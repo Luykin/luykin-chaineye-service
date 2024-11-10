@@ -1,7 +1,7 @@
 import { ProLayout } from '@ant-design/pro-components';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useUserStore } from './stores/userStore';
-import { defaultRoute, routes } from './routes';
+import { routes } from './routes';
 
 export default function App() {
   const { pathname } = useLocation();
@@ -11,7 +11,6 @@ export default function App() {
     <ProLayout
       title="Enterprise Admin"
       logo={null}
-      route={defaultRoute}
       location={{ pathname }}
       menu={{ type: 'group' }}
       menuItemRender={(item, dom) => (

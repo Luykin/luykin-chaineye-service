@@ -2,55 +2,6 @@ const puppeteer = require('puppeteer');
 const retry = require('async-retry');
 const { Fundraising, CrawlState } = require('../models');
 
-function parseAmount(valueStr) {
-	if (!valueStr || valueStr === '--') return null;
-	
-	// 移除美元符号和空格
-	valueStr = valueStr.replace('$', '').trim();
-	
-	let multiplier = 1;
-	if (valueStr.endsWith('M')) {
-		multiplier = 1e6;
-		valueStr = valueStr.replace('M', '').trim();
-	} else if (valueStr.endsWith('K')) {
-		multiplier = 1e3;
-		valueStr = valueStr.replace('K', '').trim();
-	} else if (valueStr.toLowerCase().includes('million')) {
-		multiplier = 1e6;
-		valueStr = valueStr.toLowerCase().replace('million', '').trim();
-	}
-	
-	// 转换为浮点数并乘以相应的单位
-	const value = parseFloat(valueStr);
-	return isNaN(value) ? null : value * multiplier;
-}
-
-function parseDate(dateStr) {
-	if (!dateStr) return null;
-	
-	const currentYear = new Date().getFullYear();
-	let formattedDateStr;
-	
-	// 检查日期是否包含年份
-	if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
-		// 格式为 "Aug 01, 2023" 或 "Feb 22, 2022" 等，包含完整日期和年份
-		formattedDateStr = dateStr;
-	} else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
-		// 格式为 "May, 2018"，仅有月份和年份
-		formattedDateStr = dateStr.replace(',', '');
-	} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
-		// 格式为 "Oct 21" 等，没有年份
-		formattedDateStr = `${dateStr}, ${currentYear}`;
-	} else {
-		// 无法识别的格式
-		return null;
-	}
-	
-	// 将格式化后的日期字符串转换为 Date 对象
-	const formattedDate = new Date(formattedDateStr);
-	return isNaN(formattedDate.getTime()) ? null : formattedDate;
-}
-
 class FundraisingCrawler {
 	constructor() {
 		this.browser = null;
@@ -83,6 +34,54 @@ class FundraisingCrawler {
 			
 			// Extract data
 			const fundraisingData = await this.page.evaluate(async () => {
+				function parseAmount(valueStr) {
+					if (!valueStr || valueStr === '--') return null;
+					
+					// 移除美元符号和空格
+					valueStr = valueStr.replace('$', '').trim();
+					
+					let multiplier = 1;
+					if (valueStr.endsWith('M')) {
+						multiplier = 1e6;
+						valueStr = valueStr.replace('M', '').trim();
+					} else if (valueStr.endsWith('K')) {
+						multiplier = 1e3;
+						valueStr = valueStr.replace('K', '').trim();
+					} else if (valueStr.toLowerCase().includes('million')) {
+						multiplier = 1e6;
+						valueStr = valueStr.toLowerCase().replace('million', '').trim();
+					}
+					
+					// 转换为浮点数并乘以相应的单位
+					const value = parseFloat(valueStr);
+					return isNaN(value) ? null : value * multiplier;
+				}
+				
+				function parseDate(dateStr) {
+					if (!dateStr) return null;
+					
+					const currentYear = new Date().getFullYear();
+					let formattedDateStr;
+					
+					// 检查日期是否包含年份
+					if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
+						// 格式为 "Aug 01, 2023" 或 "Feb 22, 2022" 等，包含完整日期和年份
+						formattedDateStr = dateStr;
+					} else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
+						// 格式为 "May, 2018"，仅有月份和年份
+						formattedDateStr = dateStr.replace(',', '');
+					} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
+						// 格式为 "Oct 21" 等，没有年份
+						formattedDateStr = `${dateStr}, ${currentYear}`;
+					} else {
+						// 无法识别的格式
+						return null;
+					}
+					
+					// 将格式化后的日期字符串转换为 Date 对象
+					const formattedDate = new Date(formattedDateStr);
+					return isNaN(formattedDate.getTime()) ? null : formattedDate;
+				}
 				const rows = document.querySelectorAll('.main_container tr');
 				
 				const data = Array.from(rows).slice(1).map(async row => {
