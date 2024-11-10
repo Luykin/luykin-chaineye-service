@@ -11,14 +11,29 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 8090;
+// 配置 CORS 选项
+const corsOptions = {
+	origin: [
+		'https://chaineye.tools',
+		'https://minibridge.chaineye.tools',
+		'http://chaineye.tools',
+		'http://minibridge.chaineye.tools'
+	],
+	methods: ['GET', 'POST', 'PUT', 'DELETE'], // 允许的 HTTP 方法
+	allowedHeaders: ['Content-Type', 'Authorization'], // 允许的请求头
+	credentials: false // 如果需要发送凭证（如 cookies），设置为 true
+};
+
+// 使用 CORS 中间件
+app.use(cors(corsOptions));
 
 // 安全中间件
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "script-src": ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
-            "style-src": ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+            "script-src": ["'self'", "'unsafe-inline'"],
+            "style-src": ["'self'", "'unsafe-inline'"],
         },
     },
 }));
