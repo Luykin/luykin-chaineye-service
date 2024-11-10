@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
-    "client": "cd client && npm run dev",
-    "dev:all": "concurrently \"npm run dev\" \"npm run client\"",
-    "build": "cd client && npm run build"
+    "start": "pm2 start ecosystem.config.js --env production",
+    "start:dev": "pm2 start ecosystem.config.js --env development",
+    "stop": "pm2 stop luykin-chaineye-service",
+    "restart": "pm2 restart luykin-chaineye-service",
+    "delete": "pm2 delete luykin-chaineye-service",
+    "logs": "pm2 logs luykin-chaineye-service"
   },
   "dependencies": {
     "async-retry": "^1.3.3",
