@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fundraising 爬虫管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Fundraising 爬虫管理系统</h1>
+        
+        <!-- 系统状态 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">系统状态</h2>
+            <div id="systemStatus" class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-gray-600">全量爬取状态：<span id="fullCrawlStatus" class="font-medium">-</span></p>
+                    <p class="text-gray-600">最后爬取页码：<span id="lastPage" class="font-medium">-</span></p>
+                    <p class="text-gray-600">最后更新时间：<span id="fullCrawlLastUpdate" class="font-medium">-</span></p>
+                </div>
+                <div>
+                    <p class="text-gray-600">快速更新状态：<span id="quickUpdateStatus" class="font-medium">-</span></p>
+                    <p class="text-gray-600">最后更新时间：<span id="quickUpdateLastUpdate" class="font-medium">-</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">操作控制</h2>
+            <div class="space-x-4">
+                <button onclick="startFullCrawl()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    开始全量爬取
+                </button>
+                <button onclick="startQuickUpdate()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    开始快速更新
+                </button>
+            </div>
+        </div>
+
+        <!-- 数据预览 -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">数据预览</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full table-auto">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="px-4 py-2">项目名称</th>
+                            <th class="px-4 py-2">金额</th>
+                            <th class="px-4 py-2">日期</th>
+                            <th class="px-4 py-2">投资者</th>
+                            <th class="px-4 py-2">阶段</th>
+                            <th class="px-4 py-2">类别</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTable">
+                        <!-- 数据将通过 JavaScript 动态填充 -->
+                    </tbody>
+                </table>
+                <div class="mt-4 flex justify-between items-center">
+                    <div>
+                        总记录数：<span id="totalRecords">0</span>
+                    </div>
+                    <div class="space-x-2">
+                        <button onclick="changePage(-1)" class="px-3 py-1 bg-gray-200 rounded">上一页</button>
+                        <span id="currentPage">1</span> / <span id="totalPages">1</span>
+                        <button onclick="changePage(1)" class="px-3 py-1 bg-gray-200 rounded">下一页</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        
+        // 更新系统状态
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/fundraising/status');
+                const data = await response.json();
+                
+                if (data.fullCrawl) {
+                    document.getElementById('fullCrawlStatus').textContent = getStatusText(data.fullCrawl.status);
+                    document.getElementById('lastPage').textContent = data.fullCrawl.lastPage || '-';
+                    document.getElementById('fullCrawlLastUpdate').textContent = 
+                        data.fullCrawl.lastUpdate ? new Date(data.fullCrawl.lastUpdate).toLocaleString() : '-';
+                }
+                
+                if (data.quickUpdate) {
+                    document.getElementById('quickUpdateStatus').textContent = getStatusText(data.quickUpdate.status);
+                    document.getElementById('quickUpdateLastUpdate').textContent = 
+                        data.quickUpdate.lastUpdate ? new Date(data.quickUpdate.lastUpdate).toLocaleString() : '-';
+                }
+            } catch (error) {
+                console.error('获取状态失败:', error);
+            }
+        }
+
+        // 获取数据列表
+        async function fetchData() {
+            try {
+                const response = await fetch(`/api/fundraising?page=${currentPage}&limit=10`);
+                const data = await response.json();
+                
+                const tbody = document.getElementById('dataTable');
+                tbody.innerHTML = '';
+                
+                data.data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="border px-4 py-2">${item.projectName}</td>
+                        <td class="border px-4 py-2">${item.amount}</td>
+                        <td class="border px-4 py-2">${new Date(item.date).toLocaleDateString()}</td>
+                        <td class="border px-4 py-2">${item.investors}</td>
+                        <td class="border px-4 py-2">${item.stage}</td>
+                        <td class="border px-4 py-2">${item.category}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                document.getElementById('totalRecords').textContent = data.total;
+                document.getElementById('currentPage').textContent = data.page;
+                document.getElementById('totalPages').textContent = data.totalPages;
+            } catch (error) {
+                console.error('获取数据失败:', error);
+            }
+        }
+
+        // 开始全量爬取
+        async function startFullCrawl() {
+            try {
+                await fetch('/api/fundraising/crawl/full', { method: 'POST' });
+                alert('全量爬取已开始');
+                updateStatus();
+            } catch (error) {
+                console.error('启动全量爬取失败:', error);
+                alert('启动失败，请查看控制台');
+            }
+        }
+
+        // 开始快速更新
+        async function startQuickUpdate() {
+            try {
+                await fetch('/api/fundraising/crawl/quick', { method: 'POST' });
+                alert('快速更新已开始');
+                updateStatus();
+            } catch (error) {
+                console.error('启动快速更新失败:', error);
+                alert('启动失败，请查看控制台');
+            }
+        }
+
+        // 切换页面
+        function changePage(delta) {
+            const totalPages = parseInt(document.getElementById('totalPages').textContent);
+            const newPage = currentPage + delta;
+            
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                fetchData();
+            }
+        }
+
+        // 获取状态文本
+        function getStatusText(status) {
+            const statusMap = {
+                'idle': '空闲',
+                'running': '运行中',
+                'failed': '失败',
+                'completed': '完成'
+            };
+            return statusMap[status] || status;
+        }
+
+        // 定期更新状态和数据
+        setInterval(updateStatus, 5000);
+        updateStatus();
+        fetchData();
+    </script>
+</body>
+</html>
