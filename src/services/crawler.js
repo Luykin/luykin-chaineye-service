@@ -1,11 +1,85 @@
 const puppeteer = require('puppeteer');
 const retry = require('async-retry');
 const { CrawlState, Fundraising } = require('../models');
+const baseRootDataURL = 'https://www.rootdata.com';
+
+function joinUrl(path, base = baseRootDataURL) {
+	if (!String(path).startsWith('http')) {
+		// 去除 base 末尾的斜杠，去除 path 开头的斜杠
+		base = base.replace(/\/+$/, '');  // 移除 base 末尾的多余斜杠
+		path = path.replace(/^\/+/, '');  // 移除 path 开头的多余斜杠
+		
+		// 拼接 base 和 path 并确保中间只有一个斜杠
+		return `${base}/${path}`;
+	} else {
+		return path;
+	}
+}
+
+function parseAmount(valueStr) {
+	if (!valueStr || valueStr === '--') return null;
+	
+	// 移除美元符号、空格以及"美元"字样
+	valueStr = valueStr.replace('$', '').replace('美元', '').trim();
+	
+	let multiplier = 1;
+	
+	if (valueStr.endsWith('M')) {
+		multiplier = 1e6;
+		valueStr = valueStr.replace('M', '').trim();
+	} else if (valueStr.endsWith('K')) {
+		multiplier = 1e3;
+		valueStr = valueStr.replace('K', '').trim();
+	} else if (valueStr.toLowerCase().includes('million')) {
+		multiplier = 1e6;
+		valueStr = valueStr.toLowerCase().replace('million', '').trim();
+	} else if (valueStr.includes('万')) {
+		multiplier = 1e4;
+		valueStr = valueStr.replace('万', '').trim();
+	} else if (valueStr.includes('亿')) {
+		multiplier = 1e8;
+		valueStr = valueStr.replace('亿', '').trim();
+	}
+	
+	// 转换为浮点数并乘以相应的单位
+	const value = parseFloat(valueStr);
+	return isNaN(value) ? null : value * multiplier;
+}
+
+function parseDate(dateStr) {
+	if (!dateStr) return null;
+	
+	const currentYear = new Date().getFullYear();
+	let formattedDateStr;
+	
+	// 英文日期格式处理
+	if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
+		formattedDateStr = dateStr;
+	} else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
+		formattedDateStr = `01 ${dateStr.replace(',', '')}`;
+	} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
+		formattedDateStr = `${dateStr}, ${currentYear}`;
+	}
+	
+	// 中文日期格式处理
+	else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+		// 格式为 "2022-11-08"
+		formattedDateStr = dateStr;
+	} else if (/^\d{2}-\d{2}$/.test(dateStr)) {
+		// 格式为 "11-08"，无年份
+		formattedDateStr = `${currentYear}-${dateStr}`;
+	}
+	
+	// 格式化为时间戳
+	const timestamp = Date.parse(formattedDateStr);
+	return isNaN(timestamp) ? null : timestamp;
+}
 
 class FundraisingCrawler {
 	constructor() {
 		this.browser = null;
 		this.page = null;
+		this.detailPage = null;
 	}
 	
 	async initialize() {
@@ -16,9 +90,29 @@ class FundraisingCrawler {
 		this.page = await this.browser.newPage();
 	}
 	
+	async initializeDetailPage() {
+		if (!this.browser) {
+			await this.initialize();
+		}
+		this.detailPage = await this.browser.newPage();
+	}
+	
 	async close() {
-		if (this.browser) {
-			await this.browser.close();
+		try {
+			const [fullCrawl, quickUpdate, detailCrawl] = await Promise.all([
+				CrawlState.findOne({ where: { isFullCrawl: true } }),
+				CrawlState.findOne({ where: { isFullCrawl: false } }),
+				CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: true } })
+			]);
+			if (fullCrawl.status === 'running' || quickUpdate.status === 'running' || detailCrawl.status === 'running') {
+				console.log('Crawler is busy, cannot close.');
+				return;
+			}
+			if (this.browser) {
+				await this.browser.close();
+			}
+		} catch (err) {
+			console.error('Error closing browser:', err);
 		}
 	}
 	
@@ -39,91 +133,33 @@ class FundraisingCrawler {
 			
 			// Extract data
 			const fundraisingData = await this.page.evaluate(async () => {
-				function parseAmount(valueStr) {
-					if (!valueStr || valueStr === '--') return null;
-					
-					// 移除美元符号和空格
-					valueStr = valueStr.replace('$', '').trim();
-					
-					let multiplier = 1;
-					if (valueStr.endsWith('M')) {
-						multiplier = 1e6;
-						valueStr = valueStr.replace('M', '').trim();
-					} else if (valueStr.endsWith('K')) {
-						multiplier = 1e3;
-						valueStr = valueStr.replace('K', '').trim();
-					} else if (valueStr.toLowerCase().includes('million')) {
-						multiplier = 1e6;
-						valueStr = valueStr.toLowerCase().replace('million', '').trim();
-					}
-					
-					// 转换为浮点数并乘以相应的单位
-					const value = parseFloat(valueStr);
-					return isNaN(value) ? null : value * multiplier;
-				}
-				
-				function parseDate(dateStr) {
-					if (!dateStr) return null;
-					
-					const currentYear = new Date().getFullYear();
-					let formattedDateStr;
-					
-					// 检查日期是否包含年份
-					if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
-						// 格式为 "Aug 01, 2023" 或 "Feb 22, 2022" 等，包含完整日期和年份
-						formattedDateStr = dateStr;
-					} else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
-						// 格式为 "May, 2018"，仅有月份和年份
-						formattedDateStr = dateStr.replace(',', '');
-						formattedDateStr = `01 ${formattedDateStr}`; // 补上日
-					} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
-						// 格式为 "Oct 21" 等，没有年份
-						formattedDateStr = `${dateStr}, ${currentYear}`;
-					} else if (/^[A-Za-z]{3},? \d{4}$/.test(dateStr)) {
-						// 格式为 "Jun, 2016" 等，带有月份和年份
-						formattedDateStr = `01 ${dateStr.replace(',', '')}`;
-					} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
-						// 格式为 "Sep 16" 等，没有年份
-						formattedDateStr = `${dateStr}, ${currentYear}`;
-					} else {
-						// 无法识别的格式
-						return null;
-					}
-					
-					// 将格式化后的日期字符串转换为时间戳
-					const timestamp = Date.parse(formattedDateStr);
-					return isNaN(timestamp) ? null : timestamp;
-				}
-				
 				const rows = document.querySelectorAll('.main_container tr');
 				
 				const data = Array.from(rows).slice(1).map(async row => {
 					const cells = row.querySelectorAll('td');
-					const projectElement = cells[0]?.querySelector('a');
+					const projectElement = cells[0]?.querySelector('.name .list_name');
+					const logo = cells[0]?.querySelector('a img')?.getAttribute('src') || '';
 					const projectName = projectElement?.textContent?.trim();
 					const projectLink = projectElement?.getAttribute('href');
 					const projectDescription = cells[0]?.textContent?.trim().replace(projectName, '').trim();
 					
+					const round = cells[1]?.textContent?.trim();
+					
 					const amount = cells[2]?.textContent?.trim();
-					const formattedAmount = parseAmount(amount);
 					
 					const valuation = cells[3]?.textContent?.trim();
-					const formattedValuation = parseAmount(valuation);
 					
 					const date = cells[4]?.textContent?.trim();
-					const fundedAt = parseDate(date);
 					
 					return {
+						logo,
 						projectName,
 						projectLink,
 						description: projectDescription,
-						round: cells[1]?.textContent?.trim(),
+						round,
 						amount,
-						formattedAmount,
 						valuation,
-						formattedValuation,
 						date,
-						fundedAt,
 						isInitial: true,
 					};
 				});
@@ -131,9 +167,20 @@ class FundraisingCrawler {
 				// 使用 Promise.all 等待所有行的异步操作完成
 				return await Promise.all(data);
 			});
-			console.log(fundraisingData, 'fundraisingData');
+			// console.log(fundraisingData, 'fundraisingData');
 			
-			return fundraisingData;
+			return fundraisingData.map(_ => {
+				const formattedAmount = parseAmount(_.amount);
+				const formattedValuation = parseAmount(_.valuation);
+				const fundedAt = parseDate(_.date);
+				return {
+					..._,
+					projectLink: joinUrl(_.projectLink),
+					formattedAmount,
+					formattedValuation,
+					fundedAt,
+				};
+			});
 		} catch (error) {
 			console.error(`Error crawling page ${pageNum}:`, error);
 			throw error;
@@ -242,25 +289,27 @@ class FundraisingCrawler {
 			await CrawlState.create({ isDetailCrawl: true });
 		
 		try {
-			// 标记开始详情页爬取
-			crawlState.status = 'running';
-			crawlState.error = null;
-			await crawlState.save();
+			await this.initializeDetailPage();
 			
 			// 获取需要爬取详情的项目列表
 			const projectsToCrawl = await Fundraising.Project.findAll({ where: { detailFetchedAt: null } });
-			
+			crawlState.status = 'running';
+			crawlState.error = null;
+			crawlState.numberDetailsToCrawl = projectsToCrawl.length;
+			await crawlState.save();
 			for (const project of projectsToCrawl) {
-				console.log(`开始爬取${projec.projectName}-${projec.projectLink}的详情信息啦....`)
+				console.log(`开始爬取${project.projectName}-${project.projectLink}的详情信息啦....`);
 				// 爬取项目详情逻辑
 				await this.scrapeAndUpdateProjectDetails(project);
 				
-				crawlState.lastProjectLink = projec.projectLink;
+				crawlState.lastProjectLink = project.projectLink;
 				crawlState.lastUpdateTime = new Date();
+				crawlState.numberDetailsToCrawl = Number.isInteger(crawlState.numberDetailsToCrawl) ? crawlState.numberDetailsToCrawl-- : -1;
 				await crawlState.save();
 			}
 			
 			// 完成详情页爬取
+			crawlState.numberDetailsToCrawl = 0;
 			crawlState.status = 'completed';
 			await crawlState.save();
 			
@@ -269,24 +318,27 @@ class FundraisingCrawler {
 			crawlState.error = error.message;
 			await crawlState.save();
 			throw error;
+		} finally {
+			await this.close();
 		}
 	}
 	
 	async scrapeAndUpdateProjectDetails(project) {
 		console.log(`Fetching details for ${project.projectName}...`);
 		try {
-			await this.page.goto(project.projectLink, {
+			await this.detailPage.goto(project.projectLink, {
 				waitUntil: 'networkidle0',
-				timeout: 30000
+				timeout: 20000
 			});
-			
-			await this.page.waitForSelector('.container');
+			console.log('等待打开网页。。。。。');
+			await this.detailPage.waitForSelector('.container');
+			console.log('打开详情页成功。。。。。');
 			
 			// Expand all sections
 			await this.expandAllSections();
 			
 			// Fetch additional data
-			const details = await this.page.evaluate(() => {
+			const details = await this.detailPage.evaluate(() => {
 				// Extract social links
 				const socialLinks = {};
 				document.querySelectorAll('.links a').forEach(link => {
@@ -302,12 +354,12 @@ class FundraisingCrawler {
 					profileLink: member.querySelector('.card')?.href || ''
 				}));
 				
-				const logo = document.querySelector('.detail_info_head .logo')?.src || "";
-				const projectName = document.querySelector('.detail_info_head h1.name').textContent?.trim();
+				const logo = document.querySelector('.detail_info_head .logo')?.src || '';
+				const projectName = document.querySelector('.detail_info_head h1.name')?.textContent?.trim();
 				
 				return { socialLinks, teamMembers, projectName, logo };
 			});
-			
+			console.log('更新某个项目的信息..........start', JSON.stringify(details), '更新某个项目的信息..........end');
 			// Save details to project
 			await project.update({
 				projectName: details.projectName,
@@ -316,7 +368,7 @@ class FundraisingCrawler {
 				teamMembers: details.teamMembers,
 				detailFetchedAt: +new Date()
 			});
-			
+			console.log('开始抓取这个项目更详细的详细', project.projectLink);
 			// Process Fundraising and Investment rounds
 			await this.processRounds(project);
 			
@@ -328,7 +380,7 @@ class FundraisingCrawler {
 	async processRounds(project) {
 		try {
 			// Switch to Fundraising Rounds tab
-			await this.page.evaluate(() => {
+			await this.detailPage.evaluate(() => {
 				document.querySelectorAll('button').forEach(button => {
 					if (/rounds/i.test(button.textContent)) {
 						console.log('发现页面的rounds按钮，进行点击');
@@ -337,99 +389,107 @@ class FundraisingCrawler {
 				});
 			});
 			await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for rounds to load
-			await this.page.waitForSelector('.investor .watermusk_table');
+			await this.detailPage.waitForSelector('.investor .watermusk_table');
 			
-			const roundsData = await this.page.evaluate(() => {
+			const roundsData = await this.detailPage.evaluate(() => {
+				function parseAmount(valueStr) {
+					if (!valueStr || valueStr === '--') return null;
+					
+					// 移除美元符号、空格以及"美元"字样
+					valueStr = valueStr.replace('$', '').replace('美元', '').trim();
+					
+					let multiplier = 1;
+					
+					if (valueStr.endsWith('M')) {
+						multiplier = 1e6;
+						valueStr = valueStr.replace('M', '').trim();
+					} else if (valueStr.endsWith('K')) {
+						multiplier = 1e3;
+						valueStr = valueStr.replace('K', '').trim();
+					} else if (valueStr.toLowerCase().includes('million')) {
+						multiplier = 1e6;
+						valueStr = valueStr.toLowerCase().replace('million', '').trim();
+					} else if (valueStr.includes('万')) {
+						multiplier = 1e4;
+						valueStr = valueStr.replace('万', '').trim();
+					} else if (valueStr.includes('亿')) {
+						multiplier = 1e8;
+						valueStr = valueStr.replace('亿', '').trim();
+					}
+					
+					// 转换为浮点数并乘以相应的单位
+					const value = parseFloat(valueStr);
+					return isNaN(value) ? null : value * multiplier;
+				}
+				
+				function parseDate(dateStr) {
+					if (!dateStr) return null;
+					
+					const currentYear = new Date().getFullYear();
+					let formattedDateStr;
+					
+					// 英文日期格式处理
+					if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
+						formattedDateStr = dateStr;
+					} else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
+						formattedDateStr = `01 ${dateStr.replace(',', '')}`;
+					} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
+						formattedDateStr = `${dateStr}, ${currentYear}`;
+					}
+					
+					// 中文日期格式处理
+					else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+						// 格式为 "2022-11-08"
+						formattedDateStr = dateStr;
+					} else if (/^\d{2}-\d{2}$/.test(dateStr)) {
+						// 格式为 "11-08"，无年份
+						formattedDateStr = `${currentYear}-${dateStr}`;
+					}
+					
+					// 格式化为时间戳
+					const timestamp = Date.parse(formattedDateStr);
+					return isNaN(timestamp) ? null : timestamp;
+				}
+				
 				const rows = document.querySelectorAll('.investor .watermusk_table tr');
 				return Array.from(rows).slice(1).map(row => {
 					const cells = row.querySelectorAll('td');
 					
-					function parseAmount(valueStr) {
-						if (!valueStr || valueStr === '--') return null;
-						
-						// 移除美元符号和空格
-						valueStr = valueStr.replace('$', '').trim();
-						
-						let multiplier = 1;
-						if (valueStr.endsWith('M')) {
-							multiplier = 1e6;
-							valueStr = valueStr.replace('M', '').trim();
-						} else if (valueStr.endsWith('K')) {
-							multiplier = 1e3;
-							valueStr = valueStr.replace('K', '').trim();
-						} else if (valueStr.toLowerCase().includes('million')) {
-							multiplier = 1e6;
-							valueStr = valueStr.toLowerCase().replace('million', '').trim();
-						}
-						
-						// 转换为浮点数并乘以相应的单位
-						const value = parseFloat(valueStr);
-						return isNaN(value) ? null : value * multiplier;
-					}
-					
-					function parseDate(dateStr) {
-						if (!dateStr) return null;
-						
-						const currentYear = new Date().getFullYear();
-						let formattedDateStr;
-						
-						// 检查日期是否包含年份
-						if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
-							// 格式为 "Aug 01, 2023" 或 "Feb 22, 2022" 等，包含完整日期和年份
-							formattedDateStr = dateStr;
-						} else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
-							// 格式为 "May, 2018"，仅有月份和年份
-							formattedDateStr = dateStr.replace(',', '');
-							formattedDateStr = `01 ${formattedDateStr}`; // 补上日
-						} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
-							// 格式为 "Oct 21" 等，没有年份
-							formattedDateStr = `${dateStr}, ${currentYear}`;
-						} else if (/^[A-Za-z]{3},? \d{4}$/.test(dateStr)) {
-							// 格式为 "Jun, 2016" 等，带有月份和年份
-							formattedDateStr = `01 ${dateStr.replace(',', '')}`;
-						} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
-							// 格式为 "Sep 16" 等，没有年份
-							formattedDateStr = `${dateStr}, ${currentYear}`;
-						} else {
-							// 无法识别的格式
-							return null;
-						}
-						
-						// 将格式化后的日期字符串转换为时间戳
-						const timestamp = Date.parse(formattedDateStr);
-						return isNaN(timestamp) ? null : timestamp;
-					}
-					
 					return {
 						round: cells[0]?.textContent?.trim(),
 						amount: cells[1]?.textContent?.trim(),
-						formattedAmount: parseAmount(cells[1]?.textContent),
 						valuation: cells[2]?.textContent?.trim(),
-						formattedValuation: parseAmount(cells[2]?.textContent),
 						date: cells[3]?.textContent?.trim(),
-						timestamp: parseDate(cells[3]?.textContent),
 						investors: Array.from(cells[4].querySelectorAll('a')).map(investor => ({
-							name: investor.textContent.trim(),
+							name: investor.textContent.replace('*', '').trim(),
 							link: investor.href,
 							lead: investor.textContent.includes('*')
 						}))
 					};
 				});
 			});
+			const roundsDataFormatted = roundsData.map(_ => {
+				return {
+					..._,
+					formattedAmount: parseAmount(_.amount),
+					formattedValuation: parseAmount(_.valuation),
+					timestamp: parseDate(_.date)
+				};
+			});
 			
-			console.log('发现详情页的round', JSON.stringify(roundsData));
+			console.log('发现详情页的round', JSON.stringify(roundsDataFormatted));
 			
-			for (const round of roundsData) {
+			for (const round of roundsDataFormatted) {
 				for (const investor of round.investors) {
 					let investorProject = await Fundraising.Project.findOne({ where: { projectLink: investor.link } });
 					if (!investorProject) {
 						investorProject = await Fundraising.Project.create({
 							projectName: investor.name,
-							projectLink: investor.link,
+							projectLink: joinUrl(investor.link),
 							isInitial: false
 						});
 					}
-					console.log(`${investorProject.projectName}与${project.projectName}进行了关联....`)
+					console.log(`${investorProject.projectName}与${project.projectName}进行了关联....`);
 					await Fundraising.InvestmentRelationships.create({
 						investorProjectId: investorProject.id,
 						fundedProjectId: project.id,
@@ -450,7 +510,7 @@ class FundraisingCrawler {
 	
 	async expandAllSections() {
 		try {
-			await this.page.evaluate(() => {
+			await this.detailPage.evaluate(() => {
 				document.querySelectorAll('button').forEach(button => {
 					if (/expand\s*more/i.test(button.textContent)) {
 						console.log('发现详情页有展开更多按钮，进行点击...');

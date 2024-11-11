@@ -6,6 +6,11 @@ module.exports = (sequelize) => {
 			type: DataTypes.STRING,
 			allowNull: true,
 	  },
+	  numberDetailsToCrawl: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+	    allowNull: true,
+    },
     lastPage: {
       type: DataTypes.INTEGER,
       defaultValue: 1,

@@ -7,8 +7,8 @@ const router = express.Router();
 
 // Validation middleware
 const validatePagination = [
-  query('page').optional().isInt({ min: 1 }),
-  query('limit').optional().isInt({ min: 1, max: 100 })
+	query('page').optional().isInt({ min: 1 }),
+	query('limit').optional().isInt({ min: 1, max: 100 })
 ];
 
 // Get fundraising data with pagination
@@ -24,8 +24,11 @@ router.get('/', validatePagination, async (req, res) => {
 		const offset = (page - 1) * limit;
 		
 		// 优化排序字段
-		const sortField = req.query.sort === 'fundedAt' ? 'fundedAt' : 'createdAt';
+		const sortField = req.query.sort === 'fundedAt' ? 'fundedAt' : null;
 		const sortOrder = sortField === 'fundedAt' ? 'DESC' : 'ASC';
+		
+		// 构建排序条件，若无排序字段则为空数组
+		const order = sortField ? [[sortField, sortOrder]] : [];
 		
 		const data = await Fundraising.Project.findAndCountAll({
 			where: { isInitial: true }, // 仅筛选 isInitial 为 true 的数据
@@ -41,26 +44,32 @@ router.get('/', validatePagination, async (req, res) => {
 				'formattedValuation',
 				'date',
 				'fundedAt',
-				'detailFetchedAt'
+				'detailFetchedAt',
+				'socialLinks',
+				'teamMembers'
 			], // 选择必要的字段，减少传输数据
 			limit,
 			offset,
-			order: [[sortField, sortOrder]],
+			order,
 			include: [
-				{
-					model: Fundraising.InvestmentRelationships,
-					as: 'investmentsGiven', // 当前项目作为投资方的记录
-					attributes: ['round', 'amount', 'formattedAmount', 'valuation', 'formattedValuation', 'date', 'lead'],
-					include: [
-						{ model: Fundraising.Project, as: 'fundedProject', attributes: ['projectName', 'projectLink'] } // 被投项目
-					]
-				},
+				// {
+				// 	model: Fundraising.InvestmentRelationships,
+				// 	as: 'investmentsGiven', // 当前项目作为投资方的记录
+				// 	attributes: ['round', 'lead'],
+				// 	include: [
+				// 		{ model: Fundraising.Project, as: 'fundedProject', attributes: ['projectName', 'projectLink'] } // 被投项目
+				// 	]
+				// },
 				{
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsReceived', // 当前项目作为被投资方的记录
-					attributes: ['round', 'amount', 'formattedAmount', 'valuation', 'formattedValuation', 'date', 'lead'],
+					attributes: ['round', 'lead'],
 					include: [
-						{ model: Fundraising.Project, as: 'investorProject', attributes: ['projectName', 'projectLink'] } // 出资方项目
+						{
+							model: Fundraising.Project,
+							as: 'investorProject',
+							attributes: ['id', 'projectName', 'projectLink', 'socialLinks']
+						} // 出资方项目
 					]
 				}
 			]
@@ -84,36 +93,36 @@ router.get('/', validatePagination, async (req, res) => {
 
 // Start full crawl
 router.post('/crawl/full', async (req, res) => {
-  try {
-    const state = await CrawlState.findOne({ where: { isFullCrawl: true } });
-    if (state && state.status === 'running') {
-      return res.status(400).json({ error: 'Full crawl already in progress' });
-    }
-
-    // Start crawl in background
-    crawler.fullCrawl().catch(console.error);
-    res.json({ message: 'Full crawl started' });
-  } catch (error) {
-    console.error('Error starting full crawl:', error);
-    res.status(500).json({ error: 'Failed to start full crawl' });
-  }
+	try {
+		const state = await CrawlState.findOne({ where: { isFullCrawl: true } });
+		if (state && state.status === 'running') {
+			return res.status(400).json({ error: 'Full crawl already in progress' });
+		}
+		
+		// Start crawl in background
+		crawler.fullCrawl().catch(console.error);
+		res.json({ message: 'Full crawl started' });
+	} catch (error) {
+		console.error('Error starting full crawl:', error);
+		res.status(500).json({ error: 'Failed to start full crawl' });
+	}
 });
 
 // Start quick update
 router.post('/crawl/quick', async (req, res) => {
-  try {
-    const state = await CrawlState.findOne({ where: { isFullCrawl: false } });
-    if (state && state.status === 'running') {
-      return res.status(400).json({ error: 'Quick update already in progress' });
-    }
-
-    // Start quick update in background
-    crawler.quickUpdate().catch(console.error);
-    res.json({ message: 'Quick update started' });
-  } catch (error) {
-    console.error('Error starting quick update:', error);
-    res.status(500).json({ error: 'Failed to start quick update' });
-  }
+	try {
+		const state = await CrawlState.findOne({ where: { isFullCrawl: false } });
+		if (state && state.status === 'running') {
+			return res.status(400).json({ error: 'Quick update already in progress' });
+		}
+		
+		// Start quick update in background
+		crawler.quickUpdate().catch(console.error);
+		res.json({ message: 'Quick update started' });
+	} catch (error) {
+		console.error('Error starting quick update:', error);
+		res.status(500).json({ error: 'Failed to start quick update' });
+	}
 });
 
 // Start detail crawl
@@ -135,36 +144,36 @@ router.post('/crawl/detail', async (req, res) => {
 
 // Get crawl status
 router.get('/status', async (req, res) => {
-  try {
-    const [fullCrawl, quickUpdate, detailCrawl] = await Promise.all([
-      CrawlState.findOne({ where: { isFullCrawl: true } }),
-      CrawlState.findOne({ where: { isFullCrawl: false } }),
-	    CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: true } })
-    ]);
-
-    res.json({
-      fullCrawl: fullCrawl ? {
-        status: fullCrawl.status,
-        lastPage: fullCrawl.lastPage,
-        lastUpdate: fullCrawl.lastUpdateTime,
-        error: fullCrawl.error
-      } : null,
-      quickUpdate: quickUpdate ? {
-        status: quickUpdate.status,
-        lastUpdate: quickUpdate.lastUpdateTime,
-        error: quickUpdate.error
-      } : null,
-	    detailCrawl: detailCrawl ? {
+	try {
+		const [fullCrawl, quickUpdate, detailCrawl] = await Promise.all([
+			CrawlState.findOne({ where: { isFullCrawl: true, isDetailCrawl: false } }),
+			CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: false } }),
+			CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: true } })
+		]);
+		
+		res.json({
+			fullCrawl: fullCrawl ? {
+				status: fullCrawl.status,
+				lastPage: fullCrawl.lastPage,
+				lastUpdate: fullCrawl.lastUpdateTime,
+				error: fullCrawl.error
+			} : null,
+			quickUpdate: quickUpdate ? {
+				status: quickUpdate.status,
+				lastUpdate: quickUpdate.lastUpdateTime,
+				error: quickUpdate.error
+			} : null,
+			detailCrawl: detailCrawl ? {
 				status: detailCrawl.status,
-		    lastProjectLink: detailCrawl.lastProjectLink,
+				lastProjectLink: detailCrawl.lastProjectLink,
 				lastUpdate: detailCrawl.lastUpdateTime,
 				error: detailCrawl.error
-	    }: null
-    });
-  } catch (error) {
-    console.error('Error fetching crawl status:', error);
-    res.status(500).json({ error: 'Failed to fetch crawl status' });
-  }
+			} : null
+		});
+	} catch (error) {
+		console.error('Error fetching crawl status:', error);
+		res.status(500).json({ error: 'Failed to fetch crawl status' });
+	}
 });
 
 module.exports = router;

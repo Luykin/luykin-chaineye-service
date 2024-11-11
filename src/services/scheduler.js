@@ -43,13 +43,15 @@ class CrawlerScheduler {
 			try {
 				await crawler.quickUpdate();
 				console.log('Daily quick update completed');
+				await crawler.fetchProjectDetails();
+				console.log('Daily fetchProjectDetails completed');
 			} catch (error) {
 				console.error('Daily quick update failed:', error);
 			}
 		});
 		
-		// Resume any incomplete full crawl on startup
-		this.resumeIncompleteFullCrawl();
+		// // Resume any incomplete full crawl on startup
+		// this.resumeIncompleteFullCrawl();
 		this.resumeIncompleteDetailCrawl();
 	}
 	
