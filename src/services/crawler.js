@@ -387,6 +387,7 @@ class FundraisingCrawler {
 			console.log('开始抓取这个项目更详细的详细', project.projectLink);
 			// Process Fundraising and Investment rounds
 			await this.processRounds(project);
+			console.log('此项目抓取完毕', project.projectName, '继续下一项..');
 			
 		} catch (error) {
 			console.error(`Error fetching details for ${project.projectName}:`, error);
