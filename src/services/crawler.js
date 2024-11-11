@@ -2,18 +2,38 @@ const puppeteer = require('puppeteer');
 const retry = require('async-retry');
 const { CrawlState, Fundraising } = require('../models');
 const baseRootDataURL = 'https://www.rootdata.com';
-
-function joinUrl(path, base = baseRootDataURL) {
-	if (!String(path).startsWith('http')) {
-		// 去除 base 末尾的斜杠，去除 path 开头的斜杠
-		base = base.replace(/\/+$/, '');  // 移除 base 末尾的多余斜杠
-		path = path.replace(/^\/+/, '');  // 移除 path 开头的多余斜杠
-		
-		// 拼接 base 和 path 并确保中间只有一个斜杠
-		return `${base}/${path}`;
-	} else {
-		return path;
+const { v4: uuidv4 } = require('uuid');
+function joinUrl(path, projectName) {
+	// 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
+	if (String(path).includes('javascript:void(0)')) {
+		return `javascript:void(0)/${projectName || uuidv4()}`;
 	}
+	
+	// 如果 path 没有协议，拼接 baseRootDataURL
+	if (!/^https?:\/\//i.test(path)) {
+		const base = baseRootDataURL.replace(/\/+$/, ''); // 移除 base 末尾的多余斜杠
+		path = path.replace(/^\/+/, ''); // 移除 path 开头的多余斜杠
+		path = `${base}/${path}`;
+	}
+	
+	// 去除多余的斜杠，确保中间只有一个斜杠
+	path = path.replace(/([^:]\/)\/+/g, "$1");
+	
+	// 清理重复的 URL 参数
+	const url = new URL(path);
+	const params = new URLSearchParams();
+	url.searchParams.forEach((value, key) => {
+		if (!params.has(key)) params.append(key, value);
+	});
+	url.search = params.toString();
+	
+	// 清理重复的锚点
+	if (url.hash) {
+		const uniqueHash = Array.from(new Set(url.hash.split('#'))).join('');
+		url.hash = uniqueHash;
+	}
+	
+	return url.toString();
 }
 
 function parseAmount(valueStr) {
@@ -175,7 +195,7 @@ class FundraisingCrawler {
 				const fundedAt = parseDate(_.date);
 				return {
 					..._,
-					projectLink: joinUrl(_.projectLink),
+					projectLink: joinUrl(_.projectLink, _.projectName),
 					formattedAmount,
 					formattedValuation,
 					fundedAt,
@@ -502,7 +522,7 @@ class FundraisingCrawler {
 					if (!investorProject) {
 						investorProject = await Fundraising.Project.create({
 							projectName: investor.name,
-							projectLink: joinUrl(investor.link),
+							projectLink: joinUrl(investor.link, investor.name),
 							isInitial: false
 						});
 					}
