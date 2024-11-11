@@ -82,11 +82,12 @@ module.exports = (sequelize) => {
 	}, {
 		comment: '项目表，包含每个项目的基本信息以及融资和投资记录'
 	});
+	
 	const InvestmentRelationships = sequelize.define('InvestmentRelationships', {
 		investorProjectId: {
 			type: DataTypes.INTEGER,
 			references: {
-				model: 'Projects',
+				model: Project,
 				key: 'id'
 			},
 			allowNull: false,
@@ -95,7 +96,7 @@ module.exports = (sequelize) => {
 		fundedProjectId: {
 			type: DataTypes.INTEGER,
 			references: {
-				model: 'Projects',
+				model: Project,
 				key: 'id'
 			},
 			allowNull: false,
@@ -137,5 +138,27 @@ module.exports = (sequelize) => {
 			comment: '是否是主导投资人'
 		}
 	});
+	
+	// 设置关联关系
+	Project.hasMany(InvestmentRelationships, {
+		foreignKey: 'investorProjectId',
+		as: 'investmentsGiven' // 出资的项目
+	});
+	
+	Project.hasMany(InvestmentRelationships, {
+		foreignKey: 'fundedProjectId',
+		as: 'investmentsReceived' // 接受投资的项目
+	});
+	
+	InvestmentRelationships.belongsTo(Project, {
+		foreignKey: 'investorProjectId',
+		as: 'investorProject' // 出资方
+	});
+	
+	InvestmentRelationships.belongsTo(Project, {
+		foreignKey: 'fundedProjectId',
+		as: 'fundedProject' // 接受投资方
+	});
+	
 	return { Project, InvestmentRelationships };
 };

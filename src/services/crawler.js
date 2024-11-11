@@ -302,11 +302,16 @@ class FundraisingCrawler {
 					profileLink: member.querySelector('.card')?.href || ''
 				}));
 				
-				return { socialLinks, teamMembers };
+				const logo = document.querySelector('.detail_info_head .logo')?.src || "";
+				const projectName = document.querySelector('.detail_info_head h1.name').textContent?.trim();
+				
+				return { socialLinks, teamMembers, projectName, logo };
 			});
 			
 			// Save details to project
 			await project.update({
+				projectName: details.projectName,
+				logo: details.logo,
 				socialLinks: details.socialLinks,
 				teamMembers: details.teamMembers,
 				detailFetchedAt: +new Date()

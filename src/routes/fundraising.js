@@ -13,46 +13,73 @@ const validatePagination = [
 
 // Get fundraising data with pagination
 router.get('/', validatePagination, async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-	  
-	  // 设置排序条件
-	  const sortField = req.query.sort === 'fundedAt' ? 'fundedAt' : 'createdAt'; // 默认按创建顺序排序
-	  const sortOrder = req.query.sort === 'fundedAt' ? 'DESC' : 'ASC'; // fundedAt 降序，其他字段按升序
-
-    const data = await Fundraising.Project.findAndCountAll({
-	    where: { isInitial: true }, // 仅筛选 isInitial 为 true 的数据
-      limit,
-      offset,
-      order: [[sortField, sortOrder]],
-	    include: [{
-		    model: Fundraising.InvestmentRelationships,
-		    as: 'InvestmentRelationships', // 别名，与模型定义中的关联别名保持一致
-		    attributes: ['round', 'amount', 'formattedAmount', 'valuation', 'formattedValuation', 'date', 'lead'],
-		    include: [
-			    { model: Fundraising.Project, as: 'InvestorProject', attributes: ['projectName', 'projectLink'] },
-			    { model: Fundraising.Project, as: 'FundedProject', attributes: ['projectName', 'projectLink'] }
-		    ]
-	    }]
-    });
-
-    res.json({
-      data: data.rows,
-      total: data.count,
-      page,
-      totalPages: Math.ceil(data.count / limit)
-    });
-  } catch (error) {
-    console.error('Error fetching fundraising data:', error);
-    res.status(500).json({ error: 'Failed to fetch data' });
-  }
+	try {
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			return res.status(400).json({ errors: errors.array() });
+		}
+		
+		const page = parseInt(req.query.page) || 1;
+		const limit = parseInt(req.query.limit) || 10;
+		const offset = (page - 1) * limit;
+		
+		// 优化排序字段
+		const sortField = req.query.sort === 'fundedAt' ? 'fundedAt' : 'createdAt';
+		const sortOrder = sortField === 'fundedAt' ? 'DESC' : 'ASC';
+		
+		const data = await Fundraising.Project.findAndCountAll({
+			where: { isInitial: true }, // 仅筛选 isInitial 为 true 的数据
+			attributes: [
+				'projectName',
+				'projectLink',
+				'description',
+				'logo',
+				'round',
+				'amount',
+				'formattedAmount',
+				'valuation',
+				'formattedValuation',
+				'date',
+				'fundedAt',
+				'detailFetchedAt'
+			], // 选择必要的字段，减少传输数据
+			limit,
+			offset,
+			order: [[sortField, sortOrder]],
+			include: [
+				{
+					model: Fundraising.InvestmentRelationships,
+					as: 'investmentsGiven', // 当前项目作为投资方的记录
+					attributes: ['round', 'amount', 'formattedAmount', 'valuation', 'formattedValuation', 'date', 'lead'],
+					include: [
+						{ model: Fundraising.Project, as: 'fundedProject', attributes: ['projectName', 'projectLink'] } // 被投项目
+					]
+				},
+				{
+					model: Fundraising.InvestmentRelationships,
+					as: 'investmentsReceived', // 当前项目作为被投资方的记录
+					attributes: ['round', 'amount', 'formattedAmount', 'valuation', 'formattedValuation', 'date', 'lead'],
+					include: [
+						{ model: Fundraising.Project, as: 'investorProject', attributes: ['projectName', 'projectLink'] } // 出资方项目
+					]
+				}
+			]
+		});
+		
+		res.json({
+			data: data.rows,
+			total: data.count,
+			page,
+			totalPages: Math.ceil(data.count / limit)
+		});
+	} catch (error) {
+		console.error('Error fetching fundraising data:', {
+			message: error.message,
+			stack: error.stack,
+			query: req.query // 记录请求参数，便于调试
+		});
+		res.status(500).json({ error: 'Failed to fetch data' });
+	}
 });
 
 // Start full crawl
