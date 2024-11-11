@@ -306,14 +306,19 @@ class FundraisingCrawler {
 			crawlState.error = null;
 			crawlState.numberDetailsToCrawl = projectsToCrawl.length;
 			await crawlState.save();
+			let remainingCount = projectsToCrawl.length;
+			
 			for (const project of projectsToCrawl) {
-				console.log(`开始爬取${project.projectName}-${project.projectLink}的详情信息啦....`);
+				console.log(`开始爬取 ${project.projectName} - ${project.projectLink} 的详情信息...`);
 				// 爬取项目详情逻辑
 				await this.scrapeAndUpdateProjectDetails(project);
 				
+				// 更新 crawlState 的信息
 				crawlState.lastProjectLink = project.projectLink;
 				crawlState.lastUpdateTime = new Date();
-				crawlState.numberDetailsToCrawl = Number.isInteger(crawlState.numberDetailsToCrawl) ? crawlState.numberDetailsToCrawl-- : -1;
+				// 更新计数器并赋值给 numberDetailsToCrawl
+				remainingCount--;
+				crawlState.numberDetailsToCrawl = remainingCount;
 				await crawlState.save();
 			}
 			
