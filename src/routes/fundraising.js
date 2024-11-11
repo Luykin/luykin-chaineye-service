@@ -44,9 +44,9 @@ router.get('/', validatePagination, async (req, res) => {
 				'formattedValuation',
 				'date',
 				'fundedAt',
-				// 'detailFetchedAt',
+				'detailFetchedAt',
 				'socialLinks',
-				// 'teamMembers'
+				'teamMembers'
 			], // 选择必要的字段，减少传输数据
 			limit,
 			offset,
