@@ -3,6 +3,7 @@ const retry = require('async-retry');
 const { CrawlState, Fundraising } = require('../models');
 const baseRootDataURL = 'https://www.rootdata.com';
 const { v4: uuidv4 } = require('uuid');
+
 function joinUrl(path, projectName) {
 	// 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
 	if (String(path).includes('javascript:void(0)')) {
@@ -17,7 +18,7 @@ function joinUrl(path, projectName) {
 	}
 	
 	// 去除多余的斜杠，确保中间只有一个斜杠
-	path = path.replace(/([^:]\/)\/+/g, "$1");
+	path = path.replace(/([^:]\/)\/+/g, '$1');
 	
 	// 清理重复的 URL 参数
 	const url = new URL(path);
@@ -331,8 +332,16 @@ class FundraisingCrawler {
 			for (const project of projectsToCrawl) {
 				console.log(`开始爬取 ${project.projectName} - ${project.projectLink} 的详情信息...`);
 				// 爬取项目详情逻辑
-				await this.scrapeAndUpdateProjectDetails(project);
-				
+				await retry(
+					async () => {
+						return await this.scrapeAndUpdateProjectDetails(project);
+					},
+					{
+						retries: 3,
+						minTimeout: 2000,
+						maxTimeout: 5000
+					}
+				);
 				// 更新 crawlState 的信息
 				crawlState.lastProjectLink = project.projectLink;
 				crawlState.lastUpdateTime = new Date();
@@ -340,6 +349,7 @@ class FundraisingCrawler {
 				remainingCount--;
 				crawlState.numberDetailsToCrawl = remainingCount;
 				await crawlState.save();
+				await new Promise(resolve => setTimeout(resolve, 1500));
 			}
 			
 			// 完成详情页爬取
