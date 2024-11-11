@@ -51,7 +51,7 @@ class CrawlerScheduler {
 		});
 		
 		// // Resume any incomplete full crawl on startup
-		// this.resumeIncompleteFullCrawl();
+		this.resumeIncompleteFullCrawl();
 		this.resumeIncompleteDetailCrawl();
 	}
 	

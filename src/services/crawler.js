@@ -192,6 +192,9 @@ class FundraisingCrawler {
 		let hasMoreData = true;
 		const state = await CrawlState.findOne({ where: { isFullCrawl: true } }) ||
 			await CrawlState.create({ isFullCrawl: true });
+		if (state && state.status === 'running') {
+			throw new Error('fullCrawl already in progress');
+		}
 		
 		try {
 			await this.initialize();
@@ -254,6 +257,9 @@ class FundraisingCrawler {
 			await this.initialize();
 			const state = await CrawlState.findOne({ where: { isFullCrawl: false } }) ||
 				await CrawlState.create({ isFullCrawl: false });
+			if (state && state.status === 'running') {
+				throw new Error('quickUpdate already in progress');
+			}
 			
 			state.status = 'running';
 			await state.save();
@@ -287,6 +293,9 @@ class FundraisingCrawler {
 	async fetchProjectDetails() {
 		const crawlState = await CrawlState.findOne({ where: { isDetailCrawl: true } }) ||
 			await CrawlState.create({ isDetailCrawl: true });
+		if (crawlState && crawlState.status === 'running') {
+			throw new Error('Detail crawl already in progress');
+		}
 		
 		try {
 			await this.initializeDetailPage();

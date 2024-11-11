@@ -44,9 +44,9 @@ router.get('/', validatePagination, async (req, res) => {
 				'formattedValuation',
 				'date',
 				'fundedAt',
-				'detailFetchedAt',
+				// 'detailFetchedAt',
 				'socialLinks',
-				'teamMembers'
+				// 'teamMembers'
 			], // 选择必要的字段，减少传输数据
 			limit,
 			offset,
@@ -142,6 +142,30 @@ router.post('/crawl/detail', async (req, res) => {
 	}
 });
 
+// Set all crawl statuses to idle
+router.post('/status/reset', async (req, res) => {
+	try {
+		// 更新所有 CrawlState 条目，将状态设为 'idle'，并清空错误信息
+		await CrawlState.update(
+			{
+				status: 'idle',
+				error: null,
+				lastPage: null,
+				lastProjectLink: null,
+				numberDetailsToCrawl: null
+			},
+			{
+				where: {} // 空条件表示更新所有记录
+			}
+		);
+		
+		res.json({ message: 'All crawl statuses reset to idle' });
+	} catch (error) {
+		console.error('Error resetting crawl statuses:', error);
+		res.status(500).json({ error: 'Failed to reset crawl statuses' });
+	}
+});
+
 // Get crawl status
 router.get('/status', async (req, res) => {
 	try {
@@ -165,6 +189,7 @@ router.get('/status', async (req, res) => {
 			} : null,
 			detailCrawl: detailCrawl ? {
 				status: detailCrawl.status,
+				numberDetailsToCrawl: detailCrawl.numberDetailsToCrawl,
 				lastProjectLink: detailCrawl.lastProjectLink,
 				lastUpdate: detailCrawl.lastUpdateTime,
 				error: detailCrawl.error
