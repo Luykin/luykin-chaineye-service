@@ -1,40 +1,141 @@
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-	return sequelize.define('Fundraising', {
+	const Project = sequelize.define('Project', {
 		projectName: {
 			type: DataTypes.STRING,
-			allowNull: false
+			allowNull: false,
+			comment: '项目名称，例如 \'Ripple\' 或 \'TradeBlock\''
+		},
+		projectLink: {
+			type: DataTypes.STRING,
+			unique: true,
+			allowNull: false,
+			comment: '项目详情页链接，用于唯一标识项目'
 		},
 		description: {
-			type: DataTypes.STRING
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '项目描述，简要说明项目内容'
+		},
+		logo: {
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '项目 Logo 的 URL'
 		},
 		round: {
-			type: DataTypes.STRING
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '当前融资轮次，例如 \'Series A\', \'M&A\''
 		},
 		amount: {
-			type: DataTypes.STRING, // 原始 Amount 数据
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '原始投资金额，例如 \'$25 M\''
 		},
 		formattedAmount: {
-			type: DataTypes.FLOAT, // 格式化后的 Amount 数据
-			allowNull: true
+			type: DataTypes.FLOAT,
+			allowNull: true,
+			comment: '格式化后的投资金额，浮点数类型，用于计算'
 		},
 		valuation: {
-			type: DataTypes.STRING, // 原始 Valuation 数据
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '原始估值金额，例如 \'$250 M\''
 		},
 		formattedValuation: {
-			type: DataTypes.FLOAT, // 格式化后的 Valuation 数据
-			allowNull: true
+			type: DataTypes.FLOAT,
+			allowNull: true,
+			comment: '格式化后的估值金额，浮点数类型，用于计算'
 		},
 		date: {
-			type: DataTypes.STRING, // 原始 Date 数据
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '原始日期字符串，保持原始格式，例如 \'Dec 20, 2019\''
 		},
-		formattedDate: {
-			type: DataTypes.DATEONLY, // 格式化后的 Date 数据
-			allowNull: true
+		fundedAt: {
+			type: DataTypes.BIGINT,
+			allowNull: true,
+			comment: '融资日期，格式化为 Date 类型'
 		},
-		investors: {
-			type: DataTypes.JSON // 投资人信息存储为 JSON 格式
+		detailFetchedAt: {
+			type: DataTypes.BIGINT,
+			allowNull: true,
+			defaultValue: null,
+			comment: '最近一次爬取详情页的时间，用于检查详情是否需要更新'
+		},
+		isInitial: {
+			type: DataTypes.BOOLEAN,
+			defaultValue: false,
+			comment: '是否为初始抓取'
+		},
+		socialLinks: {
+			type: DataTypes.JSON,
+			allowNull: true,
+			comment: '社交链接信息，包含官网、Twitter、LinkedIn、博客等链接的 JSON 对象'
+		},
+		teamMembers: {
+			type: DataTypes.JSON,
+			allowNull: true,
+			comment: '团队成员信息，包括头像、姓名、职位和个人链接等的 JSON 数组'
+		}
+	}, {
+		comment: '项目表，包含每个项目的基本信息以及融资和投资记录'
+	});
+	const InvestmentRelationships = sequelize.define('InvestmentRelationships', {
+		investorProjectId: {
+			type: DataTypes.INTEGER,
+			references: {
+				model: 'Projects',
+				key: 'id'
+			},
+			allowNull: false,
+			comment: '出资方项目的 ID'
+		},
+		fundedProjectId: {
+			type: DataTypes.INTEGER,
+			references: {
+				model: 'Projects',
+				key: 'id'
+			},
+			allowNull: false,
+			comment: '接受投资方项目的 ID'
+		},
+		round: {
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '融资轮次，例如 Series A, M&A'
+		},
+		amount: {
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '投资金额，例如 $25 M'
+		},
+		formattedAmount: {
+			type: DataTypes.FLOAT,
+			allowNull: true,
+			comment: '格式化后的投资金额，浮点数类型'
+		},
+		valuation: {
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '估值金额，例如 $250 M'
+		},
+		formattedValuation: {
+			type: DataTypes.FLOAT,
+			allowNull: true,
+			comment: '格式化后的估值，浮点数类型'
+		},
+		date: {
+			type: DataTypes.BIGINT,
+			allowNull: true,
+			comment: '投资或融资日期'
+		},
+		lead: {
+			type: DataTypes.BOOLEAN,
+			defaultValue: false,
+			comment: '是否是主导投资人'
 		}
 	});
+	return { Project, InvestmentRelationships };
 };

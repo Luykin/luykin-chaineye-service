@@ -2,23 +2,36 @@ const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
   return sequelize.define('CrawlState', {
+	  lastProjectLink: {
+			type: DataTypes.STRING,
+			allowNull: true,
+	  },
     lastPage: {
       type: DataTypes.INTEGER,
-      defaultValue: 1
+      defaultValue: 1,
     },
     lastUpdateTime: {
-      type: DataTypes.DATE
+      type: DataTypes.DATE,
+	    allowNull: true,
     },
+	  isDetailCrawl: {
+			type: DataTypes.BOOLEAN,
+			defaultValue: false,
+		  allowNull: true,
+	  },
     isFullCrawl: {
       type: DataTypes.BOOLEAN,
-      defaultValue: false
+      defaultValue: false,
+	    allowNull: true,
     },
     status: {
       type: DataTypes.ENUM('idle', 'running', 'failed', 'completed'),
-      defaultValue: 'idle'
+      defaultValue: 'idle',
+	    allowNull: true,
     },
     error: {
-      type: DataTypes.TEXT
+      type: DataTypes.TEXT,
+	    allowNull: true,
     }
   });
 };

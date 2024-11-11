@@ -22,11 +22,25 @@ router.get('/', validatePagination, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+	  
+	  // 设置排序条件
+	  const sortField = req.query.sort === 'fundedAt' ? 'fundedAt' : 'createdAt'; // 默认按创建顺序排序
+	  const sortOrder = req.query.sort === 'fundedAt' ? 'DESC' : 'ASC'; // fundedAt 降序，其他字段按升序
 
-    const data = await Fundraising.findAndCountAll({
+    const data = await Fundraising.Project.findAndCountAll({
+	    where: { isInitial: true }, // 仅筛选 isInitial 为 true 的数据
       limit,
       offset,
-      order: [['date', 'DESC']]
+      order: [[sortField, sortOrder]],
+	    include: [{
+		    model: Fundraising.InvestmentRelationships,
+		    as: 'InvestmentRelationships', // 别名，与模型定义中的关联别名保持一致
+		    attributes: ['round', 'amount', 'formattedAmount', 'valuation', 'formattedValuation', 'date', 'lead'],
+		    include: [
+			    { model: Fundraising.Project, as: 'InvestorProject', attributes: ['projectName', 'projectLink'] },
+			    { model: Fundraising.Project, as: 'FundedProject', attributes: ['projectName', 'projectLink'] }
+		    ]
+	    }]
     });
 
     res.json({
@@ -75,12 +89,30 @@ router.post('/crawl/quick', async (req, res) => {
   }
 });
 
+// Start detail crawl
+router.post('/crawl/detail', async (req, res) => {
+	try {
+		const state = await CrawlState.findOne({ where: { isDetailCrawl: true } });
+		if (state && state.status === 'running') {
+			return res.status(400).json({ error: 'Detail crawl already in progress' });
+		}
+		
+		// Start crawl in background
+		crawler.fetchProjectDetails().catch(console.error);
+		res.json({ message: 'Detail crawl started' });
+	} catch (error) {
+		console.error('Error starting detail crawl:', error);
+		res.status(500).json({ error: 'Failed to start detail crawl' });
+	}
+});
+
 // Get crawl status
 router.get('/status', async (req, res) => {
   try {
-    const [fullCrawl, quickUpdate] = await Promise.all([
+    const [fullCrawl, quickUpdate, detailCrawl] = await Promise.all([
       CrawlState.findOne({ where: { isFullCrawl: true } }),
-      CrawlState.findOne({ where: { isFullCrawl: false } })
+      CrawlState.findOne({ where: { isFullCrawl: false } }),
+	    CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: true } })
     ]);
 
     res.json({
@@ -94,7 +126,13 @@ router.get('/status', async (req, res) => {
         status: quickUpdate.status,
         lastUpdate: quickUpdate.lastUpdateTime,
         error: quickUpdate.error
-      } : null
+      } : null,
+	    detailCrawl: detailCrawl ? {
+				status: detailCrawl.status,
+		    lastProjectLink: detailCrawl.lastProjectLink,
+				lastUpdate: detailCrawl.lastUpdateTime,
+				error: detailCrawl.error
+	    }: null
     });
   } catch (error) {
     console.error('Error fetching crawl status:', error);
