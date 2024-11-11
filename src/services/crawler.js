@@ -139,7 +139,7 @@ class FundraisingCrawler {
 					const cells = row.querySelectorAll('td');
 					const projectElement = cells[0]?.querySelector('.name .list_name');
 					const logo = cells[0]?.querySelector('a img')?.getAttribute('src') || '';
-					const projectName = projectElement?.textContent?.trim();
+					const projectName = projectElement?.childNodes?.[0]?.textContent?.trim();
 					const projectLink = projectElement?.getAttribute('href');
 					const projectDescription = cells[0]?.textContent?.trim().replace(projectName, '').trim();
 					
