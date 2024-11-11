@@ -375,7 +375,7 @@ class FundraisingCrawler {
 				timeout: 20000
 			});
 			console.log('等待打开网页。。。。。');
-			await this.detailPage.waitForSelector('.container');
+			await this.detailPage.waitForSelector('.base_info');
 			console.log('打开详情页成功。。。。。');
 			
 			// Expand all sections
@@ -405,14 +405,17 @@ class FundraisingCrawler {
 				
 				return { socialLinks, teamMembers, projectName, logo };
 			});
-			// console.log('更新某个项目的信息..........start', JSON.stringify(details), '更新某个项目的信息..........end');
-			// Save details to project
 			await project.update({
 				projectName: details.projectName,
 				logo: details.logo,
 				socialLinks: details.socialLinks,
 				teamMembers: details.teamMembers,
-				detailFetchedAt: +new Date()
+				/**
+				 * 只有logo存在，且projectName也存在
+				 * 和socialLinks存在时才更新detailFetchedAt字段，否则不更新
+				 * **/
+				detailFetchedAt: details.projectName && details.logo
+				&& (Object.keys(details.socialLinks || {})?.length > 0) ? +new Date() : null,
 			});
 			console.log('开始抓取这个项目更详细的详细', project.projectLink);
 			// Process Fundraising and Investment rounds
