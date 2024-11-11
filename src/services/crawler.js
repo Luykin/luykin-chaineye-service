@@ -357,7 +357,9 @@ class FundraisingCrawler {
 				const socialLinks = {};
 				document.querySelectorAll('.links a').forEach(link => {
 					const type = link.querySelector('span')?.textContent?.trim().toLowerCase();
-					socialLinks[type] = link.href;
+					if (type && type !== 'undefined') {
+						socialLinks[type] = link.href;
+					}
 				});
 				
 				// Extract team members
@@ -373,7 +375,7 @@ class FundraisingCrawler {
 				
 				return { socialLinks, teamMembers, projectName, logo };
 			});
-			console.log('更新某个项目的信息..........start', JSON.stringify(details), '更新某个项目的信息..........end');
+			// console.log('更新某个项目的信息..........start', JSON.stringify(details), '更新某个项目的信息..........end');
 			// Save details to project
 			await project.update({
 				projectName: details.projectName,
@@ -491,7 +493,7 @@ class FundraisingCrawler {
 				};
 			});
 			
-			console.log('发现详情页的round', JSON.stringify(roundsDataFormatted));
+			// console.log('发现详情页的round', JSON.stringify(roundsDataFormatted));
 			
 			for (const round of roundsDataFormatted) {
 				for (const investor of round.investors) {
@@ -503,7 +505,7 @@ class FundraisingCrawler {
 							isInitial: false
 						});
 					}
-					console.log(`${investorProject.projectName}与${project.projectName}进行了关联....`);
+					// console.log(`${investorProject.projectName}与${project.projectName}进行了关联....`);
 					await Fundraising.InvestmentRelationships.create({
 						investorProjectId: investorProject.id,
 						fundedProjectId: project.id,
