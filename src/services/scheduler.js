@@ -16,6 +16,9 @@ class CrawlerScheduler {
 		});
 		
 		if (state) {
+			// 先将状态设为空闲
+			await state.update({ status: 'idle', error: null });
+			
 			console.log(`Resuming full crawl from page ${state.lastPage}`);
 			crawler.fullCrawl(state.lastPage);
 		}
@@ -31,7 +34,10 @@ class CrawlerScheduler {
 		});
 		
 		if (state) {
-			console.log(`Resuming detailCrawl`);
+			// 先将状态设为空闲
+			await state.update({ status: 'idle', error: null });
+			
+			console.log(`Resuming detail crawl`);
 			crawler.fetchProjectDetails();
 		}
 	}
