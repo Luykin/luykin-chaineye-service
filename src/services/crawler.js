@@ -436,7 +436,7 @@ class FundraisingCrawler {
 				});
 			});
 			await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for rounds to load
-			await this.detailPage.waitForSelector('.investor .watermusk_table');
+			// await this.detailPage.waitForSelector('.investor .watermusk_table');
 			
 			const roundsData = await this.detailPage.evaluate(() => {
 				function parseAmount(valueStr) {
