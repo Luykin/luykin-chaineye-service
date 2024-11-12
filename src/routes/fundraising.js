@@ -8,7 +8,7 @@ const router = express.Router();
 // Validation middleware
 const validatePagination = [
 	query('page').optional().isInt({ min: 1 }),
-	query('limit').optional().isInt({ min: 1, max: 100 })
+	query('limit').optional().isInt({ min: 5, max: 50 })
 ];
 
 // Get fundraising data with pagination
@@ -20,7 +20,7 @@ router.get('/', validatePagination, async (req, res) => {
 		}
 		
 		const page = parseInt(req.query.page) || 1;
-		const limit = parseInt(req.query.limit) || 10;
+		const limit = parseInt(req.query.limit) || 30;
 		const offset = (page - 1) * limit;
 		
 		// 优化排序字段
