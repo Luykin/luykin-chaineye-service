@@ -310,14 +310,16 @@ router.get('/status', async (req, res) => {
 				lastUpdate: detail.lastUpdateTime,
 				error: detail.error,
 				otherInfo: detail?.otherInfo,
-				projectDetails: projectDetails
+				projectDetails: projectDetails,
+				quickView: `http://148.251.131.206:8087/api/fundraising/search?keyword=${encodeURIComponent(projectDetails?.projectName)}`
 			} : null,
 			detail2: detail2 ? {
 				status: detail2.status,
 				lastUpdate: detail2.lastUpdateTime,
 				error: detail2.error,
 				otherInfo: detail2?.otherInfo,
-				projectDetails: projectDetails2
+				projectDetails: projectDetails2,
+				quickView: `http://148.251.131.206:8087/api/fundraising/search?keyword=${encodeURIComponent(projectDetails2?.projectName)}`
 			} : null
 		});
 	} catch (error) {
