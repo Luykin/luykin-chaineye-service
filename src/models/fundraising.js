@@ -64,6 +64,11 @@ module.exports = (sequelize) => {
 			defaultValue: null,
 			comment: '最近一次爬取详情页的时间，用于检查详情是否需要更新'
 		},
+		detailFailuresNumber: {
+			type: DataTypes.INTEGER,
+			defaultValue: 0,
+			comment: '抓取详情失败次数'
+		},
 		isInitial: {
 			type: DataTypes.BOOLEAN,
 			defaultValue: false,

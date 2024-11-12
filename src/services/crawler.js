@@ -3,6 +3,7 @@ const retry = require('async-retry');
 const { CrawlState, Fundraising } = require('../models');
 const baseRootDataURL = 'https://www.rootdata.com';
 const { v4: uuidv4 } = require('uuid');
+const { Op } = require('sequelize');
 
 function joinUrl(path, projectName) {
 	// 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
@@ -211,8 +212,8 @@ class FundraisingCrawler {
 	async fullCrawl(startPage = 1) {
 		let currentPage = startPage;
 		let hasMoreData = true;
-		const state = await CrawlState.findOne({ where: { isFullCrawl: true } }) ||
-			await CrawlState.create({ isFullCrawl: true });
+		const state = await CrawlState.findOne({ where: { isFullCrawl: true, isDetailCrawl: false } }) ||
+			await CrawlState.create({ isFullCrawl: true, isDetailCrawl: false });
 		if (state && state.status === 'running') {
 			throw new Error('fullCrawl already in progress');
 		}
@@ -236,7 +237,7 @@ class FundraisingCrawler {
 					}
 				);
 				
-				if (data.length === 0) {
+				if (data?.length === 0) {
 					hasMoreData = false;
 					continue;
 				}
@@ -276,8 +277,8 @@ class FundraisingCrawler {
 	async quickUpdate() {
 		try {
 			await this.initialize();
-			const state = await CrawlState.findOne({ where: { isFullCrawl: false } }) ||
-				await CrawlState.create({ isFullCrawl: false });
+			const state = await CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: false } }) ||
+				await CrawlState.create({ isFullCrawl: false, isDetailCrawl: false });
 			if (state && state.status === 'running') {
 				throw new Error('quickUpdate already in progress');
 			}
@@ -312,7 +313,7 @@ class FundraisingCrawler {
 	}
 	
 	async fetchProjectDetails() {
-		const crawlState = await CrawlState.findOne({ where: { isDetailCrawl: true } }) ||
+		const crawlState = await CrawlState.findOne({ where: { isDetailCrawl: true, isFullCrawl: false } }) ||
 			await CrawlState.create({ isDetailCrawl: true });
 		if (crawlState && crawlState.status === 'running') {
 			throw new Error('Detail crawl already in progress');
@@ -322,17 +323,24 @@ class FundraisingCrawler {
 			await this.initializeDetailPage();
 			
 			// 获取需要爬取详情的项目列表
-			const projectsToCrawl = await Fundraising.Project.findAll({ where: { detailFetchedAt: null } });
+			const projectsToCrawl = await Fundraising.Project.findAll({
+				where: {
+					detailFetchedAt: null,
+					detailFailuresNumber: {
+						[Op.lte]: 3  // 失败次数小于等于 3
+					}
+				}
+			});
 			crawlState.status = 'running';
 			crawlState.error = null;
 			crawlState.numberDetailsToCrawl = projectsToCrawl.length;
 			await crawlState.save();
 			let remainingCount = projectsToCrawl.length;
-			
+			let failedCount = 0;
 			for (const project of projectsToCrawl) {
 				console.log(`开始爬取 ${project.projectName} - ${project.projectLink} 的详情信息...`);
 				// 爬取项目详情逻辑
-				await retry(
+				const ret = await retry(
 					async () => {
 						return await this.scrapeAndUpdateProjectDetails(project);
 					},
@@ -342,6 +350,11 @@ class FundraisingCrawler {
 						maxTimeout: 5000
 					}
 				);
+				if (!ret) {
+					console.log(`详情抓取失败了～ ${project.projectName} - ${project.projectLink}, 继续下一个`);
+					failedCount++;
+					crawlState.numberDetailsFailed = failedCount;
+				}
 				// 更新 crawlState 的信息
 				crawlState.lastProjectLink = project.projectLink;
 				crawlState.lastUpdateTime = new Date();
@@ -380,6 +393,8 @@ class FundraisingCrawler {
 			
 			// Expand all sections
 			await this.expandAllSections();
+			console.log('开始抓取这个项目更详细的详细', project.projectLink);
+			await this.processRounds(project);
 			
 			// Fetch additional data
 			const details = await this.detailPage.evaluate(() => {
@@ -405,6 +420,8 @@ class FundraisingCrawler {
 				
 				return { socialLinks, teamMembers, projectName, logo };
 			});
+			const isCrawlSuccess = details.projectName && details.logo
+				&& (Object.keys(details.socialLinks || {})?.length > 0);
 			await project.update({
 				projectName: details.projectName,
 				logo: details.logo,
@@ -414,33 +431,23 @@ class FundraisingCrawler {
 				 * 只有logo存在，且projectName也存在
 				 * 和socialLinks存在时才更新detailFetchedAt字段，否则不更新
 				 * **/
-				detailFetchedAt: details.projectName && details.logo
-				&& (Object.keys(details.socialLinks || {})?.length > 0) ? +new Date() : null,
+				detailFetchedAt: isCrawlSuccess ? +new Date() : null,
+				detailFailuresNumber: isCrawlSuccess ? 0 : Number(project.detailFailuresNumber || 0) + 1
 			});
-			console.log('开始抓取这个项目更详细的详细', project.projectLink);
-			// Process Fundraising and Investment rounds
-			await this.processRounds(project);
-			console.log('此项目抓取完毕', project.projectName, '继续下一项..');
-			
+			console.log(`此项目抓取${isCrawlSuccess ? '成功' : '失败'}======,${project.projectName}`);
+			if (!isCrawlSuccess) {
+				throw new Error('Failed to fetch project details');
+			}
+			console.log('============抓取详情成功================');
+			return true; //抓取成功
 		} catch (error) {
 			console.error(`Error fetching details for ${project.projectName}:`, error);
+			throw error;
 		}
 	}
 	
 	async processRounds(project) {
 		try {
-			// Switch to Fundraising Rounds tab
-			await this.detailPage.evaluate(() => {
-				document.querySelectorAll('button').forEach(button => {
-					if (/rounds/i.test(button.textContent)) {
-						console.log('发现页面的rounds按钮，进行点击');
-						button.click();
-					}
-				});
-			});
-			await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for rounds to load
-			// await this.detailPage.waitForSelector('.investor .watermusk_table');
-			
 			const roundsData = await this.detailPage.evaluate(() => {
 				function parseAmount(valueStr) {
 					if (!valueStr || valueStr === '--') return null;
@@ -501,7 +508,7 @@ class FundraisingCrawler {
 					return isNaN(timestamp) ? null : timestamp;
 				}
 				
-				const rows = document.querySelectorAll('.investor .watermusk_table tr');
+				const rows = document.querySelectorAll('.investor tr');
 				return Array.from(rows).slice(1).map(row => {
 					const cells = row.querySelectorAll('td');
 					
@@ -510,11 +517,14 @@ class FundraisingCrawler {
 						amount: cells[1]?.textContent?.trim(),
 						valuation: cells[2]?.textContent?.trim(),
 						date: cells[3]?.textContent?.trim(),
-						investors: Array.from(cells[4].querySelectorAll('a')).map(investor => ({
-							name: investor.textContent.replace('*', '').trim(),
-							link: investor.href,
-							lead: investor.textContent.includes('*')
-						}))
+						investors: Array.from(cells[4].querySelectorAll('a')).map(investor => {
+							const name = investor.textContent.replace('*', '').trim();
+							return {
+								name,
+								link: joinUrl(investor.href, name),
+								lead: investor.textContent.includes('*')
+							};
+						})
 					};
 				});
 			});
@@ -527,20 +537,18 @@ class FundraisingCrawler {
 				};
 			});
 			
-			// console.log('发现详情页的round', JSON.stringify(roundsDataFormatted));
-			
-			for (const round of roundsDataFormatted) {
-				for (const investor of round.investors) {
+			// 批量处理投资人信息
+			const investorProjectsPromises = roundsDataFormatted.flatMap((round) =>
+				round.investors.map(async (investor) => {
 					let investorProject = await Fundraising.Project.findOne({ where: { projectLink: investor.link } });
 					if (!investorProject) {
 						investorProject = await Fundraising.Project.create({
 							projectName: investor.name,
-							projectLink: joinUrl(investor.link, investor.name),
+							projectLink: investor.link,
 							isInitial: false
 						});
 					}
-					// console.log(`${investorProject.projectName}与${project.projectName}进行了关联....`);
-					await Fundraising.InvestmentRelationships.create({
+					return {
 						investorProjectId: investorProject.id,
 						fundedProjectId: project.id,
 						round: round.round,
@@ -550,9 +558,13 @@ class FundraisingCrawler {
 						formattedValuation: round.formattedValuation,
 						date: round.timestamp,
 						lead: investor.lead
-					});
-				}
-			}
+					};
+				})
+			);
+			
+			const investorProjects = await Promise.all(investorProjectsPromises);
+			// 批量创建 InvestmentRelationships 记录
+			await Fundraising.InvestmentRelationships.bulkCreate(investorProjects);
 		} catch (error) {
 			console.error(`Error processing rounds for ${project.projectName}:`, error);
 		}
@@ -562,8 +574,8 @@ class FundraisingCrawler {
 		try {
 			await this.detailPage.evaluate(() => {
 				document.querySelectorAll('button').forEach(button => {
-					if (/expand\s*more/i.test(button.textContent)) {
-						console.log('发现详情页有展开更多按钮，进行点击...');
+					if (/expand\s*more/i.test(button.textContent) || /rounds/i.test(button.textContent)) {
+						console.log('发现详情页有展开更多按钮/rounds按钮，进行点击...');
 						button.click();
 					}
 				});

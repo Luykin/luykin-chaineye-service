@@ -11,6 +11,11 @@ module.exports = (sequelize) => {
       defaultValue: 0,
 	    allowNull: true,
     },
+	  numberDetailsFailed: {
+		  type: DataTypes.INTEGER,
+		  defaultValue: 0,
+		  allowNull: true,
+	  },
     lastPage: {
       type: DataTypes.INTEGER,
       defaultValue: 1,

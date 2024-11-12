@@ -46,24 +46,29 @@ router.get('/', validatePagination, async (req, res) => {
 				'fundedAt',
 				'detailFetchedAt',
 				'socialLinks',
-				'teamMembers'
+				'teamMembers',
+				'detailFailuresNumber'
 			], // 选择必要的字段，减少传输数据
 			limit,
 			offset,
 			order,
 			include: [
-				// {
-				// 	model: Fundraising.InvestmentRelationships,
-				// 	as: 'investmentsGiven', // 当前项目作为投资方的记录
-				// 	attributes: ['round', 'lead'],
-				// 	include: [
-				// 		{ model: Fundraising.Project, as: 'fundedProject', attributes: ['projectName', 'projectLink'] } // 被投项目
-				// 	]
-				// },
+				{
+					model: Fundraising.InvestmentRelationships,
+					as: 'investmentsGiven', // 当前项目作为投资方的记录
+					attributes: ['round', 'lead', 'amount', 'valuation', 'date'],
+					include: [
+						{
+							model: Fundraising.Project,
+							as: 'fundedProject',
+							attributes: ['id', 'projectName', 'projectLink', 'socialLinks']
+						} // 被投项目
+					]
+				},
 				{
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsReceived', // 当前项目作为被投资方的记录
-					attributes: ['round', 'lead'],
+					attributes: ['round', 'lead', 'amount', 'valuation', 'date'],
 					include: [
 						{
 							model: Fundraising.Project,
@@ -94,7 +99,7 @@ router.get('/', validatePagination, async (req, res) => {
 // Start full crawl
 router.post('/crawl/full', async (req, res) => {
 	try {
-		const state = await CrawlState.findOne({ where: { isFullCrawl: true } });
+		const state = await CrawlState.findOne({ where: { isFullCrawl: true, isDetailCrawl: false } });
 		if (state && state.status === 'running') {
 			return res.status(400).json({ error: 'Full crawl already in progress' });
 		}
@@ -111,7 +116,7 @@ router.post('/crawl/full', async (req, res) => {
 // Start quick update
 router.post('/crawl/quick', async (req, res) => {
 	try {
-		const state = await CrawlState.findOne({ where: { isFullCrawl: false } });
+		const state = await CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: false } });
 		if (state && state.status === 'running') {
 			return res.status(400).json({ error: 'Quick update already in progress' });
 		}
@@ -128,7 +133,7 @@ router.post('/crawl/quick', async (req, res) => {
 // Start detail crawl
 router.post('/crawl/detail', async (req, res) => {
 	try {
-		const state = await CrawlState.findOne({ where: { isDetailCrawl: true } });
+		const state = await CrawlState.findOne({ where: { isDetailCrawl: true, isFullCrawl: false } });
 		if (state && state.status === 'running') {
 			return res.status(400).json({ error: 'Detail crawl already in progress' });
 		}
