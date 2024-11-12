@@ -2,6 +2,7 @@ const express = require('express');
 const { query, validationResult } = require('express-validator');
 const { Fundraising, CrawlState } = require('../models');
 const crawler = require('../services/crawler');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -118,6 +119,57 @@ router.get('/', validatePagination, async (req, res) => {
 			query: req.query
 		});
 		res.status(500).json({ error: 'Failed to fetch data' });
+	}
+});
+
+// 添加路由，用于关键词搜索项目
+router.get('/search', async (req, res) => {
+	try {
+		const { keyword } = req.query;
+		
+		// 检查是否提供有效的关键词
+		if (!keyword || !keyword.trim()) {
+			return res.json({ data: [], total: 0 });
+		}
+		
+		// 清理关键词，移除多余空格
+		const sanitizedKeyword = keyword.trim();
+		
+		// 使用 Sequelize 操作符进行关键词搜索，避免直接拼接防止注入
+		const data = await Fundraising.Project.findAll({
+			where: {
+				[Op.or]: [
+					{ projectName: { [Op.like]: `%${sanitizedKeyword}%` } },
+					{ description: { [Op.like]: `%${sanitizedKeyword}%` } }
+				]
+			},
+			limit: 10, // 限制结果最多返回10条记录
+			order: [['createdAt', 'DESC']],
+			attributes: [
+				'projectName',
+				'projectLink',
+				'description',
+				'logo',
+				'round',
+				'amount',
+				'formattedAmount',
+				'valuation',
+				'formattedValuation',
+				'date',
+				'fundedAt',
+				'detailFetchedAt',
+				'socialLinks',
+				'teamMembers'
+			]
+		});
+		
+		res.json({
+			data: data,
+			total: data.length
+		});
+	} catch (error) {
+		console.error('Error searching projects:', error);
+		res.status(500).json({ error: 'Failed to search projects' });
 	}
 });
 
