@@ -16,8 +16,12 @@ const corsOptions = {
 	origin: [
 		'https://chaineye.tools',
 		'https://minibridge.chaineye.tools',
+		'https://www.cryptohunt.ai',
+		'https://cryptohunt.ai',
+		'http://cryptohunt.ai',
+		'http://www.cryptohunt.ai',
 		'http://chaineye.tools',
-		'http://minibridge.chaineye.tools'
+		'http://minibridge.chaineye.tools',
 	],
 	methods: ['GET', 'POST', 'PUT', 'DELETE'], // 允许的 HTTP 方法
 	allowedHeaders: ['Content-Type', 'Authorization'], // 允许的请求头
