@@ -183,7 +183,6 @@ class FundraisingCrawler {
 						valuation,
 						date,
 						isInitial: true,
-						originalPageNumber: Number(pageNum),
 					};
 				});
 				
@@ -202,6 +201,7 @@ class FundraisingCrawler {
 					formattedAmount,
 					formattedValuation,
 					fundedAt,
+					originalPageNumber: Number(pageNum),
 				};
 			});
 		} catch (error) {
