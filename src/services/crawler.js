@@ -17,6 +17,7 @@ const userAgents = [
 	'Mozilla/5.0 (iPad; CPU OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15A5341f Safari/604.1',
 	'Mozilla/5.0 (Linux; Android 9; Mi 9T Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.62 Mobile Safari/537.36'
 ];
+
 function joinUrl(path, projectName) {
 	// 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
 	if (String(path).includes('javascript:void(0)')) {
@@ -117,9 +118,16 @@ class FundraisingCrawler {
 	}
 	
 	async initialize() {
+		// 隧道服务器域名和端口
+		let tunnelhost = 'z748.kdltps.com';
+		let tunnelport = '15818';
 		this.browser = await puppeteer.launch({
 			headless: 'new',
-			args: ['--no-sandbox', '--disable-setuid-sandbox']
+			args: [
+				`--proxy-server=${tunnelhost}:${tunnelport}`,
+				'--no-sandbox',
+				'--disable-setuid-sandbox'
+			]
 		});
 		this.page = await this.browser.newPage();
 	}
@@ -374,7 +382,7 @@ class FundraisingCrawler {
 			console.log(projectsToCrawl.length, '开始爬取这些项目的详情信息');
 			console.log('第一个项目为: ', projectsToCrawl[0].projectLink, projectsToCrawl[0].originalPageNumber);
 			console.log('第二个项目为: ', projectsToCrawl[1].projectLink, projectsToCrawl[1].originalPageNumber);
-			console.log('最后一个项目为:', projectsToCrawl[projectsToCrawl.length - 1].projectLink, projectsToCrawl[projectsToCrawl.length - 1].originalPageNumber)
+			console.log('最后一个项目为:', projectsToCrawl[projectsToCrawl.length - 1].projectLink, projectsToCrawl[projectsToCrawl.length - 1].originalPageNumber);
 			crawlState.status = 'running';
 			crawlState.error = null;
 			crawlState.numberDetailsToCrawl = projectsToCrawl.length;
@@ -396,7 +404,7 @@ class FundraisingCrawler {
 						}
 					);
 				} catch (err) {
-					console.log(err)
+					console.log(err);
 					console.log(`详情抓取失败了～ ${project.projectName} - ${project.projectLink}, 继续下一个`);
 					failedCount++;
 					crawlState.numberDetailsFailed = failedCount;
@@ -428,8 +436,7 @@ class FundraisingCrawler {
 	
 	async scrapeAndUpdateProjectDetails(project) {
 		console.log(`Fetching details for ${project.projectName}...`);
-		try
-		{
+		try {
 			// 随机选择一个 User-Agent
 			const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
 			await this.detailPage.setUserAgent(randomUserAgent); // 设置 User-Agent
@@ -510,64 +517,6 @@ class FundraisingCrawler {
 	async processRounds(project) {
 		try {
 			const roundsData = await this.detailPage.evaluate(() => {
-				function parseAmount(valueStr) {
-					if (!valueStr || valueStr === '--') return null;
-					
-					// 移除美元符号、空格以及"美元"字样
-					valueStr = valueStr.replace('$', '').replace('美元', '').trim();
-					
-					let multiplier = 1;
-					
-					if (valueStr.endsWith('M')) {
-						multiplier = 1e6;
-						valueStr = valueStr.replace('M', '').trim();
-					} else if (valueStr.endsWith('K')) {
-						multiplier = 1e3;
-						valueStr = valueStr.replace('K', '').trim();
-					} else if (valueStr.toLowerCase().includes('million')) {
-						multiplier = 1e6;
-						valueStr = valueStr.toLowerCase().replace('million', '').trim();
-					} else if (valueStr.includes('万')) {
-						multiplier = 1e4;
-						valueStr = valueStr.replace('万', '').trim();
-					} else if (valueStr.includes('亿')) {
-						multiplier = 1e8;
-						valueStr = valueStr.replace('亿', '').trim();
-					}
-					
-					// 转换为浮点数并乘以相应的单位
-					const value = parseFloat(valueStr);
-					return isNaN(value) ? null : value * multiplier;
-				}
-				
-				function parseDate(dateStr) {
-					if (!dateStr) return null;
-					
-					const currentYear = new Date().getFullYear();
-					let formattedDateStr;
-					
-					// 英文日期格式处理
-					if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
-						formattedDateStr = dateStr;
-					} else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
-						formattedDateStr = `01 ${dateStr.replace(',', '')}`;
-					} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
-						formattedDateStr = `${dateStr}, ${currentYear}`;
-					}
-					
-					// 中文日期格式处理
-					else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-						// 格式为 "2022-11-08"
-						formattedDateStr = dateStr;
-					} else if (/^\d{2}-\d{2}$/.test(dateStr)) {
-						// 格式为 "11-08"，无年份
-						formattedDateStr = `${currentYear}-${dateStr}`;
-					}
-					
-					// 格式化为时间戳
-					const timestamp = Date.parse(formattedDateStr);
-					return isNaN(timestamp) ? null : timestamp;
-				}
 				
 				const rows = document.querySelectorAll('.investor tr');
 				return Array.from(rows).slice(1).map(row => {
