@@ -3,7 +3,7 @@ const retry = require('async-retry');
 const { CrawlState, Fundraising } = require('../models');
 const baseRootDataURL = 'https://www.rootdata.com';
 const { v4: uuidv4 } = require('uuid');
-const { Op } = require('sequelize');
+const { Op, literal } = require('sequelize');
 
 function joinUrl(path, projectName) {
 	// 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
@@ -326,12 +326,34 @@ class FundraisingCrawler {
 			// 获取需要爬取详情的项目列表
 			const projectsToCrawl = await Fundraising.Project.findAll({
 				where: {
-					detailFetchedAt: null,
-					detailFailuresNumber: {
-						[Op.lte]: 3  // 失败次数小于等于 3
+					[Op.or]: [
+						// 1. 优先筛选 `isInitial` 为 `true`、没有 `investmentsReceived`、失败次数小于等于 3 的项目
+						{
+							isInitial: true,
+							'$investmentsReceived.id$': null,
+							detailFailuresNumber: { [Op.lte]: 3 }
+						},
+						// 2. 其次筛选 `detailFetchedAt` 为空且失败次数小于等于 3 的项目
+						{
+							detailFetchedAt: null,
+							detailFailuresNumber: { [Op.lte]: 3 }
+						}
+					]
+				},
+				include: [
+					{
+						model: Fundraising.InvestmentRelationships,
+						as: 'investmentsReceived',
+						required: false, // 左连接以包括没有 `investmentsReceived` 的项目
+						attributes: ['id'] // 仅需 `id` 用于检查是否存在 `investmentsReceived`
 					}
-				}
+				],
+				order: [
+					['isInitial', 'DESC'], // 优先 `isInitial` 为 true 的项目
+					[literal('"investmentsReceived.id"'), 'ASC'] // 优先没有 `investmentsReceived` 的项目
+				]
 			});
+			console.log(projectsToCrawl.length, '开始爬取这些项目的详情信息');
 			crawlState.status = 'running';
 			crawlState.error = null;
 			crawlState.numberDetailsToCrawl = projectsToCrawl.length;
@@ -445,7 +467,10 @@ class FundraisingCrawler {
 			console.log(`============抓取详情成功 ${project.isInitial ? relatedProjectLength + '关联成功' : '非列表页项目不需要关联'}`);
 			return true; //抓取成功
 		} catch (error) {
-			console.error(`Error fetching details for ${project.projectName}:`, error);
+			console.log(`============抓取详情失败 ${project.projectLink}`);
+			await project.update({
+				detailFailuresNumber: Number(project.detailFailuresNumber || 0) + 1
+			});
 			throw error;
 		}
 	}
@@ -573,6 +598,7 @@ class FundraisingCrawler {
 			return investorProjects?.length;
 		} catch (error) {
 			console.error(`Error processing rounds for ${project.projectName}:`, error);
+			throw error;
 		}
 	}
 	
