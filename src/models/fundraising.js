@@ -83,7 +83,12 @@ module.exports = (sequelize) => {
 			type: DataTypes.JSON,
 			allowNull: true,
 			comment: '团队成员信息，包括头像、姓名、职位和个人链接等的 JSON 数组'
-		}
+		},
+		originalPageNumber: {
+			type: DataTypes.INET,
+			allowNull: true,
+			comment: "原始在rootdata的页码"
+		},
 	}, {
 		comment: '项目表，包含每个项目的基本信息以及融资和投资记录',
 		timestamps: true, // 启用 createdAt 和 updatedAt 字段

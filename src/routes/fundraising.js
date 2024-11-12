@@ -44,23 +44,39 @@ router.get('/', validatePagination, async (req, res) => {
 			return res.status(400).json({ errors: errors.array() });
 		}
 		
-		const page = parseInt(req.query.page) || 1;
-		const limit = parseInt(req.query.limit) || 30;
-		const offset = (page - 1) * limit;
-		const sortField = req.query.sort === 'fundedAt' ? 'fundedAt' : null;
+		// 获取查询参数
+		const { originalPageNumber, page = 1, limit = 30, sort } = req.query;
+		const sortField = sort === 'fundedAt' ? 'fundedAt' : null;
 		const sortOrder = sortField === 'fundedAt' ? 'DESC' : 'ASC';
 		const order = sortField ? [[sortField, sortOrder]] : [];
 		
+		let whereConditions = { isInitial: true };
+		let queryOptions = { order };
+		
+		// 处理 originalPageNumber 逻辑
+		if (originalPageNumber) {
+			whereConditions.originalPageNumber = parseInt(originalPageNumber);
+			queryOptions.where = whereConditions;
+		} else {
+			// 使用分页逻辑
+			const offset = (parseInt(page) - 1) * parseInt(limit);
+			queryOptions = {
+				...queryOptions,
+				where: whereConditions,
+				limit: parseInt(limit),
+				offset
+			};
+		}
+		
+		// 查询数据
 		const data = await Fundraising.Project.findAndCountAll({
-			where: { isInitial: true },
+			...queryOptions,
 			attributes: [
 				'projectName', 'projectLink', 'description', 'logo', 'round',
 				'amount', 'formattedAmount', 'valuation', 'formattedValuation',
-				'date', 'fundedAt', 'detailFetchedAt', 'socialLinks', 'teamMembers', 'detailFailuresNumber'
+				'date', 'fundedAt', 'detailFetchedAt', 'socialLinks', 'teamMembers',
+				'detailFailuresNumber', 'originalPageNumber'
 			],
-			limit,
-			offset,
-			order,
 			include: [
 				{
 					model: Fundraising.InvestmentRelationships,
@@ -77,21 +93,24 @@ router.get('/', validatePagination, async (req, res) => {
 			]
 		});
 		
-		// Format and group investmentsReceived by date
+		// 格式化和分组 investmentsReceived 按日期
 		const formattedData = data.rows.map(project => {
 			const investmentsByDate = groupInvestmentsByDate(project.investmentsReceived);
 			return {
-				...project.get(), // other project data
+				...project.get(),
 				investmentsReceived: investmentsByDate
 			};
 		});
 		
-		res.json({
-			data: formattedData,
-			total: data.count,
-			page,
-			totalPages: Math.ceil(data.count / limit)
-		});
+		// 构建响应数据
+		const response = { data: formattedData };
+		if (!originalPageNumber) {
+			response.total = data.count;
+			response.page = parseInt(page);
+			response.totalPages = Math.ceil(data.count / limit);
+		}
+		
+		res.json(response);
 	} catch (error) {
 		console.error('Error fetching fundraising data:', {
 			message: error.message,
