@@ -118,13 +118,13 @@ class FundraisingCrawler {
 	}
 	
 	async initialize() {
-		// 隧道服务器域名和端口
-		let tunnelhost = 'g887.kdlfps.com'
-		let tunnelport = '18866';
+		// // 隧道服务器域名和端口
+		// let tunnelhost = 'g887.kdlfps.com'
+		// let tunnelport = '18866';
 		this.browser = await puppeteer.launch({
 			headless: 'new',
 			args: [
-				`--proxy-server=${tunnelhost}:${tunnelport}`,
+				// `--proxy-server=${tunnelhost}:${tunnelport}`,
 				'--no-sandbox',
 				'--disable-setuid-sandbox'
 			]
@@ -443,7 +443,7 @@ class FundraisingCrawler {
 			
 			await this.detailPage.goto(project.projectLink, {
 				waitUntil: 'networkidle0',
-				timeout: 20000
+				timeout: 12000
 			});
 			console.log('等待打开详情页。。。。。。');
 			await this.detailPage.waitForSelector('.base_info');
@@ -593,7 +593,7 @@ class FundraisingCrawler {
 					}
 				});
 			});
-			await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for sections to load
+			await new Promise(resolve => setTimeout(resolve, 800)); // Wait for sections to load
 		} catch (error) {
 			console.error('Error expanding sections:', error);
 		}
