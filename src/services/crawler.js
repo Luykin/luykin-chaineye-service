@@ -387,14 +387,14 @@ class FundraisingCrawler {
 				waitUntil: 'networkidle0',
 				timeout: 20000
 			});
-			console.log('等待打开网页。。。。。');
+			console.log('等待打开详情页。。。。。。');
 			await this.detailPage.waitForSelector('.base_info');
 			console.log('打开详情页成功。。。。。');
 			
 			// Expand all sections
 			await this.expandAllSections();
 			console.log('开始抓取这个项目更详细的详细', project.projectLink);
-			await this.processRounds(project);
+			const relatedProjectLength = await this.processRounds(project);
 			
 			// Fetch additional data
 			const details = await this.detailPage.evaluate(() => {
@@ -438,7 +438,7 @@ class FundraisingCrawler {
 			if (!isCrawlSuccess) {
 				throw new Error('Failed to fetch project details');
 			}
-			console.log('============抓取详情成功================');
+			console.log(`============抓取详情成功 ${relatedProjectLength}个项目与之${project.projectName}关联================`);
 			return true; //抓取成功
 		} catch (error) {
 			console.error(`Error fetching details for ${project.projectName}:`, error);
@@ -521,7 +521,7 @@ class FundraisingCrawler {
 							const name = investor.textContent.replace('*', '').trim();
 							return {
 								name,
-								link: joinUrl(investor.href, name),
+								link: investor.href,
 								lead: investor.textContent.includes('*')
 							};
 						})
@@ -540,11 +540,12 @@ class FundraisingCrawler {
 			// 批量处理投资人信息
 			const investorProjectsPromises = roundsDataFormatted.flatMap((round) =>
 				round.investors.map(async (investor) => {
-					let investorProject = await Fundraising.Project.findOne({ where: { projectLink: investor.link } });
+					const projectLink = joinUrl(investor.link, investor.name)
+					let investorProject = await Fundraising.Project.findOne({ where: { projectLink: projectLink } });
 					if (!investorProject) {
 						investorProject = await Fundraising.Project.create({
 							projectName: investor.name,
-							projectLink: investor.link,
+							projectLink: projectLink,
 							isInitial: false
 						});
 					}
@@ -565,6 +566,7 @@ class FundraisingCrawler {
 			const investorProjects = await Promise.all(investorProjectsPromises);
 			// 批量创建 InvestmentRelationships 记录
 			await Fundraising.InvestmentRelationships.bulkCreate(investorProjects);
+			return investorProjects?.length;
 		} catch (error) {
 			console.error(`Error processing rounds for ${project.projectName}:`, error);
 		}
