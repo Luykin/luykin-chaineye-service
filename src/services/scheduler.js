@@ -1,6 +1,6 @@
 const schedule = require('node-schedule');
 const crawler = require('./crawler');
-const { CrawlState } = require('../models');
+const { NewCrawlState, C_STATE_TYPE } = require('../models');
 
 class CrawlerScheduler {
 	constructor() {
@@ -8,43 +8,30 @@ class CrawlerScheduler {
 		this.halfHourlyDetailJob = null;
 	}
 	
-	async resumeIncompleteFullCrawl() {
-		const state = await CrawlState.findOne({
-			where: {
-				isFullCrawl: true,
-				status: ['running', 'failed']
-			}
+	async restartDetailCrawl() {
+		await crawler.forceClose();
+		/**
+		 * 开始detail crawl**/
+		const state1 = await NewCrawlState.findOne({
+			where: C_STATE_TYPE.detail
 		});
 		
-		if (state) {
-			// 先将状态设为空闲
-			await state.update({ status: 'idle', error: null });
-			
-			console.log(`Resuming full crawl from page ${state.lastPage}`);
-			crawler.fullCrawl(state.lastPage);
+		if (state1) {
+			await state1.update({ status: 'idle', error: null });
+			crawler.detailsCrawl();
 		}
-	}
-	
-	async resumeIncompleteDetailCrawl() {
-		crawler.forceClose();
-		const state = await CrawlState.findOne({
-			where: {
-				isFullCrawl: false,
-				isDetailCrawl: true,
-			}
+		/**
+		 * 开始sub details crawl**/
+		const state2 = await NewCrawlState.findOne({
+			where: C_STATE_TYPE.detail2
 		});
-		
-		if (state) {
-			// 先将状态设为空闲
-			await state.update({ status: 'idle', error: null });
-			
-			console.log(`Resuming detail crawl`);
-			crawler.fetchProjectDetails();
+		if (state2) {
+			await state2.update({ status: 'idle', error: null });
+			crawler.subDetailsCrawl();
 		}
 	}
 	
 	startScheduler() {
-		// Schedule daily quick update at 5 AM
 		this.dailyJob = schedule.scheduleJob('0 5 * * *', async () => {
 			console.log('Starting daily quick update...');
 			try {
@@ -55,20 +42,17 @@ class CrawlerScheduler {
 			}
 		});
 		
-		// Schedule fetchProjectDetails to run every 30 minutes
 		this.halfHourlyDetailJob = schedule.scheduleJob('*/30 * * * *', async () => {
-			console.log('Starting half-hourly fetchProjectDetails...');
+			console.log('Starting half-hourly restartDetailCrawl...');
 			try {
-				await this.resumeIncompleteDetailCrawl();
-				console.log('Half-hourly fetchProjectDetails completed');
+				await this.restartDetailCrawl();
+				console.log('Half-hourly restartDetailCrawl completed');
 			} catch (error) {
-				console.error('Half-hourly fetchProjectDetails failed:', error);
+				console.error('Half-hourly restartDetailCrawl failed:', error);
 			}
 		});
 		
-		// Resume any incomplete full crawl on startup
-		// this.resumeIncompleteFullCrawl();
-		this.resumeIncompleteDetailCrawl();
+		this.restartDetailCrawl();
 	}
 	
 	stopScheduler() {

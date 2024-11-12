@@ -1,6 +1,6 @@
 const express = require('express');
 const { query, validationResult } = require('express-validator');
-const { Fundraising, CrawlState } = require('../models');
+const { Fundraising, NewCrawlState, C_STATE_TYPE } = require('../models');
 const crawler = require('../services/crawler');
 const { Op } = require('sequelize');
 
@@ -188,7 +188,7 @@ router.get('/search', async (req, res) => {
 // Start full crawl
 router.post('/crawl/full', async (req, res) => {
 	try {
-		const state = await CrawlState.findOne({ where: { isFullCrawl: true, isDetailCrawl: false } });
+		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.full });
 		if (state && state.status === 'running') {
 			return res.status(400).json({ error: 'Full crawl already in progress' });
 		}
@@ -205,7 +205,7 @@ router.post('/crawl/full', async (req, res) => {
 // Start quick update
 router.post('/crawl/quick', async (req, res) => {
 	try {
-		const state = await CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: false } });
+		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.quick });
 		if (state && state.status === 'running') {
 			return res.status(400).json({ error: 'Quick update already in progress' });
 		}
@@ -222,13 +222,8 @@ router.post('/crawl/quick', async (req, res) => {
 // Start detail crawl
 router.post('/crawl/detail', async (req, res) => {
 	try {
-		const state = await CrawlState.findOne({ where: { isDetailCrawl: true, isFullCrawl: false } });
-		if (state && state.status === 'running') {
-			return res.status(400).json({ error: 'Detail crawl already in progress' });
-		}
-		
-		// Start crawl in background
-		crawler.fetchProjectDetails().catch(console.error);
+		crawler.detailsCrawl().catch(console.error);
+		crawler.subDetailsCrawl().catch(console.error);
 		res.json({ message: 'Detail crawl started' });
 	} catch (error) {
 		console.error('Error starting detail crawl:', error);
@@ -239,14 +234,11 @@ router.post('/crawl/detail', async (req, res) => {
 // Set all crawl statuses to idle
 router.post('/status/reset', async (req, res) => {
 	try {
-		// 更新所有 CrawlState 条目，将状态设为 'idle'，并清空错误信息
-		await CrawlState.update(
+		// 更新所有 NewCrawlState 条目，将状态设为 'idle'，并清空错误信息
+		await NewCrawlState.update(
 			{
 				status: 'idle',
 				error: null,
-				lastPage: null,
-				lastProjectLink: null,
-				numberDetailsToCrawl: null
 			},
 			{
 				where: {} // 空条件表示更新所有记录
@@ -263,19 +255,21 @@ router.post('/status/reset', async (req, res) => {
 // Get crawl status
 router.get('/status', async (req, res) => {
 	try {
-		const [fullCrawl, quickUpdate, detailCrawl] = await Promise.all([
-			CrawlState.findOne({ where: { isFullCrawl: true, isDetailCrawl: false } }),
-			CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: false } }),
-			CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: true } })
+		const [full, quick, detail, detail2] = await Promise.all([
+			NewCrawlState.findOne({ where: C_STATE_TYPE.full }),
+			NewCrawlState.findOne({ where: C_STATE_TYPE.quick }),
+			NewCrawlState.findOne({ where: C_STATE_TYPE.detail }),
+			NewCrawlState.findOne({ where: C_STATE_TYPE.detail2 })
 		]);
 		
 		// 初始化 projectDetails 为 null
 		let projectDetails = null;
+		let projectDetails2 = null;
 		
-		// 如果 detailCrawl 存在，则根据 lastProjectLink 查询 Project 的 projectLink, projectName 和 originalPageNumber
-		if (detailCrawl && detailCrawl.lastProjectLink) {
+		// 如果 detail 存在，则根据 projectLink 查询 Project 的 projectLink, projectName 和 originalPageNumber
+		if (detail && detail?.otherInfo?.projectLink) {
 			const project = await Fundraising.Project.findOne({
-				where: { projectLink: detailCrawl.lastProjectLink },
+				where: { projectLink: detail?.otherInfo?.projectLink },
 				attributes: ['projectLink', 'projectName', 'originalPageNumber', 'detailFailuresNumber']
 			});
 			projectDetails = project ? {
@@ -285,27 +279,45 @@ router.get('/status', async (req, res) => {
 				detailFailuresNumber: project.detailFailuresNumber
 			} : null;
 		}
+		if (detail2 && detail2?.otherInfo?.projectLink) {
+			const project = await Fundraising.Project.findOne({
+				where: { projectLink: detail2?.otherInfo?.projectLink },
+				attributes: ['projectLink', 'projectName', 'originalPageNumber', 'detailFailuresNumber']
+			});
+			projectDetails2 = project ? {
+				projectLink: project.projectLink,
+				projectName: project.projectName,
+				originalPageNumber: project.originalPageNumber,
+				detailFailuresNumber: project.detailFailuresNumber
+			} : null;
+		}
 		
 		res.json({
-			fullCrawl: fullCrawl ? {
-				status: fullCrawl.status,
-				lastPage: fullCrawl.lastPage,
-				lastUpdate: fullCrawl.lastUpdateTime,
-				error: fullCrawl.error
+			full: full ? {
+				status: full.status,
+				lastUpdate: full.lastUpdateTime,
+				error: full.error,
+				otherInfo: full?.otherInfo
 			} : null,
-			quickUpdate: quickUpdate ? {
-				status: quickUpdate.status,
-				lastUpdate: quickUpdate.lastUpdateTime,
-				error: quickUpdate.error
+			quick: quick ? {
+				status: quick.status,
+				lastUpdate: quick.lastUpdateTime,
+				error: quick.error,
+				otherInfo: quick?.otherInfo
 			} : null,
-			detailCrawl: detailCrawl ? {
-				status: detailCrawl.status,
-				numberDetailsToCrawl: detailCrawl.numberDetailsToCrawl,
-				lastProjectLink: detailCrawl.lastProjectLink,
-				lastUpdate: detailCrawl.lastUpdateTime,
-				numberDetailsFailed: detailCrawl.numberDetailsFailed,
-				error: detailCrawl.error,
-				projectDetails: projectDetails // 返回 projectLink, projectName 和 originalPageNumber
+			detail: detail ? {
+				status: detail.status,
+				lastUpdate: detail.lastUpdateTime,
+				error: detail.error,
+				otherInfo: detail?.otherInfo,
+				projectDetails: projectDetails
+			} : null,
+			detail2: detail2 ? {
+				status: detail2.status,
+				lastUpdate: detail2.lastUpdateTime,
+				error: detail2.error,
+				otherInfo: detail2?.otherInfo,
+				projectDetails: projectDetails2
 			} : null
 		});
 	} catch (error) {
