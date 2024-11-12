@@ -4,7 +4,19 @@ const { CrawlState, Fundraising } = require('../models');
 const baseRootDataURL = 'https://www.rootdata.com';
 const { v4: uuidv4 } = require('uuid');
 const { Op, literal } = require('sequelize');
-
+// 定义不同的 User-Agent
+const userAgents = [
+	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36',
+	'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
+	'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36',
+	'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0',
+	'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
+	'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
+	'Mozilla/5.0 (Linux; Android 11; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Mobile Safari/537.36',
+	'Mozilla/5.0 (Linux; Android 10; SM-A505F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Mobile Safari/537.36',
+	'Mozilla/5.0 (iPad; CPU OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15A5341f Safari/604.1',
+	'Mozilla/5.0 (Linux; Android 9; Mi 9T Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.62 Mobile Safari/537.36'
+];
 function joinUrl(path, projectName) {
 	// 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
 	if (String(path).includes('javascript:void(0)')) {
@@ -363,17 +375,19 @@ class FundraisingCrawler {
 			for (const project of projectsToCrawl) {
 				console.log(`开始爬取 ${project.projectName} - ${project.projectLink} 的详情信息...`);
 				// 爬取项目详情逻辑
-				const ret = await retry(
-					async () => {
-						return await this.scrapeAndUpdateProjectDetails(project);
-					},
-					{
-						retries: 3,
-						minTimeout: 2000,
-						maxTimeout: 5000
-					}
-				);
-				if (!ret) {
+				try {
+					await retry(
+						async () => {
+							return await this.scrapeAndUpdateProjectDetails(project);
+						},
+						{
+							retries: 3,
+							minTimeout: 2000,
+							maxTimeout: 5000
+						}
+					);
+				} catch (err) {
+					console.log(err)
 					console.log(`详情抓取失败了～ ${project.projectName} - ${project.projectLink}, 继续下一个`);
 					failedCount++;
 					crawlState.numberDetailsFailed = failedCount;
@@ -405,7 +419,12 @@ class FundraisingCrawler {
 	
 	async scrapeAndUpdateProjectDetails(project) {
 		console.log(`Fetching details for ${project.projectName}...`);
-		try {
+		try
+		{
+			// 随机选择一个 User-Agent
+			const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+			await this.detailPage.setUserAgent(randomUserAgent); // 设置 User-Agent
+			
 			await this.detailPage.goto(project.projectLink, {
 				waitUntil: 'networkidle0',
 				timeout: 20000
