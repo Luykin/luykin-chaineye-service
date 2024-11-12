@@ -146,25 +146,38 @@ router.get('/search', async (req, res) => {
 			limit: 10, // 限制结果最多返回10条记录
 			order: [['createdAt', 'DESC']],
 			attributes: [
-				'projectName',
-				'projectLink',
-				'description',
-				'logo',
-				'round',
-				'amount',
-				'formattedAmount',
-				'valuation',
-				'formattedValuation',
-				'date',
-				'fundedAt',
-				'detailFetchedAt',
-				'socialLinks',
-				'teamMembers'
+				'projectName', 'projectLink', 'description', 'logo', 'round',
+				'amount', 'formattedAmount', 'valuation', 'formattedValuation',
+				'date', 'fundedAt', 'detailFetchedAt', 'socialLinks', 'teamMembers',
+				'detailFailuresNumber', 'originalPageNumber'
+			],
+			include: [
+				{
+					model: Fundraising.InvestmentRelationships,
+					as: 'investmentsReceived', // 当前项目作为被投资方的记录
+					attributes: ['round', 'lead', 'amount', 'valuation', 'formattedAmount', 'formattedValuation', 'date'],
+					include: [
+						{
+							model: Fundraising.Project,
+							as: 'investorProject', // 出资方项目
+							attributes: ['projectName', 'projectLink', 'socialLinks']
+						}
+					]
+				}
 			]
 		});
 		
+		// 格式化 investmentsReceived 数据，以日期进行分组
+		const formattedData = data.map(project => {
+			const investmentsByDate = groupInvestmentsByDate(project.investmentsReceived);
+			return {
+				...project.get(),
+				investmentsReceived: investmentsByDate
+			};
+		});
+		
 		res.json({
-			data: data,
+			data: formattedData,
 			total: data.length
 		});
 	} catch (error) {
