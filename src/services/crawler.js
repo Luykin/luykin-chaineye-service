@@ -119,12 +119,12 @@ class FundraisingCrawler {
 	
 	async initialize() {
 		// 隧道服务器域名和端口
-		let tunnelhost = 'z748.kdltps.com';
-		let tunnelport = '15818';
+		// let tunnelhost = 'z748.kdltps.com';
+		// let tunnelport = '15818';
 		this.browser = await puppeteer.launch({
 			headless: 'new',
 			args: [
-				`--proxy-server=${tunnelhost}:${tunnelport}`,
+				// `--proxy-server=${tunnelhost}:${tunnelport}`,
 				'--no-sandbox',
 				'--disable-setuid-sandbox'
 			]
