@@ -252,6 +252,29 @@ router.post('/status/reset', async (req, res) => {
 	}
 });
 
+// 查看所有失败的项目
+router.get('/failed', async (req, res) => {
+	try {
+		const filteredProjects = await Fundraising.Project.findAll({
+			where: {
+				detailFailuresNumber: { [Op.gt]: 3, [Op.lt]: 99 },
+				isInitial: true
+			}
+		});
+		
+		// 计算项目总数
+		const total = filteredProjects.length;
+		
+		res.json({
+			total,
+			projects: filteredProjects
+		});
+	} catch (error) {
+		console.error('Error fetching filtered projects:', error);
+		res.status(500).json({ error: 'Failed to fetch filtered projects' });
+	}
+});
+
 // Get crawl status
 router.get('/status', async (req, res) => {
 	try {
