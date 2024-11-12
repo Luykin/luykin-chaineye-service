@@ -144,7 +144,6 @@ router.get('/search', async (req, res) => {
 				]
 			},
 			limit: 10, // 限制结果最多返回10条记录
-			order: [['createdAt', 'DESC']],
 			attributes: [
 				'projectName', 'projectLink', 'description', 'logo', 'round',
 				'amount', 'formattedAmount', 'valuation', 'formattedValuation',
