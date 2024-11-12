@@ -364,10 +364,11 @@ class FundraisingCrawler {
 					[
 						literal(
 							// 按 `originalPageNumber` 升序排列，`originalPageNumber` 为 `null` 的排在最后
-							'CASE WHEN "originalPageNumber" IS NULL THEN 1 ELSE 0 END, "originalPageNumber" ASC'
+							'CASE WHEN "originalPageNumber" IS NULL THEN 1 ELSE 0 END'
 						),
 						'ASC'
-					]
+					],
+					['originalPageNumber', 'ASC'] // 按 `originalPageNumber` 升序排列
 				]
 			});
 			console.log(projectsToCrawl.length, '开始爬取这些项目的详情信息');

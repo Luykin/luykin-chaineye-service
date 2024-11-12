@@ -269,6 +269,22 @@ router.get('/status', async (req, res) => {
 			CrawlState.findOne({ where: { isFullCrawl: false, isDetailCrawl: true } })
 		]);
 		
+		// 初始化 projectDetails 为 null
+		let projectDetails = null;
+		
+		// 如果 detailCrawl 存在，则根据 lastProjectLink 查询 Project 的 projectLink, projectName 和 originalPageNumber
+		if (detailCrawl && detailCrawl.lastProjectLink) {
+			const project = await Fundraising.Project.findOne({
+				where: { projectLink: detailCrawl.lastProjectLink },
+				attributes: ['projectLink', 'projectName', 'originalPageNumber']
+			});
+			projectDetails = project ? {
+				projectLink: project.projectLink,
+				projectName: project.projectName,
+				originalPageNumber: project.originalPageNumber
+			} : null;
+		}
+		
 		res.json({
 			fullCrawl: fullCrawl ? {
 				status: fullCrawl.status,
@@ -287,7 +303,8 @@ router.get('/status', async (req, res) => {
 				lastProjectLink: detailCrawl.lastProjectLink,
 				lastUpdate: detailCrawl.lastUpdateTime,
 				numberDetailsFailed: detailCrawl.numberDetailsFailed,
-				error: detailCrawl.error
+				error: detailCrawl.error,
+				projectDetails: projectDetails // 返回 projectLink, projectName 和 originalPageNumber
 			} : null
 		});
 	} catch (error) {
