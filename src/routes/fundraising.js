@@ -56,24 +56,24 @@ router.get('/', validatePagination, async (req, res) => {
 				{
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsGiven', // 当前项目作为投资方的记录
-					attributes: ['round', 'lead', 'amount', 'valuation', 'date'],
+					attributes: ['round', 'lead', 'amount', 'valuation', 'formattedAmount', 'formattedValuation', 'date'],
 					include: [
 						{
 							model: Fundraising.Project,
 							as: 'fundedProject',
-							attributes: ['id', 'projectName', 'projectLink', 'socialLinks']
+							attributes: ['projectName', 'projectLink', 'socialLinks']
 						} // 被投项目
 					]
 				},
 				{
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsReceived', // 当前项目作为被投资方的记录
-					attributes: ['round', 'lead', 'amount', 'valuation', 'date'],
+					attributes: ['round', 'lead', 'amount', 'valuation', 'formattedAmount', 'formattedValuation', 'date'],
 					include: [
 						{
 							model: Fundraising.Project,
 							as: 'investorProject',
-							attributes: ['id', 'projectName', 'projectLink', 'socialLinks']
+							attributes: ['projectName', 'projectLink', 'socialLinks']
 						} // 出资方项目
 					]
 				}
