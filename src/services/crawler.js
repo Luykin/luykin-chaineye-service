@@ -486,7 +486,11 @@ class FundraisingCrawler {
 				 * 和socialLinks存在时才更新detailFetchedAt字段，否则不更新
 				 * **/
 				detailFetchedAt: isCrawlSuccess ? +new Date() : null,
-				detailFailuresNumber: isCrawlSuccess ? 0 : Number(project.detailFailuresNumber || 0) + 1
+				/**
+				 * relatedProjectLength 为 0 代表明确的没有关联项目，
+				 * 没有关联项目的我们不要再请求了，直接返回99
+				 * **/
+				detailFailuresNumber: isCrawlSuccess ? relatedProjectLength <= 0 ? 99 : 0 : Number(project.detailFailuresNumber || 0) + 1
 			});
 			console.log(`此项目抓取${isCrawlSuccess ? '成功' : '失败'}======,${project.projectName}`);
 			if (!isCrawlSuccess) {
