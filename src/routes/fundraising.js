@@ -222,6 +222,7 @@ router.get('/status', async (req, res) => {
 				numberDetailsToCrawl: detailCrawl.numberDetailsToCrawl,
 				lastProjectLink: detailCrawl.lastProjectLink,
 				lastUpdate: detailCrawl.lastUpdateTime,
+				numberDetailsFailed: detailCrawl.numberDetailsFailed,
 				error: detailCrawl.error
 			} : null
 		});
