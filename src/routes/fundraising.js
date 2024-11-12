@@ -276,12 +276,13 @@ router.get('/status', async (req, res) => {
 		if (detailCrawl && detailCrawl.lastProjectLink) {
 			const project = await Fundraising.Project.findOne({
 				where: { projectLink: detailCrawl.lastProjectLink },
-				attributes: ['projectLink', 'projectName', 'originalPageNumber']
+				attributes: ['projectLink', 'projectName', 'originalPageNumber', 'detailFailuresNumber']
 			});
 			projectDetails = project ? {
 				projectLink: project.projectLink,
 				projectName: project.projectName,
-				originalPageNumber: project.originalPageNumber
+				originalPageNumber: project.originalPageNumber,
+				detailFailuresNumber: project.detailFailuresNumber
 			} : null;
 		}
 		
