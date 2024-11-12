@@ -339,13 +339,11 @@ class FundraisingCrawler {
 			const projectsToCrawl = await Fundraising.Project.findAll({
 				where: {
 					[Op.or]: [
-						// 1. 优先筛选 `isInitial` 为 `true`、没有 `investmentsReceived`、失败次数小于等于 3 的项目
 						{
 							isInitial: true,
 							'$investmentsReceived.id$': null,
 							detailFailuresNumber: { [Op.lte]: 3 }
 						},
-						// 2. 其次筛选 `detailFetchedAt` 为空且失败次数小于等于 3 的项目
 						{
 							detailFetchedAt: null,
 							detailFailuresNumber: { [Op.lte]: 3 }
@@ -356,16 +354,26 @@ class FundraisingCrawler {
 					{
 						model: Fundraising.InvestmentRelationships,
 						as: 'investmentsReceived',
-						required: false, // 左连接以包括没有 `investmentsReceived` 的项目
-						attributes: ['id'] // 仅需 `id` 用于检查是否存在 `investmentsReceived`
+						required: false,
+						attributes: ['id']
 					}
 				],
 				order: [
 					['isInitial', 'DESC'], // 优先 `isInitial` 为 true 的项目
-					[literal('"investmentsReceived.id"'), 'ASC'] // 优先没有 `investmentsReceived` 的项目
+					[literal('"investmentsReceived.id"'), 'ASC'], // 优先没有 `investmentsReceived` 的项目
+					[
+						literal(
+							// 按 `originalPageNumber` 升序排列，`originalPageNumber` 为 `null` 的排在最后
+							'CASE WHEN "originalPageNumber" IS NULL THEN 1 ELSE 0 END, "originalPageNumber" ASC'
+						),
+						'ASC'
+					]
 				]
 			});
 			console.log(projectsToCrawl.length, '开始爬取这些项目的详情信息');
+			console.log('第一个项目为: ', projectsToCrawl[0].projectLink, projectsToCrawl[0].originalPageNumber);
+			console.log('第二个项目为: ', projectsToCrawl[1].projectLink, projectsToCrawl[1].originalPageNumber);
+			console.log('最后一个项目为:', projectsToCrawl[projectsToCrawl.length - 1].projectLink, projectsToCrawl[projectsToCrawl.length - 1].originalPageNumber)
 			crawlState.status = 'running';
 			crawlState.error = null;
 			crawlState.numberDetailsToCrawl = projectsToCrawl.length;
