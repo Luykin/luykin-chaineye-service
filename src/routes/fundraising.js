@@ -11,7 +11,32 @@ const validatePagination = [
 	query('limit').optional().isInt({ min: 5, max: 50 })
 ];
 
-// Get fundraising data with pagination
+const groupInvestmentsByDate = (investmentsReceived) => {
+	return investmentsReceived.reduce((acc, investment) => {
+		const dateKey = investment.date;
+		if (!acc[dateKey]) {
+			acc[dateKey] = {
+				round: investment.round,
+				amount: investment.amount,
+				valuation: investment.valuation,
+				formattedAmount: investment.formattedAmount,
+				formattedValuation: investment.formattedValuation,
+				investors: []
+			};
+		}
+		
+		acc[dateKey].investors.push({
+			lead: investment.lead,
+			projectName: investment.investorProject.projectName,
+			projectLink: investment.investorProject.projectLink,
+			socialLinks: investment.investorProject.socialLinks
+		});
+		
+		return acc;
+	}, {});
+};
+
+// Express route
 router.get('/', validatePagination, async (req, res) => {
 	try {
 		const errors = validationResult(req);
@@ -22,66 +47,47 @@ router.get('/', validatePagination, async (req, res) => {
 		const page = parseInt(req.query.page) || 1;
 		const limit = parseInt(req.query.limit) || 30;
 		const offset = (page - 1) * limit;
-		
-		// 优化排序字段
 		const sortField = req.query.sort === 'fundedAt' ? 'fundedAt' : null;
 		const sortOrder = sortField === 'fundedAt' ? 'DESC' : 'ASC';
-		
-		// 构建排序条件，若无排序字段则为空数组
 		const order = sortField ? [[sortField, sortOrder]] : [];
 		
 		const data = await Fundraising.Project.findAndCountAll({
-			where: { isInitial: true }, // 仅筛选 isInitial 为 true 的数据
+			where: { isInitial: true },
 			attributes: [
-				'projectName',
-				'projectLink',
-				'description',
-				'logo',
-				'round',
-				'amount',
-				'formattedAmount',
-				'valuation',
-				'formattedValuation',
-				'date',
-				'fundedAt',
-				'detailFetchedAt',
-				'socialLinks',
-				'teamMembers',
-				'detailFailuresNumber'
-			], // 选择必要的字段，减少传输数据
+				'projectName', 'projectLink', 'description', 'logo', 'round',
+				'amount', 'formattedAmount', 'valuation', 'formattedValuation',
+				'date', 'fundedAt', 'detailFetchedAt', 'socialLinks', 'teamMembers', 'detailFailuresNumber'
+			],
 			limit,
 			offset,
 			order,
 			include: [
 				{
 					model: Fundraising.InvestmentRelationships,
-					as: 'investmentsGiven', // 当前项目作为投资方的记录
-					attributes: ['round', 'lead', 'amount', 'valuation', 'formattedAmount', 'formattedValuation', 'date'],
-					include: [
-						{
-							model: Fundraising.Project,
-							as: 'fundedProject',
-							attributes: ['projectName', 'projectLink', 'socialLinks']
-						} // 被投项目
-					]
-				},
-				{
-					model: Fundraising.InvestmentRelationships,
-					as: 'investmentsReceived', // 当前项目作为被投资方的记录
+					as: 'investmentsReceived',
 					attributes: ['round', 'lead', 'amount', 'valuation', 'formattedAmount', 'formattedValuation', 'date'],
 					include: [
 						{
 							model: Fundraising.Project,
 							as: 'investorProject',
 							attributes: ['projectName', 'projectLink', 'socialLinks']
-						} // 出资方项目
+						}
 					]
 				}
 			]
 		});
 		
+		// Format and group investmentsReceived by date
+		const formattedData = data.rows.map(project => {
+			const investmentsByDate = groupInvestmentsByDate(project.investmentsReceived);
+			return {
+				...project.get(), // other project data
+				investmentsReceived: investmentsByDate
+			};
+		});
+		
 		res.json({
-			data: data.rows,
+			data: formattedData,
 			total: data.count,
 			page,
 			totalPages: Math.ceil(data.count / limit)
@@ -90,7 +96,7 @@ router.get('/', validatePagination, async (req, res) => {
 		console.error('Error fetching fundraising data:', {
 			message: error.message,
 			stack: error.stack,
-			query: req.query // 记录请求参数，便于调试
+			query: req.query
 		});
 		res.status(500).json({ error: 'Failed to fetch data' });
 	}
