@@ -26,11 +26,11 @@ class CrawlerScheduler {
 	}
 	
 	async resumeIncompleteDetailCrawl() {
+		crawler.forceClose();
 		const state = await CrawlState.findOne({
 			where: {
 				isFullCrawl: false,
 				isDetailCrawl: true,
-				status: ['running', 'failed']
 			}
 		});
 		
@@ -59,7 +59,7 @@ class CrawlerScheduler {
 		this.halfHourlyDetailJob = schedule.scheduleJob('*/30 * * * *', async () => {
 			console.log('Starting half-hourly fetchProjectDetails...');
 			try {
-				await crawler.fetchProjectDetails();
+				await this.resumeIncompleteDetailCrawl();
 				console.log('Half-hourly fetchProjectDetails completed');
 			} catch (error) {
 				console.error('Half-hourly fetchProjectDetails failed:', error);
@@ -67,7 +67,7 @@ class CrawlerScheduler {
 		});
 		
 		// Resume any incomplete full crawl on startup
-		this.resumeIncompleteFullCrawl();
+		// this.resumeIncompleteFullCrawl();
 		this.resumeIncompleteDetailCrawl();
 	}
 	

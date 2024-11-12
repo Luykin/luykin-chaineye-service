@@ -5,18 +5,18 @@ const baseRootDataURL = 'https://www.rootdata.com';
 const { v4: uuidv4 } = require('uuid');
 const { Op, literal } = require('sequelize');
 // 定义不同的 User-Agent
-const userAgents = [
-	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36',
-	'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
-	'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36',
-	'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0',
-	'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
-	'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
-	'Mozilla/5.0 (Linux; Android 11; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Mobile Safari/537.36',
-	'Mozilla/5.0 (Linux; Android 10; SM-A505F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Mobile Safari/537.36',
-	'Mozilla/5.0 (iPad; CPU OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15A5341f Safari/604.1',
-	'Mozilla/5.0 (Linux; Android 9; Mi 9T Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.62 Mobile Safari/537.36'
-];
+// const userAgents = [
+// 	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36',
+// 	'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
+// 	'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36',
+// 	'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0',
+// 	'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
+// 	'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
+// 	'Mozilla/5.0 (Linux; Android 11; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Mobile Safari/537.36',
+// 	'Mozilla/5.0 (Linux; Android 10; SM-A505F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Mobile Safari/537.36',
+// 	'Mozilla/5.0 (iPad; CPU OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15A5341f Safari/604.1',
+// 	'Mozilla/5.0 (Linux; Android 9; Mi 9T Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.62 Mobile Safari/537.36'
+// ];
 
 function joinUrl(path, projectName) {
 	// 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
@@ -129,6 +129,9 @@ class FundraisingCrawler {
 				'--disable-setuid-sandbox'
 			]
 		});
+		if (this.detailPage) {
+			this.page?.close?.();
+		}
 		this.page = await this.browser.newPage();
 	}
 	
@@ -136,7 +139,20 @@ class FundraisingCrawler {
 		if (!this.browser) {
 			await this.initialize();
 		}
+		if (this.detailPage) {
+			this.detailPage?.close?.();
+		}
 		this.detailPage = await this.browser.newPage();
+	}
+	
+	async forceClose() {
+		try {
+			await this.browser?.close?.();
+			this.page = null;
+			this.detailPage = null;
+		} catch (err) {
+			console.error('Error closing browser:', err);
+		}
 	}
 	
 	async close() {
@@ -160,7 +176,11 @@ class FundraisingCrawler {
 	
 	async crawlPage(pageNum) {
 		try {
-			await this.page.goto(`https://www.rootdata.com/Fundraising?page=${pageNum}`, {
+			if (!this.page) {
+				await new Promise(resolve => setTimeout(resolve, 2000));
+				throw new Error('crawlPage page not found');
+			}
+			await this.page?.goto(`https://www.rootdata.com/Fundraising?page=${pageNum}`, {
 				waitUntil: 'networkidle0',
 				timeout: 30000 // 设置超时
 			});
@@ -380,9 +400,9 @@ class FundraisingCrawler {
 				]
 			});
 			console.log(projectsToCrawl.length, '开始爬取这些项目的详情信息');
-			console.log('第一个项目为: ', projectsToCrawl[0].projectLink, projectsToCrawl[0].originalPageNumber);
-			console.log('第二个项目为: ', projectsToCrawl[1].projectLink, projectsToCrawl[1].originalPageNumber);
-			console.log('最后一个项目为:', projectsToCrawl[projectsToCrawl.length - 1].projectLink, projectsToCrawl[projectsToCrawl.length - 1].originalPageNumber);
+			// console.log('第一个项目为: ', projectsToCrawl[0].projectLink, projectsToCrawl[0].originalPageNumber);
+			// console.log('第二个项目为: ', projectsToCrawl[1].projectLink, projectsToCrawl[1].originalPageNumber);
+			// console.log('最后一个项目为:', projectsToCrawl[projectsToCrawl.length - 1].projectLink, projectsToCrawl[projectsToCrawl.length - 1].originalPageNumber);
 			crawlState.status = 'running';
 			crawlState.error = null;
 			crawlState.numberDetailsToCrawl = projectsToCrawl.length;
@@ -416,7 +436,7 @@ class FundraisingCrawler {
 				remainingCount--;
 				crawlState.numberDetailsToCrawl = remainingCount;
 				await crawlState.save();
-				await new Promise(resolve => setTimeout(resolve, 1500));
+				await new Promise(resolve => setTimeout(resolve, 1000));
 			}
 			
 			// 完成详情页爬取
@@ -437,16 +457,22 @@ class FundraisingCrawler {
 	async scrapeAndUpdateProjectDetails(project) {
 		console.log(`Fetching details for ${project.projectName}...`);
 		try {
-			// 随机选择一个 User-Agent
-			const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
-			await this.detailPage.setUserAgent(randomUserAgent); // 设置 User-Agent
+			if (!this.detailPage) {
+				throw new Error('网页不见了，Detail page not initialized');
+				return;
+			}
+			// // 随机选择一个 User-Agent
+			// const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+			// await this.detailPage.setUserAgent(randomUserAgent); // 设置 User-Agent
 			
 			await this.detailPage.goto(project.projectLink, {
 				waitUntil: 'networkidle0',
-				timeout: 12000
+				timeout: 10000
 			});
 			console.log('等待打开详情页。。。。。。');
-			await this.detailPage.waitForSelector('.base_info');
+			await this.detailPage.waitForSelector('.base_info', {
+				timeout: 10000
+			});
 			console.log('打开详情页成功。。。。。');
 			
 			// Expand all sections
@@ -499,11 +525,11 @@ class FundraisingCrawler {
 				 * **/
 				detailFailuresNumber: isCrawlSuccess ? relatedProjectLength <= 0 ? 99 : 0 : Number(project.detailFailuresNumber || 0) + 1
 			});
-			console.log(`此项目抓取${isCrawlSuccess ? '成功' : '失败'}======,${project.projectName}`);
+			// console.log(`此项目抓取${isCrawlSuccess ? '成功' : '失败'}======,${project.projectName}`);
 			if (!isCrawlSuccess) {
 				throw new Error('Failed to fetch project details');
 			}
-			console.log(`============抓取详情成功 ${project.isInitial ? relatedProjectLength + '关联成功' : '非列表页项目不需要关联'}`);
+			console.log(`============抓取详情成功 ${project.projectName} ${project.isInitial ? relatedProjectLength + '关联成功' : '非列表页项目不需要关联'}`);
 			return true; //抓取成功
 		} catch (error) {
 			console.log(`============抓取详情失败 ${project.projectLink}`);
