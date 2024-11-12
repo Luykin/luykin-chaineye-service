@@ -265,6 +265,10 @@ class FundraisingCrawler {
 			await state.save();
 			
 			while (hasMoreData) {
+				if (!this.page) {
+					throw new Error('fullCrawl外层拦截，本次遍历结束。应该开启了下一次。【网页不见了】');
+					return;
+				}
 				console.log(`Crawling page ${currentPage}...`);
 				
 				const data = await retry(
@@ -329,6 +333,10 @@ class FundraisingCrawler {
 			
 			// Only crawl first 3 pages for quick updates
 			for (let page = 1; page <= 3; page++) {
+				if (!this.page) {
+					throw new Error('quickUpdate外层拦截，本次遍历结束。应该开启了下一次。【网页不见了】');
+					return;
+				}
 				const data = await this.crawlPage(page);
 				// 获取所有字段，排除不需要更新的字段
 				const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
@@ -410,6 +418,10 @@ class FundraisingCrawler {
 			let remainingCount = projectsToCrawl.length;
 			let failedCount = 0;
 			for (const project of projectsToCrawl) {
+				if (!this.detailPage) {
+					throw new Error('fetchProjectDetails外层拦截，本次遍历结束。应该开启了下一次。【网页不见了，Detail page not initialized】');
+					return;
+				}
 				console.log(`开始爬取 ${project.projectName} - ${project.projectLink} 的详情信息...`);
 				// 爬取项目详情逻辑
 				try {
@@ -425,7 +437,7 @@ class FundraisingCrawler {
 					);
 				} catch (err) {
 					console.log(err);
-					console.log(`详情抓取失败了～ ${project.projectName} - ${project.projectLink}, 继续下一个`);
+					console.log(`${project.projectName} - ${project.projectLink}, 详情抓取失败了!! 继续下一个`);
 					failedCount++;
 					crawlState.numberDetailsFailed = failedCount;
 				}
