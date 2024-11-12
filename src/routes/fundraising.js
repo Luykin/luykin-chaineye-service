@@ -76,7 +76,7 @@ router.get('/', validatePagination, async (req, res) => {
 				'projectName', 'projectLink', 'description', 'logo', 'round',
 				'amount', 'formattedAmount', 'valuation', 'formattedValuation',
 				'date', 'fundedAt', 'detailFetchedAt', 'socialLinks', 'teamMembers',
-				'detailFailuresNumber', 'originalPageNumber'
+				'detailFailuresNumber', 'originalPageNumber', 'isInitial'
 			],
 			include: [
 				{
@@ -148,7 +148,7 @@ router.get('/search', async (req, res) => {
 				'projectName', 'projectLink', 'description', 'logo', 'round',
 				'amount', 'formattedAmount', 'valuation', 'formattedValuation',
 				'date', 'fundedAt', 'detailFetchedAt', 'socialLinks', 'teamMembers',
-				'detailFailuresNumber', 'originalPageNumber'
+				'detailFailuresNumber', 'originalPageNumber', 'isInitial'
 			],
 			include: [
 				{
