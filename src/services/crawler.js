@@ -100,13 +100,16 @@ function parseDate(dateStr) {
 // 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
 const filterMismatchedFunction = (project) => {
 	const projectNameEncoded = encodeURI(project.projectName).toLocaleLowerCase();
+	const projectNameEncoded2 = encodeURIComponent(project.projectName).toLocaleLowerCase();
 	
 	// 优先从 projectLink 中提取名称，支持特殊字符（如点、空格、冒号等）
 	const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9.%: ]+)/);
 	let extractedName = linkMatch ? linkMatch[1].toLocaleLowerCase() : null;
 	
 	// 返回项目名称不一致的记录
-	return projectNameEncoded && extractedName && !extractedName.includes(projectNameEncoded) && !projectNameEncoded.includes(extractedName);
+	return projectNameEncoded && extractedName &&
+		!extractedName.includes(projectNameEncoded) && !projectNameEncoded.includes(extractedName) &&
+		!extractedName.includes(projectNameEncoded2) && !projectNameEncoded2.includes(extractedName);
 };
 
 class FundraisingCrawler {
