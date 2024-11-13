@@ -118,45 +118,48 @@ class FundraisingCrawler {
 		}
 	}
 
-	async initListPage() {
-		await this.initBrowser();
-		if (this.listPage) {
-			this.listPage?.close?.();
-			this.listPage = null;
-		}
-		this.listPage = await this.browser.newPage();
-		console.log('初始化爬取列表页的浏览器选项卡...');
-	}
+	// async initListPage() {
+	// 	await this.initBrowser();
+	// 	if (this.listPage) {
+	// 		this.listPage?.close?.();
+	// 		this.listPage = null;
+	// 	}
+	// 	this.listPage = await this.browser.newPage();
+	// 	console.log('初始化爬取列表页的浏览器选项卡...');
+	// }
 
-	async initDetailPage() {
-		await this.initBrowser();
-		if (this.detailPage) {
-			this.detailPage?.close?.();
-			this.detailPage = null;
-		}
-		this.detailPage = await this.browser.newPage();
-		console.log('初始化爬取详情页的浏览器选项卡...');
-	}
+	// async initDetailPage() {
+	// 	await this.initBrowser();
+	// 	if (this.detailPage) {
+	// 		this.detailPage?.close?.();
+	// 		this.detailPage = null;
+	// 	}
+	// 	this.detailPage = await this.browser.newPage();
+	// 	console.log('初始化爬取详情页的浏览器选项卡...');
+	// }
 
-	async initSocialPage() {
-		await this.initBrowser();
-		if (this.socialPage) {
-			this.socialPage?.close?.();
-			this.socialPage = null;
-		}
-		this.socialPage = await this.browser.newPage();
-		console.log('初始化爬取社交媒体页的浏览器选项卡...');
-	}
+	// async initSocialPage() {
+	// 	await this.initBrowser();
+	// 	if (this.socialPage) {
+	// 		this.socialPage?.close?.();
+	// 		this.socialPage = null;
+	// 	}
+	// 	this.socialPage = await this.browser.newPage();
+	// 	console.log('初始化爬取社交媒体页的浏览器选项卡...');
+	// }
 
 	async safeInitPage(key) {
+		if (!key) {
+			throw new Error("safeInitPage 没有填写key")
+		}
 		await this.initBrowser();
-		if(this[key] && this[key]?.close) {
+		if (this[key] && this[key]?.close) {
 			this[key]?.close?.();
 			this[key] = null;
 		}
+		console.log('安全的初始化浏览器网页${key}, 请等待90s，以免未结束的任务继续使用此网页实例,等待任务清理干净');
+		await new Promise(resolve => setTimeout(resolve, 90000));
 		this[key] = await this.browser.newPage();
-		console.log('安全的初始化浏览器网页${key}, 请等待60s，以免未结束的任务继续使用此网页实例,等待任务清理干净');
-		await new Promise(resolve => setTimeout(resolve, 60000));
 	}
 	/**
 	 * 强制关闭浏览器
@@ -284,7 +287,7 @@ class FundraisingCrawler {
 		let hasMoreData = true;
 
 		try {
-			await this.initListPage();
+		    await this.safeInitPage('listPage');
 			state.status = 'running';
 			await state.save();
 
@@ -351,7 +354,7 @@ class FundraisingCrawler {
 			if (state && state.status === 'running') {
 				throw new Error('quickUpdate already in progress');
 			}
-			await this.initListPage();
+			await this.safeInitPage('listPage');
 
 			state.status = 'running';
 			await state.save();
@@ -419,6 +422,9 @@ class FundraisingCrawler {
 
 			// 遍历项目进行抓取
 			for (const project of projectsToCrawl) {
+				if (!pageInstance) {
+					throw new Error(crawlType, '网页不见了,page not initialized=====');
+				}
 				console.log(`【${crawlType}】开始爬取 ${project.projectName} - ${project.projectLink} 的详情信息...`);
 				try {
 					await retry(
@@ -490,7 +496,7 @@ class FundraisingCrawler {
 				['originalPageNumber', 'ASC']
 			]
 		};
-
+		await this.safeInitPage('detailPage');
 		// 传递具体的页面实例以及爬虫类型
 		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, this.detailPage, 'detailsCrawl');
 	}
@@ -504,7 +510,7 @@ class FundraisingCrawler {
 				socialLinks: null
 			}
 		};
-
+		await this.safeInitPage('socialPage');
 		// 传递具体的页面实例以及爬虫类型
 		await this.crawlDetails(C_STATE_TYPE.detail2, crawlQueryOptions, this.socialPage, 'subDetailsCrawl');
 	}
