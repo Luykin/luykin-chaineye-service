@@ -99,17 +99,17 @@ function parseDate(dateStr) {
 
 // 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
 const filterMismatchedFunction = (project) => {
-	const description = project.description ? project.description.trim() : '';
-	const projectNameEncoded = encodeURIComponent(project.projectName.trim().toLowerCase());
+	const description = project.description.trim();
+	const projectNameEncoded = encodeURIComponent(project.projectName).toLocaleLowerCase();
 	
 	// 优先从 projectLink 中提取名称
 	const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9%]+)/);
-	let extractedName = linkMatch ? linkMatch[1].toLowerCase() : null;
+	let extractedName = linkMatch ? linkMatch[1].toLocaleLowerCase() : null;
 	
 	// 如果 projectLink 中未匹配到名称，则从 description 末尾提取
 	if (!extractedName) {
 		const descriptionMatch = description.match(/(?:\s|^)([A-Za-z\s]+)$/);
-		extractedName = descriptionMatch ? descriptionMatch[1].trim().toLowerCase() : null;
+		extractedName = descriptionMatch ? encodeURIComponent(descriptionMatch[1]).toLocaleLowerCase() : null;
 	}
 	
 	// 返回项目名称不一致的记录
@@ -411,7 +411,9 @@ class FundraisingCrawler {
 			
 			state.status = 'running';
 			state.error = null;
-			state.otherInfo = null;
+			state.otherInfo = {
+				total: projectsToCrawl.length
+			};
 			await state.save();
 			
 			let remainingCount = projectsToCrawl.length;

@@ -6,22 +6,28 @@ const { Op } = require('sequelize');
 const router = express.Router();
 // 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
 const filterMismatchedFunction = (project) => {
-	const description = project.description ? project.description.trim() : '';
-	const projectNameEncoded = encodeURIComponent(project.projectName.trim().toLowerCase());
+	const description = project.description.trim();
+	const projectNameEncoded = encodeURIComponent(project.projectName).toLocaleLowerCase();
 	
 	// 优先从 projectLink 中提取名称
 	const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9%]+)/);
-	let extractedName = linkMatch ? linkMatch[1].toLowerCase() : null;
+	let extractedName = linkMatch ? linkMatch[1].toLocaleLowerCase() : null;
 	
 	// 如果 projectLink 中未匹配到名称，则从 description 末尾提取
 	if (!extractedName) {
 		const descriptionMatch = description.match(/(?:\s|^)([A-Za-z\s]+)$/);
-		extractedName = descriptionMatch ? descriptionMatch[1].trim().toLowerCase() : null;
+		extractedName = descriptionMatch ? encodeURIComponent(descriptionMatch[1]).toLocaleLowerCase() : null;
 	}
 	
 	// 返回项目名称不一致的记录
 	return extractedName && extractedName !== projectNameEncoded;
 };
+
+function convertUTCToBeijingTime(utcDateString) {
+	const date = new Date(utcDateString);  // 将字符串转换为 Date 对象
+	return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });  // 使用北京时间格式
+}
+
 // Validation middleware
 const validatePagination = [
 	query('page').optional().isInt({ min: 1 }),
@@ -396,19 +402,19 @@ router.get('/status', async (req, res) => {
 		res.json({
 			full: full ? {
 				status: full.status,
-				lastUpdate: full.lastUpdateTime,
+				lastUpdate: convertUTCToBeijingTime(full.lastUpdateTime),
 				error: full.error,
 				otherInfo: full?.otherInfo
 			} : null,
 			quick: quick ? {
 				status: quick.status,
-				lastUpdate: quick.lastUpdateTime,
+				lastUpdate: convertUTCToBeijingTime(quick.lastUpdateTime),
 				error: quick.error,
 				otherInfo: quick?.otherInfo
 			} : null,
 			detail: detail ? {
 				status: detail.status,
-				lastUpdate: detail.lastUpdateTime,
+				lastUpdate: convertUTCToBeijingTime(detail.lastUpdateTime),
 				error: detail.error,
 				otherInfo: detail?.otherInfo,
 				projectDetails: projectDetails,
@@ -416,7 +422,7 @@ router.get('/status', async (req, res) => {
 			} : null,
 			detail2: detail2 ? {
 				status: detail2.status,
-				lastUpdate: detail2.lastUpdateTime,
+				lastUpdate: convertUTCToBeijingTime(detail2.lastUpdateTime),
 				error: detail2.error,
 				otherInfo: detail2?.otherInfo,
 				projectDetails: projectDetails2,
@@ -424,7 +430,7 @@ router.get('/status', async (req, res) => {
 			} : null,
 			spare: spare ? {
 				status: spare.status,
-				lastUpdate: spare.lastUpdateTime,
+				lastUpdate: convertUTCToBeijingTime(spare.lastUpdateTime),
 				error: spare.error,
 				otherInfo: spare?.otherInfo
 			} : null
