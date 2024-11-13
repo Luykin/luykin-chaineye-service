@@ -634,6 +634,7 @@ class FundraisingCrawler {
 			console.log(`============抓取详情成功 ${project.projectName} ${project.isInitial ? relatedProjectLength + '关联成功' : '非列表页项目不需要关联'}`);
 			return true; //抓取成功
 		} catch (error) {
+			console.error(error, '失败报错')
 			console.log(`============抓取详情失败 ${project.projectLink}`);
 			await project.update({
 				detailFailuresNumber: Number(project.detailFailuresNumber || 0) + 1
