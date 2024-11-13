@@ -10,8 +10,8 @@ class CrawlerScheduler {
 	}
 	
 	async restartDetailCrawl(scheduledTask = false) {
-		let needRestartDetails = false;
-		let needRestartDetails2 = false;
+		// let needRestartDetails = false;
+		// let needRestartDetails2 = false;
 		/**
 		 * 开始detail crawl**/
 		const state1 = await NewCrawlState.findOne({
@@ -29,7 +29,7 @@ class CrawlerScheduler {
 		
 		if (state1) {
 			await state1.update({ status: 'idle', error: null });
-			needRestartDetails = true;
+			// needRestartDetails = true;
 		}
 		/**
 		 * 开始sub details crawl**/
@@ -47,22 +47,21 @@ class CrawlerScheduler {
 		});
 		if (state2) {
 			await state2.update({ status: 'idle', error: null });
-			needRestartDetails2 = true;
+			// needRestartDetails2 = true;
 		}
-		if (needRestartDetails || needRestartDetails2) {
-			await new Promise(resolve => setTimeout(resolve, 2000));
-			console.log('发现需要重启浏览器,重启任务', needRestartDetails, needRestartDetails2)
-			await crawler.forceClose();
-			console.log('等待浏览器完全关闭，上一次的任务结束, 等30s');
-			await new Promise(resolve => setTimeout(resolve, scheduledTask ? 30000 : 3000));
-			console.log('30s等待完毕，开始重新执行!!!!');
-			needRestartDetails && crawler.detailsCrawl();
-			needRestartDetails2 && crawler.subDetailsCrawl();
-		}
+		await new Promise(resolve => setTimeout(resolve, 2000));
+		// console.log('发现需要重启浏览器,重启任务', needRestartDetails, needRestartDetails2)
+		await crawler.forceClose();
+		console.log('等待浏览器完全关闭，上一次的任务结束, 等30s');
+		await new Promise(resolve => setTimeout(resolve, scheduledTask ? 30000 : 3000));
+		console.log('30s等待完毕，开始重新执行!!!!');
+		crawler.detailsCrawl();
+		crawler.subDetailsCrawl();
 	}
 	
 	startScheduler() {
-		this.dailyJob = schedule.scheduleJob('0 5 * * *', async () => {
+		/** 北京时间上午11点10分 **/
+		this.dailyJob = schedule.scheduleJob('10 3 * * *', async () => {
 			console.log('Starting daily quick update...');
 			try {
 				await crawler.quickUpdate();
@@ -82,7 +81,7 @@ class CrawlerScheduler {
 			}
 		});
 		
-		// this.restartDetailCrawl();
+		this.restartDetailCrawl();
 	}
 	
 	stopScheduler() {

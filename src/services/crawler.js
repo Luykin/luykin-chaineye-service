@@ -331,7 +331,7 @@ class FundraisingCrawler {
 			await state.save();
 			throw error;
 		} finally {
-			await this.close();
+			// await this.close();
 		}
 	}
 	
@@ -375,7 +375,7 @@ class FundraisingCrawler {
 			console.error('Quick update error:', error);
 			throw error;
 		} finally {
-			await this.close();
+			// await this.close();
 		}
 	}
 
@@ -464,7 +464,7 @@ class FundraisingCrawler {
 			await state.save();
 			throw error;
 		} finally {
-			await this.close();
+			// await this.close();
 		}
 	}
 	
