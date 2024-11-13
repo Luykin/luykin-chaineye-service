@@ -551,6 +551,7 @@ class FundraisingCrawler {
 		if (stateSpare) {
 			await stateSpare.update({ status: 'idle', error: null });
 		}
+		await this.safeInitPage('sparePage');
 		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'failedReTryCrawl');
 	}
 	
