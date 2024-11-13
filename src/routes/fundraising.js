@@ -3,9 +3,25 @@ const { query, validationResult } = require('express-validator');
 const { Fundraising, NewCrawlState, C_STATE_TYPE } = require('../models');
 const crawler = require('../services/crawler');
 const { Op } = require('sequelize');
-
 const router = express.Router();
-
+// 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
+const filterMismatchedFunction = (project) => {
+	const description = project.description ? project.description.trim() : '';
+	const projectName = project.projectName.trim().toLowerCase();
+	
+	// 优先从 projectLink 中提取名称
+	const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9]+)/);
+	let extractedName = linkMatch ? linkMatch[1].trim().toLowerCase() : null;
+	
+	// 如果 projectLink 中未匹配到名称，则从 description 末尾提取
+	if (!extractedName) {
+		const descriptionMatch = description.match(/(?:\s|^)([A-Za-z\s]+)$/);
+		extractedName = descriptionMatch ? descriptionMatch[1].trim().toLowerCase() : null;
+	}
+	
+	// 返回项目名称不一致的记录
+	return extractedName && extractedName !== projectName;
+};
 // Validation middleware
 const validatePagination = [
 	query('page').optional().isInt({ min: 1 }),
@@ -306,8 +322,8 @@ router.get('/mismatched', async (req, res) => {
 		const page = parseInt(req.query.page) || 1;
 		const pageSize = parseInt(req.query.pageSize) || 10;
 		const offset = (page - 1) * pageSize;
-
-    // 初步筛选：获取 description 不为空且 projectLink 以 http 开头的项目
+		
+		// 初步筛选：获取 description 不为空且 projectLink 以 http 开头的项目
 		const initialProjects = await Fundraising.Project.findAll({
 			where: {
 				description: { [Op.not]: null },
@@ -315,26 +331,7 @@ router.get('/mismatched', async (req, res) => {
 			},
 			attributes: ['projectName', 'description', 'projectLink'],
 		});
-
-    // 应用层过滤：检查 description 末尾名称与 projectName 的匹配情况
-		const filteredProjects = initialProjects.filter(project => {
-			const description = project.description.trim();
-			
-			// 尝试从 description 的末尾提取项目名称，忽略大小写和空格
-			const match = description.match(/(?:\s|^)([A-Za-z\s]+)$/);
-			const descriptionProjectName = match ? match[1].trim().toLowerCase() : null;
-			const projectName = project.projectName.trim().toLowerCase();
-			
-			// 如果 description 中没有匹配到项目名称，则从 projectLink 提取
-			let linkProjectName = descriptionProjectName;
-			if (!linkProjectName) {
-				const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9]+)/);
-				linkProjectName = linkMatch ? linkMatch[1].trim().toLowerCase() : null;
-			}
-			
-			// 返回 projectName 和提取到的名称不一致的记录
-			return linkProjectName && linkProjectName !== projectName;
-		});
+		const filteredProjects = initialProjects.filter(filterMismatchedFunction);
 		
 		// 计算总数
 		const total = filteredProjects.length;
@@ -358,11 +355,12 @@ router.get('/mismatched', async (req, res) => {
 // Get crawl status
 router.get('/status', async (req, res) => {
 	try {
-		const [full, quick, detail, detail2] = await Promise.all([
+		const [full, quick, detail, detail2, spare] = await Promise.all([
 			NewCrawlState.findOne({ where: C_STATE_TYPE.full }),
 			NewCrawlState.findOne({ where: C_STATE_TYPE.quick }),
 			NewCrawlState.findOne({ where: C_STATE_TYPE.detail }),
-			NewCrawlState.findOne({ where: C_STATE_TYPE.detail2 })
+			NewCrawlState.findOne({ where: C_STATE_TYPE.detail2 }),
+			NewCrawlState.findOne({ where: C_STATE_TYPE.spare })
 		]);
 		
 		// 初始化 projectDetails 为 null
@@ -423,6 +421,12 @@ router.get('/status', async (req, res) => {
 				otherInfo: detail2?.otherInfo,
 				projectDetails: projectDetails2,
 				quickView: `http://148.251.131.206:8087/api/fundraising/search?keyword=${encodeURIComponent(projectDetails2?.projectName)}`
+			} : null,
+			spare: spare ? {
+				status: spare.status,
+				lastUpdate: spare.lastUpdateTime,
+				error: spare.error,
+				otherInfo: spare?.otherInfo
 			} : null
 		});
 	} catch (error) {

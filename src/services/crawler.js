@@ -97,6 +97,25 @@ function parseDate(dateStr) {
 	return isNaN(timestamp) ? null : timestamp;
 }
 
+// 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
+const filterMismatchedFunction = (project) => {
+	const description = project.description ? project.description.trim() : '';
+	const projectName = project.projectName.trim().toLowerCase();
+	
+	// 优先从 projectLink 中提取名称
+	const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9]+)/);
+	let extractedName = linkMatch ? linkMatch[1].trim().toLowerCase() : null;
+	
+	// 如果 projectLink 中未匹配到名称，则从 description 末尾提取
+	if (!extractedName) {
+		const descriptionMatch = description.match(/(?:\s|^)([A-Za-z\s]+)$/);
+		extractedName = descriptionMatch ? descriptionMatch[1].trim().toLowerCase() : null;
+	}
+	
+	// 返回项目名称不一致的记录
+	return extractedName && extractedName !== projectName;
+};
+
 class FundraisingCrawler {
 	constructor() {
 		this.browser = null;
@@ -154,13 +173,14 @@ class FundraisingCrawler {
 	 * **/
 	async close() {
 		try {
-			const [s1, s2, s3, s4] = await Promise.all([
+			const [s1, s2, s3, s4, s5] = await Promise.all([
 				NewCrawlState.findOne({ where: C_STATE_TYPE.full }),
 				NewCrawlState.findOne({ where: C_STATE_TYPE.quick }),
 				NewCrawlState.findOne({ where: C_STATE_TYPE.detail }),
-				NewCrawlState.findOne({ where: C_STATE_TYPE.detail2 })
+				NewCrawlState.findOne({ where: C_STATE_TYPE.detail2 }),
+				NewCrawlState.findOne({ where: C_STATE_TYPE.spare })
 			]);
-			if (s1?.status === 'running' || s2?.status === 'running' || s3?.status === 'running' || s4?.status === 'running') {
+			if (s1?.status === 'running' || s2?.status === 'running' || s3?.status === 'running' || s4?.status === 'running' || s5?.status === 'running') {
 				console.log('Crawler is busy, cannot close.');
 				return;
 			}
@@ -392,10 +412,7 @@ class FundraisingCrawler {
 			
 			state.status = 'running';
 			state.error = null;
-			state.otherInfo = {
-				...(state.otherInfo || {}),
-				total: projectsToCrawl.length
-			};
+			state.otherInfo = null;
 			await state.save();
 			
 			let remainingCount = projectsToCrawl.length;
@@ -509,24 +526,8 @@ class FundraisingCrawler {
 			},
 			attributes: ['projectName', 'description', 'projectLink'],
 		};
-		// 过滤函数：检查 description 末尾是否匹配 projectName，否则用链接名称匹配
-		const filterFunction = (project) => {
-			const description = project.description ? project.description.trim() : '';
-			const projectName = project.projectName.trim().toLowerCase();
-			
-			// 从 description 中提取名称
-			const match = description.match(/(?:\s|^)([A-Za-z\s]+)$/);
-			// 若 description 没有项目名称，则从 projectLink 中提取
-			let linkProjectName = match ? match[1].trim().toLowerCase() : null;
-			if (!linkProjectName) {
-				const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9]+)/);
-				linkProjectName = linkMatch ? linkMatch[1].trim().toLowerCase() : null;
-			}
-			
-			return linkProjectName && linkProjectName !== projectName;
-		};
 		await this.safeInitPage('sparePage');
-		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'correctDetailed', filterFunction);
+		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'correctDetailed', filterMismatchedFunction);
 	}
 	
 	/**
