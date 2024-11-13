@@ -451,7 +451,7 @@ class FundraisingCrawler {
 					projectLink: project.projectLink
 				};
 				await state.save();
-				await new Promise(resolve => setTimeout(resolve, 1500)); // 设置间隔
+				await new Promise(resolve => setTimeout(resolve, 2000)); // 设置间隔
 			}
 			
 			// 完成爬取
@@ -571,11 +571,11 @@ class FundraisingCrawler {
 			
 			await _page.goto(project.projectLink, {
 				waitUntil: 'networkidle0',
-				timeout: 35000
+				timeout: 30000
 			});
 			console.log('等待打开详情页。。。。。。');
 			await _page.waitForSelector('.base_info', {
-				timeout: 35000
+				timeout: 20000
 			});
 			
 			await this.clickAllButtons(_page);
