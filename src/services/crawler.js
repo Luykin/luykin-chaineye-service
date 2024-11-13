@@ -196,12 +196,11 @@ class FundraisingCrawler {
 	async crawlPage(pageNum) {
 		try {
 			if (!this.listPage) {
-				await new Promise(resolve => setTimeout(resolve, 2000));
 				throw new Error('crawlPage page not found');
 			}
 			await this.listPage?.goto(`https://www.rootdata.com/Fundraising?page=${pageNum}`, {
 				waitUntil: 'networkidle0',
-				timeout: 10000 // 设置超时
+				timeout: 15000 // 设置超时
 			});
 			// 检查是否存在“没有数据”的行
 			const isEmpty = await this.listPage.evaluate(() => {
@@ -297,8 +296,8 @@ class FundraisingCrawler {
 					},
 					{
 						retries: 3,
-						minTimeout: 1000,
-						maxTimeout: 3000
+						minTimeout: 2000,
+						maxTimeout: 5000
 					}
 				);
 				
@@ -325,7 +324,7 @@ class FundraisingCrawler {
 				await state.save();
 				currentPage++;
 				// Add delay between requests
-				await new Promise(resolve => setTimeout(resolve, 1000));
+				await new Promise(resolve => setTimeout(resolve, 2000));
 			}
 			
 			state.status = 'completed';
@@ -370,7 +369,7 @@ class FundraisingCrawler {
 				await Fundraising.Project.bulkCreate(data, {
 					updateOnDuplicate: fieldsToUpdate
 				});
-				await new Promise(resolve => setTimeout(resolve, 1000));
+				await new Promise(resolve => setTimeout(resolve, 1500));
 			}
 			
 			state.lastUpdateTime = new Date();
@@ -431,8 +430,8 @@ class FundraisingCrawler {
 						},
 						{
 							retries: 3,
-							minTimeout: 1000,
-							maxTimeout: 3000
+							minTimeout: 2000,
+							maxTimeout: 5000
 						}
 					);
 				} catch (err) {
@@ -453,7 +452,7 @@ class FundraisingCrawler {
 					projectLink: project.projectLink
 				};
 				await state.save();
-				await new Promise(resolve => setTimeout(resolve, 1000)); // 设置间隔
+				await new Promise(resolve => setTimeout(resolve, 1500)); // 设置间隔
 			}
 			
 			// 完成爬取
@@ -546,11 +545,11 @@ class FundraisingCrawler {
 			
 			await _page.goto(project.projectLink, {
 				waitUntil: 'networkidle0',
-				timeout: 10000
+				timeout: 15000
 			});
 			console.log('等待打开详情页。。。。。。');
 			await _page.waitForSelector('.base_info', {
-				timeout: 10000
+				timeout: 15000
 			});
 			
 			await this.clickAllButtons(_page);
@@ -702,7 +701,7 @@ class FundraisingCrawler {
 					}
 				});
 			});
-			await new Promise(resolve => setTimeout(resolve, 500)); // Wait for sections to load
+			await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for sections to load
 		} catch (error) {
 			console.error('Error expanding sections:', error);
 		}
