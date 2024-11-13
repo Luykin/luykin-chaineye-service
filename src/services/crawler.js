@@ -106,7 +106,7 @@ const filterMismatchedFunction = (project) => {
 	let extractedName = linkMatch ? linkMatch[1].toLocaleLowerCase() : null;
 	
 	// 返回项目名称不一致的记录
-	return extractedName && extractedName !== projectNameEncoded;
+	return projectNameEncoded && extractedName && !extractedName.includes(projectNameEncoded) && !projectNameEncoded.includes(extractedName);
 };
 
 class FundraisingCrawler {
