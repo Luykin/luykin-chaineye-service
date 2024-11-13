@@ -231,6 +231,17 @@ router.post('/crawl/detail', async (req, res) => {
 	}
 });
 
+// Start detail crawl
+router.post('/crawl/repair', async (req, res) => {
+	try {
+		crawler.correctDetailed().catch(console.error);
+		res.json({ message: 'correctDetailed started' });
+	} catch (error) {
+		console.error('Error starting detail crawl:', error);
+		res.status(500).json({ error: 'Failed to start detail crawl' });
+	}
+});
+
 // Set all crawl statuses to idle
 router.post('/status/reset', async (req, res) => {
 	try {
@@ -267,7 +278,8 @@ router.get('/failed', async (req, res) => {
 		const { rows: projects, count: total } = await Fundraising.Project.findAndCountAll({
 			where: {
 				detailFailuresNumber: { [Op.gt]: 3, [Op.lt]: 99 },
-				isInitial: true
+				isInitial: true,
+				projectLink: { [Op.like]: 'http%' }
 			},
 			offset,
 			limit,
@@ -294,26 +306,34 @@ router.get('/mismatched', async (req, res) => {
 		const page = parseInt(req.query.page) || 1;
 		const pageSize = parseInt(req.query.pageSize) || 10;
 		const offset = (page - 1) * pageSize;
-		
-		// 初步筛选：获取 description 不为空的项目
+
+    // 初步筛选：获取 description 不为空且 projectLink 以 http 开头的项目
 		const initialProjects = await Fundraising.Project.findAll({
 			where: {
-				description: { [Op.not]: null }
+				description: { [Op.not]: null },
+				projectLink: { [Op.like]: 'http%' }
 			},
-			attributes: ['projectName', 'description'],
+			attributes: ['projectName', 'description', 'projectLink'],
 		});
-		
-		// 应用层过滤：检查 description 末尾名称与 projectName 的匹配情况
+
+    // 应用层过滤：检查 description 末尾名称与 projectName 的匹配情况
 		const filteredProjects = initialProjects.filter(project => {
 			const description = project.description.trim();
 			
-			// 提取 description 末尾的项目名称，忽略大小写和空格
+			// 尝试从 description 的末尾提取项目名称，忽略大小写和空格
 			const match = description.match(/(?:\s|^)([A-Za-z\s]+)$/);
 			const descriptionProjectName = match ? match[1].trim().toLowerCase() : null;
 			const projectName = project.projectName.trim().toLowerCase();
 			
-			// 返回 projectName 和 description 末尾名称不一致的记录
-			return descriptionProjectName && descriptionProjectName !== projectName;
+			// 如果 description 中没有匹配到项目名称，则从 projectLink 提取
+			let linkProjectName = descriptionProjectName;
+			if (!linkProjectName) {
+				const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9]+)/);
+				linkProjectName = linkMatch ? linkMatch[1].trim().toLowerCase() : null;
+			}
+			
+			// 返回 projectName 和提取到的名称不一致的记录
+			return linkProjectName && linkProjectName !== projectName;
 		});
 		
 		// 计算总数

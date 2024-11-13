@@ -53,9 +53,9 @@ class CrawlerScheduler {
 			await new Promise(resolve => setTimeout(resolve, 2000));
 			console.log('发现需要重启浏览器,重启任务', needRestartDetails, needRestartDetails2)
 			await crawler.forceClose();
-			console.log('等待浏览器完全关闭，上一次的任务结束, 等60s');
-			await new Promise(resolve => setTimeout(resolve, 60000));
-			console.log('60s等待完毕，开始重新执行!!!!');
+			console.log('等待浏览器完全关闭，上一次的任务结束, 等30s');
+			await new Promise(resolve => setTimeout(resolve, scheduledTask ? 30000 : 3000));
+			console.log('30s等待完毕，开始重新执行!!!!');
 			needRestartDetails && crawler.detailsCrawl();
 			needRestartDetails2 && crawler.subDetailsCrawl();
 		}

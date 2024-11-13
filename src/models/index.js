@@ -14,7 +14,8 @@ const C_STATE_TYPE = {
 	full: { type: 'full'},
 	quick: { type: 'quick' },
 	detail: { type: 'detail' },
-	detail2: { type: 'detail2' }
+	detail2: { type: 'detail2' },
+	spare: { type: 'spare' }
 };
 
 async function setupDatabase() {

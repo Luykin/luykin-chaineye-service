@@ -3,7 +3,7 @@ const { DataTypes } = require('sequelize');
 module.exports = (sequelize) => {
 	return sequelize.define('NewCrawlState', {
 		type: {
-			type: DataTypes.ENUM('full', 'quick', 'detail', 'detail2'),
+			type: DataTypes.ENUM('full', 'quick', 'detail', 'detail2', 'spare'),
 			allowNull: false,
 		},
 		lastUpdateTime: {
