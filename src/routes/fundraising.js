@@ -252,22 +252,34 @@ router.post('/status/reset', async (req, res) => {
 	}
 });
 
-// 查看所有失败的项目
+// 查看所有失败的项目（带分页）
 router.get('/failed', async (req, res) => {
 	try {
-		const filteredProjects = await Fundraising.Project.findAll({
+		// 获取分页参数，默认值为 page 1，每页 10 条记录
+		const page = parseInt(req.query.page) || 1;
+		const pageSize = parseInt(req.query.pageSize) || 10;
+		
+		// 计算 offset 和 limit
+		const offset = (page - 1) * pageSize;
+		const limit = pageSize;
+		
+		// 查询符合条件的项目，并添加分页
+		const { rows: projects, count: total } = await Fundraising.Project.findAndCountAll({
 			where: {
 				detailFailuresNumber: { [Op.gt]: 3, [Op.lt]: 99 },
 				isInitial: true
-			}
+			},
+			offset,
+			limit,
+			order: [['createdAt', 'DESC']] // 可选：按创建时间排序
 		});
-		
-		// 计算项目总数
-		const total = filteredProjects.length;
 		
 		res.json({
 			total,
-			projects: filteredProjects
+			page,
+			pageSize,
+			totalPages: Math.ceil(total / pageSize),
+			projects
 		});
 	} catch (error) {
 		console.error('Error fetching filtered projects:', error);
