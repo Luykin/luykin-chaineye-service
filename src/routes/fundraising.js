@@ -287,6 +287,54 @@ router.get('/failed', async (req, res) => {
 	}
 });
 
+// 查询爬虫爬错误的项目
+router.get('/mismatched', async (req, res) => {
+	try {
+		// 获取分页参数，默认第一页，每页10条记录
+		const page = parseInt(req.query.page) || 1;
+		const pageSize = parseInt(req.query.pageSize) || 10;
+		const offset = (page - 1) * pageSize;
+		
+		// 初步筛选：获取 description 不为空的项目
+		const initialProjects = await Fundraising.Project.findAll({
+			where: {
+				description: { [Op.not]: null }
+			},
+			attributes: ['projectName', 'description'],
+		});
+		
+		// 应用层过滤：检查 description 末尾名称与 projectName 的匹配情况
+		const filteredProjects = initialProjects.filter(project => {
+			const description = project.description.trim();
+			
+			// 提取 description 末尾的项目名称，忽略大小写和空格
+			const match = description.match(/(?:\s|^)([A-Za-z\s]+)$/);
+			const descriptionProjectName = match ? match[1].trim().toLowerCase() : null;
+			const projectName = project.projectName.trim().toLowerCase();
+			
+			// 返回 projectName 和 description 末尾名称不一致的记录
+			return descriptionProjectName && descriptionProjectName !== projectName;
+		});
+		
+		// 计算总数
+		const total = filteredProjects.length;
+		
+		// 对过滤结果进行分页
+		const paginatedProjects = filteredProjects.slice(offset, offset + pageSize);
+		
+		res.json({
+			total,
+			page,
+			pageSize,
+			totalPages: Math.ceil(total / pageSize),
+			projects: paginatedProjects
+		});
+	} catch (error) {
+		console.error('Error fetching mismatched projects:', error);
+		res.status(500).json({ error: 'Failed to fetch mismatched projects' });
+	}
+});
+
 // Get crawl status
 router.get('/status', async (req, res) => {
 	try {
