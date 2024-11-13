@@ -147,6 +147,17 @@ class FundraisingCrawler {
 		this.socialPage = await this.browser.newPage();
 		console.log('初始化爬取社交媒体页的浏览器选项卡...');
 	}
+
+	async safeInitPage(key) {
+		await this.initBrowser();
+		if(this[key] && this[key]?.close) {
+			this[key]?.close?.();
+			this[key] = null;
+		}
+		this[key] = await this.browser.newPage();
+		console.log('安全的初始化浏览器网页${key}, 请等待60s，以免未结束的任务继续使用此网页实例,等待任务清理干净');
+		await new Promise(resolve => setTimeout(resolve, 60000));
+	}
 	/**
 	 * 强制关闭浏览器
 	 * **/
