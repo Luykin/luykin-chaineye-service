@@ -571,11 +571,11 @@ class FundraisingCrawler {
 			
 			await _page.goto(project.projectLink, {
 				waitUntil: 'networkidle0',
-				timeout: 15000
+				timeout: 35000
 			});
 			console.log('等待打开详情页。。。。。。');
 			await _page.waitForSelector('.base_info', {
-				timeout: 15000
+				timeout: 35000
 			});
 			
 			await this.clickAllButtons(_page);
