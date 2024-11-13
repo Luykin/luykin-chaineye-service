@@ -60,14 +60,25 @@ class CrawlerScheduler {
 	}
 	
 	startScheduler() {
-		/** 北京时间上午11点10分 **/
-		this.dailyJob = schedule.scheduleJob('10 3 * * *', async () => {
-			console.log('Starting daily quick update...');
+		// 每天北京时间上午 7:10（对应 UTC 时间晚上 11:10）
+		this.morningJob = schedule.scheduleJob('10 23 * * *', async () => {
+			console.log('Starting morning quick update...');
 			try {
 				await crawler.quickUpdate();
-				console.log('Daily quick update completed');
+				console.log('Morning quick update completed');
 			} catch (error) {
-				console.error('Daily quick update failed:', error);
+				console.error('Morning quick update failed:', error);
+			}
+		});
+
+		// 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
+		this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
+			console.log('Starting evening quick update...');
+			try {
+				await crawler.quickUpdate();
+				console.log('Evening quick update completed');
+			} catch (error) {
+				console.error('Evening quick update failed:', error);
 			}
 		});
 		
@@ -85,8 +96,11 @@ class CrawlerScheduler {
 	}
 	
 	stopScheduler() {
-		if (this.dailyJob) {
-			this.dailyJob.cancel();
+		if (this.morningJob) {
+			this.morningJob.cancel();
+		}
+		if (this.eveningJob) {
+			this.eveningJob.cancel();
 		}
 		if (this.halfHourlyDetailJob) {
 			this.halfHourlyDetailJob.cancel();
