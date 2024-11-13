@@ -523,8 +523,15 @@ class FundraisingCrawler {
 				projectLink: { [Op.like]: 'http%' }
 			},
 		};
+		const stateSpare = await NewCrawlState.findOne({
+			where: {
+				...C_STATE_TYPE.spare,
+			}
+		});
+		if (stateSpare) {
+			await stateSpare.update({ status: 'idle', error: null });
+		}
 		await this.safeInitPage('sparePage');
-		console.log('开始correctDetailed ===============');
 		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'correctDetailed', filterMismatchedFunction);
 	}
 	
