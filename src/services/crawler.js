@@ -408,7 +408,8 @@ class FundraisingCrawler {
 			state.status = 'running';
 			state.error = null;
 			state.otherInfo = {
-				total: projectsToCrawl.length
+				total: projectsToCrawl.length,
+				filterFunction: typeof filterFunction === 'function'
 			};
 			await state.save();
 			
@@ -523,6 +524,7 @@ class FundraisingCrawler {
 			},
 		};
 		await this.safeInitPage('sparePage');
+		console.log('开始correctDetailed ===============');
 		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'correctDetailed', filterMismatchedFunction);
 	}
 	

@@ -82,7 +82,7 @@ class CrawlerScheduler {
 			}
 		});
 		
-		this.restartDetailCrawl();
+		// this.restartDetailCrawl();
 	}
 	
 	stopScheduler() {
