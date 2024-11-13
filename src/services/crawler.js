@@ -534,6 +534,25 @@ class FundraisingCrawler {
 		await this.safeInitPage('sparePage');
 		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'correctDetailed', filterMismatchedFunction);
 	}
+	/** 已经尝试失败的爬取 **/
+	async failedReTryCrawl() {
+		const crawlQueryOptions = {
+			where: {
+				detailFailuresNumber: { [Op.gt]: 3, [Op.lt]: 99 },
+				isInitial: true,
+				projectLink: { [Op.like]: 'http%' }
+			},
+		}
+		const stateSpare = await NewCrawlState.findOne({
+			where: {
+				...C_STATE_TYPE.spare,
+			}
+		});
+		if (stateSpare) {
+			await stateSpare.update({ status: 'idle', error: null });
+		}
+		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'failedReTryCrawl');
+	}
 	
 	/**
 	 * 传入一个项目数据库实例，和浏览器网页，开始爬取详情

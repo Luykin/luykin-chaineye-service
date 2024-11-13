@@ -255,8 +255,19 @@ router.post('/crawl/repair', async (req, res) => {
 		crawler.correctDetailed().catch(console.error);
 		res.json({ message: 'correctDetailed started' });
 	} catch (error) {
-		console.error('Error starting detail crawl:', error);
-		res.status(500).json({ error: 'Failed to start detail crawl' });
+		console.error('Error starting repair crawl:', error);
+		res.status(500).json({ error: 'Failed to start repair crawl' });
+	}
+});
+
+// Start detail crawl
+router.post('/crawl/retry', async (req, res) => {
+	try {
+		crawler.failedReTryCrawl().catch(console.error);
+		res.json({ message: 'failedReTryCrawl started' });
+	} catch (error) {
+		console.error('Error starting failedReTryCrawl crawl:', error);
+		res.status(500).json({ error: 'Failed to start failedReTryCrawl crawl' });
 	}
 });
 
