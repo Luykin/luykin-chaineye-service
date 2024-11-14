@@ -82,15 +82,15 @@ class CrawlerScheduler {
 			}
 		});
 		
-		this.halfHourlyDetailJob = schedule.scheduleJob('*/30 * * * *', async () => {
-			console.log('Starting half-hourly restartDetailCrawl...');
-			try {
-				await this.restartDetailCrawl(true);
-				console.log('Half-hourly restartDetailCrawl completed');
-			} catch (error) {
-				console.error('Half-hourly restartDetailCrawl failed:', error);
-			}
-		});
+		// this.halfHourlyDetailJob = schedule.scheduleJob('*/30 * * * *', async () => {
+		// 	console.log('Starting half-hourly restartDetailCrawl...');
+		// 	try {
+		// 		// await this.restartDetailCrawl(true);
+		// 		console.log('Half-hourly restartDetailCrawl completed');
+		// 	} catch (error) {
+		// 		console.error('Half-hourly restartDetailCrawl failed:', error);
+		// 	}
+		// });
 		
 		this.restartDetailCrawl();
 	}

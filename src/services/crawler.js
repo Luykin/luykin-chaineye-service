@@ -474,7 +474,7 @@ class FundraisingCrawler {
 			where: {
 				isInitial: true,
 				'$investmentsReceived.id$': null,
-				detailFailuresNumber: { [Op.lte]: 5 },
+				detailFailuresNumber: { [Op.lte]: 10 },
 				projectLink: { [Op.like]: 'http%' }  // 确保 projectLink 以 http 开头
 			},
 			include: [
