@@ -312,34 +312,15 @@ router.get('/failed', async (req, res) => {
 			},
 			offset,
 			limit,
-			subQuery: false,  // 禁用子查询
-			include: [
-				{
-					model: Fundraising.InvestmentRelationships,
-					as: 'investmentsReceived',
-					required: false,  // 使用左连接
-					attributes: ['id']
-				}
-			],
-			order: [
-				[
-					literal('CASE WHEN "originalPageNumber" IS NULL THEN 1 ELSE 0 END'),
-					'ASC'
-				],
-				['originalPageNumber', 'ASC']
-			]
 		});
-		
-		// 过滤掉包含 investmentsReceived 记录的项目
-		const filteredProjects = projects.filter(project => !project.investmentsReceived || project.investmentsReceived.length === 0);
 		
 		// 返回分页结果
 		res.json({
-			total: filteredProjects.length,
+			total,
 			page,
 			pageSize,
 			totalPages: Math.ceil(total / pageSize),
-			projects: filteredProjects
+			projects
 		});
 	} catch (error) {
 		console.error('Error fetching filtered projects:', error);
