@@ -124,9 +124,13 @@ class FundraisingCrawler {
 	async initBrowser() {
 		if (!this.browser) {
 			console.log('初始化浏览器...');
+			// // 隧道服务器域名和端口
+			let tunnelhost = 'g887.kdlfps.com'
+			let tunnelport = '18866';
 			this.browser = await puppeteer.launch({
 				headless: 'new',
 				args: [
+					// `--proxy-server=${tunnelhost}:${tunnelport}`,
 					'--no-sandbox',
 					'--disable-setuid-sandbox'
 				]
@@ -144,9 +148,12 @@ class FundraisingCrawler {
 			this[key] = null;
 		}
 		console.log(`安全的初始化浏览器网页${key}, 请等待...`);
-		await new Promise(resolve => setTimeout(resolve, 2000));
+		await new Promise(resolve => setTimeout(resolve, 5000));
 		this[key] = await this.browser.newPage();
-		await new Promise(resolve => setTimeout(resolve, 2000));
+		await this[key].setExtraHTTPHeaders({
+			'Accept-Encoding': 'gzip' // 使用gzip压缩让数据传输更快
+		});
+		await new Promise(resolve => setTimeout(resolve, 5000));
 		return this[key];
 	}
 
@@ -518,8 +525,8 @@ class FundraisingCrawler {
 				['originalPageNumber', 'ASC']
 			]
 		};
-		const _page = await this.safeInitPage('detailPage');
-		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, _page, 'detailPage');
+		await this.safeInitPage('detailPage');
+		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, this.detailPage, 'detailPage');
 	}
 	
 	// 爬取「isInitial false」的项目
@@ -532,8 +539,8 @@ class FundraisingCrawler {
 				projectLink: { [Op.like]: 'http%' }  // 确保 projectLink 以 http 开头
 			}
 		};
-		const _page = await this.safeInitPage('socialPage');
-		await this.crawlDetails(C_STATE_TYPE.detail2, crawlQueryOptions, _page, 'socialPage');
+		await this.safeInitPage('socialPage');
+		await this.crawlDetails(C_STATE_TYPE.detail2, crawlQueryOptions, this.socialPage, 'socialPage');
 	}
 	
 	/**
@@ -554,8 +561,8 @@ class FundraisingCrawler {
 		if (stateSpare) {
 			await stateSpare.update({ status: 'idle', error: null });
 		}
-		const _page = await this.safeInitPage('sparePage');
-		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, _page, 'sparePage', filterMismatchedFunction);
+		await this.safeInitPage('sparePage');
+		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'sparePage', filterMismatchedFunction);
 	}
 	/** 已经尝试失败的爬取 **/
 	async failedReTryCrawl() {
@@ -574,8 +581,8 @@ class FundraisingCrawler {
 		if (stateSpare) {
 			await stateSpare.update({ status: 'idle', error: null });
 		}
-		const _page = await this.safeInitPage('sparePage');
-		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, _page, 'failedReTryCrawl');
+		await this.safeInitPage('sparePage');
+		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'failedReTryCrawl');
 	}
 	
 	/**
