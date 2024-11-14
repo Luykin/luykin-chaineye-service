@@ -44,15 +44,23 @@ app.use(helmet({
 	contentSecurityPolicy: {
 		directives: {
 			...helmet.contentSecurityPolicy.getDefaultDirectives(),
-			"script-src": ["'self'", "'unsafe-inline'"],
-			"style-src": ["'self'", "'unsafe-inline'"],
+			'script-src': ['\'self\'', '\'unsafe-inline\''],
+			'style-src': ['\'self\'', '\'unsafe-inline\''],
 		},
 	},
 }));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+app.use(rateLimit({
+	windowMs: 60 * 1000, // 1 分钟
+	max: 60,             // 每分钟最多 60 个请求
+	message: '请求过于频繁，请稍后再试。'
+}));
 app.use(compression());
 app.use(morgan('combined'));
 app.use(express.json());
+app.use(helmet.hidePoweredBy()); // 隐藏 X-Powered-By 头
+app.use(helmet.xssFilter());      // 防止 XSS 攻击
+app.use(helmet.noSniff());        // 防止 MIME 类型嗅探
+app.use(express.json({ limit: '20kb' })); // 限制请求体大小为 20KB
 
 // API 路由
 app.use('/api/fundraising', fundraisingRoutes);
