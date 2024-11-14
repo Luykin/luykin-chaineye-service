@@ -47,7 +47,7 @@ class CrawlerScheduler {
 		await new Promise(resolve => setTimeout(resolve, scheduledTask ? 60000 : 2000));
 		console.log('等待完毕，开始重新执行');
 		crawler.detailsCrawl();
-		// crawler.subDetailsCrawl();
+		crawler.subDetailsCrawl();
 	}
 	
 	startScheduler() {

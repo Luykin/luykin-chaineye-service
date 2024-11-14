@@ -510,7 +510,7 @@ class FundraisingCrawler {
 		const crawlQueryOptions = {
 			where: {
 				isInitial: false,
-				detailFailuresNumber: { [Op.lte]: 3 },
+				detailFailuresNumber: { [Op.lte]: 5 },
 				socialLinks: null,
 				projectLink: { [Op.like]: 'http%' }  // 确保 projectLink 以 http 开头
 			}
