@@ -594,11 +594,11 @@ class FundraisingCrawler {
 			
 			await _page.goto(project.projectLink, {
 				waitUntil: 'networkidle0',
-				timeout: 15000
+				timeout: 8000
 			});
 			console.log('等待打开详情页。。。。。。');
 			await _page.waitForSelector('.base_info', {
-				timeout: 10000
+				timeout: 5000
 			});
 			
 			await this.clickAllButtons(_page);
@@ -656,7 +656,7 @@ class FundraisingCrawler {
 			console.log(`==抓取详情成功 ${project.projectName} ${project.isInitial ? relatedProjectLength + '关联成功' : '不需要关联'}`);
 			return true; //抓取成功
 		} catch (error) {
-			console.error(error, '失败报错');
+			console.log(String(error).slice(100), '失败报错');
 			await project.update({
 				detailFailuresNumber: Number(project.detailFailuresNumber || 0) + 1
 			});
