@@ -5,7 +5,8 @@ const { Op } = require('sequelize');
 
 class CrawlerScheduler {
 	constructor() {
-		this.dailyJob = null;
+		this.morningJob = null;
+		this.eveningJob = null;
 		this.halfHourlyDetailJob = null;
 	}
 	
