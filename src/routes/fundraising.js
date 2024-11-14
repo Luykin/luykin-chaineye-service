@@ -153,12 +153,16 @@ router.get('/search', async (req, res) => {
 		// 清理关键词，移除多余空格
 		const sanitizedKeyword = keyword.trim();
 		
-		// 使用 Sequelize 操作符进行关键词搜索，避免直接拼接防止注入
+		// 使用 Sequelize 操作符进行关键词搜索
 		const data = await Fundraising.Project.findAll({
 			where: {
 				[Op.or]: [
 					{ projectName: { [Op.like]: `%${sanitizedKeyword}%` } },
-					{ description: { [Op.like]: `%${sanitizedKeyword}%` } }
+					{
+						socialLinks: {
+							[Op.like]: `%${sanitizedKeyword}%`
+						}
+					}
 				]
 			},
 			limit: 10, // 限制结果最多返回10条记录
