@@ -124,9 +124,13 @@ class FundraisingCrawler {
 	async initBrowser() {
 		if (!this.browser) {
 			console.log('初始化浏览器...');
+			// 隧道服务器域名和端口
+			let tunnelhost = 'g887.kdlfps.com'
+			let tunnelport = '18866';
 			this.browser = await puppeteer.launch({
 				headless: 'new',
 				args: [
+					`--proxy-server=${tunnelhost}:${tunnelport}`,
 					'--no-sandbox',
 					'--disable-setuid-sandbox'
 				]
