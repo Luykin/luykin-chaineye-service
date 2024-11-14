@@ -27,3 +27,11 @@ pm2 set pm2-logrotate:retain 7
 # 设置轮转时间间隔 (每天)
 pm2 set pm2-logrotate:rotateInterval '0 0 * * *'
 ```
+不上传database.sqlite
+```bash
+# 停止追踪 database.sqlite
+git rm --cached database.sqlite
+#提交停止追踪 database.sqlite 的操作，并推送到远程仓库。
+# 在远程服务器的仓库根目录执行
+git update-index --assume-unchanged database.sqlite
+```

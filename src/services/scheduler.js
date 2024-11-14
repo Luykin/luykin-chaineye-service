@@ -44,10 +44,9 @@ class CrawlerScheduler {
 		if (stateSpare) {
 			await stateSpare.update({ status: 'idle', error: null, otherInfo: null });
 		}
-		// await new Promise(resolve => setTimeout(resolve, 2000));
 		await crawler.forceClose();
 		console.log('等待浏览器完全关闭，上一次的任务结束...');
-		await new Promise(resolve => setTimeout(resolve, scheduledTask ? 30000 : 3000));
+		await new Promise(resolve => setTimeout(resolve, scheduledTask ? 60000 : 2000));
 		console.log('等待完毕，开始重新执行');
 		crawler.detailsCrawl();
 		// crawler.subDetailsCrawl();
