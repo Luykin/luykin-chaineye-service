@@ -143,8 +143,8 @@ class FundraisingCrawler {
 			this[key]?.close?.();
 			this[key] = null;
 		}
-		console.log(`安全的初始化浏览器网页${key}, 请等待40s，以免未结束的任务继续使用此网页实例,等待任务清理干净`);
-		await new Promise(resolve => setTimeout(resolve, 40000));
+		console.log(`安全的初始化浏览器网页${key}, 请等待10s，以免未结束的任务继续使用此网页实例,等待任务清理干净`);
+		await new Promise(resolve => setTimeout(resolve, 10000));
 		this[key] = await this.browser.newPage();
 	}
 
@@ -157,9 +157,10 @@ class FundraisingCrawler {
 			this[key] = null;
 		}
 		console.log(`重启网页中，${key}, 请等待5s。。。`);
-		await new Promise(resolve => setTimeout(resolve, 5500));
+		await new Promise(resolve => setTimeout(resolve, 3500));
 		this[key] = await this.browser.newPage();
-		await new Promise(resolve => setTimeout(resolve, 5500));
+		await new Promise(resolve => setTimeout(resolve, 3500));
+		return this[key];
 	}
 	
 	/**
@@ -437,7 +438,7 @@ class FundraisingCrawler {
 				}
 				singlePageCumulative++;
 				if(singlePageCumulative >= 18) {
-					await this.reStartPage(crawlType);
+					pageInstance = await this.reStartPage(crawlType);
 					console.log("重启成功，继续");
 					singlePageCumulative = 0;
 				}
