@@ -147,6 +147,20 @@ class FundraisingCrawler {
 		await new Promise(resolve => setTimeout(resolve, 40000));
 		this[key] = await this.browser.newPage();
 	}
+
+	async reStartPage(key) {
+		if (!key) {
+			throw new Error('safeInitPage 没有填写key');
+		}
+		if (this[key] && this[key]?.close) {
+			this[key]?.close?.();
+			this[key] = null;
+		}
+		console.log(`重启网页中，${key}, 请等待5s。。。`);
+		await new Promise(resolve => setTimeout(resolve, 5500));
+		this[key] = await this.browser.newPage();
+		await new Promise(resolve => setTimeout(resolve, 5500));
+	}
 	
 	/**
 	 * 强制关闭浏览器
@@ -415,11 +429,17 @@ class FundraisingCrawler {
 			
 			let remainingCount = projectsToCrawl.length;
 			let failedCount = 0;
-			
+			let singlePageCumulative = 0; // 单个网页累计爬取， 用于重启
 			// 遍历项目进行抓取
 			for (const project of projectsToCrawl) {
 				if (!pageInstance) {
 					throw new Error(`${crawlType}: Page instance not initialized`);
+				}
+				singlePageCumulative++;
+				if(singlePageCumulative >= 30) {
+					await this.reStartPage(crawlType);
+					console.log("重启成功，继续");
+					singlePageCumulative = 0;
 				}
 				console.log(`【${crawlType}】开始爬取 ${project.projectName} - ${project.projectLink} 的详情信息...`);
 				try {
@@ -495,7 +515,7 @@ class FundraisingCrawler {
 		};
 		await this.safeInitPage('detailPage');
 		// 传递具体的页面实例以及爬虫类型
-		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, this.detailPage, 'detailsCrawl');
+		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, this.detailPage, 'detailPage');
 	}
 	
 	// 爬取「isInitial false」的项目
@@ -510,7 +530,7 @@ class FundraisingCrawler {
 		};
 		await this.safeInitPage('socialPage');
 		// 传递具体的页面实例以及爬虫类型
-		await this.crawlDetails(C_STATE_TYPE.detail2, crawlQueryOptions, this.socialPage, 'subDetailsCrawl');
+		await this.crawlDetails(C_STATE_TYPE.detail2, crawlQueryOptions, this.socialPage, 'socialPage');
 	}
 	
 	/**
@@ -532,7 +552,7 @@ class FundraisingCrawler {
 			await stateSpare.update({ status: 'idle', error: null });
 		}
 		await this.safeInitPage('sparePage');
-		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'correctDetailed', filterMismatchedFunction);
+		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'sparePage', filterMismatchedFunction);
 	}
 	/** 已经尝试失败的爬取 **/
 	async failedReTryCrawl() {
