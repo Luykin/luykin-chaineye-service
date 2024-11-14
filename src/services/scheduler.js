@@ -17,18 +17,11 @@ class CrawlerScheduler {
 		const state1 = await NewCrawlState.findOne({
 			where: {
 				...C_STATE_TYPE.detail,
-				...(scheduledTask ? {
-					/**
-					 * 如果是定时任务，查找不等于running的
-					 * 是running的，不处理
-					 * **/
-					status: { [Op.ne]: 'running' }
-				} : {})
 			},
 		});
 		
 		if (state1) {
-			await state1.update({ status: 'idle', error: null });
+			await state1.update({ status: 'idle', error: null, otherInfo: null });
 			// needRestartDetails = true;
 		}
 		/**
@@ -36,25 +29,25 @@ class CrawlerScheduler {
 		const state2 = await NewCrawlState.findOne({
 			where: {
 				...C_STATE_TYPE.detail2,
-				...(scheduledTask ? {
-					/**
-					 * 如果是定时任务，查找不等于running的
-					 * 是running的，不处理
-					 * **/
-					status: { [Op.ne]: 'running' }
-				} : {})
 			}
 		});
 		if (state2) {
-			await state2.update({ status: 'idle', error: null });
+			await state2.update({ status: 'idle', error: null, otherInfo: null });
 			// needRestartDetails2 = true;
 		}
-		await new Promise(resolve => setTimeout(resolve, 2000));
-		// console.log('发现需要重启浏览器,重启任务', needRestartDetails, needRestartDetails2)
+		const stateSpare = await NewCrawlState.findOne({
+			where: {
+				...C_STATE_TYPE.spare,
+			}
+		});
+		if (stateSpare) {
+			await stateSpare.update({ status: 'idle', error: null, otherInfo: null });
+		}
+		// await new Promise(resolve => setTimeout(resolve, 2000));
 		await crawler.forceClose();
-		console.log('等待浏览器完全关闭，上一次的任务结束, 等30s');
+		console.log('等待浏览器完全关闭，上一次的任务结束...');
 		await new Promise(resolve => setTimeout(resolve, scheduledTask ? 30000 : 3000));
-		console.log('30s等待完毕，开始重新执行!!!!');
+		console.log('等待完毕，开始重新执行');
 		crawler.detailsCrawl();
 		// crawler.subDetailsCrawl();
 	}

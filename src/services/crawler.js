@@ -143,10 +143,11 @@ class FundraisingCrawler {
 			this[key]?.close?.();
 			this[key] = null;
 		}
-		console.log(`安全的初始化浏览器网页${key}, 请等待5s`);
+		console.log(`安全的初始化浏览器网页${key}, 请等待...`);
 		await new Promise(resolve => setTimeout(resolve, 2000));
 		this[key] = await this.browser.newPage();
 		await new Promise(resolve => setTimeout(resolve, 2000));
+		return this[key];
 	}
 
 	async reStartPage(key) {
@@ -157,7 +158,7 @@ class FundraisingCrawler {
 			this[key]?.close?.();
 			this[key] = null;
 		}
-		console.log(`重启网页中，${key}, 请等待5s。。。`);
+		console.log(`重启网页中，${key}, 请等待...`);
 		await new Promise(resolve => setTimeout(resolve, 2000));
 		this[key] = await this.browser.newPage();
 		await new Promise(resolve => setTimeout(resolve, 2000));
@@ -405,7 +406,7 @@ class FundraisingCrawler {
 		try {
 			console.log(`开始爬取【${crawlType}】项目详情数据`);
 			
-			if (!pageInstance) {
+			if (!pageInstance || pageInstance?.isClosed?.()) {
 				throw new Error('Page instance not initialized');
 			}
 			
@@ -432,6 +433,8 @@ class FundraisingCrawler {
 			let remainingCount = projectsToCrawl.length;
 			let failedCount = 0;
 			let singlePageCumulative = 0; // 单个网页累计爬取， 用于重启
+			// const openPages = await browser.pages();  // 获取所有打开的页面
+			// console.log(`当前浏览器打开了 ${openPages.length} 个页面`);
 			// 遍历项目进行抓取
 			for (const project of projectsToCrawl) {
 				if (!pageInstance) {
@@ -463,13 +466,14 @@ class FundraisingCrawler {
 						failed: failedCount
 					};
 				}
-				
+				const openPages = await this.browser.pages();
 				remainingCount--;
 				state.lastUpdateTime = new Date();
 				state.otherInfo = {
 					...(state.otherInfo || {}),
 					remaining: remainingCount,
-					projectLink: project.projectLink
+					projectLink: project.projectLink,
+					openPages
 				};
 				await state.save();
 				await new Promise(resolve => setTimeout(resolve, 2000)); // 设置间隔
@@ -514,9 +518,8 @@ class FundraisingCrawler {
 				['originalPageNumber', 'ASC']
 			]
 		};
-		await this.safeInitPage('detailPage');
-		// 传递具体的页面实例以及爬虫类型
-		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, this.detailPage, 'detailPage');
+		const _page = await this.safeInitPage('detailPage');
+		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, _page, 'detailPage');
 	}
 	
 	// 爬取「isInitial false」的项目
@@ -529,9 +532,8 @@ class FundraisingCrawler {
 				projectLink: { [Op.like]: 'http%' }  // 确保 projectLink 以 http 开头
 			}
 		};
-		await this.safeInitPage('socialPage');
-		// 传递具体的页面实例以及爬虫类型
-		await this.crawlDetails(C_STATE_TYPE.detail2, crawlQueryOptions, this.socialPage, 'socialPage');
+		const _page = await this.safeInitPage('socialPage');
+		await this.crawlDetails(C_STATE_TYPE.detail2, crawlQueryOptions, _page, 'socialPage');
 	}
 	
 	/**
@@ -552,8 +554,8 @@ class FundraisingCrawler {
 		if (stateSpare) {
 			await stateSpare.update({ status: 'idle', error: null });
 		}
-		await this.safeInitPage('sparePage');
-		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'sparePage', filterMismatchedFunction);
+		const _page = await this.safeInitPage('sparePage');
+		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, _page, 'sparePage', filterMismatchedFunction);
 	}
 	/** 已经尝试失败的爬取 **/
 	async failedReTryCrawl() {
@@ -572,8 +574,8 @@ class FundraisingCrawler {
 		if (stateSpare) {
 			await stateSpare.update({ status: 'idle', error: null });
 		}
-		await this.safeInitPage('sparePage');
-		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, this.sparePage, 'failedReTryCrawl');
+		const _page = await this.safeInitPage('sparePage');
+		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, _page, 'failedReTryCrawl');
 	}
 	
 	/**
