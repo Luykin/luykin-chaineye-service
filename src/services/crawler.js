@@ -436,7 +436,7 @@ class FundraisingCrawler {
 					throw new Error(`${crawlType}: Page instance not initialized`);
 				}
 				singlePageCumulative++;
-				if(singlePageCumulative >= 30) {
+				if(singlePageCumulative >= 18) {
 					await this.reStartPage(crawlType);
 					console.log("重启成功，继续");
 					singlePageCumulative = 0;
