@@ -1,7 +1,7 @@
 const schedule = require('node-schedule');
 const crawler = require('./crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models');
-const { Op } = require('sequelize');
+// const { Op } = require('sequelize');
 
 class CrawlerScheduler {
 	constructor() {
@@ -11,8 +11,6 @@ class CrawlerScheduler {
 	}
 	
 	async restartDetailCrawl(scheduledTask = false) {
-		// let needRestartDetails = false;
-		// let needRestartDetails2 = false;
 		/**
 		 * 开始detail crawl**/
 		const state1 = await NewCrawlState.findOne({
