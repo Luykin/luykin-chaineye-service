@@ -130,7 +130,7 @@ class FundraisingCrawler {
 			this.browser = await puppeteer.launch({
 				headless: 'new',
 				args: [
-					`--proxy-server=${tunnelhost}:${tunnelport}`,
+					// `--proxy-server=${tunnelhost}:${tunnelport}`,
 					'--no-sandbox',
 					'--disable-setuid-sandbox'
 				]
