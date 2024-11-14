@@ -32,8 +32,6 @@ module.exports = {
 			autorestart: true,
 			// 定时启动，解决重启能解决的问题，crontab时间格式重启应用，目前只支持cluster模式;
 			cron_restart: '',
-			// 异常重启情况下，延时重启时间
-			restart_delay: '60s'
 		}
 	]
 };
