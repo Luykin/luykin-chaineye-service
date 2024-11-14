@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "nodemon src/index.js",
     "start": "pm2 start ecosystem.config.js --env production",
     "start:dev": "pm2 start ecosystem.config.js --env development",
-    "stop": "pm2 stop luykin-chaineye-service",
-    "restart": "pm2 restart luykin-chaineye-service",
-    "delete": "pm2 delete luykin-chaineye-service",
-    "logs": "pm2 logs luykin-chaineye-service"
+    "stop": "pm2 stop luykin-chaineye-api luykin-chaineye-crawler",
+    "restart": "pm2 restart luykin-chaineye-api luykin-chaineye-crawler",
+    "delete": "pm2 delete luykin-chaineye-api luykin-chaineye-crawler",
+    "logs": "pm2 logs luykin-chaineye-api luykin-chaineye-crawler",
+    "logs-crawler": "pm2 logs luykin-chaineye-crawler"
   },
   "dependencies": {
     "async-retry": "^1.3.3",
