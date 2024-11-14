@@ -1,0 +1,264 @@
+2024-11-14 13:51:09: Error: Cannot find module 'express'
+2024-11-14 13:51:09: Require stack:
+2024-11-14 13:51:09: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:09:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:09:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:09:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:09:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:09:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:09:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:09:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:09:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:09: }
+2024-11-14 13:51:09: Error: Cannot find module 'express'
+2024-11-14 13:51:09: Require stack:
+2024-11-14 13:51:09: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:09:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:09:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:09:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:09:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:09:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:09:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:09:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:09:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:09: }
+2024-11-14 13:51:09: Error: Cannot find module 'express'
+2024-11-14 13:51:09: Require stack:
+2024-11-14 13:51:09: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:09:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:09:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:09:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:09:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:09:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:09:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:09:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:09:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:09: }
+2024-11-14 13:51:09: Error: Cannot find module 'express'
+2024-11-14 13:51:09: Require stack:
+2024-11-14 13:51:09: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:09:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:09:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:09:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:09:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:09:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:09:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:09:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:09:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:09: }
+2024-11-14 13:51:09: Error: Cannot find module 'express'
+2024-11-14 13:51:09: Require stack:
+2024-11-14 13:51:09: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:09:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:09:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:09:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:09:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:09:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:09:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:09:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:09:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:09: }
+2024-11-14 13:51:09: Error: Cannot find module 'express'
+2024-11-14 13:51:09: Require stack:
+2024-11-14 13:51:09: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:09:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:09:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:09:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:09:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:09:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:09:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:09:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:09:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:09: }
+2024-11-14 13:51:09: Error: Cannot find module 'express'
+2024-11-14 13:51:09: Require stack:
+2024-11-14 13:51:09: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:09:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:09:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:09:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:09:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:09:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:09:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:09:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:09:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:09:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:09:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:09: }
+2024-11-14 13:51:10: Error: Cannot find module 'express'
+2024-11-14 13:51:10: Require stack:
+2024-11-14 13:51:10: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:10:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:10:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:10:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:10:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:10:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:10:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:10:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:10:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:10:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:10:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:10:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:10:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:10: }
+2024-11-14 13:51:10: Error: Cannot find module 'express'
+2024-11-14 13:51:10: Require stack:
+2024-11-14 13:51:10: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:10:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:10:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:10:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:10:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:10:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:10:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:10:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:10:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:10:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:10:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:10:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:10:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:10: }
+2024-11-14 13:51:10: Error: Cannot find module 'express'
+2024-11-14 13:51:10: Require stack:
+2024-11-14 13:51:10: - /root/luykin-chaineye-service/src/index.js
+2024-11-14 13:51:10:     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+2024-11-14 13:51:10:     at Hook._require.Module.require (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/node_modules/require-in-the-middle/index.js:81:25)
+2024-11-14 13:51:10:     at require (node:internal/modules/helpers:179:18)
+2024-11-14 13:51:10:     at Object.<anonymous> (/root/luykin-chaineye-service/src/index.js:1:17)
+2024-11-14 13:51:10:     at Module._compile (node:internal/modules/cjs/loader:1469:14)
+2024-11-14 13:51:10:     at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+2024-11-14 13:51:10:     at Module.load (node:internal/modules/cjs/loader:1288:32)
+2024-11-14 13:51:10:     at Module._load (node:internal/modules/cjs/loader:1104:12)
+2024-11-14 13:51:10:     at Object.<anonymous> (/root/.local/share/nvm/v20.18.0/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+2024-11-14 13:51:10:     at Module._compile (node:internal/modules/cjs/loader:1469:14) {
+2024-11-14 13:51:10:   code: 'MODULE_NOT_FOUND',
+2024-11-14 13:51:10:   requireStack: [ '/root/luykin-chaineye-service/src/index.js' ]
+2024-11-14 13:51:10: }
+2024-11-14 14:08:48: Error: Failed to launch the browser process!
+2024-11-14 14:08:48: /root/.cache/puppeteer/chrome/linux-121.0.6167.85/chrome-linux64/chrome: error while loading shared libraries: libnss3.so: cannot open shared object file: No such file or directory
+2024-11-14 14:08:48: 
+2024-11-14 14:08:48: 
+2024-11-14 14:08:48: TROUBLESHOOTING: https://pptr.dev/troubleshooting
+2024-11-14 14:08:48: 
+2024-11-14 14:08:48:     at Interface.onClose (/root/luykin-chaineye-service/node_modules/@puppeteer/browsers/lib/cjs/launch.js:267:24)
+2024-11-14 14:08:48:     at Interface.emit (node:events:531:35)
+2024-11-14 14:08:48:     at Interface.close (node:internal/readline/interface:528:10)
+2024-11-14 14:08:48:     at Socket.onend (node:internal/readline/interface:254:10)
+2024-11-14 14:08:48:     at Socket.emit (node:events:531:35)
+2024-11-14 14:08:48:     at endReadableNT (node:internal/streams/readable:1696:12)
+2024-11-14 14:08:48:     at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+2024-11-14 14:09:14: Error: Failed to launch the browser process!
+2024-11-14 14:09:14: /root/.cache/puppeteer/chrome/linux-121.0.6167.85/chrome-linux64/chrome: error while loading shared libraries: libnss3.so: cannot open shared object file: No such file or directory
+2024-11-14 14:09:14: 
+2024-11-14 14:09:14: 
+2024-11-14 14:09:14: TROUBLESHOOTING: https://pptr.dev/troubleshooting
+2024-11-14 14:09:14: 
+2024-11-14 14:09:14:     at Interface.onClose (/root/luykin-chaineye-service/node_modules/@puppeteer/browsers/lib/cjs/launch.js:267:24)
+2024-11-14 14:09:14:     at Interface.emit (node:events:531:35)
+2024-11-14 14:09:14:     at Interface.close (node:internal/readline/interface:528:10)
+2024-11-14 14:09:14:     at Socket.onend (node:internal/readline/interface:254:10)
+2024-11-14 14:09:14:     at Socket.emit (node:events:531:35)
+2024-11-14 14:09:14:     at endReadableNT (node:internal/streams/readable:1696:12)
+2024-11-14 14:09:14:     at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+2024-11-14 14:10:46: Error: Failed to launch the browser process!
+2024-11-14 14:10:46: /root/.cache/puppeteer/chrome/linux-121.0.6167.85/chrome-linux64/chrome: error while loading shared libraries: libXdamage.so.1: cannot open shared object file: No such file or directory
+2024-11-14 14:10:46: 
+2024-11-14 14:10:46: 
+2024-11-14 14:10:46: TROUBLESHOOTING: https://pptr.dev/troubleshooting
+2024-11-14 14:10:46: 
+2024-11-14 14:10:46:     at Interface.onClose (/root/luykin-chaineye-service/node_modules/@puppeteer/browsers/lib/cjs/launch.js:267:24)
+2024-11-14 14:10:46:     at Interface.emit (node:events:531:35)
+2024-11-14 14:10:46:     at Interface.close (node:internal/readline/interface:528:10)
+2024-11-14 14:10:46:     at Socket.onend (node:internal/readline/interface:254:10)
+2024-11-14 14:10:46:     at Socket.emit (node:events:531:35)
+2024-11-14 14:10:46:     at endReadableNT (node:internal/streams/readable:1696:12)
+2024-11-14 14:10:46:     at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+2024-11-14 14:11:14: Error: Failed to launch the browser process!
+2024-11-14 14:11:14: /root/.cache/puppeteer/chrome/linux-121.0.6167.85/chrome-linux64/chrome: error while loading shared libraries: libXdamage.so.1: cannot open shared object file: No such file or directory
+2024-11-14 14:11:14: 
+2024-11-14 14:11:14: 
+2024-11-14 14:11:14: TROUBLESHOOTING: https://pptr.dev/troubleshooting
+2024-11-14 14:11:14: 
+2024-11-14 14:11:14:     at Interface.onClose (/root/luykin-chaineye-service/node_modules/@puppeteer/browsers/lib/cjs/launch.js:267:24)
+2024-11-14 14:11:14:     at Interface.emit (node:events:531:35)
+2024-11-14 14:11:14:     at Interface.close (node:internal/readline/interface:528:10)
+2024-11-14 14:11:14:     at Socket.onend (node:internal/readline/interface:254:10)
+2024-11-14 14:11:14:     at Socket.emit (node:events:531:35)
+2024-11-14 14:11:14:     at endReadableNT (node:internal/streams/readable:1696:12)
+2024-11-14 14:11:14:     at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+2024-11-14 14:12:01: Error: Failed to launch the browser process!
+2024-11-14 14:12:01: /root/.cache/puppeteer/chrome/linux-121.0.6167.85/chrome-linux64/chrome: error while loading shared libraries: libXfixes.so.3: cannot open shared object file: No such file or directory
+2024-11-14 14:12:01: 
+2024-11-14 14:12:01: 
+2024-11-14 14:12:01: TROUBLESHOOTING: https://pptr.dev/troubleshooting
+2024-11-14 14:12:01: 
+2024-11-14 14:12:01:     at Interface.onClose (/root/luykin-chaineye-service/node_modules/@puppeteer/browsers/lib/cjs/launch.js:267:24)
+2024-11-14 14:12:01:     at Interface.emit (node:events:531:35)
+2024-11-14 14:12:01:     at Interface.close (node:internal/readline/interface:528:10)
+2024-11-14 14:12:01:     at Socket.onend (node:internal/readline/interface:254:10)
+2024-11-14 14:12:01:     at Socket.emit (node:events:531:35)
+2024-11-14 14:12:01:     at endReadableNT (node:internal/streams/readable:1696:12)
+2024-11-14 14:12:01:     at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+2024-11-14 14:12:14: Error: Failed to launch the browser process!
+2024-11-14 14:12:14: /root/.cache/puppeteer/chrome/linux-121.0.6167.85/chrome-linux64/chrome: error while loading shared libraries: libXfixes.so.3: cannot open shared object file: No such file or directory
+2024-11-14 14:12:14: 
+2024-11-14 14:12:14: 
+2024-11-14 14:12:14: TROUBLESHOOTING: https://pptr.dev/troubleshooting
+2024-11-14 14:12:14: 
+2024-11-14 14:12:14:     at Interface.onClose (/root/luykin-chaineye-service/node_modules/@puppeteer/browsers/lib/cjs/launch.js:267:24)
+2024-11-14 14:12:14:     at Interface.emit (node:events:531:35)
+2024-11-14 14:12:14:     at Interface.close (node:internal/readline/interface:528:10)
+2024-11-14 14:12:14:     at Socket.onend (node:internal/readline/interface:254:10)
+2024-11-14 14:12:14:     at Socket.emit (node:events:531:35)
+2024-11-14 14:12:14:     at endReadableNT (node:internal/streams/readable:1696:12)
+2024-11-14 14:12:14:     at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+2024-11-14 14:12:44: Error: Failed to launch the browser process!
+2024-11-14 14:12:44: /root/.cache/puppeteer/chrome/linux-121.0.6167.85/chrome-linux64/chrome: error while loading shared libraries: libcairo.so.2: cannot open shared object file: No such file or directory
+2024-11-14 14:12:44: 
+2024-11-14 14:12:44: 
+2024-11-14 14:12:44: TROUBLESHOOTING: https://pptr.dev/troubleshooting
+2024-11-14 14:12:44: 
+2024-11-14 14:12:44:     at Interface.onClose (/root/luykin-chaineye-service/node_modules/@puppeteer/browsers/lib/cjs/launch.js:267:24)
+2024-11-14 14:12:44:     at Interface.emit (node:events:531:35)
+2024-11-14 14:12:44:     at Interface.close (node:internal/readline/interface:528:10)
+2024-11-14 14:12:44:     at Socket.onend (node:internal/readline/interface:254:10)
+2024-11-14 14:12:44:     at Socket.emit (node:events:531:35)
+2024-11-14 14:12:44:     at endReadableNT (node:internal/streams/readable:1696:12)
+2024-11-14 14:12:44:     at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+2024-11-14 14:13:14: Error: Failed to launch the browser process!
+2024-11-14 14:13:14: /root/.cache/puppeteer/chrome/linux-121.0.6167.85/chrome-linux64/chrome: error while loading shared libraries: libcairo.so.2: cannot open shared object file: No such file or directory
+2024-11-14 14:13:14: 
+2024-11-14 14:13:14: 
+2024-11-14 14:13:14: TROUBLESHOOTING: https://pptr.dev/troubleshooting
+2024-11-14 14:13:14: 
+2024-11-14 14:13:14:     at Interface.onClose (/root/luykin-chaineye-service/node_modules/@puppeteer/browsers/lib/cjs/launch.js:267:24)
+2024-11-14 14:13:14:     at Interface.emit (node:events:531:35)
+2024-11-14 14:13:14:     at Interface.close (node:internal/readline/interface:528:10)
+2024-11-14 14:13:14:     at Socket.onend (node:internal/readline/interface:254:10)
+2024-11-14 14:13:14:     at Socket.emit (node:events:531:35)
+2024-11-14 14:13:14:     at endReadableNT (node:internal/streams/readable:1696:12)
+2024-11-14 14:13:14:     at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
