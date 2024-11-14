@@ -307,17 +307,17 @@ router.get('/failed', async (req, res) => {
 		const { rows: projects, count: total } = await Fundraising.Project.findAndCountAll({
 			where: {
 				isInitial: true,
-				'$investmentsReceived.id$': null,
 				detailFailuresNumber: { [Op.gt]: 1, [Op.lt]: 99 },
 				projectLink: { [Op.like]: 'http%' }  // 确保 projectLink 以 http 开头
 			},
 			offset,
 			limit,
+			subQuery: false,  // 禁用子查询
 			include: [
 				{
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsReceived',
-					required: false,
+					required: false,  // 使用左连接
 					attributes: ['id']
 				}
 			],
@@ -330,12 +330,16 @@ router.get('/failed', async (req, res) => {
 			]
 		});
 		
+		// 过滤掉包含 investmentsReceived 记录的项目
+		const filteredProjects = projects.filter(project => !project.investmentsReceived || project.investmentsReceived.length === 0);
+		
+		// 返回分页结果
 		res.json({
-			total,
+			total: filteredProjects.length,
 			page,
 			pageSize,
 			totalPages: Math.ceil(total / pageSize),
-			projects
+			projects: filteredProjects
 		});
 	} catch (error) {
 		console.error('Error fetching filtered projects:', error);
