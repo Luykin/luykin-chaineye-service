@@ -140,32 +140,27 @@ router.get('/', validatePagination, async (req, res) => {
 	}
 });
 
-// 添加路由，用于关键词搜索项目
+// 添加路由，用于关键词精确搜索单个项目
 router.get('/search', async (req, res) => {
 	try {
 		const { keyword } = req.query;
 		
 		// 检查是否提供有效的关键词
-		if (!keyword || !keyword.trim()) {
-			return res.json({ data: [], total: 0 });
+		if (!keyword || !keyword.trim() || String(keyword).length < 2) {
+			return res.json({ data: null, message: "No keyword provided" });
 		}
 		
 		// 清理关键词，移除多余空格
 		const sanitizedKeyword = keyword.trim();
 		
-		// 使用 Sequelize 操作符进行关键词搜索
-		const data = await Fundraising.Project.findAll({
+		// 查询符合条件的项目，确保 projectName 或 socialLinks 包含关键字
+		const project = await Fundraising.Project.findOne({
 			where: {
 				[Op.or]: [
 					{ projectName: { [Op.like]: `%${sanitizedKeyword}%` } },
-					{
-						socialLinks: {
-							[Op.like]: `%${sanitizedKeyword}%`
-						}
-					}
+					literal(`socialLinks LIKE '%${sanitizedKeyword}%'`)
 				]
 			},
-			limit: 10, // 限制结果最多返回10条记录
 			attributes: [
 				'projectName', 'projectLink', 'description', 'logo', 'round',
 				'amount', 'formattedAmount', 'valuation', 'formattedValuation',
@@ -175,12 +170,12 @@ router.get('/search', async (req, res) => {
 			include: [
 				{
 					model: Fundraising.InvestmentRelationships,
-					as: 'investmentsReceived', // 当前项目作为被投资方的记录
+					as: 'investmentsReceived',
 					attributes: ['round', 'lead', 'amount', 'valuation', 'formattedAmount', 'formattedValuation', 'date'],
 					include: [
 						{
 							model: Fundraising.Project,
-							as: 'investorProject', // 出资方项目
+							as: 'investorProject',
 							attributes: ['projectName', 'projectLink', 'socialLinks']
 						}
 					]
@@ -188,22 +183,23 @@ router.get('/search', async (req, res) => {
 			]
 		});
 		
+		if (!project) {
+			return res.json({ data: null, message: "No matching project found" });
+		}
+		
 		// 格式化 investmentsReceived 数据，以日期进行分组
-		const formattedData = data.map(project => {
-			const investmentsByDate = groupInvestmentsByDate(project.investmentsReceived);
-			return {
-				...project.get(),
-				investmentsReceived: investmentsByDate
-			};
-		});
+		const investmentsByDate = groupInvestmentsByDate(project.investmentsReceived);
+		const formattedProject = {
+			...project.get(),
+			investmentsReceived: investmentsByDate
+		};
 		
 		res.json({
-			data: formattedData,
-			total: data.length
+			data: formattedProject
 		});
 	} catch (error) {
-		console.error('Error searching projects:', error);
-		res.status(500).json({ error: 'Failed to search projects' });
+		console.error('Error searching project:', error);
+		res.status(500).json({ error: 'Failed to search project' });
 	}
 });
 
