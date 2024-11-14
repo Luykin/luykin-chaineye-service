@@ -2,7 +2,7 @@ const express = require('express');
 const { query, validationResult } = require('express-validator');
 const { Fundraising, NewCrawlState, C_STATE_TYPE } = require('../models');
 const crawler = require('../services/crawler');
-const { Op } = require('sequelize');
+const { Op, literal } = require('sequelize');
 const router = express.Router();
 // 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
 const filterMismatchedFunction = (project) => {
@@ -306,13 +306,28 @@ router.get('/failed', async (req, res) => {
 		// 查询符合条件的项目，并添加分页
 		const { rows: projects, count: total } = await Fundraising.Project.findAndCountAll({
 			where: {
-				detailFailuresNumber: { [Op.gt]: 3, [Op.lt]: 99 },
 				isInitial: true,
-				projectLink: { [Op.like]: 'http%' }
+				'$investmentsReceived.id$': null,
+				detailFailuresNumber: { [Op.gt]: 1, [Op.lt]: 99 },
+				projectLink: { [Op.like]: 'http%' }  // 确保 projectLink 以 http 开头
 			},
 			offset,
 			limit,
-			order: [['createdAt', 'DESC']] // 可选：按创建时间排序
+			include: [
+				{
+					model: Fundraising.InvestmentRelationships,
+					as: 'investmentsReceived',
+					required: false,
+					attributes: ['id']
+				}
+			],
+			order: [
+				[
+					literal('CASE WHEN "originalPageNumber" IS NULL THEN 1 ELSE 0 END'),
+					'ASC'
+				],
+				['originalPageNumber', 'ASC']
+			]
 		});
 		
 		res.json({

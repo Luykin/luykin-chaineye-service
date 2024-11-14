@@ -143,9 +143,10 @@ class FundraisingCrawler {
 			this[key]?.close?.();
 			this[key] = null;
 		}
-		console.log(`安全的初始化浏览器网页${key}, 请等待10s，以免未结束的任务继续使用此网页实例,等待任务清理干净`);
-		await new Promise(resolve => setTimeout(resolve, 10000));
+		console.log(`安全的初始化浏览器网页${key}, 请等待5s`);
+		await new Promise(resolve => setTimeout(resolve, 2000));
 		this[key] = await this.browser.newPage();
+		await new Promise(resolve => setTimeout(resolve, 2000));
 	}
 
 	async reStartPage(key) {
@@ -157,9 +158,9 @@ class FundraisingCrawler {
 			this[key] = null;
 		}
 		console.log(`重启网页中，${key}, 请等待5s。。。`);
-		await new Promise(resolve => setTimeout(resolve, 3500));
+		await new Promise(resolve => setTimeout(resolve, 2000));
 		this[key] = await this.browser.newPage();
-		await new Promise(resolve => setTimeout(resolve, 3500));
+		await new Promise(resolve => setTimeout(resolve, 2000));
 		return this[key];
 	}
 	
@@ -437,7 +438,7 @@ class FundraisingCrawler {
 					throw new Error(`${crawlType}: Page instance not initialized`);
 				}
 				singlePageCumulative++;
-				if(singlePageCumulative >= 18) {
+				if(singlePageCumulative >= 20) {
 					pageInstance = await this.reStartPage(crawlType);
 					console.log("重启成功，继续");
 					singlePageCumulative = 0;
@@ -455,8 +456,7 @@ class FundraisingCrawler {
 						}
 					);
 				} catch (err) {
-					console.log(`${crawlType} - ${err}`);
-					console.log(`【${crawlType}】${project.projectName} - ${project.projectLink}, 详情抓取失败了!! 继续下一个`);
+					console.log(`${crawlType} - ${err}`, "详情抓取失败了,继续下一个");
 					failedCount++;
 					state.otherInfo = {
 						...(state.otherInfo || {}),
@@ -495,7 +495,7 @@ class FundraisingCrawler {
 			where: {
 				isInitial: true,
 				'$investmentsReceived.id$': null,
-				detailFailuresNumber: { [Op.lte]: 10 },
+				detailFailuresNumber: { [Op.lte]: 16 },
 				projectLink: { [Op.like]: 'http%' }  // 确保 projectLink 以 http 开头
 			},
 			include: [
@@ -648,15 +648,13 @@ class FundraisingCrawler {
 				 * **/
 				detailFailuresNumber: isCrawlSuccess ? relatedProjectLength <= 0 ? 99 : 0 : Number(project.detailFailuresNumber || 0) + 1
 			});
-			// console.log(`此项目抓取${isCrawlSuccess ? '成功' : '失败'}======,${project.projectName}`);
 			if (!isCrawlSuccess) {
 				throw new Error('Failed to fetch project details');
 			}
-			console.log(`============抓取详情成功 ${project.projectName} ${project.isInitial ? relatedProjectLength + '关联成功' : '非列表页项目不需要关联'}`);
+			console.log(`==抓取详情成功 ${project.projectName} ${project.isInitial ? relatedProjectLength + '关联成功' : '不需要关联'}`);
 			return true; //抓取成功
 		} catch (error) {
-			console.error(error, '失败报错')
-			console.log(`============抓取详情失败 ${project.projectLink}`);
+			console.error(error, '失败报错');
 			await project.update({
 				detailFailuresNumber: Number(project.detailFailuresNumber || 0) + 1
 			});
