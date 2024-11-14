@@ -1,28 +1,41 @@
-/**
- * apiServer.js
- *
- * 用途: 用于启动用户访问的 API 服务。该服务处理客户端的 HTTP 请求。
- *
- * 建议运行模式:
- * - 使用 PM2 的多线程 (cluster 模式): `pm2 start apiServer.js -i max --name api-server`
- * - 在多核服务器上使用多线程可以提升并发性能。
- *
- * 说明:
- * - 由于 API 路由服务通常要响应较多的客户端请求，cluster 模式能够充分利用服务器的多核资源，确保高并发下仍然能快速响应。
- */
-
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const morgan = require('morgan');
+const redis = require('redis');
 const { setupDatabase } = require('./models');
 const fundraisingRoutes = require('./routes/fundraising');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 8090;
+
+// 初始化 Redis 客户端
+const redisClient = redis.createClient({
+	socket: {
+		host: '127.0.0.1', // Redis 地址
+		port: 6379,        // Redis 端口
+	},
+	// password: process.env.REDIS_PASSWORD // 如果有密码
+});
+
+// 连接 Redis
+(async () => {
+	try {
+		await redisClient.connect();
+		console.log('Redis 连接成功');
+	} catch (error) {
+		console.error('Redis 连接失败:', error);
+	}
+})();
+
+// 中间件传递 Redis 客户端
+app.use((req, res, next) => {
+	req.redisClient = redisClient;
+	next();
+});
 
 // CORS 配置
 const corsOptions = {
@@ -44,23 +57,23 @@ app.use(helmet({
 	contentSecurityPolicy: {
 		directives: {
 			...helmet.contentSecurityPolicy.getDefaultDirectives(),
-			'script-src': ['\'self\'', '\'unsafe-inline\''],
-			'style-src': ['\'self\'', '\'unsafe-inline\''],
+			'script-src': ["'self'", "'unsafe-inline'"],
+			'style-src': ["'self'", "'unsafe-inline'"],
 		},
 	},
 }));
 app.use(rateLimit({
-	windowMs: 60 * 1000, // 1 分钟
-	max: 60,             // 每分钟最多 60 个请求
+	windowMs: 60 * 1000,
+	max: 60,
 	message: '请求过于频繁，请稍后再试。'
 }));
 app.use(compression());
 app.use(morgan('combined'));
 app.use(express.json());
-app.use(helmet.hidePoweredBy()); // 隐藏 X-Powered-By 头
-app.use(helmet.xssFilter());      // 防止 XSS 攻击
-app.use(helmet.noSniff());        // 防止 MIME 类型嗅探
-app.use(express.json({ limit: '20kb' })); // 限制请求体大小为 20KB
+app.use(helmet.hidePoweredBy());
+app.use(helmet.xssFilter());
+app.use(helmet.noSniff());
+app.use(express.json({ limit: '20kb' }));
 
 // API 路由
 app.use('/api/fundraising', fundraisingRoutes);

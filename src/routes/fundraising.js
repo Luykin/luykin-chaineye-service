@@ -4,6 +4,8 @@ const { Fundraising, NewCrawlState, C_STATE_TYPE } = require('../models');
 const crawler = require('../services/crawler');
 const { Op, literal } = require('sequelize');
 const router = express.Router();
+const CACHE_TTL = 300; // 缓存时间限制（秒），此处设为5分钟
+
 // 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
 const filterMismatchedFunction = (project) => {
 	const projectNameEncoded = encodeURI(project.projectName).toLocaleLowerCase();
@@ -55,29 +57,38 @@ const groupInvestmentsByDate = (investmentsReceived) => {
 	}, {});
 };
 
-// Express route
+// 分页查询接口
 router.get('/', validatePagination, async (req, res) => {
 	try {
-		const errors = validationResult(req);
-		if (!errors.isEmpty()) {
-			return res.status(400).json({ errors: errors.array() });
-		}
-		
-		// 获取查询参数
 		const { originalPageNumber, page = 1, limit = 30, sort } = req.query;
 		const sortField = sort === 'fundedAt' ? 'fundedAt' : null;
 		const sortOrder = sortField === 'fundedAt' ? 'DESC' : 'ASC';
-		const order = sortField ? [[sortField, sortOrder]] : [];
+		
+		const cacheKey = `projects_${originalPageNumber}_${page}_${limit}_${sort}`;
+		let cachedData;
+		
+		// 从 Redis 获取缓存数据，处理 Redis 客户端可能断开的情况
+		try {
+			cachedData = await req.redisClient.get(cacheKey);
+		} catch (error) {
+			console.error('Redis Client Error (GET):', error);
+		}
+		
+		if (cachedData) {
+			res.set('Cache-Control', 'public, max-age=60'); // 缓存 1 分钟
+			res.set('X-Cache-Status', 'HIT'); // 标记数据来自缓存
+			return res.json(JSON.parse(cachedData));
+		}
 		
 		let whereConditions = { isInitial: true };
-		let queryOptions = { order };
+		let queryOptions = {
+			order: sortField ? [[sortField, sortOrder]] : []
+		};
 		
-		// 处理 originalPageNumber 逻辑
 		if (originalPageNumber) {
 			whereConditions.originalPageNumber = parseInt(originalPageNumber);
 			queryOptions.where = whereConditions;
 		} else {
-			// 使用分页逻辑
 			const offset = (parseInt(page) - 1) * parseInt(limit);
 			queryOptions = {
 				...queryOptions,
@@ -87,7 +98,6 @@ router.get('/', validatePagination, async (req, res) => {
 			};
 		}
 		
-		// 查询数据
 		const data = await Fundraising.Project.findAndCountAll({
 			...queryOptions,
 			attributes: [
@@ -112,7 +122,6 @@ router.get('/', validatePagination, async (req, res) => {
 			]
 		});
 		
-		// 格式化和分组 investmentsReceived 按日期
 		const formattedData = data.rows.map(project => {
 			const investmentsByDate = groupInvestmentsByDate(project.investmentsReceived);
 			return {
@@ -121,7 +130,6 @@ router.get('/', validatePagination, async (req, res) => {
 			};
 		});
 		
-		// 构建响应数据
 		const response = { data: formattedData };
 		if (!originalPageNumber) {
 			response.total = data.count;
@@ -129,31 +137,48 @@ router.get('/', validatePagination, async (req, res) => {
 			response.totalPages = Math.ceil(data.count / limit);
 		}
 		
+		// 将数据缓存到 Redis，处理 Redis 客户端可能断开的情况
+		try {
+			await req.redisClient.setEx(cacheKey, CACHE_TTL, JSON.stringify(response));
+		} catch (error) {
+			console.error('Redis Client Error (SET):', error);
+		}
+		
+		res.set('Cache-Control', 'public, max-age=60'); // 缓存 1 分钟
+		res.set('X-Cache-Status', 'MISS'); // 标记数据来自数据库
 		res.json(response);
 	} catch (error) {
-		console.error('Error fetching fundraising data:', {
-			message: error.message,
-			stack: error.stack,
-			query: req.query
-		});
+		console.error('Error fetching fundraising data:', error);
 		res.status(500).json({ error: 'Failed to fetch data' });
 	}
 });
 
-// 添加路由，用于关键词精确搜索单个项目
+// 精确关键词搜索接口
 router.get('/search', async (req, res) => {
 	try {
 		const { keyword } = req.query;
 		
-		// 检查是否提供有效的关键词
 		if (!keyword || !keyword.trim() || String(keyword).length < 2) {
-			return res.json({ data: null, message: "No keyword provided" });
+			return res.json({ data: null, message: 'No keyword provided' });
 		}
 		
-		// 清理关键词，移除多余空格
 		const sanitizedKeyword = keyword.trim();
+		const cacheKey = `project_search_${sanitizedKeyword}`;
+		let cachedData;
 		
-		// 查询符合条件的项目，确保 projectName 或 socialLinks 包含关键字
+		// 从 Redis 获取缓存数据，处理 Redis 客户端可能断开的情况
+		try {
+			cachedData = await req.redisClient.get(cacheKey);
+		} catch (error) {
+			console.error('Redis Client Error (GET):', error);
+		}
+		
+		if (cachedData) {
+			res.set('Cache-Control', 'public, max-age=60'); // 缓存 1 分钟
+			res.set('X-Cache-Status', 'HIT'); // 标记数据来自缓存
+			return res.json(JSON.parse(cachedData));
+		}
+		
 		const project = await Fundraising.Project.findOne({
 			where: {
 				[Op.or]: [
@@ -184,111 +209,28 @@ router.get('/search', async (req, res) => {
 		});
 		
 		if (!project) {
-			return res.json({ data: null, message: "No matching project found" });
+			return res.json({ data: null, message: 'No matching project found' });
 		}
 		
-		// 格式化 investmentsReceived 数据，以日期进行分组
 		const investmentsByDate = groupInvestmentsByDate(project.investmentsReceived);
 		const formattedProject = {
 			...project.get(),
 			investmentsReceived: investmentsByDate
 		};
 		
-		res.json({
-			data: formattedProject
-		});
+		// 将数据缓存到 Redis，处理 Redis 客户端可能断开的情况
+		try {
+			await req.redisClient.setEx(cacheKey, CACHE_TTL, JSON.stringify({ data: formattedProject }));
+		} catch (error) {
+			console.error('Redis Client Error (SET):', error);
+		}
+		
+		res.set('Cache-Control', 'public, max-age=60'); // 缓存 1 分钟
+		res.set('X-Cache-Status', 'MISS'); // 标记数据来自数据库
+		res.json({ data: formattedProject });
 	} catch (error) {
 		console.error('Error searching project:', error);
 		res.status(500).json({ error: 'Failed to search project' });
-	}
-});
-
-// Start full crawl
-router.post('/crawl/full', async (req, res) => {
-	try {
-		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.full });
-		if (state && state.status === 'running') {
-			return res.status(400).json({ error: 'Full crawl already in progress' });
-		}
-		
-		// Start crawl in background
-		crawler.fullCrawl().catch(console.error);
-		res.json({ message: 'Full crawl started' });
-	} catch (error) {
-		console.error('Error starting full crawl:', error);
-		res.status(500).json({ error: 'Failed to start full crawl' });
-	}
-});
-
-// Start quick update
-router.post('/crawl/quick', async (req, res) => {
-	try {
-		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.quick });
-		if (state && state.status === 'running') {
-			return res.status(400).json({ error: 'Quick update already in progress' });
-		}
-		
-		// Start quick update in background
-		crawler.quickUpdate().catch(console.error);
-		res.json({ message: 'Quick update started' });
-	} catch (error) {
-		console.error('Error starting quick update:', error);
-		res.status(500).json({ error: 'Failed to start quick update' });
-	}
-});
-
-// Start detail crawl
-router.post('/crawl/detail', async (req, res) => {
-	try {
-		crawler.detailsCrawl().catch(console.error);
-		crawler.subDetailsCrawl().catch(console.error);
-		res.json({ message: 'Detail crawl started' });
-	} catch (error) {
-		console.error('Error starting detail crawl:', error);
-		res.status(500).json({ error: 'Failed to start detail crawl' });
-	}
-});
-
-// Start detail crawl
-router.post('/crawl/repair', async (req, res) => {
-	try {
-		crawler.correctDetailed().catch(console.error);
-		res.json({ message: 'correctDetailed started' });
-	} catch (error) {
-		console.error('Error starting repair crawl:', error);
-		res.status(500).json({ error: 'Failed to start repair crawl' });
-	}
-});
-
-// Start detail crawl
-router.post('/crawl/retry', async (req, res) => {
-	try {
-		crawler.failedReTryCrawl().catch(console.error);
-		res.json({ message: 'failedReTryCrawl started' });
-	} catch (error) {
-		console.error('Error starting failedReTryCrawl crawl:', error);
-		res.status(500).json({ error: 'Failed to start failedReTryCrawl crawl' });
-	}
-});
-
-// Set all crawl statuses to idle
-router.post('/status/reset', async (req, res) => {
-	try {
-		// 更新所有 NewCrawlState 条目，将状态设为 'idle'，并清空错误信息
-		await NewCrawlState.update(
-			{
-				status: 'idle',
-				error: null,
-			},
-			{
-				where: {} // 空条件表示更新所有记录
-			}
-		);
-		
-		res.json({ message: 'All crawl statuses reset to idle' });
-	} catch (error) {
-		console.error('Error resetting crawl statuses:', error);
-		res.status(500).json({ error: 'Failed to reset crawl statuses' });
 	}
 });
 
@@ -449,3 +391,94 @@ router.get('/status', async (req, res) => {
 });
 
 module.exports = router;
+
+
+/** 废弃⚠️ **/
+// // Start full crawl
+// router.post('/crawl/full', async (req, res) => {
+// 	try {
+// 		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.full });
+// 		if (state && state.status === 'running') {
+// 			return res.status(400).json({ error: 'Full crawl already in progress' });
+// 		}
+//
+// 		// Start crawl in background
+// 		crawler.fullCrawl().catch(console.error);
+// 		res.json({ message: 'Full crawl started' });
+// 	} catch (error) {
+// 		console.error('Error starting full crawl:', error);
+// 		res.status(500).json({ error: 'Failed to start full crawl' });
+// 	}
+// });
+//
+// // Start quick update
+// router.post('/crawl/quick', async (req, res) => {
+// 	try {
+// 		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.quick });
+// 		if (state && state.status === 'running') {
+// 			return res.status(400).json({ error: 'Quick update already in progress' });
+// 		}
+//
+// 		// Start quick update in background
+// 		crawler.quickUpdate().catch(console.error);
+// 		res.json({ message: 'Quick update started' });
+// 	} catch (error) {
+// 		console.error('Error starting quick update:', error);
+// 		res.status(500).json({ error: 'Failed to start quick update' });
+// 	}
+// });
+//
+// // Start detail crawl
+// router.post('/crawl/detail', async (req, res) => {
+// 	try {
+// 		crawler.detailsCrawl().catch(console.error);
+// 		crawler.subDetailsCrawl().catch(console.error);
+// 		res.json({ message: 'Detail crawl started' });
+// 	} catch (error) {
+// 		console.error('Error starting detail crawl:', error);
+// 		res.status(500).json({ error: 'Failed to start detail crawl' });
+// 	}
+// });
+//
+// // Start detail crawl
+// router.post('/crawl/repair', async (req, res) => {
+// 	try {
+// 		crawler.correctDetailed().catch(console.error);
+// 		res.json({ message: 'correctDetailed started' });
+// 	} catch (error) {
+// 		console.error('Error starting repair crawl:', error);
+// 		res.status(500).json({ error: 'Failed to start repair crawl' });
+// 	}
+// });
+//
+// // Start detail crawl
+// router.post('/crawl/retry', async (req, res) => {
+// 	try {
+// 		crawler.failedReTryCrawl().catch(console.error);
+// 		res.json({ message: 'failedReTryCrawl started' });
+// 	} catch (error) {
+// 		console.error('Error starting failedReTryCrawl crawl:', error);
+// 		res.status(500).json({ error: 'Failed to start failedReTryCrawl crawl' });
+// 	}
+// });
+//
+// // Set all crawl statuses to idle
+// router.post('/status/reset', async (req, res) => {
+// 	try {
+// 		// 更新所有 NewCrawlState 条目，将状态设为 'idle'，并清空错误信息
+// 		await NewCrawlState.update(
+// 			{
+// 				status: 'idle',
+// 				error: null,
+// 			},
+// 			{
+// 				where: {} // 空条件表示更新所有记录
+// 			}
+// 		);
+//
+// 		res.json({ message: 'All crawl statuses reset to idle' });
+// 	} catch (error) {
+// 		console.error('Error resetting crawl statuses:', error);
+// 		res.status(500).json({ error: 'Failed to reset crawl statuses' });
+// 	}
+// });
