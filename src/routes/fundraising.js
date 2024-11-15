@@ -5,6 +5,7 @@ const crawler = require('../services/crawler');
 const { Op, literal } = require('sequelize');
 const router = express.Router();
 const CACHE_TTL = 300; // 缓存时间限制（秒），此处设为5分钟
+const CACHE_TTL_LONG = 600; // 缓存时间限制（秒），此处设为10分钟
 
 // 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
 const filterMismatchedFunction = (project) => {
@@ -344,12 +345,12 @@ router.get('/search/legacy', async (req, res) => {
 		};
 		
 		try {
-			await req.redisClient.setEx(cacheKey, 60, JSON.stringify(response));
+			await req.redisClient.setEx(cacheKey, CACHE_TTL_LONG, JSON.stringify(response));
 		} catch (error) {
 			console.error('Redis Client Error (SET):', error);
 		}
 		
-		res.set('Cache-Control', 'public, max-age=60');
+		res.set('Cache-Control', 'public, max-age=120');
 		res.set('X-Cache-Status', 'MISS');
 		res.json(response);
 	} catch (error) {
