@@ -51,7 +51,8 @@ const groupInvestmentsByDate = (investmentsReceived) => {
 			lead: investment.lead,
 			projectName: investment.investorProject.projectName,
 			projectLink: investment.investorProject.projectLink,
-			socialLinks: investment.investorProject.socialLinks
+			socialLinks: investment.investorProject.socialLinks,
+			logo: investment.investorProject?.logo,
 		});
 		
 		return acc;
