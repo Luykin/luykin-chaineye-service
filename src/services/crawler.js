@@ -174,28 +174,6 @@ class FundraisingCrawler {
 	}
 	
 	/**
-	 * 关闭浏览器，但是有运行的情况下不会关闭
-	 * **/
-	async close() {
-		try {
-			const [s1, s2, s3, s4, s5] = await Promise.all([
-				NewCrawlState.findOne({ where: C_STATE_TYPE.full }),
-				NewCrawlState.findOne({ where: C_STATE_TYPE.quick }),
-				NewCrawlState.findOne({ where: C_STATE_TYPE.detail }),
-				NewCrawlState.findOne({ where: C_STATE_TYPE.detail2 }),
-				NewCrawlState.findOne({ where: C_STATE_TYPE.spare })
-			]);
-			if (s1?.status === 'running' || s2?.status === 'running' || s3?.status === 'running' || s4?.status === 'running' || s5?.status === 'running') {
-				console.log('Crawler is busy, cannot close.');
-				return;
-			}
-			this.forceClose();
-		} catch (err) {
-			console.error('Error closing browser:', err);
-		}
-	}
-	
-	/**
 	 * 爬取指定页的机构列表数据
 	 * **/
 	async crawlPage(pageNum, pageInstance) {
@@ -283,9 +261,8 @@ class FundraisingCrawler {
 		}
 		let currentPage = startPage;
 		let hasMoreData = true;
-		
+		const pageInstance = await this.safeInitPage('listPage');
 		try {
-			const pageInstance = await this.safeInitPage('listPage');
 			state.status = 'running';
 			await state.save();
 			
@@ -339,6 +316,8 @@ class FundraisingCrawler {
 			state.error = error.message;
 			await state.save();
 			throw error;
+		} finally {
+			pageInstance && pageInstance?.close?.();
 		}
 	}
 	
@@ -346,13 +325,13 @@ class FundraisingCrawler {
 	 * 快速更新列表机构
 	 * **/
 	async quickUpdate() {
+		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.quick }) || await NewCrawlState.create(C_STATE_TYPE.quick);
+		if (state && state.status === 'running') {
+			throw new Error('quickUpdate already in progress');
+		}
+		const pageInstance = await this.safeInitPage('listPage');
+		
 		try {
-			const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.quick }) || await NewCrawlState.create(C_STATE_TYPE.quick);
-			if (state && state.status === 'running') {
-				throw new Error('quickUpdate already in progress');
-			}
-			const pageInstance = await this.safeInitPage('listPage');
-			
 			state.status = 'running';
 			await state.save();
 			
@@ -382,6 +361,8 @@ class FundraisingCrawler {
 			state.error = error.message;
 			await state.save();
 			throw error;
+		} finally {
+			pageInstance && pageInstance?.close?.();
 		}
 	}
 
@@ -459,7 +440,7 @@ class FundraisingCrawler {
 					...(state.otherInfo || {}),
 					remaining: remainingCount,
 					projectLink: project.projectLink,
-					openPages
+					openPages: openPages ? openPages?.length : 0,
 				};
 				await state.save();
 				await new Promise(resolve => setTimeout(resolve, 2000)); // 设置间隔
@@ -474,6 +455,8 @@ class FundraisingCrawler {
 			state.error = error.message;
 			await state.save();
 			throw error;
+		} finally {
+			pageInstance && pageInstance?.close?.();
 		}
 	}
 	

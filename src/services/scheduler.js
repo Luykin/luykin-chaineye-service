@@ -10,7 +10,7 @@ class CrawlerScheduler {
 		this.halfHourlyDetailJob = null;
 	}
 	
-	async restartDetailCrawl(scheduledTask = false) {
+	async restartDetailCrawl() {
 		/**
 		 * 开始detail crawl**/
 		const state1 = await NewCrawlState.findOne({
@@ -21,7 +21,6 @@ class CrawlerScheduler {
 		
 		if (state1) {
 			await state1.update({ status: 'idle', error: null, otherInfo: null });
-			// needRestartDetails = true;
 		}
 		/**
 		 * 开始sub details crawl**/
@@ -32,7 +31,6 @@ class CrawlerScheduler {
 		});
 		if (state2) {
 			await state2.update({ status: 'idle', error: null, otherInfo: null });
-			// needRestartDetails2 = true;
 		}
 		const stateSpare = await NewCrawlState.findOne({
 			where: {
@@ -44,10 +42,10 @@ class CrawlerScheduler {
 		}
 		await crawler.forceClose();
 		console.log('等待浏览器完全关闭，上一次的任务结束...');
-		await new Promise(resolve => setTimeout(resolve, scheduledTask ? 60000 : 2000));
+		await new Promise(resolve => setTimeout(resolve, 2000));
 		console.log('等待完毕，开始重新执行');
-		crawler.detailsCrawl();
-		crawler.subDetailsCrawl();
+		await crawler.detailsCrawl();
+		await crawler.subDetailsCrawl();
 	}
 	
 	startScheduler() {
@@ -56,6 +54,8 @@ class CrawlerScheduler {
 			console.log('Starting morning quick update...');
 			try {
 				await crawler.quickUpdate();
+				await crawler.detailsCrawl();
+				await crawler.subDetailsCrawl();
 				console.log('Morning quick update completed');
 			} catch (error) {
 				console.error('Morning quick update failed:', error);
@@ -67,21 +67,13 @@ class CrawlerScheduler {
 			console.log('Starting evening quick update...');
 			try {
 				await crawler.quickUpdate();
+				await crawler.detailsCrawl();
+				await crawler.subDetailsCrawl();
 				console.log('Evening quick update completed');
 			} catch (error) {
 				console.error('Evening quick update failed:', error);
 			}
 		});
-		
-		// this.halfHourlyDetailJob = schedule.scheduleJob('*/30 * * * *', async () => {
-		// 	console.log('Starting half-hourly restartDetailCrawl...');
-		// 	try {
-		// 		// await this.restartDetailCrawl(true);
-		// 		console.log('Half-hourly restartDetailCrawl completed');
-		// 	} catch (error) {
-		// 		console.error('Half-hourly restartDetailCrawl failed:', error);
-		// 	}
-		// });
 		
 		this.restartDetailCrawl();
 	}
