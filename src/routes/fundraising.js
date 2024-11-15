@@ -247,7 +247,7 @@ router.get('/search/legacy', async (req, res) => {
 		}
 		
 		const sanitizedKeyword = keyword.trim();
-		const cacheKey = `legacy_project_search_${sanitizedKeyword}`;
+		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202411152314`;
 		let cachedData;
 		
 		try {
@@ -302,19 +302,22 @@ router.get('/search/legacy', async (req, res) => {
 			return res.json({ invested: null, investor: null, message: 'No matching project found' });
 		}
 		
-		// 按照日期分组并计算 total_funding
+		// 调用现有的 groupInvestmentsByDate 函数
 		const groupedInvestments = groupInvestmentsByDate(project.investmentsReceived || []);
+		
+		// 计算 total_funding
 		const totalFunding = Object.values(groupedInvestments).reduce(
 			(sum, group) => sum + (group.formattedAmount || 0),
 			0
 		);
 		
+		// 构造 investors 数据
 		const investors = Object.values(groupedInvestments).flatMap((group) =>
 			group.investors.map((investor) => ({
-				avatar: investor.logo || '',
-				lead_investor: investor.lead || false,
-				name: investor.projectName || '',
-				twitter: investor.socialLinks?.x || ''
+				avatar: investor?.logo || '',
+				lead_investor: investor?.lead || false,
+				name: investor?.projectName || '',
+				twitter: investor?.socialLinks?.x || ''
 			}))
 		);
 		
@@ -323,28 +326,28 @@ router.get('/search/legacy', async (req, res) => {
 			total_funding: totalFunding
 		};
 		
+		// 处理 fundedProjects 数据
 		const fundedProjects = (project.investmentsGiven || []).map((investment) => ({
 			avatar: investment.fundedProject?.logo || '',
 			name: investment.fundedProject?.projectName || '',
 			twitter: investment.fundedProject?.socialLinks?.x || '',
-			round: investment.round || '',
-			amount: investment.formattedAmount || 0,
-			date: investment.date || null
+			lead_investor: investment.fundedProject?.lead || false,
 		}));
+		
+		const totalInvestment = fundedProjects.reduce((sum, proj) => sum + (proj.amount || 0), 0);
 		
 		const investorData = {
 			investors: fundedProjects,
-			total_funding: fundedProjects.reduce(
-				(sum, proj) => sum + (proj.amount || 0),
-				0
-			)
+			total_funding: totalInvestment
 		};
 		
+		// 组装最终响应
 		const response = {
 			invested: investedData,
 			investor: investorData
 		};
 		
+		// 缓存结果到 Redis
 		try {
 			await req.redisClient.setEx(cacheKey, CACHE_TTL_LONG, JSON.stringify(response));
 		} catch (error) {
