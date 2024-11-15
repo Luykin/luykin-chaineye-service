@@ -49,7 +49,7 @@ const corsOptions = {
 	allowedHeaders: ['Content-Type', 'Authorization'],
 	credentials: false
 };
-app.set('trust proxy', true);
+app.set('trust proxy', false);
 app.use(cors(corsOptions));
 
 // 安全和速率限制
