@@ -256,7 +256,7 @@ router.get('/search/legacy', async (req, res) => {
 		}
 		
 		if (cachedData) {
-			res.set('Cache-Control', 'public, max-age=60');
+			res.set('Cache-Control', 'public, max-age=120');
 			res.set('X-Cache-Status', 'HIT');
 			return res.json(JSON.parse(cachedData));
 		}
