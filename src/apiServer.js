@@ -49,7 +49,7 @@ const corsOptions = {
 	allowedHeaders: ['Content-Type', 'Authorization'],
 	credentials: false
 };
-app.set('trust proxy', false);
+app.set('trust proxy', 1); // 仅信任最靠近 Express 的一层代理
 app.use(cors(corsOptions));
 
 // 安全和速率限制
