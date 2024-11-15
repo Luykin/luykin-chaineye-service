@@ -233,6 +233,130 @@ router.get('/search', async (req, res) => {
 		res.status(500).json({ error: 'Failed to search project' });
 	}
 });
+/**
+ * 兼容https://www.cryptohunt.ai/旧版数据格式的查询接口
+ * **/
+router.get('/search/legacy', async (req, res) => {
+	try {
+		const { keyword } = req.query;
+		
+		if (!keyword || !keyword.trim() || String(keyword).length < 2) {
+			return res.json({ invested: null, investor: null, message: 'No keyword provided' });
+		}
+		
+		const sanitizedKeyword = keyword.trim();
+		const cacheKey = `legacy_project_search_${sanitizedKeyword}`;
+		let cachedData;
+		
+		try {
+			cachedData = await req.redisClient.get(cacheKey);
+		} catch (error) {
+			console.error('Redis Client Error (GET):', error);
+		}
+		
+		if (cachedData) {
+			res.set('Cache-Control', 'public, max-age=60');
+			res.set('X-Cache-Status', 'HIT');
+			return res.json(JSON.parse(cachedData));
+		}
+		
+		const project = await Fundraising.Project.findOne({
+			where: {
+				[Op.or]: [
+					{ projectName: { [Op.like]: `%${sanitizedKeyword}%` } },
+					literal(`socialLinks LIKE '%${sanitizedKeyword}%'`)
+				]
+			},
+			attributes: ['projectName', 'socialLinks', 'logo', 'amount'],
+			include: [
+				{
+					model: Fundraising.InvestmentRelationships,
+					as: 'investmentsReceived',
+					attributes: ['round', 'lead', 'amount', 'date', 'formattedAmount'],
+					include: [
+						{
+							model: Fundraising.Project,
+							as: 'investorProject',
+							attributes: ['projectName', 'socialLinks', 'logo']
+						}
+					]
+				},
+				{
+					model: Fundraising.InvestmentRelationships,
+					as: 'investmentsGiven',
+					attributes: ['round', 'amount', 'date', 'formattedAmount'],
+					include: [
+						{
+							model: Fundraising.Project,
+							as: 'fundedProject',
+							attributes: ['projectName', 'socialLinks', 'logo']
+						}
+					]
+				}
+			]
+		});
+		
+		if (!project) {
+			return res.json({ invested: null, investor: null, message: 'No matching project found' });
+		}
+		
+		// 按照日期分组并计算 total_funding
+		const groupedInvestments = groupInvestmentsByDate(project.investmentsReceived || []);
+		const totalFunding = Object.values(groupedInvestments).reduce(
+			(sum, group) => sum + (group.formattedAmount || 0),
+			0
+		);
+		
+		const investors = Object.values(groupedInvestments).flatMap((group) =>
+			group.investors.map((investor) => ({
+				avatar: investor.logo || '',
+				lead_investor: investor.lead || false,
+				name: investor.projectName || '',
+				twitter: investor.socialLinks?.x || ''
+			}))
+		);
+		
+		const investedData = {
+			investors,
+			total_funding: totalFunding
+		};
+		
+		const fundedProjects = (project.investmentsGiven || []).map((investment) => ({
+			avatar: investment.fundedProject?.logo || '',
+			name: investment.fundedProject?.projectName || '',
+			twitter: investment.fundedProject?.socialLinks?.x || '',
+			round: investment.round || '',
+			amount: investment.formattedAmount || 0,
+			date: investment.date || null
+		}));
+		
+		const investorData = {
+			investors: fundedProjects,
+			total_funding: fundedProjects.reduce(
+				(sum, proj) => sum + (proj.amount || 0),
+				0
+			)
+		};
+		
+		const response = {
+			invested: investedData,
+			investor: investorData
+		};
+		
+		try {
+			await req.redisClient.setEx(cacheKey, 60, JSON.stringify(response));
+		} catch (error) {
+			console.error('Redis Client Error (SET):', error);
+		}
+		
+		res.set('Cache-Control', 'public, max-age=60');
+		res.set('X-Cache-Status', 'MISS');
+		res.json(response);
+	} catch (error) {
+		console.error('Error in legacy search:', error);
+		res.status(500).json({ error: 'Failed to search project (legacy)' });
+	}
+});
 
 // 查看所有失败的项目（带分页）
 router.get('/failed', async (req, res) => {
