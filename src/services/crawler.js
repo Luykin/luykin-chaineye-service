@@ -366,6 +366,7 @@ class FundraisingCrawler {
 			await state.save();
 			throw error;
 		} finally {
+			console.log("quickUpdate finally: 关闭浏览器");
 			pageInstance && pageInstance?.close?.();
 		}
 	}
@@ -417,7 +418,6 @@ class FundraisingCrawler {
 					pageInstance = await this.safeInitPage(crawlType);
 					singlePageCumulative = 0;
 				}
-				console.log(`【${crawlType}】开始爬取 ${project.projectName} - ${project.projectLink} 的详情信息...`);
 				try {
 					await retry(
 						async () => {
@@ -460,6 +460,7 @@ class FundraisingCrawler {
 			await state.save();
 			throw error;
 		} finally {
+			console.log("crawlDetails finally: 关闭浏览器");
 			pageInstance && pageInstance?.close?.();
 		}
 	}
@@ -570,7 +571,6 @@ class FundraisingCrawler {
 			});
 			
 			await this.clickAllButtons(_page);
-			console.log('开始抓取这个项目更详细的详细', project.projectLink);
 			let relatedProjectLength = 0;
 			if (project.isInitial) {
 				relatedProjectLength = await this.processRounds(project, _page);
