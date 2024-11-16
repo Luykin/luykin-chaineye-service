@@ -1,7 +1,7 @@
 const express = require('express');
 const { query, validationResult } = require('express-validator');
 const { Fundraising, NewCrawlState, C_STATE_TYPE } = require('../models');
-const crawler = require('../services/crawler');
+// const crawler = require('../services/rootdata-crawler');
 const { Op, literal } = require('sequelize');
 const router = express.Router();
 const CACHE_TTL = 300; // 缓存时间限制（秒），此处设为5分钟

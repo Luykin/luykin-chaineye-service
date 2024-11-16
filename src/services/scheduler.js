@@ -1,5 +1,5 @@
 const schedule = require('node-schedule');
-const crawler = require('./crawler');
+const crawler = require('./rootdata-crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models');
 // const { Op } = require('sequelize');
 

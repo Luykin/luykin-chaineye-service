@@ -4,175 +4,16 @@ const { NewCrawlState, Fundraising, C_STATE_TYPE } = require('../models');
 const baseRootDataURL = 'https://www.rootdata.com';
 const { v4: uuidv4 } = require('uuid');
 const { Op, literal } = require('sequelize');
+const BaseCrawler = require('./base-crawler');
 
-function joinUrl(path, projectName) {
-	// 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
-	if (String(path).includes('javascript:void(0)')) {
-		return `javascript:void(0)/${projectName || uuidv4()}`;
-	}
-	
-	// 如果 path 没有协议，拼接 baseRootDataURL
-	if (!/^https?:\/\//i.test(path)) {
-		const base = baseRootDataURL.replace(/\/+$/, ''); // 移除 base 末尾的多余斜杠
-		path = path.replace(/^\/+/, ''); // 移除 path 开头的多余斜杠
-		path = `${base}/${path}`;
-	}
-	
-	// 去除多余的斜杠，确保中间只有一个斜杠
-	path = path.replace(/([^:]\/)\/+/g, '$1');
-	
-	// 清理重复的 URL 参数
-	const url = new URL(path);
-	const params = new URLSearchParams();
-	url.searchParams.forEach((value, key) => {
-		if (!params.has(key)) params.append(key, value);
-	});
-	url.search = params.toString();
-	
-	// 清理重复的锚点
-	if (url.hash) {
-		const uniqueHash = Array.from(new Set(url.hash.split('#'))).join('');
-		url.hash = uniqueHash;
-	}
-	
-	return url.toString();
-}
-
-function parseAmount(valueStr) {
-	if (!valueStr || valueStr === '--') return null;
-	
-	// 移除美元符号、空格以及"美元"字样
-	valueStr = valueStr.replace('$', '').replace('美元', '').trim();
-	
-	let multiplier = 1;
-	
-	if (valueStr.endsWith('M')) {
-		multiplier = 1e6;
-		valueStr = valueStr.replace('M', '').trim();
-	} else if (valueStr.endsWith('K')) {
-		multiplier = 1e3;
-		valueStr = valueStr.replace('K', '').trim();
-	} else if (valueStr.toLowerCase().includes('million')) {
-		multiplier = 1e6;
-		valueStr = valueStr.toLowerCase().replace('million', '').trim();
-	} else if (valueStr.includes('万')) {
-		multiplier = 1e4;
-		valueStr = valueStr.replace('万', '').trim();
-	} else if (valueStr.includes('亿')) {
-		multiplier = 1e8;
-		valueStr = valueStr.replace('亿', '').trim();
-	}
-	
-	// 转换为浮点数并乘以相应的单位
-	const value = parseFloat(valueStr);
-	return isNaN(value) ? null : value * multiplier;
-}
-
-function parseDate(dateStr) {
-	if (!dateStr) return null;
-	
-	const currentYear = new Date().getFullYear();
-	let formattedDateStr;
-	
-	// 英文日期格式处理
-	if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
-		formattedDateStr = dateStr;
-	} else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
-		formattedDateStr = `01 ${dateStr.replace(',', '')}`;
-	} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
-		formattedDateStr = `${dateStr}, ${currentYear}`;
-	}
-	
-	// 中文日期格式处理
-	else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-		// 格式为 "2022-11-08"
-		formattedDateStr = dateStr;
-	} else if (/^\d{2}-\d{2}$/.test(dateStr)) {
-		// 格式为 "11-08"，无年份
-		formattedDateStr = `${currentYear}-${dateStr}`;
-	}
-	
-	// 格式化为时间戳
-	const timestamp = Date.parse(formattedDateStr);
-	return isNaN(timestamp) ? null : timestamp;
-}
-
-// 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
-const filterMismatchedFunction = (project) => {
-	const projectNameEncoded = encodeURI(project.projectName).toLocaleLowerCase();
-	const projectNameEncoded2 = encodeURIComponent(project.projectName).toLocaleLowerCase();
-	
-	// 优先从 projectLink 中提取名称，支持特殊字符（如点、空格、冒号等）
-	const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9.%: ]+)/);
-	let extractedName = linkMatch ? linkMatch[1].toLocaleLowerCase() : null;
-	
-	// 返回项目名称不一致的记录
-	return projectNameEncoded && extractedName &&
-		!extractedName.includes(projectNameEncoded) && !projectNameEncoded.includes(extractedName) &&
-		!extractedName.includes(projectNameEncoded2) && !projectNameEncoded2.includes(extractedName);
-};
-
-class FundraisingCrawler {
+class FundraisingCrawler extends BaseCrawler {
 	constructor() {
-		this.browser = null;
+		super();
 		this.listPage = null; // 用于爬取列表数据
 		this.detailPage = null; // 用于爬取列表项目的详情数据
 		this.socialPage = null; // 用于爬取详情的项目的社交媒体信息
-		this.sparePage = null; // 闲置页面可能公用
+		// this.sparePage = null; // 闲置页面可能公用
 	}
-	
-	async initBrowser() {
-		if (!this.browser) {
-			console.log('初始化浏览器...');
-			// // 隧道服务器域名和端口
-			let tunnelhost = 'g887.kdlfps.com';
-			let tunnelport = '18866';
-			this.browser = await puppeteer.launch({
-				headless: 'new',
-				args: [
-					// `--proxy-server=${tunnelhost}:${tunnelport}`,
-					'--no-sandbox',
-					'--disable-setuid-sandbox'
-				]
-			});
-		}
-	}
-	
-	async safeInitPage(key) {
-		if (!key) {
-			throw new Error('safeInitPage 没有填写key');
-		}
-		await this.initBrowser();
-		if (this[key] && this[key]?.close) {
-			this[key]?.close?.();
-			this[key] = null;
-		}
-		console.log(`安全的初始化浏览器网页${key}, 请等待...`);
-		await new Promise(resolve => setTimeout(resolve, 2000));
-		this[key] = await this.browser.newPage();
-		await this[key].setExtraHTTPHeaders({
-			'Accept-Encoding': 'gzip' // 使用gzip压缩让数据传输更快
-		});
-		await new Promise(resolve => setTimeout(resolve, 2000));
-		return this[key];
-	}
-	
-	/**
-	 * 强制关闭浏览器
-	 * **/
-	async forceClose() {
-		try {
-			await this.browser?.close?.();
-			this.socialPage = null;
-			this.detailPage = null;
-			this.listPage = null;
-			this.browser = null;
-			console.log('已经强制关闭浏览器...');
-		} catch (err) {
-			console.error('Error closing browser:', err);
-		}
-	}
-	
 	/**
 	 * 爬取指定页的机构列表数据
 	 * **/
@@ -521,46 +362,46 @@ class FundraisingCrawler {
 		await this.crawlDetails(C_STATE_TYPE.detail2, crawlQueryOptions, 'socialPage');
 	}
 	
-	/**
-	 * 修正错误数据,重新爬取详细页面
-	 * **/
-	async correctDetailed() {
-		const crawlQueryOptions = {
-			where: {
-				description: { [Op.not]: null },
-				projectLink: { [Op.like]: 'http%' }
-			},
-		};
-		const stateSpare = await NewCrawlState.findOne({
-			where: {
-				...C_STATE_TYPE.spare,
-			}
-		});
-		if (stateSpare) {
-			await stateSpare.update({ status: 'idle', error: null });
-		}
-		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, 'sparePage', filterMismatchedFunction);
-	}
-	
-	/** 已经尝试失败的爬取 **/
-	async failedReTryCrawl() {
-		const crawlQueryOptions = {
-			where: {
-				detailFailuresNumber: { [Op.gt]: 3, [Op.lt]: 99 },
-				isInitial: true,
-				projectLink: { [Op.like]: 'http%' }
-			},
-		};
-		const stateSpare = await NewCrawlState.findOne({
-			where: {
-				...C_STATE_TYPE.spare,
-			}
-		});
-		if (stateSpare) {
-			await stateSpare.update({ status: 'idle', error: null });
-		}
-		await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, 'failedReTryCrawl');
-	}
+	// /**
+	//  * 修正错误数据,重新爬取详细页面
+	//  * **/
+	// async correctDetailed() {
+	// 	const crawlQueryOptions = {
+	// 		where: {
+	// 			description: { [Op.not]: null },
+	// 			projectLink: { [Op.like]: 'http%' }
+	// 		},
+	// 	};
+	// 	const stateSpare = await NewCrawlState.findOne({
+	// 		where: {
+	// 			...C_STATE_TYPE.spare,
+	// 		}
+	// 	});
+	// 	if (stateSpare) {
+	// 		await stateSpare.update({ status: 'idle', error: null });
+	// 	}
+	// 	await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, 'sparePage', filterMismatchedFunction);
+	// }
+	//
+	// /** 已经尝试失败的爬取 **/
+	// async failedReTryCrawl() {
+	// 	const crawlQueryOptions = {
+	// 		where: {
+	// 			detailFailuresNumber: { [Op.gt]: 3, [Op.lt]: 99 },
+	// 			isInitial: true,
+	// 			projectLink: { [Op.like]: 'http%' }
+	// 		},
+	// 	};
+	// 	const stateSpare = await NewCrawlState.findOne({
+	// 		where: {
+	// 			...C_STATE_TYPE.spare,
+	// 		}
+	// 	});
+	// 	if (stateSpare) {
+	// 		await stateSpare.update({ status: 'idle', error: null });
+	// 	}
+	// 	await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, 'failedReTryCrawl');
+	// }
 	
 	/**
 	 * 传入一个项目数据库实例，和浏览器网页，开始爬取详情
@@ -734,3 +575,110 @@ class FundraisingCrawler {
 }
 
 module.exports = new FundraisingCrawler();
+
+function joinUrl(path, projectName) {
+	// 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
+	if (String(path).includes('javascript:void(0)')) {
+		return `javascript:void(0)/${projectName || uuidv4()}`;
+	}
+	
+	// 如果 path 没有协议，拼接 baseRootDataURL
+	if (!/^https?:\/\//i.test(path)) {
+		const base = baseRootDataURL.replace(/\/+$/, ''); // 移除 base 末尾的多余斜杠
+		path = path.replace(/^\/+/, ''); // 移除 path 开头的多余斜杠
+		path = `${base}/${path}`;
+	}
+	
+	// 去除多余的斜杠，确保中间只有一个斜杠
+	path = path.replace(/([^:]\/)\/+/g, '$1');
+	
+	// 清理重复的 URL 参数
+	const url = new URL(path);
+	const params = new URLSearchParams();
+	url.searchParams.forEach((value, key) => {
+		if (!params.has(key)) params.append(key, value);
+	});
+	url.search = params.toString();
+	
+	// 清理重复的锚点
+	if (url.hash) {
+		const uniqueHash = Array.from(new Set(url.hash.split('#'))).join('');
+		url.hash = uniqueHash;
+	}
+	
+	return url.toString();
+}
+
+function parseAmount(valueStr) {
+	if (!valueStr || valueStr === '--') return null;
+	
+	// 移除美元符号、空格以及"美元"字样
+	valueStr = valueStr.replace('$', '').replace('美元', '').trim();
+	
+	let multiplier = 1;
+	
+	if (valueStr.endsWith('M')) {
+		multiplier = 1e6;
+		valueStr = valueStr.replace('M', '').trim();
+	} else if (valueStr.endsWith('K')) {
+		multiplier = 1e3;
+		valueStr = valueStr.replace('K', '').trim();
+	} else if (valueStr.toLowerCase().includes('million')) {
+		multiplier = 1e6;
+		valueStr = valueStr.toLowerCase().replace('million', '').trim();
+	} else if (valueStr.includes('万')) {
+		multiplier = 1e4;
+		valueStr = valueStr.replace('万', '').trim();
+	} else if (valueStr.includes('亿')) {
+		multiplier = 1e8;
+		valueStr = valueStr.replace('亿', '').trim();
+	}
+	
+	// 转换为浮点数并乘以相应的单位
+	const value = parseFloat(valueStr);
+	return isNaN(value) ? null : value * multiplier;
+}
+
+function parseDate(dateStr) {
+	if (!dateStr) return null;
+	
+	const currentYear = new Date().getFullYear();
+	let formattedDateStr;
+	
+	// 英文日期格式处理
+	if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
+		formattedDateStr = dateStr;
+	} else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
+		formattedDateStr = `01 ${dateStr.replace(',', '')}`;
+	} else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
+		formattedDateStr = `${dateStr}, ${currentYear}`;
+	}
+	
+	// 中文日期格式处理
+	else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+		// 格式为 "2022-11-08"
+		formattedDateStr = dateStr;
+	} else if (/^\d{2}-\d{2}$/.test(dateStr)) {
+		// 格式为 "11-08"，无年份
+		formattedDateStr = `${currentYear}-${dateStr}`;
+	}
+	
+	// 格式化为时间戳
+	const timestamp = Date.parse(formattedDateStr);
+	return isNaN(timestamp) ? null : timestamp;
+}
+
+// // 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
+// const filterMismatchedFunction = (project) => {
+// 	const projectNameEncoded = encodeURI(project.projectName).toLocaleLowerCase();
+// 	const projectNameEncoded2 = encodeURIComponent(project.projectName).toLocaleLowerCase();
+//
+// 	// 优先从 projectLink 中提取名称，支持特殊字符（如点、空格、冒号等）
+// 	const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9.%: ]+)/);
+// 	let extractedName = linkMatch ? linkMatch[1].toLocaleLowerCase() : null;
+//
+// 	// 返回项目名称不一致的记录
+// 	return projectNameEncoded && extractedName &&
+// 		!extractedName.includes(projectNameEncoded) && !projectNameEncoded.includes(extractedName) &&
+// 		!extractedName.includes(projectNameEncoded2) && !projectNameEncoded2.includes(extractedName);
+// };

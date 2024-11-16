@@ -1,7 +1,7 @@
 const { Sequelize } = require('sequelize');
 const FundraisingModel = require('./fundraising');
 const NewCrawlStateModel = require('./new-crawl-state');
-
+const EXNewsModel = require('./ex-news');
 const sequelize = new Sequelize({
 	dialect: 'sqlite',
 	storage: './database.sqlite',
@@ -10,6 +10,7 @@ const sequelize = new Sequelize({
 
 const Fundraising = FundraisingModel(sequelize);
 const NewCrawlState = NewCrawlStateModel(sequelize);
+const EXNews = EXNewsModel(sequelize);
 const C_STATE_TYPE = {
 	full: { type: 'full'},
 	quick: { type: 'quick' },
@@ -32,6 +33,7 @@ async function setupDatabase() {
 
 module.exports = {
 	sequelize,
+	EXNews,
 	Fundraising,
 	NewCrawlState,
 	C_STATE_TYPE,
