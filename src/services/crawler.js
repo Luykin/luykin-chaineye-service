@@ -465,9 +465,12 @@ class FundraisingCrawler {
 		const crawlQueryOptions = {
 			where: {
 				isInitial: true,
-				'$investmentsReceived.id$': null,
-				detailFailuresNumber: { [Op.lte]: 16 },
-				projectLink: { [Op.like]: 'http%' }  // 确保 projectLink 以 http 开头
+				[Op.or]: [
+					{ '$investmentsReceived.id$': null }, // investmentsReceived 为空
+					{ socialLinks: { [Op.eq]: null } }   // socialLinks 为空
+				],
+				detailFailuresNumber: { [Op.lte]: 18 },
+				projectLink: { [Op.like]: 'http%' } // 确保 projectLink 以 http 开头
 			},
 			include: [
 				{
