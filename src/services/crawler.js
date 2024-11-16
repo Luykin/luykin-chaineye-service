@@ -341,14 +341,18 @@ class FundraisingCrawler {
 					throw new Error('quickUpdate: Page instance not initialized');
 				}
 				const data = await this.crawlPage(page, pageInstance);
-				// // 获取所有字段，排除不需要更新的字段
-				// const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
-				// 	!['id', 'projectLink', 'createdAt', 'updatedAt'].includes(field)
-				// );
-				// 执行 bulkCreate 时使用动态字段列表
-				await Fundraising.Project.bulkCreate(data, {
-					updateOnDuplicate: [] // 指定为空数组，表示不更新任何字段
-				});
+				const existingLinks = await Fundraising.Project.findAll({
+					attributes: ['projectLink'],
+					where: {
+						projectLink: data.map(item => item.projectLink)
+					}
+				}).then(projects => projects.map(project => project.projectLink));
+				
+				const newData = data.filter(item => !existingLinks.includes(item.projectLink));
+				
+				if (newData.length > 0) {
+					await Fundraising.Project.bulkCreate(newData);
+				}
 				await new Promise(resolve => setTimeout(resolve, 2000));
 			}
 			

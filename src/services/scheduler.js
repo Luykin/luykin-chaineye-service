@@ -44,6 +44,7 @@ class CrawlerScheduler {
 		console.log('等待浏览器完全关闭，上一次的任务结束...');
 		await new Promise(resolve => setTimeout(resolve, 2000));
 		console.log('等待完毕，开始重新执行');
+		await crawler.quickUpdate();
 		await crawler.detailsCrawl();
 		await crawler.subDetailsCrawl();
 	}
