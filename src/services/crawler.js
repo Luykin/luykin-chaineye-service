@@ -351,7 +351,15 @@ class FundraisingCrawler {
 				const newData = data.filter(item => !existingLinks.includes(item.projectLink));
 				
 				if (newData.length > 0) {
-					await Fundraising.Project.bulkCreate(newData);
+					// 获取所有字段，排除不需要更新的字段
+					const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
+						!['id', 'projectLink', 'createdAt', 'updatedAt'].includes(field)
+					);
+					
+					// 执行 bulkCreate 时使用动态字段列表
+					await Fundraising.Project.bulkCreate(newData, {
+						updateOnDuplicate: fieldsToUpdate
+					});
 				}
 				await new Promise(resolve => setTimeout(resolve, 2000));
 			}
