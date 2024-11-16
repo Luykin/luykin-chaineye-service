@@ -336,18 +336,18 @@ class FundraisingCrawler {
 			await state.save();
 			
 			// Only crawl first 3 pages for quick updates
-			for (let page = 1; page <= 3; page++) {
+			for (let page = 1; page <= 2; page++) {
 				if (!pageInstance || pageInstance?.isClosed?.()) {
 					throw new Error('quickUpdate: Page instance not initialized');
 				}
 				const data = await this.crawlPage(page, pageInstance);
-				// 获取所有字段，排除不需要更新的字段
-				const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
-					!['id', 'projectLink', 'createdAt', 'updatedAt'].includes(field)
-				);
+				// // 获取所有字段，排除不需要更新的字段
+				// const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
+				// 	!['id', 'projectLink', 'createdAt', 'updatedAt'].includes(field)
+				// );
 				// 执行 bulkCreate 时使用动态字段列表
 				await Fundraising.Project.bulkCreate(data, {
-					updateOnDuplicate: fieldsToUpdate
+					updateOnDuplicate: [] // 指定为空数组，表示不更新任何字段
 				});
 				await new Promise(resolve => setTimeout(resolve, 2000));
 			}
@@ -570,7 +570,7 @@ class FundraisingCrawler {
 			}
 			const details = await _page.evaluate(() => {
 				const socialLinks = {};
-				document.querySelectorAll('.links a').forEach(link => {
+				document.querySelectorAll('.base_info .links a').forEach(link => {
 					const type = link.querySelector('span')?.textContent?.trim().toLowerCase();
 					if (type && type !== 'undefined') {
 						socialLinks[type] = link.href;
