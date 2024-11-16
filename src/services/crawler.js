@@ -181,18 +181,23 @@ class FundraisingCrawler {
 			if (!pageInstance || pageInstance?.isClosed?.()) {
 				throw new Error('pageInstance not found');
 			}
-			await pageInstance?.goto(`https://www.rootdata.com/Fundraising?page=${pageNum}`, {
+			const url = `https://www.rootdata.com/Fundraising?page=${pageNum}`;
+			console.log('正在打开网页', url);
+			await pageInstance?.goto(url, {
 				waitUntil: 'networkidle0',
 				timeout: 20000 // 设置超时
 			});
+			
+			// Wait for the table to load
+			await pageInstance.waitForSelector('.main_container');
 			// 检查是否存在“没有数据”的行
 			const isEmpty = await pageInstance.evaluate(() => {
 				return !!document.querySelector('tr.b-table-empty-row');
 			});
-			if (isEmpty) return []; // 如果是空页面则返回空数组
-			
-			// Wait for the table to load
-			await pageInstance.waitForSelector('.main_container');
+			if (isEmpty) {
+				console.log('当前页面为空，返回空数组');
+				return [];
+			}
 			
 			// Extract data
 			const fundraisingData = await pageInstance.evaluate(async () => {
@@ -226,12 +231,11 @@ class FundraisingCrawler {
 						isInitial: true,
 					};
 				});
-				
 				// 使用 Promise.all 等待所有行的异步操作完成
 				return await Promise.all(data);
 			});
 			// console.log(fundraisingData, 'fundraisingData');
-			
+			console.log('爬取完毕,得到', fundraisingData?.length);
 			return fundraisingData.map(_ => {
 				const formattedAmount = parseAmount(_.amount);
 				const formattedValuation = parseAmount(_.valuation);
@@ -326,9 +330,9 @@ class FundraisingCrawler {
 	 * **/
 	async quickUpdate() {
 		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.quick }) || await NewCrawlState.create(C_STATE_TYPE.quick);
-		if (state && state.status === 'running') {
-			throw new Error('quickUpdate already in progress');
-		}
+		// if (state && state.status === 'running') {
+		// 	throw new Error('quickUpdate already in progress');
+		// }
 		const pageInstance = await this.safeInitPage('listPage');
 		
 		try {
@@ -374,7 +378,7 @@ class FundraisingCrawler {
 			await state.save();
 			throw error;
 		} finally {
-			console.log("quickUpdate finally: 关闭浏览器");
+			console.log('quickUpdate finally: 关闭浏览器');
 			pageInstance && pageInstance?.close?.();
 		}
 	}
@@ -468,7 +472,7 @@ class FundraisingCrawler {
 			await state.save();
 			throw error;
 		} finally {
-			console.log("crawlDetails finally: 关闭浏览器");
+			console.log('crawlDetails finally: 关闭浏览器');
 			pageInstance && pageInstance?.close?.();
 		}
 	}
