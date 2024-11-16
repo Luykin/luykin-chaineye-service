@@ -311,8 +311,8 @@ router.get('/search/legacy', async (req, res) => {
 			0
 		);
 		
-		// 构造 investors 数据
-		const investors = Object.values(groupedInvestments).flatMap((group) =>
+		// 构造 investors 数据并去重
+		const rawInvestors = Object.values(groupedInvestments).flatMap((group) =>
 			group.investors.map((investor) => ({
 				avatar: investor?.logo || '',
 				lead_investor: investor?.lead || false,
@@ -321,18 +321,27 @@ router.get('/search/legacy', async (req, res) => {
 			}))
 		);
 		
+		// 按 name 去重
+		const investors = Array.from(
+			new Map(rawInvestors.map((item) => [item.name, item])).values()
+		);
+		
 		const investedData = {
 			investors,
 			total_funding: totalFunding
 		};
 		
-		// 处理 fundedProjects 数据
-		const fundedProjects = (project.investmentsGiven || []).map((investment) => ({
+		// 处理 fundedProjects 数据并去重
+		const rawFundedProjects = (project.investmentsGiven || []).map((investment) => ({
 			avatar: investment.fundedProject?.logo || '',
 			name: investment.fundedProject?.projectName || '',
 			twitter: investment.fundedProject?.socialLinks?.x || '',
 			lead_investor: investment.fundedProject?.lead || false,
 		}));
+		
+		const fundedProjects = Array.from(
+			new Map(rawFundedProjects.map((item) => [item.name, item])).values()
+		);
 		
 		const totalInvestment = fundedProjects.reduce((sum, proj) => sum + (proj.amount || 0), 0);
 		
