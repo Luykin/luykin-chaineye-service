@@ -178,6 +178,7 @@ class FundraisingCrawler extends BaseCrawler {
 		
 		try {
 			state.status = 'running';
+			state.error = null;
 			await state.save();
 			
 			// Only crawl first 3 pages for quick updates
@@ -192,7 +193,6 @@ class FundraisingCrawler extends BaseCrawler {
 						projectLink: data.map(item => item.projectLink)
 					}
 				}).then(projects => projects.map(project => project.projectLink));
-				
 				const newData = data.filter(item => !existingLinks.includes(item.projectLink));
 				
 				if (newData.length > 0) {
@@ -200,13 +200,14 @@ class FundraisingCrawler extends BaseCrawler {
 					const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
 						!['id', 'projectLink', 'createdAt', 'updatedAt'].includes(field)
 					);
-					
 					// 执行 bulkCreate 时使用动态字段列表
 					await Fundraising.Project.bulkCreate(newData, {
 						updateOnDuplicate: fieldsToUpdate
 					});
+				} else {
+					console.log('No new data found on page', page);
 				}
-				await new Promise(resolve => setTimeout(resolve, 2000));
+				await new Promise(resolve => setTimeout(resolve, 1000));
 			}
 			
 			state.lastUpdateTime = new Date();
@@ -217,7 +218,7 @@ class FundraisingCrawler extends BaseCrawler {
 			state.status = 'failed';
 			state.error = error.message;
 			await state.save();
-			throw error;
+			// throw error;
 		} finally {
 			console.log('quickUpdate finally: 关闭浏览器');
 			pageInstance && pageInstance?.close?.();
