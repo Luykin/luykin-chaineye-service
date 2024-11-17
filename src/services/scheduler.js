@@ -36,9 +36,9 @@ class CrawlerScheduler {
 		this.startRootDataCrawl().then(() => {
 			console.log('首次启动任务执行完: startRootDataCrawl')
 		}).catch(err => console.log(err));
-		this.startExNewsCrawl().then(() => {
-			console.log('首次启动任务执行完: startExNewsCrawl')
-		}).catch(err => console.log(err));
+		// this.startExNewsCrawl().then(() => {
+		// 	console.log('首次启动任务执行完: startExNewsCrawl')
+		// }).catch(err => console.log(err));
 	}
 	
 	stopScheduler() {
@@ -79,7 +79,7 @@ class CrawlerScheduler {
 	 * **/
 	async startExNewsCrawl() {
 		await exCrawler.forceClose();
-		await exCrawler.crawlBinanceNews();
+		await exCrawler.startCrawling();
 	}
 }
 

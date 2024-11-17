@@ -20,7 +20,7 @@ async function startCrawlerService() {
 	try {
 		await setupDatabase();
 		console.log('启动爬虫调度器...');
-		scheduler.startScheduler();
+		await scheduler.startScheduler();
 	} catch (error) {
 		console.error('启动爬虫服务失败:', error);
 		process.exit(1);
