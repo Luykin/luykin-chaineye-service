@@ -14,6 +14,7 @@ class FundraisingCrawler extends BaseCrawler {
 		this.socialPage = null; // 用于爬取详情的项目的社交媒体信息
 		// this.sparePage = null; // 闲置页面可能公用
 	}
+	
 	/**
 	 * 爬取指定页的机构列表数据
 	 * **/
@@ -175,12 +176,11 @@ class FundraisingCrawler extends BaseCrawler {
 		// 	throw new Error('quickUpdate already in progress');
 		// }
 		const pageInstance = await this.safeInitPage('listPage');
-		
+		let updateNum = 0;
 		try {
 			state.status = 'running';
 			state.error = null;
 			await state.save();
-			
 			// Only crawl first 3 pages for quick updates
 			for (let page = 1; page <= 2; page++) {
 				if (!pageInstance || pageInstance?.isClosed?.()) {
@@ -204,6 +204,7 @@ class FundraisingCrawler extends BaseCrawler {
 					await Fundraising.Project.bulkCreate(newData, {
 						updateOnDuplicate: fieldsToUpdate
 					});
+					updateNum = updateNum + newData.length;
 				} else {
 					console.log('No new data found on page', page);
 				}
@@ -212,11 +213,17 @@ class FundraisingCrawler extends BaseCrawler {
 			
 			state.lastUpdateTime = new Date();
 			state.status = 'completed';
+			state.otherInfo = {
+				updateNum: updateNum
+			};
 			await state.save();
 		} catch (error) {
 			console.error('Quick update error:', error);
 			state.status = 'failed';
 			state.error = error.message;
+			state.otherInfo = {
+				updateNum: updateNum
+			};
 			await state.save();
 			// throw error;
 		} finally {
