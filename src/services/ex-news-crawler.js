@@ -12,19 +12,19 @@ class ExNewsCrawler extends BaseCrawler {
 			const url = `https://www.binance.com/en/support/announcement/new-cryptocurrency-listing?c=48&navId=48&hl=en`;
 			console.log('正在打开网页', url);
 			await pageInstance?.goto(url, {
-				waitUntil: 'domcontentloaded',
+				waitUntil: 'networkidle0',
 				timeout: 20000 // 设置超时
 			});
 			const is404 = await pageInstance.evaluate(() => {
 				return !!document.querySelector('.not-fount-container .not-fount-image');
 			});
 			if (is404) {
-				//TODO 报错监控
+				console.log('找不到公告，返回空数组');
 				return [];
 			}
 			await pageInstance.waitForSelector('#app-wrap');
 			// 从 #app-wrap 开始提取内容
-			const announcements = await page.evaluate(() => {
+			const announcements = await pageInstance.evaluate(() => {
 				const appWrap = document.querySelector('#app-wrap');
 				if (!appWrap) return [];
 				
@@ -41,19 +41,19 @@ class ExNewsCrawler extends BaseCrawler {
 						results.push({
 							title,
 							timestamp: date,
-							newsUrl: href
+							newsUrl: href,
+							type: 'binance_cryptocurrency'
 						});
 					}
 				});
 				
 				return results;
 			});
-			
-			console.log('Announcements:', announcements);
+			console.log('Announcements:', announcements.length);
 			// 批量存储到数据库
 			await bulkStoreAnnouncements(announcements);
 		} catch (err) {
-		
+			console.log(err);
 		}
 	}
 }
@@ -61,7 +61,7 @@ class ExNewsCrawler extends BaseCrawler {
 async function bulkStoreAnnouncements(data) {
 	try {
 		await EXNews.bulkCreate(data, {
-			updateOnDuplicate: ['title', 'timestamp', 'newsUrl'], // 指定需要更新的字段
+			updateOnDuplicate: ['title', 'timestamp', 'newsUrl', 'type'], // 指定需要更新的字段
 		});
 		
 		console.log('Announcements saved successfully');

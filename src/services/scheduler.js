@@ -1,62 +1,20 @@
 const schedule = require('node-schedule');
-const crawler = require('./rootdata-crawler');
+const rootDataCrawler = require('./rootdata-crawler');
+const exCrawler = require('./ex-news-crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models');
-// const { Op } = require('sequelize');
 
 class CrawlerScheduler {
 	constructor() {
 		this.morningJob = null;
 		this.eveningJob = null;
-		this.halfHourlyDetailJob = null;
 	}
 	
-	async restartDetailCrawl() {
-		/**
-		 * 开始detail crawl**/
-		const state1 = await NewCrawlState.findOne({
-			where: {
-				...C_STATE_TYPE.detail,
-			},
-		});
-		
-		if (state1) {
-			await state1.update({ status: 'idle', error: null, otherInfo: null });
-		}
-		/**
-		 * 开始sub details crawl**/
-		const state2 = await NewCrawlState.findOne({
-			where: {
-				...C_STATE_TYPE.detail2,
-			}
-		});
-		if (state2) {
-			await state2.update({ status: 'idle', error: null, otherInfo: null });
-		}
-		const stateSpare = await NewCrawlState.findOne({
-			where: {
-				...C_STATE_TYPE.spare,
-			}
-		});
-		if (stateSpare) {
-			await stateSpare.update({ status: 'idle', error: null, otherInfo: null });
-		}
-		await crawler.forceClose();
-		console.log('等待浏览器完全关闭，上一次的任务结束...');
-		await new Promise(resolve => setTimeout(resolve, 2000));
-		console.log('等待完毕，开始重新执行');
-		await crawler.quickUpdate();
-		await crawler.detailsCrawl();
-		await crawler.subDetailsCrawl();
-	}
-	
-	startScheduler() {
+	async startScheduler() {
 		// 每天北京时间上午 7:10（对应 UTC 时间晚上 11:10）
 		this.morningJob = schedule.scheduleJob('10 23 * * *', async () => {
 			console.log('Starting morning quick update...');
 			try {
-				await crawler.quickUpdate();
-				await crawler.detailsCrawl();
-				await crawler.subDetailsCrawl();
+				await this.startRootDataCrawl();
 				console.log('Morning quick update completed');
 			} catch (error) {
 				console.error('Morning quick update failed:', error);
@@ -67,16 +25,20 @@ class CrawlerScheduler {
 		this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
 			console.log('Starting evening quick update...');
 			try {
-				await crawler.quickUpdate();
-				await crawler.detailsCrawl();
-				await crawler.subDetailsCrawl();
+				await this.startRootDataCrawl();
 				console.log('Evening quick update completed');
 			} catch (error) {
 				console.error('Evening quick update failed:', error);
 			}
 		});
 		
-		this.restartDetailCrawl();
+		await this.resetAllState();
+		this.startRootDataCrawl().then(() => {
+			console.log('首次启动任务执行完: startRootDataCrawl')
+		}).catch(err => console.log(err));
+		this.startExNewsCrawl().then(() => {
+			console.log('首次启动任务执行完: startExNewsCrawl')
+		}).catch(err => console.log(err));
 	}
 	
 	stopScheduler() {
@@ -86,9 +48,38 @@ class CrawlerScheduler {
 		if (this.eveningJob) {
 			this.eveningJob.cancel();
 		}
-		if (this.halfHourlyDetailJob) {
-			this.halfHourlyDetailJob.cancel();
+	}
+	/**
+	 * 重置所有状态为 idle
+	 * **/
+	async resetAllState() {
+		try {
+			await NewCrawlState.update(
+				{ status: 'idle', error: null, otherInfo: null }, // 更新的字段和值
+				{ where: {} } // 空条件，表示更新所有记录
+			);
+			console.log('所有状态已更新为 idle');
+		} catch (error) {
+			console.error('更新状态时出错:', error);
 		}
+	}
+	/**
+	 * rootData 爬取启动
+	 * 包含每日爬取前两页的项目数据，以及爬取详情数据
+	 * **/
+	async startRootDataCrawl() {
+		await rootDataCrawler.forceClose();
+		await rootDataCrawler.quickUpdate();
+		await rootDataCrawler.detailsCrawl();
+		await rootDataCrawler.subDetailsCrawl();
+	}
+	/**
+	 * 中性化交易所公告爬取
+	 * 包含： 币安,OKX
+	 * **/
+	async startExNewsCrawl() {
+		await exCrawler.forceClose();
+		await exCrawler.crawlBinanceNews();
 	}
 }
 

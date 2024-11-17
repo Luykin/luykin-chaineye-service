@@ -24,6 +24,7 @@ class BaseCrawler {
 	async forceClose() {
 		try {
 			await this.browser?.close?.();
+			this.browser = null;
 			console.log('已经强制关闭浏览器...');
 		} catch (err) {
 			console.error('Error closing browser:', err);

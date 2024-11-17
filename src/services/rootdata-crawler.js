@@ -261,6 +261,7 @@ class FundraisingCrawler extends BaseCrawler {
 			
 			state.status = 'running';
 			state.error = null;
+			state.lastUpdateTime = new Date();
 			state.otherInfo = {
 				total: projectsToCrawl.length,
 				filterFunction: typeof filterFunction === 'function'
@@ -312,6 +313,7 @@ class FundraisingCrawler extends BaseCrawler {
 			}
 			
 			// 完成爬取
+			state.lastUpdateTime = new Date();
 			state.status = 'completed';
 			await state.save();
 			
@@ -335,7 +337,7 @@ class FundraisingCrawler extends BaseCrawler {
 					{ '$investmentsReceived.id$': null }, // investmentsReceived 为空
 					{ socialLinks: { [Op.eq]: null } }   // socialLinks 为空
 				],
-				detailFailuresNumber: { [Op.lte]: 18 },
+				detailFailuresNumber: { [Op.lte]: 8 },
 				projectLink: { [Op.like]: 'http%' } // 确保 projectLink 以 http 开头
 			},
 			include: [
@@ -362,7 +364,7 @@ class FundraisingCrawler extends BaseCrawler {
 		const crawlQueryOptions = {
 			where: {
 				isInitial: false,
-				detailFailuresNumber: { [Op.lte]: 5 },
+				detailFailuresNumber: { [Op.lte]: 8 },
 				socialLinks: null,
 				projectLink: { [Op.like]: 'http%' }  // 确保 projectLink 以 http 开头
 			}
