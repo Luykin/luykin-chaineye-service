@@ -132,13 +132,14 @@ class ExNewsCrawler extends BaseCrawler {
 		while (true) {
 			const isFastMode = this.isInHighFrequencyPeriod();
 			
-			console.log(isFastMode ? '快速模式：500ms 一次' : '普通模式：7s 一次');
+			console.log(isFastMode ? '快速模式：500ms 一次' : '普通模式：9s 一次');
 			
 			await this.crawlBinanceNews(); // 执行爬取任务
-			
+			console.log('本次爬取搞定,Waiting...');
 			// 根据模式设置不同的间隔
-			const delay = isFastMode ? 500 : 7000;
+			const delay = isFastMode ? 500 : 9000;
 			await new Promise((resolve) => setTimeout(resolve, delay));
+			console.log('等待7s完毕，下一次开始执行');
 		}
 	}
 }
