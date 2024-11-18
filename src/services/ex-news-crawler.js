@@ -162,7 +162,7 @@ async function bulkStoreAnnouncements(data) {
 		
 		// 如果没有新记录，直接返回
 		if (newRecords.length === 0) {
-			console.log('No new announcements to save.');
+			// console.log('No new announcements to save.');
 			return;
 		}
 		
