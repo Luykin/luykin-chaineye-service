@@ -116,7 +116,7 @@ class ExNewsCrawler extends BaseCrawler {
 				
 				// 批量存储到数据库
 				await bulkStoreAnnouncements(announcements);
-				await new Promise((resolve) => setTimeout(resolve, 550));
+				await new Promise((resolve) => setTimeout(resolve, 500));
 			}
 		} catch (err) {
 			console.error('Error during crawling:', err);
@@ -131,7 +131,6 @@ class ExNewsCrawler extends BaseCrawler {
 			const isFastMode = this.isInHighFrequencyPeriod();
 			
 			await this.crawlBinanceNews(pageInstance); // 执行爬取任务
-			// console.log('本次爬取搞定,Waiting...');
 			whileCount++;
 			if (whileCount > 10) {
 				pageInstance = await this.safeInitPage('binancePage');
@@ -140,7 +139,7 @@ class ExNewsCrawler extends BaseCrawler {
 			/**
 			 * 6 - 16秒随机的一个值
 			 * **/
-			const delay = isFastMode ? 500 : Math.floor(Math.random() * (16000 - 6000 + 1) + 6000);
+			const delay = isFastMode ? 400 : Math.floor(Math.random() * (16000 - 6000 + 1) + 6000);
 			await new Promise((resolve) => setTimeout(resolve, delay));
 			console.log(`等待${delay}ms完毕，下一次开始执行`, isFastMode);
 		}
