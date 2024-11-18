@@ -137,9 +137,9 @@ class ExNewsCrawler extends BaseCrawler {
 				whileCount = 0;
 			}
 			/**
-			 * 6 - 16秒随机的一个值
+			 * 7 - 17秒随机的一个值
 			 * **/
-			const delay = isFastMode ? 400 : Math.floor(Math.random() * (16000 - 6000 + 1) + 6000);
+			const delay = isFastMode ? 400 : Math.floor(Math.random() * (17000 - 7000 + 1) + 7000);
 			await new Promise((resolve) => setTimeout(resolve, delay));
 			console.log(`等待${delay}ms完毕，下一次开始执行`, isFastMode);
 		}
