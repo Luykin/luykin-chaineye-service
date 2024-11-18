@@ -1,5 +1,31 @@
 const { EXNews } = require('../models');
 const BaseCrawler = require('./base-crawler');
+const TelegramBot = require('node-telegram-bot-api');
+// 替换为你的 API Token 和群组 Chat ID
+const tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
+const tgGroupChatId = '-1002295668714';
+
+const tgBot = new TelegramBot(tgToken);
+
+function formatBinanceLink(link) {
+	const baseUrl = 'https://www.binance.com';
+	
+	if (!link.startsWith('http')) {
+		// 确保拼接时不会有重复的 /
+		return `${baseUrl.replace(/\/$/, '')}/${link.replace(/^\//, '')}`;
+	}
+	
+	return link;
+}
+
+const sendMessageToGroup = async (message, form = {}) => {
+	try {
+		await tgBot.sendMessage(tgGroupChatId, message, form);
+		console.log('Message sent successfully!');
+	} catch (error) {
+		console.error('Error sending message:', error);
+	}
+};
 
 class ExNewsCrawler extends BaseCrawler {
 	constructor() {
@@ -7,13 +33,13 @@ class ExNewsCrawler extends BaseCrawler {
 		this.browser = null;
 		this.binancePage = null; // 爬取币安公告页面
 	}
-
+	
 	// 判断当前是否在高频爬取时间范围
 	isInHighFrequencyPeriod() {
 		const now = new Date();
 		const minutes = now.getMinutes();
 		const seconds = now.getSeconds();
-
+		
 		/**
 		 * 整10分 前后各30s 启动高频爬取模式
 		 * **/
@@ -22,13 +48,13 @@ class ExNewsCrawler extends BaseCrawler {
 			(minutes % 10 === 0 && seconds <= 30)
 		);
 	}
-
+	
 	// 主爬取逻辑
 	async crawlBinanceNews() {
 		try {
 			// 初始化页面
 			const pageInstance = await this.safeInitPage('binancePage');
-
+			
 			// 定义爬取的 Tab 和类型
 			const tabUrls = [
 				{
@@ -44,7 +70,7 @@ class ExNewsCrawler extends BaseCrawler {
 					type: 'binance_airdrop',
 				},
 			];
-
+			
 			// 遍历每个 Tab 页面
 			for (const { url, type } of tabUrls) {
 				console.log(type, `正在打开网页: ${url}`);
@@ -52,32 +78,32 @@ class ExNewsCrawler extends BaseCrawler {
 					waitUntil: 'networkidle0',
 					timeout: 20000, // 设置超时
 				});
-
+				
 				const is404 = await pageInstance.evaluate(() => {
 					return !!document.querySelector('.not-fount-container .not-fount-image');
 				});
-
+				
 				if (is404) {
 					console.log(`找不到 ${type} 公告，跳过`);
 					continue;
 				}
-
+				
 				await pageInstance.waitForSelector('#app-wrap');
-
+				
 				// 从 #app-wrap 开始提取内容
 				const announcements = await pageInstance.evaluate((type) => {
 					const appWrap = document.querySelector('#app-wrap');
 					if (!appWrap) return [];
-
+					
 					// 获取所有公告链接
 					const links = appWrap.querySelectorAll('section a[data-bn-type="link"]');
 					const results = [];
-
+					
 					links.forEach((link) => {
 						const title = link.querySelector('div[data-bn-type="text"]')?.innerText.trim();
 						const date = link.querySelector('h6[data-bn-type="text"]')?.innerText.trim();
 						const href = link.getAttribute('href');
-
+						
 						if (title && date && href) {
 							results.push({
 								title,
@@ -87,12 +113,12 @@ class ExNewsCrawler extends BaseCrawler {
 							});
 						}
 					});
-
+					
 					return results;
 				}, type);
-
+				
 				console.log(`从 ${type} 爬取到 ${announcements.length} 条公告`);
-
+				
 				// 批量存储到数据库
 				await bulkStoreAnnouncements(announcements);
 			}
@@ -100,32 +126,76 @@ class ExNewsCrawler extends BaseCrawler {
 			console.error('Error during crawling:', err);
 		}
 	}
-
+	
 	// 无限循环执行爬取任务
 	async startCrawling() {
 		while (true) {
 			const isFastMode = this.isInHighFrequencyPeriod();
-
-			console.log(isFastMode ? '快速模式：500ms 一次' : '普通模式：5s 一次');
-
+			
+			console.log(isFastMode ? '快速模式：500ms 一次' : '普通模式：7s 一次');
+			
 			await this.crawlBinanceNews(); // 执行爬取任务
-
+			
 			// 根据模式设置不同的间隔
-			const delay = isFastMode ? 500 : 5000;
+			const delay = isFastMode ? 500 : 7000;
 			await new Promise((resolve) => setTimeout(resolve, delay));
 		}
 	}
 }
 
-// 批量存储公告数据到数据库
 async function bulkStoreAnnouncements(data) {
 	try {
-		await EXNews.bulkCreate(data, {
-			updateOnDuplicate: ['title', 'timestamp', 'newsUrl', 'type'], // 指定需要更新的字段
+		// 获取所有已经存在的 newsUrl
+		const existingUrls = await EXNews.findAll({
+			where: {
+				newsUrl: data.map(item => item.newsUrl),
+			},
+			attributes: ['newsUrl'],
 		});
-		console.log('Announcements saved successfully');
+		
+		const existingUrlSet = new Set(existingUrls.map(record => record.newsUrl));
+		
+		// 筛选出未存在于数据库的记录
+		const newRecords = data.filter(item => !existingUrlSet.has(item.newsUrl));
+		
+		// 如果没有新记录，直接返回
+		if (newRecords.length === 0) {
+			console.log('No new announcements to save.');
+			return;
+		}
+		
+		// 筛选出需要更新的字段
+		const fieldsToUpdate = ['title', 'timestamp', 'type', 'newsUrl'];
+		
+		await EXNews.bulkCreate(newRecords, {
+			updateOnDuplicate: fieldsToUpdate, // 指定在冲突时需要更新的字段
+		});
+		
+		// 获取新记录中时间戳最大的记录作为最新记录
+		const latestRecord = newRecords.reduce((latest, record) => {
+			return new Date(record.timestamp) > new Date(latest.timestamp) ? record : latest;
+		}, newRecords[0]);
+		if (latestRecord && latestRecord?.title) {
+			const message = `🚀 <b>${latestRecord.title}</b>`;
+			const formattedLink = formatBinanceLink(latestRecord.newsUrl);
+			await sendMessageToGroup(message, {
+				parse_mode: 'HTML',
+				reply_markup: {
+					inline_keyboard: [
+						[
+							{
+								text: '🔗 Read More',
+								url: formattedLink,
+							},
+						],
+					],
+				},
+			});
+		}
 	} catch (error) {
 		console.error('Error saving announcements:', error);
+		throw error; // 抛出错误以便调用方处理
 	}
 }
+
 module.exports = new ExNewsCrawler();
