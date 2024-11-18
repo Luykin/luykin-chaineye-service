@@ -50,11 +50,8 @@ class ExNewsCrawler extends BaseCrawler {
 	}
 	
 	// 主爬取逻辑
-	async crawlBinanceNews() {
+	async crawlBinanceNews(pageInstance) {
 		try {
-			// 初始化页面
-			const pageInstance = await this.safeInitPage('binancePage');
-			
 			// 定义爬取的 Tab 和类型
 			const tabUrls = [
 				{
@@ -117,10 +114,9 @@ class ExNewsCrawler extends BaseCrawler {
 					return results;
 				}, type);
 				
-				// console.log(`从 ${type} 爬取到 ${announcements.length} 条公告`);
-				
 				// 批量存储到数据库
 				await bulkStoreAnnouncements(announcements);
+				await new Promise((resolve) => setTimeout(resolve, 550));
 			}
 		} catch (err) {
 			console.error('Error during crawling:', err);
@@ -129,14 +125,19 @@ class ExNewsCrawler extends BaseCrawler {
 	
 	// 无限循环执行爬取任务
 	async startCrawling() {
+		let whileCount = 0;
+		let pageInstance = await this.safeInitPage('binancePage');
 		while (true) {
 			const isFastMode = this.isInHighFrequencyPeriod();
-			
 			console.log(isFastMode ? '快速模式：500ms 一次' : '普通模式：9s 一次');
 			
-			await this.crawlBinanceNews(); // 执行爬取任务
+			await this.crawlBinanceNews(pageInstance); // 执行爬取任务
 			console.log('本次爬取搞定,Waiting...');
-			// 根据模式设置不同的间隔
+			whileCount++;
+			if (whileCount > 15) {
+				pageInstance = await this.safeInitPage('binancePage');
+				whileCount = 0;
+			}
 			const delay = isFastMode ? 500 : 9000;
 			await new Promise((resolve) => setTimeout(resolve, delay));
 			console.log('等待9s完毕，下一次开始执行');
