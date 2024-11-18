@@ -129,7 +129,6 @@ class ExNewsCrawler extends BaseCrawler {
 		let pageInstance = await this.safeInitPage('binancePage');
 		while (true) {
 			const isFastMode = this.isInHighFrequencyPeriod();
-			console.log(isFastMode ? '快速模式：500ms 一次' : '普通模式：9s 一次');
 			
 			await this.crawlBinanceNews(pageInstance); // 执行爬取任务
 			// console.log('本次爬取搞定,Waiting...');
@@ -143,7 +142,7 @@ class ExNewsCrawler extends BaseCrawler {
 			 * **/
 			const delay = isFastMode ? 500 : Math.floor(Math.random() * (16000 - 6000 + 1) + 6000);
 			await new Promise((resolve) => setTimeout(resolve, delay));
-			console.log(`等待${delay}s完毕，下一次开始执行`);
+			console.log(`等待${delay}ms完毕，下一次开始执行`, isFastMode);
 		}
 	}
 }
