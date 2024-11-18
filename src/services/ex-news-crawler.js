@@ -73,7 +73,7 @@ class ExNewsCrawler extends BaseCrawler {
 			
 			// 遍历每个 Tab 页面
 			for (const { url, type } of tabUrls) {
-				console.log(type, `正在打开网页: ${url}`);
+				// console.log(type, `正在打开网页: ${url}`);
 				await pageInstance?.goto(url, {
 					waitUntil: 'networkidle0',
 					timeout: 20000, // 设置超时
@@ -84,7 +84,7 @@ class ExNewsCrawler extends BaseCrawler {
 				});
 				
 				if (is404) {
-					console.log(`找不到 ${type} 公告，跳过`);
+					// console.log(`找不到 ${type} 公告，跳过`);
 					continue;
 				}
 				
@@ -117,7 +117,7 @@ class ExNewsCrawler extends BaseCrawler {
 					return results;
 				}, type);
 				
-				console.log(`从 ${type} 爬取到 ${announcements.length} 条公告`);
+				// console.log(`从 ${type} 爬取到 ${announcements.length} 条公告`);
 				
 				// 批量存储到数据库
 				await bulkStoreAnnouncements(announcements);
@@ -139,7 +139,7 @@ class ExNewsCrawler extends BaseCrawler {
 			// 根据模式设置不同的间隔
 			const delay = isFastMode ? 500 : 9000;
 			await new Promise((resolve) => setTimeout(resolve, delay));
-			console.log('等待7s完毕，下一次开始执行');
+			console.log('等待9s完毕，下一次开始执行');
 		}
 	}
 }
