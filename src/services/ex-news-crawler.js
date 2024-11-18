@@ -134,11 +134,14 @@ class ExNewsCrawler extends BaseCrawler {
 			await this.crawlBinanceNews(pageInstance); // 执行爬取任务
 			console.log('本次爬取搞定,Waiting...');
 			whileCount++;
-			if (whileCount > 15) {
+			if (whileCount > 10) {
 				pageInstance = await this.safeInitPage('binancePage');
 				whileCount = 0;
 			}
-			const delay = isFastMode ? 500 : 9000;
+			/**
+			 * 6 - 16秒随机的一个值
+			 * **/
+			const delay = isFastMode ? 500 : Math.floor(Math.random() * (16000 - 6000 + 1) + 6000);
 			await new Promise((resolve) => setTimeout(resolve, delay));
 			console.log('等待9s完毕，下一次开始执行');
 		}
