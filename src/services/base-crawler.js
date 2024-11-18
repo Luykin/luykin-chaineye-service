@@ -45,7 +45,7 @@ class BaseCrawler {
 		await this[key].setExtraHTTPHeaders({
 			'Accept-Encoding': 'gzip' // 使用gzip压缩让数据传输更快
 		});
-		await this[key].setCacheEnabled(false); // 禁用缓存
+		// await this[key].setCacheEnabled(false); // 禁用缓存
 		return this[key];
 	}
 }
