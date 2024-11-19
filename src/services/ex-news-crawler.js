@@ -44,8 +44,8 @@ class ExNewsCrawler extends BaseCrawler {
 		 * 整10分 前后各30s 启动高频爬取模式
 		 * **/
 		return (
-			(minutes % 10 === 9 && seconds >= 30) ||
-			(minutes % 10 === 0 && seconds <= 30)
+			(minutes % 10 === 9 && seconds >= 50) ||
+			(minutes % 10 === 0 && seconds <= 60)
 		);
 	}
 	
