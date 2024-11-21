@@ -1,4 +1,5 @@
 require('dotenv').config({ path: `${process.env.NODE_ENV === 'development' ? '.env-dev' : '.env-pro'}` });
+console.log(process.env.NODE_ENV, 'process.env.NODE_ENV运行环境')
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
