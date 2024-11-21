@@ -1,3 +1,5 @@
 node_modules
 # Ignore the database file
 database.sqlite
+# Ignore all .env files
+.env*

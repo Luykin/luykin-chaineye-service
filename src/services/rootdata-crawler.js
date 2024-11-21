@@ -1,10 +1,10 @@
 const puppeteer = require('puppeteer');
 const retry = require('async-retry');
-const { NewCrawlState, Fundraising, C_STATE_TYPE } = require('../models');
-const baseRootDataURL = 'https://www.rootdata.com';
+const { NewCrawlState, Fundraising, C_STATE_TYPE } = require('../models/sqlite-start');
 const { v4: uuidv4 } = require('uuid');
 const { Op, literal } = require('sequelize');
 const BaseCrawler = require('./base-crawler');
+const baseRootDataURL = 'https://www.rootdata.com';
 
 class FundraisingCrawler extends BaseCrawler {
 	constructor() {

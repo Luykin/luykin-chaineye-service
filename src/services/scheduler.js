@@ -1,7 +1,7 @@
 const schedule = require('node-schedule');
 const rootDataCrawler = require('./rootdata-crawler');
 const exCrawler = require('./ex-news-crawler');
-const { NewCrawlState, C_STATE_TYPE } = require('../models');
+const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
 
 class CrawlerScheduler {
 	constructor() {

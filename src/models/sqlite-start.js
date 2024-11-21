@@ -2,40 +2,41 @@ const { Sequelize } = require('sequelize');
 const FundraisingModel = require('./fundraising');
 const NewCrawlStateModel = require('./new-crawl-state');
 const EXNewsModel = require('./ex-news');
-const sequelize = new Sequelize({
+const sqlite = new Sequelize({
 	dialect: 'sqlite',
 	storage: './database.sqlite',
 	logging: false
 });
+/** 用sqlite数据库 **/
+const Fundraising = FundraisingModel(sqlite);
+const NewCrawlState = NewCrawlStateModel(sqlite);
+const EXNews = EXNewsModel(sqlite);
+/**用sqlite数据库 ======== end **/
 
-const Fundraising = FundraisingModel(sequelize);
-const NewCrawlState = NewCrawlStateModel(sequelize);
-const EXNews = EXNewsModel(sequelize);
 const C_STATE_TYPE = {
-	full: { type: 'full'},
+	full: { type: 'full' },
 	quick: { type: 'quick' },
 	detail: { type: 'detail' },
 	detail2: { type: 'detail2' },
 	spare: { type: 'spare' }
 };
 
-async function setupDatabase() {
+async function setupSqlite() {
 	try {
-		await sequelize.authenticate();
-		console.log('Database connection established.');
-		await sequelize.sync();
-		console.log('Database synchronized.');
+		await sqlite.authenticate();
+		console.log('sqlite Database connection established.');
+		await sqlite.sync();
+		console.log('sqlite Database synchronized.');
 	} catch (error) {
-		console.error('Database setup error:', error);
+		console.error('sqlite Database setup error:', error);
 		throw error;
 	}
 }
 
 module.exports = {
-	sequelize,
 	EXNews,
 	Fundraising,
 	NewCrawlState,
 	C_STATE_TYPE,
-	setupDatabase
+	setupSqlite
 };

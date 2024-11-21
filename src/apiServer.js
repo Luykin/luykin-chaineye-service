@@ -1,3 +1,4 @@
+require('dotenv').config({ path: `${process.env.NODE_ENV === 'development' ? '.env-dev' : '.env-pro'}` });
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -5,9 +6,10 @@ const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const morgan = require('morgan');
 const redis = require('redis');
-const { setupDatabase } = require('./models');
+const { setupSqlite } = require('./models/sqlite-start');
+const { setupPostgres } = require('./models/postgres-start');
 const fundraisingRoutes = require('./routes/fundraising');
-require('dotenv').config();
+const cryptoRoutes = require('./routes/cryptohunt-tg/index');
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -57,8 +59,8 @@ app.use(helmet({
 	contentSecurityPolicy: {
 		directives: {
 			...helmet.contentSecurityPolicy.getDefaultDirectives(),
-			'script-src': ["'self'", "'unsafe-inline'"],
-			'style-src': ["'self'", "'unsafe-inline'"],
+			'script-src': ['\'self\'', '\'unsafe-inline\''],
+			'style-src': ['\'self\'', '\'unsafe-inline\''],
 		},
 	},
 }));
@@ -77,6 +79,7 @@ app.use(express.json({ limit: '20kb' }));
 
 // API 路由
 app.use('/api/fundraising', fundraisingRoutes);
+app.use('/api/crypto', cryptoRoutes);
 
 // 错误处理中间件
 app.use((err, req, res, next) => {
@@ -86,8 +89,9 @@ app.use((err, req, res, next) => {
 
 // 启动 API 服务
 async function startAPIServer() {
-	await setupDatabase();
+	await setupSqlite();
+	await setupPostgres();
 	app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
 }
 
-startAPIServer();
+startAPIServer().then(r => r);

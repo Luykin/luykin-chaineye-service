@@ -1,6 +1,6 @@
 const express = require('express');
 const { query, validationResult } = require('express-validator');
-const { Fundraising, NewCrawlState, C_STATE_TYPE } = require('../models');
+const { Fundraising, NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
 // const crawler = require('../services/rootdata-crawler');
 const { Op, literal } = require('sequelize');
 const router = express.Router();

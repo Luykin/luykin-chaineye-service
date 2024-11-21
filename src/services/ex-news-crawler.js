@@ -1,4 +1,4 @@
-const { EXNews } = require('../models');
+const { EXNews } = require('../models/sqlite-start');
 const BaseCrawler = require('./base-crawler');
 const TelegramBot = require('node-telegram-bot-api');
 // 替换为你的 API Token 和群组 Chat ID

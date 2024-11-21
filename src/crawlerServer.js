@@ -11,14 +11,13 @@
  * - 爬虫任务通常不适合多线程并发执行，因为这可能导致数据冲突和过度请求目标服务器。
  * - 将爬虫服务与 API 服务分离可以确保用户请求和数据爬取任务互不影响。
  */
-
-const { setupDatabase } = require('./models');
+require('dotenv').config({ path: `${process.env.NODE_ENV === 'development' ? '.env-dev' : '.env-pro'}` });
+const { setupSqlite } = require('./models/sqlite-start');
 const scheduler = require('./services/scheduler');
-require('dotenv').config();
 
 async function startCrawlerService() {
 	try {
-		await setupDatabase();
+		await setupSqlite();
 		console.log('启动爬虫调度器...');
 		await scheduler.startScheduler();
 	} catch (error) {
