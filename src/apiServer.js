@@ -77,8 +77,11 @@ app.use(helmet({
 }));
 app.use(rateLimit({
 	windowMs: 60 * 1000,
-	max: 60,
-	message: '请求过于频繁，请稍后再试。'
+	max: 40,
+	message: 'Too many requests, please try again later.',
+	standardHeaders: true, // 返回标准的速率限制信息
+  legacyHeaders: false, // 关闭X-RateLimit-* 头部
+  trustProxy: true, // 明确指定信任代理
 }));
 app.use(compression());
 app.use(morgan('combined'));
