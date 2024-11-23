@@ -3,8 +3,8 @@ module.exports = {
 		{
 			name: "luykin-chaineye-api",         // API 路由服务
 			script: "./src/apiServer.js",            // API 路由的启动文件路径
-			instances: "4",                    // 启动最大实例数（根据 CPU 核心数自动启动）
-			exec_mode: "cluster",                // 使用 cluster 模式
+			instances: 1,                    // 启动最大实例数（根据 CPU 核心数自动启动）
+			exec_mode: "fork",                // 使用 cluster 模式
 			watch: false,                        // 生产环境关闭文件监视
 			env: {
 				NODE_ENV: "development",          // 开发环境变量
