@@ -1,5 +1,5 @@
 require('dotenv').config({ path: `${process.env.NODE_ENV === 'development' ? '.env-dev' : '.env-pro'}` });
-console.log(process.env.NODE_ENV, 'process.env.NODE_ENV运行环境')
+console.log(process.env.NODE_ENV, 'process.env.NODE_ENV运行环境');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -10,7 +10,9 @@ const redis = require('redis');
 const { setupSqlite } = require('./models/sqlite-start');
 const { setupPostgres } = require('./models/postgres-start');
 const fundraisingRoutes = require('./routes/fundraising');
-const cryptoRoutes = require('./routes/cryptohunt-tg/index');
+const cryptoRoutes = require('./routes/cryptohunt-tg');
+const TgBot = require('./bot/group-bot'); // 引入 TelegramBot 类
+const bot6666 = new TgBot(process.env.TG_6666BOT_TOKEN, process.env.TG_CRYPTOHUNT_CHART1_ID);
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -37,19 +39,28 @@ const redisClient = redis.createClient({
 // 中间件传递 Redis 客户端
 app.use((req, res, next) => {
 	req.redisClient = redisClient;
+	req.bot6666 = bot6666;
 	next();
 });
 
 // CORS 配置
 const corsOptions = {
 	origin: [
-		'https://chaineye.tools', 'https://minibridge.chaineye.tools',
-		'https://www.cryptohunt.ai', 'https://cryptohunt.ai',
-		'http://cryptohunt.ai', 'http://www.cryptohunt.ai',
-		'http://chaineye.tools', 'http://minibridge.chaineye.tools',
+		'https://chaineye.tools',
+		'https://minibridge.chaineye.tools',
+		'https://www.cryptohunt.ai',
+		'https://cryptohunt.ai',
+		'http://cryptohunt.ai',
+		'http://www.cryptohunt.ai',
+		'http://chaineye.tools',
+		'http://minibridge.chaineye.tools',
+		'http://localhost',             // 允许 localhost
+		'http://localhost:3000',       // 允许本地调试，端口3000
+		'http://127.0.0.1',            // 允许本地调试，IP形式
+		'http://127.0.0.1:3000'        // 允许本地调试，IP形式+端口
 	],
 	methods: ['GET', 'POST', 'PUT', 'DELETE'],
-	allowedHeaders: ['Content-Type', 'Authorization'],
+	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'], // 增加自定义头部
 	credentials: false
 };
 app.set('trust proxy', 1); // 仅信任最靠近 Express 的一层代理
@@ -93,6 +104,8 @@ async function startAPIServer() {
 	await setupSqlite();
 	await setupPostgres();
 	app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
+	await bot6666.start();
+	console.log('Telegram Bot6666 启动成功');
 }
 
 startAPIServer().then(r => r);

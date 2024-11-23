@@ -19,9 +19,7 @@ async function setupPostgres() {
 	try {
 		await postgres.authenticate();
 		console.log('postgres Database connection established.');
-		await postgres.sync({
-			force: 'true',
-		});
+		await postgres.sync();
 		console.log('postgres Database synchronized.');
 	} catch (error) {
 		console.error('postgres Database setup error:', error);
