@@ -11,7 +11,8 @@ const { setupSqlite } = require('./models/sqlite-start');
 const { setupPostgres } = require('./models/postgres-start');
 const fundraisingRoutes = require('./routes/fundraising');
 const cryptoRoutes = require('./routes/cryptohunt-tg');
-const TgBot = require('./bot/group-bot'); // 引入 TelegramBot 类
+const TgBot = require('./bot/group-bot');
+const bot6666 = new TgBot(process.env.TG_6666BOT_TOKEN, process.env.TG_CRYPTOHUNT_CHART1_ID);
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -106,39 +107,8 @@ async function startAPIServer() {
 	await setupSqlite();
 	await setupPostgres();
 	app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
-	await startBot();
+	await bot6666.start();
 	console.log('Telegram Bot6666 启动成功');
-}
-
-async function startBot() {
-	try {
-		await redisClient.connect();
-		
-		// 使用 Redis 锁来确保只有一个 Bot 实例
-		const botLockKey = 'telegram_bot_lock';
-		const lockTTL = 60 * 1000; // 1分钟锁
-		
-		const lockValue = await redisClient.set(botLockKey, 'locked', {
-			NX: true,
-			PX: lockTTL, // 设置锁的过期时间
-		});
-		
-		if (lockValue === 'OK') {
-			// 获取到锁，启动 Bot
-			const bot6666 = new TgBot(process.env.TG_6666BOT_TOKEN, process.env.TG_CRYPTOHUNT_CHART1_ID);
-			await bot6666.start();
-			console.log('Telegram Bot6666 启动成功');
-			
-			// 定期续约锁
-			setInterval(async () => {
-				await redisClient.expire(botLockKey, lockTTL / 1000);
-			}, lockTTL / 2);
-		} else {
-			console.log('另一个进程正在运行 Telegram Bot 实例。');
-		}
-	} catch (error) {
-		console.error('Redis 错误:', error);
-	}
 }
 
 startAPIServer().then(r => r);
