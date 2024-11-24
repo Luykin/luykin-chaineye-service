@@ -128,17 +128,33 @@ class TelegramBot {
 			
 			return { inviteLink: inviteLink.invite_link };
 		} catch (err) {
-			throw "error";
+			throw 'error';
 		}
 	}
 	
-	// Start the bot
+	// // Start the bot
+	// async start() {
+	// 	this.configureListeners(); // Configure event listeners
+	// 	this.bot.launch().then(r => console.log).catch(err => {
+	// 		console.log(err, '机器人挂了');
+	// 	}); // Launch the bot
+	// 	console.log('Telegram Bot launched.');
+	// }
+	//
 	async start() {
 		this.configureListeners(); // Configure event listeners
-		this.bot.launch().then(r => console.log).catch(err => {
-			console.log(err, '机器人挂了');
-		}); // Launch the bot
-		console.log('Telegram Bot launched.');
+		const launchBot = async () => {
+			try {
+				await this.bot.launch();
+				console.log('Telegram Bot launched.');
+			} catch (err) {
+				console.error('Telegram Bot encountered an error:', err);
+				console.log('Retrying to start bot in 5 seconds...');
+				setTimeout(launchBot, 5000); // 重试启动
+			}
+		};
+		
+		await launchBot(); // 启动机器人
 	}
 	
 	// Stop the bot
