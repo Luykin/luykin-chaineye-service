@@ -54,18 +54,27 @@ const corsOptions = {
 		'http://www.cryptohunt.ai',
 		'http://chaineye.tools',
 		'http://minibridge.chaineye.tools',
-		'http://localhost',             // 允许 localhost
-		'http://localhost:3000',       // 允许本地调试，端口3000
-		'http://127.0.0.1',            // 允许本地调试，IP形式
-		'http://127.0.0.1:3000'        // 允许本地调试，IP形式+端口
+		'http://localhost',
+		'http://localhost:3000',
+		'http://127.0.0.1',
+		'http://127.0.0.1:3000',
 	],
-	methods: ['GET', 'POST', 'PUT', 'DELETE'],
-	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'], // 增加自定义头部
-	credentials: false
+	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // 包括 OPTIONS
+	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
+	credentials: true,
 };
+
 app.set('trust proxy', 1); // 仅信任最靠近 Express 的一层代理
 app.use(cors(corsOptions));
-
+app.options('*', cors(corsOptions)); // 为所有路径处理 OPTIONS 请求
+app.use((req, res, next) => {
+	if (req.method === 'OPTIONS') {
+		res.setHeader('Content-Type', 'application/json');
+		res.status(200).send(); // 返回 200 状态码
+	} else {
+		next();
+	}
+});
 // 安全和速率限制
 app.use(helmet({
 	contentSecurityPolicy: {
@@ -81,8 +90,8 @@ app.use(rateLimit({
 	max: 40,
 	message: 'Too many requests, please try again later.',
 	standardHeaders: true, // 返回标准的速率限制信息
-  legacyHeaders: false, // 关闭X-RateLimit-* 头部
-  trustProxy: true, // 明确指定信任代理
+	legacyHeaders: false, // 关闭X-RateLimit-* 头部
+	trustProxy: true, // 明确指定信任代理
 }));
 app.use(compression());
 app.use(morgan('combined'));
