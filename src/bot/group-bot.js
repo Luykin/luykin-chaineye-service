@@ -28,11 +28,11 @@ class TelegramBot {
 		// Listen for new chat members
 		this.bot.on('chat_join_request', async (ctx) => {
 			try {
-				console.log(util.inspect(ctx.update, {
-					showHidden: false, // 是否显示不可枚举属性
-					depth: null,       // 展开对象的深度，null 表示无穷深度
-					colors: true,      // 启用颜色
-				}));
+				// console.log(util.inspect(ctx.update, {
+				// 	showHidden: false, // 是否显示不可枚举属性
+				// 	depth: null,       // 展开对象的深度，null 表示无穷深度
+				// 	colors: true,      // 启用颜色
+				// }));
 				const { from, chat, invite_link } = ctx.update.chat_join_request;
 				if (String(chat?.id) !== this.chatId.toString()) {
 					console.log(`Ignored event from unauthorized chat: ${String(chat?.id)}`);
@@ -41,9 +41,15 @@ class TelegramBot {
 				const inviteLink = invite_link?.invite_link;
 				if (inviteLink) {
 					const userRecord = await TGUser.findOne({ where: { inviteLink } });
-					if (!userRecord) {// 如果邀请链接无效，拒绝用户加入
+					/**
+					 * 没找到对应邀请链接的用户或者
+					 * 邀请链接的用户已经被加入群组
+					 * 都会拒绝加入
+					 * **/
+					if (!userRecord || userRecord?.tgId || userRecord?.joinTime) {
 						await ctx.telegram.declineChatJoinRequest(chat.id, from.id);
 						console.log(`拒绝用户 ${inviteLink} ${from.first_name} ${from.last_name} 的加入请求，原因：无效的邀请链接`);
+						await this.bot.telegram.revokeChatInviteLink(this.chatId, inviteLink);
 					} else {
 						await this.bot.telegram.revokeChatInviteLink(this.chatId, inviteLink);
 						// Update user information
