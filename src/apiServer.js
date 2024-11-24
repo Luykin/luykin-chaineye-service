@@ -59,9 +59,9 @@ const corsOptions = {
 		'http://127.0.0.1',
 		'http://127.0.0.1:3000',
 	],
-	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // 包括 OPTIONS
-	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
-	credentials: true,
+	methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // 包括 OPTIONS
+	// allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
+	// credentials: true,
 };
 
 app.set('trust proxy', 1); // 仅信任最靠近 Express 的一层代理
