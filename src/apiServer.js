@@ -11,8 +11,6 @@ const { setupSqlite } = require('./models/sqlite-start');
 const { setupPostgres } = require('./models/postgres-start');
 const fundraisingRoutes = require('./routes/fundraising');
 const cryptoRoutes = require('./routes/cryptohunt-tg');
-const TgBot = require('./bot/group-bot');
-const bot6666 = new TgBot(process.env.TG_6666BOT_TOKEN, process.env.TG_CRYPTOHUNT_CHART1_ID);
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -39,7 +37,6 @@ const redisClient = redis.createClient({
 // 中间件传递 Redis 客户端
 app.use((req, res, next) => {
 	req.redisClient = redisClient;
-	req.bot6666 = bot6666;
 	next();
 });
 
@@ -116,8 +113,6 @@ async function startAPIServer() {
 	await setupSqlite();
 	await setupPostgres();
 	app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
-	await bot6666.start();
-	console.log('Telegram Bot6666 启动成功');
 }
 
 startAPIServer().then(r => r);

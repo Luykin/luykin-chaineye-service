@@ -98,7 +98,7 @@ class TelegramBot {
 	// Create an invite link and log user information
 	async createInviteLink({ paidAt, paymentChain, paymentHash, expireTime, address }) {
 		try {
-			// 检查 paymentHash 是否已存在
+			console.log('createInviteLink', paymentHash);
 			const existingUser = await TGUser.findOne({ where: { paymentHash } });
 			if (existingUser) {
 				return { inviteLink: existingUser.inviteLink };
@@ -128,6 +128,7 @@ class TelegramBot {
 			
 			return { inviteLink: inviteLink.invite_link };
 		} catch (err) {
+			console.log(err);
 			throw 'error';
 		}
 	}

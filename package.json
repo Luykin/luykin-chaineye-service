@@ -7,10 +7,10 @@
     "dev-crawler": "NODE_ENV=development nodemon ./src/crawlerServer.js",
     "start": "pm2 start ecosystem.config.js --env production",
     "start:dev": "pm2 start ecosystem.config.js --env development",
-    "stop": "pm2 stop luykin-chaineye-api luykin-chaineye-crawler",
-    "restart": "pm2 restart luykin-chaineye-api luykin-chaineye-crawler",
-    "delete": "pm2 delete luykin-chaineye-api luykin-chaineye-crawler",
-    "logs": "pm2 logs luykin-chaineye-api luykin-chaineye-crawler",
+    "stop": "pm2 stop luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
+    "restart": "pm2 restart luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
+    "delete": "pm2 delete luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
+    "logs": "pm2 logs luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
     "logs-crawler": "pm2 logs luykin-chaineye-crawler"
   },
   "dependencies": {
