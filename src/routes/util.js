@@ -10,7 +10,7 @@ function decryptDataWithPrivateKey(encryptedData) {
   const decryptedData = crypto.privateDecrypt(
     {
       key: PRIVATE_KEY,
-      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      padding: crypto.constants.RSA_PKCS1_PADDING,
       oaepHash: "sha256",
     },
     buffer
