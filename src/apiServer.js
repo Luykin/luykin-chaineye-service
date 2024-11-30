@@ -42,20 +42,7 @@ app.use((req, res, next) => {
 
 // CORS 配置
 const corsOptions = {
-	origin: [
-		'https://chaineye.tools',
-		'https://minibridge.chaineye.tools',
-		'https://www.cryptohunt.ai',
-		'https://cryptohunt.ai',
-		'http://cryptohunt.ai',
-		'http://www.cryptohunt.ai',
-		'http://chaineye.tools',
-		'http://minibridge.chaineye.tools',
-		'http://localhost',
-		'http://localhost:3000',
-		'http://127.0.0.1',
-		'http://127.0.0.1:3000',
-	],
+	origin: '*',
 	methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // 包括 OPTIONS
 	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
 	credentials: true,
