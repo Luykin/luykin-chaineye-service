@@ -4,7 +4,6 @@ const path = require("path");
 
 const PRIVATE_KEY_PATH = path.join(__dirname, "../../private_key.pem");
 const PRIVATE_KEY = fs.readFileSync(PRIVATE_KEY_PATH, "utf8");
-const F_IV = "前端发送的 AES 初始化向量 (Base64)";
 /**
  * 使用 RSA 解密 AES 密钥
  * @param encryptedKey RSA 加密的 AES 密钥 (Base64)
@@ -43,10 +42,10 @@ function decryptWithAES(encryptedData, aesKey, iv) {
 }
 
 function validateRequestParams(req, res, next) {
-  const { encryptedData, encryptedKey } = req.body;
+  const { encryptedData, encryptedKey, iv } = req.body;
   const requestTimestamp = req.headers["x-request-timestamp"];
 
-  if (!encryptedData || !requestTimestamp || !encryptedKey) {
+  if (!encryptedData || !requestTimestamp || !encryptedKey || !iv) {
     return res.status(400).json({ error: "Invalid request1." });
   }
 
@@ -67,7 +66,7 @@ function validateRequestParams(req, res, next) {
 
     // 解密数据
 	  const aesKey = decryptAESKeyWithRSA(encryptedKey, PRIVATE_KEY);
-	  const decryptedData = decryptWithAES(encryptedData, aesKey, F_IV);
+	  const decryptedData = decryptWithAES(encryptedData, aesKey, iv);
 
     // 验证 paidAt 和时间戳一致
     const { paidAt, paymentChain, paymentHash, expireTime, address } = decryptedData;
