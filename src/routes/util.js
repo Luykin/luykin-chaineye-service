@@ -41,9 +41,12 @@ function decryptWithAES(encryptedData, aesKey, iv) {
 	const encryptedBuffer = Buffer.from(encryptedData, "base64");
 	console.log("解密数据decryptWithAES ===2", encryptedBuffer);
 	
-	// 分离密文和认证标签（假设最后 16 字节是认证标签）
-	const authTag = encryptedBuffer.slice(-16); // 获取认证标签
-	const ciphertext = encryptedBuffer.slice(0, -16); // 获取密文
+	// 明确认证标签长度
+	const AUTH_TAG_LENGTH = 16; // AES-GCM 默认认证标签长度为 16 字节
+	
+	// 分离密文和认证标签
+	const authTag = encryptedBuffer.slice(-AUTH_TAG_LENGTH); // 最后 16 字节是认证标签
+	const ciphertext = encryptedBuffer.slice(0, -AUTH_TAG_LENGTH); // 前面是密文
 	console.log("解密数据decryptWithAES ===3 AuthTag:", authTag);
 	console.log("解密数据decryptWithAES ===4 Ciphertext:", ciphertext);
 	
