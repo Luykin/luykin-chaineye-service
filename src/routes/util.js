@@ -4,27 +4,50 @@ const path = require("path");
 
 const PRIVATE_KEY_PATH = path.join(__dirname, "../../private_key.pem");
 const PRIVATE_KEY = fs.readFileSync(PRIVATE_KEY_PATH, "utf8");
+const F_IV = "前端发送的 AES 初始化向量 (Base64)";
+/**
+ * 使用 RSA 解密 AES 密钥
+ * @param encryptedKey RSA 加密的 AES 密钥 (Base64)
+ * @param privateKey PEM 格式的 RSA 私钥
+ * @returns 解密后的 AES 密钥 (Uint8Array)
+ */
+function decryptAESKeyWithRSA(encryptedKey, privateKey) {
+	const buffer = Buffer.from(encryptedKey, "base64");
+	
+	const decryptedKey = crypto.privateDecrypt(
+		{
+			key: privateKey,
+			padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+			oaepHash: "sha256",
+		},
+		buffer
+	);
+	
+	return new Uint8Array(decryptedKey);
+}
 
-function decryptDataWithPrivateKey(encryptedData) {
-  const buffer = Buffer.from(encryptedData, "base64");
-  const decryptedData = crypto.privateDecrypt(
-    {
-      key: PRIVATE_KEY,
-      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-      oaepHash: "sha256",
-    },
-    buffer
-  );
-
-  return JSON.parse(decryptedData.toString("utf8"));
+/**
+ * 使用 AES-GCM 解密数据
+ * @param encryptedData AES 加密的数据 (Base64)
+ * @param aesKey 解密用的 AES 密钥 (Uint8Array)
+ * @param iv 初始化向量 (Base64)
+ * @returns 解密后的数据
+ */
+function decryptWithAES(encryptedData, aesKey, iv) {
+	const ivBuffer = Buffer.from(iv, "base64");
+	const encryptedBuffer = Buffer.from(encryptedData, "base64");
+	
+	const decipher = crypto.createDecipheriv("aes-128-gcm", aesKey, ivBuffer);
+	const decrypted = Buffer.concat([decipher.update(encryptedBuffer), decipher.final()]);
+	return JSON.parse(decrypted.toString("utf8"));
 }
 
 function validateRequestParams(req, res, next) {
-  const { encryptedData } = req.body;
+  const { encryptedData, encryptedKey } = req.body;
   const requestTimestamp = req.headers["x-request-timestamp"];
 
-  if (!encryptedData || !requestTimestamp) {
-    return res.status(400).json({ error: "Invalid request." });
+  if (!encryptedData || !requestTimestamp || !encryptedKey) {
+    return res.status(400).json({ error: "Invalid request1." });
   }
 
   try {
@@ -43,7 +66,8 @@ function validateRequestParams(req, res, next) {
     }
 
     // 解密数据
-    const decryptedData = decryptDataWithPrivateKey(encryptedData);
+	  const aesKey = decryptAESKeyWithRSA(encryptedKey, PRIVATE_KEY);
+	  const decryptedData = decryptWithAES(encryptedData, aesKey, F_IV);
 
     // 验证 paidAt 和时间戳一致
     const { paidAt, paymentChain, paymentHash, expireTime, address } = decryptedData;
