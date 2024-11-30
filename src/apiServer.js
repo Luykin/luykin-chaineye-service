@@ -57,8 +57,8 @@ const corsOptions = {
 		'http://127.0.0.1:3000',
 	],
 	methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // 包括 OPTIONS
-	// allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
-	// credentials: true,
+	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
+	credentials: true,
 };
 
 app.set('trust proxy', 1); // 仅信任最靠近 Express 的一层代理
@@ -67,6 +67,7 @@ app.options('*', cors(corsOptions)); // 为所有路径处理 OPTIONS 请求
 app.use((req, res, next) => {
 	if (req.method === 'OPTIONS') {
 		res.setHeader('Content-Type', 'application/json');
+		res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
 		res.status(200).send(); // 返回 200 状态码
 	} else {
 		next();
