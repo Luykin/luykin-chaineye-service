@@ -33,16 +33,21 @@ function decryptAESKeyWithRSA(encryptedKey, privateKey) {
  * @returns 解密后的数据
  */
 function decryptWithAES(encryptedData, aesKey, iv) {
+	console.log("解密数据decryptWithAES ===0");
 	const ivBuffer = Buffer.from(iv, "base64");
+	console.log("解密数据decryptWithAES ===1", ivBuffer);
 	const encryptedBuffer = Buffer.from(encryptedData, "base64");
-	
+	console.log("解密数据decryptWithAES ===2", encryptedBuffer);
 	const decipher = crypto.createDecipheriv("aes-128-gcm", aesKey, ivBuffer);
+	console.log("解密数据decryptWithAES ===3", decipher);
 	const decrypted = Buffer.concat([decipher.update(encryptedBuffer), decipher.final()]);
+	console.log("解密数据decryptWithAES ===4", decrypted);
 	return JSON.parse(decrypted.toString("utf8"));
 }
 
 function validateRequestParams(req, res, next) {
   const { encryptedData, encryptedKey, iv } = req.body;
+	console.log(encryptedData, encryptedKey, iv);
   const requestTimestamp = req.headers["x-request-timestamp"];
 
   if (!encryptedData || !requestTimestamp || !encryptedKey || !iv) {
@@ -65,7 +70,9 @@ function validateRequestParams(req, res, next) {
     }
 
     // 解密数据
+	  console.log("解密数据0")
 	  const aesKey = decryptAESKeyWithRSA(encryptedKey, PRIVATE_KEY);
+		console.log("解密数据1", aesKey)
 	  const decryptedData = decryptWithAES(encryptedData, aesKey, iv);
 
     // 验证 paidAt 和时间戳一致
