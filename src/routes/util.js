@@ -34,14 +34,28 @@ function decryptAESKeyWithRSA(encryptedKey, privateKey) {
  */
 function decryptWithAES(encryptedData, aesKey, iv) {
 	console.log("解密数据decryptWithAES ===0");
+	
 	const ivBuffer = Buffer.from(iv, "base64");
 	console.log("解密数据decryptWithAES ===1", ivBuffer);
+	
 	const encryptedBuffer = Buffer.from(encryptedData, "base64");
 	console.log("解密数据decryptWithAES ===2", encryptedBuffer);
+	
+	// 分离密文和认证标签（假设最后 16 字节是认证标签）
+	const authTag = encryptedBuffer.slice(-16); // 获取认证标签
+	const ciphertext = encryptedBuffer.slice(0, -16); // 获取密文
+	console.log("解密数据decryptWithAES ===3 AuthTag:", authTag);
+	console.log("解密数据decryptWithAES ===4 Ciphertext:", ciphertext);
+	
+	// 创建解密器
 	const decipher = crypto.createDecipheriv("aes-128-gcm", aesKey, ivBuffer);
-	console.log("解密数据decryptWithAES ===3", decipher);
-	const decrypted = Buffer.concat([decipher.update(encryptedBuffer), decipher.final()]);
-	console.log("解密数据decryptWithAES ===4", decrypted);
+	decipher.setAuthTag(authTag); // 设置认证标签
+	console.log("解密数据decryptWithAES ===5 Decipher:", decipher);
+	
+	// 解密数据
+	const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+	console.log("解密数据decryptWithAES ===6 Decrypted:", decrypted);
+	
 	return JSON.parse(decrypted.toString("utf8"));
 }
 
