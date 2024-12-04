@@ -16,8 +16,8 @@ router.post('/create-invite', validateRequestParams, async (req, res) => {
     redisListener = req.redisClient.duplicate();
     await redisListener.connect();
 
-    // 设定超时时间（例如 8 秒）
-    const timeout = 8 * 1000;
+    // 设定超时时间（例如 20 秒）
+    const timeout = 20 * 1000;
     const responsePromise = new Promise((resolve, reject) => {
       // 监听唯一的响应通道
       redisListener.subscribe(uniqueResponseChannel, (message) => {
