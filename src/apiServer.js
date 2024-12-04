@@ -85,7 +85,6 @@ app.use(rateLimit({
 }));
 app.use(compression());
 app.use(morgan('combined'));
-app.use(express.json());
 app.use(helmet.hidePoweredBy());
 app.use(helmet.xssFilter());
 app.use(helmet.noSniff());
