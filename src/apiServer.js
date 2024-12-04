@@ -42,20 +42,7 @@ app.use((req, res, next) => {
 
 // CORS 配置
 const corsOptions = {
-	origin: [
-		'https://chaineye.tools',
-		'https://minibridge.chaineye.tools',
-		'https://www.cryptohunt.ai',
-		'https://cryptohunt.ai',
-		'http://cryptohunt.ai',
-		'http://www.cryptohunt.ai',
-		'http://chaineye.tools',
-		'http://minibridge.chaineye.tools',
-		'http://localhost',
-		'http://localhost:3000',
-		'http://127.0.0.1',
-		'http://127.0.0.1:3000',
-	],
+	origin: '*',
 	methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // 包括 OPTIONS
 	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
 	credentials: true,
@@ -63,16 +50,6 @@ const corsOptions = {
 
 app.set('trust proxy', 1); // 仅信任最靠近 Express 的一层代理
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // 为所有路径处理 OPTIONS 请求
-app.use((req, res, next) => {
-	if (req.method === 'OPTIONS') {
-		res.setHeader('Content-Type', 'application/json');
-		res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-		res.status(200).send(); // 返回 200 状态码
-	} else {
-		next();
-	}
-});
 // 安全和速率限制
 app.use(helmet({
 	contentSecurityPolicy: {
@@ -93,7 +70,6 @@ app.use(rateLimit({
 }));
 app.use(compression());
 app.use(morgan('combined'));
-app.use(express.json());
 app.use(helmet.hidePoweredBy());
 app.use(helmet.xssFilter());
 app.use(helmet.noSniff());
