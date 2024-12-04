@@ -40,16 +40,43 @@ app.use((req, res, next) => {
 	next();
 });
 
-// CORS 配置
-const corsOptions = {
-	origin: '*',
-	methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // 包括 OPTIONS
-	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
-	credentials: true,
-};
+// 允许的域名列表
+const allowedOrigins = [
+    'https://chaineye.tools',
+    'https://minibridge.chaineye.tools',
+    'https://www.cryptohunt.ai',
+    'https://cryptohunt.ai',
+	'https://dev.cryptohunt.ai',
+    'http://cryptohunt.ai',
+	'https://web.postman.co',
+    'http://www.cryptohunt.ai',
+    'http://chaineye.tools',
+    'http://minibridge.chaineye.tools',
+    'http://localhost',
+    'http://localhost:3000',
+    'http://127.0.0.1',
+    'http://127.0.0.1:3000'
+];
+
+function customCorsMiddleware(req, res, next) {
+    const origin = req.headers.origin;
+
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Timestamp');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
+    next();
+}
+
+app.use(customCorsMiddleware);
 
 app.set('trust proxy', 1); // 仅信任最靠近 Express 的一层代理
-app.use(cors(corsOptions));
 // 安全和速率限制
 app.use(helmet({
 	contentSecurityPolicy: {
