@@ -47,8 +47,10 @@ const corsOptions = {
 		'https://minibridge.chaineye.tools',
 		'https://www.cryptohunt.ai',
 		'https://cryptohunt.ai',
+		'https://dev.cryptohunt.ai',
 		'http://cryptohunt.ai',
 		'http://www.cryptohunt.ai',
+		'http://dev.cryptohunt.ai',
 		'http://chaineye.tools',
 		'http://minibridge.chaineye.tools',
 		'http://localhost',
@@ -63,16 +65,6 @@ const corsOptions = {
 
 app.set('trust proxy', 1); // 仅信任最靠近 Express 的一层代理
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // 为所有路径处理 OPTIONS 请求
-app.use((req, res, next) => {
-	if (req.method === 'OPTIONS') {
-		res.setHeader('Content-Type', 'application/json');
-		res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-		res.status(200).send(); // 返回 200 状态码
-	} else {
-		next();
-	}
-});
 // 安全和速率限制
 app.use(helmet({
 	contentSecurityPolicy: {
