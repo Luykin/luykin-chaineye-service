@@ -184,6 +184,7 @@ router.get('/search', async (req, res) => {
 		const project = await Fundraising.Project.findOne({
 			where: {
 				[Op.or]: [
+					{ projectName: { [Op.like]: `%${sanitizedKeyword}%` } },
 					literal(`socialLinks LIKE '%${sanitizedKeyword}%'`)
 				]
 			},
