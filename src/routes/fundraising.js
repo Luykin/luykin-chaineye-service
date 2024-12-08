@@ -191,9 +191,10 @@ router.get('/search', async (req, res) => {
 			attributes: [
 				'projectName', 'projectLink', 'description', 'logo', 'round',
 				'amount', 'formattedAmount', 'valuation', 'formattedValuation',
-				'date', 'fundedAt', 'detailFetchedAt', 'socialLinks', 'teamMembers',
+				'date', 'fundedAt', 'detailFetchedAt', 'socialLinks',
 				'detailFailuresNumber', 'originalPageNumber', 'isInitial'
 			],
+			// teamMembers
 			include: [
 				{
 					model: Fundraising.InvestmentRelationships,
@@ -203,7 +204,7 @@ router.get('/search', async (req, res) => {
 						{
 							model: Fundraising.Project,
 							as: 'investorProject',
-							attributes: ['projectName', 'projectLink', 'socialLinks']
+							attributes: ['projectName'] //'projectLink', 'socialLinks'
 						}
 					]
 				}
