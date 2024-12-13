@@ -3,7 +3,7 @@ const BaseCrawler = require('./base-crawler');
 const TelegramBot = require('node-telegram-bot-api');
 // 替换为你的 API Token 和群组 Chat ID
 const tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
-const tgGroupChatId = '-1002295668714';
+const tgGroupChatIdList = ['-1002295668714'];
 
 const tgBot = new TelegramBot(tgToken);
 
@@ -20,7 +20,9 @@ function formatBinanceLink(link) {
 
 const sendMessageToGroup = async (message, form = {}) => {
 	try {
-		await tgBot.sendMessage(tgGroupChatId, message, form);
+		for (const tgGroupChatId of tgGroupChatIdList) {
+			await tgBot.sendMessage(tgGroupChatId, message, form);
+		}
 		console.log('Message sent successfully!');
 	} catch (error) {
 		console.error('Error sending message:', error);
@@ -89,16 +91,16 @@ class ExNewsCrawler extends BaseCrawler {
 				
 				// 从 #app-wrap 开始提取内容
 				const announcements = await pageInstance.evaluate((type) => {
-					const appWrap = document.querySelector("#__APP")
+					const appWrap = document.querySelector('#__APP');
 					if (!appWrap) return [];
 					
 					// 获取所有公告链接
-					const links = appWrap.querySelectorAll("div[class='bn-flex flex-col gap-1 noH5:gap-2']");
+					const links = appWrap.querySelectorAll('div[class=\'bn-flex flex-col gap-1 noH5:gap-2\']');
 					const results = [];
 					
 					links.forEach((link) => {
 						const title = link.querySelector('a h3')?.innerText.trim();
-						const date = link.querySelector("div[class*='typography-caption1']")?.innerText.trim();
+						const date = link.querySelector('div[class*=\'typography-caption1\']')?.innerText.trim();
 						const href = link.querySelector('a').getAttribute('href');
 						
 						if (title && date && href) {
@@ -181,7 +183,7 @@ async function bulkStoreAnnouncements(data) {
 		if (latestRecord && latestRecord?.title) {
 			// const message = `🚀 <b>${latestRecord.title}</b>`;
 			const formattedLink = formatBinanceLink(latestRecord.newsUrl);
-			await sendMessageToGroup(`${latestRecord.title} [🔗 Read More](${formattedLink})`)
+			await sendMessageToGroup(`${latestRecord.title} [🔗 Read More](${formattedLink})`);
 			// await sendMessageToGroup(message, {
 			// 	parse_mode: 'HTML',
 			// 	link_preview_options: {
