@@ -85,7 +85,7 @@ class ExNewsCrawler extends BaseCrawler {
 					continue;
 				}
 				
-				await pageInstance.waitForSelector('#app-wrap');
+				await pageInstance.waitForSelector('#__APP');
 				
 				// 从 #app-wrap 开始提取内容
 				const announcements = await pageInstance.evaluate((type) => {
