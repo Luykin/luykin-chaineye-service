@@ -76,14 +76,14 @@ class ExNewsCrawler extends BaseCrawler {
 					timeout: 20000, // 设置超时
 				});
 				
-				const is404 = await pageInstance.evaluate(() => {
-					return !!document.querySelector('.not-fount-container .not-fount-image');
-				});
-				
-				if (is404) {
-					// console.log(`找不到 ${type} 公告，跳过`);
-					continue;
-				}
+				// const is404 = await pageInstance.evaluate(() => {
+				// 	return !!document.querySelector('.not-fount-container .not-fount-image');
+				// });
+				//
+				// if (is404) {
+				// 	// console.log(`找不到 ${type} 公告，跳过`);
+				// 	continue;
+				// }
 				
 				await pageInstance.waitForSelector('#__APP');
 				
