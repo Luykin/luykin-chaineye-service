@@ -3,7 +3,7 @@ const BaseCrawler = require('./base-crawler');
 const TelegramBot = require('node-telegram-bot-api');
 // 替换为你的 API Token 和群组 Chat ID
 const tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
-const tgGroupChatIdList = ['-1002295668714'];
+const tgGroupChatIdList = ['-1002295668714', '-4640840749'];
 
 const tgBot = new TelegramBot(tgToken);
 
