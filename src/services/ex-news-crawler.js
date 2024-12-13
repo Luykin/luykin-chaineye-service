@@ -89,17 +89,17 @@ class ExNewsCrawler extends BaseCrawler {
 				
 				// 从 #app-wrap 开始提取内容
 				const announcements = await pageInstance.evaluate((type) => {
-					const appWrap = document.querySelector('#app-wrap');
+					const appWrap = document.querySelector("#__APP")
 					if (!appWrap) return [];
 					
 					// 获取所有公告链接
-					const links = appWrap.querySelectorAll('section a[data-bn-type="link"]');
+					const links = appWrap.querySelectorAll("div[class='bn-flex flex-col gap-1 noH5:gap-2']");
 					const results = [];
 					
 					links.forEach((link) => {
-						const title = link.querySelector('div[data-bn-type="text"]')?.innerText.trim();
-						const date = link.querySelector('h6[data-bn-type="text"]')?.innerText.trim();
-						const href = link.getAttribute('href');
+						const title = link.querySelector('a h3')?.innerText.trim();
+						const date = link.querySelector("div[class*='typography-caption1']")?.innerText.trim();
+						const href = link.querySelector('a').getAttribute('href');
 						
 						if (title && date && href) {
 							results.push({
@@ -137,9 +137,9 @@ class ExNewsCrawler extends BaseCrawler {
 				whileCount = 0;
 			}
 			/**
-			 * 7 - 17秒随机的一个值
+			 * 2 - 10秒随机的一个值
 			 * **/
-			const delay = isFastMode ? 400 : Math.floor(Math.random() * (17000 - 7000 + 1) + 7000);
+			const delay = isFastMode ? 300 : Math.floor(Math.random() * (10000 - 2000 + 1) + 2000);
 			await new Promise((resolve) => setTimeout(resolve, delay));
 			console.log(`等待${delay}ms完毕，下一次开始执行`, isFastMode);
 		}
@@ -179,21 +179,25 @@ async function bulkStoreAnnouncements(data) {
 			return new Date(record.timestamp) > new Date(latest.timestamp) ? record : latest;
 		}, newRecords[0]);
 		if (latestRecord && latestRecord?.title) {
-			const message = `🚀 <b>${latestRecord.title}</b>`;
+			// const message = `🚀 <b>${latestRecord.title}</b>`;
 			const formattedLink = formatBinanceLink(latestRecord.newsUrl);
-			await sendMessageToGroup(message, {
-				parse_mode: 'HTML',
-				reply_markup: {
-					inline_keyboard: [
-						[
-							{
-								text: '🔗 Read More',
-								url: formattedLink,
-							},
-						],
-					],
-				},
-			});
+			await sendMessageToGroup(`${latestRecord.title} [🔗 Read More](${formattedLink})`)
+			// await sendMessageToGroup(message, {
+			// 	parse_mode: 'HTML',
+			// 	link_preview_options: {
+			// 		is_disabled: false
+			// 	},
+			// 	reply_markup: {
+			// 		inline_keyboard: [
+			// 			[
+			// 				{
+			// 					text: '🔗 Read More',
+			// 					url: formattedLink,
+			// 				},
+			// 			],
+			// 		],
+			// 	},
+			// });
 		}
 	} catch (error) {
 		console.error('Error saving announcements:', error);
