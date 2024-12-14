@@ -30,6 +30,10 @@ class ExNewsCrawler extends BaseCrawler {
 				url: 'https://www.binance.com/en/support/announcement/new-fiat-listings?c=50&navId=50',
 				type: 'binance_listings',
 			},
+			{
+				url: 'https://www.binance.com/en/support/announcement/c-48?navId=48',
+				type: 'binance_cryptocurrency',
+			},
 		];
 		
 		for (const { url, type } of tabUrls) {
