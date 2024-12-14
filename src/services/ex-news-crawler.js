@@ -91,7 +91,7 @@ class ExNewsCrawler extends BaseCrawler {
 						await sendMessageToGroup(`${announcement.title} [🔗 Read More](${announcement.newsUrl})`);
 						console.log(`New announcement sent: ${announcement.title}`);
 					} else {
-						console.log(`Announcement already exists: ${announcement.title}`);
+						// console.log(`Announcement already exists: ${announcement.title}`);
 					}
 				}
 			} catch (error) {
