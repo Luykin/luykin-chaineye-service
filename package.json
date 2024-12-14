@@ -12,7 +12,8 @@
     "delete": "pm2 delete luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
     "logs": "pm2 logs luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
     "logs-crawler": "pm2 logs luykin-chaineye-crawler",
-    "db:migrate": "npx sequelize-cli db:migrate"
+    "db:migrate": "npx sequelize-cli db:migrate",
+    "db:migrate:undo": "npx sequelize-cli db:migrate:undo"
   },
   "dependencies": {
     "async-retry": "^1.3.3",
