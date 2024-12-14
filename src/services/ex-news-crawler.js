@@ -26,12 +26,12 @@ class ExNewsCrawler extends BaseCrawler {
 	
 	async crawlBinanceNews() {
 		const tabUrls = [
+			// {
+			// 	url: 'https://www.binance.com/en/support/announcement/new-fiat-listings?c=50&navId=50',
+			// 	type: 'binance_listings',
+			// },
 			{
-				url: 'https://www.binance.com/en/support/announcement/new-fiat-listings?c=50&navId=50',
-				type: 'binance_listings',
-			},
-			{
-				url: 'https://www.binance.com/en/support/announcement/c-48?navId=48',
+				url: 'https://www.binance.com/en/support/announcement/new-cryptocurrency-listing?c=48&navId=48',
 				type: 'binance_cryptocurrency',
 			},
 		];
@@ -40,7 +40,7 @@ class ExNewsCrawler extends BaseCrawler {
 			const { browser, page, proxy } = await this.initProxyBrowserAndPage();
 			
 			try {
-				console.log(`Crawling: ${type} from ${url} using proxy: ${proxy.ip}:${proxy.port}`);
+				// console.log(`Crawling: ${type} from ${url} using proxy: ${proxy.ip}:${proxy.port}`);
 				await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
 				
 				const announcements = await page.evaluate((type) => {
@@ -76,7 +76,7 @@ class ExNewsCrawler extends BaseCrawler {
 						await sendMessageToGroup(`${announcement.title} [🔗 Read More](https://www.binance.com${announcement.newsUrl})`);
 						console.log(`New announcement sent: ${announcement.title}`);
 					} else {
-						// console.log(`Announcement already exists: ${announcement.title}`);
+						console.log(`Announcement already exists: ${announcement.title}`);
 					}
 				}
 			} catch (error) {
