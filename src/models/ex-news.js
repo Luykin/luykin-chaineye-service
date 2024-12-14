@@ -25,11 +25,11 @@ module.exports = (sequelize) => {
 			allowNull: true,
 		},
 		timestamp: {
-			type: DataTypes.DATE,
+			type: DataTypes.STRING,
 			allowNull: true,
 		},
 		crawlTime: {
-			type: DataTypes.INET,
+			type: DataTypes.INTEGER,
 			allowNull: true,
 			defaultValue: 0,
 		}
