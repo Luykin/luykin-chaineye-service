@@ -79,7 +79,7 @@ class BaseCrawler {
 	}
 	
 	async initBrowserWithProxy(proxy) {
-		console.log(`Initializing browser with proxy: ${proxy.ip}:${proxy.port}`);
+		// console.log(`Initializing browser with proxy: ${proxy.ip}:${proxy.port}`);
 		return await puppeteer.launch({
 			headless: 'new',
 			args: [

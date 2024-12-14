@@ -3,7 +3,7 @@ const { DataTypes } = require('sequelize');
 module.exports = (sequelize) => {
 	return sequelize.define('ExNews', {
 		type: {
-			type: DataTypes.ENUM('binance_airdrop', 'binance_api', 'binance_cryptocurrency',
+			type: DataTypes.ENUM('binance_airdrop', 'binance_api', 'binance_cryptocurrency', 'binance_listings',
 				'okx_api', 'okx_cryptocurrency'),
 			allowNull: false,
 		},
@@ -27,6 +27,11 @@ module.exports = (sequelize) => {
 		timestamp: {
 			type: DataTypes.DATE,
 			allowNull: true,
+		},
+		crawlTime: {
+			type: DataTypes.INET,
+			allowNull: true,
+			defaultValue: 0,
 		}
 	})
 };

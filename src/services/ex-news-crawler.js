@@ -52,7 +52,13 @@ class ExNewsCrawler extends BaseCrawler {
 						const href = link.querySelector('a').getAttribute('href');
 						
 						if (title && date && href) {
-							results.push({ title, timestamp: date, newsUrl: href, type });
+							results.push({
+								title,
+								timestamp: date,
+								newsUrl: href,
+								type,
+								crawlTime: +new Date()
+							});
 						}
 					});
 					return results;
@@ -66,11 +72,11 @@ class ExNewsCrawler extends BaseCrawler {
 						await sendMessageToGroup(`${announcement.title} [🔗 Read More](https://www.binance.com${announcement.newsUrl})`);
 						console.log(`New announcement sent: ${announcement.title}`);
 					} else {
-						console.log(`Announcement already exists: ${announcement.title}`);
+						// console.log(`Announcement already exists: ${announcement.title}`);
 					}
 				}
 			} catch (error) {
-				console.error(`Error crawling ${url}:`, error.message);
+				console.error(`${proxy.ip}:`, error.message);
 			} finally {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
