@@ -1,27 +1,27 @@
 const { EXNews } = require('../models/sqlite-start');
 const BaseCrawler = require('./base-crawler');
 const TelegramBot = require('node-telegram-bot-api');
-// 替换为你的 API Token 和群组 Chat ID
+const useProxy = require('@lem0-packages/puppeteer-page-proxy');
+
+// Telegram 配置
 const tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
 const tgGroupChatIdList = ['-1002295668714', '-4640840749'];
-
 const tgBot = new TelegramBot(tgToken);
 
-function formatBinanceLink(link) {
-	const baseUrl = 'https://www.binance.com';
-	
-	if (!link.startsWith('http')) {
-		// 确保拼接时不会有重复的 /
-		return `${baseUrl.replace(/\/$/, '')}/${link.replace(/^\//, '')}`;
-	}
-	
-	return link;
-}
+// 代理列表
+const proxies = [
+	'http://user81794:8ipjmd@185.232.47.106:7446',
+	'http://user81794:8ipjmd@216.10.9.111:7446',
+	'http://user81794:8ipjmd@185.232.47.101:7446',
+	'http://user81794:8ipjmd@216.10.9.234:7446',
+	'http://user81794:8ipjmd@185.232.47.233:7446',
+];
 
-const sendMessageToGroup = async (message, form = {}) => {
+// 发送消息到 Telegram 群组
+const sendMessageToGroup = async (message) => {
 	try {
 		for (const tgGroupChatId of tgGroupChatIdList) {
-			await tgBot.sendMessage(tgGroupChatId, message, form);
+			await tgBot.sendMessage(tgGroupChatId, message, { parse_mode: 'Markdown' });
 		}
 		console.log('Message sent successfully!');
 	} catch (error) {
@@ -32,75 +32,54 @@ const sendMessageToGroup = async (message, form = {}) => {
 class ExNewsCrawler extends BaseCrawler {
 	constructor() {
 		super();
-		this.browser = null;
-		this.binancePage = null; // 爬取币安公告页面
+		this.proxyIndex = 0; // 当前代理索引
 	}
 	
-	// 判断当前是否在高频爬取时间范围
-	isInHighFrequencyPeriod() {
-		const now = new Date();
-		const minutes = now.getMinutes();
-		const seconds = now.getSeconds();
-		
-		/**
-		 * 整10分 前后各30s 启动高频爬取模式
-		 * **/
-		return (
-			(minutes % 10 === 9 && seconds >= 50) ||
-			(minutes % 10 === 0 && seconds <= 60)
-		);
+	// 获取当前代理
+	getCurrentProxy() {
+		const proxy = proxies[this.proxyIndex];
+		this.proxyIndex = (this.proxyIndex + 1) % proxies.length; // 轮换代理
+		return proxy;
 	}
 	
 	// 主爬取逻辑
 	async crawlBinanceNews(pageInstance) {
 		try {
-			// 定义爬取的 Tab 和类型
 			const tabUrls = [
 				{
-					url: 'https://www.binance.com/en/support/announcement/c-48?navId=48',
-					type: 'binance_cryptocurrency',
-				},
-				{
-					url: 'https://www.binance.com/en/support/announcement/c-51?navId=51&hl=en',
-					type: 'binance_api',
-				},
-				{
-					url: 'https://www.binance.com/en/support/announcement/c-128?navId=128&hl=en',
-					type: 'binance_airdrop',
+					url: 'https://www.binance.com/en/support/announcement/new-fiat-listings?c=50&navId=50',
+					type: 'binance_listings',
 				},
 			];
 			
-			// 遍历每个 Tab 页面
 			for (const { url, type } of tabUrls) {
-				// console.log(type, `正在打开网页: ${url}`);
-				await pageInstance?.goto(url, {
-					waitUntil: 'networkidle0',
-					timeout: 20000, // 设置超时
-				});
+				// 设置代理
+				const proxy = this.getCurrentProxy();
+				await useProxy(pageInstance, proxy);
+				console.log(`Crawling: ${type} from ${url} using proxy: ${proxy}`);
 				
-				// const is404 = await pageInstance.evaluate(() => {
-				// 	return !!document.querySelector('.not-fount-container .not-fount-image');
-				// });
-				//
-				// if (is404) {
-				// 	// console.log(`找不到 ${type} 公告，跳过`);
-				// 	continue;
-				// }
+				// 访问目标页面
+				try {
+					await pageInstance.goto(url, {
+						waitUntil: 'networkidle0',
+						timeout: 8000,
+					});
+				} catch (error) {
+					console.error(`Failed to navigate to ${url}:`, error.message);
+					continue; // 跳过当前 URL，继续下一个
+				}
 				
-				await pageInstance.waitForSelector('#__APP');
-				
-				// 从 #app-wrap 开始提取内容
+				// 提取页面数据
 				const announcements = await pageInstance.evaluate((type) => {
 					const appWrap = document.querySelector('#__APP');
 					if (!appWrap) return [];
 					
-					// 获取所有公告链接
-					const links = appWrap.querySelectorAll('div[class=\'bn-flex flex-col gap-1 noH5:gap-2\']');
+					const links = appWrap.querySelectorAll('div[class="bn-flex flex-col gap-1 noH5:gap-2"]');
 					const results = [];
-					
-					links.forEach((link) => {
+					links.forEach((link, index) => {
+						if (index >= 2) return; // 只取前两条
 						const title = link.querySelector('a h3')?.innerText.trim();
-						const date = link.querySelector('div[class*=\'typography-caption1\']')?.innerText.trim();
+						const date = link.querySelector('div[class*="typography-caption1"]')?.innerText.trim();
 						const href = link.querySelector('a').getAttribute('href');
 						
 						if (title && date && href) {
@@ -109,15 +88,35 @@ class ExNewsCrawler extends BaseCrawler {
 								timestamp: date,
 								newsUrl: href,
 								type,
+								crawledTime: +new Date(),
 							});
 						}
 					});
 					
 					return results;
 				}, type);
+				console.log(announcements, 'announcements')
+				// 处理提取到的公告
+				for (const announcement of announcements) {
+					const exists = await EXNews.findOne({
+						where: { newsUrl: announcement.newsUrl },
+					});
+					
+					if (!exists) {
+						// 保存到数据库
+						await EXNews.create(announcement);
+						
+						// 发送 Telegram 通知
+						await sendMessageToGroup(
+							`${announcement.title} [🔗 Read More](https://www.binance.com${announcement.newsUrl})`
+						);
+						console.log(`New announcement sent: ${announcement.title}`);
+					} else {
+						console.log(`Announcement already exists: ${announcement.title}`);
+					}
+				}
 				
-				// 批量存储到数据库
-				await bulkStoreAnnouncements(announcements);
+				// 延时 500ms，避免频率过高
 				await new Promise((resolve) => setTimeout(resolve, 500));
 			}
 		} catch (err) {
@@ -129,81 +128,26 @@ class ExNewsCrawler extends BaseCrawler {
 	async startCrawling() {
 		let whileCount = 0;
 		let pageInstance = await this.safeInitPage('binancePage');
+		
 		while (true) {
-			const isFastMode = this.isInHighFrequencyPeriod();
-			
-			await this.crawlBinanceNews(pageInstance); // 执行爬取任务
-			whileCount++;
-			if (whileCount > 10) {
+			try {
+				await this.crawlBinanceNews(pageInstance);
+				whileCount++;
+				
+				if (whileCount > 10) {
+					console.log('Reinitializing browser and page after 10 iterations...');
+					await pageInstance.close();
+					pageInstance = await this.safeInitPage('binancePage'); // 重新初始化页面
+					whileCount = 0;
+				}
+			} catch (error) {
+				console.error('Error during startCrawling:', error);
+				
+				// 强制重启浏览器
+				await this.forceClose();
 				pageInstance = await this.safeInitPage('binancePage');
-				whileCount = 0;
 			}
-			/**
-			 * 2 - 10秒随机的一个值
-			 * **/
-			const delay = isFastMode ? 300 : Math.floor(Math.random() * (10000 - 2000 + 1) + 2000);
-			await new Promise((resolve) => setTimeout(resolve, delay));
-			console.log(`等待${delay}ms完毕，下一次开始执行`, isFastMode);
 		}
-	}
-}
-
-async function bulkStoreAnnouncements(data) {
-	try {
-		// 获取所有已经存在的 newsUrl
-		const existingUrls = await EXNews.findAll({
-			where: {
-				newsUrl: data.map(item => item.newsUrl),
-			},
-			attributes: ['newsUrl'],
-		});
-		
-		const existingUrlSet = new Set(existingUrls.map(record => record.newsUrl));
-		
-		// 筛选出未存在于数据库的记录
-		const newRecords = data.filter(item => !existingUrlSet.has(item.newsUrl));
-		
-		// 如果没有新记录，直接返回
-		if (newRecords.length === 0) {
-			// console.log('No new announcements to save.');
-			return;
-		}
-		
-		// 筛选出需要更新的字段
-		const fieldsToUpdate = ['title', 'timestamp', 'type', 'newsUrl'];
-		
-		await EXNews.bulkCreate(newRecords, {
-			updateOnDuplicate: fieldsToUpdate, // 指定在冲突时需要更新的字段
-		});
-		
-		// 获取新记录中时间戳最大的记录作为最新记录
-		const latestRecord = newRecords.reduce((latest, record) => {
-			return new Date(record.timestamp) > new Date(latest.timestamp) ? record : latest;
-		}, newRecords[0]);
-		if (latestRecord && latestRecord?.title) {
-			// const message = `🚀 <b>${latestRecord.title}</b>`;
-			const formattedLink = formatBinanceLink(latestRecord.newsUrl);
-			await sendMessageToGroup(`${latestRecord.title} [🔗 Read More](${formattedLink})`);
-			// await sendMessageToGroup(message, {
-			// 	parse_mode: 'HTML',
-			// 	link_preview_options: {
-			// 		is_disabled: false
-			// 	},
-			// 	reply_markup: {
-			// 		inline_keyboard: [
-			// 			[
-			// 				{
-			// 					text: '🔗 Read More',
-			// 					url: formattedLink,
-			// 				},
-			// 			],
-			// 		],
-			// 	},
-			// });
-		}
-	} catch (error) {
-		console.error('Error saving announcements:', error);
-		throw error; // 抛出错误以便调用方处理
 	}
 }
 
