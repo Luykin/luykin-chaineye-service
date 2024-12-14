@@ -41,7 +41,7 @@ class ExNewsCrawler extends BaseCrawler {
 			
 			try {
 				// console.log(`Crawling: ${type} from ${url} using proxy: ${proxy.ip}:${proxy.port}`);
-				await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
+				await page.goto(url, { waitUntil: 'networkidle0', timeout: 25000 });
 				
 				const announcements = await page.evaluate((type) => {
 					const appWrap = document.querySelector('#__APP');
