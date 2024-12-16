@@ -81,7 +81,7 @@ class OkxExNewsCrawler extends BaseCrawler {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
 			
-			await new Promise((resolve) => setTimeout(resolve, 500)); // 延时500ms
+			await new Promise((resolve) => setTimeout(resolve, 3000)); // 延时3000ms
 		}
 	}
 	
