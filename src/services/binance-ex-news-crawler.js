@@ -1,11 +1,5 @@
 const BaseCrawler = require('./base-crawler');
 const { EXNews } = require('../models/sqlite-start');
-const TelegramBot = require('node-telegram-bot-api');
-
-// Telegram 配置
-const tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
-const tgGroupChatIdList = ['-1002295668714', '-4640840749'];
-const tgBot = new TelegramBot(tgToken);
 
 function formatBinanceLink(link) {
 	const baseUrl = 'https://www.binance.com';
@@ -18,24 +12,12 @@ function formatBinanceLink(link) {
 	return link;
 }
 
-// 发送消息到 Telegram 群组
-const sendMessageToGroup = async (message) => {
-	try {
-		for (const tgGroupChatId of tgGroupChatIdList) {
-			await tgBot.sendMessage(tgGroupChatId, message, { parse_mode: 'Markdown' });
-		}
-		console.log('Message sent successfully!');
-	} catch (error) {
-		console.error('Error sending message:', error);
-	}
-};
-
-class ExNewsCrawler extends BaseCrawler {
+class BinanceExNewsCrawler extends BaseCrawler {
 	constructor() {
 		super();
 	}
 	
-	async crawlBinanceNews() {
+	async crawlNews() {
 		const tabUrls = [
 			// {
 			// 	url: 'https://www.binance.com/en/support/announcement/new-fiat-listings?c=50&navId=50',
@@ -87,7 +69,7 @@ class ExNewsCrawler extends BaseCrawler {
 					const exists = await EXNews.findOne({ where: { newsUrl: announcement?.newsUrl } });
 					if (!exists) {
 						await EXNews.create(announcement);
-						await sendMessageToGroup(`${announcement.title} [🔗 Read More](${announcement.newsUrl})`);
+						await BaseCrawler.sendMessageToGroup(`${announcement.title} [🔗 Read More](${announcement.newsUrl})`);
 						console.log(`New announcement sent: ${announcement.title}`);
 					} else {
 						if (+new Date() < 1734363916566) {
@@ -108,7 +90,7 @@ class ExNewsCrawler extends BaseCrawler {
 	async startCrawling() {
 		while (true) {
 			try {
-				await this.crawlBinanceNews();
+				await this.crawlNews();
 			} catch (error) {
 				console.error('Error during startCrawling:', error);
 			}
@@ -116,4 +98,4 @@ class ExNewsCrawler extends BaseCrawler {
 	}
 }
 
-module.exports = new ExNewsCrawler();
+module.exports = new BinanceExNewsCrawler();

@@ -1,6 +1,7 @@
 const schedule = require('node-schedule');
 const rootDataCrawler = require('./rootdata-crawler');
-const exCrawler = require('./ex-news-crawler');
+const BinanceExNewsCrawler = require('./binance-ex-news-crawler');
+const OkxExNewsCrawler = require('./okx-ex-news-crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
 
 class CrawlerScheduler {
@@ -33,12 +34,14 @@ class CrawlerScheduler {
 		});
 		
 		await this.resetAllState();
+		/** 开始RootData爬虫 **/
 		this.startRootDataCrawl().then(() => {
 			console.log('首次启动任务执行完: startRootDataCrawl')
 		}).catch(err => console.log(err));
-		this.startExNewsCrawl().then(() => {
-			console.log('首次启动任务执行完: startExNewsCrawl')
-		}).catch(err => console.log(err));
+		/** 开始币安 公告**/
+		this.startBinanceExNewsCrawl().then(r => r);
+		/** 开始OKX 公告 **/
+		this.startOkxExNewsCrawl().then(r => r);
 	}
 	
 	stopScheduler() {
@@ -74,12 +77,17 @@ class CrawlerScheduler {
 		await rootDataCrawler.subDetailsCrawl();
 	}
 	/**
-	 * 中性化交易所公告爬取
-	 * 包含： 币安,OKX
+	 * 币安交易所公告爬取
 	 * **/
-	async startExNewsCrawl() {
-		await exCrawler.forceClose();
-		await exCrawler.startCrawling();
+	async startBinanceExNewsCrawl() {
+		await BinanceExNewsCrawler.startCrawling();
+	}
+	
+	/**
+	 * OKX交易所公告爬取
+	 * **/
+	async startOkxExNewsCrawl() {
+		await OkxExNewsCrawler.startCrawling();
 	}
 }
 
