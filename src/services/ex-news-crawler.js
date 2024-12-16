@@ -7,16 +7,6 @@ const tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
 const tgGroupChatIdList = ['-1002295668714', '-4640840749'];
 const tgBot = new TelegramBot(tgToken);
 
-const fs = require('fs');
-
-// 创建一个指向 /dev/null 的写入流
-const nullStream = fs.createWriteStream('/dev/null');
-
-// 添加 console.log2 方法
-console.log2 = (...args) => {
-	nullStream.write(args.join(' ') + '\n');
-};
-
 function formatBinanceLink(link) {
 	const baseUrl = 'https://www.binance.com';
 	
@@ -63,13 +53,13 @@ class ExNewsCrawler extends BaseCrawler {
 			try {
 				await page.goto(url, { timeout: 15000 });
 				// 等待 links 元素加载
-				await page.waitForSelector("#__APP", { timeout: 10000 });
+				await page.waitForSelector('#__APP', { timeout: 10000 });
 				let announcements = await page.evaluate((type) => {
-					const appWrapClass = ".bn-flex.flex-col.gap-6.px-4.py-6.tablet\\:px-10.tablet\\:py-6.rounded-xl.border.border-solid.border-Line";
+					const appWrapClass = '.bn-flex.flex-col.gap-6.px-4.py-6.tablet\\:px-10.tablet\\:py-6.rounded-xl.border.border-solid.border-Line';
 					const appWrap = document.querySelector(appWrapClass);
 					if (!appWrap) return [];
 					
-					const links = appWrap?.querySelectorAll(".bn-flex.flex-col.gap-1") || [];
+					const links = appWrap?.querySelectorAll('.bn-flex.flex-col.gap-1') || [];
 					const results = [];
 					links.forEach((link, index) => {
 						if (index >= 2) return; // 只取前两条
@@ -100,7 +90,9 @@ class ExNewsCrawler extends BaseCrawler {
 						await sendMessageToGroup(`${announcement.title} [🔗 Read More](${announcement.newsUrl})`);
 						console.log(`New announcement sent: ${announcement.title}`);
 					} else {
-						console.log2(`Announcement already exists: ${announcement.title}`);
+						if (+new Date() < 1734363916566) {
+							console.log(`Announcement already exists: ${announcement.title}`);
+						}
 					}
 				}
 			} catch (error) {
