@@ -7,6 +7,16 @@ const tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
 const tgGroupChatIdList = ['-1002295668714', '-4640840749'];
 const tgBot = new TelegramBot(tgToken);
 
+const fs = require('fs');
+
+// 创建一个指向 /dev/null 的写入流
+const nullStream = fs.createWriteStream('/dev/null');
+
+// 添加 console.log2 方法
+console.log2 = (...args) => {
+	nullStream.write(args.join(' ') + '\n');
+};
+
 function formatBinanceLink(link) {
 	const baseUrl = 'https://www.binance.com';
 	
@@ -90,7 +100,7 @@ class ExNewsCrawler extends BaseCrawler {
 						await sendMessageToGroup(`${announcement.title} [🔗 Read More](${announcement.newsUrl})`);
 						console.log(`New announcement sent: ${announcement.title}`);
 					} else {
-						// console.log(`Announcement already exists: ${announcement.title}`);
+						console.log2(`Announcement already exists: ${announcement.title}`);
 					}
 				}
 			} catch (error) {
