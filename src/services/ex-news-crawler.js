@@ -52,10 +52,10 @@ class ExNewsCrawler extends BaseCrawler {
 			
 			try {
 				// console.log(`Crawling: ${type} from ${url} using proxy: ${proxy.ip}:${proxy.port}`);
-				await page.goto(url, { timeout: 25000 });
+				await page.goto(url, { timeout: 15000 });
 				const appWrapClass = ".bn-flex.flex-col.gap-6.px-4.py-6.tablet\\:px-10.tablet\\:py-6.rounded-xl.border.border-solid.border-Line";
 				// 等待 links 元素加载
-				await page.waitForSelector(appWrapClass, { timeout: 15000 });
+				await page.waitForSelector(appWrapClass, { timeout: 10000 });
 				let announcements = await page.evaluate((type) => {
 					const appWrap = document.querySelector(appWrapClass);
 					if (!appWrap) return [];
