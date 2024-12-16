@@ -53,22 +53,22 @@ class ExNewsCrawler extends BaseCrawler {
 			try {
 				// console.log(`Crawling: ${type} from ${url} using proxy: ${proxy.ip}:${proxy.port}`);
 				await page.goto(url, { timeout: 25000 });
+				const appWrapClass = ".bn-flex.flex-col.gap-6.px-4.py-6.tablet\\:px-10.tablet\\:py-6.rounded-xl.border.border-solid.border-Line";
 				// 等待 links 元素加载
-				await page.waitForSelector('#__APP div.bn-flex.flex-col.gap-1.noH5\\:gap-2', { timeout: 15000 });
-				
+				await page.waitForSelector(appWrapClass, { timeout: 15000 });
 				let announcements = await page.evaluate((type) => {
-					const appWrap = document.querySelector('#__APP');
+					const appWrap = document.querySelector(appWrapClass);
 					if (!appWrap) return [];
 					
-					const links = appWrap?.querySelectorAll('div[class="bn-flex flex-col gap-1 noH5:gap-2"]') || [];
+					const links = appWrap?.querySelectorAll(".bn-flex.flex-col.gap-1") || [];
 					const results = [];
 					links.forEach((link, index) => {
 						if (index >= 2) return; // 只取前两条
 						const title = link.querySelector('a h3')?.innerText?.trim() || '';
-						const date = link.querySelector('div[class*="typography-caption1"]')?.innerText?.trim() || '';
+						const date = link.querySelector('div[class*="typography-caption1"]')?.innerText?.trim() || '-';
 						const href = link.querySelector('a')?.getAttribute('href') || '';
 						
-						if (title && date && href) {
+						if (title && href) {
 							results.push({
 								title,
 								timestamp: date,
