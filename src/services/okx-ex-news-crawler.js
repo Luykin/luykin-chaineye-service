@@ -70,9 +70,9 @@ class OkxExNewsCrawler extends BaseCrawler {
 						await BaseCrawler.sendMessageToGroup(`${announcement.title} [🔗 Read More](${announcement.newsUrl})`);
 						console.log(`New announcement sent: ${announcement.title}`);
 					} else {
-						if (+new Date() < 1734367067972) {
-							console.log(`Announcement already exists: ${announcement.title}`);
-						}
+						// if (+new Date() < 1734367067972) {
+						// 	console.log(`Announcement already exists: ${announcement.title}`);
+						// }
 					}
 				}
 			} catch (error) {
