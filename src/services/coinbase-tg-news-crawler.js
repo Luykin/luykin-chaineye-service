@@ -6,10 +6,8 @@ class TwitterUserCrawler extends BaseCrawler {
 		super();
 		// 这里是包含多个 authToken 的数组
 		this.authTokens = [
-			'7dd17ca8557dfa0ba000259867d44475777c696b', // Token 1
-			// 添加其他 token，例如:
-			// 'newAuthToken1',
-			// 'newAuthToken2',
+			'ec759e4eb590399ad7c838cd95b48181ac1ac6dc',
+			'7dd17ca8557dfa0ba000259867d44475777c696b' // 自己的某个账号
 		];
 		this.currentTokenIndex = 0; // 当前 token 索引
 	}
@@ -58,7 +56,7 @@ class TwitterUserCrawler extends BaseCrawler {
 						results.push({
 							text,
 							timestamp: time,
-							newsUrl: url + '#',
+							newsUrl: url + '##',
 							type: 'coinbase_support',
 							crawlTime: +new Date(),
 						});
