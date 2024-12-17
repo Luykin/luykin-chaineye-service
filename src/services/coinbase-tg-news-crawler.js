@@ -4,14 +4,22 @@ const { EXNews } = require('../models/sqlite-start');
 class TwitterUserCrawler extends BaseCrawler {
 	constructor() {
 		super();
-		this.authToken = '7dd17ca8557dfa0ba000259867d44475777c696b'; // 替换为实际 auth_token
+		// 这里是包含多个 authToken 的数组
+		this.authTokens = [
+			'7dd17ca8557dfa0ba000259867d44475777c696b', // Token 1
+			// 添加其他 token，例如:
+			// 'newAuthToken1',
+			// 'newAuthToken2',
+		];
+		this.currentTokenIndex = 0; // 当前 token 索引
 	}
 	
 	// 设置 auth_token 登录状态
 	async setAuthToken(page) {
+		const token = this.authTokens[this.currentTokenIndex];
 		const cookie = {
 			name: 'auth_token',
-			value: this.authToken,
+			value: token,
 			domain: '.twitter.com',
 			path: '/',
 			expires: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60, // 7天有效期
@@ -19,13 +27,14 @@ class TwitterUserCrawler extends BaseCrawler {
 			secure: true,
 		};
 		await page.setCookie(cookie);
+		// console.log(`Using auth token: ${token}`);
 	}
 	
 	// 爬取推文数据
 	async crawlTweets() {
 		const url = `https://x.com/CoinbaseAssets`;
 		const { browser, page, proxy } = await this.initProxyBrowserAndPage();
-		console.log('Using proxy:', proxy, url)
+		// console.log('Using proxy:', proxy, url)
 		try {
 			await this.setAuthToken(page); // 设置登录状态
 			await page.goto(url, { timeout: 35000, waitUntil: 'networkidle2' });
@@ -48,7 +57,7 @@ class TwitterUserCrawler extends BaseCrawler {
 						results.push({
 							text,
 							timestamp: time,
-							newsUrl: url,
+							newsUrl: url + '#',
 							type: 'twitter_post',
 							crawlTime: +new Date(),
 						});
@@ -59,25 +68,35 @@ class TwitterUserCrawler extends BaseCrawler {
 			console.log('Tweets:', tweets);
 			// 数据存储到数据库并发送消息
 			for (const tweet of tweets) {
-				const exists = await EXNews.findOne({ where: { newsUrl: tweet?.newsUrl } });
-				if (!exists) {
-					await EXNews.create(tweet);
-					await BaseCrawler.sendMessageToGroup(
-						`📢 ${tweet.text} [🔗 阅读详情](${tweet.newsUrl})`
-					);
-					console.log(`New tweet saved: ${tweet.text}`);
-				} else {
-					console.log(`Tweet already exists: ${tweet.newsUrl}`);
+				if (containsCoinbaseSupport(tweet.text)) {
+					const exists = await EXNews.findOne({ where: { newsUrl: tweet?.newsUrl } });
+					if (!exists) {
+						await EXNews.create(tweet);
+						await BaseCrawler.sendMessageToGroup(
+							`📢 ${tweet.text} [🔗 阅读详情](${tweet.newsUrl})`
+						);
+						console.log(`New tweet saved: ${tweet.text}`);
+					} else {
+						// console.log(`Tweet already exists: ${tweet.newsUrl}`);
+					}
 				}
 			}
 		} catch (error) {
 			console.error(`Error crawling tweets with proxy ${proxy?.ip}:`, error.message);
+			// 出现错误时切换 token，确保轮换
+			this.switchAuthToken();
 		} finally {
 			await browser.close();
 		}
 	}
 	
-	// 启动爬取任务，间隔10秒
+	// 切换到下一个 auth_token
+	switchAuthToken() {
+		this.currentTokenIndex = (this.currentTokenIndex + 1) % this.authTokens.length;
+		console.log(`Switched to next auth token: ${this.authTokens[this.currentTokenIndex]}`);
+	}
+	
+	// 启动爬取任务，间隔10分钟
 	async startCrawling() {
 		while (true) {
 			try {
@@ -85,9 +104,15 @@ class TwitterUserCrawler extends BaseCrawler {
 			} catch (error) {
 				console.error('Error during startCrawling:', error.message);
 			}
-			await new Promise((resolve) => setTimeout(resolve, 10 * 1000)); // 2分钟间隔
+			await new Promise((resolve) => setTimeout(resolve, 10 * 60 * 1000)); // 10分钟间隔
 		}
 	}
+}
+
+function containsCoinbaseSupport(str) {
+	// 去除所有空格并忽略大小写
+	const normalizedStr = str.replace(/\s+/g, '').toLowerCase();
+	return /coinbasewilladdsupport/.test(normalizedStr);
 }
 
 module.exports = new TwitterUserCrawler();

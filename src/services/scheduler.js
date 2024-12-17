@@ -43,7 +43,8 @@ class CrawlerScheduler {
 		this.startBinanceExNewsCrawl().then(r => r);
 		/** 开始OKX 公告 **/
 		this.startOkxExNewsCrawl().then(r => r);
-		// CoinBaseTgNewsCrawler.startCrawling();
+		/** 开始coinbase 推特爬取 **/
+		this.startCoinBaseTgNewsCrawler().then(r => r);
 	}
 	
 	stopScheduler() {
@@ -90,6 +91,13 @@ class CrawlerScheduler {
 	 * **/
 	async startOkxExNewsCrawl() {
 		await OkxExNewsCrawler.startCrawling();
+	}
+	
+	/**
+	 * CoinBaseTg公告爬取
+	 * **/
+	async startCoinBaseTgNewsCrawler() {
+		await CoinBaseTgNewsCrawler.startCrawling();
 	}
 }
 
