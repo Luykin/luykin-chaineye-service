@@ -1,101 +1,93 @@
-const BaseCrawler = require('./base-crawler');
+const BaseCrawler = require('./base-crawler'); // 复用你现有的基础爬虫类
 const { EXNews } = require('../models/sqlite-start');
 
-function formatCoinBaseLink(link) {
-	const baseUrl = 'https://www.binance.com';
-	
-	if (!link.startsWith('http')) {
-		// 确保拼接时不会有重复的 /
-		return `${baseUrl.replace(/\/$/, '')}/${link.replace(/^\//, '')}`;
-	}
-	
-	return link;
-}
-
-class CoinbaseTgNewsCrawler extends BaseCrawler {
+class TwitterUserCrawler extends BaseCrawler {
 	constructor() {
 		super();
+		this.authToken = '7dd17ca8557dfa0ba000259867d44475777c696b'; // 替换为实际 auth_token
 	}
 	
-	async crawlNews() {
-		const tabUrls = [
-			// {
-			// 	url: 'https://www.binance.com/en/support/announcement/new-fiat-listings?c=50&navId=50',
-			// 	type: 'binance_listings',
-			// },
-			{
-				url: 'https://x.com/CoinbaseAssets',
-				type: 'coinbase_support',
-			},
-		];
-		
-		for (const { url, type } of tabUrls) {
-			const { browser, page, proxy } = await this.initProxyBrowserAndPage();
+	// 设置 auth_token 登录状态
+	async setAuthToken(page) {
+		const cookie = {
+			name: 'auth_token',
+			value: this.authToken,
+			domain: '.twitter.com',
+			path: '/',
+			expires: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60, // 7天有效期
+			httpOnly: true,
+			secure: true,
+		};
+		await page.setCookie(cookie);
+	}
+	
+	// 爬取推文数据
+	async crawlTweets() {
+		const url = `https://x.com/CoinbaseAssets`;
+		const { browser, page, proxy } = await this.initProxyBrowserAndPage();
+		console.log('Using proxy:', proxy, url)
+		try {
+			await this.setAuthToken(page); // 设置登录状态
+			await page.goto(url, { timeout: 15000, waitUntil: 'networkidle2' });
+			await page.waitForSelector('article', { timeout: 10000 }); // 等待推文加载
 			
-			try {
-				await page.goto(url, { timeout: 15000 });
-				// 等待 links 元素加载
-				await page.waitForSelector('#__APP', { timeout: 10000 });
-				let announcements = await page.evaluate((type) => {
-					const appWrapClass = '.bn-flex.flex-col.gap-6.px-4.py-6.tablet\\:px-10.tablet\\:py-6.rounded-xl.border.border-solid.border-Line';
-					const appWrap = document.querySelector(appWrapClass);
-					if (!appWrap) return [];
+			// 提取推文内容
+			const tweets = await page.evaluate(() => {
+				const results = [];
+				document.querySelectorAll('article').forEach((tweet, index) => {
+					if (index >= 2) return; // 只取前两条
+					const textElement = tweet.querySelector('[data-testid="tweetText"]');
+					const timeElement = tweet.querySelector('time');
+					const linkElement = tweet.querySelector('a[href*="/status/"]');
 					
-					const links = appWrap?.querySelectorAll('.bn-flex.flex-col.gap-1') || [];
-					const results = [];
-					links.forEach((link, index) => {
-						if (index >= 2) return; // 只取前两条
-						const title = link.querySelector('a h3')?.innerText?.trim() || '';
-						const date = link.querySelector('div[class*="typography-caption1"]')?.innerText?.trim() || '-';
-						const href = link.querySelector('a')?.getAttribute('href') || '';
-						
-						if (title && href) {
-							results.push({
-								title,
-								timestamp: date,
-								newsUrl: href,
-								type,
-								crawlTime: +new Date()
-							});
-						}
-					});
-					return results;
-				}, type);
-				announcements = announcements.map(_ => ({
-					..._,
-					newsUrl: formatCoinBaseLink(_?.newsUrl)
-				}));
-				for (const announcement of announcements) {
-					const exists = await EXNews.findOne({ where: { newsUrl: announcement?.newsUrl } });
-					if (!exists) {
-						await EXNews.create(announcement);
-						await BaseCrawler.sendMessageToGroup(`${announcement.title} [🔗 Read More](${announcement.newsUrl})`);
-						console.log(`New announcement sent: ${announcement.title}`);
-					} else {
-						// if (+new Date() < 1734363916566) {
-						// 	console.log(`Announcement already exists: ${announcement.title}`);
-						// }
+					const text = textElement?.innerText?.trim() || '';
+					const time = timeElement?.getAttribute('datetime') || '';
+					const url = linkElement?.href || '';
+					
+					if (text && url) {
+						results.push({
+							text,
+							timestamp: time,
+							newsUrl: url,
+							type: 'twitter_post',
+							crawlTime: +new Date(),
+						});
 					}
+				});
+				return results;
+			});
+			console.log('Tweets:', tweets);
+			// 数据存储到数据库并发送消息
+			for (const tweet of tweets) {
+				const exists = await EXNews.findOne({ where: { newsUrl: tweet?.newsUrl } });
+				if (!exists) {
+					await EXNews.create(tweet);
+					await BaseCrawler.sendMessageToGroup(
+						`📢 ${tweet.text} [🔗 阅读详情](${tweet.url})`
+					);
+					console.log(`New tweet saved: ${tweet.text}`);
+				} else {
+					console.log(`Tweet already exists: ${tweet.url}`);
 				}
-			} catch (error) {
-				console.log(`error: ${proxy.ip}:`, error.message);
-			} finally {
-				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
-			
-			await new Promise((resolve) => setTimeout(resolve, 500)); // 延时500ms
+		} catch (error) {
+			console.error(`Error crawling tweets with proxy ${proxy?.ip}:`, error.message);
+		} finally {
+			await browser.close();
 		}
 	}
 	
+	// 启动爬取任务，间隔10秒
 	async startCrawling() {
 		while (true) {
 			try {
-				await this.crawlNews();
+				await this.crawlTweets();
 			} catch (error) {
-				console.error('Error during startCrawling:', error);
+				console.error('Error during startCrawling:', error.message);
 			}
+			await new Promise((resolve) => setTimeout(resolve, 10 * 1000)); // 2分钟间隔
 		}
 	}
 }
 
-module.exports = new CoinbaseTgNewsCrawler();
+module.exports = new TwitterUserCrawler();

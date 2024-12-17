@@ -16,7 +16,7 @@ class BinanceExNewsCrawler extends BaseCrawler {
 	constructor() {
 		super();
 	}
-	
+	// https://www.binance.com/bapi/apex/v1/public/apex/cms/article/list/query?type=1&pageNo=3&pageSize=10&catalogId=48
 	async crawlNews() {
 		const tabUrls = [
 			// {
