@@ -49,23 +49,23 @@ class TwitterUserCrawler extends BaseCrawler {
 					const timeElement = tweet.querySelector('time');
 					const linkElement = tweet.querySelector('a[href*="/status/"]');
 					
-					const text = textElement?.innerText?.trim() || '';
+					let text = textElement?.innerText?.trim() || '';
 					const time = timeElement?.getAttribute('datetime') || '';
 					const url = linkElement?.href || '';
-					
+					// 去除 text 中的换行符和多余空格
+					text = text.replace(/[\n\r]+/g, ' ').trim();
 					if (text && url) {
 						results.push({
 							text,
 							timestamp: time,
 							newsUrl: url + '#',
-							type: 'twitter_post',
+							type: 'coinbase_support',
 							crawlTime: +new Date(),
 						});
 					}
 				});
 				return results;
 			});
-			console.log('Tweets:', tweets);
 			// 数据存储到数据库并发送消息
 			for (const tweet of tweets) {
 				if (containsCoinbaseSupport(tweet.text)) {
