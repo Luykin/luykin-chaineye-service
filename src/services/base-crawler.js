@@ -12,13 +12,13 @@ const ip1 = [
 ];
 /** 日本节点 **/
 const ip2 = [
-	{ ip: '64.137.75.57', port: '5977', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
-	{ ip: '45.114.12.152', port: '5220', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
+	// { ip: '64.137.75.57', port: '5977', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
+	// { ip: '45.114.12.152', port: '5220', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
 ];
 /** 澳大利亚节点 **/
 const ip3 = [
-	{ ip: '172.102.218.149', port: '6049', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
-	{ ip: '103.53.219.131', port: '6224', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
+	// { ip: '172.102.218.149', port: '6049', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
+	// { ip: '103.53.219.131', port: '6224', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
 ];
 
 function shuffle(array) {
