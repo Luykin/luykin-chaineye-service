@@ -28,7 +28,7 @@ class TwitterUserCrawler extends BaseCrawler {
 		console.log('Using proxy:', proxy, url)
 		try {
 			await this.setAuthToken(page); // 设置登录状态
-			await page.goto(url, { timeout: 15000, waitUntil: 'networkidle2' });
+			await page.goto(url, { timeout: 35000, waitUntil: 'networkidle2' });
 			await page.waitForSelector('article', { timeout: 10000 }); // 等待推文加载
 			
 			// 提取推文内容
