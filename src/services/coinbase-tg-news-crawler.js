@@ -63,11 +63,11 @@ class TwitterUserCrawler extends BaseCrawler {
 				if (!exists) {
 					await EXNews.create(tweet);
 					await BaseCrawler.sendMessageToGroup(
-						`📢 ${tweet.text} [🔗 阅读详情](${tweet.url})`
+						`📢 ${tweet.text} [🔗 阅读详情](${tweet.newsUrl})`
 					);
 					console.log(`New tweet saved: ${tweet.text}`);
 				} else {
-					console.log(`Tweet already exists: ${tweet.url}`);
+					console.log(`Tweet already exists: ${tweet.newsUrl}`);
 				}
 			}
 		} catch (error) {
