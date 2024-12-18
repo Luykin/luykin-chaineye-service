@@ -333,25 +333,30 @@ class FundraisingCrawler extends BaseCrawler {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
 		// 计算 10 天前的时间戳
-		// const daysAgo1 = now - 3 * 24 * 60 * 60 * 1000; // 2 天前的时间戳
+		const daysAgo1 = now - 40 * 24 * 60 * 60 * 1000; // 40 天前的时间戳
 		// 计算 2 天前的时间戳
 		const daysAgo2 = now - 2 * 24 * 60 * 60 * 1000; // 1 天前的时间戳
 		
 		const crawlQueryOptions = {
 			where: {
 				isInitial: true,
+				// 合并条件：如果满足以下条件之一
 				[Op.or]: [
-					{ '$investmentsReceived.id$': null }, // investmentsReceived 为空
-					{ socialLinks: { [Op.eq]: null } },   // socialLinks 为空
-					{ fundedAt: { [Op.gte]: daysAgo2 } } // fundedAt 在最近 3 天内
+					{ '$investmentsReceived.id$': null },  // investmentsReceived 为空
+					{ socialLinks: { [Op.eq]: null } },    // socialLinks 为空
+					{ fundedAt: { [Op.gte]: daysAgo1 } }  // fundedAt 在最近 3 天内
 				],
+				// 其他的限制条件
 				detailFailuresNumber: { [Op.lte]: 8 },
-				projectLink: { [Op.like]: 'http%' }, // 确保 projectLink 以 http 开头
-				// detailFetchedAt 不是最近2天内或者为null
-				[Op.or]: [
-					{ detailFetchedAt: { [Op.lt]: daysAgo2 } }, // detailFetchedAt 小于 2 天前
-					{ detailFetchedAt: { [Op.is]: null } }        // 或者 detailFetchedAt 为 null
-				]
+				projectLink: { [Op.like]: 'http%' },    // 确保 projectLink 以 http 开头
+				
+				// detailFetchedAt 的条件：要么是 null，要么是超过 2 天前的
+				detailFetchedAt: {
+					[Op.or]: [
+						{ [Op.is]: null },            // detailFetchedAt 为 null
+						{ [Op.lt]: daysAgo2 }         // detailFetchedAt 小于 2 天前
+					]
+				}
 			},
 			include: [
 				{
