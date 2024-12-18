@@ -333,9 +333,9 @@ class FundraisingCrawler extends BaseCrawler {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
 		// 计算 10 天前的时间戳
-		const tenDaysAgo = now - 40 * 24 * 60 * 60 * 1000; // 10 天前的时间戳
+		const daysAgo1 = now - 3 * 24 * 60 * 60 * 1000;
 		// 计算 2 天前的时间戳
-		const twoDaysAgo = now - 2 * 24 * 60 * 60 * 1000; // 2 天前的时间戳
+		const daysAgo2 = now - 2 * 24 * 60 * 60 * 1000;
 		
 		const crawlQueryOptions = {
 			where: {
@@ -343,12 +343,12 @@ class FundraisingCrawler extends BaseCrawler {
 				[Op.or]: [
 					{ '$investmentsReceived.id$': null }, // investmentsReceived 为空
 					{ socialLinks: { [Op.eq]: null } },   // socialLinks 为空
-					{ fundedAt: { [Op.gte]: tenDaysAgo } } // fundedAt 在最近 10 天内
+					{ fundedAt: { [Op.gte]: daysAgo1 } } // fundedAt 在最近 3 天内
 				],
 				detailFailuresNumber: { [Op.lte]: 8 },
 				projectLink: { [Op.like]: 'http%' }, // 确保 projectLink 以 http 开头
 				// 添加排除最近 2 天的 detailFetchedAt
-				detailFetchedAt: { [Op.lt]: twoDaysAgo } // detailFetchedAt 不能是最近 2 天内
+				detailFetchedAt: { [Op.lt]: daysAgo2 } // detailFetchedAt 不能是最近 2 天内
 			},
 			include: [
 				{
