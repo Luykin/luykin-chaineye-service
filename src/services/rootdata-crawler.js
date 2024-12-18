@@ -330,12 +330,18 @@ class FundraisingCrawler extends BaseCrawler {
 	
 	// 爬取「isInitial true」的项目
 	async detailsCrawl() {
+		// 获取当前时间的时间戳（毫秒）
+		const now = Date.now();
+		// 计算10天前的时间戳
+		const tenDaysAgo = now - 11 * 24 * 60 * 60 * 1000; // 11天前的时间戳
+		
 		const crawlQueryOptions = {
 			where: {
 				isInitial: true,
 				[Op.or]: [
 					{ '$investmentsReceived.id$': null }, // investmentsReceived 为空
-					{ socialLinks: { [Op.eq]: null } }   // socialLinks 为空
+					{ socialLinks: { [Op.eq]: null } },   // socialLinks 为空
+					{ fundedAt: { [Op.gte]: tenDaysAgo } } // fundedAt 在最近10天内
 				],
 				detailFailuresNumber: { [Op.lte]: 8 },
 				projectLink: { [Op.like]: 'http%' } // 确保 projectLink 以 http 开头
@@ -356,6 +362,7 @@ class FundraisingCrawler extends BaseCrawler {
 				['originalPageNumber', 'ASC']
 			]
 		};
+		
 		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, 'detailPage');
 	}
 	
