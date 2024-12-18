@@ -182,7 +182,7 @@ class FundraisingCrawler extends BaseCrawler {
 			state.error = null;
 			await state.save();
 			// Only crawl first 3 pages for quick updates
-			for (let page = 1; page <= 3; page++) {
+			for (let page = 1; page <= 2; page++) {
 				if (!pageInstance || pageInstance?.isClosed?.()) {
 					throw new Error('quickUpdate: Page instance not initialized');
 				}
