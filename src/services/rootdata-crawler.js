@@ -338,7 +338,7 @@ class FundraisingCrawler extends BaseCrawler {
 		const daysAgo2 = now - 2 * 24 * 60 * 60 * 1000;
 		
 		// 计算10天前的时间
-		const daysAgoDate = new Date(now - 20 * 24 * 60 * 60 * 1000); // 10天前
+		const daysAgoDate = new Date(now - 3 * 24 * 60 * 60 * 1000); // 10天前
 		
 		const crawlQueryOptions = {
 			where: {
