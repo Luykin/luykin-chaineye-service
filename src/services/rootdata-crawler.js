@@ -332,8 +332,8 @@ class FundraisingCrawler extends BaseCrawler {
 	async detailsCrawl() {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
-		// 计算10天前的时间戳
-		const tenDaysAgo = now - 11 * 24 * 60 * 60 * 1000; // 11天前的时间戳
+		// 计算2天前的时间戳
+		const tenDaysAgo = now - 2 * 24 * 60 * 60 * 1000; // 3天前的时间戳
 		
 		const crawlQueryOptions = {
 			where: {
