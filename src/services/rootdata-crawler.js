@@ -182,29 +182,29 @@ class FundraisingCrawler extends BaseCrawler {
 			state.error = null;
 			await state.save();
 			// Only crawl first 3 pages for quick updates
-			for (let page = 1; page <= 2; page++) {
+			for (let page = 1; page <= 3; page++) {
 				if (!pageInstance || pageInstance?.isClosed?.()) {
 					throw new Error('quickUpdate: Page instance not initialized');
 				}
 				const data = await this.crawlPage(page, pageInstance);
-				const existingLinks = await Fundraising.Project.findAll({
-					attributes: ['projectLink'],
-					where: {
-						projectLink: data.map(item => item.projectLink)
-					}
-				}).then(projects => projects.map(project => project.projectLink));
-				const newData = data.filter(item => !existingLinks.includes(item.projectLink));
+				// const existingLinks = await Fundraising.Project.findAll({
+				// 	attributes: ['projectLink'],
+				// 	where: {
+				// 		projectLink: data.map(item => item.projectLink)
+				// 	}
+				// }).then(projects => projects.map(project => project.projectLink));
+				// const newData = data.filter(item => !existingLinks.includes(item.projectLink));
 				
-				if (newData.length > 0) {
+				if (data.length > 0) {
 					// 获取所有字段，排除不需要更新的字段
 					const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
 						!['id', 'projectLink', 'createdAt', 'updatedAt'].includes(field)
 					);
 					// 执行 bulkCreate 时使用动态字段列表
-					await Fundraising.Project.bulkCreate(newData, {
+					await Fundraising.Project.bulkCreate(data, {
 						updateOnDuplicate: fieldsToUpdate
 					});
-					updateNum = updateNum + newData.length;
+					updateNum = updateNum + data.length;
 				} else {
 					console.log('No new data found on page', page);
 				}

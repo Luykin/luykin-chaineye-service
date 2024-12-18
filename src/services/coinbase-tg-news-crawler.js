@@ -74,6 +74,7 @@ class TwitterUserCrawler extends BaseCrawler {
 							`📢 ${tweet.text} [🔗 阅读详情](${tweet.newsUrl})`
 						);
 						console.log(`New tweet saved: ${tweet.text}`);
+						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
 						// console.log(`Tweet already exists: ${tweet.newsUrl}`);
 					}
