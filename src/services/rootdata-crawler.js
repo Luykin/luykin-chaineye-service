@@ -337,13 +337,16 @@ class FundraisingCrawler extends BaseCrawler {
 		// 计算 2 天前的时间戳
 		const daysAgo2 = now - 2 * 24 * 60 * 60 * 1000;
 		
+		// 计算10天前的时间
+		const daysAgoDate = new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000); // 10天前
+		
 		const crawlQueryOptions = {
 			where: {
 				isInitial: true,
 				[Op.or]: [
 					{ '$investmentsReceived.id$': null }, // investmentsReceived 为空
 					{ socialLinks: { [Op.eq]: null } },   // socialLinks 为空
-					{ fundedAt: { [Op.gte]: daysAgo1 } } // fundedAt 在最近 3 天内
+					{ createAt: { [Op.gte]: daysAgoDate } } // createAt 在最近 3 天内
 				],
 				detailFailuresNumber: { [Op.lte]: 8 },
 				projectLink: { [Op.like]: 'http%' }, // 确保 projectLink 以 http 开头
