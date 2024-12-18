@@ -165,7 +165,7 @@ router.get('/search', async (req, res) => {
 		}
 		
 		const sanitizedKeyword = keyword.trim();
-		const cacheKey = `project_search_${sanitizedKeyword}`;
+		const cacheKey = `project_search_${sanitizedKeyword}_202412182258`;
 		let cachedData;
 		
 		// 从 Redis 获取缓存数据，处理 Redis 客户端可能断开的情况
