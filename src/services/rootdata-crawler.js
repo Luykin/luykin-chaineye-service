@@ -333,7 +333,7 @@ class FundraisingCrawler extends BaseCrawler {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
 		// 计算 10 天前的时间戳
-		const daysAgo1 = now - 40 * 24 * 60 * 60 * 1000; // 40 天前的时间戳
+		const daysAgo1 = now - 2.5 * 24 * 60 * 60 * 1000; // 2 天前的时间戳
 		// 计算 2 天前的时间戳
 		const daysAgo2 = now - 2 * 24 * 60 * 60 * 1000; // 1 天前的时间戳
 		
