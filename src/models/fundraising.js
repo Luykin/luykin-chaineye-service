@@ -87,7 +87,7 @@ module.exports = (sequelize) => {
 		originalPageNumber: {
 			type: DataTypes.INET,
 			allowNull: true,
-			comment: "原始在rootdata的页码"
+			comment: '原始在rootdata的页码'
 		},
 	}, {
 		comment: '项目表，包含每个项目的基本信息以及融资和投资记录',
@@ -150,6 +150,13 @@ module.exports = (sequelize) => {
 		}
 	}, {
 		timestamps: true, // 启用 createdAt 和 updatedAt 字段
+		indexes: [
+			{
+				name: 'unique_investment_relationship',
+				unique: true,
+				fields: ['investorProjectId', 'fundedProjectId', 'round']
+			}
+		]
 	});
 	
 	// 设置关联关系
