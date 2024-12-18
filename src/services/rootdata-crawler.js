@@ -333,7 +333,7 @@ class FundraisingCrawler extends BaseCrawler {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
 		// 计算 10 天前的时间戳
-		const daysAgo1 = now - 3 * 24 * 60 * 60 * 1000;
+		const daysAgo1 = now - 40 * 24 * 60 * 60 * 1000;
 		// 计算 2 天前的时间戳
 		const daysAgo2 = now - 2 * 24 * 60 * 60 * 1000;
 		
@@ -347,8 +347,11 @@ class FundraisingCrawler extends BaseCrawler {
 				],
 				detailFailuresNumber: { [Op.lte]: 8 },
 				projectLink: { [Op.like]: 'http%' }, // 确保 projectLink 以 http 开头
-				// 添加排除最近 2 天的 detailFetchedAt
-				detailFetchedAt: { [Op.lt]: daysAgo2 } // detailFetchedAt 不能是最近 2 天内
+				// detailFetchedAt 不是最近2天内或者为null
+				[Op.or]: [
+					{ detailFetchedAt: { [Op.lt]: daysAgo2 } }, // detailFetchedAt 小于 2 天前
+					{ detailFetchedAt: { [Op.is]: null } }        // 或者 detailFetchedAt 为 null
+				]
 			},
 			include: [
 				{
