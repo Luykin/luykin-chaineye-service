@@ -35,18 +35,20 @@ class CrawlerScheduler {
 			}
 		});
 		
-		// await this.resetAllState();
-		// /** 开始RootData爬虫 **/
-		// this.startRootDataCrawl().then(() => {
-		// 	console.log('首次启动任务执行完: startRootDataCrawl');
-		// }).catch(err => console.log(err));
-		// /** 开始币安 公告**/
-		// this.startBinanceExNewsCrawl().then(r => r);
-		// /** 开始OKX 公告 **/
-		// this.startOkxExNewsCrawl().then(r => r);
-		// /** 开始coinbase 推特爬取 **/
-		// this.startCoinBaseTgNewsCrawler().then(r => r);
-		console.log('Scheduler started')
+		await this.resetAllState();
+		/** 开始RootData爬虫 **/
+		this.startRootDataCrawl().then(() => {
+			console.log('首次启动任务执行完: startRootDataCrawl');
+		}).catch(err => console.log(err));
+		/** 开始币安 公告**/
+		this.startBinanceExNewsCrawl().then(r => r);
+		/** 开始OKX 公告 **/
+		this.startOkxExNewsCrawl().then(r => r);
+		/** 开始coinbase 推特爬取 **/
+		this.startCoinBaseTgNewsCrawler().then(r => r);
+		console.log('Scheduler started 1111111=====');
+		await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
+		console.log('Scheduler started 2===========')
 		await BaseCrawler.sendMessageToGroup(`🎉Welcome to subscribe to our channel!🎉`);
 	}
 	
