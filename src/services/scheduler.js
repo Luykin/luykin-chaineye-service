@@ -35,17 +35,17 @@ class CrawlerScheduler {
 			}
 		});
 		
-		await this.resetAllState();
-		/** 开始RootData爬虫 **/
-		this.startRootDataCrawl().then(() => {
-			console.log('首次启动任务执行完: startRootDataCrawl');
-		}).catch(err => console.log(err));
-		/** 开始币安 公告**/
-		this.startBinanceExNewsCrawl().then(r => r);
-		/** 开始OKX 公告 **/
-		this.startOkxExNewsCrawl().then(r => r);
-		/** 开始coinbase 推特爬取 **/
-		this.startCoinBaseTgNewsCrawler().then(r => r);
+		// await this.resetAllState();
+		// /** 开始RootData爬虫 **/
+		// this.startRootDataCrawl().then(() => {
+		// 	console.log('首次启动任务执行完: startRootDataCrawl');
+		// }).catch(err => console.log(err));
+		// /** 开始币安 公告**/
+		// this.startBinanceExNewsCrawl().then(r => r);
+		// /** 开始OKX 公告 **/
+		// this.startOkxExNewsCrawl().then(r => r);
+		// /** 开始coinbase 推特爬取 **/
+		// this.startCoinBaseTgNewsCrawler().then(r => r);
 		console.log('Scheduler started')
 		await BaseCrawler.sendMessageToGroup(`🎉Welcome to subscribe to our channel!🎉`);
 	}
