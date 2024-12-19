@@ -149,10 +149,14 @@ class BaseCrawler {
 		const tgBot = BaseCrawler.#getTgBotInstance(); // 获取单例 tgBot
 		try {
 			for (const tgGroupChatId of tgGroupChatIdList) {
-				await tgBot.sendMessage(tgGroupChatId, message, {
-					parse_mode: 'Markdown',
-					message_thread_id: 2
-				});
+				try {
+					await tgBot.sendMessage(tgGroupChatId, message, {
+						parse_mode: 'Markdown',
+						message_thread_id: 2
+					});
+				} catch (err) {
+					console.log(err);
+				}
 			}
 			console.log('Message sent successfully!');
 		} catch (error) {
