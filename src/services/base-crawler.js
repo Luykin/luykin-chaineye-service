@@ -12,8 +12,11 @@ const ip1 = [
 ];
 /** 日本节点 **/
 const ip2 = [
-	// { ip: '64.137.75.57', port: '5977', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
-	// { ip: '45.114.12.152', port: '5220', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
+	{ "ip": "163.5.243.247", "port": "3581", "username": "user81794", "password": "8ipjmd" },
+	{ "ip": "163.5.243.34", "port": "3581", "username": "user81794", "password": "8ipjmd" },
+	{ "ip": "163.5.243.242", "port": "3581", "username": "user81794", "password": "8ipjmd" },
+	{ "ip": "163.5.243.150", "port": "3581", "username": "user81794", "password": "8ipjmd" },
+	{ "ip": "163.5.243.135", "port": "3581", "username": "user81794", "password": "8ipjmd" }
 ];
 /** 澳大利亚节点 **/
 const ip3 = [
