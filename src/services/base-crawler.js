@@ -20,6 +20,10 @@ const ip3 = [
 	// { ip: '172.102.218.149', port: '6049', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
 	// { ip: '103.53.219.131', port: '6224', username: '7RVICJwZQ1', password: 'xjSINDJecS' },
 ];
+/** 台湾节点 **/
+const ip4 = [
+	{ ip: '185.176.93.171', port: '6868', username: 'user81794', password: '8ipjmd' },
+]
 
 function shuffle(array) {
 	for (let i = array.length - 1; i > 0; i--) {
@@ -37,7 +41,7 @@ class BaseCrawler {
 	
 	constructor() {
 		this.browser = null;
-		this.proxies = shuffle([...ip1, ...ip2, ...ip3]);
+		this.proxies = shuffle([...ip1, ...ip2, ...ip3, ...ip4]);
 		this.proxyIndex = 0; // 当前代理索引
 	}
 	
