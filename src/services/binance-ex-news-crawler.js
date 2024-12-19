@@ -12,6 +12,29 @@ function formatBinanceLink(link) {
 	return link;
 }
 
+function validateTitle(title) {
+	// 清除首尾空格，并将多个连续空格替换成单个空格，然后转换为小写
+	const normalizedTitle = title.trim().replace(/\s+/g, ' ').toLowerCase();
+	
+	// 定义匹配的前缀
+	const validPrefixes = [
+		'binance will list',
+		'binance futures will launch',
+		'hodler airdrops',
+		'introducing',
+		'binance launchpool'
+	];
+	
+	// 检查标题是否以指定的前缀之一开头
+	for (let prefix of validPrefixes) {
+		if (normalizedTitle.includes(prefix)) {
+			return true;
+		}
+	}
+	
+	return false;
+}
+
 class BinanceExNewsCrawler extends BaseCrawler {
 	constructor() {
 		super();
@@ -67,7 +90,7 @@ class BinanceExNewsCrawler extends BaseCrawler {
 				}));
 				for (const announcement of announcements) {
 					const exists = await EXNews.findOne({ where: { newsUrl: announcement?.newsUrl } });
-					if (!exists) {
+					if (!exists && validateTitle(announcement.title)) {
 						await EXNews.create(announcement);
 						await BaseCrawler.sendMessageToGroup(`${announcement.title} [🔗 Read More](${announcement.newsUrl})`);
 						console.log(`New announcement sent: ${announcement.title}`);

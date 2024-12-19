@@ -30,7 +30,7 @@ class OkxExNewsCrawler extends BaseCrawler {
 		
 		for (const { url, type } of tabUrls) {
 			const { browser, page, proxy } = await this.initProxyBrowserAndPage();
-			console.log(`Crawling ${url} with proxy ${proxy.ip}`);
+			// console.log(`Crawling ${url} with proxy ${proxy.ip}`);
 			try {
 				await page.goto(url, { timeout: 15000 });
 				// 等待 links 元素加载
@@ -71,7 +71,7 @@ class OkxExNewsCrawler extends BaseCrawler {
 						console.log(`New announcement sent: ${announcement.title}`);
 						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
-						console.log(`Announcement already exists: ${announcement.title}`);
+						// console.log(`Announcement already exists: ${announcement.title}`);
 					}
 				}
 			} catch (error) {
