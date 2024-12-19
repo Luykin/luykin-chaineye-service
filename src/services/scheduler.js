@@ -46,10 +46,6 @@ class CrawlerScheduler {
 		this.startOkxExNewsCrawl().then(r => r);
 		/** 开始coinbase 推特爬取 **/
 		this.startCoinBaseTgNewsCrawler().then(r => r);
-		console.log('Scheduler started 1111111=====');
-		await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
-		console.log('Scheduler started 2===========')
-		await BaseCrawler.sendMessageToGroup(`🎉Welcome to subscribe to our channel!🎉`);
 	}
 	
 	stopScheduler() {
