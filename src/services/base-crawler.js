@@ -12,11 +12,11 @@ const ip1 = [
 ];
 /** 日本节点 **/
 const ip2 = [
-	{ "ip": "163.5.243.247", "port": "3581", "username": "user81794", "password": "8ipjmd" },
-	{ "ip": "163.5.243.34", "port": "3581", "username": "user81794", "password": "8ipjmd" },
-	{ "ip": "163.5.243.242", "port": "3581", "username": "user81794", "password": "8ipjmd" },
-	{ "ip": "163.5.243.150", "port": "3581", "username": "user81794", "password": "8ipjmd" },
-	{ "ip": "163.5.243.135", "port": "3581", "username": "user81794", "password": "8ipjmd" }
+	{ 'ip': '163.5.243.247', 'port': '3581', 'username': 'user81794', 'password': '8ipjmd' },
+	{ 'ip': '163.5.243.34', 'port': '3581', 'username': 'user81794', 'password': '8ipjmd' },
+	{ 'ip': '163.5.243.242', 'port': '3581', 'username': 'user81794', 'password': '8ipjmd' },
+	{ 'ip': '163.5.243.150', 'port': '3581', 'username': 'user81794', 'password': '8ipjmd' },
+	{ 'ip': '163.5.243.135', 'port': '3581', 'username': 'user81794', 'password': '8ipjmd' }
 ];
 /** 澳大利亚节点 **/
 const ip3 = [
@@ -26,7 +26,7 @@ const ip3 = [
 /** 台湾节点 **/
 const ip4 = [
 	{ ip: '185.176.93.171', port: '6868', username: 'user81794', password: '8ipjmd' },
-]
+];
 
 function shuffle(array) {
 	for (let i = array.length - 1; i > 0; i--) {
