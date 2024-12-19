@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 const TelegramBot = require('node-telegram-bot-api');
 const tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
-const tgGroupChatIdList = ['-1002295668714', '-4640840749'];
+const tgGroupChatIdList = ['-1002198757776'];
 /** 新加坡节点 **/
 const ip1 = [
 	{ ip: '185.232.47.106', port: '7446', username: 'user81794', password: '8ipjmd' },
