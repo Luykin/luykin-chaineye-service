@@ -4,6 +4,7 @@ const BinanceExNewsCrawler = require('./binance-ex-news-crawler');
 const OkxExNewsCrawler = require('./okx-ex-news-crawler');
 const CoinBaseTgNewsCrawler = require('./coinbase-tg-news-crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
+const BaseCrawler = require('./base-crawler');
 
 class CrawlerScheduler {
 	constructor() {
@@ -22,7 +23,7 @@ class CrawlerScheduler {
 				console.error('Morning quick update failed:', error);
 			}
 		});
-
+		
 		// 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
 		this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
 			console.log('Starting evening quick update...');
@@ -37,7 +38,7 @@ class CrawlerScheduler {
 		await this.resetAllState();
 		/** 开始RootData爬虫 **/
 		this.startRootDataCrawl().then(() => {
-			console.log('首次启动任务执行完: startRootDataCrawl')
+			console.log('首次启动任务执行完: startRootDataCrawl');
 		}).catch(err => console.log(err));
 		/** 开始币安 公告**/
 		this.startBinanceExNewsCrawl().then(r => r);
@@ -45,6 +46,9 @@ class CrawlerScheduler {
 		this.startOkxExNewsCrawl().then(r => r);
 		/** 开始coinbase 推特爬取 **/
 		this.startCoinBaseTgNewsCrawler().then(r => r);
+		if (Date.now() <= 1734610186789) {
+			await BaseCrawler.sendMessageToGroup(`🎉Welcome to subscribe to our channel!🎉`);
+		}
 	}
 	
 	stopScheduler() {
@@ -55,6 +59,7 @@ class CrawlerScheduler {
 			this.eveningJob.cancel();
 		}
 	}
+	
 	/**
 	 * 重置所有状态为 idle
 	 * **/
@@ -69,6 +74,7 @@ class CrawlerScheduler {
 			console.error('更新状态时出错:', error);
 		}
 	}
+	
 	/**
 	 * rootData 爬取启动
 	 * 包含每日爬取前两页的项目数据，以及爬取详情数据
@@ -79,6 +85,7 @@ class CrawlerScheduler {
 		await rootDataCrawler.detailsCrawl();
 		await rootDataCrawler.subDetailsCrawl();
 	}
+	
 	/**
 	 * 币安交易所公告爬取
 	 * **/

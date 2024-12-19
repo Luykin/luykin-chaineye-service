@@ -34,6 +34,7 @@ function shuffle(array) {
 class BaseCrawler {
 	// 静态属性：存储单例 tgBot
 	static #tgBotInstance = null;
+	
 	constructor() {
 		this.browser = null;
 		this.proxies = shuffle([...ip1, ...ip2, ...ip3]);
@@ -43,7 +44,7 @@ class BaseCrawler {
 	// 静态方法：获取 tgBot 实例
 	static #getTgBotInstance() {
 		if (!BaseCrawler.#tgBotInstance) {
-			console.log("Initializing TelegramBot instance...");
+			console.log('Initializing TelegramBot instance...');
 			BaseCrawler.#tgBotInstance = new TelegramBot(tgToken);
 		}
 		return BaseCrawler.#tgBotInstance;
@@ -148,7 +149,10 @@ class BaseCrawler {
 		const tgBot = BaseCrawler.#getTgBotInstance(); // 获取单例 tgBot
 		try {
 			for (const tgGroupChatId of tgGroupChatIdList) {
-				await tgBot.sendMessage(tgGroupChatId, message, { parse_mode: 'Markdown' });
+				await tgBot.sendMessage(tgGroupChatId, message, {
+					parse_mode: 'Markdown',
+					message_thread_id: 2
+				});
 			}
 			console.log('Message sent successfully!');
 		} catch (error) {
