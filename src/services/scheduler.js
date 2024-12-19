@@ -46,9 +46,8 @@ class CrawlerScheduler {
 		this.startOkxExNewsCrawl().then(r => r);
 		/** 开始coinbase 推特爬取 **/
 		this.startCoinBaseTgNewsCrawler().then(r => r);
-		if (Date.now() <= 1734610186789) {
-			await BaseCrawler.sendMessageToGroup(`🎉Welcome to subscribe to our channel!🎉`);
-		}
+		console.log('Scheduler started')
+		await BaseCrawler.sendMessageToGroup(`🎉Welcome to subscribe to our channel!🎉`);
 	}
 	
 	stopScheduler() {
