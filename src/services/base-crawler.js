@@ -8,9 +8,9 @@ const _devTgGroupChatIdList = [{
 	name: "CH Test alert"
 }];
 const _proTgGroupChatIdList = [{
-	group_id: "-1002198757776",
-	message_thread_id: 2,
-	name: "CH Test alert"
+	group_id: "-1001580837317",
+	message_thread_id: 69255,
+	name: "CryptoHunt Pro - News"
 }];
 /** 新加坡节点 **/
 const ip1 = [

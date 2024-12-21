@@ -32,7 +32,6 @@ class TwitterUserCrawler extends BaseCrawler {
 	async crawlTweets() {
 		const url = `https://x.com/CoinbaseAssets`;
 		const { browser, page, proxy } = await this.initProxyBrowserAndPage();
-		// console.log('Using proxy:', proxy, url)
 		try {
 			await this.setAuthToken(page); // 设置登录状态
 			await page.goto(url, { timeout: 35000, waitUntil: 'networkidle2' });
@@ -80,7 +79,7 @@ class TwitterUserCrawler extends BaseCrawler {
 				}
 			}
 		} catch (error) {
-			console.error(`Error crawling tweets with proxy ${proxy?.ip}:`, error.message);
+			console.error(`Error crawling CoinbaseAssets tweets with proxy ${proxy?.ip}; ${this.authTokens[this.currentTokenIndex]}:`, error.message);
 			// 出现错误时切换 token，确保轮换
 			this.switchAuthToken();
 		} finally {
