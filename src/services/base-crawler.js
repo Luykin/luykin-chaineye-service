@@ -1,7 +1,17 @@
 const puppeteer = require('puppeteer');
 const TelegramBot = require('node-telegram-bot-api');
-const _tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
-const tgGroupChatIdList = ['-1002198757776'];
+const _devTgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
+const _proTgToken = '7615998524:AAFLD25mHIeKKsW4ZJt2rmqY-AFWmwu1J6E';
+const _devTgGroupChatIdList = [{
+	group_id: "-1002198757776",
+	message_thread_id: 2,
+	name: "CH Test alert"
+}];
+const _proTgGroupChatIdList = [{
+	group_id: "-1002198757776",
+	message_thread_id: 2,
+	name: "CH Test alert"
+}];
 /** 新加坡节点 **/
 const ip1 = [
 	{ ip: '185.232.47.106', port: '7446', username: 'user81794', password: '8ipjmd' },
@@ -39,23 +49,33 @@ function shuffle(array) {
 }
 
 class BaseCrawler {
-	// 静态属性：存储单例 tgBot
-	static #tgBotInstance = null;
-	static #tgToken = _tgToken;
-	constructor(tgToken = _tgToken) {
+	static #devTgBotInstance = null;
+	static #proTgBotInstance = null;
+	static #devTgToken = _devTgToken;
+	static #proTgToken = _proTgToken;
+	
+	constructor() {
 		this.browser = null;
 		this.proxies = shuffle([...ip1, ...ip2, ...ip3, ...ip4]);
 		this.proxyIndex = 0; // 当前代理索引
-		BaseCrawler.#tgToken = tgToken;
 	}
 	
-	// 静态方法：获取 tgBot 实例
-	static #getTgBotInstance() {
-		if (!BaseCrawler.#tgBotInstance) {
-			console.log('Initializing TelegramBot instance...');
-			BaseCrawler.#tgBotInstance = new TelegramBot(BaseCrawler.#tgToken || _tgToken);
+	// dev测试机器人实例
+	static #getDevTgBotInstance() {
+		if (!BaseCrawler.#devTgBotInstance) {
+			console.log('Initializing DEV TelegramBot instance...');
+			BaseCrawler.#devTgBotInstance = new TelegramBot(BaseCrawler.#devTgToken || _devTgToken);
 		}
-		return BaseCrawler.#tgBotInstance;
+		return BaseCrawler.#devTgBotInstance;
+	}
+	
+	// pro正式机器人实例
+	static #getProTgBotInstance() {
+		if (!BaseCrawler.#proTgBotInstance) {
+			console.log('Initializing PRO TelegramBot instance...');
+			BaseCrawler.#proTgBotInstance = new TelegramBot(BaseCrawler.#proTgToken || _proTgToken);
+		}
+		return BaseCrawler.#proTgBotInstance;
 	}
 	
 	async initBrowser() {
@@ -166,23 +186,38 @@ class BaseCrawler {
 		return { browser, page, proxy };
 	}
 	
-	// 发送消息到 Telegram 群组
-	static async sendMessageToGroup(message) {
-		const tgBot = BaseCrawler.#getTgBotInstance(); // 获取单例 tgBot
+	// DEV 测试 发送消息到 Telegram 群组
+	static async sendMessageToGroupDev(message) {
+		await BaseCrawler.#sendMessageToGroup('dev', message);
+	};
+	
+	// DEV 测试 发送消息到 Telegram 群组
+	static async sendMessageToGroupPro(message) {
+		await BaseCrawler.#sendMessageToGroup('pro', message);
+	};
+	
+	async #sendMessageToGroup(env = 'dev', message) {
+		let tgBot;
+		if (env === 'pro') {
+			tgBot = BaseCrawler.#getProTgBotInstance();
+		} else {
+			tgBot = BaseCrawler.#getDevTgBotInstance();
+		}
+		const group = env === 'pro' ? _proTgGroupChatIdList : _devTgGroupChatIdList;
 		try {
-			for (const tgGroupChatId of tgGroupChatIdList) {
+			for (const tgGroupItem of (group || [])) {
 				try {
-					await tgBot.sendMessage(tgGroupChatId, message, {
+					await tgBot.sendMessage(tgGroupItem.group_id, message, {
 						parse_mode: 'Markdown',
-						message_thread_id: 2
+						message_thread_id: tgGroupItem.message_thread_id
 					});
+					console.log(`Message sent successfully! ${env}; ${tgGroupItem.name}`);
 				} catch (err) {
 					console.log(err);
 				}
 			}
-			console.log('Message sent successfully!');
 		} catch (error) {
-			console.error('Error sending message:', error);
+			console.error(`Error sending message ${env}:`, error);
 		}
 	};
 }
