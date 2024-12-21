@@ -44,8 +44,6 @@ class UpbitExNewsCrawler extends BaseCrawler {
 					type,
 					crawlTime: +new Date()
 				})).slice(0, 2);
-				console.log(announcements, 'announcements====')
-				// 将数据保存到数据库
 				for (const announcement of announcements) {
 					const exists = await EXNews.findOne({ where: { newsUrl: announcement?.newsUrl } });
 					if (!exists) {
