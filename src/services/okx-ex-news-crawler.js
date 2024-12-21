@@ -29,7 +29,7 @@ class OkxExNewsCrawler extends BaseCrawler {
 		];
 		
 		for (const { url, type } of tabUrls) {
-			const { browser, page, proxy } = await this.initProxyBrowserAndPage();
+			const { browser, page, proxy } = await this.initProxyBrowserAndPage('japan');
 			// console.log(`Crawling ${url} with proxy ${proxy.ip}`);
 			try {
 				await page.goto(url, { timeout: 15000 });

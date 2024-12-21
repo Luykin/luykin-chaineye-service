@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const TelegramBot = require('node-telegram-bot-api');
-const tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
+const _tgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
 const tgGroupChatIdList = ['-1002198757776'];
 /** 新加坡节点 **/
 const ip1 = [
@@ -41,18 +41,19 @@ function shuffle(array) {
 class BaseCrawler {
 	// 静态属性：存储单例 tgBot
 	static #tgBotInstance = null;
-	
-	constructor() {
+	static #tgToken = _tgToken;
+	constructor(tgToken = _tgToken) {
 		this.browser = null;
 		this.proxies = shuffle([...ip1, ...ip2, ...ip3, ...ip4]);
 		this.proxyIndex = 0; // 当前代理索引
+		BaseCrawler.#tgToken = tgToken;
 	}
 	
 	// 静态方法：获取 tgBot 实例
 	static #getTgBotInstance() {
 		if (!BaseCrawler.#tgBotInstance) {
 			console.log('Initializing TelegramBot instance...');
-			BaseCrawler.#tgBotInstance = new TelegramBot(tgToken);
+			BaseCrawler.#tgBotInstance = new TelegramBot(BaseCrawler.#tgToken || _tgToken);
 		}
 		return BaseCrawler.#tgBotInstance;
 	}
@@ -116,9 +117,22 @@ class BaseCrawler {
 		return `Mozilla/5.0 ${platform} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${majorVersion}.${minorVersion}.${patchVersion} Safari/537.36`;
 	}
 	
-	#getRandomProxy() {
-		const proxy = this.proxies[this.proxyIndex];
-		this.proxyIndex = (this.proxyIndex + 1) % this.proxies.length;
+	#getRandomProxy(region) {
+		// 根据 region 参数过滤对应地区的代理 IP
+		let proxiesToUse = this.proxies;
+		if (region === 'singapore') {
+			proxiesToUse = ip1;
+		} else if (region === 'japan') {
+			proxiesToUse = ip2;
+		} else if (region === 'australia') {
+			proxiesToUse = ip3;
+		} else if (region === 'taiwan') {
+			proxiesToUse = ip4;
+		}
+		
+		// 获取随机代理
+		const proxy = proxiesToUse[this.proxyIndex];
+		this.proxyIndex = (this.proxyIndex + 1) % proxiesToUse.length;
 		return proxy;
 	}
 	
@@ -144,8 +158,9 @@ class BaseCrawler {
 	}
 	
 	// 新增封装方法：初始化代理浏览器和页面
-	async initProxyBrowserAndPage() {
-		const proxy = this.#getRandomProxy();
+	async initProxyBrowserAndPage(region) {
+		// 通过 region 获取相应的代理
+		const proxy = this.#getRandomProxy(region);
 		const browser = await this.#initBrowserWithProxy(proxy);
 		const page = await this.#initPageWithProxy(browser, proxy);
 		return { browser, page, proxy };
