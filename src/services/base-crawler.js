@@ -200,7 +200,7 @@ class BaseCrawler {
 		return Promise.all([BaseCrawler.#sendMessageToGroup('pro', message), BaseCrawler.#sendMessageToGroup('dev', message)]);
 	};
 	
-	async #sendMessageToGroup(env = 'dev', message) {
+	static async #sendMessageToGroup(env = 'dev', message) {
 		let tgBot;
 		if (env === 'pro') {
 			tgBot = BaseCrawler.#getProTgBotInstance();
