@@ -24,7 +24,7 @@ class FundraisingCrawler extends BaseCrawler {
 				throw new Error('pageInstance not found');
 			}
 			const url = `https://www.rootdata.com/Fundraising?page=${pageNum}`;
-			console.log('正在打开网页', url);
+			// console.log('正在打开网页', url);
 			await pageInstance?.goto(url, {
 				waitUntil: 'networkidle0',
 				timeout: 20000 // 设置超时
@@ -241,7 +241,7 @@ class FundraisingCrawler extends BaseCrawler {
 		let pageInstance = await this.safeInitPage(crawlType);
 		
 		try {
-			console.log(`开始爬取【${crawlType}】项目详情数据`);
+			// console.log(`开始爬取【${crawlType}】项目详情数据`);
 			
 			if (!pageInstance || pageInstance?.isClosed?.()) {
 				throw new Error('Page instance not initialized');
@@ -251,7 +251,7 @@ class FundraisingCrawler extends BaseCrawler {
 			let projectsToCrawl = await Fundraising.Project.findAll({
 				...crawlQueryOptions  // 使用展开运算符
 			});
-			console.log(`${crawlType} - ${projectsToCrawl.length || 0} 项目待爬取`);
+			// console.log(`${crawlType} - ${projectsToCrawl.length || 0} 项目待爬取`);
 			
 			// 应用层过滤
 			if (filterFunction && typeof filterFunction === 'function') {
@@ -437,7 +437,7 @@ class FundraisingCrawler extends BaseCrawler {
 	 * 会根据isInitial判断要不要继续深度爬取融资信息
 	 * **/
 	async scrapeAndUpdateProjectDetails(project, _page) {
-		console.log(`Fetching details for ${project.projectName}...`);
+		// console.log(`Fetching details for ${project.projectName}...`);
 		try {
 			if (!_page) {
 				throw new Error('网页不见了，Detail page not initialized');

@@ -3,8 +3,9 @@ const rootDataCrawler = require('./rootdata-crawler');
 const BinanceExNewsCrawler = require('./binance-ex-news-crawler');
 const OkxExNewsCrawler = require('./okx-ex-news-crawler');
 const CoinBaseTgNewsCrawler = require('./coinbase-tg-news-crawler');
+const UpbitExNewsCrawler = require('./upbit-news-crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
-const BaseCrawler = require('./base-crawler');
+// const BaseCrawler = require('./base-crawler');
 
 class CrawlerScheduler {
 	constructor() {
@@ -46,6 +47,8 @@ class CrawlerScheduler {
 		this.startOkxExNewsCrawl().then(r => r);
 		/** 开始coinbase 推特爬取 **/
 		this.startCoinBaseTgNewsCrawler().then(r => r);
+		/** 开始Upbit 公告 **/
+		this.startUpbitExNewsCrawler().then(r => r);
 		// await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
 		// await BaseCrawler.sendMessageToGroupAllEnv('🎉Welcome to subscribe to our channel!🎉');
 	}
@@ -104,6 +107,13 @@ class CrawlerScheduler {
 	 * **/
 	async startCoinBaseTgNewsCrawler() {
 		await CoinBaseTgNewsCrawler.startCrawling();
+	}
+	
+	/**
+	 * Upbit公告爬取
+	 * **/
+	async startUpbitExNewsCrawler() {
+		await UpbitExNewsCrawler.startCrawling();
 	}
 }
 

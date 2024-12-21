@@ -114,7 +114,10 @@ class BaseCrawler {
 		}
 		console.log(`安全的初始化浏览器网页${key}, 请等待...`);
 		this[key] = await this.browser.newPage();
-		await this[key].setExtraHTTPHeaders({ 'Accept-Encoding': 'gzip' });
+		await this[key].setExtraHTTPHeaders({
+			'Accept-Encoding': 'gzip',
+			'Accept-Language': 'en;q=1.0',  // 设置英文优先
+		});
 		const userAgent = this.#getRandomUserAgent();
 		await this[key].setUserAgent(userAgent);
 		await this[key].setCacheEnabled(false);
@@ -137,7 +140,7 @@ class BaseCrawler {
 		return `Mozilla/5.0 ${platform} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${majorVersion}.${minorVersion}.${patchVersion} Safari/537.36`;
 	}
 	
-	#getRandomProxy(region) {
+	getRandomProxy(region) {
 		// 根据 region 参数过滤对应地区的代理 IP
 		let proxiesToUse = this.proxies;
 		if (region === 'singapore') {
@@ -180,7 +183,7 @@ class BaseCrawler {
 	// 新增封装方法：初始化代理浏览器和页面
 	async initProxyBrowserAndPage(region) {
 		// 通过 region 获取相应的代理
-		const proxy = this.#getRandomProxy(region);
+		const proxy = this.getRandomProxy(region);
 		const browser = await this.#initBrowserWithProxy(proxy);
 		const page = await this.#initPageWithProxy(browser, proxy);
 		return { browser, page, proxy };
