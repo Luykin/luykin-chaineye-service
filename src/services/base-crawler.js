@@ -195,6 +195,10 @@ class BaseCrawler {
 	static async sendMessageToGroupPro(message) {
 		await BaseCrawler.#sendMessageToGroup('pro', message);
 	};
+	// 发送消息到所有环境
+	static async sendMessageToGroupAllEnv(message) {
+		return Promise.all([BaseCrawler.#sendMessageToGroup('pro', message), BaseCrawler.#sendMessageToGroup('dev', message)]);
+	};
 	
 	async #sendMessageToGroup(env = 'dev', message) {
 		let tgBot;
