@@ -9,9 +9,11 @@ module.exports = {
 			time: true,
 			env: {
 				NODE_ENV: "development",          // 开发环境变量
-				PORT: 8088                        // API 服务的开发端口
+				PORT: 8088,                        // API 服务的开发端口
+				TZ: "Asia/Shanghai", // 设置时区为北京时间
 			},
 			env_production: {
+				TZ: "Asia/Shanghai", // 设置时区为北京时间
 				NODE_ENV: "production",           // 生产环境变量
 				PORT: 8087                        // API 服务的生产端口
 			}
@@ -24,9 +26,11 @@ module.exports = {
 			watch: false,                        // 关闭文件监视
 			time: true,
 			env: {
+				TZ: "Asia/Shanghai", // 设置时区为北京时间
 				NODE_ENV: "development",          // 开发环境变量
 			},
 			env_production: {
+				TZ: "Asia/Shanghai", // 设置时区为北京时间
 				NODE_ENV: "production",           // 生产环境变量
 			}
 		},
@@ -38,9 +42,11 @@ module.exports = {
 			watch: false,                        // 关闭文件监视
 			time: true,
 			env: {
+				TZ: "Asia/Shanghai", // 设置时区为北京时间
 				NODE_ENV: "development",          // 开发环境变量
 			},
 			env_production: {
+				TZ: "Asia/Shanghai", // 设置时区为北京时间
 				NODE_ENV: "production",           // 生产环境变量
 			}
 		}
