@@ -82,12 +82,12 @@ class TwitterUserCrawler extends BaseCrawler {
 				}
 			}
 		} catch (error) {
-			console.error(`Error crawling CoinbaseAssets tweets with proxy ${proxy?.ip}; ${this.authTokens[this.currentTokenIndex]}:`, error.message);
-			// 出现错误时切换 token，确保轮换
-			this.switchAuthToken();
+			console.error(`CoinBase-TwitterUserCrawler error:`, error, proxy.ip, this.authTokens[this.currentTokenIndex], Date.now());
 		} finally {
 			await browser.close();
+			this.switchAuthToken();
 		}
+		await new Promise((resolve) => setTimeout(resolve, 60 * 1000)); // 1分钟间隔
 	}
 	
 	// 切换到下一个 auth_token
@@ -102,9 +102,8 @@ class TwitterUserCrawler extends BaseCrawler {
 			try {
 				await this.crawlTweets();
 			} catch (error) {
-				console.error('Error during startCrawling:', error.message);
+				console.error('CoinBase-TwitterUserCrawler Error during startCrawling:', error, Date.now());
 			}
-			await new Promise((resolve) => setTimeout(resolve, 3 * 60 * 1000)); // 3分钟间隔
 		}
 	}
 }

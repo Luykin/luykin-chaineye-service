@@ -57,7 +57,7 @@ class UpbitExNewsCrawler extends BaseCrawler {
 					}
 				}
 			} catch (error) {
-				console.log(`error: ${proxy.ip}:`, error.message);
+				console.error(`UpbitExNewsCrawler error:`, error, proxy.ip, Date.now());
 			} finally {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
@@ -71,7 +71,7 @@ class UpbitExNewsCrawler extends BaseCrawler {
 			try {
 				await this.crawlNews();
 			} catch (error) {
-				console.error('Error during startCrawling:', error);
+				console.error('UpbitExNewsCrawler Error during startCrawling:', error, Date.now());
 			}
 		}
 	}

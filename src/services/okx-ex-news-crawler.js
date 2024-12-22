@@ -94,7 +94,7 @@ class OkxExNewsCrawler extends BaseCrawler {
 					}
 				}
 			} catch (error) {
-				console.log(`error: ${proxy.ip}:`, error.message);
+				console.error(`OkxExNewsCrawler error:`, error, proxy.ip, Date.now());
 			} finally {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
@@ -108,7 +108,7 @@ class OkxExNewsCrawler extends BaseCrawler {
 			try {
 				await this.crawlNews();
 			} catch (error) {
-				console.error('Error during startCrawling:', error);
+				console.error('OkxExNewsCrawler Error during startCrawling:', error, Date.now());
 			}
 		}
 	}
