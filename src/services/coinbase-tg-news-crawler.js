@@ -93,7 +93,7 @@ class TwitterUserCrawler extends BaseCrawler {
 	// 切换到下一个 auth_token
 	switchAuthToken() {
 		this.currentTokenIndex = (this.currentTokenIndex + 1) % this.authTokens.length;
-		console.log(`Switched to next auth token: ${this.authTokens[this.currentTokenIndex]}`);
+		// console.log(`Switched to next auth token: ${this.authTokens[this.currentTokenIndex]}`);
 	}
 	
 	// 启动爬取任务，间隔10分钟
