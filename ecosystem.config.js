@@ -6,6 +6,7 @@ module.exports = {
 			instances: 4,                    // 启动最大实例数（根据 CPU 核心数自动启动）
 			exec_mode: "cluster",                // 使用 cluster 模式
 			watch: false,                        // 生产环境关闭文件监视
+			time: true,
 			env: {
 				NODE_ENV: "development",          // 开发环境变量
 				PORT: 8088                        // API 服务的开发端口
@@ -21,6 +22,7 @@ module.exports = {
 			instances: 1,                        // 单个实例
 			exec_mode: "fork",                   // 使用 fork 模式
 			watch: false,                        // 关闭文件监视
+			time: true,
 			env: {
 				NODE_ENV: "development",          // 开发环境变量
 			},
@@ -34,6 +36,7 @@ module.exports = {
 			instances: 1,                        // 单个实例
 			exec_mode: "fork",                   // 使用 fork 模式
 			watch: false,                        // 关闭文件监视
+			time: true,
 			env: {
 				NODE_ENV: "development",          // 开发环境变量
 			},
