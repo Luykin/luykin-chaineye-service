@@ -8,10 +8,10 @@
     "start": "pm2 start ecosystem.config.js --env production",
     "start:dev": "pm2 start ecosystem.config.js --env development",
     "stop": "pm2 stop luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
-    "restart": "pm2 restart luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
+    "restart": "pm2 restart luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot --env production",
     "delete": "pm2 delete luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
-    "logs": "pm2 logs luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
-    "logs-crawler": "pm2 logs luykin-chaineye-crawler",
+    "logs": "pm2 logs luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot --env production",
+    "logs-crawler": "pm2 logs luykin-chaineye-crawler --env production",
     "db:migrate": "npx sequelize-cli db:migrate",
     "db:migrate:undo": "npx sequelize-cli db:migrate:undo"
   },
