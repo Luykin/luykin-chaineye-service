@@ -62,7 +62,7 @@ class UpbitExNewsCrawler extends BaseCrawler {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
 			
-			await new Promise((resolve) => setTimeout(resolve, 3000)); // 延时3s
+			await new Promise((resolve) => setTimeout(resolve, 1000)); // 延时1s
 		}
 	}
 	

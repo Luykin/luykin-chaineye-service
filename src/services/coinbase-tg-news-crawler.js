@@ -58,7 +58,7 @@ class TwitterUserCrawler extends BaseCrawler {
 						results.push({
 							text,
 							timestamp: time,
-							newsUrl: url + '##',
+							newsUrl: url + '###',
 							type: 'coinbase_support',
 							crawlTime: +new Date(),
 						});
@@ -73,7 +73,7 @@ class TwitterUserCrawler extends BaseCrawler {
 					if (!exists) {
 						await EXNews.create(tweet);
 						const msg = `${tweet.text} [🔗 Read More](${tweet.newsUrl})`;
-						await BaseCrawler.sendMessageToGroupAllEnv(msg);
+						await BaseCrawler.sendMessageToGroupDev(msg);
 						console.log(`New tweet saved: ${tweet.text}`);
 						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
@@ -87,7 +87,7 @@ class TwitterUserCrawler extends BaseCrawler {
 			await browser.close();
 			this.switchAuthToken();
 		}
-		await new Promise((resolve) => setTimeout(resolve, 60 * 1000)); // 1分钟间隔
+		await new Promise((resolve) => setTimeout(resolve, 10 * 1000)); // 10s间隔
 	}
 	
 	// 切换到下一个 auth_token
