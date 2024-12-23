@@ -109,9 +109,9 @@ class TwitterUserCrawler extends BaseCrawler {
 }
 
 function containsCoinbaseSupport(str) {
-	if (Date.now() < 1734969996644) {
-		return true;
-	}
+	// if (Date.now() < 1734969996644) {
+	// 	return true;
+	// }
 	// 去除所有空格并忽略大小写
 	const normalizedStr = str.replace(/\s+/g, '').toLowerCase();
 	return /coinbasewilladdsupport/.test(normalizedStr);
