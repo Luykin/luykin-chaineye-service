@@ -58,7 +58,7 @@ class TwitterUserCrawler extends BaseCrawler {
 						results.push({
 							text,
 							timestamp: time,
-							newsUrl: url + '###',
+							newsUrl: url + '/#',
 							type: 'coinbase_support',
 							crawlTime: +new Date(),
 						});
@@ -77,7 +77,7 @@ class TwitterUserCrawler extends BaseCrawler {
 						console.log(`New tweet saved: ${tweet.text}`);
 						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
-						// console.log(`Tweet already exists: ${tweet.newsUrl}`);
+						console.log(`Tweet already exists: ${tweet.newsUrl}`);
 					}
 				}
 			}
