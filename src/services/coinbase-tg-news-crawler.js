@@ -33,6 +33,7 @@ class TwitterUserCrawler extends BaseCrawler {
 	
 	// 爬取推文数据
 	async crawlTweets() {
+		console.log("开始抓取 ~~~ crawlTweets")
 		const url = `https://x.com/CoinbaseAssets`;
 		const { browser, page, proxy } = await this.initProxyBrowserAndPage();
 		try {
