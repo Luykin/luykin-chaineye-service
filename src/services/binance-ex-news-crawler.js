@@ -121,6 +121,19 @@ class BinanceExNewsCrawler extends BaseCrawler {
 			}
 		}
 	}
+	// https://www.binance.com/bapi/apex/v1/public/apex/cms/article/list/query?type=1&pageNo=3&pageSize=10&catalogId=48
+	// generateBinanceUrl(title, uniqueId) {
+	// 	const baseUrl = "https://www.binance.com/en/support/announcement/";
+	// 	// 将标题转换为小写并替换空格、特殊字符等
+	// 	const slug = title
+	// 		.trim()
+	// 		.toLowerCase()
+	// 		.replace(/[^a-z0-9\s]/g, "") // 移除非字母数字的字符
+	// 		.replace(/\s+/g, "-"); // 替换空格为短横线
+	//
+	// 	// 拼接最终的 URL
+	// 	return `${baseUrl}${slug}-${uniqueId}`;
+	// }
 }
 
 module.exports = new BinanceExNewsCrawler();
