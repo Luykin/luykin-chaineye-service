@@ -22,7 +22,8 @@ function validateTitle(title) {
 		'binance futures will launch',
 		'hodler airdrops',
 		'introducing',
-		'binance launchpool'
+		'binance launchpool',
+		'binance Pool supports'
 	];
 	
 	// 检查标题是否以指定的前缀之一开头
