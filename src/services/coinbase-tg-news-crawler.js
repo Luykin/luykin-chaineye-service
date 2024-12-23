@@ -7,7 +7,7 @@ class TwitterUserCrawler extends BaseCrawler {
 		this.authTokens = [
 			'128cc3db75c84a4e0283c422f88b161bac148fed',
 			'ee0812d03101cb9da6b86a45dd09a50f56b6e4ac',
-			'2a886be958787c0ab07621ad1feeae2a8ef3d338',
+			// '2a886be958787c0ab07621ad1feeae2a8ef3d338',
 			'1bf3e515e18b784a907ebb26eac492555641afe3',
 			'ec759e4eb590399ad7c838cd95b48181ac1ac6dc',
 			'7dd17ca8557dfa0ba000259867d44475777c696b' // 自己的某个账号
