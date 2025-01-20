@@ -602,7 +602,9 @@ class FundraisingCrawler extends BaseCrawler {
 			
 			const investorProjects = await Promise.all(investorProjectsPromises);
 			// 批量创建 InvestmentRelationships 记录
-			await Fundraising.InvestmentRelationships.bulkCreate(investorProjects);
+			await Fundraising.InvestmentRelationships.bulkCreate(investorProjects, {
+				ignoreDuplicates: true
+			});
 			return investorProjects?.length;
 		} catch (error) {
 			console.error(`Error processing rounds for ${project.projectName}:`, error);
