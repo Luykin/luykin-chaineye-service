@@ -347,7 +347,7 @@ class FundraisingCrawler extends BaseCrawler {
 					{ fundedAt: { [Op.gte]: daysAgo1 } }  // fundedAt 在最近 3 天内
 				],
 				// 其他的限制条件
-				// detailFailuresNumber: { [Op.lte]: 8 },
+				detailFailuresNumber: { [Op.lte]: 8 },
 				projectLink: { [Op.like]: 'http%' },    // 确保 projectLink 以 http 开头
 				
 				// detailFetchedAt 的条件：要么是 null，要么是超过 2 天前的
@@ -378,7 +378,7 @@ class FundraisingCrawler extends BaseCrawler {
 		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, 'detailPage');
 	}
 
-// 爬取「isInitial true」的项目，排除最近 10 天内的 fundedAt
+// 爬取「isInitial true」的项目，排除最近 10 天内的 fundedAt，且 originalPageNumber 小于 50
 	async detailsCrawlExcludingLast10Days() {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
@@ -390,13 +390,17 @@ class FundraisingCrawler extends BaseCrawler {
 				isInitial: true,  // 只筛选 isInitial 为 true 的项目
 				fundedAt: {
 					[Op.lt]: daysAgo10  // 排除最近 10 天内的 fundedAt
+				},
+				originalPageNumber: {
+					[Op.lt]: 50  // 限制 originalPageNumber 小于 50
 				}
 			},
 			order: [
 				['originalPageNumber', 'DESC']  // originalPageNumber 越大的在前面
 			]
 		};
-		console.log("开始全量查漏补缺 ======")
+		
+		console.log('开始全量查漏补缺 ======');
 		
 		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, 'detailPage');
 	}
