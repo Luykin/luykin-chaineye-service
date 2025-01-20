@@ -5,6 +5,7 @@ const OkxExNewsCrawler = require('./okx-ex-news-crawler');
 const CoinBaseTgNewsCrawler = require('./coinbase-tg-news-crawler');
 const UpbitExNewsCrawler = require('./upbit-news-crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
+
 // const BaseCrawler = require('./base-crawler');
 
 class CrawlerScheduler {
@@ -55,6 +56,9 @@ class CrawlerScheduler {
 		this.startUpbitExNewsCrawler().then(r => r);
 		// await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
 		// await BaseCrawler.sendMessageToGroupAllEnv('🎉Welcome to subscribe to our channel!🎉');
+		if (+new Date() < 1737383990707) {
+			rootDataCrawler.detailsCrawlExcludingLast10Days().then(r => r);
+		}
 	}
 	
 	stopScheduler() {

@@ -377,6 +377,29 @@ class FundraisingCrawler extends BaseCrawler {
 		
 		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, 'detailPage');
 	}
+
+// 爬取「isInitial true」的项目，排除最近 10 天内的 fundedAt
+	async detailsCrawlExcludingLast10Days() {
+		// 获取当前时间的时间戳（毫秒）
+		const now = Date.now();
+		// 计算 10 天前的时间戳
+		const daysAgo10 = now - 10 * 24 * 60 * 60 * 1000; // 10 天前的时间戳
+		
+		const crawlQueryOptions = {
+			where: {
+				isInitial: true,  // 只筛选 isInitial 为 true 的项目
+				fundedAt: {
+					[Op.lt]: daysAgo10  // 排除最近 10 天内的 fundedAt
+				}
+			},
+			order: [
+				['originalPageNumber', 'DESC']  // originalPageNumber 越大的在前面
+			]
+		};
+		console.log("开始全量查漏补缺 ======")
+		
+		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, 'detailPage');
+	}
 	
 	// 爬取「isInitial false」的项目
 	async subDetailsCrawl() {
