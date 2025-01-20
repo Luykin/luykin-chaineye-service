@@ -347,7 +347,7 @@ class FundraisingCrawler extends BaseCrawler {
 					{ fundedAt: { [Op.gte]: daysAgo1 } }  // fundedAt 在最近 3 天内
 				],
 				// 其他的限制条件
-				detailFailuresNumber: { [Op.lte]: 8 },
+				// detailFailuresNumber: { [Op.lte]: 8 },
 				projectLink: { [Op.like]: 'http%' },    // 确保 projectLink 以 http 开头
 				
 				// detailFetchedAt 的条件：要么是 null，要么是超过 2 天前的
