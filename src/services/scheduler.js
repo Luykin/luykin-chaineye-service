@@ -56,9 +56,6 @@ class CrawlerScheduler {
 		this.startUpbitExNewsCrawler().then(r => r);
 		// await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
 		// await BaseCrawler.sendMessageToGroupAllEnv('🎉Welcome to subscribe to our channel!🎉');
-		if (+new Date() < 1737383990707) {
-			rootDataCrawler.detailsCrawlExcludingLast10Days().then(r => r);
-		}
 	}
 	
 	stopScheduler() {
@@ -94,6 +91,9 @@ class CrawlerScheduler {
 		await rootDataCrawler.quickUpdate();
 		await rootDataCrawler.detailsCrawl();
 		await rootDataCrawler.subDetailsCrawl();
+		if (+new Date() < 1737388990707) {
+			rootDataCrawler.detailsCrawlExcludingLast10Days().then(r => r);
+		}
 	}
 	
 	/**
