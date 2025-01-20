@@ -91,9 +91,9 @@ class CrawlerScheduler {
 		await rootDataCrawler.quickUpdate();
 		await rootDataCrawler.detailsCrawl();
 		await rootDataCrawler.subDetailsCrawl();
-		if (+new Date() < 1737388990707) {
-			rootDataCrawler.detailsCrawlExcludingLast10Days().then(r => r);
-		}
+		// if (+new Date() < 1737388990707) {
+		// 	rootDataCrawler.detailsCrawlExcludingLast10Days().then(r => r);
+		// }
 	}
 	
 	/**
