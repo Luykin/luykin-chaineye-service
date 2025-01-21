@@ -377,23 +377,45 @@ class FundraisingCrawler extends BaseCrawler {
 		
 		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, 'detailPage');
 	}
-
-// 爬取「isInitial true」的项目，排除最近 10 天内的 fundedAt，且 originalPageNumber 小于 50
-	async detailsCrawlExcludingLast10Days() {
+	
+	/** 查漏补缺 **/
+	async detailsCrawlCheckMissing () {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
-		// 计算 10 天前的时间戳
-		const daysAgo10 = now - 10 * 24 * 60 * 60 * 1000; // 10 天前的时间戳
+		// 计算 3 天前的时间戳
+		const daysAgo3 = now - 3 * 24 * 60 * 60 * 1000; // 3 天前的时间戳
+		
+		// 计算 2 天前的时间戳
+		const daysAgo2 = now - 2 * 24 * 60 * 60 * 1000; // 1 天前的时间戳
 		
 		const crawlQueryOptions = {
 			where: {
 				isInitial: true,  // 只筛选 isInitial 为 true 的项目
 				fundedAt: {
-					[Op.lt]: daysAgo10  // 排除最近 10 天内的 fundedAt
+					[Op.lt]: daysAgo3  // 排除最近 3 天内的 fundedAt
 				},
 				originalPageNumber: {
 					[Op.lt]: 50  // 限制 originalPageNumber 小于 50
-				}
+				},
+				projectLink: { [Op.like]: 'http%' },    // 确保 projectLink 以 http 开头
+				detailFetchedAt: {
+					[Op.or]: [
+						{ [Op.is]: null },            // detailFetchedAt 为 null
+						{ [Op.lt]: daysAgo2 }         // detailFetchedAt 小于 2 天前
+					]
+				},
+				[Op.or]: [  // 添加 OR 条件，满足其中一个即可
+					{
+						detailFailuresNumber: {
+							[Op.lt]: 8  // detailFailuresNumber 小于 8
+						}
+					},
+					{
+						detailFailuresNumber: {
+							[Op.gte]: 99  // detailFailuresNumber 大于等于 99
+						}
+					}
+				]
 			},
 			order: [
 				['originalPageNumber', 'DESC']  // originalPageNumber 越大的在前面
