@@ -73,7 +73,7 @@ class TwitterUserCrawler extends BaseCrawler {
 					if (!exists) {
 						await EXNews.create(tweet);
 						const msg = `${tweet.text} [🔗 Read More](${tweet.newsUrl})`;
-						await BaseCrawler.sendMessageToGroupDev(msg);
+						await BaseCrawler.sendMessageToGroupAllEnv(msg);
 						console.log(`New tweet saved: ${tweet.text}`);
 						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
