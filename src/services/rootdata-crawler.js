@@ -379,7 +379,7 @@ class FundraisingCrawler extends BaseCrawler {
 	}
 	
 	/** 查漏补缺 **/
-	async detailsCrawlCheckMissing () {
+	async detailsCrawlCheckMissing() {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
 		// 计算 3 天前的时间戳
@@ -508,6 +508,7 @@ class FundraisingCrawler extends BaseCrawler {
 			}
 			const details = await _page.evaluate(() => {
 				const socialLinks = {};
+				/** 爬取社交媒体链接 **/
 				document.querySelectorAll('.base_info .links a').forEach(link => {
 					const type = link.querySelector('span')?.textContent?.trim().toLowerCase();
 					if (type && type !== 'undefined') {
@@ -515,7 +516,7 @@ class FundraisingCrawler extends BaseCrawler {
 					}
 				});
 				
-				// Extract team members
+				/** Extract team members 团队成员 **/
 				const teamMembers = Array.from(document.querySelectorAll('.team_member .item')).map(member => ({
 					name: member.querySelector('.content h2')?.textContent?.trim(),
 					position: member.querySelector('.content p')?.textContent?.trim(),
@@ -559,7 +560,12 @@ class FundraisingCrawler extends BaseCrawler {
 			throw error;
 		}
 	}
+	/** 2025/03/06 更新爬虫逻辑，不爬取rounds信息，
+	 * 只爬取Fundraising下的Investors（被投资的信息）
+	 * 或者  Investments 下的 Portfolio （投资出去的信息）**/
+	async getFundraisingAndInvestments() {
 	
+	}
 	/**
 	 * 传入一个项目数据库实例，和浏览器网页，开始爬取融资
 	 * **/
@@ -641,8 +647,11 @@ class FundraisingCrawler extends BaseCrawler {
 		try {
 			await _page.evaluate(() => {
 				document.querySelectorAll('button').forEach(button => {
-					if (/expand\s*more/i.test(button.textContent) || /rounds/i.test(button.textContent)) {
-						console.log('发现详情页有展开更多按钮/rounds按钮，进行点击...');
+					/** 不要点击rounds，round应该是确认的融资新闻，但是如果只是投资机构网站上列了，
+					 * 就没有rounds信息，这样的情况其实也是投资了
+					 *  || /rounds/i.test(button.textContent) **/
+					if (/expand\s*more/i.test(button.textContent)) {
+						console.log('发现详情页有展开更多按钮按钮，进行点击...');
 						button.click();
 					}
 				});
