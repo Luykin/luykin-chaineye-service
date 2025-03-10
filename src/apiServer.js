@@ -57,6 +57,7 @@ const corsOptions = {
 		'http://localhost:3000',
 		'http://127.0.0.1',
 		'http://127.0.0.1:3000',
+		'https://x.com'
 	],
 	methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // 包括 OPTIONS
 	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
