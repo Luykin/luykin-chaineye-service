@@ -248,7 +248,7 @@ router.get('/search/legacy', async (req, res) => {
 		}
 		
 		const sanitizedKeyword = keyword.trim();
-		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503132347`;
+		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503132350`;
 		let cachedData;
 		
 		try {
@@ -263,14 +263,14 @@ router.get('/search/legacy', async (req, res) => {
 			return res.json(JSON.parse(cachedData));
 		}
 		
-		// 构造正确的 JSON 查询条件，确保 "x" 这个键的值匹配目标 URL（大小写敏感）
+		// 构造正确的 JSON 查询条件，确保 "x" 这个键的值匹配目标 URL（大小写不敏感）
 		const targetTwitterUrl = `https://x.com/${sanitizedKeyword}`;
 		
 		const project = await Fundraising.Project.findOne({
 			where: {
 				socialLinks: {
 					[Op.and]: [
-						literal(`socialLinks->>'x' = '${targetTwitterUrl}'`) // JSON 查询，确保 "x" 精确匹配
+						literal(`LOWER(socialLinks->>'x') = LOWER('${targetTwitterUrl}')`) // JSON 查询，确保 "x" 精确匹配
 					]
 				}
 			},
