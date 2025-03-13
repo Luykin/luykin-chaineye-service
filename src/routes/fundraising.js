@@ -263,11 +263,16 @@ router.get('/search/legacy', async (req, res) => {
 			return res.json(JSON.parse(cachedData));
 		}
 		
+		// 构造正确的 JSON 查询条件，确保 "x" 这个键的值匹配目标 URL（大小写敏感）
+		const targetTwitterUrl = `https://x.com/${sanitizedKeyword}`;
+		
 		const project = await Fundraising.Project.findOne({
 			where: {
-				[Op.or]: [
-					literal(`socialLinks LIKE '%${sanitizedKeyword}%'`)
-				]
+				socialLinks: {
+					[Op.and]: [
+						literal(`socialLinks->>'x' = '${targetTwitterUrl}'`) // JSON 查询，确保 "x" 精确匹配
+					]
+				}
 			},
 			attributes: ['projectName', 'socialLinks', 'logo', 'amount'],
 			include: [
