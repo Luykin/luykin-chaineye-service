@@ -248,7 +248,7 @@ router.get('/search/legacy', async (req, res) => {
 		}
 		
 		const sanitizedKeyword = keyword.trim();
-		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202411152314`;
+		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503132347`;
 		let cachedData;
 		
 		try {
