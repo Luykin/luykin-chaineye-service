@@ -248,7 +248,7 @@ router.get('/search/legacy', async (req, res) => {
 		}
 		
 		const sanitizedKeyword = keyword.trim();
-		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503132350`;
+		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503152332`;
 		let cachedData;
 		
 		try {
@@ -325,10 +325,23 @@ router.get('/search/legacy', async (req, res) => {
 				twitter: investor?.socialLinks?.x || ''
 			}))
 		);
-		
-		// 按 name 去重
+
+// 自定义去重逻辑：优先保留 lead_investor 为 true 的记录
 		const investors = Array.from(
-			new Map(rawInvestors.map((item) => [item.name, item])).values()
+			rawInvestors.reduce((map, item) => {
+				// 如果已存在相同 name 的记录
+				if (map.has(item.name)) {
+					const existing = map.get(item.name);
+					// 当现有记录的 lead_investor 为 false 且当前项为 true 时替换
+					if (!existing.lead_investor && item.lead_investor) {
+						map.set(item.name, item);
+					}
+					// 否则保留原有记录（保持第一次出现的 lead_investor 为 true 的记录）
+				} else {
+					map.set(item.name, item);
+				}
+				return map;
+			}, new Map()).values()
 		);
 		
 		const investedData = {
@@ -344,10 +357,23 @@ router.get('/search/legacy', async (req, res) => {
 			lead_investor: investment.fundedProject?.lead || false,
 		}));
 		
+		// 自定义去重逻辑：优先保留 lead_investor 为 true 的记录
 		const fundedProjects = Array.from(
-			new Map(rawFundedProjects.map((item) => [item.name, item])).values()
+			rawFundedProjects.reduce((map, item) => {
+				// 如果已存在相同 name 的记录
+				if (map.has(item.name)) {
+					const existing = map.get(item.name);
+					// 当现有记录的 lead_investor 为 false 且当前项为 true 时替换
+					if (!existing.lead_investor && item.lead_investor) {
+						map.set(item.name, item);
+					}
+					// 否则保留原有记录（保持第一次出现的 lead_investor 为 true 的记录）
+				} else {
+					map.set(item.name, item);
+				}
+				return map;
+			}, new Map()).values()
 		);
-		
 		const totalInvestment = fundedProjects.reduce((sum, proj) => sum + (proj.amount || 0), 0);
 		
 		const investorData = {
