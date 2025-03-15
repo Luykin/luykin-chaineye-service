@@ -15,45 +15,45 @@ class CrawlerScheduler {
 	}
 	
 	async startScheduler() {
-		// 每天北京时间上午 7:10（对应 UTC 时间晚上 11:10）
-		this.morningJob = schedule.scheduleJob('10 23 * * *', async () => {
-			console.log('Starting morning quick update...');
-			try {
-				await this.startRootDataCrawl();
-				console.log('Morning quick update completed');
-			} catch (error) {
-				console.error('Morning quick update failed:', error);
-			}
-		});
-		
-		// 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
-		this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
-			console.log('Starting evening quick update...');
-			try {
-				await this.startRootDataCrawl();
-				console.log('Evening quick update completed');
-			} catch (error) {
-				console.error('Evening quick update failed:', error);
-			}
-		});
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// // 每天北京时间上午 7:10（对应 UTC 时间晚上 11:10）
+		// this.morningJob = schedule.scheduleJob('10 23 * * *', async () => {
+		// 	console.log('Starting morning quick update...');
+		// 	try {
+		// 		await this.startRootDataCrawl();
+		// 		console.log('Morning quick update completed');
+		// 	} catch (error) {
+		// 		console.error('Morning quick update failed:', error);
+		// 	}
+		// });
+		//
+		// // 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
+		// this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
+		// 	console.log('Starting evening quick update...');
+		// 	try {
+		// 		await this.startRootDataCrawl();
+		// 		console.log('Evening quick update completed');
+		// 	} catch (error) {
+		// 		console.error('Evening quick update failed:', error);
+		// 	}
+		// });
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
 		await this.resetAllState();
 		/** 开始RootData爬虫 **/
 		this.startRootDataCrawl().then(() => {
 			console.log('首次启动任务执行完: startRootDataCrawl');
 		}).catch(err => console.log(err));
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		/** 开始币安 公告**/
-		this.startBinanceExNewsCrawl().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		/** 开始OKX 公告 **/
-		this.startOkxExNewsCrawl().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		/** 开始coinbase 推特爬取 **/
-		this.startCoinBaseTgNewsCrawler().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		/** 开始Upbit 公告 **/
-		this.startUpbitExNewsCrawler().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// /** 开始币安 公告**/
+		// this.startBinanceExNewsCrawl().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// /** 开始OKX 公告 **/
+		// this.startOkxExNewsCrawl().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// /** 开始coinbase 推特爬取 **/
+		// this.startCoinBaseTgNewsCrawler().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// /** 开始Upbit 公告 **/
+		// this.startUpbitExNewsCrawler().then(r => r);
 		// await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
 		// await BaseCrawler.sendMessageToGroupAllEnv('🎉Welcome to subscribe to our channel!🎉');
 	}
@@ -88,10 +88,12 @@ class CrawlerScheduler {
 	 * **/
 	async startRootDataCrawl() {
 		await rootDataCrawler.forceClose();
-		await rootDataCrawler.quickUpdate();
-		await rootDataCrawler.detailsCrawl();
-		await rootDataCrawler.subDetailsCrawl();
+		// await rootDataCrawler.fullCrawl();
 		await rootDataCrawler.detailsCrawlCheckMissing();
+		// await rootDataCrawler.quickUpdate();
+		// await rootDataCrawler.detailsCrawl();
+		// await rootDataCrawler.subDetailsCrawl();
+		// await rootDataCrawler.detailsCrawlCheckMissing();
 	}
 	
 	/**
