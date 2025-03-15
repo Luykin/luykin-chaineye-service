@@ -6,7 +6,7 @@ const CoinBaseTgNewsCrawler = require('./coinbase-tg-news-crawler');
 const UpbitExNewsCrawler = require('./upbit-news-crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
 
-// const BaseCrawler = require('./base-crawler');
+const BaseCrawler = require('./base-crawler');
 
 class CrawlerScheduler {
 	constructor() {
@@ -54,8 +54,6 @@ class CrawlerScheduler {
 		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
 		/** 开始Upbit 公告 **/
 		this.startUpbitExNewsCrawler().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
-		await BaseCrawler.sendMessageToGroupAllEnv('🎉Welcome to subscribe to our channel!🎉');
 	}
 	
 	stopScheduler() {
