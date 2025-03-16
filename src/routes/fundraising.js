@@ -239,6 +239,8 @@ router.get('/search', async (req, res) => {
 /**
  * 兼容https://www.cryptohunt.ai/旧版数据格式的查询接口
  * **/
+// 时间筛选阈值（2024-03-11T00:00:00Z）
+const DATA_CUTOFF_TIMESTAMP = 1741881600000;
 router.get('/search/legacy', async (req, res) => {
 	try {
 		const { keyword } = req.query;
@@ -279,6 +281,7 @@ router.get('/search/legacy', async (req, res) => {
 				{
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsReceived',
+					where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
 					attributes: ['round', 'lead', 'amount', 'date', 'formattedAmount'],
 					include: [
 						{
@@ -291,7 +294,8 @@ router.get('/search/legacy', async (req, res) => {
 				{
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsGiven',
-					attributes: ['round', 'amount', 'date', 'formattedAmount'],
+					where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
+					attributes: ['round', 'lead', 'amount', 'date', 'formattedAmount'],
 					include: [
 						{
 							model: Fundraising.Project,
