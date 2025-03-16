@@ -19,8 +19,10 @@ class FundraisingCrawler extends BaseCrawler {
 	/**
 	 * 爬取指定页的机构列表数据
 	 * **/
-	async crawlPage(pageNum, pageInstance) {
+	async crawlPage(pageNum) {
 		try {
+			const { page: pageInstance, proxy } = await this.initProxyBrowserAndPage();
+			console.log(proxy, '开始爬取', pageNum, '的数据');
 			if (!pageInstance || pageInstance.isClosed()) {
 				throw new Error('pageInstance not found');
 			}
@@ -144,20 +146,20 @@ class FundraisingCrawler extends BaseCrawler {
 		}
 		let currentPage = startPage;
 		let hasMoreData = true;
-		const pageInstance = await this.safeInitPage('listPage');
+		// const pageInstance = await this.safeInitPage('listPage');
 		try {
 			state.status = 'running';
 			await state.save();
 			
 			while (hasMoreData) {
-				if (!pageInstance || pageInstance?.isClosed?.()) {
-					throw new Error('pageInstance not found');
-				}
+				// if (!pageInstance || pageInstance?.isClosed?.()) {
+				// 	throw new Error('pageInstance not found');
+				// }
 				console.log(`开始爬取第 ${currentPage} 页的机构数据`);
 				
 				const data = await retry(
 					async () => {
-						return await this.crawlPage(currentPage, pageInstance);
+						return await this.crawlPage(currentPage);
 					},
 					{
 						retries: 3,
@@ -201,7 +203,7 @@ class FundraisingCrawler extends BaseCrawler {
 			console.error('全量爬取项目任务失败.', currentPage, error);
 			throw error;
 		} finally {
-			pageInstance && pageInstance?.close?.();
+			// pageInstance && pageInstance?.close?.();
 		}
 	}
 	
@@ -213,7 +215,7 @@ class FundraisingCrawler extends BaseCrawler {
 		if (state && state.status === 'running') {
 			throw new Error('quickUpdate already in progress');
 		}
-		const pageInstance = await this.safeInitPage('listPage');
+		// const pageInstance = await this.safeInitPage('listPage');
 		let updateNum = 0;
 		try {
 			state.status = 'running';
@@ -221,10 +223,10 @@ class FundraisingCrawler extends BaseCrawler {
 			await state.save();
 			// Only crawl first 3 pages for quick updates
 			for (let page = 1; page <= 1; page++) {
-				if (!pageInstance || pageInstance?.isClosed?.()) {
-					throw new Error('quickUpdate: Page instance not initialized');
-				}
-				const data = await this.crawlPage(page, pageInstance);
+				// if (!pageInstance || pageInstance?.isClosed?.()) {
+				// 	throw new Error('quickUpdate: Page instance not initialized');
+				// }
+				const data = await this.crawlPage(page);
 				const existingLinks = await Fundraising.Project.findAll({
 					attributes: ['projectLink'],
 					where: {
@@ -266,7 +268,7 @@ class FundraisingCrawler extends BaseCrawler {
 			// throw error;
 		} finally {
 			console.log('quickUpdate finally: 关闭浏览器');
-			pageInstance && pageInstance?.close?.();
+			// pageInstance && pageInstance?.close?.();
 		}
 	}
 
