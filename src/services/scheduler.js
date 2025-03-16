@@ -86,7 +86,7 @@ class CrawlerScheduler {
 	 * **/
 	async startRootDataCrawl() {
 		await rootDataCrawler.forceClose();
-		await rootDataCrawler.fullCrawl();
+		await rootDataCrawler.quickUpdate();
 		await rootDataCrawler.detailsCrawlCheckMissing();
 		// await rootDataCrawler.detailsCrawl();
 		await rootDataCrawler.subDetailsCrawl();
