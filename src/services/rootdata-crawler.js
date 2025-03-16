@@ -161,8 +161,7 @@ class FundraisingCrawler extends BaseCrawler {
 					},
 					{
 						retries: 3,
-						minTimeout: 60000,
-						maxTimeout: 80000
+						minTimeout: 1000,
 					}
 				);
 				
@@ -326,8 +325,7 @@ class FundraisingCrawler extends BaseCrawler {
 						},
 						{
 							retries: 3,
-							minTimeout: 60000,
-							maxTimeout: 70000
+							minTimeout: 1000,
 						}
 					);
 				} catch (err) {
