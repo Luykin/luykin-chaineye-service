@@ -37,12 +37,34 @@ class FundraisingCrawler extends BaseCrawler {
 			// 定位分页输入框并输入页码
 			const inputSelector = 'div.el-input.el-pagination__editor.is-in-pagination input';
 			await pageInstance.waitForSelector(inputSelector, { timeout: 10000 });
-			const input = await pageInstance.$(inputSelector);
-			// 清空输入框并输入新页码
-			await input.click({ clickCount: 3 }); // 三击选中内容
-			await pageInstance.keyboard.press('Backspace');
-			await input.type(String(pageNum), { delay: 300 }); // 增加输入延迟提高稳定性
+			// 步骤2：直接操作DOM清空并设置值（核心逻辑）
+			await pageInstance.evaluate((selector, newValue) => {
+				const input = document.querySelector(selector);
+				if (!input) throw new Error('输入框未找到');
+				
+				// 清空并设置新值
+				input.value = newValue;
+				
+				// 触发必要事件（兼容Vue/React/Angular）
+				const events = ['input', 'change', 'keydown', 'keyup'];
+				events.forEach(eventName =>
+					input.dispatchEvent(new Event(eventName, { bubbles: true }))
+				);
+			}, inputSelector, String(pageNum));
+
+			// 步骤3：模拟回车键（双重保障）
 			await pageInstance.keyboard.press('Enter');
+
+			// 步骤4：验证输入结果（关键！）
+			await pageInstance.waitForFunction(
+				(selector, expectedValue) => {
+					const input = document.querySelector(selector);
+					return input && input.value === expectedValue;
+				},
+				{ timeout: 3000 },
+				inputSelector,
+				String(pageNum)
+			);
 			await pageInstance.waitForTimeout(500);
 			
 			// 自定义轮询函数（每300ms检查一次，最多60秒）
@@ -146,6 +168,7 @@ class FundraisingCrawler extends BaseCrawler {
 		}
 		let currentPage = startPage;
 		let hasMoreData = true;
+		let failedPages = [];
 		// const pageInstance = await this.safeInitPage('listPage');
 		try {
 			state.status = 'running';
@@ -170,6 +193,7 @@ class FundraisingCrawler extends BaseCrawler {
 				} catch (err) {
 					console.log('爬取第 ' + currentPage + ' 页失败');
 					data = [];
+					failedPages = [...failedPages, currentPage];
 				}
 				
 				if ((!data || (data || [])?.length === 0) && currentPage >= 278) {
@@ -189,7 +213,8 @@ class FundraisingCrawler extends BaseCrawler {
 				
 				state.otherInfo = {
 					...(state.otherInfo || {}),
-					currentPage: currentPage
+					currentPage: currentPage,
+					failedPages: failedPages
 				};
 				state.lastUpdateTime = new Date();
 				await state.save();
