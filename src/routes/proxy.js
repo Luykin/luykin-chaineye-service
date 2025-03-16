@@ -6,11 +6,11 @@ const { URL } = require('url');
 const crypto = require('crypto');
 
 // 缓存配置（根据实际需求调整）
-const CACHE_TTL = 360; // 缓存时间（秒）6 * 60秒
+const CACHE_TTL = 60 * 60; // 缓存时间（秒）
 const CACHE_MAX_SIZE = 1024 * 1024; // 单条缓存最大体积（1MB）
 
 // 生成MD5哈希作为缓存键
-const getCacheKey = (url) => crypto.createHash('md5').update(url).digest('hex');
+const getCacheKey = (url) => crypto.createHash('md5').update(`${url}_20250316`).digest('hex');
 
 router.get('/', async (req, res) => {
 	const { url: encodedUrl } = req.query;
@@ -22,6 +22,15 @@ router.get('/', async (req, res) => {
 	try {
 		const targetUrl = decodeURIComponent(encodedUrl);
 		const cacheKey = getCacheKey(targetUrl);
+		
+		// 获取请求来源的 Origin
+		const origin = req.headers.origin || '*';
+		
+		// 设置 CORS 响应头
+		res.setHeader('Access-Control-Allow-Origin', origin); // 动态设置 Origin
+		res.setHeader('Access-Control-Allow-Credentials', 'true'); // 允许凭据
+		res.setHeader('Access-Control-Allow-Methods', 'GET'); // 支持 GET 方法
+		
 		let cachedData;
 		
 		// 尝试获取缓存
