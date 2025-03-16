@@ -205,17 +205,9 @@ class FundraisingCrawler extends BaseCrawler {
 				const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
 					!['id', 'projectLink', 'createdAt', 'updatedAt'].includes(field)
 				);
-				await retry(
-					async () => {
-						await Fundraising.Project.bulkCreate(data, {
-							updateOnDuplicate: fieldsToUpdate
-						});
-					},
-					{
-						retries: 3,
-						minTimeout: 5000,
-					}
-				);
+				await Fundraising.Project.bulkCreate(data, {
+					updateOnDuplicate: fieldsToUpdate
+				});
 				
 				state.otherInfo = {
 					...(state.otherInfo || {}),
