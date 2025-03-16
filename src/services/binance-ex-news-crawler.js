@@ -40,6 +40,7 @@ class BinanceExNewsCrawler extends BaseCrawler {
 	constructor() {
 		super();
 	}
+	
 	// https://www.binance.com/bapi/apex/v1/public/apex/cms/article/list/query?type=1&pageNo=3&pageSize=10&catalogId=48
 	async crawlNews() {
 		const tabUrls = [
@@ -104,7 +105,7 @@ class BinanceExNewsCrawler extends BaseCrawler {
 					}
 				}
 			} catch (error) {
-				console.error(`BinanceExNewsCrawler error:`, error, proxy.ip, Date.now());
+				console.error(`BinanceExNewsCrawler error:`, error?.message, proxy.ip, Date.now());
 			} finally {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
@@ -122,6 +123,7 @@ class BinanceExNewsCrawler extends BaseCrawler {
 			}
 		}
 	}
+	
 	// https://www.binance.com/bapi/apex/v1/public/apex/cms/article/list/query?type=1&pageNo=3&pageSize=10&catalogId=48
 	// generateBinanceUrl(title, uniqueId) {
 	// 	const baseUrl = "https://www.binance.com/en/support/announcement/";

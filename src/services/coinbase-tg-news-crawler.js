@@ -82,7 +82,7 @@ class TwitterUserCrawler extends BaseCrawler {
 				}
 			}
 		} catch (error) {
-			console.error(`CoinBase-TwitterUserCrawler error:`, error, proxy.ip, this.authTokens[this.currentTokenIndex], Date.now());
+			console.error(`CoinBase-TwitterUserCrawler error:`, error?.message, proxy.ip, this.authTokens[this.currentTokenIndex], Date.now());
 		} finally {
 			await browser.close();
 			this.switchAuthToken();

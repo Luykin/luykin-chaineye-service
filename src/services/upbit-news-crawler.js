@@ -5,6 +5,7 @@ class UpbitExNewsCrawler extends BaseCrawler {
 	constructor() {
 		super();
 	}
+	
 	async crawlNews() {
 		const tabUrls = [
 			{
@@ -57,7 +58,7 @@ class UpbitExNewsCrawler extends BaseCrawler {
 					}
 				}
 			} catch (error) {
-				console.error(`UpbitExNewsCrawler error:`, error, proxy.ip, Date.now());
+				console.error(`UpbitExNewsCrawler error:`, error?.message, proxy.ip, Date.now());
 			} finally {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}

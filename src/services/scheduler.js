@@ -42,18 +42,18 @@ class CrawlerScheduler {
 		this.startRootDataCrawl().then(() => {
 			console.log('首次启动任务执行完: startRootDataCrawl');
 		}).catch(err => console.log(err));
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		/** 开始币安 公告**/
-		this.startBinanceExNewsCrawl().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		/** 开始OKX 公告 **/
-		this.startOkxExNewsCrawl().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		/** 开始coinbase 推特爬取 **/
-		this.startCoinBaseTgNewsCrawler().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		/** 开始Upbit 公告 **/
-		this.startUpbitExNewsCrawler().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// /** 开始币安 公告**/
+		// this.startBinanceExNewsCrawl().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// /** 开始OKX 公告 **/
+		// this.startOkxExNewsCrawl().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// /** 开始coinbase 推特爬取 **/
+		// this.startCoinBaseTgNewsCrawler().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// /** 开始Upbit 公告 **/
+		// this.startUpbitExNewsCrawler().then(r => r);
 	}
 	
 	stopScheduler() {

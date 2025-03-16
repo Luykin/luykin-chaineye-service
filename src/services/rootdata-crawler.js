@@ -91,7 +91,7 @@ class FundraisingCrawler extends BaseCrawler {
 			// 检查空数据情况
 			const isEmpty = await pageInstance.evaluate(() => !!document.querySelector('tr.b-table-empty-row'));
 			if (isEmpty) {
-				console.log('当前页面为空，返回空数组');
+				console.log('当前页面为空，返回空数组', currentPage);
 				return [];
 			}
 			
@@ -116,6 +116,9 @@ class FundraisingCrawler extends BaseCrawler {
 			});
 			
 			console.log('爬取完毕, 得到', fundraisingData.length);
+			if (!fundraisingData || !fundraisingData.length) {
+				throw new Error('本次爬取页面没有找到数据');
+			}
 			return fundraisingData.map(item => ({
 				...item,
 				projectLink: joinUrl(item.projectLink, item.projectName),
@@ -150,7 +153,7 @@ class FundraisingCrawler extends BaseCrawler {
 				if (!pageInstance || pageInstance?.isClosed?.()) {
 					throw new Error('pageInstance not found');
 				}
-				console.log(`Crawling page ${currentPage}...`);
+				console.log(`开始爬取第 ${currentPage} 页的机构数据`);
 				
 				const data = await retry(
 					async () => {
@@ -158,12 +161,12 @@ class FundraisingCrawler extends BaseCrawler {
 					},
 					{
 						retries: 3,
-						minTimeout: 2000,
-						maxTimeout: 5000
+						minTimeout: 60000,
+						maxTimeout: 80000
 					}
 				);
 				
-				if (data?.length === 0 && currentPage >= 278) {
+				if ((!data || (data || [])?.length === 0) && currentPage >= 278) {
 					hasMoreData = false;
 					continue;
 				}
@@ -323,8 +326,8 @@ class FundraisingCrawler extends BaseCrawler {
 						},
 						{
 							retries: 3,
-							minTimeout: 2000,
-							maxTimeout: 5000
+							minTimeout: 60000,
+							maxTimeout: 70000
 						}
 					);
 				} catch (err) {
