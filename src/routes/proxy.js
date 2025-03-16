@@ -22,15 +22,6 @@ router.get('/', async (req, res) => {
 	try {
 		const targetUrl = decodeURIComponent(encodedUrl);
 		const cacheKey = getCacheKey(targetUrl);
-		
-		// 获取请求来源的 Origin
-		const origin = req.headers.origin || '*';
-		
-		// 设置 CORS 响应头
-		res.setHeader('Access-Control-Allow-Origin', origin); // 动态设置 Origin
-		res.setHeader('Access-Control-Allow-Credentials', 'true'); // 允许凭据
-		res.setHeader('Access-Control-Allow-Methods', 'GET'); // 支持 GET 方法
-		
 		let cachedData;
 		
 		// 尝试获取缓存
@@ -50,6 +41,10 @@ router.get('/', async (req, res) => {
 				Object.entries(headers).forEach(([key, value]) => {
 					res.setHeader(key, value);
 				});
+				// 设置 CORS 响应头
+				res.setHeader('Access-Control-Allow-Origin', "*"); // 动态设置 Origin
+				res.setHeader('Access-Control-Allow-Credentials', 'false'); // 允许凭据
+				res.setHeader('Access-Control-Allow-Methods', 'GET'); // 支持 GET 方法
 				
 				return res.send(body);
 			} catch (parseError) {
@@ -97,6 +92,11 @@ router.get('/', async (req, res) => {
 		Object.entries(proxyRes.headers).forEach(([key, value]) => {
 			res.setHeader(key, value);
 		});
+		// 设置 CORS 响应头
+		res.setHeader('Access-Control-Allow-Origin', "*"); // 动态设置 Origin
+		res.setHeader('Access-Control-Allow-Credentials', 'false'); // 允许凭据
+		res.setHeader('Access-Control-Allow-Methods', 'GET'); // 支持 GET 方法
+		
 		res.send(responseBody);
 		
 	} catch (err) {
