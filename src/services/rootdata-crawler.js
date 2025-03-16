@@ -458,6 +458,11 @@ class FundraisingCrawler extends BaseCrawler {
 		const crawlQueryOptions = {
 			where: {
 				isInitial: true,  // 只筛选 isInitial 为 true 的项目
+				[Op.or]: [
+					{ '$investmentsReceived.id$': null },  // investmentsReceived 为空
+					{ socialLinks: { [Op.eq]: null } },    // socialLinks 为空
+					// { fundedAt: { [Op.gte]: daysAgo1 } }  // fundedAt 在最近 3 天内
+				],
 				// fundedAt: {
 				// 	[Op.lt]: daysAgo3  // 排除最近 3 天内的 fundedAt
 				// },
