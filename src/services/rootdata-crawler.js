@@ -402,9 +402,9 @@ class FundraisingCrawler extends BaseCrawler {
 		const crawlQueryOptions = {
 			where: {
 				isInitial: true,  // 只筛选 isInitial 为 true 的项目
-				fundedAt: {
-					[Op.lt]: daysAgo3  // 排除最近 3 天内的 fundedAt
-				},
+				// fundedAt: {
+				// 	[Op.lt]: daysAgo3  // 排除最近 3 天内的 fundedAt
+				// },
 				// originalPageNumber: {
 				// 	[Op.lt]: 50  // 限制 originalPageNumber 小于 50
 				// },
