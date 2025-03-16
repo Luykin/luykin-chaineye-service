@@ -282,8 +282,8 @@ router.get('/search/legacy', async (req, res) => {
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsReceived',
 					// 正确的作用域
-					required: false, // 避免 INNER JOIN 过滤掉主项目
-					where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
+					// required: false, // 避免 INNER JOIN 过滤掉主项目
+					// where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
 					attributes: ['round', 'lead', 'amount', 'date', 'formattedAmount'],
 					include: [
 						{
@@ -297,8 +297,8 @@ router.get('/search/legacy', async (req, res) => {
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsGiven',
 					// 正确的作用域
-					required: false, // 避免 INNER JOIN 过滤掉主项目
-					where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
+					// required: false, // 避免 INNER JOIN 过滤掉主项目
+					// where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
 					attributes: ['round', 'lead', 'amount', 'date', 'formattedAmount'],
 					include: [
 						{
