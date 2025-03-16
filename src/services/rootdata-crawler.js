@@ -88,12 +88,12 @@ class FundraisingCrawler extends BaseCrawler {
 				await pageInstance.waitForTimeout(10000);
 			}
 			
-			// 检查空数据情况
-			const isEmpty = await pageInstance.evaluate(() => !!document.querySelector('tr.b-table-empty-row'));
-			if (isEmpty) {
-				console.log('当前页面为空，返回空数组', currentPage);
-				return [];
-			}
+			// // 检查空数据情况
+			// const isEmpty = await pageInstance.evaluate(() => !!document.querySelector('tr.b-table-empty-row'));
+			// if (isEmpty) {
+			// 	console.log('当前页面为空，返回空数组', pageNum);
+			// 	return [];
+			// }
 			
 			// 提取并格式化数据（保持原有逻辑不变）
 			const fundraisingData = await pageInstance.evaluate(async () => {
