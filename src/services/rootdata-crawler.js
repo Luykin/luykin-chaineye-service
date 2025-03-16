@@ -205,11 +205,17 @@ class FundraisingCrawler extends BaseCrawler {
 				const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
 					!['id', 'projectLink', 'createdAt', 'updatedAt'].includes(field)
 				);
-				
-				// 执行 bulkCreate 时使用动态字段列表
-				await Fundraising.Project.bulkCreate(data, {
-					updateOnDuplicate: fieldsToUpdate
-				});
+				await retry(
+					async () => {
+						await Fundraising.Project.bulkCreate(data, {
+							updateOnDuplicate: fieldsToUpdate
+						});
+					},
+					{
+						retries: 3,
+						minTimeout: 5000,
+					}
+				);
 				
 				state.otherInfo = {
 					...(state.otherInfo || {}),
