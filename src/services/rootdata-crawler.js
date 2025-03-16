@@ -205,7 +205,7 @@ class FundraisingCrawler extends BaseCrawler {
 			state.status = 'failed';
 			state.error = error.message;
 			await state.save();
-			console.error('全量爬取项目任务失败.', currentPage, error);
+			console.error('全量爬取项目任务失败.', error.message);
 			throw error;
 		} finally {
 			// pageInstance && pageInstance?.close?.();
