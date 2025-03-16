@@ -118,7 +118,7 @@ class FundraisingCrawler extends BaseCrawler {
 			});
 			
 			console.log('爬取完毕, 得到', fundraisingData.length);
-			if (!fundraisingData || !fundraisingData.length) {
+			if (!fundraisingData || !fundraisingData.length || fundraisingData.length <= 1) {
 				throw new Error('本次爬取页面没有找到数据');
 			}
 			return fundraisingData.map(item => ({
@@ -131,7 +131,7 @@ class FundraisingCrawler extends BaseCrawler {
 			}));
 			
 		} catch (error) {
-			console.error(`Error crawling page ${pageNum}:`, error);
+			console.error(`Error crawling page ${pageNum}:`, error?.message);
 			throw error;
 		}
 	}
@@ -156,16 +156,21 @@ class FundraisingCrawler extends BaseCrawler {
 				// 	throw new Error('pageInstance not found');
 				// }
 				console.log(`开始爬取第 ${currentPage} 页的机构数据`);
-				
-				const data = await retry(
-					async () => {
-						return await this.crawlPage(currentPage);
-					},
-					{
-						retries: 3,
-						minTimeout: 1000,
-					}
-				);
+				let data = [];
+				try {
+					data = await retry(
+						async () => {
+							return await this.crawlPage(currentPage);
+						},
+						{
+							retries: 3,
+							minTimeout: 1000,
+						}
+					);
+				} catch (err) {
+					console.log('爬取第 ' + currentPage + ' 页失败');
+					data = [];
+				}
 				
 				if ((!data || (data || [])?.length === 0) && currentPage >= 278) {
 					hasMoreData = false;
