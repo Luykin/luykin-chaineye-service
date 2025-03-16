@@ -250,7 +250,7 @@ router.get('/search/legacy', async (req, res) => {
 		}
 		
 		const sanitizedKeyword = keyword.trim();
-		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503161042`;
+		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503161055`;
 		let cachedData;
 		
 		try {
@@ -281,6 +281,8 @@ router.get('/search/legacy', async (req, res) => {
 				{
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsReceived',
+					// 正确的作用域
+					required: false, // 避免 INNER JOIN 过滤掉主项目
 					where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
 					attributes: ['round', 'lead', 'amount', 'date', 'formattedAmount'],
 					include: [
@@ -294,6 +296,8 @@ router.get('/search/legacy', async (req, res) => {
 				{
 					model: Fundraising.InvestmentRelationships,
 					as: 'investmentsGiven',
+					// 正确的作用域
+					required: false, // 避免 INNER JOIN 过滤掉主项目
 					where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
 					attributes: ['round', 'lead', 'amount', 'date', 'formattedAmount'],
 					include: [
