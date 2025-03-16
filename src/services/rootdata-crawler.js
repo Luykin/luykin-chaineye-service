@@ -21,8 +21,8 @@ class FundraisingCrawler extends BaseCrawler {
 	 * **/
 	async crawlPage(pageNum) {
 		try {
-			const { page: pageInstance, proxy } = await this.initProxyBrowserAndPage('japan');
-			console.log(proxy, '开始爬取', pageNum, '的数据');
+			const { page: pageInstance } = await this.initBrowserAndPage();
+			console.log('开始爬取', pageNum, '的数据');
 			if (!pageInstance || pageInstance.isClosed()) {
 				throw new Error('pageInstance not found');
 			}

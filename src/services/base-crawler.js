@@ -3,14 +3,14 @@ const TelegramBot = require('node-telegram-bot-api');
 const _devTgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
 const _proTgToken = '7615998524:AAFLD25mHIeKKsW4ZJt2rmqY-AFWmwu1J6E';
 const _devTgGroupChatIdList = [{
-	group_id: "-1002198757776",
+	group_id: '-1002198757776',
 	message_thread_id: 2,
-	name: "CH Test alert"
+	name: 'CH Test alert'
 }];
 const _proTgGroupChatIdList = [{
-	group_id: "-1001580837317",
+	group_id: '-1001580837317',
 	message_thread_id: 69255,
-	name: "CryptoHunt Pro - News"
+	name: 'CryptoHunt Pro - News'
 }];
 /** 新加坡节点 **/
 const ip1 = [
@@ -170,9 +170,28 @@ class BaseCrawler {
 		});
 	}
 	
+	async #initBrowser() {
+		return await puppeteer.launch({
+			headless: 'new',
+			args: [
+				'--no-sandbox',
+				'--disable-setuid-sandbox',
+			],
+		});
+	}
+	
 	async #initPageWithProxy(browser, proxy) {
 		const page = await browser.newPage();
 		await page.authenticate({ username: proxy.username, password: proxy.password });
+		const userAgent = this.#getRandomUserAgent();
+		await page.setUserAgent(userAgent);
+		await page.setExtraHTTPHeaders({ 'Accept-Encoding': 'gzip' });
+		await page.setCacheEnabled(false);
+		return page;
+	}
+	
+	async #initPage(browser) {
+		const page = await browser.newPage();
 		const userAgent = this.#getRandomUserAgent();
 		await page.setUserAgent(userAgent);
 		await page.setExtraHTTPHeaders({ 'Accept-Encoding': 'gzip' });
@@ -189,6 +208,12 @@ class BaseCrawler {
 		return { browser, page, proxy };
 	}
 	
+	async initBrowserAndPage() {
+		const browser = await this.#initBrowser();
+		const page = await this.#initPage(browser);
+		return { browser, page };
+	}
+	
 	// DEV 测试 发送消息到 Telegram 群组
 	static async sendMessageToGroupDev(message) {
 		await BaseCrawler.#sendMessageToGroup('dev', message);
@@ -198,6 +223,7 @@ class BaseCrawler {
 	static async sendMessageToGroupPro(message) {
 		await BaseCrawler.#sendMessageToGroup('pro', message);
 	};
+	
 	// 发送消息到所有环境
 	static async sendMessageToGroupAllEnv(message) {
 		return Promise.all([BaseCrawler.#sendMessageToGroup('pro', message), BaseCrawler.#sendMessageToGroup('dev', message)]);
