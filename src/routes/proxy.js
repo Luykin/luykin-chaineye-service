@@ -10,7 +10,7 @@ const CACHE_TTL = 60 * 60; // 缓存时间（秒）
 const CACHE_MAX_SIZE = 1024 * 1024; // 单条缓存最大体积（1MB）
 
 // 生成MD5哈希作为缓存键
-const getCacheKey = (url) => crypto.createHash('md5').update(`${url}_20250316`).digest('hex');
+const getCacheKey = (url) => crypto.createHash('md5').update(`${url}_202503162029`).digest('hex');
 
 router.get('/', async (req, res) => {
 	const { url: encodedUrl } = req.query;
