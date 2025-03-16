@@ -1,10 +1,10 @@
-const puppeteer = require('puppeteer');
+// const puppeteer = require('puppeteer');
 const retry = require('async-retry');
 const { NewCrawlState, Fundraising, C_STATE_TYPE } = require('../models/sqlite-start');
 const { v4: uuidv4 } = require('uuid');
 const { Op, literal } = require('sequelize');
 const BaseCrawler = require('./base-crawler');
-const sequelize = require('sequelize');
+// const sequelize = require('sequelize');
 const baseRootDataURL = 'https://www.rootdata.com';
 
 class FundraisingCrawler extends BaseCrawler {
@@ -32,7 +32,6 @@ class FundraisingCrawler extends BaseCrawler {
 			});
 			// 确保主容器加载完成
 			await pageInstance.waitForSelector('.main_container', { timeout: 10000 });
-			
 			// 定位分页输入框并输入页码
 			const inputSelector = 'div.el-input.el-pagination__editor.is-in-pagination input';
 			await pageInstance.waitForSelector(inputSelector, { timeout: 10000 });
@@ -42,28 +41,52 @@ class FundraisingCrawler extends BaseCrawler {
 			await pageInstance.keyboard.press('Backspace');
 			await input.type(String(pageNum), { delay: 300 }); // 增加输入延迟提高稳定性
 			await pageInstance.keyboard.press('Enter');
-			await new Promise((resolve) => setTimeout(resolve, 2000));
-			// 精确等待目标POST请求完成
-			const targetUrl = 'https://www.rootdata.com/pc/lang/data/sc_fac_list_page';
-			const responsePromise = pageInstance.waitForResponse(
-				response =>
-					response.url() === targetUrl &&
-					response.status() === 200 &&
-					response.request().method() === 'POST',
-				{ timeout: 20000 }
-			);
+			await pageInstance.waitForTimeout(500);
 			
-			// 同时等待网络空闲作为备用方案
-			const networkIdlePromise = pageInstance.waitForNetworkIdle({
-				timeout: 20000,
-				idleTime: 500
-			});
+			// 自定义轮询函数（每300ms检查一次，最多60秒）
+			async function waitForLoadingComplete() {
+				const startTime = Date.now();
+				const timeout = 60000; // 60秒超时
+				const interval = 1000; // 1s检查间隔
+				
+				return new Promise((resolve, reject) => {
+					const check = async () => {
+						try {
+							// 检查DOM状态
+							const result = await pageInstance.evaluate(() => {
+								const container = document.querySelector(
+									'.watermusk_center.table-compat-sort.table-compat-sticky.table-responsive'
+								);
+								return !container?.classList.contains('el-loading-parent--relative');
+							});
+							
+							console.log('轮训查看DOM状态', result);
+							if (result) {
+								clearInterval(timer);
+								resolve();
+							} else if (Date.now() - startTime > timeout) {
+								clearInterval(timer);
+								reject(new Error('轮询超时：加载状态未消失'));
+							}
+						} catch (error) {
+							clearInterval(timer);
+							reject(error);
+						}
+					};
+					
+					// 启动轮询
+					const timer = setInterval(check, interval);
+					check(); // 立即首次检查
+				});
+			}
 			
-			// 使用Promise.race实现双重验证
-			await Promise.race([
-				responsePromise,
-				networkIdlePromise
-			]);
+			try {
+				//等待DOM加载状态消失（el-loading-parent--relative被移除）
+				await waitForLoadingComplete();
+			} catch (error) {
+				console.log('精确等待失败:', error);
+				await pageInstance.waitForTimeout(10000);
+			}
 			
 			// 检查空数据情况
 			const isEmpty = await pageInstance.evaluate(() => !!document.querySelector('tr.b-table-empty-row'));
@@ -140,7 +163,7 @@ class FundraisingCrawler extends BaseCrawler {
 					}
 				);
 				
-				if (data?.length === 0) {
+				if (data?.length === 0 && currentPage >= 278) {
 					hasMoreData = false;
 					continue;
 				}
@@ -168,10 +191,12 @@ class FundraisingCrawler extends BaseCrawler {
 			
 			state.status = 'completed';
 			await state.save();
+			console.log('全量爬取项目任务完成，Crawling completed.');
 		} catch (error) {
 			state.status = 'failed';
 			state.error = error.message;
 			await state.save();
+			console.error('全量爬取项目任务失败.', currentPage, error);
 			throw error;
 		} finally {
 			pageInstance && pageInstance?.close?.();
