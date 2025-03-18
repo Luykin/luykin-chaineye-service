@@ -46,8 +46,8 @@ class StatisticsCrawler extends BaseCrawler {
 		};
 		try {
 			(async () => {
-				/** 每1分半钟 更新一次数据库 **/
-				if (+new Date() > this.updateDatabaseTime + 1000 * 90) {
+				/** 每三分钟 更新一次数据库 **/
+				if (+new Date() > this.updateDatabaseTime + 1000 * 180) {
 					this.updateDatabaseTime = +new Date();
 					await NewsStatistics.create({
 						key: key,
