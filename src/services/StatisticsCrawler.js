@@ -50,7 +50,7 @@ class StatisticsCrawler extends BaseCrawler {
 		let isBanned = false;
 		/**
 		 * 十次都失败的ip，从ip里面拿掉，仅限于这个实例*/
-		if (_totalCount >= 10 && _failedCount === _totalCount) {
+		if (_totalCount >= 5 && _failedCount === _totalCount) {
 			this.banIp(ip);
 			isBanned = true;
 		}
