@@ -40,7 +40,7 @@ class StatisticsCrawler extends BaseCrawler {
 				'failedCrawlCount': (orgObj?.['failedCrawlCount'] || 0) + Number(!isSuccess),
 				'failedErrorAry': [
 					...(orgObj?.['failedErrorAry'] || []),
-					...(error ? error : {})
+					...(error ? [error] : [])
 				].slice(-10),
 			}
 		};
