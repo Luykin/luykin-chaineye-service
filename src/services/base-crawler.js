@@ -78,19 +78,6 @@ class BaseCrawler {
 		return BaseCrawler.#proTgBotInstance;
 	}
 	
-	async initBrowser() {
-		if (!this.browser) {
-			console.log('初始化浏览器...');
-			this.browser = await puppeteer.launch({
-				headless: 'new',
-				args: [
-					'--no-sandbox',
-					'--disable-setuid-sandbox'
-				]
-			});
-		}
-	}
-	
 	async forceClose() {
 		try {
 			await this.browser?.close?.();
@@ -100,30 +87,6 @@ class BaseCrawler {
 			console.error('Error closing browser:', err);
 		}
 	}
-	
-	async safeInitPage(key) {
-		if (!key) throw new Error('safeInitPage 没有填写key');
-		await this.initBrowser();
-		if (this[key] && this[key]?.close) {
-			try {
-				await this[key]?.close();
-				this[key] = null;
-			} catch {
-				this[key] = null;
-			}
-		}
-		console.log(`安全的初始化浏览器网页${key}, 请等待...`);
-		this[key] = await this.browser.newPage();
-		await this[key].setExtraHTTPHeaders({
-			'Accept-Encoding': 'gzip',
-			'Accept-Language': 'en;q=1.0',  // 设置英文优先
-		});
-		const userAgent = this.#getRandomUserAgent();
-		await this[key].setUserAgent(userAgent);
-		await this[key].setCacheEnabled(false);
-		return this[key];
-	}
-	
 	#getRandomUserAgent() {
 		const majorVersion = Math.floor(Math.random() * 20) + 90;
 		const minorVersion = Math.floor(Math.random() * 3000) + 1000;
