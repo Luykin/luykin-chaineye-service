@@ -47,9 +47,14 @@ class StatisticsCrawler extends BaseCrawler {
 		try {
 			(async () => {
 				/** 每五分钟 更新一次数据库 **/
-				if (+new Date() > this.updateDatabaseTime + 1000 * 300) {
+				if (+new Date() > this.updateDatabaseTime + 1000 * 180) {
 					this.updateDatabaseTime = +new Date();
-					await NewsStatistics.create({
+					
+					// 检查数据库中是否已存在该 key 的记录
+					const existingRecord = await NewsStatistics.findOne({ where: { key } });
+					
+					// 构造要保存的数据
+					const dataToSave = {
 						key: key,
 						ip: ip,
 						mainInfo: this.statisticalObj?.[key] || {},
@@ -57,7 +62,16 @@ class StatisticsCrawler extends BaseCrawler {
 							'successRate': (this.statisticalObj?.[key]?.['successCrawlCount'] || 0) / (this.statisticalObj?.[key]?.['totalCrawlCount'] || 0),
 						},
 						timestamp: String(+new Date()),
-					});
+					};
+					
+					if (existingRecord) {
+						// 如果记录已存在，则更新记录
+						await NewsStatistics.update(dataToSave, { where: { key } });
+					} else {
+						// 如果记录不存在，则创建新记录
+						await NewsStatistics.create(dataToSave);
+					}
+					
 					// console.log('statisticsCrawler report', updateItem)
 				}
 			})();
