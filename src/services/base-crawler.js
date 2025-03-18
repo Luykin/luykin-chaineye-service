@@ -60,6 +60,18 @@ class BaseCrawler {
 		this.proxyIndex = 0; // 当前代理索引
 	}
 	
+	/**
+	 * 从proxies删除某个ip*/
+	banIp(oneIp) {
+		const index = this.proxies.findIndex(proxy => proxy.ip === oneIp);
+		if (index !== -1) {
+			this.proxies.splice(index, 1);
+			console.log(`已ban掉IP: ${oneIp}`);
+		} else {
+			console.log(`未找到IP: ${oneIp}`);
+		}
+	}
+	
 	// dev测试机器人实例
 	static #getDevTgBotInstance() {
 		if (!BaseCrawler.#devTgBotInstance) {
@@ -87,6 +99,7 @@ class BaseCrawler {
 			console.error('Error closing browser:', err);
 		}
 	}
+	
 	#getRandomUserAgent() {
 		const majorVersion = Math.floor(Math.random() * 20) + 90;
 		const minorVersion = Math.floor(Math.random() * 3000) + 1000;
@@ -114,6 +127,9 @@ class BaseCrawler {
 			proxiesToUse = ip3;
 		} else if (region === 'taiwan') {
 			proxiesToUse = ip4;
+		}
+		if (!Array.isArray(proxiesToUse) || proxiesToUse.length === 0) {
+			throw new Error('No proxies available.');
 		}
 		
 		// 获取随机代理

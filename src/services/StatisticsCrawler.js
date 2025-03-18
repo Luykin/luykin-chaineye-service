@@ -32,18 +32,28 @@ class StatisticsCrawler extends BaseCrawler {
 			return;
 		}
 		const orgObj = this.statisticalObj?.[key] || {};
+		const _totalCount = Number(orgObj?.['totalCrawlCount'] || 0);
+		const _successCount = Number(orgObj?.['successCrawlCount'] || 0);
+		const _failedCount = Number(orgObj?.['failedCrawlCount'] || 0);
 		this.statisticalObj[key] = {
 			...orgObj,
 			...{
-				'totalCrawlCount': (orgObj?.['totalCrawlCount'] || 0) + 1,
-				'successCrawlCount': (orgObj?.['successCrawlCount'] || 0) + Number(isSuccess),
-				'failedCrawlCount': (orgObj?.['failedCrawlCount'] || 0) + Number(!isSuccess),
+				'totalCrawlCount': _totalCount + 1,
+				'successCrawlCount': _successCount + Number(isSuccess),
+				'failedCrawlCount': _failedCount + Number(!isSuccess),
 				'failedErrorAry': [
 					...(orgObj?.['failedErrorAry'] || []),
 					...(error ? [error] : [])
 				].slice(-10),
 			}
 		};
+		let isBanned = false;
+		/**
+		 * 十次都失败的ip，从ip里面拿掉，仅限于这个实例*/
+		if (_totalCount >= 10 && _successCount === _totalCount) {
+			this.banIp(ip);
+			isBanned = true;
+		}
 		try {
 			(async () => {
 				/** 每180秒 更新一次数据库 **/
@@ -59,6 +69,7 @@ class StatisticsCrawler extends BaseCrawler {
 						ip: ip,
 						mainInfo: this.statisticalObj?.[key] || {},
 						moreInfo: {
+							isBanned,
 							'successRate': (this.statisticalObj?.[key]?.['successCrawlCount'] || 0) / (this.statisticalObj?.[key]?.['totalCrawlCount'] || 0),
 						},
 						timestamp: String(+new Date()),
