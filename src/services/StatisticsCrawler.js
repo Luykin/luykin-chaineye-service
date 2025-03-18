@@ -53,7 +53,7 @@ class StatisticsCrawler extends BaseCrawler {
 						key: key,
 						ip: ip,
 						mainInfo: this.statisticalObj?.[key] || {},
-						otherInfo: {
+						moreInfo: {
 							'successRate': (this.statisticalObj?.[key]?.['successCrawlCount'] || 0) / (this.statisticalObj?.[key]?.['totalCrawlCount'] || 0),
 						},
 						timestamp: String(+new Date()),
