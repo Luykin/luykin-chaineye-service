@@ -85,7 +85,6 @@ class CrawlerScheduler {
 	 * 包含每日爬取前两页的项目数据，以及爬取详情数据
 	 * **/
 	async startRootDataCrawl() {
-		await rootDataCrawler.forceClose();
 		await rootDataCrawler.quickUpdate();
 		await rootDataCrawler.detailsCrawl();
 		await rootDataCrawler.subDetailsCrawl();

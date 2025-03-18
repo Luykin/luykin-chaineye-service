@@ -8,8 +8,6 @@ const baseRootDataURL = 'https://www.rootdata.com';
 class FundraisingCrawler extends BaseCrawler {
 	constructor() {
 		super();
-		this.detailPage = null; // 用于爬取列表项目的详情数据
-		this.socialPage = null; // 用于爬取详情的项目的社交媒体信息
 	}
 	/**
 	 * 【爬虫】每一页的操作，爬取项目列表页面，包括等待页面加载，输入页数量，数据构建等
