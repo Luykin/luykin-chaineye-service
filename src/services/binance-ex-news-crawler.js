@@ -1,5 +1,5 @@
-const BaseCrawler = require('./base-crawler');
 const { EXNews } = require('../models/sqlite-start');
+const StatisticsCrawler = require('./StatisticsCrawler');
 
 function formatBinanceLink(link) {
 	const baseUrl = 'https://www.binance.com';
@@ -36,7 +36,7 @@ function validateTitle(title) {
 	return false;
 }
 
-class BinanceExNewsCrawler extends BaseCrawler {
+class BinanceExNewsCrawler extends StatisticsCrawler {
 	constructor() {
 		super();
 	}
@@ -58,9 +58,9 @@ class BinanceExNewsCrawler extends BaseCrawler {
 			const { browser, page, proxy } = await this.initProxyBrowserAndPage();
 			
 			try {
-				await page.goto(url, { timeout: 15000 });
+				await page.goto(url, { timeout: 30000 });
 				// 等待 links 元素加载
-				await page.waitForSelector('#__APP', { timeout: 10000 });
+				await page.waitForSelector('#__APP', { timeout: 30000 });
 				let announcements = await page.evaluate((type) => {
 					const appWrapClass = '.bn-flex.flex-col.gap-6.px-4.py-6.tablet\\:px-10.tablet\\:py-6.rounded-xl.border.border-solid.border-Line';
 					const appWrap = document.querySelector(appWrapClass);
@@ -95,7 +95,7 @@ class BinanceExNewsCrawler extends BaseCrawler {
 					if (!exists && validateTitle(announcement.title)) {
 						await EXNews.create(announcement);
 						const msg = `${announcement.title} [🔗 Read More](${announcement.newsUrl})`;
-						await BaseCrawler.sendMessageToGroupAllEnv(msg);
+						await StatisticsCrawler.sendMessageToGroupAllEnv(msg);
 						console.log(`New announcement sent: ${announcement.title}`);
 						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
@@ -104,7 +104,20 @@ class BinanceExNewsCrawler extends BaseCrawler {
 						// }
 					}
 				}
+				const isSuccess = Boolean(announcements?.length);
+				this.report({
+					key: `BinanceExNewsCrawler-${proxy.ip}`,
+					ip: proxy.ip,
+					isSuccess,
+					error: isSuccess ? null : new Error(`BinanceExNewsCrawler error: 没拿到数据 ${proxy.ip}`),
+				});
 			} catch (error) {
+				this.report({
+					key: `BinanceExNewsCrawler-${proxy.ip}`,
+					ip: proxy.ip,
+					isSuccess: false,
+					error: error?.message,
+				});
 				console.error(`BinanceExNewsCrawler error:`, error?.message, proxy.ip, Date.now());
 			} finally {
 				await browser.close(); // 每次爬取完成后关闭浏览器

@@ -1,7 +1,7 @@
-const BaseCrawler = require('./base-crawler'); // 复用你现有的基础爬虫类
+const StatisticsCrawler = require('./StatisticsCrawler'); // 复用你现有的基础爬虫类
 const { EXNews } = require('../models/sqlite-start');
 
-class TwitterUserCrawler extends BaseCrawler {
+class TwitterUserCrawler extends StatisticsCrawler {
 	constructor() {
 		super();
 		this.authTokens = [
@@ -38,7 +38,7 @@ class TwitterUserCrawler extends BaseCrawler {
 		try {
 			await this.setAuthToken(page); // 设置登录状态
 			await page.goto(url, { timeout: 35000, waitUntil: 'networkidle2' });
-			await page.waitForSelector('article', { timeout: 10000 }); // 等待推文加载
+			await page.waitForSelector('article', { timeout: 30000 }); // 等待推文加载
 			
 			// 提取推文内容
 			const tweets = await page.evaluate(() => {
@@ -73,7 +73,7 @@ class TwitterUserCrawler extends BaseCrawler {
 					if (!exists) {
 						await EXNews.create(tweet);
 						const msg = `${tweet.text} [🔗 Read More](${tweet.newsUrl})`;
-						await BaseCrawler.sendMessageToGroupAllEnv(msg);
+						await StatisticsCrawler.sendMessageToGroupAllEnv(msg);
 						console.log(`New tweet saved: ${tweet.text}`);
 						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
@@ -81,13 +81,26 @@ class TwitterUserCrawler extends BaseCrawler {
 					}
 				}
 			}
+			const isSuccess = Boolean(tweets?.length);
+			this.report({
+				key: `CoinBase-TwitterUserCrawler-${proxy.ip}`,
+				ip: proxy.ip,
+				isSuccess,
+				error: isSuccess ? null : new Error(`CoinBase-TwitterUserCrawler error: 没拿到数据 ${proxy.ip}`),
+			});
 		} catch (error) {
+			this.report({
+				key: `CoinBase-TwitterUserCrawler-${proxy.ip}`,
+				ip: proxy.ip,
+				isSuccess: false,
+				error: error?.message,
+			});
 			console.error(`CoinBase-TwitterUserCrawler error:`, error?.message, proxy.ip, this.authTokens[this.currentTokenIndex], Date.now());
 		} finally {
 			await browser.close();
 			this.switchAuthToken();
 		}
-		await new Promise((resolve) => setTimeout(resolve, 10 * 1000)); // 10s间隔
+		await new Promise((resolve) => setTimeout(resolve, 15 * 1000)); // 15s间隔
 	}
 	
 	// 切换到下一个 auth_token

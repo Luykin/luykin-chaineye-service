@@ -12,6 +12,7 @@ const { setupPostgres } = require('./models/postgres-start');
 const fundraisingRoutes = require('./routes/fundraising');
 const cryptoRoutes = require('./routes/cryptohunt-tg');
 const proxyRoutes = require('./routes/proxy');
+const newsRoutes = require('./routes/ex-news');
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -96,6 +97,7 @@ app.use(express.json({ limit: '20kb' }));
 app.use('/api/fundraising', fundraisingRoutes);
 app.use('/api/crypto', cryptoRoutes);
 app.use('/api/proxy', proxyRoutes);
+app.use('/api/news', newsRoutes);
 
 // 错误处理中间件
 app.use((err, req, res, next) => {

@@ -1,4 +1,4 @@
-const BaseCrawler = require('./base-crawler');
+const StatisticsCrawler = require('./StatisticsCrawler');
 const { EXNews } = require('../models/sqlite-start');
 function formatOkxLink(link) {
 	const baseUrl = 'https://www.okx.com';
@@ -29,7 +29,7 @@ function validateTitle(title) {
 	return false;
 }
 
-class OkxExNewsCrawler extends BaseCrawler {
+class OkxExNewsCrawler extends StatisticsCrawler {
 	constructor() {
 		super();
 	}
@@ -50,9 +50,9 @@ class OkxExNewsCrawler extends BaseCrawler {
 			const { browser, page, proxy } = await this.initProxyBrowserAndPage('japan');
 			// console.log(`Crawling ${url} with proxy ${proxy.ip}`);
 			try {
-				await page.goto(url, { timeout: 15000 });
+				await page.goto(url, { timeout: 30000 });
 				// 等待 links 元素加载
-				await page.waitForSelector('.home-container', { timeout: 10000 });
+				await page.waitForSelector('.home-container', { timeout: 30000 });
 				let announcements = await page.evaluate((type) => {
 					const appWrap = document.querySelector("ul[class*='index_list__']");
 					if (!appWrap) return [];
@@ -86,14 +86,27 @@ class OkxExNewsCrawler extends BaseCrawler {
 					if (!exists && validateTitle(announcement.title)) {
 						await EXNews.create(announcement);
 						const msg = `${announcement.title} [🔗 Read More](${announcement.newsUrl})`;
-						await BaseCrawler.sendMessageToGroupAllEnv(msg);
+						await StatisticsCrawler.sendMessageToGroupAllEnv(msg);
 						console.log(`New announcement sent: ${announcement.title}`);
 						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
 						// console.log(`Announcement already exists: ${announcement.title}`);
 					}
 				}
+				const isSuccess = Boolean(announcements?.length);
+				this.report({
+					key: `OkxExNewsCrawler-${proxy.ip}`,
+					ip: proxy.ip,
+					isSuccess,
+					error: isSuccess ? null : new Error(`OkxExNewsCrawler error: 没拿到数据 ${proxy.ip}`),
+				});
 			} catch (error) {
+				this.report({
+					key: `OkxExNewsCrawler-${proxy.ip}`,
+					ip: proxy.ip,
+					isSuccess: false,
+					error: error?.message,
+				});
 				console.error(`OkxExNewsCrawler error:`, error?.message, proxy.ip, Date.now());
 			} finally {
 				await browser.close(); // 每次爬取完成后关闭浏览器

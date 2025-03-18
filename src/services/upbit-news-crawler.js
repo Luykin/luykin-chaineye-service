@@ -1,7 +1,7 @@
-const BaseCrawler = require('./base-crawler');  // 确保继承 BaseCrawler
+const StatisticsCrawler = require('./StatisticsCrawler');  // 确保继承 StatisticsCrawler
 const { EXNews } = require('../models/sqlite-start');
 
-class UpbitExNewsCrawler extends BaseCrawler {
+class UpbitExNewsCrawler extends StatisticsCrawler {
 	constructor() {
 		super();
 	}
@@ -18,8 +18,8 @@ class UpbitExNewsCrawler extends BaseCrawler {
 			const { browser, page, proxy } = await this.initProxyBrowserAndPage();
 			
 			try {
-				await page.goto(url, { timeout: 20000 });
-				await page.waitForSelector('body', { timeout: 10000 });
+				await page.goto(url, { timeout: 30000 });
+				await page.waitForSelector('body', { timeout: 30000 });
 				
 				// 获取Upbit的公告数据
 				let announcements = await page.evaluate((type) => {
@@ -50,14 +50,27 @@ class UpbitExNewsCrawler extends BaseCrawler {
 					if (!exists) {
 						await EXNews.create(announcement);
 						const msg = `${announcement.title} [🔗 Read More](${announcement.newsUrl})`;
-						await BaseCrawler.sendMessageToGroupDev(msg);
+						await StatisticsCrawler.sendMessageToGroupDev(msg);
 						console.log(`New announcement sent: ${announcement.title}`);
 						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
 						// 忽略已经存在的公告
 					}
 				}
+				const isSuccess = Boolean(announcements?.length);
+				this.report({
+					key: `UpbitExNewsCrawler-${proxy.ip}`,
+					ip: proxy.ip,
+					isSuccess,
+					error: isSuccess ? null : new Error(`UpbitExNewsCrawler error: 没拿到数据 ${proxy.ip}`),
+				});
 			} catch (error) {
+				this.report({
+					key: `UpbitExNewsCrawler-${proxy.ip}`,
+					ip: proxy.ip,
+					isSuccess: false,
+					error: error?.message,
+				});
 				console.error(`UpbitExNewsCrawler error:`, error?.message, proxy.ip, Date.now());
 			} finally {
 				await browser.close(); // 每次爬取完成后关闭浏览器

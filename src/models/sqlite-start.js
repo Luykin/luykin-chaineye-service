@@ -2,6 +2,7 @@ const { Sequelize } = require('sequelize');
 const FundraisingModel = require('./fundraising');
 const NewCrawlStateModel = require('./new-crawl-state');
 const EXNewsModel = require('./ex-news');
+const NewsStatisticsModel = require('./news-statistics');
 const sqlite = new Sequelize({
 	dialect: 'sqlite',
 	storage: './database.sqlite',
@@ -11,6 +12,7 @@ const sqlite = new Sequelize({
 const Fundraising = FundraisingModel(sqlite);
 const NewCrawlState = NewCrawlStateModel(sqlite);
 const EXNews = EXNewsModel(sqlite);
+const NewsStatistics = NewsStatisticsModel(sqlite);
 /**用sqlite数据库 ======== end **/
 
 const C_STATE_TYPE = {
@@ -37,6 +39,7 @@ module.exports = {
 	EXNews,
 	Fundraising,
 	NewCrawlState,
+	NewsStatistics,
 	C_STATE_TYPE,
 	setupSqlite
 };
