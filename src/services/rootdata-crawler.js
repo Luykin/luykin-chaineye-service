@@ -1,27 +1,22 @@
-// const puppeteer = require('puppeteer');
 const retry = require('async-retry');
 const { NewCrawlState, Fundraising, C_STATE_TYPE } = require('../models/sqlite-start');
 const { v4: uuidv4 } = require('uuid');
 const { Op, literal } = require('sequelize');
 const BaseCrawler = require('./base-crawler');
-// const sequelize = require('sequelize');
 const baseRootDataURL = 'https://www.rootdata.com';
 
 class FundraisingCrawler extends BaseCrawler {
 	constructor() {
 		super();
-		this.listPage = null; // 用于爬取列表数据
 		this.detailPage = null; // 用于爬取列表项目的详情数据
 		this.socialPage = null; // 用于爬取详情的项目的社交媒体信息
-		// this.sparePage = null; // 闲置页面可能公用
 	}
-	
 	/**
-	 * 爬取指定页的机构列表数据
+	 * 【爬虫】每一页的操作，爬取项目列表页面，包括等待页面加载，输入页数量，数据构建等
 	 * **/
 	async crawlPage(pageNum) {
+		const { browser, page: pageInstance } = await this.initBrowserAndPage();
 		try {
-			const { page: pageInstance } = await this.initBrowserAndPage();
 			console.log('开始爬取', pageNum, '的数据');
 			if (!pageInstance || pageInstance.isClosed()) {
 				throw new Error('pageInstance not found');
@@ -51,10 +46,10 @@ class FundraisingCrawler extends BaseCrawler {
 					input.dispatchEvent(new Event(eventName, { bubbles: true }))
 				);
 			}, inputSelector, String(pageNum));
-
+			
 			// 步骤3：模拟回车键（双重保障）
 			await pageInstance.keyboard.press('Enter');
-
+			
 			// 步骤4：验证输入结果（关键！）
 			await pageInstance.waitForFunction(
 				(selector, expectedValue) => {
@@ -155,11 +150,90 @@ class FundraisingCrawler extends BaseCrawler {
 		} catch (error) {
 			console.error(`Error crawling page ${pageNum}:`, error?.message);
 			throw error;
+		} finally {
+			browser && await browser?.close();
 		}
 	}
 	
 	/**
-	 * 全量更新列表机构
+	 * 【爬虫】项目详情页的爬取逻辑，包括投资人，投资轮次，社交媒体等信息 */
+	async crawlDetails(crawlStateType, crawlQueryOptions, crawlType, filterFunction) {
+		const state = await NewCrawlState.findOne({ where: crawlStateType }) || await NewCrawlState.create(crawlStateType);
+		if (state && state.status === 'running') {
+			throw new Error(`${crawlType} crawl already in progress`);
+		}
+		try {
+			// console.log(`开始爬取【${crawlType}】项目详情数据`);
+			// 查询项目列表
+			let projectsToCrawl = await Fundraising.Project.findAll({
+				...crawlQueryOptions  // 使用展开运算符
+			});
+			// 应用层过滤
+			if (filterFunction && typeof filterFunction === 'function') {
+				projectsToCrawl = projectsToCrawl.filter(filterFunction);
+				console.log(`${crawlType} - 经过过滤后剩余 ${projectsToCrawl.length || 0} 项目待爬取`);
+			}
+			
+			state.status = 'running';
+			state.error = null;
+			state.lastUpdateTime = new Date();
+			state.otherInfo = {
+				total: projectsToCrawl.length,
+				filterFunction: typeof filterFunction === 'function'
+			};
+			await state.save();
+			
+			let remainingCount = projectsToCrawl.length;
+			let failedCount = 0;
+			for (const project of projectsToCrawl) {
+				const { browser, page: pageInstance } = await this.initBrowserAndPage();
+				try {
+					await retry(
+						async () => {
+							return await this.scrapeAndUpdateProjectDetails(project, pageInstance);
+						},
+						{
+							retries: 3,
+							minTimeout: 1000,
+						}
+					);
+				} catch (err) {
+					console.log(`${crawlType} - ${err}`, '详情抓取失败了,继续下一个');
+					failedCount++;
+					state.otherInfo = {
+						...(state.otherInfo || {}),
+						failed: failedCount
+					};
+				} finally {
+					browser && await browser?.close?.();
+				}
+				remainingCount--;
+				state.lastUpdateTime = new Date();
+				state.otherInfo = {
+					...(state.otherInfo || {}),
+					remaining: remainingCount,
+					projectLink: project?.projectLink,
+				};
+				await state.save();
+				await new Promise(resolve => setTimeout(resolve, 2000)); // 设置间隔
+			}
+			
+			// 完成爬取
+			state.lastUpdateTime = new Date();
+			state.status = 'completed';
+			await state.save();
+			
+		} catch (error) {
+			state.status = 'failed';
+			state.error = error.message;
+			await state.save();
+			throw error;
+		}
+	}
+	
+	/**
+	 * 【爬取类型：全量项目基础信息爬取】全量更新列表机构，包括页面的控制递增，
+	 * 状态控制
 	 * **/
 	async fullCrawl(startPage = 1) {
 		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.full }) || await NewCrawlState.create(C_STATE_TYPE.full);
@@ -230,13 +304,11 @@ class FundraisingCrawler extends BaseCrawler {
 			await state.save();
 			console.error('全量爬取项目任务失败.', error.message);
 			throw error;
-		} finally {
-			// pageInstance && pageInstance?.close?.();
 		}
 	}
 	
 	/**
-	 * 快速更新列表机构
+	 * 【爬取类型：第一页项目基础信息爬取】快速更新列表机构，每日更新第一页
 	 * **/
 	async quickUpdate() {
 		const state = await NewCrawlState.findOne({ where: C_STATE_TYPE.quick }) || await NewCrawlState.create(C_STATE_TYPE.quick);
@@ -299,107 +371,13 @@ class FundraisingCrawler extends BaseCrawler {
 			// pageInstance && pageInstance?.close?.();
 		}
 	}
-
-// 抽象的爬虫函数
-	async crawlDetails(crawlStateType, crawlQueryOptions, crawlType, filterFunction = null) {
-		const state = await NewCrawlState.findOne({ where: crawlStateType }) || await NewCrawlState.create(crawlStateType);
-		if (state && state.status === 'running') {
-			throw new Error(`${crawlType} crawl already in progress`);
-		}
-		let pageInstance = await this.safeInitPage(crawlType);
-		
-		try {
-			// console.log(`开始爬取【${crawlType}】项目详情数据`);
-			
-			if (!pageInstance || pageInstance?.isClosed?.()) {
-				throw new Error('Page instance not initialized');
-			}
-			
-			// 查询项目列表
-			let projectsToCrawl = await Fundraising.Project.findAll({
-				...crawlQueryOptions  // 使用展开运算符
-			});
-			// console.log(`${crawlType} - ${projectsToCrawl.length || 0} 项目待爬取`);
-			
-			// 应用层过滤
-			if (filterFunction && typeof filterFunction === 'function') {
-				projectsToCrawl = projectsToCrawl.filter(filterFunction);
-				console.log(`${crawlType} - 经过过滤后剩余 ${projectsToCrawl.length || 0} 项目待爬取`);
-			}
-			
-			state.status = 'running';
-			state.error = null;
-			state.lastUpdateTime = new Date();
-			state.otherInfo = {
-				total: projectsToCrawl.length,
-				filterFunction: typeof filterFunction === 'function'
-			};
-			await state.save();
-			
-			let remainingCount = projectsToCrawl.length;
-			let failedCount = 0;
-			let singlePageCumulative = 0; // 单个网页累计爬取， 用于重启
-			for (const project of projectsToCrawl) {
-				if (!pageInstance) {
-					throw new Error(`${crawlType}: Page instance not initialized`);
-				}
-				singlePageCumulative++;
-				if (singlePageCumulative >= 20) {
-					pageInstance = await this.safeInitPage(crawlType);
-					singlePageCumulative = 0;
-				}
-				try {
-					await retry(
-						async () => {
-							return await this.scrapeAndUpdateProjectDetails(project, pageInstance);
-						},
-						{
-							retries: 3,
-							minTimeout: 1000,
-						}
-					);
-				} catch (err) {
-					console.log(`${crawlType} - ${err}`, '详情抓取失败了,继续下一个');
-					failedCount++;
-					state.otherInfo = {
-						...(state.otherInfo || {}),
-						failed: failedCount
-					};
-				}
-				const openPages = await this.browser.pages();
-				remainingCount--;
-				state.lastUpdateTime = new Date();
-				state.otherInfo = {
-					...(state.otherInfo || {}),
-					remaining: remainingCount,
-					projectLink: project.projectLink,
-					openPages: openPages ? openPages?.length : 0,
-				};
-				await state.save();
-				await new Promise(resolve => setTimeout(resolve, 2000)); // 设置间隔
-			}
-			
-			// 完成爬取
-			state.lastUpdateTime = new Date();
-			state.status = 'completed';
-			await state.save();
-			
-		} catch (error) {
-			state.status = 'failed';
-			state.error = error.message;
-			await state.save();
-			throw error;
-		} finally {
-			console.log('crawlDetails finally: 关闭浏览器');
-			pageInstance && pageInstance?.close?.();
-		}
-	}
 	
-	// 爬取「isInitial true」的项目
+	/**
+	 * 【爬取类型：项目详情】更新2天前的详情页需要更新的项目
+	 * **/
 	async detailsCrawl() {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
-		// 计算 10 天前的时间戳
 		const daysAgo1 = now - 2.5 * 24 * 60 * 60 * 1000; // 2 天前的时间戳
 		// 计算 2 天前的时间戳
 		const daysAgo2 = now - 2 * 24 * 60 * 60 * 1000; // 1 天前的时间戳
@@ -445,7 +423,9 @@ class FundraisingCrawler extends BaseCrawler {
 		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, 'detailPage');
 	}
 	
-	/** 查漏补缺 **/
+	/**
+	 * 【爬取类型：项目详情】查漏补缺
+	 * **/
 	async detailsCrawlCheckMissing() {
 		// 获取当前时间的时间戳（毫秒）
 		const now = Date.now();
@@ -499,7 +479,9 @@ class FundraisingCrawler extends BaseCrawler {
 		await this.crawlDetails(C_STATE_TYPE.detail, crawlQueryOptions, 'detailPage');
 	}
 	
-	// 爬取「isInitial false」的项目
+	/**
+	 * 【爬取类型：二层子项目项目详情】子项目详情
+	 * **/
 	async subDetailsCrawl() {
 		const crawlQueryOptions = {
 			where: {
@@ -511,47 +493,6 @@ class FundraisingCrawler extends BaseCrawler {
 		};
 		await this.crawlDetails(C_STATE_TYPE.detail2, crawlQueryOptions, 'socialPage');
 	}
-	
-	// /**
-	//  * 修正错误数据,重新爬取详细页面
-	//  * **/
-	// async correctDetailed() {
-	// 	const crawlQueryOptions = {
-	// 		where: {
-	// 			description: { [Op.not]: null },
-	// 			projectLink: { [Op.like]: 'http%' }
-	// 		},
-	// 	};
-	// 	const stateSpare = await NewCrawlState.findOne({
-	// 		where: {
-	// 			...C_STATE_TYPE.spare,
-	// 		}
-	// 	});
-	// 	if (stateSpare) {
-	// 		await stateSpare.update({ status: 'idle', error: null });
-	// 	}
-	// 	await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, 'sparePage', filterMismatchedFunction);
-	// }
-	//
-	// /** 已经尝试失败的爬取 **/
-	// async failedReTryCrawl() {
-	// 	const crawlQueryOptions = {
-	// 		where: {
-	// 			detailFailuresNumber: { [Op.gt]: 3, [Op.lt]: 99 },
-	// 			isInitial: true,
-	// 			projectLink: { [Op.like]: 'http%' }
-	// 		},
-	// 	};
-	// 	const stateSpare = await NewCrawlState.findOne({
-	// 		where: {
-	// 			...C_STATE_TYPE.spare,
-	// 		}
-	// 	});
-	// 	if (stateSpare) {
-	// 		await stateSpare.update({ status: 'idle', error: null });
-	// 	}
-	// 	await this.crawlDetails(C_STATE_TYPE.spare, crawlQueryOptions, 'failedReTryCrawl');
-	// }
 	
 	async scrapeAndUpdateProjectDetails(project, _page) {
 		try {
@@ -898,18 +839,3 @@ function parseDate(dateStr) {
 	const timestamp = Date.parse(formattedDateStr);
 	return isNaN(timestamp) ? null : timestamp;
 }
-
-// // 过滤函数：优先从 projectLink 提取项目名称进行匹配，若无结果则使用 description 中的末尾名称
-// const filterMismatchedFunction = (project) => {
-// 	const projectNameEncoded = encodeURI(project.projectName).toLocaleLowerCase();
-// 	const projectNameEncoded2 = encodeURIComponent(project.projectName).toLocaleLowerCase();
-//
-// 	// 优先从 projectLink 中提取名称，支持特殊字符（如点、空格、冒号等）
-// 	const linkMatch = project.projectLink.match(/\/Projects\/detail\/([A-Za-z0-9.%: ]+)/);
-// 	let extractedName = linkMatch ? linkMatch[1].toLocaleLowerCase() : null;
-//
-// 	// 返回项目名称不一致的记录
-// 	return projectNameEncoded && extractedName &&
-// 		!extractedName.includes(projectNameEncoded) && !projectNameEncoded.includes(extractedName) &&
-// 		!extractedName.includes(projectNameEncoded2) && !projectNameEncoded2.includes(extractedName);
-// };
