@@ -40,14 +40,14 @@ class StatisticsCrawler extends BaseCrawler {
 				'failedCrawlCount': (orgObj?.['failedCrawlCount'] || 0) + Number(!isSuccess),
 				'failedErrorAry': [
 					...(orgObj?.['failedErrorAry'] || []),
-					error
+					...(error ? error : {})
 				].slice(-10),
 			}
 		};
 		try {
 			(async () => {
-				/** 每三分钟 更新一次数据库 **/
-				if (+new Date() > this.updateDatabaseTime + 1000 * 180) {
+				/** 每五分钟 更新一次数据库 **/
+				if (+new Date() > this.updateDatabaseTime + 1000 * 300) {
 					this.updateDatabaseTime = +new Date();
 					await NewsStatistics.create({
 						key: key,
