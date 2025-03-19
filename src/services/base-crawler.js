@@ -190,7 +190,8 @@ class BaseCrawler {
 	async initBrowserAndPage() {
 		const browser = await this.#initBrowser();
 		const page = await this.#initPage(browser);
-		return { browser, page };
+		const proxy = { ip: '127.0.0.1', port: 'none', 'username': 'none', 'password': 'nne' };
+		return { browser, page, proxy };
 	}
 	
 	// DEV 测试 发送消息到 Telegram 群组
