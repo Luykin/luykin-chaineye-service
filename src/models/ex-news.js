@@ -4,7 +4,7 @@ module.exports = (sequelize) => {
 	return sequelize.define('ExNews', {
 		type: {
 			type: DataTypes.ENUM('binance_airdrop', 'binance_api', 'binance_cryptocurrency', 'binance_listings',
-				'okx_api', 'okx_cryptocurrency', 'coinbase_support', 'upbit_announcement'),
+				'okx_api', 'okx_cryptocurrency', 'coinbase_support', 'upbit_announcement', 'truthsocial_trump'),
 			allowNull: false,
 		},
 		newsUrl: {

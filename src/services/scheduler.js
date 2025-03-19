@@ -4,6 +4,7 @@ const BinanceExNewsCrawler = require('./binance-ex-news-crawler');
 const OkxExNewsCrawler = require('./okx-ex-news-crawler');
 const CoinBaseTgNewsCrawler = require('./coinbase-tg-news-crawler');
 const UpbitExNewsCrawler = require('./upbit-news-crawler');
+const TruthsocialCrawler = require('./truthsocial-crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
 
 const BaseCrawler = require('./base-crawler');
@@ -25,7 +26,7 @@ class CrawlerScheduler {
 				console.error('Morning quick update failed:', error);
 			}
 		});
-
+		
 		// 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
 		this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
 			console.log('Starting evening quick update...');
@@ -54,6 +55,9 @@ class CrawlerScheduler {
 		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
 		/** 开始Upbit 公告 **/
 		this.startUpbitExNewsCrawler().then(r => r);
+		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		/** 开始Truthsocial 公告 **/
+		this.startTruthsocialCrawler().then(r => r);
 	}
 	
 	stopScheduler() {
@@ -116,6 +120,13 @@ class CrawlerScheduler {
 	 * **/
 	async startUpbitExNewsCrawler() {
 		await UpbitExNewsCrawler.startCrawling();
+	}
+	
+	/**
+	 * Truthsocial公告爬取
+	 * **/
+	async startTruthsocialCrawler() {
+		await TruthsocialCrawler.startCrawling();
 	}
 }
 
