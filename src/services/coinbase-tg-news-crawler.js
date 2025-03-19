@@ -75,7 +75,7 @@ class TwitterUserCrawler extends StatisticsCrawler {
 						const msg = `${tweet.text} [🔗 Read More](${tweet.newsUrl})`;
 						await StatisticsCrawler.sendMessageToGroupAllEnv(msg);
 						console.log(`New tweet saved: ${tweet.text}`);
-						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
+						// await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
 						console.log(`Tweet already exists: ${tweet.newsUrl}`);
 					}

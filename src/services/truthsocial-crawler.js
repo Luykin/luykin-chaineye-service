@@ -49,7 +49,6 @@ class TruthsocialCrawler extends StatisticsCrawler {
 						const msg = `${announcement.title} [🔗 Read More](${announcement.newsUrl})`;
 						await StatisticsCrawler.sendMessageToGroupDev(msg);
 						console.log(`New announcement sent: ${announcement.title}`);
-						await new Promise((resolve) => setTimeout(resolve, 60 * 1000)); // 爬取到东西，休息60秒
 					} else {
 						// 忽略已经存在的公告
 					}

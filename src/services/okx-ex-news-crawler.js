@@ -88,7 +88,7 @@ class OkxExNewsCrawler extends StatisticsCrawler {
 						const msg = `${announcement.title} [🔗 Read More](${announcement.newsUrl})`;
 						await StatisticsCrawler.sendMessageToGroupAllEnv(msg);
 						console.log(`New announcement sent: ${announcement.title}`);
-						await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
+						// await new Promise((resolve) => setTimeout(resolve, 30 * 1000)); // 爬取到东西，休息30秒
 					} else {
 						// console.log(`Announcement already exists: ${announcement.title}`);
 					}
