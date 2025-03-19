@@ -53,16 +53,14 @@ class BinanceExNewsCrawler extends StatisticsCrawler {
 				type: 'binance_cryptocurrency',
 			},
 		];
-		
 		for (const { url, type } of tabUrls) {
 			const { browser, page, proxy } = await this.initProxyBrowserAndPage();
-			
 			try {
 				await page.goto(url, { timeout: 30000 });
 				// 等待 links 元素加载
-				await page.waitForSelector('#__APP', { timeout: 30000 });
+				await page.waitForSelector('.bn-flex.flex-col.gap-6.px-4.py-6', { timeout: 30000 });
 				let announcements = await page.evaluate((type) => {
-					const appWrapClass = '.bn-flex.flex-col.gap-6.px-4.py-6.tablet\\:px-10.tablet\\:py-6.rounded-xl.border.border-solid.border-Line';
+					const appWrapClass = '.bn-flex.flex-col.gap-6.px-4.py-6';
 					const appWrap = document.querySelector(appWrapClass);
 					if (!appWrap) return [];
 					
@@ -123,7 +121,7 @@ class BinanceExNewsCrawler extends StatisticsCrawler {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
 			
-			await new Promise((resolve) => setTimeout(resolve, 500)); // 延时500ms
+			await new Promise((resolve) => setTimeout(resolve, 800)); // 延时500ms
 		}
 	}
 	

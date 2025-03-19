@@ -1,5 +1,16 @@
 const BaseCrawler = require('./base-crawler');
 const { NewsStatistics } = require('../models/sqlite-start');
+/**
+ * 把错误对象转换为字符串
+ * @param value 错误对象
+ * @returns
+ */
+const formatErrorString = (value) => {
+	if (value instanceof Error) {
+		return JSON.stringify(value, Object.getOwnPropertyNames(value));
+	}
+	return JSON.stringify(value);
+};
 
 class StatisticsCrawler extends BaseCrawler {
 	
@@ -43,7 +54,7 @@ class StatisticsCrawler extends BaseCrawler {
 				'failedCrawlCount': _failedCount + Number(!isSuccess),
 				'failedErrorAry': [
 					...(orgObj?.['failedErrorAry'] || []),
-					...(error ? [error] : [])
+					...(error ? [formatErrorString(error)] : [])
 				].slice(-10),
 			}
 		};
