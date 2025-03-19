@@ -15,7 +15,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 		];
 		
 		for (const { url, type } of tabUrls) {
-			const { browser, page, proxy } = await this.initBrowserAndPage();
+			const { browser, page, proxy } = await this.initProxyBrowserAndPage();
 			
 			try {
 				await page.goto(url, { timeout: 30000 });
@@ -53,6 +53,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 						// 忽略已经存在的公告
 					}
 				}
+				console.log(`TruthsocialCrawler crawlNews done: ${announcements?.length}`, JSON.stringify(announcements));
 				const isSuccess = Boolean(announcements?.length);
 				this.report({
 					key: `TruthsocialCrawler-${proxy.ip}`,
