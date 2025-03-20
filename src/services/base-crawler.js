@@ -1,4 +1,11 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-extra');
+const Stealth = require('puppeteer-extra-plugin-stealth');
+const AnonymizeUA = require('puppeteer-extra-plugin-anonymize-ua');
+// const FontSize = require('puppeteer-extra-plugin-font-size');
+
+// 加载顺序建议：基础插件 -> 功能增强插件
+puppeteer.use(Stealth());
+puppeteer.use(AnonymizeUA());
 const TelegramBot = require('node-telegram-bot-api');
 const _devTgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
 const _proTgToken = '7615998524:AAFLD25mHIeKKsW4ZJt2rmqY-AFWmwu1J6E';
@@ -100,22 +107,6 @@ class BaseCrawler {
 		}
 	}
 	
-	#getRandomUserAgent() {
-		const majorVersion = Math.floor(Math.random() * 20) + 90;
-		const minorVersion = Math.floor(Math.random() * 3000) + 1000;
-		const patchVersion = Math.floor(Math.random() * 100);
-		
-		const platforms = [
-			`(Windows NT ${Math.floor(Math.random() * 5) + 10}.0; Win64; x64)`,
-			`(Macintosh; Intel Mac OS X 10_${Math.floor(Math.random() * 4) + 12}_${Math.floor(Math.random() * 10)})`,
-			`(X11; Linux x86_64)`,
-			`(Linux; Android ${Math.floor(Math.random() * 3) + 9}; Pixel ${Math.floor(Math.random() * 6) + 3})`,
-			`(iPhone; CPU iPhone OS ${Math.floor(Math.random() * 4) + 13}_0 like Mac OS X)`,
-		];
-		const platform = platforms[Math.floor(Math.random() * platforms.length)];
-		return `Mozilla/5.0 ${platform} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${majorVersion}.${minorVersion}.${patchVersion} Safari/537.36`;
-	}
-	
 	getRandomProxy(region) {
 		// 根据 region 参数过滤对应地区的代理 IP
 		let proxiesToUse = this.proxies;
@@ -162,8 +153,6 @@ class BaseCrawler {
 	async #initPageWithProxy(browser, proxy) {
 		const page = await browser.newPage();
 		await page.authenticate({ username: proxy.username, password: proxy.password });
-		const userAgent = this.#getRandomUserAgent();
-		await page.setUserAgent(userAgent);
 		await page.setExtraHTTPHeaders({ 'Accept-Encoding': 'gzip' });
 		await page.setCacheEnabled(false);
 		return page;
@@ -171,8 +160,6 @@ class BaseCrawler {
 	
 	async #initPage(browser) {
 		const page = await browser.newPage();
-		const userAgent = this.#getRandomUserAgent();
-		await page.setUserAgent(userAgent);
 		await page.setExtraHTTPHeaders({ 'Accept-Encoding': 'gzip' });
 		await page.setCacheEnabled(false);
 		return page;
