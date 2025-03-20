@@ -9,6 +9,7 @@ class FundraisingCrawler extends BaseCrawler {
 	constructor() {
 		super();
 	}
+	
 	/**
 	 * 【爬虫】每一页的操作，爬取项目列表页面，包括等待页面加载，输入页数量，数据构建等
 	 * **/
@@ -58,7 +59,7 @@ class FundraisingCrawler extends BaseCrawler {
 				inputSelector,
 				String(pageNum)
 			);
-			await pageInstance.waitForTimeout(500);
+			await new Promise(resolve => setTimeout(resolve, 500)); // 设置间隔
 			
 			// 自定义轮询函数（每300ms检查一次，最多60秒）
 			async function waitForLoadingComplete() {
@@ -102,7 +103,7 @@ class FundraisingCrawler extends BaseCrawler {
 				await waitForLoadingComplete();
 			} catch (error) {
 				console.log('精确等待失败:', error);
-				await pageInstance.waitForTimeout(10000);
+				await new Promise(resolve => setTimeout(resolve, 10000));
 			}
 			
 			// // 检查空数据情况
@@ -578,7 +579,7 @@ class FundraisingCrawler extends BaseCrawler {
 				}
 			});
 		});
-		await _page.waitForTimeout(1000);
+		await new Promise(resolve => setTimeout(resolve, 1000)); // 设置间隔
 	}
 
 // 抓取初始投资者数据（无轮次信息）
@@ -605,7 +606,7 @@ class FundraisingCrawler extends BaseCrawler {
 				}
 			});
 		});
-		await _page.waitForTimeout(1000);
+		await new Promise(resolve => setTimeout(resolve, 1000)); // 设置间隔
 	}
 
 // 处理轮次数据
