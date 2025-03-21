@@ -41,7 +41,7 @@ class FundraisingCrawler extends BaseCrawler {
 				String(pageNum)
 			);
 			if (String(nowPage) !== String(pageNum)) {
-				console.log('页面BUG了，页面page对应不上');
+				console.log('页面BUG了，页面page对应不上', nowPage, pageNum);
 				// 步骤2：直接操作DOM清空并设置值（核心逻辑）
 				await pageInstance.evaluate((selector, newValue) => {
 					const input = document.querySelector(selector);
