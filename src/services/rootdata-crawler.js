@@ -330,16 +330,14 @@ class FundraisingCrawler extends BaseCrawler {
 			await state.save();
 			// Only crawl first 3 pages for quick updates
 			for (let page = 1; page <= 1; page++) {
-				// if (!pageInstance || pageInstance?.isClosed?.()) {
-				// 	throw new Error('quickUpdate: Page instance not initialized');
-				// }
 				const data = await this.crawlPage(page);
-				const existingLinks = await Fundraising.Project.findAll({
-					attributes: ['projectLink', 'isInitial', 'projectName'],
+				const existingProject = await Fundraising.Project.findAll({
+					// attributes: ['projectLink', 'isInitial', 'projectName'],
 					where: {
 						projectLink: data.map(item => item.projectLink)
 					}
-				}).then(projects => projects.map(project => project.projectLink));
+				});
+				const existingLinks = existingProject.map(project => project.projectLink)
 				const newData = data.filter(item => !existingLinks.includes(item.projectLink));
 				
 				if (newData.length > 0) {
@@ -356,11 +354,11 @@ class FundraisingCrawler extends BaseCrawler {
 					console.log('No new data found on page', page);
 				}
 				//除了更新项目本身，要去更新这一页的项目详情
-				const totalCount = existingLinks?.length;
+				const totalCount = existingProject?.length;
 				let sucUpdateCount = 0;
 				let failedUpdateCount = 0;
 				console.log(`第 ${page} 页的机构数据有${totalCount}个详情页数据还需要再爬取一遍`);
-				for (const project of existingLinks) {
+				for (const project of existingProject) {
 					if(!project?.isInitial || !project?.projectLink) {
 						console.log("非列表项目，或者链接不存在，跳过～");
 						failedUpdateCount++;
