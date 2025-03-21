@@ -31,6 +31,7 @@ class FundraisingCrawler extends BaseCrawler {
 			// 定位分页输入框并输入页码
 			const inputSelector = 'div.el-input.el-pagination__editor.is-in-pagination input';
 			await pageInstance.waitForSelector(inputSelector, { timeout: 10000 });
+			//TODO 这里需要优化，如果输入框输入了，但是页面没有更新，需要重新输入，否则会报错
 			const nowPage = await pageInstance.waitForFunction(
 				(selector, expectedValue) => {
 					const input = document.querySelector(selector);
