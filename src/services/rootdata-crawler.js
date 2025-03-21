@@ -356,10 +356,10 @@ class FundraisingCrawler extends BaseCrawler {
 					console.log('No new data found on page', page);
 				}
 				//除了更新项目本身，要去更新这一页的项目详情
-				const totalCount = data?.length;
+				const totalCount = existingLinks?.length;
 				let hadUpdateCount = 0;
 				console.log(`第 ${page} 页的机构数据有${totalCount}个详情页数据还需要再爬取一遍`);
-				for (const project of data) {
+				for (const project of existingLinks) {
 					const { browser, page: pageInstance } = await this.initBrowserAndPage();
 					try {
 						await retry(
