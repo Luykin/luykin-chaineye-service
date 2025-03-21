@@ -31,26 +31,7 @@ class FundraisingCrawler extends BaseCrawler {
 			// 定位分页输入框并输入页码
 			const inputSelector = 'div.el-input.el-pagination__editor.is-in-pagination input';
 			await pageInstance.waitForSelector(inputSelector, { timeout: 10000 });
-			// 步骤2：直接操作DOM清空并设置值（核心逻辑）
-			await pageInstance.evaluate((selector, newValue) => {
-				const input = document.querySelector(selector);
-				if (!input) throw new Error('输入框未找到');
-				
-				// 清空并设置新值
-				input.value = newValue;
-				
-				// 触发必要事件（兼容Vue/React/Angular）
-				const events = ['input', 'change', 'keydown', 'keyup'];
-				events.forEach(eventName =>
-					input.dispatchEvent(new Event(eventName, { bubbles: true }))
-				);
-			}, inputSelector, String(pageNum));
-			
-			// 步骤3：模拟回车键（双重保障）
-			await pageInstance.keyboard.press('Enter');
-			
-			// 步骤4：验证输入结果（关键！）
-			await pageInstance.waitForFunction(
+			const nowPage = await pageInstance.waitForFunction(
 				(selector, expectedValue) => {
 					const input = document.querySelector(selector);
 					return input && input.value === expectedValue;
@@ -59,59 +40,86 @@ class FundraisingCrawler extends BaseCrawler {
 				inputSelector,
 				String(pageNum)
 			);
-			await new Promise(resolve => setTimeout(resolve, 500)); // 设置间隔
-			
-			// 自定义轮询函数（每300ms检查一次，最多60秒）
-			async function waitForLoadingComplete() {
-				const startTime = Date.now();
-				const timeout = 60000; // 60秒超时
-				const interval = 1000; // 1s检查间隔
-				
-				return new Promise((resolve, reject) => {
-					const check = async () => {
-						try {
-							// 检查DOM状态
-							const result = await pageInstance.evaluate(() => {
-								const container = document.querySelector(
-									'.watermusk_center.table-compat-sort.table-compat-sticky.table-responsive'
-								);
-								return !container?.classList.contains('el-loading-parent--relative');
-							});
-							
-							console.log('轮训查看DOM状态', result);
-							if (result) {
-								clearInterval(timer);
-								resolve();
-							} else if (Date.now() - startTime > timeout) {
-								clearInterval(timer);
-								reject(new Error('轮询超时：加载状态未消失'));
-							}
-						} catch (error) {
-							clearInterval(timer);
-							reject(error);
-						}
-					};
+			if (String(nowPage) !== String(pageNum)) {
+				console.log('页面BUG了，页面page对应不上');
+				// 步骤2：直接操作DOM清空并设置值（核心逻辑）
+				await pageInstance.evaluate((selector, newValue) => {
+					const input = document.querySelector(selector);
+					if (!input) throw new Error('输入框未找到');
 					
-					// 启动轮询
-					const timer = setInterval(check, interval);
-					check(); // 立即首次检查
-				});
+					// 清空并设置新值
+					input.value = newValue;
+					
+					// 触发必要事件（兼容Vue/React/Angular）
+					const events = ['input', 'change', 'keydown', 'keyup'];
+					events.forEach(eventName =>
+						input.dispatchEvent(new Event(eventName, { bubbles: true }))
+					);
+				}, inputSelector, String(pageNum));
+				
+				// 步骤3：模拟回车键（双重保障）
+				await pageInstance.keyboard.press('Enter');
+				
+				// 步骤4：验证输入结果（关键！）
+				await pageInstance.waitForFunction(
+					(selector, expectedValue) => {
+						const input = document.querySelector(selector);
+						return input && input.value === expectedValue;
+					},
+					{ timeout: 3000 },
+					inputSelector,
+					String(pageNum)
+				);
+				await new Promise(resolve => setTimeout(resolve, 500)); // 设置间隔
+				
+				// 自定义轮询函数（每300ms检查一次，最多60秒）
+				async function waitForLoadingComplete() {
+					const startTime = Date.now();
+					const timeout = 60000; // 60秒超时
+					const interval = 1000; // 1s检查间隔
+					
+					return new Promise((resolve, reject) => {
+						const check = async () => {
+							try {
+								// 检查DOM状态
+								const result = await pageInstance.evaluate(() => {
+									const container = document.querySelector(
+										'.watermusk_center.table-compat-sort.table-compat-sticky.table-responsive'
+									);
+									return !container?.classList.contains('el-loading-parent--relative');
+								});
+								
+								console.log('轮训查看DOM状态', result);
+								if (result) {
+									clearInterval(timer);
+									resolve();
+								} else if (Date.now() - startTime > timeout) {
+									clearInterval(timer);
+									reject(new Error('轮询超时：加载状态未消失'));
+								}
+							} catch (error) {
+								clearInterval(timer);
+								reject(error);
+							}
+						};
+						
+						// 启动轮询
+						const timer = setInterval(check, interval);
+						check(); // 立即首次检查
+					});
+				}
+				
+				try {
+					//等待DOM加载状态消失（el-loading-parent--relative被移除）
+					await waitForLoadingComplete();
+				} catch (error) {
+					console.log('精确等待失败:', error);
+					await new Promise(resolve => setTimeout(resolve, 10000));
+				}
+			} else {
+				console.log('页数对应上了，等待会儿继续', pageNum);
+				await new Promise(resolve => setTimeout(resolve, 2000));
 			}
-			
-			try {
-				//等待DOM加载状态消失（el-loading-parent--relative被移除）
-				await waitForLoadingComplete();
-			} catch (error) {
-				console.log('精确等待失败:', error);
-				await new Promise(resolve => setTimeout(resolve, 10000));
-			}
-			
-			// // 检查空数据情况
-			// const isEmpty = await pageInstance.evaluate(() => !!document.querySelector('tr.b-table-empty-row'));
-			// if (isEmpty) {
-			// 	console.log('当前页面为空，返回空数组', pageNum);
-			// 	return [];
-			// }
 			
 			// 提取并格式化数据（保持原有逻辑不变）
 			const fundraisingData = await pageInstance.evaluate(async () => {
@@ -346,6 +354,34 @@ class FundraisingCrawler extends BaseCrawler {
 					updateNum = updateNum + newData.length;
 				} else {
 					console.log('No new data found on page', page);
+				}
+				//除了更新项目本身，要去更新这一页的项目详情
+				const totalCount = data?.length;
+				let hadUpdateCount = 0;
+				console.log(`第 ${page} 页的机构数据有${totalCount}个详情页数据还需要再爬取一遍`);
+				for (const project of data) {
+					const { browser, page: pageInstance } = await this.initBrowserAndPage();
+					try {
+						await retry(
+							async () => {
+								return await this.scrapeAndUpdateProjectDetails(project, pageInstance);
+							},
+							{
+								retries: 3,
+								minTimeout: 1000,
+							}
+						);
+					} catch (err) {
+						console.log('前两页更新逻辑：详情抓取失败了,继续下一个');
+					} finally {
+						hadUpdateCount++;
+						state.otherInfo = {
+							detailUpdateNum: hadUpdateCount
+						};
+						await state.save();
+						browser && await browser?.close?.();
+						await new Promise(resolve => setTimeout(resolve, 1000));
+					}
 				}
 				await new Promise(resolve => setTimeout(resolve, 1000));
 			}
