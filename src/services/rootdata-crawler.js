@@ -335,7 +335,7 @@ class FundraisingCrawler extends BaseCrawler {
 				// }
 				const data = await this.crawlPage(page);
 				const existingLinks = await Fundraising.Project.findAll({
-					// attributes: ['projectLink'],
+					attributes: ['projectLink', 'isInitial', 'projectName'],
 					where: {
 						projectLink: data.map(item => item.projectLink)
 					}
@@ -355,34 +355,42 @@ class FundraisingCrawler extends BaseCrawler {
 				} else {
 					console.log('No new data found on page', page);
 				}
-				// //除了更新项目本身，要去更新这一页的项目详情
-				// const totalCount = existingLinks?.length;
-				// let hadUpdateCount = 0;
-				// console.log(`第 ${page} 页的机构数据有${totalCount}个详情页数据还需要再爬取一遍`);
-				// for (const project of existingLinks) {
-				// 	const { browser, page: pageInstance } = await this.initBrowserAndPage();
-				// 	try {
-				// 		await retry(
-				// 			async () => {
-				// 				return await this.scrapeAndUpdateProjectDetails(project, pageInstance);
-				// 			},
-				// 			{
-				// 				retries: 3,
-				// 				minTimeout: 1000,
-				// 			}
-				// 		);
-				// 	} catch (err) {
-				// 		console.log('前两页更新逻辑：详情抓取失败了,继续下一个');
-				// 	} finally {
-				// 		hadUpdateCount++;
-				// 		state.otherInfo = {
-				// 			detailUpdateNum: hadUpdateCount
-				// 		};
-				// 		await state.save();
-				// 		browser && await browser?.close?.();
-				// 		await new Promise(resolve => setTimeout(resolve, 1000));
-				// 	}
-				// }
+				//除了更新项目本身，要去更新这一页的项目详情
+				const totalCount = existingLinks?.length;
+				let sucUpdateCount = 0;
+				let failedUpdateCount = 0;
+				console.log(`第 ${page} 页的机构数据有${totalCount}个详情页数据还需要再爬取一遍`);
+				for (const project of existingLinks) {
+					if(!project?.isInitial || !project?.projectLink) {
+						console.log("非列表项目，或者链接不存在，跳过～");
+						failedUpdateCount++;
+						continue;
+					}
+					const { browser, page: pageInstance } = await this.initBrowserAndPage();
+					try {
+						await retry(
+							async () => {
+								return await this.scrapeAndUpdateProjectDetails(project, pageInstance);
+							},
+							{
+								retries: 1,
+								minTimeout: 1000,
+							}
+						);
+						sucUpdateCount++;
+					} catch (err) {
+						failedUpdateCount++;
+						console.log('前两页更新逻辑：详情抓取失败了,继续下一个');
+					} finally {
+						browser && await browser?.close?.();
+						state.otherInfo = {
+							sucUpdateCount: sucUpdateCount,
+							failedUpdateCount: failedUpdateCount
+						};
+						await state.save();
+						await new Promise(resolve => setTimeout(resolve, 1000));
+					}
+				}
 				await new Promise(resolve => setTimeout(resolve, 1000));
 			}
 			
