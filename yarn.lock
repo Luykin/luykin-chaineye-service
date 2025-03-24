@@ -2904,14 +2904,6 @@ puppeteer-extra-plugin-anonymize-ua@^2.4.6:
     debug "^4.1.1"
     puppeteer-extra-plugin "^3.2.3"
 
-puppeteer-extra-plugin-font-size@^2.3.3:
-  version "2.3.3"
-  resolved "https://registry.npmmirror.com/puppeteer-extra-plugin-font-size/-/puppeteer-extra-plugin-font-size-2.3.3.tgz#692e7e25cec1a1599f1793ebc0d0bb6ab9f85119"
-  integrity sha512-AvvppOhoOhXOWZc0TsGV4Z5KbHHH9KVWnDQhatAaIkgZjmFltcE7TtsQa/qMMhonC2RG9k8/7+uKbTJrT9u2Uw==
-  dependencies:
-    debug "^4.1.1"
-    puppeteer-extra-plugin "^3.2.3"
-
 puppeteer-extra-plugin-stealth@^2.11.2:
   version "2.11.2"
   resolved "https://registry.npmmirror.com/puppeteer-extra-plugin-stealth/-/puppeteer-extra-plugin-stealth-2.11.2.tgz#bd3f5a1781cac8a98c983d148086585a84fcc8f1"

@@ -26,7 +26,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 					const links = document.querySelectorAll('div[data-test-id=\'virtuoso-item-list\'] div[data-index]') || [];
 					const results = [];
 					links.forEach((link, index) => {
-						if (index >= 2) return; // 只取前两条
+						if (index >= 5) return; // 只取前两条
 						const title = link.querySelector('.flex.flex-col.space-y-4')?.innerText?.trim() || '';
 						const href = `https://truthsocial.com/@realDonaldTrump?key=${encodeURIComponent(title).slice(0, 50)}`;
 						
@@ -73,7 +73,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
 			
-			await new Promise((resolve) => setTimeout(resolve, 10000)); // 延时10s
+			await new Promise((resolve) => setTimeout(resolve, 5000)); // 延时5s
 		}
 	}
 	
