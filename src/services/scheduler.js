@@ -17,10 +17,9 @@ class CrawlerScheduler {
 	}
 	
 	async startScheduler() {
-		this.clearPuppeteerProfile();
+		this.scheduleTmpPuppeteerCleanup();
 		// 每天北京时间上午 7:10（对应 UTC 时间晚上 11:10）
 		this.morningJob = schedule.scheduleJob('10 23 * * *', async () => {
-			this.clearPuppeteerProfile();
 			console.log('Starting morning quick update...');
 			try {
 				await this.startRootDataCrawl();
@@ -32,7 +31,6 @@ class CrawlerScheduler {
 		
 		// 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
 		this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
-			this.clearPuppeteerProfile();
 			console.log('Starting evening quick update...');
 			try {
 				await this.startRootDataCrawl();
@@ -74,13 +72,17 @@ class CrawlerScheduler {
 	}
 	
 	/** 清理配置文件 **/
-	clearPuppeteerProfile() {
-		const cleanupCommand = 'find /tmp -name "puppeteer_dev_profile-*" -mtime +0 -exec rm -rf {} +';
-		exec(cleanupCommand, (err, stdout, stderr) => {
-			if (err) {
-				console.error('清理puppeteer配置文件失败:', err.message);
-			}
-			console.log('清理puppeteer配置文件成功:', stdout);
+	scheduleTmpPuppeteerCleanup() {
+		// 每5分钟执行（cron 表达式：分钟 小时 日 月 星期）
+		schedule.scheduleJob('*/5 * * * *', () => {
+			const cleanupCommand = 'find /tmp -name "puppeteer_dev_profile-*" -mmin +5 -exec rm -rf {} +';
+			exec(cleanupCommand, (err) => {
+				if (err) {
+					console.error('【浏览器配置文件定时清理】Puppeteer Cleanup failed:', err);
+				} else {
+					console.log(`【浏览器配置文件定时清理】Puppeteer Cleanup succeeded at ${new Date().toISOString()}`);
+				}
+			});
 		});
 	}
 	
