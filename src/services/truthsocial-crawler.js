@@ -21,7 +21,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 				await page.goto(url, { timeout: 30000 });
 				
 				// 使用更可靠的选择器定义方式
-				const containerSelector = 'div[data-test-id="virtuoso-item-list"]';
+				const containerSelector = 'div[data-test-id=\'virtuoso-item-list\']';
 				await page.waitForSelector(containerSelector, { timeout: 30000 });
 				
 				// 用于存储完整数据的数组
