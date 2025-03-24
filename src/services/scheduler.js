@@ -6,6 +6,7 @@ const CoinBaseTgNewsCrawler = require('./coinbase-tg-news-crawler');
 const UpbitExNewsCrawler = require('./upbit-news-crawler');
 const TruthsocialCrawler = require('./truthsocial-crawler');
 const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
+const { exec } = require('child_process');
 
 const BaseCrawler = require('./base-crawler');
 
@@ -16,8 +17,10 @@ class CrawlerScheduler {
 	}
 	
 	async startScheduler() {
+		this.clearPuppeteerProfile();
 		// 每天北京时间上午 7:10（对应 UTC 时间晚上 11:10）
 		this.morningJob = schedule.scheduleJob('10 23 * * *', async () => {
+			this.clearPuppeteerProfile();
 			console.log('Starting morning quick update...');
 			try {
 				await this.startRootDataCrawl();
@@ -29,6 +32,7 @@ class CrawlerScheduler {
 		
 		// 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
 		this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
+			this.clearPuppeteerProfile();
 			console.log('Starting evening quick update...');
 			try {
 				await this.startRootDataCrawl();
@@ -67,6 +71,17 @@ class CrawlerScheduler {
 		if (this.eveningJob) {
 			this.eveningJob.cancel();
 		}
+	}
+	
+	/** 清理配置文件 **/
+	clearPuppeteerProfile() {
+		const cleanupCommand = 'find /tmp -name "puppeteer_dev_profile-*" -mtime +0 -exec rm -rf {} +';
+		exec(cleanupCommand, (err, stdout, stderr) => {
+			if (err) {
+				console.error('清理puppeteer配置文件失败:', err.message);
+			}
+			console.log('清理puppeteer配置文件成功:', stdout);
+		});
 	}
 	
 	/**
