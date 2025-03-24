@@ -15,7 +15,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 		];
 		
 		for (const { url, type } of tabUrls) {
-			const { browser, page, proxy } = await this.initBrowserAndPage();
+			const { browser, page, proxy } = await this.initProxyBrowserAndPage("japan");
 			
 			try {
 				await page.goto(url, { timeout: 30000 });
