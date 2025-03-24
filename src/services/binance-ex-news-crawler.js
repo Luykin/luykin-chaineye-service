@@ -54,7 +54,7 @@ class BinanceExNewsCrawler extends StatisticsCrawler {
 			},
 		];
 		for (const { url, type } of tabUrls) {
-			const { browser, page, proxy } = await this.initProxyBrowserAndPage();
+			const { browser, page, proxy } = await this.initProxyBrowserAndPage("singapore");
 			try {
 				await page.goto(url, { timeout: 30000 });
 				// 等待 links 元素加载
@@ -120,7 +120,7 @@ class BinanceExNewsCrawler extends StatisticsCrawler {
 				await browser.close(); // 每次爬取完成后关闭浏览器
 			}
 			
-			await new Promise((resolve) => setTimeout(resolve, 800)); // 延时500ms
+			await new Promise((resolve) => setTimeout(resolve, 1000)); // 延时500ms
 		}
 	}
 	
