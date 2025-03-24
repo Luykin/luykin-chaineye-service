@@ -15,7 +15,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 		];
 		
 		for (const { url, type } of tabUrls) {
-			const { browser, page, proxy } = await this.initProxyBrowserAndPage('japan');
+			const { browser, page, proxy } = await this.initBrowserAndPage();
 			
 			try {
 				await page.goto(url, { timeout: 30000 });
@@ -24,71 +24,64 @@ class TruthsocialCrawler extends StatisticsCrawler {
 				const containerSelector = 'div[data-test-id="virtuoso-item-list"]';
 				await page.waitForSelector(containerSelector, { timeout: 30000 });
 				
-				// 优化后的自动滚动加载逻辑
-				const loadedItems = await page.evaluate((containerSelector) => {
-					const collectedItems = new Map();
-					let lastItemCount = 0;
-					let retryCount = 0;
+				// 用于存储完整数据的数组
+				const announcements = [];
+				const collectedIndices = new Set();
+				// let lastMaxIndex = -1;
+				let retryCount = 0;
+				const maxRetries = 5;
+				
+				while (announcements.length < 5 && retryCount < maxRetries) {
+					// 获取当前可见元素的数据和索引
+					const newData = await page.evaluate(containerSelector => {
+						return Array.from(document.querySelectorAll(
+							`${containerSelector} div[data-index]`
+						)).map(el => {
+							const index = parseInt(el.getAttribute('data-index'));
+							const title = el.querySelector('.flex.flex-col.space-y-4')?.innerText?.trim();
+							return {
+								index,
+								title: title || null,
+								// html: el.outerHTML // 保存完整HTML片段
+							};
+						});
+					}, containerSelector);
 					
-					const scrollContainer = document.querySelector(containerSelector);
-					if (!scrollContainer) throw new Error('Scroll container not found');
-					
-					return new Promise(resolve => {
-						const checkInterval = setInterval(() => {
-							// 获取当前所有可见元素
-							const elements = Array.from(
-								scrollContainer.querySelectorAll('div[data-index]')
-							);
-							
-							// 收集新元素
-							elements.forEach(el => {
-								const index = el.getAttribute('data-index');
-								if (!collectedItems.has(index)) {
-									collectedItems.set(index, el.outerHTML);
-								}
+					// 处理新数据
+					newData.forEach(item => {
+						if (!collectedIndices.has(item.index) && item.title) {
+							collectedIndices.add(item.index);
+							announcements.push({
+								title: item.title,
+								index: item.index,
+								newsUrl: `https://truthsocial.com/@realDonaldTrump?key=${encodeURIComponent(item?.title).slice(0, 50)}`,
+								type,
+								crawlTime: Date.now()
 							});
-							
-							// 满足条件时终止
-							if (collectedItems.size >= 5 || retryCount >= 20) {
-								clearInterval(checkInterval);
-								resolve(Array.from(collectedItems.values()).slice(0, 5));
-							}
-							
-							// 智能滚动策略
-							if (elements.length > lastItemCount) {
-								lastItemCount = elements.length;
-								retryCount = 0; // 重置重试计数器
-								// 滚动到当前最后一个元素的底部
-								elements[elements.length - 1].scrollIntoView({
-									behavior: 'smooth',
-									block: 'end'
-								});
-							} else {
-								retryCount++;
-							}
-							
-						}, 1000); // 每秒检查一次
+						}
 					});
 					
-				}, containerSelector); // 注意这里参数传递方式的修正
-				
-				// 处理收集到的元素
-				let announcements = await page.evaluate((itemsHTML, type) => {
-					const parser = new DOMParser();
-					return itemsHTML.map(html => {
-						const doc = parser.parseFromString(html, 'text/html');
-						const title = doc.querySelector('.flex.flex-col.space-y-4')?.innerText?.trim();
-						if (!title) return null;
-						
-						return {
-							title,
-							newsUrl: `https://truthsocial.com/@realDonaldTrump?key=${encodeURIComponent(title).slice(0, 50)}`,
-							type,
-							crawlTime: Date.now()
-						};
-					}).filter(item => item !== null);
+					retryCount++;
 					
-				}, loadedItems, type);
+					// 智能滚动策略
+					await page.evaluate(containerSelector => {
+						const lastElement = document.querySelector(
+							`${containerSelector} div[data-index]:last-child`
+						);
+						if (lastElement) {
+							lastElement.scrollIntoView({ behavior: 'smooth', block: 'end' });
+						}
+						setTimeout(() => {
+							window.scrollBy({
+								top: 500,
+								behavior: 'smooth'
+							});
+						}, 500);
+					}, containerSelector);
+					
+					// 等待元素渲染和网络请求
+					await new Promise((resolve) => setTimeout(resolve, 1200));
+				}
 				
 				for (const announcement of announcements) {
 					const exists = await EXNews.findOne({ where: { newsUrl: announcement?.newsUrl } });
@@ -97,11 +90,12 @@ class TruthsocialCrawler extends StatisticsCrawler {
 						const msg = `${announcement.title} [🔗 Read More](${announcement.newsUrl})`;
 						await StatisticsCrawler.sendMessageToGroupDev(msg);
 						console.log(`New announcement sent: ${announcement.title}`);
+						await new Promise((resolve) => setTimeout(resolve, 500));
 					} else {
 						// 忽略已经存在的公告
 					}
 				}
-				console.log(`TruthsocialCrawler crawlNews done: ${announcements?.length}`, JSON.stringify(announcements));
+				console.log(`TruthsocialCrawler crawlNews done: ${announcements?.length}`);
 				const isSuccess = Boolean(announcements?.length);
 				this.report({
 					key: `TruthsocialCrawler-${proxy.ip}`,
