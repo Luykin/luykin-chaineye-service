@@ -19,28 +19,76 @@ class TruthsocialCrawler extends StatisticsCrawler {
 			
 			try {
 				await page.goto(url, { timeout: 30000 });
-				await page.waitForSelector('div[data-test-id=\'virtuoso-item-list\']', { timeout: 30000 });
 				
-				// 获取Truthsocial数据
-				let announcements = await page.evaluate((type) => {
-					const links = document.querySelectorAll('div[data-test-id=\'virtuoso-item-list\'] div[data-index]') || [];
-					const results = [];
-					links.forEach((link, index) => {
-						if (index >= 5) return; // 只取前两条
-						const title = link.querySelector('.flex.flex-col.space-y-4')?.innerText?.trim() || '';
-						const href = `https://truthsocial.com/@realDonaldTrump?key=${encodeURIComponent(title).slice(0, 50)}`;
-						
-						if (title && href) {
-							results.push({
-								title,
-								newsUrl: href,
-								type,
-								crawlTime: +new Date()
+				// 使用更可靠的选择器定义方式
+				const containerSelector = 'div[data-test-id="virtuoso-item-list"]';
+				await page.waitForSelector(containerSelector, { timeout: 30000 });
+				
+				// 优化后的自动滚动加载逻辑
+				const loadedItems = await page.evaluate((containerSelector) => {
+					const collectedItems = new Map();
+					let lastItemCount = 0;
+					let retryCount = 0;
+					
+					const scrollContainer = document.querySelector(containerSelector);
+					if (!scrollContainer) throw new Error('Scroll container not found');
+					
+					return new Promise(resolve => {
+						const checkInterval = setInterval(() => {
+							// 获取当前所有可见元素
+							const elements = Array.from(
+								scrollContainer.querySelectorAll('div[data-index]')
+							);
+							
+							// 收集新元素
+							elements.forEach(el => {
+								const index = el.getAttribute('data-index');
+								if (!collectedItems.has(index)) {
+									collectedItems.set(index, el.outerHTML);
+								}
 							});
-						}
+							
+							// 满足条件时终止
+							if (collectedItems.size >= 5 || retryCount >= 20) {
+								clearInterval(checkInterval);
+								resolve(Array.from(collectedItems.values()).slice(0, 5));
+							}
+							
+							// 智能滚动策略
+							if (elements.length > lastItemCount) {
+								lastItemCount = elements.length;
+								retryCount = 0; // 重置重试计数器
+								// 滚动到当前最后一个元素的底部
+								elements[elements.length - 1].scrollIntoView({
+									behavior: 'smooth',
+									block: 'end'
+								});
+							} else {
+								retryCount++;
+							}
+							
+						}, 1000); // 每秒检查一次
 					});
-					return results;
-				}, type);
+					
+				}, containerSelector); // 注意这里参数传递方式的修正
+				
+				// 处理收集到的元素
+				let announcements = await page.evaluate((itemsHTML, type) => {
+					const parser = new DOMParser();
+					return itemsHTML.map(html => {
+						const doc = parser.parseFromString(html, 'text/html');
+						const title = doc.querySelector('.flex.flex-col.space-y-4')?.innerText?.trim();
+						if (!title) return null;
+						
+						return {
+							title,
+							newsUrl: `https://truthsocial.com/@realDonaldTrump?key=${encodeURIComponent(title).slice(0, 50)}`,
+							type,
+							crawlTime: Date.now()
+						};
+					}).filter(item => item !== null);
+					
+				}, loadedItems, type);
 				
 				for (const announcement of announcements) {
 					const exists = await EXNews.findOne({ where: { newsUrl: announcement?.newsUrl } });
