@@ -63,7 +63,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 				
 				while (announcements.length < 5 && retryCount < maxRetries) {
 					// 获取当前可见元素的数据和索引
-					const newData = await page.evaluate(containerSelector => {
+					const newData = await page.evaluate((containerSelector, processElement) => {
 						return Array.from(document.querySelectorAll(
 							`${containerSelector} div[data-index]`
 						)).map(el => {
@@ -75,7 +75,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 								// html: el.outerHTML // 保存完整HTML片段
 							};
 						});
-					}, containerSelector);
+					}, containerSelector, processElement.toString());
 					
 					// 处理新数据
 					newData.forEach(item => {
