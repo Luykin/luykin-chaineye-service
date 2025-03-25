@@ -45,6 +45,23 @@ const ip4 = [
 	{ ip: '185.176.93.171', port: '6868', username: 'user81794', password: '8ipjmd' },
 ];
 
+const puppeteerArgs = [
+	'--no-sandbox',// 禁用沙盒模式
+	'--disable-dev-shm-usage',// 禁用 /dev/shm 使用
+	'--disable-setuid-sandbox',
+	'--disable-breakpad', // 禁用崩溃报告
+	'--disable-component-extensions-with-background-pages',// 禁用带后台页面的扩展组件
+	'--disable-extensions', // 禁用所有扩展
+	'--disable-sync', // 禁用同步功能
+	'--disable-blink-features=AutomationControlled', // 禁用自动化特性
+	'--no-first-run',// 跳过首次运行体验
+	'--no-default-browser-check',// 禁用默认浏览器检查
+	'--no-pings',// 禁用 <a ping> 请求
+	'--disable-popup-blocking',// 禁用弹出窗口拦截
+	'--disable-notifications',// 禁用通知功能
+	'--disable-translate'// 禁用翻译提示
+]
+
 function shuffle(array) {
 	for (let i = array.length - 1; i > 0; i--) {
 		// 生成 0 到 i 之间的随机索引
@@ -134,8 +151,7 @@ class BaseCrawler {
 			headless: 'new',
 			args: [
 				`--proxy-server=${proxy.ip}:${proxy.port}`,
-				'--no-sandbox',
-				'--disable-setuid-sandbox',
+				...puppeteerArgs,
 			],
 		});
 	}
@@ -144,8 +160,7 @@ class BaseCrawler {
 		return await puppeteer.launch({
 			headless: 'new',
 			args: [
-				'--no-sandbox',
-				'--disable-setuid-sandbox',
+				...puppeteerArgs,
 			],
 		});
 	}
