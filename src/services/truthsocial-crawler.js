@@ -1,35 +1,5 @@
 const StatisticsCrawler = require('./StatisticsCrawler');  // 确保继承 StatisticsCrawler
 const { EXNews } = require('../models/sqlite-start');
-function processElement(el) {
-	// 提取标题文本并去除多余空格和换行
-	const rawText = el.querySelector('.flex.flex-col.space-y-4')?.innerText?.trim();
-	try {
-		if (!rawText) return ''; // 如果没有找到文本，直接返回空字符串
-
-		// 处理多余的空格和换行
-		const cleanedText = rawText
-			.replace(/\s+/g, ' ') // 将多个空格替换为单个空格
-			.replace(/\n+/g, '\n') // 将多个换行替换为单个换行
-			.trim(); // 去除首尾空白
-
-		// 查找 video 标签及其子标签 source 的 src 属性
-		const videoElements = el.querySelectorAll('video, video source');
-		const videoSrcs = Array.from(videoElements)
-			.map(videoEl => videoEl.src || videoEl.getAttribute('src')) // 获取 src 属性
-			.filter(src => src); // 过滤掉空值
-
-		// 组装最终文本
-		let finalText = cleanedText;
-		if (videoSrcs.length > 0) {
-			const videoLinks = videoSrcs.map(src => `Video Source: ${src}`).join('\n');
-			finalText += `\n\n${videoLinks}`;
-		}
-
-		return finalText;
-	} catch (err) {
-		return rawText;
-	}
-}
 
 class TruthsocialCrawler extends StatisticsCrawler {
 	constructor() {
@@ -63,7 +33,37 @@ class TruthsocialCrawler extends StatisticsCrawler {
 				
 				while (announcements.length < 5 && retryCount < maxRetries) {
 					// 获取当前可见元素的数据和索引
-					const newData = await page.evaluate((containerSelector, processElement) => {
+					const newData = await page.evaluate((containerSelector) => {
+						function processElement(el) {
+							// 提取标题文本并去除多余空格和换行
+							const rawText = el.querySelector('.flex.flex-col.space-y-4')?.innerText?.trim();
+							try {
+								if (!rawText) return ''; // 如果没有找到文本，直接返回空字符串
+
+								// 处理多余的空格和换行
+								const cleanedText = rawText
+									.replace(/\s+/g, ' ') // 将多个空格替换为单个空格
+									.replace(/\n+/g, '\n') // 将多个换行替换为单个换行
+									.trim(); // 去除首尾空白
+
+								// 查找 video 标签及其子标签 source 的 src 属性
+								const videoElements = el.querySelectorAll('video, video source');
+								const videoSrcs = Array.from(videoElements)
+									.map(videoEl => videoEl.src || videoEl.getAttribute('src')) // 获取 src 属性
+									.filter(src => src); // 过滤掉空值
+
+								// 组装最终文本
+								let finalText = cleanedText;
+								if (videoSrcs.length > 0) {
+									const videoLinks = videoSrcs.map(src => `Video Source: ${src}`).join('\n');
+									finalText += `\n\n${videoLinks}`;
+								}
+
+								return finalText;
+							} catch (err) {
+								return rawText;
+							}
+						}
 						return Array.from(document.querySelectorAll(
 							`${containerSelector} div[data-index]`
 						)).map(el => {
@@ -75,7 +75,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 								// html: el.outerHTML // 保存完整HTML片段
 							};
 						});
-					}, containerSelector, processElement.toString());
+					}, containerSelector);
 					
 					// 处理新数据
 					newData.forEach(item => {
