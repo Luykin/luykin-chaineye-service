@@ -31,7 +31,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 				let retryCount = 0;
 				const maxRetries = 5;
 				
-				while (announcements.length < 5 && retryCount < maxRetries) {
+				while (announcements.length < 4 && retryCount < maxRetries) {
 					// 获取当前可见元素的数据和索引
 					const newData = await page.evaluate((containerSelector) => {
 						function processElement(el) {
@@ -50,7 +50,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 								const videoElements = el.querySelectorAll('video, video source');
 								const videoSrcs = Array.from(videoElements)
 									.map(videoEl => videoEl.src || videoEl.getAttribute('src')) // 获取 src 属性
-									.filter(src => src); // 过滤掉空值
+									.filter(src => src).slice(0,1); // 过滤掉空值
 
 								// 组装最终文本
 								let finalText = cleanedText;
