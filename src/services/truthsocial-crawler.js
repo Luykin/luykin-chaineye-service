@@ -125,7 +125,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 						// 忽略已经存在的公告
 					}
 				}
-				console.log(`TruthsocialCrawler crawlNews done: ${announcements?.length}`);
+				// console.log(`TruthsocialCrawler crawlNews done: ${announcements?.length}`);
 				const isSuccess = Boolean(announcements?.length);
 				this.report({
 					key: `TruthsocialCrawler-${proxy.ip}`,
