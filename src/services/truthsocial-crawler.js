@@ -155,6 +155,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 				await this.crawlNews();
 			} catch (error) {
 				console.error('TruthsocialCrawler Error during startCrawling:', error, Date.now());
+				await new Promise((resolve) => setTimeout(resolve, 1000)); // 延时500ms
 			}
 		}
 	}

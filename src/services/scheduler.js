@@ -5,10 +5,10 @@ const OkxExNewsCrawler = require('./okx-ex-news-crawler');
 const CoinBaseTgNewsCrawler = require('./coinbase-tg-news-crawler');
 const UpbitExNewsCrawler = require('./upbit-news-crawler');
 const TruthsocialCrawler = require('./truthsocial-crawler');
-const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
+const { NewCrawlState } = require('../models/sqlite-start');
 const { exec } = require('child_process');
 
-const BaseCrawler = require('./base-crawler');
+// const BaseCrawler = require('./base-crawler');
 
 class CrawlerScheduler {
 	constructor() {
@@ -76,8 +76,8 @@ class CrawlerScheduler {
 	/** 清理配置文件 **/
 	scheduleTmpPuppeteerCleanup() {
 		// 每20分钟执行（cron 表达式：分钟 小时 日 月 星期）
-		schedule.scheduleJob('*/25 * * * *', () => {
-			const cleanupCommand = 'find /tmp -name "puppeteer_dev_profile-*" -mmin +25 -exec rm -rf {} +';
+		schedule.scheduleJob('*/20 * * * *', () => {
+			const cleanupCommand = 'find /tmp -name "puppeteer_dev_profile-*" -mmin +20 -exec rm -rf {} +';
 			exec(cleanupCommand, (err) => {
 				if (err) {
 					console.error('【浏览器配置文件定时清理】Puppeteer Cleanup failed:', err);
