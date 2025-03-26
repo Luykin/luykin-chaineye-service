@@ -77,7 +77,7 @@ class CrawlerScheduler {
 	scheduleTmpPuppeteerCleanup() {
 		// 每20分钟执行（cron 表达式：分钟 小时 日 月 星期）
 		schedule.scheduleJob('*/20 * * * *', () => {
-			const cleanupCommand = 'find /tmp -name "puppeteer_dev_profile-*" -mmin +20 -exec rm -rf {} +';
+			const cleanupCommand = 'find /tmp -name "puppeteer-*" -mmin +20 -exec rm -rf {} +';
 			exec(cleanupCommand, (err) => {
 				if (err) {
 					console.error('【浏览器配置文件定时清理】Puppeteer Cleanup failed:', err);
