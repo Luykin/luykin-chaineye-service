@@ -82,18 +82,13 @@ class BaseCrawler {
 		this.browser = null;
 		this.proxies = shuffle([...ip1, ...ip2, ...ip3, ...ip4]);
 		this.proxyIndex = 0; // 当前代理索引
+		this.banedIp = [];
 	}
 	
 	/**
 	 * 从proxies删除某个ip*/
 	banIp(oneIp) {
-		const index = this.proxies.findIndex(proxy => proxy.ip === oneIp);
-		if (index !== -1) {
-			this.proxies.splice(index, 1);
-			console.log(`已ban掉IP: ${oneIp}`);
-		} else {
-			console.log(`未找到IP: ${oneIp}`);
-		}
+		this.banedIp = [...new Set([...this.banedIp, oneIp])];
 	}
 	
 	// dev测试机器人实例
@@ -114,16 +109,6 @@ class BaseCrawler {
 		return BaseCrawler.#proTgBotInstance;
 	}
 	
-	async forceClose() {
-		try {
-			await this.browser?.close?.();
-			this.browser = null;
-			console.log('已经强制关闭浏览器...');
-		} catch (err) {
-			console.error('Error closing browser:', err);
-		}
-	}
-	
 	getRandomProxy(region) {
 		// 根据 region 参数过滤对应地区的代理 IP
 		let proxiesToUse = this.proxies;
@@ -136,14 +121,15 @@ class BaseCrawler {
 		} else if (region === 'taiwan') {
 			proxiesToUse = ip4;
 		}
+		proxiesToUse = proxiesToUse.filter(item => {
+			return !this.banedIp.includes(item?.ip);
+		});
 		if (!Array.isArray(proxiesToUse) || proxiesToUse.length === 0) {
 			throw new Error('No proxies available.');
 		}
-		
 		// 获取随机代理
-		const proxy = proxiesToUse[this.proxyIndex];
 		this.proxyIndex = (this.proxyIndex + 1) % proxiesToUse.length;
-		return proxy;
+		return proxiesToUse[this.proxyIndex];
 	}
 	
 	async #initBrowserWithProxy(proxy) {
