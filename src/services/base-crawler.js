@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer-extra');
 const Stealth = require('puppeteer-extra-plugin-stealth');
 const AnonymizeUA = require('puppeteer-extra-plugin-anonymize-ua');
 const path = require('path');
-const fs = require('fs');
+// const fs = require('fs');
 
 // 加载顺序建议：基础插件 -> 功能增强插件
 puppeteer.use(Stealth());
@@ -141,36 +141,29 @@ class BaseCrawler {
 			const childClassName = this.constructor.name || 'UnknownClass';
 			this._userDataDir = path.join('/tmp', `puppeteer-profile-${childClassName}-${nowTime}`);
 			this._userDataDirUpdateTime = nowTime;
-			// 如果文件夹不存在，则创建
-			if (!fs.existsSync(this._userDataDir)) {
-				fs.mkdirSync(this._userDataDir, { recursive: true });
-				console.log(`用户数据目录已创建: ${this._userDataDir}`);
-			} else {
-				console.log(`用户数据目录已存在: ${this._userDataDir}`);
-			}
 		}
 		return String(this._userDataDir);
 	}
 	async #initBrowserWithProxy(proxy) {
-		const userDataDir = this.#getUserDataDir();
+		// const userDataDir = this.#getUserDataDir();
 		return await puppeteer.launch({
 			headless: 'new',
 			args: [
 				`--proxy-server=${proxy.ip}:${proxy.port}`,
 				...puppeteerArgs,
 			],
-			userDataDir
+			// userDataDir
 		});
 	}
 	
 	async #initBrowser() {
-		const userDataDir = this.#getUserDataDir();
+		// const userDataDir = this.#getUserDataDir();
 		return await puppeteer.launch({
 			headless: 'new',
 			args: [
 				...puppeteerArgs,
 			],
-			userDataDir
+			// userDataDir
 		});
 	}
 	
