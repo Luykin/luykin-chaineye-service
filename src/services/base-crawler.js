@@ -1,11 +1,13 @@
 const puppeteer = require('puppeteer-extra');
 const Stealth = require('puppeteer-extra-plugin-stealth');
 const AnonymizeUA = require('puppeteer-extra-plugin-anonymize-ua');
-// const FontSize = require('puppeteer-extra-plugin-font-size');
+const path = require('path');
+const fs = require('fs');
 
 // 加载顺序建议：基础插件 -> 功能增强插件
 puppeteer.use(Stealth());
 puppeteer.use(AnonymizeUA());
+const twentyMinutesInMilliseconds = 20 * 60 * 1000; // 1,200,000 毫秒 20分钟
 const TelegramBot = require('node-telegram-bot-api');
 const _devTgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
 const _proTgToken = '7615998524:AAFLD25mHIeKKsW4ZJt2rmqY-AFWmwu1J6E';
@@ -83,6 +85,8 @@ class BaseCrawler {
 		this.proxies = shuffle([...ip1, ...ip2, ...ip3, ...ip4]);
 		this.proxyIndex = 0; // 当前代理索引
 		this.banedIp = [];
+		this._userDataDir = '';
+		this._userDataDirUpdateTime = 0;
 	}
 	
 	/**
@@ -131,23 +135,42 @@ class BaseCrawler {
 		this.proxyIndex = (this.proxyIndex + 1) % proxiesToUse.length;
 		return proxiesToUse[this.proxyIndex];
 	}
-	
+	async #getUserDataDir() {
+		const nowTime = Date.now();
+		if(!this._userDataDir || (nowTime - this._userDataDirUpdateTime > twentyMinutesInMilliseconds)) {
+			const childClassName = this.constructor.name;
+			this._userDataDir = path.join('/tmp', `puppeteer-profile-${childClassName}-${nowTime}`);
+			this._userDataDirUpdateTime = nowTime;
+			// 如果文件夹不存在，则创建
+			if (!fs.existsSync(this._userDataDir)) {
+				fs.mkdirSync(this._userDataDir, { recursive: true });
+				console.log(`用户数据目录已创建: ${this._userDataDir}`);
+			} else {
+				console.log(`用户数据目录已存在: ${this._userDataDir}`);
+			}
+		}
+		return this._userDataDir;
+	}
 	async #initBrowserWithProxy(proxy) {
+		const userDataDir = this.#getUserDataDir();
 		return await puppeteer.launch({
 			headless: 'new',
 			args: [
 				`--proxy-server=${proxy.ip}:${proxy.port}`,
 				...puppeteerArgs,
 			],
+			userDataDir
 		});
 	}
 	
 	async #initBrowser() {
+		const userDataDir = this.#getUserDataDir();
 		return await puppeteer.launch({
 			headless: 'new',
 			args: [
 				...puppeteerArgs,
 			],
+			userDataDir
 		});
 	}
 	
