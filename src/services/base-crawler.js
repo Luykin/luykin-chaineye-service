@@ -138,7 +138,7 @@ class BaseCrawler {
 	async #getUserDataDir() {
 		const nowTime = Date.now();
 		if(!this._userDataDir || (nowTime - this._userDataDirUpdateTime > twentyMinutesInMilliseconds)) {
-			const childClassName = this.constructor.name;
+			const childClassName = this.constructor.name || 'UnknownClass';
 			this._userDataDir = path.join('/tmp', `puppeteer-profile-${childClassName}-${nowTime}`);
 			this._userDataDirUpdateTime = nowTime;
 			// 如果文件夹不存在，则创建
@@ -149,7 +149,7 @@ class BaseCrawler {
 				console.log(`用户数据目录已存在: ${this._userDataDir}`);
 			}
 		}
-		return this._userDataDir;
+		return String(this._userDataDir);
 	}
 	async #initBrowserWithProxy(proxy) {
 		const userDataDir = this.#getUserDataDir();
