@@ -825,31 +825,47 @@ function joinUrl(path, projectName) {
 function parseAmount(valueStr) {
 	if (!valueStr || valueStr === '--') return null;
 	
-	// 移除美元符号、空格以及"美元"字样
-	valueStr = valueStr.replace('$', '').replace('美元', '').trim();
+	// 移除所有美元符号、空格以及中英文单位
+	valueStr = valueStr
+		.replace(/\$/g, '')          // 移除美元符号
+		.replace(/美元/g, '')        // 移除中文美元
+		.replace(/,/g, '')          // 移除数字中的逗号
+		.replace(/ /g, '')          // 移除空格
+		.trim();
+	
+	// 空值检查
+	if (valueStr === '') return null;
 	
 	let multiplier = 1;
+	const units = [
+		// 中文大单位优先
+		{ pattern: /十亿/g, val: 1e9 },
+		{ pattern: /亿/g, val: 1e8 },
+		{ pattern: /万/g, val: 1e4 },
+		
+		// 英文单位（不区分大小写）
+		{ pattern: /billion/i, val: 1e9 },
+		{ pattern: /million/i, val: 1e6 },
+		{ pattern: /thousand/i, val: 1e3 },
+		
+		// 单字母后缀（严格匹配末尾）
+		{ pattern: /B$/i, val: 1e9 },
+		{ pattern: /M$/i, val: 1e6 },
+		{ pattern: /K$/i, val: 1e3 }
+	];
 	
-	if (valueStr.endsWith('M')) {
-		multiplier = 1e6;
-		valueStr = valueStr.replace('M', '').trim();
-	} else if (valueStr.endsWith('K')) {
-		multiplier = 1e3;
-		valueStr = valueStr.replace('K', '').trim();
-	} else if (valueStr.toLowerCase().includes('million')) {
-		multiplier = 1e6;
-		valueStr = valueStr.toLowerCase().replace('million', '').trim();
-	} else if (valueStr.includes('万')) {
-		multiplier = 1e4;
-		valueStr = valueStr.replace('万', '').trim();
-	} else if (valueStr.includes('亿')) {
-		multiplier = 1e8;
-		valueStr = valueStr.replace('亿', '').trim();
+	// 循环匹配单位
+	for (const unit of units) {
+		if (unit.pattern.test(valueStr)) {
+			multiplier = unit.val;
+			valueStr = valueStr.replace(unit.pattern, '').trim();
+			break; // 匹配到第一个单位后退出
+		}
 	}
 	
-	// 转换为浮点数并乘以相应的单位
+	// 解析数值（支持负数和科学计数法）
 	const value = parseFloat(valueStr);
-	return isNaN(value) ? null : value * multiplier;
+	return Number.isFinite(value) ? value * multiplier : null;
 }
 
 function parseDate(dateStr) {
