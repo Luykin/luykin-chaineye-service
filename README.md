@@ -179,3 +179,29 @@ sudo ufw allow from 127.0.0.1 to any port 6379
 sudo ufw deny 6379
 ```
 这样配置后，Redis 将仅允许来自本地主机的连接并拒绝外部网络访问。
+
+
+重复推特链接处理：
+-- 查找所有重复的 x 链接（出现次数 > 1）
+SELECT
+json_extract(socialLinks, '$.x') AS twitter_url,
+COUNT(*) AS count
+FROM Projects
+WHERE twitter_url IS NOT NULL
+GROUP BY twitter_url
+HAVING COUNT(*) > 1;
+
+-- 1. 找到每个 Twitter 链接对应的最新项目（id 最大）
+WITH LatestProjects AS (
+SELECT
+id,
+json_extract(socialLinks, '$.x') AS twitter_url,
+ROW_NUMBER() OVER (PARTITION BY json_extract(socialLinks, '$.x') ORDER BY id DESC) AS rn
+FROM Projects
+)
+-- 2. 更新重复项目（将 x 置空）
+UPDATE Projects
+SET socialLinks = json_set(socialLinks, '$.x', NULL)
+WHERE id IN (
+SELECT id FROM LatestProjects WHERE rn > 1
+);
