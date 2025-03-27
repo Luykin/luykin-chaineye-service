@@ -165,7 +165,7 @@ router.get('/search', async (req, res) => {
 		}
 		
 		const sanitizedKeyword = keyword.trim();
-		const cacheKey = `project_search_${sanitizedKeyword}_202412182259`;
+		const cacheKey = `project_search_${sanitizedKeyword}_202412182269`;
 		let cachedData;
 		
 		// 从 Redis 获取缓存数据，处理 Redis 客户端可能断开的情况
@@ -189,6 +189,7 @@ router.get('/search', async (req, res) => {
 					literal(`LOWER(socialLinks->>'x') = LOWER('${targetTwitterUrl}')`) // JSON 查询，确保 "x" 精确匹配
 				]
 			},
+			order: [['id', 'DESC']], // 按 id 倒序
 			attributes: [
 				'projectName', 'projectLink', 'description', 'logo', 'round',
 				'amount', 'formattedAmount', 'valuation', 'formattedValuation',
@@ -251,7 +252,7 @@ router.get('/search/legacy', async (req, res) => {
 		}
 		
 		const sanitizedKeyword = keyword.trim();
-		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503161056`;
+		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503161057`;
 		let cachedData;
 		
 		try {
@@ -277,6 +278,7 @@ router.get('/search/legacy', async (req, res) => {
 					]
 				}
 			},
+			order: [['id', 'DESC']], // 按 id 倒序
 			attributes: ['projectName', 'socialLinks', 'logo', 'amount'],
 			include: [
 				{
@@ -315,7 +317,6 @@ router.get('/search/legacy', async (req, res) => {
 		if (!project) {
 			return res.json({ invested: null, investor: null, message: 'No matching project found' });
 		}
-		console.log('project:', project)
 		// 调用现有的 groupInvestmentsByDate 函数
 		const groupedInvestments = groupInvestmentsByDate(project.investmentsReceived || []);
 		
