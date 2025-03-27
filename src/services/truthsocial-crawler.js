@@ -31,14 +31,44 @@ class TruthsocialCrawler extends StatisticsCrawler {
 				let retryCount = 0;
 				const maxRetries = 5;
 				
-				while (announcements.length < 5 && retryCount < maxRetries) {
+				while (announcements.length < 4 && retryCount < maxRetries) {
 					// 获取当前可见元素的数据和索引
-					const newData = await page.evaluate(containerSelector => {
+					const newData = await page.evaluate((containerSelector) => {
+						function processElement(el) {
+							// 提取标题文本并去除多余空格和换行
+							const rawText = el.querySelector('.flex.flex-col.space-y-4')?.innerText?.trim();
+							try {
+								if (!rawText) return ''; // 如果没有找到文本，直接返回空字符串
+
+								// 处理多余的空格和换行
+								const cleanedText = rawText
+									.replace(/\s+/g, ' ') // 将多个空格替换为单个空格
+									.replace(/\n+/g, '\n') // 将多个换行替换为单个换行
+									.trim(); // 去除首尾空白
+
+								// 查找 video 标签及其子标签 source 的 src 属性
+								const videoElements = el.querySelectorAll('video, video source');
+								const videoSrcs = Array.from(videoElements)
+									.map(videoEl => videoEl.src || videoEl.getAttribute('src')) // 获取 src 属性
+									.filter(src => src).slice(0,1); // 过滤掉空值
+
+								// 组装最终文本
+								let finalText = cleanedText;
+								if (videoSrcs.length > 0) {
+									const videoLinks = videoSrcs.map(src => `Video Source: ${src}`).join('\n');
+									finalText += `\n\n${videoLinks}`;
+								}
+
+								return finalText;
+							} catch (err) {
+								return rawText;
+							}
+						}
 						return Array.from(document.querySelectorAll(
 							`${containerSelector} div[data-index]`
 						)).map(el => {
 							const index = parseInt(el.getAttribute('data-index'));
-							const title = el.querySelector('.flex.flex-col.space-y-4')?.innerText?.trim();
+							const title = processElement(el);
 							return {
 								index,
 								title: title || null,
@@ -95,7 +125,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 						// 忽略已经存在的公告
 					}
 				}
-				console.log(`TruthsocialCrawler crawlNews done: ${announcements?.length}`);
+				// console.log(`TruthsocialCrawler crawlNews done: ${announcements?.length}`);
 				const isSuccess = Boolean(announcements?.length);
 				this.report({
 					key: `TruthsocialCrawler-${proxy.ip}`,
@@ -125,6 +155,7 @@ class TruthsocialCrawler extends StatisticsCrawler {
 				await this.crawlNews();
 			} catch (error) {
 				console.error('TruthsocialCrawler Error during startCrawling:', error, Date.now());
+				await new Promise((resolve) => setTimeout(resolve, 1000)); // 延时500ms
 			}
 		}
 	}

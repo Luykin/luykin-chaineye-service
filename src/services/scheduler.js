@@ -5,10 +5,10 @@ const OkxExNewsCrawler = require('./okx-ex-news-crawler');
 const CoinBaseTgNewsCrawler = require('./coinbase-tg-news-crawler');
 const UpbitExNewsCrawler = require('./upbit-news-crawler');
 const TruthsocialCrawler = require('./truthsocial-crawler');
-const { NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
+const { NewCrawlState } = require('../models/sqlite-start');
 const { exec } = require('child_process');
 
-const BaseCrawler = require('./base-crawler');
+// const BaseCrawler = require('./base-crawler');
 
 class CrawlerScheduler {
 	constructor() {
@@ -18,46 +18,48 @@ class CrawlerScheduler {
 	
 	async startScheduler() {
 		this.scheduleTmpPuppeteerCleanup();
-		// // 每天北京时间上午 7:10（对应 UTC 时间晚上 11:10）
-		// this.morningJob = schedule.scheduleJob('10 23 * * *', async () => {
-		// 	console.log('Starting morning quick update...');
-		// 	try {
-		// 		await this.startRootDataCrawl();
-		// 		console.log('Morning quick update completed');
-		// 	} catch (error) {
-		// 		console.error('Morning quick update failed:', error);
-		// 	}
-		// });
-		//
-		// // 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
-		// this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
-		// 	console.log('Starting evening quick update...');
-		// 	try {
-		// 		await this.startRootDataCrawl();
-		// 		console.log('Evening quick update completed');
-		// 	} catch (error) {
-		// 		console.error('Evening quick update failed:', error);
-		// 	}
-		// });
-		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		// await this.resetAllState();
+		// 每天北京时间上午 7:10（对应 UTC 时间晚上 11:10）
+		this.morningJob = schedule.scheduleJob('10 23 * * *', async () => {
+			console.log('Starting morning quick update...');
+			try {
+				await this.startRootDataCrawl();
+				console.log('Morning quick update completed');
+			} catch (error) {
+				console.error('Morning quick update failed:', error);
+			}
+		});
+
+		// 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
+		this.eveningJob = schedule.scheduleJob('10 10 * * *', async () => {
+			console.log('Starting evening quick update...');
+			try {
+				await this.startRootDataCrawl();
+				console.log('Evening quick update completed');
+			} catch (error) {
+				console.error('Evening quick update failed:', error);
+			}
+		});
+		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		await this.resetAllState();
+		/** 每次重启没必要执行一次 rootData 的更新 start ============ **/
 		// /** 开始RootData爬虫 **/
 		// this.startRootDataCrawl().then(() => {
 		// 	console.log('首次启动任务执行完: startRootDataCrawl');
 		// }).catch(err => console.log(err));
 		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		// /** 开始币安 公告**/
-		// this.startBinanceExNewsCrawl().then(r => r);
-		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		// /** 开始OKX 公告 **/
-		// this.startOkxExNewsCrawl().then(r => r);
-		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		// /** 开始coinbase 推特爬取 **/
-		// this.startCoinBaseTgNewsCrawler().then(r => r);
-		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		// /** 开始Upbit 公告 **/
-		// this.startUpbitExNewsCrawler().then(r => r);
-		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		/** 每次重启没必要执行一次 rootData 的更新 end ============== **/
+		/** 开始币安 公告**/
+		this.startBinanceExNewsCrawl().then(r => r);
+		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		/** 开始OKX 公告 **/
+		this.startOkxExNewsCrawl().then(r => r);
+		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		/** 开始coinbase 推特爬取 **/
+		this.startCoinBaseTgNewsCrawler().then(r => r);
+		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		/** 开始Upbit 公告 **/
+		this.startUpbitExNewsCrawler().then(r => r);
+		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
 		/** 开始Truthsocial 公告 **/
 		this.startTruthsocialCrawler().then(r => r);
 	}
@@ -73,9 +75,9 @@ class CrawlerScheduler {
 	
 	/** 清理配置文件 **/
 	scheduleTmpPuppeteerCleanup() {
-		// 每5分钟执行（cron 表达式：分钟 小时 日 月 星期）
-		schedule.scheduleJob('*/5 * * * *', () => {
-			const cleanupCommand = 'find /tmp -name "puppeteer_dev_profile-*" -mmin +5 -exec rm -rf {} +';
+		// 每20分钟执行（cron 表达式：分钟 小时 日 月 星期）
+		schedule.scheduleJob('*/20 * * * *', () => {
+			const cleanupCommand = 'find /tmp -name "puppeteer-*" -mmin +20 -exec rm -rf {} +';
 			exec(cleanupCommand, (err) => {
 				if (err) {
 					console.error('【浏览器配置文件定时清理】Puppeteer Cleanup failed:', err);

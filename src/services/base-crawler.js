@@ -1,11 +1,13 @@
 const puppeteer = require('puppeteer-extra');
 const Stealth = require('puppeteer-extra-plugin-stealth');
 const AnonymizeUA = require('puppeteer-extra-plugin-anonymize-ua');
-// const FontSize = require('puppeteer-extra-plugin-font-size');
+const path = require('path');
+const fs = require('fs');
 
 // 加载顺序建议：基础插件 -> 功能增强插件
 puppeteer.use(Stealth());
 puppeteer.use(AnonymizeUA());
+const twentyMinutesInMilliseconds = 20 * 60 * 1000; // 1,200,000 毫秒 20分钟
 const TelegramBot = require('node-telegram-bot-api');
 const _devTgToken = '7369047814:AAHv7OQffIzszIdwKCTVzjP349ZhsItVpm0';
 const _proTgToken = '7615998524:AAFLD25mHIeKKsW4ZJt2rmqY-AFWmwu1J6E';
@@ -45,6 +47,23 @@ const ip4 = [
 	{ ip: '185.176.93.171', port: '6868', username: 'user81794', password: '8ipjmd' },
 ];
 
+const puppeteerArgs = [
+	'--no-sandbox',// 禁用沙盒模式
+	'--disable-dev-shm-usage',// 禁用 /dev/shm 使用
+	'--disable-setuid-sandbox',
+	'--disable-breakpad', // 禁用崩溃报告
+	'--disable-component-extensions-with-background-pages',// 禁用带后台页面的扩展组件
+	'--disable-extensions', // 禁用所有扩展
+	'--disable-sync', // 禁用同步功能
+	'--disable-blink-features=AutomationControlled', // 禁用自动化特性
+	'--no-first-run',// 跳过首次运行体验
+	'--no-default-browser-check',// 禁用默认浏览器检查
+	'--no-pings',// 禁用 <a ping> 请求
+	'--disable-popup-blocking',// 禁用弹出窗口拦截
+	'--disable-notifications',// 禁用通知功能
+	'--disable-translate'// 禁用翻译提示
+]
+
 function shuffle(array) {
 	for (let i = array.length - 1; i > 0; i--) {
 		// 生成 0 到 i 之间的随机索引
@@ -65,18 +84,15 @@ class BaseCrawler {
 		this.browser = null;
 		this.proxies = shuffle([...ip1, ...ip2, ...ip3, ...ip4]);
 		this.proxyIndex = 0; // 当前代理索引
+		this.banedIp = [];
+		this._userDataDir = '';
+		this._userDataDirUpdateTime = 0;
 	}
 	
 	/**
 	 * 从proxies删除某个ip*/
 	banIp(oneIp) {
-		const index = this.proxies.findIndex(proxy => proxy.ip === oneIp);
-		if (index !== -1) {
-			this.proxies.splice(index, 1);
-			console.log(`已ban掉IP: ${oneIp}`);
-		} else {
-			console.log(`未找到IP: ${oneIp}`);
-		}
+		this.banedIp = [...new Set([...this.banedIp, oneIp])];
 	}
 	
 	// dev测试机器人实例
@@ -97,16 +113,6 @@ class BaseCrawler {
 		return BaseCrawler.#proTgBotInstance;
 	}
 	
-	async forceClose() {
-		try {
-			await this.browser?.close?.();
-			this.browser = null;
-			console.log('已经强制关闭浏览器...');
-		} catch (err) {
-			console.error('Error closing browser:', err);
-		}
-	}
-	
 	getRandomProxy(region) {
 		// 根据 region 参数过滤对应地区的代理 IP
 		let proxiesToUse = this.proxies;
@@ -119,34 +125,53 @@ class BaseCrawler {
 		} else if (region === 'taiwan') {
 			proxiesToUse = ip4;
 		}
+		proxiesToUse = proxiesToUse.filter(item => {
+			return !this.banedIp.includes(item?.ip);
+		});
 		if (!Array.isArray(proxiesToUse) || proxiesToUse.length === 0) {
 			throw new Error('No proxies available.');
 		}
-		
 		// 获取随机代理
-		const proxy = proxiesToUse[this.proxyIndex];
 		this.proxyIndex = (this.proxyIndex + 1) % proxiesToUse.length;
-		return proxy;
+		return proxiesToUse[this.proxyIndex];
 	}
-	
+	async #getUserDataDir() {
+		const nowTime = Date.now();
+		/** 第19分钟后新建新的 **/
+		if(!this._userDataDir || (nowTime - this._userDataDirUpdateTime > twentyMinutesInMilliseconds - 60 * 1000)) {
+			const childClassName = this.constructor.name || 'UnknownClass';
+			this._userDataDir = path.join('/tmp', `puppeteer-profile-${childClassName}-${nowTime}`);
+			this._userDataDirUpdateTime = nowTime;
+			// 如果文件夹不存在，则创建
+			if (!fs.existsSync(this._userDataDir)) {
+				fs.mkdirSync(this._userDataDir, { recursive: true });
+				console.log(`用户数据目录已创建: ${this._userDataDir}`);
+			} else {
+				console.log(`用户数据目录已存在: ${this._userDataDir}`);
+			}
+		}
+		return String(this._userDataDir);
+	}
 	async #initBrowserWithProxy(proxy) {
+		const userDataDir = await this.#getUserDataDir();
 		return await puppeteer.launch({
 			headless: 'new',
 			args: [
 				`--proxy-server=${proxy.ip}:${proxy.port}`,
-				'--no-sandbox',
-				'--disable-setuid-sandbox',
+				...puppeteerArgs,
 			],
+			userDataDir
 		});
 	}
 	
 	async #initBrowser() {
+		const userDataDir = await this.#getUserDataDir();
 		return await puppeteer.launch({
 			headless: 'new',
 			args: [
-				'--no-sandbox',
-				'--disable-setuid-sandbox',
+				...puppeteerArgs,
 			],
+			userDataDir
 		});
 	}
 	

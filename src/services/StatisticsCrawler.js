@@ -25,6 +25,7 @@ class StatisticsCrawler extends BaseCrawler {
 			}
 		};
 		this.updateDatabaseTime = 0;
+		this.lastSucTime = '-';
 	}
 	
 	/**
@@ -41,6 +42,9 @@ class StatisticsCrawler extends BaseCrawler {
 		} = info || {};
 		if (!key) {
 			return;
+		}
+		if (isSuccess) {
+			this.lastSucTime = new Date().toISOString();
 		}
 		const orgObj = this.statisticalObj?.[key] || {};
 		const _totalCount = Number(orgObj?.['totalCrawlCount'] || 0);
@@ -80,6 +84,7 @@ class StatisticsCrawler extends BaseCrawler {
 						ip: ip,
 						mainInfo: this.statisticalObj?.[key] || {},
 						moreInfo: {
+							lastSucTime:this.lastSucTime,
 							isBanned,
 							'successRate': (this.statisticalObj?.[key]?.['successCrawlCount'] || 0) / (this.statisticalObj?.[key]?.['totalCrawlCount'] || 0),
 						},
