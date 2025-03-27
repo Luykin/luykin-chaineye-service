@@ -315,7 +315,7 @@ router.get('/search/legacy', async (req, res) => {
 		if (!project) {
 			return res.json({ invested: null, investor: null, message: 'No matching project found' });
 		}
-		
+		console.log('project:', project)
 		// 调用现有的 groupInvestmentsByDate 函数
 		const groupedInvestments = groupInvestmentsByDate(project.investmentsReceived || []);
 		
