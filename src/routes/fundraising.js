@@ -243,16 +243,23 @@ router.get('/search', async (req, res) => {
  * **/
 // 时间筛选阈值（2024-03-11T00:00:00Z）
 const DATA_CUTOFF_TIMESTAMP = 1741708800000;
+/** 手动维护部分更名推特 **/
+const RENAME_MAP = {
+	'YZiLabs': 'BinanceLabs'
+};
 router.get('/search/legacy', async (req, res) => {
 	try {
-		const { keyword } = req.query;
+		let { keyword } = req.query;
 		
 		if (!keyword || !keyword.trim() || String(keyword).length < 2) {
 			return res.json({ invested: null, investor: null, message: 'No keyword provided' });
 		}
+		if (keyword in RENAME_MAP) {
+			keyword = RENAME_MAP[keyword];
+		}
 		
 		const sanitizedKeyword = keyword.trim();
-		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503161057`;
+		const cacheKey = `legacy_project_search_${sanitizedKeyword}_202503161099`;
 		let cachedData;
 		
 		try {
