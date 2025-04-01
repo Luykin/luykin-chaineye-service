@@ -245,7 +245,8 @@ router.get('/search', async (req, res) => {
 const DATA_CUTOFF_TIMESTAMP = 1741708800000;
 /** 手动维护部分更名推特 **/
 const RENAME_MAP = {
-	'YZiLabs': 'BinanceLabs'
+	'YZiLabs': 'BinanceLabs',
+	'yzilabs': 'BinanceLabs'
 };
 router.get('/search/legacy', async (req, res) => {
 	try {
