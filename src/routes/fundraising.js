@@ -255,8 +255,9 @@ router.get('/search/legacy', async (req, res) => {
 		if (!keyword || !keyword.trim() || String(keyword).length < 2) {
 			return res.json({ invested: null, investor: null, message: 'No keyword provided' });
 		}
-		if (keyword in RENAME_MAP) {
-			keyword = RENAME_MAP[keyword];
+		const lowerKeyword = String(keyword).toLocaleLowerCase();
+		if ((lowerKeyword in RENAME_MAP) || (keyword in RENAME_MAP)) {
+			keyword = RENAME_MAP[lowerKeyword] || RENAME_MAP[keyword];
 		}
 		
 		const sanitizedKeyword = keyword.trim();
