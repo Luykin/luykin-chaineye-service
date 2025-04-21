@@ -2,7 +2,7 @@ const express = require('express');
 const { query, validationResult } = require('express-validator');
 const { Fundraising, NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
 // const crawler = require('../services/rootdata-crawler');
-const { Op, literal } = require('sequelize');
+const { Op, literal, fn, col } = require('sequelize');
 const router = express.Router();
 const CACHE_TTL = 300; // 缓存时间限制（秒），此处设为5分钟
 const CACHE_TTL_LONG = 600; // 缓存时间限制（秒），此处设为10分钟
@@ -422,6 +422,56 @@ router.get('/search/legacy', async (req, res) => {
 	}
 });
 
+// const { Op, literal, fn, col } = require('sequelize');
+
+router.get('/investors', async (req, res) => {
+	try {
+		const page = parseInt(req.query.page) || 1;
+		const pageSize = parseInt(req.query.pageSize) || 20;
+		const offset = (page - 1) * pageSize;
+		
+		// 1. 获取所有唯一的investorProjectId
+		const investorIds = await Fundraising.InvestmentRelationships.findAll({
+			attributes: [[fn('DISTINCT', col('investorProjectId')), 'investorProjectId']],
+			raw: true
+		});
+		
+		const ids = investorIds.map(item => item.investorProjectId);
+		
+		// 2. 查询项目信息（不分页，获取所有数据）
+		const allProjects = await Fundraising.Project.findAll({
+			where: { id: ids },
+			attributes: ['id', 'projectName', 'socialLinks']
+		});
+		
+		// 3. 按项目名称去重（保持原始顺序）
+		const nameMap = new Map();
+		const uniqueProjects = [];
+		
+		for (const project of allProjects) {
+			if (!nameMap.has(project.projectName)) {
+				nameMap.set(project.projectName, project);
+				uniqueProjects.push(project);
+			}
+		}
+		
+		// 4. 分页处理去重后的数据
+		const paginatedProjects = uniqueProjects.slice(offset, offset + pageSize);
+		
+		res.json({
+			data: paginatedProjects,
+			pagination: {
+				page,
+				pageSize,
+				total: uniqueProjects.length
+			}
+		});
+		
+	} catch (error) {
+		console.error('Investor list error:', error);
+		res.status(500).json({ error: 'Failed to retrieve investors' });
+	}
+});
 // 查看所有失败的项目（带分页）
 router.get('/failed', async (req, res) => {
 	try {
