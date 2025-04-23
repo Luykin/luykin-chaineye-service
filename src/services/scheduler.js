@@ -48,8 +48,8 @@ class CrawlerScheduler {
 		// 	console.log('首次启动任务执行完: startRootDataCrawl');
 		// }).catch(err => console.log(err));
 		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
-		this.startInvestorsCrawl().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// this.startInvestorsCrawl().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
 		/** 每次重启没必要执行一次 rootData 的更新 end ============== **/
 		/** 开始币安 公告**/
 		this.startBinanceExNewsCrawl().then(r => r);
