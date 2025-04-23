@@ -485,7 +485,7 @@ router.get('/investors', async (req, res) => {
 		const offset = (page - 1) * INVESTORS_PAGE_SIZE;
 		
 		// 构造缓存键（包含分页信息）
-		const cacheKey = `vc_listed_projects_page_${page}_size_${INVESTORS_PAGE_SIZE}_20250423`;
+		const cacheKey = `vc_listed_projects_page_${page}_size_${INVESTORS_PAGE_SIZE}_20250423_1`;
 		
 		// 尝试从 Redis 缓存中获取数据
 		let cachedData;
@@ -507,7 +507,7 @@ router.get('/investors', async (req, res) => {
 			where: {
 				isVcListed: true, // 筛选条件
 			},
-			attributes: ['id', 'projectName', 'logo', 'socialLinks', 'vcListPage', 'projectLink'], // 指定需要的字段
+			attributes: ['projectName', 'logo', 'socialLinks', 'vcListPage', 'projectLink'], // 指定需要的字段
 			order: [['vcListPage', 'ASC']], // 按照 vcListPage 从小到大排序
 			limit: INVESTORS_PAGE_SIZE, // 每页条数
 			offset: offset, // 跳过前面的记录
@@ -521,7 +521,7 @@ router.get('/investors', async (req, res) => {
 				projectLink: project.projectLink,
 				logo: project.logo,
 				twitter: project.socialLinks?.x || '', // 假设 socialLinks 是 JSON 字段，提取 x（Twitter）链接
-				// vcListPage: project.vcListPage || null,
+				vcListPage: project.vcListPage || null,
 			};
 		});
 		
