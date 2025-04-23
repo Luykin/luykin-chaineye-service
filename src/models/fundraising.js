@@ -89,6 +89,18 @@ module.exports = (sequelize) => {
 			allowNull: true,
 			comment: '原始在rootdata的页码'
 		},
+		isVcListed: {
+			type: DataTypes.BOOLEAN,
+			allowNull: true,
+			defaultValue: null,
+			comment: '是否在风险投资者列表中'
+		},
+		vcListPage: {
+			type: DataTypes.INTEGER,
+			allowNull: true,
+			defaultValue: null,
+			comment: '在风险投资者列表中的页码'
+		}
 	}, {
 		comment: '项目表，包含每个项目的基本信息以及融资和投资记录',
 		timestamps: true, // 启用 createdAt 和 updatedAt 字段

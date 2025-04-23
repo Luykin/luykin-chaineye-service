@@ -424,54 +424,120 @@ router.get('/search/legacy', async (req, res) => {
 
 // const { Op, literal, fn, col } = require('sequelize');
 
+// router.get('/investors', async (req, res) => {
+// 	try {
+// 		const page = parseInt(req.query.page) || 1;
+// 		const pageSize = parseInt(req.query.pageSize) || 20;
+// 		const offset = (page - 1) * pageSize;
+//
+// 		// 1. 获取所有唯一的investorProjectId
+// 		const investorIds = await Fundraising.InvestmentRelationships.findAll({
+// 			attributes: [[fn('DISTINCT', col('investorProjectId')), 'investorProjectId']],
+// 			raw: true
+// 		});
+//
+// 		const ids = investorIds.map(item => item.investorProjectId);
+//
+// 		// 2. 查询项目信息（不分页，获取所有数据）
+// 		const allProjects = await Fundraising.Project.findAll({
+// 			where: { id: ids },
+// 			attributes: ['id', 'projectName', 'socialLinks']
+// 		});
+//
+// 		// 3. 按项目名称去重（保持原始顺序）
+// 		const nameMap = new Map();
+// 		const uniqueProjects = [];
+//
+// 		for (const project of allProjects) {
+// 			if (!nameMap.has(project.projectName)) {
+// 				nameMap.set(project.projectName, project);
+// 				uniqueProjects.push(project);
+// 			}
+// 		}
+//
+// 		// 4. 分页处理去重后的数据
+// 		const paginatedProjects = uniqueProjects.slice(offset, offset + pageSize);
+//
+// 		res.json({
+// 			data: paginatedProjects,
+// 			pagination: {
+// 				page,
+// 				pageSize,
+// 				total: uniqueProjects.length
+// 			}
+// 		});
+//
+// 	} catch (error) {
+// 		console.error('Investor list error:', error);
+// 		res.status(500).json({ error: 'Failed to retrieve investors' });
+// 	}
+// });
+/**
+ * 获取所有 isVcListed 为 true 的项目
+ */
 router.get('/investors', async (req, res) => {
 	try {
-		const page = parseInt(req.query.page) || 1;
-		const pageSize = parseInt(req.query.pageSize) || 20;
-		const offset = (page - 1) * pageSize;
+		// 构造缓存键
+		const cacheKey = 'vc_listed_projects_20250423';
 		
-		// 1. 获取所有唯一的investorProjectId
-		const investorIds = await Fundraising.InvestmentRelationships.findAll({
-			attributes: [[fn('DISTINCT', col('investorProjectId')), 'investorProjectId']],
-			raw: true
-		});
-		
-		const ids = investorIds.map(item => item.investorProjectId);
-		
-		// 2. 查询项目信息（不分页，获取所有数据）
-		const allProjects = await Fundraising.Project.findAll({
-			where: { id: ids },
-			attributes: ['id', 'projectName', 'socialLinks']
-		});
-		
-		// 3. 按项目名称去重（保持原始顺序）
-		const nameMap = new Map();
-		const uniqueProjects = [];
-		
-		for (const project of allProjects) {
-			if (!nameMap.has(project.projectName)) {
-				nameMap.set(project.projectName, project);
-				uniqueProjects.push(project);
-			}
+		// 尝试从 Redis 缓存中获取数据
+		let cachedData;
+		try {
+			cachedData = await req.redisClient.get(cacheKey);
+		} catch (error) {
+			console.error('Redis Client Error (GET):', error);
 		}
 		
-		// 4. 分页处理去重后的数据
-		const paginatedProjects = uniqueProjects.slice(offset, offset + pageSize);
+		// // 如果缓存命中，直接返回缓存数据
+		// if (cachedData) {
+		// 	res.set('Cache-Control', 'public, max-age=120');
+		// 	res.set('X-Cache-Status', 'HIT');
+		// 	return res.json(JSON.parse(cachedData));
+		// }
 		
-		res.json({
-			data: paginatedProjects,
-			pagination: {
-				page,
-				pageSize,
-				total: uniqueProjects.length
-			}
+		// 查询数据库：获取所有 isVcListed 为 true 的项目
+		const vcListedProjects = await Fundraising.Project.findAll({
+			where: {
+				isVcListed: true, // 筛选条件
+			},
+			attributes: ['id', 'projectName', 'logo', 'socialLinks', 'vcListPage', 'projectLink'], // 指定需要的字段
 		});
 		
+		// 格式化返回数据
+		const formattedProjects = vcListedProjects.map((project) => {
+			return {
+				id: project.id,
+				name: project.projectName,
+				projectLink: project.projectLink,
+				logo: project.logo,
+				twitter: project.socialLinks?.x || '', // 假设 socialLinks 是 JSON 字段，提取 x（Twitter）链接
+				vcListPage: project.vcListPage || null,
+			};
+		});
+		
+		// 构造响应数据
+		const response = {
+			investors: formattedProjects,
+			total_count: formattedProjects.length,
+		};
+		
+		// 缓存结果到 Redis
+		try {
+			await req.redisClient.setEx(cacheKey, CACHE_TTL, JSON.stringify(response));
+		} catch (error) {
+			console.error('Redis Client Error (SET):', error);
+		}
+		
+		// 返回响应
+		res.set('Cache-Control', 'public, max-age=120');
+		res.set('X-Cache-Status', 'MISS');
+		res.json(response);
 	} catch (error) {
-		console.error('Investor list error:', error);
-		res.status(500).json({ error: 'Failed to retrieve investors' });
+		console.error('Error fetching VC listed projects:', error);
+		res.status(500).json({ error: 'Failed to fetch VC listed projects' });
 	}
 });
+
 // 查看所有失败的项目（带分页）
 router.get('/failed', async (req, res) => {
 	try {
