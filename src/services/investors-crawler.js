@@ -131,7 +131,7 @@ class InvestorsCrawler extends BaseCrawler {
 					return {
 						logo: cells[0]?.querySelector('a img')?.src || '',
 						projectName: projectName,
-						projectLink: cells[0]?.querySelector("a").href,
+						projectLink: cells[0]?.querySelector('a').href,
 						description: `VC-${projectName}`,
 						// round: cells[1]?.textContent?.trim(),
 						// amount: cells[2]?.textContent?.trim(),
@@ -275,18 +275,21 @@ class InvestorsCrawler extends BaseCrawler {
 					data = [];
 					failedPages = [...failedPages, currentPage];
 				}
-				
-				if ((!data || (data || [])?.length === 0) && currentPage >= 1) {
+				if (currentPage >= 1) {
 					hasMoreData = false;
 					continue;
 				}
+				// if ((!data || (data || [])?.length === 0) && currentPage >= 1) {
+				// 	hasMoreData = false;
+				// 	continue;
+				// }
 				
 				// // 获取所有字段，排除不需要更新的字段
 				// const fieldsToUpdate = Object.keys(Fundraising.Project.rawAttributes).filter(field =>
 				// 	!['id', 'projectLink', 'createdAt', 'updatedAt'].includes(field)
 				// );
 				await Fundraising.Project.bulkCreate(data, {
-					updateOnDuplicate: ["isVcListed", "vcListPage"]
+					updateOnDuplicate: ['isVcListed', 'vcListPage']
 				});
 				
 				state.otherInfo = {

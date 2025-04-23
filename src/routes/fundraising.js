@@ -485,7 +485,7 @@ router.get('/investors', async (req, res) => {
 		const offset = (page - 1) * INVESTORS_PAGE_SIZE;
 		
 		// 构造缓存键（包含分页信息）
-		const cacheKey = `vc_listed_projects_page_${page}_size_${INVESTORS_PAGE_SIZE}_20250423_1`;
+		const cacheKey = `vc_listed_projects_page_${page}_size_${INVESTORS_PAGE_SIZE}_20250423_2`;
 		
 		// 尝试从 Redis 缓存中获取数据
 		let cachedData;
