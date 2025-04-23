@@ -276,7 +276,7 @@ class InvestorsCrawler extends BaseCrawler {
 					failedPages = [...failedPages, currentPage];
 				}
 				
-				if ((!data || (data || [])?.length === 0) && currentPage >= 278) {
+				if ((!data || (data || [])?.length === 0) && currentPage >= 1) {
 					hasMoreData = false;
 					continue;
 				}
