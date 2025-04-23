@@ -472,13 +472,20 @@ router.get('/search/legacy', async (req, res) => {
 // 		res.status(500).json({ error: 'Failed to retrieve investors' });
 // 	}
 // });
+
+const INVESTORS_PAGE_SIZE = 30; // 每页默认返回 30 条记录
+
 /**
- * 获取所有 isVcListed 为 true 的项目
+ * 获取所有 isVcListed 为 true 的项目，支持分页和排序
  */
 router.get('/investors', async (req, res) => {
 	try {
-		// 构造缓存键
-		const cacheKey = 'vc_listed_projects_20250423';
+		// 获取分页参数
+		const page = parseInt(req.query.page, 10) || 1; // 默认第一页
+		const offset = (page - 1) * INVESTORS_PAGE_SIZE;
+		
+		// 构造缓存键（包含分页信息）
+		const cacheKey = `vc_listed_projects_page_${page}_size_${INVESTORS_PAGE_SIZE}`;
 		
 		// 尝试从 Redis 缓存中获取数据
 		let cachedData;
@@ -488,19 +495,22 @@ router.get('/investors', async (req, res) => {
 			console.error('Redis Client Error (GET):', error);
 		}
 		
-		// // 如果缓存命中，直接返回缓存数据
-		// if (cachedData) {
-		// 	res.set('Cache-Control', 'public, max-age=120');
-		// 	res.set('X-Cache-Status', 'HIT');
-		// 	return res.json(JSON.parse(cachedData));
-		// }
+		// 如果缓存命中，直接返回缓存数据
+		if (cachedData) {
+			res.set('Cache-Control', 'public, max-age=120');
+			res.set('X-Cache-Status', 'HIT');
+			return res.json(JSON.parse(cachedData));
+		}
 		
 		// 查询数据库：获取所有 isVcListed 为 true 的项目
-		const vcListedProjects = await Fundraising.Project.findAll({
+		const { rows: vcListedProjects, count: totalCount } = await Fundraising.Project.findAndCountAll({
 			where: {
 				isVcListed: true, // 筛选条件
 			},
 			attributes: ['id', 'projectName', 'logo', 'socialLinks', 'vcListPage', 'projectLink'], // 指定需要的字段
+			order: [['vcListPage', 'ASC']], // 按照 vcListPage 从小到大排序
+			limit: INVESTORS_PAGE_SIZE, // 每页条数
+			offset: offset, // 跳过前面的记录
 		});
 		
 		// 格式化返回数据
@@ -515,10 +525,16 @@ router.get('/investors', async (req, res) => {
 			};
 		});
 		
+		// 计算总页数
+		const totalPages = Math.ceil(totalCount / INVESTORS_PAGE_SIZE);
+		
 		// 构造响应数据
 		const response = {
 			investors: formattedProjects,
-			total_count: formattedProjects.length,
+			total_count: totalCount,
+			page: page,
+			INVESTORS_PAGE_SIZE: INVESTORS_PAGE_SIZE,
+			total_pages: totalPages,
 		};
 		
 		// 缓存结果到 Redis
