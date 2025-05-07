@@ -13,6 +13,7 @@ const fundraisingRoutes = require('./routes/fundraising');
 const cryptoRoutes = require('./routes/cryptohunt-tg');
 const proxyRoutes = require('./routes/proxy');
 const newsRoutes = require('./routes/ex-news');
+const { securityMiddleware, fingerprintLimiter, rateLimiter } = require('./xhunt/middleware/security');
 
 const app = express();
 const PORT = process.env.PORT || 8090;

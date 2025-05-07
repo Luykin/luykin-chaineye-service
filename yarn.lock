@@ -3697,6 +3697,11 @@ tweetnacl@^0.14.3, tweetnacl@~0.14.0:
   resolved "https://registry.npmmirror.com/tweetnacl/-/tweetnacl-0.14.5.tgz#5ae68177f192d4456269d108afa93ff8743f4f64"
   integrity sha512-KXXFFdAbFXY4geFIwoyNK+f5Z1b7swfXABfL7HXCmoIWMKU3dmS26672A4EeQtDzLKy7SXmfBu51JolvEKwtGA==
 
+twitter-api-v2@^1.23.0:
+  version "1.23.0"
+  resolved "https://registry.yarnpkg.com/twitter-api-v2/-/twitter-api-v2-1.23.0.tgz#baa4ddc69dd3fb79f650df86ef3d0be93f17e9e1"
+  integrity sha512-5i1agETVpTuY68Zuk9i2B3N9wHzc4JIWw0WKyG4CEaFv9mRKmU87roa+U1oYYXTChWb0HMcqfkwoBJHYmLbeDA==
+
 type-is@~1.6.18:
   version "1.6.18"
   resolved "https://registry.npmmirror.com/type-is/-/type-is-1.6.18.tgz#4e552cd05df09467dcbc4ef739de89f2cf37c131"

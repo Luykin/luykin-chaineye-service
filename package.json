@@ -43,6 +43,7 @@
     "socks-proxy-agent": "^8.0.4",
     "sqlite3": "^5.1.7",
     "telegraf": "^4.16.3",
+    "twitter-api-v2": "^1.23.0",
     "uuid": "^11.0.3"
   },
   "devDependencies": {
