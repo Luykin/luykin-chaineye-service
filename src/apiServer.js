@@ -3,7 +3,6 @@ console.log(process.env.NODE_ENV, 'process.env.NODE_ENV运行环境');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
-const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const morgan = require('morgan');
 const redis = require('redis');
@@ -13,6 +12,9 @@ const fundraisingRoutes = require('./routes/fundraising');
 const cryptoRoutes = require('./routes/cryptohunt-tg');
 const proxyRoutes = require('./routes/proxy');
 const newsRoutes = require('./routes/ex-news');
+const xHuntAuthRoutes = require('./xhunt/api/auth');
+const xHuntProxyRoutes = require('./xhunt/api/proxy');
+const xHuntReviewsRoutes = require('./xhunt/api/reviews');
 const { securityMiddleware, fingerprintLimiter, rateLimiter } = require('./xhunt/middleware/security');
 
 const app = express();
@@ -79,14 +81,8 @@ app.use(helmet({
 		},
 	},
 }));
-app.use(rateLimit({
-	windowMs: 60 * 1000,
-	max: 40,
-	message: 'Too many requests, please try again later.',
-	standardHeaders: true, // 返回标准的速率限制信息
-	legacyHeaders: false, // 关闭X-RateLimit-* 头部
-	trustProxy: true, // 明确指定信任代理
-}));
+// 全局速率限制
+app.use(rateLimiter);
 app.use(compression());
 app.use(morgan('combined'));
 app.use(helmet.hidePoweredBy());
@@ -99,6 +95,27 @@ app.use('/api/fundraising', fundraisingRoutes);
 app.use('/api/crypto', cryptoRoutes);
 app.use('/api/proxy', proxyRoutes);
 app.use('/api/news', newsRoutes);
+
+app.use(
+	'/api/xhunt/auth',
+	fingerprintLimiter,
+	securityMiddleware,
+	xHuntAuthRoutes
+);
+
+app.use(
+	'/api/xhunt/proxy',
+	fingerprintLimiter,
+	securityMiddleware,
+	xHuntProxyRoutes
+);
+
+app.use(
+	'/api/xhunt/reviews',
+	fingerprintLimiter,
+	securityMiddleware,
+	xHuntReviewsRoutes
+);
 
 // 错误处理中间件
 app.use((err, req, res, next) => {

@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { User, Token } = require('../models');
+// const { User, Token } = require('../models');
+const { XHuntUserToken, XHuntUser } = require('../../models/postgres-start');
 const { generateTwitterAuthUrl, getTwitterTokens, getTwitterUserInfo } = require('../services/twitter');
 const { validateRequest } = require('../middleware/validate-request');
 const { body, param } = require('express-validator');
@@ -32,7 +33,7 @@ router.post('/twitter/callback', [
 		
 		const twitterUser = await getTwitterUserInfo(accessToken);
 		
-		const [user] = await User.findOrCreate({
+		const [user] = await XHuntUser.findOrCreate({
 			where: { twitterId: twitterUser.id },
 			defaults: {
 				username: twitterUser.username,
@@ -42,7 +43,7 @@ router.post('/twitter/callback', [
 		});
 		
 		const tokenExpiry = new Date(Date.now() + expiresIn * 1000);
-		const tokenRecord = await Token.create({
+		const tokenRecord = await XHuntUserToken.create({
 			userId: user.id,
 			accessToken,
 			refreshToken,
@@ -86,7 +87,7 @@ router.post('/refresh', async (req, res) => {
 		
 		const decoded = jwt.verify(token, process.env.JWT_SECRET);
 		
-		const tokenRecord = await Token.findOne({
+		const tokenRecord = await XHuntUserToken.findOne({
 			where: {
 				id: decoded.tokenId,
 				isRevoked: false
@@ -135,7 +136,7 @@ router.delete('/tokens/:tokenId', [
 	try {
 		const { tokenId } = req.params;
 		
-		const token = await Token.findOne({
+		const token = await XHuntUserToken.findOne({
 			where: { id: tokenId },
 			include: ['user']
 		});
@@ -184,7 +185,7 @@ router.post('/tokens/revoke-batch', [
 			if (username) userWhere.username = username;
 			if (userId) userWhere.id = userId;
 			
-			const users = await User.findAll({ where: userWhere });
+			const users = await XHuntUser.findAll({ where: userWhere });
 			const userIds = users.map(user => user.id);
 			
 			if (userIds.length === 0) {
@@ -198,7 +199,7 @@ router.post('/tokens/revoke-batch', [
 			where.userId = req.user.id;
 		}
 		
-		const [updatedCount] = await Token.update(
+		const [updatedCount] = await XHuntUserToken.update(
 			{ isRevoked: true },
 			{ where }
 		);
@@ -215,9 +216,9 @@ router.post('/tokens/revoke-batch', [
 
 router.post('/tokens/revoke-all', async (req, res) => {
 	try {
-		const [rowsUpdated] = await Token.update(
+		const [rowsUpdated] = await XHuntUserToken.update(
 			{ isRevoked: true },
-			{ where: { isRevoked: false } } // 仅更新未撤销的 Token
+			{ where: { isRevoked: false } } // 仅更新未撤销的 XHuntUserToken
 		);
 		
 		res.json({

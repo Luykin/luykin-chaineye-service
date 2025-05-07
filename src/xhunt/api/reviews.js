@@ -2,7 +2,7 @@ const express = require('express');
 const { body, param } = require('express-validator');
 const { validateRequest } = require('../middleware/validate-request');
 const { authenticateToken } = require('../middleware/auth');
-const { XReviewForAccount, XHuntUser, XAccount } = require('../models');
+const { XReviewForAccount, XHuntUser, XAccount } = require('../../models/postgres-start');
 
 const router = express.Router();
 

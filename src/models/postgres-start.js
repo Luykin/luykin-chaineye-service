@@ -1,5 +1,11 @@
 const { Sequelize } = require('sequelize');
 const TGUserModel = require('./cryptohunt-tg-user');
+// 加载所有模型（注意：调用方式改为工厂函数）
+const XHuntUserModel = require('../xhunt/models/XHuntUser');
+const XAccountModel = require('../xhunt/models/XAccount');
+const XHuntUserTokenModel = require('../xhunt/models/XHuntUserToken');
+const XReviewForAccountModel = require('../xhunt/models/XReviewForAccount');
+
 
 const pgInstance = new Sequelize({
 	dialect: process.env.PG_DIALECT,
@@ -17,12 +23,41 @@ const TGUser = TGUserModel(pgInstance);
 /** 这是 https://www.cryptohunt.ai/ 的数据表 end====== **/
 
 /** ✅这是XHunt 浏览器插件的 数据表  start====== **/
-const {
-	XHuntUser,
-	XAccount,
-	XHuntUserToken,
-	XReviewForAccount
-} = require('../xhunt/models'); // 替换为正确的路径
+const XHuntUser = XHuntUserModel(pgInstance);
+const XAccount = XAccountModel(pgInstance);
+const XHuntUserToken = XHuntUserTokenModel(pgInstance);
+const XReviewForAccount = XReviewForAccountModel(pgInstance);
+// 建立模型之间的关系
+XHuntUser.hasMany(XReviewForAccount, {
+	foreignKey: 'xHuntUserId',
+	as: 'reviews'
+});
+
+XReviewForAccount.belongsTo(XHuntUser, {
+	foreignKey: 'xHuntUserId',
+	as: 'xHuntUser'
+});
+
+XAccount.hasMany(XReviewForAccount, {
+	foreignKey: 'xAccountId',
+	as: 'receivedReviews'
+});
+
+XReviewForAccount.belongsTo(XAccount, {
+	foreignKey: 'xAccountId',
+	as: 'xAccount'
+});
+
+XHuntUser.hasMany(XHuntUserToken, {
+	foreignKey: 'userId',
+	as: 'tokens'
+});
+
+XHuntUserToken.belongsTo(XHuntUser, {
+	foreignKey: 'userId',
+	as: 'user'
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 

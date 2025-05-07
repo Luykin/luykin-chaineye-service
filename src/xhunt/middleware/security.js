@@ -4,7 +4,7 @@ const crypto = require('crypto');
 // 速率限制中间件
 const rateLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000, // 15分钟窗口
-	max: 100, // 限制请求次数
+	max: 200, // 限制请求次数
 	standardHeaders: true,
 	legacyHeaders: false,
 	handler: (req, res) => {
@@ -17,7 +17,7 @@ const rateLimiter = rateLimit({
 // 基于设备指纹的速率限制
 const fingerprintLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
-	max: 50,
+	max: 300,
 	standardHeaders: true,
 	legacyHeaders: false,
 	keyGenerator: (req) => req.headers['x-device-fingerprint'] || req.ip,
@@ -117,7 +117,7 @@ const securityMiddleware = (req, res, next) => {
 		next();
 	} catch (error) {
 		console.error('Security middleware error:', error);
-		res.status(500).json({ error: '安全验证失败' });
+		res.status(500).json({ error: 'securityMiddleware 500' });
 	}
 };
 

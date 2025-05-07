@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { Token, User } = require('../models');
+const { XHuntUserToken, XHuntUser } = require('../../models/postgres-start');
 
 async function authenticateToken(req, res, next) {
 	try {
@@ -14,14 +14,14 @@ async function authenticateToken(req, res, next) {
 		const decoded = jwt.verify(token, process.env.JWT_SECRET);
 		
 		// 从数据库查找对应的令牌记录
-		const tokenRecord = await Token.findOne({
+		const tokenRecord = await XHuntUserToken.findOne({
 			where: {
 				id: decoded.tokenId,
 				isRevoked: false
 			},
 			include: [{
-				model: User,
-				as: 'user'
+				model: XHuntUser,
+				as: 'user' // 确保与模型关联的 `as` 别名一致
 			}]
 		});
 		
