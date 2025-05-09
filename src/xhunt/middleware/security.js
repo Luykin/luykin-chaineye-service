@@ -73,9 +73,10 @@ const securityMiddleware = (req, res, next) => {
 		const timestamp = parseInt(req.headers['x-request-timestamp']);
 		const fingerprint = req.headers['x-device-fingerprint'];
 		const signature = req.headers['x-request-signature'];
+		const version = req.headers['x-extension-version'];
 		
 		// 验证请求头是否存在
-		if (!requestId || !timestamp || !fingerprint || !signature) {
+		if (!requestId || !timestamp || !fingerprint || !signature || !version) {
 			return res.status(400).json({ error: '缺少必要的安全头信息' });
 		}
 		
