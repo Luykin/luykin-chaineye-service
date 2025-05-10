@@ -76,7 +76,7 @@ const securityMiddleware = (req, res, next) => {
 		
 		// 验证请求头是否存在
 		if (!requestId || !timestamp || !fingerprint || !signature || !version) {
-			return res.status(400).json({ error: '401' });
+			return res.status(400).json({ error: '400' });
 		}
 		
 		// 验证指纹格式
@@ -104,7 +104,7 @@ const securityMiddleware = (req, res, next) => {
 		);
 		
 		if (signature !== expectedSignature) {
-			return res.status(401).json({ error: '499' });
+			return res.status(401).json({ error: '401' });
 		}
 		
 		// 将验证后的信息添加到请求对象中
