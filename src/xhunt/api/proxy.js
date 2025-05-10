@@ -28,7 +28,6 @@ async function proxyRequest(req, res, targetUrl) {
 		if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
 			options.body = JSON.stringify(req.body);
 		}
-		
 		// 发送请求到目标服务器
 		const response = await fetch(targetUrl, options);
 		const data = await response.json();
@@ -43,10 +42,26 @@ async function proxyRequest(req, res, targetUrl) {
 
 // 获取目标URL
 function getTargetUrl(req) {
-	const target = req.query.target || DEFAULT_TARGET;
-	const baseUrl = URL_MAPPINGS[target] || URL_MAPPINGS[DEFAULT_TARGET];
+	// 提取并删除 target 参数
+	const originalQuery = { ...req.query };
+	const target = originalQuery.target || DEFAULT_TARGET;
+	delete originalQuery.target;
+	
+	// 获取目标基础 URL 并确保无多余空格
+	const baseUrl = (URL_MAPPINGS[target] || URL_MAPPINGS[DEFAULT_TARGET]).trim();
+	
+	// 提取路径（去除 /auth/ 或 /public/ 前缀）
 	const targetPath = req.path.replace(/^\/(auth|public)\//, '');
-	return `${baseUrl}/${targetPath}`;
+	
+	// 将剩余查询参数转换为查询字符串
+	const search = new URLSearchParams(originalQuery).toString();
+	
+	// 拼接完整的目标 URL
+	let fullPath = targetPath;
+	if (search) {
+		fullPath += `?${search}`;
+	}
+	return `${baseUrl}/${fullPath}`;
 }
 
 // 代理路由 - 需要认证

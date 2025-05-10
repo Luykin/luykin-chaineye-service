@@ -65,7 +65,7 @@ const corsOptions = {
 		'https://x.com'
 	],
 	methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // 包括 OPTIONS
-	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp'],
+	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp', 'x-request-id', 'x-request-timestamp', 'x-device-fingerprint', 'x-request-signature', 'x-extension-version'],
 	credentials: true,
 };
 

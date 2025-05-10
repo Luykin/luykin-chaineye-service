@@ -56,9 +56,8 @@ const generateSignature = (method, path, timestamp, body, fingerprint) => {
 		path,
 		timestamp,
 		fingerprint,
-		body ? JSON.stringify(body) : ''
+		JSON.stringify(body || {})
 	].join('|');
-	
 	return crypto
 		.createHmac('sha256', process.env.XHUNT_API_SECRET)
 		.update(payload)
@@ -77,7 +76,7 @@ const securityMiddleware = (req, res, next) => {
 		
 		// 验证请求头是否存在
 		if (!requestId || !timestamp || !fingerprint || !signature || !version) {
-			return res.status(400).json({ error: '缺少必要的安全头信息' });
+			return res.status(400).json({ error: '401' });
 		}
 		
 		// 验证指纹格式
@@ -98,14 +97,14 @@ const securityMiddleware = (req, res, next) => {
 		// 验证签名
 		const expectedSignature = generateSignature(
 			req.method,
-			req.path,
+			req.baseUrl + req.path,
 			timestamp,
 			req.body,
 			fingerprint
 		);
 		
 		if (signature !== expectedSignature) {
-			return res.status(401).json({ error: '无效的请求签名' });
+			return res.status(401).json({ error: '499' });
 		}
 		
 		// 将验证后的信息添加到请求对象中
