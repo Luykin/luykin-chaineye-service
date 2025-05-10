@@ -81,17 +81,17 @@ const securityMiddleware = (req, res, next) => {
 		
 		// 验证指纹格式
 		if (!isValidFingerprint(fingerprint)) {
-			return res.status(400).json({ error: '无效的设备指纹格式' });
+			return res.status(400).json({ error: '400-1' });
 		}
 		
 		// 验证请求ID格式
 		if (!isValidRequestId(requestId)) {
-			return res.status(400).json({ error: '无效的请求ID格式' });
+			return res.status(400).json({ error: '400-2' });
 		}
 		
 		// 验证时间戳
 		if (!isTimestampValid(timestamp)) {
-			return res.status(400).json({ error: '请求已过期' });
+			return res.status(400).json({ error: '400-3' });
 		}
 		
 		// 验证签名
