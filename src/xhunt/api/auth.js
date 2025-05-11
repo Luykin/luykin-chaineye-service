@@ -1,6 +1,5 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-// const { User, Token } = require('../models');
 const { XHuntUserToken, XHuntUser } = require('../../models/postgres-start');
 const { generateTwitterAuthUrl, getTwitterTokens, getTwitterUserInfo } = require('../services/twitter');
 const { validateRequest } = require('../middleware/validate-request');
@@ -10,70 +9,129 @@ const { Op } = require('sequelize');
 
 const router = express.Router();
 
+function withTimeout(promise, { milliseconds, message = '请求超时', abortController } = {}) {
+	const timeout = new Promise((_, reject) => {
+		const timer = setTimeout(() => {
+			if (abortController) {
+				abortController.abort();
+			}
+			reject(new Error(message));
+		}, milliseconds);
+		
+		// 清理定时器
+		promise.then(() => clearTimeout(timer)).catch(() => clearTimeout(timer));
+	});
+	
+	return Promise.race([promise, timeout]);
+}
+
 // 获取 Twitter 授权 URL
 router.get('/twitter/url', async (req, res) => {
 	try {
-		const authUrl = await generateTwitterAuthUrl();
+		const authUrl = await generateTwitterAuthUrl(async (state, codeVerifier) => {
+			const cacheKey = `twitter_oauth_state:${state}`;
+			/** state 8分钟没处理就过期 **/
+			await req.redisClient.setEx(cacheKey, 480, codeVerifier);
+		});
 		res.json({ url: authUrl });
 	} catch (error) {
 		console.error('Error generating auth URL:', error);
 		res.status(500).json({ error: '获取授权URL失败' });
 	}
 });
-
-// Twitter OAuth 回调处理
-router.post('/twitter/callback', [
-	body('code').trim().notEmpty(),
-	validateRequest
-], async (req, res) => {
-	try {
-		const { code } = req.body;
+/**
+ * Twitter OAuth 回调处理接口
+ */
+router.post(
+	'/twitter/callback',
+	[
+		body('code').trim().notEmpty(),
+		body('state').trim().notEmpty(),
+		validateRequest,
+	],
+	async (req, res) => {
+		const { code, state } = req.body;
+		console.log('收到callback请求了', code, state);
 		
-		const { accessToken, refreshToken, expiresIn } = await getTwitterTokens(code);
-		
-		const twitterUser = await getTwitterUserInfo(accessToken);
-		
-		const [user] = await XHuntUser.findOrCreate({
-			where: { twitterId: twitterUser.id },
-			defaults: {
-				username: twitterUser.username,
-				displayName: twitterUser.name,
-				avatar: twitterUser.profile_image_url
+		try {
+			// === Step 1: 验证 state 是否有效 ===
+			const cacheKey = `twitter_oauth_state:${state}`;
+			let cachedData;
+			try {
+				cachedData = await req.redisClient.get(cacheKey);
+			} catch (redisError) {
+				console.error('Redis GET error:', redisError);
+				return res.status(500).json({ error: '服务器内部错误（Redis）' });
 			}
-		});
-		
-		const tokenExpiry = new Date(Date.now() + expiresIn * 1000);
-		const tokenRecord = await XHuntUserToken.create({
-			userId: user.id,
-			accessToken,
-			refreshToken,
-			tokenExpiry,
-			lastUsed: new Date()
-		});
-		
-		const jwtToken = jwt.sign(
-			{
+			console.log('缓存数据', cachedData);
+			if (!cachedData) {
+				return res.status(400).json({
+					error: '无效或过期的 state',
+				});
+			}
+			
+			// 删除已使用的 state，防止重复使用
+			try {
+				await req.redisClient.del(cacheKey);
+			} catch (redisDelError) {
+				console.warn('无法删除 Redis 中的 state:', redisDelError);
+			}
+			console.log('已删除缓存数据111', cachedData);
+			// === Step 2: 获取 Twitter Tokens ===
+			const { accessToken, refreshToken, expiresIn } = await getTwitterTokens(code, cachedData);
+			console.log('accessToken11222', accessToken);
+			// === Step 3: 获取 Twitter 用户信息 ===
+			const twitterUser = await getTwitterUserInfo(accessToken);
+			console.log(twitterUser, '???dsdstwitterUsertwitterUsertwitterUsera123');
+			// === Step 4: 创建或更新用户信息 ===
+			const [user] = await XHuntUser.findOrCreate({
+				where: { twitterId: twitterUser.id },
+				defaults: {
+					username: twitterUser.username,
+					displayName: twitterUser.name,
+					avatar: twitterUser.profile_image_url,
+				},
+			});
+			// 删除所有旧 token
+			await XHuntUserToken.destroy({
+				where: { userId: user.id },
+			});
+			// === Step 5: 创建 Token 记录 ===
+			const tokenExpiry = new Date(Date.now() + expiresIn * 1000);
+			const tokenRecord = await XHuntUserToken.create({
 				userId: user.id,
-				tokenId: tokenRecord.id
-			},
-			process.env.JWT_SECRET,
-			{ expiresIn: '30d' }
-		);
-		
-		res.json({
-			token: jwtToken,
-			user: {
-				id: user.id,
-				username: user.username,
-				displayName: user.displayName,
-				avatar: user.avatar
-			}
-		});
-	} catch (error) {
-		console.error('Twitter callback error:', error);
-		res.status(500).json({ error: '登录失败' });
+				accessToken,
+				refreshToken,
+				tokenExpiry,
+				lastUsed: new Date(),
+			});
+			
+			// === Step 6: 签发 JWT Token ===
+			const jwtToken = jwt.sign(
+				{
+					userId: user.id,
+					tokenId: tokenRecord.id,
+				},
+				process.env.JWT_SECRET,
+				{ expiresIn: '30d' }
+			);
+			console.log('成功返回数据', jwtToken);
+			// === Step 7: 返回响应 ===
+			return res.json({
+				token: jwtToken,
+				user: {
+					id: user.id,
+					username: user.username,
+					displayName: user.displayName,
+					avatar: user.avatar,
+				},
+			});
+		} catch (error) {
+			console.error('Twitter callback error:', error);
+			return res.status(500).json({ error: '登录失败，请稍后再试' });
+		}
 	}
-});
+);
 
 // 刷新令牌
 router.post('/refresh', async (req, res) => {

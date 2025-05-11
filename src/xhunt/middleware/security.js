@@ -93,7 +93,6 @@ const securityMiddleware = (req, res, next) => {
 		if (!isTimestampValid(timestamp)) {
 			return res.status(400).json({ error: '400-3' });
 		}
-		
 		// 验证签名
 		const expectedSignature = generateSignature(
 			req.method,
@@ -106,7 +105,6 @@ const securityMiddleware = (req, res, next) => {
 		if (signature !== expectedSignature) {
 			return res.status(401).json({ error: '401' });
 		}
-		
 		// 将验证后的信息添加到请求对象中
 		req.securityContext = {
 			requestId,

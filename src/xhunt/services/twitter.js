@@ -12,7 +12,7 @@ const client = new TwitterApi({
 
 // 生成 Twitter 授权 URL
 async function generateTwitterAuthUrl(stateStoreFn) {
-	const { url, state } = await client.generateOAuth2AuthLink(
+	const { url, state, codeVerifier } = await client.generateOAuth2AuthLink(
 		process.env.TWITTER_CALLBACK_URL,
 		{
 			scope: ['tweet.read', 'users.read', 'offline.access'],
@@ -21,19 +21,21 @@ async function generateTwitterAuthUrl(stateStoreFn) {
 	
 	// 建议：将 state 存入 session
 	if (typeof stateStoreFn === 'function') {
-		stateStoreFn(state);
+		await stateStoreFn(state, codeVerifier);
 	}
 	
 	return url;
 }
 
 // 获取 Twitter Tokens
-async function getTwitterTokens(code) {
+async function getTwitterTokens(code, codeVerifier) {
+	console.log('getTwitterTokens', 'code', code, codeVerifier);
 	const { accessToken, refreshToken, expiresIn } = await client.loginWithOAuth2({
 		code,
+		codeVerifier,
 		redirectUri: process.env.TWITTER_CALLBACK_URL,
 	});
-	
+	console.log('getTwitterTokens', 'accessToken', accessToken);
 	return { accessToken, refreshToken, expiresIn };
 }
 
