@@ -205,3 +205,24 @@ SET socialLinks = json_set(socialLinks, '$.x', NULL)
 WHERE id IN (
 SELECT id FROM LatestProjects WHERE rn > 1
 );
+
+
+查询某个项目：
+sqlite3 path/to/your/database.sqlite
+
+-- 启用列显示和标题（美化输出）
+.headers on
+.mode columns
+
+-- 查询 socialLinks.x 包含 "ArciumHQ" 的项目
+SELECT
+id,
+projectName,
+round,
+amount,
+valuation,
+json_extract(socialLinks, '$.x') AS x_link,
+json_extract(socialLinks, '$.twitter') AS twitter_link,
+json_extract(socialLinks, '$.linkedin') AS linkedin_link
+FROM Projects
+WHERE json_extract(socialLinks, '$.x') LIKE '%ArciumHQ%';
