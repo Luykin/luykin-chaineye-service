@@ -51,7 +51,6 @@ router.post(
 	],
 	async (req, res) => {
 		const { code, state } = req.body;
-		console.log('收到callback请求了', code, state);
 		
 		try {
 			// === Step 1: 验证 state 是否有效 ===
@@ -63,7 +62,6 @@ router.post(
 				console.error('Redis GET error:', redisError);
 				return res.status(500).json({ error: '服务器内部错误（Redis）' });
 			}
-			console.log('缓存数据', cachedData);
 			if (!cachedData) {
 				return res.status(400).json({
 					error: '无效或过期的 state',
@@ -76,13 +74,10 @@ router.post(
 			} catch (redisDelError) {
 				console.warn('无法删除 Redis 中的 state:', redisDelError);
 			}
-			console.log('已删除缓存数据111', cachedData);
 			// === Step 2: 获取 Twitter Tokens ===
 			const { accessToken, refreshToken, expiresIn } = await getTwitterTokens(code, cachedData);
-			console.log('accessToken11222', accessToken);
 			// === Step 3: 获取 Twitter 用户信息 ===
 			const twitterUser = await getTwitterUserInfo(accessToken);
-			console.log(twitterUser, '???dsdstwitterUsertwitterUsertwitterUsera123');
 			// === Step 4: 创建或更新用户信息 ===
 			const [user] = await XHuntUser.findOrCreate({
 				where: { twitterId: twitterUser.id },
@@ -115,7 +110,6 @@ router.post(
 				process.env.JWT_SECRET,
 				{ expiresIn: '30d' }
 			);
-			console.log('成功返回数据', jwtToken);
 			// === Step 7: 返回响应 ===
 			return res.json({
 				token: jwtToken,

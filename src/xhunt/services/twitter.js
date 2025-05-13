@@ -29,13 +29,11 @@ async function generateTwitterAuthUrl(stateStoreFn) {
 
 // 获取 Twitter Tokens
 async function getTwitterTokens(code, codeVerifier) {
-	console.log('getTwitterTokens', 'code', code, codeVerifier);
 	const { accessToken, refreshToken, expiresIn } = await client.loginWithOAuth2({
 		code,
 		codeVerifier,
 		redirectUri: process.env.TWITTER_CALLBACK_URL,
 	});
-	console.log('getTwitterTokens', 'accessToken', accessToken);
 	return { accessToken, refreshToken, expiresIn };
 }
 
