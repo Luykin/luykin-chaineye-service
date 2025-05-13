@@ -127,7 +127,9 @@ router.post('/', [
 			note: note || ''
 		});
 		
-		res.status(201).json(review);
+		res.status(201).json({
+			status: 'success',
+		});
 	} catch (error) {
 		console.error('Error creating review:', error);
 		res.status(500).json({ error: 'Failed to create review' });
@@ -176,7 +178,9 @@ router.post('/update', [
 			} : {})
 		});
 		
-		res.json(review);
+		res.json({
+			status: 'success',
+		});
 	} catch (error) {
 		console.error('Error updating review:', error);
 		res.status(500).json({ error: 'Failed to update review' });
