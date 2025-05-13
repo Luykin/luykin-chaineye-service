@@ -7,33 +7,44 @@ const { XReviewForAccount, XHuntUser, XAccount } = require('../../models/postgre
 const router = express.Router();
 
 // Get reviews for a Twitter account
-router.get('/:xAccountId', [
-	param('xAccountId').trim().notEmpty(),
+router.get('/:handle', [
+	param('handle').trim().notEmpty(),
 	validateRequest
 ], async (req, res) => {
 	try {
-		const reviews = await XReviewForAccount.findAll({
-			where: { xAccountId: req.params.xAccountId },
+		const handle = req.params.handle;
+		
+		// Step 1: 查找 XAccount
+		const xAccount = await XAccount.findOne({
+			where: { handle },
 			include: [
 				{
-					model: XHuntUser,
-					as: 'reviewer',
-					attributes: ['id', 'username', 'displayName', 'avatar']
-				},
-				{
-					model: XAccount,
-					as: 'account',
-					attributes: ['id', 'handle', 'displayName', 'avatar']
+					model: XReviewForAccount,
+					as: 'receivedReviews',
+					include: [
+						{
+							model: XHuntUser,
+							as: 'reviewer',
+							attributes: ['id', 'displayName', 'avatar']
+						}
+					]
 				}
-			],
-			order: [['createdAt', 'DESC']]
+			]
 		});
 		
-		// Calculate stats
-		const totalReviews = reviews.length;
-		const averageRating = reviews.reduce((acc, review) => acc + review.rating, 0) / totalReviews;
+		if (!xAccount) {
+			return res.status(404).json({ error: 'Account not found' });
+		}
 		
-		// Generate tag cloud
+		const reviews = xAccount.receivedReviews;
+		
+		// Step 2: 计算统计数据
+		const totalReviews = reviews.length;
+		const averageRating = totalReviews > 0
+			? reviews.reduce((acc, review) => acc + review.rating, 0) / totalReviews
+			: 0;
+		
+		// Step 3: 构建标签云
 		const tagCounts = {};
 		reviews.forEach(review => {
 			review.tags.forEach(tag => {
@@ -46,15 +57,15 @@ router.get('/:xAccountId', [
 			value
 		}));
 		
-		// Get top reviewers
+		// Step 4: 获取顶级评论者
 		const topReviewers = reviews.slice(0, 5).map(review => ({
 			id: review.reviewer.id,
 			avatar: review.reviewer.avatar,
 			name: review.reviewer.displayName
 		}));
 		
+		// Step 5: 返回封装好的数据
 		res.json({
-			reviews,
 			stats: {
 				averageRating,
 				totalReviews,
@@ -68,24 +79,57 @@ router.get('/:xAccountId', [
 	}
 });
 
-// Create a new review
+// POST /reviews
 router.post('/', [
 	authenticateToken,
-	body('xAccountId').trim().notEmpty(),
+	body('handle').trim().notEmpty(),
+	body('xLink').trim().notEmpty(),
+	body('displayName').trim().notEmpty(),
+	body('avatar').trim().notEmpty(),
+	body('followers').isInt({ min: 0 }),
+	body('following').isInt({ min: 0 }),
 	body('rating').isInt({ min: 1, max: 5 }),
 	body('tags').isArray({ min: 1 }),
 	body('note').optional().trim(),
 	validateRequest
 ], async (req, res) => {
 	try {
+		const { handle, xLink, displayName, avatar, followers, following, rating, tags, note } = req.body;
+		
+		// Step 1: 查找或创建 XAccount
+		let xAccount = await XAccount.findOne({
+			where: { handle }
+		});
+		
+		if (!xAccount) {
+			// 如果不存在，创建一个新的 XAccount
+			xAccount = await XAccount.create({
+				xLink,
+				handle,
+				displayName,
+				avatar,
+				followers,
+				following
+			});
+		} else {
+			// 如果存在，更新相关信息
+			await xAccount.update({
+				displayName,
+				avatar,
+				followers,
+				following
+			});
+		}
+		
+		// Step 2: 创建 XReviewForAccount
 		const review = await XReviewForAccount.create({
 			xHuntUserId: req.user.id,
-			xAccountId: req.body.xAccountId,
+			xAccountId: xAccount.id,
 			userAvatar: req.user.avatar,
 			userName: req.user.displayName,
-			rating: req.body.rating,
-			tags: req.body.tags,
-			note: req.body.note
+			rating,
+			tags,
+			note
 		});
 		
 		res.status(201).json(review);
@@ -95,32 +139,43 @@ router.post('/', [
 	}
 });
 
-// Update a review
-router.put('/:id', [
+router.post('/update', [
 	authenticateToken,
-	param('id').trim().notEmpty(),
-	body('rating').isInt({ min: 1, max: 5 }),
-	body('tags').isArray({ min: 1 }),
+	body('handle').trim().notEmpty(),
+	body('reviewId').trim().notEmpty(),
+	body('rating').isInt({ min: 1, max: 5 }).optional(),
+	body('tags').isArray({ min: 1 }).optional(),
 	body('note').optional().trim(),
 	validateRequest
 ], async (req, res) => {
 	try {
+		const { handle, reviewId } = req.body;
+		const { rating, tags, note } = req.body;
+		
+		// Step 1: 查找目标 XAccount
+		const xAccount = await XAccount.findOne({
+			where: { handle }
+		});
+		
+		if (!xAccount) {
+			return res.status(404).json({ error: 'X 账号不存在' });
+		}
+		
+		// Step 2: 查找评论并验证归属
 		const review = await XReviewForAccount.findOne({
 			where: {
-				id: req.params.id,
-				xHuntUserId: req.user.id
+				id: reviewId,
+				xHuntUserId: req.user.id,
+				xAccountId: xAccount.id
 			}
 		});
 		
 		if (!review) {
-			return res.status(404).json({ error: 'Review not found' });
+			return res.status(404).json({ error: '评论不存在或无权修改' });
 		}
 		
-		await review.update({
-			rating: req.body.rating,
-			tags: req.body.tags,
-			note: req.body.note
-		});
+		// Step 3: 更新评论内容
+		await review.update({ rating, tags, note });
 		
 		res.json(review);
 	} catch (error) {
@@ -129,26 +184,41 @@ router.put('/:id', [
 	}
 });
 
-// Delete a review
-router.delete('/:id', [
+router.post('/delete', [
 	authenticateToken,
-	param('id').trim().notEmpty(),
+	body('handle').trim().notEmpty(),
+	body('reviewId').trim().notEmpty(),
 	validateRequest
 ], async (req, res) => {
 	try {
+		const { handle, reviewId } = req.body;
+		
+		// Step 1: 查找目标 XAccount
+		const xAccount = await XAccount.findOne({
+			where: { handle }
+		});
+		
+		if (!xAccount) {
+			return res.status(404).json({ error: 'X 账号不存在' });
+		}
+		
+		// Step 2: 查找评论并验证归属
 		const review = await XReviewForAccount.findOne({
 			where: {
-				id: req.params.id,
-				xHuntUserId: req.user.id
+				id: reviewId,
+				xHuntUserId: req.user.id,
+				xAccountId: xAccount.id
 			}
 		});
 		
 		if (!review) {
-			return res.status(404).json({ error: 'Review not found' });
+			return res.status(404).json({ error: '评论不存在或无权删除' });
 		}
 		
+		// Step 3: 删除评论
 		await review.destroy();
-		res.status(204).send();
+		
+		res.status(200).json({ message: '删除成功' });
 	} catch (error) {
 		console.error('Error deleting review:', error);
 		res.status(500).json({ error: 'Failed to delete review' });
