@@ -65,7 +65,8 @@ async function setupPostgres() {
 	try {
 		await pgInstance.authenticate();
 		console.log('postgres Database connection established.');
-		await pgInstance.sync();
+		// await pgInstance.sync();
+		await pgInstance.sync({ alter: process.env.ENV === 'dev' });
 		console.log('postgres Database synchronized.');
 	} catch (error) {
 		console.error('postgres Database setup error:', error);
