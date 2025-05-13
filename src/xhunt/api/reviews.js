@@ -90,7 +90,7 @@ router.post('/', [
 	body('following').isInt({ min: 0 }),
 	body('rating').isInt({ min: 1, max: 5 }),
 	body('tags').isArray({ min: 1 }),
-	body('note').optional().trim(),
+	// body('note').optional().trim(),
 	validateRequest
 ], async (req, res) => {
 	try {
@@ -145,7 +145,7 @@ router.post('/update', [
 	body('reviewId').trim().notEmpty(),
 	body('rating').isInt({ min: 1, max: 5 }).optional(),
 	body('tags').isArray({ min: 1 }).optional(),
-	body('note').optional().trim(),
+	// body('note').optional().trim(),
 	validateRequest
 ], async (req, res) => {
 	try {
@@ -175,7 +175,11 @@ router.post('/update', [
 		}
 		
 		// Step 3: 更新评论内容
-		await review.update({ rating, tags, note });
+		await review.update({
+			rating, tags, ...(note ? {
+				note
+			} : {})
+		});
 		
 		res.json(review);
 	} catch (error) {
