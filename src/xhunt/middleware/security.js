@@ -53,7 +53,7 @@ const isValidRequestId = (requestId) => {
 const generateSignature = (method, path, timestamp, body, fingerprint) => {
 	const payload = [
 		method.toUpperCase(),
-		path,
+		path.endsWith("/") ? path.slice(0, -1) : path,
 		timestamp,
 		fingerprint,
 		JSON.stringify(body || {})
@@ -101,9 +101,8 @@ const securityMiddleware = (req, res, next) => {
 			req.body,
 			fingerprint
 		);
-		
 		if (signature !== expectedSignature) {
-			return res.status(401).json({ error: '401' });
+			return res.status(411).json({ error: '411' });
 		}
 		// 将验证后的信息添加到请求对象中
 		req.securityContext = {

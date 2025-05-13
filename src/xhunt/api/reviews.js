@@ -24,7 +24,7 @@ router.get('/:handle', [
 					include: [
 						{
 							model: XHuntUser,
-							as: 'reviewer',
+							as: 'xHuntUser',
 							attributes: ['id', 'displayName', 'avatar']
 						}
 					]
@@ -66,12 +66,10 @@ router.get('/:handle', [
 		
 		// Step 5: 返回封装好的数据
 		res.json({
-			stats: {
-				averageRating,
-				totalReviews,
-				tagCloud,
-				topReviewers
-			}
+			averageRating,
+			totalReviews,
+			tagCloud,
+			topReviewers
 		});
 	} catch (error) {
 		console.error('Error fetching reviews:', error);
@@ -86,11 +84,8 @@ router.post('/', [
 	body('xLink').trim().notEmpty(),
 	body('displayName').trim().notEmpty(),
 	body('avatar').trim().notEmpty(),
-	body('followers').isInt({ min: 0 }),
-	body('following').isInt({ min: 0 }),
 	body('rating').isInt({ min: 1, max: 5 }),
 	body('tags').isArray({ min: 1 }),
-	// body('note').optional().trim(),
 	validateRequest
 ], async (req, res) => {
 	try {
@@ -108,16 +103,16 @@ router.post('/', [
 				handle,
 				displayName,
 				avatar,
-				followers,
-				following
+				followers: followers || 0,
+				following: following || 0,
 			});
 		} else {
 			// 如果存在，更新相关信息
 			await xAccount.update({
 				displayName,
 				avatar,
-				followers,
-				following
+				followers: followers || 0,
+				following: following || 0,
 			});
 		}
 		
@@ -129,7 +124,7 @@ router.post('/', [
 			userName: req.user.displayName,
 			rating,
 			tags,
-			note
+			note: note || ''
 		});
 		
 		res.status(201).json(review);

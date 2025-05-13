@@ -12,7 +12,6 @@ async function authenticateToken(req, res, next) {
 		
 		// 验证 JWT
 		const decoded = jwt.verify(token, process.env.JWT_SECRET);
-		
 		// 从数据库查找对应的令牌记录
 		const tokenRecord = await XHuntUserToken.findOne({
 			where: {
@@ -24,14 +23,13 @@ async function authenticateToken(req, res, next) {
 				as: 'user' // 确保与模型关联的 `as` 别名一致
 			}]
 		});
-		
 		if (!tokenRecord) {
-			return res.status(401).json({ error: 'TOKEN_INVALID' });
+			return res.status(419).json({ error: 'TOKEN_INVALID' });
 		}
 		
 		// 检查令牌是否过期
 		if (tokenRecord.tokenExpiry <= new Date()) {
-			return res.status(401).json({ error: 'TOKEN_EXPIRED' });
+			return res.status(419).json({ error: 'TOKEN_EXPIRED' });
 		}
 		
 		// 更新最后使用时间
@@ -44,10 +42,10 @@ async function authenticateToken(req, res, next) {
 		next();
 	} catch (error) {
 		if (error.name === 'JsonWebTokenError') {
-			return res.status(401).json({ error: 'TOKEN_INVALID' });
+			return res.status(419).json({ error: 'TOKEN_INVALID' });
 		}
 		if (error.name === 'TokenExpiredError') {
-			return res.status(401).json({ error: 'TOKEN_EXPIRED' });
+			return res.status(419).json({ error: 'TOKEN_EXPIRED' });
 		}
 		console.error('Auth middleware error:', error);
 		res.status(500).json({ error: '认证失败' });
