@@ -31,7 +31,6 @@ router.get('/:handle', [
 				}
 			]
 		});
-		
 		if (!xAccount) {
 			return res.status(404).json({ error: 'Account not found' });
 		}
@@ -56,12 +55,10 @@ router.get('/:handle', [
 			text,
 			value
 		}));
-		
 		// Step 4: 获取顶级评论者
 		const topReviewers = reviews.slice(0, 5).map(review => ({
-			id: review.reviewer.id,
-			avatar: review.reviewer.avatar,
-			name: review.reviewer.displayName
+			avatar: review.userAvatar,
+			name: review.userName
 		}));
 		
 		// Step 5: 返回封装好的数据

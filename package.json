@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "NODE_ENV=development nodemon ./src/apiServer.js",
+    "dev:pro": "NODE_ENV=production nodemon ./src/apiServer.js",
     "dev-crawler": "NODE_ENV=development nodemon ./src/crawlerServer.js",
     "start": "pm2 start ecosystem.config.js --env production",
     "start:dev": "pm2 start ecosystem.config.js --env development",
