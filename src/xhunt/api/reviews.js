@@ -74,7 +74,6 @@ router.get('/:handle', [
 	}
 });
 
-// POST /reviews
 router.post('/', [
 	authenticateToken,
 	body('handle').trim().notEmpty(),
@@ -113,8 +112,24 @@ router.post('/', [
 			});
 		}
 		
-		// Step 2: 创建 XReviewForAccount
-		const review = await XReviewForAccount.create({
+		// Step 2: 检查用户是否已经评论过该账号
+		const existingReview = await XReviewForAccount.findOne({
+			where: {
+				xHuntUserId: req.user.id,
+				xAccountId: xAccount.id
+			}
+		});
+		
+		if (existingReview) {
+			return res.status(400).json({
+				error: 'ALREADY_REVIEWED',
+				message: '您已对该账号发表过评论，请前往修改已有评论',
+				existingReviewId: existingReview.id
+			});
+		}
+		
+		// Step 3: 创建新评论
+		await XReviewForAccount.create({
 			xHuntUserId: req.user.id,
 			xAccountId: xAccount.id,
 			userAvatar: req.user.avatar,

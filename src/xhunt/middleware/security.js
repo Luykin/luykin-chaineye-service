@@ -110,7 +110,6 @@ const securityMiddleware = (req, res, next) => {
 			timestamp,
 			fingerprint
 		};
-		
 		next();
 	} catch (error) {
 		console.error('Security middleware error:', error);
