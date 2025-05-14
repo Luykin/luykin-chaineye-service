@@ -9,6 +9,8 @@ const { sanitizeNote } = require('../services/inputValidator');
 const router = express.Router();
 
 // Get reviews for a Twitter account
+const { Op, fn, col } = require('sequelize');
+
 router.get('/:handle', [
 	authenticateTokenOptional,
 	param('handle').trim().notEmpty(),
@@ -17,69 +19,79 @@ router.get('/:handle', [
 	try {
 		const handle = req.params.handle;
 		
-		// Step 1: 查找 XAccount
+		// Step 1: 获取 XAccount 及其基础信息
 		const xAccount = await XAccount.findOne({
 			where: { handle },
-			include: [
-				{
-					model: XReviewForAccount,
-					as: 'receivedReviews',
-					include: [
-						{
-							model: XHuntUser,
-							as: 'xHuntUser',
-							attributes: ['id', 'displayName', 'avatar']
-						}
-					]
-				}
-			]
+			attributes: ['id']
 		});
+		
 		if (!xAccount) {
 			return res.status(404).json({ error: 'Account not found' });
 		}
 		
-		const reviews = xAccount.receivedReviews;
+		const accountId = xAccount.id;
 		
-		// Step 2: 计算统计数据
-		const totalReviews = reviews.length;
-		const averageRating = totalReviews > 0
-			? Number((reviews.reduce((acc, review) => acc + review.rating, 0) / totalReviews).toFixed(2))
-			: 0;
-		
-		// Step 3: 构建标签云
-		const tagCounts = {};
-		reviews.forEach(review => {
-			review.tags.forEach(tag => {
-				tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-			});
+		// Step 2: 使用 Sequelize 执行聚合查询（替代 JS 处理）
+		const stats = await XReviewForAccount.findOne({
+			where: { xAccountId: accountId },
+			attributes: [
+				[fn('AVG', col('rating')), 'averageRating'],
+				[fn('COUNT', col('id')), 'totalReviews'],
+				[fn('JSON_AGG', col('tags')), 'allTags'], // 收集所有 tags 数组
+			],
+			raw: true
 		});
 		
-		const tagCloud = Object.entries(tagCounts).map(([text, value]) => ({
-			text,
-			value
-		}));
+		let averageRating = Number(Number(stats.averageRating || 0).toFixed(2));
+		const totalReviews = parseInt(stats.totalReviews, 10);
 		
-		// Step 4: 获取顶级评论者
-		const topReviewers = reviews.slice(0, 5).map(review => ({
+		// Step 3: 解析所有标签（扁平化数组）
+		let allTags = [];
+		if (stats.allTags) {
+			stats.allTags.forEach(tagArr => {
+				allTags = [...allTags, ...tagArr];
+			});
+		}
+		
+		// Step 4: 构建 tagCloud（仍需 JS 处理，但数据量已大幅减少）
+		const tagCounts = {};
+		allTags.forEach(tag => {
+			tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+		});
+		const tagCloud = Object.entries(tagCounts).map(([text, value]) => ({ text, value }));
+		
+		// Step 5: 获取前 5 条评论用户（避免加载全部评论）
+		let topReviewers = await XReviewForAccount.findAll({
+			where: { xAccountId: accountId },
+			limit: 5,
+			order: [['createdAt', 'DESC']],
+			// include: [{
+			// 	model: XHuntUser,
+			// 	as: 'xHuntUser',
+			// 	attributes: ['displayName', 'avatar']
+			// }],
+			attributes: ['userAvatar', 'userName'],
+			raw: true
+		});
+		topReviewers = topReviewers.map(review => ({
 			avatar: review.userAvatar,
 			name: review.userName
 		}));
 		
-		// Step 5: 检查当前用户是否评论过（如果已登录）
+		// Step 6: 如果登录了，检查当前用户是否评论过
 		let currentUserReview = null;
 		if (req.user) {
-			const userReview = reviews.find(review => review.xHuntUserId === req.user.id);
-			if (userReview) {
-				currentUserReview = {
-					// id: userReview.id,
-					rating: userReview.rating,
-					tags: userReview.tags,
-					note: userReview.note
-				};
-			}
+			currentUserReview = await XReviewForAccount.findOne({
+				where: {
+					xHuntUserId: req.user.id,
+					xAccountId: accountId
+				},
+				attributes: ['rating', 'tags', 'note'],
+				raw: true
+			});
 		}
 		
-		// Step 6: 返回封装好格式的数据
+		// Step 7: 返回结果
 		res.json({
 			averageRating,
 			totalReviews,
