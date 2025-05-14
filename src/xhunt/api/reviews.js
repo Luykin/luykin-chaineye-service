@@ -37,7 +37,6 @@ router.get('/:handle', [
 	try {
 		const handle = req.params.handle;
 		const onlyKOL = req.query.onlyKOL === true;
-		console.log('onlyKOL:', onlyKOL);
 		// Step 1: 获取 XAccount 及其基础信息
 		const xAccount = await XAccount.findOne({
 			where: { handle },
