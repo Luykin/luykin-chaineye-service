@@ -33,6 +33,16 @@ module.exports = (sequelize) => {
 			type: DataTypes.STRING,
 			allowNull: true,
 			comment: '用户头像 URL'
+		},
+		kolRank20W: {
+			type: DataTypes.INTEGER,
+			allowNull: true,
+			comment: 'KOL 影响力排名（20w 内的排名，非空表示入选）'
+		},
+		classification: {
+			type: DataTypes.STRING,
+			allowNull: true,
+			comment: '分类（如 KOL、项目方、机构、个人等）'
 		}
 	}, {
 		tableName: 'XHuntUsers', // 显式指定表名（可选）
@@ -42,6 +52,9 @@ module.exports = (sequelize) => {
 				name: 'idx_twitter_id',
 				fields: ['twitterId'],
 				unique: true
+			},
+			{ name: 'idx_kol_rank',
+				fields: ['kolRank20W']
 			}
 		]
 	});
