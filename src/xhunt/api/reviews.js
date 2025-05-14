@@ -1,13 +1,16 @@
 const express = require('express');
 const { body, param } = require('express-validator');
 const { validateRequest } = require('../middleware/validate-request');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, authenticateTokenOptional } = require('../middleware/auth');
 const { XReviewForAccount, XHuntUser, XAccount } = require('../../models/postgres-start');
+const { validateTags, validateNote } = require('../middleware/reviewValidator');
+const { sanitizeNote } = require('../services/inputValidator');
 
 const router = express.Router();
 
 // Get reviews for a Twitter account
 router.get('/:handle', [
+	authenticateTokenOptional,
 	param('handle').trim().notEmpty(),
 	validateRequest
 ], async (req, res) => {
@@ -97,9 +100,9 @@ router.post('/', [
 	body('displayName').trim().notEmpty(),
 	body('avatar').trim().notEmpty(),
 	body('rating').isInt({ min: 1, max: 5 }),
-	body('tags').isArray({ min: 1 }),
-	validateRequest
-], async (req, res) => {
+	validateTags,
+	validateNote
+], validateRequest, async (req, res) => {
 	try {
 		const { handle, xLink, displayName, avatar, followers, following, rating, tags, note } = req.body;
 		
@@ -128,7 +131,7 @@ router.post('/', [
 			});
 		}
 		
-		// Step 2: 检查用户是否已经评论过该账号
+		// Step 2: 检查是否已存在评论
 		const existingReview = await XReviewForAccount.findOne({
 			where: {
 				xHuntUserId: req.user.id,
@@ -151,13 +154,11 @@ router.post('/', [
 			userAvatar: req.user.avatar,
 			userName: req.user.displayName,
 			rating,
-			tags,
-			note: note || ''
+			tags: tags.map(t => t.trim()),
+			note: sanitizeNote(note || '')
 		});
 		
-		res.status(201).json({
-			status: 'success',
-		});
+		res.status(201).json({ status: 'success' });
 	} catch (error) {
 		console.error('Error creating review:', error);
 		res.status(500).json({ error: 'Failed to create review' });
@@ -169,19 +170,26 @@ router.post('/update', [
 	body('handle').trim().notEmpty(),
 	body('reviewId').trim().notEmpty(),
 	body('rating').isInt({ min: 1, max: 5 }).optional(),
-	body('tags').isArray({ min: 1 }).optional(),
-	// body('note').optional().trim(),
-	validateRequest
-], async (req, res) => {
+	body('tags').isArray({ min: 1 }).optional().custom((tags) => {
+		for (const tag of tags) {
+			if (!isValidTag(tag)) {
+				throw new Error(`标签 "${tag}" 不符合规范`);
+			}
+		}
+		return true;
+	}),
+	body('note').optional().trim().custom((note) => {
+		if (note.length > 1000) {
+			throw new Error('备注内容不能超过 1000 字符');
+		}
+		return true;
+	})
+], validateRequest, async (req, res) => {
 	try {
 		const { handle, reviewId } = req.body;
 		const { rating, tags, note } = req.body;
 		
-		// Step 1: 查找目标 XAccount
-		const xAccount = await XAccount.findOne({
-			where: { handle }
-		});
-		
+		const xAccount = await XAccount.findOne({ where: { handle } });
 		if (!xAccount) {
 			return res.status(404).json({ error: 'X 账号不存在' });
 		}
@@ -199,16 +207,14 @@ router.post('/update', [
 			return res.status(404).json({ error: '评论不存在或无权修改' });
 		}
 		
-		// Step 3: 更新评论内容
+		// 更新评论内容
 		await review.update({
-			rating, tags, ...(note ? {
-				note
-			} : {})
+			rating,
+			tags: tags?.map(t => t.trim()) ?? undefined,
+			note: note ? sanitizeNote(note) : undefined
 		});
 		
-		res.json({
-			status: 'success',
-		});
+		res.json({ status: 'success' });
 	} catch (error) {
 		console.error('Error updating review:', error);
 		res.status(500).json({ error: 'Failed to update review' });

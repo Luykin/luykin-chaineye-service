@@ -1,18 +1,15 @@
+// middleware/auth.js
+
 const jwt = require('jsonwebtoken');
 const { XHuntUserToken, XHuntUser } = require('../../models/postgres-start');
 
-async function authenticateToken(req, res, next) {
+/**
+ * 核心认证逻辑（提取为私有函数）
+ */
+async function verifyToken(token, req, res, next) {
 	try {
-		const authHeader = req.headers['authorization'];
-		const token = authHeader && authHeader.split(' ')[1];
-		
-		if (!token) {
-			return res.status(401).json({ error: 'TOKEN_REQUIRED' });
-		}
-		
-		// 验证 JWT
 		const decoded = jwt.verify(token, process.env.JWT_SECRET);
-		// 从数据库查找对应的令牌记录
+		
 		const tokenRecord = await XHuntUserToken.findOne({
 			where: {
 				id: decoded.tokenId,
@@ -20,24 +17,23 @@ async function authenticateToken(req, res, next) {
 			},
 			include: [{
 				model: XHuntUser,
-				as: 'user' // 确保与模型关联的 `as` 别名一致
+				as: 'user'
 			}]
 		});
-		if (!tokenRecord) {
-			return res.status(419).json({ error: 'TOKEN_INVALID' });
-		}
-		// 检查令牌是否过期
-		if (tokenRecord.tokenExpiry <= new Date()) {
+		
+		if (!tokenRecord || tokenRecord.tokenExpiry <= new Date()) {
 			return res.status(419).json({ error: 'TOKEN_EXPIRED' });
 		}
-		if(!tokenRecord?.fingerprint || tokenRecord?.fingerprint !== req.securityContext.fingerprint) {
+		
+		// 可选：增加指纹/设备识别验证
+		if (!tokenRecord?.fingerprint || tokenRecord.fingerprint !== req.securityContext?.fingerprint) {
 			return res.status(419).json({ error: 'DO_NOT_ABUSE_TOKEN' });
 		}
 		
-		// 更新最后使用时间
-		await tokenRecord.update({ lastUsed: new Date() });
+		// 更新最后使用时间（异步更新不影响流程）
+		tokenRecord.update({ lastUsed: new Date() });
 		
-		// 将用户信息添加到请求对象
+		// 挂载用户信息到请求对象
 		req.user = tokenRecord.user;
 		req.tokenRecord = tokenRecord;
 		
@@ -54,6 +50,35 @@ async function authenticateToken(req, res, next) {
 	}
 }
 
+/**
+ * 强制登录中间件
+ */
+async function authenticateToken(req, res, next) {
+	const authHeader = req.headers['authorization'];
+	const token = authHeader && authHeader.split(' ')[1];
+	
+	if (!token) {
+		return res.status(401).json({ error: 'TOKEN_REQUIRED' });
+	}
+	
+	await verifyToken(token, req, res, next);
+}
+
+/**
+ * 可选登录中间件（带 token 就解析，没带就 pass）
+ */
+async function authenticateTokenOptional(req, res, next) {
+	const authHeader = req.headers['authorization'];
+	const token = authHeader && authHeader.split(' ')[1];
+	
+	if (!token) {
+		return next(); // 无 token 直接放行
+	}
+	
+	await verifyToken(token, req, res, next);
+}
+
 module.exports = {
-	authenticateToken
+	authenticateToken,
+	authenticateTokenOptional
 };

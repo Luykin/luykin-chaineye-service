@@ -45,7 +45,8 @@
     "sqlite3": "^5.1.7",
     "telegraf": "^4.16.3",
     "twitter-api-v2": "^1.23.0",
-    "uuid": "^11.0.3"
+    "uuid": "^11.0.3",
+    "xss": "^1.0.15"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
