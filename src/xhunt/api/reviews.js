@@ -103,7 +103,10 @@ router.get('/:handle', [
 				where: onlyKOL ? { kolRank20W: { [Op.ne]: null } } : undefined,
 				required: onlyKOL
 			}],
-			raw: true
+			raw: true,
+			// group: ['xHuntUser.displayName', 'xHuntUser.id'], // 必须包含所有非聚合字段
+			// having: fn('COUNT', col('XReviewForAccount.id')) > 0,
+			// raw: true
 		});
 		topReviewers = topReviewers.map(review => ({
 			avatar: review.userAvatar,
