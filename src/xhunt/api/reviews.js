@@ -40,7 +40,7 @@ router.get('/:handle', [
 		// Step 2: 计算统计数据
 		const totalReviews = reviews.length;
 		const averageRating = totalReviews > 0
-			? reviews.reduce((acc, review) => acc + review.rating, 0) / totalReviews
+			? Number((reviews.reduce((acc, review) => acc + review.rating, 0) / totalReviews).toFixed(2))
 			: 0;
 		
 		// Step 3: 构建标签云
@@ -55,18 +55,34 @@ router.get('/:handle', [
 			text,
 			value
 		}));
+		
 		// Step 4: 获取顶级评论者
 		const topReviewers = reviews.slice(0, 5).map(review => ({
 			avatar: review.userAvatar,
 			name: review.userName
 		}));
 		
-		// Step 5: 返回封装好的数据
+		// Step 5: 检查当前用户是否评论过（如果已登录）
+		let currentUserReview = null;
+		if (req.user) {
+			const userReview = reviews.find(review => review.xHuntUserId === req.user.id);
+			if (userReview) {
+				currentUserReview = {
+					// id: userReview.id,
+					rating: userReview.rating,
+					tags: userReview.tags,
+					note: userReview.note
+				};
+			}
+		}
+		
+		// Step 6: 返回封装好格式的数据
 		res.json({
 			averageRating,
 			totalReviews,
 			tagCloud,
-			topReviewers
+			topReviewers,
+			currentUserReview
 		});
 	} catch (error) {
 		console.error('Error fetching reviews:', error);
