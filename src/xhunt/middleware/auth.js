@@ -26,10 +26,12 @@ async function authenticateToken(req, res, next) {
 		if (!tokenRecord) {
 			return res.status(419).json({ error: 'TOKEN_INVALID' });
 		}
-		
 		// 检查令牌是否过期
 		if (tokenRecord.tokenExpiry <= new Date()) {
 			return res.status(419).json({ error: 'TOKEN_EXPIRED' });
+		}
+		if(!tokenRecord?.fingerprint || tokenRecord?.fingerprint !== req.securityContext.fingerprint) {
+			return res.status(419).json({ error: 'DO_NOT_ABUSE_TOKEN' });
 		}
 		
 		// 更新最后使用时间

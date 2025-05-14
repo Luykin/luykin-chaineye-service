@@ -9,22 +9,6 @@ const { Op } = require('sequelize');
 
 const router = express.Router();
 
-function withTimeout(promise, { milliseconds, message = '请求超时', abortController } = {}) {
-	const timeout = new Promise((_, reject) => {
-		const timer = setTimeout(() => {
-			if (abortController) {
-				abortController.abort();
-			}
-			reject(new Error(message));
-		}, milliseconds);
-		
-		// 清理定时器
-		promise.then(() => clearTimeout(timer)).catch(() => clearTimeout(timer));
-	});
-	
-	return Promise.race([promise, timeout]);
-}
-
 // 获取 Twitter 授权 URL
 router.get('/twitter/url', async (req, res) => {
 	try {
@@ -99,6 +83,8 @@ router.post(
 				refreshToken,
 				tokenExpiry,
 				lastUsed: new Date(),
+				/** 强制需要前端指纹 **/
+				fingerprint: req?.securityContext?.fingerprint || '',
 			});
 			
 			// === Step 6: 签发 JWT Token ===

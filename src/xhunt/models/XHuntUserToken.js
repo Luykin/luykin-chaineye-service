@@ -32,6 +32,11 @@ module.exports = (sequelize) => {
 			allowNull: false,
 			comment: '刷新 Token'
 		},
+		fingerprint: {
+			type: DataTypes.TEXT,
+			allowNull: true,
+			comment: '前端指纹信息'
+		},
 		tokenExpiry: {
 			type: DataTypes.DATE,
 			allowNull: false,
