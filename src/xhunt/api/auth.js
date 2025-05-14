@@ -6,6 +6,7 @@ const { validateRequest } = require('../middleware/validate-request');
 const { body, param } = require('express-validator');
 const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
+const axios = require('axios');
 
 const router = express.Router();
 
@@ -23,95 +24,118 @@ router.get('/twitter/url', async (req, res) => {
 		res.status(500).json({ error: '获取授权URL失败' });
 	}
 });
+
 /**
  * Twitter OAuth 回调处理接口
  */
-router.post(
-	'/twitter/callback',
-	[
-		body('code').trim().notEmpty(),
-		body('state').trim().notEmpty(),
-		validateRequest,
-	],
-	async (req, res) => {
-		const { code, state } = req.body;
+router.post('/twitter/callback', [
+	body('code').trim().notEmpty(),
+	body('state').trim().notEmpty(),
+	validateRequest
+], async (req, res) => {
+	const { code, state } = req.body;
+	
+	try {
+		const cacheKey = `twitter_oauth_state:${state}`;
+		let cachedData;
 		
+		// Step 1: 验证 state 是否有效
 		try {
-			// === Step 1: 验证 state 是否有效 ===
-			const cacheKey = `twitter_oauth_state:${state}`;
-			let cachedData;
-			try {
-				cachedData = await req.redisClient.get(cacheKey);
-			} catch (redisError) {
-				console.error('Redis GET error:', redisError);
-				return res.status(500).json({ error: '服务器内部错误（Redis）' });
-			}
-			if (!cachedData) {
-				return res.status(400).json({
-					error: '无效或过期的 state',
-				});
-			}
-			
-			// 删除已使用的 state，防止重复使用
-			try {
-				await req.redisClient.del(cacheKey);
-			} catch (redisDelError) {
-				console.warn('无法删除 Redis 中的 state:', redisDelError);
-			}
-			// === Step 2: 获取 Twitter Tokens ===
-			const { accessToken, refreshToken, expiresIn } = await getTwitterTokens(code, cachedData);
-			// === Step 3: 获取 Twitter 用户信息 ===
-			const twitterUser = await getTwitterUserInfo(accessToken);
-			// === Step 4: 创建或更新用户信息 ===
-			const [user] = await XHuntUser.findOrCreate({
-				where: { twitterId: twitterUser.id },
-				defaults: {
-					username: twitterUser.username,
-					displayName: twitterUser.name,
-					avatar: twitterUser.profile_image_url,
-				},
-			});
-			// 删除所有旧 token
-			await XHuntUserToken.destroy({
-				where: { userId: user.id },
-			});
-			// === Step 5: 创建 Token 记录 ===
-			const tokenExpiry = new Date(Date.now() + expiresIn * 1000);
-			const tokenRecord = await XHuntUserToken.create({
-				userId: user.id,
-				accessToken,
-				refreshToken,
-				tokenExpiry,
-				lastUsed: new Date(),
-				/** 强制需要前端指纹 **/
-				fingerprint: req?.securityContext?.fingerprint || '',
-			});
-			
-			// === Step 6: 签发 JWT Token ===
-			const jwtToken = jwt.sign(
-				{
-					userId: user.id,
-					tokenId: tokenRecord.id,
-				},
-				process.env.JWT_SECRET,
-				{ expiresIn: '30d' }
-			);
-			// === Step 7: 返回响应 ===
-			return res.json({
-				token: jwtToken,
-				user: {
-					id: user.id,
-					username: user.username,
-					displayName: user.displayName,
-					avatar: user.avatar,
-				},
-			});
-		} catch (error) {
-			console.error('Twitter callback error:', error);
-			return res.status(500).json({ error: '登录失败，请稍后再试' });
+			cachedData = await req.redisClient.get(cacheKey);
+		} catch (redisError) {
+			console.error('Redis GET error:', redisError);
+			return res.status(500).json({ error: '服务器内部错误（Redis）' });
 		}
+		
+		if (!cachedData) {
+			return res.status(400).json({ error: '无效或过期的 state' });
+		}
+		
+		// Step 2: 删除已使用的 state，防止重复使用
+		try {
+			await req.redisClient.del(cacheKey);
+		} catch (redisDelError) {
+			console.warn('无法删除 Redis 中的 state:', redisDelError);
+		}
+		
+		// Step 3: 获取 Twitter Tokens
+		const { accessToken, refreshToken, expiresIn } = await getTwitterTokens(code, cachedData);
+		
+		// Step 4: 获取 Twitter 用户信息
+		const twitterUser = await getTwitterUserInfo(accessToken);
+		
+		// Step 5: 创建或更新用户信息
+		const [user, created] = await XHuntUser.findOrCreate({
+			where: { twitterId: twitterUser.id },
+			defaults: {
+				username: twitterUser.username,
+				displayName: twitterUser.name,
+				avatar: twitterUser.profile_image_url
+			}
+		});
+		
+		// Step 6: 可选：调用外部 API 获取用户分类和排名
+		try {
+			const response = await axios.get(`https://kota.chaineye.tools/api/plugin/twitter/info?username=${twitterUser.username}`, {
+				timeout: 5000 // 设置5秒超时
+			});
+			
+			if (response.data?.code === 200) {
+				const { basicInfo, kolFollow } = response.data.data || {};
+				const { classification } = basicInfo || {};
+				const { kolRank20W } = kolFollow || {};
+				
+				// 更新用户信息
+				await user.update({
+					classification,
+					kolRank20W: kolRank20W ? parseInt(kolRank20W, 10) : null
+				});
+			} else {
+				console.warn('External API returned non-200:', response.status, response.data);
+			}
+		} catch (apiError) {
+			// 忽略外部 API 错误，继续流程
+			console.error('外部 API 调用失败:', apiError.message);
+		}
+		
+		// Step 7: 清除旧 token
+		await XHuntUserToken.destroy({ where: { userId: user.id } });
+		
+		// Step 8: 创建新 Token 记录
+		const tokenExpiry = new Date(Date.now() + expiresIn * 1000);
+		const tokenRecord = await XHuntUserToken.create({
+			userId: user.id,
+			accessToken,
+			refreshToken,
+			tokenExpiry,
+			lastUsed: new Date(),
+			fingerprint: req?.securityContext?.fingerprint || ''
+		});
+		
+		// Step 9: 签发 JWT Token
+		const jwtToken = jwt.sign(
+			{ userId: user.id, tokenId: tokenRecord.id },
+			process.env.JWT_SECRET,
+			{ expiresIn: '30d' }
+		);
+		
+		// Step 10: 返回响应
+		res.json({
+			token: jwtToken,
+			user: {
+				id: user.id,
+				username: user.username,
+				displayName: user.displayName,
+				avatar: user.avatar,
+				classification: user.classification,
+				kolRank20W: user.kolRank20W
+			}
+		});
+	} catch (error) {
+		console.error('Twitter callback error:', error);
+		res.status(500).json({ error: '登录失败，请稍后再试' });
 	}
-);
+});
 
 // 获取当前用户信息
 router.get('/me', authenticateToken, async (req, res) => {
