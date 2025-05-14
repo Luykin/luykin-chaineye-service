@@ -140,84 +140,29 @@ router.post('/', [
 		});
 		
 		if (existingReview) {
-			return res.status(400).json({
-				error: 'ALREADY_REVIEWED',
-				message: '您已对该账号发表过评论，请前往修改已有评论',
-				existingReviewId: existingReview.id
+			// 更新已有评论
+			await existingReview.update({
+				rating,
+				tags: tags.map(t => t.trim()),
+				note: sanitizeNote(note || '')
+			});
+		} else {
+			// Step 3: 创建新评论
+			await XReviewForAccount.create({
+				xHuntUserId: req.user.id,
+				xAccountId: xAccount.id,
+				userAvatar: req.user.avatar,
+				userName: req.user.displayName,
+				rating,
+				tags: tags.map(t => t.trim()),
+				note: sanitizeNote(note || '')
 			});
 		}
-		
-		// Step 3: 创建新评论
-		await XReviewForAccount.create({
-			xHuntUserId: req.user.id,
-			xAccountId: xAccount.id,
-			userAvatar: req.user.avatar,
-			userName: req.user.displayName,
-			rating,
-			tags: tags.map(t => t.trim()),
-			note: sanitizeNote(note || '')
-		});
 		
 		res.status(201).json({ status: 'success' });
 	} catch (error) {
 		console.error('Error creating review:', error);
 		res.status(500).json({ error: 'Failed to create review' });
-	}
-});
-
-router.post('/update', [
-	authenticateToken,
-	body('handle').trim().notEmpty(),
-	body('reviewId').trim().notEmpty(),
-	body('rating').isInt({ min: 1, max: 5 }).optional(),
-	body('tags').isArray({ min: 1 }).optional().custom((tags) => {
-		for (const tag of tags) {
-			if (!isValidTag(tag)) {
-				throw new Error(`标签 "${tag}" 不符合规范`);
-			}
-		}
-		return true;
-	}),
-	body('note').optional().trim().custom((note) => {
-		if (note.length > 1000) {
-			throw new Error('备注内容不能超过 1000 字符');
-		}
-		return true;
-	})
-], validateRequest, async (req, res) => {
-	try {
-		const { handle, reviewId } = req.body;
-		const { rating, tags, note } = req.body;
-		
-		const xAccount = await XAccount.findOne({ where: { handle } });
-		if (!xAccount) {
-			return res.status(404).json({ error: 'X 账号不存在' });
-		}
-		
-		// Step 2: 查找评论并验证归属
-		const review = await XReviewForAccount.findOne({
-			where: {
-				id: reviewId,
-				xHuntUserId: req.user.id,
-				xAccountId: xAccount.id
-			}
-		});
-		
-		if (!review) {
-			return res.status(404).json({ error: '评论不存在或无权修改' });
-		}
-		
-		// 更新评论内容
-		await review.update({
-			rating,
-			tags: tags?.map(t => t.trim()) ?? undefined,
-			note: note ? sanitizeNote(note) : undefined
-		});
-		
-		res.json({ status: 'success' });
-	} catch (error) {
-		console.error('Error updating review:', error);
-		res.status(500).json({ error: 'Failed to update review' });
 	}
 });
 

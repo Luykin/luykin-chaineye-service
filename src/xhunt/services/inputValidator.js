@@ -49,15 +49,10 @@ function isValidTag(tag) {
 function sanitizeNote(note) {
 	if (!note || typeof note !== 'string') return '';
 	const trimmed = note.trim().substring(0, 1000); // 截断
-	return xss(trimmed, {
-		whiteList: [], // 禁止所有 HTML 标签
-		stripIgnoreTag: true,
-		escapeHtml: true
-	});
+	return xss(trimmed);
 }
 
 module.exports = {
 	isValidTag,
 	sanitizeNote,
-	calculateTagCharLength
 };
