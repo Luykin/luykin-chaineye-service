@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const { validateRequest } = require('../middleware/validate-request');
 const { authenticateToken, authenticateTokenOptional } = require('../middleware/auth');
 const { XReviewForAccount, XHuntUser, XAccount } = require('../../models/postgres-start');
@@ -9,7 +9,7 @@ const { sanitizeNote } = require('../services/inputValidator');
 const router = express.Router();
 
 // Get reviews for a Twitter account
-const { fn, col } = require('sequelize');
+const { fn, col, Op } = require('sequelize');
 
 /** 内置tag ===start === **/
 // # KOL人物类型标签
@@ -27,14 +27,17 @@ projectCharacterTags = [
 
 /** 内置tag ===end === **/
 
+// GET /reviews/:handle
 router.get('/:handle', [
 	authenticateTokenOptional,
 	param('handle').trim().notEmpty(),
+	query('onlyKOL').optional().isBoolean().toBoolean(),
 	validateRequest
 ], async (req, res) => {
 	try {
 		const handle = req.params.handle;
-		
+		const onlyKOL = req.query.onlyKOL === true;
+		console.log('onlyKOL:', onlyKOL);
 		// Step 1: 获取 XAccount 及其基础信息
 		const xAccount = await XAccount.findOne({
 			where: { handle },
@@ -47,15 +50,23 @@ router.get('/:handle', [
 		
 		const accountId = xAccount.id;
 		
-		// Step 2: 使用 Sequelize 执行聚合查询（替代 JS 处理）
+		// Step 2: 使用 Sequelize 执行聚合查询（带关联）
 		const stats = await XReviewForAccount.findOne({
 			where: { xAccountId: accountId },
+			include: [{
+				model: XHuntUser,
+				as: 'xHuntUser',
+				where: onlyKOL ? { kolRank20W: { [Op.ne]: null } } : undefined,
+				required: onlyKOL,
+				attributes: []
+			}],
 			attributes: [
 				[fn('AVG', col('rating')), 'averageRating'],
-				[fn('COUNT', col('id')), 'totalReviews'],
-				[fn('JSON_AGG', col('tags')), 'allTags'], // 收集所有 tags 数组
+				[fn('COUNT', col('XReviewForAccount.id')), 'totalReviews'],
+				[fn('JSON_AGG', col('tags')), 'allTags']
 			],
-			raw: true
+			raw: true,
+			nest: true
 		});
 		
 		let averageRating = Number(Number(stats.averageRating || 0).toFixed(2));
@@ -69,7 +80,7 @@ router.get('/:handle', [
 			});
 		}
 		
-		// Step 4: 构建 tagCloud
+		// Step 4: 构建 tagCloud（仅前 10 个高频标签）
 		const tagCounts = {};
 		allTags.forEach(tag => {
 			tagCounts[tag] = (tagCounts[tag] || 0) + 1;
@@ -86,12 +97,13 @@ router.get('/:handle', [
 			where: { xAccountId: accountId },
 			limit: 5,
 			order: [['createdAt', 'DESC']],
-			// include: [{
-			// 	model: XHuntUser,
-			// 	as: 'xHuntUser',
-			// 	attributes: ['displayName', 'avatar']
-			// }],
 			attributes: ['userAvatar', 'userName'],
+			include: [{
+				model: XHuntUser,
+				as: 'xHuntUser',
+				where: onlyKOL ? { kolRank20W: { [Op.ne]: null } } : undefined,
+				required: onlyKOL
+			}],
 			raw: true
 		});
 		topReviewers = topReviewers.map(review => ({
@@ -203,45 +215,45 @@ router.post('/', [
 	}
 });
 
-router.post('/delete', [
-	authenticateToken,
-	body('handle').trim().notEmpty(),
-	body('reviewId').trim().notEmpty(),
-	validateRequest
-], async (req, res) => {
-	try {
-		const { handle, reviewId } = req.body;
-		
-		// Step 1: 查找目标 XAccount
-		const xAccount = await XAccount.findOne({
-			where: { handle }
-		});
-		
-		if (!xAccount) {
-			return res.status(404).json({ error: 'X 账号不存在' });
-		}
-		
-		// Step 2: 查找评论并验证归属
-		const review = await XReviewForAccount.findOne({
-			where: {
-				id: reviewId,
-				xHuntUserId: req.user.id,
-				xAccountId: xAccount.id
-			}
-		});
-		
-		if (!review) {
-			return res.status(404).json({ error: '评论不存在或无权删除' });
-		}
-		
-		// Step 3: 删除评论
-		await review.destroy();
-		
-		res.status(200).json({ message: '删除成功' });
-	} catch (error) {
-		console.error('Error deleting review:', error);
-		res.status(500).json({ error: 'Failed to delete review' });
-	}
-});
+// router.post('/delete', [
+// 	authenticateToken,
+// 	body('handle').trim().notEmpty(),
+// 	body('reviewId').trim().notEmpty(),
+// 	validateRequest
+// ], async (req, res) => {
+// 	try {
+// 		const { handle, reviewId } = req.body;
+//
+// 		// Step 1: 查找目标 XAccount
+// 		const xAccount = await XAccount.findOne({
+// 			where: { handle }
+// 		});
+//
+// 		if (!xAccount) {
+// 			return res.status(404).json({ error: 'X 账号不存在' });
+// 		}
+//
+// 		// Step 2: 查找评论并验证归属
+// 		const review = await XReviewForAccount.findOne({
+// 			where: {
+// 				id: reviewId,
+// 				xHuntUserId: req.user.id,
+// 				xAccountId: xAccount.id
+// 			}
+// 		});
+//
+// 		if (!review) {
+// 			return res.status(404).json({ error: '评论不存在或无权删除' });
+// 		}
+//
+// 		// Step 3: 删除评论
+// 		await review.destroy();
+//
+// 		res.status(200).json({ message: '删除成功' });
+// 	} catch (error) {
+// 		console.error('Error deleting review:', error);
+// 		res.status(500).json({ error: 'Failed to delete review' });
+// 	}
+// });
 
 module.exports = router;
