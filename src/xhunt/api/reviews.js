@@ -9,7 +9,7 @@ const { sanitizeNote } = require('../services/inputValidator');
 const router = express.Router();
 
 // Get reviews for a Twitter account
-const { Op, fn, col } = require('sequelize');
+const { fn, col } = require('sequelize');
 
 router.get('/:handle', [
 	authenticateTokenOptional,
@@ -53,12 +53,17 @@ router.get('/:handle', [
 			});
 		}
 		
-		// Step 4: 构建 tagCloud（仍需 JS 处理，但数据量已大幅减少）
+		// Step 4: 构建 tagCloud
 		const tagCounts = {};
 		allTags.forEach(tag => {
 			tagCounts[tag] = (tagCounts[tag] || 0) + 1;
 		});
-		const tagCloud = Object.entries(tagCounts).map(([text, value]) => ({ text, value }));
+		
+		// 只取前 10 个
+		const tagCloud = Object.entries(tagCounts)
+			.map(([text, value]) => ({ text, value }))
+			.sort((a, b) => b.value - a.value)
+			.slice(0, 10);
 		
 		// Step 5: 获取前 5 条评论用户（避免加载全部评论）
 		let topReviewers = await XReviewForAccount.findAll({
