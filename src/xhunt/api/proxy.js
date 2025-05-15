@@ -31,7 +31,7 @@ async function proxyRequest(req, res, targetUrl) {
 		// 发送请求到目标服务器
 		const response = await fetch(targetUrl, options);
 		const data = await response.json();
-		console.log('Proxy response:', data);
+		console.log('Proxy response=========:', data);
 		// 返回响应
 		res.status(response.status).json(data);
 	} catch (error) {
