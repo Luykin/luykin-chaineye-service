@@ -102,12 +102,15 @@ router.post('/twitter/callback', [
 		await XHuntUserToken.destroy({ where: { userId: user.id } });
 		
 		// Step 8: 创建新 Token 记录
-		const tokenExpiry = new Date(Date.now() + expiresIn * 1000);
+		const expiryDays = 30;//  30天过期
+		const thirtyDaysFromNow = new Date();
+		thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + expiryDays);
+		
 		const tokenRecord = await XHuntUserToken.create({
 			userId: user.id,
 			accessToken,
 			refreshToken,
-			tokenExpiry,
+			tokenExpiry: thirtyDaysFromNow,
 			lastUsed: new Date(),
 			fingerprint: req?.securityContext?.fingerprint || ''
 		});
@@ -116,7 +119,7 @@ router.post('/twitter/callback', [
 		const jwtToken = jwt.sign(
 			{ userId: user.id, tokenId: tokenRecord.id },
 			process.env.JWT_SECRET,
-			{ expiresIn: '30d' }
+			{ expiresIn: `${expiryDays}d` }
 		);
 		
 		// Step 10: 返回响应
