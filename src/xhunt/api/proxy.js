@@ -6,7 +6,7 @@ const router = express.Router();
 
 // URL映射配置
 const URL_MAPPINGS = {
-	'kota': 'https://kota.chaineye.tools',
+	'kota': 'http://10.170.0.2:16530',
 	'kb': 'https://kb.cryptohunt.ai'
 };
 
@@ -30,9 +30,7 @@ async function proxyRequest(req, res, targetUrl) {
 		}
 		// 发送请求到目标服务器
 		const response = await fetch(targetUrl, options);
-		console.log('Proxy response response =====1:', response)
 		const data = await response.json();
-		console.log('Proxy response=========:', data);
 		// 返回响应
 		res.status(response.status).json(data);
 	} catch (error) {
