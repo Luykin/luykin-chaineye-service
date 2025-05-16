@@ -84,6 +84,7 @@ router.get('/:handle', [
 		allTags.forEach(tag => {
 			tagCounts[tag] = (tagCounts[tag] || 0) + 1;
 		});
+		const allTagCount = Object.keys(tagCounts || {}).length;
 		
 		// 只取前 10 个
 		const tagCloud = Object.entries(tagCounts)
@@ -133,6 +134,7 @@ router.get('/:handle', [
 			tagCloud,
 			topReviewers,
 			currentUserReview,
+			allTagCount,
 			defaultTags: {
 				kol: kolProfileTags,
 				project: projectCharacterTags
