@@ -88,7 +88,7 @@ router.post('/twitter/callback', [
 				// 更新用户信息
 				await user.update({
 					classification,
-					kolRank20W: kolRank20W ? parseInt(kolRank20W, 10) : null
+					kolRank20W: kolRank20W && Number(kolRank20W) > 0 ? parseInt(kolRank20W, 10) : null
 				});
 			} else {
 				console.warn('External API returned non-200:', response.status, response.data);
