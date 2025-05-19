@@ -221,45 +221,43 @@ router.post('/', [
 	}
 });
 
-// router.post('/delete', [
-// 	authenticateToken,
-// 	body('handle').trim().notEmpty(),
-// 	body('reviewId').trim().notEmpty(),
-// 	validateRequest
-// ], async (req, res) => {
-// 	try {
-// 		const { handle, reviewId } = req.body;
-//
-// 		// Step 1: 查找目标 XAccount
-// 		const xAccount = await XAccount.findOne({
-// 			where: { handle }
-// 		});
-//
-// 		if (!xAccount) {
-// 			return res.status(404).json({ error: 'X 账号不存在' });
-// 		}
-//
-// 		// Step 2: 查找评论并验证归属
-// 		const review = await XReviewForAccount.findOne({
-// 			where: {
-// 				id: reviewId,
-// 				xHuntUserId: req.user.id,
-// 				xAccountId: xAccount.id
-// 			}
-// 		});
-//
-// 		if (!review) {
-// 			return res.status(404).json({ error: '评论不存在或无权删除' });
-// 		}
-//
-// 		// Step 3: 删除评论
-// 		await review.destroy();
-//
-// 		res.status(200).json({ message: '删除成功' });
-// 	} catch (error) {
-// 		console.error('Error deleting review:', error);
-// 		res.status(500).json({ error: 'Failed to delete review' });
-// 	}
-// });
+router.post('/delete', [
+	authenticateToken,
+	body('handle').trim().notEmpty(),
+	validateRequest
+], async (req, res) => {
+	try {
+		const { handle } = req.body;
+
+		// Step 1: 查找目标 XAccount
+		const xAccount = await XAccount.findOne({
+			where: { handle }
+		});
+
+		if (!xAccount) {
+			return res.status(404).json({ error: 'X 账号不存在' });
+		}
+
+		// Step 2: 查找评论并验证归属
+		const review = await XReviewForAccount.findOne({
+			where: {
+				xHuntUserId: req.user.id,
+				xAccountId: xAccount.id
+			}
+		});
+
+		if (!review) {
+			return res.status(404).json({ error: '评论不存在或无权删除' });
+		}
+
+		// Step 3: 删除评论
+		await review.destroy();
+
+		res.status(200).json({ message: '删除成功' });
+	} catch (error) {
+		console.error('Error deleting review:', error);
+		res.status(500).json({ error: 'Failed to delete review' });
+	}
+});
 
 module.exports = router;
