@@ -131,7 +131,8 @@ router.post('/twitter/callback', [
 				displayName: user.displayName,
 				avatar: user.avatar,
 				classification: user.classification,
-				kolRank20W: user.kolRank20W
+				kolRank20W: user.kolRank20W,
+				twitterId: user.twitterId,
 			}
 		});
 	} catch (error) {
@@ -146,7 +147,8 @@ router.get('/me', authenticateToken, async (req, res) => {
 		res.json({
 			username: req.user.username,
 			displayName: req.user.displayName,
-			avatar: req.user.avatar
+			avatar: req.user.avatar,
+			twitterId: req.user.twitterId
 		});
 	} catch (error) {
 		console.error('Failed to fetch user info:', error);
