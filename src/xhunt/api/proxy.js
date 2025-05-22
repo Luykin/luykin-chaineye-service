@@ -7,7 +7,7 @@ const router = express.Router();
 // URL映射配置
 const URL_MAPPINGS = {
 	'kota': 'http://10.170.0.2:16530',
-	'kb': 'https://kb.cryptohunt.ai'
+	'kb': 'http://34.146.221.115:8087'
 };
 
 // 默认目标服务器
