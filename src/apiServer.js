@@ -61,7 +61,7 @@ app.use((req, res, next) => {
 				`path:${req.path}`,
 				`method:${req.method}`,
 				`error_message:${body.error?.substring(0, 100) || 'unknown'}`.replace(/[:=]/g, '_'), // 移除标签分隔符
-				`stack_hash:${crypto.createHash('md5').update(body.stack || '').digest('hex')}`      // 堆栈哈希（避免 PII 泄露）
+				// `stack_hash:${crypto.createHash('md5').update(body.stack || '').digest('hex')}`      // 堆栈哈希（避免 PII 泄露）
 			];
 			
 			dataDog.increment('requests.errors.total', 1, errorTags);
