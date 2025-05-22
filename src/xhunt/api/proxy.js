@@ -34,7 +34,7 @@ async function proxyRequest(req, res, targetUrl) {
 		// 返回响应
 		res.status(response.status).json(data);
 	} catch (error) {
-		console.error('Proxy request error:', error);
+		console.error(targetUrl, 'Proxy request error:', error);
 		res.status(500).json({ error: '请求失败' });
 	}
 }
