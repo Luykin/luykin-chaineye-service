@@ -16,6 +16,8 @@ const xHuntAuthRoutes = require('./xhunt/api/auth');
 const xHuntProxyRoutes = require('./xhunt/api/proxy');
 const xHuntReviewsRoutes = require('./xhunt/api/reviews');
 const { securityMiddleware, fingerprintLimiter, rateLimiter } = require('./xhunt/middleware/security');
+const StatsD = require('hot-shots');
+const dataDog = new StatsD();
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -39,9 +41,23 @@ const redisClient = redis.createClient({
 	}
 })();
 
-// 中间件传递 Redis 客户端
 app.use((req, res, next) => {
 	req.redisClient = redisClient;
+	req.dataDog = dataDog;
+	next();
+});
+
+/** https://us5.datadoghq.com/integrations?search=node&integrationId=node 性能统计 **/
+app.use((req, res, next) => {
+	const startTime = Date.now();
+	
+	res.on('finish', () => {
+		const latency = Date.now() - startTime;
+		
+		dataDog.increment('requests.total');
+		dataDog.histogram('requests.latency', latency);
+		dataDog.increment(`requests.status.${res.statusCode}`);
+	});
 	next();
 });
 

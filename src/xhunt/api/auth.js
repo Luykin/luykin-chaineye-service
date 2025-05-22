@@ -95,7 +95,22 @@ router.post('/twitter/callback', [
 			}
 		} catch (apiError) {
 			// 忽略外部 API 错误，继续流程
+			req.dataDog.increment('user.initRankError', 1, [
+				`err:${String(apiError) || 'unknown'}`
+			]);
 			console.error('外部 API 调用失败:', apiError.message);
+		}
+		
+		if (created) {
+			req.dataDog.increment('user.registrations', 1, [
+				`source:twitter`,
+				`classification:${user.classification || 'unknown'}`
+			]);
+		} else {
+			req.dataDog.increment('user.logins', 1, [
+				`source:twitter`,
+				`classification:${user.classification || 'unknown'}`
+			]);
 		}
 		
 		// Step 7: 清除旧 token
