@@ -51,12 +51,42 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
 	const startTime = Date.now();
 	
+	// 劫持原生的 .json()/.send() 方法，捕获错误信息
+	const originalSend = res.send;
+	res.send = function (body) {
+		// 在响应前记录错误详情（仅限 500 状态码）
+		if (res.statusCode === 500) {
+			const errorTags = [
+				`status:500`,
+				`path:${req.path}`,
+				`method:${req.method}`,
+				`error_message:${body.error?.substring(0, 100) || 'unknown'}`.replace(/[:=]/g, '_'), // 移除标签分隔符
+				`stack_hash:${crypto.createHash('md5').update(body.stack || '').digest('hex')}`      // 堆栈哈希（避免 PII 泄露）
+			];
+			
+			dataDog.increment('requests.errors.total', 1, errorTags);
+			dataDog.event('HTTP 500 Error', body.error || 'Unknown error', {
+				alert_type: 'error',
+				tags: errorTags
+			});
+		}
+		originalSend.call(this, body);
+	};
+	
 	res.on('finish', () => {
 		const latency = Date.now() - startTime;
 		
-		dataDog.increment('requests.total');
-		dataDog.histogram('requests.latency', latency);
-		dataDog.increment(`requests.status.${res.statusCode}`);
+		// 基础指标
+		dataDog.increment('requests.total', 1, [
+			`status:${res.statusCode}`,
+			`path:${req.path}`,
+			`method:${req.method}`
+		]);
+		
+		dataDog.histogram('requests.latency', latency, [
+			`status:${res.statusCode}`,
+			`path:${req.path}`
+		]);
 	});
 	next();
 });
