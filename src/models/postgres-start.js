@@ -5,6 +5,7 @@ const XHuntUserModel = require('../xhunt/models/XHuntUser');
 const XAccountModel = require('../xhunt/models/XAccount');
 const XHuntUserTokenModel = require('../xhunt/models/XHuntUserToken');
 const XReviewForAccountModel = require('../xhunt/models/XReviewForAccount');
+const XPointRecordModel = require('../xhunt/models/XPointRecord');
 
 
 const pgInstance = new Sequelize({
@@ -27,6 +28,7 @@ const XHuntUser = XHuntUserModel(pgInstance);
 const XAccount = XAccountModel(pgInstance);
 const XHuntUserToken = XHuntUserTokenModel(pgInstance);
 const XReviewForAccount = XReviewForAccountModel(pgInstance);
+const XPointRecord = XPointRecordModel(pgInstance);
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
 	foreignKey: 'xHuntUserId',
@@ -56,6 +58,26 @@ XHuntUser.hasMany(XHuntUserToken, {
 XHuntUserToken.belongsTo(XHuntUser, {
 	foreignKey: 'userId',
 	as: 'user'
+});
+
+XHuntUser.hasMany(XPointRecord, {
+	foreignKey: 'xHuntUserId',
+	as: 'pointsHistory'
+});
+
+XPointRecord.belongsTo(XHuntUser, {
+	foreignKey: 'xHuntUserId',
+	as: 'user'
+});
+
+XReviewForAccount.hasOne(XPointRecord, {
+	foreignKey: 'reviewId',
+	as: 'pointRecord'
+});
+
+XPointRecord.belongsTo(XReviewForAccount, {
+	foreignKey: 'reviewId',
+	as: 'review'
 });
 
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
