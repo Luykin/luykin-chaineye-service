@@ -2,10 +2,10 @@ const express = require('express');
 const { body, param, query } = require('express-validator');
 const { validateRequest } = require('../middleware/validate-request');
 const { authenticateToken, authenticateTokenOptional } = require('../middleware/auth');
-const { XReviewForAccount, XHuntUser, XAccount } = require('../../models/postgres-start');
+const { XReviewForAccount, XHuntUser, XAccount, XPointRecord } = require('../../models/postgres-start');
 const { validateTags, validateNote } = require('../middleware/reviewValidator');
 const { sanitizeNote } = require('../services/inputValidator');
-
+const { getPointsByRank } = require('../services/twitter');
 const router = express.Router();
 
 // Get reviews for a Twitter account
@@ -203,7 +203,7 @@ router.post('/', [
 			});
 		} else {
 			// Step 3: 创建新评论
-			await XReviewForAccount.create({
+			const newReview = await XReviewForAccount.create({
 				xHuntUserId: req.user.id,
 				xAccountId: xAccount.id,
 				userAvatar: req.user.avatar,
@@ -212,6 +212,15 @@ router.post('/', [
 				tags: tags.map(t => t.trim()),
 				note: sanitizeNote(note || '')
 			});
+			const points = getPointsByRank(req.user.kolRank20W);
+			await XPointRecord.create({
+				xHuntUserId: req.user.id,
+				reviewId: newReview.id,
+				points,
+				userRankAtTimeOfReview: req.user.kolRank20W
+			});
+			const cacheKey1 = `user:points:${req.user.id}`;
+			await req.redisClient.del(cacheKey1);
 		}
 		
 		res.status(201).json({ status: 'success' });
@@ -248,6 +257,20 @@ router.post('/delete', [
 
 		if (!review) {
 			return res.status(404).json({ error: '评论不存在或无权删除' });
+		}
+		
+		const pointRecord = await XPointRecord.findOne({
+			where: {
+				xHuntUserId: req.user.id,
+				reviewId: review.id
+			}
+		});
+		
+		if (pointRecord) {
+			// 删除评论前销毁积分记录
+			await pointRecord.destroy();
+			const cacheKey1 = `user:points:${req.user.id}`;
+			await req.redisClient.del(cacheKey1);
 		}
 
 		// Step 3: 删除评论

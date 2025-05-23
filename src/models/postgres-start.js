@@ -110,5 +110,6 @@ module.exports = {
 	XHuntUser,
 	XAccount,
 	XHuntUserToken,
-	XReviewForAccount
+	XReviewForAccount,
+	XPointRecord
 };

@@ -46,8 +46,24 @@ async function getTwitterUserInfo(accessToken) {
 	return user;
 }
 
+function getPointsByRank(rank) {
+	try {
+		rank = Number(rank);
+		if (!rank || rank < 0 || rank > 200000) return 1;
+		if (rank >= 100000) return 2;
+		if (rank >= 10000) return 4;
+		if (rank >= 5000) return 8;
+		if (rank >= 1000) return 16;
+		return 32;
+	} catch (err) {
+		console.error("getPointsByRank", err);
+		return 1;
+	}
+}
+
 module.exports = {
 	generateTwitterAuthUrl,
 	getTwitterTokens,
-	getTwitterUserInfo
+	getTwitterUserInfo,
+	getPointsByRank
 };

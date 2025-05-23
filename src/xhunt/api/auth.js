@@ -1,6 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { XHuntUserToken, XHuntUser } = require('../../models/postgres-start');
+const { XHuntUserToken, XHuntUser, XPointRecord } = require('../../models/postgres-start');
 const { generateTwitterAuthUrl, getTwitterTokens, getTwitterUserInfo } = require('../services/twitter');
 const { validateRequest } = require('../middleware/validate-request');
 const { body, param } = require('express-validator');
@@ -159,11 +159,30 @@ router.post('/twitter/callback', [
 // 获取当前用户信息
 router.get('/me', authenticateToken, async (req, res) => {
 	try {
+		const cacheKey = `user:points:${req.user.id}`;
+		
+		// 优先从 Redis 获取积分
+		const cachedPoints = await req.redisClient.get(cacheKey);
+		
+		let totalPoints = 0;
+		
+		if (cachedPoints !== null) {
+			totalPoints = parseInt(cachedPoints, 10);
+		} else {
+			// 回退到数据库查询（冷启动或缓存过期）
+			totalPoints = await XPointRecord.sum('points', {
+				where: { xHuntUserId: req.user.id }
+			}) || 0;
+			
+			// 写入缓存（异步非阻塞）
+			req.redisClient.setEx(cacheKey, 3600, totalPoints).catch(console.error);
+		}
 		res.json({
 			username: req.user.username,
 			displayName: req.user.displayName,
 			avatar: req.user.avatar,
-			twitterId: req.user.twitterId
+			twitterId: req.user.twitterId,
+			xPoints: totalPoints
 		});
 	} catch (error) {
 		console.error('Failed to fetch user info:', error);
