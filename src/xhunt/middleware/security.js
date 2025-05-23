@@ -108,7 +108,8 @@ const securityMiddleware = (req, res, next) => {
 		req.securityContext = {
 			requestId,
 			timestamp,
-			fingerprint
+			fingerprint,
+			version
 		};
 		next();
 	} catch (error) {

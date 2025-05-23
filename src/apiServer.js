@@ -65,10 +65,6 @@ app.use((req, res, next) => {
 			];
 			
 			dataDog.increment('requests.errors.total', 1, errorTags);
-			dataDog.event('HTTP 500 Error', body.error || 'Unknown error', {
-				alert_type: 'error',
-				tags: errorTags
-			});
 		}
 		originalSend.call(this, body);
 	};
@@ -80,7 +76,8 @@ app.use((req, res, next) => {
 		dataDog.increment('requests.total', 1, [
 			`status:${res.statusCode}`,
 			`path:${req.path}`,
-			`method:${req.method}`
+			`method:${req.method}`,
+			`version:${req?.securityContext?.version || "unknown"}`
 		]);
 		
 		dataDog.histogram('requests.latency', latency, [
