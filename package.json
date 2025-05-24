@@ -8,6 +8,7 @@
     "dev-crawler": "NODE_ENV=development nodemon ./src/crawlerServer.js",
     "start": "pm2 start ecosystem.config.js --env production",
     "start:dev": "pm2 start ecosystem.config.js --env development",
+    "start-api:dev": "pm2 start luykin-chaineye-api --env development",
     "stop": "pm2 stop luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
     "restart-api": "pm2 restart luykin-chaineye-api",
     "restart": "pm2 restart luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
