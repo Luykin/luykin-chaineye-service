@@ -160,7 +160,12 @@ router.post('/', [
 ], validateRequest, async (req, res) => {
 	try {
 		const { handle, xLink, displayName, avatar, followers, following, rating, tags, note } = req.body;
-		
+		/** 提前检查评论数量上限 **/
+		const cacheKey = `user:review:limit:${req.user.id}`;
+		const userReviewsLimit = await req.redisClient.get(cacheKey);
+		if (userReviewsLimit) {
+			return res.status(403).json({ status: 'error', error: '您今日已达到最大评论次数（5次）' });
+		}
 		// Step 1: 查找或创建 XAccount
 		let xAccount = await XAccount.findOne({
 			where: { handle }
@@ -193,6 +198,29 @@ router.post('/', [
 				xAccountId: xAccount.id
 			}
 		});
+		
+		const isCreatingNew = !existingReview;
+		
+		// Step 2.1: 如果是新增评论，检查当日是否已达上限
+		if (isCreatingNew) {
+			const today = new Date();
+			const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+			
+			const reviewCount = await XReviewForAccount.count({
+				where: {
+					xHuntUserId: req.user.id,
+					createdAt: {
+						[Op.gte]: startOfToday
+					}
+				}
+			});
+			
+			if (reviewCount >= 5) {
+				// const cacheKey = `user:review:limit:${req.user.id}`;
+				req.redisClient.setEx(cacheKey, 360, '5');
+				return res.status(403).json({ status: 'error', error: '您今日已达到最大评论次数（5次）' });
+			}
+		}
 		
 		if (existingReview) {
 			// 更新已有评论
@@ -237,16 +265,16 @@ router.post('/delete', [
 ], async (req, res) => {
 	try {
 		const { handle } = req.body;
-
+		
 		// Step 1: 查找目标 XAccount
 		const xAccount = await XAccount.findOne({
 			where: { handle }
 		});
-
+		
 		if (!xAccount) {
 			return res.status(404).json({ error: 'X 账号不存在' });
 		}
-
+		
 		// Step 2: 查找评论并验证归属
 		const review = await XReviewForAccount.findOne({
 			where: {
@@ -254,7 +282,7 @@ router.post('/delete', [
 				xAccountId: xAccount.id
 			}
 		});
-
+		
 		if (!review) {
 			return res.status(404).json({ error: '评论不存在或无权删除' });
 		}
@@ -272,10 +300,10 @@ router.post('/delete', [
 			const cacheKey1 = `user:points:${req.user.id}`;
 			await req.redisClient.del(cacheKey1);
 		}
-
+		
 		// Step 3: 删除评论
 		await review.destroy();
-
+		
 		res.status(200).json({ message: '删除成功' });
 	} catch (error) {
 		console.error('Error deleting review:', error);
