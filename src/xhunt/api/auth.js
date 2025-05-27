@@ -7,6 +7,7 @@ const { body, param } = require('express-validator');
 const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const axios = require('axios');
+const retry = require('async-retry');
 
 const router = express.Router();
 
@@ -76,29 +77,55 @@ router.post('/twitter/callback', [
 		
 		// Step 6: 可选：调用外部 API 获取用户分类和排名
 		try {
-			const response = await axios.get(`https://kota.chaineye.tools/api/plugin/twitter/info?username=${twitterUser.username}`, {
-				timeout: 5000 // 设置5秒超时
+			const response = await retry(
+				async (bail) => {
+					try {
+						const res = await axios.get(
+							`http://10.170.0.2:16530/api/plugin/twitter/info?username=${twitterUser.username}`,
+							{
+								timeout: 5000 // 设置5秒超时
+							}
+						);
+						
+						if (res.data?.code !== 200) {
+							// 非200响应视为失败，触发重试
+							throw new Error(`API 返回非200状态码: ${res.status}`);
+						}
+						
+						return res;
+					} catch (err) {
+						// 可以选择在某些错误不重试（比如404或认证失败）
+						// bail(err); // 如果你不希望重试某些错误，就调用 bail()
+						
+						// 否则继续重试
+						throw err;
+					}
+				},
+				{
+					retries: 3, // 最多重试3次
+					factor: 2, // 指数退避因子
+					minTimeout: 1000, // 第一次重试前等待1秒
+					onRetry: (err, attempt) => {
+						req.dataDog.increment('user.retryInitRank', 1, [`err:${err.message}`, `attempt:${attempt}`]);
+						// console.error(`第 ${attempt} 次重试:`, err.message);
+					}
+				}
+			);
+			
+			// 请求成功后处理数据
+			const { basicInfo, kolFollow } = response.data.data || {};
+			const { classification } = basicInfo || {};
+			const { kolRank20W } = kolFollow || {};
+			
+			await user.update({
+				classification,
+				kolRank20W: kolRank20W && Number(kolRank20W) > 0 ? parseInt(kolRank20W, 10) : null
 			});
 			
-			if (response.data?.code === 200) {
-				const { basicInfo, kolFollow } = response.data.data || {};
-				const { classification } = basicInfo || {};
-				const { kolRank20W } = kolFollow || {};
-				
-				// 更新用户信息
-				await user.update({
-					classification,
-					kolRank20W: kolRank20W && Number(kolRank20W) > 0 ? parseInt(kolRank20W, 10) : null
-				});
-			} else {
-				console.warn('External API returned non-200:', response.status, response.data);
-			}
-		} catch (apiError) {
-			// 忽略外部 API 错误，继续流程
-			req.dataDog.increment('user.initRankError', 1, [
-				`err:${String(apiError) || 'unknown'}`
-			]);
-			console.error('外部 API 调用失败:', apiError.message);
+		} catch (finalError) {
+			// 所有重试都失败了
+			req.dataDog.increment('user.initRankFinalFail', 1, [`err:${finalError.message}`]);
+			console.error('初始化用户排名最终请求失败:', finalError.message);
 		}
 		
 		if (created) {
