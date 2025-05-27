@@ -102,9 +102,9 @@ router.post('/twitter/callback', [
 					}
 				},
 				{
-					retries: 3, // 最多重试3次
+					retries: 2, // 最多重试3次
 					factor: 2, // 指数退避因子
-					minTimeout: 1000, // 第一次重试前等待1秒
+					minTimeout: 500, // 第一次重试前等待1秒
 					onRetry: (err, attempt) => {
 						req.dataDog.increment('user.retryInitRank', 1, [`err:${err.message}`, `attempt:${attempt}`]);
 						// console.error(`第 ${attempt} 次重试:`, err.message);
