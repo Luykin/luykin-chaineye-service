@@ -62,9 +62,9 @@ class CrawlerScheduler {
 		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
 		/** 开始Upbit 公告 **/
 		this.startUpbitExNewsCrawler().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
 		/** 开始Truthsocial 公告 **/
-		this.startTruthsocialCrawler().then(r => r);
+		// this.startTruthsocialCrawler().then(r => r);
 	}
 	
 	stopScheduler() {
