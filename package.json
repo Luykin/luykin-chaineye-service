@@ -8,7 +8,6 @@
     "dev-crawler": "NODE_ENV=development nodemon ./src/crawlerServer.js",
     "start": "pm2 start ecosystem.config.js --env production",
     "start:dev": "pm2 start ecosystem.config.js --env development",
-    "start-api:dev": "pm2 start ./src/apiServer.js --name dev-luykin-chaineye-api --env development",
     "stop": "pm2 stop luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
     "restart-api": "pm2 restart luykin-chaineye-api",
     "restart": "pm2 restart luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
@@ -16,7 +15,10 @@
     "logs": "pm2 logs luykin-chaineye-api luykin-chaineye-crawler luykin-chaineye-bot",
     "logs-crawler": "pm2 logs luykin-chaineye-crawler --env production",
     "db:migrate": "npx sequelize-cli db:migrate",
-    "db:migrate:undo": "npx sequelize-cli db:migrate:undo"
+    "db:migrate:undo": "npx sequelize-cli db:migrate:undo",
+    "test-start": "pm2 start dev.ecosystem.config.js --env development",
+    "test-restart": "pm2 restart dev.ecosystem.config.js --env development",
+    "test-logs": "pm2 logs dev-luykin-chaineye-api"
   },
   "dependencies": {
     "@lem0-packages/puppeteer-page-proxy": "^1.3.3",
