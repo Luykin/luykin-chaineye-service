@@ -50,10 +50,10 @@ module.exports = (sequelize) => {
 						throw new Error('评分最多保留一位小数');
 					}
 				},
-				min: 1.0,
+				min: 0.0,
 				max: 5.0
 			},
-			comment: '评分（1.0 到 5.0，支持一位小数）'
+			comment: '评分（0.0 到 5.0，支持一位小数）'
 		},
 		tags: {
 			type: DataTypes.ARRAY(DataTypes.STRING),

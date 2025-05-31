@@ -155,8 +155,8 @@ router.post('/', [
 	body('displayName').trim().notEmpty(),
 	body('avatar').trim().notEmpty(),
 	body('rating')
-		.isFloat({ min: 1.0, max: 5.0 })
-		.withMessage('评分必须在 1.0 到 5.0 之间')
+		.isFloat({ min: 0.0, max: 5.0 })
+		.withMessage('评分必须在 0.0 到 5.0 之间')
 		.custom(value => {
 			const decimalPart = value.toString().split('.')[1] || '';
 			if (decimalPart.length > 1) {
