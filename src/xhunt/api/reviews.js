@@ -154,7 +154,16 @@ router.post('/', [
 	body('xLink').trim().notEmpty(),
 	body('displayName').trim().notEmpty(),
 	body('avatar').trim().notEmpty(),
-	body('rating').isInt({ min: 1, max: 5 }),
+	body('rating')
+		.isFloat({ min: 1.0, max: 5.0 })
+		.withMessage('评分必须在 1.0 到 5.0 之间')
+		.custom(value => {
+			const decimalPart = value.toString().split('.')[1] || '';
+			if (decimalPart.length > 1) {
+				throw new Error('评分最多保留一位小数');
+			}
+			return true;
+		}),
 	validateTags,
 	validateNote
 ], validateRequest, async (req, res) => {

@@ -42,13 +42,18 @@ module.exports = (sequelize) => {
 			comment: '评价用户的用户名'
 		},
 		rating: {
-			type: DataTypes.INTEGER,
+			type: DataTypes.DECIMAL(3, 1),
 			allowNull: false,
 			validate: {
-				min: 1,
-				max: 5
+				isDecimal(value) {
+					if (value % 1 !== 0 && value.toString().split('.')[1].length > 1) {
+						throw new Error('评分最多保留一位小数');
+					}
+				},
+				min: 1.0,
+				max: 5.0
 			},
-			comment: '评分（1 到 5 分）'
+			comment: '评分（1.0 到 5.0，支持一位小数）'
 		},
 		tags: {
 			type: DataTypes.ARRAY(DataTypes.STRING),
