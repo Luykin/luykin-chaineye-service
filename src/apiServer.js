@@ -105,7 +105,8 @@ const corsOptions = {
 		'http://localhost:3000',
 		'http://127.0.0.1',
 		'http://127.0.0.1:3000',
-		'https://x.com'
+		'https://x.com',
+		'chrome-extension://pkabfgfgebpmcjgfkjfjapgfemfomlie'
 	],
 	methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // 包括 OPTIONS
 	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp', 'x-request-id', 'x-request-timestamp', 'x-device-fingerprint', 'x-request-signature', 'x-extension-version'],
