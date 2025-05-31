@@ -90,26 +90,50 @@ app.use((req, res, next) => {
 
 // CORS 配置
 const corsOptions = {
-	origin: [
-		'https://chaineye.tools',
-		'https://minibridge.chaineye.tools',
-		'https://www.cryptohunt.ai',
-		'https://cryptohunt.ai',
-		'https://dev.cryptohunt.ai',
-		'http://cryptohunt.ai',
-		'http://www.cryptohunt.ai',
-		'http://dev.cryptohunt.ai',
-		'http://chaineye.tools',
-		'http://minibridge.chaineye.tools',
-		'http://localhost',
-		'http://localhost:3000',
-		'http://127.0.0.1',
-		'http://127.0.0.1:3000',
-		'https://x.com',
-		'chrome-extension://pkabfgfgebpmcjgfkjfjapgfemfomlie'
+	origin: (origin, callback) => {
+		// 白名单列表
+		const allowedOrigins = [
+			'https://chaineye.tools',
+			'https://minibridge.chaineye.tools',
+			'https://www.cryptohunt.ai',
+			'https://cryptohunt.ai',
+			'https://dev.cryptohunt.ai',
+			'http://cryptohunt.ai',
+			'http://www.cryptohunt.ai',
+			'http://dev.cryptohunt.ai',
+			'http://chaineye.tools',
+			'http://minibridge.chaineye.tools',
+			'http://localhost',
+			'http://localhost:3000',
+			'http://127.0.0.1',
+			'http://127.0.0.1:3000',
+			'https://x.com'
+		];
+		
+		// 允许 chrome-extension:// 来源（任何插件）
+		if (origin && origin.startsWith('chrome-extension://')) {
+			return callback(null, true);
+		}
+		
+		// 白名单中的域名也放行
+		if (!origin || allowedOrigins.includes(origin)) {
+			return callback(null, true);
+		}
+		
+		// 否则拒绝
+		callback(new Error('Not allowed by CORS'));
+	},
+	methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+	allowedHeaders: [
+		'Content-Type',
+		'Authorization',
+		'X-Request-Timestamp',
+		'x-request-id',
+		'x-request-timestamp',
+		'x-device-fingerprint',
+		'x-request-signature',
+		'x-extension-version'
 	],
-	methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // 包括 OPTIONS
-	allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Timestamp', 'x-request-id', 'x-request-timestamp', 'x-device-fingerprint', 'x-request-signature', 'x-extension-version'],
 	credentials: true,
 };
 
