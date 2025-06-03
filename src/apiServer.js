@@ -62,12 +62,14 @@ function injectHeadersToSpan(req, res, next) {
 			'x-request-timestamp',
 			'x-device-fingerprint',
 			'x-request-signature',
-			'x-extension-version'
+			'x-extension-version',
+			'x-user-id'
 		];
 		
 		// 遍历并写入 Span Tags
 		headersToCapture.forEach(header => {
 			const value = req.headers[header];
+			value['my-env'] = process.env.ENV;
 			if (value) {
 				// 建议命名格式：http.request_header.<header_name>
 				span.setTag(`http.request_header.${header}`, value);
@@ -86,7 +88,7 @@ app.use((req, res, next) => {
 	
 	// 劫持原生的 .json()/.send() 方法，捕获错误信息
 	const originalSend = res.send;
-	res.send = function (body) {
+	res.send = function(body) {
 		// 在响应前记录错误详情（仅限 500 状态码）
 		if (res.statusCode === 500) {
 			const errorTags = [
@@ -110,7 +112,7 @@ app.use((req, res, next) => {
 			`status:${res.statusCode}`,
 			`path:${req.path}`,
 			`method:${req.method}`,
-			`version:${req?.securityContext?.version || "unknown"}`
+			`version:${req?.securityContext?.version || 'unknown'}`
 		]);
 		
 		dataDog.histogram('requests.latency', latency, [
@@ -165,7 +167,8 @@ const corsOptions = {
 		'x-request-timestamp',
 		'x-device-fingerprint',
 		'x-request-signature',
-		'x-extension-version'
+		'x-extension-version',
+		'x-user-id'
 	],
 	credentials: true,
 };
