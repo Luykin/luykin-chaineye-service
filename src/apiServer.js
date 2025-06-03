@@ -63,7 +63,8 @@ function injectHeadersToSpan(req, res, next) {
 			'x-device-fingerprint',
 			'x-request-signature',
 			'x-extension-version',
-			'x-user-id'
+			'x-user-id',
+			'x-window-location-href'
 		];
 		
 		// 遍历并写入 Span Tags
@@ -168,7 +169,8 @@ const corsOptions = {
 		'x-device-fingerprint',
 		'x-request-signature',
 		'x-extension-version',
-		'x-user-id'
+		'x-user-id',
+		'x-window-location-href'
 	],
 	credentials: true,
 };
