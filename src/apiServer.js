@@ -72,7 +72,7 @@ function injectHeadersToSpan(req, res, next) {
 			// value['my-env'] = process.env.ENV;
 			if (value) {
 				// 建议命名格式：http.request_header.<header_name>
-				span.setTag(`http.request_header.${header}`, value);
+				span.setTag(`http.request_header.${header}`, String(value));
 			}
 		});
 	}
