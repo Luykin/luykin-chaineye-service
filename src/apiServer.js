@@ -1,3 +1,6 @@
+// This line must come before importing any instrumented module.
+require('dd-trace').init()
+
 require('dotenv').config({ path: `${process.env.NODE_ENV === 'development' ? '.env-dev' : '.env-pro'}` });
 console.log(process.env.NODE_ENV, 'process.env.NODE_ENV运行环境');
 const express = require('express');
