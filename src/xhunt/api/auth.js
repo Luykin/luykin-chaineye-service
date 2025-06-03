@@ -202,7 +202,7 @@ router.get('/me', authenticateToken, async (req, res) => {
 			}) || 0;
 			
 			// 写入缓存（异步非阻塞）
-			req.redisClient.setEx(cacheKey, 3600, totalPoints).catch(console.error);
+			req.redisClient.setEx(cacheKey, 3600, JSON.stringify(totalPoints)).catch(console.error);
 		}
 		res.json({
 			username: req.user.username,
