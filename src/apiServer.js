@@ -69,7 +69,7 @@ function injectHeadersToSpan(req, res, next) {
 		// 遍历并写入 Span Tags
 		headersToCapture.forEach(header => {
 			const value = req.headers[header];
-			value['my-env'] = process.env.ENV;
+			// value['my-env'] = process.env.ENV;
 			if (value) {
 				// 建议命名格式：http.request_header.<header_name>
 				span.setTag(`http.request_header.${header}`, value);
