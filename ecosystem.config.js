@@ -8,12 +8,12 @@ module.exports = {
 			watch: false,                        // 生产环境关闭文件监视
 			time: true,
 			interpreter: "node",
-			interpreter_args: "--require dd-trace/init",  // ⬅️ 注入 Datadog 自动埋点
+			interpreter_args: "--require dd-trace/init",  // 注入 Datadog 自动埋点
 			env: {
 				NODE_ENV: "development",         // 开发环境变量
 				PORT: 8088,                      // API 服务的开发端口
 				TZ: "Asia/Shanghai",             // 设置时区为北京时间
-				DD_SERVICE: "luykin-chaineye-api",       // Datadog 服务名称（自定义）
+				DD_SERVICE: "dev-luykin-chaineye-api",       // Datadog 服务名称（自定义）
 				DD_ENV: "development",           // 环境对应
 				DD_AGENT_HOST: "localhost",      // Agent 地址（默认 localhost）
 				DD_TRACE_AGENT_PORT: 8126,       // 默认 APM 端口
