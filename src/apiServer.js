@@ -1,5 +1,5 @@
 // This line must come before importing any instrumented module.
-require('dd-trace').init({
+const tracer = require('dd-trace').init({
 	logInjection: true
 });
 
@@ -51,6 +51,34 @@ app.use((req, res, next) => {
 	req.dataDog = dataDog;
 	next();
 });
+
+//将指定请求头注入到 Datadog APM Span 中
+function injectHeadersToSpan(req, res, next) {
+	const span = tracer.scope().active();
+	if (span) {
+		// 要记录的请求头列表（全部使用小写形式匹配 req.headers）
+		const headersToCapture = [
+			'x-request-id',
+			'x-request-timestamp',
+			'x-device-fingerprint',
+			'x-request-signature',
+			'x-extension-version'
+		];
+		
+		// 遍历并写入 Span Tags
+		headersToCapture.forEach(header => {
+			const value = req.headers[header];
+			if (value) {
+				// 建议命名格式：http.request_header.<header_name>
+				span.setTag(`http.request_header.${header}`, value);
+			}
+		});
+	}
+	next();
+}
+
+// 使用中间件
+app.use(injectHeadersToSpan);
 
 /** https://us5.datadoghq.com/integrations?search=node&integrationId=node 性能统计 **/
 app.use((req, res, next) => {
