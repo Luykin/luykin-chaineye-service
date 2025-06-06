@@ -3,6 +3,7 @@ const { query, validationResult } = require('express-validator');
 const { Fundraising, NewCrawlState, C_STATE_TYPE } = require('../models/sqlite-start');
 // const crawler = require('../services/rootdata-crawler');
 const { Op, literal, fn, col } = require('sequelize');
+const axios = require('axios');
 const router = express.Router();
 const CACHE_TTL = 300; // 缓存时间限制（秒），此处设为5分钟
 const CACHE_TTL_LONG = 600; // 缓存时间限制（秒），此处设为10分钟
@@ -402,6 +403,104 @@ router.get('/search/legacy', async (req, res) => {
 			total_funding: totalInvestment
 		};
 		
+		// ----------------------------- 新增逻辑开始 -----------------------------
+		// 收集需要更新的用户名
+		const usernamesToFetch = new Set();
+		const extractUsername = (url) => {
+			if (!url) return null;
+			const match = url.match(/x\.com\/([^/]+)/i);
+			return match ? match[1] : null;
+		};
+		
+		// 从 investors 中提取用户名
+		investors.forEach(investor => {
+			if (investor.twitter) {
+				const username = extractUsername(investor.twitter);
+				if (username && (!investor.avatar || !investor.avatar.startsWith('https://pbs.twimg.com'))) {
+					usernamesToFetch.add(username);
+				}
+			}
+		});
+		
+		// 从 fundedProjects 中提取用户名
+		fundedProjects.forEach(project => {
+			if (project.twitter) {
+				const username = extractUsername(project.twitter);
+				if (username && (!project.avatar || !project.avatar.startsWith('https://pbs.twimg.com'))) {
+					usernamesToFetch.add(username);
+				}
+			}
+		});
+		
+		// 如果存在需要更新的用户名
+		if (usernamesToFetch.size > 0) {
+			try {
+				const usernames = Array.from(usernamesToFetch);
+				const apiURL = `http://10.170.0.2:16530/api/twitterapi/fetch/users?users=${usernames.join(',')}`;
+				const response = await axios.get(apiURL);
+				const userDataArray = response?.data?.data || [];
+				
+				// 构建用户名到头像的映射
+				const avatarMap = {};
+				userDataArray.forEach(user => {
+					if (user.username && user.avatar) {
+						avatarMap[String(user.username).toLowerCase()] = user.avatar;
+					}
+				});
+				
+				// 更新 investors 的 avatar
+				investors.forEach(investor => {
+					if (investor.twitter) {
+						const username = String(extractUsername(investor.twitter)).toLowerCase();
+						if (username && avatarMap[username]) {
+							investor.avatar = avatarMap[username];
+						}
+					}
+				});
+				
+				// 更新 fundedProjects 的 avatar
+				fundedProjects.forEach(project => {
+					if (project.twitter) {
+						const username = String(extractUsername(project.twitter)).toLowerCase();
+						if (username && avatarMap[username]) {
+							project.avatar = avatarMap[username];
+						}
+					}
+				});
+				
+				// // 异步更新数据库
+				// setImmediate(async () => {
+				// 	try {
+				// 		for (const username_u of usernamesToFetch) {
+				// 			const username = String(username_u).toLowerCase();
+				// 			if (!avatarMap[username]) continue;
+				//
+				// 			const twitterUrl = `https://x.com/${username}`;
+				// 			const twitterUrlWithSlash = `https://x.com/${username}/`;
+				//
+				// 			await Fundraising.Project.update(
+				// 				{ logo: avatarMap[username] },
+				// 				{
+				// 					where: {
+				// 						[Op.or]: [
+				// 							literal(`LOWER(socialLinks->>'x') = LOWER('${twitterUrl}')`),
+				// 							literal(`LOWER(socialLinks->>'x') = LOWER('${twitterUrlWithSlash}')`)
+				// 						]
+				// 					}
+				// 				}
+				// 			);
+				// 		}
+				// 	} catch (error) {
+				// 		console.error('Error updating project logos in database:', error);
+				// 	}
+				// });
+				
+			} catch (error) {
+				console.error('Error fetching updated avatars:', error);
+			}
+		}
+		// ----------------------------- 新增逻辑结束 -----------------------------
+		
 		// 组装最终响应
 		const response = {
 			invested: investedData,
@@ -423,7 +522,6 @@ router.get('/search/legacy', async (req, res) => {
 		res.status(500).json({ error: 'Failed to search project (legacy)' });
 	}
 });
-
 // const { Op, literal, fn, col } = require('sequelize');
 
 // router.get('/investors', async (req, res) => {
