@@ -81,7 +81,6 @@ router.get('/reviews', [
 		
 		// 格式化返回数据
 		const formattedReviews = reviews.map(review => ({
-			reviewId: review.id,
 			rating: review.rating,
 			tags: review.tags || [],
 			userName: review.userName,
@@ -89,7 +88,6 @@ router.get('/reviews', [
 			createdAt: review.createdAt,
 			updatedAt: review.updatedAt,
 			reviewer: {
-				id: review.xHuntUser?.id,
 				username: review.xHuntUser?.username,
 				displayName: review.xHuntUser?.displayName,
 				avatar: review.xHuntUser?.avatar,
@@ -97,12 +95,9 @@ router.get('/reviews', [
 				classification: review.xHuntUser?.classification
 			},
 			targetAccount: {
-				id: review.xAccount?.id,
 				handle: review.xAccount?.handle,
 				displayName: review.xAccount?.displayName,
-				avatar: review.xAccount?.avatar,
-				followers: review.xAccount?.followers,
-				following: review.xAccount?.following
+				avatar: review.xAccount?.avatar
 			}
 		}));
 		
