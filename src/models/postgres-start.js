@@ -6,6 +6,7 @@ const XAccountModel = require('../xhunt/models/XAccount');
 const XHuntUserTokenModel = require('../xhunt/models/XHuntUserToken');
 const XReviewForAccountModel = require('../xhunt/models/XReviewForAccount');
 const XPointRecordModel = require('../xhunt/models/XPointRecord');
+const XPrivateNoteModel = require('../xhunt/models/XPrivateNote');
 
 
 const pgInstance = new Sequelize({
@@ -29,6 +30,8 @@ const XAccount = XAccountModel(pgInstance);
 const XHuntUserToken = XHuntUserTokenModel(pgInstance);
 const XReviewForAccount = XReviewForAccountModel(pgInstance);
 const XPointRecord = XPointRecordModel(pgInstance);
+const XPrivateNote = XPrivateNoteModel(pgInstance);
+
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
 	foreignKey: 'xHuntUserId',
@@ -80,6 +83,27 @@ XPointRecord.belongsTo(XReviewForAccount, {
 	as: 'review'
 });
 
+// 新增私人备注关系
+XHuntUser.hasMany(XPrivateNote, {
+	foreignKey: 'xHuntUserId',
+	as: 'privateNotes'
+});
+
+XPrivateNote.belongsTo(XHuntUser, {
+	foreignKey: 'xHuntUserId',
+	as: 'xHuntUser'
+});
+
+XAccount.hasMany(XPrivateNote, {
+	foreignKey: 'xAccountId',
+	as: 'privateNotes'
+});
+
+XPrivateNote.belongsTo(XAccount, {
+	foreignKey: 'xAccountId',
+	as: 'xAccount'
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 
@@ -111,5 +135,6 @@ module.exports = {
 	XAccount,
 	XHuntUserToken,
 	XReviewForAccount,
-	XPointRecord
+	XPointRecord,
+	XPrivateNote
 };

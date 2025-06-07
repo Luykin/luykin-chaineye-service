@@ -20,6 +20,7 @@ const newsRoutes = require('./routes/ex-news');
 const xHuntAuthRoutes = require('./xhunt/api/auth');
 const xHuntProxyRoutes = require('./xhunt/api/proxy');
 const xHuntReviewsRoutes = require('./xhunt/api/reviews');
+const xHuntNotesRoutes = require('./xhunt/api/notes');
 const { securityMiddleware, fingerprintLimiter, rateLimiter } = require('./xhunt/middleware/security');
 const StatsD = require('hot-shots');
 const dataDog = new StatsD();
@@ -159,7 +160,7 @@ const corsOptions = {
 		// 否则拒绝
 		callback(new Error('Not allowed by CORS'));
 	},
-	methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 	allowedHeaders: [
 		'Content-Type',
 		'Authorization',
@@ -221,6 +222,13 @@ app.use(
 	fingerprintLimiter,
 	securityMiddleware,
 	xHuntReviewsRoutes
+);
+
+app.use(
+	'/api/xhunt/notes',
+	fingerprintLimiter,
+	securityMiddleware,
+	xHuntNotesRoutes
 );
 
 // 错误处理中间件
