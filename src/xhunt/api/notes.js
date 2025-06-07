@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, query } = require('express-validator');
+const { body, param } = require('express-validator');
 const { validateRequest } = require('../middleware/validate-request');
 const { authenticateToken } = require('../middleware/auth');
 const { XPrivateNote, XAccount } = require('../../models/postgres-start');
@@ -8,68 +8,17 @@ const { sanitizeNote } = require('../services/inputValidator');
 const router = express.Router();
 
 /**
- * GET /notes
- * 获取当前用户的所有私人备注
- * 不允许查询特定账号，只能获取自己的全部备注
- */
-router.get('/', [
-	authenticateToken,
-	validateRequest
-], async (req, res) => {
-	try {
-		// 只查询当前用户的备注，不允许任何筛选参数
-		const privateNotes = await XPrivateNote.findAll({
-			where: {
-				xHuntUserId: req.user.id // 只能查询当前用户的备注
-			},
-			include: [{
-				model: XAccount,
-				as: 'xAccount',
-				attributes: ['id', 'handle', 'displayName', 'avatar']
-			}],
-			attributes: ['id', 'note', 'createdAt', 'updatedAt'],
-			order: [['updatedAt', 'DESC']]
-		});
-		
-		// 返回所有备注
-		const formattedNotes = privateNotes.map(note => ({
-			id: note.id,
-			note: note.note || '',
-			createdAt: note.createdAt,
-			updatedAt: note.updatedAt,
-			account: {
-				handle: note.xAccount.handle,
-				displayName: note.xAccount.displayName,
-				avatar: note.xAccount.avatar
-			}
-		}));
-		
-		res.json({
-			total: formattedNotes.length,
-			notes: formattedNotes
-		});
-		
-	} catch (error) {
-		console.error('Error fetching private notes:', error);
-		res.status(500).json({ error: '获取备注失败' });
-	}
-});
-
-/**
- * GET /notes/by-handle/:handle
+ * GET /notes/:handle
  * 获取当前用户对特定账号的私人备注
  * 只能查询当前用户自己的备注
  */
-router.get('/by-handle/:handle', [
+router.get('/:handle', [
 	authenticateToken,
+	param('handle').trim().notEmpty().withMessage('账号handle不能为空'),
 	validateRequest
 ], async (req, res) => {
 	try {
 		const { handle } = req.params;
-		
-		if (!handle || !handle.trim()) {
-			return res.status(400).json({ error: 'handle参数不能为空' });
-		}
 		
 		// 查找当前用户对特定账号的备注
 		const privateNote = await XPrivateNote.findOne({
