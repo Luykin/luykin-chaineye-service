@@ -9,7 +9,7 @@ const router = express.Router();
 
 /**
  * GET /notes
- * 获取当前用户的所有私人备注
+ * 获取当前用户的私人备注
  * @query handle - 可选，筛选特定账号的备注
  */
 router.get('/', [
@@ -44,7 +44,26 @@ router.get('/', [
 			order: [['updatedAt', 'DESC']]
 		});
 		
-		// 格式化返回数据
+		// 如果查询特定handle但没有找到，返回空备注
+		if (handle && privateNotes.length === 0) {
+			return res.json({
+				handle,
+				note: '',
+				lastUpdated: null
+			});
+		}
+		
+		// 如果查询特定handle且找到了，返回单个结果
+		if (handle && privateNotes.length > 0) {
+			const note = privateNotes[0];
+			return res.json({
+				handle,
+				note: note.note,
+				lastUpdated: note.updatedAt
+			});
+		}
+		
+		// 返回所有备注
 		const formattedNotes = privateNotes.map(note => ({
 			id: note.id,
 			note: note.note || '',
@@ -57,26 +76,6 @@ router.get('/', [
 			}
 		}));
 		
-		// 如果查询特定handle但没有找到，返回空备注
-		if (handle && formattedNotes.length === 0) {
-			return res.json({
-				handle,
-				note: '',
-				lastUpdated: null
-			});
-		}
-		
-		// 如果查询特定handle且找到了，返回单个结果
-		if (handle && formattedNotes.length > 0) {
-			const note = formattedNotes[0];
-			return res.json({
-				handle,
-				note: note.note,
-				lastUpdated: note.updatedAt
-			});
-		}
-		
-		// 返回所有备注
 		res.json({
 			total: formattedNotes.length,
 			notes: formattedNotes

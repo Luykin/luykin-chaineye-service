@@ -71,6 +71,7 @@ router.get('/reviews', [
 				'id',
 				'rating',
 				'tags',
+				'note',
 				'userName',
 				'userAvatar',
 				'createdAt',
@@ -84,6 +85,7 @@ router.get('/reviews', [
 			reviewId: review.id,
 			rating: review.rating,
 			tags: review.tags || [],
+			note: review.note || '',
 			userName: review.userName,
 			userAvatar: review.userAvatar,
 			createdAt: review.createdAt,
@@ -110,11 +112,7 @@ router.get('/reviews', [
 		res.json({
 			success: true,
 			total: formattedReviews.length,
-			data: formattedReviews,
-			// query: {
-			// 	xAccountId,
-			// 	userName: userName || null
-			// }
+			data: formattedReviews
 		});
 		
 	} catch (error) {
