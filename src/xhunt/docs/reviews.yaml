@@ -1,0 +1,219 @@
+# 评论相关API文档
+
+paths:
+  /reviews/{handle}:
+    get:
+      tags:
+        - Reviews
+      summary: 获取X账号的评论汇总
+      description: 获取指定X账号的评论统计信息，包括平均评分、标签云、最近评论用户等
+      security:
+        - SecurityHeaders: []
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          description: X账号用户名（不含@符号）
+          schema:
+            type: string
+            example: "elonmusk"
+        - name: onlyKOL
+          in: query
+          required: false
+          description: 是否只显示KOL用户的评论
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: 成功获取评论汇总
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewSummary'
+        '404':
+          description: 账号不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /reviews:
+    post:
+      tags:
+        - Reviews
+      summary: 创建或更新评论
+      description: 为指定X账号创建新评论或更新已有评论。每日限制5次新评论。
+      security:
+        - BearerAuth: []
+        - SecurityHeaders: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - handle
+                - xLink
+                - displayName
+                - avatar
+                - rating
+                - tags
+              properties:
+                handle:
+                  type: string
+                  description: X账号用户名（不含@）
+                  example: "elonmusk"
+                xLink:
+                  type: string
+                  format: uri
+                  description: X账号完整链接
+                  example: "https://x.com/elonmusk"
+                displayName:
+                  type: string
+                  description: X账号显示名称
+                  example: "Elon Musk"
+                avatar:
+                  type: string
+                  format: uri
+                  description: X账号头像URL
+                  example: "https://pbs.twimg.com/profile_images/..."
+                followers:
+                  type: integer
+                  description: 关注者数量
+                  example: 50000000
+                following:
+                  type: integer
+                  description: 正在关注的数量
+                  example: 100
+                rating:
+                  type: number
+                  format: float
+                  minimum: 0.0
+                  maximum: 5.0
+                  description: 评分（0.0-5.0，最多一位小数）
+                  example: 4.5
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+                  description: 标签列表（至少一个）
+                  example: ["创业者", "大佬", "技术领先"]
+                note:
+                  type: string
+                  maxLength: 1000
+                  description: 私人备注（即将废弃，最多1000字符）
+                  example: "这是一个私人备注"
+                comment:
+                  type: string
+                  maxLength: 3000
+                  description: 公开评论内容（最多3000字符）
+                  example: "这是一个公开的评论内容，其他用户可以看到"
+      responses:
+        '201':
+          description: 评论创建/更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未授权访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 今日评论次数已达上限（5次）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "error"
+                  error:
+                    type: string
+                    example: "您今日已达到最大评论次数（5次）"
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /reviews/delete:
+    post:
+      tags:
+        - Reviews
+      summary: 删除评论
+      description: 删除当前用户对指定X账号的评论，同时会删除相关积分记录
+      security:
+        - BearerAuth: []
+        - SecurityHeaders: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - handle
+              properties:
+                handle:
+                  type: string
+                  description: X账号用户名（不含@）
+                  example: "elonmusk"
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "删除成功"
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未授权访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 评论不存在或无权删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

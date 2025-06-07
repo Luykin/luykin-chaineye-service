@@ -63,12 +63,200 @@ function getTargetUrl(req) {
 	return `${baseUrl}/${fullPath}`;
 }
 
+/**
+ * @swagger
+ * /proxy/auth/{path}:
+ *   get:
+ *     tags:
+ *       - Proxy Service
+ *     summary: 需要认证的代理请求 (GET)
+ *     description: 代理需要用户认证的GET请求到指定的后端服务
+ *     security:
+ *       - BearerAuth: []
+ *       - SecurityHeaders: []
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         description: 目标API路径
+ *         schema:
+ *           type: string
+ *           example: "some-endpoint"
+ *       - name: target
+ *         in: query
+ *         required: false
+ *         description: 目标服务器标识
+ *         schema:
+ *           type: string
+ *           enum: [kota, kb]
+ *           default: kota
+ *           example: "kota"
+ *     responses:
+ *       200:
+ *         description: 代理请求成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               description: 目标服务器返回的数据
+ *       401:
+ *         description: 未授权访问
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: 代理请求失败
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *   post:
+ *     tags:
+ *       - Proxy Service
+ *     summary: 需要认证的代理请求 (POST)
+ *     description: 代理需要用户认证的POST请求到指定的后端服务
+ *     security:
+ *       - BearerAuth: []
+ *       - SecurityHeaders: []
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         description: 目标API路径
+ *         schema:
+ *           type: string
+ *           example: "some-endpoint"
+ *       - name: target
+ *         in: query
+ *         required: false
+ *         description: 目标服务器标识
+ *         schema:
+ *           type: string
+ *           enum: [kota, kb]
+ *           default: kota
+ *           example: "kota"
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: 要发送到目标服务器的数据
+ *     responses:
+ *       200:
+ *         description: 代理请求成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               description: 目标服务器返回的数据
+ *       401:
+ *         description: 未授权访问
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: 代理请求失败
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // 代理路由 - 需要认证
 router.all('/auth/*', authenticateToken, securityMiddleware, async (req, res) => {
 	const targetUrl = getTargetUrl(req);
 	await proxyRequest(req, res, targetUrl);
 });
 
+/**
+ * @swagger
+ * /proxy/public/{path}:
+ *   get:
+ *     tags:
+ *       - Proxy Service
+ *     summary: 公开的代理请求 (GET)
+ *     description: 代理不需要用户认证的GET请求到指定的后端服务
+ *     security:
+ *       - SecurityHeaders: []
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         description: 目标API路径
+ *         schema:
+ *           type: string
+ *           example: "some-endpoint"
+ *       - name: target
+ *         in: query
+ *         required: false
+ *         description: 目标服务器标识
+ *         schema:
+ *           type: string
+ *           enum: [kota, kb]
+ *           default: kota
+ *           example: "kota"
+ *     responses:
+ *       200:
+ *         description: 代理请求成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               description: 目标服务器返回的数据
+ *       500:
+ *         description: 代理请求失败
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *   post:
+ *     tags:
+ *       - Proxy Service
+ *     summary: 公开的代理请求 (POST)
+ *     description: 代理不需要用户认证的POST请求到指定的后端服务
+ *     security:
+ *       - SecurityHeaders: []
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         description: 目标API路径
+ *         schema:
+ *           type: string
+ *           example: "some-endpoint"
+ *       - name: target
+ *         in: query
+ *         required: false
+ *         description: 目标服务器标识
+ *         schema:
+ *           type: string
+ *           enum: [kota, kb]
+ *           default: kota
+ *           example: "kota"
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: 要发送到目标服务器的数据
+ *     responses:
+ *       200:
+ *         description: 代理请求成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               description: 目标服务器返回的数据
+ *       500:
+ *         description: 代理请求失败
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // 代理路由 - 无需认证
 router.all('/public/*', securityMiddleware, async (req, res) => {
 	const targetUrl = getTargetUrl(req);
@@ -82,4 +270,3 @@ module.exports = router;
 //
 // // Specific target
 // await fetch('/api/proxy/public/some-endpoint?target=kb');
-

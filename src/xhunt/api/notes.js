@@ -8,6 +8,51 @@ const { sanitizeNote } = require('../services/inputValidator');
 const router = express.Router();
 
 /**
+ * @swagger
+ * /notes/{handle}:
+ *   get:
+ *     tags:
+ *       - Private Notes
+ *     summary: 获取私人备注
+ *     description: 获取当前用户对指定X账号的私人备注
+ *     security:
+ *       - BearerAuth: []
+ *       - SecurityHeaders: []
+ *     parameters:
+ *       - name: handle
+ *         in: path
+ *         required: true
+ *         description: X账号用户名（不含@符号）
+ *         schema:
+ *           type: string
+ *           example: "elonmusk"
+ *     responses:
+ *       200:
+ *         description: 成功获取私人备注
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PrivateNote'
+ *       400:
+ *         description: 请求参数错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: 未授权访问
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: 服务器内部错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+/**
  * GET /notes/:handle
  * 获取当前用户对特定账号的私人备注
  * 只能查询当前用户自己的备注
@@ -56,6 +101,93 @@ router.get('/:handle', [
 	}
 });
 
+/**
+ * @swagger
+ * /notes:
+ *   post:
+ *     tags:
+ *       - Private Notes
+ *     summary: 创建或更新私人备注
+ *     description: 为指定X账号创建新的私人备注或更新已有备注
+ *     security:
+ *       - BearerAuth: []
+ *       - SecurityHeaders: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - handle
+ *               - xLink
+ *               - displayName
+ *               - avatar
+ *             properties:
+ *               handle:
+ *                 type: string
+ *                 description: X账号用户名（不含@）
+ *                 example: "elonmusk"
+ *               xLink:
+ *                 type: string
+ *                 format: uri
+ *                 description: X账号完整链接
+ *                 example: "https://x.com/elonmusk"
+ *               displayName:
+ *                 type: string
+ *                 description: X账号显示名称
+ *                 example: "Elon Musk"
+ *               avatar:
+ *                 type: string
+ *                 format: uri
+ *                 description: X账号头像URL
+ *                 example: "https://pbs.twimg.com/profile_images/..."
+ *               followers:
+ *                 type: integer
+ *                 description: 关注者数量
+ *                 example: 50000000
+ *               following:
+ *                 type: integer
+ *                 description: 正在关注的数量
+ *                 example: 100
+ *               note:
+ *                 type: string
+ *                 maxLength: 2000
+ *                 description: 私人备注内容（最多2000字符）
+ *                 example: "这是我的私人备注，只有我能看到"
+ *     responses:
+ *       200:
+ *         description: 备注保存成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: "success"
+ *                 message:
+ *                   type: string
+ *                   example: "备注保存成功"
+ *       400:
+ *         description: 请求参数错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: 未授权访问
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: 服务器内部错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 /**
  * POST /notes
  * 新增或修改当前用户对指定账号的私人备注
@@ -140,6 +272,69 @@ router.post('/', [
 	}
 });
 
+/**
+ * @swagger
+ * /notes:
+ *   delete:
+ *     tags:
+ *       - Private Notes
+ *     summary: 删除私人备注
+ *     description: 删除当前用户对指定X账号的私人备注
+ *     security:
+ *       - BearerAuth: []
+ *       - SecurityHeaders: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - handle
+ *             properties:
+ *               handle:
+ *                 type: string
+ *                 description: X账号用户名（不含@）
+ *                 example: "elonmusk"
+ *     responses:
+ *       200:
+ *         description: 备注删除成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: "success"
+ *                 message:
+ *                   type: string
+ *                   example: "备注删除成功"
+ *       400:
+ *         description: 请求参数错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: 未授权访问
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: 备注不存在
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: 服务器内部错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 /**
  * DELETE /notes
  * 删除当前用户对指定账号的私人备注

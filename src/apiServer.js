@@ -11,6 +11,8 @@ const cors = require('cors');
 const compression = require('compression');
 const morgan = require('morgan');
 const redis = require('redis');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpecs = require('./config/swagger');
 const { setupSqlite } = require('./models/sqlite-start');
 const { setupPostgres } = require('./models/postgres-start');
 const fundraisingRoutes = require('./routes/fundraising');
@@ -198,6 +200,20 @@ app.use(helmet.xssFilter());
 app.use(helmet.noSniff());
 app.use(express.json({ limit: '20kb' }));
 
+// Swagger API 文档路由
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
+	explorer: true,
+	customCss: '.swagger-ui .topbar { display: none }',
+	customSiteTitle: 'XHunt API Documentation',
+	swaggerOptions: {
+		docExpansion: 'none',
+		filter: true,
+		showRequestHeaders: true,
+		showCommonExtensions: true,
+		tryItOutEnabled: true
+	}
+}));
+
 // API 路由
 app.use('/api/fundraising', fundraisingRoutes);
 app.use('/api/crypto', cryptoRoutes);
@@ -245,7 +261,10 @@ app.use((err, req, res, next) => {
 async function startAPIServer() {
 	await setupSqlite();
 	await setupPostgres();
-	app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
+	app.listen(PORT, () => {
+		console.log(`API 服务器运行在端口 ${PORT}`);
+		console.log(`API 文档地址: http://localhost:${PORT}/api-docs`);
+	});
 }
 
 startAPIServer().then(r => r);

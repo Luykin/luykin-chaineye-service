@@ -11,6 +11,34 @@ const retry = require('async-retry');
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * /auth/twitter/url:
+ *   get:
+ *     tags:
+ *       - Authentication
+ *     summary: 获取Twitter授权URL
+ *     description: 获取Twitter OAuth2授权链接，用于用户登录
+ *     responses:
+ *       200:
+ *         description: 成功获取授权URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 url:
+ *                   type: string
+ *                   format: uri
+ *                   description: Twitter授权URL
+ *                   example: "https://twitter.com/i/oauth2/authorize?response_type=code&client_id=..."
+ *       500:
+ *         description: 服务器内部错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // 获取 Twitter 授权 URL
 router.get('/twitter/url', async (req, res) => {
 	try {
@@ -26,6 +54,61 @@ router.get('/twitter/url', async (req, res) => {
 	}
 });
 
+/**
+ * @swagger
+ * /auth/twitter/callback:
+ *   post:
+ *     tags:
+ *       - Authentication
+ *     summary: Twitter OAuth回调处理
+ *     description: 处理Twitter OAuth2回调，完成用户登录并返回JWT Token
+ *     security:
+ *       - SecurityHeaders: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - code
+ *               - state
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 description: Twitter返回的授权码
+ *                 example: "VGhpcyBpcyBhbiBleGFtcGxlIGNvZGU"
+ *               state:
+ *                 type: string
+ *                 description: OAuth2 state参数
+ *                 example: "random-state-string"
+ *     responses:
+ *       200:
+ *         description: 登录成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                   description: JWT访问令牌
+ *                   example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       400:
+ *         description: 请求参数错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: 服务器内部错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 /**
  * Twitter OAuth 回调处理接口
  */
@@ -183,6 +266,60 @@ router.post('/twitter/callback', [
 	}
 });
 
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     tags:
+ *       - Authentication
+ *     summary: 获取当前用户信息
+ *     description: 获取当前登录用户的详细信息，包括积分
+ *     security:
+ *       - BearerAuth: []
+ *       - SecurityHeaders: []
+ *     responses:
+ *       200:
+ *         description: 成功获取用户信息
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 username:
+ *                   type: string
+ *                   description: 用户名
+ *                 displayName:
+ *                   type: string
+ *                   description: 显示名称
+ *                 avatar:
+ *                   type: string
+ *                   format: uri
+ *                   description: 头像URL
+ *                 twitterId:
+ *                   type: string
+ *                   description: Twitter ID
+ *                 xPoints:
+ *                   type: integer
+ *                   description: 用户积分
+ *       401:
+ *         description: 未授权访问
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       419:
+ *         description: Token过期或无效
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: 服务器内部错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // 获取当前用户信息
 router.get('/me', authenticateToken, async (req, res) => {
 	try {
@@ -217,6 +354,38 @@ router.get('/me', authenticateToken, async (req, res) => {
 	}
 });
 
+/**
+ * @swagger
+ * /auth/logout:
+ *   post:
+ *     tags:
+ *       - Authentication
+ *     summary: 用户登出
+ *     description: 撤销当前Token，用户登出
+ *     security:
+ *       - BearerAuth: []
+ *       - SecurityHeaders: []
+ *     responses:
+ *       200:
+ *         description: 登出成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties: {}
+ *       401:
+ *         description: 未授权访问
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: 服务器内部错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 /**
  * POST /logout
  * 登出接口：将当前 Token 标记为已撤销
