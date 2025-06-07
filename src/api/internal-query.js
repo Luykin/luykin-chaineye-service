@@ -71,7 +71,6 @@ router.get('/reviews', [
 				'id',
 				'rating',
 				'tags',
-				'note',
 				'userName',
 				'userAvatar',
 				'createdAt',
@@ -84,7 +83,6 @@ router.get('/reviews', [
 		const formattedReviews = reviews.map(review => ({
 			rating: review.rating,
 			tags: review.tags || [],
-			note: review.note || '',
 			userName: review.userName,
 			userAvatar: review.userAvatar,
 			createdAt: review.createdAt,
