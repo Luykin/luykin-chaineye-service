@@ -9,59 +9,27 @@ const router = express.Router();
 
 /**
  * GET /notes
- * 获取当前用户的私人备注
- * @query handle - 可选，筛选特定账号的备注
+ * 获取当前用户的所有私人备注
+ * 不允许查询特定账号，只能获取自己的全部备注
  */
 router.get('/', [
 	authenticateToken,
-	query('handle').optional().trim(),
 	validateRequest
 ], async (req, res) => {
 	try {
-		const { handle } = req.query;
-		
-		// 构建查询条件 - 只查询当前用户的备注
-		const whereConditions = {
-			xHuntUserId: req.user.id
-		};
-		
-		// 如果指定了handle，添加账号筛选
-		let includeConditions = {
-			model: XAccount,
-			as: 'xAccount',
-			attributes: ['id', 'handle', 'displayName', 'avatar']
-		};
-		
-		if (handle) {
-			includeConditions.where = { handle };
-		}
-		
-		// 查找当前用户的私人备注
+		// 只查询当前用户的备注，不允许任何筛选参数
 		const privateNotes = await XPrivateNote.findAll({
-			where: whereConditions,
-			include: [includeConditions],
+			where: {
+				xHuntUserId: req.user.id // 只能查询当前用户的备注
+			},
+			include: [{
+				model: XAccount,
+				as: 'xAccount',
+				attributes: ['id', 'handle', 'displayName', 'avatar']
+			}],
 			attributes: ['id', 'note', 'createdAt', 'updatedAt'],
 			order: [['updatedAt', 'DESC']]
 		});
-		
-		// 如果查询特定handle但没有找到，返回空备注
-		if (handle && privateNotes.length === 0) {
-			return res.json({
-				handle,
-				note: '',
-				lastUpdated: null
-			});
-		}
-		
-		// 如果查询特定handle且找到了，返回单个结果
-		if (handle && privateNotes.length > 0) {
-			const note = privateNotes[0];
-			return res.json({
-				handle,
-				note: note.note,
-				lastUpdated: note.updatedAt
-			});
-		}
 		
 		// 返回所有备注
 		const formattedNotes = privateNotes.map(note => ({
@@ -83,6 +51,58 @@ router.get('/', [
 		
 	} catch (error) {
 		console.error('Error fetching private notes:', error);
+		res.status(500).json({ error: '获取备注失败' });
+	}
+});
+
+/**
+ * GET /notes/by-handle/:handle
+ * 获取当前用户对特定账号的私人备注
+ * 只能查询当前用户自己的备注
+ */
+router.get('/by-handle/:handle', [
+	authenticateToken,
+	validateRequest
+], async (req, res) => {
+	try {
+		const { handle } = req.params;
+		
+		if (!handle || !handle.trim()) {
+			return res.status(400).json({ error: 'handle参数不能为空' });
+		}
+		
+		// 查找当前用户对特定账号的备注
+		const privateNote = await XPrivateNote.findOne({
+			where: {
+				xHuntUserId: req.user.id // 只能查询当前用户的备注
+			},
+			include: [{
+				model: XAccount,
+				as: 'xAccount',
+				where: { handle: handle.trim() },
+				attributes: ['id', 'handle', 'displayName', 'avatar']
+			}],
+			attributes: ['id', 'note', 'createdAt', 'updatedAt']
+		});
+		
+		// 如果没有找到，返回空备注
+		if (!privateNote) {
+			return res.json({
+				handle,
+				note: '',
+				lastUpdated: null
+			});
+		}
+		
+		// 返回找到的备注
+		res.json({
+			handle,
+			note: privateNote.note || '',
+			lastUpdated: privateNote.updatedAt
+		});
+		
+	} catch (error) {
+		console.error('Error fetching private note by handle:', error);
 		res.status(500).json({ error: '获取备注失败' });
 	}
 });
