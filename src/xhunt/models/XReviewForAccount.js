@@ -63,7 +63,7 @@ module.exports = (sequelize) => {
 		note: {
 			type: DataTypes.TEXT,
 			allowNull: true,
-			comment: '用户评论内容'
+			comment: '用户的私人备注-后续迁移到XPrivateNote表'
 		}
 	}, {
 		tableName: 'XReviewForAccounts', // 显式指定表名（可选）
