@@ -18,7 +18,8 @@ router.get('/reviews', [
 		.isUUID()
 		.withMessage('xAccountId必须是有效的UUID格式'),
 	query('userName')
-		.optional()
+		.notEmpty()
+		.withMessage('userName参数是必填的')
 		.isString()
 		.trim()
 		.withMessage('userName必须是字符串')
@@ -31,9 +32,9 @@ router.get('/reviews', [
 		}
 		
 		if (errors.length > 0) {
-			return res.status(400).json({ 
-				error: '参数验证失败', 
-				details: errors 
+			return res.status(400).json({
+				error: '参数验证失败',
+				details: errors
 			});
 		}
 
@@ -67,13 +68,12 @@ router.get('/reviews', [
 				}
 			],
 			attributes: [
-				'id', 
-				'rating', 
-				'tags', 
-				'note', 
-				'userName', 
-				'userAvatar', 
-				'createdAt', 
+				'id',
+				'rating',
+				'tags',
+				'userName',
+				'userAvatar',
+				'createdAt',
 				'updatedAt'
 			],
 			order: [['createdAt', 'DESC']] // 按创建时间倒序排列
@@ -84,7 +84,6 @@ router.get('/reviews', [
 			reviewId: review.id,
 			rating: review.rating,
 			tags: review.tags || [],
-			note: review.note || '',
 			userName: review.userName,
 			userAvatar: review.userAvatar,
 			createdAt: review.createdAt,
@@ -112,18 +111,18 @@ router.get('/reviews', [
 			success: true,
 			total: formattedReviews.length,
 			data: formattedReviews,
-			query: {
-				xAccountId,
-				userName: userName || null
-			}
+			// query: {
+			// 	xAccountId,
+			// 	userName: userName || null
+			// }
 		});
 		
 	} catch (error) {
 		console.error('Internal query error:', error);
-		res.status(500).json({ 
+		res.status(500).json({
 			success: false,
 			error: '查询失败',
-			message: error.message 
+			message: error.message
 		});
 	}
 });
