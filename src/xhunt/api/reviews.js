@@ -3,8 +3,8 @@ const { body, param, query } = require('express-validator');
 const { validateRequest } = require('../middleware/validate-request');
 const { authenticateToken, authenticateTokenOptional } = require('../middleware/auth');
 const { XReviewForAccount, XHuntUser, XAccount, XPointRecord } = require('../../models/postgres-start');
-const { validateTags, validateNote } = require('../middleware/reviewValidator');
-const { sanitizeNote } = require('../services/inputValidator');
+const { validateTags, validateNote, validateComment } = require('../middleware/reviewValidator');
+const { sanitizeNote, sanitizeComment } = require('../services/inputValidator');
 const { getPointsByRank } = require('../services/twitter');
 const router = express.Router();
 
@@ -124,7 +124,9 @@ router.get('/:handle', [
 					xHuntUserId: req.user.id,
 					xAccountId: accountId
 				},
-				attributes: ['rating', 'tags', 'note'],
+				attributes: ['rating', 'tags',
+					'note' //本字段即将需要被废弃⚠️
+				],
 				raw: true
 			});
 		}
@@ -165,10 +167,11 @@ router.post('/', [
 			return true;
 		}),
 	validateTags,
-	validateNote
+	validateNote,
+	validateComment
 ], validateRequest, async (req, res) => {
 	try {
-		const { handle, xLink, displayName, avatar, followers, following, rating, tags, note } = req.body;
+		const { handle, xLink, displayName, avatar, followers, following, rating, tags, note, comment } = req.body;
 		/** 提前检查评论数量上限 **/
 		const cacheKey = `user:review:limit:${req.user.id}`;
 		const userReviewsLimit = await req.redisClient.get(cacheKey);
@@ -236,7 +239,8 @@ router.post('/', [
 			await existingReview.update({
 				rating,
 				tags: tags.map(t => t.trim()),
-				note: sanitizeNote(note || '')
+				note: sanitizeNote(note || ''), //本字段即将需要被废弃⚠️
+				comment: sanitizeComment(comment || '')
 			});
 		} else {
 			// Step 3: 创建新评论
@@ -247,7 +251,8 @@ router.post('/', [
 				userName: req.user.displayName,
 				rating,
 				tags: tags.map(t => t.trim()),
-				note: sanitizeNote(note || '')
+				note: sanitizeNote(note || ''), //本字段即将需要被废弃⚠️
+				comment: sanitizeComment(comment || '')
 			});
 			const points = getPointsByRank(req.user.kolRank20W);
 			await XPointRecord.create({

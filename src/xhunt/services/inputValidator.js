@@ -52,7 +52,17 @@ function sanitizeNote(note) {
 	return xss(trimmed);
 }
 
+/**
+ * 清理并校验 comment 内容
+ */
+function sanitizeComment(comment) {
+	if (!comment || typeof comment !== 'string') return '';
+	const trimmed = comment.trim().substring(0, 3000); // 截断
+	return xss(trimmed);
+}
+
 module.exports = {
 	isValidTag,
 	sanitizeNote,
+	sanitizeComment
 };

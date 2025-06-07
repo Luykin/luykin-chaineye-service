@@ -1,5 +1,5 @@
 const { body } = require('express-validator');
-const { isValidTag, sanitizeNote } = require('../services/inputValidator');
+const { isValidTag, sanitizeNote, sanitizeComment } = require('../services/inputValidator');
 
 const validateTags = body('tags')
 	.isArray({ min: 1 })
@@ -14,6 +14,7 @@ const validateTags = body('tags')
 		return true;
 	});
 
+/** 即将迁移到XPrivateNote单独表 **/
 const validateNote = body('note')
 	.optional()
 	.isString()
@@ -26,7 +27,20 @@ const validateNote = body('note')
 		return true;
 	});
 
+const validateComment = body('comment')
+	.optional()
+	.isString()
+	.trim()
+	.customSanitizer(sanitizeComment)
+	.custom((comment) => {
+		if (comment.length > 3000) {
+			throw new Error('评论内容不能超过 3000 字符');
+		}
+		return true;
+	});
+
 module.exports = {
 	validateTags,
-	validateNote
+	validateNote,
+	validateComment
 };
