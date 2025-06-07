@@ -21,6 +21,7 @@ const xHuntAuthRoutes = require('./xhunt/api/auth');
 const xHuntProxyRoutes = require('./xhunt/api/proxy');
 const xHuntReviewsRoutes = require('./xhunt/api/reviews');
 const xHuntNotesRoutes = require('./xhunt/api/notes');
+const internalQueryRoutes = require('./api/internal-query');
 const { securityMiddleware, fingerprintLimiter, rateLimiter } = require('./xhunt/middleware/security');
 const StatsD = require('hot-shots');
 const dataDog = new StatsD();
@@ -230,6 +231,9 @@ app.use(
 	securityMiddleware,
 	xHuntNotesRoutes
 );
+
+// 内部查询API - 使用随机字符前缀，无需安全中间件
+app.use('/api/internal-x9k2m7p4q8', internalQueryRoutes);
 
 // 错误处理中间件
 app.use((err, req, res, next) => {
