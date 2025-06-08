@@ -57,7 +57,7 @@ router.get('/reviews', [
 						[Op.iLike]: `%${userName.trim()}%` // 使用iLike进行大小写不敏感的模糊查询
 					}
 				} : undefined,
-				required: userName && userName.trim() ? true : false // 如果有userName条件，则必须匹配
+				required: !!(userName && userName.trim()) // 如果有userName条件，则必须匹配
 			},
 			{
 				model: XAccount,
