@@ -44,7 +44,7 @@ router.get('/reviews', [
 		const { xAccountId, userName } = req.query;
 		
 		if (!userName || !userName.trim()) {
-			// 情况1：不传userName，只返回评论用户列表
+			// 情况1：不传userName，只返回评论用户列表（去重）
 			const reviewers = await XReviewForAccount.findAll({
 				where: { xAccountId },
 				include: [{
@@ -52,26 +52,32 @@ router.get('/reviews', [
 					as: 'xHuntUser',
 					attributes: ['username', 'displayName']
 				}],
-				attributes: ['userName'],
+				attributes: ['userName', 'xHuntUserId'], // 添加xHuntUserId用于去重
 				order: [['createdAt', 'DESC']],
-				// 去重：每个用户只显示一次
-				group: ['XReviewForAccount.xHuntUserId', 'xHuntUser.id', 'XReviewForAccount.userName'],
 				raw: false
 			});
 			
-			// 格式化返回数据 - 只返回用户信息
-			const formattedReviewers = reviewers.map(review => ({
-				userName: review.userName,
-				reviewer: {
-					username: review.xHuntUser?.username,
-					displayName: review.xHuntUser?.displayName
+			// 手动去重：基于xHuntUserId
+			const uniqueReviewers = [];
+			const seenUserIds = new Set();
+			
+			for (const review of reviewers) {
+				if (!seenUserIds.has(review.xHuntUserId)) {
+					seenUserIds.add(review.xHuntUserId);
+					uniqueReviewers.push({
+						userName: review.userName,
+						reviewer: {
+							username: review.xHuntUser?.username,
+							displayName: review.xHuntUser?.displayName
+						}
+					});
 				}
-			}));
+			}
 			
 			return res.json({
 				success: true,
-				total: formattedReviewers.length,
-				data: formattedReviewers
+				total: uniqueReviewers.length,
+				data: uniqueReviewers
 			});
 			
 		} else {
@@ -109,7 +115,6 @@ router.get('/reviews', [
 					'rating',
 					'tags',
 					'userName',
-					'createdAt',
 					'updatedAt'
 				],
 				order: [['createdAt', 'DESC']]
@@ -120,7 +125,6 @@ router.get('/reviews', [
 				rating: review.rating,
 				tags: review.tags || [],
 				userName: review.userName,
-				createdAt: review.createdAt,
 				updatedAt: review.updatedAt,
 				reviewer: {
 					username: review.xHuntUser?.username,
