@@ -39,9 +39,13 @@ router.get('/:handle', [
 	try {
 		const handle = req.params.handle;
 		const onlyKOL = req.query.onlyKOL === true;
-		// Step 1: 获取 XAccount 及其基础信息
+		// Step 1: 获取 XAccount 及其基础信息 - 大小写不敏感查找
 		const xAccount = await XAccount.findOne({
-			where: { handle },
+			where: { 
+				handle: {
+					[Op.iLike]: handle // 使用 iLike 进行大小写不敏感查找
+				}
+			},
 			attributes: ['id']
 		});
 		
@@ -178,9 +182,13 @@ router.post('/', [
 		if (userReviewsLimit) {
 			return res.status(403).json({ status: 'error', error: '您今日已达到最大评论次数（5次）' });
 		}
-		// Step 1: 查找或创建 XAccount
+		// Step 1: 查找或创建 XAccount - 大小写不敏感查找
 		let xAccount = await XAccount.findOne({
-			where: { handle }
+			where: { 
+				handle: {
+					[Op.iLike]: handle // 使用 iLike 进行大小写不敏感查找
+				}
+			}
 		});
 		
 		if (!xAccount) {
@@ -280,9 +288,13 @@ router.post('/delete', [
 	try {
 		const { handle } = req.body;
 		
-		// Step 1: 查找目标 XAccount
+		// Step 1: 查找目标 XAccount - 大小写不敏感查找
 		const xAccount = await XAccount.findOne({
-			where: { handle }
+			where: { 
+				handle: {
+					[Op.iLike]: handle // 使用 iLike 进行大小写不敏感查找
+				}
+			}
 		});
 		
 		if (!xAccount) {
