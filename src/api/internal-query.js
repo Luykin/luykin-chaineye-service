@@ -50,26 +50,21 @@ router.get('/reviews', [
 				include: [{
 					model: XHuntUser,
 					as: 'xHuntUser',
-					attributes: ['username', 'displayName', 'avatar', 'kolRank20W', 'classification']
+					attributes: ['username', 'displayName']
 				}],
-				attributes: ['userName', 'userAvatar', 'createdAt'],
+				attributes: ['userName'],
 				order: [['createdAt', 'DESC']],
 				// 去重：每个用户只显示一次
-				group: ['XReviewForAccount.xHuntUserId', 'xHuntUser.id', 'XReviewForAccount.userName', 'XReviewForAccount.userAvatar', 'XReviewForAccount.createdAt'],
+				group: ['XReviewForAccount.xHuntUserId', 'xHuntUser.id', 'XReviewForAccount.userName'],
 				raw: false
 			});
 			
 			// 格式化返回数据 - 只返回用户信息
 			const formattedReviewers = reviewers.map(review => ({
 				userName: review.userName,
-				userAvatar: review.userAvatar,
-				createdAt: review.createdAt,
 				reviewer: {
 					username: review.xHuntUser?.username,
-					displayName: review.xHuntUser?.displayName,
-					avatar: review.xHuntUser?.avatar,
-					kolRank20W: review.xHuntUser?.kolRank20W,
-					classification: review.xHuntUser?.classification
+					displayName: review.xHuntUser?.displayName
 				}
 			}));
 			
@@ -87,7 +82,7 @@ router.get('/reviews', [
 					{
 						model: XHuntUser,
 						as: 'xHuntUser',
-						attributes: ['username', 'displayName', 'avatar', 'kolRank20W', 'classification'],
+						attributes: ['username', 'displayName'],
 						where: {
 							[Op.or]: [
 								{
@@ -107,14 +102,13 @@ router.get('/reviews', [
 					{
 						model: XAccount,
 						as: 'xAccount',
-						attributes: ['handle', 'displayName', 'avatar']
+						attributes: ['handle', 'displayName']
 					}
 				],
 				attributes: [
 					'rating',
 					'tags',
 					'userName',
-					'userAvatar',
 					'createdAt',
 					'updatedAt'
 				],
@@ -126,20 +120,15 @@ router.get('/reviews', [
 				rating: review.rating,
 				tags: review.tags || [],
 				userName: review.userName,
-				userAvatar: review.userAvatar,
 				createdAt: review.createdAt,
 				updatedAt: review.updatedAt,
 				reviewer: {
 					username: review.xHuntUser?.username,
-					displayName: review.xHuntUser?.displayName,
-					avatar: review.xHuntUser?.avatar,
-					kolRank20W: review.xHuntUser?.kolRank20W,
-					classification: review.xHuntUser?.classification
+					displayName: review.xHuntUser?.displayName
 				},
 				targetAccount: {
 					handle: review.xAccount?.handle,
-					displayName: review.xAccount?.displayName,
-					avatar: review.xAccount?.avatar
+					displayName: review.xAccount?.displayName
 				}
 			}));
 			
