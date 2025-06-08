@@ -51,9 +51,9 @@ router.get('/reviews', [
 				model: XHuntUser,
 				as: 'xHuntUser',
 				attributes: ['id', 'username', 'displayName', 'avatar', 'kolRank20W', 'classification'],
-				// 如果提供了userName，在XHuntUser的displayName上进行模糊查询
+				// 如果提供了userName，在XHuntUser的userName上进行模糊查询
 				where: userName && userName.trim() ? {
-					displayName: {
+					userName: {
 						[Op.iLike]: `%${userName.trim()}%` // 使用iLike进行大小写不敏感的模糊查询
 					}
 				} : undefined,
@@ -62,7 +62,7 @@ router.get('/reviews', [
 			{
 				model: XAccount,
 				as: 'xAccount',
-				attributes: ['id', 'handle', 'displayName', 'avatar', 'followers', 'following']
+				attributes: ['id', 'handle', 'displayName', 'avatar']
 			}
 		];
 		
