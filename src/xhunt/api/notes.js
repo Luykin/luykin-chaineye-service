@@ -129,7 +129,7 @@ router.post('/', [
 			});
 		}
 		
-		res.status(200).json({ 
+		res.status(200).json({
 			status: 'success',
 			message: '备注保存成功'
 		});
@@ -140,49 +140,49 @@ router.post('/', [
 	}
 });
 
-/**
- * DELETE /notes
- * 删除当前用户对指定账号的私人备注
- */
-router.delete('/', [
-	authenticateToken,
-	body('handle').trim().notEmpty().withMessage('账号handle不能为空'),
-	validateRequest
-], async (req, res) => {
-	try {
-		const { handle } = req.body;
-		
-		// Step 1: 查找目标账号
-		const xAccount = await XAccount.findOne({
-			where: { handle },
-			attributes: ['id']
-		});
-		
-		if (!xAccount) {
-			return res.status(404).json({ error: '账号不存在' });
-		}
-		
-		// Step 2: 查找并删除私人备注（只删除当前用户的）
-		const deleteResult = await XPrivateNote.destroy({
-			where: {
-				xHuntUserId: req.user.id, // 确保只删除当前用户的备注
-				xAccountId: xAccount.id
-			}
-		});
-		
-		if (deleteResult === 0) {
-			return res.status(404).json({ error: '备注不存在' });
-		}
-		
-		res.status(200).json({ 
-			status: 'success',
-			message: '备注删除成功'
-		});
-		
-	} catch (error) {
-		console.error('Error deleting private note:', error);
-		res.status(500).json({ error: '删除备注失败' });
-	}
-});
+// /**
+//  * DELETE /notes
+//  * 删除当前用户对指定账号的私人备注
+//  */
+// router.delete('/', [
+// 	authenticateToken,
+// 	body('handle').trim().notEmpty().withMessage('账号handle不能为空'),
+// 	validateRequest
+// ], async (req, res) => {
+// 	try {
+// 		const { handle } = req.body;
+//
+// 		// Step 1: 查找目标账号
+// 		const xAccount = await XAccount.findOne({
+// 			where: { handle },
+// 			attributes: ['id']
+// 		});
+//
+// 		if (!xAccount) {
+// 			return res.status(404).json({ error: '账号不存在' });
+// 		}
+//
+// 		// Step 2: 查找并删除私人备注（只删除当前用户的）
+// 		const deleteResult = await XPrivateNote.destroy({
+// 			where: {
+// 				xHuntUserId: req.user.id, // 确保只删除当前用户的备注
+// 				xAccountId: xAccount.id
+// 			}
+// 		});
+//
+// 		if (deleteResult === 0) {
+// 			return res.status(404).json({ error: '备注不存在' });
+// 		}
+//
+// 		res.status(200).json({
+// 			status: 'success',
+// 			message: '备注删除成功'
+// 		});
+//
+// 	} catch (error) {
+// 		console.error('Error deleting private note:', error);
+// 		res.status(500).json({ error: '删除备注失败' });
+// 	}
+// });
 
 module.exports = router;
