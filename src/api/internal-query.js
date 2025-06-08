@@ -45,28 +45,31 @@ router.get('/reviews', [
 			xAccountId: xAccountId
 		};
 		
-		// 如果提供了userName，添加模糊查询条件
-		if (userName && userName.trim()) {
-			whereConditions.userName = {
-				[Op.iLike]: `%${userName.trim()}%` // 使用iLike进行大小写不敏感的模糊查询
-			};
-		}
+		// 构建 include 条件
+		const includeConditions = [
+			{
+				model: XHuntUser,
+				as: 'xHuntUser',
+				attributes: ['id', 'username', 'displayName', 'avatar', 'kolRank20W', 'classification'],
+				// 如果提供了userName，在XHuntUser的displayName上进行模糊查询
+				where: userName && userName.trim() ? {
+					displayName: {
+						[Op.iLike]: `%${userName.trim()}%` // 使用iLike进行大小写不敏感的模糊查询
+					}
+				} : undefined,
+				required: userName && userName.trim() ? true : false // 如果有userName条件，则必须匹配
+			},
+			{
+				model: XAccount,
+				as: 'xAccount',
+				attributes: ['id', 'handle', 'displayName', 'avatar', 'followers', 'following']
+			}
+		];
 		
 		// 查询评价记录
 		const reviews = await XReviewForAccount.findAll({
 			where: whereConditions,
-			include: [
-				{
-					model: XHuntUser,
-					as: 'xHuntUser',
-					attributes: ['id', 'username', 'displayName', 'avatar', 'kolRank20W', 'classification']
-				},
-				{
-					model: XAccount,
-					as: 'xAccount',
-					attributes: ['id', 'handle', 'displayName', 'avatar', 'followers', 'following']
-				}
-			],
+			include: includeConditions,
 			attributes: [
 				'id',
 				'rating',
