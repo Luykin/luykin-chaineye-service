@@ -291,7 +291,7 @@ router.get('/search/legacy', async (req, res) => {
 				}
 			},
 			order: [['id', 'DESC']], // 按 id 倒序
-			attributes: ['projectName', 'socialLinks', 'logo', 'amount'],
+			attributes: ['projectName', 'projectLink', 'socialLinks', 'logo', 'amount'],
 			include: [
 				{
 					model: Fundraising.InvestmentRelationships,
@@ -504,7 +504,8 @@ router.get('/search/legacy', async (req, res) => {
 		// 组装最终响应
 		const response = {
 			invested: investedData,
-			investor: investorData
+			investor: investorData,
+			projectLink: project?.projectLink
 		};
 		
 		// 缓存结果到 Redis
