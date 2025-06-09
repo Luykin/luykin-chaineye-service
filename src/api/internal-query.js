@@ -10,9 +10,10 @@ const router = express.Router();
  * 内部查询接口：查询某个推特账号的评价信息
  * @query xAccountId - X账号ID (必填)
  * @query userName - 用户名 (可选，支持模糊查询)
+ * @query minRating - 最低评分 (可选，仅在不传userName时生效，支持小数)
  * 
  * 逻辑：
- * 1. 不传userName：返回所有评论用户的基本信息列表
+ * 1. 不传userName：返回所有评论用户的基本信息列表，可通过minRating筛选
  * 2. 传userName：返回匹配用户的具体评论内容
  */
 router.get('/reviews', [
@@ -25,7 +26,21 @@ router.get('/reviews', [
 		.optional()
 		.isString()
 		.trim()
-		.withMessage('userName必须是字符串')
+		.withMessage('userName必须是字符串'),
+	query('minRating')
+		.optional()
+		.isFloat({ min: 0, max: 5 })
+		.withMessage('minRating必须是0-5之间的数字')
+		.custom((value) => {
+			// 检查小数位数不超过1位
+			if (value && value.toString().includes('.')) {
+				const decimalPart = value.toString().split('.')[1];
+				if (decimalPart && decimalPart.length > 1) {
+					throw new Error('minRating最多保留一位小数');
+				}
+			}
+			return true;
+		})
 ], async (req, res) => {
 	try {
 		// 验证参数
@@ -41,12 +56,31 @@ router.get('/reviews', [
 			});
 		}
 
-		const { xAccountId, userName } = req.query;
+		const { xAccountId, userName, minRating } = req.query;
+		
+		// 解析并验证 minRating
+		let parsedMinRating = null;
+		if (minRating !== undefined && minRating !== '') {
+			parsedMinRating = parseFloat(minRating);
+			if (isNaN(parsedMinRating) || parsedMinRating < 0 || parsedMinRating > 5) {
+				return res.status(400).json({
+					error: '参数验证失败',
+					details: [{ field: 'minRating', message: 'minRating必须是0-5之间的有效数字' }]
+				});
+			}
+		}
 		
 		if (!userName || !userName.trim()) {
-			// 情况1：不传userName，只返回评论用户列表（去重）
+			// 情况1：不传userName，返回评论用户列表（去重），可选择按评分筛选
+			
+			// 构建查询条件
+			const whereClause = { xAccountId };
+			if (parsedMinRating !== null) {
+				whereClause.rating = { [Op.gte]: parsedMinRating };
+			}
+			
 			const reviewers = await XReviewForAccount.findAll({
-				where: { xAccountId },
+				where: whereClause,
 				include: [{
 					model: XHuntUser,
 					as: 'xHuntUser',
@@ -77,11 +111,14 @@ router.get('/reviews', [
 			return res.json({
 				success: true,
 				total: uniqueReviewers.length,
-				data: uniqueReviewers
+				data: uniqueReviewers,
+				filters: {
+					minRating: parsedMinRating
+				}
 			});
 			
 		} else {
-			// 情况2：传了userName，返回具体评论内容
+			// 情况2：传了userName，返回具体评论内容（minRating参数在此情况下被忽略）
 			const reviews = await XReviewForAccount.findAll({
 				where: { xAccountId },
 				include: [
