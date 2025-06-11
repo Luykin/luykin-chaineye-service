@@ -103,7 +103,7 @@ router.post('/errors', [
  * POST /request-delay
  * 前端请求延迟统计接口
  * 接收前端接口延迟统计并转发给 DataDog
- * 校验宽松，前端传什么就上报什么
+ * 简化版本，只关注基本的延迟统计
  */
 router.post('/request-delay', [
 	securityMiddleware,
@@ -149,10 +149,7 @@ router.post('/request-delay', [
 				
 				if (request.method) parts.push(`Method: ${request.method}`);
 				parts.push(`Path: ${path}`);
-				if (request.status) parts.push(`Status: ${request.status}`);
 				if (request.duration !== undefined) parts.push(`Duration: ${request.duration}ms`);
-				if (request.success !== undefined) parts.push(`Success: ${request.success}`);
-				if (request.retryCount) parts.push(`Retries: ${request.retryCount}`);
 				
 				return `[Request ${index + 1}] ${parts.join(' | ')}`;
 			}).join('\n');
@@ -163,54 +160,29 @@ router.post('/request-delay', [
 				? requestMessages.substring(0, maxLength - 20) + '...[truncated]'
 				: requestMessages;
 			
-			// 统计汇总信息
-			const totalRequests = reportData.requests.length;
-			const successCount = reportData.requests.filter(r => r.success).length;
-			const failedCount = totalRequests - successCount;
-			const avgDuration = reportData.requests
-				.filter(r => !isNaN(Number(r.duration)))
-				.reduce((sum, r, _, arr) => sum + Number(r.duration) / arr.length, 0);
-			const totalRetries = reportData.requests
-				.reduce((sum, r) => sum + (Number(r.retryCount) || 0), 0);
+			// 计算平均延迟
+			const validDurations = reportData.requests
+				.map(r => Number(r.duration))
+				.filter(d => !isNaN(d) && d > 0);
+			
+			const avgDuration = validDurations.length > 0 
+				? validDurations.reduce((sum, d) => sum + d, 0) / validDurations.length 
+				: 0;
 			
 			const delayTags = [
 				...baseTags,
-				`total_requests:${totalRequests}`,
-				`success_count:${successCount}`,
-				`failed_count:${failedCount}`,
-				`avg_duration:${Math.round(avgDuration)}`,
-				`total_retries:${totalRetries}`
+				`total_requests:${reportData.requests.length}`,
+				`avg_duration:${Math.round(avgDuration)}`
 			];
 			
-			// 发送单次批量统计
-			req.dataDog.increment('frontend.requests.batch', totalRequests, delayTags);
+			// 发送单次延迟统计
+			req.dataDog.increment('frontend.requests.delay_batch', reportData.requests.length, delayTags);
 			
-			// 发送平均延迟
-			if (!isNaN(avgDuration) && avgDuration > 0) {
+			// 发送平均延迟直方图
+			if (avgDuration > 0) {
 				req.dataDog.histogram('frontend.request.avg_duration', avgDuration, delayTags);
 			}
 			
-			// 发送失败统计
-			if (failedCount > 0) {
-				req.dataDog.increment('frontend.requests.batch_failed', failedCount, delayTags);
-			}
-			
-			// 发送重试统计
-			if (totalRetries > 0) {
-				req.dataDog.increment('frontend.requests.batch_retries', totalRetries, delayTags);
-			}
-			
-			// 发送详情事件
-			req.dataDog.event(
-				'Frontend Request Delay Batch',
-				finalMessage,
-				{
-					alert_type: failedCount > totalRequests * 0.5 ? 'warning' : 'info',
-					tags: delayTags,
-					source_type_name: 'frontend',
-					date_happened: reportData.timestamp ? Math.floor(Number(reportData.timestamp) / 1000) : undefined
-				}
-			);
 		} else {
 			// 如果没有 requests 数组，直接统计整个报告
 			req.dataDog.increment('frontend.delay_reports.empty', 1, baseTags);
