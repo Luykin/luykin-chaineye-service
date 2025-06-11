@@ -103,15 +103,11 @@ router.post('/errors', [
  * POST /request-delay
  * 前端请求延迟统计接口
  * 接收前端接口延迟统计并转发给 DataDog
- * 简化版本，只关注基本的延迟统计
+ * 纯转发模式，前端传什么就上报什么
  */
 router.post('/request-delay', [
 	securityMiddleware,
-	// 只做最基本的校验
-	body('requests').optional().isArray(),
-	body('sessionId').optional(),
-	body('userAgent').optional(),
-	body('timestamp').optional(),
+	// 只做最基本的校验，前端传什么都接受
 	validateRequest
 ], async (req, res) => {
 	try {
@@ -125,67 +121,30 @@ router.post('/request-delay', [
 			`fingerprint:${fingerprint.slice(0, 8)}`
 		];
 		
-		// 如果有 requests 数组，合并所有请求信息
-		if (Array.isArray(reportData.requests) && reportData.requests.length > 0) {
-			// 合并所有请求信息为一个大的message
-			const requestMessages = reportData.requests.map((request, index) => {
-				const parts = [];
-				
-				// 提取路径
-				let path = 'unknown';
-				try {
-					if (request.url) {
-						const urlStr = String(request.url);
-						if (urlStr.startsWith('http')) {
-							const urlObj = new URL(urlStr);
-							path = urlObj.pathname;
-						} else {
-							path = urlStr.split('?')[0];
-						}
-					}
-				} catch (e) {
-					// 忽略URL解析错误
-				}
-				
-				if (request.method) parts.push(`Method: ${request.method}`);
-				parts.push(`Path: ${path}`);
-				if (request.duration !== undefined) parts.push(`Duration: ${request.duration}ms`);
-				
-				return `[Request ${index + 1}] ${parts.join(' | ')}`;
-			}).join('\n');
-			
-			// 限制总长度
-			const maxLength = 4000;
-			const finalMessage = requestMessages.length > maxLength 
-				? requestMessages.substring(0, maxLength - 20) + '...[truncated]'
-				: requestMessages;
-			
-			// 计算平均延迟
-			const validDurations = reportData.requests
-				.map(r => Number(r.duration))
-				.filter(d => !isNaN(d) && d > 0);
-			
-			const avgDuration = validDurations.length > 0 
-				? validDurations.reduce((sum, d) => sum + d, 0) / validDurations.length 
-				: 0;
-			
-			const delayTags = [
-				...baseTags,
-				`total_requests:${reportData.requests.length}`,
-				`avg_duration:${Math.round(avgDuration)}`
-			];
-			
-			// 发送单次延迟统计
-			req.dataDog.increment('frontend.requests.delay_batch', reportData.requests.length, delayTags);
-			
-			// 发送平均延迟直方图
-			if (avgDuration > 0) {
-				req.dataDog.histogram('frontend.request.avg_duration', avgDuration, delayTags);
-			}
-			
-		} else {
-			// 如果没有 requests 数组，直接统计整个报告
-			req.dataDog.increment('frontend.delay_reports.empty', 1, baseTags);
+		// 直接转发前端计算好的数据
+		// 前端可能发送的字段：avgDuration, totalRequests, maxDuration, minDuration 等
+		const delayTags = [...baseTags];
+		
+		// 添加前端传来的统计数据作为标签
+		if (reportData.avgDuration !== undefined) {
+			delayTags.push(`avg_duration:${Math.round(Number(reportData.avgDuration) || 0)}`);
+		}
+		if (reportData.totalRequests !== undefined) {
+			delayTags.push(`total_requests:${Number(reportData.totalRequests) || 0}`);
+		}
+		if (reportData.maxDuration !== undefined) {
+			delayTags.push(`max_duration:${Math.round(Number(reportData.maxDuration) || 0)}`);
+		}
+		if (reportData.minDuration !== undefined) {
+			delayTags.push(`min_duration:${Math.round(Number(reportData.minDuration) || 0)}`);
+		}
+		
+		// 发送延迟统计到 DataDog
+		req.dataDog.increment('frontend.delay_reports', 1, delayTags);
+		
+		// 如果前端提供了平均延迟，发送直方图
+		if (reportData.avgDuration !== undefined && !isNaN(Number(reportData.avgDuration))) {
+			req.dataDog.histogram('frontend.request.avg_duration', Number(reportData.avgDuration), delayTags);
 		}
 		
 		res.status(200).json({ 
