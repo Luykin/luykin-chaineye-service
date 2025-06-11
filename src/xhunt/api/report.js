@@ -102,8 +102,7 @@ router.post('/errors', [
 /**
  * POST /request-delay
  * 前端请求延迟统计接口
- * 接收前端接口延迟统计并转发给 DataDog
- * 纯转发模式，前端传什么就上报什么
+ * 计算全部延迟的平均值并换算成秒发送给 DataDog
  */
 router.post('/request-delay', [
 	securityMiddleware,
@@ -121,46 +120,43 @@ router.post('/request-delay', [
 			`fingerprint:${fingerprint.slice(0, 8)}`
 		];
 		
-		// 处理 stats 数组中的每个接口统计
-		if (Array.isArray(reportData.stats)) {
-			reportData.stats.forEach(stat => {
-				// 提取路径用于分类
-				let path = 'unknown';
-				try {
-					const url = new URL(stat.url);
-					path = url.pathname;
-				} catch (e) {
-					// URL 解析失败时使用原始 URL
-					path = stat.url || 'unknown';
-				}
-				
-				// 为每个接口创建标签
-				const statTags = [
-					...baseTags,
-					`path:${path}`,
-					`method:${stat.method || 'unknown'}`,
-					`success_rate:${Math.round(stat.successRate || 0)}`
-				];
-				
-				// 发送平均延迟直方图
-				if (stat.avgDuration && !isNaN(Number(stat.avgDuration))) {
-					req.dataDog.histogram('frontend.request.avg_duration', Number(stat.avgDuration), statTags);
-				}
-				
-				// 发送最大延迟
-				if (stat.maxDuration && !isNaN(Number(stat.maxDuration))) {
-					req.dataDog.histogram('frontend.request.max_duration', Number(stat.maxDuration), statTags);
-				}
-				
-				// 发送最小延迟
-				if (stat.minDuration && !isNaN(Number(stat.minDuration))) {
-					req.dataDog.histogram('frontend.request.min_duration', Number(stat.minDuration), statTags);
-				}
-			});
+		// 处理 stats 数组，计算全部延迟的平均值
+		if (Array.isArray(reportData.stats) && reportData.stats.length > 0) {
+			// 计算所有接口的平均延迟
+			const totalAvgDuration = reportData.stats.reduce((sum, stat) => {
+				return sum + (Number(stat.avgDuration) || 0);
+			}, 0);
+			
+			const totalMaxDuration = reportData.stats.reduce((sum, stat) => {
+				return sum + (Number(stat.maxDuration) || 0);
+			}, 0);
+			
+			const totalMinDuration = reportData.stats.reduce((sum, stat) => {
+				return sum + (Number(stat.minDuration) || 0);
+			}, 0);
+			
+			const statsCount = reportData.stats.length;
+			
+			// 计算平均值并换算成秒（毫秒 / 1000）
+			const avgDurationInSeconds = (totalAvgDuration / statsCount) / 1000;
+			const maxDurationInSeconds = (totalMaxDuration / statsCount) / 1000;
+			const minDurationInSeconds = (totalMinDuration / statsCount) / 1000;
+			
+			// 发送平均延迟（秒）
+			if (!isNaN(avgDurationInSeconds) && avgDurationInSeconds > 0) {
+				req.dataDog.histogram('frontend.delay.avg_duration', avgDurationInSeconds, baseTags);
+			}
+			
+			// 发送最大延迟（秒）
+			if (!isNaN(maxDurationInSeconds) && maxDurationInSeconds > 0) {
+				req.dataDog.histogram('frontend.delay.max_duration', maxDurationInSeconds, baseTags);
+			}
+			
+			// 发送最小延迟（秒）
+			if (!isNaN(minDurationInSeconds) && minDurationInSeconds > 0) {
+				req.dataDog.histogram('frontend.delay.min_duration', minDurationInSeconds, baseTags);
+			}
 		}
-		
-		// 发送整体延迟报告计数
-		req.dataDog.increment('frontend.delay_reports', 1, baseTags);
 		
 		res.status(200).json({ 
 			status: 'success'
