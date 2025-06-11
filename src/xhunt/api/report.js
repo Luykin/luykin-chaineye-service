@@ -32,52 +32,58 @@ router.post('/errors', [
 			`fingerprint:${fingerprint.slice(0, 8)}` // 只取前8位
 		];
 		
-		// 如果有 errors 数组，遍历处理
-		if (Array.isArray(reportData.errors)) {
-			for (const error of reportData.errors) {
-				const errorTags = [
-					...baseTags,
-					`error_type:${error.errorType || 'unknown'}`,
-					`priority:${error.priority || 'unknown'}`,
-					`source:${error.source || 'unknown'}`
-				];
+		// 如果有 errors 数组，合并所有错误信息
+		if (Array.isArray(reportData.errors) && reportData.errors.length > 0) {
+			// 合并所有错误信息为一个大的message
+			const errorMessages = reportData.errors.map((error, index) => {
+				const parts = [];
+				if (error.message) parts.push(`Message: ${error.message}`);
+				if (error.errorType) parts.push(`Type: ${error.errorType}`);
+				if (error.source) parts.push(`Source: ${error.source}`);
+				if (error.filename) parts.push(`File: ${error.filename}`);
+				if (error.lineno) parts.push(`Line: ${error.lineno}`);
+				if (error.count && error.count > 1) parts.push(`Count: ${error.count}`);
 				
-				// 发送错误计数到 DataDog
-				const count = Number(error.count) || 1;
-				req.dataDog.increment('frontend.errors.total', count, errorTags);
-				
-				// 发送错误详情事件（如果有消息）
-				if (error.message) {
-					req.dataDog.event(
-						'Frontend Error',
-						String(error.message).substring(0, 500), // 限制长度
-						{
-							alert_type: error.priority === 'critical' ? 'error' : 
-							           error.priority === 'high' ? 'warning' : 'info',
-							tags: errorTags,
-							source_type_name: 'frontend',
-							date_happened: error.timestamp ? Math.floor(Number(error.timestamp) / 1000) : undefined,
-							text: JSON.stringify({
-								stack: error.stack,
-								url: error.url,
-								userAgent: error.userAgent,
-								filename: error.filename,
-								lineno: error.lineno,
-								colno: error.colno
-							}).substring(0, 4000) // 限制长度
-						}
-					);
-				}
-			}
+				return `[Error ${index + 1}] ${parts.join(' | ')}`;
+			}).join('\n');
 			
-			// 发送报告级别的统计
-			req.dataDog.increment('frontend.error_reports.total', 1, [
+			// 限制总长度，避免超出DataDog限制
+			const maxLength = 4000;
+			const finalMessage = errorMessages.length > maxLength 
+				? errorMessages.substring(0, maxLength - 20) + '...[truncated]'
+				: errorMessages;
+			
+			// 统计错误类型分布
+			const errorTypes = reportData.errors.map(e => e.errorType || 'unknown');
+			const priorityLevels = reportData.errors.map(e => e.priority || 'unknown');
+			const totalCount = reportData.errors.reduce((sum, e) => sum + (Number(e.count) || 1), 0);
+			
+			const errorTags = [
 				...baseTags,
-				`error_count:${reportData.errors.length}`
-			]);
+				`error_types:${[...new Set(errorTypes)].join(',')}`,
+				`priorities:${[...new Set(priorityLevels)].join(',')}`,
+				`total_errors:${reportData.errors.length}`,
+				`total_count:${totalCount}`
+			];
+			
+			// 发送单次错误计数到 DataDog
+			req.dataDog.increment('frontend.errors.batch', totalCount, errorTags);
+			
+			// 发送单次错误详情事件
+			req.dataDog.event(
+				'Frontend Error Batch',
+				finalMessage,
+				{
+					alert_type: priorityLevels.includes('critical') ? 'error' : 
+					           priorityLevels.includes('high') ? 'warning' : 'info',
+					tags: errorTags,
+					source_type_name: 'frontend',
+					date_happened: reportData.timestamp ? Math.floor(Number(reportData.timestamp) / 1000) : undefined
+				}
+			);
 		} else {
 			// 如果没有 errors 数组，直接统计整个报告
-			req.dataDog.increment('frontend.error_reports.total', 1, baseTags);
+			req.dataDog.increment('frontend.error_reports.empty', 1, baseTags);
 		}
 		
 		res.status(200).json({ 
@@ -119,9 +125,12 @@ router.post('/request-delay', [
 			`fingerprint:${fingerprint.slice(0, 8)}`
 		];
 		
-		// 如果有 requests 数组，遍历处理
-		if (Array.isArray(reportData.requests)) {
-			for (const request of reportData.requests) {
+		// 如果有 requests 数组，合并所有请求信息
+		if (Array.isArray(reportData.requests) && reportData.requests.length > 0) {
+			// 合并所有请求信息为一个大的message
+			const requestMessages = reportData.requests.map((request, index) => {
+				const parts = [];
+				
 				// 提取路径
 				let path = 'unknown';
 				try {
@@ -138,43 +147,73 @@ router.post('/request-delay', [
 					// 忽略URL解析错误
 				}
 				
-				const requestTags = [
-					...baseTags,
-					`method:${request.method || 'unknown'}`,
-					`path:${path}`,
-					`status:${request.status || 'unknown'}`,
-					`success:${Boolean(request.success)}`
-				];
+				if (request.method) parts.push(`Method: ${request.method}`);
+				parts.push(`Path: ${path}`);
+				if (request.status) parts.push(`Status: ${request.status}`);
+				if (request.duration !== undefined) parts.push(`Duration: ${request.duration}ms`);
+				if (request.success !== undefined) parts.push(`Success: ${request.success}`);
+				if (request.retryCount) parts.push(`Retries: ${request.retryCount}`);
 				
-				// 发送请求延迟统计
-				const duration = Number(request.duration);
-				if (!isNaN(duration) && duration >= 0) {
-					req.dataDog.histogram('frontend.request.duration', duration, requestTags);
-				}
-				
-				// 发送请求计数
-				req.dataDog.increment('frontend.requests.total', 1, requestTags);
-				
-				// 如果请求失败，单独统计
-				if (!request.success) {
-					req.dataDog.increment('frontend.requests.failed', 1, requestTags);
-				}
-				
-				// 如果有重试次数
-				const retryCount = Number(request.retryCount);
-				if (!isNaN(retryCount) && retryCount > 0) {
-					req.dataDog.increment('frontend.requests.retries', retryCount, requestTags);
-				}
+				return `[Request ${index + 1}] ${parts.join(' | ')}`;
+			}).join('\n');
+			
+			// 限制总长度
+			const maxLength = 4000;
+			const finalMessage = requestMessages.length > maxLength 
+				? requestMessages.substring(0, maxLength - 20) + '...[truncated]'
+				: requestMessages;
+			
+			// 统计汇总信息
+			const totalRequests = reportData.requests.length;
+			const successCount = reportData.requests.filter(r => r.success).length;
+			const failedCount = totalRequests - successCount;
+			const avgDuration = reportData.requests
+				.filter(r => !isNaN(Number(r.duration)))
+				.reduce((sum, r, _, arr) => sum + Number(r.duration) / arr.length, 0);
+			const totalRetries = reportData.requests
+				.reduce((sum, r) => sum + (Number(r.retryCount) || 0), 0);
+			
+			const delayTags = [
+				...baseTags,
+				`total_requests:${totalRequests}`,
+				`success_count:${successCount}`,
+				`failed_count:${failedCount}`,
+				`avg_duration:${Math.round(avgDuration)}`,
+				`total_retries:${totalRetries}`
+			];
+			
+			// 发送单次批量统计
+			req.dataDog.increment('frontend.requests.batch', totalRequests, delayTags);
+			
+			// 发送平均延迟
+			if (!isNaN(avgDuration) && avgDuration > 0) {
+				req.dataDog.histogram('frontend.request.avg_duration', avgDuration, delayTags);
 			}
 			
-			// 发送批量报告统计
-			req.dataDog.increment('frontend.delay_reports.total', 1, [
-				...baseTags,
-				`request_count:${reportData.requests.length}`
-			]);
+			// 发送失败统计
+			if (failedCount > 0) {
+				req.dataDog.increment('frontend.requests.batch_failed', failedCount, delayTags);
+			}
+			
+			// 发送重试统计
+			if (totalRetries > 0) {
+				req.dataDog.increment('frontend.requests.batch_retries', totalRetries, delayTags);
+			}
+			
+			// 发送详情事件
+			req.dataDog.event(
+				'Frontend Request Delay Batch',
+				finalMessage,
+				{
+					alert_type: failedCount > totalRequests * 0.5 ? 'warning' : 'info',
+					tags: delayTags,
+					source_type_name: 'frontend',
+					date_happened: reportData.timestamp ? Math.floor(Number(reportData.timestamp) / 1000) : undefined
+				}
+			);
 		} else {
 			// 如果没有 requests 数组，直接统计整个报告
-			req.dataDog.increment('frontend.delay_reports.total', 1, baseTags);
+			req.dataDog.increment('frontend.delay_reports.empty', 1, baseTags);
 		}
 		
 		res.status(200).json({ 
