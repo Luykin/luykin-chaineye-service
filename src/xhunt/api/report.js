@@ -156,21 +156,6 @@ router.post('/request-delay', [
 				if (stat.minDuration && !isNaN(Number(stat.minDuration))) {
 					req.dataDog.histogram('frontend.request.min_duration', Number(stat.minDuration), statTags);
 				}
-				
-				// 发送请求计数
-				if (stat.totalRequests && !isNaN(Number(stat.totalRequests))) {
-					req.dataDog.increment('frontend.requests.total', Number(stat.totalRequests), statTags);
-				}
-				
-				// 发送成功请求计数
-				if (stat.successRequests && !isNaN(Number(stat.successRequests))) {
-					req.dataDog.increment('frontend.requests.success', Number(stat.successRequests), statTags);
-				}
-				
-				// 发送失败请求计数
-				if (stat.failedRequests && !isNaN(Number(stat.failedRequests))) {
-					req.dataDog.increment('frontend.requests.failed', Number(stat.failedRequests), statTags);
-				}
 			});
 		}
 		
