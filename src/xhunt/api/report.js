@@ -121,31 +121,61 @@ router.post('/request-delay', [
 			`fingerprint:${fingerprint.slice(0, 8)}`
 		];
 		
-		// 直接转发前端计算好的数据
-		// 前端可能发送的字段：avgDuration, totalRequests, maxDuration, minDuration 等
-		const delayTags = [...baseTags];
+		// 处理 stats 数组中的每个接口统计
+		if (Array.isArray(reportData.stats)) {
+			reportData.stats.forEach(stat => {
+				// 提取路径用于分类
+				let path = 'unknown';
+				try {
+					const url = new URL(stat.url);
+					path = url.pathname;
+				} catch (e) {
+					// URL 解析失败时使用原始 URL
+					path = stat.url || 'unknown';
+				}
+				
+				// 为每个接口创建标签
+				const statTags = [
+					...baseTags,
+					`path:${path}`,
+					`method:${stat.method || 'unknown'}`,
+					`success_rate:${Math.round(stat.successRate || 0)}`
+				];
+				
+				// 发送平均延迟直方图
+				if (stat.avgDuration && !isNaN(Number(stat.avgDuration))) {
+					req.dataDog.histogram('frontend.request.avg_duration', Number(stat.avgDuration), statTags);
+				}
+				
+				// 发送最大延迟
+				if (stat.maxDuration && !isNaN(Number(stat.maxDuration))) {
+					req.dataDog.histogram('frontend.request.max_duration', Number(stat.maxDuration), statTags);
+				}
+				
+				// 发送最小延迟
+				if (stat.minDuration && !isNaN(Number(stat.minDuration))) {
+					req.dataDog.histogram('frontend.request.min_duration', Number(stat.minDuration), statTags);
+				}
+				
+				// 发送请求计数
+				if (stat.totalRequests && !isNaN(Number(stat.totalRequests))) {
+					req.dataDog.increment('frontend.requests.total', Number(stat.totalRequests), statTags);
+				}
+				
+				// 发送成功请求计数
+				if (stat.successRequests && !isNaN(Number(stat.successRequests))) {
+					req.dataDog.increment('frontend.requests.success', Number(stat.successRequests), statTags);
+				}
+				
+				// 发送失败请求计数
+				if (stat.failedRequests && !isNaN(Number(stat.failedRequests))) {
+					req.dataDog.increment('frontend.requests.failed', Number(stat.failedRequests), statTags);
+				}
+			});
+		}
 		
-		// 添加前端传来的统计数据作为标签
-		if (reportData.avgDuration !== undefined) {
-			delayTags.push(`avg_duration:${Math.round(Number(reportData.avgDuration) || 0)}`);
-		}
-		if (reportData.totalRequests !== undefined) {
-			delayTags.push(`total_requests:${Number(reportData.totalRequests) || 0}`);
-		}
-		if (reportData.maxDuration !== undefined) {
-			delayTags.push(`max_duration:${Math.round(Number(reportData.maxDuration) || 0)}`);
-		}
-		if (reportData.minDuration !== undefined) {
-			delayTags.push(`min_duration:${Math.round(Number(reportData.minDuration) || 0)}`);
-		}
-		
-		// 发送延迟统计到 DataDog
-		req.dataDog.increment('frontend.delay_reports', 1, delayTags);
-		
-		// 如果前端提供了平均延迟，发送直方图
-		if (reportData.avgDuration !== undefined && !isNaN(Number(reportData.avgDuration))) {
-			req.dataDog.histogram('frontend.request.avg_duration', Number(reportData.avgDuration), delayTags);
-		}
+		// 发送整体延迟报告计数
+		req.dataDog.increment('frontend.delay_reports', 1, baseTags);
 		
 		res.status(200).json({ 
 			status: 'success'
