@@ -51,12 +51,12 @@ function setBrowserCacheHeaders(res, method) {
 		res.setHeader('Cache-Control', 'public, max-age=600'); // 600秒 = 10分钟
 		res.setHeader('Expires', new Date(Date.now() + 10 * 60 * 1000).toUTCString());
 		
-		// 设置 ETag 用于条件请求（可选）
-		const etag = `"proxy-${Date.now()}"`;
-		res.setHeader('ETag', etag);
-		
-		// 设置 Last-Modified（可选）
-		res.setHeader('Last-Modified', new Date().toUTCString());
+		// // 设置 ETag 用于条件请求（可选）
+		// const etag = `"proxy-${Date.now()}"`;
+		// res.setHeader('ETag', etag);
+		//
+		// // 设置 Last-Modified（可选）
+		// res.setHeader('Last-Modified', new Date().toUTCString());
 	} else {
 		// 非 GET 请求不缓存
 		res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
