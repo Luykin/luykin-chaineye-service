@@ -28,14 +28,40 @@ async function proxyRequest(req, res, targetUrl) {
 		if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
 			options.body = JSON.stringify(req.body);
 		}
+		
 		// 发送请求到目标服务器
 		const response = await fetch(targetUrl, options);
 		const data = await response.json();
+		
+		// 设置浏览器缓存策略
+		setBrowserCacheHeaders(res, req.method);
+		
 		// 返回响应
 		res.status(response.status).json(data);
 	} catch (error) {
 		console.error(targetUrl, 'Proxy request error:', error);
 		res.status(500).json({ error: '请求失败' });
+	}
+}
+
+// 设置浏览器缓存头
+function setBrowserCacheHeaders(res, method) {
+	if (method === 'GET') {
+		// GET 请求设置10分钟缓存
+		res.setHeader('Cache-Control', 'public, max-age=600'); // 600秒 = 10分钟
+		res.setHeader('Expires', new Date(Date.now() + 10 * 60 * 1000).toUTCString());
+		
+		// 设置 ETag 用于条件请求（可选）
+		const etag = `"proxy-${Date.now()}"`;
+		res.setHeader('ETag', etag);
+		
+		// 设置 Last-Modified（可选）
+		res.setHeader('Last-Modified', new Date().toUTCString());
+	} else {
+		// 非 GET 请求不缓存
+		res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+		res.setHeader('Pragma', 'no-cache');
+		res.setHeader('Expires', '0');
 	}
 }
 
@@ -82,4 +108,3 @@ module.exports = router;
 //
 // // Specific target
 // await fetch('/api/proxy/public/some-endpoint?target=kb');
-
