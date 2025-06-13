@@ -3,8 +3,8 @@ const crypto = require('crypto');
 
 // 速率限制中间件
 const rateLimiter = rateLimit({
-	windowMs: 15 * 60 * 1000, // 15分钟窗口
-	max: 200, // 限制请求次数
+	windowMs: 10 * 60 * 1000, // 10分钟窗口
+	max: 400, // 限制请求次数
 	standardHeaders: true,
 	legacyHeaders: false,
 	handler: (req, res) => {
@@ -16,8 +16,8 @@ const rateLimiter = rateLimit({
 
 // 基于设备指纹的速率限制
 const fingerprintLimiter = rateLimit({
-	windowMs: 15 * 60 * 1000,
-	max: 300,
+	windowMs: 10 * 60 * 1000,
+	max: 600,
 	standardHeaders: true,
 	legacyHeaders: false,
 	keyGenerator: (req) => req.headers['x-device-fingerprint'] || req.ip,
