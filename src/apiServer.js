@@ -109,15 +109,16 @@ app.use((req, res, next) => {
 	};
 	
 	res.on('finish', () => {
-		// const latency = Date.now() - startTime;
-		
-		// 基础指标
-		dataDog.increment('requests.total', 1, [
-			`status:${res.statusCode}`,
-			`path:${req.path}`,
-			`method:${req.method}`,
-			`version:${req?.securityContext?.version || 'unknown'}`
-		]);
+		// 1/10 采样率：只有 10% 的请求会发送指标
+		if (Math.random() < 0.1) {
+			// 基础指标
+			dataDog.increment('requests.total', 1, [
+				`status:${res.statusCode}`,
+				`path:${req.path}`,
+				`method:${req.method}`,
+				`version:${req?.securityContext?.version || 'unknown'}`
+			]);
+		}
 		
 		// dataDog.histogram('requests.latency', latency, [
 		// 	`status:${res.statusCode}`,
