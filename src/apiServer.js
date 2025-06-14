@@ -88,7 +88,7 @@ app.use(injectHeadersToSpan);
 
 /** https://us5.datadoghq.com/integrations?search=node&integrationId=node 性能统计 **/
 app.use((req, res, next) => {
-	const startTime = Date.now();
+	// const startTime = Date.now();
 	
 	// 劫持原生的 .json()/.send() 方法，捕获错误信息
 	const originalSend = res.send;
@@ -109,7 +109,7 @@ app.use((req, res, next) => {
 	};
 	
 	res.on('finish', () => {
-		const latency = Date.now() - startTime;
+		// const latency = Date.now() - startTime;
 		
 		// 基础指标
 		dataDog.increment('requests.total', 1, [
@@ -119,10 +119,10 @@ app.use((req, res, next) => {
 			`version:${req?.securityContext?.version || 'unknown'}`
 		]);
 		
-		dataDog.histogram('requests.latency', latency, [
-			`status:${res.statusCode}`,
-			`path:${req.path}`
-		]);
+		// dataDog.histogram('requests.latency', latency, [
+		// 	`status:${res.statusCode}`,
+		// 	`path:${req.path}`
+		// ]);
 	});
 	next();
 });
