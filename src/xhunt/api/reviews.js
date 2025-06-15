@@ -41,7 +41,7 @@ router.get('/:handle', [
 		const onlyKOL = req.query.onlyKOL === true;
 		// Step 1: 获取 XAccount 及其基础信息 - 大小写不敏感查找
 		const xAccount = await XAccount.findOne({
-			where: { 
+			where: {
 				handle: {
 					[Op.iLike]: handle // 使用 iLike 进行大小写不敏感查找
 				}
@@ -135,6 +135,9 @@ router.get('/:handle', [
 			});
 		}
 		
+		/** 缓存5分钟 **/
+		res.setHeader('Cache-Control', 'public, max-age=300'); // 300秒 = 5分钟
+		res.setHeader('Expires', new Date(Date.now() + 5 * 60 * 1000).toUTCString());
 		// Step 7: 返回结果
 		res.json({
 			averageRating,
@@ -184,7 +187,7 @@ router.post('/', [
 		}
 		// Step 1: 查找或创建 XAccount - 大小写不敏感查找
 		let xAccount = await XAccount.findOne({
-			where: { 
+			where: {
 				handle: {
 					[Op.iLike]: handle // 使用 iLike 进行大小写不敏感查找
 				}
@@ -290,7 +293,7 @@ router.post('/delete', [
 		
 		// Step 1: 查找目标 XAccount - 大小写不敏感查找
 		const xAccount = await XAccount.findOne({
-			where: { 
+			where: {
 				handle: {
 					[Op.iLike]: handle // 使用 iLike 进行大小写不敏感查找
 				}

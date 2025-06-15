@@ -231,7 +231,7 @@ router.get('/search', async (req, res) => {
 			console.error('Redis Client Error (SET):', error);
 		}
 		
-		res.set('Cache-Control', 'public, max-age=60'); // 缓存 1 分钟
+		res.set('Cache-Control', 'public, max-age=600'); // 缓存 1 分钟
 		res.set('X-Cache-Status', 'MISS'); // 标记数据来自数据库
 		res.json({ data: formattedProject });
 	} catch (error) {
@@ -515,7 +515,7 @@ router.get('/search/legacy', async (req, res) => {
 			console.error('Redis Client Error (SET):', error);
 		}
 		
-		res.set('Cache-Control', 'public, max-age=120');
+		res.set('Cache-Control', 'public, max-age=600');
 		res.set('X-Cache-Status', 'MISS');
 		res.json(response);
 	} catch (error) {
