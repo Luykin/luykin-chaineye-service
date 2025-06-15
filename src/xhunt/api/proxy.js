@@ -73,6 +73,7 @@ function getTargetUrl(req) {
 	if (String(req.path).includes('/b8aa0c/plugin/twitter/rank/batch')) {
 		// 临时修复batch接口的问题
 		baseUrl = (URL_MAPPINGS[TEMPORARY_TARGET]).trim();
+		console.log('临时修复batch接口的问题', baseUrl)
 	} else {
 		baseUrl = (URL_MAPPINGS[target] || URL_MAPPINGS[DEFAULT_TARGET]).trim();
 	}
