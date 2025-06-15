@@ -7,11 +7,13 @@ const router = express.Router();
 // URL映射配置
 const URL_MAPPINGS = {
 	'kota': 'http://10.170.0.2:16530',
-	'kb': 'http://34.146.221.115:8087'
+	'kb': 'http://34.146.221.115:8087',
+	'kota_temporary': 'http://10.170.0.2:16531'
 };
 
 // 默认目标服务器
 const DEFAULT_TARGET = 'kota';
+const TEMPORARY_TARGET = 'kota_temporary';
 
 // 代理请求处理函数
 async function proxyRequest(req, res, targetUrl) {
@@ -51,12 +53,6 @@ function setBrowserCacheHeaders(res, method) {
 		res.setHeader('Cache-Control', 'public, max-age=600'); // 600秒 = 10分钟
 		res.setHeader('Expires', new Date(Date.now() + 10 * 60 * 1000).toUTCString());
 		
-		// // 设置 ETag 用于条件请求（可选）
-		// const etag = `"proxy-${Date.now()}"`;
-		// res.setHeader('ETag', etag);
-		//
-		// // 设置 Last-Modified（可选）
-		// res.setHeader('Last-Modified', new Date().toUTCString());
 	} else {
 		// 非 GET 请求不缓存
 		res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -73,7 +69,13 @@ function getTargetUrl(req) {
 	delete originalQuery.target;
 	
 	// 获取目标基础 URL 并确保无多余空格
-	const baseUrl = (URL_MAPPINGS[target] || URL_MAPPINGS[DEFAULT_TARGET]).trim();
+	let baseUrl;
+	if (String(req.path).includes('/b8aa0c/plugin/twitter/rank/batch')) {
+		// 临时修复batch接口的问题
+		baseUrl = (URL_MAPPINGS[TEMPORARY_TARGET]).trim();
+	} else {
+		baseUrl = (URL_MAPPINGS[target] || URL_MAPPINGS[DEFAULT_TARGET]).trim();
+	}
 	
 	// 提取路径（去除 /auth/ 或 /public/ 前缀）
 	const targetPath = req.path.replace(/^\/(auth|public)\//, '');
@@ -102,9 +104,3 @@ router.all('/public/*', securityMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-
-// // Default (kota)
-// await fetch('/api/proxy/public/some-endpoint');
-//
-// // Specific target
-// await fetch('/api/proxy/public/some-endpoint?target=kb');
