@@ -136,8 +136,8 @@ router.get('/:handle', [
 		}
 		
 		/** 缓存5分钟 **/
-		res.setHeader('Cache-Control', 'public, max-age=300'); // 300秒 = 5分钟
-		res.setHeader('Expires', new Date(Date.now() + 5 * 60 * 1000).toUTCString());
+		res.setHeader('Cache-Control', 'public, max-age=180'); // 180秒 = 3分钟
+		res.setHeader('Expires', new Date(Date.now() + 3 * 60 * 1000).toUTCString());
 		// Step 7: 返回结果
 		res.json({
 			averageRating,
