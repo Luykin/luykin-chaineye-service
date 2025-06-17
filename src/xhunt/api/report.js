@@ -198,10 +198,6 @@ router.post('/high-delay', [
 					date_happened: reportData.timestamp ? Math.floor(Number(reportData.timestamp) / 1000) : undefined
 				}
 			);
-			
-			// 发送延迟指标（换算成秒）
-			req.dataDog.histogram('frontend.high_delay.avg_duration', avgDuration / 1000, baseTags);
-			req.dataDog.histogram('frontend.high_delay.max_duration', maxDuration / 1000, baseTags);
 		}
 		
 		res.status(200).json({
