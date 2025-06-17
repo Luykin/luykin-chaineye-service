@@ -66,9 +66,6 @@ router.post('/errors', [
 				`total_count:${totalCount}`
 			];
 			
-			// 发送单次错误计数到 DataDog
-			// req.dataDog.increment('frontend.errors.batch', totalCount, errorTags);
-			
 			// 发送单次错误详情事件
 			req.dataDog.event(
 				'Frontend Error Batch',
@@ -81,9 +78,6 @@ router.post('/errors', [
 					date_happened: reportData.timestamp ? Math.floor(Number(reportData.timestamp) / 1000) : undefined
 				}
 			);
-		} else {
-			// 如果没有 errors 数组，直接统计整个报告
-			// req.dataDog.increment('frontend.error_reports.empty', 1, baseTags);
 		}
 		
 		res.status(200).json({
@@ -100,73 +94,125 @@ router.post('/errors', [
 });
 
 /**
- * POST /request-delay
- * 前端请求延迟统计接口
- * 计算全部延迟的平均值并换算成秒发送给 DataDog
+ * POST /high-delay
+ * 前端高延迟请求上报接口
+ * 接收前端高延迟请求信息（6秒以上）并转发给 DataDog
  */
-router.post('/request-delay', [
+router.post('/high-delay', [
 	securityMiddleware,
-	// 只做最基本的校验，前端传什么都接受
+	// 只做最基本的校验
+	body('records').optional().isArray(),
+	body('timestamp').optional(),
+	body('sessionId').optional(),
+	body('reportType').optional(),
 	validateRequest
 ], async (req, res) => {
 	try {
-		// const reportData = req.body;
-		// const version = req?.securityContext?.version || 'unknown';
-		// const fingerprint = req?.securityContext?.fingerprint || 'unknown';
-		//
-		// // 基础标签
-		// const baseTags = [
-		// 	`version:${version}`,
-		// 	`fingerprint:${fingerprint.slice(0, 8)}`
-		// ];
-		//
-		// // 处理 stats 数组，计算全部延迟的平均值
-		// if (Array.isArray(reportData.stats) && reportData.stats.length > 0) {
-		// 	// 计算所有接口的平均延迟
-		// 	const totalAvgDuration = reportData.stats.reduce((sum, stat) => {
-		// 		return sum + (Number(stat.avgDuration) || 0);
-		// 	}, 0);
-		//
-		// 	const totalMaxDuration = reportData.stats.reduce((sum, stat) => {
-		// 		return sum + (Number(stat.maxDuration) || 0);
-		// 	}, 0);
-		//
-		// 	const totalMinDuration = reportData.stats.reduce((sum, stat) => {
-		// 		return sum + (Number(stat.minDuration) || 0);
-		// 	}, 0);
-		//
-		// 	const statsCount = reportData.stats.length;
-		//
-		// 	// 计算平均值并换算成秒（毫秒 / 1000）
-		// 	const avgDurationInSeconds = (totalAvgDuration / statsCount) / 1000;
-		// 	const maxDurationInSeconds = (totalMaxDuration / statsCount) / 1000;
-		// 	const minDurationInSeconds = (totalMinDuration / statsCount) / 1000;
-		//
-		// 	// 发送平均延迟（秒）
-		// 	if (!isNaN(avgDurationInSeconds) && avgDurationInSeconds > 0) {
-		// 		req.dataDog.histogram('frontend.delay.avg_duration', avgDurationInSeconds, baseTags);
-		// 	}
-		//
-		// 	// 发送最大延迟（秒）
-		// 	if (!isNaN(maxDurationInSeconds) && maxDurationInSeconds > 0) {
-		// 		req.dataDog.histogram('frontend.delay.max_duration', maxDurationInSeconds, baseTags);
-		// 	}
+		const reportData = req.body;
+		const version = req?.securityContext?.version || 'unknown';
+		const fingerprint = req?.securityContext?.fingerprint || 'unknown';
+		
+		// 基础标签
+		const baseTags = [
+			`version:${version}`,
+			`fingerprint:${fingerprint.slice(0, 8)}`
+		];
+		
+		// 处理高延迟记录
+		if (Array.isArray(reportData.records) && reportData.records.length > 0) {
+			// 合并所有高延迟请求信息
+			const delayMessages = reportData.records.map((record, index) => {
+				const parts = [];
+				
+				// 基础请求信息
+				if (record.url) parts.push(`URL: ${record.url}`);
+				if (record.method) parts.push(`Method: ${record.method}`);
+				if (record.duration) parts.push(`Duration: ${record.duration}ms`);
+				if (record.success !== undefined) parts.push(`Success: ${record.success}`);
+				if (record.statusCode) parts.push(`Status: ${record.statusCode}`);
+				if (record.errorMessage) parts.push(`Error: ${record.errorMessage}`);
+				
+				// 用户信息
+				if (record.userId) parts.push(`User: ${record.userId}`);
+				if (record.currentUrl) parts.push(`CurrentPage: ${record.currentUrl}`);
+				
+				// 网络信息
+				if (record.networkBefore) {
+					const netBefore = record.networkBefore;
+					parts.push(`NetworkBefore: ${netBefore.effectiveType || 'unknown'} (${netBefore.downlink || 'unknown'}Mbps)`);
+				}
+				if (record.networkAfter) {
+					const netAfter = record.networkAfter;
+					parts.push(`NetworkAfter: ${netAfter.effectiveType || 'unknown'} (${netAfter.downlink || 'unknown'}Mbps)`);
+				}
+				
+				// 设备信息
+				if (record.deviceInfo) {
+					const device = record.deviceInfo;
+					parts.push(`Device: ${device.platform || 'unknown'} ${device.userAgent ? device.userAgent.slice(0, 50) : ''}`);
+				}
+				
+				return `[HighDelay ${index + 1}] ${parts.join(' | ')}`;
+			}).join('\n');
 			
-			// // 发送最小延迟（秒）
-			// if (!isNaN(minDurationInSeconds) && minDurationInSeconds > 0) {
-			// 	req.dataDog.histogram('frontend.delay.min_duration', minDurationInSeconds, baseTags);
-			// }
-		// }
+			// 限制总长度
+			const maxLength = 4000;
+			const finalMessage = delayMessages.length > maxLength
+				? delayMessages.substring(0, maxLength - 20) + '...[truncated]'
+				: delayMessages;
+			
+			// 统计延迟分布
+			const avgDuration = reportData.records.reduce((sum, r) => sum + (Number(r.duration) || 0), 0) / reportData.records.length;
+			const maxDuration = Math.max(...reportData.records.map(r => Number(r.duration) || 0));
+			const failedCount = reportData.records.filter(r => !r.success).length;
+			const successRate = ((reportData.records.length - failedCount) / reportData.records.length * 100).toFixed(1);
+			
+			// 提取 API 路径进行分类
+			const apiPaths = reportData.records.map(r => {
+				try {
+					const url = new URL(r.url);
+					return url.pathname.split('/').slice(0, 4).join('/'); // 取前4段路径
+				} catch {
+					return 'unknown';
+				}
+			});
+			const uniquePaths = [...new Set(apiPaths)];
+			
+			const delayTags = [
+				...baseTags,
+				`avg_duration:${Math.round(avgDuration)}ms`,
+				`max_duration:${maxDuration}ms`,
+				`success_rate:${successRate}%`,
+				`total_requests:${reportData.records.length}`,
+				`api_paths:${uniquePaths.slice(0, 3).join(',')}`
+			];
+			
+			// 发送高延迟事件
+			req.dataDog.event(
+				'Frontend High Delay Report',
+				finalMessage,
+				{
+					alert_type: avgDuration > 10000 ? 'error' : 'warning', // 10秒以上为错误级别
+					tags: delayTags,
+					source_type_name: 'frontend',
+					date_happened: reportData.timestamp ? Math.floor(Number(reportData.timestamp) / 1000) : undefined
+				}
+			);
+			
+			// 发送延迟指标（换算成秒）
+			req.dataDog.histogram('frontend.high_delay.avg_duration', avgDuration / 1000, baseTags);
+			req.dataDog.histogram('frontend.high_delay.max_duration', maxDuration / 1000, baseTags);
+		}
 		
 		res.status(200).json({
 			status: 'success'
 		});
 		
 	} catch (error) {
-		console.error('Request delay reporting failed:', error);
+		console.error('High delay reporting failed:', error);
 		res.status(500).json({
 			status: 'error',
-			message: '延迟统计处理失败'
+			message: '高延迟报告处理失败'
 		});
 	}
 });
