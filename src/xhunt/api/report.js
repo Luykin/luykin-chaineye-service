@@ -94,6 +94,21 @@ router.post('/errors', [
 });
 
 /**
+ * POST /request-delay
+ * 前端请求延迟统计接口（已废弃，仅为兼容线上版本）
+ * 直接返回成功状态，不做任何处理
+ */
+router.post('/request-delay', [
+	securityMiddleware,
+	validateRequest
+], async (req, res) => {
+	// 为了兼容线上版本，直接返回成功
+	res.status(200).json({
+		status: 'success'
+	});
+});
+
+/**
  * POST /high-delay
  * 前端高延迟请求上报接口
  * 接收前端高延迟请求信息（6秒以上）并转发给 DataDog
