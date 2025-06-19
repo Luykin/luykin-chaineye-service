@@ -129,7 +129,8 @@ router.get('/:handle', [
 					xAccountId: accountId
 				},
 				attributes: ['rating', 'tags',
-					'note' //本字段即将需要被废弃⚠️
+					'note', //本字段即将需要被废弃⚠️
+					'comment' // 新增返回 comment 字段
 				],
 				raw: true
 			});

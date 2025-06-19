@@ -2,7 +2,7 @@ const express = require('express');
 const { body, param } = require('express-validator');
 const { validateRequest } = require('../middleware/validate-request');
 const { authenticateToken } = require('../middleware/auth');
-const { XPrivateNote, XAccount } = require('../../models/postgres-start');
+const { XPrivateNote, XAccount, XReviewForAccount } = require('../../models/postgres-start');
 const { sanitizeNote } = require('../services/inputValidator');
 
 const router = express.Router();
@@ -128,6 +128,24 @@ router.post('/', [
 				note: sanitizeNote(note || '')
 			});
 		}
+		
+		// Step 4: 异步清空 reviews 表中的 note 字段（用于逐步迁移）
+		setImmediate(async () => {
+			try {
+				await XReviewForAccount.update(
+					{ note: '' }, // 清空 note 字段
+					{
+						where: {
+							xHuntUserId: req.user.id,
+							xAccountId: xAccount.id
+						}
+					}
+				);
+				console.log(`已清空用户 ${req.user.id} 对账号 ${handle} 在 reviews 表中的 note 字段`);
+			} catch (error) {
+				console.error('清空 reviews 表中的 note 字段失败:', error);
+			}
+		});
 		
 		res.status(200).json({
 			status: 'success',
