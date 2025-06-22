@@ -49,6 +49,48 @@ const isValidRequestId = (requestId) => {
 	return uuidV4Regex.test(requestId);
 };
 
+// 检测是否为浏览器环境
+const isBrowserEnvironment = (userAgent, windowLocationHref) => {
+	if (!userAgent || !windowLocationHref) {
+		return false;
+	}
+	
+	// 检查 User-Agent 是否包含常见浏览器标识
+	const browserPatterns = [
+		/Chrome\/\d+/i,
+		/Firefox\/\d+/i,
+		/Safari\/\d+/i,
+		/Edge\/\d+/i,
+		/Opera\/\d+/i
+	];
+	
+	const hasBrowserUA = browserPatterns.some(pattern => pattern.test(userAgent));
+	
+	// 检查是否包含脚本特征（常见的脚本 User-Agent）
+	const scriptPatterns = [
+		/curl/i,
+		/wget/i,
+		/python/i,
+		/node/i,
+		/axios/i,
+		/fetch/i,
+		/postman/i,
+		/insomnia/i,
+		/httpie/i,
+		/bot/i,
+		/crawler/i,
+		/spider/i
+	];
+	
+	const hasScriptUA = scriptPatterns.some(pattern => pattern.test(userAgent));
+	
+	// 检查 window.location.href 格式是否合理
+	const isValidUrl = /^https?:\/\/.+/.test(windowLocationHref);
+	
+	// 必须有浏览器特征，没有脚本特征，且有有效的 URL
+	return hasBrowserUA && !hasScriptUA && isValidUrl;
+};
+
 // 生成签名
 const generateSignature = (method, path, timestamp, body, fingerprint) => {
 	const payload = [
@@ -62,6 +104,23 @@ const generateSignature = (method, path, timestamp, body, fingerprint) => {
 		.createHmac('sha256', process.env.XHUNT_API_SECRET)
 		.update(payload)
 		.digest('hex');
+};
+
+// 浏览器环境检测中间件
+const browserOnlyMiddleware = (req, res, next) => {
+	try {
+		const userAgent = req.headers['user-agent'];
+		const windowLocationHref = req.headers['x-window-location-href'];
+		
+		if (!isBrowserEnvironment(userAgent, windowLocationHref)) {
+			return res.status(403).json({ error: '403' });
+		}
+		
+		next();
+	} catch (error) {
+		console.error('Browser detection middleware error:', error);
+		res.status(500).json({ error: 'browserOnlyMiddleware 500' });
+	}
 };
 
 // 安全中间件
@@ -122,5 +181,6 @@ module.exports = {
 	rateLimiter,
 	fingerprintLimiter,
 	securityMiddleware,
+	browserOnlyMiddleware,
 	generateSignature // 导出用于测试
 };

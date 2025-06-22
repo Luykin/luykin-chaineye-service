@@ -23,7 +23,7 @@ const xHuntReviewsRoutes = require('./xhunt/api/reviews');
 const xHuntNotesRoutes = require('./xhunt/api/notes');
 const xHuntReportRoutes = require('./xhunt/api/report');
 const internalQueryRoutes = require('./api/internal-query');
-const { securityMiddleware, fingerprintLimiter, rateLimiter } = require('./xhunt/middleware/security');
+const { securityMiddleware, fingerprintLimiter, rateLimiter, browserOnlyMiddleware } = require('./xhunt/middleware/security');
 const StatsD = require('hot-shots');
 const dataDog = new StatsD();
 
@@ -209,6 +209,7 @@ app.use('/api/news', newsRoutes);
 app.use(
 	'/api/xhunt/auth',
 	fingerprintLimiter,
+	browserOnlyMiddleware,
 	securityMiddleware,
 	xHuntAuthRoutes
 );
@@ -216,6 +217,7 @@ app.use(
 app.use(
 	'/api/xhunt/proxy',
 	fingerprintLimiter,
+	browserOnlyMiddleware,
 	securityMiddleware,
 	xHuntProxyRoutes
 );
@@ -223,6 +225,7 @@ app.use(
 app.use(
 	'/api/xhunt/reviews',
 	fingerprintLimiter,
+	browserOnlyMiddleware,
 	securityMiddleware,
 	xHuntReviewsRoutes
 );
@@ -230,6 +233,7 @@ app.use(
 app.use(
 	'/api/xhunt/notes',
 	fingerprintLimiter,
+	browserOnlyMiddleware,
 	securityMiddleware,
 	xHuntNotesRoutes
 );
@@ -237,6 +241,7 @@ app.use(
 app.use(
 	'/api/xhunt/report',
 	fingerprintLimiter,
+	browserOnlyMiddleware,
 	xHuntReportRoutes
 );
 
