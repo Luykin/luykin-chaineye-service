@@ -57,11 +57,59 @@ const isBrowserEnvironment = (userAgent, windowLocationHref) => {
 	
 	// 检查 User-Agent 是否包含常见浏览器标识
 	const browserPatterns = [
+		// 主流桌面浏览器
 		/Chrome\/\d+/i,
 		/Firefox\/\d+/i,
 		/Safari\/\d+/i,
 		/Edge\/\d+/i,
-		/Opera\/\d+/i
+		/Opera\/\d+/i,
+		/Chromium\/\d+/i,
+		
+		// 移动端浏览器
+		/Mobile.*Safari/i,
+		/Android.*Chrome/i,
+		/iPhone.*Safari/i,
+		/iPad.*Safari/i,
+		/Mobile.*Firefox/i,
+		/SamsungBrowser\/\d+/i,
+		/UCBrowser\/\d+/i,
+		/MiuiBrowser\/\d+/i,
+		/QQBrowser\/\d+/i,
+		/BaiduBrowser\/\d+/i,
+		/SogouMobileBrowser\/\d+/i,
+		
+		// 其他常见浏览器
+		/Vivaldi\/\d+/i,
+		/Brave\/\d+/i,
+		/DuckDuckGo\/\d+/i,
+		/Yandex\/\d+/i,
+		/OPR\/\d+/i,        // Opera 的另一种标识
+		/Edg\/\d+/i,        // Edge 的另一种标识
+		/EdgA\/\d+/i,       // Edge Android
+		/EdgiOS\/\d+/i,     // Edge iOS
+		/CriOS\/\d+/i,      // Chrome iOS
+		/FxiOS\/\d+/i,      // Firefox iOS
+		/Version\/.*Safari/i, // Safari 的标准格式
+		
+		// WebView 和嵌入式浏览器
+		/WebView/i,
+		/wv\)/i,            // Android WebView
+		/Version\/.*Mobile.*Safari/i, // 移动端 Safari WebView
+		
+		// 国产浏览器
+		/360SE/i,           // 360安全浏览器
+		/360EE/i,           // 360极速浏览器
+		/Maxthon/i,         // 傲游浏览器
+		/TencentTraveler/i, // 腾讯TT浏览器
+		/TheWorld/i,        // 世界之窗浏览器
+		/LBBROWSER/i,       // 猎豹浏览器
+		/2345Explorer/i,    // 2345浏览器
+		/115Browser/i,      // 115浏览器
+		
+		// 其他可能的浏览器标识
+		/Mozilla\/\d+.*Gecko/i, // 基于 Gecko 的浏览器
+		/AppleWebKit\/\d+/i,    // 基于 WebKit 的浏览器
+		/KHTML.*like.*Gecko/i   // 类似 Gecko 的浏览器
 	];
 	
 	const hasBrowserUA = browserPatterns.some(pattern => pattern.test(userAgent));
@@ -79,7 +127,15 @@ const isBrowserEnvironment = (userAgent, windowLocationHref) => {
 		/httpie/i,
 		/bot/i,
 		/crawler/i,
-		/spider/i
+		/spider/i,
+		/scraper/i,
+		/automation/i,
+		/headless/i,
+		/phantom/i,
+		/selenium/i,
+		/webdriver/i,
+		/puppeteer/i,
+		/playwright/i
 	];
 	
 	const hasScriptUA = scriptPatterns.some(pattern => pattern.test(userAgent));
