@@ -135,6 +135,23 @@ router.post('/high-delay', [
 		
 		// 处理高延迟记录
 		if (Array.isArray(reportData.records) && reportData.records.length > 0) {
+			// 提取 IP 信息（从第一条记录中获取，通常所有记录的 IP 都相同）
+			const firstRecord = reportData.records[0];
+			const ipInfo = firstRecord?.deviceInfo?.ipInfo;
+			let ipPrefix = '';
+			
+			if (ipInfo?.ip) {
+				const ipParts = [];
+				ipParts.push(`IP: ${ipInfo.ip}`);
+				if (ipInfo.country) ipParts.push(`Country: ${ipInfo.country}`);
+				if (ipInfo.region) ipParts.push(`Region: ${ipInfo.region}`);
+				if (ipInfo.city) ipParts.push(`City: ${ipInfo.city}`);
+				if (ipInfo.isp) ipParts.push(`ISP: ${ipInfo.isp}`);
+				if (ipInfo.timezone) ipParts.push(`Timezone: ${ipInfo.timezone}`);
+				
+				ipPrefix = `[${ipParts.join(' | ')}]\n\n`;
+			}
+			
 			// 合并所有高延迟请求信息
 			const delayMessages = reportData.records.map((record, index) => {
 				const parts = [];
@@ -170,37 +187,31 @@ router.post('/high-delay', [
 				return `[HighDelay ${index + 1}] ${parts.join(' | ')}`;
 			}).join('\n');
 			
+			// 拼接 IP 信息到最前面
+			const fullMessage = ipPrefix + delayMessages;
+			
 			// 限制总长度
 			const maxLength = 4000;
-			const finalMessage = delayMessages.length > maxLength
-				? delayMessages.substring(0, maxLength - 20) + '...[truncated]'
-				: delayMessages;
+			const finalMessage = fullMessage.length > maxLength
+				? fullMessage.substring(0, maxLength - 20) + '...[truncated]'
+				: fullMessage;
 			
-			// 统计延迟分布
-			const avgDuration = reportData.records.reduce((sum, r) => sum + (Number(r.duration) || 0), 0) / reportData.records.length;
-			const maxDuration = Math.max(...reportData.records.map(r => Number(r.duration) || 0));
-			const failedCount = reportData.records.filter(r => !r.success).length;
-			const successRate = ((reportData.records.length - failedCount) / reportData.records.length * 100).toFixed(1);
-			
-			// 提取 API 路径进行分类
-			const apiPaths = reportData.records.map(r => {
-				try {
-					const url = new URL(r.url);
-					return url.pathname.split('/').slice(0, 4).join('/'); // 取前4段路径
-				} catch {
-					return 'unknown';
-				}
-			});
-			const uniquePaths = [...new Set(apiPaths)];
-			
+			// 简化的标签（只保留基础信息）
 			const delayTags = [
 				...baseTags,
-				`avg_duration:${Math.round(avgDuration)}ms`,
-				`max_duration:${maxDuration}ms`,
-				`success_rate:${successRate}%`,
-				`total_requests:${reportData.records.length}`,
-				`api_paths:${uniquePaths.slice(0, 3).join(',')}`
+				`total_requests:${reportData.records.length}`
 			];
+			
+			// 添加 IP 相关标签
+			if (ipInfo?.country) {
+				delayTags.push(`country:${ipInfo.country}`);
+			}
+			if (ipInfo?.isp) {
+				delayTags.push(`isp:${ipInfo.isp.replace(/[:=]/g, '_')}`); // 移除标签分隔符
+			}
+			
+			// 计算平均延迟用于判断严重程度
+			const avgDuration = reportData.records.reduce((sum, r) => sum + (Number(r.duration) || 0), 0) / reportData.records.length;
 			
 			// 发送高延迟事件
 			req.dataDog.event(
