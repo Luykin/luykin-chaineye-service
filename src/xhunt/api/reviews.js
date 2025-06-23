@@ -55,7 +55,7 @@ router.get('/:handle', [
 		
 		const accountId = xAccount.id;
 		
-		// Step 2: 使用 Sequelize 执行聚合查询（带关联）
+		// Step 2: 使用 Sequelize 执行聚合查询（带关联）- 根据 onlyKOL 筛选
 		const stats = await XReviewForAccount.findOne({
 			where: { xAccountId: accountId },
 			include: [{
@@ -72,6 +72,11 @@ router.get('/:handle', [
 			],
 			raw: true,
 			nest: true
+		});
+		
+		// Step 2.1: 新增 - 获取真实的总评论数（不受 onlyKOL 筛选影响）
+		const realTotalReviews = await XReviewForAccount.count({
+			where: { xAccountId: accountId }
 		});
 		
 		let averageRating = Number(Number(stats.averageRating || 0).toFixed(2));
@@ -140,6 +145,7 @@ router.get('/:handle', [
 		res.json({
 			averageRating,
 			totalReviews,
+			realTotalReviews, // 新增字段：真实的总评论数
 			tagCloud,
 			topReviewers,
 			currentUserReview,
