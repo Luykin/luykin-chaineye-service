@@ -198,7 +198,25 @@ app.use(morgan('combined'));
 app.use(helmet.hidePoweredBy());
 app.use(helmet.xssFilter());
 app.use(helmet.noSniff());
+
+// 🆕 针对不同路由设置不同的请求体大小限制
+// 普通接口：20KB 限制
 app.use(express.json({ limit: '20kb' }));
+
+// 🆕 为上报接口设置更大的限制（但仍然合理）
+app.use('/api/xhunt/report', express.json({ 
+	limit: '500kb', // 上报接口允许更大的请求体
+	verify: (req, res, buf, encoding) => {
+		// 记录请求体大小用于监控
+		const sizeKB = Math.round(buf.length / 1024);
+		if (req.dataDog && sizeKB > 100) { // 超过100KB时记录
+			req.dataDog.histogram('request.body.size', sizeKB, [
+				`path:${req.path}`,
+				`size_category:${sizeKB > 300 ? 'large' : 'medium'}`
+			]);
+		}
+	}
+}));
 
 // API 路由
 app.use('/api/fundraising', fundraisingRoutes);
@@ -247,6 +265,27 @@ app.use(
 
 // 内部查询API - 使用随机字符前缀，无需安全中间件
 app.use('/api/internal-x9k2m7p4q8', internalQueryRoutes);
+
+// 🆕 专门处理请求体过大的错误
+app.use((error, req, res, next) => {
+	if (error.type === 'entity.too.large') {
+		// 记录过大请求的统计信息
+		if (req.dataDog) {
+			req.dataDog.increment('requests.payload_too_large', 1, [
+				`path:${req.path}`,
+				`method:${req.method}`,
+				`user_agent:${req.headers['user-agent']?.substring(0, 50) || 'unknown'}`
+			]);
+		}
+		
+		return res.status(413).json({ 
+			error: '请求数据过大，请减少上报数据量',
+			code: 'PAYLOAD_TOO_LARGE',
+			maxSize: '500KB'
+		});
+	}
+	next(error);
+});
 
 // 错误处理中间件
 app.use((err, req, res, next) => {
