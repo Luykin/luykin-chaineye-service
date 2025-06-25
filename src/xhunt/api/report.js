@@ -99,11 +99,11 @@ function detectProxy(req, ipInfo) {
 	}
 	
 	// 6. 检查IP地址类型（私有IP、本地IP等）
-	const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-	                 req.headers['x-real-ip'] || 
-	                 req.connection.remoteAddress || 
-	                 req.socket.remoteAddress || 
-	                 req.ip || 
+	const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+	                 req.headers['x-real-ip'] ||
+	                 req.connection.remoteAddress ||
+	                 req.socket.remoteAddress ||
+	                 req.ip ||
 	                 'unknown';
 	
 	// 检查是否为私有IP或本地IP
@@ -307,8 +307,8 @@ router.post('/high-delay', [
 		.optional()
 		.isArray()
 		.custom((records) => {
-			if (Array.isArray(records) && records.length > 30) {
-				throw new Error('单次上报记录数不能超过30条');
+			if (Array.isArray(records) && records.length > 10) {
+				throw new Error('单次上报记录数不能超过10条');
 			}
 			return true;
 		}),
@@ -319,11 +319,11 @@ router.post('/high-delay', [
 ], async (req, res) => {
 	try {
 		// 🆕 获取客户端真实IP（考虑代理情况）
-		const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-		                 req.headers['x-real-ip'] || 
-		                 req.connection.remoteAddress || 
-		                 req.socket.remoteAddress || 
-		                 req.ip || 
+		const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+		                 req.headers['x-real-ip'] ||
+		                 req.connection.remoteAddress ||
+		                 req.socket.remoteAddress ||
+		                 req.ip ||
 		                 'unknown';
 		
 		// 🆕 检查是否为重复上报
@@ -374,7 +374,7 @@ router.post('/high-delay', [
 			}
 			
 			// 🆕 限制处理的记录数量，防止过大数据
-			const maxRecords = 15; // 最多处理15条记录
+			const maxRecords = 5; // 最多处理15条记录
 			const recordsToProcess = reportData.records.slice(0, maxRecords);
 			
 			// 合并所有高延迟请求信息
@@ -383,8 +383,8 @@ router.post('/high-delay', [
 				
 				// 基础请求信息（截断过长内容）
 				if (record.url) {
-					const shortUrl = record.url.length > 80 ? 
-						record.url.substring(0, 80) + '...' : record.url;
+					const shortUrl = record.url.length > 70 ?
+						record.url.substring(0, 40) + '...' + record.url.substring(-30) : record.url;
 					parts.push(`URL: ${shortUrl}`);
 				}
 				if (record.method) parts.push(`Method: ${record.method}`);
@@ -392,17 +392,29 @@ router.post('/high-delay', [
 				if (record.success !== undefined) parts.push(`Success: ${record.success}`);
 				if (record.statusCode) parts.push(`Status: ${record.statusCode}`);
 				if (record.errorMessage) {
-					const shortError = record.errorMessage.length > 100 ? 
-						record.errorMessage.substring(0, 100) + '...' : record.errorMessage;
+					const shortError = record.errorMessage.length > 70 ?
+						record.errorMessage.substring(0, 70) + '...' : record.errorMessage;
 					parts.push(`Error: ${shortError}`);
 				}
 				
 				// 用户信息
 				if (record.userId) parts.push(`User: ${record.userId}`);
+				if (record.currentUrl) parts.push(`CurrentPage: ${record.currentUrl}`);
 				
-				// 简化的网络信息
-				if (record.networkBefore?.effectiveType) {
-					parts.push(`Network: ${record.networkBefore.effectiveType}`);
+				// 网络信息
+				if (record.networkBefore) {
+					const netBefore = record.networkBefore;
+					parts.push(`NetworkBefore: ${netBefore.effectiveType || 'unknown'} (${netBefore.downlink || 'unknown'}Mbps)`);
+				}
+				if (record.networkAfter) {
+					const netAfter = record.networkAfter;
+					parts.push(`NetworkAfter: ${netAfter.effectiveType || 'unknown'} (${netAfter.downlink || 'unknown'}Mbps)`);
+				}
+				
+				// 设备信息
+				if (record.deviceInfo) {
+					const device = record.deviceInfo;
+					parts.push(`Device: ${device.platform || 'unknown'} ${device.userAgent ? device.userAgent.slice(0, 30) : ''}`);
 				}
 				
 				return `[HighDelay ${index + 1}] ${parts.join(' | ')}`;
