@@ -109,9 +109,52 @@ router.post('/request-delay', [
 });
 
 /**
+ * 检查是否为重复上报
+ * @param {Object} req - 请求对象
+ * @param {string} clientIP - 客户端IP
+ * @returns {Promise<boolean>} - 是否为重复上报
+ */
+async function isDuplicateReport(req, clientIP) {
+	try {
+		const cacheKey = `high_delay_report:${clientIP}`;
+		const lastReportTime = await req.redisClient.get(cacheKey);
+		
+		if (lastReportTime) {
+			const timeDiff = Date.now() - parseInt(lastReportTime, 10);
+			const tenMinutes = 10 * 60 * 1000; // 10分钟
+			
+			if (timeDiff < tenMinutes) {
+				// 记录重复上报统计
+				if (req.dataDog) {
+					req.dataDog.increment('high_delay_report.duplicate', 1, [
+						`ip:${clientIP}`,
+						`time_since_last:${Math.round(timeDiff / 1000)}s`
+					]);
+				}
+				return true;
+			}
+		}
+		
+		// 设置新的上报时间（10分钟过期）
+		await req.redisClient.setEx(cacheKey, 10 * 60, Date.now().toString());
+		return false;
+	} catch (redisError) {
+		console.error('Redis error in duplicate check:', redisError);
+		// Redis 出错时不阻止上报，但记录错误
+		if (req.dataDog) {
+			req.dataDog.increment('high_delay_report.redis_error', 1, [
+				`error:${redisError.message.substring(0, 50)}`
+			]);
+		}
+		return false;
+	}
+}
+
+/**
  * POST /high-delay
  * 前端高延迟请求上报接口
  * 接收前端高延迟请求信息（6秒以上）并转发给 DataDog
+ * 🆕 添加重复上报防护：同一IP 10分钟内只能上报一次
  */
 router.post('/high-delay', [
 	securityMiddleware,
@@ -131,6 +174,24 @@ router.post('/high-delay', [
 	validateRequest
 ], async (req, res) => {
 	try {
+		// 🆕 获取客户端真实IP（考虑代理情况）
+		const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+		                 req.headers['x-real-ip'] || 
+		                 req.connection.remoteAddress || 
+		                 req.socket.remoteAddress || 
+		                 req.ip || 
+		                 'unknown';
+		
+		// 🆕 检查是否为重复上报
+		const isDuplicate = await isDuplicateReport(req, clientIP);
+		if (isDuplicate) {
+			return res.status(429).json({
+				status: 'duplicate',
+				message: '上报过于频繁，请10分钟后再试',
+				retryAfter: 600 // 10分钟后重试
+			});
+		}
+		
 		const reportData = req.body;
 		const version = req?.securityContext?.version || 'unknown';
 		const fingerprint = req?.securityContext?.fingerprint || 'unknown';
@@ -138,7 +199,8 @@ router.post('/high-delay', [
 		// 基础标签
 		const baseTags = [
 			`version:${version}`,
-			`fingerprint:${fingerprint.slice(0, 8)}`
+			`fingerprint:${fingerprint.slice(0, 8)}`,
+			`client_ip:${clientIP}` // 🆕 添加客户端IP标签
 		];
 		
 		// 处理高延迟记录
@@ -160,36 +222,36 @@ router.post('/high-delay', [
 				ipPrefix = `[${ipParts.join(' | ')}]\n\n`;
 			}
 			
+			// 🆕 限制处理的记录数量，防止过大数据
+			const maxRecords = 15; // 最多处理15条记录
+			const recordsToProcess = reportData.records.slice(0, maxRecords);
+			
 			// 合并所有高延迟请求信息
-			const delayMessages = reportData.records.map((record, index) => {
+			const delayMessages = recordsToProcess.map((record, index) => {
 				const parts = [];
 				
-				// 基础请求信息
-				if (record.url) parts.push(`URL: ${record.url}`);
+				// 基础请求信息（截断过长内容）
+				if (record.url) {
+					const shortUrl = record.url.length > 80 ? 
+						record.url.substring(0, 80) + '...' : record.url;
+					parts.push(`URL: ${shortUrl}`);
+				}
 				if (record.method) parts.push(`Method: ${record.method}`);
 				if (record.duration) parts.push(`Duration: ${record.duration}ms`);
 				if (record.success !== undefined) parts.push(`Success: ${record.success}`);
 				if (record.statusCode) parts.push(`Status: ${record.statusCode}`);
-				if (record.errorMessage) parts.push(`Error: ${record.errorMessage}`);
+				if (record.errorMessage) {
+					const shortError = record.errorMessage.length > 100 ? 
+						record.errorMessage.substring(0, 100) + '...' : record.errorMessage;
+					parts.push(`Error: ${shortError}`);
+				}
 				
 				// 用户信息
 				if (record.userId) parts.push(`User: ${record.userId}`);
-				if (record.currentUrl) parts.push(`CurrentPage: ${record.currentUrl}`);
 				
-				// 网络信息
-				if (record.networkBefore) {
-					const netBefore = record.networkBefore;
-					parts.push(`NetworkBefore: ${netBefore.effectiveType || 'unknown'} (${netBefore.downlink || 'unknown'}Mbps)`);
-				}
-				if (record.networkAfter) {
-					const netAfter = record.networkAfter;
-					parts.push(`NetworkAfter: ${netAfter.effectiveType || 'unknown'} (${netAfter.downlink || 'unknown'}Mbps)`);
-				}
-				
-				// 设备信息
-				if (record.deviceInfo) {
-					const device = record.deviceInfo;
-					parts.push(`Device: ${device.platform || 'unknown'} ${device.userAgent ? device.userAgent.slice(0, 50) : ''}`);
+				// 简化的网络信息
+				if (record.networkBefore?.effectiveType) {
+					parts.push(`Network: ${record.networkBefore.effectiveType}`);
 				}
 				
 				return `[HighDelay ${index + 1}] ${parts.join(' | ')}`;
@@ -198,8 +260,8 @@ router.post('/high-delay', [
 			// 拼接 IP 信息到最前面
 			const fullMessage = ipPrefix + delayMessages;
 			
-			// 限制总长度
-			const maxLength = 3000;
+			// 🆕 更严格的长度限制
+			const maxLength = 2500; // 减少到2500字符
 			const finalMessage = fullMessage.length > maxLength
 				? fullMessage.substring(0, maxLength - 20) + '...[truncated]'
 				: fullMessage;
@@ -207,7 +269,7 @@ router.post('/high-delay', [
 			// 简化的标签（只保留基础信息）
 			const delayTags = [
 				...baseTags,
-				`total_requests:${reportData.records.length}`
+				`total_requests:${recordsToProcess.length}`
 			];
 			
 			// 添加 IP 相关标签
@@ -218,8 +280,14 @@ router.post('/high-delay', [
 				delayTags.push(`isp:${ipInfo.isp.replace(/[:=]/g, '_')}`); // 移除标签分隔符
 			}
 			
+			// 🆕 如果原始记录数超过处理数，添加标记
+			if (reportData.records.length > maxRecords) {
+				delayTags.push(`truncated:true`);
+				delayTags.push(`original_count:${reportData.records.length}`);
+			}
+			
 			// 计算平均延迟用于判断严重程度
-			const avgDuration = reportData.records.reduce((sum, r) => sum + (Number(r.duration) || 0), 0) / reportData.records.length;
+			const avgDuration = recordsToProcess.reduce((sum, r) => sum + (Number(r.duration) || 0), 0) / recordsToProcess.length;
 			
 			// 发送高延迟事件
 			req.dataDog.event(
@@ -232,6 +300,15 @@ router.post('/high-delay', [
 					date_happened: reportData.timestamp ? Math.floor(Number(reportData.timestamp) / 1000) : undefined
 				}
 			);
+			
+			// 🆕 记录成功上报的统计
+			if (req.dataDog) {
+				req.dataDog.increment('high_delay_report.success', 1, [
+					`ip:${clientIP}`,
+					`records_count:${recordsToProcess.length}`,
+					`avg_duration:${Math.round(avgDuration)}ms`
+				]);
+			}
 		}
 		
 		res.status(200).json({
@@ -240,6 +317,14 @@ router.post('/high-delay', [
 		
 	} catch (error) {
 		console.error('High delay reporting failed:', error);
+		
+		// 🆕 记录失败统计
+		if (req.dataDog) {
+			req.dataDog.increment('high_delay_report.error', 1, [
+				`error:${error.message.substring(0, 50)}`
+			]);
+		}
+		
 		res.status(500).json({
 			status: 'error',
 			message: '高延迟报告处理失败'
