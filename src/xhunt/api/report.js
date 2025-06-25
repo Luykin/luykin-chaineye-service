@@ -100,11 +100,11 @@ function detectProxy(req, ipInfo) {
 	
 	// 6. 检查IP地址类型（私有IP、本地IP等）
 	const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-	                 req.headers['x-real-ip'] ||
-	                 req.connection.remoteAddress ||
-	                 req.socket.remoteAddress ||
-	                 req.ip ||
-	                 'unknown';
+		req.headers['x-real-ip'] ||
+		req.connection.remoteAddress ||
+		req.socket.remoteAddress ||
+		req.ip ||
+		'unknown';
 	
 	// 检查是否为私有IP或本地IP
 	const privateIPPatterns = [
@@ -215,7 +215,7 @@ router.post('/errors', [
 				finalMessage,
 				{
 					alert_type: priorityLevels.includes('critical') ? 'error' :
-					           priorityLevels.includes('high') ? 'warning' : 'info',
+						priorityLevels.includes('high') ? 'warning' : 'info',
 					tags: errorTags,
 					source_type_name: 'frontend',
 					date_happened: reportData.timestamp ? Math.floor(Number(reportData.timestamp) / 1000) : undefined
@@ -320,11 +320,11 @@ router.post('/high-delay', [
 	try {
 		// 🆕 获取客户端真实IP（考虑代理情况）
 		const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-		                 req.headers['x-real-ip'] ||
-		                 req.connection.remoteAddress ||
-		                 req.socket.remoteAddress ||
-		                 req.ip ||
-		                 'unknown';
+			req.headers['x-real-ip'] ||
+			req.connection.remoteAddress ||
+			req.socket.remoteAddress ||
+			req.ip ||
+			'unknown';
 		
 		// 🆕 检查是否为重复上报
 		const isDuplicate = await isDuplicateReport(req, clientIP);
@@ -383,11 +383,9 @@ router.post('/high-delay', [
 				
 				// 基础请求信息（截断过长内容）
 				if (record.url) {
-					const shortUrl = record.url.length > 70 ?
-						record.url.substring(0, 40) + '...' + record.url.substring(-30) : record.url;
-					parts.push(`URL: ${shortUrl}`);
+					parts.push(`URL: ${record.url}`);
 				}
-				if (record.method) parts.push(`Method: ${record.method}`);
+				// if (record.method) parts.push(`Method: ${record.method}`);
 				if (record.duration) parts.push(`Duration: ${record.duration}ms`);
 				if (record.success !== undefined) parts.push(`Success: ${record.success}`);
 				if (record.statusCode) parts.push(`Status: ${record.statusCode}`);
@@ -414,7 +412,7 @@ router.post('/high-delay', [
 				// 设备信息
 				if (record.deviceInfo) {
 					const device = record.deviceInfo;
-					parts.push(`Device: ${device.platform || 'unknown'} ${device.userAgent ? device.userAgent.slice(0, 30) : ''}`);
+					parts.push(`Device: ${device.platform || 'unknown'} ${device.userAgent ? device.userAgent.slice(0, 50) : ''}...`);
 				}
 				
 				return `[HighDelay ${index + 1}] ${parts.join(' | ')}`;
