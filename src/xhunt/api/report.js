@@ -6,6 +6,149 @@ const { securityMiddleware } = require('../middleware/security');
 const router = express.Router();
 
 /**
+ * 检测用户是否使用代理
+ * @param {Object} req - 请求对象
+ * @param {Object} ipInfo - IP信息对象
+ * @returns {Object} - 代理检测结果
+ */
+function detectProxy(req, ipInfo) {
+	const proxyIndicators = [];
+	let proxyScore = 0;
+	
+	// 1. 检查代理相关的请求头
+	const proxyHeaders = [
+		'x-forwarded-for',
+		'x-real-ip',
+		'x-forwarded-proto',
+		'x-forwarded-host',
+		'x-forwarded-port',
+		'x-original-forwarded-for',
+		'x-cluster-client-ip',
+		'cf-connecting-ip', // Cloudflare
+		'true-client-ip',
+		'x-client-ip',
+		'forwarded',
+		'via'
+	];
+	
+	const foundProxyHeaders = proxyHeaders.filter(header => req.headers[header]);
+	if (foundProxyHeaders.length > 0) {
+		proxyIndicators.push(`Headers: ${foundProxyHeaders.join(', ')}`);
+		proxyScore += foundProxyHeaders.length * 10;
+	}
+	
+	// 2. 检查 X-Forwarded-For 是否包含多个IP
+	const xForwardedFor = req.headers['x-forwarded-for'];
+	if (xForwardedFor && xForwardedFor.includes(',')) {
+		const ips = xForwardedFor.split(',').map(ip => ip.trim());
+		proxyIndicators.push(`XFF Chain: ${ips.length} IPs`);
+		proxyScore += ips.length * 5;
+	}
+	
+	// 3. 检查 Via 头（代理服务器标识）
+	const viaHeader = req.headers['via'];
+	if (viaHeader) {
+		proxyIndicators.push(`Via: ${viaHeader.substring(0, 50)}`);
+		proxyScore += 20;
+	}
+	
+	// 4. 检查 User-Agent 是否包含代理特征
+	const userAgent = req.headers['user-agent'] || '';
+	const proxyUAPatterns = [
+		/proxy/i,
+		/squid/i,
+		/nginx/i,
+		/apache/i,
+		/cloudflare/i,
+		/fastly/i,
+		/varnish/i
+	];
+	
+	const foundUAPatterns = proxyUAPatterns.filter(pattern => pattern.test(userAgent));
+	if (foundUAPatterns.length > 0) {
+		proxyIndicators.push('UA: Proxy signatures');
+		proxyScore += 15;
+	}
+	
+	// 5. 检查IP信息中的ISP是否为已知代理服务商
+	if (ipInfo?.isp) {
+		const proxyISPs = [
+			/cloudflare/i,
+			/fastly/i,
+			/amazon/i,
+			/google/i,
+			/microsoft/i,
+			/digitalocean/i,
+			/linode/i,
+			/vultr/i,
+			/ovh/i,
+			/hetzner/i,
+			/proxy/i,
+			/vpn/i,
+			/hosting/i,
+			/datacenter/i,
+			/server/i,
+			/cloud/i
+		];
+		
+		const foundISPPatterns = proxyISPs.filter(pattern => pattern.test(ipInfo.isp));
+		if (foundISPPatterns.length > 0) {
+			proxyIndicators.push(`ISP: ${ipInfo.isp}`);
+			proxyScore += 25;
+		}
+	}
+	
+	// 6. 检查IP地址类型（私有IP、本地IP等）
+	const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+	                 req.headers['x-real-ip'] || 
+	                 req.connection.remoteAddress || 
+	                 req.socket.remoteAddress || 
+	                 req.ip || 
+	                 'unknown';
+	
+	// 检查是否为私有IP或本地IP
+	const privateIPPatterns = [
+		/^10\./,
+		/^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+		/^192\.168\./,
+		/^127\./,
+		/^::1$/,
+		/^fc00:/,
+		/^fe80:/
+	];
+	
+	if (privateIPPatterns.some(pattern => pattern.test(clientIP))) {
+		proxyIndicators.push(`Private IP: ${clientIP}`);
+		proxyScore += 30;
+	}
+	
+	// 7. 检查端口信息
+	const forwardedPort = req.headers['x-forwarded-port'];
+	if (forwardedPort && forwardedPort !== '80' && forwardedPort !== '443') {
+		proxyIndicators.push(`Port: ${forwardedPort}`);
+		proxyScore += 10;
+	}
+	
+	// 判断代理可能性
+	let proxyLikelihood = 'No';
+	if (proxyScore >= 50) {
+		proxyLikelihood = 'High';
+	} else if (proxyScore >= 25) {
+		proxyLikelihood = 'Medium';
+	} else if (proxyScore >= 10) {
+		proxyLikelihood = 'Low';
+	}
+	
+	return {
+		isProxy: proxyScore >= 10,
+		likelihood: proxyLikelihood,
+		score: proxyScore,
+		indicators: proxyIndicators,
+		clientIP
+	};
+}
+
+/**
  * POST /errors
  * 前端错误上报接口
  * 接收前端错误信息并转发给 DataDog
@@ -155,6 +298,7 @@ async function isDuplicateReport(req, clientIP) {
  * 前端高延迟请求上报接口
  * 接收前端高延迟请求信息（6秒以上）并转发给 DataDog
  * 🆕 添加重复上报防护：同一IP 10分钟内只能上报一次
+ * 🆕 添加代理检测功能
  */
 router.post('/high-delay', [
 	securityMiddleware,
@@ -196,28 +340,35 @@ router.post('/high-delay', [
 		const version = req?.securityContext?.version || 'unknown';
 		const fingerprint = req?.securityContext?.fingerprint || 'unknown';
 		
-		// 基础标签
-		const baseTags = [
-			`version:${version}`,
-			`fingerprint:${fingerprint.slice(0, 8)}`,
-			`client_ip:${clientIP}` // 🆕 添加客户端IP标签
-		];
-		
 		// 处理高延迟记录
 		if (Array.isArray(reportData.records) && reportData.records.length > 0) {
 			// 提取 IP 信息（从第一条记录中获取，通常所有记录的 IP 都相同）
 			const firstRecord = reportData.records[0];
 			const ipInfo = firstRecord?.deviceInfo?.ipInfo;
-			let ipPrefix = '';
 			
-			if (ipInfo?.ip) {
+			// 🆕 检测代理使用情况
+			const proxyDetection = detectProxy(req, ipInfo);
+			
+			// 构建 IP 和代理信息前缀
+			let ipPrefix = '';
+			if (ipInfo?.ip || proxyDetection.isProxy) {
 				const ipParts = [];
-				ipParts.push(`IP: ${ipInfo.ip}`);
-				if (ipInfo.country) ipParts.push(`Country: ${ipInfo.country}`);
-				if (ipInfo.region) ipParts.push(`Region: ${ipInfo.region}`);
-				if (ipInfo.city) ipParts.push(`City: ${ipInfo.city}`);
-				if (ipInfo.isp) ipParts.push(`ISP: ${ipInfo.isp}`);
-				if (ipInfo.timezone) ipParts.push(`Timezone: ${ipInfo.timezone}`);
+				
+				// IP 基础信息
+				if (ipInfo?.ip) ipParts.push(`IP: ${ipInfo.ip}`);
+				if (ipInfo?.country) ipParts.push(`Country: ${ipInfo.country}`);
+				if (ipInfo?.region) ipParts.push(`Region: ${ipInfo.region}`);
+				if (ipInfo?.city) ipParts.push(`City: ${ipInfo.city}`);
+				if (ipInfo?.isp) ipParts.push(`ISP: ${ipInfo.isp}`);
+				if (ipInfo?.timezone) ipParts.push(`Timezone: ${ipInfo.timezone}`);
+				
+				// 🆕 代理检测信息
+				if (proxyDetection.isProxy) {
+					ipParts.push(`Proxy: ${proxyDetection.likelihood} (Score: ${proxyDetection.score})`);
+					if (proxyDetection.indicators.length > 0) {
+						ipParts.push(`Indicators: ${proxyDetection.indicators.slice(0, 3).join(', ')}`);
+					}
+				}
 				
 				ipPrefix = `[${ipParts.join(' | ')}]\n\n`;
 			}
@@ -257,7 +408,7 @@ router.post('/high-delay', [
 				return `[HighDelay ${index + 1}] ${parts.join(' | ')}`;
 			}).join('\n');
 			
-			// 拼接 IP 信息到最前面
+			// 拼接 IP 和代理信息到最前面
 			const fullMessage = ipPrefix + delayMessages;
 			
 			// 🆕 更严格的长度限制
@@ -266,24 +417,32 @@ router.post('/high-delay', [
 				? fullMessage.substring(0, maxLength - 20) + '...[truncated]'
 				: fullMessage;
 			
-			// 简化的标签（只保留基础信息）
-			const delayTags = [
-				...baseTags,
+			// 基础标签
+			const baseTags = [
+				`version:${version}`,
+				`fingerprint:${fingerprint.slice(0, 8)}`,
+				`client_ip:${clientIP}`,
 				`total_requests:${recordsToProcess.length}`
 			];
 			
 			// 添加 IP 相关标签
 			if (ipInfo?.country) {
-				delayTags.push(`country:${ipInfo.country}`);
+				baseTags.push(`country:${ipInfo.country}`);
 			}
 			if (ipInfo?.isp) {
-				delayTags.push(`isp:${ipInfo.isp.replace(/[:=]/g, '_')}`); // 移除标签分隔符
+				baseTags.push(`isp:${ipInfo.isp.replace(/[:=]/g, '_')}`); // 移除标签分隔符
+			}
+			
+			// 🆕 添加代理相关标签
+			if (proxyDetection.isProxy) {
+				baseTags.push(`proxy:${proxyDetection.likelihood.toLowerCase()}`);
+				baseTags.push(`proxy_score:${proxyDetection.score}`);
 			}
 			
 			// 🆕 如果原始记录数超过处理数，添加标记
 			if (reportData.records.length > maxRecords) {
-				delayTags.push(`truncated:true`);
-				delayTags.push(`original_count:${reportData.records.length}`);
+				baseTags.push(`truncated:true`);
+				baseTags.push(`original_count:${reportData.records.length}`);
 			}
 			
 			// 计算平均延迟用于判断严重程度
@@ -295,7 +454,7 @@ router.post('/high-delay', [
 				finalMessage,
 				{
 					alert_type: avgDuration > 10000 ? 'error' : 'warning', // 10秒以上为错误级别
-					tags: delayTags,
+					tags: baseTags,
 					source_type_name: 'frontend',
 					date_happened: reportData.timestamp ? Math.floor(Number(reportData.timestamp) / 1000) : undefined
 				}
@@ -306,7 +465,8 @@ router.post('/high-delay', [
 				req.dataDog.increment('high_delay_report.success', 1, [
 					`ip:${clientIP}`,
 					`records_count:${recordsToProcess.length}`,
-					`avg_duration:${Math.round(avgDuration)}ms`
+					`avg_duration:${Math.round(avgDuration)}ms`,
+					`proxy:${proxyDetection.isProxy ? proxyDetection.likelihood.toLowerCase() : 'no'}`
 				]);
 			}
 		}
