@@ -110,6 +110,30 @@ function calculateGrowthRate(current, previous) {
 }
 
 /**
+ * 🆕 退出登录接口
+ * 通过返回401状态码来清除浏览器的认证缓存
+ */
+router.get('/logout', (req, res) => {
+	// 设置WWW-Authenticate头来触发浏览器清除认证
+	res.setHeader('WWW-Authenticate', 'Basic realm="XHunt Stats"');
+	res.status(401).send(`
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<title>已退出登录</title>
+			<meta charset="UTF-8">
+			<meta http-equiv="refresh" content="2;url=/api/xhunt/stats">
+		</head>
+		<body style="font-family: Arial, sans-serif; text-align: center; margin-top: 100px;">
+			<h2>✅ 已成功退出登录</h2>
+			<p>正在跳转到登录页面...</p>
+			<p><a href="/api/xhunt/stats">点击这里立即跳转</a></p>
+		</body>
+		</html>
+	`);
+});
+
+/**
  * GET /stats
  * 获取产品数据统计（需要认证）
  */
@@ -425,6 +449,9 @@ function generateStatsHTML(stats) {
             margin-bottom: 20px;
             text-align: center;
             backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
         .logout-btn {
@@ -435,12 +462,14 @@ function generateStatsHTML(stats) {
             border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
-            margin-left: 10px;
             transition: all 0.3s ease;
+            text-decoration: none;
         }
         
         .logout-btn:hover {
             background: rgba(255,255,255,0.3);
+            color: white;
+            text-decoration: none;
         }
         
         .stats-grid {
@@ -602,14 +631,19 @@ function generateStatsHTML(stats) {
             .stat-value {
                 font-size: 2rem;
             }
+            
+            .auth-info {
+                flex-direction: column;
+                gap: 10px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="auth-info">
-            🔐 已认证访问 - 统计数据面板
-            <button class="logout-btn" onclick="logout()">退出登录</button>
+            <span>🔐 已认证访问 - 统计数据面板</span>
+            <a href="/api/xhunt/stats/logout" class="logout-btn">退出登录</a>
         </div>
         
         <div class="header">
@@ -753,23 +787,6 @@ function generateStatsHTML(stats) {
         setTimeout(() => {
             window.location.reload();
         }, 5 * 60 * 1000);
-        
-        // 退出登录功能
-        function logout() {
-            // 发送一个带有错误认证信息的请求来清除浏览器的认证缓存
-            fetch(window.location.href, {
-                method: 'GET',
-                headers: {
-                    'Authorization': 'Basic ' + btoa('logout:logout')
-                }
-            }).then(() => {
-                // 清除认证后重新加载页面
-                window.location.reload();
-            }).catch(() => {
-                // 即使请求失败也重新加载页面
-                window.location.reload();
-            });
-        }
     </script>
 </body>
 </html>
