@@ -5,6 +5,64 @@ const { XHuntUser, XHuntUserToken, XReviewForAccount, XAccount, XPointRecord } =
 const router = express.Router();
 
 /**
+ * 基础认证中间件
+ * 最简单的用户名密码验证
+ */
+function basicAuth(req, res, next) {
+	// 从环境变量获取认证信息，如果没有则使用默认值
+	const STATS_USERNAME = process.env.STATS_USERNAME || 'admin';
+	const STATS_PASSWORD = process.env.STATS_PASSWORD || 'xhunt2024';
+	
+	const authHeader = req.headers.authorization;
+	
+	if (!authHeader || !authHeader.startsWith('Basic ')) {
+		// 返回401状态码，浏览器会自动弹出登录框
+		res.setHeader('WWW-Authenticate', 'Basic realm="XHunt Stats"');
+		return res.status(401).send(`
+			<!DOCTYPE html>
+			<html>
+			<head>
+				<title>需要认证</title>
+				<meta charset="UTF-8">
+			</head>
+			<body style="font-family: Arial, sans-serif; text-align: center; margin-top: 100px;">
+				<h2>🔐 访问受限</h2>
+				<p>请输入用户名和密码访问统计页面</p>
+				<p style="color: #666; font-size: 14px;">默认账号: admin / xhunt2024</p>
+			</body>
+			</html>
+		`);
+	}
+	
+	// 解码 Base64 编码的用户名密码
+	const base64Credentials = authHeader.split(' ')[1];
+	const credentials = Buffer.from(base64Credentials, 'base64').toString('ascii');
+	const [username, password] = credentials.split(':');
+	
+	// 验证用户名密码
+	if (username === STATS_USERNAME && password === STATS_PASSWORD) {
+		next(); // 认证成功，继续处理请求
+	} else {
+		// 认证失败
+		res.setHeader('WWW-Authenticate', 'Basic realm="XHunt Stats"');
+		return res.status(401).send(`
+			<!DOCTYPE html>
+			<html>
+			<head>
+				<title>认证失败</title>
+				<meta charset="UTF-8">
+			</head>
+			<body style="font-family: Arial, sans-serif; text-align: center; margin-top: 100px;">
+				<h2>❌ 认证失败</h2>
+				<p>用户名或密码错误，请重试</p>
+				<button onclick="window.location.reload()">重新登录</button>
+			</body>
+			</html>
+		`);
+	}
+}
+
+/**
  * 获取今日开始时间
  */
 function getTodayStart() {
@@ -53,9 +111,9 @@ function calculateGrowthRate(current, previous) {
 
 /**
  * GET /stats
- * 获取产品数据统计
+ * 获取产品数据统计（需要认证）
  */
-router.get('/', async (req, res) => {
+router.get('/', basicAuth, async (req, res) => {
 	try {
 		const todayStart = getTodayStart();
 		const yesterdayStart = getYesterdayStart();
@@ -359,6 +417,32 @@ function generateStatsHTML(stats) {
             opacity: 0.9;
         }
         
+        .auth-info {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .logout-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-left: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -523,6 +607,11 @@ function generateStatsHTML(stats) {
 </head>
 <body>
     <div class="container">
+        <div class="auth-info">
+            🔐 已认证访问 - 统计数据面板
+            <button class="logout-btn" onclick="logout()">退出登录</button>
+        </div>
+        
         <div class="header">
             <h1>📊 XHunt 数据统计</h1>
             <p>实时产品数据监控面板 - ${new Date().toLocaleString('zh-CN')}</p>
@@ -664,6 +753,23 @@ function generateStatsHTML(stats) {
         setTimeout(() => {
             window.location.reload();
         }, 5 * 60 * 1000);
+        
+        // 退出登录功能
+        function logout() {
+            // 发送一个带有错误认证信息的请求来清除浏览器的认证缓存
+            fetch(window.location.href, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Basic ' + btoa('logout:logout')
+                }
+            }).then(() => {
+                // 清除认证后重新加载页面
+                window.location.reload();
+            }).catch(() => {
+                // 即使请求失败也重新加载页面
+                window.location.reload();
+            });
+        }
     </script>
 </body>
 </html>
@@ -690,9 +796,9 @@ function getGrowthIcon(growth) {
 
 /**
  * GET /stats/json
- * 获取JSON格式的统计数据（用于API调用）
+ * 获取JSON格式的统计数据（用于API调用，也需要认证）
  */
-router.get('/json', async (req, res) => {
+router.get('/json', basicAuth, async (req, res) => {
 	try {
 		const todayStart = getTodayStart();
 		const yesterdayStart = getYesterdayStart();
@@ -740,6 +846,18 @@ router.get('/json', async (req, res) => {
 			error: '获取统计数据失败' 
 		});
 	}
+});
+
+/**
+ * GET /health
+ * 健康检查接口（无需认证）
+ */
+router.get('/health', (req, res) => {
+	res.json({
+		status: 'ok',
+		timestamp: new Date().toISOString(),
+		service: 'xhunt-stats-api'
+	});
 });
 
 module.exports = router;
