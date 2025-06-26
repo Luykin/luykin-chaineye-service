@@ -397,6 +397,5 @@ async function getSimpleStats() {
 module.exports = {
 	getFullStats,
 	getSimpleStats,
-	calculateGrowthRate,
-	fetchDataDogDashboard
+	calculateGrowthRate
 };
