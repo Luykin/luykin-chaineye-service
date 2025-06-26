@@ -22,6 +22,7 @@ const xHuntProxyRoutes = require('./xhunt/api/proxy');
 const xHuntReviewsRoutes = require('./xhunt/api/reviews');
 const xHuntNotesRoutes = require('./xhunt/api/notes');
 const xHuntReportRoutes = require('./xhunt/api/report');
+const xHuntStatsRoutes = require('./xhunt/api/stats'); // 🆕 新增统计路由
 const internalQueryRoutes = require('./api/internal-query');
 const { securityMiddleware, fingerprintLimiter, rateLimiter, browserOnlyMiddleware } = require('./xhunt/middleware/security');
 const StatsD = require('hot-shots');
@@ -252,6 +253,9 @@ app.use(
 	browserOnlyMiddleware,
 	xHuntReportRoutes
 );
+
+// 🆕 新增统计路由 - 无需安全中间件，方便内部监控
+app.use('/api/xhunt/stats', xHuntStatsRoutes);
 
 // 内部查询API - 使用随机字符前缀，无需安全中间件
 app.use('/api/internal-x9k2m7p4q8', internalQueryRoutes);
