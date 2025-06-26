@@ -28,7 +28,7 @@ function basicAuth(req, res, next) {
 			<body style="font-family: Arial, sans-serif; text-align: center; margin-top: 100px;">
 				<h2>🔐 访问受限</h2>
 				<p>请输入用户名和密码访问统计页面</p>
-				<p style="color: #666; font-size: 14px;">默认账号: admin / xhunt2024</p>
+<!--				<p style="color: #666; font-size: 14px;">默认账号: admin / xhunt2024</p>-->
 			</body>
 			</html>
 		`);
