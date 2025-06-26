@@ -472,6 +472,74 @@ function generateStatsHTML(stats) {
             text-decoration: none;
         }
         
+        /* 🆕 快捷链接样式 */
+        .quick-links {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .quick-links h3 {
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            text-align: center;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .link-item {
+            background: rgba(255,255,255,0.15);
+            padding: 15px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .link-item:hover {
+            background: rgba(255,255,255,0.25);
+            transform: translateY(-2px);
+        }
+        
+        .link-item a {
+            color: white;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+        
+        .link-item a:hover {
+            color: white;
+            text-decoration: none;
+        }
+        
+        .link-icon {
+            font-size: 1.5rem;
+            min-width: 30px;
+        }
+        
+        .link-text {
+            flex: 1;
+        }
+        
+        .link-title {
+            font-size: 1rem;
+            margin-bottom: 3px;
+        }
+        
+        .link-desc {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+        
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -636,6 +704,10 @@ function generateStatsHTML(stats) {
                 flex-direction: column;
                 gap: 10px;
             }
+            
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -644,6 +716,62 @@ function generateStatsHTML(stats) {
         <div class="auth-info">
             <span>🔐 已认证访问 - 统计数据面板</span>
             <a href="/api/xhunt/stats/logout" class="logout-btn">退出登录</a>
+        </div>
+        
+        <!-- 🆕 快捷链接区域 -->
+        <div class="quick-links">
+            <h3>🚀 快捷入口</h3>
+            <div class="links-grid">
+                <div class="link-item">
+                    <a href="https://analytics.google.com/analytics/web/#/p484087839/reports/intelligenthome" target="_blank">
+                        <span class="link-icon">📊</span>
+                        <div class="link-text">
+                            <div class="link-title">Google Analytics</div>
+                            <div class="link-desc">网站流量统计分析</div>
+                        </div>
+                    </a>
+                </div>
+                
+                <div class="link-item">
+                    <a href="https://us5.datadoghq.com/apm/home" target="_blank">
+                        <span class="link-icon">🐕</span>
+                        <div class="link-text">
+                            <div class="link-title">DataDog APM</div>
+                            <div class="link-desc">应用性能监控</div>
+                        </div>
+                    </a>
+                </div>
+                
+                <div class="link-item">
+                    <a href="https://chrome.google.com/webstore/devconsole/9d25eceb-fe8d-401a-a54e-08499569b9a3" target="_blank">
+                        <span class="link-icon">🧩</span>
+                        <div class="link-text">
+                            <div class="link-title">Chrome 开发者控制台</div>
+                            <div class="link-desc">浏览器插件管理</div>
+                        </div>
+                    </a>
+                </div>
+                
+                <div class="link-item">
+                    <a href="https://docs.google.com/document/d/1W4URRutiCIxtYy8oLgEp8wy9yAzRDbNpIbNeXB2oors/edit?tab=t.0" target="_blank">
+                        <span class="link-icon">📝</span>
+                        <div class="link-text">
+                            <div class="link-title">需求文档</div>
+                            <div class="link-desc">产品需求与规划</div>
+                        </div>
+                    </a>
+                </div>
+                
+                <div class="link-item">
+                    <a href="https://kb.cryptohunt.ai/nacos/" target="_blank">
+                        <span class="link-icon">⚙️</span>
+                        <div class="link-text">
+                            <div class="link-title">Nacos 配置中心</div>
+                            <div class="link-desc">服务配置管理</div>
+                        </div>
+                    </a>
+                </div>
+            </div>
         </div>
         
         <div class="header">
