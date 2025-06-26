@@ -19,7 +19,7 @@
         }
         
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
         }
         
@@ -139,42 +139,67 @@
             opacity: 0.8;
         }
 
-        /* 主要内容区域 */
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 400px;
-            gap: 20px;
+        /* DataDog 仪表板样式 - 全宽显示 */
+        .datadog-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
             margin-bottom: 30px;
+            position: relative;
         }
 
+        .datadog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .datadog-header h3 {
+            color: #1f2937;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .datadog-link {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .datadog-link:hover {
+            background: #5a67d8;
+            color: white;
+            text-decoration: none;
+            transform: translateY(-2px);
+        }
+
+        .datadog-content {
+            width: 100%;
+            min-height: 600px;
+            border-radius: 8px;
+            background: #f9fafb;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+
+        /* 统计数据样式 */
         .stats-section {
             background: white;
             border-radius: 12px;
             padding: 24px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        }
-
-        /* DataDog 仪表板样式 */
-        .datadog-dashboard {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            height: fit-content;
-        }
-
-        .datadog-dashboard h3 {
-            margin-bottom: 15px;
-            color: #1f2937;
-            font-size: 1.3rem;
-        }
-
-        .datadog-iframe {
-            width: 100%;
-            height: 600px;
-            border: none;
-            border-radius: 8px;
-            background: #f9fafb;
+            margin-bottom: 30px;
         }
         
         .stats-grid {
@@ -318,16 +343,6 @@
             opacity: 0.8;
         }
         
-        @media (max-width: 1200px) {
-            .main-content {
-                grid-template-columns: 1fr;
-            }
-            
-            .datadog-dashboard {
-                order: -1;
-            }
-        }
-        
         @media (max-width: 768px) {
             .stats-grid {
                 grid-template-columns: 1fr;
@@ -348,6 +363,16 @@
             
             .links-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .datadog-header {
+                flex-direction: column;
+                gap: 15px;
+                align-items: stretch;
+            }
+
+            .datadog-link {
+                justify-content: center;
             }
         }
     </style>
@@ -420,116 +445,118 @@
             <p>实时产品数据监控面板 - <%= formatDateTime() %></p>
         </div>
         
-        <!-- 主要内容区域：左侧统计数据，右侧 DataDog 仪表板 -->
-        <div class="main-content">
-            <!-- 左侧：统计数据 -->
-            <div class="stats-section">
-                <!-- 核心指标 -->
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <span class="stat-title">📱 日活用户(已登录X)</span>
-                        </div>
-                        <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyActiveUsers.value) %></div>
-                        <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyActiveUsers.growth) %>">
-                            <%= getGrowthIcon(stats.coreMetrics.dailyActiveUsers.growth) %> <%= stats.coreMetrics.dailyActiveUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyActiveUsers.yesterday %>)
-                        </div>
+        <!-- DataDog 仪表板 - 全宽显示 -->
+        <div class="datadog-section">
+            <div class="datadog-header">
+                <h3>📊 DataDog 实时监控仪表板</h3>
+                <a href="https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f" 
+                   target="_blank" 
+                   class="datadog-link">
+                    🔗 打开完整仪表板
+                </a>
+            </div>
+            <div class="datadog-content">
+                <%- stats.dataDogDashboard %>
+            </div>
+        </div>
+        
+        <!-- 统计数据区域 -->
+        <div class="stats-section">
+            <!-- 核心指标 -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">📱 日活用户(已登录X)</span>
                     </div>
-                    
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <span class="stat-title">💬 今日评论</span>
-                        </div>
-                        <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyReviews.value) %></div>
-                        <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyReviews.growth) %>">
-                            <%= getGrowthIcon(stats.coreMetrics.dailyReviews.growth) %> <%= stats.coreMetrics.dailyReviews.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyReviews.yesterday %>)
-                        </div>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <span class="stat-title">👥 评论用户</span>
-                        </div>
-                        <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyReviewUsers.value) %></div>
-                        <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyReviewUsers.growth) %>">
-                            <%= getGrowthIcon(stats.coreMetrics.dailyReviewUsers.growth) %> <%= stats.coreMetrics.dailyReviewUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyReviewUsers.yesterday %>)
-                        </div>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <span class="stat-title">🆕 新注册用户(已登录X)</span>
-                        </div>
-                        <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyNewUsers.value) %></div>
-                        <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyNewUsers.growth) %>">
-                            <%= getGrowthIcon(stats.coreMetrics.dailyNewUsers.growth) %> <%= stats.coreMetrics.dailyNewUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyNewUsers.yesterday %>)
-                        </div>
+                    <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyActiveUsers.value) %></div>
+                    <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyActiveUsers.growth) %>">
+                        <%= getGrowthIcon(stats.coreMetrics.dailyActiveUsers.growth) %> <%= stats.coreMetrics.dailyActiveUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyActiveUsers.yesterday %>)
                     </div>
                 </div>
                 
-                <!-- 累计数据 -->
-                <div class="section">
-                    <h2 class="section-title">📈 累计数据</h2>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-title">总用户数</div>
-                            <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalUsers) %></div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-title">总账号数</div>
-                            <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalAccounts) %></div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-title">KOL 用户数</div>
-                            <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalKOLUsers) %></div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-title">累计积分</div>
-                            <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalPointsAwarded) %></div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-title">平均评分</div>
-                            <div class="stat-value"><%= stats.totalMetrics.averageRating %> ⭐</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-title">今日积分</div>
-                            <div class="stat-value"><%= formatNumber(stats.todayDetails.pointsAwarded) %></div>
-                        </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">💬 今日评论</span>
+                    </div>
+                    <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyReviews.value) %></div>
+                    <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyReviews.growth) %>">
+                        <%= getGrowthIcon(stats.coreMetrics.dailyReviews.growth) %> <%= stats.coreMetrics.dailyReviews.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyReviews.yesterday %>)
                     </div>
                 </div>
                 
-                <!-- 周期统计 -->
-                <div class="section">
-                    <h2 class="section-title">📅 周期统计</h2>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-title">本周评论</div>
-                            <div class="stat-value"><%= formatNumber(stats.periodMetrics.weekly.reviews) %></div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-title">本周新用户</div>
-                            <div class="stat-value"><%= formatNumber(stats.periodMetrics.weekly.newUsers) %></div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-title">本月评论</div>
-                            <div class="stat-value"><%= formatNumber(stats.periodMetrics.monthly.reviews) %></div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-title">本月新用户</div>
-                            <div class="stat-value"><%= formatNumber(stats.periodMetrics.monthly.newUsers) %></div>
-                        </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">👥 评论用户</span>
+                    </div>
+                    <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyReviewUsers.value) %></div>
+                    <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyReviewUsers.growth) %>">
+                        <%= getGrowthIcon(stats.coreMetrics.dailyReviewUsers.growth) %> <%= stats.coreMetrics.dailyReviewUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyReviewUsers.yesterday %>)
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">🆕 新注册用户(已登录X)</span>
+                    </div>
+                    <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyNewUsers.value) %></div>
+                    <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyNewUsers.growth) %>">
+                        <%= getGrowthIcon(stats.coreMetrics.dailyNewUsers.growth) %> <%= stats.coreMetrics.dailyNewUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyNewUsers.yesterday %>)
                     </div>
                 </div>
             </div>
             
-            <!-- 右侧：DataDog 仪表板 -->
-            <div class="datadog-dashboard">
-                <h3>📊 DataDog 实时监控</h3>
-                <iframe 
-                    src="https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f"
-                    class="datadog-iframe"
-                    title="DataDog Dashboard">
-                </iframe>
+            <!-- 累计数据 -->
+            <div class="section">
+                <h2 class="section-title">📈 累计数据</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-title">总用户数</div>
+                        <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalUsers) %></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">总账号数</div>
+                        <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalAccounts) %></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">KOL 用户数</div>
+                        <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalKOLUsers) %></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">累计积分</div>
+                        <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalPointsAwarded) %></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">平均评分</div>
+                        <div class="stat-value"><%= stats.totalMetrics.averageRating %> ⭐</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">今日积分</div>
+                        <div class="stat-value"><%= formatNumber(stats.todayDetails.pointsAwarded) %></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 周期统计 -->
+            <div class="section">
+                <h2 class="section-title">📅 周期统计</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-title">本周评论</div>
+                        <div class="stat-value"><%= formatNumber(stats.periodMetrics.weekly.reviews) %></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">本周新用户</div>
+                        <div class="stat-value"><%= formatNumber(stats.periodMetrics.weekly.newUsers) %></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">本月评论</div>
+                        <div class="stat-value"><%= formatNumber(stats.periodMetrics.monthly.reviews) %></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">本月新用户</div>
+                        <div class="stat-value"><%= formatNumber(stats.periodMetrics.monthly.newUsers) %></div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -564,6 +591,7 @@
         
         <div class="refresh-info">
             <p>🔄 数据每次访问时实时更新 | ⏰ 最后更新: <%= formatDateTime() %></p>
+            <p style="margin-top: 8px; font-size: 14px;">📊 DataDog 仪表板通过后端代理获取，避免跨域问题</p>
         </div>
     </div>
     
