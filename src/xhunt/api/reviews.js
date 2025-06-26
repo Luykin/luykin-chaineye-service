@@ -161,6 +161,129 @@ router.get('/:handle', [
 	}
 });
 
+// 🆕 GET /reviews/:handle/comments - 获取某个 handle 的所有长评论（分页）
+router.get('/:handle/comments', [
+	authenticateTokenOptional,
+	param('handle').trim().notEmpty().withMessage('账号handle不能为空'),
+	query('page').optional().isInt({ min: 1 }).withMessage('页码必须是大于0的整数'),
+	query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('每页数量必须在1-50之间'),
+	query('onlyKOL').optional().isBoolean().toBoolean(),
+	validateRequest
+], async (req, res) => {
+	try {
+		const handle = req.params.handle;
+		const page = parseInt(req.query.page) || 1;
+		const limit = parseInt(req.query.limit) || 10;
+		const onlyKOL = req.query.onlyKOL === true;
+		const offset = (page - 1) * limit;
+
+		// Step 1: 查找目标账号 - 大小写不敏感
+		const xAccount = await XAccount.findOne({
+			where: {
+				handle: {
+					[Op.iLike]: handle
+				}
+			},
+			attributes: ['id', 'handle', 'displayName', 'avatar']
+		});
+
+		if (!xAccount) {
+			return res.status(404).json({ error: 'Account not found' });
+		}
+
+		// Step 2: 构建查询条件
+		const whereClause = {
+			xAccountId: xAccount.id,
+			comment: {
+				[Op.and]: [
+					{ [Op.ne]: null },     // comment 不为 null
+					{ [Op.ne]: '' }        // comment 不为空字符串
+				]
+			}
+		};
+
+		// Step 3: 构建关联查询条件（KOL筛选）
+		const includeClause = {
+			model: XHuntUser,
+			as: 'xHuntUser',
+			attributes: ['username', 'displayName', 'avatar', 'kolRank20W', 'classification'],
+			required: true // 必须有关联的用户
+		};
+
+		if (onlyKOL) {
+			includeClause.where = { kolRank20W: { [Op.ne]: null } };
+		}
+
+		// Step 4: 查询长评论列表（分页）
+		const { rows: comments, count: totalComments } = await XReviewForAccount.findAndCountAll({
+			where: whereClause,
+			include: [includeClause],
+			attributes: [
+				'id',
+				'rating',
+				'tags',
+				'comment',
+				'userAvatar',
+				'userName',
+				'createdAt',
+				'updatedAt'
+			],
+			order: [['createdAt', 'DESC']], // 按创建时间倒序
+			limit,
+			offset
+		});
+
+		// Step 5: 格式化返回数据
+		const formattedComments = comments.map(comment => ({
+			id: comment.id,
+			rating: parseFloat(comment.rating),
+			tags: comment.tags || [],
+			comment: comment.comment,
+			createdAt: comment.createdAt,
+			updatedAt: comment.updatedAt,
+			reviewer: {
+				username: comment.xHuntUser?.username,
+				displayName: comment.xHuntUser?.displayName || comment.userName,
+				avatar: comment.xHuntUser?.avatar || comment.userAvatar,
+				kolRank20W: comment.xHuntUser?.kolRank20W,
+				classification: comment.xHuntUser?.classification,
+				isKOL: comment.xHuntUser?.kolRank20W !== null
+			}
+		}));
+
+		// Step 6: 计算分页信息
+		const totalPages = Math.ceil(totalComments / limit);
+
+		// Step 7: 返回结果
+		res.json({
+			success: true,
+			data: {
+				account: {
+					handle: xAccount.handle,
+					displayName: xAccount.displayName,
+					avatar: xAccount.avatar
+				},
+				comments: formattedComments,
+				pagination: {
+					page,
+					limit,
+					totalComments,
+					totalPages,
+					hasNextPage: page < totalPages,
+					hasPrevPage: page > 1
+				},
+				filters: {
+					onlyKOL
+				}
+			}
+		});
+
+	} catch (error) {
+		console.error('Error fetching comments for handle:', error);
+		res.status(500).json({ error: 'Failed to fetch comments' });
+	}
+});
+
 router.post('/', [
 	authenticateToken,
 	body('handle').trim().notEmpty(),
