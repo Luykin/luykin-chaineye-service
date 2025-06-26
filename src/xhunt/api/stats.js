@@ -621,7 +621,7 @@ function generateStatsHTML(stats) {
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-header">
-                    <span class="stat-title">📱 日活用户</span>
+                    <span class="stat-title">📱 日活用户(已登录X)</span>
                 </div>
                 <div class="stat-value">${coreMetrics.dailyActiveUsers.value.toLocaleString()}</div>
                 <div class="stat-growth ${getGrowthClass(coreMetrics.dailyActiveUsers.growth)}">
@@ -651,7 +651,7 @@ function generateStatsHTML(stats) {
             
             <div class="stat-card">
                 <div class="stat-header">
-                    <span class="stat-title">🆕 新注册用户</span>
+                    <span class="stat-title">🆕 新注册用户(已登录X)</span>
                 </div>
                 <div class="stat-value">${coreMetrics.dailyNewUsers.value.toLocaleString()}</div>
                 <div class="stat-growth ${getGrowthClass(coreMetrics.dailyNewUsers.growth)}">
@@ -841,9 +841,9 @@ router.get('/json', basicAuth, async (req, res) => {
 
 	} catch (error) {
 		console.error('Error fetching JSON stats:', error);
-		res.status(500).json({ 
-			success: false, 
-			error: '获取统计数据失败' 
+		res.status(500).json({
+			success: false,
+			error: '获取统计数据失败'
 		});
 	}
 });
