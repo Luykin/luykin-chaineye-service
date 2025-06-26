@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XHunt 数据统计</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .auth-info {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logout-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
+            color: white;
+            text-decoration: none;
+        }
+        
+        /* 快捷链接样式 */
+        .quick-links {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .quick-links h3 {
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            text-align: center;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .link-item {
+            background: rgba(255,255,255,0.15);
+            padding: 15px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .link-item:hover {
+            background: rgba(255,255,255,0.25);
+            transform: translateY(-2px);
+        }
+        
+        .link-item a {
+            color: white;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+        
+        .link-item a:hover {
+            color: white;
+            text-decoration: none;
+        }
+        
+        .link-icon {
+            font-size: 1.5rem;
+            min-width: 30px;
+        }
+        
+        .link-text {
+            flex: 1;
+        }
+        
+        .link-title {
+            font-size: 1rem;
+            margin-bottom: 3px;
+        }
+        
+        .link-desc {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+
+        /* 主要内容区域 */
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stats-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        /* DataDog 仪表板样式 */
+        .datadog-dashboard {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            height: fit-content;
+        }
+
+        .datadog-dashboard h3 {
+            margin-bottom: 15px;
+            color: #1f2937;
+            font-size: 1.3rem;
+        }
+
+        .datadog-iframe {
+            width: 100%;
+            height: 600px;
+            border: none;
+            border-radius: 8px;
+            background: #f9fafb;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+        }
+        
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .stat-title {
+            font-size: 0.9rem;
+            color: #6b7280;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+        
+        .stat-growth {
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .growth-positive {
+            color: #10b981;
+        }
+        
+        .growth-negative {
+            color: #ef4444;
+        }
+        
+        .growth-neutral {
+            color: #6b7280;
+        }
+        
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 10px;
+        }
+        
+        .tags-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        
+        .tag-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .tag-name {
+            font-weight: 600;
+            color: #374151;
+        }
+        
+        .tag-count {
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .distribution-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+        }
+        
+        .distribution-item {
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .distribution-rank {
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+        
+        .distribution-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            color: #6b7280;
+        }
+        
+        .refresh-info {
+            text-align: center;
+            color: white;
+            margin-top: 20px;
+            opacity: 0.8;
+        }
+        
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .datadog-dashboard {
+                order: -1;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .stat-value {
+                font-size: 2rem;
+            }
+            
+            .auth-info {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="auth-info">
+            <span>🔐 已认证访问 - 统计数据面板</span>
+            <a href="/api/xhunt/stats/logout" class="logout-btn">退出登录</a>
+        </div>
+        
+        <!-- 快捷链接区域 -->
+        <div class="quick-links">
+            <h3>🚀 快捷入口</h3>
+            <div class="links-grid">
+                <div class="link-item">
+                    <a href="https://analytics.google.com/analytics/web/#/p484087839/reports/intelligenthome" target="_blank">
+                        <span class="link-icon">📊</span>
+                        <div class="link-text">
+                            <div class="link-title">Google Analytics</div>
+                            <div class="link-desc">网站流量统计分析</div>
+                        </div>
+                    </a>
+                </div>
+                
+                <div class="link-item">
+                    <a href="https://us5.datadoghq.com/apm/home" target="_blank">
+                        <span class="link-icon">🐕</span>
+                        <div class="link-text">
+                            <div class="link-title">DataDog APM</div>
+                            <div class="link-desc">应用性能监控</div>
+                        </div>
+                    </a>
+                </div>
+                
+                <div class="link-item">
+                    <a href="https://chrome.google.com/webstore/devconsole/9d25eceb-fe8d-401a-a54e-08499569b9a3" target="_blank">
+                        <span class="link-icon">🧩</span>
+                        <div class="link-text">
+                            <div class="link-title">Chrome 开发者控制台</div>
+                            <div class="link-desc">浏览器插件管理</div>
+                        </div>
+                    </a>
+                </div>
+                
+                <div class="link-item">
+                    <a href="https://docs.google.com/document/d/1W4URRutiCIxtYy8oLgEp8wy9yAzRDbNpIbNeXB2oors/edit?tab=t.0" target="_blank">
+                        <span class="link-icon">📝</span>
+                        <div class="link-text">
+                            <div class="link-title">需求文档</div>
+                            <div class="link-desc">产品需求与规划</div>
+                        </div>
+                    </a>
+                </div>
+                
+                <div class="link-item">
+                    <a href="https://kb.cryptohunt.ai/nacos/" target="_blank">
+                        <span class="link-icon">⚙️</span>
+                        <div class="link-text">
+                            <div class="link-title">Nacos 配置中心</div>
+                            <div class="link-desc">服务配置管理</div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="header">
+            <h1>📊 XHunt 数据统计</h1>
+            <p>实时产品数据监控面板 - <%= formatDateTime() %></p>
+        </div>
+        
+        <!-- 主要内容区域：左侧统计数据，右侧 DataDog 仪表板 -->
+        <div class="main-content">
+            <!-- 左侧：统计数据 -->
+            <div class="stats-section">
+                <!-- 核心指标 -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">📱 日活用户(已登录X)</span>
+                        </div>
+                        <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyActiveUsers.value) %></div>
+                        <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyActiveUsers.growth) %>">
+                            <%= getGrowthIcon(stats.coreMetrics.dailyActiveUsers.growth) %> <%= stats.coreMetrics.dailyActiveUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyActiveUsers.yesterday %>)
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">💬 今日评论</span>
+                        </div>
+                        <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyReviews.value) %></div>
+                        <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyReviews.growth) %>">
+                            <%= getGrowthIcon(stats.coreMetrics.dailyReviews.growth) %> <%= stats.coreMetrics.dailyReviews.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyReviews.yesterday %>)
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">👥 评论用户</span>
+                        </div>
+                        <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyReviewUsers.value) %></div>
+                        <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyReviewUsers.growth) %>">
+                            <%= getGrowthIcon(stats.coreMetrics.dailyReviewUsers.growth) %> <%= stats.coreMetrics.dailyReviewUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyReviewUsers.yesterday %>)
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">🆕 新注册用户(已登录X)</span>
+                        </div>
+                        <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyNewUsers.value) %></div>
+                        <div class="stat-growth <%= getGrowthClass(stats.coreMetrics.dailyNewUsers.growth) %>">
+                            <%= getGrowthIcon(stats.coreMetrics.dailyNewUsers.growth) %> <%= stats.coreMetrics.dailyNewUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyNewUsers.yesterday %>)
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 累计数据 -->
+                <div class="section">
+                    <h2 class="section-title">📈 累计数据</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-title">总用户数</div>
+                            <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalUsers) %></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">总账号数</div>
+                            <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalAccounts) %></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">KOL 用户数</div>
+                            <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalKOLUsers) %></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">累计积分</div>
+                            <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalPointsAwarded) %></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">平均评分</div>
+                            <div class="stat-value"><%= stats.totalMetrics.averageRating %> ⭐</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">今日积分</div>
+                            <div class="stat-value"><%= formatNumber(stats.todayDetails.pointsAwarded) %></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 周期统计 -->
+                <div class="section">
+                    <h2 class="section-title">📅 周期统计</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-title">本周评论</div>
+                            <div class="stat-value"><%= formatNumber(stats.periodMetrics.weekly.reviews) %></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">本周新用户</div>
+                            <div class="stat-value"><%= formatNumber(stats.periodMetrics.weekly.newUsers) %></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">本月评论</div>
+                            <div class="stat-value"><%= formatNumber(stats.periodMetrics.monthly.reviews) %></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">本月新用户</div>
+                            <div class="stat-value"><%= formatNumber(stats.periodMetrics.monthly.newUsers) %></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧：DataDog 仪表板 -->
+            <div class="datadog-dashboard">
+                <h3>📊 DataDog 实时监控</h3>
+                <iframe 
+                    src="https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f"
+                    class="datadog-iframe"
+                    title="DataDog Dashboard">
+                </iframe>
+            </div>
+        </div>
+        
+        <!-- 热门标签 -->
+        <div class="section">
+            <h2 class="section-title">🏷️ 热门标签 TOP 10</h2>
+            <div class="tags-grid">
+                <% stats.popularTags.forEach(tag => { %>
+                    <div class="tag-item">
+                        <span class="tag-name"><%= tag.name %></span>
+                        <span class="tag-count"><%= tag.count %></span>
+                    </div>
+                <% }); %>
+            </div>
+        </div>
+        
+        <!-- 用户分布 -->
+        <div class="section">
+            <h2 class="section-title">👑 用户活跃度分布</h2>
+            <div class="distribution-grid">
+                <% stats.userDistribution.slice(0, 8).forEach(item => { %>
+                    <div class="distribution-item">
+                        <div class="distribution-rank"><%= item.kolRank === 'Non-KOL' ? '普通用户' : `KOL排名: ${item.kolRank}` %></div>
+                        <div class="distribution-stats">
+                            <span>用户数: <%= item.userCount %></span>
+                            <span>评论数: <%= item.reviewCount %></span>
+                        </div>
+                    </div>
+                <% }); %>
+            </div>
+        </div>
+        
+        <div class="refresh-info">
+            <p>🔄 数据每次访问时实时更新 | ⏰ 最后更新: <%= formatDateTime() %></p>
+        </div>
+    </div>
+    
+    <script>
+        // 自动刷新页面（每5分钟）
+        setTimeout(() => {
+            window.location.reload();
+        }, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
