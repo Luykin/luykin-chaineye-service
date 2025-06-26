@@ -51,54 +51,54 @@ function calculateGrowthRate(current, previous) {
 /**
  * 获取 DataDog 仪表板内容
  */
-async function fetchDataDogDashboard() {
-	try {
-		const response = await fetch('https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f', {
-			headers: {
-				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-				'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-				'Accept-Language': 'en-US,en;q=0.5',
-				'Accept-Encoding': 'gzip, deflate, br',
-				'DNT': '1',
-				'Connection': 'keep-alive',
-				'Upgrade-Insecure-Requests': '1',
-			},
-			timeout: 10000 // 10秒超时
-		});
-
-		if (!response.ok) {
-			throw new Error(`HTTP error! status: ${response.status}`);
-		}
-
-		let html = await response.text();
-		
-		// 处理相对路径，转换为绝对路径
-		html = html.replace(/src="\/([^"]*)/g, 'src="https://p.us5.datadoghq.com/$1');
-		html = html.replace(/href="\/([^"]*)/g, 'href="https://p.us5.datadoghq.com/$1');
-		html = html.replace(/url\(\/([^)]*)/g, 'url(https://p.us5.datadoghq.com/$1');
-		
-		// 移除可能导致跳转的脚本
-		html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-		html = html.replace(/window\.location/g, '// window.location');
-		html = html.replace(/document\.location/g, '// document.location');
-		
-		return html;
-	} catch (error) {
-		console.error('Failed to fetch DataDog dashboard:', error);
-		return `
-			<div style="padding: 40px; text-align: center; color: #666; background: #f9fafb; border-radius: 8px; border: 2px dashed #ddd;">
-				<h3 style="margin-bottom: 16px; color: #ef4444;">📊 DataDog 仪表板加载失败</h3>
-				<p style="margin-bottom: 12px;">无法获取实时监控数据</p>
-				<p style="font-size: 14px; color: #888;">错误信息: ${error.message}</p>
-				<a href="https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f" 
-				   target="_blank" 
-				   style="display: inline-block; margin-top: 16px; padding: 8px 16px; background: #667eea; color: white; text-decoration: none; border-radius: 6px;">
-					🔗 直接访问 DataDog
-				</a>
-			</div>
-		`;
-	}
-}
+// async function fetchDataDogDashboard() {
+// 	try {
+// 		const response = await fetch('https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f', {
+// 			headers: {
+// 				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+// 				'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+// 				'Accept-Language': 'en-US,en;q=0.5',
+// 				'Accept-Encoding': 'gzip, deflate, br',
+// 				'DNT': '1',
+// 				'Connection': 'keep-alive',
+// 				'Upgrade-Insecure-Requests': '1',
+// 			},
+// 			timeout: 10000 // 10秒超时
+// 		});
+//
+// 		if (!response.ok) {
+// 			throw new Error(`HTTP error! status: ${response.status}`);
+// 		}
+//
+// 		let html = await response.text();
+//
+// 		// 处理相对路径，转换为绝对路径
+// 		html = html.replace(/src="\/([^"]*)/g, 'src="https://p.us5.datadoghq.com/$1');
+// 		html = html.replace(/href="\/([^"]*)/g, 'href="https://p.us5.datadoghq.com/$1');
+// 		html = html.replace(/url\(\/([^)]*)/g, 'url(https://p.us5.datadoghq.com/$1');
+//
+// 		// 移除可能导致跳转的脚本
+// 		html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+// 		html = html.replace(/window\.location/g, '// window.location');
+// 		html = html.replace(/document\.location/g, '// document.location');
+//
+// 		return html;
+// 	} catch (error) {
+// 		console.error('Failed to fetch DataDog dashboard:', error);
+// 		return `
+// 			<div style="padding: 40px; text-align: center; color: #666; background: #f9fafb; border-radius: 8px; border: 2px dashed #ddd;">
+// 				<h3 style="margin-bottom: 16px; color: #ef4444;">📊 DataDog 仪表板加载失败</h3>
+// 				<p style="margin-bottom: 12px;">无法获取实时监控数据</p>
+// 				<p style="font-size: 14px; color: #888;">错误信息: ${error.message}</p>
+// 				<a href="https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f"
+// 				   target="_blank"
+// 				   style="display: inline-block; margin-top: 16px; padding: 8px 16px; background: #667eea; color: white; text-decoration: none; border-radius: 6px;">
+// 					🔗 直接访问 DataDog
+// 				</a>
+// 			</div>
+// 		`;
+// 	}
+// }
 
 /**
  * 获取完整的统计数据
@@ -273,8 +273,8 @@ async function getFullStats() {
 			raw: true
 		}),
 		
-		// 11. DataDog 仪表板内容
-		fetchDataDogDashboard()
+		// // 11. DataDog 仪表板内容
+		// fetchDataDogDashboard()
 	]);
 
 	// 计算增长率

@@ -10,36 +10,36 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
-        
+
         .container {
             max-width: 1600px;
             margin: 0 auto;
         }
-        
+
         .header {
             text-align: center;
             color: white;
             margin-bottom: 30px;
         }
-        
+
         .header h1 {
             font-size: 2.5rem;
             margin-bottom: 10px;
             text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
-        
+
         .header p {
             font-size: 1.1rem;
             opacity: 0.9;
         }
-        
+
         .auth-info {
             background: rgba(255,255,255,0.1);
             color: white;
@@ -52,7 +52,7 @@
             justify-content: space-between;
             align-items: center;
         }
-        
+
         .logout-btn {
             background: rgba(255,255,255,0.2);
             color: white;
@@ -64,13 +64,13 @@
             transition: all 0.3s ease;
             text-decoration: none;
         }
-        
+
         .logout-btn:hover {
             background: rgba(255,255,255,0.3);
             color: white;
             text-decoration: none;
         }
-        
+
         /* 快捷链接样式 */
         .quick-links {
             background: rgba(255,255,255,0.1);
@@ -80,19 +80,19 @@
             margin-bottom: 30px;
             backdrop-filter: blur(10px);
         }
-        
+
         .quick-links h3 {
             margin-bottom: 15px;
             font-size: 1.2rem;
             text-align: center;
         }
-        
+
         .links-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 15px;
         }
-        
+
         .link-item {
             background: rgba(255,255,255,0.15);
             padding: 15px;
@@ -100,12 +100,12 @@
             transition: all 0.3s ease;
             border: 1px solid rgba(255,255,255,0.2);
         }
-        
+
         .link-item:hover {
             background: rgba(255,255,255,0.25);
             transform: translateY(-2px);
         }
-        
+
         .link-item a {
             color: white;
             text-decoration: none;
@@ -114,26 +114,26 @@
             gap: 10px;
             font-weight: 500;
         }
-        
+
         .link-item a:hover {
             color: white;
             text-decoration: none;
         }
-        
+
         .link-icon {
             font-size: 1.5rem;
             min-width: 30px;
         }
-        
+
         .link-text {
             flex: 1;
         }
-        
+
         .link-title {
             font-size: 1rem;
             margin-bottom: 3px;
         }
-        
+
         .link-desc {
             font-size: 0.85rem;
             opacity: 0.8;
@@ -201,14 +201,14 @@
             box-shadow: 0 8px 32px rgba(0,0,0,0.1);
             margin-bottom: 30px;
         }
-        
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
-        
+
         .stat-card {
             background: white;
             border-radius: 12px;
@@ -216,19 +216,19 @@
             box-shadow: 0 8px 32px rgba(0,0,0,0.1);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
-        
+
         .stat-card:hover {
             transform: translateY(-4px);
             box-shadow: 0 12px 40px rgba(0,0,0,0.15);
         }
-        
+
         .stat-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 16px;
         }
-        
+
         .stat-title {
             font-size: 0.9rem;
             color: #6b7280;
@@ -236,33 +236,33 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        
+
         .stat-value {
             font-size: 2.5rem;
             font-weight: 700;
             color: #1f2937;
             margin-bottom: 8px;
         }
-        
+
         .stat-growth {
             display: flex;
             align-items: center;
             font-size: 0.85rem;
             font-weight: 500;
         }
-        
+
         .growth-positive {
             color: #10b981;
         }
-        
+
         .growth-negative {
             color: #ef4444;
         }
-        
+
         .growth-neutral {
             color: #6b7280;
         }
-        
+
         .section {
             background: white;
             border-radius: 12px;
@@ -270,7 +270,7 @@
             margin-bottom: 20px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.1);
         }
-        
+
         .section-title {
             font-size: 1.5rem;
             font-weight: 700;
@@ -279,13 +279,13 @@
             border-bottom: 2px solid #e5e7eb;
             padding-bottom: 10px;
         }
-        
+
         .tags-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 12px;
         }
-        
+
         .tag-item {
             display: flex;
             justify-content: space-between;
@@ -295,12 +295,12 @@
             border-radius: 8px;
             border-left: 4px solid #667eea;
         }
-        
+
         .tag-name {
             font-weight: 600;
             color: #374151;
         }
-        
+
         .tag-count {
             background: #667eea;
             color: white;
@@ -309,58 +309,58 @@
             font-size: 0.8rem;
             font-weight: 600;
         }
-        
+
         .distribution-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 16px;
         }
-        
+
         .distribution-item {
             padding: 16px;
             background: #f9fafb;
             border-radius: 8px;
             border: 1px solid #e5e7eb;
         }
-        
+
         .distribution-rank {
             font-weight: 700;
             color: #667eea;
             margin-bottom: 8px;
         }
-        
+
         .distribution-stats {
             display: flex;
             justify-content: space-between;
             font-size: 0.9rem;
             color: #6b7280;
         }
-        
+
         .refresh-info {
             text-align: center;
             color: white;
             margin-top: 20px;
             opacity: 0.8;
         }
-        
+
         @media (max-width: 768px) {
             .stats-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .header h1 {
                 font-size: 2rem;
             }
-            
+
             .stat-value {
                 font-size: 2rem;
             }
-            
+
             .auth-info {
                 flex-direction: column;
                 gap: 10px;
             }
-            
+
             .links-grid {
                 grid-template-columns: 1fr;
             }
@@ -383,7 +383,7 @@
             <span>🔐 已认证访问 - 统计数据面板</span>
             <a href="/api/xhunt/stats/logout" class="logout-btn">退出登录</a>
         </div>
-        
+
         <!-- 快捷链接区域 -->
         <div class="quick-links">
             <h3>🚀 快捷入口</h3>
@@ -397,7 +397,7 @@
                         </div>
                     </a>
                 </div>
-                
+
                 <div class="link-item">
                     <a href="https://us5.datadoghq.com/apm/home" target="_blank">
                         <span class="link-icon">🐕</span>
@@ -407,7 +407,7 @@
                         </div>
                     </a>
                 </div>
-                
+
                 <div class="link-item">
                     <a href="https://chrome.google.com/webstore/devconsole/9d25eceb-fe8d-401a-a54e-08499569b9a3" target="_blank">
                         <span class="link-icon">🧩</span>
@@ -417,7 +417,7 @@
                         </div>
                     </a>
                 </div>
-                
+
                 <div class="link-item">
                     <a href="https://docs.google.com/document/d/1W4URRutiCIxtYy8oLgEp8wy9yAzRDbNpIbNeXB2oors/edit?tab=t.0" target="_blank">
                         <span class="link-icon">📝</span>
@@ -427,7 +427,7 @@
                         </div>
                     </a>
                 </div>
-                
+
                 <div class="link-item">
                     <a href="https://kb.cryptohunt.ai/nacos/" target="_blank">
                         <span class="link-icon">⚙️</span>
@@ -439,27 +439,27 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="header">
             <h1>📊 XHunt 数据统计</h1>
             <p>实时产品数据监控面板 - <%= formatDateTime() %></p>
         </div>
-        
-        <!-- DataDog 仪表板 - 全宽显示 -->
-        <div class="datadog-section">
-            <div class="datadog-header">
-                <h3>📊 DataDog 实时监控仪表板</h3>
-                <a href="https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f" 
-                   target="_blank" 
-                   class="datadog-link">
-                    🔗 打开完整仪表板
-                </a>
-            </div>
-            <div class="datadog-content">
-                <%- stats.dataDogDashboard %>
-            </div>
-        </div>
-        
+
+<!--        &lt;!&ndash; DataDog 仪表板 - 全宽显示 &ndash;&gt;-->
+<!--        <div class="datadog-section">-->
+<!--            <div class="datadog-header">-->
+<!--                <h3>📊 DataDog 实时监控仪表板</h3>-->
+<!--                <a href="https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f" -->
+<!--                   target="_blank" -->
+<!--                   class="datadog-link">-->
+<!--                    🔗 打开完整仪表板-->
+<!--                </a>-->
+<!--            </div>-->
+<!--            <div class="datadog-content">-->
+<!--                <%- stats.dataDogDashboard %>-->
+<!--            </div>-->
+<!--        </div>-->
+
         <!-- 统计数据区域 -->
         <div class="stats-section">
             <!-- 核心指标 -->
@@ -473,7 +473,7 @@
                         <%= getGrowthIcon(stats.coreMetrics.dailyActiveUsers.growth) %> <%= stats.coreMetrics.dailyActiveUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyActiveUsers.yesterday %>)
                     </div>
                 </div>
-                
+
                 <div class="stat-card">
                     <div class="stat-header">
                         <span class="stat-title">💬 今日评论</span>
@@ -483,7 +483,7 @@
                         <%= getGrowthIcon(stats.coreMetrics.dailyReviews.growth) %> <%= stats.coreMetrics.dailyReviews.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyReviews.yesterday %>)
                     </div>
                 </div>
-                
+
                 <div class="stat-card">
                     <div class="stat-header">
                         <span class="stat-title">👥 评论用户</span>
@@ -493,7 +493,7 @@
                         <%= getGrowthIcon(stats.coreMetrics.dailyReviewUsers.growth) %> <%= stats.coreMetrics.dailyReviewUsers.growth %>% vs 昨日 (<%= stats.coreMetrics.dailyReviewUsers.yesterday %>)
                     </div>
                 </div>
-                
+
                 <div class="stat-card">
                     <div class="stat-header">
                         <span class="stat-title">🆕 新注册用户(已登录X)</span>
@@ -504,7 +504,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- 累计数据 -->
             <div class="section">
                 <h2 class="section-title">📈 累计数据</h2>
@@ -535,7 +535,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- 周期统计 -->
             <div class="section">
                 <h2 class="section-title">📅 周期统计</h2>
@@ -559,7 +559,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- 热门标签 -->
         <div class="section">
             <h2 class="section-title">🏷️ 热门标签 TOP 10</h2>
@@ -572,7 +572,7 @@
                 <% }); %>
             </div>
         </div>
-        
+
         <!-- 用户分布 -->
         <div class="section">
             <h2 class="section-title">👑 用户活跃度分布</h2>
@@ -588,13 +588,13 @@
                 <% }); %>
             </div>
         </div>
-        
+
         <div class="refresh-info">
             <p>🔄 数据每次访问时实时更新 | ⏰ 最后更新: <%= formatDateTime() %></p>
             <p style="margin-top: 8px; font-size: 14px;">📊 DataDog 仪表板通过后端代理获取，避免跨域问题</p>
         </div>
     </div>
-    
+
     <script>
         // 自动刷新页面（每5分钟）
         setTimeout(() => {
