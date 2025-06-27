@@ -17,15 +17,6 @@ function getTodayStartChina() {
 }
 
 /**
- * 获取中国时区的昨日开始时间（UTC）
- */
-function getYesterdayStartChina() {
-	const todayStart = getTodayStartChina();
-	const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
-	return yesterdayStart;
-}
-
-/**
  * 获取中国时区的本周开始时间（周一 UTC）
  */
 function getWeekStartChina() {
@@ -67,39 +58,18 @@ function getTodayEndChina() {
 }
 
 /**
- * 获取中国时区的昨日结束时间（UTC）
- */
-function getYesterdayEndChina() {
-	const yesterdayStart = getYesterdayStartChina();
-	const yesterdayEnd = new Date(yesterdayStart.getTime() + 24 * 60 * 60 * 1000);
-	return yesterdayEnd;
-}
-
-/**
- * 计算增长率
- */
-function calculateGrowthRate(current, previous) {
-	if (previous === 0) return current > 0 ? 100 : 0;
-	return Math.round(((current - previous) / previous) * 100);
-}
-
-/**
  * 获取完整的统计数据
  */
 async function getFullStats() {
 	// 使用中国时区的时间范围
 	const todayStart = getTodayStartChina();
 	const todayEnd = getTodayEndChina();
-	const yesterdayStart = getYesterdayStartChina();
-	const yesterdayEnd = getYesterdayEndChina();
 	const weekStart = getWeekStartChina();
 	const monthStart = getMonthStartChina();
 
 	console.log('🕐 时区调试信息:');
 	console.log('中国今日开始 (UTC):', todayStart.toISOString());
 	console.log('中国今日结束 (UTC):', todayEnd.toISOString());
-	console.log('中国昨日开始 (UTC):', yesterdayStart.toISOString());
-	console.log('中国昨日结束 (UTC):', yesterdayEnd.toISOString());
 	console.log('中国本周开始 (UTC):', weekStart.toISOString());
 	console.log('中国本月开始 (UTC):', monthStart.toISOString());
 
@@ -107,17 +77,13 @@ async function getFullStats() {
 	const [
 		// 1. 日活统计（中国时区）
 		todayActiveTokens,
-		yesterdayActiveTokens,
 		
 		// 2. 评论统计（中国时区）
 		todayReviews,
-		yesterdayReviews,
 		todayReviewUsers,
-		yesterdayReviewUsers,
 		
 		// 3. 用户注册统计（中国时区）
 		todayNewUsers,
-		yesterdayNewUsers,
 		totalUsers,
 		
 		// 4. 账号统计
@@ -144,7 +110,7 @@ async function getFullStats() {
 		// 9. 热门标签统计
 		popularTags,
 		
-		// 10. 用户活跃度分布
+		// 10. 用户活跃度分布（显示用户名）
 		userActivityDistribution
 	] = await Promise.all([
 		// 1. 日活统计（中国时区）
@@ -154,27 +120,13 @@ async function getFullStats() {
 				isRevoked: false
 			}
 		}),
-		XHuntUserToken.count({
-			where: {
-				lastUsed: { [Op.gte]: yesterdayStart, [Op.lt]: yesterdayEnd },
-				isRevoked: false
-			}
-		}),
 		
 		// 2. 评论统计（中国时区）
 		XReviewForAccount.count({
 			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
 		}),
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: yesterdayStart, [Op.lt]: yesterdayEnd } }
-		}),
-		XReviewForAccount.count({
 			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } },
-			distinct: true,
-			col: 'xHuntUserId'
-		}),
-		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: yesterdayStart, [Op.lt]: yesterdayEnd } },
 			distinct: true,
 			col: 'xHuntUserId'
 		}),
@@ -182,9 +134,6 @@ async function getFullStats() {
 		// 3. 用户注册统计（中国时区）
 		XHuntUser.count({
 			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
-		}),
-		XHuntUser.count({
-			where: { createdAt: { [Op.gte]: yesterdayStart, [Op.lt]: yesterdayEnd } }
 		}),
 		XHuntUser.count(),
 		
@@ -246,11 +195,14 @@ async function getFullStats() {
 			raw: true
 		}),
 		
-		// 10. 用户活跃度分布
+		// 10. 用户活跃度分布（显示用户名和详细信息）
 		XHuntUser.findAll({
 			attributes: [
+				'id',
+				'username',
+				'displayName',
 				'kolRank20W',
-				[fn('COUNT', '*'), 'userCount'],
+				'classification',
 				[fn('COUNT', col('reviews.id')), 'reviewCount']
 			],
 			include: [{
@@ -259,51 +211,29 @@ async function getFullStats() {
 				required: false,
 				attributes: []
 			}],
-			group: ['XHuntUser.kolRank20W'],
-			order: [['kolRank20W', 'ASC']],
+			group: ['XHuntUser.id', 'XHuntUser.username', 'XHuntUser.displayName', 'XHuntUser.kolRank20W', 'XHuntUser.classification'],
+			having: fn('COUNT', col('reviews.id')), // 只显示有评论的用户
+			order: [[fn('COUNT', col('reviews.id')), 'DESC']], // 按评论数量倒序
+			limit: 20, // 限制显示前20个活跃用户
 			raw: true
 		})
 	]);
 
-	// 计算增长率
-	const dailyActiveGrowth = calculateGrowthRate(todayActiveTokens, yesterdayActiveTokens);
-	const dailyReviewsGrowth = calculateGrowthRate(todayReviews, yesterdayReviews);
-	const dailyUsersGrowth = calculateGrowthRate(todayNewUsers, yesterdayNewUsers);
-	const dailyReviewUsersGrowth = calculateGrowthRate(todayReviewUsers, yesterdayReviewUsers);
-
 	// 构建统计数据
 	return {
-		// 时区信息
-		timezoneInfo: {
-			timezone: 'Asia/Shanghai (UTC+8)',
-			todayStart: todayStart.toISOString(),
-			todayEnd: todayEnd.toISOString(),
-			yesterdayStart: yesterdayStart.toISOString(),
-			yesterdayEnd: yesterdayEnd.toISOString(),
-			chinaTime: new Date().toLocaleString("zh-CN", {timeZone: "Asia/Shanghai"})
-		},
-		
-		// 核心指标
+		// 核心指标（移除昨日对比）
 		coreMetrics: {
 			dailyActiveUsers: {
-				value: todayActiveTokens,
-				growth: dailyActiveGrowth,
-				yesterday: yesterdayActiveTokens
+				value: todayActiveTokens
 			},
 			dailyReviews: {
-				value: todayReviews,
-				growth: dailyReviewsGrowth,
-				yesterday: yesterdayReviews
+				value: todayReviews
 			},
 			dailyReviewUsers: {
-				value: todayReviewUsers,
-				growth: dailyReviewUsersGrowth,
-				yesterday: yesterdayReviewUsers
+				value: todayReviewUsers
 			},
 			dailyNewUsers: {
-				value: todayNewUsers,
-				growth: dailyUsersGrowth,
-				yesterday: yesterdayNewUsers
+				value: todayNewUsers
 			}
 		},
 		
@@ -341,10 +271,13 @@ async function getFullStats() {
 			count: parseInt(tag.count)
 		})),
 		
-		// 用户活跃度分布
+		// 用户活跃度分布（显示用户名）
 		userDistribution: userActivityDistribution.map(item => ({
-			kolRank: item.kolRank20W || 'Non-KOL',
-			userCount: parseInt(item.userCount),
+			id: item.id,
+			username: item.username,
+			displayName: item.displayName,
+			kolRank: item.kolRank20W,
+			classification: item.classification,
 			reviewCount: parseInt(item.reviewCount)
 		}))
 	};
@@ -395,10 +328,8 @@ async function getSimpleStats() {
 module.exports = {
 	getFullStats,
 	getSimpleStats,
-	calculateGrowthRate,
 	// 导出时区相关函数用于测试
 	getTodayStartChina,
-	getYesterdayStartChina,
 	getWeekStartChina,
 	getMonthStartChina
 };
