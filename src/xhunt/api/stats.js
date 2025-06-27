@@ -1,9 +1,31 @@
 const express = require('express');
 const path = require('path');
 const { getFullStats, getSimpleStats } = require('../services/statsService');
-const { getGrowthClass, getGrowthIcon, formatNumber, formatDateTime } = require('../utils/htmlHelpers');
 
 const router = express.Router();
+
+/**
+ * 格式化数字（添加千分位分隔符）
+ */
+function formatNumber(num) {
+	return num.toLocaleString();
+}
+
+/**
+ * 格式化日期时间（中国时区）
+ */
+function formatDateTime(date = new Date()) {
+	return date.toLocaleString('zh-CN', {
+		timeZone: 'Asia/Shanghai',
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit',
+		hour12: false
+	});
+}
 
 /**
  * 基础认证中间件
@@ -100,11 +122,9 @@ router.get('/', basicAuth, async (req, res) => {
 		app.set('view engine', 'ejs');
 		app.set('views', path.join(__dirname, '../views'));
 
-		// 渲染模板
+		// 渲染模板，传递所有需要的辅助函数
 		res.render('stats', {
 			stats,
-			getGrowthClass,
-			getGrowthIcon,
 			formatNumber,
 			formatDateTime
 		});
