@@ -2,42 +2,77 @@ const { Op, fn, col } = require('sequelize');
 const { XHuntUser, XHuntUserToken, XReviewForAccount, XAccount, XPointRecord } = require('../../models/postgres-start');
 
 /**
- * 获取今日开始时间
+ * 获取中国时区的今日开始时间（UTC）
+ * 中国时间 00:00:00 对应 UTC 时间 16:00:00（前一天）
  */
-function getTodayStart() {
-	const today = new Date();
-	today.setHours(0, 0, 0, 0);
-	return today;
-}
-
-/**
- * 获取昨日开始时间
- */
-function getYesterdayStart() {
-	const yesterday = new Date();
-	yesterday.setDate(yesterday.getDate() - 1);
-	yesterday.setHours(0, 0, 0, 0);
-	return yesterday;
-}
-
-/**
- * 获取本周开始时间（周一）
- */
-function getWeekStart() {
+function getTodayStartChina() {
 	const now = new Date();
-	const dayOfWeek = now.getDay();
-	const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-	const monday = new Date(now.setDate(diff));
+	// 获取中国时间的今日开始
+	const chinaToday = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
+	chinaToday.setHours(0, 0, 0, 0);
+	
+	// 转换为 UTC 时间（减去8小时）
+	const utcTodayStart = new Date(chinaToday.getTime() - 8 * 60 * 60 * 1000);
+	return utcTodayStart;
+}
+
+/**
+ * 获取中国时区的昨日开始时间（UTC）
+ */
+function getYesterdayStartChina() {
+	const todayStart = getTodayStartChina();
+	const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+	return yesterdayStart;
+}
+
+/**
+ * 获取中国时区的本周开始时间（周一 UTC）
+ */
+function getWeekStartChina() {
+	const now = new Date();
+	// 获取中国时间
+	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
+	const dayOfWeek = chinaTime.getDay();
+	const diff = chinaTime.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+	const monday = new Date(chinaTime.setDate(diff));
 	monday.setHours(0, 0, 0, 0);
-	return monday;
+	
+	// 转换为 UTC 时间
+	const utcMondayStart = new Date(monday.getTime() - 8 * 60 * 60 * 1000);
+	return utcMondayStart;
 }
 
 /**
- * 获取本月开始时间
+ * 获取中国时区的本月开始时间（UTC）
  */
-function getMonthStart() {
+function getMonthStartChina() {
 	const now = new Date();
-	return new Date(now.getFullYear(), now.getMonth(), 1);
+	// 获取中国时间
+	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
+	const monthStart = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), 1);
+	monthStart.setHours(0, 0, 0, 0);
+	
+	// 转换为 UTC 时间
+	const utcMonthStart = new Date(monthStart.getTime() - 8 * 60 * 60 * 1000);
+	return utcMonthStart;
+}
+
+/**
+ * 获取中国时区的今日结束时间（UTC）
+ */
+function getTodayEndChina() {
+	const todayStart = getTodayStartChina();
+	const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+	return todayEnd;
+}
+
+/**
+ * 获取中国时区的昨日结束时间（UTC）
+ */
+function getYesterdayEndChina() {
+	const yesterdayStart = getYesterdayStartChina();
+	const yesterdayEnd = new Date(yesterdayStart.getTime() + 24 * 60 * 60 * 1000);
+	return yesterdayEnd;
 }
 
 /**
@@ -49,79 +84,38 @@ function calculateGrowthRate(current, previous) {
 }
 
 /**
- * 获取 DataDog 仪表板内容
- */
-// async function fetchDataDogDashboard() {
-// 	try {
-// 		const response = await fetch('https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f', {
-// 			headers: {
-// 				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-// 				'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-// 				'Accept-Language': 'en-US,en;q=0.5',
-// 				'Accept-Encoding': 'gzip, deflate, br',
-// 				'DNT': '1',
-// 				'Connection': 'keep-alive',
-// 				'Upgrade-Insecure-Requests': '1',
-// 			},
-// 			timeout: 10000 // 10秒超时
-// 		});
-//
-// 		if (!response.ok) {
-// 			throw new Error(`HTTP error! status: ${response.status}`);
-// 		}
-//
-// 		let html = await response.text();
-//
-// 		// 处理相对路径，转换为绝对路径
-// 		html = html.replace(/src="\/([^"]*)/g, 'src="https://p.us5.datadoghq.com/$1');
-// 		html = html.replace(/href="\/([^"]*)/g, 'href="https://p.us5.datadoghq.com/$1');
-// 		html = html.replace(/url\(\/([^)]*)/g, 'url(https://p.us5.datadoghq.com/$1');
-//
-// 		// 移除可能导致跳转的脚本
-// 		html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-// 		html = html.replace(/window\.location/g, '// window.location');
-// 		html = html.replace(/document\.location/g, '// document.location');
-//
-// 		return html;
-// 	} catch (error) {
-// 		console.error('Failed to fetch DataDog dashboard:', error);
-// 		return `
-// 			<div style="padding: 40px; text-align: center; color: #666; background: #f9fafb; border-radius: 8px; border: 2px dashed #ddd;">
-// 				<h3 style="margin-bottom: 16px; color: #ef4444;">📊 DataDog 仪表板加载失败</h3>
-// 				<p style="margin-bottom: 12px;">无法获取实时监控数据</p>
-// 				<p style="font-size: 14px; color: #888;">错误信息: ${error.message}</p>
-// 				<a href="https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f"
-// 				   target="_blank"
-// 				   style="display: inline-block; margin-top: 16px; padding: 8px 16px; background: #667eea; color: white; text-decoration: none; border-radius: 6px;">
-// 					🔗 直接访问 DataDog
-// 				</a>
-// 			</div>
-// 		`;
-// 	}
-// }
-
-/**
  * 获取完整的统计数据
  */
 async function getFullStats() {
-	const todayStart = getTodayStart();
-	const yesterdayStart = getYesterdayStart();
-	const weekStart = getWeekStart();
-	const monthStart = getMonthStart();
+	// 使用中国时区的时间范围
+	const todayStart = getTodayStartChina();
+	const todayEnd = getTodayEndChina();
+	const yesterdayStart = getYesterdayStartChina();
+	const yesterdayEnd = getYesterdayEndChina();
+	const weekStart = getWeekStartChina();
+	const monthStart = getMonthStartChina();
+
+	console.log('🕐 时区调试信息:');
+	console.log('中国今日开始 (UTC):', todayStart.toISOString());
+	console.log('中国今日结束 (UTC):', todayEnd.toISOString());
+	console.log('中国昨日开始 (UTC):', yesterdayStart.toISOString());
+	console.log('中国昨日结束 (UTC):', yesterdayEnd.toISOString());
+	console.log('中国本周开始 (UTC):', weekStart.toISOString());
+	console.log('中国本月开始 (UTC):', monthStart.toISOString());
 
 	// 并行执行所有统计查询
 	const [
-		// 1. 日活统计
+		// 1. 日活统计（中国时区）
 		todayActiveTokens,
 		yesterdayActiveTokens,
 		
-		// 2. 评论统计
+		// 2. 评论统计（中国时区）
 		todayReviews,
 		yesterdayReviews,
 		todayReviewUsers,
 		yesterdayReviewUsers,
 		
-		// 3. 用户注册统计
+		// 3. 用户注册统计（中国时区）
 		todayNewUsers,
 		yesterdayNewUsers,
 		totalUsers,
@@ -130,11 +124,11 @@ async function getFullStats() {
 		totalAccounts,
 		todayNewAccounts,
 		
-		// 5. 积分统计
+		// 5. 积分统计（中国时区）
 		todayPointsAwarded,
 		totalPointsAwarded,
 		
-		// 6. 周/月统计
+		// 6. 周/月统计（中国时区）
 		weeklyReviews,
 		monthlyReviews,
 		weeklyNewUsers,
@@ -151,65 +145,62 @@ async function getFullStats() {
 		popularTags,
 		
 		// 10. 用户活跃度分布
-		userActivityDistribution,
-		
-		// 11. DataDog 仪表板内容
-		dataDogDashboard
+		userActivityDistribution
 	] = await Promise.all([
-		// 1. 日活统计
+		// 1. 日活统计（中国时区）
 		XHuntUserToken.count({
 			where: {
-				lastUsed: { [Op.gte]: todayStart },
+				lastUsed: { [Op.gte]: todayStart, [Op.lt]: todayEnd },
 				isRevoked: false
 			}
 		}),
 		XHuntUserToken.count({
 			where: {
-				lastUsed: { [Op.gte]: yesterdayStart, [Op.lt]: todayStart },
+				lastUsed: { [Op.gte]: yesterdayStart, [Op.lt]: yesterdayEnd },
 				isRevoked: false
 			}
 		}),
 		
-		// 2. 评论统计
+		// 2. 评论统计（中国时区）
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
 		}),
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: yesterdayStart, [Op.lt]: todayStart } }
+			where: { createdAt: { [Op.gte]: yesterdayStart, [Op.lt]: yesterdayEnd } }
 		}),
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart } },
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } },
 			distinct: true,
 			col: 'xHuntUserId'
 		}),
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: yesterdayStart, [Op.lt]: todayStart } },
+			where: { createdAt: { [Op.gte]: yesterdayStart, [Op.lt]: yesterdayEnd } },
 			distinct: true,
 			col: 'xHuntUserId'
 		}),
 		
-		// 3. 用户注册统计
+		// 3. 用户注册统计（中国时区）
 		XHuntUser.count({
-			where: { createdAt: { [Op.gte]: todayStart } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
 		}),
 		XHuntUser.count({
-			where: { createdAt: { [Op.gte]: yesterdayStart, [Op.lt]: todayStart } }
+			where: { createdAt: { [Op.gte]: yesterdayStart, [Op.lt]: yesterdayEnd } }
 		}),
 		XHuntUser.count(),
 		
-		// 4. 账号统计
+		// 4. 账号统计（中国时区）
 		XAccount.count(),
 		XAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
 		}),
 		
-		// 5. 积分统计
+		// 5. 积分统计（中国时区）
 		XPointRecord.sum('points', {
-			where: { createdAt: { [Op.gte]: todayStart } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
 		}) || 0,
 		XPointRecord.sum('points') || 0,
 		
-		// 6. 周/月统计
+		// 6. 周/月统计（中国时区）
 		XReviewForAccount.count({
 			where: { createdAt: { [Op.gte]: weekStart } }
 		}),
@@ -223,12 +214,12 @@ async function getFullStats() {
 			where: { createdAt: { [Op.gte]: monthStart } }
 		}),
 		
-		// 7. KOL用户统计
+		// 7. KOL用户统计（中国时区）
 		XHuntUser.count({
 			where: { kolRank20W: { [Op.ne]: null } }
 		}),
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart } },
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } },
 			include: [{
 				model: XHuntUser,
 				as: 'xHuntUser',
@@ -271,10 +262,7 @@ async function getFullStats() {
 			group: ['XHuntUser.kolRank20W'],
 			order: [['kolRank20W', 'ASC']],
 			raw: true
-		}),
-		
-		// // 11. DataDog 仪表板内容
-		// fetchDataDogDashboard()
+		})
 	]);
 
 	// 计算增长率
@@ -285,6 +273,16 @@ async function getFullStats() {
 
 	// 构建统计数据
 	return {
+		// 时区信息
+		timezoneInfo: {
+			timezone: 'Asia/Shanghai (UTC+8)',
+			todayStart: todayStart.toISOString(),
+			todayEnd: todayEnd.toISOString(),
+			yesterdayStart: yesterdayStart.toISOString(),
+			yesterdayEnd: yesterdayEnd.toISOString(),
+			chinaTime: new Date().toLocaleString("zh-CN", {timeZone: "Asia/Shanghai"})
+		},
+		
 		// 核心指标
 		coreMetrics: {
 			dailyActiveUsers: {
@@ -348,10 +346,7 @@ async function getFullStats() {
 			kolRank: item.kolRank20W || 'Non-KOL',
 			userCount: parseInt(item.userCount),
 			reviewCount: parseInt(item.reviewCount)
-		})),
-		
-		// DataDog 仪表板内容
-		dataDogDashboard
+		}))
 	};
 }
 
@@ -359,7 +354,8 @@ async function getFullStats() {
  * 获取简化的统计数据（用于 JSON API）
  */
 async function getSimpleStats() {
-	const todayStart = getTodayStart();
+	const todayStart = getTodayStartChina();
+	const todayEnd = getTodayEndChina();
 
 	const [
 		todayActiveTokens,
@@ -370,15 +366,15 @@ async function getSimpleStats() {
 	] = await Promise.all([
 		XHuntUserToken.count({
 			where: {
-				lastUsed: { [Op.gte]: todayStart },
+				lastUsed: { [Op.gte]: todayStart, [Op.lt]: todayEnd },
 				isRevoked: false
 			}
 		}),
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
 		}),
 		XHuntUser.count({
-			where: { createdAt: { [Op.gte]: todayStart } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
 		}),
 		XHuntUser.count(),
 		XAccount.count()
@@ -390,6 +386,8 @@ async function getSimpleStats() {
 		dailyNewUsers: todayNewUsers,
 		totalUsers,
 		totalAccounts,
+		timezone: 'Asia/Shanghai (UTC+8)',
+		chinaTime: new Date().toLocaleString("zh-CN", {timeZone: "Asia/Shanghai"}),
 		timestamp: new Date().toISOString()
 	};
 }
@@ -397,5 +395,10 @@ async function getSimpleStats() {
 module.exports = {
 	getFullStats,
 	getSimpleStats,
-	calculateGrowthRate
+	calculateGrowthRate,
+	// 导出时区相关函数用于测试
+	getTodayStartChina,
+	getYesterdayStartChina,
+	getWeekStartChina,
+	getMonthStartChina
 };

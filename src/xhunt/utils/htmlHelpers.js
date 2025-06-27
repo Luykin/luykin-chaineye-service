@@ -24,15 +24,41 @@ function formatNumber(num) {
 }
 
 /**
- * 格式化日期时间
+ * 格式化日期时间（中国时区）
  */
 function formatDateTime(date = new Date()) {
-	return date.toLocaleString('zh-CN');
+	return date.toLocaleString('zh-CN', {
+		timeZone: 'Asia/Shanghai',
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit',
+		hour12: false
+	});
+}
+
+/**
+ * 格式化中国时间（仅用于显示）
+ */
+function formatChinaTime(date = new Date()) {
+	return date.toLocaleString('zh-CN', {
+		timeZone: 'Asia/Shanghai',
+		weekday: 'long',
+		year: 'numeric',
+		month: 'long',
+		day: 'numeric',
+		hour: '2-digit',
+		minute: '2-digit',
+		hour12: false
+	});
 }
 
 module.exports = {
 	getGrowthClass,
 	getGrowthIcon,
 	formatNumber,
-	formatDateTime
+	formatDateTime,
+	formatChinaTime
 };

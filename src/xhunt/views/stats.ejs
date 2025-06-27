@@ -71,6 +71,29 @@
             text-decoration: none;
         }
 
+        /* 时区信息样式 */
+        .timezone-info {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            border-left: 4px solid #fbbf24;
+        }
+
+        .timezone-info h4 {
+            margin-bottom: 8px;
+            font-size: 1rem;
+            color: #fbbf24;
+        }
+
+        .timezone-info p {
+            margin: 4px 0;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
         /* 快捷链接样式 */
         .quick-links {
             background: rgba(255,255,255,0.1);
@@ -137,60 +160,6 @@
         .link-desc {
             font-size: 0.85rem;
             opacity: 0.8;
-        }
-
-        /* DataDog 仪表板样式 - 全宽显示 */
-        .datadog-section {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-            position: relative;
-        }
-
-        .datadog-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #e5e7eb;
-        }
-
-        .datadog-header h3 {
-            color: #1f2937;
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-
-        .datadog-link {
-            background: #667eea;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .datadog-link:hover {
-            background: #5a67d8;
-            color: white;
-            text-decoration: none;
-            transform: translateY(-2px);
-        }
-
-        .datadog-content {
-            width: 100%;
-            min-height: 600px;
-            border-radius: 8px;
-            background: #f9fafb;
-            overflow: hidden;
-            border: 1px solid #e5e7eb;
         }
 
         /* 统计数据样式 */
@@ -364,16 +333,6 @@
             .links-grid {
                 grid-template-columns: 1fr;
             }
-
-            .datadog-header {
-                flex-direction: column;
-                gap: 15px;
-                align-items: stretch;
-            }
-
-            .datadog-link {
-                justify-content: center;
-            }
         }
     </style>
 </head>
@@ -382,6 +341,14 @@
         <div class="auth-info">
             <span>🔐 已认证访问 - 统计数据面板</span>
             <a href="/api/xhunt/stats/logout" class="logout-btn">退出登录</a>
+        </div>
+
+        <!-- 时区信息提示 -->
+        <div class="timezone-info">
+            <h4>🕐 时区信息</h4>
+            <p><strong>当前时区:</strong> <%= stats.timezoneInfo.timezone %></p>
+            <p><strong>中国时间:</strong> <%= stats.timezoneInfo.chinaTime %></p>
+            <p><strong>说明:</strong> 所有统计数据均按中国时区（UTC+8）计算，数据库时间已自动转换</p>
         </div>
 
         <!-- 快捷链接区域 -->
@@ -444,21 +411,6 @@
             <h1>📊 XHunt 数据统计</h1>
             <p>实时产品数据监控面板 - <%= formatDateTime() %></p>
         </div>
-
-<!--        &lt;!&ndash; DataDog 仪表板 - 全宽显示 &ndash;&gt;-->
-<!--        <div class="datadog-section">-->
-<!--            <div class="datadog-header">-->
-<!--                <h3>📊 DataDog 实时监控仪表板</h3>-->
-<!--                <a href="https://p.us5.datadoghq.com/sb/7835f769-3710-11f0-a543-0e1c818bfb48-35c1b61a99a3f17f362065fa7c812f1f" -->
-<!--                   target="_blank" -->
-<!--                   class="datadog-link">-->
-<!--                    🔗 打开完整仪表板-->
-<!--                </a>-->
-<!--            </div>-->
-<!--            <div class="datadog-content">-->
-<!--                <%- stats.dataDogDashboard %>-->
-<!--            </div>-->
-<!--        </div>-->
 
         <!-- 统计数据区域 -->
         <div class="stats-section">
@@ -591,7 +543,7 @@
 
         <div class="refresh-info">
             <p>🔄 数据每次访问时实时更新 | ⏰ 最后更新: <%= formatDateTime() %></p>
-            <p style="margin-top: 8px; font-size: 14px;">📊 DataDog 仪表板通过后端代理获取，避免跨域问题</p>
+            <p style="margin-top: 8px; font-size: 14px;">🕐 所有统计数据均按中国时区（UTC+8）计算</p>
         </div>
     </div>
 
