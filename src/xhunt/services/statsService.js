@@ -110,7 +110,7 @@ async function getFullStats() {
 		// 9. 热门标签统计
 		popularTags,
 		
-		// 10. 用户活跃度分布（显示用户名）
+		// 10. 用户活跃度分布（修复SQL查询）
 		userActivityDistribution
 	] = await Promise.all([
 		// 1. 日活统计（中国时区）
@@ -195,28 +195,58 @@ async function getFullStats() {
 			raw: true
 		}),
 		
-		// 10. 用户活跃度分布（显示用户名和详细信息）
-		XHuntUser.findAll({
-			attributes: [
-				'id',
-				'username',
-				'displayName',
-				'kolRank20W',
-				'classification',
-				[fn('COUNT', col('reviews.id')), 'reviewCount']
-			],
-			include: [{
-				model: XReviewForAccount,
-				as: 'reviews',
-				required: false,
-				attributes: []
-			}],
-			group: ['XHuntUser.id', 'XHuntUser.username', 'XHuntUser.displayName', 'XHuntUser.kolRank20W', 'XHuntUser.classification'],
-			having: fn('COUNT', col('reviews.id')), // 只显示有评论的用户
-			order: [[fn('COUNT', col('reviews.id')), 'DESC']], // 按评论数量倒序
-			limit: 20, // 限制显示前20个活跃用户
-			raw: true
-		})
+		// 10. 修复用户活跃度分布查询
+		// 使用两步查询来避免复杂的子查询问题
+		(async () => {
+			try {
+				// 先获取有评论的用户ID和评论数量
+				const userReviewCounts = await XReviewForAccount.findAll({
+					attributes: [
+						'xHuntUserId',
+						[fn('COUNT', '*'), 'reviewCount']
+					],
+					group: ['xHuntUserId'],
+					order: [[fn('COUNT', '*'), 'DESC']],
+					limit: 20,
+					raw: true
+				});
+				
+				// 如果没有评论数据，返回空数组
+				if (!userReviewCounts || userReviewCounts.length === 0) {
+					return [];
+				}
+				
+				// 获取用户ID列表
+				const userIds = userReviewCounts.map(item => item.xHuntUserId);
+				
+				// 再查询用户详细信息
+				const users = await XHuntUser.findAll({
+					where: {
+						id: { [Op.in]: userIds }
+					},
+					attributes: ['id', 'username', 'displayName', 'kolRank20W', 'classification'],
+					raw: true
+				});
+				
+				// 合并数据
+				const result = userReviewCounts.map(reviewData => {
+					const user = users.find(u => u.id === reviewData.xHuntUserId);
+					return {
+						id: user?.id || reviewData.xHuntUserId,
+						username: user?.username || null,
+						displayName: user?.displayName || null,
+						kolRank20W: user?.kolRank20W || null,
+						classification: user?.classification || null,
+						reviewCount: parseInt(reviewData.reviewCount)
+					};
+				});
+				
+				return result;
+			} catch (error) {
+				console.error('Error fetching user activity distribution:', error);
+				return []; // 返回空数组而不是抛出错误
+			}
+		})()
 	]);
 
 	// 构建统计数据
@@ -272,14 +302,7 @@ async function getFullStats() {
 		})),
 		
 		// 用户活跃度分布（显示用户名）
-		userDistribution: userActivityDistribution.map(item => ({
-			id: item.id,
-			username: item.username,
-			displayName: item.displayName,
-			kolRank: item.kolRank20W,
-			classification: item.classification,
-			reviewCount: parseInt(item.reviewCount)
-		}))
+		userDistribution: userActivityDistribution || []
 	};
 }
 
