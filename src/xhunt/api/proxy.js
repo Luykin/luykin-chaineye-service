@@ -8,7 +8,8 @@ const router = express.Router();
 const URL_MAPPINGS = {
 	'kota': 'http://10.170.0.2:16530',
 	'kb': 'http://34.146.221.115:8087',
-	'kota_temporary': 'http://10.170.0.2:16531'
+	'kota_temporary': 'http://10.170.0.2:16531',
+	"k8s_kota": "https://data.cryptohunt.ai"
 };
 
 // 默认目标服务器
