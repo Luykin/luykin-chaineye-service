@@ -26,23 +26,23 @@ async function verifyToken(token, req, res, next) {
 		}
 		
 		// 指纹/设备识别验证
-		if (!tokenRecord?.fingerprint || tokenRecord.fingerprint !== req.securityContext?.fingerprint) {
+		if (!tokenRecord?.fingerprint) {
 			// 指纹不匹配时，撤销当前用户的所有 token（强制重新登录）
 			try {
 				await XHuntUserToken.update(
 					{ isRevoked: true },
-					{ 
-						where: { 
+					{
+						where: {
 							userId: tokenRecord.userId,
-							isRevoked: false 
-						} 
+							isRevoked: false
+						}
 					}
 				);
 				console.log(`用户 ${tokenRecord.userId} 因指纹不匹配被强制退出，已撤销所有 token`);
 			} catch (revokeError) {
 				console.error('撤销用户 token 失败:', revokeError);
 			}
-			
+
 			return res.status(419).json({ error: 'DEVICE_MISMATCH_LOGOUT' });
 		}
 		
