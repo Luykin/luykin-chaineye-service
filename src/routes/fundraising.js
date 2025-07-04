@@ -526,31 +526,31 @@ async function batchUpdateProjectLogos(avatarMap) {
 			const twitterUrlWithSlash = `https://x.com/${username}/`;
 			
 			return `
-				WHEN (LOWER(socialLinks->>'x') = LOWER('${twitterUrl}') OR 
-				      LOWER(socialLinks->>'x') = LOWER('${twitterUrlWithSlash}')) 
+				WHEN (LOWER(socialLinks->>'x') = LOWER('${twitterUrl}') OR
+				      LOWER(socialLinks->>'x') = LOWER('${twitterUrlWithSlash}'))
 				THEN '${avatar}'
 			`;
 		}).join(' ');
 		
 		// 构建完整的更新SQL
 		const updateSQL = `
-			UPDATE Projects 
-			SET logo = CASE 
+			UPDATE Projects
+			SET logo = CASE
 				${caseWhenClauses}
-				ELSE logo 
+				ELSE logo
 			END
 			WHERE socialLinks->>'x' IS NOT NULL
 			AND (${usernames.map(username => {
 				const twitterUrl = `https://x.com/${username}`;
 				const twitterUrlWithSlash = `https://x.com/${username}/`;
-				return `(LOWER(socialLinks->>'x') = LOWER('${twitterUrl}') OR 
+				return `(LOWER(socialLinks->>'x') = LOWER('${twitterUrl}') OR
 				         LOWER(socialLinks->>'x') = LOWER('${twitterUrlWithSlash}'))`;
 			}).join(' OR ')})
 		`;
 		
 		// 执行批量更新
-		const [results] = await Fundraising.Project.sequelize.query(updateSQL);
-		console.log(`批量更新完成，影响了 ${results} 条记录`);
+		await Fundraising.Project.sequelize.query(updateSQL);
+		console.log(`批量更新完成`);
 		
 	} catch (error) {
 		console.error('批量更新项目Logo失败:', error);
