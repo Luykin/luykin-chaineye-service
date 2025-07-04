@@ -468,32 +468,14 @@ router.get('/search/legacy', async (req, res) => {
 					}
 				});
 				
-				// // 异步更新数据库
-				// setImmediate(async () => {
-				// 	try {
-				// 		for (const username_u of usernamesToFetch) {
-				// 			const username = String(username_u).toLowerCase();
-				// 			if (!avatarMap[username]) continue;
-				//
-				// 			const twitterUrl = `https://x.com/${username}`;
-				// 			const twitterUrlWithSlash = `https://x.com/${username}/`;
-				//
-				// 			await Fundraising.Project.update(
-				// 				{ logo: avatarMap[username] },
-				// 				{
-				// 					where: {
-				// 						[Op.or]: [
-				// 							literal(`LOWER(socialLinks->>'x') = LOWER('${twitterUrl}')`),
-				// 							literal(`LOWER(socialLinks->>'x') = LOWER('${twitterUrlWithSlash}')`)
-				// 						]
-				// 					}
-				// 				}
-				// 			);
-				// 		}
-				// 	} catch (error) {
-				// 		console.error('Error updating project logos in database:', error);
-				// 	}
-				// });
+				// 🆕 批量更新数据库 - 优化版本
+				setImmediate(async () => {
+					try {
+						await batchUpdateProjectLogos(avatarMap);
+					} catch (error) {
+						console.error('Error updating project logos in database:', error);
+					}
+				});
 				
 			} catch (error) {
 				console.error('Error fetching updated avatars:', error);
@@ -523,6 +505,104 @@ router.get('/search/legacy', async (req, res) => {
 		res.status(500).json({ error: 'Failed to search project (legacy)' });
 	}
 });
+
+/**
+ * 🆕 批量更新项目Logo的优化函数
+ * @param {Object} avatarMap - 用户名到头像URL的映射
+ */
+async function batchUpdateProjectLogos(avatarMap) {
+	if (!avatarMap || Object.keys(avatarMap).length === 0) {
+		return;
+	}
+	
+	try {
+		// 方案1: 使用 CASE WHEN 进行批量更新（推荐）
+		const usernames = Object.keys(avatarMap);
+		
+		// 构建 CASE WHEN 语句
+		const caseWhenClauses = usernames.map(username => {
+			const avatar = avatarMap[username];
+			const twitterUrl = `https://x.com/${username}`;
+			const twitterUrlWithSlash = `https://x.com/${username}/`;
+			
+			return `
+				WHEN (LOWER(socialLinks->>'x') = LOWER('${twitterUrl}') OR 
+				      LOWER(socialLinks->>'x') = LOWER('${twitterUrlWithSlash}')) 
+				THEN '${avatar}'
+			`;
+		}).join(' ');
+		
+		// 构建完整的更新SQL
+		const updateSQL = `
+			UPDATE Projects 
+			SET logo = CASE 
+				${caseWhenClauses}
+				ELSE logo 
+			END
+			WHERE socialLinks->>'x' IS NOT NULL
+			AND (${usernames.map(username => {
+				const twitterUrl = `https://x.com/${username}`;
+				const twitterUrlWithSlash = `https://x.com/${username}/`;
+				return `(LOWER(socialLinks->>'x') = LOWER('${twitterUrl}') OR 
+				         LOWER(socialLinks->>'x') = LOWER('${twitterUrlWithSlash}'))`;
+			}).join(' OR ')})
+		`;
+		
+		// 执行批量更新
+		const [results] = await Fundraising.Project.sequelize.query(updateSQL);
+		console.log(`批量更新完成，影响了 ${results} 条记录`);
+		
+	} catch (error) {
+		console.error('批量更新项目Logo失败:', error);
+		
+		// 🔄 降级方案：如果批量更新失败，使用事务批量处理
+		try {
+			await fallbackBatchUpdate(avatarMap);
+		} catch (fallbackError) {
+			console.error('降级批量更新也失败:', fallbackError);
+		}
+	}
+}
+
+/**
+ * 🔄 降级方案：使用事务进行批量更新
+ * @param {Object} avatarMap - 用户名到头像URL的映射
+ */
+async function fallbackBatchUpdate(avatarMap) {
+	const transaction = await Fundraising.Project.sequelize.transaction();
+	
+	try {
+		const updatePromises = Object.entries(avatarMap).map(([username, avatar]) => {
+			const twitterUrl = `https://x.com/${username}`;
+			const twitterUrlWithSlash = `https://x.com/${username}/`;
+			
+			return Fundraising.Project.update(
+				{ logo: avatar },
+				{
+					where: {
+						[Op.or]: [
+							literal(`LOWER(socialLinks->>'x') = LOWER('${twitterUrl}')`),
+							literal(`LOWER(socialLinks->>'x') = LOWER('${twitterUrlWithSlash}')`)
+						]
+					},
+					transaction
+				}
+			);
+		});
+		
+		// 并行执行所有更新操作
+		const results = await Promise.all(updatePromises);
+		await transaction.commit();
+		
+		const totalUpdated = results.reduce((sum, [affectedCount]) => sum + affectedCount, 0);
+		console.log(`降级批量更新完成，影响了 ${totalUpdated} 条记录`);
+		
+	} catch (error) {
+		await transaction.rollback();
+		throw error;
+	}
+}
+
 // const { Op, literal, fn, col } = require('sequelize');
 
 // router.get('/investors', async (req, res) => {
