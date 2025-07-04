@@ -6,9 +6,9 @@ const router = express.Router();
 
 // URL映射配置
 const URL_MAPPINGS = {
-	'kota': 'http://10.170.0.2:16530',
+	'kota': 'http://35.220.214.49:16530',
 	'kb': 'http://150.5.158.179:8087',
-	'kota_temporary': 'http://10.170.0.2:16531',
+	'kota_temporary': 'http://35.220.214.49:16531',
 	"k8s_kota": "https://data.cryptohunt.ai"
 };
 
