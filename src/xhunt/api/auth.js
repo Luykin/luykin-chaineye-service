@@ -81,7 +81,7 @@ router.post('/twitter/callback', [
 				async (bail) => {
 					try {
 						const res = await axios.get(
-							`http://10.170.0.2:16530/api/c9e1c6/plugin/twitter/info?username=${twitterUser.username}`,
+							`https://kota.chaineye.tools/api/c9e1c6/plugin/twitter/info?username=${twitterUser.username}`,
 							{
 								timeout: 5000 // 设置5秒超时
 							}

@@ -436,7 +436,7 @@ router.get('/search/legacy', async (req, res) => {
 		if (usernamesToFetch.size > 0) {
 			try {
 				const usernames = Array.from(usernamesToFetch);
-				const apiURL = `http://10.170.0.2:16530/api/twitterapi/fetch/users?users=${usernames.join(',')}`;
+				const apiURL = `https://kota.chaineye.tools/api/twitterapi/fetch/users?users=${usernames.join(',')}`;
 				const response = await axios.get(apiURL);
 				const userDataArray = response?.data?.data || [];
 				
