@@ -50,7 +50,12 @@ router.get('/:handle', [
 		});
 		
 		if (!xAccount) {
-			return res.status(404).json({ error: 'Account not found' });
+			return res.json({
+				defaultTags: {
+					kol: kolProfileTags,
+					project: projectCharacterTags
+				}
+			});
 		}
 		
 		const accountId = xAccount.id;
