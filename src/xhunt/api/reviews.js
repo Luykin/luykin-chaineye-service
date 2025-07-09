@@ -13,7 +13,7 @@ const { fn, col, Op } = require('sequelize');
 
 /** 内置tag ===start === **/
 // # KOL人物类型标签
-kolProfileTags = [
+const kolProfileTags = [
 	'有灵魂的KOL', '投研', '二级', '套利', '打新', 'Meme',
 	'段子手', '宏观', '空投', '美女', '科学家',
 	'创业者', 'VC', '假冒账户', '诈骗犯', '黑名单',
@@ -22,10 +22,17 @@ kolProfileTags = [
 ];
 
 // # 项目/机构特征标签
-projectCharacterTags = [
+const projectCharacterTags = [
 	'团队豪华', '宏大叙事', '技术领先', '被反撸',
 	'老鼠仓', '诈骗项目', '求拉盘'
 ];
+
+const colorTags = {
+	'有灵魂的KOL': {
+		color: '#c02cd3',
+		bg: 'rgba(192,44,211,0.1)'
+	}
+};
 
 /** 内置tag ===end === **/
 
@@ -53,7 +60,8 @@ router.get('/:handle', [
 			return res.json({
 				defaultTags: {
 					kol: kolProfileTags,
-					project: projectCharacterTags
+					project: projectCharacterTags,
+					colorTags
 				}
 			});
 		}
@@ -157,7 +165,8 @@ router.get('/:handle', [
 			allTagCount,
 			defaultTags: {
 				kol: kolProfileTags,
-				project: projectCharacterTags
+				project: projectCharacterTags,
+				colorTags
 			}
 		});
 	} catch (error) {
