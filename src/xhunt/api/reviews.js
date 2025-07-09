@@ -14,7 +14,7 @@ const { fn, col, Op } = require('sequelize');
 /** 内置tag ===start === **/
 // # KOL人物类型标签
 kolProfileTags = [
-	'投研', '二级', '套利', '打新', 'Meme',
+	'有灵魂的KOL', '投研', '二级', '套利', '打新', 'Meme',
 	'段子手', '宏观', '空投', '美女', '科学家',
 	'创业者', 'VC', '假冒账户', '诈骗犯', '黑名单',
 	'degen', '鲸鱼', '钻石手', '车头', '大佬',
@@ -176,7 +176,7 @@ router.get('/:handle/comments', [
 		const limit = parseInt(req.query.limit) || 10;
 		const onlyKOL = req.query.onlyKOL === true;
 		const offset = (page - 1) * limit;
-
+		
 		// Step 1: 查找目标账号 - 大小写不敏感
 		const xAccount = await XAccount.findOne({
 			where: {
@@ -186,11 +186,11 @@ router.get('/:handle/comments', [
 			},
 			attributes: ['id', 'handle', 'displayName', 'avatar']
 		});
-
+		
 		if (!xAccount) {
 			return res.status(404).json({ error: 'Account not found' });
 		}
-
+		
 		// Step 2: 构建查询条件
 		const whereClause = {
 			xAccountId: xAccount.id,
@@ -201,7 +201,7 @@ router.get('/:handle/comments', [
 				]
 			}
 		};
-
+		
 		// Step 3: 构建关联查询条件（KOL筛选）
 		const includeClause = {
 			model: XHuntUser,
@@ -209,11 +209,11 @@ router.get('/:handle/comments', [
 			attributes: ['username', 'displayName', 'avatar', 'kolRank20W', 'classification'],
 			required: true // 必须有关联的用户
 		};
-
+		
 		if (onlyKOL) {
 			includeClause.where = { kolRank20W: { [Op.ne]: null } };
 		}
-
+		
 		// Step 4: 查询长评论列表（分页）
 		const { rows: comments, count: totalComments } = await XReviewForAccount.findAndCountAll({
 			where: whereClause,
@@ -232,7 +232,7 @@ router.get('/:handle/comments', [
 			limit,
 			offset
 		});
-
+		
 		// Step 5: 格式化返回数据
 		const formattedComments = comments.map(comment => ({
 			id: comment.id,
@@ -250,10 +250,10 @@ router.get('/:handle/comments', [
 				isKOL: comment.xHuntUser?.kolRank20W !== null
 			}
 		}));
-
+		
 		// Step 6: 计算分页信息
 		const totalPages = Math.ceil(totalComments / limit);
-
+		
 		// Step 7: 返回结果
 		res.json({
 			success: true,
@@ -277,7 +277,7 @@ router.get('/:handle/comments', [
 				}
 			}
 		});
-
+		
 	} catch (error) {
 		console.error('Error fetching comments for handle:', error);
 		res.status(500).json({ error: 'Failed to fetch comments' });
