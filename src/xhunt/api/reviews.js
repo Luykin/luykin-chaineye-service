@@ -14,7 +14,7 @@ const { fn, col, Op } = require('sequelize');
 /** 内置tag ===start === **/
 // # KOL人物类型标签
 const kolProfileTags = [
-	'有灵魂的KOL', '投研', '二级', '套利', '打新', 'Meme',
+	'🔥有灵魂的KOL', '投研', '二级', '套利', '打新', 'Meme',
 	'段子手', '宏观', '空投', '美女', '科学家',
 	'创业者', 'VC', '假冒账户', '诈骗犯', '黑名单',
 	'degen', '鲸鱼', '钻石手', '车头', '大佬',
@@ -28,7 +28,7 @@ const projectCharacterTags = [
 ];
 
 const colorTags = {
-	'有灵魂的KOL': {
+	'🔥有灵魂的KOL': {
 		color: '#c02cd3',
 		bg: 'rgba(192,44,211,0.1)'
 	}
