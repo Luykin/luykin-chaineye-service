@@ -246,6 +246,140 @@ async function getFullStats() {
 				console.error('Error fetching user activity distribution:', error);
 				return []; // 返回空数组而不是抛出错误
 			}
+		})(),
+		
+		// 11. 🔥有灵魂的KOL 标签专业统计
+		(async () => {
+			try {
+				const targetTag = '🔥有灵魂的KOL';
+				
+				// 11.1 统计使用该标签的评论者（按评论次数排序）
+				const kolTagReviewers = await XReviewForAccount.findAll({
+					where: {
+						tags: {
+							[Op.contains]: [targetTag] // PostgreSQL 数组包含查询
+						}
+					},
+					attributes: [
+						'xHuntUserId',
+						[fn('COUNT', '*'), 'tagUsageCount']
+					],
+					include: [{
+						model: XHuntUser,
+						as: 'xHuntUser',
+						attributes: ['username', 'displayName', 'avatar', 'kolRank20W', 'classification'],
+						required: true
+					}],
+					group: ['xHuntUserId', 'xHuntUser.id'],
+					order: [[fn('COUNT', '*'), 'DESC']],
+					limit: 20,
+					raw: false
+				});
+				
+				// 11.2 统计被打该标签的账号（按被评论次数排序）
+				const kolTagReceivers = await XReviewForAccount.findAll({
+					where: {
+						tags: {
+							[Op.contains]: [targetTag]
+						}
+					},
+					attributes: [
+						'xAccountId',
+						[fn('COUNT', '*'), 'receivedTagCount']
+					],
+					include: [{
+						model: XAccount,
+						as: 'xAccount',
+						attributes: ['handle', 'displayName', 'avatar'],
+						required: true
+					}],
+					group: ['xAccountId', 'xAccount.id'],
+					order: [[fn('COUNT', '*'), 'DESC']],
+					limit: 20,
+					raw: false
+				});
+				
+				// 11.3 统计今日该标签的使用情况
+				const todayKolTagUsage = await XReviewForAccount.count({
+					where: {
+						tags: {
+							[Op.contains]: [targetTag]
+						},
+						createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd }
+					}
+				});
+				
+				// 11.4 统计该标签的总使用次数
+				const totalKolTagUsage = await XReviewForAccount.count({
+					where: {
+						tags: {
+							[Op.contains]: [targetTag]
+						}
+					}
+				});
+				
+				// 11.5 统计使用该标签的独立用户数
+				const uniqueKolTagUsers = await XReviewForAccount.count({
+					where: {
+						tags: {
+							[Op.contains]: [targetTag]
+						}
+					},
+					distinct: true,
+					col: 'xHuntUserId'
+				});
+				
+				// 11.6 统计被打该标签的独立账号数
+				const uniqueKolTagAccounts = await XReviewForAccount.count({
+					where: {
+						tags: {
+							[Op.contains]: [targetTag]
+						}
+					},
+					distinct: true,
+					col: 'xAccountId'
+				});
+				
+				return {
+					targetTag,
+					reviewers: kolTagReviewers.map(item => ({
+						userId: item.xHuntUserId,
+						username: item.xHuntUser?.username,
+						displayName: item.xHuntUser?.displayName,
+						avatar: item.xHuntUser?.avatar,
+						kolRank20W: item.xHuntUser?.kolRank20W,
+						classification: item.xHuntUser?.classification,
+						tagUsageCount: parseInt(item.get('tagUsageCount')),
+						isKOL: item.xHuntUser?.kolRank20W !== null
+					})),
+					receivers: kolTagReceivers.map(item => ({
+						accountId: item.xAccountId,
+						handle: item.xAccount?.handle,
+						displayName: item.xAccount?.displayName,
+						avatar: item.xAccount?.avatar,
+						receivedTagCount: parseInt(item.get('receivedTagCount'))
+					})),
+					stats: {
+						todayUsage: todayKolTagUsage,
+						totalUsage: totalKolTagUsage,
+						uniqueUsers: uniqueKolTagUsers,
+						uniqueAccounts: uniqueKolTagAccounts
+					}
+				};
+			} catch (error) {
+				console.error('Error fetching KOL tag statistics:', error);
+				return {
+					targetTag: '🔥有灵魂的KOL',
+					reviewers: [],
+					receivers: [],
+					stats: {
+						todayUsage: 0,
+						totalUsage: 0,
+						uniqueUsers: 0,
+						uniqueAccounts: 0
+					}
+				};
+			}
 		})()
 	]);
 
@@ -302,7 +436,20 @@ async function getFullStats() {
 		})),
 		
 		// 用户活跃度分布（显示用户名）
-		userDistribution: userActivityDistribution || []
+		userDistribution: userActivityDistribution || [],
+		
+		// 🔥有灵魂的KOL 标签专业统计
+		kolTagAnalytics: userActivityDistribution[10] || {
+			targetTag: '🔥有灵魂的KOL',
+			reviewers: [],
+			receivers: [],
+			stats: {
+				todayUsage: 0,
+				totalUsage: 0,
+				uniqueUsers: 0,
+				uniqueAccounts: 0
+			}
+		}
 	};
 }
 
