@@ -532,6 +532,108 @@
             </div>
         </div>
 
+        <!-- 🔥有灵魂的KOL 标签专业统计 -->
+        <div class="section">
+            <h2 class="section-title">🔥 "有灵魂的KOL" 标签专业统计</h2>
+            
+            <!-- 统计概览 -->
+            <div class="stats-grid" style="margin-bottom: 30px;">
+                <div class="stat-card">
+                    <div class="stat-title">今日使用次数</div>
+                    <div class="stat-value"><%= formatNumber(stats.kolTagAnalytics.stats.todayUsage) %></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">累计使用次数</div>
+                    <div class="stat-value"><%= formatNumber(stats.kolTagAnalytics.stats.totalUsage) %></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">参与评论用户数</div>
+                    <div class="stat-value"><%= formatNumber(stats.kolTagAnalytics.stats.uniqueUsers) %></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">被评论账号数</div>
+                    <div class="stat-value"><%= formatNumber(stats.kolTagAnalytics.stats.uniqueAccounts) %></div>
+                </div>
+            </div>
+
+            <!-- 评论者排行榜 -->
+            <div style="margin-bottom: 30px;">
+                <h3 style="font-size: 1.3rem; margin-bottom: 20px; color: #374151; border-left: 4px solid #f59e0b; padding-left: 12px;">
+                    🏆 评论者排行榜 TOP 20 - 谁最爱打这个标签
+                </h3>
+                <div class="distribution-grid">
+                    <% if (stats.kolTagAnalytics.reviewers && stats.kolTagAnalytics.reviewers.length > 0) { %>
+                        <% stats.kolTagAnalytics.reviewers.forEach((reviewer, index) => { %>
+                            <div class="distribution-item" style="border-left: 4px solid #f59e0b;">
+                                <div class="user-info">
+                                    <div>
+                                        <div class="user-name">
+                                            #<%= index + 1 %> <%= reviewer.displayName || reviewer.username || '匿名用户' %>
+                                            <% if (reviewer.isKOL) { %>
+                                                <span class="kol-badge">KOL</span>
+                                            <% } %>
+                                        </div>
+                                        <% if (reviewer.username) { %>
+                                            <div class="user-username">@<%= reviewer.username %></div>
+                                        <% } %>
+                                        <% if (reviewer.classification) { %>
+                                            <div class="user-rank">分类: <%= reviewer.classification %></div>
+                                        <% } %>
+                                    </div>
+                                    <div class="user-stats">
+                                        <div class="review-count" style="color: #f59e0b;">
+                                            <%= reviewer.tagUsageCount %> 次使用
+                                        </div>
+                                        <% if (reviewer.kolRank20W) { %>
+                                            <div class="user-rank">KOL排名: <%= formatNumber(reviewer.kolRank20W) %></div>
+                                        <% } %>
+                                    </div>
+                                </div>
+                            </div>
+                        <% }); %>
+                    <% } else { %>
+                        <div style="text-align: center; color: #6b7280; padding: 40px;">
+                            暂无数据
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- 被评论者排行榜 -->
+            <div>
+                <h3 style="font-size: 1.3rem; margin-bottom: 20px; color: #374151; border-left: 4px solid #10b981; padding-left: 12px;">
+                    🎯 被评论者排行榜 TOP 20 - 谁最受认可
+                </h3>
+                <div class="distribution-grid">
+                    <% if (stats.kolTagAnalytics.receivers && stats.kolTagAnalytics.receivers.length > 0) { %>
+                        <% stats.kolTagAnalytics.receivers.forEach((receiver, index) => { %>
+                            <div class="distribution-item" style="border-left: 4px solid #10b981;">
+                                <div class="user-info">
+                                    <div>
+                                        <div class="user-name">
+                                            #<%= index + 1 %> <%= receiver.displayName || receiver.handle || '未知账号' %>
+                                        </div>
+                                        <% if (receiver.handle) { %>
+                                            <div class="user-username">@<%= receiver.handle %></div>
+                                        <% } %>
+                                    </div>
+                                    <div class="user-stats">
+                                        <div class="review-count" style="color: #10b981;">
+                                            <%= receiver.receivedTagCount %> 次被评
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <% }); %>
+                    <% } else { %>
+                        <div style="text-align: center; color: #6b7280; padding: 40px;">
+                            暂无数据
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+
         <div class="refresh-info">
             <p>🔄 数据每次访问时实时更新 | ⏰ 最后更新: <%= formatDateTime() %></p>
             <p style="margin-top: 8px; font-size: 14px;">🕐 所有统计数据均按中国时区（UTC+8）计算</p>
