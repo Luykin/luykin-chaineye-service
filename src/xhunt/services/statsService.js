@@ -439,7 +439,7 @@ async function getFullStats() {
 		userDistribution: userActivityDistribution || [],
 		
 		// 🔥有灵魂的KOL 标签专业统计
-		kolTagAnalytics: userActivityDistribution[11] || {
+		kolTagAnalytics: kolTagAnalytics || {
 			targetTag: '🔥有灵魂的KOL',
 			reviewers: [],
 			receivers: [],
