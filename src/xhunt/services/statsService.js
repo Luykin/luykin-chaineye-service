@@ -111,7 +111,10 @@ async function getFullStats() {
 		popularTags,
 		
 		// 10. 用户活跃度分布（修复SQL查询）
-		userActivityDistribution
+		userActivityDistribution,
+		
+		// 11. 🔥有灵魂的KOL 标签专业统计
+		kolTagAnalytics
 	] = await Promise.all([
 		// 1. 日活统计（中国时区）
 		XHuntUserToken.count({
