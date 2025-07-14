@@ -47,7 +47,18 @@ async function verifyToken(token, req, res, next) {
 		}
 		
 		// 更新最后使用时间（异步更新不影响流程）
-		tokenRecord.update({ lastUsed: new Date() });
+		// 🆕 优化：只有距离上次更新超过5分钟才更新 lastUsed
+		const now = new Date();
+		const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+		
+		if (!tokenRecord.lastUsed || tokenRecord.lastUsed < fiveMinutesAgo) {
+			// 异步更新，不阻塞请求流程
+			setImmediate(() => {
+				tokenRecord.update({ lastUsed: now }).catch(error => {
+					console.error('Failed to update token lastUsed:', error);
+				});
+			});
+		}
 		
 		// 挂载用户信息到请求对象
 		req.user = tokenRecord.user;
