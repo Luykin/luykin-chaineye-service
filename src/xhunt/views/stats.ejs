@@ -139,6 +139,18 @@
             opacity: 0.8;
         }
 
+        /* 表格容器样式 */
+        .table-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+
+        .table-container table {
+            border: none;
+        }
+
         /* 统计数据样式 */
         .stats-section {
             background: white;
@@ -562,12 +574,12 @@
                     <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #f59e0b; padding-left: 12px; margin: 0;">
                         🏆 评论者全量名单 - 谁最爱打这个标签
                     </h3>
-                    <button onclick="downloadReviewersData()" style="background: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    <button id="downloadReviewersBtn" style="background: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
                         📥 下载评论者名单
                     </button>
                 </div>
                 
-                <div style="overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                <div class="table-container">
                     <table style="width: 100%; border-collapse: collapse; background: white;">
                         <thead style="background: #f9fafb;">
                             <tr>
@@ -626,12 +638,12 @@
                     <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #10b981; padding-left: 12px; margin: 0;">
                         🎯 被评论者全量名单 - 谁最受认可
                     </h3>
-                    <button onclick="downloadReceiversData()" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    <button id="downloadReceiversBtn" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
                         📥 下载被评论者名单
                     </button>
                 </div>
                 
-                <div style="overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                <div class="table-container">
                     <table style="width: 100%; border-collapse: collapse; background: white;">
                         <thead style="background: #f9fafb;">
                             <tr>
@@ -669,6 +681,13 @@
     </div>
 
     <script>
+        // 页面加载完成后绑定事件
+        document.addEventListener('DOMContentLoaded', function() {
+            // 绑定下载按钮事件
+            document.getElementById('downloadReviewersBtn').addEventListener('click', downloadReviewersData);
+            document.getElementById('downloadReceiversBtn').addEventListener('click', downloadReceiversData);
+        });
+
         // 下载评论者数据
         function downloadReviewersData() {
             console.log('开始下载评论者数据...');
