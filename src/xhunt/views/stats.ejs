@@ -671,20 +671,27 @@
     <script>
         // 下载评论者数据
         function downloadReviewersData() {
+            console.log('开始下载评论者数据...');
             const reviewers = <%- JSON.stringify(stats.kolTagAnalytics.reviewers || []) %>;
+            console.log('评论者数据:', reviewers);
             const csvContent = generateReviewersCSV(reviewers);
+            console.log('生成的CSV内容:', csvContent.substring(0, 200) + '...');
             downloadCSV(csvContent, '有灵魂的KOL_评论者名单.csv');
         }
 
         // 下载被评论者数据
         function downloadReceiversData() {
+            console.log('开始下载被评论者数据...');
             const receivers = <%- JSON.stringify(stats.kolTagAnalytics.receivers || []) %>;
+            console.log('被评论者数据:', receivers);
             const csvContent = generateReceiversCSV(receivers);
+            console.log('生成的CSV内容:', csvContent.substring(0, 200) + '...');
             downloadCSV(csvContent, '有灵魂的KOL_被评论者名单.csv');
         }
 
         // 生成评论者CSV内容
         function generateReviewersCSV(data) {
+            console.log('生成评论者CSV，数据长度:', data.length);
             const headers = ['排名', '用户名', '显示名称', '分类', 'KOL排名', '使用次数', '是否KOL'];
             const rows = data.map((item, index) => [
                 index + 1,
@@ -696,13 +703,17 @@
                 item.isKOL ? '是' : '否'
             ]);
             
-            return [headers, ...rows].map(row => 
+            const csvContent = [headers, ...rows].map(row => 
                 row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
             ).join('\n');
+            
+            console.log('评论者CSV生成完成，长度:', csvContent.length);
+            return csvContent;
         }
 
         // 生成被评论者CSV内容
         function generateReceiversCSV(data) {
+            console.log('生成被评论者CSV，数据长度:', data.length);
             const headers = ['排名', '用户名', '显示名称', '被评次数'];
             const rows = data.map((item, index) => [
                 index + 1,
@@ -711,27 +722,63 @@
                 item.receivedTagCount
             ]);
             
-            return [headers, ...rows].map(row => 
+            const csvContent = [headers, ...rows].map(row => 
                 row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
             ).join('\n');
+            
+            console.log('被评论者CSV生成完成，长度:', csvContent.length);
+            return csvContent;
         }
 
         // 下载CSV文件
         function downloadCSV(csvContent, filename) {
-            // 添加BOM以支持中文
-            const BOM = '\uFEFF';
-            const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
+            console.log('开始下载CSV文件:', filename);
+            console.log('CSV内容长度:', csvContent.length);
             
-            if (link.download !== undefined) {
-                const url = URL.createObjectURL(blob);
-                link.setAttribute('href', url);
-                link.setAttribute('download', filename);
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+            try {
+                // 添加BOM以支持中文
+                const BOM = '\uFEFF';
+                const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+                console.log('Blob创建成功，大小:', blob.size);
+                
+                // 检查浏览器支持
+                if (typeof window.navigator.msSaveBlob !== 'undefined') {
+                    // IE浏览器
+                    console.log('使用IE下载方式');
+                    window.navigator.msSaveBlob(blob, filename);
+                } else {
+                    // 现代浏览器
+                    console.log('使用现代浏览器下载方式');
+                    const link = document.createElement('a');
+                    
+                    if (typeof link.download !== 'undefined') {
+                        const url = URL.createObjectURL(blob);
+                        console.log('创建下载URL:', url);
+                        
+                        link.setAttribute('href', url);
+                        link.setAttribute('download', filename);
+                        link.style.visibility = 'hidden';
+                        link.style.position = 'absolute';
+                        link.style.left = '-9999px';
+                        
+                        document.body.appendChild(link);
+                        console.log('触发点击下载');
+                        link.click();
+                        
+                        // 延迟清理
+                        setTimeout(() => {
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(url);
+                            console.log('清理完成');
+                        }, 100);
+                    } else {
+                        console.error('浏览器不支持下载功能');
+                        alert('您的浏览器不支持文件下载功能，请使用现代浏览器');
+                    }
+                }
+            } catch (error) {
+                console.error('下载过程中出现错误:', error);
+                alert('下载失败: ' + error.message);
             }
         }
 
