@@ -534,7 +534,7 @@
 
         <!-- 🔥有灵魂的KOL 标签专业统计 -->
         <div class="section">
-            <h2 class="section-title">🔥 "有灵魂的KOL" 标签专业统计</h2>
+            <h2 class="section-title">🔥 "有灵魂的KOL" 标签专业统计（含 🔥有灵魂的KOL 和 有灵魂的KOL）</h2>
             
             <!-- 统计概览 -->
             <div class="stats-grid" style="margin-bottom: 30px;">
@@ -556,80 +556,108 @@
                 </div>
             </div>
 
-            <!-- 评论者排行榜 -->
+            <!-- 评论者全量表格 -->
             <div style="margin-bottom: 30px;">
-                <h3 style="font-size: 1.3rem; margin-bottom: 20px; color: #374151; border-left: 4px solid #f59e0b; padding-left: 12px;">
-                    🏆 评论者排行榜 TOP 20 - 谁最爱打这个标签
-                </h3>
-                <div class="distribution-grid">
-                    <% if (stats.kolTagAnalytics.reviewers && stats.kolTagAnalytics.reviewers.length > 0) { %>
-                        <% stats.kolTagAnalytics.reviewers.forEach((reviewer, index) => { %>
-                            <div class="distribution-item" style="border-left: 4px solid #f59e0b;">
-                                <div class="user-info">
-                                    <div>
-                                        <div class="user-name">
-                                            #<%= index + 1 %> <%= reviewer.displayName || reviewer.username || '匿名用户' %>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #f59e0b; padding-left: 12px; margin: 0;">
+                        🏆 评论者全量名单 - 谁最爱打这个标签
+                    </h3>
+                    <button onclick="downloadReviewersData()" style="background: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                        📥 下载评论者名单
+                    </button>
+                </div>
+                
+                <div style="overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; background: white;">
+                        <thead style="background: #f9fafb;">
+                            <tr>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">排名</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户名</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">显示名称</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">分类</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">KOL排名</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">使用次数</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">是否KOL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reviewersTableBody">
+                            <% if (stats.kolTagAnalytics.reviewers && stats.kolTagAnalytics.reviewers.length > 0) { %>
+                                <% stats.kolTagAnalytics.reviewers.forEach((reviewer, index) => { %>
+                                    <tr style="border-bottom: 1px solid #f3f4f6;">
+                                        <td style="padding: 12px; color: #374151;"><%= index + 1 %></td>
+                                        <td style="padding: 12px; color: #374151;">@<%= reviewer.username || '未知' %></td>
+                                        <td style="padding: 12px; color: #374151;">
+                                            <%= reviewer.displayName || reviewer.username || '匿名用户' %>
                                             <% if (reviewer.isKOL) { %>
-                                                <span class="kol-badge">KOL</span>
+                                                <span style="background: linear-gradient(45deg, #f59e0b, #d97706); color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 6px;">KOL</span>
                                             <% } %>
-                                        </div>
-                                        <% if (reviewer.username) { %>
-                                            <div class="user-username">@<%= reviewer.username %></div>
-                                        <% } %>
-                                        <% if (reviewer.classification) { %>
-                                            <div class="user-rank">分类: <%= reviewer.classification %></div>
-                                        <% } %>
-                                    </div>
-                                    <div class="user-stats">
-                                        <div class="review-count" style="color: #f59e0b;">
-                                            <%= reviewer.tagUsageCount %> 次使用
-                                        </div>
-                                        <% if (reviewer.kolRank20W) { %>
-                                            <div class="user-rank">KOL排名: <%= formatNumber(reviewer.kolRank20W) %></div>
-                                        <% } %>
-                                    </div>
-                                </div>
-                            </div>
-                        <% }); %>
-                    <% } else { %>
-                        <div style="text-align: center; color: #6b7280; padding: 40px;">
-                            暂无数据
-                        </div>
-                    <% } %>
+                                        </td>
+                                        <td style="padding: 12px; color: #6b7280;"><%= reviewer.classification || '-' %></td>
+                                        <td style="padding: 12px; color: #6b7280;">
+                                            <% if (reviewer.kolRank20W) { %>
+                                                <%= formatNumber(reviewer.kolRank20W) %>
+                                            <% } else { %>
+                                                -
+                                            <% } %>
+                                        </td>
+                                        <td style="padding: 12px; color: #f59e0b; font-weight: 600;"><%= reviewer.tagUsageCount %></td>
+                                        <td style="padding: 12px;">
+                                            <% if (reviewer.isKOL) { %>
+                                                <span style="color: #10b981;">✅ 是</span>
+                                            <% } else { %>
+                                                <span style="color: #6b7280;">❌ 否</span>
+                                            <% } %>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            <% } else { %>
+                                <tr>
+                                    <td colspan="7" style="padding: 40px; text-align: center; color: #6b7280;">暂无数据</td>
+                                </tr>
+                            <% } %>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            <!-- 被评论者排行榜 -->
+            <!-- 被评论者全量表格 -->
             <div>
-                <h3 style="font-size: 1.3rem; margin-bottom: 20px; color: #374151; border-left: 4px solid #10b981; padding-left: 12px;">
-                    🎯 被评论者排行榜 TOP 20 - 谁最受认可
-                </h3>
-                <div class="distribution-grid">
-                    <% if (stats.kolTagAnalytics.receivers && stats.kolTagAnalytics.receivers.length > 0) { %>
-                        <% stats.kolTagAnalytics.receivers.forEach((receiver, index) => { %>
-                            <div class="distribution-item" style="border-left: 4px solid #10b981;">
-                                <div class="user-info">
-                                    <div>
-                                        <div class="user-name">
-                                            #<%= index + 1 %> <%= receiver.displayName || receiver.handle || '未知账号' %>
-                                        </div>
-                                        <% if (receiver.handle) { %>
-                                            <div class="user-username">@<%= receiver.handle %></div>
-                                        <% } %>
-                                    </div>
-                                    <div class="user-stats">
-                                        <div class="review-count" style="color: #10b981;">
-                                            <%= receiver.receivedTagCount %> 次被评
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        <% }); %>
-                    <% } else { %>
-                        <div style="text-align: center; color: #6b7280; padding: 40px;">
-                            暂无数据
-                        </div>
-                    <% } %>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #10b981; padding-left: 12px; margin: 0;">
+                        🎯 被评论者全量名单 - 谁最受认可
+                    </h3>
+                    <button onclick="downloadReceiversData()" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                        📥 下载被评论者名单
+                    </button>
+                </div>
+                
+                <div style="overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; background: white;">
+                        <thead style="background: #f9fafb;">
+                            <tr>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">排名</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户名</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">显示名称</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">被评次数</th>
+                            </tr>
+                        </thead>
+                        <tbody id="receiversTableBody">
+                            <% if (stats.kolTagAnalytics.receivers && stats.kolTagAnalytics.receivers.length > 0) { %>
+                                <% stats.kolTagAnalytics.receivers.forEach((receiver, index) => { %>
+                                    <tr style="border-bottom: 1px solid #f3f4f6;">
+                                        <td style="padding: 12px; color: #374151;"><%= index + 1 %></td>
+                                        <td style="padding: 12px; color: #374151;">@<%= receiver.handle || '未知' %></td>
+                                        <td style="padding: 12px; color: #374151;"><%= receiver.displayName || receiver.handle || '未知账号' %></td>
+                                        <td style="padding: 12px; color: #10b981; font-weight: 600;"><%= receiver.receivedTagCount %></td>
+                                    </tr>
+                                <% }); %>
+                            <% } else { %>
+                                <tr>
+                                    <td colspan="4" style="padding: 40px; text-align: center; color: #6b7280;">暂无数据</td>
+                                </tr>
+                            <% } %>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -641,6 +669,72 @@
     </div>
 
     <script>
+        // 下载评论者数据
+        function downloadReviewersData() {
+            const reviewers = <%- JSON.stringify(stats.kolTagAnalytics.reviewers || []) %>;
+            const csvContent = generateReviewersCSV(reviewers);
+            downloadCSV(csvContent, '有灵魂的KOL_评论者名单.csv');
+        }
+
+        // 下载被评论者数据
+        function downloadReceiversData() {
+            const receivers = <%- JSON.stringify(stats.kolTagAnalytics.receivers || []) %>;
+            const csvContent = generateReceiversCSV(receivers);
+            downloadCSV(csvContent, '有灵魂的KOL_被评论者名单.csv');
+        }
+
+        // 生成评论者CSV内容
+        function generateReviewersCSV(data) {
+            const headers = ['排名', '用户名', '显示名称', '分类', 'KOL排名', '使用次数', '是否KOL'];
+            const rows = data.map((item, index) => [
+                index + 1,
+                item.username || '未知',
+                item.displayName || item.username || '匿名用户',
+                item.classification || '-',
+                item.kolRank20W ? item.kolRank20W.toLocaleString() : '-',
+                item.tagUsageCount,
+                item.isKOL ? '是' : '否'
+            ]);
+            
+            return [headers, ...rows].map(row => 
+                row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+            ).join('\n');
+        }
+
+        // 生成被评论者CSV内容
+        function generateReceiversCSV(data) {
+            const headers = ['排名', '用户名', '显示名称', '被评次数'];
+            const rows = data.map((item, index) => [
+                index + 1,
+                item.handle || '未知',
+                item.displayName || item.handle || '未知账号',
+                item.receivedTagCount
+            ]);
+            
+            return [headers, ...rows].map(row => 
+                row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+            ).join('\n');
+        }
+
+        // 下载CSV文件
+        function downloadCSV(csvContent, filename) {
+            // 添加BOM以支持中文
+            const BOM = '\uFEFF';
+            const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+        }
+
         // 自动刷新页面（每5分钟）
         setTimeout(() => {
             window.location.reload();

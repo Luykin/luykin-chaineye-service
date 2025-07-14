@@ -254,14 +254,16 @@ async function getFullStats() {
 		// 11. 🔥有灵魂的KOL 标签专业统计
 		(async () => {
 			try {
-				const targetTag = '🔥有灵魂的KOL';
+				const targetTags = ['🔥有灵魂的KOL', '有灵魂的KOL']; // 支持两种标签
 				
 				// 11.1 统计使用该标签的评论者（按评论次数排序）
 				const kolTagReviewers = await XReviewForAccount.findAll({
 					where: {
-						tags: {
-							[Op.contains]: [targetTag] // PostgreSQL 数组包含查询
-						}
+						[Op.or]: targetTags.map(tag => ({
+							tags: {
+								[Op.contains]: [tag] // PostgreSQL 数组包含查询
+							}
+						}))
 					},
 					attributes: [
 						'xHuntUserId',
@@ -275,16 +277,17 @@ async function getFullStats() {
 					}],
 					group: ['xHuntUserId', 'xHuntUser.id'],
 					order: [[fn('COUNT', '*'), 'DESC']],
-					limit: 20,
 					raw: false
 				});
 				
 				// 11.2 统计被打该标签的账号（按被评论次数排序）
 				const kolTagReceivers = await XReviewForAccount.findAll({
 					where: {
-						tags: {
-							[Op.contains]: [targetTag]
-						}
+						[Op.or]: targetTags.map(tag => ({
+							tags: {
+								[Op.contains]: [tag]
+							}
+						}))
 					},
 					attributes: [
 						'xAccountId',
@@ -298,16 +301,17 @@ async function getFullStats() {
 					}],
 					group: ['xAccountId', 'xAccount.id'],
 					order: [[fn('COUNT', '*'), 'DESC']],
-					limit: 20,
 					raw: false
 				});
 				
 				// 11.3 统计今日该标签的使用情况
 				const todayKolTagUsage = await XReviewForAccount.count({
 					where: {
-						tags: {
-							[Op.contains]: [targetTag]
-						},
+						[Op.or]: targetTags.map(tag => ({
+							tags: {
+								[Op.contains]: [tag]
+							}
+						})),
 						createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd }
 					}
 				});
@@ -315,18 +319,22 @@ async function getFullStats() {
 				// 11.4 统计该标签的总使用次数
 				const totalKolTagUsage = await XReviewForAccount.count({
 					where: {
-						tags: {
-							[Op.contains]: [targetTag]
-						}
+						[Op.or]: targetTags.map(tag => ({
+							tags: {
+								[Op.contains]: [tag]
+							}
+						}))
 					}
 				});
 				
 				// 11.5 统计使用该标签的独立用户数
 				const uniqueKolTagUsers = await XReviewForAccount.count({
 					where: {
-						tags: {
-							[Op.contains]: [targetTag]
-						}
+						[Op.or]: targetTags.map(tag => ({
+							tags: {
+								[Op.contains]: [tag]
+							}
+						}))
 					},
 					distinct: true,
 					col: 'xHuntUserId'
@@ -335,16 +343,18 @@ async function getFullStats() {
 				// 11.6 统计被打该标签的独立账号数
 				const uniqueKolTagAccounts = await XReviewForAccount.count({
 					where: {
-						tags: {
-							[Op.contains]: [targetTag]
-						}
+						[Op.or]: targetTags.map(tag => ({
+							tags: {
+								[Op.contains]: [tag]
+							}
+						}))
 					},
 					distinct: true,
 					col: 'xAccountId'
 				});
 				
 				return {
-					targetTag,
+					targetTags,
 					reviewers: kolTagReviewers.map(item => ({
 						userId: item.xHuntUserId,
 						username: item.xHuntUser?.username,
@@ -372,7 +382,7 @@ async function getFullStats() {
 			} catch (error) {
 				console.error('Error fetching KOL tag statistics:', error);
 				return {
-					targetTag: '🔥有灵魂的KOL',
+					targetTags: ['🔥有灵魂的KOL', '有灵魂的KOL'],
 					reviewers: [],
 					receivers: [],
 					stats: {
@@ -443,7 +453,7 @@ async function getFullStats() {
 		
 		// 🔥有灵魂的KOL 标签专业统计
 		kolTagAnalytics: kolTagAnalytics || {
-			targetTag: '🔥有灵魂的KOL',
+			targetTags: ['🔥有灵魂的KOL', '有灵魂的KOL'],
 			reviewers: [],
 			receivers: [],
 			stats: {
