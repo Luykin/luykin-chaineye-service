@@ -3,70 +3,78 @@ const { XHuntUser, XHuntUserToken, XReviewForAccount, XAccount, XPointRecord } =
 
 /**
  * 获取中国时区的今日开始时间（UTC）
- * 中国时间今日 00:00:00 对应的 UTC 时间
+ * 北京时间今日 00:00:00 对应的 UTC 时间
  */
 function getTodayStartChina() {
-	// 获取当前中国时间
+	// 获取当前 UTC 时间
 	const now = new Date();
-	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
 	
-	// 设置为中国时间今日 00:00:00
-	const chinaToday = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), chinaTime.getDate(), 0, 0, 0, 0);
+	// 获取当前北京时间
+	const beijingTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
 	
-	// 转换为 UTC 时间：中国时间减去8小时得到UTC时间
-	const utcTime = new Date(chinaToday.getTime() - 8 * 60 * 60 * 1000);
+	// 设置为北京时间今日 00:00:00
+	const beijingTodayStart = new Date(beijingTime.getFullYear(), beijingTime.getMonth(), beijingTime.getDate(), 0, 0, 0, 0);
+	
+	// 转换为 UTC 时间：北京时间减去8小时得到UTC时间
+	const utcTime = new Date(beijingTodayStart.getTime() - 8 * 60 * 60 * 1000);
 	return utcTime;
 }
 
 /**
  * 获取中国时区的今日结束时间（UTC）
- * 中国时间今日 23:59:59 对应的 UTC 时间
+ * 北京时间今日 23:59:59.999 对应的 UTC 时间
  */
 function getTodayEndChina() {
-	// 获取当前中国时间
+	// 获取当前 UTC 时间
 	const now = new Date();
-	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
 	
-	// 设置为中国时间今日 23:59:59.999
-	const chinaTodayEnd = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), chinaTime.getDate(), 23, 59, 59, 999);
+	// 获取当前北京时间
+	const beijingTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
 	
-	// 转换为 UTC 时间：中国时间减去8小时得到UTC时间
-	const utcTime = new Date(chinaTodayEnd.getTime() - 8 * 60 * 60 * 1000);
+	// 设置为北京时间今日 23:59:59.999
+	const beijingTodayEnd = new Date(beijingTime.getFullYear(), beijingTime.getMonth(), beijingTime.getDate(), 23, 59, 59, 999);
+	
+	// 转换为 UTC 时间：北京时间减去8小时得到UTC时间
+	const utcTime = new Date(beijingTodayEnd.getTime() - 8 * 60 * 60 * 1000);
 	return utcTime;
 }
 
 /**
- * 获取中国时区的本周开始时间（周一 UTC）
+ * 获取中国时区的本周开始时间（北京时间周一 00:00:00 对应的 UTC）
  */
 function getWeekStartChina() {
-	// 获取当前中国时间
+	// 获取当前 UTC 时间
 	const now = new Date();
-	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
+	
+	// 获取当前北京时间
+	const beijingTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
 	
 	// 计算本周一的日期
-	const dayOfWeek = chinaTime.getDay();
+	const dayOfWeek = beijingTime.getDay();
 	const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // 周日为0，需要回到上周一
 	
-	const monday = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), chinaTime.getDate() + daysToMonday, 0, 0, 0, 0);
+	const beijingMondayStart = new Date(beijingTime.getFullYear(), beijingTime.getMonth(), beijingTime.getDate() + daysToMonday, 0, 0, 0, 0);
 	
-	// 转换为 UTC 时间：中国时间减去8小时得到UTC时间
-	const utcMondayStart = new Date(monday.getTime() - 8 * 60 * 60 * 1000);
+	// 转换为 UTC 时间：北京时间减去8小时得到UTC时间
+	const utcMondayStart = new Date(beijingMondayStart.getTime() - 8 * 60 * 60 * 1000);
 	return utcMondayStart;
 }
 
 /**
- * 获取中国时区的本月开始时间（UTC）
+ * 获取中国时区的本月开始时间（北京时间1号 00:00:00 对应的 UTC）
  */
 function getMonthStartChina() {
-	// 获取当前中国时间
+	// 获取当前 UTC 时间
 	const now = new Date();
-	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
 	
-	// 设置为中国时间本月1日 00:00:00
-	const monthStart = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), 1);
+	// 获取当前北京时间
+	const beijingTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
 	
-	// 转换为 UTC 时间：中国时间减去8小时得到UTC时间
-	const utcMonthStart = new Date(monthStart.getTime() - 8 * 60 * 60 * 1000);
+	// 设置为北京时间本月1日 00:00:00
+	const beijingMonthStart = new Date(beijingTime.getFullYear(), beijingTime.getMonth(), 1, 0, 0, 0, 0);
+	
+	// 转换为 UTC 时间：北京时间减去8小时得到UTC时间
+	const utcMonthStart = new Date(beijingMonthStart.getTime() - 8 * 60 * 60 * 1000);
 	return utcMonthStart;
 }
 
@@ -80,9 +88,15 @@ async function getFullStats() {
 	const weekStart = getWeekStartChina();
 	const monthStart = getMonthStartChina();
 
-	console.log('🕐 时区调试信息:');
-	console.log('中国今日开始 (UTC):', todayStart.toISOString());
-	console.log('中国今日结束 (UTC):', todayEnd.toISOString());
+	console.log('🕐 时区调试信息（修复后）:');
+	console.log('北京今日开始 (UTC):', todayStart.toISOString());
+	console.log('北京今日结束 (UTC):', todayEnd.toISOString());
+	console.log('北京本周开始 (UTC):', weekStart.toISOString());
+	console.log('北京本月开始 (UTC):', monthStart.toISOString());
+	console.log('');
+	console.log('🔍 验证转换（应该是北京时间）:');
+	console.log('今日开始 +8小时:', new Date(todayStart.getTime() + 8 * 60 * 60 * 1000).toISOString());
+	console.log('今日结束 +8小时:', new Date(todayEnd.getTime() + 8 * 60 * 60 * 1000).toISOString());
 	console.log('中国本周开始 (UTC):', weekStart.toISOString());
 	console.log('中国本月开始 (UTC):', monthStart.toISOString());
 
