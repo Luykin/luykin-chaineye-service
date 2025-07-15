@@ -3,32 +3,53 @@ const { XHuntUser, XHuntUserToken, XReviewForAccount, XAccount, XPointRecord } =
 
 /**
  * 获取中国时区的今日开始时间（UTC）
- * 中国时间 00:00:00 对应 UTC 时间 16:00:00（前一天）
+ * 中国时间今日 00:00:00 对应的 UTC 时间
  */
 function getTodayStartChina() {
+	// 获取当前中国时间
 	const now = new Date();
-	// 获取中国时间的今日开始
-	const chinaToday = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
-	chinaToday.setHours(0, 0, 0, 0);
+	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
 	
-	// 转换为 UTC 时间（减去8小时）
-	const utcTodayStart = new Date(chinaToday.getTime() - 8 * 60 * 60 * 1000);
-	return utcTodayStart;
+	// 设置为中国时间今日 00:00:00
+	const chinaToday = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), chinaTime.getDate(), 0, 0, 0, 0);
+	
+	// 转换为 UTC 时间：中国时间减去8小时得到UTC时间
+	const utcTime = new Date(chinaToday.getTime() - 8 * 60 * 60 * 1000);
+	return utcTime;
+}
+
+/**
+ * 获取中国时区的今日结束时间（UTC）
+ * 中国时间今日 23:59:59 对应的 UTC 时间
+ */
+function getTodayEndChina() {
+	// 获取当前中国时间
+	const now = new Date();
+	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
+	
+	// 设置为中国时间今日 23:59:59.999
+	const chinaTodayEnd = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), chinaTime.getDate(), 23, 59, 59, 999);
+	
+	// 转换为 UTC 时间：中国时间减去8小时得到UTC时间
+	const utcTime = new Date(chinaTodayEnd.getTime() - 8 * 60 * 60 * 1000);
+	return utcTime;
 }
 
 /**
  * 获取中国时区的本周开始时间（周一 UTC）
  */
 function getWeekStartChina() {
+	// 获取当前中国时间
 	const now = new Date();
-	// 获取中国时间
 	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
-	const dayOfWeek = chinaTime.getDay();
-	const diff = chinaTime.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-	const monday = new Date(chinaTime.setDate(diff));
-	monday.setHours(0, 0, 0, 0);
 	
-	// 转换为 UTC 时间
+	// 计算本周一的日期
+	const dayOfWeek = chinaTime.getDay();
+	const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // 周日为0，需要回到上周一
+	
+	const monday = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), chinaTime.getDate() + daysToMonday, 0, 0, 0, 0);
+	
+	// 转换为 UTC 时间：中国时间减去8小时得到UTC时间
 	const utcMondayStart = new Date(monday.getTime() - 8 * 60 * 60 * 1000);
 	return utcMondayStart;
 }
@@ -37,24 +58,16 @@ function getWeekStartChina() {
  * 获取中国时区的本月开始时间（UTC）
  */
 function getMonthStartChina() {
+	// 获取当前中国时间
 	const now = new Date();
-	// 获取中国时间
 	const chinaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
-	const monthStart = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), 1);
-	monthStart.setHours(0, 0, 0, 0);
 	
-	// 转换为 UTC 时间
+	// 设置为中国时间本月1日 00:00:00
+	const monthStart = new Date(chinaTime.getFullYear(), chinaTime.getMonth(), 1);
+	
+	// 转换为 UTC 时间：中国时间减去8小时得到UTC时间
 	const utcMonthStart = new Date(monthStart.getTime() - 8 * 60 * 60 * 1000);
 	return utcMonthStart;
-}
-
-/**
- * 获取中国时区的今日结束时间（UTC）
- */
-function getTodayEndChina() {
-	const todayStart = getTodayStartChina();
-	const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-	return todayEnd;
 }
 
 /**
@@ -126,29 +139,29 @@ async function getFullStats() {
 		
 		// 2. 评论统计（中国时区）
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd } }
 		}),
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } },
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd } },
 			distinct: true,
 			col: 'xHuntUserId'
 		}),
 		
 		// 3. 用户注册统计（中国时区）
 		XHuntUser.count({
-			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd } }
 		}),
 		XHuntUser.count(),
 		
 		// 4. 账号统计（中国时区）
 		XAccount.count(),
 		XAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd } }
 		}),
 		
 		// 5. 积分统计（中国时区）
 		XPointRecord.sum('points', {
-			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd } }
 		}) || 0,
 		XPointRecord.sum('points') || 0,
 		
@@ -171,7 +184,7 @@ async function getFullStats() {
 			where: { kolRank20W: { [Op.ne]: null } }
 		}),
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } },
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd } },
 			include: [{
 				model: XHuntUser,
 				as: 'xHuntUser',
@@ -312,7 +325,7 @@ async function getFullStats() {
 								[Op.contains]: [tag]
 							}
 						})),
-						createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd }
+						createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd }
 					}
 				});
 				
@@ -487,10 +500,10 @@ async function getSimpleStats() {
 			}
 		}),
 		XReviewForAccount.count({
-			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd } }
 		}),
 		XHuntUser.count({
-			where: { createdAt: { [Op.gte]: todayStart, [Op.lt]: todayEnd } }
+			where: { createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd } }
 		}),
 		XHuntUser.count(),
 		XAccount.count()
@@ -513,6 +526,7 @@ module.exports = {
 	getSimpleStats,
 	// 导出时区相关函数用于测试
 	getTodayStartChina,
+	getTodayEndChina,
 	getWeekStartChina,
 	getMonthStartChina
 };

@@ -117,6 +117,9 @@ router.get('/', basicAuth, async (req, res) => {
 		// 获取统计数据
 		const stats = await getFullStats();
 
+		// 将统计数据传递给前端JavaScript（用于下载功能）
+		const statsDataScript = `<script>window.statsData = ${JSON.stringify(stats)};</script>`;
+
 		// 设置 EJS 模板引擎
 		const app = req.app;
 		app.set('view engine', 'ejs');
@@ -126,12 +129,22 @@ router.get('/', basicAuth, async (req, res) => {
 		const express = require('express');
 		app.use('/static', express.static(path.join(__dirname, '../../public/static')));
 
-		// 渲染模板，传递所有需要的辅助函数
-		res.render('stats', {
-			stats,
-			formatNumber,
-			formatDateTime
+		// 渲染模板，传递所有需要的辅助函数和数据
+		const renderedHtml = await new Promise((resolve, reject) => {
+			app.render('stats', {
+				stats,
+				formatNumber,
+				formatDateTime
+			}, (err, html) => {
+				if (err) reject(err);
+				else resolve(html);
+			});
 		});
+
+		// 在HTML中注入统计数据脚本
+		const finalHtml = renderedHtml.replace('</body>', `${statsDataScript}</body>`);
+		
+		res.send(finalHtml);
 
 	} catch (error) {
 		console.error('Error fetching stats:', error);
