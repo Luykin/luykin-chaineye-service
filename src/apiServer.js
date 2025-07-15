@@ -7,6 +7,7 @@ require('dotenv').config({ path: `${process.env.NODE_ENV === 'development' ? '.e
 console.log(process.env.NODE_ENV, 'process.env.NODE_ENV运行环境');
 const express = require('express');
 const helmet = require('helmet');
+const path = require('path');
 const cors = require('cors');
 const compression = require('compression');
 const morgan = require('morgan');
