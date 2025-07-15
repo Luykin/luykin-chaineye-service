@@ -209,6 +209,9 @@ app.use('/api/xhunt/report', express.json({
 	limit: '300kb', // 上报接口允许更大的请求体
 }));
 
+// 🆕 添加静态文件服务支持
+app.use('/static', express.static(path.join(__dirname, '../public/static')));
+
 // API 路由
 app.use('/api/fundraising', fundraisingRoutes);
 app.use('/api/crypto', cryptoRoutes);

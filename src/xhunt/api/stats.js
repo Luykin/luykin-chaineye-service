@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const { getFullStats, getSimpleStats } = require('../services/statsService');
+const expressStatic = require('express');
 
 const router = express.Router();
 
@@ -114,6 +115,11 @@ router.get('/logout', (req, res) => {
  */
 router.get('/', basicAuth, async (req, res) => {
 	try {
+		// 设置静态文件服务（在每次请求时设置）
+		const app = req.app;
+		const staticPath = path.join(__dirname, '../../public/static');
+		app.use('/static', expressStatic.static(staticPath));
+		
 		// 获取统计数据
 		const stats = await getFullStats();
 
@@ -121,13 +127,8 @@ router.get('/', basicAuth, async (req, res) => {
 		const statsDataScript = `<script>window.statsData = ${JSON.stringify(stats)};</script>`;
 
 		// 设置 EJS 模板引擎
-		const app = req.app;
 		app.set('view engine', 'ejs');
 		app.set('views', path.join(__dirname, '../views'));
-
-		// 设置静态文件服务
-		const express = require('express');
-		app.use('/static', express.static(path.join(__dirname, '../../public/static')));
 
 		// 渲染模板，传递所有需要的辅助函数和数据
 		const renderedHtml = await new Promise((resolve, reject) => {
