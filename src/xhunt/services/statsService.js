@@ -127,7 +127,7 @@ async function getFullStats() {
 		userActivityDistribution,
 		
 		// 11. 🔥有灵魂的KOL 标签专业统计
-		kolTagAnalytics
+		kolTagAnalytics,
 		
 		// 12. 特定用户统计
 		specificUsersAnalytics
@@ -135,7 +135,7 @@ async function getFullStats() {
 		// 1. 日活统计（中国时区）
 		XHuntUserToken.count({
 			where: {
-				lastUsed: { [Op.gte]: todayStart, [Op.lt]: todayEnd },
+				lastUsed: { [Op.gte]: todayStart, [Op.lte]: todayEnd },
 				isRevoked: false
 			}
 		}),
@@ -409,7 +409,7 @@ async function getFullStats() {
 					}
 				};
 			}
-		})()
+		})(),
 		
 		// 12. 特定用户统计
 		(async () => {
@@ -619,7 +619,7 @@ async function getFullStats() {
 				uniqueUsers: 0,
 				uniqueAccounts: 0
 			}
-		}
+		},
 		
 		// 特定用户统计
 		specificUsersAnalytics: specificUsersAnalytics || {
@@ -652,7 +652,7 @@ async function getSimpleStats() {
 	] = await Promise.all([
 		XHuntUserToken.count({
 			where: {
-				lastUsed: { [Op.gte]: todayStart, [Op.lt]: todayEnd },
+				lastUsed: { [Op.gte]: todayStart, [Op.lte]: todayEnd },
 				isRevoked: false
 			}
 		}),
