@@ -128,6 +128,9 @@ async function getFullStats() {
 		
 		// 11. 🔥有灵魂的KOL 标签专业统计
 		kolTagAnalytics
+		
+		// 12. 特定用户统计
+		specificUsersAnalytics
 	] = await Promise.all([
 		// 1. 日活统计（中国时区）
 		XHuntUserToken.count({
@@ -407,6 +410,147 @@ async function getFullStats() {
 				};
 			}
 		})()
+		
+		// 12. 特定用户统计
+		(async () => {
+			try {
+				// 目标用户列表（数据库中没有@符号）
+				const targetUsernames = [
+					'0x0xFeng', 'BTW0205', 'Alvin0617', 'DtDt666', 'BroLeonAus',
+					'Paris13Jeanne', 'momochenming', 'zohanlin', 'qqzsss', 'tmel0211'
+				];
+				
+				// 12.1 查找目标用户的账号ID
+				const targetAccounts = await XAccount.findAll({
+					where: {
+						handle: {
+							[Op.in]: targetUsernames.map(username => username.toLowerCase())
+						}
+					},
+					attributes: ['id', 'handle', 'displayName']
+				});
+				
+				const targetAccountIds = targetAccounts.map(account => account.id);
+				
+				if (targetAccountIds.length === 0) {
+					return {
+						targetUsernames,
+						reviewers: [],
+						receivers: [],
+						stats: {
+							todayReviews: 0,
+							totalReviews: 0,
+							uniqueReviewers: 0,
+							targetUsersFound: 0
+						}
+					};
+				}
+				
+				// 12.2 统计评论过这些用户的人（按评论次数排序）
+				const specificUsersReviewers = await XReviewForAccount.findAll({
+					where: {
+						xAccountId: { [Op.in]: targetAccountIds }
+					},
+					attributes: [
+						'xHuntUserId',
+						[fn('COUNT', '*'), 'reviewCount']
+					],
+					include: [{
+						model: XHuntUser,
+						as: 'xHuntUser',
+						attributes: ['username', 'displayName', 'avatar', 'kolRank20W', 'classification'],
+						required: true
+					}],
+					group: ['xHuntUserId', 'xHuntUser.id'],
+					order: [[fn('COUNT', '*'), 'DESC']],
+					raw: false
+				});
+				
+				// 12.3 统计这些特定用户被评论的情况
+				const specificUsersReceivers = await XReviewForAccount.findAll({
+					where: {
+						xAccountId: { [Op.in]: targetAccountIds }
+					},
+					attributes: [
+						'xAccountId',
+						[fn('COUNT', '*'), 'reviewCount']
+					],
+					include: [{
+						model: XAccount,
+						as: 'xAccount',
+						attributes: ['handle', 'displayName', 'avatar'],
+						required: true
+					}],
+					group: ['xAccountId', 'xAccount.id'],
+					order: [[fn('COUNT', '*'), 'DESC']],
+					raw: false
+				});
+				
+				// 12.4 统计今日对这些用户的评论数
+				const todaySpecificReviews = await XReviewForAccount.count({
+					where: {
+						xAccountId: { [Op.in]: targetAccountIds },
+						createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd }
+					}
+				});
+				
+				// 12.5 统计总评论数
+				const totalSpecificReviews = await XReviewForAccount.count({
+					where: {
+						xAccountId: { [Op.in]: targetAccountIds }
+					}
+				});
+				
+				// 12.6 统计参与评论的独立用户数
+				const uniqueSpecificReviewers = await XReviewForAccount.count({
+					where: {
+						xAccountId: { [Op.in]: targetAccountIds }
+					},
+					distinct: true,
+					col: 'xHuntUserId'
+				});
+				
+				return {
+					targetUsernames,
+					reviewers: specificUsersReviewers.map(item => ({
+						userId: item.xHuntUserId,
+						username: item.xHuntUser?.username,
+						displayName: item.xHuntUser?.displayName,
+						avatar: item.xHuntUser?.avatar,
+						kolRank20W: item.xHuntUser?.kolRank20W,
+						classification: item.xHuntUser?.classification,
+						reviewCount: parseInt(item.get('reviewCount')),
+						isKOL: item.xHuntUser?.kolRank20W !== null
+					})),
+					receivers: specificUsersReceivers.map(item => ({
+						accountId: item.xAccountId,
+						handle: item.xAccount?.handle,
+						displayName: item.xAccount?.displayName,
+						avatar: item.xAccount?.avatar,
+						reviewCount: parseInt(item.get('reviewCount'))
+					})),
+					stats: {
+						todayReviews: todaySpecificReviews,
+						totalReviews: totalSpecificReviews,
+						uniqueReviewers: uniqueSpecificReviewers,
+						targetUsersFound: targetAccounts.length
+					}
+				};
+			} catch (error) {
+				console.error('Error fetching specific users statistics:', error);
+				return {
+					targetUsernames: ['0x0xFeng', 'BTW0205', 'Alvin0617', 'DtDt666', 'BroLeonAus', 'Paris13Jeanne', 'momochenming', 'zohanlin', 'qqzsss', 'tmel0211'],
+					reviewers: [],
+					receivers: [],
+					stats: {
+						todayReviews: 0,
+						totalReviews: 0,
+						uniqueReviewers: 0,
+						targetUsersFound: 0
+					}
+				};
+			}
+		})()
 	]);
 
 	// 构建统计数据
@@ -474,6 +618,19 @@ async function getFullStats() {
 				totalUsage: 0,
 				uniqueUsers: 0,
 				uniqueAccounts: 0
+			}
+		}
+		
+		// 特定用户统计
+		specificUsersAnalytics: specificUsersAnalytics || {
+			targetUsernames: ['0x0xFeng', 'BTW0205', 'Alvin0617', 'DtDt666', 'BroLeonAus', 'Paris13Jeanne', 'momochenming', 'zohanlin', 'qqzsss', 'tmel0211'],
+			reviewers: [],
+			receivers: [],
+			stats: {
+				todayReviews: 0,
+				totalReviews: 0,
+				uniqueReviewers: 0,
+				targetUsersFound: 0
 			}
 		}
 	};
