@@ -1,0 +1,12 @@
+<!-- 热门标签 -->
+<div class="section">
+    <h2 class="section-title">🏷️ 热门标签 TOP 10</h2>
+    <div class="tags-grid">
+        <% stats.popularTags.forEach(tag => { %>
+            <div class="tag-item">
+                <span class="tag-name"><%= tag.name %></span>
+                <span class="tag-count"><%= tag.count %></span>
+            </div>
+        <% }); %>
+    </div>
+</div>

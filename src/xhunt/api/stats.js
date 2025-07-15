@@ -122,6 +122,10 @@ router.get('/', basicAuth, async (req, res) => {
 		app.set('view engine', 'ejs');
 		app.set('views', path.join(__dirname, '../views'));
 
+		// 设置静态文件服务
+		const express = require('express');
+		app.use('/static', express.static(path.join(__dirname, '../../public/static')));
+
 		// 渲染模板，传递所有需要的辅助函数
 		res.render('stats', {
 			stats,

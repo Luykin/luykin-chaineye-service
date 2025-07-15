@@ -1,0 +1,87 @@
+<!-- 统计数据区域 -->
+<div class="stats-section">
+    <!-- 核心指标 -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">📱 日活用户(已登录X)</span>
+            </div>
+            <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyActiveUsers.value) %></div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">💬 今日评论</span>
+            </div>
+            <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyReviews.value) %></div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">👥 评论用户</span>
+            </div>
+            <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyReviewUsers.value) %></div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">🆕 新注册用户(已登录X)</span>
+            </div>
+            <div class="stat-value"><%= formatNumber(stats.coreMetrics.dailyNewUsers.value) %></div>
+        </div>
+    </div>
+
+    <!-- 累计数据 -->
+    <div class="section">
+        <h2 class="section-title">📈 累计数据</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-title">总用户数</div>
+                <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalUsers) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">总账号数</div>
+                <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalAccounts) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">KOL 用户数</div>
+                <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalKOLUsers) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">累计积分</div>
+                <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalPointsAwarded) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">平均评分</div>
+                <div class="stat-value"><%= stats.totalMetrics.averageRating %> ⭐</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">今日积分</div>
+                <div class="stat-value"><%= formatNumber(stats.todayDetails.pointsAwarded) %></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 周期统计 -->
+    <div class="section">
+        <h2 class="section-title">📅 周期统计</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-title">本周评论</div>
+                <div class="stat-value"><%= formatNumber(stats.periodMetrics.weekly.reviews) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">本周新用户</div>
+                <div class="stat-value"><%= formatNumber(stats.periodMetrics.weekly.newUsers) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">本月评论</div>
+                <div class="stat-value"><%= formatNumber(stats.periodMetrics.monthly.reviews) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">本月新用户</div>
+                <div class="stat-value"><%= formatNumber(stats.periodMetrics.monthly.newUsers) %></div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,132 @@
+<!-- 特定用户统计 -->
+<div class="section">
+    <h2 class="section-title">🎯 特定用户评论统计</h2>
+    <p style="color: #6b7280; margin-bottom: 20px;">
+        统计目标用户：0x0xFeng, BTW0205, Alvin0617, DtDt666, BroLeonAus, Paris13Jeanne, momochenming, zohanlin, qqzsss, tmel0211
+    </p>
+    
+    <!-- 统计概览 -->
+    <div class="stats-grid" style="margin-bottom: 30px;">
+        <div class="stat-card">
+            <div class="stat-title">今日评论数</div>
+            <div class="stat-value"><%= formatNumber(stats.specificUsersAnalytics.stats.todayReviews) %></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">累计评论数</div>
+            <div class="stat-value"><%= formatNumber(stats.specificUsersAnalytics.stats.totalReviews) %></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">参与评论用户数</div>
+            <div class="stat-value"><%= formatNumber(stats.specificUsersAnalytics.stats.uniqueReviewers) %></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">目标用户数</div>
+            <div class="stat-value"><%= formatNumber(stats.specificUsersAnalytics.stats.targetUsersFound) %></div>
+        </div>
+    </div>
+
+    <!-- 评论者全量表格 -->
+    <div style="margin-bottom: 30px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #3b82f6; padding-left: 12px; margin: 0;">
+                👥 评论者全量名单 - 谁评论过这些特定用户
+            </h3>
+            <button id="downloadSpecificReviewersBtn" style="background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                📥 下载评论者名单
+            </button>
+        </div>
+        
+        <div class="table-container">
+            <table style="width: 100%; border-collapse: collapse; background: white;">
+                <thead style="background: #f9fafb;">
+                    <tr>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">排名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">显示名称</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">分类</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">KOL排名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">评论次数</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">是否KOL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (stats.specificUsersAnalytics.reviewers && stats.specificUsersAnalytics.reviewers.length > 0) { %>
+                        <% stats.specificUsersAnalytics.reviewers.forEach((reviewer, index) => { %>
+                            <tr style="border-bottom: 1px solid #f3f4f6;">
+                                <td style="padding: 12px; color: #374151;"><%= index + 1 %></td>
+                                <td style="padding: 12px; color: #374151;">@<%= reviewer.username || '未知' %></td>
+                                <td style="padding: 12px; color: #374151;">
+                                    <%= reviewer.displayName || reviewer.username || '匿名用户' %>
+                                    <% if (reviewer.isKOL) { %>
+                                        <span style="background: linear-gradient(45deg, #f59e0b, #d97706); color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 6px;">KOL</span>
+                                    <% } %>
+                                </td>
+                                <td style="padding: 12px; color: #6b7280;"><%= reviewer.classification || '-' %></td>
+                                <td style="padding: 12px; color: #6b7280;">
+                                    <% if (reviewer.kolRank20W) { %>
+                                        <%= formatNumber(reviewer.kolRank20W) %>
+                                    <% } else { %>
+                                        -
+                                    <% } %>
+                                </td>
+                                <td style="padding: 12px; color: #3b82f6; font-weight: 600;"><%= reviewer.reviewCount %></td>
+                                <td style="padding: 12px;">
+                                    <% if (reviewer.isKOL) { %>
+                                        <span style="color: #10b981;">✅ 是</span>
+                                    <% } else { %>
+                                        <span style="color: #6b7280;">❌ 否</span>
+                                    <% } %>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="7" style="padding: 40px; text-align: center; color: #6b7280;">暂无数据</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 被评论者全量表格 -->
+    <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #8b5cf6; padding-left: 12px; margin: 0;">
+                🎯 被评论者全量名单 - 特定用户被评论情况
+            </h3>
+            <button id="downloadSpecificReceiversBtn" style="background: #8b5cf6; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                📥 下载被评论者名单
+            </button>
+        </div>
+        
+        <div class="table-container">
+            <table style="width: 100%; border-collapse: collapse; background: white;">
+                <thead style="background: #f9fafb;">
+                    <tr>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">排名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">显示名称</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">被评论次数</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (stats.specificUsersAnalytics.receivers && stats.specificUsersAnalytics.receivers.length > 0) { %>
+                        <% stats.specificUsersAnalytics.receivers.forEach((receiver, index) => { %>
+                            <tr style="border-bottom: 1px solid #f3f4f6;">
+                                <td style="padding: 12px; color: #374151;"><%= index + 1 %></td>
+                                <td style="padding: 12px; color: #374151;">@<%= receiver.handle || '未知' %></td>
+                                <td style="padding: 12px; color: #374151;"><%= receiver.displayName || receiver.handle || '未知账号' %></td>
+                                <td style="padding: 12px; color: #8b5cf6; font-weight: 600;"><%= receiver.reviewCount %></td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="4" style="padding: 40px; text-align: center; color: #6b7280;">暂无数据</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

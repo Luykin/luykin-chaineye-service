@@ -1,0 +1,32 @@
+<!-- 用户活跃度分布 -->
+<div class="section">
+    <h2 class="section-title">👑 活跃用户排行榜 TOP 20</h2>
+    <div class="distribution-grid">
+        <% stats.userDistribution.forEach((user, index) => { %>
+            <div class="distribution-item">
+                <div class="user-info">
+                    <div>
+                        <div class="user-name">
+                            #<%= index + 1 %> <%= user.displayName || user.username || '匿名用户' %>
+                            <% if (user.kolRank) { %>
+                                <span class="kol-badge">KOL</span>
+                            <% } %>
+                        </div>
+                        <% if (user.username) { %>
+                            <div class="user-username">@<%= user.username %></div>
+                        <% } %>
+                    </div>
+                    <div class="user-stats">
+                        <div class="review-count"><%= user.reviewCount %> 条评论</div>
+                        <% if (user.kolRank) { %>
+                            <div class="user-rank">KOL排名: <%= formatNumber(user.kolRank) %></div>
+                        <% } %>
+                        <% if (user.classification) { %>
+                            <div class="user-rank">分类: <%= user.classification %></div>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+        <% }); %>
+    </div>
+</div>

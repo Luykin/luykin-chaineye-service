@@ -1,0 +1,129 @@
+<!-- 🔥有灵魂的KOL 标签专业统计 -->
+<div class="section">
+    <h2 class="section-title">🔥 "有灵魂的KOL" 标签专业统计（含 🔥有灵魂的KOL 和 有灵魂的KOL）</h2>
+    
+    <!-- 统计概览 -->
+    <div class="stats-grid" style="margin-bottom: 30px;">
+        <div class="stat-card">
+            <div class="stat-title">今日使用次数</div>
+            <div class="stat-value"><%= formatNumber(stats.kolTagAnalytics.stats.todayUsage) %></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">累计使用次数</div>
+            <div class="stat-value"><%= formatNumber(stats.kolTagAnalytics.stats.totalUsage) %></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">参与评论用户数</div>
+            <div class="stat-value"><%= formatNumber(stats.kolTagAnalytics.stats.uniqueUsers) %></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">被评论账号数</div>
+            <div class="stat-value"><%= formatNumber(stats.kolTagAnalytics.stats.uniqueAccounts) %></div>
+        </div>
+    </div>
+
+    <!-- 评论者全量表格 -->
+    <div style="margin-bottom: 30px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #f59e0b; padding-left: 12px; margin: 0;">
+                🏆 评论者全量名单 - 谁最爱打这个标签
+            </h3>
+            <button id="downloadReviewersBtn" style="background: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                📥 下载评论者名单
+            </button>
+        </div>
+        
+        <div class="table-container">
+            <table style="width: 100%; border-collapse: collapse; background: white;">
+                <thead style="background: #f9fafb;">
+                    <tr>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">排名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">显示名称</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">分类</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">KOL排名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">使用次数</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">是否KOL</th>
+                    </tr>
+                </thead>
+                <tbody id="reviewersTableBody">
+                    <% if (stats.kolTagAnalytics.reviewers && stats.kolTagAnalytics.reviewers.length > 0) { %>
+                        <% stats.kolTagAnalytics.reviewers.forEach((reviewer, index) => { %>
+                            <tr style="border-bottom: 1px solid #f3f4f6;">
+                                <td style="padding: 12px; color: #374151;"><%= index + 1 %></td>
+                                <td style="padding: 12px; color: #374151;">@<%= reviewer.username || '未知' %></td>
+                                <td style="padding: 12px; color: #374151;">
+                                    <%= reviewer.displayName || reviewer.username || '匿名用户' %>
+                                    <% if (reviewer.isKOL) { %>
+                                        <span style="background: linear-gradient(45deg, #f59e0b, #d97706); color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 6px;">KOL</span>
+                                    <% } %>
+                                </td>
+                                <td style="padding: 12px; color: #6b7280;"><%= reviewer.classification || '-' %></td>
+                                <td style="padding: 12px; color: #6b7280;">
+                                    <% if (reviewer.kolRank20W) { %>
+                                        <%= formatNumber(reviewer.kolRank20W) %>
+                                    <% } else { %>
+                                        -
+                                    <% } %>
+                                </td>
+                                <td style="padding: 12px; color: #f59e0b; font-weight: 600;"><%= reviewer.tagUsageCount %></td>
+                                <td style="padding: 12px;">
+                                    <% if (reviewer.isKOL) { %>
+                                        <span style="color: #10b981;">✅ 是</span>
+                                    <% } else { %>
+                                        <span style="color: #6b7280;">❌ 否</span>
+                                    <% } %>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="7" style="padding: 40px; text-align: center; color: #6b7280;">暂无数据</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 被评论者全量表格 -->
+    <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #10b981; padding-left: 12px; margin: 0;">
+                🎯 被评论者全量名单 - 谁最受认可
+            </h3>
+            <button id="downloadReceiversBtn" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                📥 下载被评论者名单
+            </button>
+        </div>
+        
+        <div class="table-container">
+            <table style="width: 100%; border-collapse: collapse; background: white;">
+                <thead style="background: #f9fafb;">
+                    <tr>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">排名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户名</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">显示名称</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">被评次数</th>
+                    </tr>
+                </thead>
+                <tbody id="receiversTableBody">
+                    <% if (stats.kolTagAnalytics.receivers && stats.kolTagAnalytics.receivers.length > 0) { %>
+                        <% stats.kolTagAnalytics.receivers.forEach((receiver, index) => { %>
+                            <tr style="border-bottom: 1px solid #f3f4f6;">
+                                <td style="padding: 12px; color: #374151;"><%= index + 1 %></td>
+                                <td style="padding: 12px; color: #374151;">@<%= receiver.handle || '未知' %></td>
+                                <td style="padding: 12px; color: #374151;"><%= receiver.displayName || receiver.handle || '未知账号' %></td>
+                                <td style="padding: 12px; color: #10b981; font-weight: 600;"><%= receiver.receivedTagCount %></td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="4" style="padding: 40px; text-align: center; color: #6b7280;">暂无数据</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
