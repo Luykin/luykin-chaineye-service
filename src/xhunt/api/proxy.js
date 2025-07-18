@@ -8,7 +8,7 @@ const router = express.Router();
 const URL_MAPPINGS = {
 	'kota': 'https://kota.chaineye.tools',
 	'kb': 'http://150.5.158.179:8087',
-	'kota_temporary': 'http://35.220.214.49:16531',
+	'kota_temporary': 'http://172.31.0.8:16531',
 	"k8s_kota": "https://data.cryptohunt.ai"
 };
 
