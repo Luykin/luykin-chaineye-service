@@ -502,75 +502,6 @@ async function getFullStats(redisClient = null) {
 			}
 		})(),
 		
-		// 13. 🆕 设备指纹重复分析
-		(async () => {
-			try {
-				// 13.1 统计指纹重复情况
-				const fingerprintStats = await XHuntUserToken.findAll({
-					attributes: [
-						'fingerprint',
-						[fn('COUNT', '*'), 'tokenCount'],
-						[fn('COUNT', fn('DISTINCT', col('userId'))), 'uniqueUsers']
-					],
-					where: {
-						fingerprint: { [Op.ne]: null }, // 排除空指纹
-						isRevoked: false // 只统计有效token
-					},
-					group: ['fingerprint'],
-					order: [[fn('COUNT', '*'), 'DESC']],
-					raw: true
-				});
-				
-				// 13.2 分析重复情况
-				const totalFingerprints = fingerprintStats.length;
-				const duplicateFingerprints = fingerprintStats.filter(item => parseInt(item.tokenCount) > 1);
-				const duplicateCount = duplicateFingerprints.length;
-				const duplicateRate = totalFingerprints > 0 ? (duplicateCount / totalFingerprints * 100) : 0;
-				
-				// 13.3 统计总token数和总用户数
-				const totalTokens = fingerprintStats.reduce((sum, item) => sum + parseInt(item.tokenCount), 0);
-				const totalUniqueUsers = fingerprintStats.reduce((sum, item) => sum + parseInt(item.uniqueUsers), 0);
-				
-				// 13.4 计算可能的统计偏差
-				const potentialUndercount = totalTokens - totalFingerprints; // 因重复指纹可能少统计的用户数
-				const undercountRate = totalFingerprints > 0 ? (potentialUndercount / totalFingerprints * 100) : 0;
-				
-				// 13.5 获取重复最多的前10个指纹
-				const topDuplicates = duplicateFingerprints.slice(0, 10).map(item => ({
-					fingerprint: item.fingerprint.substring(0, 8) + '...', // 只显示前8位
-					tokenCount: parseInt(item.tokenCount),
-					uniqueUsers: parseInt(item.uniqueUsers),
-					duplicateLevel: parseInt(item.tokenCount) - parseInt(item.uniqueUsers)
-				}));
-				
-				return {
-					summary: {
-						totalFingerprints,
-						duplicateCount,
-						duplicateRate: Number(duplicateRate.toFixed(2)),
-						totalTokens,
-						totalUniqueUsers,
-						potentialUndercount,
-						undercountRate: Number(undercountRate.toFixed(2))
-					},
-					topDuplicates
-				};
-			} catch (error) {
-				console.error('Error fetching fingerprint duplicate analysis:', error);
-				return {
-					summary: {
-						totalFingerprints: 0,
-						duplicateCount: 0,
-						duplicateRate: 0,
-						totalTokens: 0,
-						totalUniqueUsers: 0,
-						potentialUndercount: 0,
-						undercountRate: 0
-					},
-					topDuplicates: []
-				};
-			}
-		})(),
 		// 12. 特定用户统计
 		(async () => {
 			try {
@@ -710,7 +641,77 @@ async function getFullStats(redisClient = null) {
 					}
 				};
 			}
-		})()
+		})(),
+		
+		// 13. 🆕 设备指纹重复分析
+		(async () => {
+			try {
+				// 13.1 统计指纹重复情况
+				const fingerprintStats = await XHuntUserToken.findAll({
+					attributes: [
+						'fingerprint',
+						[fn('COUNT', '*'), 'tokenCount'],
+						[fn('COUNT', fn('DISTINCT', col('userId'))), 'uniqueUsers']
+					],
+					where: {
+						fingerprint: { [Op.ne]: null }, // 排除空指纹
+						isRevoked: false // 只统计有效token
+					},
+					group: ['fingerprint'],
+					order: [[fn('COUNT', '*'), 'DESC']],
+					raw: true
+				});
+				
+				// 13.2 分析重复情况
+				const totalFingerprints = fingerprintStats.length;
+				const duplicateFingerprints = fingerprintStats.filter(item => parseInt(item.tokenCount) > 1);
+				const duplicateCount = duplicateFingerprints.length;
+				const duplicateRate = totalFingerprints > 0 ? (duplicateCount / totalFingerprints * 100) : 0;
+				
+				// 13.3 统计总token数和总用户数
+				const totalTokens = fingerprintStats.reduce((sum, item) => sum + parseInt(item.tokenCount), 0);
+				const totalUniqueUsers = fingerprintStats.reduce((sum, item) => sum + parseInt(item.uniqueUsers), 0);
+				
+				// 13.4 计算可能的统计偏差
+				const potentialUndercount = totalTokens - totalFingerprints; // 因重复指纹可能少统计的用户数
+				const undercountRate = totalFingerprints > 0 ? (potentialUndercount / totalFingerprints * 100) : 0;
+				
+				// 13.5 获取重复最多的前10个指纹
+				const topDuplicates = duplicateFingerprints.slice(0, 10).map(item => ({
+					fingerprint: item.fingerprint.substring(0, 8) + '...', // 只显示前8位
+					tokenCount: parseInt(item.tokenCount),
+					uniqueUsers: parseInt(item.uniqueUsers),
+					duplicateLevel: parseInt(item.tokenCount) - parseInt(item.uniqueUsers)
+				}));
+				
+				return {
+					summary: {
+						totalFingerprints,
+						duplicateCount,
+						duplicateRate: Number(duplicateRate.toFixed(2)),
+						totalTokens,
+						totalUniqueUsers,
+						potentialUndercount,
+						undercountRate: Number(undercountRate.toFixed(2))
+					},
+					topDuplicates
+				};
+			} catch (error) {
+				console.error('Error fetching fingerprint duplicate analysis:', error);
+				return {
+					summary: {
+						totalFingerprints: 0,
+						duplicateCount: 0,
+						duplicateRate: 0,
+						totalTokens: 0,
+						totalUniqueUsers: 0,
+						potentialUndercount: 0,
+						undercountRate: 0
+					},
+					topDuplicates: []
+				};
+			}
+		})(),
 	]);
 
 	// 构建统计数据
