@@ -121,7 +121,7 @@ router.get('/', basicAuth, async (req, res) => {
 		app.use('/static', expressStatic.static(staticPath));
 		
 		// 获取统计数据
-		const stats = await getFullStats();
+		const stats = await getFullStats(req.redisClient);
 
 		// 将统计数据传递给前端JavaScript（用于下载功能）
 		const statsDataScript = `<script>window.statsData = ${JSON.stringify(stats)};</script>`;

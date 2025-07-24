@@ -2,6 +2,73 @@ const { Op, fn, col } = require('sequelize');
 const { XHuntUser, XHuntUserToken, XReviewForAccount, XAccount, XPointRecord } = require('../../models/postgres-start');
 
 /**
+ * 获取最近7天的日活数据（基于设备指纹）
+ * @param {Object} redisClient - Redis客户端实例
+ * @returns {Promise<Array>} 最近7天的日活数据
+ */
+async function getDailyActiveUsers(redisClient) {
+	try {
+		const dauData = [];
+		
+		// 获取最近7天的数据
+		for (let i = 6; i >= 0; i--) {
+			// 计算北京时间的日期
+			const date = new Date();
+			date.setDate(date.getDate() - i);
+			const beijingTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
+			const dateStr = beijingTime.toISOString().split('T')[0];
+			
+			const dauKey = `dau:${dateStr}`;
+			
+			try {
+				// 获取当日活跃用户数（Set的成员数量）
+				const activeUsers = await redisClient.sCard(dauKey);
+				
+				dauData.push({
+					date: dateStr,
+					activeUsers: activeUsers || 0,
+					displayDate: beijingTime.toLocaleDateString('zh-CN', {
+						month: 'short',
+						day: 'numeric',
+						weekday: 'short'
+					})
+				});
+			} catch (redisError) {
+				console.error(`Error fetching DAU for ${dateStr}:`, redisError);
+				dauData.push({
+					date: dateStr,
+					activeUsers: 0,
+					displayDate: beijingTime.toLocaleDateString('zh-CN', {
+						month: 'short',
+						day: 'numeric',
+						weekday: 'short'
+					})
+				});
+			}
+		}
+		
+		return dauData;
+	} catch (error) {
+		console.error('Error fetching daily active users:', error);
+		// 返回空数据而不是抛出错误
+		return Array.from({length: 7}, (_, i) => {
+			const date = new Date();
+			date.setDate(date.getDate() - (6 - i));
+			const beijingTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Shanghai"}));
+			return {
+				date: beijingTime.toISOString().split('T')[0],
+				activeUsers: 0,
+				displayDate: beijingTime.toLocaleDateString('zh-CN', {
+					month: 'short',
+					day: 'numeric',
+					weekday: 'short'
+				})
+			};
+		});
+	}
+}
+
+/**
  * 获取中国时区的今日开始时间（UTC）
  * 北京时间今日 00:00:00 对应的 UTC 时间
  */
@@ -80,8 +147,9 @@ function getMonthStartChina() {
 
 /**
  * 获取完整的统计数据
+ * @param {Object} redisClient - Redis客户端实例（可选）
  */
-async function getFullStats() {
+async function getFullStats(redisClient = null) {
 	// 使用中国时区的时间范围
 	const todayStart = getTodayStartChina();
 	const todayEnd = getTodayEndChina();
@@ -99,6 +167,12 @@ async function getFullStats() {
 	console.log('今日结束 +8小时:', new Date(todayEnd.getTime() + 8 * 60 * 60 * 1000).toISOString());
 	console.log('中国本周开始 (UTC):', weekStart.toISOString());
 	console.log('中国本月开始 (UTC):', monthStart.toISOString());
+
+	// 🆕 获取基于设备指纹的日活数据
+	let dailyActiveUsersData = [];
+	if (redisClient) {
+		dailyActiveUsersData = await getDailyActiveUsers(redisClient);
+	}
 
 	// 并行执行所有统计查询
 	const [
@@ -646,7 +720,10 @@ async function getFullStats() {
 				uniqueReviewers: 0,
 				targetUsersFound: 0
 			}
-		}
+		},
+		
+		// 🆕 基于设备指纹的日活数据
+		dailyActiveUsersData: dailyActiveUsersData || []
 	};
 }
 

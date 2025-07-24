@@ -219,6 +219,25 @@ const securityMiddleware = (req, res, next) => {
 		if (signature !== expectedSignature) {
 			return res.status(411).json({ error: '411' });
 		}
+		
+		// 🔥 日活统计逻辑 - 使用 Redis（异步非阻塞）
+		setImmediate(async () => {
+			try {
+				// 使用北京时间的日期作为key
+				const beijingTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Shanghai"});
+				const today = new Date(beijingTime).toISOString().split('T')[0];
+				const dauKey = `dau:${today}`;
+				
+				// 使用 Redis Set 记录当日活跃用户（自动去重）
+				await req.redisClient.sAdd(dauKey, fingerprint);
+				// 设置过期时间（保留8天，确保7天数据完整）
+				await req.redisClient.expire(dauKey, 8 * 24 * 60 * 60);
+			} catch (redisError) {
+				// Redis 错误不影响主流程，只记录日志
+				console.error('DAU tracking error:', redisError);
+			}
+		});
+		
 		// 将验证后的信息添加到请求对象中
 		req.securityContext = {
 			requestId,
