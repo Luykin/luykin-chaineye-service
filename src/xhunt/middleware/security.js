@@ -1,25 +1,92 @@
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
-// 🚀 智能日活统计 - 内存去重缓存
-const recentFingerprints = new Map(); // key: date_fingerprint, value: timestamp
-const CACHE_DURATION = 10 * 60 * 1000; // 10分钟缓存
-
-// 清理过期缓存 - 每分钟执行一次
-setInterval(() => {
-	const now = Date.now();
-	let cleanedCount = 0;
-	for (let [key, timestamp] of recentFingerprints) {
-		if (now - timestamp > CACHE_DURATION) {
-			recentFingerprints.delete(key);
-			cleanedCount++;
+// 🚀 智能日活统计缓存管理器
+class DAUCacheManager {
+	constructor() {
+		this.recentFingerprints = new Map(); // key: date_fingerprint, value: timestamp
+		this.CACHE_DURATION = 10 * 60 * 1000; // 10分钟缓存
+		this.cleanupTimer = null;
+		this.isInitialized = false;
+	}
+	
+	// 初始化定时器（只执行一次）
+	init() {
+		if (this.isInitialized) {
+			return;
+		}
+		
+		this.isInitialized = true;
+		this.cleanupTimer = setInterval(() => {
+			this.cleanup();
+		}, 60 * 1000); // 每分钟清理一次
+		
+		console.log('🚀 DAU缓存管理器已初始化');
+	}
+	
+	// 清理过期缓存
+	cleanup() {
+		const now = Date.now();
+		let cleanedCount = 0;
+		
+		for (let [key, timestamp] of this.recentFingerprints) {
+			if (now - timestamp > this.CACHE_DURATION) {
+				this.recentFingerprints.delete(key);
+				cleanedCount++;
+			}
+		}
+		
+		// 只在有清理时才输出日志，避免日志污染
+		if (cleanedCount > 0) {
+			console.log(`🧹 DAU缓存清理: 移除 ${cleanedCount} 个过期条目，当前缓存大小: ${this.recentFingerprints.size}`);
 		}
 	}
-	// 只在有清理时才输出日志，避免日志污染
-	if (cleanedCount > 0) {
-		console.log(`🧹 DAU缓存清理: 移除 ${cleanedCount} 个过期条目，当前缓存大小: ${recentFingerprints.size}`);
+	
+	// 检查是否需要写入Redis
+	shouldWriteToRedis(fingerprint) {
+		const beijingTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Shanghai"});
+		const today = new Date(beijingTime).toISOString().split('T')[0];
+		const cacheKey = `${today}_${fingerprint}`;
+		
+		if (!this.recentFingerprints.has(cacheKey)) {
+			// 未缓存，标记为已处理
+			this.recentFingerprints.set(cacheKey, Date.now());
+			return true;
+		}
+		
+		return false; // 已缓存，跳过
 	}
-}, 60 * 1000); // 每分钟清理一次
+	
+	// 从缓存中移除（用于Redis失败时的重试机制）
+	removeFromCache(fingerprint) {
+		const beijingTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Shanghai"});
+		const today = new Date(beijingTime).toISOString().split('T')[0];
+		const cacheKey = `${today}_${fingerprint}`;
+		this.recentFingerprints.delete(cacheKey);
+	}
+	
+	// 销毁定时器（用于测试或服务关闭）
+	destroy() {
+		if (this.cleanupTimer) {
+			clearInterval(this.cleanupTimer);
+			this.cleanupTimer = null;
+			this.isInitialized = false;
+			console.log('🛑 DAU缓存管理器已销毁');
+		}
+	}
+	
+	// 获取缓存状态（用于调试）
+	getStatus() {
+		return {
+			cacheSize: this.recentFingerprints.size,
+			isInitialized: this.isInitialized,
+			cacheDuration: this.CACHE_DURATION
+		};
+	}
+}
+
+// 创建单例实例
+const dauCacheManager = new DAUCacheManager();
 
 // 速率限制中间件
 const rateLimiter = rateLimit({
@@ -201,6 +268,9 @@ const browserOnlyMiddleware = (req, res, next) => {
 
 // 安全中间件
 const securityMiddleware = (req, res, next) => {
+	// 确保缓存管理器已初始化
+	dauCacheManager.init();
+	
 	try {
 		// 检查必要的请求头
 		const requestId = req.headers['x-request-id'];
@@ -240,16 +310,10 @@ const securityMiddleware = (req, res, next) => {
 			return res.status(411).json({ error: '411' });
 		}
 		
-		// 🔥 日活统计逻辑 - 使用 Redis（异步非阻塞）
-		// 🚀 智能日活统计 - 去重缓存优化
-		const beijingTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Shanghai"});
-		const today = new Date(beijingTime).toISOString().split('T')[0];
-		const cacheKey = `${today}_${fingerprint}`;
-		
-		// 检查是否在缓存期内（10分钟内同一设备不重复写入）
-		if (!recentFingerprints.has(cacheKey)) {
-			// 未缓存，标记为已处理并异步写入 Redis
-			recentFingerprints.set(cacheKey, Date.now());
+		// 🔥 智能日活统计 - 使用缓存管理器
+		if (dauCacheManager.shouldWriteToRedis(fingerprint)) {
+			const beijingTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Shanghai"});
+			const today = new Date(beijingTime).toISOString().split('T')[0];
 			
 			// 异步写入 Redis（非阻塞）
 			setImmediate(async () => {
@@ -262,7 +326,7 @@ const securityMiddleware = (req, res, next) => {
 					// Redis 错误不影响主流程，只记录日志
 					console.error('DAU tracking error:', redisError);
 					// Redis 失败时从缓存中移除，允许下次重试
-					recentFingerprints.delete(cacheKey);
+					dauCacheManager.removeFromCache(fingerprint);
 				}
 			});
 		}
@@ -287,5 +351,6 @@ module.exports = {
 	fingerprintLimiter,
 	securityMiddleware,
 	browserOnlyMiddleware,
-	generateSignature // 导出用于测试
+	generateSignature, // 导出用于测试
+	dauCacheManager // 导出缓存管理器（用于测试和监控）
 };
