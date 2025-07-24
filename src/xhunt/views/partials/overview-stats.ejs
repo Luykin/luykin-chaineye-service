@@ -163,7 +163,7 @@
         </div>
         
         <!-- 重复指纹详情表格 -->
-        <% if (stats.fingerprintDuplicateAnalysis.duplicateList && stats.fingerprintDuplicateAnalysis.duplicateList.length > 0) { %>
+        <% if (stats.fingerprintDuplicateAnalysis.topDuplicates && stats.fingerprintDuplicateAnalysis.topDuplicates.length > 0) { %>
             <div>
                 <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #f59e0b; padding-left: 12px; margin-bottom: 20px;">
                     🔥 重复指纹列表 TOP 10
@@ -179,7 +179,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <% stats.fingerprintDuplicateAnalysis.duplicateList.forEach((duplicate, index) => { %>
+                            <% stats.fingerprintDuplicateAnalysis.topDuplicates.forEach((duplicate, index) => { %>
                                 <tr style="border-bottom: 1px solid #f3f4f6;">
                                     <td style="padding: 12px; color: #374151;"><%= index + 1 %></td>
                                     <td style="padding: 12px; font-family: monospace; color: #6b7280;"><%= duplicate.fingerprint %></td>
