@@ -218,7 +218,10 @@ async function getFullStats(redisClient = null) {
 		kolTagAnalytics,
 		
 		// 12. 特定用户统计
-		specificUsersAnalytics
+		specificUsersAnalytics,
+		
+		// 13. 🆕 设备指纹重复分析
+		fingerprintDuplicateAnalysis
 	] = await Promise.all([
 		// 1. 日活统计（中国时区）
 		XHuntUserToken.count({
