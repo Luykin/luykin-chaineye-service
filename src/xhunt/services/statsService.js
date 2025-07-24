@@ -514,7 +514,9 @@ async function getFullStats(redisClient = null) {
 						isRevoked: false // 只统计有效token
 					},
 					group: ['fingerprint'],
-					having: fn('COUNT', '*'), // 所有指纹都统计
+					having: {
+						[fn('COUNT', '*')]: { [Op.gte]: 1 } // 修复：添加正确的HAVING条件
+					},
 					order: [[fn('COUNT', '*'), 'DESC']],
 					raw: true
 				});
@@ -568,7 +570,7 @@ async function getFullStats(redisClient = null) {
 					topDuplicates: []
 				};
 			}
-		})()
+		})(),
 		// 12. 特定用户统计
 		(async () => {
 			try {
