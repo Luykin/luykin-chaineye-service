@@ -1,6 +1,26 @@
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
+// 🚀 智能日活统计 - 内存去重缓存
+const recentFingerprints = new Map(); // key: date_fingerprint, value: timestamp
+const CACHE_DURATION = 10 * 60 * 1000; // 10分钟缓存
+
+// 清理过期缓存 - 每分钟执行一次
+setInterval(() => {
+	const now = Date.now();
+	let cleanedCount = 0;
+	for (let [key, timestamp] of recentFingerprints) {
+		if (now - timestamp > CACHE_DURATION) {
+			recentFingerprints.delete(key);
+			cleanedCount++;
+		}
+	}
+	// 只在有清理时才输出日志，避免日志污染
+	if (cleanedCount > 0) {
+		console.log(`🧹 DAU缓存清理: 移除 ${cleanedCount} 个过期条目，当前缓存大小: ${recentFingerprints.size}`);
+	}
+}, 60 * 1000); // 每分钟清理一次
+
 // 速率限制中间件
 const rateLimiter = rateLimit({
 	windowMs: 10 * 60 * 1000, // 10分钟窗口
@@ -221,22 +241,32 @@ const securityMiddleware = (req, res, next) => {
 		}
 		
 		// 🔥 日活统计逻辑 - 使用 Redis（异步非阻塞）
-		setImmediate(async () => {
-			try {
-				// 使用北京时间的日期作为key
-				const beijingTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Shanghai"});
-				const today = new Date(beijingTime).toISOString().split('T')[0];
-				const dauKey = `dau:${today}`;
-				
-				// 使用 Redis Set 记录当日活跃用户（自动去重）
-				await req.redisClient.sAdd(dauKey, fingerprint);
-				// 设置过期时间（保留8天，确保7天数据完整）
-				await req.redisClient.expire(dauKey, 8 * 24 * 60 * 60);
-			} catch (redisError) {
-				// Redis 错误不影响主流程，只记录日志
-				console.error('DAU tracking error:', redisError);
-			}
-		});
+		// 🚀 智能日活统计 - 去重缓存优化
+		const beijingTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Shanghai"});
+		const today = new Date(beijingTime).toISOString().split('T')[0];
+		const cacheKey = `${today}_${fingerprint}`;
+		
+		// 检查是否在缓存期内（10分钟内同一设备不重复写入）
+		if (!recentFingerprints.has(cacheKey)) {
+			// 未缓存，标记为已处理并异步写入 Redis
+			recentFingerprints.set(cacheKey, Date.now());
+			
+			// 异步写入 Redis（非阻塞）
+			setImmediate(async () => {
+				try {
+					const dauKey = `dau:${today}`;
+					await req.redisClient.sAdd(dauKey, fingerprint);
+					// 设置过期时间（保留8天，确保7天数据完整）
+					await req.redisClient.expire(dauKey, 8 * 24 * 60 * 60);
+				} catch (redisError) {
+					// Redis 错误不影响主流程，只记录日志
+					console.error('DAU tracking error:', redisError);
+					// Redis 失败时从缓存中移除，允许下次重试
+					recentFingerprints.delete(cacheKey);
+				}
+			});
+		}
+		// 如果在缓存期内，直接跳过（避免重复写入）
 		
 		// 将验证后的信息添加到请求对象中
 		req.securityContext = {
