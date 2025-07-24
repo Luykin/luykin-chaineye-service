@@ -794,13 +794,13 @@ async function getFullStats(redisClient = null) {
 		// 🆕 基于设备指纹的日活数据
 		dailyActiveUsersData: dailyActiveUsersData || [],
 		
-		// // 🆕 设备指纹重复分析
-		// fingerprintDuplicateAnalysis: fingerprintDuplicateAnalysis || {
-		// 	totalFingerprints: 0,
-		// 	duplicateCount: 0,
-		// 	duplicateRate: 0,
-		// 	topDuplicates: []
-		// }
+		// 🆕 设备指纹重复分析
+		fingerprintDuplicateAnalysis: {
+			totalFingerprints: 0,
+			duplicateCount: 0,
+			duplicateRate: 0,
+			topDuplicates: []
+		}
 	};
 }
 
