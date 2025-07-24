@@ -503,7 +503,7 @@ async function getFullStats(redisClient = null) {
 		(async () => {
 			try {
 				// 13.1 统计指纹重复情况
-				const fingerprintStats = await XHuntUserToken.findAll({
+				const fingerprintDuplicateStats = await XHuntUserToken.findAll({
 					attributes: [
 						'fingerprint',
 						[fn('COUNT', '*'), 'tokenCount'],
@@ -514,22 +514,20 @@ async function getFullStats(redisClient = null) {
 						isRevoked: false // 只统计有效token
 					},
 					group: ['fingerprint'],
-					having: {
-						[fn('COUNT', '*')]: { [Op.gte]: 1 } // 修复：添加正确的HAVING条件
-					},
+					// 移除 having 子句，因为 COUNT(*) >= 1 对所有分组都成立
 					order: [[fn('COUNT', '*'), 'DESC']],
 					raw: true
 				});
 				
 				// 13.2 分析重复情况
-				const totalFingerprints = fingerprintStats.length;
-				const duplicateFingerprints = fingerprintStats.filter(item => parseInt(item.tokenCount) > 1);
+				const totalFingerprints = fingerprintDuplicateStats.length;
+				const duplicateFingerprints = fingerprintDuplicateStats.filter(item => parseInt(item.tokenCount) > 1);
 				const duplicateCount = duplicateFingerprints.length;
 				const duplicateRate = totalFingerprints > 0 ? (duplicateCount / totalFingerprints * 100) : 0;
 				
 				// 13.3 统计总token数和总用户数
-				const totalTokens = fingerprintStats.reduce((sum, item) => sum + parseInt(item.tokenCount), 0);
-				const totalUniqueUsers = fingerprintStats.reduce((sum, item) => sum + parseInt(item.uniqueUsers), 0);
+				const totalTokens = fingerprintDuplicateStats.reduce((sum, item) => sum + parseInt(item.tokenCount), 0);
+				const totalUniqueUsers = fingerprintDuplicateStats.reduce((sum, item) => sum + parseInt(item.uniqueUsers), 0);
 				
 				// 13.4 计算可能的统计偏差
 				const potentialUndercount = totalTokens - totalFingerprints; // 因重复指纹可能少统计的用户数
@@ -798,7 +796,7 @@ async function getFullStats(redisClient = null) {
 		dailyActiveUsersData: dailyActiveUsersData || [],
 		
 		// 🆕 设备指纹重复分析
-		fingerprintDuplicateAnalysis: fingerprintStats || {
+		fingerprintDuplicateAnalysis: fingerprintDuplicateAnalysis || {
 			summary: {
 				totalFingerprints: 0,
 				duplicateCount: 0,
