@@ -219,9 +219,9 @@ async function getFullStats(redisClient = null) {
 		
 		// 12. 特定用户统计
 		specificUsersAnalytics,
-		
-		// 13. 🆕 设备指纹重复分析
-		fingerprintDuplicateAnalysis
+		//
+		// // 13. 🆕 设备指纹重复分析
+		// fingerprintDuplicateAnalysis
 	] = await Promise.all([
 		// 1. 日活统计（中国时区）
 		XHuntUserToken.count({
@@ -643,71 +643,71 @@ async function getFullStats(redisClient = null) {
 			}
 		})(),
 		
-		// 13. 🆕 设备指纹重复分析
-		(async () => {
-			try {
-				// Step 1: 获取所有有效token，按创建时间降序
-				const allTokens = await XHuntUserToken.findAll({
-					where: {
-						fingerprint: { [Op.ne]: null },
-						isRevoked: false
-					},
-					attributes: ['userId', 'fingerprint', 'createdAt'],
-					order: [['createdAt', 'DESC']],
-					raw: true
-				});
-				
-				// Step 2: 每个用户只保留最新的指纹
-				const userLatestFingerprints = new Map();
-				allTokens.forEach(token => {
-					if (!userLatestFingerprints.has(token.userId)) {
-						userLatestFingerprints.set(token.userId, token.fingerprint);
-					}
-				});
-				
-				// Step 3: 统计指纹出现次数
-				const fingerprintCounts = new Map();
-				userLatestFingerprints.forEach(fingerprint => {
-					fingerprintCounts.set(fingerprint, (fingerprintCounts.get(fingerprint) || 0) + 1);
-				});
-				
-				// Step 4: 找出重复的指纹（出现次数 > 1）
-				const duplicateFingerprints = [];
-				fingerprintCounts.forEach((count, fingerprint) => {
-					if (count > 1) {
-						duplicateFingerprints.push({
-							fingerprint: fingerprint.substring(0, 8) + '...', // 只显示前8位
-							count: count
-						});
-					}
-				});
-				
-				// Step 5: 计算统计数据
-				const totalFingerprints = fingerprintCounts.size; // 总指纹数（去重后）
-				const duplicateCount = duplicateFingerprints.length; // 重复指纹数量
-				const duplicateRate = totalFingerprints > 0 ? (duplicateCount / totalFingerprints * 100) : 0;
-				
-				// Step 6: 按重复次数排序，取TOP 10
-				const topDuplicates = duplicateFingerprints
-					.sort((a, b) => b.count - a.count)
-					.slice(0, 10);
-				
-				return {
-					totalFingerprints,
-					duplicateCount,
-					duplicateRate: Number(duplicateRate.toFixed(2)),
-					topDuplicates
-				};
-			} catch (error) {
-				console.error('Error fetching fingerprint duplicate analysis:', error);
-				return {
-					totalFingerprints: 0,
-					duplicateCount: 0,
-					duplicateRate: 0,
-					topDuplicates: []
-				};
-			}
-		})(),
+		// // 13. 🆕 设备指纹重复分析
+		// (async () => {
+		// 	try {
+		// 		// Step 1: 获取所有有效token，按创建时间降序
+		// 		const allTokens = await XHuntUserToken.findAll({
+		// 			where: {
+		// 				fingerprint: { [Op.ne]: null },
+		// 				isRevoked: false
+		// 			},
+		// 			attributes: ['userId', 'fingerprint', 'createdAt'],
+		// 			order: [['createdAt', 'DESC']],
+		// 			raw: true
+		// 		});
+		//
+		// 		// Step 2: 每个用户只保留最新的指纹
+		// 		const userLatestFingerprints = new Map();
+		// 		allTokens.forEach(token => {
+		// 			if (!userLatestFingerprints.has(token.userId)) {
+		// 				userLatestFingerprints.set(token.userId, token.fingerprint);
+		// 			}
+		// 		});
+		//
+		// 		// Step 3: 统计指纹出现次数
+		// 		const fingerprintCounts = new Map();
+		// 		userLatestFingerprints.forEach(fingerprint => {
+		// 			fingerprintCounts.set(fingerprint, (fingerprintCounts.get(fingerprint) || 0) + 1);
+		// 		});
+		//
+		// 		// Step 4: 找出重复的指纹（出现次数 > 1）
+		// 		const duplicateFingerprints = [];
+		// 		fingerprintCounts.forEach((count, fingerprint) => {
+		// 			if (count > 1) {
+		// 				duplicateFingerprints.push({
+		// 					fingerprint: fingerprint.substring(0, 8) + '...', // 只显示前8位
+		// 					count: count
+		// 				});
+		// 			}
+		// 		});
+		//
+		// 		// Step 5: 计算统计数据
+		// 		const totalFingerprints = fingerprintCounts.size; // 总指纹数（去重后）
+		// 		const duplicateCount = duplicateFingerprints.length; // 重复指纹数量
+		// 		const duplicateRate = totalFingerprints > 0 ? (duplicateCount / totalFingerprints * 100) : 0;
+		//
+		// 		// Step 6: 按重复次数排序，取TOP 10
+		// 		const topDuplicates = duplicateFingerprints
+		// 			.sort((a, b) => b.count - a.count)
+		// 			.slice(0, 10);
+		//
+		// 		return {
+		// 			totalFingerprints,
+		// 			duplicateCount,
+		// 			duplicateRate: Number(duplicateRate.toFixed(2)),
+		// 			topDuplicates
+		// 		};
+		// 	} catch (error) {
+		// 		console.error('Error fetching fingerprint duplicate analysis:', error);
+		// 		return {
+		// 			totalFingerprints: 0,
+		// 			duplicateCount: 0,
+		// 			duplicateRate: 0,
+		// 			topDuplicates: []
+		// 		};
+		// 	}
+		// })(),
 	]);
 
 	// 构建统计数据
@@ -794,13 +794,13 @@ async function getFullStats(redisClient = null) {
 		// 🆕 基于设备指纹的日活数据
 		dailyActiveUsersData: dailyActiveUsersData || [],
 		
-		// 🆕 设备指纹重复分析
-		fingerprintDuplicateAnalysis: fingerprintDuplicateAnalysis || {
-			totalFingerprints: 0,
-			duplicateCount: 0,
-			duplicateRate: 0,
-			topDuplicates: []
-		}
+		// // 🆕 设备指纹重复分析
+		// fingerprintDuplicateAnalysis: fingerprintDuplicateAnalysis || {
+		// 	totalFingerprints: 0,
+		// 	duplicateCount: 0,
+		// 	duplicateRate: 0,
+		// 	topDuplicates: []
+		// }
 	};
 }
 
