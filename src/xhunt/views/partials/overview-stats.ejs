@@ -144,44 +144,29 @@
         </p>
         
         <!-- 重复统计概览 -->
-        <div class="stats-grid" style="margin-bottom: 30px;">
+        <div class="stats-grid" style="margin-bottom: 30px; grid-template-columns: repeat(3, 1fr);">
             <div class="stat-card">
-                <div class="stat-title">总指纹数</div>
-                <div class="stat-value"><%= formatNumber(stats.fingerprintDuplicateAnalysis.summary.totalFingerprints) %></div>
-                <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">有效Token的指纹总数</div>
+                <div class="stat-title">用户指纹总数</div>
+                <div class="stat-value"><%= formatNumber(stats.fingerprintDuplicateAnalysis.totalFingerprints) %></div>
+                <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">每用户最新指纹总数</div>
             </div>
             <div class="stat-card">
                 <div class="stat-title">重复指纹数</div>
-                <div class="stat-value" style="color: #f59e0b;"><%= formatNumber(stats.fingerprintDuplicateAnalysis.summary.duplicateCount) %></div>
-                <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">被多个Token使用的指纹</div>
+                <div class="stat-value" style="color: #f59e0b;"><%= formatNumber(stats.fingerprintDuplicateAnalysis.duplicateCount) %></div>
+                <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">出现次数>1的指纹数量</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">重复概率</div>
-                <div class="stat-value" style="color: #f59e0b;"><%= stats.fingerprintDuplicateAnalysis.summary.duplicateRate %>%</div>
+                <div class="stat-title">重复率</div>
+                <div class="stat-value" style="color: #f59e0b;"><%= stats.fingerprintDuplicateAnalysis.duplicateRate %>%</div>
                 <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">指纹重复的概率</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-title">可能少统计</div>
-                <div class="stat-value" style="color: #ef4444;"><%= formatNumber(stats.fingerprintDuplicateAnalysis.summary.potentialUndercount) %></div>
-                <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">因重复指纹可能少计的用户</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-title">少统计概率</div>
-                <div class="stat-value" style="color: #ef4444;"><%= stats.fingerprintDuplicateAnalysis.summary.undercountRate %>%</div>
-                <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">日活可能被低估的比例</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-title">实际用户数</div>
-                <div class="stat-value" style="color: #10b981;"><%= formatNumber(stats.fingerprintDuplicateAnalysis.summary.totalUniqueUsers) %></div>
-                <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">去重后的真实用户数</div>
             </div>
         </div>
         
         <!-- 重复指纹详情表格 -->
-        <% if (stats.fingerprintDuplicateAnalysis.topDuplicates && stats.fingerprintDuplicateAnalysis.topDuplicates.length > 0) { %>
+        <% if (stats.fingerprintDuplicateAnalysis.duplicateList && stats.fingerprintDuplicateAnalysis.duplicateList.length > 0) { %>
             <div>
                 <h3 style="font-size: 1.3rem; color: #374151; border-left: 4px solid #f59e0b; padding-left: 12px; margin-bottom: 20px;">
-                    🔥 重复最多的指纹 TOP 10
+                    🔥 重复指纹列表 TOP 10
                 </h3>
                 
                 <div class="table-container">
@@ -190,29 +175,15 @@
                             <tr>
                                 <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">排名</th>
                                 <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">指纹（前8位）</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Token数量</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">实际用户数</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">重复程度</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">影响评估</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">重复次数</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <% stats.fingerprintDuplicateAnalysis.topDuplicates.forEach((duplicate, index) => { %>
+                            <% stats.fingerprintDuplicateAnalysis.duplicateList.forEach((duplicate, index) => { %>
                                 <tr style="border-bottom: 1px solid #f3f4f6;">
                                     <td style="padding: 12px; color: #374151;"><%= index + 1 %></td>
                                     <td style="padding: 12px; font-family: monospace; color: #6b7280;"><%= duplicate.fingerprint %></td>
-                                    <td style="padding: 12px; color: #f59e0b; font-weight: 600;"><%= duplicate.tokenCount %></td>
-                                    <td style="padding: 12px; color: #10b981; font-weight: 600;"><%= duplicate.uniqueUsers %></td>
-                                    <td style="padding: 12px; color: #ef4444; font-weight: 600;">+<%= duplicate.duplicateLevel %></td>
-                                    <td style="padding: 12px;">
-                                        <% if (duplicate.duplicateLevel === 0) { %>
-                                            <span style="color: #10b981; font-size: 12px;">✅ 无影响</span>
-                                        <% } else if (duplicate.duplicateLevel <= 2) { %>
-                                            <span style="color: #f59e0b; font-size: 12px;">⚠️ 轻微</span>
-                                        <% } else { %>
-                                            <span style="color: #ef4444; font-size: 12px;">🚨 严重</span>
-                                        <% } %>
-                                    </td>
+                                    <td style="padding: 12px; color: #f59e0b; font-weight: 600;"><%= duplicate.count %></td>
                                 </tr>
                             <% }); %>
                         </tbody>
@@ -220,17 +191,6 @@
                 </div>
             </div>
         <% } %>
-        
-        <!-- 分析说明 -->
-        <div style="margin-top: 20px; padding: 16px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
-            <h4 style="color: #92400e; margin-bottom: 8px;">📊 统计准确性分析</h4>
-            <ul style="color: #92400e; font-size: 14px; margin: 0; padding-left: 20px;">
-                <li><strong>理论最大误差</strong>：日活可能被低估 <%= stats.fingerprintDuplicateAnalysis.summary.undercountRate %>%</li>
-                <li><strong>重复原因</strong>：同一设备多次登录、浏览器重装、隐私模式等</li>
-                <li><strong>实际影响</strong>：由于指纹算法稳定性，实际误差通常远小于理论值</li>
-                <li><strong>建议</strong>：当重复率 > 10% 时，考虑结合其他指标进行校正</li>
-            </ul>
-        </div>
     </div>
 
     <!-- 周期统计 -->
