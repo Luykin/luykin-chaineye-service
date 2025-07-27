@@ -256,8 +256,8 @@ async function getFullStats(redisClient = null) {
 		// 5. 积分统计（中国时区）
 		XPointRecord.sum('points', {
 			where: { createdAt: { [Op.gte]: todayStart, [Op.lte]: todayEnd } }
-		}) || 0,
-		XPointRecord.sum('points') || 0,
+		}),
+		XPointRecord.sum('points'),
 		
 		// 6. 周/月统计（中国时区）
 		XReviewForAccount.count({
@@ -733,7 +733,7 @@ async function getFullStats(redisClient = null) {
 			totalUsers,
 			totalAccounts,
 			totalKOLUsers,
-			totalPointsAwarded,
+			totalPointsAwarded: totalPointsAwarded || 0,
 			averageRating: Number(averageRating?.avgRating || 0).toFixed(2)
 		},
 		
@@ -752,7 +752,7 @@ async function getFullStats(redisClient = null) {
 		// 今日详细数据
 		todayDetails: {
 			newAccounts: todayNewAccounts,
-			pointsAwarded: todayPointsAwarded,
+			pointsAwarded: todayPointsAwarded || 0,
 			kolReviews: todayKOLReviews
 		},
 		
