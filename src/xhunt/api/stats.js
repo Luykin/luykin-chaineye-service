@@ -9,6 +9,10 @@ const router = express.Router();
  * 格式化数字（添加千分位分隔符）
  */
 function formatNumber(num) {
+	// 处理 null、undefined 和非数字值
+	if (num === null || num === undefined || isNaN(num)) {
+		return '0';
+	}
 	return num.toLocaleString();
 }
 
