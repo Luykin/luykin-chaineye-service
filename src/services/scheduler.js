@@ -52,8 +52,8 @@ class CrawlerScheduler {
 		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
 		/** 每次重启没必要执行一次 rootData 的更新 end ============== **/
 		/** 开始币安 公告**/
-		this.startBinanceExNewsCrawl().then(r => r);
-		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
+		// this.startBinanceExNewsCrawl().then(r => r);
+		// await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
 		/** 开始OKX 公告 **/
 		this.startOkxExNewsCrawl().then(r => r);
 		await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
