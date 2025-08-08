@@ -73,16 +73,19 @@ async function getDailyActiveUsers(redisClient) {
  * 北京时间今日 00:00:00 对应的 UTC 时间
  */
 function getTodayStartChina() {
-	// 获取当前 UTC 时间
+	// 获取当前时间
 	const now = new Date();
 	
-	// 获取当前北京时间
-	const beijingTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+	// 获取北京时间的年月日
+	const beijingDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+	const year = beijingDate.getFullYear();
+	const month = beijingDate.getMonth();
+	const day = beijingDate.getDate();
 	
-	// 设置为北京时间今日 00:00:00
-	const beijingTodayStart = new Date(beijingTime.getFullYear(), beijingTime.getMonth(), beijingTime.getDate(), 0, 0, 0, 0);
+	// 创建北京时间今日 00:00:00
+	const beijingTodayStart = new Date(year, month, day, 0, 0, 0, 0);
 	
-	// 转换为 UTC 时间：北京时间减去8小时得到UTC时间
+	// 计算UTC时间：北京时间减去8小时
 	const utcTime = new Date(beijingTodayStart.getTime() - 8 * 60 * 60 * 1000);
 	return utcTime;
 }
@@ -92,16 +95,19 @@ function getTodayStartChina() {
  * 北京时间今日 23:59:59.999 对应的 UTC 时间
  */
 function getTodayEndChina() {
-	// 获取当前 UTC 时间
+	// 获取当前时间
 	const now = new Date();
 	
-	// 获取当前北京时间
-	const beijingTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+	// 获取北京时间的年月日
+	const beijingDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+	const year = beijingDate.getFullYear();
+	const month = beijingDate.getMonth();
+	const day = beijingDate.getDate();
 	
-	// 设置为北京时间今日 23:59:59.999
-	const beijingTodayEnd = new Date(beijingTime.getFullYear(), beijingTime.getMonth(), beijingTime.getDate(), 23, 59, 59, 999);
+	// 创建北京时间今日 23:59:59.999
+	const beijingTodayEnd = new Date(year, month, day, 23, 59, 59, 999);
 	
-	// 转换为 UTC 时间：北京时间减去8小时得到UTC时间
+	// 计算UTC时间：北京时间减去8小时
 	const utcTime = new Date(beijingTodayEnd.getTime() - 8 * 60 * 60 * 1000);
 	return utcTime;
 }
@@ -110,19 +116,22 @@ function getTodayEndChina() {
  * 获取中国时区的本周开始时间（北京时间周一 00:00:00 对应的 UTC）
  */
 function getWeekStartChina() {
-	// 获取当前 UTC 时间
+	// 获取当前时间
 	const now = new Date();
 	
-	// 获取当前北京时间
-	const beijingTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+	// 获取北京时间的年月日
+	const beijingDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+	const year = beijingDate.getFullYear();
+	const month = beijingDate.getMonth();
+	const day = beijingDate.getDate();
 	
 	// 计算本周一的日期
-	const dayOfWeek = beijingTime.getDay();
+	const dayOfWeek = beijingDate.getDay();
 	const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // 周日为0，需要回到上周一
 	
-	const beijingMondayStart = new Date(beijingTime.getFullYear(), beijingTime.getMonth(), beijingTime.getDate() + daysToMonday, 0, 0, 0, 0);
+	const beijingMondayStart = new Date(year, month, day + daysToMonday, 0, 0, 0, 0);
 	
-	// 转换为 UTC 时间：北京时间减去8小时得到UTC时间
+	// 计算UTC时间：北京时间减去8小时
 	const utcMondayStart = new Date(beijingMondayStart.getTime() - 8 * 60 * 60 * 1000);
 	return utcMondayStart;
 }
@@ -131,16 +140,18 @@ function getWeekStartChina() {
  * 获取中国时区的本月开始时间（北京时间1号 00:00:00 对应的 UTC）
  */
 function getMonthStartChina() {
-	// 获取当前 UTC 时间
+	// 获取当前时间
 	const now = new Date();
 	
-	// 获取当前北京时间
-	const beijingTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+	// 获取北京时间的年月日
+	const beijingDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+	const year = beijingDate.getFullYear();
+	const month = beijingDate.getMonth();
 	
 	// 设置为北京时间本月1日 00:00:00
-	const beijingMonthStart = new Date(beijingTime.getFullYear(), beijingTime.getMonth(), 1, 0, 0, 0, 0);
+	const beijingMonthStart = new Date(year, month, 1, 0, 0, 0, 0);
 	
-	// 转换为 UTC 时间：北京时间减去8小时得到UTC时间
+	// 计算UTC时间：北京时间减去8小时
 	const utcMonthStart = new Date(beijingMonthStart.getTime() - 8 * 60 * 60 * 1000);
 	return utcMonthStart;
 }
@@ -156,17 +167,22 @@ async function getFullStats(redisClient = null) {
 	const weekStart = getWeekStartChina();
 	const monthStart = getMonthStartChina();
 	
+	// 调试信息：验证时间计算是否正确
 	console.log('🕐 时区调试信息（修复后）:');
+	console.log('当前UTC时间:', new Date().toISOString());
+	console.log('当前北京时间:', new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
+	console.log('');
+	console.log('查询时间范围 (UTC):');
 	console.log('北京今日开始 (UTC):', todayStart.toISOString());
 	console.log('北京今日结束 (UTC):', todayEnd.toISOString());
 	console.log('北京本周开始 (UTC):', weekStart.toISOString());
 	console.log('北京本月开始 (UTC):', monthStart.toISOString());
 	console.log('');
-	console.log('🔍 验证转换（应该是北京时间）:');
+	console.log('🔍 验证转换（转换回北京时间应该是正确的）:');
 	console.log('今日开始 +8小时:', new Date(todayStart.getTime() + 8 * 60 * 60 * 1000).toISOString());
 	console.log('今日结束 +8小时:', new Date(todayEnd.getTime() + 8 * 60 * 60 * 1000).toISOString());
-	console.log('中国本周开始 (UTC):', weekStart.toISOString());
-	console.log('中国本月开始 (UTC):', monthStart.toISOString());
+	console.log('本周开始 +8小时:', new Date(weekStart.getTime() + 8 * 60 * 60 * 1000).toISOString());
+	console.log('本月开始 +8小时:', new Date(monthStart.getTime() + 8 * 60 * 60 * 1000).toISOString());
 	
 	// 🆕 获取基于设备指纹的日活数据
 	let dailyActiveUsersData = [];

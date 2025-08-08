@@ -17,6 +17,8 @@ const pgInstance = new Sequelize({
 	username: process.env.PG_USERNAME,
 	password: process.env.PG_PASSWORD,
 	logging: process.env.PG_LOGGING === 'true', // 转换为布尔值
+	// 对 Postgres：保持服务端与 ORM 都使用 UTC，避免跨时区偏差
+	timezone: '+00:00'
 });
 
 /** 🏖️这是 https://www.cryptohunt.ai/ 的数据表 start====== **/
