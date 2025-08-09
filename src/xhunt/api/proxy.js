@@ -1,8 +1,27 @@
 const express = require('express');
 const { securityMiddleware } = require('../middleware/security');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, authenticateTokenOptional } = require('../middleware/auth');
 
 const router = express.Router();
+
+// 需要可选认证的路径列表（只有这些路径需要尝试获取用户信息）
+const OPTIONAL_AUTH_PATHS = [
+	'/pro/api/ai/content' // AI内容生成接口需要用户信息做频率限制
+];
+
+// 条件可选认证中间件
+function conditionalOptionalAuth(req, res, next) {
+	// 检查当前请求路径是否需要可选认证
+	const needsOptionalAuth = OPTIONAL_AUTH_PATHS.some(path => req.path.includes(path));
+	
+	if (needsOptionalAuth) {
+		// 对于需要的路径，应用可选认证
+		return authenticateTokenOptional(req, res, next);
+	} else {
+		// 对于其他路径，直接跳过认证
+		return next();
+	}
+}
 
 // AI 内容生成频率限制中间件
 async function aiContentRateLimit(req, res, next) {
@@ -170,8 +189,8 @@ router.all('/auth/*', authenticateToken, securityMiddleware, aiContentRateLimit,
 	await proxyRequest(req, res, targetUrl);
 });
 
-// 代理路由 - 无需认证
-router.all('/public/*', securityMiddleware, aiContentRateLimit, async (req, res) => {
+// 代理路由 - 无需认证（但特定路径可选择性识别用户）
+router.all('/public/*', conditionalOptionalAuth, securityMiddleware, aiContentRateLimit, async (req, res) => {
 	const targetUrl = getTargetUrl(req);
 	await proxyRequest(req, res, targetUrl);
 });
