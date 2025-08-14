@@ -31,14 +31,12 @@ function conditionalOptionalAuth(req, res, next) {
 // AI 内容生成频率限制中间件
 async function aiContentRateLimit(req, res, next) {
   try {
-    // const windowLocationHref = String(
-    //   req.headers["x-window-location-href"]
-    // ).toLocaleLowerCase();
+    const xUserId = String(req.headers["x-user-id"]).toLocaleLowerCase();
 
-    // //给alpha_gege 加个白名单，没有限制的测试ai 检测功能
-    // if (windowLocationHref.includes("/alpha_gege/")) {
-    //   return next();
-    // }
+    //给alpha_gege 加个白名单，没有限制的测试ai 检测功能
+    if (xUserId.includes("alpha_gege") || xUserId.includes("luoyukun4")) {
+      return next();
+    }
     // 只对 /pro/api/ai/content 的 POST 请求进行限制
     if (req.method !== "POST" || !req.path.includes("/pro/api/ai/content")) {
       return next();
