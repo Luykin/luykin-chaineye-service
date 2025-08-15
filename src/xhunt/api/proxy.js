@@ -326,9 +326,7 @@ router.all(
 // 代理路由 - 流式（与普通代理完全分离）
 router.all(
   "/public-stream/*",
-  conditionalOptionalAuth,
   securityMiddleware,
-  aiContentRateLimit,
   async (req, res) => {
     const targetUrl = getTargetUrlForStreaming(req);
     await proxyRequestStream(req, res, targetUrl);
