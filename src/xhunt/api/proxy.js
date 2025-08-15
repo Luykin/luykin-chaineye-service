@@ -224,12 +224,17 @@ function getTargetUrlForStreaming(req) {
 // 流式代理请求处理函数
 async function proxyRequestStream(req, res, targetUrl) {
   try {
+    // 禁用 Express 的响应缓冲
+    res.setTimeout(0);
+    res.setHeader("X-Accel-Buffering", "no"); // 禁用 Nginx 缓冲
+
     const options = {
       method: req.method,
       headers: {
         "Content-Type": "application/json",
-        Accept: "text/event-stream",
+        Accept: "text/event-stream, application/json",
         Connection: "keep-alive",
+        "Cache-Control": "no-cache",
       },
     };
 
@@ -252,10 +257,11 @@ async function handleStreamingResponse(response, res) {
   try {
     // 设置流式响应的头部
     res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
+    res.setHeader("X-Accel-Buffering", "no"); // 禁用 Nginx 缓冲
 
     // 设置状态码
     res.status(response.status);
@@ -263,14 +269,21 @@ async function handleStreamingResponse(response, res) {
     if (response.body) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+
+          // 解码数据块
           const chunk = decoder.decode(value, { stream: true });
+
+          // 直接写入，不添加额外的前缀
           res.write(chunk);
-          if (res.flushHeaders) {
-            res.flushHeaders();
+
+          // 强制刷新缓冲区，确保数据立即发送
+          if (typeof res.flush === "function") {
+            res.flush();
           }
         }
       } finally {
@@ -281,11 +294,13 @@ async function handleStreamingResponse(response, res) {
       // 如果没有 body 流，尝试使用 response.text() 然后分块发送
       const text = await response.text();
       const chunks = text.split("\n");
+
       for (const chunk of chunks) {
         if (chunk.trim()) {
           res.write(chunk + "\n");
-          if (res.flushHeaders) {
-            res.flushHeaders();
+          // 强制刷新缓冲区
+          if (typeof res.flush === "function") {
+            res.flush();
           }
         }
       }
@@ -324,13 +339,9 @@ router.all(
 );
 
 // 代理路由 - 流式（与普通代理完全分离）
-router.all(
-  "/public-stream/*",
-  securityMiddleware,
-  async (req, res) => {
-    const targetUrl = getTargetUrlForStreaming(req);
-    await proxyRequestStream(req, res, targetUrl);
-  }
-);
+router.all("/public-stream/*", securityMiddleware, async (req, res) => {
+  const targetUrl = getTargetUrlForStreaming(req);
+  await proxyRequestStream(req, res, targetUrl);
+});
 
 module.exports = router;

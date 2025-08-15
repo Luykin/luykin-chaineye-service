@@ -195,7 +195,15 @@ app.use(helmet({
 }));
 // 全局速率限制
 app.use(rateLimiter);
-app.use(compression());
+// 条件性压缩：排除流式路由
+app.use((req, res, next) => {
+	if (req.path.includes('/api/xhunt/proxy/public-stream/')) {
+		// 流式路由跳过压缩中间件
+		return next();
+	}
+	// 非流式路由应用压缩
+	compression()(req, res, next);
+});
 app.use(morgan('combined'));
 app.use(helmet.hidePoweredBy());
 app.use(helmet.xssFilter());
