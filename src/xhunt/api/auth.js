@@ -208,33 +208,33 @@ router.post(
 // 获取当前用户信息
 router.get("/me", authenticateToken, async (req, res) => {
   try {
-    const cacheKey = `user:points:${req.user.id}`;
+    // const cacheKey = `user:points:${req.user.id}`;
 
-    // 优先从 Redis 获取积分
-    const cachedPoints = await req.redisClient.get(cacheKey);
+    // // 优先从 Redis 获取积分
+    // const cachedPoints = await req.redisClient.get(cacheKey);
 
-    let totalPoints = 0;
+    // let totalPoints = 0;
 
-    if (cachedPoints !== null) {
-      totalPoints = parseInt(cachedPoints, 10);
-    } else {
-      // 回退到数据库查询（冷启动或缓存过期）
-      totalPoints =
-        (await XPointRecord.sum("points", {
-          where: { xHuntUserId: req.user.id },
-        })) || 0;
+    // if (cachedPoints !== null) {
+    //   totalPoints = parseInt(cachedPoints, 10);
+    // } else {
+    //   // 回退到数据库查询（冷启动或缓存过期）
+    //   totalPoints =
+    //     (await XPointRecord.sum("points", {
+    //       where: { xHuntUserId: req.user.id },
+    //     })) || 0;
 
-      // 写入缓存（异步非阻塞）
-      req.redisClient
-        .setEx(cacheKey, 3600, JSON.stringify(totalPoints))
-        .catch(console.error);
-    }
+    //   // 写入缓存（异步非阻塞）
+    //   req.redisClient
+    //     .setEx(cacheKey, 3600, JSON.stringify(totalPoints))
+    //     .catch(console.error);
+    // }
     res.json({
       username: req.user.username,
       displayName: req.user.displayName,
       avatar: req.user.avatar,
       twitterId: req.user.twitterId,
-      xPoints: totalPoints,
+      xPoints: -1,
     });
   } catch (error) {
     console.error("Failed to fetch user info:", error);
