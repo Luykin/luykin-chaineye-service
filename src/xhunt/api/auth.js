@@ -73,7 +73,7 @@ router.post(
       }
 
       // Step 3: 获取 Twitter Tokens
-      const { accessToken, refreshToken, expiresIn } = await getTwitterTokens(
+      const { accessToken, refreshToken } = await getTwitterTokens(
         code,
         cachedData
       );
@@ -90,6 +90,15 @@ router.post(
           avatar: twitterUser.profile_image_url,
         },
       });
+
+      // 如果用户已存在，更新可能变化的信息
+      if (!created) {
+        await user.update({
+          username: twitterUser.username,
+          displayName: twitterUser.name,
+          avatar: twitterUser.profile_image_url,
+        });
+      }
 
       // Step 6: 可选：调用外部 API 获取用户分类和排名
       try {
