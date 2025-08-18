@@ -1,24 +1,24 @@
-const { Sequelize } = require('sequelize');
-const TGUserModel = require('./cryptohunt-tg-user');
+const { Sequelize } = require("sequelize");
+const TGUserModel = require("./cryptohunt-tg-user");
 // 加载所有模型（注意：调用方式改为工厂函数）
-const XHuntUserModel = require('../xhunt/models/XHuntUser');
-const XAccountModel = require('../xhunt/models/XAccount');
-const XHuntUserTokenModel = require('../xhunt/models/XHuntUserToken');
-const XReviewForAccountModel = require('../xhunt/models/XReviewForAccount');
-const XPointRecordModel = require('../xhunt/models/XPointRecord');
-const XPrivateNoteModel = require('../xhunt/models/XPrivateNote');
-
+const XHuntUserModel = require("../xhunt/models/XHuntUser");
+const XAccountModel = require("../xhunt/models/XAccount");
+const XHuntUserTokenModel = require("../xhunt/models/XHuntUserToken");
+const XReviewForAccountModel = require("../xhunt/models/XReviewForAccount");
+const XPointRecordModel = require("../xhunt/models/XPointRecord");
+const XPrivateNoteModel = require("../xhunt/models/XPrivateNote");
+const MantleRegistrationModel = require("../xhunt/models/MantleRegistration");
 
 const pgInstance = new Sequelize({
-	dialect: process.env.PG_DIALECT,
-	host: process.env.PG_HOST,
-	port: parseInt(process.env.PG_PORT, 10),
-	database: process.env.PG_DATABASE,
-	username: process.env.PG_USERNAME,
-	password: process.env.PG_PASSWORD,
-	logging: process.env.PG_LOGGING === 'true', // 转换为布尔值
-	// 对 Postgres：保持服务端与 ORM 都使用 UTC，避免跨时区偏差
-	timezone: '+00:00'
+  dialect: process.env.PG_DIALECT,
+  host: process.env.PG_HOST,
+  port: parseInt(process.env.PG_PORT, 10),
+  database: process.env.PG_DATABASE,
+  username: process.env.PG_USERNAME,
+  password: process.env.PG_PASSWORD,
+  logging: process.env.PG_LOGGING === "true", // 转换为布尔值
+  // 对 Postgres：保持服务端与 ORM 都使用 UTC，避免跨时区偏差
+  timezone: "+00:00",
 });
 
 /** 🏖️这是 https://www.cryptohunt.ai/ 的数据表 start====== **/
@@ -33,110 +33,122 @@ const XHuntUserToken = XHuntUserTokenModel(pgInstance);
 const XReviewForAccount = XReviewForAccountModel(pgInstance);
 const XPointRecord = XPointRecordModel(pgInstance);
 const XPrivateNote = XPrivateNoteModel(pgInstance);
+const MantleRegistration = MantleRegistrationModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
-	foreignKey: 'xHuntUserId',
-	as: 'reviews'
+  foreignKey: "xHuntUserId",
+  as: "reviews",
 });
 
 XReviewForAccount.belongsTo(XHuntUser, {
-	foreignKey: 'xHuntUserId',
-	as: 'xHuntUser'
+  foreignKey: "xHuntUserId",
+  as: "xHuntUser",
 });
 
 XAccount.hasMany(XReviewForAccount, {
-	foreignKey: 'xAccountId',
-	as: 'receivedReviews'
+  foreignKey: "xAccountId",
+  as: "receivedReviews",
 });
 
 XReviewForAccount.belongsTo(XAccount, {
-	foreignKey: 'xAccountId',
-	as: 'xAccount'
+  foreignKey: "xAccountId",
+  as: "xAccount",
 });
 
 XHuntUser.hasMany(XHuntUserToken, {
-	foreignKey: 'userId',
-	as: 'tokens'
+  foreignKey: "userId",
+  as: "tokens",
 });
 
 XHuntUserToken.belongsTo(XHuntUser, {
-	foreignKey: 'userId',
-	as: 'user'
+  foreignKey: "userId",
+  as: "user",
 });
 
 XHuntUser.hasMany(XPointRecord, {
-	foreignKey: 'xHuntUserId',
-	as: 'pointsHistory'
+  foreignKey: "xHuntUserId",
+  as: "pointsHistory",
 });
 
 XPointRecord.belongsTo(XHuntUser, {
-	foreignKey: 'xHuntUserId',
-	as: 'user'
+  foreignKey: "xHuntUserId",
+  as: "user",
 });
 
 XReviewForAccount.hasOne(XPointRecord, {
-	foreignKey: 'reviewId',
-	as: 'pointRecord'
+  foreignKey: "reviewId",
+  as: "pointRecord",
 });
 
 XPointRecord.belongsTo(XReviewForAccount, {
-	foreignKey: 'reviewId',
-	as: 'review'
+  foreignKey: "reviewId",
+  as: "review",
 });
 
 // 新增私人备注关系
 XHuntUser.hasMany(XPrivateNote, {
-	foreignKey: 'xHuntUserId',
-	as: 'privateNotes'
+  foreignKey: "xHuntUserId",
+  as: "privateNotes",
 });
 
 XPrivateNote.belongsTo(XHuntUser, {
-	foreignKey: 'xHuntUserId',
-	as: 'xHuntUser'
+  foreignKey: "xHuntUserId",
+  as: "xHuntUser",
 });
 
 XAccount.hasMany(XPrivateNote, {
-	foreignKey: 'xAccountId',
-	as: 'privateNotes'
+  foreignKey: "xAccountId",
+  as: "privateNotes",
 });
 
 XPrivateNote.belongsTo(XAccount, {
-	foreignKey: 'xAccountId',
-	as: 'xAccount'
+  foreignKey: "xAccountId",
+  as: "xAccount",
+});
+
+// MantleRegistration 关系（与用户关联）
+XHuntUser.hasMany(MantleRegistration, {
+  foreignKey: "xHuntUserId",
+  as: "mantleRegistrations",
+});
+
+MantleRegistration.belongsTo(XHuntUser, {
+  foreignKey: "xHuntUserId",
+  as: "xHuntUser",
 });
 
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
-
 async function setupPostgres() {
-	try {
-		await pgInstance.authenticate();
-		console.log('postgres Database connection established.');
-		// await pgInstance.sync();
-		await pgInstance.sync({ alter: false });
-		console.log('postgres Database synchronized.');
-	} catch (error) {
-		console.error('postgres Database setup error:', error);
-		throw error;
-	}
+  try {
+    await pgInstance.authenticate();
+    console.log("postgres Database connection established.");
+    // await pgInstance.sync();
+    await pgInstance.sync({ alter: false });
+    console.log("postgres Database synchronized.");
+  } catch (error) {
+    console.error("postgres Database setup error:", error);
+    throw error;
+  }
 }
 
 module.exports = {
-	// 数据库初始化
-	setupPostgres,
-	
-	// 数据库实例
-	pgInstance,
-	
-	// CryptoHunt 数据表
-	TGUser,
-	
-	// XHunt 数据表
-	XHuntUser,
-	XAccount,
-	XHuntUserToken,
-	XReviewForAccount,
-	XPointRecord,
-	XPrivateNote
+  // 数据库初始化
+  setupPostgres,
+
+  // 数据库实例
+  pgInstance,
+
+  // CryptoHunt 数据表
+  TGUser,
+
+  // XHunt 数据表
+  XHuntUser,
+  XAccount,
+  XHuntUserToken,
+  XReviewForAccount,
+  XPointRecord,
+  XPrivateNote,
+  MantleRegistration,
 };
