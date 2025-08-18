@@ -8,6 +8,7 @@ const {
   MantleRegistration,
   XHuntUser,
 } = require("../../models/postgres-start");
+const { authenticateTokenOptional } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -183,3 +184,30 @@ router.get("/registrations", async (req, res) => {
 });
 
 module.exports = router;
+
+// 3) 查询当前用户是否已报名
+router.get(
+  "/me",
+  authenticateTokenOptional,
+  browserOnlyMiddleware,
+  securityMiddleware,
+  async (req, res) => {
+    try {
+      const userId = req.user && req.user.id;
+      if (!userId) {
+        return res.status(200).json({ registered: false });
+      }
+      const record = await MantleRegistration.findOne({
+        where: { xHuntUserId: userId },
+        order: [["createdAt", "DESC"]],
+      });
+      if (!record) {
+        return res.status(200).json({ registered: false });
+      }
+      return res.status(200).json({ registered: true, registration: record });
+    } catch (err) {
+      console.error("Mantle me query error:", err);
+      return res.status(500).json({ error: "服务器内部错误（mantle me）" });
+    }
+  }
+);
