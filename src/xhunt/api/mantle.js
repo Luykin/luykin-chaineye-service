@@ -8,7 +8,10 @@ const {
   MantleRegistration,
   XHuntUser,
 } = require("../../models/postgres-start");
-const { authenticateTokenOptional } = require("../middleware/auth");
+const {
+  authenticateTokenOptional,
+  authenticateToken,
+} = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -37,35 +40,18 @@ router.post(
   "/register",
   fingerprintLimiter,
   browserOnlyMiddleware,
+  authenticateToken,
   securityMiddleware,
   async (req, res) => {
     try {
-      const {
-        xHuntUserId: bodyUserId,
-        twitterId: bodyTwitterId,
-        username,
-        displayName,
-        avatar,
-        invitedByCode,
-        evmAddress,
-        registrationUrl,
-      } = req.body || {};
+      const { invitedByCode, evmAddress, registrationUrl } = req.body || {};
 
-      if (!bodyUserId && !bodyTwitterId) {
-        return res
-          .status(400)
-          .json({ error: "xHuntUserId 或 twitterId 需要至少提供一个" });
+      // 定位用户（仅使用 token）
+      const authedUserId = req.user && req.user.id;
+      if (!authedUserId) {
+        return res.status(401).json({ error: "未登录或 token 无效" });
       }
-
-      // 定位用户
-      let user = null;
-      if (bodyUserId) {
-        user = await XHuntUser.findByPk(bodyUserId);
-      } else if (bodyTwitterId) {
-        user = await XHuntUser.findOne({
-          where: { twitterId: String(bodyTwitterId) },
-        });
-      }
+      const user = await XHuntUser.findByPk(authedUserId);
       if (!user) {
         return res.status(404).json({ error: "对应的用户不存在" });
       }
@@ -75,10 +61,7 @@ router.post(
         const { Op } = require("sequelize");
         const existed = await MantleRegistration.findOne({
           where: {
-            [Op.or]: [
-              { xHuntUserId: user.id },
-              { twitterId: bodyTwitterId || user.twitterId },
-            ],
+            [Op.or]: [{ xHuntUserId: user.id }, { twitterId: user.twitterId }],
           },
         });
         if (existed) {
@@ -106,11 +89,10 @@ router.post(
       // 组装报名记录
       const record = await MantleRegistration.create({
         xHuntUserId: user.id,
-        twitterId: bodyTwitterId || user.twitterId,
-        username: typeof username === "string" ? username : user.username,
-        displayName:
-          typeof displayName === "string" ? displayName : user.displayName,
-        avatar: typeof avatar === "string" ? avatar : user.avatar,
+        twitterId: user.twitterId,
+        username: user.username,
+        displayName: user.displayName,
+        avatar: user.avatar,
         invitedByCode: typeof invitedByCode === "string" ? invitedByCode : null,
         evmAddress: typeof evmAddress === "string" ? evmAddress : null,
         registrationUrl:
