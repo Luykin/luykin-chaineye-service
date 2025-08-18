@@ -12,7 +12,7 @@ const {
 const router = express.Router();
 
 function generateInviteCode(length = 10) {
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let code = "";
   for (let i = 0; i < length; i += 1) {
     code += letters.charAt(Math.floor(Math.random() * letters.length));
@@ -67,6 +67,22 @@ router.post(
       }
       if (!user) {
         return res.status(404).json({ error: "对应的用户不存在" });
+      }
+
+      // 已报名校验（同一用户或同一 twitterId 不允许重复报名）
+      {
+        const { Op } = require("sequelize");
+        const existed = await MantleRegistration.findOne({
+          where: {
+            [Op.or]: [
+              { xHuntUserId: user.id },
+              { twitterId: bodyTwitterId || user.twitterId },
+            ],
+          },
+        });
+        if (existed) {
+          return res.status(409).json({ error: "您已报名，无需重复提交" });
+        }
       }
 
       // 如该用户尚无邀请码，则生成并写入（生成失败则阻断报名）
