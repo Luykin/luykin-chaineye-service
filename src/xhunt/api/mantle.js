@@ -157,19 +157,18 @@ router.get("/registrations", async (req, res) => {
     if (twitterId) {
       where.twitterId = String(twitterId);
     }
-    if (startDate || endDate) {
-      where.registeredAt = {};
-      if (startDate) where.registeredAt.$gte = new Date(startDate);
-      if (endDate) where.registeredAt.$lte = new Date(endDate);
-    }
+    const { parseUtcDateParam } = require("../utils/date");
 
-    // Sequelize v6 写法需使用 Op
-    const { Op } = require("sequelize");
-    if (where.registeredAt) {
+    const startDt = parseUtcDateParam(startDate);
+    const endDt = parseUtcDateParam(endDate);
+    if (startDt || endDt) {
+      const { Op } = require("sequelize");
       const range = {};
-      if (where.registeredAt.$gte) range[Op.gte] = where.registeredAt.$gte;
-      if (where.registeredAt.$lte) range[Op.lte] = where.registeredAt.$lte;
-      where.registeredAt = range;
+      if (startDt) range[Op.gte] = startDt;
+      if (endDt) range[Op.lte] = endDt;
+      if (Object.keys(range).length > 0) {
+        where.registeredAt = range;
+      }
     }
 
     const offset = (page - 1) * pageSize;
@@ -178,12 +177,13 @@ router.get("/registrations", async (req, res) => {
       limit: pageSize,
       offset,
       order: [["createdAt", "DESC"]],
+      distinct: true,
       attributes: { exclude: ["xHuntUserId"] },
       include: [
         {
           model: XHuntUser,
           as: "xHuntUser",
-          attributes: ["inviteCode"],
+          attributes: ["inviteCode", "displayName", "classification"],
         },
       ],
     });
@@ -201,8 +201,6 @@ router.get("/registrations", async (req, res) => {
       .json({ error: "服务器内部错误（mantle registrations）" });
   }
 });
-
-module.exports = router;
 
 // 3) 查询当前用户是否已报名
 router.get(
@@ -224,7 +222,7 @@ router.get(
           {
             model: XHuntUser,
             as: "xHuntUser",
-            attributes: ["inviteCode"],
+            attributes: ["inviteCode", "displayName"],
           },
         ],
       });
@@ -238,3 +236,5 @@ router.get(
     }
   }
 );
+
+module.exports = router;
