@@ -19,6 +19,132 @@ const retry = require("async-retry");
 
 const router = express.Router();
 
+// ---------------- Wallet Sign-in (EVM) ----------------
+// Helper: extract a standard 20-byte EVM address (0x + 40 hex) if present
+function extractEvm40Address(input) {
+  if (!input) return null;
+  const str = String(input);
+  const match = str.match(/0x[a-fA-F0-9]{40}/);
+  return match ? match[0].toLowerCase() : null;
+}
+
+// Helper: compute a stable cache key from input address string
+function computeWalletNonceKey(input) {
+  const lower = String(input || "")
+    .trim()
+    .toLowerCase();
+  const evm40 = extractEvm40Address(lower);
+  return `wallet_nonce:${evm40 || lower}`;
+}
+
+// Generate and cache a challenge message (nonce) for a given EVM address
+router.get("/wallet/nonce", async (req, res) => {
+  try {
+    const address = (req.query.address || "").toString().trim();
+    const lower = address.toLowerCase();
+    if (!lower) {
+      return res.status(400).json({ error: "INVALID_ADDRESS" });
+    }
+    const cacheKey = computeWalletNonceKey(lower);
+
+    // generate a nonce and generic challenge message
+    const nonce = Math.random().toString(36).slice(2, 10);
+    const displayAddress = extractEvm40Address(lower) || lower;
+    const message = `Sign to verify wallet ownership (no transaction or gas).\nAddress: ${displayAddress}.\nNonce: ${nonce}.\nRequested by XHunt.`;
+
+    try {
+      await req.redisClient.setEx(
+        cacheKey,
+        5 * 60, // 5 minutes TTL
+        JSON.stringify({ nonce, message })
+      );
+    } catch (redisErr) {
+      console.error("Redis SET wallet nonce error:", redisErr);
+      return res.status(500).json({ error: "SERVER_REDIS_ERROR" });
+    }
+
+    return res.json({ nonce, message });
+  } catch (error) {
+    console.error("Wallet nonce error:", error);
+    return res.status(500).json({ error: "WALLET_NONCE_FAILED" });
+  }
+});
+
+// Verify signature for the cached challenge message
+router.post(
+  "/wallet/verify",
+  [
+    body("address").isString(),
+    body("signature").isString(),
+    body("nonce").optional().isString(),
+    body("message").optional().isString(),
+    validateRequest,
+  ],
+  async (req, res) => {
+    try {
+      const { address, signature, nonce, message } = req.body || {};
+      const lower = String(address || "")
+        .trim()
+        .toLowerCase();
+      const cacheKey = computeWalletNonceKey(lower);
+
+      let cached;
+      try {
+        const raw = await req.redisClient.get(cacheKey);
+        cached = raw ? JSON.parse(raw) : null;
+      } catch (redisErr) {
+        console.error("Redis GET wallet nonce error:", redisErr);
+        return res.status(500).json({ error: "SERVER_REDIS_ERROR" });
+      }
+
+      if (!cached || !cached.nonce || !cached.message) {
+        return res
+          .status(400)
+          .json({ error: "CHALLENGE_NOT_FOUND_OR_EXPIRED" });
+      }
+
+      // Ensure the provided message/nonce align with the cached challenge
+      if (message && message !== cached.message) {
+        return res.status(400).json({ error: "MESSAGE_MISMATCH" });
+      }
+      if (nonce && nonce !== cached.nonce) {
+        return res.status(400).json({ error: "NONCE_MISMATCH" });
+      }
+
+      // Verify signature using ethers (v5)
+      let recovered;
+      try {
+        const { utils } = require("ethers");
+        recovered = utils.verifyMessage(message || cached.message, signature);
+      } catch (e) {
+        console.error("EVM signature verify error:", e);
+        return res.status(400).json({ error: "SIGNATURE_VERIFY_FAILED" });
+      }
+
+      if (recovered) {
+        const expected40 = extractEvm40Address(lower);
+        if (expected40 && recovered.toLowerCase() !== expected40) {
+          return res.status(400).json({ error: "ADDRESS_MISMATCH" });
+        }
+      }
+
+      // One-time challenge: remove it after success to prevent replay
+      try {
+        await req.redisClient.del(cacheKey);
+      } catch (redisDelErr) {
+        console.warn("Redis DEL wallet nonce warn:", redisDelErr);
+      }
+
+      // For now, we only confirm success and whether the address is bound
+      // Future: bind to user and issue JWT if needed
+      return res.json({ success: true, bound: false });
+    } catch (error) {
+      console.error("Wallet verify error:", error);
+      return res.status(500).json({ error: "WALLET_VERIFY_FAILED" });
+    }
+  }
+);
+
 // 获取 Twitter 授权 URL
 router.get("/twitter/url", async (req, res) => {
   try {
