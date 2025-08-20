@@ -35,6 +35,14 @@ async function ensureUniqueInviteCode() {
   throw new Error("Failed to generate unique invite code");
 }
 
+// 特殊邀请码与允许用户
+const SPECIAL_INVITE_CODE = "XHuntAI";
+const SPECIAL_ALLOWED_USERNAMES = new Set([
+  "luoyukun4",
+  "defiteddy2020",
+  "elonmusk",
+]);
+
 // 1) Mantle 活动报名接口（受限：指纹/浏览器/安全中间件）
 router.post(
   "/register",
@@ -54,6 +62,26 @@ router.post(
       const user = await XHuntUser.findByPk(authedUserId);
       if (!user) {
         return res.status(404).json({ error: "对应的用户不存在" });
+      }
+
+      // 提前校验邀请码合法性
+      if (typeof invitedByCode === "string" && invitedByCode.trim()) {
+        const code = invitedByCode.trim();
+        if (code === SPECIAL_INVITE_CODE) {
+          const userHandle = (user.username || "").toLowerCase();
+          if (!SPECIAL_ALLOWED_USERNAMES.has(userHandle)) {
+            return res
+              .status(403)
+              .json({ error: "You are not a specially invited user" });
+          }
+        } else {
+          const inviter = await XHuntUser.findOne({
+            where: { inviteCode: code },
+          });
+          if (!inviter) {
+            return res.status(400).json({ error: "邀请码无效" });
+          }
+        }
       }
 
       // 已报名校验（同一用户或同一 twitterId 不允许重复报名）
@@ -100,10 +128,11 @@ router.post(
         // registeredAt 由默认值生成
       });
 
+      const { xHuntUserId: _omit, ...safeRecord } = record.toJSON();
       return res.json({
         success: true,
         inviteCode: user.inviteCode || null,
-        registration: record,
+        registration: safeRecord,
       });
     } catch (err) {
       console.error("Mantle register error:", err);
@@ -149,6 +178,14 @@ router.get("/registrations", async (req, res) => {
       limit: pageSize,
       offset,
       order: [["createdAt", "DESC"]],
+      attributes: { exclude: ["xHuntUserId"] },
+      include: [
+        {
+          model: XHuntUser,
+          as: "xHuntUser",
+          attributes: ["inviteCode"],
+        },
+      ],
     });
 
     return res.json({
@@ -182,6 +219,14 @@ router.get(
       const record = await MantleRegistration.findOne({
         where: { xHuntUserId: userId },
         order: [["createdAt", "DESC"]],
+        attributes: { exclude: ["xHuntUserId"] },
+        include: [
+          {
+            model: XHuntUser,
+            as: "xHuntUser",
+            attributes: ["inviteCode"],
+          },
+        ],
       });
       if (!record) {
         return res.status(200).json({ registered: false });
