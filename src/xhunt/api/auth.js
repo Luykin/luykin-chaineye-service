@@ -365,6 +365,8 @@ router.get("/me", authenticateToken, async (req, res) => {
     //     .setEx(cacheKey, 3600, JSON.stringify(totalPoints))
     //     .catch(console.error);
     // }
+    // 缓存策略：前端缓存 120s
+    res.set("Cache-Control", "private, max-age=120");
     res.json({
       username: req.user.username,
       displayName: req.user.displayName,
