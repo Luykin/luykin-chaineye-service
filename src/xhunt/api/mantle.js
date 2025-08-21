@@ -39,8 +39,6 @@ async function ensureUniqueInviteCode() {
 const SPECIAL_INVITE_CODE = "XHuntAI";
 const SPECIAL_ALLOWED_USERNAMES = new Set([
   "luoyukun4",
-  "defiteddy2020",
-  "elonmusk",
   "maid_crypto",
   "paris13jeanne",
   "momochenming",
