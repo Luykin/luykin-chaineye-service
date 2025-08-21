@@ -65,6 +65,7 @@ router.post(
       }
 
       // 提前校验邀请码合法性
+      let inviter = null;
       if (typeof invitedByCode === "string" && invitedByCode.trim()) {
         const code = invitedByCode.trim();
         if (code === SPECIAL_INVITE_CODE) {
@@ -75,7 +76,7 @@ router.post(
               .json({ error: "You are not a specially invited user" });
           }
         } else {
-          const inviter = await XHuntUser.findOne({
+          inviter = await XHuntUser.findOne({
             where: { inviteCode: code },
           });
           if (!inviter) {
@@ -122,6 +123,19 @@ router.post(
         displayName: user.displayName,
         avatar: user.avatar,
         invitedByCode: typeof invitedByCode === "string" ? invitedByCode : null,
+        invitedByUserId: inviter ? inviter.id : null,
+        invitedByTwitterId: inviter ? inviter.twitterId : null,
+        invitedByUsername: inviter ? inviter.username : null,
+        invitedByUserInfo: inviter
+          ? {
+              username: inviter.username,
+              displayName: inviter.displayName,
+              avatar: inviter.avatar,
+              classification: inviter.classification,
+              inviteCode: inviter.inviteCode,
+              createdAt: inviter.createdAt,
+            }
+          : null,
         evmAddress: typeof evmAddress === "string" ? evmAddress : null,
         registrationUrl:
           typeof registrationUrl === "string" ? registrationUrl : fallbackUrl,
@@ -144,7 +158,7 @@ router.post(
 );
 
 // 2) 报名查询接口（无安全中间件）
-router.get("/registrations", async (req, res) => {
+router.get("/registrations-n7f2k4s4hy", async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const pageSize = Math.min(

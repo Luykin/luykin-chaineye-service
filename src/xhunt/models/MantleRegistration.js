@@ -60,6 +60,11 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: "邀请人的详细用户信息（JSON格式）",
       },
+      invitedByUsername: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: "邀请人的用户名",
+      },
       evmAddress: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -88,6 +93,10 @@ module.exports = (sequelize) => {
         {
           name: "idx_mantle_invited_by_twitter",
           fields: ["invitedByTwitterId"],
+        },
+        {
+          name: "idx_mantle_invited_by_username",
+          fields: ["invitedByUsername"],
         },
         { name: "idx_mantle_registered_at", fields: ["registeredAt"] },
       ],
