@@ -338,6 +338,8 @@ router.get(
       if (!record) {
         return res.status(200).json({ registered: false, invitedCount });
       }
+      // 缓存策略：前端缓存 50s
+      res.set("Cache-Control", "private, max-age=50");
       return res
         .status(200)
         .json({ registered: true, invitedCount, registration: record });
