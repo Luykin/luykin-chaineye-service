@@ -41,6 +41,57 @@ const SPECIAL_ALLOWED_USERNAMES = new Set([
   "luoyukun4",
   "defiteddy2020",
   "elonmusk",
+  "maid_crypto",
+  "paris13jeanne",
+  "momochenming",
+  "mimoo1201",
+  "vvickym2",
+  "web3annie",
+  "charles48011843",
+  "bocaibocai_",
+  "meta8mate",
+  "zohanlin",
+  "qqzsss",
+  "0xallen888",
+  "neohexwu",
+  "scarlettweb3",
+  "airdropalchemis",
+  "timbro_bro",
+  "blocktvbee",
+  "0xmoon6626",
+  "captain_kent",
+  "border_crypto",
+  "drbitcoin36",
+  "bclaobai",
+  "love_doge123",
+  "0xcryptohowe",
+  "monica_xiaom",
+  "aisunny224737",
+  "cyrus_g3",
+  "0xjuliechen",
+  "chaozuoye",
+  "unaiyang",
+  "viregeek",
+  "ru7longcrypto",
+  "eleveresearch",
+  "0xjasonli",
+  "dabiaogeggg",
+  "kuigas",
+  "tmel0211",
+  "rocky_bitcoin",
+  "btw0205",
+  "fishkiller",
+  "alvin0617",
+  "0xbeyondlee",
+  "cryptopainter_x",
+  "0x_todd",
+  "luyaoyuan1",
+  "candydao_leaf",
+  "web3feng",
+  "jason_chen998",
+  "wuhuoqiu",
+  "broleonaus",
+  "guomin184935",
 ]);
 
 // 1) Mantle 活动报名接口（受限：指纹/浏览器/安全中间件）
@@ -142,6 +193,16 @@ router.post(
         // registeredAt 由默认值生成
       });
 
+      // 若存在邀请人，清除其邀请数缓存
+      if (inviter && inviter.id && req.redisClient) {
+        const cacheKey = `mantle:invites:count:${inviter.id}`;
+        try {
+          await req.redisClient.del(cacheKey);
+        } catch (redisDelErr) {
+          console.warn("Redis DEL invite count warn:", redisDelErr);
+        }
+      }
+
       const { xHuntUserId: _omit, ...safeRecord } = record.toJSON();
       return res.json({
         success: true,
@@ -228,6 +289,42 @@ router.get(
       if (!userId) {
         return res.status(200).json({ registered: false });
       }
+
+      // 统计当前用户已邀请的人数（带缓存）
+      let invitedCount = 0;
+      const cacheKey = `mantle:invites:count:${userId}`;
+      let cachedCount = null;
+      if (req.redisClient) {
+        try {
+          const raw = await req.redisClient.get(cacheKey);
+          if (raw !== null && raw !== undefined) {
+            cachedCount = parseInt(raw, 10);
+            if (!Number.isNaN(cachedCount)) {
+              invitedCount = cachedCount;
+            }
+          }
+        } catch (redisGetErr) {
+          console.error("Redis GET invite count error:", redisGetErr);
+        }
+      }
+
+      if (cachedCount === null) {
+        try {
+          invitedCount = await MantleRegistration.count({
+            where: { invitedByUserId: userId },
+          });
+          if (req.redisClient) {
+            try {
+              await req.redisClient.setEx(cacheKey, 600, String(invitedCount)); // 缓存10分钟
+            } catch (redisSetErr) {
+              console.error("Redis SET invite count error:", redisSetErr);
+            }
+          }
+        } catch (countErr) {
+          console.error("Invite count query error:", countErr);
+        }
+      }
+
       const record = await MantleRegistration.findOne({
         where: { xHuntUserId: userId },
         order: [["createdAt", "DESC"]],
@@ -241,9 +338,11 @@ router.get(
         ],
       });
       if (!record) {
-        return res.status(200).json({ registered: false });
+        return res.status(200).json({ registered: false, invitedCount });
       }
-      return res.status(200).json({ registered: true, registration: record });
+      return res
+        .status(200)
+        .json({ registered: true, invitedCount, registration: record });
     } catch (err) {
       console.error("Mantle me query error:", err);
       return res.status(500).json({ error: "服务器内部错误（mantle me）" });
