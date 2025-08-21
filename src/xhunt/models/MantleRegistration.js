@@ -45,6 +45,21 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: "可选：填写被哪个人邀请的邀请码",
       },
+      invitedByUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: "邀请人的 XHunt 用户ID",
+      },
+      invitedByTwitterId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: "邀请人的推特ID",
+      },
+      invitedByUserInfo: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        comment: "邀请人的详细用户信息（JSON格式）",
+      },
       evmAddress: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -69,6 +84,11 @@ module.exports = (sequelize) => {
         { name: "idx_mantle_user", fields: ["xHuntUserId"] },
         { name: "idx_mantle_twitter", fields: ["twitterId"] },
         { name: "idx_mantle_invited_by", fields: ["invitedByCode"] },
+        { name: "idx_mantle_invited_by_user", fields: ["invitedByUserId"] },
+        {
+          name: "idx_mantle_invited_by_twitter",
+          fields: ["invitedByTwitterId"],
+        },
         { name: "idx_mantle_registered_at", fields: ["registeredAt"] },
       ],
     }
