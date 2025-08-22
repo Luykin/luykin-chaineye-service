@@ -354,9 +354,75 @@ router.get(
       if (!userId) {
         return res.status(200).json({ registered: false });
       }
-
       // 统计当前用户已邀请的人数（带缓存）
       let invitedCount = 0;
+
+      const record = await MantleRegistration.findOne({
+        where: { xHuntUserId: userId },
+        order: [["createdAt", "DESC"]],
+        attributes: { exclude: ["xHuntUserId"] },
+        include: [
+          {
+            model: XHuntUser,
+            as: "xHuntUser",
+            attributes: ["inviteCode", "displayName"],
+          },
+        ],
+      });
+
+      if (!record) {
+        return res.status(200).json({ registered: false, invitedCount });
+      }
+
+      // 获取用户的 handle 信息
+      let hunterData = null;
+      if (req.user && req.user.username) {
+        try {
+          const response = await axios.post(
+            "https://data.cryptohunt.ai/pro/api/hunter_by_handle",
+            {
+              campaign: "mantle",
+              handle: req.user.username,
+            },
+            {
+              timeout: 10000, // 设置10秒超时
+            }
+          );
+
+          if (response.data && response.data.row) {
+            hunterData = response.data.row;
+          }
+        } catch (hunterErr) {
+          console.error("Hunter data fetch error:", hunterErr);
+
+          // 根据错误类型返回相应的错误信息
+          if (hunterErr.code === "ECONNABORTED") {
+            return res.status(408).json({
+              error: "获取 hunter 数据超时，请稍后重试",
+              hunterDataError: "timeout",
+            });
+          } else if (hunterErr.response) {
+            // 服务器返回了错误状态码
+            return res.status(hunterErr.response.status).json({
+              error: `获取 hunter 数据失败: ${hunterErr.response.status}`,
+              hunterDataError: "api_error",
+            });
+          } else if (hunterErr.request) {
+            // 请求已发出但没有收到响应
+            return res.status(503).json({
+              error: "无法连接到 hunter 数据服务，请稍后重试",
+              hunterDataError: "connection_error",
+            });
+          } else {
+            // 其他错误
+            return res.status(500).json({
+              error: "获取 hunter 数据时发生未知错误",
+              hunterDataError: "unknown_error",
+            });
+          }
+        }
+      }
+
       const cacheKey = `mantle:invites:count:${userId}`;
       let cachedCount = null;
       if (req.redisClient) {
@@ -390,26 +456,14 @@ router.get(
         }
       }
 
-      const record = await MantleRegistration.findOne({
-        where: { xHuntUserId: userId },
-        order: [["createdAt", "DESC"]],
-        attributes: { exclude: ["xHuntUserId"] },
-        include: [
-          {
-            model: XHuntUser,
-            as: "xHuntUser",
-            attributes: ["inviteCode", "displayName"],
-          },
-        ],
+      // 缓存策略：前端缓存 90s
+      res.set("Cache-Control", "private, max-age=90");
+      return res.status(200).json({
+        registered: true,
+        invitedCount,
+        registration: record,
+        hunterData,
       });
-      if (!record) {
-        return res.status(200).json({ registered: false, invitedCount });
-      }
-      // 缓存策略：前端缓存 50s
-      res.set("Cache-Control", "private, max-age=50");
-      return res
-        .status(200)
-        .json({ registered: true, invitedCount, registration: record });
     } catch (err) {
       console.error("Mantle me query error:", err);
       return res.status(500).json({ error: "服务器内部错误（mantle me）" });
