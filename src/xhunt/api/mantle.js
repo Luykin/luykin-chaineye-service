@@ -12,6 +12,7 @@ const {
   authenticateTokenOptional,
   authenticateToken,
 } = require("../middleware/auth");
+const axios = require("axios");
 
 const router = express.Router();
 
@@ -113,6 +114,24 @@ router.post(
         return res.status(404).json({ error: "对应的用户不存在" });
       }
 
+      // 8秒频率限制（按用户）
+      if (req.redisClient) {
+        try {
+          const cooldownKey = `mantle:register:cd:${user.id}`;
+          let ttl = await req.redisClient.ttl(cooldownKey);
+          if (typeof ttl === "number" && ttl > 0) {
+            return res
+              .status(429)
+              .json({ error: `操作过于频繁，请在${ttl}s后重试` });
+          }
+          // 开启新的冷却窗口 10s
+          await req.redisClient.setEx(cooldownKey, 10, "1");
+        } catch (cdErr) {
+          console.warn("Redis cooldown warn:", cdErr);
+          // Redis 出错则不阻断，但继续流程
+        }
+      }
+
       // 提前校验邀请码合法性
       let inviter = null;
       if (typeof invitedByCode === "string" && invitedByCode.trim()) {
@@ -132,6 +151,54 @@ router.post(
             return res.status(400).json({ error: "邀请码无效" });
           }
         }
+      }
+
+      // 外部数据校验：账号注册时间需≥1个月前，且粉丝数≥50
+      try {
+        const apiUrl =
+          "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid";
+        const payload = { user_id: String(user.twitterId) };
+        const response = await axios.post(apiUrl, payload, { timeout: 7000 });
+
+        const data = response && response.data ? response.data : null;
+        if (
+          !data ||
+          !data.created_at ||
+          typeof data.followers_count !== "number"
+        ) {
+          return res
+            .status(502)
+            .json({ error: "外部数据校验失败：返回数据不完整" });
+        }
+
+        const createdAt = new Date(data.created_at);
+        if (Number.isNaN(createdAt.getTime())) {
+          return res
+            .status(502)
+            .json({ error: "外部数据校验失败：创建时间无效" });
+        }
+
+        const now = new Date();
+        const oneMonthAgo = new Date(now.getTime());
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+        if (createdAt > oneMonthAgo) {
+          return res
+            .status(400)
+            .json({ error: "不满足条件：账号注册需早于1个月" });
+        }
+
+        if (data.followers_count < 50) {
+          return res
+            .status(400)
+            .json({ error: "不满足条件：粉丝数量需不少于50" });
+        }
+      } catch (apiErr) {
+        console.error(
+          "Mantle register profile check error:",
+          apiErr?.message || apiErr
+        );
+        return res.status(502).json({ error: "外部数据校验请求失败" });
       }
 
       // 已报名校验（同一用户或同一 twitterId 不允许重复报名）
