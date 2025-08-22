@@ -389,9 +389,7 @@ router.get(
             }
           );
 
-          if (response.data && response.data.row) {
-            hunterData = response.data.row;
-          }
+          hunterData = response.data;
         } catch (hunterErr) {
           console.error("Hunter data fetch error:", hunterErr);
 
