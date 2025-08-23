@@ -223,14 +223,12 @@ router.get("/dau-details", basicAuth, async (req, res) => {
         return {
           fingerprint: parts[0],
           userId: parts[1],
-          fingerprintShort: parts[0].substring(0, 8) + "...", // 只显示前8位
         };
       } else {
         // 兼容旧格式（只有fingerprint）
         return {
           fingerprint: member,
           userId: "未知",
-          fingerprintShort: member.substring(0, 8) + "...",
         };
       }
     });

@@ -49,7 +49,7 @@
         <div id="dau-summary" style="display: none; margin-bottom: 30px;">
             <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
                 <div class="stat-card">
-                    <div class="stat-title">总用户数</div>
+                    <div class="stat-title" id="dau-date-title">今日日活</div>
                     <div class="stat-value" id="dau-total-count">0</div>
                 </div>
                 <div class="stat-card">
@@ -105,8 +105,7 @@
                         <tr>
                             <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">序号</th>
                             <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户ID</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">设备指纹（前8位）</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">完整指纹</th>
+                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">设备指纹</th>
                         </tr>
                     </thead>
                     <tbody id="dau-details-tbody">
@@ -148,14 +147,6 @@
 .dau-unknown-user {
     color: #9ca3af;
     font-style: italic;
-}
-
-.dau-fingerprint-short {
-    font-family: monospace;
-    background: #f3f4f6;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 12px;
 }
 
 .dau-fingerprint-full {
@@ -247,6 +238,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const validUsers = data.details.filter(item => item.userId !== '未知').length;
         const unknownUsers = totalCount - validUsers;
         
+        // 更新日期标题
+        const dateTitle = document.getElementById('dau-date-title');
+        const selectedDate = new Date(data.date);
+        const month = selectedDate.getMonth() + 1;
+        const day = selectedDate.getDate();
+        dateTitle.textContent = `${month}月${day}号日活`;
+        
         document.getElementById('dau-total-count').textContent = totalCount.toLocaleString();
         document.getElementById('dau-valid-users').textContent = validUsers.toLocaleString();
         document.getElementById('dau-unknown-users').textContent = unknownUsers.toLocaleString();
@@ -276,7 +274,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (filteredDauData.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="4" style="text-align: center; padding: 40px; color: #6b7280;">
+                    <td colspan="3" style="text-align: center; padding: 40px; color: #6b7280;">
                         没有找到匹配的数据
                     </td>
                 </tr>
@@ -296,9 +294,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 <td style="padding: 12px; color: #374151;">${index + 1}</td>
                 <td style="padding: 12px;">
                     <span class="dau-user-id ${isUnknown ? 'dau-unknown-user' : ''}">${item.userId}</span>
-                </td>
-                <td style="padding: 12px;">
-                    <span class="dau-fingerprint-short">${item.fingerprintShort}</span>
                 </td>
                 <td style="padding: 12px;">
                     <span class="dau-fingerprint-full" title="${item.fingerprint}">${item.fingerprint}</span>
