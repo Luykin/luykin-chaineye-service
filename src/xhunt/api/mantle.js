@@ -141,11 +141,14 @@ router.post(
 
       // 提前校验邀请码合法性
       let inviter = null;
+      // 计算用户handle，避免重复计算
+      const userHandle = (user.username || "").toLowerCase();
+      const isSpecialUser = SPECIAL_ALLOWED_USERNAMES.has(userHandle);
+
       if (typeof invitedByCode === "string" && invitedByCode.trim()) {
         const code = invitedByCode.trim();
         if (code === SPECIAL_INVITE_CODE) {
-          const userHandle = (user.username || "").toLowerCase();
-          if (!SPECIAL_ALLOWED_USERNAMES.has(userHandle)) {
+          if (!isSpecialUser) {
             return res
               .status(403)
               .json({ error: "You are not a specially invited user" });
@@ -161,51 +164,55 @@ router.post(
       }
 
       // 外部数据校验：账号注册时间需≥1个月前，且粉丝数≥50
-      try {
-        const apiUrl =
-          "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid";
-        const payload = { user_id: String(user.twitterId) };
-        const response = await axios.post(apiUrl, payload, { timeout: 7000 });
+      // 特殊用户名单中的用户跳过外部数据校验
 
-        const data = response && response.data ? response.data : null;
-        if (
-          !data ||
-          !data.created_at ||
-          typeof data.followers_count !== "number"
-        ) {
-          return res
-            .status(502)
-            .json({ error: "外部数据校验失败：返回数据不完整" });
+      if (!isSpecialUser) {
+        try {
+          const apiUrl =
+            "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid";
+          const payload = { user_id: String(user.twitterId) };
+          const response = await axios.post(apiUrl, payload, { timeout: 7000 });
+
+          const data = response && response.data ? response.data : null;
+          if (
+            !data ||
+            !data.created_at ||
+            typeof data.followers_count !== "number"
+          ) {
+            return res
+              .status(502)
+              .json({ error: "外部数据校验失败：返回数据不完整" });
+          }
+
+          const createdAt = new Date(data.created_at);
+          if (Number.isNaN(createdAt.getTime())) {
+            return res
+              .status(502)
+              .json({ error: "外部数据校验失败：创建时间无效" });
+          }
+
+          const now = new Date();
+          const oneMonthAgo = new Date(now.getTime());
+          oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+          if (createdAt > oneMonthAgo) {
+            return res
+              .status(400)
+              .json({ error: "不满足条件：账号注册需早于1个月" });
+          }
+
+          if (data.followers_count < 50) {
+            return res
+              .status(400)
+              .json({ error: "不满足条件：粉丝数量需不少于50" });
+          }
+        } catch (apiErr) {
+          console.error(
+            "Mantle register profile check error:",
+            apiErr?.message || apiErr
+          );
+          return res.status(502).json({ error: "外部数据校验请求失败" });
         }
-
-        const createdAt = new Date(data.created_at);
-        if (Number.isNaN(createdAt.getTime())) {
-          return res
-            .status(502)
-            .json({ error: "外部数据校验失败：创建时间无效" });
-        }
-
-        const now = new Date();
-        const oneMonthAgo = new Date(now.getTime());
-        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-
-        if (createdAt > oneMonthAgo) {
-          return res
-            .status(400)
-            .json({ error: "不满足条件：账号注册需早于1个月" });
-        }
-
-        if (data.followers_count < 50) {
-          return res
-            .status(400)
-            .json({ error: "不满足条件：粉丝数量需不少于50" });
-        }
-      } catch (apiErr) {
-        console.error(
-          "Mantle register profile check error:",
-          apiErr?.message || apiErr
-        );
-        return res.status(502).json({ error: "外部数据校验请求失败" });
       }
 
       // 已报名校验（同一用户或同一 twitterId 不允许重复报名）
