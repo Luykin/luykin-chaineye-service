@@ -119,16 +119,24 @@ function getWeekStartChina() {
   // 获取当前时间
   const now = new Date();
 
-  // 获取北京时间的年月日
-  const beijingDate = new Date(
-    now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
-  );
-  const year = beijingDate.getFullYear();
-  const month = beijingDate.getMonth();
-  const day = beijingDate.getDate();
+  // 使用UTC方法计算北京时间（UTC+8）
+  const utcHours = now.getUTCHours();
+  const beijingHours = utcHours + 8;
+
+  let beijingDate = new Date(now);
+  if (beijingHours >= 24) {
+    beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
+    beijingDate.setUTCHours(beijingHours - 24);
+  } else {
+    beijingDate.setUTCHours(beijingHours);
+  }
+
+  const year = beijingDate.getUTCFullYear();
+  const month = beijingDate.getUTCMonth();
+  const day = beijingDate.getUTCDate();
 
   // 计算本周一的日期
-  const dayOfWeek = beijingDate.getDay();
+  const dayOfWeek = beijingDate.getUTCDay();
   const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // 周日为0，需要回到上周一
 
   const beijingMondayStart = new Date(
@@ -155,12 +163,20 @@ function getMonthStartChina() {
   // 获取当前时间
   const now = new Date();
 
-  // 获取北京时间的年月日
-  const beijingDate = new Date(
-    now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
-  );
-  const year = beijingDate.getFullYear();
-  const month = beijingDate.getMonth();
+  // 使用UTC方法计算北京时间（UTC+8）
+  const utcHours = now.getUTCHours();
+  const beijingHours = utcHours + 8;
+
+  let beijingDate = new Date(now);
+  if (beijingHours >= 24) {
+    beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
+    beijingDate.setUTCHours(beijingHours - 24);
+  } else {
+    beijingDate.setUTCHours(beijingHours);
+  }
+
+  const year = beijingDate.getUTCFullYear();
+  const month = beijingDate.getUTCMonth();
 
   // 设置为北京时间本月1日 00:00:00
   const beijingMonthStart = new Date(year, month, 1, 0, 0, 0, 0);

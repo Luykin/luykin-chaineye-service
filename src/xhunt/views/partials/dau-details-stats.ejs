@@ -51,14 +51,22 @@
                 <div class="stat-card">
                     <div class="stat-title" id="dau-date-title">今日日活</div>
                     <div class="stat-value" id="dau-total-count">0</div>
+                    <div class="stat-subtitle">总活跃记录数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">今日去重日活</div>
+                    <div class="stat-value" id="dau-unique-users">0</div>
+                    <div class="stat-subtitle">唯一活跃用户数</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">有效用户ID</div>
                     <div class="stat-value" id="dau-valid-users">0</div>
+                    <div class="stat-subtitle">有用户ID的记录数</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">未知用户</div>
                     <div class="stat-value" id="dau-unknown-users">0</div>
+                    <div class="stat-subtitle">无用户ID的记录数</div>
                 </div>
             </div>
         </div>
@@ -80,22 +88,6 @@
                             width: 200px;
                         "
                     >
-                    <button 
-                        id="export-dau-data" 
-                        style="
-                            padding: 6px 12px;
-                            background: #10b981;
-                            color: white;
-                            border: none;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-size: 14px;
-                        "
-                        onmouseover="this.style.background='#059669'"
-                        onmouseout="this.style.background='#10b981'"
-                    >
-                        导出数据
-                    </button>
                 </div>
             </div>
 
@@ -155,6 +147,31 @@
     font-size: 12px;
     word-break: break-all;
 }
+
+.stat-subtitle {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 4px;
+    font-weight: 400;
+}
+
+.stats-grid {
+    gap: 20px;
+}
+
+.stat-card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
 </style>
 
 <script>
@@ -167,15 +184,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const containerDiv = document.getElementById('dau-details-container');
     const noDataDiv = document.getElementById('dau-no-data');
     const searchInput = document.getElementById('dau-search');
-    const exportButton = document.getElementById('export-dau-data');
     
     let currentDauData = [];
     let filteredDauData = [];
     
-    // 设置默认日期为今天（中国时区）
+    // 设置默认日期为今天（使用UTC+8方法，与后端保持一致）
     const today = new Date();
-    const chinaToday = new Date(today.toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
-    const todayStr = chinaToday.toISOString().split('T')[0];
+    const utcHours = today.getUTCHours();
+    const beijingHours = utcHours + 8;
+    
+    let beijingDate = new Date(today);
+    if (beijingHours >= 24) {
+      beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
+      beijingDate.setUTCHours(beijingHours - 24);
+    } else {
+      beijingDate.setUTCHours(beijingHours);
+    }
+    
+    const todayStr = beijingDate.toISOString().split('T')[0];
     dateSelector.value = todayStr;
     
     // 加载按钮点击事件
@@ -183,9 +209,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 搜索功能
     searchInput.addEventListener('input', filterDauData);
-    
-    // 导出功能
-    exportButton.addEventListener('click', exportDauData);
     
     // 页面加载时自动加载今天的数据
     loadDauDetails();
@@ -240,6 +263,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const validUsers = data.details.filter(item => item.userId !== '未知').length;
         const unknownUsers = totalCount - validUsers;
         
+        // 计算去重日活（按用户ID去重）
+        const uniqueUserIds = new Set();
+        data.details.forEach(item => {
+            if (item.userId !== '未知') {
+                uniqueUserIds.add(item.userId);
+            }
+        });
+        const uniqueUsersCount = uniqueUserIds.size;
+        
         // 更新日期标题（使用中国时区）
         const dateTitle = document.getElementById('dau-date-title');
         const selectedDate = new Date(data.date + 'T00:00:00+08:00'); // 使用中国时区
@@ -248,6 +280,7 @@ document.addEventListener('DOMContentLoaded', function() {
         dateTitle.textContent = `${month}月${day}号日活`;
         
         document.getElementById('dau-total-count').textContent = totalCount.toLocaleString();
+        document.getElementById('dau-unique-users').textContent = uniqueUsersCount.toLocaleString();
         document.getElementById('dau-valid-users').textContent = validUsers.toLocaleString();
         document.getElementById('dau-unknown-users').textContent = unknownUsers.toLocaleString();
     }
@@ -309,33 +342,6 @@ document.addEventListener('DOMContentLoaded', function() {
         paginationDiv.innerHTML = `共 ${filteredDauData.length} 条记录`;
     }
     
-    function exportDauData() {
-        if (filteredDauData.length === 0) {
-            alert('没有数据可导出');
-            return;
-        }
-        
-        const selectedDate = dateSelector.value;
-        const csvContent = [
-            ['序号', '用户ID', '设备指纹'],
-            ...filteredDauData.map((item, index) => [
-                index + 1,
-                item.userId,
-                item.fingerprint
-            ])
-        ].map(row => row.join(',')).join('\n');
-        
-        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        
-        link.setAttribute('href', url);
-        link.setAttribute('download', `dau-details-${selectedDate}.csv`);
-        link.style.visibility = 'hidden';
-        
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
+
 });
 </script>
