@@ -52,10 +52,14 @@ class DAUCacheManager {
       return false;
     }
 
-    const beijingTime = new Date().toLocaleString("en-US", {
-      timeZone: "Asia/Shanghai",
-    });
-    const today = new Date(beijingTime).toISOString().split("T")[0];
+    // 修复时区计算：直接获取北京时间的日期字符串
+    const now = new Date();
+    const beijingDate = new Date(
+      now.toLocaleString("en-US", {
+        timeZone: "Asia/Shanghai",
+      })
+    );
+    const today = beijingDate.toISOString().split("T")[0];
     // 使用 fingerprint,x-user-id 组合作为缓存键，提高唯一性
     const cacheKey = `${today}_${fingerprint}_${xUserId}`;
 
@@ -83,10 +87,14 @@ class DAUCacheManager {
       return;
     }
 
-    const beijingTime = new Date().toLocaleString("en-US", {
-      timeZone: "Asia/Shanghai",
-    });
-    const today = new Date(beijingTime).toISOString().split("T")[0];
+    // 修复时区计算：直接获取北京时间的日期字符串
+    const now = new Date();
+    const beijingDate = new Date(
+      now.toLocaleString("en-US", {
+        timeZone: "Asia/Shanghai",
+      })
+    );
+    const today = beijingDate.toISOString().split("T")[0];
     const cacheKey = `${today}_${fingerprint}_${xUserId}`;
     this.recentFingerprints.delete(cacheKey);
   }
@@ -354,10 +362,14 @@ const securityMiddleware = (req, res, next) => {
     );
 
     if (dauCacheManager.shouldWriteToRedis(fingerprint, xUserId)) {
-      const beijingTime = new Date().toLocaleString("en-US", {
-        timeZone: "Asia/Shanghai",
-      });
-      const today = new Date(beijingTime).toISOString().split("T")[0];
+      // 修复时区计算：直接获取北京时间的日期字符串
+      const now = new Date();
+      const beijingDate = new Date(
+        now.toLocaleString("en-US", {
+          timeZone: "Asia/Shanghai",
+        })
+      );
+      const today = beijingDate.toISOString().split("T")[0];
 
       // 异步写入 Redis（非阻塞）
       setImmediate(async () => {
