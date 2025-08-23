@@ -172,9 +172,11 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentDauData = [];
     let filteredDauData = [];
     
-    // 设置默认日期为今天
-    const today = new Date().toISOString().split('T')[0];
-    dateSelector.value = today;
+    // 设置默认日期为今天（中国时区）
+    const today = new Date();
+    const chinaToday = new Date(today.toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
+    const todayStr = chinaToday.toISOString().split('T')[0];
+    dateSelector.value = todayStr;
     
     // 加载按钮点击事件
     loadButton.addEventListener('click', loadDauDetails);
@@ -238,9 +240,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const validUsers = data.details.filter(item => item.userId !== '未知').length;
         const unknownUsers = totalCount - validUsers;
         
-        // 更新日期标题
+        // 更新日期标题（使用中国时区）
         const dateTitle = document.getElementById('dau-date-title');
-        const selectedDate = new Date(data.date);
+        const selectedDate = new Date(data.date + 'T00:00:00+08:00'); // 使用中国时区
         const month = selectedDate.getMonth() + 1;
         const day = selectedDate.getDate();
         dateTitle.textContent = `${month}月${day}号日活`;

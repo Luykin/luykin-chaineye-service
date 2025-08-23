@@ -6,6 +6,12 @@ const {
   XAccount,
   XPointRecord,
 } = require("../../models/postgres-start");
+const {
+  getTodayStartChina,
+  getTodayEndChina,
+  formatDateTimeChina,
+  getChinaDateString,
+} = require("../../utils/date");
 
 /**
  * 获取最近7天的日活数据（基于设备指纹）
@@ -21,10 +27,7 @@ async function getDailyActiveUsers(redisClient) {
       // 计算北京时间的日期
       const date = new Date();
       date.setDate(date.getDate() - i);
-      const beijingTime = new Date(
-        date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
-      );
-      const dateStr = beijingTime.toISOString().split("T")[0];
+      const dateStr = getChinaDateString(date);
 
       const dauKey = `dau:${dateStr}`;
 
@@ -32,17 +35,26 @@ async function getDailyActiveUsers(redisClient) {
         // 获取当日活跃用户数（Set的成员数量）
         const activeUsers = await redisClient.sCard(dauKey);
 
+        // 格式化显示日期
+        const beijingTime = new Date(
+          date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
+        );
+        const displayDate = beijingTime.toLocaleDateString("zh-CN", {
+          month: "short",
+          day: "numeric",
+          weekday: "short",
+        });
+
         dauData.push({
           date: dateStr,
           activeUsers: activeUsers || 0,
-          displayDate: beijingTime.toLocaleDateString("zh-CN", {
-            month: "short",
-            day: "numeric",
-            weekday: "short",
-          }),
+          displayDate: displayDate,
         });
       } catch (redisError) {
         console.error(`Error fetching DAU for ${dateStr}:`, redisError);
+        const beijingTime = new Date(
+          date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
+        );
         dauData.push({
           date: dateStr,
           activeUsers: 0,
@@ -62,11 +74,12 @@ async function getDailyActiveUsers(redisClient) {
     return Array.from({ length: 7 }, (_, i) => {
       const date = new Date();
       date.setDate(date.getDate() - (6 - i));
+      const dateStr = getChinaDateString(date);
       const beijingTime = new Date(
         date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
       );
       return {
-        date: beijingTime.toISOString().split("T")[0],
+        date: dateStr,
         activeUsers: 0,
         displayDate: beijingTime.toLocaleDateString("zh-CN", {
           month: "short",
@@ -78,53 +91,7 @@ async function getDailyActiveUsers(redisClient) {
   }
 }
 
-/**
- * 获取中国时区的今日开始时间（UTC）
- * 北京时间今日 00:00:00 对应的 UTC 时间
- */
-function getTodayStartChina() {
-  // 获取当前时间
-  const now = new Date();
-
-  // 获取北京时间的年月日
-  const beijingDate = new Date(
-    now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
-  );
-  const year = beijingDate.getFullYear();
-  const month = beijingDate.getMonth();
-  const day = beijingDate.getDate();
-
-  // 创建北京时间今日 00:00:00
-  const beijingTodayStart = new Date(year, month, day, 0, 0, 0, 0);
-
-  // 计算UTC时间：北京时间减去8小时
-  const utcTime = new Date(beijingTodayStart.getTime() - 8 * 60 * 60 * 1000);
-  return utcTime;
-}
-
-/**
- * 获取中国时区的今日结束时间（UTC）
- * 北京时间今日 23:59:59.999 对应的 UTC 时间
- */
-function getTodayEndChina() {
-  // 获取当前时间
-  const now = new Date();
-
-  // 获取北京时间的年月日
-  const beijingDate = new Date(
-    now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
-  );
-  const year = beijingDate.getFullYear();
-  const month = beijingDate.getMonth();
-  const day = beijingDate.getDate();
-
-  // 创建北京时间今日 23:59:59.999
-  const beijingTodayEnd = new Date(year, month, day, 23, 59, 59, 999);
-
-  // 计算UTC时间：北京时间减去8小时
-  const utcTime = new Date(beijingTodayEnd.getTime() - 8 * 60 * 60 * 1000);
-  return utcTime;
-}
+// 使用统一的时区处理函数，已从 utils/date.js 导入
 
 /**
  * 获取中国时区的本周开始时间（北京时间周一 00:00:00 对应的 UTC）

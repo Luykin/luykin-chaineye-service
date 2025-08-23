@@ -273,6 +273,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 格式化时间
             const lastUsed = new Date(user.lastUsed);
             const timeAgo = getTimeAgo(lastUsed);
+            const chinaTime = lastUsed.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
             
             row.innerHTML = `
                 <td style="padding: 12px;">
@@ -285,7 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="online-user-handle">@${user.twitterId}</span>
                 </td>
                 <td style="padding: 12px;">
-                    <span class="online-user-time" title="${lastUsed.toLocaleString('zh-CN')}">${timeAgo}</span>
+                    <span class="online-user-time" title="${chinaTime}">${timeAgo}</span>
                 </td>
             `;
             
@@ -328,8 +329,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function getTimeAgo(date) {
+        // 确保使用中国时区
         const now = new Date();
-        const diffMs = now - date;
+        const chinaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
+        const chinaDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
+        
+        const diffMs = chinaNow - chinaDate;
         const diffMins = Math.floor(diffMs / (1000 * 60));
         
         if (diffMins < 1) {
