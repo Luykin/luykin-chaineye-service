@@ -24,10 +24,13 @@ async function getDailyActiveUsers(redisClient) {
 
     // 获取最近7天的数据
     for (let i = 6; i >= 0; i--) {
-      // 计算北京时间的日期
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = getChinaDateString(date);
+      // 计算北京时间的日期（使用和 security.js 相同的方式）
+      const beijingTime = new Date().toLocaleString("en-US", {
+        timeZone: "Asia/Shanghai",
+      });
+      const today = new Date(beijingTime);
+      today.setDate(today.getDate() - i);
+      const dateStr = today.toISOString().split("T")[0];
 
       const dauKey = `dau:${dateStr}`;
 
@@ -72,16 +75,16 @@ async function getDailyActiveUsers(redisClient) {
     console.error("Error fetching daily active users:", error);
     // 返回空数据而不是抛出错误
     return Array.from({ length: 7 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - i));
-      const dateStr = getChinaDateString(date);
-      const beijingTime = new Date(
-        date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
-      );
+      const beijingTime = new Date().toLocaleString("en-US", {
+        timeZone: "Asia/Shanghai",
+      });
+      const today = new Date(beijingTime);
+      today.setDate(today.getDate() - (6 - i));
+      const dateStr = today.toISOString().split("T")[0];
       return {
         date: dateStr,
         activeUsers: 0,
-        displayDate: beijingTime.toLocaleDateString("zh-CN", {
+        displayDate: today.toLocaleDateString("zh-CN", {
           month: "short",
           day: "numeric",
           weekday: "short",
