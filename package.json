@@ -17,9 +17,9 @@
     "logs-crawler": "pm2 logs luykin-chaineye-crawler --env production",
     "db:migrate": "npx sequelize-cli db:migrate",
     "db:migrate:undo": "npx sequelize-cli db:migrate:undo",
-    "db:migrate:pg": "npx sequelize-cli db:migrate --config config/config-pg.json --migrations-path migrations-pg",
-    "db:migrate:pg:undo": "npx sequelize-cli db:migrate:undo --config config/config-pg.json --migrations-path migrations-pg",
-    "db:migrate:pg:status": "npx sequelize-cli db:migrate:status --config config/config-pg.json --migrations-path migrations-pg",
+    "db:migrate:pg": "NODE_ENV=production npx sequelize-cli db:migrate --config config/config-pg.json --migrations-path migrations-pg",
+    "db:migrate:pg:undo": "NODE_ENV=production npx sequelize-cli db:migrate:undo --config config/config-pg.json --migrations-path migrations-pg",
+    "db:migrate:pg:status": "NODE_ENV=production npx sequelize-cli db:migrate:status --config config/config-pg.json --migrations-path migrations-pg",
     "test-start": "pm2 start dev.ecosystem.config.js --env development",
     "test-restart": "pm2 restart dev.ecosystem.config.js --env development",
     "test-logs": "pm2 logs dev-luykin-chaineye-api"
