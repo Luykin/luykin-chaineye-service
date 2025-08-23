@@ -106,6 +106,11 @@ router.post(
     try {
       const { invitedByCode, evmAddress, registrationUrl } = req.body || {};
 
+      // 校验EVM地址必填
+      if (!evmAddress || typeof evmAddress !== "string" || !evmAddress.trim()) {
+        return res.status(400).json({ error: "EVM地址为必填项" });
+      }
+
       // 定位用户（仅使用 token）
       const authedUserId = req.user && req.user.id;
       if (!authedUserId) {
