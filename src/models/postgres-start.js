@@ -8,6 +8,7 @@ const XReviewForAccountModel = require("../xhunt/models/XReviewForAccount");
 const XPointRecordModel = require("../xhunt/models/XPointRecord");
 const XPrivateNoteModel = require("../xhunt/models/XPrivateNote");
 const MantleRegistrationModel = require("../xhunt/models/MantleRegistration");
+const XPrivateMessageModel = require("../xhunt/models/XPrivateMessage");
 
 const pgInstance = new Sequelize({
   dialect: process.env.PG_DIALECT,
@@ -34,6 +35,7 @@ const XReviewForAccount = XReviewForAccountModel(pgInstance);
 const XPointRecord = XPointRecordModel(pgInstance);
 const XPrivateNote = XPrivateNoteModel(pgInstance);
 const MantleRegistration = MantleRegistrationModel(pgInstance);
+const XPrivateMessage = XPrivateMessageModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -118,6 +120,27 @@ MantleRegistration.belongsTo(XHuntUser, {
   as: "xHuntUser",
 });
 
+// XPrivateMessage 关系（私信）
+XHuntUser.hasMany(XPrivateMessage, {
+  foreignKey: "senderId",
+  as: "sentMessages",
+});
+
+XHuntUser.hasMany(XPrivateMessage, {
+  foreignKey: "receiverId",
+  as: "receivedMessages",
+});
+
+XPrivateMessage.belongsTo(XHuntUser, {
+  foreignKey: "senderId",
+  as: "sender",
+});
+
+XPrivateMessage.belongsTo(XHuntUser, {
+  foreignKey: "receiverId",
+  as: "receiver",
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 async function setupPostgres() {
@@ -151,4 +174,5 @@ module.exports = {
   XPointRecord,
   XPrivateNote,
   MantleRegistration,
+  XPrivateMessage,
 };
