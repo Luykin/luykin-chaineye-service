@@ -18,9 +18,11 @@ node src/script/send-kol-reports.js <campaignId> <senderId> <usernames>
 
 ### 示例
 
+<!-- 6666666d-cc11-8888-8888-034d3e9a8888 这是Xhunt 官方机器人 -->
+
 ```bash
 # 给两个用户发送KOL报告私信
-node src/script/send-kol-reports.js kol_report_20250127 your-sender-uuid "FloriaT96249,luoyukun4"
+node src/script/send-kol-reports.js kol_report_20250127 6666666d-cc11-8888-8888-034d3e9a8888 "FloriaT96249,luoyukun4"
 
 # 给更多用户发送
 node src/script/send-kol-reports.js kol_report_20250127 your-sender-uuid "user1,user2,user3,user4,user5"

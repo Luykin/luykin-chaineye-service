@@ -1,5 +1,5 @@
 // 加载环境变量
-require("dotenv").config({ path: ".env-dev" });
+require("dotenv").config({ path: ".env-pro" });
 
 const { Op } = require("sequelize");
 const { XHuntUser, XPrivateMessage } = require("../models/postgres-start");
