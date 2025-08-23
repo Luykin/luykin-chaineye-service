@@ -264,10 +264,9 @@ router.get("/online-users", basicAuth, async (req, res) => {
     const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
 
     // 获取在线用户数据
-    const {
-      XHuntUserToken,
-      XHuntUser,
-    } = require("../../src/models/postgres-start");
+    const postgresModels = require("../../models/postgres-start");
+    const XHuntUserToken = postgresModels.XHuntUserToken;
+    const XHuntUser = postgresModels.XHuntUser;
     const { Op } = require("sequelize");
 
     // 查询最近20分钟内有活动的用户
