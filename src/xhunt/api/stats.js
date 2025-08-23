@@ -251,6 +251,86 @@ router.get("/dau-details", basicAuth, async (req, res) => {
 });
 
 /**
+ * GET /online-users
+ * 获取最近20分钟内的在线用户列表（需要认证）
+ */
+router.get("/online-users", basicAuth, async (req, res) => {
+  try {
+    const { page = 1, limit = 100 } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    
+    // 计算20分钟前的时间
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+    
+    // 获取在线用户数据
+    const { XHuntUserToken, XHuntUser } = require('../../src/models/postgres-start');
+    const { Op } = require('sequelize');
+    
+    // 查询最近20分钟内有活动的用户
+    const onlineUsers = await XHuntUserToken.findAll({
+      where: {
+        lastUsed: {
+          [Op.gte]: twentyMinutesAgo
+        },
+        isRevoked: false
+      },
+      include: [
+        {
+          model: XHuntUser,
+          as: 'user',
+          attributes: ['id', 'twitterId', 'username', 'displayName', 'avatar']
+        }
+      ],
+      attributes: ['id', 'lastUsed'],
+      order: [['lastUsed', 'DESC']],
+      limit: limitNum,
+      offset: (pageNum - 1) * limitNum
+    });
+    
+    // 获取总数
+    const totalCount = await XHuntUserToken.count({
+      where: {
+        lastUsed: {
+          [Op.gte]: twentyMinutesAgo
+        },
+        isRevoked: false
+      }
+    });
+    
+    // 格式化数据
+    const formattedUsers = onlineUsers.map(token => ({
+      id: token.user.id,
+      twitterId: token.user.twitterId,
+      username: token.user.username || token.user.twitterId,
+      displayName: token.user.displayName || token.user.username || token.user.twitterId,
+      avatar: token.user.avatar,
+      lastUsed: token.lastUsed
+    }));
+    
+    res.json({
+      success: true,
+      data: {
+        users: formattedUsers,
+        pagination: {
+          currentPage: pageNum,
+          pageSize: limitNum,
+          totalCount: totalCount,
+          totalPages: Math.ceil(totalCount / limitNum)
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error fetching online users:', error);
+    res.status(500).json({
+      success: false,
+      error: '获取在线用户失败'
+    });
+  }
+});
+
+/**
  * GET /health
  * 健康检查接口（无需认证）
  */
