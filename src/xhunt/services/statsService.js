@@ -49,6 +49,15 @@ async function getDailyActiveUsers(redisClient) {
         console.log(
           `🔍 变量类型检查: beijingTime=${typeof beijingTime}, today=${typeof today}, dateStr=${typeof dateStr}`
         );
+
+        // 检查今天的数据是否存在
+        console.log(
+          `🔍 今天(${currentToday})的数据查询key: dau:${currentToday}`
+        );
+        console.log(`🔍 当前查询的key: dau:${dateStr}`);
+        console.log(
+          `🔍 是否匹配: ${currentToday === dateStr ? "✅ 匹配" : "❌ 不匹配"}`
+        );
       }
 
       try {

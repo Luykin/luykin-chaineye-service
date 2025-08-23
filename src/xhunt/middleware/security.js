@@ -48,6 +48,7 @@ class DAUCacheManager {
   shouldWriteToRedis(fingerprint, xUserId) {
     // 如果没有 x-user-id，不进行统计
     if (!xUserId) {
+      console.log(`🔍 DAU缓存检查: 缺少x-user-id，跳过统计`);
       return false;
     }
 
@@ -61,9 +62,18 @@ class DAUCacheManager {
     if (!this.recentFingerprints.has(cacheKey)) {
       // 未缓存，标记为已处理
       this.recentFingerprints.set(cacheKey, Date.now());
+      console.log(
+        `🔍 DAU缓存检查: 新增缓存键 ${cacheKey.substring(
+          0,
+          20
+        )}...，允许写入Redis`
+      );
       return true;
     }
 
+    console.log(
+      `🔍 DAU缓存检查: 缓存键 ${cacheKey.substring(0, 20)}... 已存在，跳过写入`
+    );
     return false; // 已缓存，跳过
   }
 
@@ -331,6 +341,18 @@ const securityMiddleware = (req, res, next) => {
 
     // 🔥 智能日活统计 - 使用缓存管理器
     const xUserId = req.headers["x-user-id"];
+
+    // 调试信息：检查DAU统计条件
+    console.log(
+      `🔍 DAU统计调试: fingerprint=${fingerprint?.substring(
+        0,
+        8
+      )}..., xUserId=${xUserId}, shouldWrite=${dauCacheManager.shouldWriteToRedis(
+        fingerprint,
+        xUserId
+      )}`
+    );
+
     if (dauCacheManager.shouldWriteToRedis(fingerprint, xUserId)) {
       const beijingTime = new Date().toLocaleString("en-US", {
         timeZone: "Asia/Shanghai",
