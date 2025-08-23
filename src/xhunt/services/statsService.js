@@ -11,7 +11,7 @@ const {
   getTodayEndChina,
   formatDateTimeChina,
   getChinaDateString,
-} = require("../../utils/date");
+} = require("../utils/date");
 
 /**
  * 获取最近7天的日活数据（基于设备指纹）
