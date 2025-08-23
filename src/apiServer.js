@@ -27,6 +27,7 @@ const xHuntNotesRoutes = require("./xhunt/api/notes");
 const xHuntReportRoutes = require("./xhunt/api/report");
 const xHuntStatsRoutes = require("./xhunt/api/stats"); // 🆕 新增统计路由
 const xHuntMantleRoutes = require("./xhunt/api/mantle");
+const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const internalQueryRoutes = require("./api/internal-query");
 const {
   securityMiddleware,
@@ -280,6 +281,14 @@ app.use(
   fingerprintLimiter,
   browserOnlyMiddleware,
   xHuntReportRoutes
+);
+
+// 私信接口
+app.use(
+  "/api/xhunt/private-messages",
+  fingerprintLimiter,
+  browserOnlyMiddleware,
+  xHuntPrivateMessageRoutes
 );
 
 // 🆕 新增统计路由 - 无需安全中间件，方便内部监控
