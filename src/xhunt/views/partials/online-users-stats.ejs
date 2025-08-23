@@ -64,7 +64,6 @@
                 <table id="online-users-table" style="width: 100%; border-collapse: collapse; background: white;">
                     <thead style="background: #f9fafb;">
                         <tr>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">头像</th>
                             <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户名</th>
                             <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">显示名称</th>
                             <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">推特ID</th>
@@ -108,26 +107,7 @@
     background-color: #f3f4f6;
 }
 
-.online-user-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid #e5e7eb;
-}
 
-.online-user-avatar-placeholder {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #f3f4f6;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #9ca3af;
-    font-size: 16px;
-    border: 2px solid #e5e7eb;
-}
 
 .online-user-name {
     font-weight: 600;
@@ -277,7 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (filteredOnlineData.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="5" style="text-align: center; padding: 40px; color: #6b7280;">
+                    <td colspan="4" style="text-align: center; padding: 40px; color: #6b7280;">
                         没有找到匹配的数据
                     </td>
                 </tr>
@@ -294,17 +274,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const lastUsed = new Date(user.lastUsed);
             const timeAgo = getTimeAgo(lastUsed);
             
-            // 头像处理
-            const avatarHtml = user.avatar 
-                ? `<img src="${user.avatar}" alt="头像" class="online-user-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`
-                : '';
-            const avatarPlaceholder = `<div class="online-user-avatar-placeholder">${user.displayName ? user.displayName.charAt(0).toUpperCase() : '?'}</div>`;
-            
             row.innerHTML = `
-                <td style="padding: 12px;">
-                    ${avatarHtml}
-                    <div class="online-user-avatar-placeholder" style="display: ${user.avatar ? 'none' : 'flex'};">${user.displayName ? user.displayName.charAt(0).toUpperCase() : '?'}</div>
-                </td>
                 <td style="padding: 12px;">
                     <span class="online-user-name">${user.username}</span>
                 </td>

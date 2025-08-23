@@ -281,7 +281,7 @@ router.get("/online-users", basicAuth, async (req, res) => {
         {
           model: XHuntUser,
           as: "user",
-          attributes: ["id", "twitterId", "username", "displayName", "avatar"],
+          attributes: ["id", "twitterId", "username", "displayName"],
         },
       ],
       attributes: ["id", "lastUsed"],
@@ -307,7 +307,6 @@ router.get("/online-users", basicAuth, async (req, res) => {
       username: token.user.username || token.user.twitterId,
       displayName:
         token.user.displayName || token.user.username || token.user.twitterId,
-      avatar: token.user.avatar,
       lastUsed: token.lastUsed,
     }));
 
