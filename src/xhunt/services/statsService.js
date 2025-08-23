@@ -44,38 +44,12 @@ async function getDailyActiveUsers(redisClient) {
 
       const dauKey = `dau:${dateStr}`;
 
-      // 调试信息：验证日期计算和Redis key
-      console.log(`🔍 DAU查询: i=${i}, dateStr=${dateStr}, dauKey=${dauKey}`);
-
-      // 验证当前时间对应的Redis key（用于对比）
-      if (i === 0) {
-        const currentBeijingTime = new Date().toLocaleString("en-US", {
-          timeZone: "Asia/Shanghai",
-        });
-        const currentToday = new Date(currentBeijingTime)
-          .toISOString()
-          .split("T")[0];
-        console.log(`📅 当前北京时间对应的key: dau:${currentToday}`);
-        console.log(
-          `🔍 变量类型检查: beijingTime=${typeof beijingTime}, today=${typeof today}, dateStr=${typeof dateStr}`
-        );
-
-        // 检查今天的数据是否存在
-        console.log(
-          `🔍 今天(${currentToday})的数据查询key: dau:${currentToday}`
-        );
-        console.log(`🔍 当前查询的key: dau:${dateStr}`);
-        console.log(
-          `🔍 是否匹配: ${currentToday === dateStr ? "✅ 匹配" : "❌ 不匹配"}`
-        );
-      }
-
       try {
         // 获取当日活跃用户数（Set的成员数量）
         const activeUsers = await redisClient.sCard(dauKey);
 
         // 格式化显示日期
-        const displayDate = today.toLocaleDateString("zh-CN", {
+        const displayDate = beijingDate.toLocaleDateString("zh-CN", {
           month: "short",
           day: "numeric",
           weekday: "short",
@@ -91,7 +65,7 @@ async function getDailyActiveUsers(redisClient) {
         dauData.push({
           date: dateStr,
           activeUsers: 0,
-          displayDate: today.toLocaleDateString("zh-CN", {
+          displayDate: beijingDate.toLocaleDateString("zh-CN", {
             month: "short",
             day: "numeric",
             weekday: "short",
@@ -208,38 +182,6 @@ async function getFullStats(redisClient = null) {
   const todayEnd = getTodayEndChina();
   const weekStart = getWeekStartChina();
   const monthStart = getMonthStartChina();
-
-  // 调试信息：验证时间计算是否正确
-  console.log("🕐 时区调试信息（修复后）:");
-  console.log("当前UTC时间:", new Date().toISOString());
-  console.log(
-    "当前北京时间:",
-    new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })
-  );
-  console.log("");
-  console.log("查询时间范围 (UTC):");
-  console.log("北京今日开始 (UTC):", todayStart.toISOString());
-  console.log("北京今日结束 (UTC):", todayEnd.toISOString());
-  console.log("北京本周开始 (UTC):", weekStart.toISOString());
-  console.log("北京本月开始 (UTC):", monthStart.toISOString());
-  console.log("");
-  console.log("🔍 验证转换（转换回北京时间应该是正确的）:");
-  console.log(
-    "今日开始 +8小时:",
-    new Date(todayStart.getTime() + 8 * 60 * 60 * 1000).toISOString()
-  );
-  console.log(
-    "今日结束 +8小时:",
-    new Date(todayEnd.getTime() + 8 * 60 * 60 * 1000).toISOString()
-  );
-  console.log(
-    "本周开始 +8小时:",
-    new Date(weekStart.getTime() + 8 * 60 * 60 * 1000).toISOString()
-  );
-  console.log(
-    "本月开始 +8小时:",
-    new Date(monthStart.getTime() + 8 * 60 * 60 * 1000).toISOString()
-  );
 
   // 🆕 获取基于设备指纹的日活数据
   let dailyActiveUsersData = [];
