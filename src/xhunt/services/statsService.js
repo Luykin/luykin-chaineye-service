@@ -25,12 +25,15 @@ async function getDailyActiveUsers(redisClient) {
     // 获取最近7天的数据
     for (let i = 6; i >= 0; i--) {
       // 计算北京时间的日期（使用和 security.js 相同的方式）
-      const beijingTime = new Date().toLocaleString("en-US", {
-        timeZone: "Asia/Shanghai",
-      });
-      const today = new Date(beijingTime);
-      today.setDate(today.getDate() - i);
-      const dateStr = today.toISOString().split("T")[0];
+      const now = new Date();
+      // 先转换为北京时间，然后减去天数
+      const beijingTime = new Date(
+        now.toLocaleString("en-US", {
+          timeZone: "Asia/Shanghai",
+        })
+      );
+      beijingTime.setDate(beijingTime.getDate() - i);
+      const dateStr = beijingTime.toISOString().split("T")[0];
 
       const dauKey = `dau:${dateStr}`;
 
@@ -39,10 +42,7 @@ async function getDailyActiveUsers(redisClient) {
         const activeUsers = await redisClient.sCard(dauKey);
 
         // 格式化显示日期
-        const beijingTime = new Date(
-          date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
-        );
-        const displayDate = beijingTime.toLocaleDateString("zh-CN", {
+        const displayDate = today.toLocaleDateString("zh-CN", {
           month: "short",
           day: "numeric",
           weekday: "short",
@@ -55,13 +55,10 @@ async function getDailyActiveUsers(redisClient) {
         });
       } catch (redisError) {
         console.error(`Error fetching DAU for ${dateStr}:`, redisError);
-        const beijingTime = new Date(
-          date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
-        );
         dauData.push({
           date: dateStr,
           activeUsers: 0,
-          displayDate: beijingTime.toLocaleDateString("zh-CN", {
+          displayDate: today.toLocaleDateString("zh-CN", {
             month: "short",
             day: "numeric",
             weekday: "short",
@@ -75,16 +72,18 @@ async function getDailyActiveUsers(redisClient) {
     console.error("Error fetching daily active users:", error);
     // 返回空数据而不是抛出错误
     return Array.from({ length: 7 }, (_, i) => {
-      const beijingTime = new Date().toLocaleString("en-US", {
-        timeZone: "Asia/Shanghai",
-      });
-      const today = new Date(beijingTime);
-      today.setDate(today.getDate() - (6 - i));
-      const dateStr = today.toISOString().split("T")[0];
+      const now = new Date();
+      const beijingTime = new Date(
+        now.toLocaleString("en-US", {
+          timeZone: "Asia/Shanghai",
+        })
+      );
+      beijingTime.setDate(beijingTime.getDate() - (6 - i));
+      const dateStr = beijingTime.toISOString().split("T")[0];
       return {
         date: dateStr,
         activeUsers: 0,
-        displayDate: today.toLocaleDateString("zh-CN", {
+        displayDate: beijingTime.toLocaleDateString("zh-CN", {
           month: "short",
           day: "numeric",
           weekday: "short",
