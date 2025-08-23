@@ -24,13 +24,23 @@ async function getDailyActiveUsers(redisClient) {
 
     // 获取最近7天的数据
     for (let i = 6; i >= 0; i--) {
-      // 计算北京时间的日期（使用和 security.js 完全一致的方式）
-      const beijingTime = new Date().toLocaleString("en-US", {
-        timeZone: "Asia/Shanghai",
-      });
-      const today = new Date(beijingTime);
-      today.setDate(today.getDate() - i);
-      const dateStr = today.toISOString().split("T")[0];
+      // 计算北京时间的日期（使用和 security.js 完全一致的UTC方法）
+      const now = new Date();
+      const utcHours = now.getUTCHours();
+      const beijingHours = utcHours + 8;
+
+      // 如果北京时间超过24小时，说明是下一天
+      let beijingDate = new Date(now);
+      if (beijingHours >= 24) {
+        beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
+        beijingDate.setUTCHours(beijingHours - 24);
+      } else {
+        beijingDate.setUTCHours(beijingHours);
+      }
+
+      // 减去天数得到目标日期
+      beijingDate.setUTCDate(beijingDate.getUTCDate() - i);
+      const dateStr = beijingDate.toISOString().split("T")[0];
 
       const dauKey = `dau:${dateStr}`;
 
@@ -95,16 +105,28 @@ async function getDailyActiveUsers(redisClient) {
     console.error("Error fetching daily active users:", error);
     // 返回空数据而不是抛出错误
     return Array.from({ length: 7 }, (_, i) => {
-      const beijingTime = new Date().toLocaleString("en-US", {
-        timeZone: "Asia/Shanghai",
-      });
-      const today = new Date(beijingTime);
-      today.setDate(today.getDate() - (6 - i));
-      const dateStr = today.toISOString().split("T")[0];
+      // 使用UTC方法计算北京时间（UTC+8）
+      const now = new Date();
+      const utcHours = now.getUTCHours();
+      const beijingHours = utcHours + 8;
+
+      // 如果北京时间超过24小时，说明是下一天
+      let beijingDate = new Date(now);
+      if (beijingHours >= 24) {
+        beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
+        beijingDate.setUTCHours(beijingHours - 24);
+      } else {
+        beijingDate.setUTCHours(beijingHours);
+      }
+
+      // 减去天数得到目标日期
+      beijingDate.setUTCDate(beijingDate.getUTCDate() - (6 - i));
+      const dateStr = beijingDate.toISOString().split("T")[0];
+
       return {
         date: dateStr,
         activeUsers: 0,
-        displayDate: today.toLocaleDateString("zh-CN", {
+        displayDate: beijingDate.toLocaleDateString("zh-CN", {
           month: "short",
           day: "numeric",
           weekday: "short",

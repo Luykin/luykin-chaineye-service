@@ -52,13 +52,20 @@ class DAUCacheManager {
       return false;
     }
 
-    // 修复时区计算：直接获取北京时间的日期字符串
+    // 使用UTC方法计算北京时间（UTC+8）
     const now = new Date();
-    const beijingDate = new Date(
-      now.toLocaleString("en-US", {
-        timeZone: "Asia/Shanghai",
-      })
-    );
+    const utcHours = now.getUTCHours();
+    const beijingHours = utcHours + 8;
+
+    // 如果北京时间超过24小时，说明是下一天
+    let beijingDate = new Date(now);
+    if (beijingHours >= 24) {
+      beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
+      beijingDate.setUTCHours(beijingHours - 24);
+    } else {
+      beijingDate.setUTCHours(beijingHours);
+    }
+
     const today = beijingDate.toISOString().split("T")[0];
     // 使用 fingerprint,x-user-id 组合作为缓存键，提高唯一性
     const cacheKey = `${today}_${fingerprint}_${xUserId}`;
@@ -87,13 +94,20 @@ class DAUCacheManager {
       return;
     }
 
-    // 修复时区计算：直接获取北京时间的日期字符串
+    // 使用UTC方法计算北京时间（UTC+8）
     const now = new Date();
-    const beijingDate = new Date(
-      now.toLocaleString("en-US", {
-        timeZone: "Asia/Shanghai",
-      })
-    );
+    const utcHours = now.getUTCHours();
+    const beijingHours = utcHours + 8;
+
+    // 如果北京时间超过24小时，说明是下一天
+    let beijingDate = new Date(now);
+    if (beijingHours >= 24) {
+      beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
+      beijingDate.setUTCHours(beijingHours - 24);
+    } else {
+      beijingDate.setUTCHours(beijingHours);
+    }
+
     const today = beijingDate.toISOString().split("T")[0];
     const cacheKey = `${today}_${fingerprint}_${xUserId}`;
     this.recentFingerprints.delete(cacheKey);
@@ -362,13 +376,20 @@ const securityMiddleware = (req, res, next) => {
     );
 
     if (dauCacheManager.shouldWriteToRedis(fingerprint, xUserId)) {
-      // 修复时区计算：直接获取北京时间的日期字符串
+      // 使用UTC方法计算北京时间（UTC+8）
       const now = new Date();
-      const beijingDate = new Date(
-        now.toLocaleString("en-US", {
-          timeZone: "Asia/Shanghai",
-        })
-      );
+      const utcHours = now.getUTCHours();
+      const beijingHours = utcHours + 8;
+
+      // 如果北京时间超过24小时，说明是下一天
+      let beijingDate = new Date(now);
+      if (beijingHours >= 24) {
+        beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
+        beijingDate.setUTCHours(beijingHours - 24);
+      } else {
+        beijingDate.setUTCHours(beijingHours);
+      }
+
       const today = beijingDate.toISOString().split("T")[0];
 
       // 异步写入 Redis（非阻塞）
