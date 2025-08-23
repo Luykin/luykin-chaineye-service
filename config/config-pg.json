@@ -1,0 +1,32 @@
+{
+  "development": {
+    "dialect": "postgres",
+    "host": "150.5.158.179",
+    "port": 5433,
+    "database": "luykindatabase",
+    "username": "luykin",
+    "password": "wtf.0813",
+    "logging": true,
+    "timezone": "+00:00"
+  },
+  "test": {
+    "dialect": "postgres",
+    "host": "150.5.158.179",
+    "port": 5433,
+    "database": "luykindatabase",
+    "username": "luykin",
+    "password": "wtf.0813",
+    "logging": true,
+    "timezone": "+00:00"
+  },
+  "production": {
+    "dialect": "postgres",
+    "host": "150.5.158.179",
+    "port": 5433,
+    "database": "luykindatabase",
+    "username": "luykin",
+    "password": "wtf.0813",
+    "logging": false,
+    "timezone": "+00:00"
+  }
+}
