@@ -46,6 +46,9 @@ async function getDailyActiveUsers(redisClient) {
           .toISOString()
           .split("T")[0];
         console.log(`📅 当前北京时间对应的key: dau:${currentToday}`);
+        console.log(
+          `🔍 变量类型检查: beijingTime=${typeof beijingTime}, today=${typeof today}, dateStr=${typeof dateStr}`
+        );
       }
 
       try {
@@ -53,7 +56,7 @@ async function getDailyActiveUsers(redisClient) {
         const activeUsers = await redisClient.sCard(dauKey);
 
         // 格式化显示日期
-        const displayDate = beijingTime.toLocaleDateString("zh-CN", {
+        const displayDate = today.toLocaleDateString("zh-CN", {
           month: "short",
           day: "numeric",
           weekday: "short",
@@ -69,7 +72,7 @@ async function getDailyActiveUsers(redisClient) {
         dauData.push({
           date: dateStr,
           activeUsers: 0,
-          displayDate: beijingTime.toLocaleDateString("zh-CN", {
+          displayDate: today.toLocaleDateString("zh-CN", {
             month: "short",
             day: "numeric",
             weekday: "short",
