@@ -52,6 +52,11 @@ module.exports = (sequelize) => {
         defaultValue: false,
         comment: "已读未读状态（false=未读，true=已读）",
       },
+      campaignId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: "活动标识，用于避免同一活动重复发送消息",
+      },
     },
     {
       tableName: "XPrivateMessages",
@@ -69,6 +74,14 @@ module.exports = (sequelize) => {
         {
           name: "idx_private_message_display_sent",
           fields: ["displayAt", "sentAt"],
+        },
+        {
+          name: "idx_private_message_campaign",
+          fields: ["campaignId"],
+        },
+        {
+          name: "idx_private_message_receiver_campaign",
+          fields: ["receiverId", "campaignId"],
         },
       ],
     }
