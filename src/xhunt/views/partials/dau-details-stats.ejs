@@ -1,0 +1,344 @@
+<!-- 日活详情统计 -->
+<div class="stats-section">
+    <div class="section">
+        <h2 class="section-title">📱 日活用户详情</h2>
+        <p style="color: #6b7280; margin-bottom: 20px; font-size: 14px;">
+            查看指定日期的所有活跃用户详情，包含设备指纹和用户ID信息
+        </p>
+
+        <!-- 日期选择器 -->
+        <div style="margin-bottom: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                <label for="dau-date-selector" style="font-weight: 600; color: #374151;">选择日期：</label>
+                <input 
+                    type="date" 
+                    id="dau-date-selector" 
+                    style="
+                        padding: 8px 12px;
+                        border: 1px solid #d1d5db;
+                        border-radius: 6px;
+                        font-size: 14px;
+                        background: white;
+                    "
+                >
+                <button 
+                    id="load-dau-details" 
+                    style="
+                        padding: 8px 16px;
+                        background: #3b82f6;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        font-weight: 500;
+                    "
+                    onmouseover="this.style.background='#2563eb'"
+                    onmouseout="this.style.background='#3b82f6'"
+                >
+                    加载数据
+                </button>
+                <span id="dau-loading" style="display: none; color: #6b7280;">
+                    <span style="display: inline-block; width: 16px; height: 16px; border: 2px solid #3b82f6; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></span>
+                    加载中...
+                </span>
+            </div>
+        </div>
+
+        <!-- 统计信息 -->
+        <div id="dau-summary" style="display: none; margin-bottom: 30px;">
+            <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                <div class="stat-card">
+                    <div class="stat-title">总用户数</div>
+                    <div class="stat-value" id="dau-total-count">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">有效用户ID</div>
+                    <div class="stat-value" id="dau-valid-users">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">未知用户</div>
+                    <div class="stat-value" id="dau-unknown-users">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 用户列表 -->
+        <div id="dau-details-container" style="display: none;">
+            <div style="margin-bottom: 20px; display: flex; justify-content: between; align-items: center;">
+                <h3 style="font-size: 1.3rem; color: #374151; margin: 0;">用户列表</h3>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input 
+                        type="text" 
+                        id="dau-search" 
+                        placeholder="搜索用户ID..." 
+                        style="
+                            padding: 6px 12px;
+                            border: 1px solid #d1d5db;
+                            border-radius: 4px;
+                            font-size: 14px;
+                            width: 200px;
+                        "
+                    >
+                    <button 
+                        id="export-dau-data" 
+                        style="
+                            padding: 6px 12px;
+                            background: #10b981;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        "
+                        onmouseover="this.style.background='#059669'"
+                        onmouseout="this.style.background='#10b981'"
+                    >
+                        导出数据
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table id="dau-details-table" style="width: 100%; border-collapse: collapse; background: white;">
+                    <thead style="background: #f9fafb;">
+                        <tr>
+                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">序号</th>
+                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户ID</th>
+                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">设备指纹（前8位）</th>
+                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">完整指纹</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dau-details-tbody">
+                        <!-- 数据将通过JavaScript动态填充 -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页信息 -->
+            <div id="dau-pagination" style="margin-top: 20px; text-align: center; color: #6b7280; font-size: 14px;">
+                <!-- 分页信息将通过JavaScript动态填充 -->
+            </div>
+        </div>
+
+        <!-- 无数据提示 -->
+        <div id="dau-no-data" style="display: none; text-align: center; padding: 60px 20px; color: #6b7280;">
+            <div style="font-size: 48px; margin-bottom: 20px;">📱</div>
+            <h3 style="margin-bottom: 10px; color: #374151;">暂无数据</h3>
+            <p>所选日期没有日活数据，请选择其他日期</p>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.dau-user-row:hover {
+    background-color: #f3f4f6;
+}
+
+.dau-user-id {
+    font-weight: 600;
+    color: #374151;
+}
+
+.dau-unknown-user {
+    color: #9ca3af;
+    font-style: italic;
+}
+
+.dau-fingerprint-short {
+    font-family: monospace;
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.dau-fingerprint-full {
+    font-family: monospace;
+    color: #6b7280;
+    font-size: 12px;
+    word-break: break-all;
+}
+</style>
+
+<script>
+// 日活详情相关JavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    const dateSelector = document.getElementById('dau-date-selector');
+    const loadButton = document.getElementById('load-dau-details');
+    const loadingSpan = document.getElementById('dau-loading');
+    const summaryDiv = document.getElementById('dau-summary');
+    const containerDiv = document.getElementById('dau-details-container');
+    const noDataDiv = document.getElementById('dau-no-data');
+    const searchInput = document.getElementById('dau-search');
+    const exportButton = document.getElementById('export-dau-data');
+    
+    let currentDauData = [];
+    let filteredDauData = [];
+    
+    // 设置默认日期为今天
+    const today = new Date().toISOString().split('T')[0];
+    dateSelector.value = today;
+    
+    // 加载按钮点击事件
+    loadButton.addEventListener('click', loadDauDetails);
+    
+    // 搜索功能
+    searchInput.addEventListener('input', filterDauData);
+    
+    // 导出功能
+    exportButton.addEventListener('click', exportDauData);
+    
+    // 页面加载时自动加载今天的数据
+    loadDauDetails();
+    
+    async function loadDauDetails() {
+        const selectedDate = dateSelector.value;
+        if (!selectedDate) {
+            alert('请选择日期');
+            return;
+        }
+        
+        // 显示加载状态
+        loadingSpan.style.display = 'inline';
+        loadButton.disabled = true;
+        
+        try {
+            const response = await fetch(`/api/xhunt/stats/dau-details?date=${selectedDate}`);
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                currentDauData = result.data.details;
+                filteredDauData = [...currentDauData];
+                
+                updateSummary(result.data);
+                updateTable();
+                
+                if (currentDauData.length > 0) {
+                    summaryDiv.style.display = 'block';
+                    containerDiv.style.display = 'block';
+                    noDataDiv.style.display = 'none';
+                } else {
+                    summaryDiv.style.display = 'none';
+                    containerDiv.style.display = 'none';
+                    noDataDiv.style.display = 'block';
+                }
+            } else {
+                alert('加载数据失败: ' + result.error);
+            }
+        } catch (error) {
+            console.error('Error loading DAU details:', error);
+            alert('加载数据失败，请检查网络连接');
+        } finally {
+            // 隐藏加载状态
+            loadingSpan.style.display = 'none';
+            loadButton.disabled = false;
+        }
+    }
+    
+    function updateSummary(data) {
+        const totalCount = data.totalCount;
+        const validUsers = data.details.filter(item => item.userId !== '未知').length;
+        const unknownUsers = totalCount - validUsers;
+        
+        document.getElementById('dau-total-count').textContent = totalCount.toLocaleString();
+        document.getElementById('dau-valid-users').textContent = validUsers.toLocaleString();
+        document.getElementById('dau-unknown-users').textContent = unknownUsers.toLocaleString();
+    }
+    
+    function filterDauData() {
+        const searchTerm = searchInput.value.toLowerCase();
+        
+        if (!searchTerm) {
+            filteredDauData = [...currentDauData];
+        } else {
+            filteredDauData = currentDauData.filter(item => 
+                item.userId.toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        updateTable();
+    }
+    
+    function updateTable() {
+        const tbody = document.getElementById('dau-details-tbody');
+        const paginationDiv = document.getElementById('dau-pagination');
+        
+        // 清空现有内容
+        tbody.innerHTML = '';
+        
+        if (filteredDauData.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 40px; color: #6b7280;">
+                        没有找到匹配的数据
+                    </td>
+                </tr>
+            `;
+            paginationDiv.innerHTML = '';
+            return;
+        }
+        
+        // 填充表格数据
+        filteredDauData.forEach((item, index) => {
+            const row = document.createElement('tr');
+            row.className = 'dau-user-row';
+            
+            const isUnknown = item.userId === '未知';
+            
+            row.innerHTML = `
+                <td style="padding: 12px; color: #374151;">${index + 1}</td>
+                <td style="padding: 12px;">
+                    <span class="dau-user-id ${isUnknown ? 'dau-unknown-user' : ''}">${item.userId}</span>
+                </td>
+                <td style="padding: 12px;">
+                    <span class="dau-fingerprint-short">${item.fingerprintShort}</span>
+                </td>
+                <td style="padding: 12px;">
+                    <span class="dau-fingerprint-full" title="${item.fingerprint}">${item.fingerprint}</span>
+                </td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+        
+        // 更新分页信息
+        paginationDiv.innerHTML = `共 ${filteredDauData.length} 条记录`;
+    }
+    
+    function exportDauData() {
+        if (filteredDauData.length === 0) {
+            alert('没有数据可导出');
+            return;
+        }
+        
+        const selectedDate = dateSelector.value;
+        const csvContent = [
+            ['序号', '用户ID', '设备指纹'],
+            ...filteredDauData.map((item, index) => [
+                index + 1,
+                item.userId,
+                item.fingerprint
+            ])
+        ].map(row => row.join(',')).join('\n');
+        
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', `dau-details-${selectedDate}.csv`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+});
+</script>

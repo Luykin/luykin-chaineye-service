@@ -20,15 +20,16 @@
             <p>实时产品数据监控面板 - <%= formatDateTime() %></p>
         </div>
 
-        <!-- Tab 导航 -->
-        <div class="tab-container">
-            <div class="tab-nav">
-                <button class="tab-btn active" data-tab="overview">📊 数据概览</button>
-                <button class="tab-btn" data-tab="tags">🏷️ 标签统计</button>
-                <button class="tab-btn" data-tab="users">👑 用户排行</button>
+                    <!-- Tab 导航 -->
+            <div class="tab-container">
+                <div class="tab-nav">
+                    <button class="tab-btn active" data-tab="overview">📊 数据概览</button>
+                    <button class="tab-btn" data-tab="tags">🏷️ 标签统计</button>
+                    <button class="tab-btn" data-tab="users">👑 用户排行</button>
+                    <button class="tab-btn" data-tab="dau-details">📱 日活详情</button>
 <!--                <button class="tab-btn" data-tab="kol-tag">🔥 有灵魂的KOL</button>-->
 <!--                <button class="tab-btn" data-tab="specific-users">🎯 特定用户</button>-->
-            </div>
+                </div>
 
             <!-- Tab 内容 -->
             <div class="tab-content">
@@ -45,6 +46,11 @@
                 <!-- 用户排行 Tab -->
                 <div class="tab-pane" id="users">
                     <%- include('partials/users-stats', { stats, formatNumber }) %>
+                </div>
+
+                <!-- 日活详情 Tab -->
+                <div class="tab-pane" id="dau-details">
+                    <%- include('partials/dau-details-stats') %>
                 </div>
             </div>
         </div>
