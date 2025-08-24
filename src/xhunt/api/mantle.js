@@ -39,6 +39,7 @@ async function ensureUniqueInviteCode() {
 // 特殊邀请码与允许用户
 const SPECIAL_INVITE_CODE = "XHuntAI";
 const SPECIAL_ALLOWED_USERNAMES = new Set([
+  "sea_bitcoin",
   "luoyukun4",
   "alpha_gege",
   "defiteddy2020",
