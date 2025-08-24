@@ -58,11 +58,11 @@
                     <div class="stat-value" id="dau-unique-users">0</div>
                     <div class="stat-subtitle">唯一活跃用户数</div>
                 </div>
-                <div class="stat-card">
+                <!-- <div class="stat-card">
                     <div class="stat-title">有效用户ID</div>
                     <div class="stat-value" id="dau-valid-users">0</div>
                     <div class="stat-subtitle">有用户ID的记录数</div>
-                </div>
+                </div> -->
                 <div class="stat-card">
                     <div class="stat-title">未知用户</div>
                     <div class="stat-value" id="dau-unknown-users">0</div>
@@ -281,7 +281,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         document.getElementById('dau-total-count').textContent = totalCount.toLocaleString();
         document.getElementById('dau-unique-users').textContent = uniqueUsersCount.toLocaleString();
-        document.getElementById('dau-valid-users').textContent = validUsers.toLocaleString();
+        // document.getElementById('dau-valid-users').textContent = validUsers.toLocaleString();
         document.getElementById('dau-unknown-users').textContent = unknownUsers.toLocaleString();
     }
     
