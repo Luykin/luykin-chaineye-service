@@ -469,8 +469,8 @@ router.get(
         }
       }
 
-      // 缓存策略：前端缓存 50s
-      res.set("Cache-Control", "private, max-age=50");
+      // 缓存策略：前端缓存 30s
+      res.set("Cache-Control", "private, max-age=30");
       return res.status(200).json({
         registered: true,
         invitedCount,
