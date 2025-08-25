@@ -149,7 +149,7 @@ router.post(
 
       if (typeof invitedByCode === "string" && invitedByCode.trim()) {
         const code = invitedByCode.trim();
-        if (code === SPECIAL_INVITE_CODE) {
+        if (code.toLowerCase() === SPECIAL_INVITE_CODE.toLowerCase()) {
           if (!isSpecialUser) {
             return res
               .status(403)
