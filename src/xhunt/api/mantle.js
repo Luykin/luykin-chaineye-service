@@ -470,11 +470,21 @@ router.get(
         }
       }
 
+      // 获取总报名人数
+      let totalRegistrations = 0;
+      try {
+        totalRegistrations = await MantleRegistration.count();
+      } catch (countErr) {
+        console.error("Total registrations count error:", countErr);
+        // 如果统计失败，不影响主要功能，设为0
+      }
+
       // 缓存策略：前端缓存 30s
       res.set("Cache-Control", "private, max-age=30");
       return res.status(200).json({
         registered: true,
         invitedCount,
+        totalRegistrations,
         registration: record,
         hunterData,
       });
