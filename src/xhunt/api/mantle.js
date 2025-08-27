@@ -366,9 +366,17 @@ router.get(
   securityMiddleware,
   async (req, res) => {
     try {
+      // 获取总报名人数（所有情况下都要返回）
+      let totalRegistrations = 0;
+      try {
+        totalRegistrations = await MantleRegistration.count();
+      } catch (countErr) {
+        console.error("Total registrations count error:", countErr);
+      }
+
       const userId = req.user && req.user.id;
       if (!userId) {
-        return res.status(200).json({ registered: false });
+        return res.status(200).json({ registered: false, totalRegistrations });
       }
       // 统计当前用户已邀请的人数（带缓存）
       let invitedCount = 0;
@@ -387,7 +395,9 @@ router.get(
       });
 
       if (!record) {
-        return res.status(200).json({ registered: false, invitedCount });
+        return res
+          .status(200)
+          .json({ registered: false, invitedCount, totalRegistrations });
       }
 
       // 获取用户的 handle 信息
@@ -470,17 +480,8 @@ router.get(
         }
       }
 
-      // 获取总报名人数
-      let totalRegistrations = 0;
-      try {
-        totalRegistrations = await MantleRegistration.count();
-      } catch (countErr) {
-        console.error("Total registrations count error:", countErr);
-        // 如果统计失败，不影响主要功能，设为0
-      }
-
-      // 缓存策略：前端缓存 30s
-      res.set("Cache-Control", "private, max-age=30");
+      // 缓存策略：前端缓存 40s
+      res.set("Cache-Control", "private, max-age=40");
       return res.status(200).json({
         registered: true,
         invitedCount,
