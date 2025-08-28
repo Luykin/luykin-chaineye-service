@@ -98,6 +98,7 @@ module.exports = (sequelize) => {
           name: "idx_mantle_invited_by_username",
           fields: ["invitedByUsername"],
         },
+        { name: "idx_mantle_evm_address", fields: ["evmAddress"] },
         { name: "idx_mantle_registered_at", fields: ["registeredAt"] },
       ],
     }

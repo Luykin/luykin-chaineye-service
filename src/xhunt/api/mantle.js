@@ -13,6 +13,7 @@ const {
   authenticateToken,
 } = require("../middleware/auth");
 const axios = require("axios");
+const { Op } = require("sequelize");
 
 const router = express.Router();
 
@@ -111,6 +112,16 @@ router.post(
       // 校验EVM地址必填
       if (!evmAddress || typeof evmAddress !== "string" || !evmAddress.trim()) {
         return res.status(400).json({ error: "EVM地址为必填项" });
+      }
+
+      // EVM地址查重校验（检查是否已被其他用户使用）
+      const existingEVM = await MantleRegistration.findOne({
+        where: {
+          evmAddress: evmAddress.trim(),
+        },
+      });
+      if (existingEVM) {
+        return res.status(409).json({ error: "该EVM地址已被使用" });
       }
 
       // 定位用户（仅使用 token）
