@@ -142,10 +142,17 @@ router.post(
         return res.status(400).json({ error: "EVM地址为必填项" });
       }
 
+      // 校验EVM地址格式
+      const trimmedAddress = evmAddress.trim();
+      const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
+      if (!evmAddressRegex.test(trimmedAddress)) {
+        return res.status(400).json({ error: "EVM地址格式不正确" });
+      }
+
       // EVM地址查重校验（检查是否已被其他用户使用）
       const existingEVM = await MantleRegistration.findOne({
         where: {
-          evmAddress: evmAddress.trim(),
+          evmAddress: trimmedAddress,
         },
       });
       if (existingEVM) {
@@ -279,7 +286,7 @@ router.post(
               createdAt: inviter.createdAt,
             }
           : null,
-        evmAddress: typeof evmAddress === "string" ? evmAddress : null,
+        evmAddress: trimmedAddress,
         registrationUrl:
           typeof registrationUrl === "string" ? registrationUrl : fallbackUrl,
         // registeredAt 由默认值生成
