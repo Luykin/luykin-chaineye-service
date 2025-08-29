@@ -64,40 +64,9 @@ async function sendKolReports(
       const reportId = `${username}-${generateRandomString(8)}`;
       const reportUrl = `https://xhunt.ai/kolreport/${reportId}`;
 
-      // 创建私信内容
+      // 创建私信内容（Markdown 格式）
       const title = "🎉 您的专属KOL分析报告已生成！";
-      const content = `
-        <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-          <p>亲爱的 <strong>${username}</strong>，</p>
-          
-          <p>我们很高兴地通知您，您的专属KOL影响力分析报告已经生成完成！</p>
-          
-          <p>这份报告包含了：</p>
-          <ul>
-            <li>📊 您的粉丝增长趋势分析</li>
-            <li>🎯 内容影响力评估</li>
-            <li>📈 互动率数据统计</li>
-            <li>🌟 在加密货币领域的专业度评分</li>
-            <li>💡 个性化发展建议</li>
-          </ul>
-          
-          <p style="margin: 20px 0;">
-            <a href="${reportUrl}" 
-               style="background-color: #1DA1F2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-              🔍 查看我的专属报告
-            </a>
-          </p>
-          
-          <p>这份报告将帮助您更好地了解自己在加密货币社区中的影响力，并为未来的内容创作提供数据支持。</p>
-          
-          <p>感谢您对CryptoHunt社区的支持！</p>
-          
-          <p style="color: #666; font-size: 14px; margin-top: 30px;">
-            CryptoHunt团队<br>
-            <small>报告链接: ${reportUrl}</small>
-          </p>
-        </div>
-      `;
+      const content = `亲爱的 ${username}，\n\n我们很高兴地通知您，您的专属KOL影响力分析报告已经生成完成！\n\n这份报告包含了：\n• 📊 您的粉丝增长趋势分析\n• 🎯 内容影响力评估\n• 📈 互动率数据统计\n• 🌟 在加密货币领域的专业度评分\n• 💡 个性化发展建议\n\n[🔍 查看我的专属报告](${reportUrl})\n\n这份报告将帮助您更好地了解自己在加密货币社区中的影响力，并为未来的内容创作提供数据支持。\n\n感谢您对CryptoHunt社区的支持！\n\nCryptoHunt团队\n报告链接: <a href="${reportUrl}" target="_blank">${reportUrl}</a>\n`;
 
       // 创建私信记录
       const message = await XPrivateMessage.create({
