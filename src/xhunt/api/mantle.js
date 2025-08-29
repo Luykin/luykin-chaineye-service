@@ -53,6 +53,8 @@ const SPECIAL_ALLOWED_USERNAMES = new Set([
   "web3annie",
   "charles48011843",
   "bocaibocai_",
+	"bocaibocai",
+	"0x_xifeng",
   "meta8mate",
   "zohanlin",
   "qqzsss",
