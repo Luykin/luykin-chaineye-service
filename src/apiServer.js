@@ -97,51 +97,6 @@ function injectHeadersToSpan(req, res, next) {
 // 使用中间件
 app.use(injectHeadersToSpan);
 
-/** https://us5.datadoghq.com/integrations?search=node&integrationId=node 性能统计 **/
-app.use((req, res, next) => {
-  // const startTime = Date.now();
-
-  // 劫持原生的 .json()/.send() 方法，捕获错误信息
-  const originalSend = res.send;
-  res.send = function (body) {
-    // 在响应前记录错误详情（仅限 500 状态码）
-    if (res.statusCode === 500) {
-      const errorTags = [
-        `status:500`,
-        `path:${req.path}`,
-        `method:${req.method}`,
-        `error_message:${body.error?.substring(0, 100) || "unknown"}`.replace(
-          /[:=]/g,
-          "_"
-        ), // 移除标签分隔符
-        // `stack_hash:${crypto.createHash('md5').update(body.stack || '').digest('hex')}`      // 堆栈哈希（避免 PII 泄露）
-      ];
-
-      dataDog.increment("requests.errors.total", 1, errorTags);
-    }
-    originalSend.call(this, body);
-  };
-
-  // res.on('finish', () => {
-  // 	// 1/10 采样率：只有 10% 的请求会发送指标
-  // 	if (Math.random() < 0.1) {
-  // 		// 基础指标
-  // 		dataDog.increment('requests.total', 1, [
-  // 			`status:${res.statusCode}`,
-  // 			`path:${req.path}`,
-  // 			`method:${req.method}`,
-  // 			`version:${req?.securityContext?.version || 'unknown'}`
-  // 		]);
-  // 	}
-  //
-  // 	// dataDog.histogram('requests.latency', latency, [
-  // 	// 	`status:${res.statusCode}`,
-  // 	// 	`path:${req.path}`
-  // 	// ]);
-  // });
-  next();
-});
-
 // CORS 配置
 const corsOptions = {
   origin: (origin, callback) => {
