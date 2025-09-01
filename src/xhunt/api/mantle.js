@@ -53,7 +53,7 @@ const SPECIAL_ALLOWED_USERNAMES = new Set([
   "web3annie",
   "charles48011843",
   "bocaibocai_",
-	"0x_xifeng",
+  "0x_xifeng",
   "meta8mate",
   "zohanlin",
   "qqzsss",
@@ -97,6 +97,7 @@ const SPECIAL_ALLOWED_USERNAMES = new Set([
   "wuhuoqiu",
   "broleonaus",
   "guomin184935",
+  "jesse_meta",
 ]);
 
 // 1) Mantle 活动报名接口（受限：指纹/浏览器/安全中间件）
