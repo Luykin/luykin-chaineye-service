@@ -12,6 +12,9 @@ const OPTIONAL_AUTH_PATHS = [
   "/pro/api/ai/content", // AI内容生成接口需要用户信息做频率限制
 ];
 
+// AI 内容生成白名单（白名单内每日 20 次，非白名单每日 3 次）
+const AI_CONTENT_WHITELIST = ["alpha_gege", "luoyukun4"];
+
 // 条件可选认证中间件
 function conditionalOptionalAuth(req, res, next) {
   // 检查当前请求路径是否需要可选认证
@@ -33,10 +36,10 @@ async function aiContentRateLimit(req, res, next) {
   try {
     const xUserId = String(req.headers["x-user-id"]).toLocaleLowerCase();
 
-    //给alpha_gege 加个白名单，没有限制的测试ai 检测功能
-    if (xUserId.includes("alpha_gege") || xUserId.includes("luoyukun4")) {
-      return next();
-    }
+    // 判断是否在白名单内
+    const isWhitelisted = AI_CONTENT_WHITELIST.some((id) =>
+      xUserId.includes(id)
+    );
     // 只对 /pro/api/ai/content 的 POST 请求进行限制
     if (req.method !== "POST" || !req.path.includes("/pro/api/ai/content")) {
       return next();
@@ -67,7 +70,7 @@ async function aiContentRateLimit(req, res, next) {
 
     // 检查今日调用次数
     const currentCount = (await req.redisClient.get(dailyKey)) || 0;
-    const maxCalls = 5; // 每日最大调用次数
+    const maxCalls = isWhitelisted ? 20 : 3; // 白名单 20 次，非白名单 3 次
 
     if (parseInt(currentCount) >= maxCalls) {
       return res.status(429).json({
