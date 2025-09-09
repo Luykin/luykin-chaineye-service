@@ -11,7 +11,7 @@
             <% if (stats.dailyActiveUsersData && stats.dailyActiveUsersData.length > 0) { %>
                 <% stats.dailyActiveUsersData.forEach(dayData => { %>
                     <div class="stat-card">
-                        <div class="stat-title"><%= dayData.date %></div>
+                        <div class="stat-title"><%= dayData.displayDate %></div>
                         <div class="stat-value" style="font-size: 1.8rem;"><%= formatNumber(dayData.activeUsers) %></div>
                         <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;"><%= dayData.date %></div>
                     </div>

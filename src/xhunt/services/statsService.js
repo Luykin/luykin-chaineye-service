@@ -48,8 +48,9 @@ async function getDailyActiveUsers(redisClient) {
         // 获取当日活跃用户数（Set的成员数量）
         const activeUsers = await redisClient.sCard(dauKey);
 
-        // 格式化显示日期
+        // 格式化显示日期（固定以北京时间显示）
         const displayDate = beijingDate.toLocaleDateString("zh-CN", {
+          timeZone: "Asia/Shanghai",
           month: "short",
           day: "numeric",
           weekday: "short",
@@ -66,6 +67,7 @@ async function getDailyActiveUsers(redisClient) {
           date: dateStr,
           activeUsers: 0,
           displayDate: beijingDate.toLocaleDateString("zh-CN", {
+            timeZone: "Asia/Shanghai",
             month: "short",
             day: "numeric",
             weekday: "short",
@@ -101,6 +103,7 @@ async function getDailyActiveUsers(redisClient) {
         date: dateStr,
         activeUsers: 0,
         displayDate: beijingDate.toLocaleDateString("zh-CN", {
+          timeZone: "Asia/Shanghai",
           month: "short",
           day: "numeric",
           weekday: "short",
