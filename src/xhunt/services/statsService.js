@@ -49,7 +49,7 @@ async function getDailyActiveUsers(redisClient) {
         const activeUsers = await redisClient.sCard(dauKey);
 
         // 格式化显示日期（固定以北京时间显示）
-        const displayDate = beijingDate.toLocaleDateString("zh-CN", {
+        const displayDate = now.toLocaleDateString("zh-CN", {
           timeZone: "Asia/Shanghai",
           month: "short",
           day: "numeric",
@@ -66,7 +66,7 @@ async function getDailyActiveUsers(redisClient) {
         dauData.push({
           date: dateStr,
           activeUsers: 0,
-          displayDate: beijingDate.toLocaleDateString("zh-CN", {
+          displayDate: now.toLocaleDateString("zh-CN", {
             timeZone: "Asia/Shanghai",
             month: "short",
             day: "numeric",
