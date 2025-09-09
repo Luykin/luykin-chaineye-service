@@ -179,6 +179,22 @@
                 <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalKOLUsers) %></div>
             </div>
             <div class="stat-card">
+                <div class="stat-title">KOL ≤ 20万</div>
+                <div class="stat-value"><%= formatNumber(stats.totalMetrics.kolBuckets?.within200k || 0) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">KOL ≤ 5万</div>
+                <div class="stat-value"><%= formatNumber(stats.totalMetrics.kolBuckets?.within50k || 0) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">KOL ≤ 2万</div>
+                <div class="stat-value"><%= formatNumber(stats.totalMetrics.kolBuckets?.within20k || 0) %></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">KOL ≤ 5千</div>
+                <div class="stat-value"><%= formatNumber(stats.totalMetrics.kolBuckets?.within5k || 0) %></div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-title">累计积分</div>
                 <div class="stat-value"><%= formatNumber(stats.totalMetrics.totalPointsAwarded) %></div>
             </div>

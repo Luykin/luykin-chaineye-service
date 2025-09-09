@@ -236,6 +236,12 @@ async function getFullStats(redisClient = null) {
     totalKOLUsers,
     todayKOLReviews,
 
+    // 7.1 KOL按排名分档统计
+    kolWithin200k,
+    kolWithin50k,
+    kolWithin20k,
+    kolWithin5k,
+
     // 8. 平均评分统计
     averageRating,
 
@@ -318,6 +324,20 @@ async function getFullStats(redisClient = null) {
           required: true,
         },
       ],
+    }),
+
+    // 7.1 KOL按排名分档统计（基于 kolRank20W 数值越小排名越高）
+    XHuntUser.count({
+      where: { kolRank20W: { [Op.ne]: null, [Op.lte]: 200000 } },
+    }),
+    XHuntUser.count({
+      where: { kolRank20W: { [Op.ne]: null, [Op.lte]: 50000 } },
+    }),
+    XHuntUser.count({
+      where: { kolRank20W: { [Op.ne]: null, [Op.lte]: 20000 } },
+    }),
+    XHuntUser.count({
+      where: { kolRank20W: { [Op.ne]: null, [Op.lte]: 5000 } },
     }),
 
     // 8. 平均评分
@@ -769,6 +789,12 @@ async function getFullStats(redisClient = null) {
       totalUsers,
       totalAccounts,
       totalKOLUsers,
+      kolBuckets: {
+        within200k: kolWithin200k,
+        within50k: kolWithin50k,
+        within20k: kolWithin20k,
+        within5k: kolWithin5k,
+      },
       totalPointsAwarded: totalPointsAwarded || 0,
       averageRating: Number(averageRating?.avgRating || 0).toFixed(2),
     },
