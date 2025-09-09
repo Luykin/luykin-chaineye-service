@@ -48,8 +48,11 @@ async function getDailyActiveUsers(redisClient) {
         // 获取当日活跃用户数（Set的成员数量）
         const activeUsers = await redisClient.sCard(dauKey);
 
-        // 格式化显示日期（固定以北京时间显示）
-        const displayDate = now.toLocaleDateString("zh-CN", {
+        // 显示日期使用 now - i（不做 +8 小时位移），仅用于展示
+        const displayDateDate = new Date(
+          now.getTime() - i * 24 * 60 * 60 * 1000
+        );
+        const displayDate = displayDateDate.toLocaleDateString("zh-CN", {
           timeZone: "Asia/Shanghai",
           month: "short",
           day: "numeric",
@@ -63,10 +66,13 @@ async function getDailyActiveUsers(redisClient) {
         });
       } catch (redisError) {
         console.error(`Error fetching DAU for ${dateStr}:`, redisError);
+        const fallbackDisplayDateDate = new Date(
+          now.getTime() - i * 24 * 60 * 60 * 1000
+        );
         dauData.push({
           date: dateStr,
           activeUsers: 0,
-          displayDate: now.toLocaleDateString("zh-CN", {
+          displayDate: fallbackDisplayDateDate.toLocaleDateString("zh-CN", {
             timeZone: "Asia/Shanghai",
             month: "short",
             day: "numeric",
@@ -99,10 +105,13 @@ async function getDailyActiveUsers(redisClient) {
       beijingDate.setUTCDate(beijingDate.getUTCDate() - (6 - i));
       const dateStr = beijingDate.toISOString().split("T")[0];
 
+      const defaultDisplayDateDate = new Date(
+        now.getTime() - (6 - i) * 24 * 60 * 60 * 1000
+      );
       return {
         date: dateStr,
         activeUsers: 0,
-        displayDate: beijingDate.toLocaleDateString("zh-CN", {
+        displayDate: defaultDisplayDateDate.toLocaleDateString("zh-CN", {
           timeZone: "Asia/Shanghai",
           month: "short",
           day: "numeric",
