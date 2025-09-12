@@ -13,7 +13,7 @@ const OPTIONAL_AUTH_PATHS = [
 ];
 
 // AI 内容生成白名单（白名单内每日 20 次，非白名单每日 3 次）
-const AI_CONTENT_WHITELIST = ["alpha_gege", "luoyukun4"];
+const AI_CONTENT_WHITELIST = ["alpha_gege", "luoyukun4", "FloriaT96249", "floriat96249"];
 
 // 条件可选认证中间件
 function conditionalOptionalAuth(req, res, next) {
