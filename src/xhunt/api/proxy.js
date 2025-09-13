@@ -14,10 +14,9 @@ const OPTIONAL_AUTH_PATHS = [
 
 // AI 内容生成白名单
 // - 100次/日名单
-const AI_CONTENT_WHITELIST_100 = ["luoyukun4"];
+const AI_CONTENT_WHITELIST_200 = ["luoyukun4", "alpha_gege"];
 // - 20次/日名单
 const AI_CONTENT_WHITELIST_20 = [
-  "alpha_gege",
   "FloriaT96249",
   "floriat96249",
   "UFoust13797",
@@ -45,12 +44,12 @@ async function aiContentRateLimit(req, res, next) {
   try {
     const xUserId = String(req.headers["x-user-id"]).toLocaleLowerCase();
 
-    // 判断白名单等级：先判100次，再判20次
-    const isWhitelist100 = AI_CONTENT_WHITELIST_100.some((id) =>
+    // 判断白名单等级：先判200次，再判20次
+    const isWhitelist200 = AI_CONTENT_WHITELIST_200.some((id) =>
       xUserId.includes(id)
     );
     const isWhitelist20 =
-      !isWhitelist100 &&
+      !isWhitelist200 &&
       AI_CONTENT_WHITELIST_20.some((id) => xUserId.includes(id));
     // 只对 /pro/api/ai/content 的 POST 请求进行限制
     if (req.method !== "POST" || !req.path.includes("/pro/api/ai/content")) {
@@ -82,7 +81,7 @@ async function aiContentRateLimit(req, res, next) {
 
     // 检查今日调用次数
     const currentCount = (await req.redisClient.get(dailyKey)) || 0;
-    const maxCalls = isWhitelist100 ? 100 : isWhitelist20 ? 20 : 3; // 100/20/3 次
+    const maxCalls = isWhitelist200 ? 200 : isWhitelist20 ? 20 : 3; // 200/20/3 次
 
     if (parseInt(currentCount) >= maxCalls) {
       return res.status(429).json({
