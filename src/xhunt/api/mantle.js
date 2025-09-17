@@ -121,15 +121,25 @@ router.post(
         return res.status(404).json({ error: "对应的用户不存在" });
       }
 
+      const now = new Date(); // 本地时间，但可以转成 UTC 时间戳比较
+      const cutoffTime = new Date("2025-09-20T00:00:00Z"); // UTC 时间 00:00（北京时间 08:00）
+
+      if (now.getTime() >= cutoffTime.getTime()) {
+        return res.status(403).json({
+          error:
+            "Registration has closed, the event registration period has ended",
+        });
+      }
+
       // 8秒频率限制（按用户）
       if (req.redisClient) {
         try {
           const cooldownKey = `mantle:register:cd:${user.id}`;
           let ttl = await req.redisClient.ttl(cooldownKey);
           if (typeof ttl === "number" && ttl > 0) {
-            return res
-              .status(429)
-              .json({ error: `操作过于频繁，请在${ttl}s后重试` });
+            return res.status(429).json({
+              error: `Too frequent requests, please try again in ${ttl}s`,
+            });
           }
           // 开启新的冷却窗口 10s
           await req.redisClient.setEx(cooldownKey, 10, "1");
@@ -141,14 +151,14 @@ router.post(
 
       // 校验EVM地址必填
       if (!evmAddress || typeof evmAddress !== "string" || !evmAddress.trim()) {
-        return res.status(400).json({ error: "EVM地址为必填项" });
+        return res.status(400).json({ error: "EVM address is required" });
       }
 
       // 校验EVM地址格式
       const trimmedAddress = evmAddress.trim();
       const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
       if (!evmAddressRegex.test(trimmedAddress)) {
-        return res.status(400).json({ error: "EVM地址格式不正确" });
+        return res.status(400).json({ error: "Invalid EVM address format" });
       }
 
       // EVM地址查重校验（检查是否已被其他用户使用）
@@ -158,7 +168,9 @@ router.post(
         },
       });
       if (existingEVM) {
-        return res.status(409).json({ error: "该EVM地址已被使用" });
+        return res
+          .status(409)
+          .json({ error: "This EVM address is already in use" });
       }
 
       // 提前校验邀请码合法性
@@ -180,7 +192,7 @@ router.post(
             where: { inviteCode: code },
           });
           if (!inviter) {
-            return res.status(400).json({ error: "邀请码无效" });
+            return res.status(400).json({ error: "Invalid invite code" });
           }
         }
       }
