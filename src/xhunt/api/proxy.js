@@ -159,7 +159,34 @@ async function proxyRequest(req, res, targetUrl) {
 
     // 发送请求到目标服务器
     const response = await fetch(targetUrl, options);
-    const data = await response.json();
+
+    // 检查响应内容类型
+    const contentType = response.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
+
+    let data;
+    if (isJson) {
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error(targetUrl, "JSON parse error:", jsonError);
+        // 如果JSON解析失败，尝试获取原始文本用于调试
+        const rawText = await response.text();
+        console.error(targetUrl, "Raw response:", rawText.substring(0, 500));
+        return res.status(502).json({
+          error: "目标服务器返回了无效的JSON数据",
+          details: "服务器响应格式错误",
+        });
+      }
+    } else {
+      // 非JSON响应，可能是HTML错误页面
+      const rawText = await response.text();
+      console.error(targetUrl, "Non-JSON response:", rawText.substring(0, 500));
+      return res.status(502).json({
+        error: "目标服务器返回了非JSON格式的响应",
+        details: "可能是服务器错误或维护中",
+      });
+    }
 
     // 设置浏览器缓存策略
     setBrowserCacheHeaders(res, req.method);
@@ -285,6 +312,29 @@ async function proxyRequestStream(req, res, targetUrl) {
     }
 
     const response = await fetch(targetUrl, options);
+
+    // 检查流式响应的状态
+    if (!response.ok) {
+      console.error(
+        targetUrl,
+        "Streaming request failed:",
+        response.status,
+        response.statusText
+      );
+      try {
+        const errorText = await response.text();
+        console.error(
+          targetUrl,
+          "Error response:",
+          errorText.substring(0, 500)
+        );
+      } catch (_) {}
+      return res.status(response.status).json({
+        error: "流式请求失败",
+        details: `目标服务器返回错误: ${response.status} ${response.statusText}`,
+      });
+    }
+
     await handleStreamingResponse(response, res);
   } catch (error) {
     console.error(targetUrl, "Proxy stream request error:", error);
