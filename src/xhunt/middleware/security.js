@@ -301,6 +301,19 @@ const browserOnlyMiddleware = (req, res, next) => {
   try {
     const userAgent = req.headers["user-agent"];
     const windowLocationHref = req.headers["x-window-location-href"];
+    const version = req.headers["x-extension-version"];
+
+    // 检查是否需要跳过浏览器环境检测
+    const currentPath = req.baseUrl + req.path;
+    const shouldSkipBrowserCheck =
+      windowLocationHref === "background-script" &&
+      SKIP_SIGNATURE_PATHS.includes(currentPath) &&
+      version === "0.0.0";
+
+    // 如果是后台脚本且满足跳过条件，则跳过浏览器环境检测
+    if (shouldSkipBrowserCheck) {
+      return next();
+    }
 
     if (!isBrowserEnvironment(userAgent, windowLocationHref)) {
       return res.status(403).json({ error: "403" });
