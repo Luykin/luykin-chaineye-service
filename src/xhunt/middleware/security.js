@@ -126,6 +126,12 @@ class DAUCacheManager {
 // 创建单例实例
 const dauCacheManager = new DAUCacheManager();
 
+// 定义跳过签名验证的路径列表
+const SKIP_SIGNATURE_PATHS = [
+  "/api/xhunt/proxy/public/fetch/twitter/feed",
+  "/api/xhunt/proxy/public/fetch/twitter/top_tweet",
+];
+
 // 速率限制中间件
 const rateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10分钟窗口
@@ -339,16 +345,27 @@ const securityMiddleware = (req, res, next) => {
     if (!isTimestampValid(timestamp)) {
       return res.status(400).json({ error: "400-3" });
     }
-    // 验证签名
-    const expectedSignature = generateSignature(
-      req.method,
-      req.baseUrl + req.path,
-      timestamp,
-      req.body,
-      fingerprint
-    );
-    if (signature !== expectedSignature) {
-      return res.status(411).json({ error: "411" });
+
+    // 检查是否需要跳过签名验证
+    const windowLocationHref = req.headers["x-window-location-href"];
+    const currentPath = req.baseUrl + req.path;
+    const shouldSkipSignature =
+      windowLocationHref === "background-script" &&
+      SKIP_SIGNATURE_PATHS.includes(currentPath) &&
+      version === "0.0.0";
+
+    // 验证签名（除非满足跳过条件）
+    if (!shouldSkipSignature) {
+      const expectedSignature = generateSignature(
+        req.method,
+        req.baseUrl + req.path,
+        timestamp,
+        req.body,
+        fingerprint
+      );
+      if (signature !== expectedSignature) {
+        return res.status(411).json({ error: "411" });
+      }
     }
 
     // 🔥 智能日活统计 - 使用缓存管理器
