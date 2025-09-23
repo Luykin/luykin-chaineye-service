@@ -310,7 +310,9 @@ const browserOnlyMiddleware = (req, res, next) => {
         SKIP_SIGNATURE_PATHS.includes(currentPath) &&
         version === "0.0.0";
       if (!shouldSkipBrowserCheck) {
-        return res.status(403).json({ error: "403" });
+        return res
+          .status(403)
+          .json({ error: "403", windowLocationHref, currentPath, version });
       }
     }
 
