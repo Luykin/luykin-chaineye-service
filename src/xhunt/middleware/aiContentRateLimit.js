@@ -4,13 +4,7 @@
 // - 200次/日名单
 const AI_CONTENT_WHITELIST_200 = ["luoyukun4", "alpha_gege"];
 // - 20次/日名单
-const AI_CONTENT_WHITELIST_20 = [
-  "FloriaT96249",
-  "floriat96249",
-  "UFoust13797",
-  "ufoust13797",
-  "cuegod001",
-];
+const AI_CONTENT_WHITELIST_20 = ["cuegod001"];
 
 // 获取到明天00:00的秒数
 function getSecondsUntilMidnight(beijingTime) {
