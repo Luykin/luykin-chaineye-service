@@ -1,133 +1,9 @@
 const express = require("express");
 const { securityMiddleware } = require("../middleware/security");
-const {
-  authenticateToken,
-  authenticateTokenOptional,
-} = require("../middleware/auth");
+const { authenticateToken } = require("../middleware/auth");
+const { aiContentRateLimit } = require("../middleware/aiContentRateLimit");
 
 const router = express.Router();
-
-// 需要可选认证的路径列表（只有这些路径需要尝试获取用户信息）
-const OPTIONAL_AUTH_PATHS = [
-  "/pro/api/ai/content", // AI内容生成接口需要用户信息做频率限制
-];
-
-// AI 内容生成白名单
-// - 100次/日名单
-const AI_CONTENT_WHITELIST_200 = ["luoyukun4", "alpha_gege"];
-// - 20次/日名单
-const AI_CONTENT_WHITELIST_20 = [
-  "FloriaT96249",
-  "floriat96249",
-  "UFoust13797",
-  "ufoust13797",
-];
-
-// 条件可选认证中间件
-function conditionalOptionalAuth(req, res, next) {
-  // 检查当前请求路径是否需要可选认证
-  const needsOptionalAuth = OPTIONAL_AUTH_PATHS.some((path) =>
-    req.path.includes(path)
-  );
-
-  if (needsOptionalAuth) {
-    // 对于需要的路径，应用可选认证
-    return authenticateTokenOptional(req, res, next);
-  } else {
-    // 对于其他路径，直接跳过认证
-    return next();
-  }
-}
-
-// AI 内容生成频率限制中间件
-async function aiContentRateLimit(req, res, next) {
-  try {
-    const xUserId = String(req.headers["x-user-id"]).toLocaleLowerCase();
-
-    // 判断白名单等级：先判200次，再判20次
-    const isWhitelist200 = AI_CONTENT_WHITELIST_200.some((id) =>
-      xUserId.includes(id)
-    );
-    const isWhitelist20 =
-      !isWhitelist200 &&
-      AI_CONTENT_WHITELIST_20.some((id) => xUserId.includes(id));
-    // 只对 /pro/api/ai/content 的 POST 请求进行限制
-    if (req.method !== "POST" || !req.path.includes("/pro/api/ai/content")) {
-      return next();
-    }
-
-    // 获取用户标识
-    let userKey;
-    if (req.user && req.user.id) {
-      // 已登录用户：使用用户ID作为key
-      userKey = `ai_content_limit:user:${req.user.id}`;
-    } else if (req.securityContext && req.securityContext.fingerprint) {
-      // 未登录用户：使用指纹作为key
-      userKey = `ai_content_limit:fingerprint:${req.securityContext.fingerprint}`;
-    } else {
-      // 无法识别用户，拒绝请求
-      return res.status(400).json({
-        error: "无法识别用户身份，请刷新页面重试",
-      });
-    }
-
-    // 获取今天的日期作为过期时间计算基准
-    const now = new Date();
-    const beijingTime = new Date(
-      now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
-    );
-    const today = beijingTime.toISOString().split("T")[0];
-    const dailyKey = `${userKey}:${today}`;
-
-    // 检查今日调用次数
-    const currentCount = (await req.redisClient.get(dailyKey)) || 0;
-    const maxCalls = isWhitelist200 ? 200 : isWhitelist20 ? 20 : 3; // 200/20/3 次
-
-    if (parseInt(currentCount) >= maxCalls) {
-      return res.status(429).json({
-        error: "今日AI内容生成次数已用完",
-        message: `您今日已使用${currentCount}/${maxCalls}次，请明天再试`,
-        resetTime: getNextDayResetTime(beijingTime),
-      });
-    }
-
-    // 增加调用次数
-    const newCount = await req.redisClient.incr(dailyKey);
-
-    // 设置过期时间到明天00:00（北京时间）
-    if (newCount === 1) {
-      const secondsUntilMidnight = getSecondsUntilMidnight(beijingTime);
-      await req.redisClient.expire(dailyKey, secondsUntilMidnight);
-    }
-
-    // 在响应头中添加使用情况信息
-    res.setHeader("X-RateLimit-Limit", maxCalls);
-    res.setHeader("X-RateLimit-Remaining", Math.max(0, maxCalls - newCount));
-    res.setHeader("X-RateLimit-Reset", getNextDayResetTime(beijingTime));
-
-    next();
-  } catch (error) {
-    console.error("AI content rate limit error:", error);
-    // 发生错误时不阻止请求，但记录日志
-    next();
-  }
-}
-
-// 获取到明天00:00的秒数
-function getSecondsUntilMidnight(beijingTime) {
-  const tomorrow = new Date(beijingTime);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(0, 0, 0, 0);
-  return Math.ceil((tomorrow - beijingTime) / 1000);
-}
-
-// 获取明天00:00的时间戳
-function getNextDayResetTime(beijingTime) {
-  const tomorrow = new Date(beijingTime);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(0, 0, 0, 0);
-  return tomorrow.getTime();
-}
 
 // URL映射配置
 const URL_MAPPINGS = {
@@ -139,7 +15,6 @@ const URL_MAPPINGS = {
 
 // 默认目标服务器
 const DEFAULT_TARGET = "kota";
-// const TEMPORARY_TARGET = "kota_temporary";
 
 // 代理请求处理函数
 async function proxyRequest(req, res, targetUrl) {
@@ -421,7 +296,6 @@ router.all(
 // 代理路由 - 无需认证（但特定路径可选择性识别用户）
 router.all(
   "/public/*",
-  conditionalOptionalAuth,
   securityMiddleware,
   aiContentRateLimit,
   async (req, res) => {
