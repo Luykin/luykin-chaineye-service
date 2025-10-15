@@ -332,7 +332,7 @@ router.get("/search/legacy", async (req, res) => {
     }
 
     const sanitizedKeyword = keyword.trim();
-    const cacheKey = `legacy_project_search_${sanitizedKeyword}_20251015_1218`;
+    const cacheKey = `legacy_project_search_${sanitizedKeyword}_20251015_1222`;
     let cachedData;
 
     try {
@@ -416,59 +416,6 @@ router.get("/search/legacy", async (req, res) => {
       project.investmentsReceived || []
     );
 
-    // 特殊处理：为 phyrex_ni 添加硬编码的投资项目
-    if (String(sanitizedKeyword).toLocaleLowerCase() === "phyrex_ni") {
-      // 硬编码的投资项目数据
-      const hardcodedInvestments = [
-        {
-          projectName: "Solayer Labs",
-          socialLinks: { x: "https://x.com/solayer_labs" },
-          logo: "https://pbs.twimg.com/profile_images/1852368489174159360/htlVoJ1j_400x400.jpg",
-          lead: false,
-        },
-        {
-          projectName: "Aster DEX",
-          socialLinks: { x: "https://x.com/aster_dex" },
-          logo: "https://pbs.twimg.com/profile_images/1906615420939022336/j1PVcH8N_400x400.jpg",
-          lead: false,
-        },
-        {
-          projectName: "Huma Finance",
-          socialLinks: { x: "https://x.com/humafinance" },
-          logo: "https://pbs.twimg.com/profile_images/1624112902771703821/oSgPaG68_400x400.png",
-          lead: false,
-        },
-        {
-          projectName: "Sahara Labs AI",
-          socialLinks: { x: "https://x.com/saharalabsai" },
-          logo: "https://pbs.twimg.com/profile_images/1955663161928921088/nn_g5zL1_400x400.png",
-          lead: false,
-        },
-        {
-          projectName: "GAIB AI",
-          socialLinks: { x: "https://x.com/gaib_ai" },
-          logo: "https://pbs.twimg.com/profile_images/1963511865520373760/KaLCvZ5s_400x400.jpg",
-          lead: false,
-        },
-      ];
-
-      // 将硬编码的投资项目添加到 groupedInvestments
-      const hardcodedDate = "2024-01-01"; // 使用一个默认日期
-      if (!groupedInvestments[hardcodedDate]) {
-        groupedInvestments[hardcodedDate] = {
-          round: "Special",
-          amount: 0,
-          valuation: 0,
-          formattedAmount: 0,
-          formattedValuation: 0,
-          investors: [],
-        };
-      }
-
-      // 添加硬编码的投资项目到 investors 数组
-      groupedInvestments[hardcodedDate].investors.push(...hardcodedInvestments);
-    }
-
     // 计算 total_funding
     const totalFunding = Object.values(groupedInvestments).reduce(
       (sum, group) => sum + (group.formattedAmount || 0),
@@ -521,7 +468,7 @@ router.get("/search/legacy", async (req, res) => {
     );
 
     // 自定义去重逻辑：优先保留 lead_investor 为 true 的记录
-    const fundedProjects = Array.from(
+    let fundedProjects = Array.from(
       rawFundedProjects
         .reduce((map, item) => {
           // 如果已存在相同 name 的记录
@@ -539,6 +486,51 @@ router.get("/search/legacy", async (req, res) => {
         }, new Map())
         .values()
     );
+
+    // 特殊处理：为 phyrex_ni 添加硬编码的投资项目（他投资出去的项目）
+    if (String(sanitizedKeyword).toLocaleLowerCase() === "phyrex_ni") {
+      // 硬编码的投资项目数据
+      const hardcodedFundedProjects = [
+        {
+          avatar:
+            "https://pbs.twimg.com/profile_images/1852368489174159360/htlVoJ1j_400x400.jpg",
+          name: "Solayer Labs",
+          twitter: "https://x.com/solayer_labs",
+          lead_investor: false,
+        },
+        {
+          avatar:
+            "https://pbs.twimg.com/profile_images/1906615420939022336/j1PVcH8N_400x400.jpg",
+          name: "Aster DEX",
+          twitter: "https://x.com/aster_dex",
+          lead_investor: false,
+        },
+        {
+          avatar:
+            "https://pbs.twimg.com/profile_images/1624112902771703821/oSgPaG68_400x400.png",
+          name: "Huma Finance",
+          twitter: "https://x.com/humafinance",
+          lead_investor: false,
+        },
+        {
+          avatar:
+            "https://pbs.twimg.com/profile_images/1955663161928921088/nn_g5zL1_400x400.png",
+          name: "Sahara Labs AI",
+          twitter: "https://x.com/saharalabsai",
+          lead_investor: false,
+        },
+        {
+          avatar:
+            "https://pbs.twimg.com/profile_images/1963511865520373760/KaLCvZ5s_400x400.jpg",
+          name: "GAIB AI",
+          twitter: "https://x.com/gaib_ai",
+          lead_investor: false,
+        },
+      ];
+
+      // 将硬编码的投资项目添加到 fundedProjects
+      fundedProjects = [...fundedProjects, ...hardcodedFundedProjects];
+    }
     const totalInvestment = fundedProjects.reduce(
       (sum, proj) => sum + (proj.amount || 0),
       0
