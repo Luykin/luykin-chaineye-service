@@ -332,7 +332,7 @@ router.get("/search/legacy", async (req, res) => {
     }
 
     const sanitizedKeyword = keyword.trim();
-    const cacheKey = `legacy_project_search_${sanitizedKeyword}_20250606_1056`;
+    const cacheKey = `legacy_project_search_${sanitizedKeyword}_20251015_1218`;
     let cachedData;
 
     try {
@@ -415,6 +415,59 @@ router.get("/search/legacy", async (req, res) => {
     const groupedInvestments = groupInvestmentsByDate(
       project.investmentsReceived || []
     );
+
+    // 特殊处理：为 phyrex_ni 添加硬编码的投资项目
+    if (String(sanitizedKeyword).toLocaleLowerCase() === "phyrex_ni") {
+      // 硬编码的投资项目数据
+      const hardcodedInvestments = [
+        {
+          projectName: "Solayer Labs",
+          socialLinks: { x: "https://x.com/solayer_labs" },
+          logo: "https://pbs.twimg.com/profile_images/1852368489174159360/htlVoJ1j_400x400.jpg",
+          lead: false,
+        },
+        {
+          projectName: "Aster DEX",
+          socialLinks: { x: "https://x.com/aster_dex" },
+          logo: "https://pbs.twimg.com/profile_images/1906615420939022336/j1PVcH8N_400x400.jpg",
+          lead: false,
+        },
+        {
+          projectName: "Huma Finance",
+          socialLinks: { x: "https://x.com/humafinance" },
+          logo: "https://pbs.twimg.com/profile_images/1624112902771703821/oSgPaG68_400x400.png",
+          lead: false,
+        },
+        {
+          projectName: "Sahara Labs AI",
+          socialLinks: { x: "https://x.com/saharalabsai" },
+          logo: "https://pbs.twimg.com/profile_images/1955663161928921088/nn_g5zL1_400x400.png",
+          lead: false,
+        },
+        {
+          projectName: "GAIB AI",
+          socialLinks: { x: "https://x.com/gaib_ai" },
+          logo: "https://pbs.twimg.com/profile_images/1963511865520373760/KaLCvZ5s_400x400.jpg",
+          lead: false,
+        },
+      ];
+
+      // 将硬编码的投资项目添加到 groupedInvestments
+      const hardcodedDate = "2024-01-01"; // 使用一个默认日期
+      if (!groupedInvestments[hardcodedDate]) {
+        groupedInvestments[hardcodedDate] = {
+          round: "Special",
+          amount: 0,
+          valuation: 0,
+          formattedAmount: 0,
+          formattedValuation: 0,
+          investors: [],
+        };
+      }
+
+      // 添加硬编码的投资项目到 investors 数组
+      groupedInvestments[hardcodedDate].investors.push(...hardcodedInvestments);
+    }
 
     // 计算 total_funding
     const totalFunding = Object.values(groupedInvestments).reduce(
