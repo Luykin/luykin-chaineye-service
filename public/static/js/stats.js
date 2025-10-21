@@ -1,18 +1,26 @@
 // Tab 切换功能
 document.addEventListener("DOMContentLoaded", function () {
-  // 初始化 Tab 功能
-  initTabs();
+  console.log("🚀 DOMContentLoaded 事件触发");
 
-  // 绑定下载按钮事件
-  bindDownloadEvents();
+  try {
+    // 初始化 Tab 功能
+    initTabs();
 
-  // 绑定数据导出按钮事件
-  bindExportEvents();
+    // 绑定下载按钮事件
+    bindDownloadEvents();
 
-  // 自动刷新页面（每5分钟）
-  setTimeout(() => {
-    window.location.reload();
-  }, 5 * 60 * 1000);
+    // 绑定数据导出按钮事件
+    bindExportEvents();
+
+    // 自动刷新页面（每5分钟）
+    setTimeout(() => {
+      window.location.reload();
+    }, 5 * 60 * 1000);
+
+    console.log("✅ 所有初始化完成");
+  } catch (error) {
+    console.error("❌ 初始化过程中出错:", error);
+  }
 });
 
 // 初始化 Tab 功能
@@ -80,7 +88,12 @@ function bindExportEvents() {
   const backupAllDauBtn = document.getElementById("backup-all-dau");
   console.log("🔍 查找备份按钮:", backupAllDauBtn);
   if (backupAllDauBtn) {
-    backupAllDauBtn.addEventListener("click", backupAllDAUData);
+    // 先添加一个简单的测试事件
+    backupAllDauBtn.addEventListener("click", function (e) {
+      console.log("🔥 备份按钮被点击了！");
+      e.preventDefault();
+      alert("备份按钮点击测试成功！");
+    });
     console.log("✅ 备份按钮事件绑定成功");
   } else {
     console.error("❌ 未找到备份按钮");
@@ -92,7 +105,12 @@ function bindExportEvents() {
   );
   console.log("🔍 查找下载按钮:", downloadLatestBackupBtn);
   if (downloadLatestBackupBtn) {
-    downloadLatestBackupBtn.addEventListener("click", downloadLatestBackup);
+    // 先添加一个简单的测试事件
+    downloadLatestBackupBtn.addEventListener("click", function (e) {
+      console.log("🔥 下载按钮被点击了！");
+      e.preventDefault();
+      alert("下载按钮点击测试成功！");
+    });
     console.log("✅ 下载按钮事件绑定成功");
   } else {
     console.error("❌ 未找到下载按钮");
