@@ -139,7 +139,7 @@ const SKIP_SIGNATURE_PATHS = [
 // 速率限制中间件
 const rateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10分钟窗口
-  max: 800, // 限制请求次数
+  max: 1500, // 限制请求次数
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -152,7 +152,7 @@ const rateLimiter = rateLimit({
 // 基于设备指纹的速率限制
 const fingerprintLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 1000,
+  max: 1500,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.headers["x-device-fingerprint"] || req.ip,

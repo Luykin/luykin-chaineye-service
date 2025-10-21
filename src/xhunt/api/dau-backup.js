@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { getDAUBackupService } = require("../middleware/security");
+const DAUBackupService = require("../../services/dauBackupService");
 
 /**
  * 获取DAU备份服务状态
@@ -85,16 +86,10 @@ router.get("/files", async (req, res) => {
  */
 router.post("/backup-all", async (req, res) => {
   try {
-    const backupService = getDAUBackupService();
-
-    if (!backupService) {
-      return res.status(503).json({
-        success: false,
-        message: "DAU备份服务未初始化",
-      });
-    }
-
     console.log("🔄 收到手动备份所有DAU数据的请求");
+
+    // 直接使用请求中的Redis客户端创建备份服务
+    const backupService = new DAUBackupService(req.redisClient);
     const result = await backupService.backupAllDAUData();
 
     res.json({
@@ -125,15 +120,8 @@ router.post("/backup-all", async (req, res) => {
  */
 router.get("/download-latest", async (req, res) => {
   try {
-    const backupService = getDAUBackupService();
-
-    if (!backupService) {
-      return res.status(503).json({
-        success: false,
-        message: "DAU备份服务未初始化",
-      });
-    }
-
+    // 直接使用请求中的Redis客户端创建备份服务
+    const backupService = new DAUBackupService(req.redisClient);
     const backupData = await backupService.readLatestBackupData();
     const fileName = "dau-all-users.json"; // 固定文件名
 

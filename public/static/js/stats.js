@@ -1,7 +1,6 @@
 // Tab 切换功能
 document.addEventListener("DOMContentLoaded", function () {
   console.log("🚀 DOMContentLoaded 事件触发");
-  alert("JavaScript已加载！");
 
   try {
     // 初始化 Tab 功能
@@ -19,10 +18,8 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 10 * 60 * 1000);
 
     console.log("✅ 所有初始化完成");
-    alert("所有初始化完成！");
   } catch (error) {
     console.error("❌ 初始化过程中出错:", error);
-    alert("初始化出错: " + error.message);
   }
 });
 
@@ -86,50 +83,34 @@ function bindDownloadEvents() {
 // 绑定数据导出事件
 function bindExportEvents() {
   console.log("🔧 开始绑定数据导出事件...");
-  alert("开始绑定数据导出事件...");
 
   // DAU手动备份所有数据
   const backupAllDauBtn = document.getElementById("backup-all-dau");
-  console.log("🔍 查找备份按钮:", backupAllDauBtn);
   if (backupAllDauBtn) {
-    backupAllDauBtn.addEventListener("click", function () {
-      alert("备份按钮被点击了！");
-      backupAllDAUData();
-    });
+    backupAllDauBtn.addEventListener("click", backupAllDAUData);
     console.log("✅ 备份按钮事件绑定成功");
-    alert("备份按钮绑定成功！");
   } else {
     console.error("❌ 未找到备份按钮");
-    alert("❌ 未找到备份按钮");
   }
 
   // 下载最新备份文件
   const downloadLatestBackupBtn = document.getElementById(
     "download-latest-backup"
   );
-  console.log("🔍 查找下载按钮:", downloadLatestBackupBtn);
   if (downloadLatestBackupBtn) {
-    downloadLatestBackupBtn.addEventListener("click", function () {
-      alert("下载按钮被点击了！");
-      downloadLatestBackup();
-    });
+    downloadLatestBackupBtn.addEventListener("click", downloadLatestBackup);
     console.log("✅ 下载按钮事件绑定成功");
-    alert("下载按钮绑定成功！");
   } else {
     console.error("❌ 未找到下载按钮");
-    alert("❌ 未找到下载按钮");
   }
 
   // 用户Excel导出
   const exportUsersExcelBtn = document.getElementById("export-users-excel");
-  console.log("🔍 查找Excel按钮:", exportUsersExcelBtn);
   if (exportUsersExcelBtn) {
     exportUsersExcelBtn.addEventListener("click", exportUsersExcel);
     console.log("✅ Excel导出按钮事件绑定成功");
-    alert("Excel按钮绑定成功！");
   } else {
     console.error("❌ 未找到Excel导出按钮");
-    alert("❌ 未找到Excel导出按钮");
   }
 }
 
