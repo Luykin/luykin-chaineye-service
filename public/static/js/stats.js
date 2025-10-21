@@ -1,3 +1,29 @@
+// 全局测试函数
+window.debugButtons = function () {
+  console.log("🔍 开始调试按钮...");
+
+  const backupBtn = document.getElementById("backup-all-dau");
+  const downloadBtn = document.getElementById("download-latest-backup");
+  const excelBtn = document.getElementById("export-users-excel");
+
+  console.log("备份按钮:", backupBtn);
+  console.log("下载按钮:", downloadBtn);
+  console.log("Excel按钮:", excelBtn);
+
+  if (backupBtn) {
+    console.log("备份按钮位置:", backupBtn.getBoundingClientRect());
+    console.log("备份按钮样式:", window.getComputedStyle(backupBtn));
+  }
+
+  // 尝试直接添加事件
+  if (backupBtn) {
+    backupBtn.onclick = function () {
+      console.log("🔥 通过onclick触发！");
+      alert("onclick测试成功！");
+    };
+  }
+};
+
 // Tab 切换功能
 document.addEventListener("DOMContentLoaded", function () {
   console.log("🚀 DOMContentLoaded 事件触发");
@@ -18,6 +44,11 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 5 * 60 * 1000);
 
     console.log("✅ 所有初始化完成");
+
+    // 延迟调试
+    setTimeout(() => {
+      window.debugButtons();
+    }, 1000);
   } catch (error) {
     console.error("❌ 初始化过程中出错:", error);
   }
@@ -87,14 +118,29 @@ function bindExportEvents() {
   // DAU手动备份所有数据
   const backupAllDauBtn = document.getElementById("backup-all-dau");
   console.log("🔍 查找备份按钮:", backupAllDauBtn);
+  console.log("🔍 备份按钮位置:", backupAllDauBtn?.offsetParent);
+  console.log(
+    "🔍 备份按钮可见性:",
+    backupAllDauBtn?.offsetWidth,
+    backupAllDauBtn?.offsetHeight
+  );
+
   if (backupAllDauBtn) {
     // 先添加一个简单的测试事件
     backupAllDauBtn.addEventListener("click", function (e) {
       console.log("🔥 备份按钮被点击了！");
       e.preventDefault();
+      e.stopPropagation();
       alert("备份按钮点击测试成功！");
     });
     console.log("✅ 备份按钮事件绑定成功");
+
+    // 测试直接调用
+    console.log("🧪 测试直接调用函数...");
+    window.testBackupClick = function () {
+      console.log("🔥 直接调用测试成功！");
+      alert("直接调用测试成功！");
+    };
   } else {
     console.error("❌ 未找到备份按钮");
   }
