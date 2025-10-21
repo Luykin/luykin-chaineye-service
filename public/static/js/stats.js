@@ -80,6 +80,12 @@ function bindExportEvents() {
     exportDauFilesBtn.addEventListener("click", exportDAUFiles);
   }
 
+  // DAU手动备份所有数据
+  const backupAllDauBtn = document.getElementById("backup-all-dau");
+  if (backupAllDauBtn) {
+    backupAllDauBtn.addEventListener("click", backupAllDAUData);
+  }
+
   // 用户Excel导出
   const exportUsersExcelBtn = document.getElementById("export-users-excel");
   if (exportUsersExcelBtn) {
@@ -282,6 +288,67 @@ function exportDAUFiles() {
   setTimeout(() => {
     hideExportStatus();
   }, 1000);
+}
+
+// 手动备份所有DAU数据
+function backupAllDAUData() {
+  console.log("开始手动备份所有DAU数据...");
+
+  // 确认操作
+  if (
+    !confirm(
+      "确定要备份Redis中所有DAU数据吗？\n\n注意：同一天的数据会被覆盖写入。"
+    )
+  ) {
+    return;
+  }
+
+  // 显示加载状态
+  showExportStatus("正在备份所有DAU数据，请稍候...");
+
+  // 禁用按钮防止重复点击
+  const backupBtn = document.getElementById("backup-all-dau");
+  if (backupBtn) {
+    backupBtn.disabled = true;
+    backupBtn.innerHTML = '<span class="btn-icon">⏳</span>正在备份...';
+  }
+
+  // 发送备份请求
+  fetch("/api/xhunt/dau-backup/backup-all", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      console.log("备份结果:", data);
+
+      if (data.success) {
+        alert(
+          `备份成功！\n\n${
+            data.message
+          }\n\n备份的日期：${data.data.backedUpDates.join(", ")}`
+        );
+      } else {
+        alert(`备份失败：${data.message}`);
+      }
+    })
+    .catch((error) => {
+      console.error("备份请求失败:", error);
+      alert("备份请求失败: " + error.message);
+    })
+    .finally(() => {
+      // 隐藏加载状态
+      hideExportStatus();
+
+      // 恢复按钮状态
+      if (backupBtn) {
+        backupBtn.disabled = false;
+        backupBtn.innerHTML =
+          '<span class="btn-icon">💾</span>手动备份所有DAU数据';
+      }
+    });
 }
 
 // 导出用户Excel文件

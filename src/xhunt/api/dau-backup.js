@@ -190,4 +190,41 @@ router.get("/files", async (req, res) => {
   }
 });
 
+/**
+ * 手动备份所有DAU数据
+ */
+router.post("/backup-all", async (req, res) => {
+  try {
+    const backupService = getDAUBackupService();
+
+    if (!backupService) {
+      return res.status(503).json({
+        success: false,
+        message: "DAU备份服务未初始化",
+      });
+    }
+
+    console.log("🔄 收到手动备份所有DAU数据的请求");
+    const result = await backupService.backupAllDAUData();
+
+    res.json({
+      success: result.success,
+      message: result.message,
+      data: {
+        backedUpDates: result.backedUpDates,
+        totalKeys: result.totalKeys,
+        successCount: result.successCount,
+        errorCount: result.errorCount,
+      },
+    });
+  } catch (error) {
+    console.error("手动备份所有DAU数据失败:", error);
+    res.status(500).json({
+      success: false,
+      message: "备份失败",
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;

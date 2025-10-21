@@ -93,9 +93,62 @@ class DAUBackupService {
   }
 
   /**
+   * 备份所有Redis中的DAU数据
+   */
+  async backupAllDAUData() {
+    try {
+      console.log("🔄 开始备份所有DAU数据...");
+
+      // 获取所有DAU相关的键
+      const dauKeys = await this.redisClient.keys("dau:*");
+
+      if (dauKeys.length === 0) {
+        console.log("ℹ️  Redis中没有找到DAU数据");
+        return { success: true, message: "没有找到DAU数据", backedUpDates: [] };
+      }
+
+      const backedUpDates = [];
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const dauKey of dauKeys) {
+        try {
+          // 从键名中提取日期 (dau:2024-01-15 -> 2024-01-15)
+          const date = dauKey.replace("dau:", "");
+
+          // 备份该日期的数据（支持覆盖）
+          await this.backupDataForDate(date, true);
+          backedUpDates.push(date);
+          successCount++;
+
+          console.log(`✅ 成功备份 ${date} 的数据`);
+        } catch (error) {
+          console.error(`❌ 备份 ${dauKey} 失败:`, error);
+          errorCount++;
+        }
+      }
+
+      const result = {
+        success: errorCount === 0,
+        message: `备份完成：成功 ${successCount} 个，失败 ${errorCount} 个`,
+        backedUpDates: backedUpDates.sort(),
+        totalKeys: dauKeys.length,
+        successCount,
+        errorCount,
+      };
+
+      console.log("📊 备份结果:", result);
+      return result;
+    } catch (error) {
+      console.error("❌ 备份所有DAU数据失败:", error);
+      throw error;
+    }
+  }
+
+  /**
    * 备份指定日期的数据
    */
-  async backupDataForDate(date) {
+  async backupDataForDate(date, allowOverwrite = false) {
     const dauKey = `dau:${date}`;
 
     try {
@@ -118,13 +171,17 @@ class DAUBackupService {
       const fileName = `dau-${date}.json`;
       const filePath = path.join(this.backupDir, fileName);
 
-      // 检查文件是否已存在
-      try {
-        await fs.access(filePath);
-        console.log(`⚠️  ${date} 备份文件已存在，跳过备份`);
-        return;
-      } catch (error) {
-        // 文件不存在，继续备份
+      // 检查文件是否已存在（如果不允许覆盖）
+      if (!allowOverwrite) {
+        try {
+          await fs.access(filePath);
+          console.log(`⚠️  ${date} 备份文件已存在，跳过备份`);
+          return;
+        } catch (error) {
+          // 文件不存在，继续备份
+        }
+      } else {
+        console.log(`🔄 ${date} 允许覆盖，将重新备份数据`);
       }
 
       // 准备备份数据
