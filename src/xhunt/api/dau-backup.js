@@ -37,128 +37,13 @@ router.get("/status", async (req, res) => {
   }
 });
 
-/**
- * 手动触发指定日期的备份
- */
-router.post("/backup/:date", async (req, res) => {
-  try {
-    const { date } = req.params;
-
-    // 验证日期格式
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(date)) {
-      return res.status(400).json({
-        success: false,
-        message: "日期格式不正确，请使用 YYYY-MM-DD 格式",
-      });
-    }
-
-    const backupService = getDAUBackupService();
-
-    if (!backupService) {
-      return res.status(503).json({
-        success: false,
-        message: "DAU备份服务未初始化",
-      });
-    }
-
-    await backupService.manualBackup(date);
-
-    res.json({
-      success: true,
-      message: `成功触发 ${date} 的DAU数据备份`,
-    });
-  } catch (error) {
-    console.error("手动备份失败:", error);
-    res.status(500).json({
-      success: false,
-      message: "备份失败",
-      error: error.message,
-    });
-  }
-});
+// 已删除不需要的接口：
+// - /backup/:date (按日期备份)
+// - /data/:date (按日期读取数据)
+// - /cleanup (清理过期文件)
 
 /**
- * 获取指定日期的备份数据
- */
-router.get("/data/:date", async (req, res) => {
-  try {
-    const { date } = req.params;
-
-    // 验证日期格式
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(date)) {
-      return res.status(400).json({
-        success: false,
-        message: "日期格式不正确，请使用 YYYY-MM-DD 格式",
-      });
-    }
-
-    const backupService = getDAUBackupService();
-
-    if (!backupService) {
-      return res.status(503).json({
-        success: false,
-        message: "DAU备份服务未初始化",
-      });
-    }
-
-    const backupData = await backupService.readBackupData(date);
-
-    res.json({
-      success: true,
-      data: backupData,
-    });
-  } catch (error) {
-    console.error("读取备份数据失败:", error);
-
-    if (error.message.includes("备份文件不存在")) {
-      return res.status(404).json({
-        success: false,
-        message: `未找到 ${date} 的备份数据`,
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "读取备份数据失败",
-      error: error.message,
-    });
-  }
-});
-
-/**
- * 清理过期的备份文件
- */
-router.post("/cleanup", async (req, res) => {
-  try {
-    const backupService = getDAUBackupService();
-
-    if (!backupService) {
-      return res.status(503).json({
-        success: false,
-        message: "DAU备份服务未初始化",
-      });
-    }
-
-    await backupService.cleanupOldBackups();
-
-    res.json({
-      success: true,
-      message: "过期备份文件清理完成",
-    });
-  } catch (error) {
-    console.error("清理过期备份失败:", error);
-    res.status(500).json({
-      success: false,
-      message: "清理失败",
-      error: error.message,
-    });
-  }
-});
-
-/**
- * 获取备份文件列表
+ * 获取主备份文件状态
  */
 router.get("/files", async (req, res) => {
   try {
@@ -171,20 +56,25 @@ router.get("/files", async (req, res) => {
       });
     }
 
-    const backupFiles = await backupService.getBackupFiles();
+    const mainBackupFile = await backupService.getLatestBackupFile();
+    const hasBackup = !!mainBackupFile;
+    const fileName = "dau-all-users.json"; // 固定文件名
 
     res.json({
       success: true,
       data: {
-        files: backupFiles,
-        total: backupFiles.length,
+        hasBackup: hasBackup,
+        fileName: fileName,
+        message: hasBackup
+          ? "主备份文件存在"
+          : "主备份文件不存在，请先执行备份",
       },
     });
   } catch (error) {
-    console.error("获取备份文件列表失败:", error);
+    console.error("获取备份文件状态失败:", error);
     res.status(500).json({
       success: false,
-      message: "获取文件列表失败",
+      message: "获取文件状态失败",
       error: error.message,
     });
   }
@@ -211,9 +101,12 @@ router.post("/backup-all", async (req, res) => {
       success: result.success,
       message: result.message,
       data: {
-        backedUpDates: result.backedUpDates,
-        totalKeys: result.totalKeys,
-        successCount: result.successCount,
+        fileName: result.fileName,
+        totalUsers: result.totalUsers,
+        totalRecords: result.totalRecords,
+        addedUsers: result.addedUsers,
+        updatedUsers: result.updatedUsers,
+        newRecords: result.newRecords,
         errorCount: result.errorCount,
       },
     });
@@ -222,6 +115,53 @@ router.post("/backup-all", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "备份失败",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * 下载最新的累加备份文件
+ */
+router.get("/download-latest", async (req, res) => {
+  try {
+    const backupService = getDAUBackupService();
+
+    if (!backupService) {
+      return res.status(503).json({
+        success: false,
+        message: "DAU备份服务未初始化",
+      });
+    }
+
+    const backupData = await backupService.readLatestBackupData();
+    const fileName = "dau-all-users.json"; // 固定文件名
+
+    // 设置响应头
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(fileName)}"`
+    );
+
+    // 发送文件
+    res.json(backupData);
+  } catch (error) {
+    console.error("下载最新备份文件失败:", error);
+
+    if (
+      error.message.includes("备份文件不存在") ||
+      error.message.includes("没有找到")
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: "没有找到备份文件，请先执行备份操作",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "下载备份文件失败",
       error: error.message,
     });
   }

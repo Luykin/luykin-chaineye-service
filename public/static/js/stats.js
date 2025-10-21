@@ -74,16 +74,18 @@ function bindDownloadEvents() {
 
 // 绑定数据导出事件
 function bindExportEvents() {
-  // DAU备份文件导出
-  const exportDauFilesBtn = document.getElementById("export-dau-files");
-  if (exportDauFilesBtn) {
-    exportDauFilesBtn.addEventListener("click", exportDAUFiles);
-  }
-
   // DAU手动备份所有数据
   const backupAllDauBtn = document.getElementById("backup-all-dau");
   if (backupAllDauBtn) {
     backupAllDauBtn.addEventListener("click", backupAllDAUData);
+  }
+
+  // 下载最新备份文件
+  const downloadLatestBackupBtn = document.getElementById(
+    "download-latest-backup"
+  );
+  if (downloadLatestBackupBtn) {
+    downloadLatestBackupBtn.addEventListener("click", downloadLatestBackup);
   }
 
   // 用户Excel导出
@@ -273,22 +275,7 @@ function downloadCSV(csvContent, filename) {
   }
 }
 
-// 导出DAU备份文件列表
-function exportDAUFiles() {
-  console.log("开始导出DAU备份文件列表...");
-
-  // 显示加载状态
-  showExportStatus("正在获取DAU备份文件列表...");
-
-  // 在新标签页中打开DAU备份文件列表
-  const dauBackupUrl = "/api/xhunt/dau-backup/files";
-  window.open(dauBackupUrl, "_blank");
-
-  // 隐藏加载状态
-  setTimeout(() => {
-    hideExportStatus();
-  }, 1000);
-}
+// 已删除 exportDAUFiles 函数 - 不再需要查看文件列表功能
 
 // 手动备份所有DAU数据
 function backupAllDAUData() {
@@ -297,7 +284,7 @@ function backupAllDAUData() {
   // 确认操作
   if (
     !confirm(
-      "确定要备份Redis中所有DAU数据吗？\n\n注意：同一天的数据会被覆盖写入。"
+      "确定要备份Redis中所有DAU数据吗？\n\n将生成一个包含所有唯一用户的累加备份文件。"
     )
   ) {
     return;
@@ -325,11 +312,14 @@ function backupAllDAUData() {
       console.log("备份结果:", data);
 
       if (data.success) {
-        alert(
-          `备份成功！\n\n${
-            data.message
-          }\n\n备份的日期：${data.data.backedUpDates.join(", ")}`
-        );
+        // 显示详细的成功消息和下载选项
+        const message = `备份成功！\n\n${data.message}\n\n详细统计：\n- 总用户数：${data.data.totalUsers}\n- 总记录数：${data.data.totalRecords}\n- 新增用户：${data.data.addedUsers}\n- 更新用户：${data.data.updatedUsers}\n- 新记录数：${data.data.newRecords}\n\n文件名：${data.data.fileName}\n\n是否立即下载备份文件？`;
+
+        const downloadConfirm = confirm(message);
+
+        if (downloadConfirm) {
+          downloadLatestBackup();
+        }
       } else {
         alert(`备份失败：${data.message}`);
       }
@@ -349,6 +339,32 @@ function backupAllDAUData() {
           '<span class="btn-icon">💾</span>手动备份所有DAU数据';
       }
     });
+}
+
+// 下载最新的备份文件
+function downloadLatestBackup() {
+  console.log("开始下载最新备份文件...");
+
+  // 显示加载状态
+  showExportStatus("正在下载备份文件...");
+
+  // 创建下载链接
+  const downloadUrl = "/api/xhunt/dau-backup/download-latest";
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.style.display = "none";
+
+  // 添加到页面并触发下载
+  document.body.appendChild(link);
+  link.click();
+
+  // 清理
+  setTimeout(() => {
+    document.body.removeChild(link);
+    hideExportStatus();
+  }, 2000);
+
+  console.log("下载请求已发送");
 }
 
 // 导出用户Excel文件

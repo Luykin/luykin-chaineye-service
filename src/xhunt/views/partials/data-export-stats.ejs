@@ -16,18 +16,18 @@
           包含所有使用过我们插件的推特号数据（登录和未登录用户），这些数据来自Redis的DAU统计。
         </p>
         <div class="export-actions">
-          <button id="export-dau-files" class="export-btn primary">
-            <span class="btn-icon">📁</span>
-            查看DAU备份文件
-          </button>
-          <button id="backup-all-dau" class="export-btn secondary">
+          <button id="backup-all-dau" class="export-btn primary">
             <span class="btn-icon">💾</span>
-            手动备份所有DAU数据
+            备份所有DAU数据
+          </button>
+          <button id="download-latest-backup" class="export-btn secondary">
+            <span class="btn-icon">⬇️</span>
+            下载备份文件
           </button>
           <div class="export-info">
             <small
-              >查看：在新标签页中打开备份文件列表 |
-              备份：备份Redis中所有DAU数据（同一天会覆盖）</small
+              >备份：生成/更新累加备份文件（去重） |
+              下载：下载最新的备份文件</small
             >
           </div>
         </div>
@@ -193,6 +193,16 @@
 
   .export-btn.secondary:hover {
     background: linear-gradient(135deg, #ee82f0 0%, #f3455a 100%);
+    transform: translateY(-1px);
+  }
+
+  .export-btn.tertiary {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+  }
+
+  .export-btn.tertiary:hover {
+    background: linear-gradient(135deg, #3d8bfe 0%, #00e6fe 100%);
     transform: translateY(-1px);
   }
 
