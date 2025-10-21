@@ -57,38 +57,27 @@ class DAUBackupService {
    * 设置定时任务
    */
   setupCronJob() {
-    // 北京时间23:59执行备份（UTC 15:59）
-    this.cronJob = schedule.scheduleJob("59 15 * * *", async () => {
-      try {
-        console.log("🕐 开始执行DAU数据备份任务...");
-        await this.backupTodayData();
-        console.log("✅ DAU数据备份任务完成");
-      } catch (error) {
-        console.error("❌ DAU数据备份任务失败:", error);
-      }
-    });
+    // 只在主进程中设置定时任务，避免 cluster 模式下重复执行
+    if (
+      process.env.NODE_APP_INSTANCE === "0" ||
+      !process.env.NODE_APP_INSTANCE
+    ) {
+      // 北京时间23:59执行备份（UTC 15:59）
+      this.cronJob = schedule.scheduleJob("59 15 * * *", async () => {
+        try {
+          console.log("🕐 开始执行DAU数据备份任务...");
+          await this.backupAllDAUData();
+          console.log("✅ DAU数据备份任务完成");
+        } catch (error) {
+          console.error("❌ DAU数据备份任务失败:", error);
+        }
+      });
 
-    console.log("⏰ DAU备份定时任务已设置: 每天北京时间23:59执行");
-  }
-
-  /**
-   * 备份今天的数据
-   */
-  async backupTodayData() {
-    const today = this.getBeijingDate();
-    const yesterday = this.getPreviousDay(today);
-
-    try {
-      // 备份昨天的数据（因为今天还没结束）
-      await this.backupDataForDate(yesterday);
-
-      // 如果今天是月末最后一天，也备份今天的数据
-      if (this.isLastDayOfMonth(today)) {
-        await this.backupDataForDate(today);
-      }
-    } catch (error) {
-      console.error(`❌ 备份${yesterday}数据失败:`, error);
-      throw error;
+      console.log(
+        "⏰ DAU备份定时任务已设置: 每天北京时间23:59执行 ===== 主进程"
+      );
+    } else {
+      console.log("⏭️  非主进程，跳过定时任务设置");
     }
   }
 
@@ -100,8 +89,7 @@ class DAUBackupService {
       console.log("🔄 开始备份所有DAU数据（累加模式）...");
 
       // 先尝试读取已有的备份文件
-      let existingUsers = new Map();
-      let existingTotalRecords = 0;
+      let existingUsers = new Set();
       let existingSourceDates = new Set();
 
       try {
@@ -111,19 +99,11 @@ class DAUBackupService {
             `📖 读取到已有备份文件，包含 ${existingBackup.users.length} 个用户`
           );
 
-          // 将已有用户数据加载到Map中
-          existingBackup.users.forEach((user) => {
-            const userId = user.xUserId || user.fingerprint;
-            existingUsers.set(userId, {
-              fingerprint: user.fingerprint,
-              xUserId: user.xUserId,
-              firstSeen: user.firstSeen,
-              lastSeen: user.lastSeen,
-              totalDays: user.totalDays,
-            });
+          // 将已有用户数据加载到Set中
+          existingBackup.users.forEach((userId) => {
+            existingUsers.add(userId);
           });
 
-          existingTotalRecords = existingBackup.totalRecords || 0;
           existingSourceDates = new Set(existingBackup.sourceDates || []);
         }
       } catch (error) {
@@ -143,11 +123,9 @@ class DAUBackupService {
       }
 
       // 用于存储新处理的用户数据
-      const newUsers = new Map();
       let newProcessed = 0;
       let errorCount = 0;
       let addedUsers = 0;
-      let updatedUsers = 0;
 
       // 处理每个日期的数据
       for (const dauKey of dauKeys) {
@@ -172,27 +150,9 @@ class DAUBackupService {
             // 检查是否是新用户
             if (!existingUsers.has(userId)) {
               // 新用户
-              existingUsers.set(userId, {
-                fingerprint,
-                xUserId: xUserId || null,
-                firstSeen: date,
-                lastSeen: date,
-                totalDays: 1,
-              });
+              existingUsers.add(userId);
               addedUsers++;
-            } else {
-              // 已存在用户，更新信息
-              const existingUser = existingUsers.get(userId);
-              existingUsers.set(userId, {
-                ...existingUser,
-                lastSeen: date,
-                totalDays: existingUser.totalDays + 1,
-              });
-              updatedUsers++;
             }
-
-            // 记录到新用户Map中（用于统计）
-            newUsers.set(userId, true);
           }
 
           newProcessed += dauData.length;
@@ -212,16 +172,9 @@ class DAUBackupService {
       const backupData = {
         exportTime: new Date().toISOString(),
         totalUniqueUsers: existingUsers.size,
-        totalRecords: existingTotalRecords + newProcessed,
+        totalRecords: newProcessed,
         sourceDates: Array.from(existingSourceDates).sort(),
-        users: Array.from(existingUsers.values()).map((user, index) => ({
-          id: index + 1,
-          fingerprint: user.fingerprint,
-          xUserId: user.xUserId,
-          firstSeen: user.firstSeen,
-          lastSeen: user.lastSeen,
-          totalDays: user.totalDays,
-        })),
+        users: Array.from(existingUsers),
       };
 
       // 写入备份文件
@@ -229,12 +182,11 @@ class DAUBackupService {
 
       const result = {
         success: errorCount === 0,
-        message: `备份完成：总计 ${existingUsers.size} 个唯一用户，${backupData.totalRecords} 条总记录（新增 ${addedUsers} 个用户，更新 ${updatedUsers} 个用户）`,
+        message: `备份完成：总计 ${existingUsers.size} 个唯一用户，${backupData.totalRecords} 条总记录（新增 ${addedUsers} 个用户）`,
         fileName: fileName,
         totalUsers: existingUsers.size,
         totalRecords: backupData.totalRecords,
         addedUsers: addedUsers,
-        updatedUsers: updatedUsers,
         newRecords: newProcessed,
         errorCount: errorCount,
       };
@@ -291,12 +243,9 @@ class DAUBackupService {
         date: date,
         backupTime: new Date().toISOString(),
         totalUsers: dauData.length,
-        data: dauData.map((item) => {
+        users: dauData.map((item) => {
           const [fingerprint, xUserId] = item.split(",");
-          return {
-            fingerprint,
-            xUserId: xUserId || null,
-          };
+          return xUserId || fingerprint; // 只保存用户标识符
         }),
       };
 
@@ -361,45 +310,6 @@ class DAUBackupService {
       }
       throw error;
     }
-  }
-
-  /**
-   * 获取北京时间日期
-   */
-  getBeijingDate() {
-    const now = new Date();
-    const utcHours = now.getUTCHours();
-    const beijingHours = utcHours + 8;
-
-    let beijingDate = new Date(now);
-    if (beijingHours >= 24) {
-      beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
-      beijingDate.setUTCHours(beijingHours - 24);
-    } else {
-      beijingDate.setUTCHours(beijingHours);
-    }
-
-    return beijingDate.toISOString().split("T")[0];
-  }
-
-  /**
-   * 获取前一天日期
-   */
-  getPreviousDay(dateString) {
-    const date = new Date(dateString);
-    date.setDate(date.getDate() - 1);
-    return date.toISOString().split("T")[0];
-  }
-
-  /**
-   * 检查是否为月末最后一天
-   */
-  isLastDayOfMonth(dateString) {
-    const date = new Date(dateString);
-    const nextDay = new Date(date);
-    nextDay.setDate(date.getDate() + 1);
-
-    return date.getMonth() !== nextDay.getMonth();
   }
 
   /**
