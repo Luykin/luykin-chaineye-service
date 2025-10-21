@@ -25,11 +25,10 @@ const xHuntProxyRoutes = require("./xhunt/api/proxy");
 const xHuntReviewsRoutes = require("./xhunt/api/reviews");
 const xHuntNotesRoutes = require("./xhunt/api/notes");
 const xHuntReportRoutes = require("./xhunt/api/report");
-const xHuntStatsRoutes = require("./xhunt/api/stats"); // 🆕 新增统计路由
+const xHuntStatsRoutes = require("./xhunt/api/stats");
 const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
-const xHuntDAUBackupRoutes = require("./xhunt/api/dau-backup"); // 🆕 新增DAU备份路由
-const redisMount = require("./xhunt/middleware/redisMount"); // 🆕 Redis挂载中间件
+const xHuntDAUBackupRoutes = require("./xhunt/api/dau-backup");
 const internalQueryRoutes = require("./api/internal-query");
 const {
   securityMiddleware,
@@ -254,7 +253,7 @@ app.use(
 app.use("/api/xhunt/stats", xHuntStatsRoutes);
 
 // 🆕 新增DAU备份路由 - 使用Redis挂载中间件
-app.use("/api/xhunt/dau-backup", redisMount, xHuntDAUBackupRoutes);
+app.use("/api/xhunt/dau-backup", xHuntDAUBackupRoutes);
 
 // Mantle 活动接口
 app.use("/api/xhunt/mantle", xHuntMantleRoutes);
