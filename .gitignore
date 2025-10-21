@@ -3,3 +3,5 @@ node_modules
 database.sqlite
 # Ignore all .env files
 .env*
+# Ignore DAU backup files
+data/

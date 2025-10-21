@@ -74,24 +74,38 @@ function bindDownloadEvents() {
 
 // 绑定数据导出事件
 function bindExportEvents() {
+  console.log("🔧 开始绑定数据导出事件...");
+
   // DAU手动备份所有数据
   const backupAllDauBtn = document.getElementById("backup-all-dau");
+  console.log("🔍 查找备份按钮:", backupAllDauBtn);
   if (backupAllDauBtn) {
     backupAllDauBtn.addEventListener("click", backupAllDAUData);
+    console.log("✅ 备份按钮事件绑定成功");
+  } else {
+    console.error("❌ 未找到备份按钮");
   }
 
   // 下载最新备份文件
   const downloadLatestBackupBtn = document.getElementById(
     "download-latest-backup"
   );
+  console.log("🔍 查找下载按钮:", downloadLatestBackupBtn);
   if (downloadLatestBackupBtn) {
     downloadLatestBackupBtn.addEventListener("click", downloadLatestBackup);
+    console.log("✅ 下载按钮事件绑定成功");
+  } else {
+    console.error("❌ 未找到下载按钮");
   }
 
   // 用户Excel导出
   const exportUsersExcelBtn = document.getElementById("export-users-excel");
+  console.log("🔍 查找Excel导出按钮:", exportUsersExcelBtn);
   if (exportUsersExcelBtn) {
     exportUsersExcelBtn.addEventListener("click", exportUsersExcel);
+    console.log("✅ Excel导出按钮事件绑定成功");
+  } else {
+    console.error("❌ 未找到Excel导出按钮");
   }
 }
 
@@ -279,6 +293,7 @@ function downloadCSV(csvContent, filename) {
 
 // 手动备份所有DAU数据
 function backupAllDAUData() {
+  console.log("🚀 backupAllDAUData 函数被调用");
   console.log("开始手动备份所有DAU数据...");
 
   // 确认操作
@@ -343,6 +358,7 @@ function backupAllDAUData() {
 
 // 下载最新的备份文件
 function downloadLatestBackup() {
+  console.log("🚀 downloadLatestBackup 函数被调用");
   console.log("开始下载最新备份文件...");
 
   // 显示加载状态
