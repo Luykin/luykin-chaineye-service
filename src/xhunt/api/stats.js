@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const { getFullStats, getSimpleStats } = require("../services/statsService");
 const expressStatic = require("express");
+const XLSX = require("xlsx");
 
 const router = express.Router();
 
@@ -327,6 +328,79 @@ router.get("/online-users", basicAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       error: "获取在线用户失败",
+    });
+  }
+});
+
+/**
+ * GET /export/users/excel
+ * 导出所有已登录用户数据为Excel文件（需要认证）
+ */
+router.get("/export/users/excel", basicAuth, async (req, res) => {
+  try {
+    // 获取PostgreSQL模型
+    const postgresModels = require("../../models/postgres-start");
+    const XHuntUser = postgresModels.XHuntUser;
+
+    // 查询所有用户数据
+    const users = await XHuntUser.findAll({
+      attributes: ["twitterId", "username", "displayName"],
+      order: [["createdAt", "DESC"]],
+    });
+
+    // 准备Excel数据
+    const excelData = users.map((user, index) => ({
+      序号: index + 1,
+      "Twitter ID": user.twitterId,
+      用户名: user.username || "",
+      显示名称: user.displayName || "",
+    }));
+
+    // 创建工作簿
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // 设置列宽
+    const colWidths = [
+      { wch: 8 }, // 序号
+      { wch: 20 }, // Twitter ID
+      { wch: 25 }, // 用户名
+      { wch: 25 }, // 显示名称
+    ];
+    worksheet["!cols"] = colWidths;
+
+    // 添加工作表到工作簿
+    XLSX.utils.book_append_sheet(workbook, worksheet, "用户数据");
+
+    // 生成Excel文件
+    const excelBuffer = XLSX.write(workbook, {
+      type: "buffer",
+      bookType: "xlsx",
+    });
+
+    // 设置响应头
+    const fileName = `XHunt用户数据_${
+      new Date().toISOString().split("T")[0]
+    }.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(fileName)}"`
+    );
+    res.setHeader("Content-Length", excelBuffer.length);
+
+    // 发送文件
+    res.send(excelBuffer);
+
+    console.log(`✅ 用户数据Excel导出完成: ${users.length} 个用户`);
+  } catch (error) {
+    console.error("Error exporting users Excel:", error);
+    res.status(500).json({
+      success: false,
+      error: "导出用户数据失败",
     });
   }
 });

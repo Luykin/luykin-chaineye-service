@@ -1,5 +1,6 @@
 const rateLimit = require("express-rate-limit");
 const crypto = require("crypto");
+const DAUBackupService = require("../../services/dauBackupService");
 
 // 🚀 智能日活统计缓存管理器
 class DAUCacheManager {
@@ -125,6 +126,9 @@ class DAUCacheManager {
 
 // 创建单例实例
 const dauCacheManager = new DAUCacheManager();
+
+// 创建DAU备份服务实例（延迟初始化）
+let dauBackupService = null;
 
 // 定义跳过签名验证的路径列表
 const SKIP_SIGNATURE_PATHS = [
@@ -326,6 +330,14 @@ const securityMiddleware = (req, res, next) => {
   // 确保缓存管理器已初始化
   dauCacheManager.init();
 
+  // 确保DAU备份服务已初始化
+  if (!dauBackupService && req.redisClient) {
+    dauBackupService = new DAUBackupService(req.redisClient);
+    dauBackupService.init().catch((error) => {
+      console.error("❌ DAU备份服务初始化失败:", error);
+    });
+  }
+
   try {
     // 检查必要的请求头
     const requestId = req.headers["x-request-id"];
@@ -436,4 +448,5 @@ module.exports = {
   browserOnlyMiddleware,
   generateSignature, // 导出用于测试
   dauCacheManager, // 导出缓存管理器（用于测试和监控）
+  getDAUBackupService: () => dauBackupService, // 导出DAU备份服务获取函数
 };

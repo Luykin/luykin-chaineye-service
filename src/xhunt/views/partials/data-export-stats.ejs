@@ -1,0 +1,297 @@
+<div class="export-container">
+  <div class="export-header">
+    <h2>📤 数据导出</h2>
+    <p>导出系统数据用于分析和备份</p>
+  </div>
+
+  <div class="export-options">
+    <!-- DAU数据导出 -->
+    <div class="export-card">
+      <div class="export-card-header">
+        <h3>📊 DAU数据导出</h3>
+        <p>导出Redis中记录的DAU备份文件列表</p>
+      </div>
+      <div class="export-card-content">
+        <p class="export-description">
+          包含所有使用过我们插件的推特号数据（登录和未登录用户），这些数据来自Redis的DAU统计。
+        </p>
+        <div class="export-actions">
+          <button id="export-dau-files" class="export-btn primary">
+            <span class="btn-icon">📁</span>
+            查看DAU备份文件
+          </button>
+          <div class="export-info">
+            <small>点击按钮将在新标签页中打开备份文件列表</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 用户数据导出 -->
+    <div class="export-card">
+      <div class="export-card-header">
+        <h3>👥 用户数据导出</h3>
+        <p>导出已登录插件的用户数据（Excel格式）</p>
+      </div>
+      <div class="export-card-content">
+        <p class="export-description">
+          包含已登录我们插件的用户信息：Twitter ID、用户名和显示名称。
+        </p>
+        <div class="export-actions">
+          <button id="export-users-excel" class="export-btn secondary">
+            <span class="btn-icon">📊</span>
+            导出用户Excel
+          </button>
+          <div class="export-info">
+            <small>将下载包含所有已登录用户信息的Excel文件</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导出状态显示 -->
+  <div id="export-status" class="export-status" style="display: none">
+    <div class="status-content">
+      <div class="status-icon">⏳</div>
+      <div class="status-text">正在处理导出请求...</div>
+    </div>
+  </div>
+
+  <!-- 导出历史 -->
+  <div class="export-history">
+    <h3>📋 导出说明</h3>
+    <div class="history-list">
+      <div class="history-item">
+        <div class="history-icon">📊</div>
+        <div class="history-content">
+          <strong>DAU数据</strong>
+          <p>包含所有访问过我们插件的用户数据，无论是否登录</p>
+        </div>
+      </div>
+      <div class="history-item">
+        <div class="history-icon">👥</div>
+        <div class="history-content">
+          <strong>用户数据</strong>
+          <p>仅包含已登录我们插件的用户信息</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .export-container {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .export-header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .export-header h2 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+  }
+
+  .export-header p {
+    color: #7f8c8d;
+    font-size: 16px;
+  }
+
+  .export-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+
+  .export-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .export-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15);
+  }
+
+  .export-card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+  }
+
+  .export-card-header h3 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+  }
+
+  .export-card-header p {
+    margin: 0;
+    opacity: 0.9;
+    font-size: 14px;
+  }
+
+  .export-card-content {
+    padding: 20px;
+  }
+
+  .export-description {
+    color: #555;
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .export-actions {
+    text-align: center;
+  }
+
+  .export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    min-width: 200px;
+    justify-content: center;
+  }
+
+  .export-btn.primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+
+  .export-btn.primary:hover {
+    background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+    transform: translateY(-1px);
+  }
+
+  .export-btn.secondary {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+  }
+
+  .export-btn.secondary:hover {
+    background: linear-gradient(135deg, #ee82f0 0%, #f3455a 100%);
+    transform: translateY(-1px);
+  }
+
+  .export-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-icon {
+    font-size: 18px;
+  }
+
+  .export-info {
+    margin-top: 10px;
+  }
+
+  .export-info small {
+    color: #7f8c8d;
+    font-size: 12px;
+  }
+
+  .export-status {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px 30px;
+    border-radius: 10px;
+    z-index: 1000;
+  }
+
+  .status-content {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .status-icon {
+    font-size: 24px;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .export-history {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+  }
+
+  .export-history h3 {
+    color: #2c3e50;
+    margin-bottom: 15px;
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .history-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .history-icon {
+    font-size: 20px;
+    margin-top: 2px;
+  }
+
+  .history-content strong {
+    color: #2c3e50;
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  .history-content p {
+    color: #7f8c8d;
+    margin: 0;
+    font-size: 14px;
+  }
+
+  @media (max-width: 768px) {
+    .export-options {
+      grid-template-columns: 1fr;
+    }
+
+    .export-btn {
+      min-width: 100%;
+    }
+  }
+</style>
