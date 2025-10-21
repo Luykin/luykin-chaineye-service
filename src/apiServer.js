@@ -119,6 +119,8 @@ const corsOptions = {
       "http://127.0.0.1",
       "http://127.0.0.1:3000",
       "https://x.com",
+      "https://kb.cryptohunt.ai",
+      "http://kb.cryptohunt.ai",
     ];
 
     // 允许 chrome-extension:// 来源（任何插件）
@@ -274,8 +276,23 @@ app.use((error, req, res, next) => {
 
 // 错误处理中间件
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: "服务器内部错误！" });
+  console.error("❌ 服务器错误:", err.message);
+  console.error("❌ 错误堆栈:", err.stack);
+
+  // 如果是CORS错误，返回更友好的错误信息
+  if (err.message === "Not allowed by CORS") {
+    return res.status(403).json({
+      error: "CORS错误：请求被阻止",
+      message: "请检查域名是否在白名单中",
+      origin: req.headers.origin,
+    });
+  }
+
+  res.status(500).json({
+    error: "服务器内部错误！",
+    message: err.message,
+    stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+  });
 });
 
 // 启动 API 服务
