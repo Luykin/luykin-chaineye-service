@@ -1,29 +1,3 @@
-// 全局测试函数
-window.debugButtons = function () {
-  console.log("🔍 开始调试按钮...");
-
-  const backupBtn = document.getElementById("backup-all-dau");
-  const downloadBtn = document.getElementById("download-latest-backup");
-  const excelBtn = document.getElementById("export-users-excel");
-
-  console.log("备份按钮:", backupBtn);
-  console.log("下载按钮:", downloadBtn);
-  console.log("Excel按钮:", excelBtn);
-
-  if (backupBtn) {
-    console.log("备份按钮位置:", backupBtn.getBoundingClientRect());
-    console.log("备份按钮样式:", window.getComputedStyle(backupBtn));
-  }
-
-  // 尝试直接添加事件
-  if (backupBtn) {
-    backupBtn.onclick = function () {
-      console.log("🔥 通过onclick触发！");
-      alert("onclick测试成功！");
-    };
-  }
-};
-
 // Tab 切换功能
 document.addEventListener("DOMContentLoaded", function () {
   console.log("🚀 DOMContentLoaded 事件触发");
@@ -38,17 +12,12 @@ document.addEventListener("DOMContentLoaded", function () {
     // 绑定数据导出按钮事件
     bindExportEvents();
 
-    // 自动刷新页面（每5分钟）
+    // 自动刷新页面（每10分钟）
     setTimeout(() => {
       window.location.reload();
-    }, 5 * 60 * 1000);
+    }, 10 * 60 * 1000);
 
     console.log("✅ 所有初始化完成");
-
-    // 延迟调试
-    setTimeout(() => {
-      window.debugButtons();
-    }, 1000);
   } catch (error) {
     console.error("❌ 初始化过程中出错:", error);
   }
@@ -117,30 +86,9 @@ function bindExportEvents() {
 
   // DAU手动备份所有数据
   const backupAllDauBtn = document.getElementById("backup-all-dau");
-  console.log("🔍 查找备份按钮:", backupAllDauBtn);
-  console.log("🔍 备份按钮位置:", backupAllDauBtn?.offsetParent);
-  console.log(
-    "🔍 备份按钮可见性:",
-    backupAllDauBtn?.offsetWidth,
-    backupAllDauBtn?.offsetHeight
-  );
-
   if (backupAllDauBtn) {
-    // 先添加一个简单的测试事件
-    backupAllDauBtn.addEventListener("click", function (e) {
-      console.log("🔥 备份按钮被点击了！");
-      e.preventDefault();
-      e.stopPropagation();
-      alert("备份按钮点击测试成功！");
-    });
+    backupAllDauBtn.addEventListener("click", backupAllDAUData);
     console.log("✅ 备份按钮事件绑定成功");
-
-    // 测试直接调用
-    console.log("🧪 测试直接调用函数...");
-    window.testBackupClick = function () {
-      console.log("🔥 直接调用测试成功！");
-      alert("直接调用测试成功！");
-    };
   } else {
     console.error("❌ 未找到备份按钮");
   }
@@ -149,14 +97,8 @@ function bindExportEvents() {
   const downloadLatestBackupBtn = document.getElementById(
     "download-latest-backup"
   );
-  console.log("🔍 查找下载按钮:", downloadLatestBackupBtn);
   if (downloadLatestBackupBtn) {
-    // 先添加一个简单的测试事件
-    downloadLatestBackupBtn.addEventListener("click", function (e) {
-      console.log("🔥 下载按钮被点击了！");
-      e.preventDefault();
-      alert("下载按钮点击测试成功！");
-    });
+    downloadLatestBackupBtn.addEventListener("click", downloadLatestBackup);
     console.log("✅ 下载按钮事件绑定成功");
   } else {
     console.error("❌ 未找到下载按钮");
@@ -164,7 +106,6 @@ function bindExportEvents() {
 
   // 用户Excel导出
   const exportUsersExcelBtn = document.getElementById("export-users-excel");
-  console.log("🔍 查找Excel导出按钮:", exportUsersExcelBtn);
   if (exportUsersExcelBtn) {
     exportUsersExcelBtn.addEventListener("click", exportUsersExcel);
     console.log("✅ Excel导出按钮事件绑定成功");
@@ -357,7 +298,6 @@ function downloadCSV(csvContent, filename) {
 
 // 手动备份所有DAU数据
 function backupAllDAUData() {
-  console.log("🚀 backupAllDAUData 函数被调用");
   console.log("开始手动备份所有DAU数据...");
 
   // 确认操作
@@ -380,15 +320,23 @@ function backupAllDAUData() {
   }
 
   // 发送备份请求
+  console.log("🔄 发送备份请求到: /api/xhunt/dau-backup/backup-all");
+
   fetch("/api/xhunt/dau-backup/backup-all", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
   })
-    .then((response) => response.json())
+    .then((response) => {
+      console.log("📡 收到响应:", response.status, response.statusText);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    })
     .then((data) => {
-      console.log("备份结果:", data);
+      console.log("📊 备份结果:", data);
 
       if (data.success) {
         // 显示详细的成功消息和下载选项
@@ -404,8 +352,10 @@ function backupAllDAUData() {
       }
     })
     .catch((error) => {
-      console.error("备份请求失败:", error);
-      alert("备份请求失败: " + error.message);
+      console.error("❌ 备份请求失败:", error);
+      alert(
+        `备份请求失败：${error.message}\n\n请检查：\n1. 后端服务是否运行\n2. 网络连接是否正常\n3. 控制台是否有更多错误信息`
+      );
     })
     .finally(() => {
       // 隐藏加载状态
@@ -422,17 +372,27 @@ function backupAllDAUData() {
 
 // 下载最新的备份文件
 function downloadLatestBackup() {
-  console.log("🚀 downloadLatestBackup 函数被调用");
-  console.log("开始下载最新备份文件...");
+  console.log("🔄 开始下载最新备份文件...");
 
   // 显示加载状态
   showExportStatus("正在下载备份文件...");
 
   // 创建下载链接
   const downloadUrl = "/api/xhunt/dau-backup/download-latest";
+  console.log("📥 下载链接:", downloadUrl);
+
   const link = document.createElement("a");
   link.href = downloadUrl;
   link.style.display = "none";
+
+  // 添加错误处理
+  link.onerror = function () {
+    console.error("❌ 下载失败");
+    alert(
+      "下载失败，请检查：\n1. 备份文件是否存在\n2. 后端服务是否运行\n3. 网络连接是否正常"
+    );
+    hideExportStatus();
+  };
 
   // 添加到页面并触发下载
   document.body.appendChild(link);
@@ -440,11 +400,15 @@ function downloadLatestBackup() {
 
   // 清理
   setTimeout(() => {
-    document.body.removeChild(link);
+    try {
+      document.body.removeChild(link);
+    } catch (e) {
+      console.log("清理下载链接时出错:", e);
+    }
     hideExportStatus();
   }, 2000);
 
-  console.log("下载请求已发送");
+  console.log("✅ 下载请求已发送");
 }
 
 // 导出用户Excel文件
