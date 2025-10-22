@@ -155,7 +155,14 @@ const fingerprintLimiter = rateLimit({
   max: 1500,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.headers["x-device-fingerprint"] || req.ip,
+  keyGenerator: (req) => {
+    const fingerprint = req.headers["x-device-fingerprint"];
+    // 如果指纹是特定值，使用IP进行限速；否则使用指纹限速
+    if (fingerprint === "0fa18b367456abdea6060e931e4902b4") {
+      return req.ip;
+    }
+    return fingerprint || req.ip;
+  },
   handler: (req, res) => {
     res.status(429).json({
       error: "设备请求过于频繁，请稍后再试",
