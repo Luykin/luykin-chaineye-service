@@ -438,24 +438,38 @@ router.get("/log-search", basicAuth, async (req, res) => {
 
     // 获取所有日志文件
     const files = await fs.readdir(pm2LogsDir);
-    const logFiles = files
-      .filter((file) => file.endsWith(".log"))
-      .map((file) => ({
-        name: file,
-        path: path.join(pm2LogsDir, file),
-        mtime: 0, // 稍后设置
-      }));
+    const logFiles = [];
 
-    // 获取文件修改时间并排序（最新的在前）
-    for (const file of logFiles) {
-      try {
-        const stats = await fs.stat(file.path);
-        file.mtime = stats.mtime.getTime();
-      } catch (error) {
-        file.mtime = 0;
+    // 过滤和检查日志文件
+    for (const file of files) {
+      // 只处理 .log 文件且文件名包含日期格式 (YYYY-MM-DD)
+      if (file.endsWith(".log") && /\d{4}-\d{2}-\d{2}/.test(file)) {
+        const filePath = path.join(pm2LogsDir, file);
+
+        try {
+          const stats = await fs.stat(filePath);
+          const fileSizeMB = stats.size / (1024 * 1024); // 转换为MB
+
+          // 跳过大于100MB的文件
+          if (fileSizeMB > 100) {
+            console.log(`跳过大文件: ${file} (${fileSizeMB.toFixed(2)}MB)`);
+            continue;
+          }
+
+          logFiles.push({
+            name: file,
+            path: filePath,
+            mtime: stats.mtime.getTime(),
+            size: fileSizeMB,
+          });
+        } catch (error) {
+          console.error(`Error checking file ${file}:`, error);
+          continue;
+        }
       }
     }
 
+    // 按修改时间排序（最新的在前）
     logFiles.sort((a, b) => b.mtime - a.mtime);
 
     const results = [];
@@ -514,6 +528,11 @@ router.get("/log-search", basicAuth, async (req, res) => {
         totalMatches: totalMatches,
         results: results,
         searchedFiles: logFiles.length,
+        totalFiles: logFiles.length,
+        fileSizes: logFiles.map((f) => ({
+          name: f.name,
+          size: f.size,
+        })),
       },
     });
   } catch (error) {

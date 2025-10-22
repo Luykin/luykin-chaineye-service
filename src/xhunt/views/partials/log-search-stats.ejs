@@ -52,6 +52,12 @@
       <span id="totalMatches">0</span> 个匹配结果，搜索了
       <span id="searchedFiles">0</span> 个日志文件
     </div>
+    <div id="fileInfo" class="file-info" style="display: none">
+      <div class="file-list">
+        <h4>📁 搜索的日志文件：</h4>
+        <div id="fileList" class="file-list-items"></div>
+      </div>
+    </div>
   </div>
 
   <!-- 搜索结果 -->
@@ -192,6 +198,42 @@
   .stats-info {
     color: #27ae60;
     font-weight: 600;
+  }
+
+  .file-info {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #bdc3c7;
+  }
+
+  .file-list h4 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+
+  .file-list-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .file-item {
+    background: #ecf0f1;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #2c3e50;
+    border: 1px solid #bdc3c7;
+  }
+
+  .file-item .file-name {
+    font-weight: 600;
+  }
+
+  .file-item .file-size {
+    color: #7f8c8d;
+    margin-left: 5px;
   }
 
   .search-results {
@@ -337,6 +379,8 @@
     const noResults = document.getElementById("noResults");
     const searchError = document.getElementById("searchError");
     const retryBtn = document.getElementById("retryBtn");
+    const fileInfo = document.getElementById("fileInfo");
+    const fileList = document.getElementById("fileList");
 
     // 搜索函数
     async function performSearch() {
@@ -356,6 +400,7 @@
       searchResults.style.display = "none";
       noResults.style.display = "none";
       searchError.style.display = "none";
+      fileInfo.style.display = "none";
 
       try {
         const params = new URLSearchParams({
@@ -394,6 +439,11 @@
       document.getElementById("totalMatches").textContent = data.totalMatches;
       document.getElementById("searchedFiles").textContent = data.searchedFiles;
       searchStats.style.display = "block";
+
+      // 显示文件信息
+      if (data.fileSizes && data.fileSizes.length > 0) {
+        displayFileInfo(data.fileSizes);
+      }
 
       // 显示结果
       const resultsContainer = document.getElementById("searchResults");
@@ -444,6 +494,23 @@
     // 转义正则表达式特殊字符
     function escapeRegExp(string) {
       return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    // 显示文件信息
+    function displayFileInfo(fileSizes) {
+      fileList.innerHTML = "";
+
+      fileSizes.forEach((file) => {
+        const fileItem = document.createElement("div");
+        fileItem.className = "file-item";
+        fileItem.innerHTML = `
+           <span class="file-name">${file.name}</span>
+           <span class="file-size">(${file.size.toFixed(2)}MB)</span>
+         `;
+        fileList.appendChild(fileItem);
+      });
+
+      fileInfo.style.display = "block";
     }
 
     // 显示错误
