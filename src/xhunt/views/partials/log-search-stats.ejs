@@ -103,73 +103,73 @@
             <button id="retryBtn" class="retry-btn">🔄 重试</button>
           </div>
         </div>
+      </div>
 
-        <!-- 最新错误日志 Tab -->
-        <div class="sub-tab-pane" id="error-logs-tab">
-          <div class="error-logs-header">
-            <h3>❌ 最新API错误日志</h3>
-            <p>点击按钮查看最新的API错误日志</p>
-          </div>
+      <!-- 最新错误日志 Tab -->
+      <div class="sub-tab-pane" id="error-logs-tab">
+        <div class="error-logs-header">
+          <h3>❌ 最新API错误日志</h3>
+          <p>点击按钮查看最新的API错误日志</p>
+        </div>
 
-          <!-- 错误日志控制 -->
-          <div class="error-logs-controls">
-            <div class="form-row">
-              <div class="form-group">
-                <label for="errorLogLines">显示行数：</label>
-                <select id="errorLogLines" class="form-select">
-                  <option value="1000" selected>1000 行</option>
-                  <option value="5000">5000 行</option>
-                  <option value="10000">10000 行</option>
-                </select>
-              </div>
+        <!-- 错误日志控制 -->
+        <div class="error-logs-controls">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="errorLogLines">显示行数：</label>
+              <select id="errorLogLines" class="form-select">
+                <option value="1000" selected>1000 行</option>
+                <option value="5000">5000 行</option>
+                <option value="10000">10000 行</option>
+              </select>
+            </div>
 
-              <div class="form-group">
-                <button id="loadErrorLogsBtn" class="search-btn">
-                  <span class="btn-text">🔄 刷新查看最新日志</span>
-                  <span class="btn-loading" style="display: none"
-                    >⏳ 加载中...</span
-                  >
-                </button>
-              </div>
+            <div class="form-group">
+              <button id="loadErrorLogsBtn" class="search-btn">
+                <span class="btn-text">🔄 刷新查看最新日志</span>
+                <span class="btn-loading" style="display: none"
+                  >⏳ 加载中...</span
+                >
+              </button>
             </div>
           </div>
+        </div>
 
-          <!-- 错误日志统计 -->
-          <div id="errorLogsStats" class="search-stats" style="display: none">
-            <div class="stats-info">
-              加载了 <span id="totalErrorLines">0</span> 行错误日志，来自
-              <span id="errorLogFiles">0</span> 个文件
-            </div>
+        <!-- 错误日志统计 -->
+        <div id="errorLogsStats" class="search-stats" style="display: none">
+          <div class="stats-info">
+            加载了 <span id="totalErrorLines">0</span> 行错误日志，来自
+            <span id="errorLogFiles">0</span> 个文件
           </div>
+        </div>
 
-          <!-- 错误日志内容 -->
-          <div
-            id="errorLogsContent"
-            class="error-logs-content"
-            style="display: none"
-          >
-            <!-- 错误日志将通过 JavaScript 动态填充 -->
+        <!-- 错误日志内容 -->
+        <div
+          id="errorLogsContent"
+          class="error-logs-content"
+          style="display: none"
+        >
+          <!-- 错误日志将通过 JavaScript 动态填充 -->
+        </div>
+
+        <!-- 无错误日志提示 -->
+        <div id="noErrorLogs" class="no-results" style="display: none">
+          <div class="no-results-content">
+            <h3>📭 没有找到错误日志</h3>
+            <p>可能的原因：</p>
+            <ul>
+              <li>API服务运行正常，没有产生错误日志</li>
+              <li>错误日志文件不存在或无法访问</li>
+            </ul>
           </div>
+        </div>
 
-          <!-- 无错误日志提示 -->
-          <div id="noErrorLogs" class="no-results" style="display: none">
-            <div class="no-results-content">
-              <h3>📭 没有找到错误日志</h3>
-              <p>可能的原因：</p>
-              <ul>
-                <li>API服务运行正常，没有产生错误日志</li>
-                <li>错误日志文件不存在或无法访问</li>
-              </ul>
-            </div>
-          </div>
-
-          <!-- 错误日志加载失败提示 -->
-          <div id="errorLogsError" class="search-error" style="display: none">
-            <div class="error-content">
-              <h3>❌ 加载错误日志失败</h3>
-              <p id="errorLogsErrorMessage">发生了未知错误</p>
-              <button id="retryErrorLogsBtn" class="retry-btn">🔄 重试</button>
-            </div>
+        <!-- 错误日志加载失败提示 -->
+        <div id="errorLogsError" class="search-error" style="display: none">
+          <div class="error-content">
+            <h3>❌ 加载错误日志失败</h3>
+            <p id="errorLogsErrorMessage">发生了未知错误</p>
+            <button id="retryErrorLogsBtn" class="retry-btn">🔄 重试</button>
           </div>
         </div>
       </div>
@@ -732,6 +732,7 @@
       subTabBtns.forEach((btn) => {
         btn.addEventListener("click", function () {
           const targetTab = this.getAttribute("data-sub-tab");
+          console.log("点击了tab:", targetTab);
 
           // 移除所有active类
           subTabBtns.forEach((b) => b.classList.remove("active"));
@@ -739,7 +740,15 @@
 
           // 添加active类到当前选中的tab
           this.classList.add("active");
-          document.getElementById(targetTab + "-tab").classList.add("active");
+          const targetPane = document.getElementById(targetTab + "-tab");
+          console.log("目标面板:", targetPane);
+          console.log("所有面板:", subTabPanes);
+          if (targetPane) {
+            targetPane.classList.add("active");
+            console.log("成功切换到面板:", targetTab);
+          } else {
+            console.error("找不到目标面板:", targetTab + "-tab");
+          }
         });
       });
 
