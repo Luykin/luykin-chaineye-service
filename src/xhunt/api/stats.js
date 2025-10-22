@@ -471,7 +471,8 @@ router.get("/log-search", basicAuth, async (req, res) => {
         const content = await fs.readFile(file.path, "utf8");
         const lines = content.split("\n");
 
-        for (let i = 0; i < lines.length; i++) {
+        // 从文件底部开始往前搜索（最新的日志在底部）
+        for (let i = lines.length - 1; i >= 0; i--) {
           if (totalMatches >= limitNum) break;
 
           const line = lines[i];
