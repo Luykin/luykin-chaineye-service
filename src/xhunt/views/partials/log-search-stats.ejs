@@ -1,0 +1,465 @@
+<div class="log-search-container">
+  <div class="search-header">
+    <h2>🔍 日志搜索</h2>
+    <p>在 PM2 日志文件中搜索关键词，支持上下文展示和高亮显示</p>
+  </div>
+
+  <!-- 搜索表单 -->
+  <div class="search-form">
+    <div class="form-group">
+      <label for="searchQuery">搜索关键词：</label>
+      <input
+        type="text"
+        id="searchQuery"
+        placeholder="输入要搜索的关键词..."
+        class="search-input"
+      />
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="contextLines">上下文行数：</label>
+        <select id="contextLines" class="form-select">
+          <option value="1">1 行</option>
+          <option value="3" selected>3 行</option>
+          <option value="5">5 行</option>
+          <option value="10">10 行</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="resultLimit">结果限制：</label>
+        <select id="resultLimit" class="form-select">
+          <option value="50">50 条</option>
+          <option value="100" selected>100 条</option>
+          <option value="200">200 条</option>
+          <option value="500">500 条</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <button id="searchBtn" class="search-btn">
+          <span class="btn-text">🔍 搜索</span>
+          <span class="btn-loading" style="display: none">⏳ 搜索中...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 搜索结果统计 -->
+  <div id="searchStats" class="search-stats" style="display: none">
+    <div class="stats-info">
+      <span id="totalMatches">0</span> 个匹配结果，搜索了
+      <span id="searchedFiles">0</span> 个日志文件
+    </div>
+  </div>
+
+  <!-- 搜索结果 -->
+  <div id="searchResults" class="search-results" style="display: none">
+    <!-- 结果将通过 JavaScript 动态填充 -->
+  </div>
+
+  <!-- 无结果提示 -->
+  <div id="noResults" class="no-results" style="display: none">
+    <div class="no-results-content">
+      <h3>😔 没有找到匹配的结果</h3>
+      <p>请尝试：</p>
+      <ul>
+        <li>检查关键词拼写是否正确</li>
+        <li>尝试使用更简单的关键词</li>
+        <li>检查日志文件是否存在</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 错误提示 -->
+  <div id="searchError" class="search-error" style="display: none">
+    <div class="error-content">
+      <h3>❌ 搜索失败</h3>
+      <p id="errorMessage">发生了未知错误</p>
+      <button id="retryBtn" class="retry-btn">🔄 重试</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .log-search-container {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .search-header {
+    margin-bottom: 30px;
+    text-align: center;
+  }
+
+  .search-header h2 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+  }
+
+  .search-header p {
+    color: #7f8c8d;
+    font-size: 14px;
+  }
+
+  .search-form {
+    background: #f8f9fa;
+    padding: 25px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  .form-row {
+    display: flex;
+    gap: 20px;
+    align-items: end;
+    flex-wrap: wrap;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #2c3e50;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: border-color 0.3s ease;
+  }
+
+  .search-input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+
+  .form-select {
+    padding: 10px 12px;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    min-width: 120px;
+  }
+
+  .search-btn {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 120px;
+  }
+
+  .search-btn:hover {
+    background: linear-gradient(135deg, #2980b9, #1f5f8b);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+  }
+
+  .search-btn:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .search-stats {
+    background: #e8f5e8;
+    border: 1px solid #27ae60;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .stats-info {
+    color: #27ae60;
+    font-weight: 600;
+  }
+
+  .search-results {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
+
+  .result-item {
+    border-bottom: 1px solid #ecf0f1;
+    padding: 20px;
+    transition: background-color 0.2s ease;
+  }
+
+  .result-item:hover {
+    background-color: #f8f9fa;
+  }
+
+  .result-item:last-child {
+    border-bottom: none;
+  }
+
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .result-file {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 16px;
+  }
+
+  .result-line {
+    color: #7f8c8d;
+    font-size: 14px;
+    background: #ecf0f1;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
+  .context-lines {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+
+  .context-line {
+    margin: 2px 0;
+    padding: 2px 0;
+  }
+
+  .context-line.match-line {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding-left: 10px;
+    font-weight: 600;
+  }
+
+  .context-line .line-number {
+    color: #6c757d;
+    margin-right: 10px;
+    user-select: none;
+  }
+
+  .highlight {
+    background: #ffeb3b;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+
+  .no-results,
+  .search-error {
+    text-align: center;
+    padding: 60px 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  .no-results h3,
+  .search-error h3 {
+    color: #7f8c8d;
+    margin-bottom: 15px;
+  }
+
+  .no-results ul {
+    text-align: left;
+    display: inline-block;
+    color: #6c757d;
+  }
+
+  .retry-btn {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 15px;
+    transition: background-color 0.3s ease;
+  }
+
+  .retry-btn:hover {
+    background: #c0392b;
+  }
+
+  @media (max-width: 768px) {
+    .form-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .result-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const searchBtn = document.getElementById("searchBtn");
+    const searchQuery = document.getElementById("searchQuery");
+    const contextLines = document.getElementById("contextLines");
+    const resultLimit = document.getElementById("resultLimit");
+    const searchStats = document.getElementById("searchStats");
+    const searchResults = document.getElementById("searchResults");
+    const noResults = document.getElementById("noResults");
+    const searchError = document.getElementById("searchError");
+    const retryBtn = document.getElementById("retryBtn");
+
+    // 搜索函数
+    async function performSearch() {
+      const query = searchQuery.value.trim();
+      if (!query) {
+        alert("请输入搜索关键词");
+        return;
+      }
+
+      // 显示加载状态
+      searchBtn.disabled = true;
+      searchBtn.querySelector(".btn-text").style.display = "none";
+      searchBtn.querySelector(".btn-loading").style.display = "inline";
+
+      // 隐藏之前的结果
+      searchStats.style.display = "none";
+      searchResults.style.display = "none";
+      noResults.style.display = "none";
+      searchError.style.display = "none";
+
+      try {
+        const params = new URLSearchParams({
+          query: query,
+          contextLines: contextLines.value,
+          limit: resultLimit.value,
+        });
+
+        const response = await fetch(`/api/xhunt/stats/log-search?${params}`);
+        const data = await response.json();
+
+        if (data.success) {
+          displayResults(data.data);
+        } else {
+          showError(data.error);
+        }
+      } catch (error) {
+        console.error("Search error:", error);
+        showError("网络请求失败，请检查连接");
+      } finally {
+        // 恢复按钮状态
+        searchBtn.disabled = false;
+        searchBtn.querySelector(".btn-text").style.display = "inline";
+        searchBtn.querySelector(".btn-loading").style.display = "none";
+      }
+    }
+
+    // 显示搜索结果
+    function displayResults(data) {
+      if (data.totalMatches === 0) {
+        noResults.style.display = "block";
+        return;
+      }
+
+      // 显示统计信息
+      document.getElementById("totalMatches").textContent = data.totalMatches;
+      document.getElementById("searchedFiles").textContent = data.searchedFiles;
+      searchStats.style.display = "block";
+
+      // 显示结果
+      const resultsContainer = document.getElementById("searchResults");
+      resultsContainer.innerHTML = "";
+
+      data.results.forEach((result) => {
+        const resultItem = document.createElement("div");
+        resultItem.className = "result-item";
+
+        const contextHtml = result.context
+          .map((line) => {
+            const lineClass = line.isMatch
+              ? "context-line match-line"
+              : "context-line";
+            const highlightedContent = highlightText(line.content, data.query);
+            return `
+          <div class="${lineClass}">
+            <span class="line-number">${line.lineNumber}:</span>
+            ${highlightedContent}
+          </div>
+        `;
+          })
+          .join("");
+
+        resultItem.innerHTML = `
+        <div class="result-header">
+          <div class="result-file">📄 ${result.file}</div>
+          <div class="result-line">第 ${result.lineNumber} 行</div>
+        </div>
+        <div class="context-lines">
+          ${contextHtml}
+        </div>
+      `;
+
+        resultsContainer.appendChild(resultItem);
+      });
+
+      searchResults.style.display = "block";
+    }
+
+    // 高亮文本
+    function highlightText(text, query) {
+      if (!query) return text;
+      const regex = new RegExp(`(${escapeRegExp(query)})`, "gi");
+      return text.replace(regex, '<span class="highlight">$1</span>');
+    }
+
+    // 转义正则表达式特殊字符
+    function escapeRegExp(string) {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    // 显示错误
+    function showError(message) {
+      document.getElementById("errorMessage").textContent = message;
+      searchError.style.display = "block";
+    }
+
+    // 事件监听
+    searchBtn.addEventListener("click", performSearch);
+    retryBtn.addEventListener("click", performSearch);
+
+    searchQuery.addEventListener("keypress", function (e) {
+      if (e.key === "Enter") {
+        performSearch();
+      }
+    });
+  });
+</script>

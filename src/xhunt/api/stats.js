@@ -3,6 +3,8 @@ const path = require("path");
 const { getFullStats, getSimpleStats } = require("../services/statsService");
 const expressStatic = require("express");
 const XLSX = require("xlsx");
+const fs = require("fs").promises;
+const os = require("os");
 
 const router = express.Router();
 
@@ -401,6 +403,123 @@ router.get("/export/users/excel", basicAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       error: "导出用户数据失败",
+    });
+  }
+});
+
+/**
+ * GET /log-search
+ * 日志搜索接口（需要认证）
+ */
+router.get("/log-search", basicAuth, async (req, res) => {
+  try {
+    const { query, contextLines = 3, limit = 100 } = req.query;
+
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "搜索关键词不能为空",
+      });
+    }
+
+    // 获取 PM2 日志目录
+    const homeDir = os.homedir();
+    const pm2LogsDir = path.join(homeDir, ".pm2", "logs");
+
+    // 检查日志目录是否存在
+    try {
+      await fs.access(pm2LogsDir);
+    } catch (error) {
+      return res.status(404).json({
+        success: false,
+        error: "PM2 日志目录不存在",
+      });
+    }
+
+    // 获取所有日志文件
+    const files = await fs.readdir(pm2LogsDir);
+    const logFiles = files
+      .filter((file) => file.endsWith(".log"))
+      .map((file) => ({
+        name: file,
+        path: path.join(pm2LogsDir, file),
+        mtime: 0, // 稍后设置
+      }));
+
+    // 获取文件修改时间并排序（最新的在前）
+    for (const file of logFiles) {
+      try {
+        const stats = await fs.stat(file.path);
+        file.mtime = stats.mtime.getTime();
+      } catch (error) {
+        file.mtime = 0;
+      }
+    }
+
+    logFiles.sort((a, b) => b.mtime - a.mtime);
+
+    const results = [];
+    const contextLinesNum = parseInt(contextLines);
+    const limitNum = parseInt(limit);
+    let totalMatches = 0;
+
+    // 搜索每个日志文件
+    for (const file of logFiles) {
+      if (totalMatches >= limitNum) break;
+
+      try {
+        const content = await fs.readFile(file.path, "utf8");
+        const lines = content.split("\n");
+
+        for (let i = 0; i < lines.length; i++) {
+          if (totalMatches >= limitNum) break;
+
+          const line = lines[i];
+          if (line.toLowerCase().includes(query.toLowerCase())) {
+            // 获取上下文行
+            const startLine = Math.max(0, i - contextLinesNum);
+            const endLine = Math.min(lines.length - 1, i + contextLinesNum);
+
+            const context = [];
+            for (let j = startLine; j <= endLine; j++) {
+              context.push({
+                lineNumber: j + 1,
+                content: lines[j],
+                isMatch: j === i,
+              });
+            }
+
+            results.push({
+              file: file.name,
+              lineNumber: i + 1,
+              context: context,
+              matchLine: line,
+              timestamp: file.mtime,
+            });
+
+            totalMatches++;
+          }
+        }
+      } catch (error) {
+        console.error(`Error reading log file ${file.name}:`, error);
+        continue;
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        query: query,
+        totalMatches: totalMatches,
+        results: results,
+        searchedFiles: logFiles.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error searching logs:", error);
+    res.status(500).json({
+      success: false,
+      error: "日志搜索失败",
     });
   }
 });
