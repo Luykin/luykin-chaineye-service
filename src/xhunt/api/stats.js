@@ -442,25 +442,29 @@ router.get("/log-search", basicAuth, async (req, res) => {
 
     // 过滤和检查日志文件
     for (const file of files) {
-      // 只处理 .log 文件且文件名包含日期格式 (YYYY-MM-DD)
-      if (file.endsWith(".log") && /\d{4}-\d{2}-\d{2}/.test(file)) {
+      // 只处理 .log 文件
+      if (file.endsWith(".log")) {
         const filePath = path.join(pm2LogsDir, file);
 
         try {
           const stats = await fs.stat(filePath);
           const fileSizeMB = stats.size / (1024 * 1024); // 转换为MB
 
-          // 跳过大于100MB的文件
-          if (fileSizeMB > 100) {
+          // 跳过大于200MB的文件（提高限制，因为很多文件都比较大）
+          if (fileSizeMB > 200) {
             console.log(`跳过大文件: ${file} (${fileSizeMB.toFixed(2)}MB)`);
             continue;
           }
+
+          // 优先处理有日期格式的文件（PM2 logrotate 后的文件）
+          const hasDate = /\d{4}-\d{2}-\d{2}/.test(file);
 
           logFiles.push({
             name: file,
             path: filePath,
             mtime: stats.mtime.getTime(),
             size: fileSizeMB,
+            hasDate: hasDate, // 标记是否有日期格式
           });
         } catch (error) {
           console.error(`Error checking file ${file}:`, error);
@@ -469,8 +473,18 @@ router.get("/log-search", basicAuth, async (req, res) => {
       }
     }
 
-    // 按修改时间排序（最新的在前）
-    logFiles.sort((a, b) => b.mtime - a.mtime);
+    // 排序：优先处理有日期格式的文件，然后按修改时间排序（最新的在前）
+    logFiles.sort((a, b) => {
+      // 首先按是否有日期格式排序（有日期的优先）
+      if (a.hasDate && !b.hasDate) return -1;
+      if (!a.hasDate && b.hasDate) return 1;
+
+      // 然后按修改时间排序（最新的在前）
+      return b.mtime - a.mtime;
+    });
+
+    console.log(`找到 ${logFiles.length} 个可搜索的日志文件（小于100MB）`);
+    console.log(`搜索关键词: "${query}"`);
 
     const results = [];
     const contextLinesNum = parseInt(contextLines);
@@ -481,9 +495,12 @@ router.get("/log-search", basicAuth, async (req, res) => {
     for (const file of logFiles) {
       if (totalMatches >= limitNum) break;
 
+      console.log(`正在搜索文件: ${file.name} (${file.size.toFixed(2)}MB)`);
+
       try {
         const content = await fs.readFile(file.path, "utf8");
         const lines = content.split("\n");
+        console.log(`文件 ${file.name} 有 ${lines.length} 行`);
 
         // 从文件底部开始往前搜索（最新的日志在底部）
         for (let i = lines.length - 1; i >= 0; i--) {
@@ -491,6 +508,13 @@ router.get("/log-search", basicAuth, async (req, res) => {
 
           const line = lines[i];
           if (line.toLowerCase().includes(query.toLowerCase())) {
+            console.log(
+              `在文件 ${file.name} 第 ${i + 1} 行找到匹配: ${line.substring(
+                0,
+                100
+              )}...`
+            );
+
             // 获取上下文行
             const startLine = Math.max(0, i - contextLinesNum);
             const endLine = Math.min(lines.length - 1, i + contextLinesNum);
