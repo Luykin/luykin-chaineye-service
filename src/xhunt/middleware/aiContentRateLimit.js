@@ -83,7 +83,7 @@ async function aiContentRateLimit(req, res, next) {
     if (parseInt(currentCount) >= maxCalls) {
       return res.status(429).json({
         error: `已使用 ${currentCount}/${maxCalls} 次，请明天再试`,
-        message: `You have used ${currentCount}/${maxCalls} times today, please try again tomorrow`,
+        message: `今日已使用 ${currentCount}/${maxCalls} 次，请明天再试 (You have used ${currentCount}/${maxCalls} times today, please try again tomorrow)`,
         resetTime: getNextDayResetTime(beijingTime),
       });
     }
