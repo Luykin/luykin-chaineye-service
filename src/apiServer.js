@@ -176,7 +176,30 @@ app.use((req, res, next) => {
   // 非流式路由应用压缩
   compression()(req, res, next);
 });
-app.use(morgan("combined"));
+// 自定义 morgan 日志格式
+morgan.token("custom-info", function (req, res) {
+  const userAgent = req.get("User-Agent") || "";
+  const isChromeExtension = userAgent.includes("chrome-extension://");
+
+  // 获取需要的用户相关信息
+  const userId = req.headers["x-user-id"] || "anonymous";
+  const fingerprint = req.headers["x-device-fingerprint"] || "no-fingerprint";
+  const version = req.headers["x-extension-version"] || "no-version";
+  const windowLocationHref =
+    req.headers["x-window-location-href"] || "no-location";
+
+  // 获取IP信息
+  const realIp = req.headers["x-real-ip"] || "no-real-ip";
+  const forwardedFor = req.headers["x-forwarded-for"] || "no-forwarded-for";
+
+  return `pm2_app=luykin-chaineye-api custom_info=xhunt-service user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref} real_ip=${realIp} forwarded_for=${forwardedFor} is_extension=${isChromeExtension}`;
+});
+
+app.use(
+  morgan(
+    ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" :custom-info'
+  )
+);
 app.use(helmet.hidePoweredBy());
 app.use(helmet.xssFilter());
 app.use(helmet.noSniff());
