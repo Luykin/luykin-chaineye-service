@@ -544,6 +544,116 @@ router.get("/log-search", basicAuth, async (req, res) => {
 });
 
 /**
+ * GET /error-logs
+ * 获取最新API错误日志（需要认证）
+ */
+router.get("/error-logs", basicAuth, async (req, res) => {
+  try {
+    const { lines = 1000 } = req.query;
+    const linesNum = parseInt(lines);
+
+    // 获取 PM2 日志目录
+    const homeDir = os.homedir();
+    const pm2LogsDir = path.join(homeDir, ".pm2", "logs");
+
+    // 检查日志目录是否存在
+    try {
+      await fs.access(pm2LogsDir);
+    } catch (error) {
+      return res.status(404).json({
+        success: false,
+        error: "PM2 日志目录不存在",
+      });
+    }
+
+    // 获取所有API错误日志文件
+    const files = await fs.readdir(pm2LogsDir);
+    const errorLogFiles = [];
+
+    // 过滤API错误日志文件
+    for (const file of files) {
+      if (file.endsWith(".log") && file.includes("api-error")) {
+        const filePath = path.join(pm2LogsDir, file);
+
+        try {
+          const stats = await fs.stat(filePath);
+          const fileSizeMB = stats.size / (1024 * 1024);
+
+          // 跳过空文件
+          if (fileSizeMB === 0) {
+            continue;
+          }
+
+          errorLogFiles.push({
+            name: file,
+            path: filePath,
+            mtime: stats.mtime.getTime(),
+            size: fileSizeMB,
+          });
+        } catch (error) {
+          console.error(`Error checking file ${file}:`, error);
+          continue;
+        }
+      }
+    }
+
+    // 按修改时间排序（最新的在前）
+    errorLogFiles.sort((a, b) => b.mtime - a.mtime);
+
+    const allLogs = [];
+    let totalLines = 0;
+
+    // 读取每个错误日志文件的最新内容
+    for (const file of errorLogFiles) {
+      if (totalLines >= linesNum) break;
+
+      try {
+        const content = await fs.readFile(file.path, "utf8");
+        const lines = content
+          .split("\n")
+          .filter((line) => line.trim().length > 0);
+
+        // 从文件底部开始取最新的行
+        const remainingLines = linesNum - totalLines;
+        const startIndex = Math.max(0, lines.length - remainingLines);
+        const recentLines = lines.slice(startIndex);
+
+        // 为每行添加文件信息
+        recentLines.forEach((line) => {
+          allLogs.push(`[${file.name}] ${line}`);
+        });
+
+        totalLines += recentLines.length;
+      } catch (error) {
+        console.error(`Error reading log file ${file.name}:`, error);
+        continue;
+      }
+    }
+
+    // 按时间倒序排列（最新的在前）
+    allLogs.reverse();
+
+    res.json({
+      success: true,
+      data: {
+        logs: allLogs,
+        totalLines: allLogs.length,
+        files: errorLogFiles.map((f) => ({
+          name: f.name,
+          size: f.size,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Error loading error logs:", error);
+    res.status(500).json({
+      success: false,
+      error: "加载错误日志失败",
+    });
+  }
+});
+
+/**
  * GET /health
  * 健康检查接口（无需认证）
  */
