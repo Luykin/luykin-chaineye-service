@@ -16,92 +16,74 @@ const fileCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
 
 /**
- * 流式搜索日志文件 - 修复版本，支持完整上下文
+ * 高效搜索日志文件 - 优化版本
  */
-async function streamSearchLogFile(filePath, query, contextLines, limit) {
-  return new Promise((resolve, reject) => {
+async function searchLogFile(filePath, query, contextLines, limit) {
+  // 检查缓存
+  const cacheKey = `${filePath}-${query}-${contextLines}`;
+  const cached = fileCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.results.slice(0, limit);
+  }
+
+  try {
+    // 直接读取文件内容（对于日志文件，这通常是最快的方法）
+    const content = await fs.readFile(filePath, "utf8");
+    const lines = content.split("\n");
+
     const results = [];
-    const allLines = []; // 存储所有行
-    let lineNumber = 0;
     let matchCount = 0;
-    const matchPositions = []; // 存储匹配行的位置
 
-    // 检查缓存
-    const cacheKey = `${filePath}-${query}-${contextLines}`;
-    const cached = fileCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return resolve(cached.results.slice(0, limit));
-    }
+    // 从文件底部开始往前搜索（最新的日志在底部）
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (matchCount >= limit) break;
 
-    const fileStream = createReadStream(filePath, { encoding: "utf8" });
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-
-    rl.on("line", (line) => {
-      allLines.push(line);
-      lineNumber++;
-
-      // 搜索匹配行，记录位置
+      const line = lines[i];
       if (line.toLowerCase().includes(query.toLowerCase())) {
-        matchPositions.push(lineNumber - 1); // 存储0-based索引
-        matchCount++;
-        if (matchCount >= limit) {
-          rl.close();
-        }
-      }
-    });
+        // 获取上下文行
+        const startLine = Math.max(0, i - contextLines);
+        const endLine = Math.min(lines.length - 1, i + contextLines);
 
-    rl.on("close", () => {
-      // 处理所有匹配位置，生成完整上下文
-      for (let i = 0; i < Math.min(matchPositions.length, limit); i++) {
-        const matchPos = matchPositions[i];
         const context = [];
-
-        // 计算上下文范围
-        const startIdx = Math.max(0, matchPos - contextLines);
-        const endIdx = Math.min(allLines.length - 1, matchPos + contextLines);
-
-        // 生成上下文
-        for (let j = startIdx; j <= endIdx; j++) {
+        for (let j = startLine; j <= endLine; j++) {
           context.push({
             lineNumber: j + 1,
-            content: allLines[j],
-            isMatch: j === matchPos,
+            content: lines[j],
+            isMatch: j === i,
           });
         }
 
         results.push({
-          lineNumber: matchPos + 1,
+          lineNumber: i + 1,
           context: context,
-          matchLine: allLines[matchPos],
+          matchLine: line,
         });
+
+        matchCount++;
       }
+    }
 
-      // 缓存结果
-      fileCache.set(cacheKey, {
-        results: results,
-        timestamp: Date.now(),
-      });
+    // 缓存结果
+    fileCache.set(cacheKey, {
+      results: results,
+      timestamp: Date.now(),
+    });
 
-      // 清理旧缓存
-      if (fileCache.size > 50) {
-        const now = Date.now();
-        for (const [key, value] of fileCache.entries()) {
-          if (now - value.timestamp > CACHE_TTL) {
-            fileCache.delete(key);
-          }
+    // 清理旧缓存
+    if (fileCache.size > 50) {
+      const now = Date.now();
+      for (const [key, value] of fileCache.entries()) {
+        if (now - value.timestamp > CACHE_TTL) {
+          fileCache.delete(key);
         }
       }
+    }
 
-      resolve(results);
-    });
-
-    rl.on("error", (error) => {
-      reject(error);
-    });
-  });
+    return results;
+  } catch (error) {
+    console.error(`Error reading log file ${filePath}:`, error);
+    return [];
+  }
 }
 
 /**
@@ -573,44 +555,30 @@ router.get("/log-search", basicAuth, async (req, res) => {
     const limitNum = parseInt(limit);
     let totalMatches = 0;
 
-    // 并行搜索日志文件（限制并发数避免内存溢出）
-    const MAX_CONCURRENT_FILES = 4;
+    // 串行搜索日志文件（安全稳定）
+    for (const file of logFiles) {
+      if (totalMatches >= limitNum) break;
 
-    for (
-      let i = 0;
-      i < logFiles.length && totalMatches < limitNum;
-      i += MAX_CONCURRENT_FILES
-    ) {
-      const batch = logFiles.slice(i, i + MAX_CONCURRENT_FILES);
+      try {
+        const fileResults = await searchLogFile(
+          file.path,
+          query,
+          contextLinesNum,
+          limitNum - totalMatches
+        );
 
-      const batchPromises = batch.map(async (file) => {
-        if (totalMatches >= limitNum) return [];
+        const formattedResults = fileResults.map((result) => ({
+          ...result,
+          file: file.name,
+          timestamp: file.mtime,
+        }));
 
-        try {
-          // 使用流式搜索优化大文件处理
-          const fileResults = await streamSearchLogFile(
-            file.path,
-            query,
-            contextLinesNum,
-            limitNum - totalMatches
-          );
-
-          // 添加文件信息到结果
-          return fileResults.map((result) => ({
-            ...result,
-            file: file.name,
-            timestamp: file.mtime,
-          }));
-        } catch (error) {
-          console.error(`Error reading log file ${file.name}:`, error);
-          return [];
-        }
-      });
-
-      const batchResults = await Promise.all(batchPromises);
-      const flatResults = batchResults.flat();
-      results.push(...flatResults);
-      totalMatches += flatResults.length;
+        results.push(...formattedResults);
+        totalMatches += formattedResults.length;
+      } catch (error) {
+        console.error(`Error reading log file ${file.name}:`, error);
+        continue;
+      }
     }
 
     res.json({
