@@ -488,8 +488,8 @@
       handlers.forEach((handler, index) => {
         const reportUrl = urls[index] || "无报告链接";
         const personalizedContent = content
-          .replace(/\{\{username\}\}/g, handler)
-          .replace(/\{\{reportUrl\}\}/g, reportUrl);
+          .replace(/\{\{\s*username\s*\}\}/g, handler)
+          .replace(/\{\{\s*reportUrl\s*\}\}/g, reportUrl);
 
         const messageDiv = document.createElement("div");
         messageDiv.className = "preview-message";

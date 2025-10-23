@@ -704,12 +704,12 @@ router.get("/notes", basicAuth, async (req, res) => {
       include: [
         {
           model: XHuntUser,
-          as: "user",
+          as: "xHuntUser",
           attributes: ["id", "username", "displayName"],
         },
         {
           model: XAccount,
-          as: "account",
+          as: "xAccount",
           attributes: ["id", "handle", "displayName"],
         },
       ],
@@ -768,10 +768,10 @@ router.get("/notes", basicAuth, async (req, res) => {
       id: note.id,
       note: note.note,
       createdAt: note.createdAt,
-      userUsername: note.user?.username,
-      userDisplayName: note.user?.displayName,
-      accountHandle: note.account?.handle,
-      accountDisplayName: note.account?.displayName,
+      userUsername: note.xHuntUser?.username,
+      userDisplayName: note.xHuntUser?.displayName,
+      accountHandle: note.xAccount?.handle,
+      accountDisplayName: note.xAccount?.displayName,
     }));
 
     res.json({
@@ -876,8 +876,8 @@ router.post("/send-messages", basicAuth, async (req, res) => {
 
         // 个性化内容（替换占位符）
         const personalizedContent = content
-          .replace(/\{\{username\}\}/g, username)
-          .replace(/\{\{reportUrl\}\}/g, reportUrl);
+          .replace(/\{\{\s*username\s*\}\}/g, username)
+          .replace(/\{\{\s*reportUrl\s*\}\}/g, reportUrl);
 
         // 创建私信记录
         const message = await XPrivateMessage.create({
