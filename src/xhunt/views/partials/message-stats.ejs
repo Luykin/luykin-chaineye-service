@@ -393,6 +393,26 @@
 </style>
 
 <script>
+  // 插入占位符函数（全局作用域）
+  window.insertPlaceholder = function (placeholder) {
+    const textarea = document.getElementById("message-content");
+    if (!textarea) {
+      console.error("找不到 message-content 元素");
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const before = text.substring(0, start);
+    const after = text.substring(end, text.length);
+    textarea.value = before + placeholder + after;
+    textarea.focus();
+    textarea.setSelectionRange(
+      start + placeholder.length,
+      start + placeholder.length
+    );
+  };
+
   document.addEventListener("DOMContentLoaded", function () {
     // 绑定事件
     document
@@ -441,22 +461,6 @@
         .map((u) => u.trim())
         .filter((u) => u);
     }
-
-    // 插入占位符
-    window.insertPlaceholder = function (placeholder) {
-      const textarea = document.getElementById("message-content");
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const text = textarea.value;
-      const before = text.substring(0, start);
-      const after = text.substring(end, text.length);
-      textarea.value = before + placeholder + after;
-      textarea.focus();
-      textarea.setSelectionRange(
-        start + placeholder.length,
-        start + placeholder.length
-      );
-    };
 
     // 预览私信
     function previewMessages() {

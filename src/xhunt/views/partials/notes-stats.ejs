@@ -149,7 +149,7 @@
                 text-align: left;
                 border-bottom: 1px solid #e5e7eb;
                 font-weight: 600;
-                width: 8%;
+                width: 10%;
               "
             >
               序号
@@ -160,7 +160,7 @@
                 text-align: left;
                 border-bottom: 1px solid #e5e7eb;
                 font-weight: 600;
-                width: 15%;
+                width: 20%;
               "
             >
               备注用户
@@ -171,7 +171,7 @@
                 text-align: left;
                 border-bottom: 1px solid #e5e7eb;
                 font-weight: 600;
-                width: 15%;
+                width: 20%;
               "
             >
               被备注账号
@@ -182,7 +182,7 @@
                 text-align: left;
                 border-bottom: 1px solid #e5e7eb;
                 font-weight: 600;
-                width: 40%;
+                width: 35%;
               "
             >
               备注内容
@@ -193,21 +193,10 @@
                 text-align: left;
                 border-bottom: 1px solid #e5e7eb;
                 font-weight: 600;
-                width: 12%;
+                width: 15%;
               "
             >
               备注时间
-            </th>
-            <th
-              style="
-                padding: 12px;
-                text-align: left;
-                border-bottom: 1px solid #e5e7eb;
-                font-weight: 600;
-                width: 10%;
-              "
-            >
-              操作
             </th>
           </tr>
         </thead>
@@ -294,27 +283,6 @@
   .notes-time {
     font-size: 12px;
     color: #6b7280;
-  }
-
-  .notes-actions {
-    display: flex;
-    gap: 4px;
-  }
-
-  .notes-action-btn {
-    padding: 4px 8px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    background: white;
-    color: #374151;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .notes-action-btn:hover {
-    background: #f3f4f6;
-    border-color: #9ca3af;
   }
 
   .pagination-btn {
@@ -413,43 +381,36 @@
         });
 
         row.innerHTML = `
-                <td style="padding: 12px; color: #374151;">${index + 1}</td>
-                <td style="padding: 12px;">
-                    <div class="notes-user-info">
-                        <div class="notes-user-name">${
-                          note.userDisplayName || "未知用户"
-                        }</div>
-                        <div class="notes-user-username">@${
-                          note.userUsername || "unknown"
-                        }</div>
-                    </div>
-                </td>
-                <td style="padding: 12px;">
-                    <div class="notes-account-info">
-                        <div class="notes-account-handle">@${
-                          note.accountHandle || "unknown"
-                        }</div>
-                        <div class="notes-account-name">${
-                          note.accountDisplayName || "未知账号"
-                        }</div>
-                    </div>
-                </td>
-                <td style="padding: 12px;">
-                    <div class="notes-note-content">${
-                      note.note || "无备注内容"
-                    }</div>
-                </td>
-                <td style="padding: 12px;">
-                    <div class="notes-time">${time}</div>
-                </td>
-                <td style="padding: 12px;">
-                    <div class="notes-actions">
-                        <button class="notes-action-btn" onclick="copyNote('${
-                          note.note || ""
-                        }')">复制</button>
-                    </div>
-                </td>
-            `;
+                 <td style="padding: 12px; color: #374151;">${index + 1}</td>
+                 <td style="padding: 12px;">
+                     <div class="notes-user-info">
+                         <div class="notes-user-name">${
+                           note.userDisplayName || "未知用户"
+                         }</div>
+                         <div class="notes-user-username">@${
+                           note.userUsername || "unknown"
+                         }</div>
+                     </div>
+                 </td>
+                 <td style="padding: 12px;">
+                     <div class="notes-account-info">
+                         <div class="notes-account-handle">@${
+                           note.accountHandle || "unknown"
+                         }</div>
+                         <div class="notes-account-name">${
+                           note.accountDisplayName || "未知账号"
+                         }</div>
+                     </div>
+                 </td>
+                 <td style="padding: 12px;">
+                     <div class="notes-note-content">${
+                       note.note || "无备注内容"
+                     }</div>
+                 </td>
+                 <td style="padding: 12px;">
+                     <div class="notes-time">${time}</div>
+                 </td>
+             `;
 
         tbody.appendChild(row);
       });
@@ -510,18 +471,5 @@
 
       displayNotes(sortedNotes);
     }
-
-    // 复制备注内容
-    window.copyNote = function (note) {
-      navigator.clipboard
-        .writeText(note)
-        .then(() => {
-          alert("备注内容已复制到剪贴板");
-        })
-        .catch((err) => {
-          console.error("复制失败:", err);
-          alert("复制失败");
-        });
-    };
   });
 </script>

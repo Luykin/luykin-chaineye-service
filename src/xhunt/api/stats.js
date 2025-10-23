@@ -881,7 +881,7 @@ router.post("/send-messages", basicAuth, async (req, res) => {
 
         // 创建私信记录
         const message = await XPrivateMessage.create({
-          senderId: req.user?.id || "00000000-0000-0000-0000-000000000000", // 使用系统ID或从认证中获取
+          senderId: "6666666d-cc11-8888-8888-034d3e9a8888",
           receiverId: user.id,
           title: title,
           content: personalizedContent,
