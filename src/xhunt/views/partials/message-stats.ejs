@@ -137,38 +137,6 @@
           font-family: monospace;
         "
       ></textarea>
-      <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap">
-        <button
-          type="button"
-          onclick="insertPlaceholder('{{ username }}')"
-          style="
-            padding: 4px 8px;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
-            background: white;
-            color: #374151;
-            font-size: 12px;
-            cursor: pointer;
-          "
-        >
-          插入 {{ username }}
-        </button>
-        <button
-          type="button"
-          onclick="insertPlaceholder('{{ reportUrl }}')"
-          style="
-            padding: 4px 8px;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
-            background: white;
-            color: #374151;
-            font-size: 12px;
-            cursor: pointer;
-          "
-        >
-          插入 {{ reportUrl }}
-        </button>
-      </div>
     </div>
 
     <!-- 报告链接输入 -->
@@ -314,7 +282,7 @@
       >
         <h3 style="margin: 0; color: #374151">私信预览</h3>
         <button
-          onclick="closePreview()"
+          id="close-preview-btn"
           style="
             background: none;
             border: none;
@@ -393,26 +361,6 @@
 </style>
 
 <script>
-  // 插入占位符函数（全局作用域）
-  window.insertPlaceholder = function (placeholder) {
-    const textarea = document.getElementById("message-content");
-    if (!textarea) {
-      console.error("找不到 message-content 元素");
-      return;
-    }
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value;
-    const before = text.substring(0, start);
-    const after = text.substring(end, text.length);
-    textarea.value = before + placeholder + after;
-    textarea.focus();
-    textarea.setSelectionRange(
-      start + placeholder.length,
-      start + placeholder.length
-    );
-  };
-
   document.addEventListener("DOMContentLoaded", function () {
     // 绑定事件
     document
@@ -489,7 +437,8 @@
       const previewContent = document.getElementById("preview-content");
       previewContent.innerHTML = "";
 
-      handlers.forEach((handler, index) => {
+      // 只预览前两个用户
+      handlers.slice(0, 2).forEach((handler, index) => {
         const reportUrl = urls[index] || "无报告链接";
         const personalizedContent = content
           .replace(/\{\{\s*username\s*\}\}/g, handler)
@@ -507,6 +456,15 @@
         previewContent.appendChild(messageDiv);
       });
 
+      // 如果用户数量超过2个，显示提示
+      if (handlers.length > 2) {
+        const tipDiv = document.createElement("div");
+        tipDiv.style.cssText =
+          "margin-top: 16px; padding: 12px; background: #f0f9ff; border: 1px solid #3b82f6; border-radius: 6px; color: #1e40af; font-size: 14px;";
+        tipDiv.innerHTML = `📝 仅显示前2个用户的预览，实际将发送给 ${handlers.length} 个用户`;
+        previewContent.appendChild(tipDiv);
+      }
+
       document.getElementById("preview-modal").style.display = "block";
     }
 
@@ -514,6 +472,20 @@
     window.closePreview = function () {
       document.getElementById("preview-modal").style.display = "none";
     };
+
+    // 绑定关闭按钮事件
+    document
+      .getElementById("close-preview-btn")
+      .addEventListener("click", closePreview);
+
+    // 点击模态框背景关闭
+    document
+      .getElementById("preview-modal")
+      .addEventListener("click", function (e) {
+        if (e.target === this) {
+          closePreview();
+        }
+      });
 
     // 发送私信
     function sendMessages() {
