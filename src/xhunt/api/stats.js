@@ -4,9 +4,102 @@ const { getFullStats, getSimpleStats } = require("../services/statsService");
 const expressStatic = require("express");
 const XLSX = require("xlsx");
 const fs = require("fs").promises;
+const fsSync = require("fs");
 const os = require("os");
+const { createReadStream } = require("fs");
+const readline = require("readline");
 
 const router = express.Router();
+
+// 文件缓存，避免重复读取
+const fileCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
+
+/**
+ * 流式搜索日志文件
+ */
+async function streamSearchLogFile(filePath, query, contextLines, limit) {
+  return new Promise((resolve, reject) => {
+    const results = [];
+    const lines = [];
+    let lineNumber = 0;
+    let matchCount = 0;
+
+    // 检查缓存
+    const cacheKey = `${filePath}-${query}-${contextLines}`;
+    const cached = fileCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return resolve(cached.results.slice(0, limit));
+    }
+
+    const fileStream = createReadStream(filePath, { encoding: "utf8" });
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    });
+
+    rl.on("line", (line) => {
+      lines.push(line);
+      lineNumber++;
+
+      // 保持最近的行在内存中（用于上下文）
+      if (lines.length > contextLines * 2 + 1) {
+        lines.shift();
+      }
+
+      // 搜索匹配行
+      if (line.toLowerCase().includes(query.toLowerCase())) {
+        const context = [];
+        const startIdx = Math.max(0, lines.length - contextLines - 1);
+        const endIdx = lines.length - 1;
+
+        for (let i = startIdx; i <= endIdx; i++) {
+          const actualLineNum = lineNumber - (endIdx - i);
+          context.push({
+            lineNumber: actualLineNum,
+            content: lines[i],
+            isMatch: i === endIdx,
+          });
+        }
+
+        results.push({
+          lineNumber: lineNumber,
+          context: context,
+          matchLine: line,
+        });
+
+        matchCount++;
+        if (matchCount >= limit) {
+          rl.close();
+        }
+      }
+    });
+
+    rl.on("close", () => {
+      // 缓存结果
+      fileCache.set(cacheKey, {
+        results: results,
+        timestamp: Date.now(),
+      });
+
+      // 清理旧缓存
+      if (fileCache.size > 50) {
+        const now = Date.now();
+        for (const [key, value] of fileCache.entries()) {
+          if (now - value.timestamp > CACHE_TTL) {
+            fileCache.delete(key);
+          }
+        }
+      }
+
+      resolve(results);
+    });
+
+    rl.on("error", (error) => {
+      reject(error);
+    });
+  });
+}
 
 /**
  * 格式化数字（添加千分位分隔符）
@@ -409,11 +502,11 @@ router.get("/export/users/excel", basicAuth, async (req, res) => {
 
 /**
  * GET /log-search
- * 日志搜索接口（需要认证）
+ * 日志搜索接口（需要认证）- 优化版本
  */
 router.get("/log-search", basicAuth, async (req, res) => {
   try {
-    const { query, contextLines = 3, limit = 100 } = req.query;
+    const { query, contextLines = 3, limit = 5 } = req.query;
 
     if (!query || query.trim().length === 0) {
       return res.status(400).json({
@@ -440,33 +533,34 @@ router.get("/log-search", basicAuth, async (req, res) => {
     const files = await fs.readdir(pm2LogsDir);
     const logFiles = [];
 
-    // 过滤和检查日志文件
-    for (const file of files) {
-      // 只处理 .log 文件
-      if (file.endsWith(".log")) {
+    // 并行过滤和检查日志文件
+    const fileCheckPromises = files
+      .filter((file) => file.endsWith(".log"))
+      .map(async (file) => {
         const filePath = path.join(pm2LogsDir, file);
-
         try {
           const stats = await fs.stat(filePath);
-          const fileSizeMB = stats.size / (1024 * 1024); // 转换为MB
+          const fileSizeMB = stats.size / (1024 * 1024);
 
           // 跳过大于200MB的文件或0MB的空文件
           if (fileSizeMB > 200 || fileSizeMB === 0) {
-            continue;
+            return null;
           }
 
-          logFiles.push({
+          return {
             name: file,
             path: filePath,
             mtime: stats.mtime.getTime(),
             size: fileSizeMB,
-          });
+          };
         } catch (error) {
           console.error(`Error checking file ${file}:`, error);
-          continue;
+          return null;
         }
-      }
-    }
+      });
+
+    const fileResults = await Promise.all(fileCheckPromises);
+    logFiles.push(...fileResults.filter((file) => file !== null));
 
     // 按修改时间排序（最新的在前）
     logFiles.sort((a, b) => b.mtime - a.mtime);
@@ -476,48 +570,44 @@ router.get("/log-search", basicAuth, async (req, res) => {
     const limitNum = parseInt(limit);
     let totalMatches = 0;
 
-    // 搜索每个日志文件
-    for (const file of logFiles) {
-      if (totalMatches >= limitNum) break;
+    // 并行搜索日志文件（限制并发数避免内存溢出）
+    const MAX_CONCURRENT_FILES = 2;
 
-      try {
-        const content = await fs.readFile(file.path, "utf8");
-        const lines = content.split("\n");
+    for (
+      let i = 0;
+      i < logFiles.length && totalMatches < limitNum;
+      i += MAX_CONCURRENT_FILES
+    ) {
+      const batch = logFiles.slice(i, i + MAX_CONCURRENT_FILES);
 
-        // 从文件底部开始往前搜索（最新的日志在底部）
-        for (let i = lines.length - 1; i >= 0; i--) {
-          if (totalMatches >= limitNum) break;
+      const batchPromises = batch.map(async (file) => {
+        if (totalMatches >= limitNum) return [];
 
-          const line = lines[i];
-          if (line.toLowerCase().includes(query.toLowerCase())) {
-            // 获取上下文行
-            const startLine = Math.max(0, i - contextLinesNum);
-            const endLine = Math.min(lines.length - 1, i + contextLinesNum);
+        try {
+          // 使用流式搜索优化大文件处理
+          const fileResults = await streamSearchLogFile(
+            file.path,
+            query,
+            contextLinesNum,
+            limitNum - totalMatches
+          );
 
-            const context = [];
-            for (let j = startLine; j <= endLine; j++) {
-              context.push({
-                lineNumber: j + 1,
-                content: lines[j],
-                isMatch: j === i,
-              });
-            }
-
-            results.push({
-              file: file.name,
-              lineNumber: i + 1,
-              context: context,
-              matchLine: line,
-              timestamp: file.mtime,
-            });
-
-            totalMatches++;
-          }
+          // 添加文件信息到结果
+          return fileResults.map((result) => ({
+            ...result,
+            file: file.name,
+            timestamp: file.mtime,
+          }));
+        } catch (error) {
+          console.error(`Error reading log file ${file.name}:`, error);
+          return [];
         }
-      } catch (error) {
-        console.error(`Error reading log file ${file.name}:`, error);
-        continue;
-      }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      const flatResults = batchResults.flat();
+      results.push(...flatResults);
+      totalMatches += flatResults.length;
     }
 
     res.json({
