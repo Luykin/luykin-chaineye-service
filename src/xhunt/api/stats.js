@@ -43,22 +43,27 @@ async function streamSearchLogFile(filePath, query, contextLines, limit) {
       lineNumber++;
 
       // 保持最近的行在内存中（用于上下文）
-      if (lines.length > contextLines * 2 + 1) {
+      // 需要保持足够多的行来提供上下文的上下文
+      if (lines.length > contextLines * 3 + 1) {
         lines.shift();
       }
 
       // 搜索匹配行
       if (line.toLowerCase().includes(query.toLowerCase())) {
         const context = [];
-        const startIdx = Math.max(0, lines.length - contextLines - 1);
-        const endIdx = lines.length - 1;
+        const matchLineIndex = lines.length - 1; // 当前匹配行在lines数组中的索引
+        const startIdx = Math.max(0, matchLineIndex - contextLines);
+        const endIdx = Math.min(
+          lines.length - 1,
+          matchLineIndex + contextLines
+        );
 
         for (let i = startIdx; i <= endIdx; i++) {
-          const actualLineNum = lineNumber - (endIdx - i);
+          const actualLineNum = lineNumber - (matchLineIndex - i);
           context.push({
             lineNumber: actualLineNum,
             content: lines[i],
-            isMatch: i === endIdx,
+            isMatch: i === matchLineIndex,
           });
         }
 
