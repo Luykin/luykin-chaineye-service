@@ -1,0 +1,685 @@
+<!-- 发送私信统计 -->
+<div class="section">
+  <h2 class="section-title">💬 批量发送私信</h2>
+  <p style="color: #6b7280; margin-bottom: 20px; font-size: 14px">
+    批量发送私信给多个用户，支持个性化内容和报告链接
+  </p>
+
+  <!-- 发送私信表单 -->
+  <div class="message-form" style="max-width: 800px">
+    <!-- 活动ID输入 -->
+    <div class="form-group" style="margin-bottom: 20px">
+      <label
+        for="campaign-id"
+        style="
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: #374151;
+        "
+      >
+        活动ID (Campaign ID) <span style="color: #ef4444">*</span>
+      </label>
+      <input
+        type="text"
+        id="campaign-id"
+        placeholder="例如: kol_report_20250127"
+        style="
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+        "
+      />
+    </div>
+
+    <!-- 用户Handler输入 -->
+    <div class="form-group" style="margin-bottom: 20px">
+      <label
+        for="user-handlers"
+        style="
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: #374151;
+        "
+      >
+        用户Handler <span style="color: #ef4444">*</span>
+        <span style="font-size: 12px; color: #6b7280; font-weight: normal">
+          (多个用户用逗号或回车分隔)
+        </span>
+      </label>
+      <textarea
+        id="user-handlers"
+        rows="4"
+        placeholder="例如: FloriaT96249,luoyukun4,alpha_gege"
+        style="
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+          resize: vertical;
+          font-family: monospace;
+        "
+      ></textarea>
+      <div
+        id="handler-count"
+        style="margin-top: 4px; font-size: 12px; color: #6b7280"
+      >
+        已输入 0 个用户
+      </div>
+    </div>
+
+    <!-- 私信标题输入 -->
+    <div class="form-group" style="margin-bottom: 20px">
+      <label
+        for="message-title"
+        style="
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: #374151;
+        "
+      >
+        私信标题 <span style="color: #ef4444">*</span>
+      </label>
+      <input
+        type="text"
+        id="message-title"
+        placeholder="例如: 🎉 您的专属KOL分析报告已生成！"
+        style="
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+        "
+      />
+    </div>
+
+    <!-- 私信内容输入 -->
+    <div class="form-group" style="margin-bottom: 20px">
+      <label
+        for="message-content"
+        style="
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: #374151;
+        "
+      >
+        私信内容 <span style="color: #ef4444">*</span>
+        <span style="font-size: 12px; color: #6b7280; font-weight: normal">
+          (支持占位符: {{ username }} 和 {{ reportUrl }})
+        </span>
+      </label>
+      <textarea
+        id="message-content"
+        rows="8"
+        placeholder="例如: 亲爱的 {{
+          username
+        }}，\n\n我们很高兴地通知您，您的专属KOL影响力分析报告已经生成完成！\n\n[🔍 查看我的专属报告]({{
+          reportUrl
+        }})\n\n感谢您对CryptoHunt社区的支持！"
+        style="
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+          resize: vertical;
+          font-family: monospace;
+        "
+      ></textarea>
+      <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap">
+        <button
+          type="button"
+          onclick="insertPlaceholder('{{ username }}')"
+          style="
+            padding: 4px 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            background: white;
+            color: #374151;
+            font-size: 12px;
+            cursor: pointer;
+          "
+        >
+          插入 {{ username }}
+        </button>
+        <button
+          type="button"
+          onclick="insertPlaceholder('{{ reportUrl }}')"
+          style="
+            padding: 4px 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            background: white;
+            color: #374151;
+            font-size: 12px;
+            cursor: pointer;
+          "
+        >
+          插入 {{ reportUrl }}
+        </button>
+      </div>
+    </div>
+
+    <!-- 报告链接输入 -->
+    <div class="form-group" style="margin-bottom: 20px">
+      <label
+        for="report-urls"
+        style="
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: #374151;
+        "
+      >
+        报告链接
+        <span style="font-size: 12px; color: #6b7280; font-weight: normal">
+          (多个链接用逗号或回车分隔，顺序与用户Handler对应)
+        </span>
+      </label>
+      <textarea
+        id="report-urls"
+        rows="4"
+        placeholder="例如: https://xhunt.ai/kolreport/user1-abc123,https://xhunt.ai/kolreport/user2-def456"
+        style="
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+          resize: vertical;
+          font-family: monospace;
+        "
+      ></textarea>
+      <div
+        id="url-count"
+        style="margin-top: 4px; font-size: 12px; color: #6b7280"
+      >
+        已输入 0 个链接
+      </div>
+    </div>
+
+    <!-- 发送按钮 -->
+    <div class="form-group" style="margin-bottom: 20px">
+      <button
+        id="send-messages-btn"
+        style="
+          padding: 12px 24px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background-color 0.2s;
+        "
+        onmouseover="this.style.backgroundColor='#2563eb'"
+        onmouseout="this.style.backgroundColor='#3b82f6'"
+      >
+        <span class="btn-icon">📤</span>发送私信
+      </button>
+      <button
+        id="preview-messages-btn"
+        style="
+          padding: 12px 24px;
+          background: #6b7280;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background-color 0.2s;
+          margin-left: 12px;
+        "
+        onmouseover="this.style.backgroundColor='#4b5563'"
+        onmouseout="this.style.backgroundColor='#6b7280'"
+      >
+        <span class="btn-icon">👁️</span>预览私信
+      </button>
+    </div>
+  </div>
+
+  <!-- 加载状态 -->
+  <div
+    id="message-loading"
+    style="display: none; text-align: center; padding: 20px; color: #6b7280"
+  >
+    <div
+      style="
+        display: inline-block;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+      "
+    >
+      ⏳
+    </div>
+    正在发送私信...
+  </div>
+
+  <!-- 发送结果 -->
+  <div id="message-results" style="display: none">
+    <h3 style="margin-bottom: 16px; color: #374151">发送结果</h3>
+    <div id="results-content"></div>
+  </div>
+
+  <!-- 预览模态框 -->
+  <div
+    id="preview-modal"
+    style="
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+    "
+  >
+    <div
+      style="
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        border-radius: 8px;
+        padding: 24px;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      "
+    >
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+        "
+      >
+        <h3 style="margin: 0; color: #374151">私信预览</h3>
+        <button
+          onclick="closePreview()"
+          style="
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+          "
+        >
+          ×
+        </button>
+      </div>
+      <div id="preview-content"></div>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  .result-item {
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    margin-bottom: 8px;
+  }
+
+  .result-success {
+    background: #f0fdf4;
+    border-color: #22c55e;
+  }
+
+  .result-error {
+    background: #fef2f2;
+    border-color: #ef4444;
+  }
+
+  .result-not-found {
+    background: #fefce8;
+    border-color: #eab308;
+  }
+
+  .result-already-sent {
+    background: #f0f9ff;
+    border-color: #3b82f6;
+  }
+
+  .preview-message {
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: #f9fafb;
+  }
+
+  .preview-message h4 {
+    margin: 0 0 8px 0;
+    color: #374151;
+  }
+
+  .preview-message p {
+    margin: 0;
+    white-space: pre-wrap;
+    color: #6b7280;
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // 绑定事件
+    document
+      .getElementById("user-handlers")
+      .addEventListener("input", updateHandlerCount);
+    document
+      .getElementById("report-urls")
+      .addEventListener("input", updateUrlCount);
+    document
+      .getElementById("send-messages-btn")
+      .addEventListener("click", sendMessages);
+    document
+      .getElementById("preview-messages-btn")
+      .addEventListener("click", previewMessages);
+
+    // 更新用户数量
+    function updateHandlerCount() {
+      const handlers = parseHandlers(
+        document.getElementById("user-handlers").value
+      );
+      document.getElementById(
+        "handler-count"
+      ).textContent = `已输入 ${handlers.length} 个用户`;
+    }
+
+    // 更新链接数量
+    function updateUrlCount() {
+      const urls = parseUrls(document.getElementById("report-urls").value);
+      document.getElementById(
+        "url-count"
+      ).textContent = `已输入 ${urls.length} 个链接`;
+    }
+
+    // 解析用户Handler
+    function parseHandlers(text) {
+      return text
+        .split(/[,\n]/)
+        .map((h) => h.trim())
+        .filter((h) => h);
+    }
+
+    // 解析报告链接
+    function parseUrls(text) {
+      return text
+        .split(/[,\n]/)
+        .map((u) => u.trim())
+        .filter((u) => u);
+    }
+
+    // 插入占位符
+    window.insertPlaceholder = function (placeholder) {
+      const textarea = document.getElementById("message-content");
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      const before = text.substring(0, start);
+      const after = text.substring(end, text.length);
+      textarea.value = before + placeholder + after;
+      textarea.focus();
+      textarea.setSelectionRange(
+        start + placeholder.length,
+        start + placeholder.length
+      );
+    };
+
+    // 预览私信
+    function previewMessages() {
+      const handlers = parseHandlers(
+        document.getElementById("user-handlers").value
+      );
+      const urls = parseUrls(document.getElementById("report-urls").value);
+      const title = document.getElementById("message-title").value;
+      const content = document.getElementById("message-content").value;
+
+      if (!handlers.length) {
+        alert("请输入用户Handler");
+        return;
+      }
+
+      if (!title) {
+        alert("请输入私信标题");
+        return;
+      }
+
+      if (!content) {
+        alert("请输入私信内容");
+        return;
+      }
+
+      const previewContent = document.getElementById("preview-content");
+      previewContent.innerHTML = "";
+
+      handlers.forEach((handler, index) => {
+        const reportUrl = urls[index] || "无报告链接";
+        const personalizedContent = content
+          .replace(/\{\{username\}\}/g, handler)
+          .replace(/\{\{reportUrl\}\}/g, reportUrl);
+
+        const messageDiv = document.createElement("div");
+        messageDiv.className = "preview-message";
+        messageDiv.innerHTML = `
+          <h4>@${handler}</h4>
+          <p><strong>标题:</strong> ${title}</p>
+          <p><strong>内容:</strong></p>
+          <p>${personalizedContent}</p>
+          <p><strong>报告链接:</strong> ${reportUrl}</p>
+        `;
+        previewContent.appendChild(messageDiv);
+      });
+
+      document.getElementById("preview-modal").style.display = "block";
+    }
+
+    // 关闭预览
+    window.closePreview = function () {
+      document.getElementById("preview-modal").style.display = "none";
+    };
+
+    // 发送私信
+    function sendMessages() {
+      const campaignId = document.getElementById("campaign-id").value;
+      const handlers = parseHandlers(
+        document.getElementById("user-handlers").value
+      );
+      const urls = parseUrls(document.getElementById("report-urls").value);
+      const title = document.getElementById("message-title").value;
+      const content = document.getElementById("message-content").value;
+
+      // 验证输入
+      if (!campaignId) {
+        alert("请输入活动ID");
+        return;
+      }
+
+      if (!handlers.length) {
+        alert("请输入用户Handler");
+        return;
+      }
+
+      if (!title) {
+        alert("请输入私信标题");
+        return;
+      }
+
+      if (!content) {
+        alert("请输入私信内容");
+        return;
+      }
+
+      // 确认发送
+      if (!confirm(`确定要发送私信给 ${handlers.length} 个用户吗？`)) {
+        return;
+      }
+
+      // 显示加载状态
+      document.getElementById("message-loading").style.display = "block";
+      document.getElementById("message-results").style.display = "none";
+      document.getElementById("send-messages-btn").disabled = true;
+
+      // 准备数据
+      const messageData = {
+        campaignId: campaignId,
+        title: title,
+        content: content,
+        handlers: handlers,
+        reportUrls: urls,
+      };
+
+      // 发送请求
+      fetch("/api/xhunt/stats/send-messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(messageData),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          document.getElementById("message-loading").style.display = "none";
+          document.getElementById("send-messages-btn").disabled = false;
+
+          if (data.success) {
+            displayResults(data.data);
+            document.getElementById("message-results").style.display = "block";
+          } else {
+            alert("发送失败: " + data.error);
+          }
+        })
+        .catch((error) => {
+          console.error("Error sending messages:", error);
+          document.getElementById("message-loading").style.display = "none";
+          document.getElementById("send-messages-btn").disabled = false;
+          alert("发送失败: " + error.message);
+        });
+    }
+
+    // 显示发送结果
+    function displayResults(results) {
+      const resultsContent = document.getElementById("results-content");
+      resultsContent.innerHTML = "";
+
+      // 统计信息
+      const statsDiv = document.createElement("div");
+      statsDiv.style.cssText =
+        "margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 6px;";
+      statsDiv.innerHTML = `
+        <h4 style="margin: 0 0 12px 0; color: #374151">发送统计</h4>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+          <div style="text-align: center;">
+            <div style="font-size: 24px; font-weight: 600; color: #22c55e;">${results.success.length}</div>
+            <div style="font-size: 12px; color: #6b7280;">成功发送</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 24px; font-weight: 600; color: #ef4444;">${results.errors.length}</div>
+            <div style="font-size: 12px; color: #6b7280;">发送失败</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 24px; font-weight: 600; color: #eab308;">${results.notFound.length}</div>
+            <div style="font-size: 12px; color: #6b7280;">用户未找到</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 24px; font-weight: 600; color: #3b82f6;">${results.alreadySent.length}</div>
+            <div style="font-size: 12px; color: #6b7280;">已发送过</div>
+          </div>
+        </div>
+      `;
+      resultsContent.appendChild(statsDiv);
+
+      // 详细结果
+      const detailsDiv = document.createElement("div");
+      detailsDiv.innerHTML =
+        "<h4 style='margin: 0 0 12px 0; color: #374151'>详细结果</h4>";
+      resultsContent.appendChild(detailsDiv);
+
+      // 成功发送
+      if (results.success.length > 0) {
+        results.success.forEach((item) => {
+          const itemDiv = document.createElement("div");
+          itemDiv.className = "result-item result-success";
+          itemDiv.innerHTML = `
+            <div style="font-weight: 600; color: #22c55e;">✅ 成功发送给 @${item.username}</div>
+            <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
+              用户ID: ${item.userId} | 消息ID: ${item.messageId}
+            </div>
+          `;
+          resultsContent.appendChild(itemDiv);
+        });
+      }
+
+      // 发送失败
+      if (results.errors.length > 0) {
+        results.errors.forEach((item) => {
+          const itemDiv = document.createElement("div");
+          itemDiv.className = "result-item result-error";
+          itemDiv.innerHTML = `
+            <div style="font-weight: 600; color: #ef4444;">❌ 发送失败 @${item.username}</div>
+            <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
+              错误: ${item.error}
+            </div>
+          `;
+          resultsContent.appendChild(itemDiv);
+        });
+      }
+
+      // 用户未找到
+      if (results.notFound.length > 0) {
+        results.notFound.forEach((username) => {
+          const itemDiv = document.createElement("div");
+          itemDiv.className = "result-item result-not-found";
+          itemDiv.innerHTML = `
+            <div style="font-weight: 600; color: #eab308;">❓ 用户未找到 @${username}</div>
+          `;
+          resultsContent.appendChild(itemDiv);
+        });
+      }
+
+      // 已发送过
+      if (results.alreadySent.length > 0) {
+        results.alreadySent.forEach((username) => {
+          const itemDiv = document.createElement("div");
+          itemDiv.className = "result-item result-already-sent";
+          itemDiv.innerHTML = `
+            <div style="font-weight: 600; color: #3b82f6;">🔄 已发送过 @${username}</div>
+          `;
+          resultsContent.appendChild(itemDiv);
+        });
+      }
+    }
+  });
+</script>

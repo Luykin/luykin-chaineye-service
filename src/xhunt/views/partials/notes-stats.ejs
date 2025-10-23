@@ -1,0 +1,527 @@
+<!-- 备注查看统计 -->
+<div class="section">
+  <h2 class="section-title">📝 用户备注查看</h2>
+  <p style="color: #6b7280; margin-bottom: 20px; font-size: 14px">
+    查看指定日期的所有用户备注记录，包含谁给谁备注了什么内容
+  </p>
+
+  <!-- 日期选择器 -->
+  <div class="date-selector" style="margin-bottom: 30px">
+    <label
+      for="notes-date"
+      style="
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #374151;
+      "
+    >
+      选择日期:
+    </label>
+    <div style="display: flex; gap: 12px; align-items: center">
+      <input
+        type="date"
+        id="notes-date"
+        style="
+          padding: 8px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+        "
+      />
+      <button
+        id="load-notes-btn"
+        style="
+          padding: 8px 16px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background-color 0.2s;
+        "
+        onmouseover="this.style.backgroundColor='#2563eb'"
+        onmouseout="this.style.backgroundColor='#3b82f6'"
+      >
+        <span class="btn-icon">📊</span>加载数据
+      </button>
+    </div>
+  </div>
+
+  <!-- 加载状态 -->
+  <div
+    id="notes-loading"
+    style="display: none; text-align: center; padding: 20px; color: #6b7280"
+  >
+    <div
+      style="
+        display: inline-block;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+      "
+    >
+      ⏳
+    </div>
+    正在加载备注数据...
+  </div>
+
+  <!-- 备注列表 -->
+  <div id="notes-content" style="display: none">
+    <!-- 统计信息 -->
+    <div
+      class="stats-grid"
+      style="margin-bottom: 30px; grid-template-columns: repeat(3, 1fr)"
+    >
+      <div class="stat-card">
+        <div class="stat-title">总备注数</div>
+        <div class="stat-value" id="total-notes">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">备注用户数</div>
+        <div class="stat-value" id="unique-users">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">被备注账号数</div>
+        <div class="stat-value" id="unique-accounts">0</div>
+      </div>
+    </div>
+
+    <!-- 搜索和筛选 -->
+    <div
+      style="
+        margin-bottom: 20px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      "
+    >
+      <input
+        type="text"
+        id="notes-search"
+        placeholder="搜索备注内容、用户名或账号..."
+        style="
+          flex: 1;
+          min-width: 200px;
+          padding: 8px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 14px;
+        "
+      />
+      <select
+        id="notes-sort"
+        style="
+          padding: 8px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+        "
+      >
+        <option value="newest">按时间排序（最新）</option>
+        <option value="oldest">按时间排序（最旧）</option>
+        <option value="user">按用户排序</option>
+        <option value="account">按账号排序</option>
+      </select>
+    </div>
+
+    <!-- 备注列表表格 -->
+    <div class="table-container">
+      <table
+        style="
+          width: 100%;
+          border-collapse: collapse;
+          background: white;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        "
+      >
+        <thead style="background: #f9fafb">
+          <tr>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 8%;
+              "
+            >
+              序号
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 15%;
+              "
+            >
+              备注用户
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 15%;
+              "
+            >
+              被备注账号
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 40%;
+              "
+            >
+              备注内容
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 12%;
+              "
+            >
+              备注时间
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 10%;
+              "
+            >
+              操作
+            </th>
+          </tr>
+        </thead>
+        <tbody id="notes-table-body">
+          <!-- 动态内容 -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 分页 -->
+    <div
+      id="notes-pagination"
+      style="
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+      "
+    >
+      <!-- 动态生成分页按钮 -->
+    </div>
+  </div>
+
+  <!-- 无数据提示 -->
+  <div
+    id="notes-empty"
+    style="display: none; text-align: center; padding: 40px; color: #6b7280"
+  >
+    <div style="font-size: 48px; margin-bottom: 16px">📝</div>
+    <h3 style="margin-bottom: 8px; color: #374151">暂无备注数据</h3>
+    <p>选择其他日期或稍后再试</p>
+  </div>
+</div>
+
+<style>
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .notes-note-content {
+    max-width: 300px;
+    word-wrap: break-word;
+    line-height: 1.4;
+  }
+
+  .notes-user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .notes-user-name {
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .notes-user-username {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .notes-account-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .notes-account-handle {
+    font-weight: 600;
+    color: #3b82f6;
+  }
+
+  .notes-account-name {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .notes-time {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .notes-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .notes-action-btn {
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: white;
+    color: #374151;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .notes-action-btn:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+
+  .pagination-btn {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    background: white;
+    color: #374151;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .pagination-btn:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+
+  .pagination-btn.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+  }
+
+  .pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // 设置默认日期为今天
+    const today = new Date().toISOString().split("T")[0];
+    document.getElementById("notes-date").value = today;
+
+    // 绑定事件
+    document
+      .getElementById("load-notes-btn")
+      .addEventListener("click", loadNotesData);
+    document
+      .getElementById("notes-search")
+      .addEventListener("input", filterNotes);
+    document.getElementById("notes-sort").addEventListener("change", sortNotes);
+
+    // 加载备注数据
+    function loadNotesData() {
+      const selectedDate = document.getElementById("notes-date").value;
+      if (!selectedDate) {
+        alert("请选择日期");
+        return;
+      }
+
+      // 显示加载状态
+      document.getElementById("notes-loading").style.display = "block";
+      document.getElementById("notes-content").style.display = "none";
+      document.getElementById("notes-empty").style.display = "none";
+
+      // 发送请求
+      fetch(`/api/xhunt/stats/notes?date=${selectedDate}`)
+        .then((response) => response.json())
+        .then((data) => {
+          document.getElementById("notes-loading").style.display = "none";
+
+          if (data.success && data.data.notes.length > 0) {
+            window.notesData = data.data.notes;
+            displayNotes(data.data.notes);
+            updateStats(data.data.stats);
+            document.getElementById("notes-content").style.display = "block";
+          } else {
+            document.getElementById("notes-empty").style.display = "block";
+          }
+        })
+        .catch((error) => {
+          console.error("Error loading notes:", error);
+          document.getElementById("notes-loading").style.display = "none";
+          alert("加载备注数据失败: " + error.message);
+        });
+    }
+
+    // 显示备注数据
+    function displayNotes(notes) {
+      const tbody = document.getElementById("notes-table-body");
+      tbody.innerHTML = "";
+
+      notes.forEach((note, index) => {
+        const row = document.createElement("tr");
+        row.style.borderBottom = "1px solid #f3f4f6";
+
+        const time = new Date(note.createdAt).toLocaleString("zh-CN", {
+          timeZone: "Asia/Shanghai",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        row.innerHTML = `
+                <td style="padding: 12px; color: #374151;">${index + 1}</td>
+                <td style="padding: 12px;">
+                    <div class="notes-user-info">
+                        <div class="notes-user-name">${
+                          note.userDisplayName || "未知用户"
+                        }</div>
+                        <div class="notes-user-username">@${
+                          note.userUsername || "unknown"
+                        }</div>
+                    </div>
+                </td>
+                <td style="padding: 12px;">
+                    <div class="notes-account-info">
+                        <div class="notes-account-handle">@${
+                          note.accountHandle || "unknown"
+                        }</div>
+                        <div class="notes-account-name">${
+                          note.accountDisplayName || "未知账号"
+                        }</div>
+                    </div>
+                </td>
+                <td style="padding: 12px;">
+                    <div class="notes-note-content">${
+                      note.note || "无备注内容"
+                    }</div>
+                </td>
+                <td style="padding: 12px;">
+                    <div class="notes-time">${time}</div>
+                </td>
+                <td style="padding: 12px;">
+                    <div class="notes-actions">
+                        <button class="notes-action-btn" onclick="copyNote('${
+                          note.note || ""
+                        }')">复制</button>
+                    </div>
+                </td>
+            `;
+
+        tbody.appendChild(row);
+      });
+    }
+
+    // 更新统计信息
+    function updateStats(stats) {
+      document.getElementById("total-notes").textContent =
+        stats.totalNotes.toLocaleString();
+      document.getElementById("unique-users").textContent =
+        stats.uniqueUsers.toLocaleString();
+      document.getElementById("unique-accounts").textContent =
+        stats.uniqueAccounts.toLocaleString();
+    }
+
+    // 筛选备注
+    function filterNotes() {
+      const searchTerm = document
+        .getElementById("notes-search")
+        .value.toLowerCase();
+      const rows = document.querySelectorAll("#notes-table-body tr");
+
+      rows.forEach((row) => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchTerm) ? "" : "none";
+      });
+    }
+
+    // 排序备注
+    function sortNotes() {
+      const sortBy = document.getElementById("notes-sort").value;
+      if (!window.notesData) return;
+
+      let sortedNotes = [...window.notesData];
+
+      switch (sortBy) {
+        case "newest":
+          sortedNotes.sort(
+            (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+          );
+          break;
+        case "oldest":
+          sortedNotes.sort(
+            (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+          );
+          break;
+        case "user":
+          sortedNotes.sort((a, b) =>
+            (a.userDisplayName || "").localeCompare(b.userDisplayName || "")
+          );
+          break;
+        case "account":
+          sortedNotes.sort((a, b) =>
+            (a.accountHandle || "").localeCompare(b.accountHandle || "")
+          );
+          break;
+      }
+
+      displayNotes(sortedNotes);
+    }
+
+    // 复制备注内容
+    window.copyNote = function (note) {
+      navigator.clipboard
+        .writeText(note)
+        .then(() => {
+          alert("备注内容已复制到剪贴板");
+        })
+        .catch((err) => {
+          console.error("复制失败:", err);
+          alert("复制失败");
+        });
+    };
+  });
+</script>

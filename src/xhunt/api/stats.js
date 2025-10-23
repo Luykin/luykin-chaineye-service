@@ -654,6 +654,280 @@ router.get("/error-logs", basicAuth, async (req, res) => {
 });
 
 /**
+ * GET /notes
+ * 获取指定日期的用户备注数据（需要认证）
+ */
+router.get("/notes", basicAuth, async (req, res) => {
+  try {
+    const { date, page = 1, limit = 50 } = req.query;
+
+    // 如果没有指定日期，使用今天
+    let targetDate = date;
+    if (!targetDate) {
+      const beijingTime = new Date().toLocaleString("en-US", {
+        timeZone: "Asia/Shanghai",
+      });
+      targetDate = new Date(beijingTime).toISOString().split("T")[0];
+    }
+
+    // 验证日期格式
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      return res.status(400).json({
+        success: false,
+        error: "日期格式错误，请使用 YYYY-MM-DD 格式",
+      });
+    }
+
+    // 计算日期范围（北京时间）
+    const startDate = new Date(targetDate + "T00:00:00+08:00");
+    const endDate = new Date(targetDate + "T23:59:59+08:00");
+
+    // 获取PostgreSQL模型
+    const postgresModels = require("../../models/postgres-start");
+    const XPrivateNote = postgresModels.XPrivateNote;
+    const XHuntUser = postgresModels.XHuntUser;
+    const XAccount = postgresModels.XAccount;
+    const { Op } = require("sequelize");
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+
+    // 查询备注数据
+    const notes = await XPrivateNote.findAll({
+      where: {
+        createdAt: {
+          [Op.gte]: startDate,
+          [Op.lte]: endDate,
+        },
+      },
+      include: [
+        {
+          model: XHuntUser,
+          as: "user",
+          attributes: ["id", "username", "displayName"],
+        },
+        {
+          model: XAccount,
+          as: "account",
+          attributes: ["id", "handle", "displayName"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: limitNum,
+      offset: offset,
+    });
+
+    // 获取总数
+    const totalCount = await XPrivateNote.count({
+      where: {
+        createdAt: {
+          [Op.gte]: startDate,
+          [Op.lte]: endDate,
+        },
+      },
+    });
+
+    // 获取统计信息
+    const stats = await Promise.all([
+      // 总备注数
+      XPrivateNote.count({
+        where: {
+          createdAt: {
+            [Op.gte]: startDate,
+            [Op.lte]: endDate,
+          },
+        },
+      }),
+      // 独立用户数
+      XPrivateNote.count({
+        where: {
+          createdAt: {
+            [Op.gte]: startDate,
+            [Op.lte]: endDate,
+          },
+        },
+        distinct: true,
+        col: "xHuntUserId",
+      }),
+      // 独立账号数
+      XPrivateNote.count({
+        where: {
+          createdAt: {
+            [Op.gte]: startDate,
+            [Op.lte]: endDate,
+          },
+        },
+        distinct: true,
+        col: "xAccountId",
+      }),
+    ]);
+
+    // 格式化数据
+    const formattedNotes = notes.map((note) => ({
+      id: note.id,
+      note: note.note,
+      createdAt: note.createdAt,
+      userUsername: note.user?.username,
+      userDisplayName: note.user?.displayName,
+      accountHandle: note.account?.handle,
+      accountDisplayName: note.account?.displayName,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        notes: formattedNotes,
+        stats: {
+          totalNotes: stats[0],
+          uniqueUsers: stats[1],
+          uniqueAccounts: stats[2],
+        },
+        pagination: {
+          currentPage: pageNum,
+          pageSize: limitNum,
+          totalCount: totalCount,
+          totalPages: Math.ceil(totalCount / limitNum),
+        },
+        date: targetDate,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching notes:", error);
+    res.status(500).json({
+      success: false,
+      error: "获取备注数据失败",
+    });
+  }
+});
+
+/**
+ * POST /send-messages
+ * 批量发送私信（需要认证）
+ */
+router.post("/send-messages", basicAuth, async (req, res) => {
+  try {
+    const { campaignId, title, content, handlers, reportUrls } = req.body;
+
+    // 验证必需参数
+    if (
+      !campaignId ||
+      !title ||
+      !content ||
+      !handlers ||
+      !Array.isArray(handlers) ||
+      handlers.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必需参数：campaignId, title, content, handlers",
+      });
+    }
+
+    // 获取PostgreSQL模型
+    const postgresModels = require("../../models/postgres-start");
+    const XPrivateMessage = postgresModels.XPrivateMessage;
+    const XHuntUser = postgresModels.XHuntUser;
+    const { Op } = require("sequelize");
+
+    const results = {
+      success: [],
+      notFound: [],
+      alreadySent: [],
+      errors: [],
+    };
+
+    // 处理每个用户
+    for (let i = 0; i < handlers.length; i++) {
+      const username = handlers[i];
+      const reportUrl = reportUrls && reportUrls[i] ? reportUrls[i] : "";
+
+      try {
+        console.log(`处理用户: ${username}`);
+
+        // 查找用户（大小写不敏感）
+        const user = await XHuntUser.findOne({
+          where: {
+            username: {
+              [Op.iLike]: username,
+            },
+          },
+        });
+
+        if (!user) {
+          console.log(`用户 ${username} 未找到`);
+          results.notFound.push(username);
+          continue;
+        }
+
+        // 检查是否已经发送过相同活动的消息
+        const existingMessage = await XPrivateMessage.findOne({
+          where: {
+            receiverId: user.id,
+            campaignId: campaignId,
+          },
+        });
+
+        if (existingMessage) {
+          console.log(`用户 ${username} 已经收到过活动 ${campaignId} 的消息`);
+          results.alreadySent.push(username);
+          continue;
+        }
+
+        // 个性化内容（替换占位符）
+        const personalizedContent = content
+          .replace(/\{\{username\}\}/g, username)
+          .replace(/\{\{reportUrl\}\}/g, reportUrl);
+
+        // 创建私信记录
+        const message = await XPrivateMessage.create({
+          senderId: req.user?.id || "00000000-0000-0000-0000-000000000000", // 使用系统ID或从认证中获取
+          receiverId: user.id,
+          title: title,
+          content: personalizedContent,
+          displayAt: new Date(),
+          sentAt: new Date(),
+          isRead: false,
+          campaignId: campaignId,
+        });
+
+        console.log(`✅ 成功发送私信给用户 ${username} (ID: ${user.id})`);
+        results.success.push({
+          username: username,
+          userId: user.id,
+          messageId: message.id,
+        });
+      } catch (error) {
+        console.error(`❌ 处理用户 ${username} 时出错:`, error.message);
+        results.errors.push({
+          username: username,
+          error: error.message,
+        });
+      }
+    }
+
+    // 输出结果统计
+    console.log("\n=== 私信发送结果统计 ===");
+    console.log(`✅ 成功发送: ${results.success.length} 条`);
+    console.log(`❓ 用户未找到: ${results.notFound.length} 个`);
+    console.log(`🔄 已发送过: ${results.alreadySent.length} 个`);
+    console.log(`❌ 发送失败: ${results.errors.length} 个`);
+
+    res.json({
+      success: true,
+      data: results,
+      message: `私信发送完成：成功 ${results.success.length} 条，失败 ${results.errors.length} 条`,
+    });
+  } catch (error) {
+    console.error("Error sending messages:", error);
+    res.status(500).json({
+      success: false,
+      error: "发送私信失败",
+    });
+  }
+});
+
+/**
  * GET /health
  * 健康检查接口（无需认证）
  */

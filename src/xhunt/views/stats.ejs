@@ -35,6 +35,8 @@
           <!-- <button class="tab-btn" data-tab="users">👑 用户排行</button> -->
           <button class="tab-btn" data-tab="dau-details">📱 日活详情</button>
           <button class="tab-btn" data-tab="online-users">🟢 在线用户</button>
+          <button class="tab-btn" data-tab="notes">📝 备注查看</button>
+          <button class="tab-btn" data-tab="messages">💬 发送私信</button>
           <button class="tab-btn" data-tab="data-export">📤 数据导出</button>
           <button class="tab-btn" data-tab="log-search">🔍 日志搜索</button>
           <!--                <button class="tab-btn" data-tab="kol-tag">🔥 有灵魂的KOL</button>-->
@@ -57,6 +59,16 @@
           <!-- 在线用户 Tab -->
           <div class="tab-pane" id="online-users">
             <%- include('partials/online-users-stats') %>
+          </div>
+
+          <!-- 备注查看 Tab -->
+          <div class="tab-pane" id="notes">
+            <%- include('partials/notes-stats') %>
+          </div>
+
+          <!-- 发送私信 Tab -->
+          <div class="tab-pane" id="messages">
+            <%- include('partials/message-stats') %>
           </div>
 
           <!-- 数据导出 Tab -->
