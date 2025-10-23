@@ -45,39 +45,34 @@ function initTabs() {
 
 // 绑定下载事件
 function bindDownloadEvents() {
-  // 有灵魂的KOL 下载事件
-  const downloadReviewersBtn = document.getElementById("downloadReviewersBtn");
-  const downloadReceiversBtn = document.getElementById("downloadReceiversBtn");
-
-  if (downloadReviewersBtn) {
-    downloadReviewersBtn.addEventListener("click", downloadReviewersData);
-  }
-
-  if (downloadReceiversBtn) {
-    downloadReceiversBtn.addEventListener("click", downloadReceiversData);
-  }
-
-  // 特定用户下载事件
-  const downloadSpecificReviewersBtn = document.getElementById(
-    "downloadSpecificReviewersBtn"
-  );
-  const downloadSpecificReceiversBtn = document.getElementById(
-    "downloadSpecificReceiversBtn"
-  );
-
-  if (downloadSpecificReviewersBtn) {
-    downloadSpecificReviewersBtn.addEventListener(
-      "click",
-      downloadSpecificReviewersData
-    );
-  }
-
-  if (downloadSpecificReceiversBtn) {
-    downloadSpecificReceiversBtn.addEventListener(
-      "click",
-      downloadSpecificReceiversData
-    );
-  }
+  // 有灵魂的KOL 下载事件 - 已注释
+  // const downloadReviewersBtn = document.getElementById("downloadReviewersBtn");
+  // const downloadReceiversBtn = document.getElementById("downloadReceiversBtn");
+  // if (downloadReviewersBtn) {
+  //   downloadReviewersBtn.addEventListener("click", downloadReviewersData);
+  // }
+  // if (downloadReceiversBtn) {
+  //   downloadReceiversBtn.addEventListener("click", downloadReceiversData);
+  // }
+  // 特定用户下载事件 - 已注释
+  // const downloadSpecificReviewersBtn = document.getElementById(
+  //   "downloadSpecificReviewersBtn"
+  // );
+  // const downloadSpecificReceiversBtn = document.getElementById(
+  //   "downloadSpecificReceiversBtn"
+  // );
+  // if (downloadSpecificReviewersBtn) {
+  //   downloadSpecificReviewersBtn.addEventListener(
+  //     "click",
+  //     downloadSpecificReviewersData
+  //   );
+  // }
+  // if (downloadSpecificReceiversBtn) {
+  //   downloadSpecificReceiversBtn.addEventListener(
+  //     "click",
+  //     downloadSpecificReceiversData
+  //   );
+  // }
 }
 
 // 绑定数据导出事件
@@ -114,119 +109,119 @@ function bindExportEvents() {
   }
 }
 
-// 下载有灵魂的KOL评论者数据
-function downloadReviewersData() {
-  console.log("开始下载评论者数据...");
-  const reviewers = window.statsData?.kolTagAnalytics?.reviewers || [];
-  console.log("评论者数据:", reviewers);
-  const csvContent = generateReviewersCSV(reviewers);
-  downloadCSV(csvContent, "有灵魂的KOL_评论者名单.csv");
-}
+// 下载有灵魂的KOL评论者数据 - 已注释
+// function downloadReviewersData() {
+//   console.log("开始下载评论者数据...");
+//   const reviewers = window.statsData?.kolTagAnalytics?.reviewers || [];
+//   console.log("评论者数据:", reviewers);
+//   const csvContent = generateReviewersCSV(reviewers);
+//   downloadCSV(csvContent, "有灵魂的KOL_评论者名单.csv");
+// }
 
-// 下载有灵魂的KOL被评论者数据
-function downloadReceiversData() {
-  console.log("开始下载被评论者数据...");
-  const receivers = window.statsData?.kolTagAnalytics?.receivers || [];
-  console.log("被评论者数据:", receivers);
-  const csvContent = generateReceiversCSV(receivers);
-  downloadCSV(csvContent, "有灵魂的KOL_被评论者名单.csv");
-}
+// 下载有灵魂的KOL被评论者数据 - 已注释
+// function downloadReceiversData() {
+//   console.log("开始下载被评论者数据...");
+//   const receivers = window.statsData?.kolTagAnalytics?.receivers || [];
+//   console.log("被评论者数据:", receivers);
+//   const csvContent = generateReceiversCSV(receivers);
+//   downloadCSV(csvContent, "有灵魂的KOL_被评论者名单.csv");
+// }
 
-// 下载特定用户评论者数据
-function downloadSpecificReviewersData() {
-  console.log("开始下载特定用户评论者数据...");
-  const reviewers = window.statsData?.specificUsersAnalytics?.reviewers || [];
-  console.log("特定用户评论者数据:", reviewers);
-  const csvContent = generateSpecificReviewersCSV(reviewers);
-  downloadCSV(csvContent, "特定用户_评论者名单.csv");
-}
+// 下载特定用户评论者数据 - 已注释
+// function downloadSpecificReviewersData() {
+//   console.log("开始下载特定用户评论者数据...");
+//   const reviewers = window.statsData?.specificUsersAnalytics?.reviewers || [];
+//   console.log("特定用户评论者数据:", reviewers);
+//   const csvContent = generateSpecificReviewersCSV(reviewers);
+//   downloadCSV(csvContent, "特定用户_评论者名单.csv");
+// }
 
-// 下载特定用户被评论者数据
-function downloadSpecificReceiversData() {
-  console.log("开始下载特定用户被评论者数据...");
-  const receivers = window.statsData?.specificUsersAnalytics?.receivers || [];
-  console.log("特定用户被评论者数据:", receivers);
-  const csvContent = generateSpecificReceiversCSV(receivers);
-  downloadCSV(csvContent, "特定用户_被评论者名单.csv");
-}
+// 下载特定用户被评论者数据 - 已注释
+// function downloadSpecificReceiversData() {
+//   console.log("开始下载特定用户被评论者数据...");
+//   const receivers = window.statsData?.specificUsersAnalytics?.receivers || [];
+//   console.log("特定用户被评论者数据:", receivers);
+//   const csvContent = generateSpecificReceiversCSV(receivers);
+//   downloadCSV(csvContent, "特定用户_被评论者名单.csv");
+// }
 
-// 生成有灵魂的KOL评论者CSV内容
-function generateReviewersCSV(data) {
-  console.log("生成评论者CSV，数据长度:", data.length);
-  const headers = [
-    "排名",
-    "用户名",
-    "显示名称",
-    "分类",
-    "KOL排名",
-    "使用次数",
-    "是否KOL",
-  ];
-  const rows = data.map((item, index) => [
-    index + 1,
-    item.username || "未知",
-    item.displayName || item.username || "匿名用户",
-    item.classification || "-",
-    item.kolRank20W ? item.kolRank20W.toLocaleString() : "-",
-    item.tagUsageCount,
-    item.isKOL ? "是" : "否",
-  ]);
+// 生成有灵魂的KOL评论者CSV内容 - 已注释
+// function generateReviewersCSV(data) {
+//   console.log("生成评论者CSV，数据长度:", data.length);
+//   const headers = [
+//     "排名",
+//     "用户名",
+//     "显示名称",
+//     "分类",
+//     "KOL排名",
+//     "使用次数",
+//     "是否KOL",
+//   ];
+//   const rows = data.map((item, index) => [
+//     index + 1,
+//     item.username || "未知",
+//     item.displayName || item.username || "匿名用户",
+//     item.classification || "-",
+//     item.kolRank20W ? item.kolRank20W.toLocaleString() : "-",
+//     item.tagUsageCount,
+//     item.isKOL ? "是" : "否",
+//   ]);
 
-  return generateCSVContent(headers, rows);
-}
+//   return generateCSVContent(headers, rows);
+// }
 
-// 生成有灵魂的KOL被评论者CSV内容
-function generateReceiversCSV(data) {
-  console.log("生成被评论者CSV，数据长度:", data.length);
-  const headers = ["排名", "用户名", "显示名称", "被评次数"];
-  const rows = data.map((item, index) => [
-    index + 1,
-    item.handle || "未知",
-    item.displayName || item.handle || "未知账号",
-    item.receivedTagCount,
-  ]);
+// 生成有灵魂的KOL被评论者CSV内容 - 已注释
+// function generateReceiversCSV(data) {
+//   console.log("生成被评论者CSV，数据长度:", data.length);
+//   const headers = ["排名", "用户名", "显示名称", "被评次数"];
+//   const rows = data.map((item, index) => [
+//     index + 1,
+//     item.handle || "未知",
+//     item.displayName || item.handle || "未知账号",
+//     item.receivedTagCount,
+//   ]);
 
-  return generateCSVContent(headers, rows);
-}
+//   return generateCSVContent(headers, rows);
+// }
 
-// 生成特定用户评论者CSV内容
-function generateSpecificReviewersCSV(data) {
-  console.log("生成特定用户评论者CSV，数据长度:", data.length);
-  const headers = [
-    "排名",
-    "用户名",
-    "显示名称",
-    "分类",
-    "KOL排名",
-    "评论次数",
-    "是否KOL",
-  ];
-  const rows = data.map((item, index) => [
-    index + 1,
-    item.username || "未知",
-    item.displayName || item.username || "匿名用户",
-    item.classification || "-",
-    item.kolRank20W ? item.kolRank20W.toLocaleString() : "-",
-    item.reviewCount,
-    item.isKOL ? "是" : "否",
-  ]);
+// 生成特定用户评论者CSV内容 - 已注释
+// function generateSpecificReviewersCSV(data) {
+//   console.log("生成特定用户评论者CSV，数据长度:", data.length);
+//   const headers = [
+//     "排名",
+//     "用户名",
+//     "显示名称",
+//     "分类",
+//     "KOL排名",
+//     "评论次数",
+//     "是否KOL",
+//   ];
+//   const rows = data.map((item, index) => [
+//     index + 1,
+//     item.username || "未知",
+//     item.displayName || item.username || "匿名用户",
+//     item.classification || "-",
+//     item.kolRank20W ? item.kolRank20W.toLocaleString() : "-",
+//     item.reviewCount,
+//     item.isKOL ? "是" : "否",
+//   ]);
 
-  return generateCSVContent(headers, rows);
-}
+//   return generateCSVContent(headers, rows);
+// }
 
-// 生成特定用户被评论者CSV内容
-function generateSpecificReceiversCSV(data) {
-  console.log("生成特定用户被评论者CSV，数据长度:", data.length);
-  const headers = ["排名", "用户名", "显示名称", "被评论次数"];
-  const rows = data.map((item, index) => [
-    index + 1,
-    item.handle || "未知",
-    item.displayName || item.handle || "未知账号",
-    item.reviewCount,
-  ]);
+// 生成特定用户被评论者CSV内容 - 已注释
+// function generateSpecificReceiversCSV(data) {
+//   console.log("生成特定用户被评论者CSV，数据长度:", data.length);
+//   const headers = ["排名", "用户名", "显示名称", "被评论次数"];
+//   const rows = data.map((item, index) => [
+//     index + 1,
+//     item.handle || "未知",
+//     item.displayName || item.handle || "未知账号",
+//     item.reviewCount,
+//   ]);
 
-  return generateCSVContent(headers, rows);
-}
+//   return generateCSVContent(headers, rows);
+// }
 
 // 生成CSV内容的通用函数
 function generateCSVContent(headers, rows) {

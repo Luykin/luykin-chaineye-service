@@ -358,73 +358,75 @@ async function getFullStats(redisClient = null) {
       raw: true,
     }),
 
-    // 9. 热门标签（前10个）
-    XReviewForAccount.findAll({
-      attributes: [
-        [fn("unnest", col("tags")), "tag"],
-        [fn("COUNT", "*"), "count"],
-      ],
-      group: [fn("unnest", col("tags"))],
-      order: [[fn("COUNT", "*"), "DESC"]],
-      limit: 10,
-      raw: true,
-    }),
+    // 9. 热门标签（前10个） - 已注释
+    // XReviewForAccount.findAll({
+    //   attributes: [
+    //     [fn("unnest", col("tags")), "tag"],
+    //     [fn("COUNT", "*"), "count"],
+    //   ],
+    //   group: [fn("unnest", col("tags"))],
+    //   order: [[fn("COUNT", "*"), "DESC"]],
+    //   limit: 10,
+    //   raw: true,
+    // }),
+    Promise.resolve([]), // 返回空数组
 
-    // 10. 修复用户活跃度分布查询
+    // 10. 修复用户活跃度分布查询 - 已注释
     // 使用两步查询来避免复杂的子查询问题
-    (async () => {
-      try {
-        // 先获取有评论的用户ID和评论数量
-        const userReviewCounts = await XReviewForAccount.findAll({
-          attributes: ["xHuntUserId", [fn("COUNT", "*"), "reviewCount"]],
-          group: ["xHuntUserId"],
-          order: [[fn("COUNT", "*"), "DESC"]],
-          limit: 20,
-          raw: true,
-        });
+    // (async () => {
+    //   try {
+    //     // 先获取有评论的用户ID和评论数量
+    //     const userReviewCounts = await XReviewForAccount.findAll({
+    //       attributes: ["xHuntUserId", [fn("COUNT", "*"), "reviewCount"]],
+    //       group: ["xHuntUserId"],
+    //       order: [[fn("COUNT", "*"), "DESC"]],
+    //       limit: 20,
+    //       raw: true,
+    //     });
 
-        // 如果没有评论数据，返回空数组
-        if (!userReviewCounts || userReviewCounts.length === 0) {
-          return [];
-        }
+    //     // 如果没有评论数据，返回空数组
+    //     if (!userReviewCounts || userReviewCounts.length === 0) {
+    //       return [];
+    //     }
 
-        // 获取用户ID列表
-        const userIds = userReviewCounts.map((item) => item.xHuntUserId);
+    //     // 获取用户ID列表
+    //     const userIds = userReviewCounts.map((item) => item.xHuntUserId);
 
-        // 再查询用户详细信息
-        const users = await XHuntUser.findAll({
-          where: {
-            id: { [Op.in]: userIds },
-          },
-          attributes: [
-            "id",
-            "username",
-            "displayName",
-            "kolRank20W",
-            "classification",
-          ],
-          raw: true,
-        });
+    //     // 再查询用户详细信息
+    //     const users = await XHuntUser.findAll({
+    //       where: {
+    //         id: { [Op.in]: userIds },
+    //       },
+    //       attributes: [
+    //         "id",
+    //         "username",
+    //         "displayName",
+    //         "kolRank20W",
+    //         "classification",
+    //       ],
+    //       raw: true,
+    //     });
 
-        // 合并数据
-        const result = userReviewCounts.map((reviewData) => {
-          const user = users.find((u) => u.id === reviewData.xHuntUserId);
-          return {
-            id: user?.id || reviewData.xHuntUserId,
-            username: user?.username || null,
-            displayName: user?.displayName || null,
-            kolRank20W: user?.kolRank20W || null,
-            classification: user?.classification || null,
-            reviewCount: parseInt(reviewData.reviewCount),
-          };
-        });
+    //     // 合并数据
+    //     const result = userReviewCounts.map((reviewData) => {
+    //       const user = users.find((u) => u.id === reviewData.xHuntUserId);
+    //       return {
+    //         id: user?.id || reviewData.xHuntUserId,
+    //         username: user?.username || null,
+    //         displayName: user?.displayName || null,
+    //         kolRank20W: user?.kolRank20W || null,
+    //         classification: user?.classification || null,
+    //         reviewCount: parseInt(reviewData.reviewCount),
+    //       };
+    //     });
 
-        return result;
-      } catch (error) {
-        console.error("Error fetching user activity distribution:", error);
-        return []; // 返回空数组而不是抛出错误
-      }
-    })(),
+    //     return result;
+    //   } catch (error) {
+    //     console.error("Error fetching user activity distribution:", error);
+    //     return []; // 返回空数组而不是抛出错误
+    //   }
+    // })(),
+    Promise.resolve([]), // 返回空数组
 
     // // 11. 🔥有灵魂的KOL 标签专业统计
     // (async () => {
