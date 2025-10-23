@@ -576,7 +576,7 @@ router.get("/log-search", basicAuth, async (req, res) => {
     let totalMatches = 0;
 
     // 并行搜索日志文件（限制并发数避免内存溢出）
-    const MAX_CONCURRENT_FILES = 2;
+    const MAX_CONCURRENT_FILES = 4;
 
     for (
       let i = 0;
