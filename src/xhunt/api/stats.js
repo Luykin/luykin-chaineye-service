@@ -16,14 +16,15 @@ const fileCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
 
 /**
- * 流式搜索日志文件
+ * 流式搜索日志文件 - 修复版本，支持完整上下文
  */
 async function streamSearchLogFile(filePath, query, contextLines, limit) {
   return new Promise((resolve, reject) => {
     const results = [];
-    const lines = [];
+    const allLines = []; // 存储所有行
     let lineNumber = 0;
     let matchCount = 0;
+    const matchPositions = []; // 存储匹配行的位置
 
     // 检查缓存
     const cacheKey = `${filePath}-${query}-${contextLines}`;
@@ -39,40 +40,12 @@ async function streamSearchLogFile(filePath, query, contextLines, limit) {
     });
 
     rl.on("line", (line) => {
-      lines.push(line);
+      allLines.push(line);
       lineNumber++;
 
-      // 保持最近的行在内存中（用于上下文）
-      // 需要保持足够多的行来提供上下文的上下文
-      if (lines.length > contextLines * 3 + 1) {
-        lines.shift();
-      }
-
-      // 搜索匹配行
+      // 搜索匹配行，记录位置
       if (line.toLowerCase().includes(query.toLowerCase())) {
-        const context = [];
-        const matchLineIndex = lines.length - 1; // 当前匹配行在lines数组中的索引
-        const startIdx = Math.max(0, matchLineIndex - contextLines);
-        const endIdx = Math.min(
-          lines.length - 1,
-          matchLineIndex + contextLines
-        );
-
-        for (let i = startIdx; i <= endIdx; i++) {
-          const actualLineNum = lineNumber - (matchLineIndex - i);
-          context.push({
-            lineNumber: actualLineNum,
-            content: lines[i],
-            isMatch: i === matchLineIndex,
-          });
-        }
-
-        results.push({
-          lineNumber: lineNumber,
-          context: context,
-          matchLine: line,
-        });
-
+        matchPositions.push(lineNumber - 1); // 存储0-based索引
         matchCount++;
         if (matchCount >= limit) {
           rl.close();
@@ -81,6 +54,31 @@ async function streamSearchLogFile(filePath, query, contextLines, limit) {
     });
 
     rl.on("close", () => {
+      // 处理所有匹配位置，生成完整上下文
+      for (let i = 0; i < Math.min(matchPositions.length, limit); i++) {
+        const matchPos = matchPositions[i];
+        const context = [];
+
+        // 计算上下文范围
+        const startIdx = Math.max(0, matchPos - contextLines);
+        const endIdx = Math.min(allLines.length - 1, matchPos + contextLines);
+
+        // 生成上下文
+        for (let j = startIdx; j <= endIdx; j++) {
+          context.push({
+            lineNumber: j + 1,
+            content: allLines[j],
+            isMatch: j === matchPos,
+          });
+        }
+
+        results.push({
+          lineNumber: matchPos + 1,
+          context: context,
+          matchLine: allLines[matchPos],
+        });
+      }
+
       // 缓存结果
       fileCache.set(cacheKey, {
         results: results,
