@@ -95,6 +95,17 @@
 </div>
 
 <script>
+  // 根据百分比计算背景颜色（浅蓝色渐变）
+  function getRetentionColor(percentage) {
+    const p = parseFloat(percentage) || 0;
+    // 使用蓝色渐变：0% = 白色，100% = 深蓝色
+    const opacity = Math.min(p / 100, 1); // 限制在0-1之间
+    const r = Math.round(255 - (255 - 173) * opacity); // 从白色渐变到 rgb(173, 216, 230)
+    const g = Math.round(255 - (255 - 216) * opacity);
+    const b = Math.round(255 - (255 - 230) * opacity);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
   // 页面加载时获取数据
   document.addEventListener("DOMContentLoaded", function () {
     loadWeeklyCohorts();
@@ -157,16 +168,10 @@
                     (${parseFloat(cohort.week2Retention).toFixed(1)}%)
                   </span>
                 </td>
-                <td style="padding: 15px; text-align: center; font-weight: 600;">
-                  <span style="color: ${
-                    parseFloat(cohort.week2Retention) >= 30
-                      ? "#27ae60"
-                      : parseFloat(cohort.week2Retention) >= 20
-                      ? "#f39c12"
-                      : "#e74c3c"
-                  };">
-                    ${parseFloat(cohort.week2Retention).toFixed(1)}%
-                  </span>
+                <td style="padding: 15px; text-align: center; font-weight: 600; background-color: ${getRetentionColor(
+                  cohort.week2Retention
+                )};">
+                  ${parseFloat(cohort.week2Retention).toFixed(1)}%
                 </td>
                 <td style="padding: 15px; text-align: center;">
                   <span style="color: #27ae60; font-weight: 600;">${cohort.week3Active.toLocaleString()}</span>
@@ -175,16 +180,10 @@
                     (${parseFloat(cohort.week3Retention).toFixed(1)}%)
                   </span>
                 </td>
-                <td style="padding: 15px; text-align: center; font-weight: 600;">
-                  <span style="color: ${
-                    parseFloat(cohort.week3Retention) >= 20
-                      ? "#27ae60"
-                      : parseFloat(cohort.week3Retention) >= 15
-                      ? "#f39c12"
-                      : "#e74c3c"
-                  };">
-                    ${parseFloat(cohort.week3Retention).toFixed(1)}%
-                  </span>
+                <td style="padding: 15px; text-align: center; font-weight: 600; background-color: ${getRetentionColor(
+                  cohort.week3Retention
+                )};">
+                  ${parseFloat(cohort.week3Retention).toFixed(1)}%
                 </td>
                 <td style="padding: 15px; text-align: center;">
                   <span style="color: #27ae60; font-weight: 600;">${cohort.week4Active.toLocaleString()}</span>
@@ -193,29 +192,17 @@
                     (${parseFloat(cohort.week4Retention).toFixed(1)}%)
                   </span>
                 </td>
-                <td style="padding: 15px; text-align: center; font-weight: 600;">
-                  <span style="color: ${
-                    parseFloat(cohort.week4Retention) >= 15
-                      ? "#27ae60"
-                      : parseFloat(cohort.week4Retention) >= 10
-                      ? "#f39c12"
-                      : "#e74c3c"
-                  };">
-                    ${parseFloat(cohort.week4Retention).toFixed(1)}%
-                  </span>
+                <td style="padding: 15px; text-align: center; font-weight: 600; background-color: ${getRetentionColor(
+                  cohort.week4Retention
+                )};">
+                  ${parseFloat(cohort.week4Retention).toFixed(1)}%
                 </td>
               </tr>
             `;
           })
           .join("");
 
-        // 添加斑马纹效果
-        const rows = tbodyEl.querySelectorAll("tr");
-        rows.forEach((row, index) => {
-          if (index % 2 === 1) {
-            row.style.backgroundColor = "#f8f9fa";
-          }
-        });
+        // 背景颜色会根据单元格内容自动变化，不需要斑马纹
       } else {
         // 显示空状态
         loadingEl.style.display = "none";
