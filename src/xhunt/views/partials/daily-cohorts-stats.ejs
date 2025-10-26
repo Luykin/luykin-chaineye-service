@@ -221,6 +221,8 @@
   }
 
   async function loadDailyCohorts() {
+    console.log("🔍 loadDailyCohorts 被调用");
+
     const loadingEl = document.getElementById("daily-cohorts-loading");
     const errorEl = document.getElementById("daily-cohorts-error");
     const tableEl = document.getElementById("daily-cohorts-table");
@@ -238,6 +240,8 @@
       const startDate = document.getElementById("start-date").value;
       const endDate = document.getElementById("end-date").value;
 
+      console.log(`📅 查询日期范围: ${startDate} 至 ${endDate}`);
+
       // 构建查询URL
       const url = new URL(
         "/api/xhunt/stats/daily-cohorts",
@@ -245,6 +249,8 @@
       );
       if (startDate) url.searchParams.append("startDate", startDate);
       if (endDate) url.searchParams.append("endDate", endDate);
+
+      console.log(`🌐 请求URL: ${url.toString()}`);
 
       const response = await fetch(url.toString(), {
         credentials: "include",
@@ -255,6 +261,7 @@
       }
 
       const result = await response.json();
+      console.log(`✅ 接收到数据:`, result);
 
       // 显示日期范围信息
       if (result.data && result.data.dateRange) {
@@ -263,6 +270,8 @@
       }
 
       if (result.success && result.data && result.data.cohorts.length > 0) {
+        console.log(`📊 成功加载 ${result.data.cohorts.length} 个cohorts`);
+
         // 显示表格
         loadingEl.style.display = "none";
         tableEl.style.display = "block";
@@ -376,13 +385,14 @@
 
         // 背景颜色会根据单元格内容自动变化，不需要斑马纹
       } else {
+        console.log(`⚠️  没有数据或数据为空`);
         // 显示空状态
         loadingEl.style.display = "none";
         emptyEl.style.display = "block";
         tableEl.style.display = "none";
       }
     } catch (error) {
-      console.error("Error loading daily cohorts:", error);
+      console.error("❌ Error loading daily cohorts:", error);
       loadingEl.style.display = "none";
       errorEl.style.display = "block";
       tableEl.style.display = "none";
