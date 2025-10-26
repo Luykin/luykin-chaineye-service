@@ -57,9 +57,16 @@ async function migrateDauHistory() {
     for (const user of xhuntUsers) {
       totalProcessed++;
 
+      // ⚠️ 跳过没有 username 的用户
+      if (!user.username) {
+        console.warn(`⚠️  跳过没有 username 的用户: id=${user.id}`);
+        totalSkipped++;
+        continue;
+      }
+
       // 检查是否已经有 DailyActiveUser 记录
       const existingRecord = await DailyActiveUser.findOne({
-        where: { userId: user.id },
+        where: { userId: user.username }, // 🔥 使用 username，不是 id
       });
 
       if (existingRecord) {
@@ -76,7 +83,7 @@ async function migrateDauHistory() {
       const firstActiveDate = user.createdAt.toISOString().split("T")[0];
 
       await DailyActiveUser.create({
-        userId: user.id,
+        userId: user.username, // 🔥 关键修复：使用 username 而不是 id
         date: firstActiveDate,
       });
 
@@ -84,9 +91,7 @@ async function migrateDauHistory() {
 
       if (totalCreated % 100 === 0) {
         console.log(
-          `✅ 已创建 ${totalCreated} 条记录（用户: ${
-            user.username || user.id.substring(0, 8)
-          }, 日期: ${firstActiveDate}）`
+          `✅ 已创建 ${totalCreated} 条记录（用户: ${user.username}, 日期: ${firstActiveDate}）`
         );
       }
     }
