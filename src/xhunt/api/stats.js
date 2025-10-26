@@ -1214,11 +1214,26 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
       cohorts.get(cohortDate).users.add(userId);
     }
 
+    // 🔥 计算每个日期的总日活数（用于在日期旁边显示）
+    const dailyActiveUsersCount = new Map();
+    for (const record of allRecords) {
+      const date = record.date;
+      if (!dailyActiveUsersCount.has(date)) {
+        dailyActiveUsersCount.set(date, new Set());
+      }
+      dailyActiveUsersCount.get(date).add(record.userId);
+    }
+
     // 计算每个cohort在后续天的活跃情况
     const cohortResults = [];
     for (const [cohortDate, cohort] of cohorts.entries()) {
       const cohortUsers = cohort.users;
       const totalUsers = cohortUsers.size;
+      
+      // 获取当日总日活数
+      const dailyActiveCount = dailyActiveUsersCount.has(cohortDate)
+        ? dailyActiveUsersCount.get(cohortDate).size
+        : 0;
 
       // 计算第2天、第3天、第4天、第5天、第6天、第7天、第8天的日期
       const cohortDateObj = new Date(cohortDate);
@@ -1318,6 +1333,7 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
       cohortResults.push({
         cohortDate: cohortDate,
         newUsers: totalUsers,
+        dailyActiveUsers: dailyActiveCount, // 🔥 当日总日活数
         day2Active: day2Users.size,
         day2Retention: day2Retention,
         day3Active: day3Users.size,
