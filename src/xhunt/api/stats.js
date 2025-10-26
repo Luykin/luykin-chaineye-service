@@ -1167,28 +1167,24 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
     const startDate = req.query.startDate;
     const endDate = req.query.endDate;
 
-    // 如果没有指定日期范围，默认显示最近两周
+    // 如果没有指定日期范围，默认显示最近8天
     let defaultStartDate = new Date();
-    defaultStartDate.setDate(defaultStartDate.getDate() - 14);
+    defaultStartDate.setDate(defaultStartDate.getDate() - 8);
     const defaultStartStr = defaultStartDate.toISOString().split("T")[0];
     const defaultEndDate = new Date().toISOString().split("T")[0];
 
     const queryStartDate = startDate || defaultStartStr;
     const queryEndDate = endDate || defaultEndDate;
 
-    // 获取指定日期范围内的活跃记录，按用户和日期分组
+    // 🔥 关键修复：获取所有历史记录来正确计算首次活跃日期
+    // 不能只查询指定日期范围的记录，否则会错误计算首次活跃日期
     const allRecords = await DailyActiveUser.findAll({
       attributes: ["userId", "date"],
-      where: {
-        date: {
-          [Op.between]: [queryStartDate, queryEndDate],
-        },
-      },
       order: [["date", "ASC"]],
       raw: true,
     });
 
-    // 计算每个用户的首次活跃日期
+    // 计算每个用户的真实首次活跃日期（基于全部历史数据）
     const userFirstActiveDate = new Map();
     for (const record of allRecords) {
       const { userId, date } = record;
@@ -1197,11 +1193,16 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
       }
     }
 
-    // 按天分组计算cohort
+    // 按天分组计算cohort（只包含指定日期范围内首次活跃的用户）
     const cohorts = new Map(); // key: cohortDate, value: {users: Set}
 
     for (const [userId, firstDate] of userFirstActiveDate.entries()) {
       const cohortDate = firstDate; // 使用首次活跃日期作为cohort标识
+
+      // 🔥 只统计首次活跃日期在查询范围内的cohort
+      if (cohortDate < queryStartDate || cohortDate > queryEndDate) {
+        continue;
+      }
 
       if (!cohorts.has(cohortDate)) {
         cohorts.set(cohortDate, {
