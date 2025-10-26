@@ -1229,7 +1229,7 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
     for (const [cohortDate, cohort] of cohorts.entries()) {
       const cohortUsers = cohort.users;
       const totalUsers = cohortUsers.size;
-      
+
       // 获取当日总日活数
       const dailyActiveCount = dailyActiveUsersCount.has(cohortDate)
         ? dailyActiveUsersCount.get(cohortDate).size
