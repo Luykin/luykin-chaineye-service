@@ -115,12 +115,22 @@ function formatDateTime(date = new Date()) {
 
 /**
  * 基础认证中间件
- * 最简单的用户名密码验证
+ * 支持多用户角色验证
  */
 function basicAuth(req, res, next) {
-  // 从环境变量获取认证信息，如果没有则使用默认值
-  const STATS_USERNAME = process.env.STATS_USERNAME || "admin";
-  const STATS_PASSWORD = process.env.STATS_PASSWORD || "xhunt2024";
+  // 定义用户角色
+  const users = {
+    admin: {
+      password: process.env.STATS_ADMIN_PASSWORD || "d&sja6kl=8!u90%1i@admin",
+      role: "admin",
+      name: "管理员",
+    },
+    luykin: {
+      password: process.env.STATS_LUYKIN_PASSWORD || "wtf.0813",
+      role: "luykin",
+      name: "Luykin",
+    },
+  };
 
   const authHeader = req.headers.authorization;
 
@@ -150,7 +160,14 @@ function basicAuth(req, res, next) {
   const [username, password] = credentials.split(":");
 
   // 验证用户名密码
-  if (username === STATS_USERNAME && password === STATS_PASSWORD) {
+  const user = users[username];
+  if (user && user.password === password) {
+    // 将用户信息附加到请求对象上
+    req.user = {
+      username: username,
+      role: user.role,
+      name: user.name,
+    };
     next(); // 认证成功，继续处理请求
   } else {
     // 认证失败
@@ -227,6 +244,7 @@ router.get("/", basicAuth, async (req, res) => {
           stats,
           formatNumber,
           formatDateTime,
+          user: req.user, // 传递用户信息
         },
         (err, html) => {
           if (err) reject(err);
