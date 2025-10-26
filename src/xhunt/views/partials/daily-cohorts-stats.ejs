@@ -48,7 +48,7 @@
         />
       </div>
       <button
-        onclick="loadDailyCohorts()"
+        id="query-cohorts-btn"
         style="
           padding: 8px 20px;
           background: #3498db;
@@ -65,7 +65,7 @@
         查询
       </button>
       <button
-        onclick="resetDateRange()"
+        id="reset-cohorts-btn"
         style="
           padding: 8px 20px;
           background: #95a5a6;
@@ -98,7 +98,7 @@
   >
     <p style="color: #e74c3c; font-size: 16px">❌ 加载天级留存数据失败</p>
     <button
-      onclick="loadDailyCohorts()"
+      id="retry-cohorts-btn"
       style="
         margin-top: 15px;
         padding: 10px 20px;
@@ -196,7 +196,58 @@
 
   // 页面加载时初始化日期选择器和获取数据
   document.addEventListener("DOMContentLoaded", function () {
+    console.log("📌 DOMContentLoaded - 初始化天级留存分析");
+
+    // 初始化日期范围
     initializeDateRange();
+
+    // 绑定按钮事件
+    const queryBtn = document.getElementById("query-cohorts-btn");
+    const resetBtn = document.getElementById("reset-cohorts-btn");
+    const retryBtn = document.getElementById("retry-cohorts-btn");
+
+    if (queryBtn) {
+      queryBtn.addEventListener("click", loadDailyCohorts);
+      console.log("✅ 查询按钮事件已绑定");
+    } else {
+      console.error("❌ 找不到查询按钮");
+    }
+
+    if (resetBtn) {
+      resetBtn.addEventListener("click", resetDateRange);
+      console.log("✅ 重置按钮事件已绑定");
+    } else {
+      console.error("❌ 找不到重置按钮");
+    }
+
+    if (retryBtn) {
+      retryBtn.addEventListener("click", loadDailyCohorts);
+      console.log("✅ 重试按钮事件已绑定");
+    } else {
+      console.warn("⚠️  重试按钮未找到（正常，只在出错时显示）");
+    }
+
+    // 日期输入框支持回车键查询
+    const startDateInput = document.getElementById("start-date");
+    const endDateInput = document.getElementById("end-date");
+
+    if (startDateInput) {
+      startDateInput.addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          loadDailyCohorts();
+        }
+      });
+    }
+
+    if (endDateInput) {
+      endDateInput.addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          loadDailyCohorts();
+        }
+      });
+    }
+
+    // 初始加载数据
     loadDailyCohorts();
   });
 
