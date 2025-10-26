@@ -1134,11 +1134,14 @@ router.get("/weekly-cohorts", basicAuth, async (req, res) => {
     // 按周开始日期倒序排列
     cohortResults.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
 
+    // 只返回最近8周的数据
+    const recentCohorts = cohortResults.slice(0, 8);
+
     res.json({
       success: true,
       data: {
-        cohorts: cohortResults,
-        totalCohorts: cohortResults.length,
+        cohorts: recentCohorts,
+        totalCohorts: recentCohorts.length,
       },
     });
   } catch (error) {
