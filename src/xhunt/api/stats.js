@@ -1160,9 +1160,27 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
     const DailyActiveUser = postgresModels.DailyActiveUser;
     const { Op } = require("sequelize");
 
-    // 获取所有活跃记录，按用户和日期分组
+    // 获取查询参数
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+
+    // 如果没有指定日期范围，默认显示最近两周
+    let defaultStartDate = new Date();
+    defaultStartDate.setDate(defaultStartDate.getDate() - 14);
+    const defaultStartStr = defaultStartDate.toISOString().split("T")[0];
+    const defaultEndDate = new Date().toISOString().split("T")[0];
+
+    const queryStartDate = startDate || defaultStartStr;
+    const queryEndDate = endDate || defaultEndDate;
+
+    // 获取指定日期范围内的活跃记录，按用户和日期分组
     const allRecords = await DailyActiveUser.findAll({
       attributes: ["userId", "date"],
+      where: {
+        date: {
+          [Op.between]: [queryStartDate, queryEndDate],
+        },
+      },
       order: [["date", "ASC"]],
       raw: true,
     });
@@ -1325,6 +1343,10 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
       data: {
         cohorts: cohortResults,
         totalCohorts: cohortResults.length,
+        dateRange: {
+          startDate: queryStartDate,
+          endDate: queryEndDate,
+        },
       },
     });
   } catch (error) {

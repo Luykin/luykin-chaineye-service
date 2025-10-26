@@ -4,6 +4,85 @@
     <p style="color: #666; margin-top: 10px">
       基于用户首次活跃日期，追踪用户在第2、3、4、5、6、7、8、9、10天的活跃情况
     </p>
+
+    <!-- 日期选择器 -->
+    <div
+      style="
+        margin-top: 20px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        flex-wrap: wrap;
+      "
+    >
+      <div style="display: flex; align-items: center; gap: 8px">
+        <label for="start-date" style="font-weight: 500; color: #333"
+          >开始日期：</label
+        >
+        <input
+          type="date"
+          id="start-date"
+          style="
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+          "
+        />
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <label for="end-date" style="font-weight: 500; color: #333"
+          >结束日期：</label
+        >
+        <input
+          type="date"
+          id="end-date"
+          style="
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+          "
+        />
+      </div>
+      <button
+        onclick="loadDailyCohorts()"
+        style="
+          padding: 8px 20px;
+          background: #3498db;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          font-weight: 500;
+          transition: background 0.3s;
+        "
+        onmouseover="this.style.background='#2980b9'"
+        onmouseout="this.style.background='#3498db'"
+      >
+        查询
+      </button>
+      <button
+        onclick="resetDateRange()"
+        style="
+          padding: 8px 20px;
+          background: #95a5a6;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          font-weight: 500;
+          transition: background 0.3s;
+        "
+        onmouseover="this.style.background='#7f8c8d'"
+        onmouseout="this.style.background='#95a5a6'"
+      >
+        重置为最近两周
+      </button>
+      <span id="date-range-info" style="color: #666; font-size: 14px"></span>
+    </div>
   </div>
 
   <!-- 加载状态 -->
@@ -115,10 +194,31 @@
     return `rgb(${r}, ${g}, ${b})`;
   }
 
-  // 页面加载时获取数据
+  // 页面加载时初始化日期选择器和获取数据
   document.addEventListener("DOMContentLoaded", function () {
+    initializeDateRange();
     loadDailyCohorts();
   });
+
+  // 初始化日期范围为最近两周
+  function initializeDateRange() {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 14);
+
+    document.getElementById("end-date").value = endDate
+      .toISOString()
+      .split("T")[0];
+    document.getElementById("start-date").value = startDate
+      .toISOString()
+      .split("T")[0];
+  }
+
+  // 重置日期范围为最近两周
+  function resetDateRange() {
+    initializeDateRange();
+    loadDailyCohorts();
+  }
 
   async function loadDailyCohorts() {
     const loadingEl = document.getElementById("daily-cohorts-loading");
@@ -134,7 +234,19 @@
     emptyEl.style.display = "none";
 
     try {
-      const response = await fetch("/api/xhunt/stats/daily-cohorts", {
+      // 获取日期范围
+      const startDate = document.getElementById("start-date").value;
+      const endDate = document.getElementById("end-date").value;
+
+      // 构建查询URL
+      const url = new URL(
+        "/api/xhunt/stats/daily-cohorts",
+        window.location.origin
+      );
+      if (startDate) url.searchParams.append("startDate", startDate);
+      if (endDate) url.searchParams.append("endDate", endDate);
+
+      const response = await fetch(url.toString(), {
         credentials: "include",
       });
 
@@ -143,6 +255,12 @@
       }
 
       const result = await response.json();
+
+      // 显示日期范围信息
+      if (result.data && result.data.dateRange) {
+        const dateInfo = document.getElementById("date-range-info");
+        dateInfo.textContent = `显示范围: ${result.data.dateRange.startDate} 至 ${result.data.dateRange.endDate}`;
+      }
 
       if (result.success && result.data && result.data.cohorts.length > 0) {
         // 显示表格
