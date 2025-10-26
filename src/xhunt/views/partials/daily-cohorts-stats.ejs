@@ -79,7 +79,7 @@
         onmouseover="this.style.background='#7f8c8d'"
         onmouseout="this.style.background='#95a5a6'"
       >
-        重置为最近两周
+        重置为最近8天
       </button>
       <span id="date-range-info" style="color: #666; font-size: 14px"></span>
     </div>
@@ -200,11 +200,11 @@
     loadDailyCohorts();
   });
 
-  // 初始化日期范围为最近两周
+  // 初始化日期范围为最近8天
   function initializeDateRange() {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 14);
+    startDate.setDate(endDate.getDate() - 8);
 
     document.getElementById("end-date").value = endDate
       .toISOString()
@@ -214,7 +214,7 @@
       .split("T")[0];
   }
 
-  // 重置日期范围为最近两周
+  // 重置日期范围为最近8天
   function resetDateRange() {
     initializeDateRange();
     loadDailyCohorts();
