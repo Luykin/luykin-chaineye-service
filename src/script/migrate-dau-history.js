@@ -70,12 +70,10 @@ async function migrateDauHistory() {
       return;
     }
 
-    // 获取昨天的日期
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split("T")[0];
+    // 将历史用户标记为 2025-10-17 活跃（真实 DAU 追踪从 10-18 开始）
+    const historicalDate = "2025-10-17";
 
-    console.log(`📅 将历史用户标记为 ${yesterdayStr} 活跃`);
+    console.log(`📅 将历史用户标记为 ${historicalDate} 活跃`);
 
     // 批量插入数据（优化性能）
     const batchSize = 1000; // 每次批量插入1000条
@@ -89,7 +87,7 @@ async function migrateDauHistory() {
         // 准备批量插入的数据
         const recordsToInsert = batch.map((userId) => ({
           userId: userId,
-          date: yesterdayStr,
+          date: historicalDate,
         }));
 
         // 使用 bulkCreate 批量插入，ignoreDuplicates 会自动跳过已存在的记录
@@ -122,11 +120,11 @@ async function migrateDauHistory() {
               await DailyActiveUser.findOrCreate({
                 where: {
                   userId: userId,
-                  date: yesterdayStr,
+                  date: historicalDate,
                 },
                 defaults: {
                   userId: userId,
-                  date: yesterdayStr,
+                  date: historicalDate,
                 },
               });
             } catch (singleError) {
