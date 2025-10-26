@@ -1,0 +1,248 @@
+<div class="section" style="padding: 20px">
+  <div class="header-section" style="margin-bottom: 30px">
+    <h2>📊 周级留存分析</h2>
+    <p style="color: #666; margin-top: 10px">
+      基于用户首次活跃周，追踪用户在第2、3、4周的活跃情况
+    </p>
+  </div>
+
+  <!-- 加载状态 -->
+  <div id="weekly-cohorts-loading" style="text-align: center; padding: 40px">
+    <div class="loading-spinner"></div>
+    <p style="margin-top: 15px; color: #666">正在加载周级留存数据...</p>
+  </div>
+
+  <!-- 错误状态 -->
+  <div
+    id="weekly-cohorts-error"
+    style="display: none; text-align: center; padding: 40px"
+  >
+    <p style="color: #e74c3c; font-size: 16px">❌ 加载周级留存数据失败</p>
+    <button
+      onclick="loadWeeklyCohorts()"
+      style="
+        margin-top: 15px;
+        padding: 10px 20px;
+        background: #3498db;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      "
+    >
+      重试
+    </button>
+  </div>
+
+  <!-- 数据表格 -->
+  <div id="weekly-cohorts-table" style="display: none">
+    <table
+      style="
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      "
+    >
+      <thead>
+        <tr
+          style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+          "
+        >
+          <th style="padding: 15px; text-align: left; font-weight: 600">
+            首次活跃周
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            新用户数
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第2周活跃
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第2周留存率
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第3周活跃
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第3周留存率
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第4周活跃
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第4周留存率
+          </th>
+        </tr>
+      </thead>
+      <tbody id="weekly-cohorts-tbody">
+        <!-- 数据将通过JavaScript填充 -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 空状态 -->
+  <div
+    id="weekly-cohorts-empty"
+    style="display: none; text-align: center; padding: 40px"
+  >
+    <p style="color: #999; font-size: 16px">暂无周级留存数据</p>
+  </div>
+</div>
+
+<script>
+  // 页面加载时获取数据
+  document.addEventListener("DOMContentLoaded", function () {
+    loadWeeklyCohorts();
+  });
+
+  async function loadWeeklyCohorts() {
+    const loadingEl = document.getElementById("weekly-cohorts-loading");
+    const errorEl = document.getElementById("weekly-cohorts-error");
+    const tableEl = document.getElementById("weekly-cohorts-table");
+    const emptyEl = document.getElementById("weekly-cohorts-empty");
+    const tbodyEl = document.getElementById("weekly-cohorts-tbody");
+
+    // 显示加载状态
+    loadingEl.style.display = "block";
+    errorEl.style.display = "none";
+    tableEl.style.display = "none";
+    emptyEl.style.display = "none";
+
+    try {
+      const response = await fetch("/api/xhunt/stats/weekly-cohorts", {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data && result.data.cohorts.length > 0) {
+        // 显示表格
+        loadingEl.style.display = "none";
+        tableEl.style.display = "block";
+        errorEl.style.display = "none";
+
+        // 填充数据
+        tbodyEl.innerHTML = result.data.cohorts
+          .map((cohort) => {
+            // 格式化周开始日期
+            const weekStartFormatted = new Date(
+              cohort.weekStart
+            ).toLocaleDateString("zh-CN", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            });
+
+            return `
+              <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 15px; font-weight: 500; color: #333;">
+                  ${weekStartFormatted}
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600; color: #3498db;">
+                  ${cohort.newUsers.toLocaleString()}
+                </td>
+                <td style="padding: 15px; text-align: center;">
+                  ${cohort.week2Active.toLocaleString()}
+                  } (<span style="color: #27ae60; font-weight: 600;">${parseFloat(
+                    cohort.week2Retention
+                  ).toFixed(1)}%</span>)
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600;">
+                  <span style="color: ${
+                    parseFloat(cohort.week2Retention) >= 30
+                      ? "#27ae60"
+                      : parseFloat(cohort.week2Retention) >= 20
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  };">
+                    ${parseFloat(cohort.week2Retention).toFixed(1)}%
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center;">
+                  ${cohort.week3Active.toLocaleString()} (<span style="color: #27ae60; font-weight: 600;">${parseFloat(
+              cohort.week3Retention
+            ).toFixed(1)}%</span>)
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600;">
+                  <span style="color: ${
+                    parseFloat(cohort.week3Retention) >= 20
+                      ? "#27ae60"
+                      : parseFloat(cohort.week3Retention) >= 15
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  };">
+                    ${parseFloat(cohort.week3Retention).toFixed(1)}%
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center;">
+                  ${cohort.week4Active.toLocaleString()} (<span style="color: #27ae60; font-weight: 600;">${parseFloat(
+              cohort.week4Retention
+            ).toFixed(1)}%</span>)
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600;">
+                  <span style="color: ${
+                    parseFloat(cohort.week4Retention) >= 15
+                      ? "#27ae60"
+                      : parseFloat(cohort.week4Retention) >= 10
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  };">
+                    ${parseFloat(cohort.week4Retention).toFixed(1)}%
+                  </span>
+                </td>
+              </tr>
+            `;
+          })
+          .join("");
+
+        // 添加斑马纹效果
+        const rows = tbodyEl.querySelectorAll("tr");
+        rows.forEach((row, index) => {
+          if (index % 2 === 1) {
+            row.style.backgroundColor = "#f8f9fa";
+          }
+        });
+      } else {
+        // 显示空状态
+        loadingEl.style.display = "none";
+        emptyEl.style.display = "block";
+        tableEl.style.display = "none";
+      }
+    } catch (error) {
+      console.error("Error loading weekly cohorts:", error);
+      loadingEl.style.display = "none";
+      errorEl.style.display = "block";
+      tableEl.style.display = "none";
+    }
+  }
+</script>
+
+<style>
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+  }
+</style>

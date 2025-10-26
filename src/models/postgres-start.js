@@ -9,6 +9,7 @@ const XPointRecordModel = require("../xhunt/models/XPointRecord");
 const XPrivateNoteModel = require("../xhunt/models/XPrivateNote");
 const MantleRegistrationModel = require("../xhunt/models/MantleRegistration");
 const XPrivateMessageModel = require("../xhunt/models/XPrivateMessage");
+const DailyActiveUserModel = require("../xhunt/models/DailyActiveUser");
 
 const pgInstance = new Sequelize({
   dialect: process.env.PG_DIALECT,
@@ -36,6 +37,7 @@ const XPointRecord = XPointRecordModel(pgInstance);
 const XPrivateNote = XPrivateNoteModel(pgInstance);
 const MantleRegistration = MantleRegistrationModel(pgInstance);
 const XPrivateMessage = XPrivateMessageModel(pgInstance);
+const DailyActiveUser = DailyActiveUserModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -175,4 +177,5 @@ module.exports = {
   XPrivateNote,
   MantleRegistration,
   XPrivateMessage,
+  DailyActiveUser,
 };

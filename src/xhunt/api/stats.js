@@ -989,6 +989,314 @@ router.post("/send-messages", basicAuth, async (req, res) => {
 });
 
 /**
+ * GET /weekly-cohorts
+ * 获取周级活跃cohort分析数据（需要认证）
+ */
+router.get("/weekly-cohorts", basicAuth, async (req, res) => {
+  try {
+    const postgresModels = require("../../models/postgres-start");
+    const DailyActiveUser = postgresModels.DailyActiveUser;
+    const { Op } = require("sequelize");
+
+    // 获取所有活跃记录，按用户和日期分组
+    const allRecords = await DailyActiveUser.findAll({
+      attributes: ["userId", "date"],
+      order: [["date", "ASC"]],
+      raw: true,
+    });
+
+    // 计算每个用户的首次活跃日期
+    const userFirstActiveDate = new Map();
+    for (const record of allRecords) {
+      const { userId, date } = record;
+      if (!userFirstActiveDate.has(userId)) {
+        userFirstActiveDate.set(userId, date);
+      }
+    }
+
+    // 按周分组计算cohort
+    const cohorts = new Map(); // key: weekStart, value: {users: Set, weekDates: Map}
+
+    for (const [userId, firstDate] of userFirstActiveDate.entries()) {
+      const firstDateObj = new Date(firstDate);
+
+      // 计算第一周的周一开始日期（中国时区）
+      const dayOfWeek = firstDateObj.getDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const firstMonday = new Date(firstDateObj);
+      firstMonday.setDate(firstMonday.getDate() + mondayOffset);
+
+      // 格式化为 YYYY-MM-DD
+      const weekStart = firstMonday.toISOString().split("T")[0];
+
+      if (!cohorts.has(weekStart)) {
+        cohorts.set(weekStart, {
+          weekStart: weekStart,
+          users: new Set(),
+          activeDates: new Set(), // 该cohort在哪些日期活跃
+        });
+      }
+
+      cohorts.get(weekStart).users.add(userId);
+
+      // 找出该用户活跃的所有日期，加入到cohort的活跃日期集合中
+      for (const record of allRecords) {
+        if (record.userId === userId) {
+          cohorts.get(weekStart).activeDates.add(record.date);
+        }
+      }
+    }
+
+    // 计算每个cohort在后续周的活跃情况
+    const cohortResults = [];
+    for (const [weekStart, cohort] of cohorts.entries()) {
+      const weekStartDate = new Date(weekStart);
+      const cohortUsers = cohort.users;
+      const totalUsers = cohortUsers.size;
+
+      // 计算第2周、第3周、第4周的日期范围
+      const week2Start = new Date(weekStartDate);
+      week2Start.setDate(weekStartDate.getDate() + 7);
+      const week2StartStr = week2Start.toISOString().split("T")[0];
+
+      const week3Start = new Date(weekStartDate);
+      week3Start.setDate(weekStartDate.getDate() + 14);
+      const week3StartStr = week3Start.toISOString().split("T")[0];
+
+      const week4Start = new Date(weekStartDate);
+      week4Start.setDate(weekStartDate.getDate() + 21);
+      const week4StartStr = week4Start.toISOString().split("T")[0];
+
+      // 计算每周的活跃用户数
+      const week2Users = new Set();
+      const week3Users = new Set();
+      const week4Users = new Set();
+
+      for (const record of allRecords) {
+        if (!cohortUsers.has(record.userId)) continue;
+
+        const recordDate = record.date;
+
+        // 检查是否在第2周
+        if (recordDate >= week2StartStr && recordDate < week3StartStr) {
+          week2Users.add(record.userId);
+        }
+
+        // 检查是否在第3周
+        if (recordDate >= week3StartStr && recordDate < week4StartStr) {
+          week3Users.add(record.userId);
+        }
+
+        // 检查是否在第4周
+        if (recordDate >= week4StartStr) {
+          week4Users.add(record.userId);
+        }
+      }
+
+      // 计算留存率
+      const week2Retention =
+        totalUsers > 0 ? ((week2Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const week3Retention =
+        totalUsers > 0 ? ((week3Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const week4Retention =
+        totalUsers > 0 ? ((week4Users.size / totalUsers) * 100).toFixed(1) : 0;
+
+      cohortResults.push({
+        weekStart: weekStart,
+        newUsers: totalUsers,
+        week2Active: week2Users.size,
+        week2Retention: week2Retention,
+        week3Active: week3Users.size,
+        week3Retention: week3Retention,
+        week4Active: week4Users.size,
+        week4Retention: week4Retention,
+      });
+    }
+
+    // 按周开始日期倒序排列
+    cohortResults.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+
+    res.json({
+      success: true,
+      data: {
+        cohorts: cohortResults,
+        totalCohorts: cohortResults.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching weekly cohorts:", error);
+    res.status(500).json({
+      success: false,
+      error: "获取周级cohort数据失败",
+    });
+  }
+});
+
+/**
+ * GET /daily-cohorts
+ * 获取天级活跃cohort分析数据（需要认证）
+ */
+router.get("/daily-cohorts", basicAuth, async (req, res) => {
+  try {
+    const postgresModels = require("../../models/postgres-start");
+    const DailyActiveUser = postgresModels.DailyActiveUser;
+    const { Op } = require("sequelize");
+
+    // 获取所有活跃记录，按用户和日期分组
+    const allRecords = await DailyActiveUser.findAll({
+      attributes: ["userId", "date"],
+      order: [["date", "ASC"]],
+      raw: true,
+    });
+
+    // 计算每个用户的首次活跃日期
+    const userFirstActiveDate = new Map();
+    for (const record of allRecords) {
+      const { userId, date } = record;
+      if (!userFirstActiveDate.has(userId)) {
+        userFirstActiveDate.set(userId, date);
+      }
+    }
+
+    // 按天分组计算cohort
+    const cohorts = new Map(); // key: cohortDate, value: {users: Set}
+
+    for (const [userId, firstDate] of userFirstActiveDate.entries()) {
+      const cohortDate = firstDate; // 使用首次活跃日期作为cohort标识
+
+      if (!cohorts.has(cohortDate)) {
+        cohorts.set(cohortDate, {
+          cohortDate: cohortDate,
+          users: new Set(),
+        });
+      }
+
+      cohorts.get(cohortDate).users.add(userId);
+    }
+
+    // 计算每个cohort在后续天的活跃情况
+    const cohortResults = [];
+    for (const [cohortDate, cohort] of cohorts.entries()) {
+      const cohortUsers = cohort.users;
+      const totalUsers = cohortUsers.size;
+
+      // 计算第2天、第3天、第4天、第5天、第6天、第7天、第8天的日期
+      const cohortDateObj = new Date(cohortDate);
+      const day2Date = new Date(cohortDateObj);
+      day2Date.setDate(cohortDateObj.getDate() + 1);
+      const day2Str = day2Date.toISOString().split("T")[0];
+
+      const day3Date = new Date(cohortDateObj);
+      day3Date.setDate(cohortDateObj.getDate() + 2);
+      const day3Str = day3Date.toISOString().split("T")[0];
+
+      const day4Date = new Date(cohortDateObj);
+      day4Date.setDate(cohortDateObj.getDate() + 3);
+      const day4Str = day4Date.toISOString().split("T")[0];
+
+      const day5Date = new Date(cohortDateObj);
+      day5Date.setDate(cohortDateObj.getDate() + 4);
+      const day5Str = day5Date.toISOString().split("T")[0];
+
+      const day6Date = new Date(cohortDateObj);
+      day6Date.setDate(cohortDateObj.getDate() + 5);
+      const day6Str = day6Date.toISOString().split("T")[0];
+
+      const day7Date = new Date(cohortDateObj);
+      day7Date.setDate(cohortDateObj.getDate() + 6);
+      const day7Str = day7Date.toISOString().split("T")[0];
+
+      const day8Date = new Date(cohortDateObj);
+      day8Date.setDate(cohortDateObj.getDate() + 7);
+      const day8Str = day8Date.toISOString().split("T")[0];
+
+      // 计算每天的活跃用户数
+      const day2Users = new Set();
+      const day3Users = new Set();
+      const day4Users = new Set();
+      const day5Users = new Set();
+      const day6Users = new Set();
+      const day7Users = new Set();
+      const day8Users = new Set();
+
+      for (const record of allRecords) {
+        if (!cohortUsers.has(record.userId)) continue;
+
+        const recordDate = record.date;
+
+        if (recordDate === day2Str) {
+          day2Users.add(record.userId);
+        } else if (recordDate === day3Str) {
+          day3Users.add(record.userId);
+        } else if (recordDate === day4Str) {
+          day4Users.add(record.userId);
+        } else if (recordDate === day5Str) {
+          day5Users.add(record.userId);
+        } else if (recordDate === day6Str) {
+          day6Users.add(record.userId);
+        } else if (recordDate === day7Str) {
+          day7Users.add(record.userId);
+        } else if (recordDate === day8Str) {
+          day8Users.add(record.userId);
+        }
+      }
+
+      // 计算留存率
+      const day2Retention =
+        totalUsers > 0 ? ((day2Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const day3Retention =
+        totalUsers > 0 ? ((day3Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const day4Retention =
+        totalUsers > 0 ? ((day4Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const day5Retention =
+        totalUsers > 0 ? ((day5Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const day6Retention =
+        totalUsers > 0 ? ((day6Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const day7Retention =
+        totalUsers > 0 ? ((day7Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const day8Retention =
+        totalUsers > 0 ? ((day8Users.size / totalUsers) * 100).toFixed(1) : 0;
+
+      cohortResults.push({
+        cohortDate: cohortDate,
+        newUsers: totalUsers,
+        day2Active: day2Users.size,
+        day2Retention: day2Retention,
+        day3Active: day3Users.size,
+        day3Retention: day3Retention,
+        day4Active: day4Users.size,
+        day4Retention: day4Retention,
+        day5Active: day5Users.size,
+        day5Retention: day5Retention,
+        day6Active: day6Users.size,
+        day6Retention: day6Retention,
+        day7Active: day7Users.size,
+        day7Retention: day7Retention,
+        day8Active: day8Users.size,
+        day8Retention: day8Retention,
+      });
+    }
+
+    // 按日期倒序排列
+    cohortResults.sort((a, b) => b.cohortDate.localeCompare(a.cohortDate));
+
+    res.json({
+      success: true,
+      data: {
+        cohorts: cohortResults,
+        totalCohorts: cohortResults.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching daily cohorts:", error);
+    res.status(500).json({
+      success: false,
+      error: "获取天级cohort数据失败",
+    });
+  }
+});
+
+/**
  * GET /health
  * 健康检查接口（无需认证）
  */

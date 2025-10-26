@@ -1,0 +1,142 @@
+const fs = require("fs");
+const fsPromises = require("fs").promises;
+const path = require("path");
+
+// 加载环境变量（优先使用 .env-pro，然后 .env-dev，最后 .env）
+const envProFile = path.join(__dirname, "../../.env-pro");
+const envDevFile = path.join(__dirname, "../../.env-dev");
+const envFile = path.join(__dirname, "../../.env");
+
+if (fs.existsSync(envProFile)) {
+  require("dotenv").config({ path: envProFile });
+  console.log("📝 使用 .env-pro 配置文件");
+} else if (fs.existsSync(envDevFile)) {
+  require("dotenv").config({ path: envDevFile });
+  console.log("📝 使用 .env-dev 配置文件");
+} else if (fs.existsSync(envFile)) {
+  require("dotenv").config({ path: envFile });
+  console.log("📝 使用 .env 配置文件");
+} else {
+  require("dotenv").config();
+  console.log("📝 尝试默认环境变量配置");
+}
+const { setupPostgres, DailyActiveUser } = require("../models/postgres-start");
+
+/**
+ * 数据迁移脚本：将 dau-all-users.json 的历史数据导入到数据库
+ * 标记所有历史用户为昨天活跃
+ */
+async function migrateDauHistory() {
+  console.log("🚀 开始数据迁移：从dau-all-users.json导入历史数据");
+
+  try {
+    // 初始化数据库连接（会自动创建不存在的表）
+    console.log("📊 正在同步数据库结构（如果表不存在会自动创建）...");
+    await setupPostgres();
+    console.log("✅ 数据库结构同步完成");
+
+    // 验证 DailyActiveUsers 表是否存在
+    try {
+      await DailyActiveUser.findOne({ limit: 1 });
+      console.log("✅ DailyActiveUsers 表已存在");
+    } catch (error) {
+      console.error("❌ DailyActiveUsers 表创建失败:", error.message);
+      throw error;
+    }
+
+    // 读取备份文件
+    const backupFilePath = path.join(
+      __dirname,
+      "../../data/dau-backups/dau-all-users.json"
+    );
+
+    let backupData;
+    try {
+      const fileContent = await fsPromises.readFile(backupFilePath, "utf8");
+      backupData = JSON.parse(fileContent);
+      console.log(
+        `✅ 成功读取备份文件，包含 ${backupData.users?.length || 0} 个用户`
+      );
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        console.log("⚠️  备份文件不存在，跳过迁移");
+        return;
+      }
+      throw error;
+    }
+
+    if (!backupData.users || backupData.users.length === 0) {
+      console.log("ℹ️  备份文件中没有用户数据，跳过迁移");
+      return;
+    }
+
+    // 获取昨天的日期
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+    console.log(`📅 将历史用户标记为 ${yesterdayStr} 活跃`);
+
+    // 批量插入数据
+    const batchSize = 100;
+    let insertedCount = 0;
+    let skippedCount = 0;
+
+    for (let i = 0; i < backupData.users.length; i += batchSize) {
+      const batch = backupData.users.slice(i, i + batchSize);
+
+      for (const userId of batch) {
+        try {
+          // 使用 findOrCreate 避免重复插入
+          const [record, created] = await DailyActiveUser.findOrCreate({
+            where: {
+              userId: userId,
+              date: yesterdayStr,
+            },
+            defaults: {
+              userId: userId,
+              date: yesterdayStr,
+            },
+          });
+
+          if (created) {
+            insertedCount++;
+          } else {
+            skippedCount++;
+          }
+        } catch (error) {
+          console.error(`❌ 插入用户 ${userId} 失败:`, error.message);
+        }
+      }
+
+      // 显示进度
+      if (
+        (i + batch.length) % 1000 === 0 ||
+        i + batch.length === backupData.users.length
+      ) {
+        console.log(
+          `📊 进度: ${i + batch.length}/${
+            backupData.users.length
+          } (已插入: ${insertedCount}, 跳过: ${skippedCount})`
+        );
+      }
+    }
+
+    console.log(`\n✅ 数据迁移完成！`);
+    console.log(`📈 总计: ${backupData.users.length} 个用户`);
+    console.log(`✅ 新插入: ${insertedCount} 条记录`);
+    console.log(`⏭️  已存在: ${skippedCount} 条记录`);
+
+    // 显示数据库中的总记录数
+    const totalCount = await DailyActiveUser.count();
+    console.log(`\n💾 数据库中总记录数: ${totalCount}`);
+
+    process.exit(0);
+  } catch (error) {
+    console.error("❌ 数据迁移失败:", error);
+    process.exit(1);
+  }
+}
+
+// 执行迁移
+migrateDauHistory();

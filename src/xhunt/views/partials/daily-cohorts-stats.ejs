@@ -1,0 +1,307 @@
+<div class="section" style="padding: 20px">
+  <div class="header-section" style="margin-bottom: 30px">
+    <h2>📈 天级留存分析</h2>
+    <p style="color: #666; margin-top: 10px">
+      基于用户首次活跃日期，追踪用户在第2、3、4、5、6、7、8天的活跃情况
+    </p>
+  </div>
+
+  <!-- 加载状态 -->
+  <div id="daily-cohorts-loading" style="text-align: center; padding: 40px">
+    <div class="loading-spinner"></div>
+    <p style="margin-top: 15px; color: #666">正在加载天级留存数据...</p>
+  </div>
+
+  <!-- 错误状态 -->
+  <div
+    id="daily-cohorts-error"
+    style="display: none; text-align: center; padding: 40px"
+  >
+    <p style="color: #e74c3c; font-size: 16px">❌ 加载天级留存数据失败</p>
+    <button
+      onclick="loadDailyCohorts()"
+      style="
+        margin-top: 15px;
+        padding: 10px 20px;
+        background: #3498db;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      "
+    >
+      重试
+    </button>
+  </div>
+
+  <!-- 数据表格 -->
+  <div id="daily-cohorts-table" style="display: none">
+    <table
+      style="
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      "
+    >
+      <thead>
+        <tr
+          style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+          "
+        >
+          <th style="padding: 15px; text-align: left; font-weight: 600">
+            首次活跃日期
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            新用户数
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第2天
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第3天
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第4天
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第5天
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第6天
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第7天
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第8天
+          </th>
+        </tr>
+      </thead>
+      <tbody id="daily-cohorts-tbody">
+        <!-- 数据将通过JavaScript填充 -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 空状态 -->
+  <div
+    id="daily-cohorts-empty"
+    style="display: none; text-align: center; padding: 40px"
+  >
+    <p style="color: #999; font-size: 16px">暂无天级留存数据</p>
+  </div>
+</div>
+
+<script>
+  // 页面加载时获取数据
+  document.addEventListener("DOMContentLoaded", function () {
+    loadDailyCohorts();
+  });
+
+  async function loadDailyCohorts() {
+    const loadingEl = document.getElementById("daily-cohorts-loading");
+    const errorEl = document.getElementById("daily-cohorts-error");
+    const tableEl = document.getElementById("daily-cohorts-table");
+    const emptyEl = document.getElementById("daily-cohorts-empty");
+    const tbodyEl = document.getElementById("daily-cohorts-tbody");
+
+    // 显示加载状态
+    loadingEl.style.display = "block";
+    errorEl.style.display = "none";
+    tableEl.style.display = "none";
+    emptyEl.style.display = "none";
+
+    try {
+      const response = await fetch("/api/xhunt/stats/daily-cohorts", {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data && result.data.cohorts.length > 0) {
+        // 显示表格
+        loadingEl.style.display = "none";
+        tableEl.style.display = "block";
+        errorEl.style.display = "none";
+
+        // 填充数据
+        tbodyEl.innerHTML = result.data.cohorts
+          .map((cohort) => {
+            // 格式化日期
+            const dateFormatted = new Date(
+              cohort.cohortDate
+            ).toLocaleDateString("zh-CN", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            });
+
+            return `
+              <tr style="border-bottom: 1px solid #eee">
+                <td style="padding: 15px; font-weight: 500; color: #333">
+                  ${dateFormatted}
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600; color: #3498db">
+                  ${cohort.newUsers.toLocaleString()}
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600">
+                  <span style="color: ${
+                    parseFloat(cohort.day2Retention) >= 30
+                      ? "#27ae60"
+                      : parseFloat(cohort.day2Retention) >= 20
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  }">
+                    ${parseFloat(cohort.day2Retention).toFixed(1)}%
+                  </span>
+                  <br>
+                  <span style="font-size: 12px; color: #999">
+                    ${cohort.day2Active}人
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600">
+                  <span style="color: ${
+                    parseFloat(cohort.day3Retention) >= 20
+                      ? "#27ae60"
+                      : parseFloat(cohort.day3Retention) >= 15
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  }">
+                    ${parseFloat(cohort.day3Retention).toFixed(1)}%
+                  </span>
+                  <br>
+                  <span style="font-size: 12px; color: #999">
+                    ${cohort.day3Active}人
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600">
+                  <span style="color: ${
+                    parseFloat(cohort.day4Retention) >= 15
+                      ? "#27ae60"
+                      : parseFloat(cohort.day4Retention) >= 10
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  }">
+                    ${parseFloat(cohort.day4Retention).toFixed(1)}%
+                  </span>
+                  <br>
+                  <span style="font-size: 12px; color: #999">
+                    ${cohort.day4Active}人
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600">
+                  <span style="color: ${
+                    parseFloat(cohort.day5Retention) >= 15
+                      ? "#27ae60"
+                      : parseFloat(cohort.day5Retention) >= 10
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  }">
+                    ${parseFloat(cohort.day5Retention).toFixed(1)}%
+                  </span>
+                  <br>
+                  <span style="font-size: 12px; color: #999">
+                    ${cohort.day5Active}人
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600">
+                  <span style="color: ${
+                    parseFloat(cohort.day6Retention) >= 15
+                      ? "#27ae60"
+                      : parseFloat(cohort.day6Retention) >= 10
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  }">
+                    ${parseFloat(cohort.day6Retention).toFixed(1)}%
+                  </span>
+                  <br>
+                  <span style="font-size: 12px; color: #999">
+                    ${cohort.day6Active}人
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600">
+                  <span style="color: ${
+                    parseFloat(cohort.day7Retention) >= 15
+                      ? "#27ae60"
+                      : parseFloat(cohort.day7Retention) >= 10
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  }">
+                    ${parseFloat(cohort.day7Retention).toFixed(1)}%
+                  </span>
+                  <br>
+                  <span style="font-size: 12px; color: #999">
+                    ${cohort.day7Active}人
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600">
+                  <span style="color: ${
+                    parseFloat(cohort.day8Retention) >= 15
+                      ? "#27ae60"
+                      : parseFloat(cohort.day8Retention) >= 10
+                      ? "#f39c12"
+                      : "#e74c3c"
+                  }">
+                    ${parseFloat(cohort.day8Retention).toFixed(1)}%
+                  </span>
+                  <br>
+                  <span style="font-size: 12px; color: #999">
+                    ${cohort.day8Active}人
+                  </span>
+                </td>
+              </tr>
+            `;
+          })
+          .join("");
+
+        // 添加斑马纹效果
+        const rows = tbodyEl.querySelectorAll("tr");
+        rows.forEach((row, index) => {
+          if (index % 2 === 1) {
+            row.style.backgroundColor = "#f8f9fa";
+          }
+        });
+      } else {
+        // 显示空状态
+        loadingEl.style.display = "none";
+        emptyEl.style.display = "block";
+        tableEl.style.display = "none";
+      }
+    } catch (error) {
+      console.error("Error loading daily cohorts:", error);
+      loadingEl.style.display = "none";
+      errorEl.style.display = "block";
+      tableEl.style.display = "none";
+    }
+  }
+</script>
+
+<style>
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+  }
+</style>

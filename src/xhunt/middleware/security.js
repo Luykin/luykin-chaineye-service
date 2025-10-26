@@ -1,6 +1,8 @@
 const rateLimit = require("express-rate-limit");
 const crypto = require("crypto");
 const DAUBackupService = require("../../services/dauBackupService");
+// 延迟导入以避免循环依赖
+let DailyActiveUser = null;
 
 // 🚀 智能日活统计缓存管理器
 class DAUCacheManager {
@@ -415,19 +417,47 @@ const securityMiddleware = (req, res, next) => {
 
       const today = beijingDate.toISOString().split("T")[0];
 
-      // 异步写入 Redis（非阻塞）
+      // 异步写入 Redis 和 PostgreSQL（非阻塞）
       setImmediate(async () => {
         try {
+          // 写入 Redis
           const dauKey = `dau:${today}`;
           // 使用 fingerprint,x-user-id 组合作为唯一标识，提高统计精确性
           const uniqueIdentifier = `${fingerprint},${xUserId}`;
           await req.redisClient.sAdd(dauKey, uniqueIdentifier);
           // 设置过期时间（保留8天，确保7天数据完整）
           await req.redisClient.expire(dauKey, 8 * 24 * 60 * 60);
-        } catch (redisError) {
-          // Redis 错误不影响主流程，只记录日志
-          console.error("DAU tracking error:", redisError);
-          // Redis 失败时从缓存中移除，允许下次重试
+
+          // 写入 PostgreSQL（延迟加载模型避免循环依赖）
+          if (!DailyActiveUser) {
+            const postgresModels = require("../../models/postgres-start");
+            DailyActiveUser = postgresModels.DailyActiveUser;
+          }
+
+          // 注意：此方法只在 shouldWriteToRedis 返回 true 时才调用
+          // 而 shouldWriteToRedis 会确保 xUserId 存在
+          // 使用 xUserId 作为用户标识（只记录登录用户）
+          const [record, created] = await DailyActiveUser.findOrCreate({
+            where: {
+              userId: xUserId, // 只使用 xUserId，不fallback到fingerprint
+              date: today,
+            },
+            defaults: {
+              userId: xUserId,
+              date: today,
+            },
+          });
+
+          // 记录数据库写入日志
+          if (created) {
+            console.log(
+              `📊 DAU数据库记录已创建: userId=${xUserId}, date=${today}`
+            );
+          }
+        } catch (error) {
+          // 错误不影响主流程，只记录日志
+          console.error("DAU tracking error:", error);
+          // 失败时从缓存中移除，允许下次重试
           dauCacheManager.removeFromCache(fingerprint, xUserId);
         }
       });

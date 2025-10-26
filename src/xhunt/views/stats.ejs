@@ -39,6 +39,8 @@
           <button class="tab-btn" data-tab="messages">💬 发送私信</button>
           <button class="tab-btn" data-tab="data-export">📤 数据导出</button>
           <button class="tab-btn" data-tab="log-search">🔍 日志搜索</button>
+          <button class="tab-btn" data-tab="weekly-cohorts">📊 周级留存</button>
+          <button class="tab-btn" data-tab="daily-cohorts">📈 天级留存</button>
           <!--                <button class="tab-btn" data-tab="kol-tag">🔥 有灵魂的KOL</button>-->
           <!--                <button class="tab-btn" data-tab="specific-users">🎯 特定用户</button>-->
         </div>
@@ -79,6 +81,16 @@
           <!-- 日志搜索 Tab -->
           <div class="tab-pane" id="log-search">
             <%- include('partials/log-search-stats') %>
+          </div>
+
+          <!-- 周级留存 Tab -->
+          <div class="tab-pane" id="weekly-cohorts">
+            <%- include('partials/weekly-cohorts-stats') %>
+          </div>
+
+          <!-- 天级留存 Tab -->
+          <div class="tab-pane" id="daily-cohorts">
+            <%- include('partials/daily-cohorts-stats') %>
           </div>
         </div>
       </div>
