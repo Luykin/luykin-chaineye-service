@@ -77,55 +77,72 @@ async function migrateDauHistory() {
 
     console.log(`📅 将历史用户标记为 ${yesterdayStr} 活跃`);
 
-    // 批量插入数据
-    const batchSize = 100;
-    let insertedCount = 0;
-    let skippedCount = 0;
+    // 批量插入数据（优化性能）
+    const batchSize = 1000; // 每次批量插入1000条
+    let totalProcessed = 0;
+    let errorCount = 0;
 
     for (let i = 0; i < backupData.users.length; i += batchSize) {
       const batch = backupData.users.slice(i, i + batchSize);
 
-      for (const userId of batch) {
-        try {
-          // 使用 findOrCreate 避免重复插入
-          const [record, created] = await DailyActiveUser.findOrCreate({
-            where: {
-              userId: userId,
-              date: yesterdayStr,
-            },
-            defaults: {
-              userId: userId,
-              date: yesterdayStr,
-            },
-          });
+      try {
+        // 准备批量插入的数据
+        const recordsToInsert = batch.map((userId) => ({
+          userId: userId,
+          date: yesterdayStr,
+        }));
 
-          if (created) {
-            insertedCount++;
-          } else {
-            skippedCount++;
-          }
-        } catch (error) {
-          console.error(`❌ 插入用户 ${userId} 失败:`, error.message);
-        }
-      }
+        // 使用 bulkCreate 批量插入，ignoreDuplicates 会自动跳过已存在的记录
+        const result = await DailyActiveUser.bulkCreate(recordsToInsert, {
+          ignoreDuplicates: true, // 如果记录已存在则忽略，不会报错
+          validate: true, // 验证数据
+        });
 
-      // 显示进度
-      if (
-        (i + batch.length) % 1000 === 0 ||
-        i + batch.length === backupData.users.length
-      ) {
+        totalProcessed += batch.length;
+
+        // 显示进度（每处理一批或到达末尾时显示）
         console.log(
-          `📊 进度: ${i + batch.length}/${
-            backupData.users.length
-          } (已插入: ${insertedCount}, 跳过: ${skippedCount})`
+          `📊 进度: ${totalProcessed}/${backupData.users.length} (${(
+            (totalProcessed / backupData.users.length) *
+            100
+          ).toFixed(1)}%)`
         );
+      } catch (error) {
+        errorCount++;
+        console.error(
+          `❌ 批量插入失败（批次 ${i}-${i + batch.length - 1}）:`,
+          error.message
+        );
+
+        // 如果批量插入失败，可以尝试逐条插入（降级策略）
+        if (errorCount >= 3) {
+          console.log("⚠️  批量插入失败次数过多，尝试逐条插入...");
+          for (const userId of batch) {
+            try {
+              await DailyActiveUser.findOrCreate({
+                where: {
+                  userId: userId,
+                  date: yesterdayStr,
+                },
+                defaults: {
+                  userId: userId,
+                  date: yesterdayStr,
+                },
+              });
+            } catch (singleError) {
+              console.error(`❌ 插入用户 ${userId} 失败:`, singleError.message);
+            }
+          }
+        }
       }
     }
 
     console.log(`\n✅ 数据迁移完成！`);
     console.log(`📈 总计: ${backupData.users.length} 个用户`);
-    console.log(`✅ 新插入: ${insertedCount} 条记录`);
-    console.log(`⏭️  已存在: ${skippedCount} 条记录`);
+    console.log(`📊 处理完成: ${totalProcessed} 条记录`);
+    if (errorCount > 0) {
+      console.log(`⚠️  失败批次: ${errorCount} 个`);
+    }
 
     // 显示数据库中的总记录数
     const totalCount = await DailyActiveUser.count();
