@@ -1228,6 +1228,14 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
       day8Date.setDate(cohortDateObj.getDate() + 7);
       const day8Str = day8Date.toISOString().split("T")[0];
 
+      const day9Date = new Date(cohortDateObj);
+      day9Date.setDate(cohortDateObj.getDate() + 8);
+      const day9Str = day9Date.toISOString().split("T")[0];
+
+      const day10Date = new Date(cohortDateObj);
+      day10Date.setDate(cohortDateObj.getDate() + 9);
+      const day10Str = day10Date.toISOString().split("T")[0];
+
       // 计算每天的活跃用户数
       const day2Users = new Set();
       const day3Users = new Set();
@@ -1236,6 +1244,8 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
       const day6Users = new Set();
       const day7Users = new Set();
       const day8Users = new Set();
+      const day9Users = new Set();
+      const day10Users = new Set();
 
       for (const record of allRecords) {
         if (!cohortUsers.has(record.userId)) continue;
@@ -1256,6 +1266,10 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
           day7Users.add(record.userId);
         } else if (recordDate === day8Str) {
           day8Users.add(record.userId);
+        } else if (recordDate === day9Str) {
+          day9Users.add(record.userId);
+        } else if (recordDate === day10Str) {
+          day10Users.add(record.userId);
         }
       }
 
@@ -1274,6 +1288,10 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
         totalUsers > 0 ? ((day7Users.size / totalUsers) * 100).toFixed(1) : 0;
       const day8Retention =
         totalUsers > 0 ? ((day8Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const day9Retention =
+        totalUsers > 0 ? ((day9Users.size / totalUsers) * 100).toFixed(1) : 0;
+      const day10Retention =
+        totalUsers > 0 ? ((day10Users.size / totalUsers) * 100).toFixed(1) : 0;
 
       cohortResults.push({
         cohortDate: cohortDate,
@@ -1292,6 +1310,10 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
         day7Retention: day7Retention,
         day8Active: day8Users.size,
         day8Retention: day8Retention,
+        day9Active: day9Users.size,
+        day9Retention: day9Retention,
+        day10Active: day10Users.size,
+        day10Retention: day10Retention,
       });
     }
 

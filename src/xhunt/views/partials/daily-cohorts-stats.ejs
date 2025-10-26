@@ -2,7 +2,7 @@
   <div class="header-section" style="margin-bottom: 30px">
     <h2>📈 天级留存分析</h2>
     <p style="color: #666; margin-top: 10px">
-      基于用户首次活跃日期，追踪用户在第2、3、4、5、6、7、8天的活跃情况
+      基于用户首次活跃日期，追踪用户在第2、3、4、5、6、7、8、9、10天的活跃情况
     </p>
   </div>
 
@@ -79,6 +79,12 @@
           </th>
           <th style="padding: 15px; text-align: center; font-weight: 600">
             第8天
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第9天
+          </th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">
+            第10天
           </th>
         </tr>
       </thead>
@@ -225,6 +231,24 @@
                   <br>
                   <span style="font-size: 12px; opacity: 0.7">
                     ${cohort.day8Active}人
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600; background-color: ${getRetentionColor(
+                  cohort.day9Retention
+                )};">
+                  ${parseFloat(cohort.day9Retention).toFixed(1)}%
+                  <br>
+                  <span style="font-size: 12px; opacity: 0.7">
+                    ${cohort.day9Active}人
+                  </span>
+                </td>
+                <td style="padding: 15px; text-align: center; font-weight: 600; background-color: ${getRetentionColor(
+                  cohort.day10Retention
+                )};">
+                  ${parseFloat(cohort.day10Retention).toFixed(1)}%
+                  <br>
+                  <span style="font-size: 12px; opacity: 0.7">
+                    ${cohort.day10Active}人
                   </span>
                 </td>
               </tr>
