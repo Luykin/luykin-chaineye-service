@@ -8,9 +8,6 @@ const UpbitExNewsCrawler = require("./upbit-news-crawler");
 const TruthsocialCrawler = require("./truthsocial-crawler");
 const { NewCrawlState } = require("../models/sqlite-start");
 const { exec } = require("child_process");
-const {
-  migrateFundraisingData,
-} = require("../script/migrate-fundraising-to-pg");
 
 // const BaseCrawler = require('./base-crawler');
 
@@ -120,23 +117,17 @@ class CrawlerScheduler {
   /**
    * rootData 爬取启动
    * 包含每日爬取前两页的项目数据，以及爬取详情数据
-   * 爬虫完成后自动同步数据到 PostgreSQL
+   * 数据直接写入 PostgreSQL（不再需要迁移步骤）
    * **/
   async startRootDataCrawl() {
     try {
-      // 1. 爬取数据到 SQLite
-      console.log("🕷️ 开始爬取数据到 SQLite...");
+      console.log("🕷️ 开始爬取数据到 PostgreSQL...");
       await rootDataCrawler.quickUpdate();
       await rootDataCrawler.detailsCrawl();
       await rootDataCrawler.subDetailsCrawl();
-      console.log("✅ SQLite 数据爬取完成");
-
-      // 2. 同步数据到 PostgreSQL
-      console.log("🔄 rootdata 数据开始同步数据到 PostgreSQL...");
-      await migrateFundraisingData();
-      console.log("✅ rootdata 数据PostgreSQL 数据同步完成");
+      console.log("✅ PostgreSQL 数据爬取完成");
     } catch (error) {
-      console.error("❌ RootData 爬取或同步失败:", error);
+      console.error("❌ RootData 爬取失败:", error);
       throw error;
     }
   }

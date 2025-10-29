@@ -11,26 +11,32 @@
  * - 爬虫任务通常不适合多线程并发执行，因为这可能导致数据冲突和过度请求目标服务器。
  * - 将爬虫服务与 API 服务分离可以确保用户请求和数据爬取任务互不影响。
  */
-require('dotenv').config({ path: `${process.env.NODE_ENV === 'development' ? '.env-dev' : '.env-pro'}` });
-const { setupSqlite } = require('./models/sqlite-start');
-const scheduler = require('./services/scheduler');
+require("dotenv").config({
+  path: `${process.env.NODE_ENV === "development" ? ".env-dev" : ".env-pro"}`,
+});
+const { setupSqlite } = require("./models/sqlite-start");
+const { setupPostgresFundraising } = require("./models/postgres-fundraising");
+const scheduler = require("./services/scheduler");
 
 async function startCrawlerService() {
-	try {
-		await setupSqlite();
-		console.log('启动爬虫调度器...');
-		await scheduler.startScheduler();
-	} catch (error) {
-		console.error('启动爬虫服务失败:', error);
-		process.exit(1);
-	}
+  try {
+    // 初始化 SQLite（用于爬取状态管理）
+    await setupSqlite();
+    // 初始化 PostgreSQL Fundraising（用于项目数据存储）
+    await setupPostgresFundraising();
+    console.log("启动爬虫调度器...");
+    await scheduler.startScheduler();
+  } catch (error) {
+    console.error("启动爬虫服务失败:", error);
+    process.exit(1);
+  }
 }
 
 // 优雅关闭
-process.on('SIGTERM', async () => {
-	console.log('收到 SIGTERM 信号，正在优雅关闭...');
-	scheduler.stopScheduler();
-	process.exit(0);
+process.on("SIGTERM", async () => {
+  console.log("收到 SIGTERM 信号，正在优雅关闭...");
+  scheduler.stopScheduler();
+  process.exit(0);
 });
 
 startCrawlerService();

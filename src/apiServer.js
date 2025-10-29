@@ -16,6 +16,7 @@ const morgan = require("morgan");
 const redis = require("redis");
 const { setupSqlite } = require("./models/sqlite-start");
 const { setupPostgres } = require("./models/postgres-start");
+const { setupPostgresFundraising } = require("./models/postgres-fundraising");
 const fundraisingRoutes = require("./routes/fundraising");
 const cryptoRoutes = require("./routes/cryptohunt-tg");
 const proxyRoutes = require("./routes/proxy");
@@ -325,6 +326,7 @@ app.use((err, req, res, next) => {
 async function startAPIServer() {
   await setupSqlite();
   await setupPostgres();
+  await setupPostgresFundraising();
   app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
 }
 

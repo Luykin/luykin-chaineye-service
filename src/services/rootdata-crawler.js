@@ -1,10 +1,9 @@
 const retry = require("async-retry");
 const axios = require("axios");
-const {
-  NewCrawlState,
-  Fundraising,
-  C_STATE_TYPE,
-} = require("../models/sqlite-start");
+// 从 SQLite 导入爬取状态管理
+const { NewCrawlState, C_STATE_TYPE } = require("../models/sqlite-start");
+// 从 PostgreSQL 导入 Fundraising 模型
+const { Fundraising } = require("../models/postgres-fundraising");
 const { v4: uuidv4 } = require("uuid");
 const { Op, literal } = require("sequelize");
 const BaseCrawler = require("./base-crawler");

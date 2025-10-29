@@ -1,10 +1,9 @@
 const express = require("express");
 const { query, validationResult } = require("express-validator");
-const {
-  Fundraising,
-  NewCrawlState,
-  C_STATE_TYPE,
-} = require("../models/sqlite-start");
+// 从 PostgreSQL 导入 Fundraising 模型
+const { Fundraising } = require("../models/postgres-fundraising");
+// 从 SQLite 导入爬取状态管理
+const { NewCrawlState, C_STATE_TYPE } = require("../models/sqlite-start");
 // const crawler = require('../services/rootdata-crawler');
 const { Op, literal, fn, col } = require("sequelize");
 const axios = require("axios");
