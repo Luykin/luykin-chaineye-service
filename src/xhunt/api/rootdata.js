@@ -347,8 +347,8 @@ async function batchUpdateProjectLogos(avatarMap, Fundraising) {
         const twitterUrlWithSlash = `https://x.com/${username}/`;
 
         return `
-          WHEN (LOWER(socialLinks->>'x') = LOWER('${twitterUrl}') OR
-                LOWER(socialLinks->>'x') = LOWER('${twitterUrlWithSlash}'))
+          WHEN (LOWER(sociallinks->>'x') = LOWER('${twitterUrl}') OR
+                LOWER(sociallinks->>'x') = LOWER('${twitterUrlWithSlash}'))
           THEN '${avatar}'
         `;
       })
@@ -359,7 +359,7 @@ async function batchUpdateProjectLogos(avatarMap, Fundraising) {
       SET logo = CASE ${caseWhenClauses}
                   ELSE logo
                   END
-      WHERE socialLinks->>'x' IS NOT NULL
+      WHERE sociallinks->>'x' IS NOT NULL
     `;
 
     await Fundraising.Project.sequelize.query(updateQuery);
@@ -423,14 +423,12 @@ router.get("/search", async (req, res) => {
     // 5. 优化查询：先找到项目，再分别查询关联
     const project = await Fundraising.Project.findOne({
       where: {
-        socialLinks: {
-          [Op.or]: [
-            literal(`LOWER(socialLinks->>'x') = LOWER('${targetTwitterUrl}')`),
-            literal(
-              `LOWER(socialLinks->>'x') = LOWER('${targetTwitterUrlWithSlash}')`
-            ),
-          ],
-        },
+        [Op.or]: [
+          literal(`LOWER(sociallinks->>'x') = LOWER('${targetTwitterUrl}')`),
+          literal(
+            `LOWER(sociallinks->>'x') = LOWER('${targetTwitterUrlWithSlash}')`
+          ),
+        ],
       },
       order: [["id", "DESC"]],
       attributes: [
