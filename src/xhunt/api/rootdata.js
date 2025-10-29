@@ -100,6 +100,13 @@ class RootdataDataFixService {
   ) {
     try {
       const projectLink = project.projectLink;
+
+      // 只验证项目链接，不验证投资者链接
+      if (!projectLink || !projectLink.includes("/Projects/detail")) {
+        console.log(`⏭️ 跳过验证（非项目链接）: ${projectLink}`);
+        return null;
+      }
+
       const cacheKey = `rootdata_verified:${projectLink}`;
 
       // 1. 检查20天内是否已修正
