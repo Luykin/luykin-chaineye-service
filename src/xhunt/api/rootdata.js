@@ -153,8 +153,37 @@ class RootdataDataFixService {
   static async fixProjectData(project, apiData, Fundraising) {
     const fundedProjectId = project.id;
 
+    // 获取项目的 Twitter URL（用于验证）
+    // 优先使用 twitterUrl 字段，如果没有则使用 socialLinks.x
+    const projectTwitterUrl = project.twitterUrl || project.socialLinks?.x;
+    if (!projectTwitterUrl) {
+      console.log(
+        `⚠️ 项目缺少 Twitter URL，无法验证数据: ${project.projectLink}`
+      );
+      return;
+    }
+
     for (const round of apiData.items) {
       if (!round.invests || round.invests.length === 0) continue;
+
+      // ✅ 数据验证：确保 API 返回的是我们查询的项目数据
+      // RootData API 有时会返回错误的项目（相同 ID 但不同项目）
+      if (round.X) {
+        const normalizeUrl = (url) => {
+          if (!url) return "";
+          return url.toLowerCase().replace(/\/$/, ""); // 移除末尾斜杠并转小写
+        };
+
+        const apiTwitterUrl = normalizeUrl(round.X);
+        const expectedTwitterUrl = normalizeUrl(projectTwitterUrl);
+
+        if (apiTwitterUrl !== expectedTwitterUrl) {
+          console.log(
+            `⚠️ 跳过不匹配的数据: API返回 ${round.X}, 期望 ${projectTwitterUrl}`
+          );
+          continue; // 跳过不匹配的 round
+        }
+      }
 
       for (const investor of round.invests) {
         try {
