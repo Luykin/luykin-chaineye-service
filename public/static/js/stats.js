@@ -802,11 +802,28 @@ function renderRootdataProjects(projects, pagination) {
       ? new Date(project.detailFetchedAt).toLocaleString("zh-CN")
       : "未抓取";
     const failures = project.detailFailuresNumber || 0;
-    const fetchStatusColor =
-      failures === 0 ? "#10b981" : failures < 3 ? "#f59e0b" : "#ef4444";
+
+    // 判断抓取状态
+    // failures = 0: 抓取成功且有投资者数据
+    // failures = 99: 抓取成功但无投资者数据（基础信息已抓取）
+    // 0 < failures < 99: 抓取失败
+    let fetchStatusColor;
+    let fetchStatusText;
+
+    if (failures === 0 || failures === 99) {
+      fetchStatusColor = "#10b981"; // 绿色
+      fetchStatusText = failures === 0 ? "抓取成功" : "抓取成功(无投资者)";
+    } else if (failures < 3) {
+      fetchStatusColor = "#f59e0b"; // 黄色
+      fetchStatusText = `失败: ${failures}次`;
+    } else {
+      fetchStatusColor = "#ef4444"; // 红色
+      fetchStatusText = `失败: ${failures}次`;
+    }
+
     const fetchStatus = `
       <div style="font-size: 12px;">
-        <div style="color: ${fetchStatusColor}; font-weight: 600;">失败: ${failures}次</div>
+        <div style="color: ${fetchStatusColor}; font-weight: 600;">${fetchStatusText}</div>
         <div style="color: #6b7280; font-size: 11px;">${detailFetchedAt}</div>
       </div>
     `;
