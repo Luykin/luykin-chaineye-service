@@ -66,17 +66,17 @@ class FundraisingCrawler extends BaseCrawler {
       try {
         const axiosConfig = {
           ...config,
-          proxy: proxy
-            ? {
-                protocol: "http",
-                host: proxy.ip,
-                port: parseInt(proxy.port),
-                auth: {
-                  username: proxy.username,
-                  password: proxy.password,
-                },
-              }
-            : false, // false 表示不使用代理
+          //   proxy: proxy
+          //     ? {
+          //         protocol: "http",
+          //         host: proxy.ip,
+          //         port: parseInt(proxy.port),
+          //         auth: {
+          //           username: proxy.username,
+          //           password: proxy.password,
+          //         },
+          //       }
+          //     : false, // false 表示不使用代理
         };
 
         const response = await axios.get(url, axiosConfig);
@@ -718,6 +718,17 @@ class FundraisingCrawler extends BaseCrawler {
       });
       const html = response.data;
       console.log(`[详情] HTML 长度: ${String(html?.length || 0)}`);
+      console.log(
+        `[详情] HTML 前 1000 字符:\n${String(html).substring(0, 1000)}`
+      );
+      console.log(
+        `[详情] HTML 包含 .investor 类: ${String(html).includes(
+          'class="investor"'
+        )}`
+      );
+      console.log(
+        `[详情] HTML 包含 investor 文本: ${String(html).includes("investor")}`
+      );
 
       // 将 HTML 注入到离线页面环境中，复用现有的 DOM 抓取逻辑
       await _page.setContent(html, { waitUntil: "domcontentloaded" });
