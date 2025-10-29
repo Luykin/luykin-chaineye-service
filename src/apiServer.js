@@ -29,6 +29,7 @@ const xHuntStatsRoutes = require("./xhunt/api/stats");
 const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntDAUBackupRoutes = require("./xhunt/api/dau-backup");
+const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const internalQueryRoutes = require("./api/internal-query");
 const {
   securityMiddleware,
@@ -280,6 +281,9 @@ app.use("/api/xhunt/dau-backup", xHuntDAUBackupRoutes);
 
 // Mantle 活动接口
 app.use("/api/xhunt/mantle", xHuntMantleRoutes);
+
+// Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据
+app.use("/api/rootdata", xHuntRootdataRoutes);
 
 // 内部查询API - 使用随机字符前缀，无需安全中间件
 app.use("/api/internal-x9k2m7p4q8", internalQueryRoutes);

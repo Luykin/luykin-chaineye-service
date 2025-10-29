@@ -117,7 +117,33 @@ async function migrateFundraisingData() {
         });
 
         if (existingPGProject) {
-          // 如果已存在，记录映射关系
+          // 如果已存在，更新记录（增量同步）
+          await PGProject.update(
+            {
+              projectName: sqliteProject.projectName,
+              description: sqliteProject.description,
+              logo: sqliteProject.logo,
+              round: sqliteProject.round,
+              amount: sqliteProject.amount,
+              formattedAmount: sqliteProject.formattedAmount,
+              valuation: sqliteProject.valuation,
+              formattedValuation: sqliteProject.formattedValuation,
+              date: sqliteProject.date,
+              fundedAt: convertTimestamp(sqliteProject.fundedAt),
+              detailFetchedAt: convertTimestamp(sqliteProject.detailFetchedAt),
+              detailFailuresNumber: sqliteProject.detailFailuresNumber,
+              isInitial: sqliteProject.isInitial,
+              socialLinks: sqliteProject.socialLinks,
+              teamMembers: sqliteProject.teamMembers,
+              originalPageNumber: sqliteProject.originalPageNumber,
+              isVcListed: sqliteProject.isVcListed,
+              vcListPage: sqliteProject.vcListPage,
+              updatedAt: convertTimestamp(sqliteProject.updatedAt),
+            },
+            { where: { projectLink: sqliteProject.projectLink } }
+          );
+
+          // 记录映射关系
           projectIdMap.set(sqliteProject.id, existingPGProject.id);
           projectLinkMap.set(sqliteProject.projectLink, existingPGProject.id);
         } else {
