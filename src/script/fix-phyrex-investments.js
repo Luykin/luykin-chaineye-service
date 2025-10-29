@@ -43,23 +43,32 @@ async function fixPhyrexInvestments() {
   try {
     console.log("🚀 开始修复 phyrex_ni 的投资数据...\n");
 
-    // 1. 查找 phyrex_ni 的项目
-    const phyrexProject = await Fundraising.Project.findOne({
-      where: {
-        socialLinks: {
-          x: "https://x.com/phyrex_ni",
+    // 1. 查找或创建 phyrex_ni 的项目
+    const [phyrexProject, phyrexCreated] =
+      await Fundraising.Project.findOrCreate({
+        where: {
+          socialLinks: {
+            x: "https://x.com/phyrex_ni",
+          },
         },
-      },
-    });
+        defaults: {
+          projectName: "Phyrex",
+          socialLinks: { x: "https://x.com/phyrex_ni" },
+          logo: "https://pbs.twimg.com/profile_images/1760613636918476800/OYd_SQc5_400x400.jpg",
+          description: "Crypto Investor & KOL",
+          isInitial: false, // 标记为投资者
+        },
+      });
 
-    if (!phyrexProject) {
-      console.log("❌ 未找到 phyrex_ni 的项目，请先确保该项目存在于数据库中");
-      return;
+    if (phyrexCreated) {
+      console.log(
+        `✨ 创建投资者项目: ${phyrexProject.projectName} (ID: ${phyrexProject.id})\n`
+      );
+    } else {
+      console.log(
+        `✅ 找到投资者项目: ${phyrexProject.projectName} (ID: ${phyrexProject.id})\n`
+      );
     }
-
-    console.log(
-      `✅ 找到投资者项目: ${phyrexProject.projectName} (ID: ${phyrexProject.id})\n`
-    );
 
     let createdCount = 0;
     let updatedCount = 0;
