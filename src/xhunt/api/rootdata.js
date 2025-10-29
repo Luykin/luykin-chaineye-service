@@ -347,8 +347,8 @@ async function batchUpdateProjectLogos(avatarMap, Fundraising) {
         const twitterUrlWithSlash = `https://x.com/${username}/`;
 
         return `
-          WHEN (LOWER(sociallinks->>'x') = LOWER('${twitterUrl}') OR
-                LOWER(sociallinks->>'x') = LOWER('${twitterUrlWithSlash}'))
+          WHEN (LOWER("socialLinks"->>'x') = LOWER('${twitterUrl}') OR
+                LOWER("socialLinks"->>'x') = LOWER('${twitterUrlWithSlash}'))
           THEN '${avatar}'
         `;
       })
@@ -359,7 +359,7 @@ async function batchUpdateProjectLogos(avatarMap, Fundraising) {
       SET logo = CASE ${caseWhenClauses}
                   ELSE logo
                   END
-      WHERE sociallinks->>'x' IS NOT NULL
+      WHERE "socialLinks"->>'x' IS NOT NULL
     `;
 
     await Fundraising.Project.sequelize.query(updateQuery);
@@ -424,9 +424,9 @@ router.get("/search", async (req, res) => {
     const project = await Fundraising.Project.findOne({
       where: {
         [Op.or]: [
-          literal(`LOWER(sociallinks->>'x') = LOWER('${targetTwitterUrl}')`),
+          literal(`LOWER("socialLinks"->>'x') = LOWER('${targetTwitterUrl}')`),
           literal(
-            `LOWER(sociallinks->>'x') = LOWER('${targetTwitterUrlWithSlash}')`
+            `LOWER("socialLinks"->>'x') = LOWER('${targetTwitterUrlWithSlash}')`
           ),
         ],
       },
