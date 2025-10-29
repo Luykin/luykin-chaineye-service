@@ -3,7 +3,23 @@
  * 将硬编码的投资项目写入数据库
  */
 
-const { Fundraising } = require("../models/postgres-fundraising");
+const { Sequelize } = require("sequelize");
+const FundraisingModel = require("../models/fundraising");
+
+// ============ 连接 PostgreSQL 数据库 ============
+const pgInstance = new Sequelize({
+  dialect: "postgres",
+  host: process.env.PG_HOST || "150.5.158.179",
+  port: parseInt(process.env.PG_PORT || "5432", 10),
+  database: process.env.PG_DATABASE || "luykindatabase",
+  username: process.env.PG_USERNAME || "luykin",
+  password: process.env.PG_PASSWORD || "wtf.0813",
+  logging: false,
+  timezone: "+00:00",
+});
+
+// ============ 初始化模型 ============
+const Fundraising = FundraisingModel(pgInstance);
 
 // phyrex_ni 的投资项目列表
 const PHYREX_INVESTMENTS = [
@@ -41,6 +57,11 @@ const PHYREX_INVESTMENTS = [
 
 async function fixPhyrexInvestments() {
   try {
+    // 测试数据库连接
+    console.log("🔌 连接 PostgreSQL 数据库...");
+    await pgInstance.authenticate();
+    console.log("✅ PostgreSQL 连接成功\n");
+
     console.log("🚀 开始修复 phyrex_ni 的投资数据...\n");
 
     // 1. 查找或创建 phyrex_ni 的项目
