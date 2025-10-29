@@ -801,7 +801,7 @@ class FundraisingCrawler extends BaseCrawler {
         logo: details.logo,
         socialLinks: details.socialLinks,
         teamMembers: details.teamMembers,
-        detailFetchedAt: isCrawlSuccess ? new Date() : null,
+        detailFetchedAt: isCrawlSuccess ? Date.now() : null,
         detailFailuresNumber: isCrawlSuccess
           ? mergedInvestors.length
             ? 0
