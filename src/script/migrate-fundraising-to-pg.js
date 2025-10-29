@@ -70,14 +70,11 @@ async function migrateFundraisingData() {
     const fieldsToChange = ["projectLink", "description", "logo"];
 
     for (const fieldName of fieldsToChange) {
-      const [results] = await pgInstance.query(
-        `
+      const [results] = await pgInstance.query(`
         SELECT data_type 
         FROM information_schema.columns 
-        WHERE table_name = 'Projects' AND column_name = $1;
-      `,
-        [fieldName]
-      );
+        WHERE table_name = 'Projects' AND column_name = '${fieldName}';
+      `);
 
       if (results && results.length > 0 && results[0].data_type !== "text") {
         console.log(`   修改 ${fieldName} 字段类型为 TEXT...`);
