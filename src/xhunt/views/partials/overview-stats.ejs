@@ -39,23 +39,36 @@
       <h4 style="margin-bottom: 15px; color: #374151">📈 7天趋势</h4>
       <div style="display: flex; align-items: end; gap: 8px; height: 100px">
         <% if (stats.dailyActiveUsersData && stats.dailyActiveUsersData.length >
-        0) { %> <% // 计算最大值 let maxValue = 0; for (let i = 0; i <
+        0) { var maxValue = 0; for (var i = 0; i <
         stats.dailyActiveUsersData.length; i++) { if
         (stats.dailyActiveUsersData[i].activeUsers > maxValue) { maxValue =
-        stats.dailyActiveUsersData[i].activeUsers; } } const minHeight = 10;
-        const maxHeight = 80; %> <%
-        stats.dailyActiveUsersData.forEach(function(dayData, index) { %> <% let
-        height = minHeight; if (maxValue > 0) { height = Math.max(minHeight,
-        (dayData.activeUsers / maxValue) * maxHeight); } const isToday = index
-        === stats.dailyActiveUsersData.length - 1; %>
+        stats.dailyActiveUsersData[i].activeUsers; } } var minHeight = 10; var
+        maxHeight = 80; stats.dailyActiveUsersData.forEach(function(dayData,
+        index) { var height = minHeight; if (maxValue > 0) { height =
+        Math.max(minHeight, (dayData.activeUsers / maxValue) * maxHeight); } var
+        isToday = index === stats.dailyActiveUsersData.length - 1; var bgColor =
+        isToday ? '#3b82f6' : '#94a3b8'; %>
         <div
-          style="flex: 1; background: <%= isToday ? '#3b82f6' : '#94a3b8' %>; height: <%= height %>px; border-radius: 4px 4px 0 0; position: relative; display: flex; align-items: end; justify-content: center; color: white; font-size: 10px; font-weight: 600; padding: 2px;"
+          style="
+            flex: 1;
+            background: <%= bgColor %>;
+            height: <%= height %>px;
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            display: flex;
+            align-items: end;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px;
+          "
         >
-          <span style="transform: rotate(-90deg); white-space: nowrap">
-            <%= dayData.activeUsers %>
-          </span>
+          <span style="transform: rotate(-90deg); white-space: nowrap"
+            ><%= dayData.activeUsers %></span
+          >
         </div>
-        <% }); %> <% } %>
+        <% }); } %>
       </div>
       <div
         style="
@@ -67,12 +80,11 @@
         "
       >
         <% if (stats.dailyActiveUsersData && stats.dailyActiveUsersData.length >
-        0) { %> <% stats.dailyActiveUsersData.forEach(function(dayData, index) {
-        %>
+        0) { stats.dailyActiveUsersData.forEach(function(dayData) { %>
         <div style="flex: 1; text-align: center">
           <%= dayData.displayDate.split(' ')[0] %>
         </div>
-        <% }); %> <% } %>
+        <% }); } %>
       </div>
     </div>
   </div>
