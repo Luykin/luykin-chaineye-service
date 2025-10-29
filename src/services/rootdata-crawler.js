@@ -730,63 +730,46 @@ class FundraisingCrawler extends BaseCrawler {
       const html = response.data;
 
       if (isManualTrigger) {
-        console.log(`[详情] HTML 类型: ${typeof html}`);
-        console.log(`[详情] HTML 是否为 Buffer: ${Buffer.isBuffer(html)}`);
-        console.log(`[详情] HTML 原始长度: ${html?.length || 0}`);
-
         const htmlStr = Buffer.isBuffer(html)
           ? html.toString("utf-8")
           : String(html);
-        console.log(`[详情] 转换后字符串长度: ${htmlStr.length}`);
 
-        // 检查前 10 个字符的详细信息
-        const first10Chars = [];
-        for (let i = 0; i < Math.min(10, htmlStr.length); i++) {
-          first10Chars.push({
-            idx: i,
-            char:
-              htmlStr[i] === "\n"
-                ? "\\n"
-                : htmlStr[i] === "\r"
-                ? "\\r"
-                : htmlStr[i] === "\t"
-                ? "\\t"
-                : htmlStr[i],
-            code: htmlStr.charCodeAt(i),
-          });
-        }
-        console.log(`[详情] 前 10 个字符:`, JSON.stringify(first10Chars));
-
-        // 使用 JSON.stringify 安全打印前 500 字符
-        console.log(`[详情] HTML 前 500 字符 (JSON 格式):`);
-        console.log(JSON.stringify(htmlStr.substring(0, 500)));
+        console.log(`[详情] HTML 长度: ${htmlStr.length}`);
+        console.log(`[详情] HTML 前 100 字符: ${htmlStr.substring(0, 100)}`);
 
         // 检查 investor 关键词
         const investorIndex = htmlStr.indexOf("investor");
+        console.log(`[详情] 'investor' 首次出现位置: ${investorIndex}`);
+
         if (investorIndex >= 0) {
-          console.log(`[详情] 'investor' 首次出现位置: ${investorIndex}`);
-          console.log(`[详情] 'investor' 周围内容 (JSON 格式):`);
-          console.log(
-            JSON.stringify(
-              htmlStr.substring(
-                Math.max(0, investorIndex - 100),
-                investorIndex + 200
-              )
-            )
+          const around = htmlStr.substring(
+            Math.max(0, investorIndex - 150),
+            investorIndex + 150
           );
+          console.log(`[详情] 'investor' 周围 300 字符:`);
+          console.log(around);
         }
 
-        // 检查是否包含 class="investor"
-        console.log(
-          `[详情] HTML 包含 'class="investor"': ${htmlStr.includes(
-            'class="investor"'
-          )}`
-        );
-        console.log(
-          `[详情] HTML 包含 '<div class="investor': ${htmlStr.includes(
-            '<div class="investor'
-          )}`
-        );
+        // 检查各种可能的 investor 选择器
+        const checks = [
+          'class="investor"',
+          "class='investor'",
+          'class="investor ',
+          'className="investor"',
+          '<div class="investor',
+          '<section class="investor',
+        ];
+
+        console.log(`[详情] HTML 内容检查:`);
+        checks.forEach((check) => {
+          const found = htmlStr.includes(check);
+          if (found) {
+            const index = htmlStr.indexOf(check);
+            console.log(`  ✓ 包含 '${check}' (位置: ${index})`);
+          } else {
+            console.log(`  ✗ 不包含 '${check}'`);
+          }
+        });
       }
 
       // 将 HTML 注入到离线页面环境中，复用现有的 DOM 抓取逻辑
