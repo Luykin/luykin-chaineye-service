@@ -1,8 +1,38 @@
 // Tab 切换功能
+// 获取本地日期字符串（格式：YYYY-MM-DD）
+function getLocalDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// 初始化所有日期选择器为今天（使用本地时区）
+function initDatePickers() {
+  const today = getLocalDateString();
+  const datePickerIds = [
+    "rootdata-date-picker",
+    "notes-date",
+    "dau-date-selector",
+    "start-date",
+    "end-date",
+  ];
+
+  datePickerIds.forEach((id) => {
+    const datePicker = document.getElementById(id);
+    if (datePicker && !datePicker.value) {
+      datePicker.value = today;
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   console.log("🚀 DOMContentLoaded 事件触发");
 
   try {
+    // 初始化所有日期选择器
+    initDatePickers();
+
     // 初始化 Tab 功能
     initTabs();
 
@@ -648,13 +678,6 @@ function bindRootdataEvents() {
   setTimeout(() => {
     loadRootdataQuota();
   }, 500);
-
-  // 初始化日期选择器为今天
-  const dateInput = document.getElementById("rootdata-date-picker");
-  if (dateInput) {
-    const today = new Date().toISOString().split("T")[0];
-    dateInput.value = today;
-  }
 }
 
 // 当前分页状态
