@@ -262,7 +262,11 @@ router.get("/", basicAuth, async (req, res) => {
     res.send(finalHtml);
   } catch (error) {
     console.error("Error fetching stats:", error);
-    res.status(500).json({ error: "获取统计数据失败" });
+    res.status(500).json({
+      error: "获取统计数据失败",
+      message: error.message,
+      stack: error.stack,
+    });
   }
 });
 
