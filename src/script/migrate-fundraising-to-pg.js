@@ -26,6 +26,31 @@ const { Project: SQLiteProject, InvestmentRelationships: SQLiteRelations } =
 const { Project: PGProject, InvestmentRelationships: PGRelations } =
   FundraisingModel(pgInstance);
 
+// ============ 辅助函数：转换时间戳 ============
+function convertTimestamp(value) {
+  // 打折 null/undefined
+  if (value === null || value === undefined) {
+    return null;
+  }
+  // 如果已经是数值，直接返回
+  if (typeof value === "number") {
+    return value;
+  }
+  // 如果是字符串类型的时间戳，转换为数值
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (!isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  // 如果是 Date 对象，转换为时间戳
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+  // 其他情况返回原值
+  return value;
+}
+
 // ============ 迁移函数 ============
 async function migrateFundraisingData() {
   try {
@@ -87,8 +112,8 @@ async function migrateFundraisingData() {
             valuation: sqliteProject.valuation,
             formattedValuation: sqliteProject.formattedValuation,
             date: sqliteProject.date,
-            fundedAt: sqliteProject.fundedAt,
-            detailFetchedAt: sqliteProject.detailFetchedAt,
+            fundedAt: convertTimestamp(sqliteProject.fundedAt),
+            detailFetchedAt: convertTimestamp(sqliteProject.detailFetchedAt),
             detailFailuresNumber: sqliteProject.detailFailuresNumber,
             isInitial: sqliteProject.isInitial,
             socialLinks: sqliteProject.socialLinks,
@@ -96,8 +121,8 @@ async function migrateFundraisingData() {
             originalPageNumber: sqliteProject.originalPageNumber,
             isVcListed: sqliteProject.isVcListed,
             vcListPage: sqliteProject.vcListPage,
-            createdAt: sqliteProject.createdAt,
-            updatedAt: sqliteProject.updatedAt,
+            createdAt: convertTimestamp(sqliteProject.createdAt),
+            updatedAt: convertTimestamp(sqliteProject.updatedAt),
           });
 
           // 记录映射关系
@@ -171,10 +196,10 @@ async function migrateFundraisingData() {
             formattedAmount: sqliteRelation.formattedAmount,
             valuation: sqliteRelation.valuation,
             formattedValuation: sqliteRelation.formattedValuation,
-            date: sqliteRelation.date,
+            date: convertTimestamp(sqliteRelation.date),
             lead: sqliteRelation.lead,
-            createdAt: sqliteRelation.createdAt,
-            updatedAt: sqliteRelation.updatedAt,
+            createdAt: convertTimestamp(sqliteRelation.createdAt),
+            updatedAt: convertTimestamp(sqliteRelation.updatedAt),
           });
         }
 
