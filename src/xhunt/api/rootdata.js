@@ -994,6 +994,13 @@ router.post("/manual-crawl", async (req, res) => {
       console.log(`📄 [手动爬虫] Project ID: ${project.id}`);
       console.log(`📄 [手动爬虫] Project Link: ${project.projectLink}`);
 
+      // 手动触发的爬虫强制视为初始项目，确保完整抓取
+      const originalIsInitial = project.isInitial;
+      project.isInitial = true;
+      console.log(
+        `🔧 [手动爬虫] 强制设置 isInitial = true (原值: ${originalIsInitial})`
+      );
+
       await crawler.scrapeAndUpdateProjectDetails(project, page);
 
       console.log(`✅ [手动爬虫] 爬取执行完成`);
