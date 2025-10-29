@@ -75,6 +75,8 @@ async function fixPhyrexInvestments() {
         },
         defaults: {
           projectName: "Phyrex",
+          projectLink:
+            "https://www.rootdata.com/member/Phyrex%20Ni?k=MjA0OTI%3D", // 必填字段
           socialLinks: { x: "https://x.com/phyrex_ni" },
           logo: "https://pbs.twimg.com/profile_images/1760613636918476800/OYd_SQc5_400x400.jpg",
           description: "Crypto Investor & KOL",
@@ -109,6 +111,7 @@ async function fixPhyrexInvestments() {
         },
         defaults: {
           projectName: investment.name,
+          projectLink: `javascript:void(0)/${investment.name}`,
           logo: investment.avatar,
           socialLinks: { x: investment.twitter },
           isInitial: false,
