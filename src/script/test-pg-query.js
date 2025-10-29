@@ -36,15 +36,15 @@ async function testQuery() {
     console.log(`   targetTwitterUrl: ${targetTwitterUrl}`);
     console.log(`   targetTwitterUrlWithSlash: ${targetTwitterUrlWithSlash}\n`);
 
-    // 方法 1: 查看所有包含 x.com 的项目
+    // 方法 1: 查看包含特定 keyword 的项目（JSON 字段模糊匹配）
     console.log("=".repeat(60));
-    console.log("方法 1: 查看所有包含 Twitter/X 链接的项目");
+    console.log(`方法 1: 查找 socialLinks 中包含 "${keyword}" 的项目`);
     console.log("=".repeat(60));
     const allProjects = await pgInstance.query(
       `SELECT id, "projectName", "projectLink", "socialLinks" 
        FROM "Projects" 
        WHERE "socialLinks" IS NOT NULL 
-       AND "socialLinks"::text LIKE '%x.com%'
+       AND "socialLinks"::text ILIKE '%${keyword}%'
        LIMIT 10`,
       { type: Sequelize.QueryTypes.SELECT }
     );
@@ -138,28 +138,28 @@ async function testQuery() {
       console.log("❌ 未找到项目");
     }
 
-    // 方法 5: 检查特定项目
+    // 方法 5: 检查特定项目（按项目名或链接模糊搜索）
     console.log("\n" + "=".repeat(60));
-    console.log("方法 5: 查找 Phyrex 项目");
+    console.log(`方法 5: 查找包含 "${keyword}" 的项目`);
     console.log("=".repeat(60));
-    const phyrexProject = await pgInstance.query(
+    const keywordProject = await pgInstance.query(
       `SELECT id, "projectName", "projectLink", "socialLinks" 
        FROM "Projects" 
-       WHERE "projectName" ILIKE '%phyrex%' OR "projectLink" LIKE '%phyrex%'
-       LIMIT 5`,
+       WHERE "projectName" ILIKE '%${keyword}%' OR "projectLink" ILIKE '%${keyword}%'
+       LIMIT 10`,
       { type: Sequelize.QueryTypes.SELECT }
     );
 
-    if (phyrexProject && phyrexProject.length > 0) {
-      console.log(`✅ 找到 ${phyrexProject.length} 个相关项目:`);
-      phyrexProject.forEach((p) => {
+    if (keywordProject && keywordProject.length > 0) {
+      console.log(`✅ 找到 ${keywordProject.length} 个相关项目:`);
+      keywordProject.forEach((p) => {
         console.log(`\nID: ${p.id}`);
         console.log(`Name: ${p.projectName}`);
         console.log(`Link: ${p.projectLink}`);
         console.log(`socialLinks: ${JSON.stringify(p.socialLinks)}`);
       });
     } else {
-      console.log("❌ 未找到 Phyrex 相关项目");
+      console.log(`❌ 未找到包含 "${keyword}" 的项目`);
     }
   } catch (error) {
     console.error("\n❌ 测试失败:", error);
