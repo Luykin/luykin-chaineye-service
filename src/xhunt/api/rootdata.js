@@ -3,8 +3,281 @@ const { Op, literal } = require("sequelize");
 const axios = require("axios");
 const router = express.Router();
 
-// 缓存时间：2小时 = 7200 秒
+// Redis 缓存时间：2小时 = 7200 秒
 const CACHE_TTL_ROOTDATA = 7200;
+// HTTP 缓存时间：2分钟 = 120 秒（确保修正后能快速获取新数据）
+const HTTP_CACHE_TTL = 120;
+
+// Rootdata API 配置
+const ROOTDATA_API_BASE = "https://api.rootdata.com/open";
+const ROOTDATA_API_KEY = "0TpF08MLXdb50VCGx1H8buExoMwgADbR";
+
+/**
+ * Rootdata API 服务类
+ */
+class RootdataAPIService {
+  /**
+   * 根据项目URL提取 project_id
+   */
+  static extractProjectId(projectLink) {
+    if (!projectLink) return null;
+
+    // 从 URL 中提取参数，如: ?k=MTE3
+    const match = projectLink.match(/[?&]k=([^&]+)/);
+    if (!match) return null;
+
+    try {
+      // Base64 解码
+      const decoded = Buffer.from(match[1], "base64").toString("utf-8");
+      return decoded;
+    } catch (error) {
+      console.error("Failed to decode project_id:", error);
+      return null;
+    }
+  }
+
+  /**
+   * 调用 Rootdata API - 获取项目融资信息
+   * @param {string} projectId - 项目ID
+   */
+  static async getFundingInfo(projectId) {
+    try {
+      const response = await axios.post(
+        `${ROOTDATA_API_BASE}/get_fac`,
+        { project_id: projectId },
+        {
+          headers: {
+            apikey: ROOTDATA_API_KEY,
+            language: "en",
+            "Content-Type": "application/json",
+          },
+          timeout: 10000,
+        }
+      );
+
+      if (response.data?.result === 200) {
+        return response.data.data;
+      }
+
+      throw new Error(`API returned result: ${response.data?.result}`);
+    } catch (error) {
+      console.error("Rootdata API Error (get_fac):", error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 根据 projectLink 获取完整的融资信息
+   */
+  static async getProjectFundingData(projectLink) {
+    const projectId = this.extractProjectId(projectLink);
+
+    if (!projectId) {
+      throw new Error("Failed to extract project_id from projectLink");
+    }
+
+    return await this.getFundingInfo(projectId);
+  }
+}
+
+/**
+ * 数据修正服务
+ * 通过 Rootdata API 验证和修复本地数据库的投资关系数据
+ */
+class RootdataDataFixService {
+  /**
+   * 验证和修复项目数据
+   * @param {Object} project - 项目对象
+   * @param {Object} Fundraising - Fundraising 模型
+   * @param {Object} redisClient - Redis 客户端
+   * @param {string} searchCacheKey - 搜索结果的缓存key（修正后需要清除）
+   */
+  static async verifyAndFixProject(
+    project,
+    Fundraising,
+    redisClient,
+    searchCacheKey = null
+  ) {
+    try {
+      const projectLink = project.projectLink;
+      const cacheKey = `rootdata_verified:${projectLink}`;
+
+      // 1. 检查24小时内是否已修正
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        console.log(`✅ 使用缓存数据，跳过API调用: ${projectLink}`);
+        return JSON.parse(cached);
+      }
+
+      // 2. 调用 Rootdata API
+      console.log(`🔍 验证项目数据: ${projectLink}`);
+      const apiData = await RootdataAPIService.getProjectFundingData(
+        projectLink
+      );
+
+      if (!apiData || !apiData.items || apiData.items.length === 0) {
+        console.log(`⚠️ 未找到API数据，跳过修正: ${projectLink}`);
+        return null;
+      }
+
+      // 3. 修正数据
+      await this.fixProjectData(project, apiData, Fundraising);
+
+      // 4. 清除搜索结果缓存，让下次请求获取修正后的数据
+      if (searchCacheKey) {
+        try {
+          await redisClient.del(searchCacheKey);
+          console.log(`🗑️ 已清除搜索结果缓存: ${searchCacheKey}`);
+        } catch (error) {
+          console.error("清除缓存失败:", error);
+        }
+      }
+
+      // 5. 缓存验证结果（24小时）
+      const cacheData = {
+        verified: true,
+        verifiedAt: Date.now(),
+        data: apiData,
+      };
+      await redisClient.setEx(cacheKey, 86400, JSON.stringify(cacheData));
+
+      console.log(`✅ 数据修正完成并已缓存: ${projectLink}`);
+      return cacheData;
+    } catch (error) {
+      console.error("❌ 数据修正失败:", error.message);
+      return null;
+    }
+  }
+
+  /**
+   * 修正项目数据
+   */
+  static async fixProjectData(project, apiData, Fundraising) {
+    const fundedProjectId = project.id;
+
+    for (const round of apiData.items) {
+      if (!round.invests || round.invests.length === 0) continue;
+
+      for (const investor of round.invests) {
+        try {
+          // 查找或创建投资者项目
+          const investorProject = await this.findOrCreateInvestor(
+            investor,
+            Fundraising
+          );
+
+          if (!investorProject) continue;
+
+          // 查找或创建投资关系
+          await this.findOrCreateRelationship(
+            {
+              investorProjectId: investorProject.id,
+              fundedProjectId: fundedProjectId,
+              round: round.rounds || null,
+              amount: round.amount || null,
+              formattedAmount: round.amount || null,
+              date: this.parseDate(round.published_time),
+              lead: investor.lead_investor === 1,
+            },
+            Fundraising
+          );
+        } catch (error) {
+          console.error(`修正投资者失败:`, error.message);
+        }
+      }
+    }
+  }
+
+  /**
+   * 查找或创建投资者项目
+   */
+  static async findOrCreateInvestor(investor, Fundraising) {
+    // 提取 projectLink
+    const projectLink = investor.rootdataurl;
+    if (!projectLink) return null;
+
+    // 从 rootdataurl 构建完整的 projectLink
+    // 例如: https://www.rootdata.com/Investors/detail/Polychain?k=MTQ2
+    let fullProjectLink = projectLink;
+    if (!projectLink.includes("http")) {
+      fullProjectLink = `https://www.rootdata.com${projectLink}`;
+    }
+
+    // 查找是否存在
+    const existing = await Fundraising.Project.findOne({
+      where: { projectLink: fullProjectLink },
+      raw: true,
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    // 创建新项目
+    const newProject = await Fundraising.Project.create({
+      projectName: investor.name,
+      projectLink: fullProjectLink,
+      logo: investor.logo,
+      description: investor.name, // 使用名称作为描述
+      isInitial: false, // 标记为投资者项目
+      socialLinks: investor.X ? { x: investor.X } : null,
+    });
+
+    console.log(`✨ 创建新投资者项目: ${investor.name}`);
+    return newProject;
+  }
+
+  /**
+   * 查找或创建投资关系
+   */
+  static async findOrCreateRelationship(relationshipData, Fundraising) {
+    const { investorProjectId, fundedProjectId, round } = relationshipData;
+
+    // 检查是否存在
+    const existing = await Fundraising.InvestmentRelationships.findOne({
+      where: {
+        investorProjectId,
+        fundedProjectId,
+        round,
+      },
+      raw: true,
+    });
+
+    if (existing) {
+      // 更新现有关系
+      await Fundraising.InvestmentRelationships.update(
+        {
+          amount: relationshipData.amount,
+          formattedAmount: relationshipData.formattedAmount,
+          date: relationshipData.date,
+          lead: relationshipData.lead,
+        },
+        {
+          where: {
+            investorProjectId,
+            fundedProjectId,
+            round,
+          },
+        }
+      );
+      return;
+    }
+
+    // 创建新关系
+    await Fundraising.InvestmentRelationships.create(relationshipData);
+    console.log(
+      `✨ 创建投资关系: ${investorProjectId} -> ${fundedProjectId} (${round})`
+    );
+  }
+
+  /**
+   * 解析日期字符串为时间戳
+   */
+  static parseDate(dateStr) {
+    if (!dateStr) return null;
+    return new Date(dateStr).getTime();
+  }
+}
 
 /**
  * 手动维护部分更名推特
@@ -128,7 +401,7 @@ router.get("/search", async (req, res) => {
     try {
       cachedData = await req.redisClient.get(cacheKey);
       if (cachedData) {
-        res.set("Cache-Control", "public, max-age=7200");
+        res.set("Cache-Control", `public, max-age=${HTTP_CACHE_TTL}`);
         res.set("X-Cache-Status", "HIT");
         return res.json(JSON.parse(cachedData));
       }
@@ -190,7 +463,23 @@ router.get("/search", async (req, res) => {
       return res.json(notFoundResponse);
     }
 
-    // 6. 并行查询关联数据（性能优化）
+    // 6. 异步验证和修正数据（不影响响应速度）
+    // 修正完成后会自动清除缓存，确保下次请求能获取最新数据
+    setImmediate(async () => {
+      try {
+        await RootdataDataFixService.verifyAndFixProject(
+          project,
+          Fundraising,
+          req.redisClient,
+          cacheKey // 传入搜索缓存key，修正后会清除
+        );
+        console.log(`✅ 数据修正完成: ${cacheKey}`);
+      } catch (error) {
+        console.error("数据修正失败:", error);
+      }
+    });
+
+    // 7. 并行查询关联数据（性能优化）
     const [investmentsReceived, investmentsGiven] = await Promise.all([
       Fundraising.InvestmentRelationships.findAll({
         where: { fundedProjectId: project.id },
@@ -234,7 +523,7 @@ router.get("/search", async (req, res) => {
       }),
     ]);
 
-    // 7. 处理 invested（收到的投资）数据
+    // 8. 处理 invested（收到的投资）数据
     const groupedInvestments = groupInvestmentsByDate(
       investmentsReceived || []
     );
@@ -275,7 +564,7 @@ router.get("/search", async (req, res) => {
       total_funding: totalFunding,
     };
 
-    // 7. 处理 investor（投出的项目）数据
+    // 9. 处理 investor（投出的项目）数据
     const rawFundedProjects = (investmentsGiven || []).map((investment) => ({
       avatar: investment.fundedProject?.logo || "",
       name: investment.fundedProject?.projectName || "",
@@ -349,7 +638,7 @@ router.get("/search", async (req, res) => {
       ),
     };
 
-    // 8. 异步更新头像（如果有缺失的头像）
+    // 10. 异步更新头像（如果有缺失的头像）
     const usernamesToFetch = new Set();
 
     investors.forEach((investor) => {
@@ -428,14 +717,14 @@ router.get("/search", async (req, res) => {
       });
     }
 
-    // 9. 组装最终响应
+    // 11. 组装最终响应
     const response = {
       invested: investedData,
       investor: investorData,
       projectLink: project?.projectLink,
     };
 
-    // 10. 缓存结果到 Redis（2小时）
+    // 12. 缓存结果到 Redis（2小时）
     try {
       await req.redisClient.setEx(
         cacheKey,
@@ -446,7 +735,7 @@ router.get("/search", async (req, res) => {
       console.error("Redis Client Error (SET):", error);
     }
 
-    res.set("Cache-Control", "public, max-age=7200");
+    res.set("Cache-Control", `public, max-age=${HTTP_CACHE_TTL}`);
     res.set("X-Cache-Status", "MISS");
     res.json(response);
   } catch (error) {
