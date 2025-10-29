@@ -119,10 +119,11 @@ class RootdataDataFixService {
         console.log(`⚠️ 未找到API数据，跳过修正: ${projectLink}`);
         return null;
       }
-
+      console.log(`🔍 API数据-有几轮: ${apiData.items.length}`);
+      console.log(`开始修正数据... ${project.projectName} ${projectLink}`);
       // 3. 修正数据
       await this.fixProjectData(project, apiData, Fundraising);
-
+      console.log(`修正数据完成... ${project.projectName} ${projectLink}`);
       // 4. 清除搜索结果缓存，让下次请求获取修正后的数据
       if (searchCacheKey) {
         try {
@@ -572,7 +573,7 @@ router.get("/search", async (req, res) => {
       lead_investor: investment.fundedProject?.lead || false,
     }));
 
-    let fundedProjects = Array.from(
+    const fundedProjects = Array.from(
       rawFundedProjects
         .reduce((map, item) => {
           if (map.has(item.name)) {
@@ -587,48 +588,6 @@ router.get("/search", async (req, res) => {
         }, new Map())
         .values()
     );
-
-    // 特殊处理：为 phyrex_ni 添加硬编码的投资项目
-    if (sanitizedKeyword.toLowerCase() === "phyrex_ni") {
-      const hardcodedFundedProjects = [
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1852368489174159360/htlVoJ1j_400x400.jpg",
-          name: "Solayer Labs",
-          twitter: "https://x.com/solayer_labs",
-          lead_investor: false,
-        },
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1906615420939022336/j1PVcH8N_400x400.jpg",
-          name: "Aster DEX",
-          twitter: "https://x.com/aster_dex",
-          lead_investor: false,
-        },
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1624112902771703821/oSgPaG68_400x400.png",
-          name: "Huma Finance",
-          twitter: "https://x.com/humafinance",
-          lead_investor: false,
-        },
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1955663161928921088/nn_g5zL1_400x400.png",
-          name: "Sahara Labs AI",
-          twitter: "https://x.com/saharalabsai",
-          lead_investor: false,
-        },
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1963511865520373760/KaLCvZ5s_400x400.jpg",
-          name: "GAIB AI",
-          twitter: "https://x.com/gaib_ai",
-          lead_investor: false,
-        },
-      ];
-      fundedProjects = [...fundedProjects, ...hardcodedFundedProjects];
-    }
 
     const investorData = {
       investors: fundedProjects,

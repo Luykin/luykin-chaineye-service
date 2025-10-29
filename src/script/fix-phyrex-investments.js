@@ -1,0 +1,147 @@
+/**
+ * 修复 phyrex_ni 的投资项目数据
+ * 将硬编码的投资项目写入数据库
+ */
+
+const { Fundraising } = require("../models/postgres-fundraising");
+
+// phyrex_ni 的投资项目列表
+const PHYREX_INVESTMENTS = [
+  {
+    name: "Solayer Labs",
+    twitter: "https://x.com/solayer_labs",
+    avatar:
+      "https://pbs.twimg.com/profile_images/1852368489174159360/htlVoJ1j_400x400.jpg",
+  },
+  {
+    name: "Aster DEX",
+    twitter: "https://x.com/aster_dex",
+    avatar:
+      "https://pbs.twimg.com/profile_images/1906615420939022336/j1PVcH8N_400x400.jpg",
+  },
+  {
+    name: "Huma Finance",
+    twitter: "https://x.com/humafinance",
+    avatar:
+      "https://pbs.twimg.com/profile_images/1624112902771703821/oSgPaG68_400x400.png",
+  },
+  {
+    name: "Sahara Labs AI",
+    twitter: "https://x.com/saharalabsai",
+    avatar:
+      "https://pbs.twimg.com/profile_images/1955663161928921088/nn_g5zL1_400x400.png",
+  },
+  {
+    name: "GAIB AI",
+    twitter: "https://x.com/gaib_ai",
+    avatar:
+      "https://pbs.twimg.com/profile_images/1963511865520373760/KaLCvZ5s_400x400.jpg",
+  },
+];
+
+async function fixPhyrexInvestments() {
+  try {
+    console.log("🚀 开始修复 phyrex_ni 的投资数据...\n");
+
+    // 1. 查找 phyrex_ni 的项目
+    const phyrexProject = await Fundraising.Project.findOne({
+      where: {
+        socialLinks: {
+          x: "https://x.com/phyrex_ni",
+        },
+      },
+    });
+
+    if (!phyrexProject) {
+      console.log("❌ 未找到 phyrex_ni 的项目，请先确保该项目存在于数据库中");
+      return;
+    }
+
+    console.log(
+      `✅ 找到投资者项目: ${phyrexProject.projectName} (ID: ${phyrexProject.id})\n`
+    );
+
+    let createdCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    // 2. 遍历投资项目列表
+    for (const investment of PHYREX_INVESTMENTS) {
+      console.log(`📝 处理项目: ${investment.name}...`);
+
+      // 2.1 查找或创建被投资项目
+      let [fundedProject, created] = await Fundraising.Project.findOrCreate({
+        where: {
+          socialLinks: {
+            x: investment.twitter,
+          },
+        },
+        defaults: {
+          projectName: investment.name,
+          logo: investment.avatar,
+          socialLinks: { x: investment.twitter },
+          isInitial: false,
+        },
+      });
+
+      if (created) {
+        console.log(`  ✨ 创建新项目: ${investment.name}`);
+      } else {
+        console.log(
+          `  ℹ️  项目已存在: ${investment.name} (ID: ${fundedProject.id})`
+        );
+
+        // 更新 logo（如果为空或不同）
+        if (!fundedProject.logo || fundedProject.logo !== investment.avatar) {
+          await fundedProject.update({ logo: investment.avatar });
+          console.log(`  🖼️  更新了项目 logo`);
+        }
+      }
+
+      // 2.2 创建或更新投资关系
+      const [relationship, relationshipCreated] =
+        await Fundraising.InvestmentRelationships.findOrCreate({
+          where: {
+            investorProjectId: phyrexProject.id,
+            fundedProjectId: fundedProject.id,
+          },
+          defaults: {
+            investorProjectId: phyrexProject.id,
+            fundedProjectId: fundedProject.id,
+            round: "Angel",
+            lead: false,
+            amount: null,
+            formattedAmount: null,
+            date: Date.now(),
+          },
+        });
+
+      if (relationshipCreated) {
+        console.log(`  ✅ 创建投资关系: phyrex_ni -> ${investment.name}`);
+        createdCount++;
+      } else {
+        console.log(`  ⚠️  投资关系已存在`);
+        skippedCount++;
+      }
+
+      console.log("");
+    }
+
+    // 3. 总结
+    console.log("=".repeat(50));
+    console.log("✅ 数据修复完成！");
+    console.log(`📊 统计:`);
+    console.log(`   - 新建投资关系: ${createdCount}`);
+    console.log(`   - 已存在（跳过）: ${skippedCount}`);
+    console.log(`   - 总计处理: ${PHYREX_INVESTMENTS.length}`);
+    console.log("=".repeat(50));
+
+    process.exit(0);
+  } catch (error) {
+    console.error("❌ 修复失败:", error);
+    process.exit(1);
+  }
+}
+
+// 运行脚本
+fixPhyrexInvestments();
