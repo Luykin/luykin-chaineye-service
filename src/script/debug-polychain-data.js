@@ -98,8 +98,8 @@ async function queryDatabaseData(keyword) {
 
   const targetTwitterUrl = `https://x.com/${keyword}`;
 
-  // 查找项目
-  const project = await Fundraising.Project.findOne({
+  // 方式1: 通过 twitterUrl 查找
+  let project = await Fundraising.Project.findOne({
     where: {
       twitterUrl: targetTwitterUrl,
     },
@@ -107,7 +107,67 @@ async function queryDatabaseData(keyword) {
   });
 
   if (!project) {
-    console.log(`\n⚠️ 数据库中未找到匹配的项目`);
+    console.log(`\n⚠️ 未通过 twitterUrl 找到项目，尝试其他方式...`);
+
+    // 方式2: 通过项目名称查找（模糊匹配）
+    const { Op } = require("sequelize");
+    project = await Fundraising.Project.findOne({
+      where: {
+        projectName: {
+          [Op.iLike]: `%${keyword}%`,
+        },
+      },
+      raw: true,
+    });
+
+    if (project) {
+      console.log(`✅ 通过项目名称找到匹配项目`);
+    }
+  } else {
+    console.log(`✅ 通过 twitterUrl 找到项目`);
+  }
+
+  // 方式3: 通过 projectLink 查找
+  if (!project) {
+    project = await Fundraising.Project.findOne({
+      where: {
+        projectLink:
+          "https://www.rootdata.com/Investors/detail/Polychain?k=MTQ2",
+      },
+      raw: true,
+    });
+
+    if (project) {
+      console.log(`✅ 通过 projectLink 找到项目`);
+    }
+  }
+
+  if (!project) {
+    console.log(`\n❌ 所有查询方式都未找到匹配的项目`);
+
+    // 显示一些可能匹配的项目
+    const { Op } = require("sequelize");
+    const similarProjects = await Fundraising.Project.findAll({
+      where: {
+        [Op.or]: [
+          { projectName: { [Op.iLike]: "%poly%" } },
+          { projectName: { [Op.iLike]: "%chain%" } },
+        ],
+      },
+      limit: 5,
+      raw: true,
+    });
+
+    if (similarProjects.length > 0) {
+      console.log(`\n💡 找到 ${similarProjects.length} 个可能相关的项目:`);
+      similarProjects.forEach((p, idx) => {
+        console.log(`\n   ${idx + 1}. ${p.projectName}`);
+        console.log(`      ID: ${p.id}`);
+        console.log(`      Link: ${p.projectLink}`);
+        console.log(`      Twitter: ${p.twitterUrl || "N/A"}`);
+      });
+    }
+
     return null;
   }
 
@@ -224,7 +284,16 @@ async function main() {
     if (projectId) {
       try {
         const apiData = await getFundingInfo(projectId);
-        console.log(`\n✅ API 调用成功`);
+        if (apiData?.data?.items?.length > 0) {
+          console.log(
+            `\n✅ API 调用成功，返回了 ${apiData.data.items.length} 条融资记录`
+          );
+        } else {
+          console.log(`\n⚠️ API 调用成功，但返回数据为空`);
+          console.log(`   说明: Rootdata 的 get_fac 接口只返回"项目融资"数据`);
+          console.log(`   对于投资机构(Investors)，该接口不返回其投资组合`);
+          console.log(`   这是正常的，投资组合数据需要通过爬虫获取`);
+        }
       } catch (error) {
         console.log(`\n❌ API 调用失败`);
       }
