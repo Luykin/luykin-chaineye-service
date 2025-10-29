@@ -7,10 +7,11 @@ const { Sequelize } = require("sequelize");
 const FundraisingModel = require("../models/fundraising");
 
 // ============ 连接 PostgreSQL 数据库 ============
+// 默认连接到生产数据库，也可通过环境变量覆盖
 const pgInstance = new Sequelize({
   dialect: "postgres",
   host: process.env.PG_HOST || "150.5.158.179",
-  port: parseInt(process.env.PG_PORT || "5432", 10),
+  port: parseInt(process.env.PG_PORT || "5432", 10), // 生产端口: 5432, 开发端口: 5433
   database: process.env.PG_DATABASE || "luykindatabase",
   username: process.env.PG_USERNAME || "luykin",
   password: process.env.PG_PASSWORD || "wtf.0813",
@@ -165,13 +166,27 @@ async function fixPhyrexInvestments() {
     console.log(`   - 已存在（跳过）: ${skippedCount}`);
     console.log(`   - 总计处理: ${PHYREX_INVESTMENTS.length}`);
     console.log("=".repeat(50));
-
-    process.exit(0);
   } catch (error) {
     console.error("❌ 修复失败:", error);
-    process.exit(1);
+    throw error;
+  } finally {
+    // 关闭数据库连接
+    await pgInstance.close();
+    console.log("\n🔌 数据库连接已关闭");
   }
 }
 
-// 运行脚本
-fixPhyrexInvestments();
+// ============ 执行脚本 ============
+if (require.main === module) {
+  fixPhyrexInvestments()
+    .then(() => {
+      console.log("\n✨ 所有操作完成");
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error("\n💥 发生错误:", error);
+      process.exit(1);
+    });
+}
+
+module.exports = { fixPhyrexInvestments };
