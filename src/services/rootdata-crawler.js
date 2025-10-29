@@ -731,17 +731,51 @@ class FundraisingCrawler extends BaseCrawler {
 
       if (isManualTrigger) {
         console.log(`[详情] HTML 长度: ${String(html?.length || 0)}`);
+
+        // 打印原始前 500 字符和去除空白后的前 500 字符
+        const htmlStr = String(html);
+        const trimmedStart = htmlStr.trimStart();
         console.log(
-          `[详情] HTML 前 2000 字符:\n${String(html).substring(0, 2000)}`
+          `[详情] HTML 原始前 500 字符:\n${htmlStr.substring(0, 500)}`
         );
         console.log(
-          `[详情] HTML 包含 .investor 类: ${String(html).includes(
+          `[详情] HTML 去除开头空白后前 500 字符:\n${trimmedStart.substring(
+            0,
+            500
+          )}`
+        );
+
+        // 检查各种可能的 investor 类名格式
+        console.log(
+          `[详情] HTML 包含 'class="investor"': ${htmlStr.includes(
             'class="investor"'
           )}`
         );
         console.log(
-          `[详情] HTML 包含 investor 文本: ${String(html).includes("investor")}`
+          `[详情] HTML 包含 'class=\\'investor\\'': ${htmlStr.includes(
+            "class='investor'"
+          )}`
         );
+        console.log(
+          `[详情] HTML 包含 'className="investor"': ${htmlStr.includes(
+            'className="investor"'
+          )}`
+        );
+        console.log(
+          `[详情] HTML 包含 'investor': ${htmlStr.includes("investor")}`
+        );
+
+        // 搜索 investor 关键词出现的位置
+        const investorIndex = htmlStr.indexOf("investor");
+        if (investorIndex >= 0) {
+          console.log(`[详情] 'investor' 首次出现位置: ${investorIndex}`);
+          console.log(
+            `[详情] 'investor' 周围内容:\n${htmlStr.substring(
+              Math.max(0, investorIndex - 100),
+              investorIndex + 200
+            )}`
+          );
+        }
       }
 
       // 将 HTML 注入到离线页面环境中，复用现有的 DOM 抓取逻辑
