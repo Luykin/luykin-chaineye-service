@@ -660,7 +660,7 @@ async function loadRootdataDailyStats() {
 
   try {
     const response = await fetch(
-      `/api/stats/rootdata-daily?date=${selectedDate}`
+      `/api/xhunt/stats/rootdata-daily?date=${selectedDate}`
     );
 
     if (!response.ok) {
