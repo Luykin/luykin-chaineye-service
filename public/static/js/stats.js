@@ -649,7 +649,10 @@ async function loadRootdataDailyStats() {
     document.getElementById("rootdata-daily-loading").style.display = "none";
 
     // 检查是否有数据
-    if (data.summary.projectsCount === 0 && data.summary.relationshipsCount === 0) {
+    if (
+      data.summary.projectsCount === 0 &&
+      data.summary.relationshipsCount === 0
+    ) {
       document.getElementById("rootdata-daily-empty").style.display = "block";
       return;
     }
@@ -713,26 +716,34 @@ function renderRootdataProjects(projects) {
     const bgColor = index % 2 === 0 ? "#ffffff" : "#f9fafb";
     const createdAt = new Date(project.createdAt).toLocaleString("zh-CN");
     const twitter = project.twitterUrl || project.socialLinks?.x || "-";
-    const twitterDisplay = twitter !== "-" ? 
-      `<a href="${twitter}" target="_blank" style="color: #3b82f6; text-decoration: none;">🔗 查看</a>` : 
-      "-";
+    const twitterDisplay =
+      twitter !== "-"
+        ? `<a href="${twitter}" target="_blank" style="color: #3b82f6; text-decoration: none;">🔗 查看</a>`
+        : "-";
 
     html += `
       <tr style="background: ${bgColor}; border-bottom: 1px solid #e5e7eb;">
         <td style="padding: 12px;">
-          ${project.logo ? 
-            `<img src="${project.logo}" alt="${project.projectName}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">` :
-            `<div style="width: 40px; height: 40px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7280;">无</div>`
+          ${
+            project.logo
+              ? `<img src="${project.logo}" alt="${project.projectName}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">`
+              : `<div style="width: 40px; height: 40px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7280;">无</div>`
           }
         </td>
-        <td style="padding: 12px; font-weight: 600; color: #111827;">${project.projectName}</td>
-        <td style="padding: 12px; color: #6b7280; font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${project.description || '-'}">
+        <td style="padding: 12px; font-weight: 600; color: #111827;">${
+          project.projectName
+        }</td>
+        <td style="padding: 12px; color: #6b7280; font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${
+          project.description || "-"
+        }">
           ${project.description || "-"}
         </td>
         <td style="padding: 12px;">${twitterDisplay}</td>
         <td style="padding: 12px; color: #6b7280; font-size: 13px;">${createdAt}</td>
         <td style="padding: 12px;">
-          <a href="${project.projectLink}" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 13px;">🔗 查看详情</a>
+          <a href="${
+            project.projectLink
+          }" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 13px;">🔗 查看详情</a>
         </td>
       </tr>
     `;
@@ -780,33 +791,45 @@ function renderRootdataRelationships(relationships) {
   relationships.forEach((rel, index) => {
     const bgColor = index % 2 === 0 ? "#ffffff" : "#f9fafb";
     const createdAt = new Date(rel.createdAt).toLocaleString("zh-CN");
-    const amount = rel.formattedAmount ? `$${rel.formattedAmount.toFixed(2)}M` : "-";
+    const amount = rel.formattedAmount
+      ? `$${rel.formattedAmount.toFixed(2)}M`
+      : "-";
     const lead = rel.lead ? "✅" : "-";
 
     html += `
       <tr style="background: ${bgColor}; border-bottom: 1px solid #e5e7eb;">
         <td style="padding: 12px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            ${rel.investorProject?.logo ?
-              `<img src="${rel.investorProject.logo}" alt="${rel.investorProject.projectName}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
-              `<div style="width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb;"></div>`
+            ${
+              rel.investorProject?.logo
+                ? `<img src="${rel.investorProject.logo}" alt="${rel.investorProject.projectName}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">`
+                : `<div style="width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb;"></div>`
             }
             <div>
-              <div style="font-weight: 600; color: #111827;">${rel.investorProject?.projectName || "-"}</div>
-              <a href="${rel.investorProject?.projectLink || "#"}" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 11px;">查看</a>
+              <div style="font-weight: 600; color: #111827;">${
+                rel.investorProject?.projectName || "-"
+              }</div>
+              <a href="${
+                rel.investorProject?.projectLink || "#"
+              }" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 11px;">查看</a>
             </div>
           </div>
         </td>
         <td style="padding: 12px; text-align: center; font-size: 20px; color: #9ca3af;">→</td>
         <td style="padding: 12px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            ${rel.fundedProject?.logo ?
-              `<img src="${rel.fundedProject.logo}" alt="${rel.fundedProject.projectName}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
-              `<div style="width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb;"></div>`
+            ${
+              rel.fundedProject?.logo
+                ? `<img src="${rel.fundedProject.logo}" alt="${rel.fundedProject.projectName}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">`
+                : `<div style="width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb;"></div>`
             }
             <div>
-              <div style="font-weight: 600; color: #111827;">${rel.fundedProject?.projectName || "-"}</div>
-              <a href="${rel.fundedProject?.projectLink || "#"}" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 11px;">查看</a>
+              <div style="font-weight: 600; color: #111827;">${
+                rel.fundedProject?.projectName || "-"
+              }</div>
+              <a href="${
+                rel.fundedProject?.projectLink || "#"
+              }" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 11px;">查看</a>
             </div>
           </div>
         </td>
@@ -846,6 +869,7 @@ function switchRootdataTab(tabName) {
   if (tabName === "projects") {
     document.getElementById("rootdata-projects-list").style.display = "block";
   } else if (tabName === "relationships") {
-    document.getElementById("rootdata-relationships-list").style.display = "block";
+    document.getElementById("rootdata-relationships-list").style.display =
+      "block";
   }
 }
