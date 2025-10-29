@@ -315,350 +315,47 @@ const RENAME_MAP = {
   YZiLabs: "BinanceLabs",
   yzilabs: "BinanceLabs",
 };
+/**
+ * 🔄 Legacy API - 代理到新接口
+ * 为了保持向后兼容，直接调用新的 rootdata 接口
+ */
 router.get("/search/legacy", async (req, res) => {
   try {
-    let { keyword } = req.query;
+    const { keyword } = req.query;
 
-    if (!keyword || !keyword.trim() || String(keyword).length < 2) {
-      return res.json({
-        invested: null,
-        investor: null,
-        message: "No keyword provided",
-      });
-    }
-    const lowerKeyword = String(keyword).toLocaleLowerCase();
-    if (lowerKeyword in RENAME_MAP || keyword in RENAME_MAP) {
-      keyword = RENAME_MAP[lowerKeyword] || RENAME_MAP[keyword];
-    }
+    // 内部请求新接口
+    const baseUrl = req.protocol + "://" + req.get("host");
+    const newApiUrl = `${baseUrl}/api/rootdata/search?keyword=${encodeURIComponent(
+      keyword
+    )}`;
 
-    const sanitizedKeyword = keyword.trim();
-    const cacheKey = `legacy_project_search_${sanitizedKeyword}_20251015_1222`;
-    let cachedData;
-
-    try {
-      cachedData = await req.redisClient.get(cacheKey);
-    } catch (error) {
-      console.error("Redis Client Error (GET):", error);
-    }
-
-    if (cachedData) {
-      res.set("Cache-Control", "public, max-age=120");
-      res.set("X-Cache-Status", "HIT");
-      return res.json(JSON.parse(cachedData));
-    }
-
-    // 构造正确的 JSON 查询条件，确保 "x" 这个键的值匹配目标 URL（大小写不敏感）
-    const targetTwitterUrl = `https://x.com/${sanitizedKeyword}`;
-    const targetTwitterUrlWithSlash = `https://x.com/${sanitizedKeyword}/`;
-
-    const project = await Fundraising.Project.findOne({
-      where: {
-        socialLinks: {
-          [Op.or]: [
-            literal(`LOWER(socialLinks->>'x') = LOWER('${targetTwitterUrl}')`),
-            literal(
-              `LOWER(socialLinks->>'x') = LOWER('${targetTwitterUrlWithSlash}')`
-            ),
-          ],
-        },
+    const response = await axios.get(newApiUrl, {
+      headers: {
+        // 传递 Redis 客户端需要的请求头（如果有的话）
+        "x-forwarded-for": req.get("x-forwarded-for") || req.ip,
       },
-      order: [["id", "DESC"]], // 按 id 倒序
-      attributes: [
-        "projectName",
-        "projectLink",
-        "socialLinks",
-        "logo",
-        "amount",
-      ],
-      include: [
-        {
-          model: Fundraising.InvestmentRelationships,
-          as: "investmentsReceived",
-          // 正确的作用域
-          // required: false, // 避免 INNER JOIN 过滤掉主项目
-          // where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
-          attributes: ["round", "lead", "amount", "date", "formattedAmount"],
-          include: [
-            {
-              model: Fundraising.Project,
-              as: "investorProject",
-              attributes: ["projectName", "socialLinks", "logo"],
-            },
-          ],
-        },
-        {
-          model: Fundraising.InvestmentRelationships,
-          as: "investmentsGiven",
-          // 正确的作用域
-          // required: false, // 避免 INNER JOIN 过滤掉主项目
-          // where: { updatedAt: { [Op.gte]: DATA_CUTOFF_TIMESTAMP } },
-          attributes: ["round", "lead", "amount", "date", "formattedAmount"],
-          include: [
-            {
-              model: Fundraising.Project,
-              as: "fundedProject",
-              attributes: ["projectName", "socialLinks", "logo"],
-            },
-          ],
-        },
-      ],
+      timeout: 30000, // 30 秒超时
     });
 
-    if (!project) {
-      return res.json({
-        invested: null,
-        investor: null,
-        message: "No matching project found",
-      });
-    }
-    // 调用现有的 groupInvestmentsByDate 函数
-    const groupedInvestments = groupInvestmentsByDate(
-      project.investmentsReceived || []
-    );
+    // 添加标识，表示这是从 legacy 接口代理过来的
+    res.set("X-Proxied-From", "legacy");
+    res.set("X-Data-Source", "PostgreSQL");
 
-    // 计算 total_funding
-    const totalFunding = Object.values(groupedInvestments).reduce(
-      (sum, group) => sum + (group.formattedAmount || 0),
-      0
-    );
-
-    // 构造 investors 数据并去重
-    const rawInvestors = Object.values(groupedInvestments).flatMap((group) =>
-      group.investors.map((investor) => ({
-        avatar: investor?.logo || "",
-        lead_investor: investor?.lead || false,
-        name: investor?.projectName || "",
-        twitter: investor?.socialLinks?.x || "",
-      }))
-    );
-
-    // 自定义去重逻辑：优先保留 lead_investor 为 true 的记录
-    const investors = Array.from(
-      rawInvestors
-        .reduce((map, item) => {
-          // 如果已存在相同 name 的记录
-          if (map.has(item.name)) {
-            const existing = map.get(item.name);
-            // 当现有记录的 lead_investor 为 false 且当前项为 true 时替换
-            if (!existing.lead_investor && item.lead_investor) {
-              map.set(item.name, item);
-            }
-            // 否则保留原有记录（保持第一次出现的 lead_investor 为 true 的记录）
-          } else {
-            map.set(item.name, item);
-          }
-          return map;
-        }, new Map())
-        .values()
-    );
-
-    const investedData = {
-      investors,
-      total_funding: totalFunding,
-    };
-
-    // 处理 fundedProjects 数据并去重
-    const rawFundedProjects = (project.investmentsGiven || []).map(
-      (investment) => ({
-        avatar: investment.fundedProject?.logo || "",
-        name: investment.fundedProject?.projectName || "",
-        twitter: investment.fundedProject?.socialLinks?.x || "",
-        lead_investor: investment.fundedProject?.lead || false,
-      })
-    );
-
-    // 自定义去重逻辑：优先保留 lead_investor 为 true 的记录
-    let fundedProjects = Array.from(
-      rawFundedProjects
-        .reduce((map, item) => {
-          // 如果已存在相同 name 的记录
-          if (map.has(item.name)) {
-            const existing = map.get(item.name);
-            // 当现有记录的 lead_investor 为 false 且当前项为 true 时替换
-            if (!existing.lead_investor && item.lead_investor) {
-              map.set(item.name, item);
-            }
-            // 否则保留原有记录（保持第一次出现的 lead_investor 为 true 的记录）
-          } else {
-            map.set(item.name, item);
-          }
-          return map;
-        }, new Map())
-        .values()
-    );
-
-    // 特殊处理：为 phyrex_ni 添加硬编码的投资项目（他投资出去的项目）
-    if (String(sanitizedKeyword).toLocaleLowerCase() === "phyrex_ni") {
-      // 硬编码的投资项目数据
-      const hardcodedFundedProjects = [
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1852368489174159360/htlVoJ1j_400x400.jpg",
-          name: "Solayer Labs",
-          twitter: "https://x.com/solayer_labs",
-          lead_investor: false,
-        },
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1906615420939022336/j1PVcH8N_400x400.jpg",
-          name: "Aster DEX",
-          twitter: "https://x.com/aster_dex",
-          lead_investor: false,
-        },
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1624112902771703821/oSgPaG68_400x400.png",
-          name: "Huma Finance",
-          twitter: "https://x.com/humafinance",
-          lead_investor: false,
-        },
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1955663161928921088/nn_g5zL1_400x400.png",
-          name: "Sahara Labs AI",
-          twitter: "https://x.com/saharalabsai",
-          lead_investor: false,
-        },
-        {
-          avatar:
-            "https://pbs.twimg.com/profile_images/1963511865520373760/KaLCvZ5s_400x400.jpg",
-          name: "GAIB AI",
-          twitter: "https://x.com/gaib_ai",
-          lead_investor: false,
-        },
-      ];
-
-      // 将硬编码的投资项目添加到 fundedProjects
-      fundedProjects = [...fundedProjects, ...hardcodedFundedProjects];
-    }
-    const totalInvestment = fundedProjects.reduce(
-      (sum, proj) => sum + (proj.amount || 0),
-      0
-    );
-
-    const investorData = {
-      investors: fundedProjects,
-      total_funding: totalInvestment,
-    };
-
-    // ----------------------------- 新增逻辑开始 -----------------------------
-    // 收集需要更新的用户名
-    const usernamesToFetch = new Set();
-    const extractUsername = (url) => {
-      if (!url) return null;
-      const match = url.match(/x\.com\/([^/]+)/i);
-      return match ? match[1] : null;
-    };
-
-    // 从 investors 中提取用户名
-    investors.forEach((investor) => {
-      if (investor.twitter) {
-        const username = extractUsername(investor.twitter);
-        if (
-          username &&
-          (!investor.avatar ||
-            !investor.avatar.startsWith("https://pbs.twimg.com"))
-        ) {
-          usernamesToFetch.add(username);
-        }
-      }
-    });
-
-    // 从 fundedProjects 中提取用户名
-    fundedProjects.forEach((project) => {
-      if (project.twitter) {
-        const username = extractUsername(project.twitter);
-        if (
-          username &&
-          (!project.avatar ||
-            !project.avatar.startsWith("https://pbs.twimg.com"))
-        ) {
-          usernamesToFetch.add(username);
-        }
-      }
-    });
-
-    // 如果存在需要更新的用户名
-    if (usernamesToFetch.size > 0) {
-      try {
-        const usernames = Array.from(usernamesToFetch);
-        const apiURL = `https://data.cryptohunt.ai/fetch/twitter/users?usernames=${usernames.join(
-          ","
-        )}`;
-        const response = await axios.get(apiURL);
-        const userDataArray = response?.data?.data?.data || [];
-
-        // 构建用户名到头像的映射
-        const avatarMap = {};
-        userDataArray.forEach((user) => {
-          if (user?.profile?.username && user?.profile?.profile_image_url) {
-            avatarMap[String(user?.profile?.username).toLowerCase()] =
-              user?.profile?.profile_image_url;
-          }
-        });
-
-        // 更新 investors 的 avatar
-        investors.forEach((investor) => {
-          if (investor.twitter) {
-            const username = String(
-              extractUsername(investor.twitter)
-            ).toLowerCase();
-            if (username && avatarMap[username]) {
-              investor.avatar = avatarMap[username];
-            }
-          }
-        });
-
-        // 更新 fundedProjects 的 avatar
-        fundedProjects.forEach((project) => {
-          if (project.twitter) {
-            const username = String(
-              extractUsername(project.twitter)
-            ).toLowerCase();
-            if (username && avatarMap[username]) {
-              project.avatar = avatarMap[username];
-            }
-          }
-        });
-
-        // 🆕 批量更新数据库 - 优化版本
-        setImmediate(async () => {
-          try {
-            await batchUpdateProjectLogos(avatarMap);
-          } catch (error) {
-            console.error("Error updating project logos in database:", error);
-          }
-        });
-      } catch (error) {
-        console.error("Error fetching updated avatars:", error);
-      }
-    }
-    // ----------------------------- 新增逻辑结束 -----------------------------
-
-    // 组装最终响应
-    const response = {
-      invested: investedData,
-      investor: investorData,
-      projectLink: project?.projectLink,
-    };
-
-    // 缓存结果到 Redis
-    try {
-      await req.redisClient.setEx(
-        cacheKey,
-        CACHE_TTL_LONG,
-        JSON.stringify(response)
-      );
-    } catch (error) {
-      console.error("Redis Client Error (SET):", error);
-    }
-
-    res.set("Cache-Control", "public, max-age=600");
-    res.set("X-Cache-Status", "MISS");
-    res.json(response);
+    // 返回新接口的响应
+    res.json(response.data);
   } catch (error) {
-    console.error("Error in legacy search:", error);
-    res.status(500).json({ error: "Failed to search project (legacy)" });
+    console.error("Error in legacy search (proxy):", error.message);
+
+    // 如果新接口返回了错误响应，直接返回
+    if (error.response) {
+      return res.status(error.response.status).json(error.response.data);
+    }
+
+    // 其他错误
+    res.status(500).json({
+      error: "Failed to search project (legacy)",
+      message: error.message,
+    });
   }
 });
 
