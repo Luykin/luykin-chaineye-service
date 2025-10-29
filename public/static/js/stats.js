@@ -617,6 +617,14 @@ function bindRootdataEvents() {
     });
   }
 
+  // 绑定设置 isInitial 按钮
+  const setInitialBtn = document.getElementById("rootdata-set-initial-btn");
+  if (setInitialBtn) {
+    setInitialBtn.addEventListener("click", function () {
+      setDailyProjectsAsInitial();
+    });
+  }
+
   // 绑定 Tab 切换按钮
   const tabBtns = document.querySelectorAll(".rootdata-tab-btn");
   tabBtns.forEach((btn) => {
@@ -624,6 +632,16 @@ function bindRootdataEvents() {
       const tabName = this.getAttribute("data-rootdata-tab");
       switchRootdataTab(tabName);
     });
+  });
+
+  // 使用事件委托绑定分页按钮（因为是动态生成的）
+  document.addEventListener("click", function (e) {
+    if (e.target.classList.contains("rootdata-page-btn")) {
+      const page = parseInt(e.target.getAttribute("data-page"));
+      if (!isNaN(page) && page > 0) {
+        loadRootdataDailyStats(page);
+      }
+    }
   });
 
   // 延迟加载配额信息
@@ -744,6 +762,7 @@ function renderRootdataProjects(projects, pagination) {
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">社交链接</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">融资时间</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">抓取状态</th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151;">初始项目</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">创建时间</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">链接</th>
         </tr>
@@ -792,6 +811,11 @@ function renderRootdataProjects(projects, pagination) {
       </div>
     `;
 
+    // isInitial 状态
+    const isInitialBadge = project.isInitial
+      ? '<span style="display: inline-block; padding: 4px 8px; background: #10b981; color: white; border-radius: 4px; font-size: 11px; font-weight: 600;">是</span>'
+      : '<span style="display: inline-block; padding: 4px 8px; background: #6b7280; color: white; border-radius: 4px; font-size: 11px; font-weight: 600;">否</span>';
+
     html += `
       <tr style="background: ${bgColor}; border-bottom: 1px solid #e5e7eb;">
         <td style="padding: 12px;">
@@ -812,6 +836,7 @@ function renderRootdataProjects(projects, pagination) {
         <td style="padding: 12px; font-size: 12px;">${socialDisplay}</td>
         <td style="padding: 12px; color: #6b7280; font-size: 13px;">${fundedAt}</td>
         <td style="padding: 12px;">${fetchStatus}</td>
+        <td style="padding: 12px; text-align: center;">${isInitialBadge}</td>
         <td style="padding: 12px; color: #6b7280; font-size: 13px;">${createdAt}</td>
         <td style="padding: 12px;">
           <a href="${
@@ -945,8 +970,8 @@ function renderRootdataRelationships(relationships, pagination) {
  */
 function renderPagination(currentPage, totalPages, type) {
   let html = `
-    <div style="display: flex; justify-content: center; align-items: center; padding: 20px; gap: 10px;">
-      <button onclick="loadRootdataDailyStats(${currentPage - 1})" ${
+    <div class="rootdata-pagination" style="display: flex; justify-content: center; align-items: center; padding: 20px; gap: 10px;">
+      <button class="rootdata-page-btn" data-page="${currentPage - 1}" ${
     currentPage <= 1 ? "disabled" : ""
   } style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
         ← 上一页
@@ -954,7 +979,7 @@ function renderPagination(currentPage, totalPages, type) {
       <span style="color: #374151; font-weight: 600;">
         第 ${currentPage} / ${totalPages} 页
       </span>
-      <button onclick="loadRootdataDailyStats(${currentPage + 1})" ${
+      <button class="rootdata-page-btn" data-page="${currentPage + 1}" ${
     currentPage >= totalPages ? "disabled" : ""
   } style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
         下一页 →
@@ -962,6 +987,49 @@ function renderPagination(currentPage, totalPages, type) {
     </div>
   `;
   return html;
+}
+
+/**
+ * 设置当日新增项目为初始项目
+ */
+async function setDailyProjectsAsInitial() {
+  const dateInput = document.getElementById("rootdata-date-picker");
+  const selectedDate = dateInput.value;
+
+  if (!selectedDate) {
+    alert("请先选择日期");
+    return;
+  }
+
+  if (!confirm(`确定要将 ${selectedDate} 新增的所有项目设置为初始项目吗？`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      "/api/xhunt/stats/rootdata-daily/set-initial",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ date: selectedDate }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert(result.data.message);
+      // 重新加载数据以显示更新后的状态
+      loadRootdataDailyStats(rootdataCurrentPage);
+    } else {
+      alert(`设置失败: ${result.message || result.error}`);
+    }
+  } catch (error) {
+    console.error("设置 isInitial 失败:", error);
+    alert(`设置失败: ${error.message}`);
+  }
 }
 
 /**

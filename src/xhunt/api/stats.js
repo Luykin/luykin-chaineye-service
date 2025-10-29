@@ -1511,6 +1511,7 @@ router.get("/rootdata-daily", basicAuth, async (req, res) => {
           "fundedAt",
           "detailFailuresNumber",
           "detailFetchedAt",
+          "isInitial",
           "createdAt",
         ],
         order: [["createdAt", "DESC"]],
@@ -1588,6 +1589,76 @@ router.get("/rootdata-daily", basicAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch Rootdata daily data",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/stats/rootdata-daily/set-initial
+ * 将指定日期新增的项目的 isInitial 设置为 true
+ */
+router.post("/rootdata-daily/set-initial", basicAuth, async (req, res) => {
+  try {
+    const { date } = req.body;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing date parameter",
+        message: "Please provide a date in YYYY-MM-DD format",
+      });
+    }
+
+    // 验证日期格式
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid date format",
+        message: "Date must be in YYYY-MM-DD format",
+      });
+    }
+
+    // 获取 PostgreSQL Fundraising 模型
+    const { Fundraising } = require("../../models/postgres-fundraising");
+    if (!Fundraising) {
+      return res.status(500).json({
+        success: false,
+        error: "Database model not initialized",
+      });
+    }
+
+    // 计算日期范围（UTC 时间）
+    const startDate = new Date(date + "T00:00:00.000Z");
+    const endDate = new Date(date + "T23:59:59.999Z");
+
+    // 批量更新项目的 isInitial 为 true
+    const [updatedCount] = await Fundraising.Project.update(
+      { isInitial: true },
+      {
+        where: {
+          createdAt: {
+            [require("sequelize").Op.gte]: startDate,
+            [require("sequelize").Op.lte]: endDate,
+          },
+        },
+      }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        date,
+        updatedCount,
+        message: `成功将 ${updatedCount} 个项目的 isInitial 设置为 true`,
+      },
+    });
+  } catch (error) {
+    console.error("设置 isInitial 失败:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to set isInitial",
       message: error.message,
     });
   }
