@@ -364,8 +364,8 @@ class RootdataDataFixService {
  * 手动维护部分更名推特
  */
 const RENAME_MAP = {
-  YZiLabs: "BinanceLabs",
-  yzilabs: "BinanceLabs",
+  //   YZiLabs: "BinanceLabs",
+  //   yzilabs: "BinanceLabs",
 };
 
 /**
@@ -475,7 +475,7 @@ router.get("/search", async (req, res) => {
     }
 
     const sanitizedKeyword = keyword.trim();
-    const cacheKey = `rootdata_search_${sanitizedKeyword}_1030`;
+    const cacheKey = `rootdata_search_${sanitizedKeyword}_1030_2`;
 
     // 2. 从 Redis 获取缓存
     let cachedData;
