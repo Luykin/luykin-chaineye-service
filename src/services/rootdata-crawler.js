@@ -8,11 +8,101 @@ const {
 const { v4: uuidv4 } = require("uuid");
 const { Op, literal } = require("sequelize");
 const BaseCrawler = require("./base-crawler");
+const { ip1, ip2, ip3, ip4 } = require("./base-crawler");
 const baseRootDataURL = "https://www.rootdata.com";
 
 class FundraisingCrawler extends BaseCrawler {
   constructor() {
     super();
+    // 合并所有代理到扁平数组
+    this.allProxies = [...ip1, ...ip2, ...ip3, ...ip4];
+  }
+
+  /**
+   * 获取随机代理（可能返回 null 表示不使用代理）
+   */
+  getRandomProxyOrNull() {
+    const useProxy = Math.random() > 0.8; // 20% 概率使用代理
+    if (!useProxy) {
+      return null; // 不使用代理
+    }
+
+    const availableProxies = this.allProxies.filter(
+      (p) => !this.banedIp.includes(p?.ip)
+    );
+
+    if (availableProxies.length === 0) {
+      return null; // 没有可用代理就直连
+    }
+
+    const randomIndex = Math.floor(Math.random() * availableProxies.length);
+    return availableProxies[randomIndex];
+  }
+
+  /**
+   * 使用随机代理或直连发送 axios 请求，失败自动尝试下一个
+   */
+  async axiosRequestWithRetry(url, config = {}, maxRetries = 5) {
+    const triedProxies = new Set();
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const proxy = this.getRandomProxyOrNull();
+
+      // 如果选中了某个代理且已经尝试过，跳过
+      if (proxy && triedProxies.has(proxy.ip)) {
+        continue;
+      }
+
+      // 标记这个代理为已尝试
+      if (proxy) {
+        triedProxies.add(proxy.ip);
+      }
+
+      console.log(
+        `[axios] 尝试 ${attempt + 1}/${maxRetries} (${
+          proxy ? `${proxy.ip}:${proxy.port}` : "直连"
+        })`
+      );
+
+      try {
+        const axiosConfig = {
+          ...config,
+          proxy: proxy
+            ? {
+                protocol: "http",
+                host: proxy.ip,
+                port: parseInt(proxy.port),
+                auth: {
+                  username: proxy.username,
+                  password: proxy.password,
+                },
+              }
+            : false, // false 表示不使用代理
+        };
+
+        const response = await axios.get(url, axiosConfig);
+
+        if (response.status >= 300 && response.status < 400) {
+          throw new Error(`被重定向，状态码: ${response.status}`);
+        }
+
+        return response;
+      } catch (error) {
+        console.log(
+          `[axios] 尝试 ${attempt + 1}/${maxRetries} 失败 (${
+            proxy ? `${proxy.ip}:${proxy.port}` : "直连"
+          }):`,
+          error.message
+        );
+
+        // 如果是最后一次尝试，抛出错误
+        if (attempt === maxRetries - 1) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("所有尝试都失败了");
   }
 
   /**
@@ -611,9 +701,9 @@ class FundraisingCrawler extends BaseCrawler {
         `[详情] 开始: ${project.projectName} | ${project.projectLink} | isInitial=${project.isInitial}`
       );
 
-      // 访问项目详情页（直接请求 HTML，避免被重定向到登录页）
+      // 访问项目详情页（使用随机代理或直连，失败自动重试）
       console.log(`[详情] 拉取 HTML...`);
-      const response = await axios.get(project.projectLink, {
+      const response = await this.axiosRequestWithRetry(project.projectLink, {
         timeout: 20000,
         headers: {
           "User-Agent":
@@ -627,9 +717,6 @@ class FundraisingCrawler extends BaseCrawler {
         maxRedirects: 0,
         validateStatus: (status) => status >= 200 && status < 400,
       });
-      if (response.status >= 300 && response.status < 400) {
-        throw new Error(`直连被重定向，状态码: ${response.status}`);
-      }
       const html = response.data;
       console.log(`[详情] HTML 长度: ${String(html?.length || 0)}`);
 
