@@ -11,7 +11,6 @@ module.exports = (sequelize) => {
       },
       projectLink: {
         type: DataTypes.STRING,
-        unique: true,
         allowNull: false,
         comment: "项目详情页链接，用于唯一标识项目",
       },
@@ -108,6 +107,13 @@ module.exports = (sequelize) => {
     {
       comment: "项目表，包含每个项目的基本信息以及融资和投资记录",
       timestamps: true, // 启用 createdAt 和 updatedAt 字段
+      indexes: [
+        {
+          name: "unique_project_link",
+          unique: true,
+          fields: ["projectLink"],
+        },
+      ],
     }
   );
 
