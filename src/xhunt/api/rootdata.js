@@ -838,13 +838,17 @@ router.delete("/relationship/:id", async (req, res) => {
 
 /**
  * DELETE /api/rootdata/relationships/funded-project/:fundedProjectId
- * 删除被投项目的所有投资关系记录
+ * 删除被投项目的投资关系记录（可选：仅删除指定日期范围内的）
+ *
+ * Query params:
+ *   - date: 可选，格式 YYYY-MM-DD，只删除该日期 00:00:00 到 23:59:59 创建的记录
  */
 router.delete(
   "/relationships/funded-project/:fundedProjectId",
   async (req, res) => {
     try {
       const { fundedProjectId } = req.params;
+      const { date } = req.query;
 
       if (!fundedProjectId) {
         return res.status(400).json({ error: "Missing funded project id" });
@@ -857,20 +861,50 @@ router.delete(
           .json({ error: "Database model not initialized" });
       }
 
-      // 删除所有相关记录
+      // 构建删除条件
+      const whereCondition = { fundedProjectId: fundedProjectId };
+
+      // 如果提供了日期，只删除该日期范围内创建的记录
+      if (date) {
+        const dateObj = new Date(date);
+        if (isNaN(dateObj.getTime())) {
+          return res.status(400).json({ error: "Invalid date format" });
+        }
+
+        // 设置日期范围：当天 00:00:00 到 23:59:59
+        const startOfDay = new Date(dateObj);
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date(dateObj);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        whereCondition.createdAt = {
+          [Op.gte]: startOfDay,
+          [Op.lte]: endOfDay,
+        };
+
+        console.log(
+          `🗑️ 删除被投项目 (ID=${fundedProjectId}) 在 ${date} 新增的投资关系`
+        );
+      } else {
+        console.log(
+          `⚠️ 删除被投项目 (ID=${fundedProjectId}) 的所有投资关系（无日期限制）`
+        );
+      }
+
+      // 删除符合条件的记录
       const result = await Fundraising.InvestmentRelationships.destroy({
-        where: { fundedProjectId: fundedProjectId },
+        where: whereCondition,
       });
 
-      console.log(
-        `✅ 删除被投项目 (ID=${fundedProjectId}) 的所有投资关系: ${result} 条`
-      );
+      console.log(`✅ 成功删除 ${result} 条记录`);
 
       res.json({
         success: true,
         message: "删除成功",
         deletedCount: result,
         fundedProjectId: fundedProjectId,
+        dateFilter: date || "all",
       });
     } catch (error) {
       console.error("删除被投项目投资关系失败:", error);
