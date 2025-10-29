@@ -959,9 +959,8 @@ router.post("/manual-crawl", async (req, res) => {
       console.log(`✨ 创建新项目: ${projectName}`);
     }
 
-    // 3. 调用爬虫服务
-    const FundraisingCrawler = require("../../services/rootdata-crawler");
-    const crawler = new FundraisingCrawler();
+    // 3. 调用爬虫服务（导出的是单例实例，不是类）
+    const crawler = require("../../services/rootdata-crawler");
 
     // 初始化浏览器
     const { browser, page } = await crawler.initBrowserAndPage();
