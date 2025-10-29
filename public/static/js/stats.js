@@ -790,6 +790,7 @@ function renderRootdataRelationships(relationships, pagination) {
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">金额</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">主导</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">创建时间</th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151; width: 200px;">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -844,6 +845,25 @@ function renderRootdataRelationships(relationships, pagination) {
         <td style="padding: 12px; color: #10b981; font-weight: 600;">${amount}</td>
         <td style="padding: 12px; text-align: center;">${lead}</td>
         <td style="padding: 12px; color: #6b7280; font-size: 13px;">${createdAt}</td>
+        <td style="padding: 12px; text-align: center;">
+          <button 
+            class="delete-relationship-btn" 
+            data-relationship-id="${rel.id}"
+            style="padding: 4px 12px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 5px;"
+            title="删除本条记录"
+          >
+            🗑️ 删除
+          </button>
+          <button 
+            class="delete-funded-project-btn" 
+            data-funded-project-id="${rel.fundedProjectId}"
+            data-funded-project-name="${rel.fundedProject?.projectName || ""}"
+            style="padding: 4px 12px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;"
+            title="删除该被投项目的所有投资关系"
+          >
+            🗑️ 删全部
+          </button>
+        </td>
       </tr>
     `;
   });
@@ -863,6 +883,93 @@ function renderRootdataRelationships(relationships, pagination) {
   }
 
   container.innerHTML = html;
+
+  // 绑定删除按钮事件
+  bindDeleteRelationshipEvents();
+}
+
+/**
+ * 绑定删除投资关系按钮事件
+ */
+function bindDeleteRelationshipEvents() {
+  // 删除单条记录
+  document.querySelectorAll(".delete-relationship-btn").forEach((btn) => {
+    btn.addEventListener("click", async function () {
+      const relationshipId = this.getAttribute("data-relationship-id");
+      if (!confirm("确定要删除这条投资关系记录吗？")) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/rootdata/relationship/${relationshipId}`,
+          {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        const result = await response.json();
+        if (response.ok) {
+          alert("✅ 删除成功");
+          // 重新加载当前日期的数据
+          const datePicker = document.getElementById("rootdata-date-picker");
+          if (datePicker && datePicker.value) {
+            loadRootdataDailyStats(datePicker.value);
+          }
+        } else {
+          alert(`❌ 删除失败: ${result.message || "未知错误"}`);
+        }
+      } catch (error) {
+        console.error("删除失败:", error);
+        alert("❌ 删除失败: " + error.message);
+      }
+    });
+  });
+
+  // 删除被投项目的所有记录
+  document.querySelectorAll(".delete-funded-project-btn").forEach((btn) => {
+    btn.addEventListener("click", async function () {
+      const fundedProjectId = this.getAttribute("data-funded-project-id");
+      const projectName = this.getAttribute("data-funded-project-name");
+      if (
+        !confirm(
+          `确定要删除【${projectName}】的所有投资关系记录吗？此操作不可恢复！`
+        )
+      ) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/rootdata/relationships/funded-project/${fundedProjectId}`,
+          {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        const result = await response.json();
+        if (response.ok) {
+          alert(`✅ 成功删除 ${result.deletedCount} 条记录`);
+          // 重新加载当前日期的数据
+          const datePicker = document.getElementById("rootdata-date-picker");
+          if (datePicker && datePicker.value) {
+            loadRootdataDailyStats(datePicker.value);
+          }
+        } else {
+          alert(`❌ 删除失败: ${result.message || "未知错误"}`);
+        }
+      } catch (error) {
+        console.error("删除失败:", error);
+        alert("❌ 删除失败: " + error.message);
+      }
+    });
+  });
 }
 
 /**

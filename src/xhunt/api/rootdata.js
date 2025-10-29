@@ -216,6 +216,52 @@ class RootdataDataFixService {
   }
 
   /**
+   * 标准化 URL - 统一编码格式
+   * 处理 RootData URL 中的空格和 Base64 参数值中的特殊字符
+   * 例如: "Amber Group?k=NDA4Nw==" -> "Amber%20Group?k=NDA4Nw%3D%3D"
+   */
+  static normalizeUrl(url) {
+    if (!url) return url;
+
+    try {
+      // 分离基础 URL 和查询参数
+      const questionMarkIndex = url.indexOf("?");
+      if (questionMarkIndex === -1) {
+        // 没有查询参数，只处理路径中的空格
+        return url.replace(/ /g, "%20");
+      }
+
+      const baseUrl = url.substring(0, questionMarkIndex);
+      const queryString = url.substring(questionMarkIndex + 1);
+
+      // 对路径部分的空格进行编码
+      const encodedBaseUrl = baseUrl.replace(/ /g, "%20");
+
+      // 对查询参数进行处理
+      // 格式: k=value，其中 value 可能包含 = (Base64)
+      const params = queryString.split("&");
+      const encodedParams = params.map((param) => {
+        const equalIndex = param.indexOf("=");
+        if (equalIndex === -1) return param;
+
+        const key = param.substring(0, equalIndex);
+        const value = param.substring(equalIndex + 1);
+
+        // 对参数值中的 = 进行编码（Base64 值中的 =）
+        const encodedValue = value.replace(/=/g, "%3D");
+
+        return `${key}=${encodedValue}`;
+      });
+
+      return `${encodedBaseUrl}?${encodedParams.join("&")}`;
+    } catch (error) {
+      console.warn("URL 标准化失败:", url, error);
+      // 失败时返回原 URL
+      return url;
+    }
+  }
+
+  /**
    * 查找或创建投资者项目
    */
   static async findOrCreateInvestor(investor, Fundraising) {
@@ -225,25 +271,47 @@ class RootdataDataFixService {
 
     // 从 rootdataurl 构建完整的 projectLink
     // 例如: https://www.rootdata.com/Investors/detail/Polychain?k=MTQ2
-    let fullProjectLink = projectLink;
+    let originalProjectLink = projectLink;
     if (!projectLink.includes("http")) {
-      fullProjectLink = `https://www.rootdata.com${projectLink}`;
+      originalProjectLink = `https://www.rootdata.com${projectLink}`;
     }
 
-    // 查找是否存在
-    const existing = await Fundraising.Project.findOne({
-      where: { projectLink: fullProjectLink },
+    // 标准化 URL 格式（统一编码）
+    const normalizedProjectLink = this.normalizeUrl(originalProjectLink);
+
+    // 同时使用两种 URL 格式查找（防止重复创建）
+    // 先查标准化的，再查原始的
+    let existing = await Fundraising.Project.findOne({
+      where: {
+        [Op.or]: [
+          { projectLink: normalizedProjectLink },
+          { projectLink: originalProjectLink },
+        ],
+      },
       raw: true,
     });
 
     if (existing) {
+      // 如果找到的记录使用的是未标准化的 URL，更新为标准化格式
+      if (existing.projectLink !== normalizedProjectLink) {
+        try {
+          await Fundraising.Project.update(
+            { projectLink: normalizedProjectLink },
+            { where: { id: existing.id } }
+          );
+          console.log(`📝 更新项目 URL 为标准化格式: ${existing.projectName}`);
+          existing.projectLink = normalizedProjectLink;
+        } catch (error) {
+          console.warn("更新 URL 格式失败:", error.message);
+        }
+      }
       return existing;
     }
 
-    // 创建新项目
+    // 创建新项目（使用标准化后的 URL）
     const newProject = await Fundraising.Project.create({
       projectName: investor.name,
-      projectLink: fullProjectLink,
+      projectLink: normalizedProjectLink,
       logo: investor.logo,
       description: investor.name, // 使用名称作为描述
       isInitial: true, // ✅ 标记为初始项目，以便爬虫抓取详细信息
@@ -725,5 +793,93 @@ router.get("/search", async (req, res) => {
     });
   }
 });
+
+/**
+ * DELETE /api/rootdata/relationship/:id
+ * 删除单条投资关系记录
+ */
+router.delete("/relationship/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: "Missing relationship id" });
+    }
+
+    const { Fundraising } = require("../../models/postgres-fundraising");
+    if (!Fundraising) {
+      return res.status(500).json({ error: "Database model not initialized" });
+    }
+
+    // 查找记录
+    const relationship = await Fundraising.InvestmentRelationships.findByPk(id);
+    if (!relationship) {
+      return res.status(404).json({ error: "Relationship not found" });
+    }
+
+    // 删除记录
+    await relationship.destroy();
+
+    console.log(`✅ 删除投资关系记录: ID=${id}`);
+
+    res.json({
+      success: true,
+      message: "删除成功",
+      deletedId: id,
+    });
+  } catch (error) {
+    console.error("删除投资关系失败:", error);
+    res.status(500).json({
+      error: "Failed to delete relationship",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/rootdata/relationships/funded-project/:fundedProjectId
+ * 删除被投项目的所有投资关系记录
+ */
+router.delete(
+  "/relationships/funded-project/:fundedProjectId",
+  async (req, res) => {
+    try {
+      const { fundedProjectId } = req.params;
+
+      if (!fundedProjectId) {
+        return res.status(400).json({ error: "Missing funded project id" });
+      }
+
+      const { Fundraising } = require("../../models/postgres-fundraising");
+      if (!Fundraising) {
+        return res
+          .status(500)
+          .json({ error: "Database model not initialized" });
+      }
+
+      // 删除所有相关记录
+      const result = await Fundraising.InvestmentRelationships.destroy({
+        where: { fundedProjectId: fundedProjectId },
+      });
+
+      console.log(
+        `✅ 删除被投项目 (ID=${fundedProjectId}) 的所有投资关系: ${result} 条`
+      );
+
+      res.json({
+        success: true,
+        message: "删除成功",
+        deletedCount: result,
+        fundedProjectId: fundedProjectId,
+      });
+    } catch (error) {
+      console.error("删除被投项目投资关系失败:", error);
+      res.status(500).json({
+        error: "Failed to delete relationships",
+        message: error.message,
+      });
+    }
+  }
+);
 
 module.exports = router;
