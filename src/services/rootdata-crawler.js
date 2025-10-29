@@ -690,18 +690,29 @@ class FundraisingCrawler extends BaseCrawler {
     );
   }
 
-  async scrapeAndUpdateProjectDetails(project, _page) {
+  async scrapeAndUpdateProjectDetails(project, _page, isManualTrigger = false) {
     try {
       if (!_page || _page.isClosed()) {
         throw new Error("网页不见了，Detail page not initialized");
       }
 
-      console.log(
-        `[详情] 开始: ${project.projectName} | ${project.projectLink} | isInitial=${project.isInitial}`
-      );
+      // 手动触发时，强制视为初始项目以确保完整抓取
+      const effectiveIsInitial = isManualTrigger ? true : project.isInitial;
+
+      if (isManualTrigger) {
+        console.log(
+          `[详情] 开始: ${project.projectName} | ${project.projectLink} | isInitial=${project.isInitial} (手动触发，强制为 true)`
+        );
+      } else {
+        console.log(
+          `抓取详情: ${project.projectName} | ${project.projectLink}`
+        );
+      }
 
       // 访问项目详情页（使用随机代理或直连，失败自动重试）
-      console.log(`[详情] 拉取 HTML...`);
+      if (isManualTrigger) {
+        console.log(`[详情] 拉取 HTML...`);
+      }
       const response = await this.axiosRequestWithRetry(project.projectLink, {
         timeout: 20000,
         headers: {
@@ -717,46 +728,60 @@ class FundraisingCrawler extends BaseCrawler {
         validateStatus: (status) => status >= 200 && status < 400,
       });
       const html = response.data;
-      console.log(`[详情] HTML 长度: ${String(html?.length || 0)}`);
-      console.log(
-        `[详情] HTML 前 1000 字符:\n${String(html).substring(0, 1000)}`
-      );
-      console.log(
-        `[详情] HTML 包含 .investor 类: ${String(html).includes(
-          'class="investor"'
-        )}`
-      );
-      console.log(
-        `[详情] HTML 包含 investor 文本: ${String(html).includes("investor")}`
-      );
+
+      if (isManualTrigger) {
+        console.log(`[详情] HTML 长度: ${String(html?.length || 0)}`);
+        console.log(
+          `[详情] HTML 前 2000 字符:\n${String(html).substring(0, 2000)}`
+        );
+        console.log(
+          `[详情] HTML 包含 .investor 类: ${String(html).includes(
+            'class="investor"'
+          )}`
+        );
+        console.log(
+          `[详情] HTML 包含 investor 文本: ${String(html).includes("investor")}`
+        );
+      }
 
       // 将 HTML 注入到离线页面环境中，复用现有的 DOM 抓取逻辑
       await _page.setContent(html, { waitUntil: "domcontentloaded" });
 
       await _page.waitForSelector(".base_info", { timeout: 20000 });
-      console.log(`[详情] DOM 就绪 (.base_info)`);
+      if (isManualTrigger) {
+        console.log(`[详情] DOM 就绪 (.base_info)`);
+      }
 
       // 第一阶段：点击展开更多按钮并抓取基础投资者数据
 
       await this.clickExpandButtons(_page);
 
-      const initialInvestors = await this.scrapeInitialInvestors(_page);
-      console.log(`[详情] 初始投资者: ${initialInvestors?.length || 0}`);
+      const initialInvestors = await this.scrapeInitialInvestors(
+        _page,
+        isManualTrigger
+      );
+      if (isManualTrigger) {
+        console.log(`[详情] 初始投资者: ${initialInvestors?.length || 0}`);
+      }
 
       // 第二阶段：点击 rounds 按钮并抓取轮次数据
       let roundsInvestors = [];
-      if (project.isInitial) {
+      if (effectiveIsInitial) {
         await this.clickRoundsButton(_page);
-        roundsInvestors = await this.processRounds(_page);
-        console.log(`[详情] 轮次投资者: ${roundsInvestors?.length || 0}`);
-      } else {
+        roundsInvestors = await this.processRounds(_page, isManualTrigger);
+        if (isManualTrigger) {
+          console.log(`[详情] 轮次投资者: ${roundsInvestors?.length || 0}`);
+        }
       }
 
-      if (initialInvestors?.length !== roundsInvestors?.length) {
+      if (
+        isManualTrigger &&
+        initialInvestors?.length !== roundsInvestors?.length
+      ) {
         console.log(
-          `[警告] 投资者数量不一致: initial=${
+          `[详情] ⚠️ 投资者数量不一致: initial=${
             initialInvestors?.length || 0
-          }, rounds=${roundsInvestors?.length || 0} | ${project.projectLink}`
+          }, rounds=${roundsInvestors?.length || 0}`
         );
       }
       // 合并投资者数据（轮次数据优先）
@@ -802,11 +827,13 @@ class FundraisingCrawler extends BaseCrawler {
         details.projectName &&
         details.logo &&
         Object.keys(details.socialLinks).length > 0;
-      console.log(
-        `[详情] 抓取成功=${isCrawlSuccess} 社交链接=${
-          Object.keys(details.socialLinks).length
-        } 团队=${details.teamMembers?.length || 0}`
-      );
+      if (isManualTrigger) {
+        console.log(
+          `[详情] 抓取成功=${isCrawlSuccess} 社交链接=${
+            Object.keys(details.socialLinks).length
+          } 团队=${details.teamMembers?.length || 0}`
+        );
+      }
       await project.update({
         projectName: details.projectName,
         logo: details.logo,
@@ -863,7 +890,7 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   // 抓取初始投资者数据（无轮次信息）
-  async scrapeInitialInvestors(_page) {
+  async scrapeInitialInvestors(_page, isManualTrigger = false) {
     const result = await _page.evaluate(() => {
       // 收集调试信息
       const debug = {
@@ -903,21 +930,25 @@ class FundraisingCrawler extends BaseCrawler {
       return { debug, investors };
     });
 
-    // 在外部打印调试信息
-    console.log(
-      `[详情] 查找 .investor 元素数量: ${result.debug.investorCount}`
-    );
-    console.log(
-      `[详情] 查找 .investor .row 元素数量: ${result.debug.rowCount}`
-    );
-    console.log(
-      `[详情] 查找 .investor .row .item 元素数量: ${result.debug.rowItemCount}`
-    );
-    console.log(
-      `[详情] 查找 .investor .item 元素数量: ${result.debug.itemCount}`
-    );
-    console.log(`[详情] 使用的选择器: ${result.debug.usedSelector}`);
-    console.log(`[详情] 最终找到的投资者元素数量: ${result.debug.finalCount}`);
+    // 仅在手动触发时打印详细调试信息
+    if (isManualTrigger) {
+      console.log(
+        `[详情] 查找 .investor 元素数量: ${result.debug.investorCount}`
+      );
+      console.log(
+        `[详情] 查找 .investor .row 元素数量: ${result.debug.rowCount}`
+      );
+      console.log(
+        `[详情] 查找 .investor .row .item 元素数量: ${result.debug.rowItemCount}`
+      );
+      console.log(
+        `[详情] 查找 .investor .item 元素数量: ${result.debug.itemCount}`
+      );
+      console.log(`[详情] 使用的选择器: ${result.debug.usedSelector}`);
+      console.log(
+        `[详情] 最终找到的投资者元素数量: ${result.debug.finalCount}`
+      );
+    }
 
     return result.investors;
   }
@@ -935,7 +966,7 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   // 处理轮次数据
-  async processRounds(_page) {
+  async processRounds(_page, isManualTrigger = false) {
     const result = await _page.evaluate(() => {
       // 收集调试信息
       const debug = {
@@ -1015,19 +1046,27 @@ class FundraisingCrawler extends BaseCrawler {
       return { debug, investors };
     });
 
-    // 在外部打印调试信息
-    console.log(`[详情] 开始处理轮次数据`);
-    console.log(
-      `[详情] 查找 .investor 元素数量: ${result.debug.investorCount}`
-    );
-    console.log(`[详情] 查找 .investor tr 元素数量: ${result.debug.trCount}`);
-    console.log(
-      `[详情] 查找 .investor thead 元素数量: ${result.debug.theadCount}`
-    );
-    console.log(`[详情] 找到表头单元格数量: ${result.debug.headerCellsCount}`);
-    console.log(`[详情] 表头文本: ${JSON.stringify(result.debug.headerTexts)}`);
-    console.log(`[详情] 列索引: ${JSON.stringify(result.debug.columnIndexes)}`);
-    console.log(`[详情] 数据行数量: ${result.debug.dataRowsCount}`);
+    // 仅在手动触发时打印详细调试信息
+    if (isManualTrigger) {
+      console.log(`[详情] 开始处理轮次数据`);
+      console.log(
+        `[详情] 查找 .investor 元素数量: ${result.debug.investorCount}`
+      );
+      console.log(`[详情] 查找 .investor tr 元素数量: ${result.debug.trCount}`);
+      console.log(
+        `[详情] 查找 .investor thead 元素数量: ${result.debug.theadCount}`
+      );
+      console.log(
+        `[详情] 找到表头单元格数量: ${result.debug.headerCellsCount}`
+      );
+      console.log(
+        `[详情] 表头文本: ${JSON.stringify(result.debug.headerTexts)}`
+      );
+      console.log(
+        `[详情] 列索引: ${JSON.stringify(result.debug.columnIndexes)}`
+      );
+      console.log(`[详情] 数据行数量: ${result.debug.dataRowsCount}`);
+    }
 
     return result.investors;
   }
