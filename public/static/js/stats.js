@@ -12,6 +12,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // 绑定数据导出按钮事件
     bindExportEvents();
 
+    // 绑定 Rootdata 页面事件
+    bindRootdataEvents();
+
     // 自动刷新页面（每10分钟）
     setTimeout(() => {
       window.location.reload();
@@ -594,9 +597,36 @@ function formatNumber(num) {
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-// 页面加载时自动获取配额
-document.addEventListener("DOMContentLoaded", function () {
-  // 延迟加载，确保页面已完全渲染
+/**
+ * 绑定 Rootdata 页面事件
+ */
+function bindRootdataEvents() {
+  // 绑定配额刷新按钮
+  const quotaRefreshBtn = document.getElementById("rootdata-quota-refresh-btn");
+  if (quotaRefreshBtn) {
+    quotaRefreshBtn.addEventListener("click", function () {
+      loadRootdataQuota();
+    });
+  }
+
+  // 绑定查询按钮
+  const queryBtn = document.getElementById("rootdata-query-btn");
+  if (queryBtn) {
+    queryBtn.addEventListener("click", function () {
+      loadRootdataDailyStats();
+    });
+  }
+
+  // 绑定 Tab 切换按钮
+  const tabBtns = document.querySelectorAll(".rootdata-tab-btn");
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const tabName = this.getAttribute("data-rootdata-tab");
+      switchRootdataTab(tabName);
+    });
+  });
+
+  // 延迟加载配额信息
   setTimeout(() => {
     loadRootdataQuota();
   }, 500);
@@ -607,7 +637,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const today = new Date().toISOString().split("T")[0];
     dateInput.value = today;
   }
-});
+}
 
 /**
  * 加载 Rootdata 每日统计数据

@@ -132,11 +132,10 @@ class RootdataDataFixService {
         }
       }
 
-      // 5. 缓存验证结果（20天）
+      // 5. 缓存验证结果（20天）- 只存储标记，不存储具体数据
       const cacheData = {
         verified: true,
         verifiedAt: Date.now(),
-        data: apiData,
       };
       await redisClient.setEx(cacheKey, 1728000, JSON.stringify(cacheData)); // 20天 = 20 * 24 * 3600
 

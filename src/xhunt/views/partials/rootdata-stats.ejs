@@ -140,7 +140,7 @@
     <!-- 刷新按钮 -->
     <div style="text-align: center; margin-top: 15px">
       <button
-        onclick="loadRootdataQuota()"
+        id="rootdata-quota-refresh-btn"
         style="
           padding: 8px 20px;
           background: #3b82f6;
@@ -182,7 +182,7 @@
         "
       />
       <button
-        onclick="loadRootdataDailyStats()"
+        id="rootdata-query-btn"
         style="
           margin-left: 10px;
           padding: 8px 20px;
@@ -265,7 +265,6 @@
         <button
           class="rootdata-tab-btn active"
           data-rootdata-tab="projects"
-          onclick="switchRootdataTab('projects')"
           style="
             padding: 10px 20px;
             background: none;
@@ -283,7 +282,6 @@
         <button
           class="rootdata-tab-btn"
           data-rootdata-tab="relationships"
-          onclick="switchRootdataTab('relationships')"
           style="
             padding: 10px 20px;
             background: none;
