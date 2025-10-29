@@ -29,7 +29,6 @@ const xHuntReportRoutes = require("./xhunt/api/report");
 const xHuntStatsRoutes = require("./xhunt/api/stats");
 const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
-const xHuntDAUBackupRoutes = require("./xhunt/api/dau-backup");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const internalQueryRoutes = require("./api/internal-query");
 const {
@@ -276,9 +275,6 @@ app.use(
 
 // 🆕 新增统计路由 - 无需安全中间件，方便内部监控
 app.use("/api/xhunt/stats", xHuntStatsRoutes);
-
-// 🆕 新增DAU备份路由 - 使用Redis挂载中间件
-app.use("/api/xhunt/dau-backup", xHuntDAUBackupRoutes);
 
 // Mantle 活动接口
 app.use("/api/xhunt/mantle", xHuntMantleRoutes);

@@ -5,35 +5,6 @@
   </div>
 
   <div class="export-options">
-    <!-- DAU数据导出 -->
-    <div class="export-card">
-      <div class="export-card-header">
-        <h3>📊 DAU数据导出</h3>
-        <p>导出Redis中记录的DAU备份文件列表</p>
-      </div>
-      <div class="export-card-content">
-        <p class="export-description">
-          包含所有使用过我们插件的推特号数据（登录和未登录用户），这些数据来自Redis的DAU统计。
-        </p>
-        <div class="export-actions">
-          <button id="backup-all-dau" class="export-btn primary">
-            <span class="btn-icon">💾</span>
-            备份所有DAU数据
-          </button>
-          <button id="download-latest-backup" class="export-btn secondary">
-            <span class="btn-icon">⬇️</span>
-            下载备份文件
-          </button>
-          <div class="export-info">
-            <small
-              >备份：生成/更新累加备份文件（去重） |
-              下载：下载最新的备份文件</small
-            >
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- 用户数据导出 -->
     <div class="export-card">
       <div class="export-card-header">
@@ -70,17 +41,10 @@
     <h3>📋 导出说明</h3>
     <div class="history-list">
       <div class="history-item">
-        <div class="history-icon">📊</div>
-        <div class="history-content">
-          <strong>DAU数据</strong>
-          <p>包含所有访问过我们插件的用户数据，无论是否登录</p>
-        </div>
-      </div>
-      <div class="history-item">
         <div class="history-icon">👥</div>
         <div class="history-content">
           <strong>用户数据</strong>
-          <p>仅包含已登录我们插件的用户信息</p>
+          <p>包含已登录插件的用户信息：Twitter ID、用户名和显示名称</p>
         </div>
       </div>
     </div>

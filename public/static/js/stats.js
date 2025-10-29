@@ -45,11 +45,6 @@ document.addEventListener("DOMContentLoaded", function () {
     // 绑定 Rootdata 页面事件
     bindRootdataEvents();
 
-    // 自动刷新页面（每10分钟）
-    setTimeout(() => {
-      window.location.reload();
-    }, 10 * 60 * 1000);
-
     console.log("✅ 所有初始化完成");
   } catch (error) {
     console.error("❌ 初始化过程中出错:", error);
@@ -111,26 +106,6 @@ function bindDownloadEvents() {
 // 绑定数据导出事件
 function bindExportEvents() {
   console.log("🔧 开始绑定数据导出事件...");
-
-  // DAU手动备份所有数据
-  const backupAllDauBtn = document.getElementById("backup-all-dau");
-  if (backupAllDauBtn) {
-    backupAllDauBtn.addEventListener("click", backupAllDAUData);
-    console.log("✅ 备份按钮事件绑定成功");
-  } else {
-    console.error("❌ 未找到备份按钮");
-  }
-
-  // 下载最新备份文件
-  const downloadLatestBackupBtn = document.getElementById(
-    "download-latest-backup"
-  );
-  if (downloadLatestBackupBtn) {
-    downloadLatestBackupBtn.addEventListener("click", downloadLatestBackup);
-    console.log("✅ 下载按钮事件绑定成功");
-  } else {
-    console.error("❌ 未找到下载按钮");
-  }
 
   // 用户Excel导出
   const exportUsersExcelBtn = document.getElementById("export-users-excel");
@@ -323,121 +298,6 @@ function downloadCSV(csvContent, filename) {
 }
 
 // 已删除 exportDAUFiles 函数 - 不再需要查看文件列表功能
-
-// 手动备份所有DAU数据
-function backupAllDAUData() {
-  console.log("开始手动备份所有DAU数据...");
-
-  // 确认操作
-  if (
-    !confirm(
-      "确定要备份Redis中所有DAU数据吗？\n\n将生成一个包含所有唯一用户的累加备份文件。"
-    )
-  ) {
-    return;
-  }
-
-  // 显示加载状态
-  showExportStatus("正在备份所有DAU数据，请稍候...");
-
-  // 禁用按钮防止重复点击
-  const backupBtn = document.getElementById("backup-all-dau");
-  if (backupBtn) {
-    backupBtn.disabled = true;
-    backupBtn.innerHTML = '<span class="btn-icon">⏳</span>正在备份...';
-  }
-
-  // 发送备份请求
-  console.log("🔄 发送备份请求到: /api/xhunt/dau-backup/backup-all");
-
-  fetch("/api/xhunt/dau-backup/backup-all", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  })
-    .then((response) => {
-      console.log("📡 收到响应:", response.status, response.statusText);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      return response.json();
-    })
-    .then((data) => {
-      console.log("📊 备份结果:", data);
-
-      if (data.success) {
-        // 显示详细的成功消息和下载选项
-        const message = `备份成功！\n\n${data.message}\n\n详细统计：\n- 总用户数：${data.data.totalUsers}\n- 总记录数：${data.data.totalRecords}\n- 新增用户：${data.data.addedUsers}\n- 更新用户：${data.data.updatedUsers}\n- 新记录数：${data.data.newRecords}\n\n文件名：${data.data.fileName}\n\n是否立即下载备份文件？`;
-
-        const downloadConfirm = confirm(message);
-
-        if (downloadConfirm) {
-          downloadLatestBackup();
-        }
-      } else {
-        alert(`备份失败：${data.message}`);
-      }
-    })
-    .catch((error) => {
-      console.error("❌ 备份请求失败:", error);
-      alert(
-        `备份请求失败：${error.message}\n\n请检查：\n1. 后端服务是否运行\n2. 网络连接是否正常\n3. 控制台是否有更多错误信息`
-      );
-    })
-    .finally(() => {
-      // 隐藏加载状态
-      hideExportStatus();
-
-      // 恢复按钮状态
-      if (backupBtn) {
-        backupBtn.disabled = false;
-        backupBtn.innerHTML =
-          '<span class="btn-icon">💾</span>手动备份所有DAU数据';
-      }
-    });
-}
-
-// 下载最新的备份文件
-function downloadLatestBackup() {
-  console.log("🔄 开始下载最新备份文件...");
-
-  // 显示加载状态
-  showExportStatus("正在下载备份文件...");
-
-  // 创建下载链接
-  const downloadUrl = "/api/xhunt/dau-backup/download-latest";
-  console.log("📥 下载链接:", downloadUrl);
-
-  const link = document.createElement("a");
-  link.href = downloadUrl;
-  link.style.display = "none";
-
-  // 添加错误处理
-  link.onerror = function () {
-    console.error("❌ 下载失败");
-    alert(
-      "下载失败，请检查：\n1. 备份文件是否存在\n2. 后端服务是否运行\n3. 网络连接是否正常"
-    );
-    hideExportStatus();
-  };
-
-  // 添加到页面并触发下载
-  document.body.appendChild(link);
-  link.click();
-
-  // 清理
-  setTimeout(() => {
-    try {
-      document.body.removeChild(link);
-    } catch (e) {
-      console.log("清理下载链接时出错:", e);
-    }
-    hideExportStatus();
-  }, 2000);
-
-  console.log("✅ 下载请求已发送");
-}
 
 // 导出用户Excel文件
 function exportUsersExcel() {
