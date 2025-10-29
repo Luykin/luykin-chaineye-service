@@ -730,60 +730,94 @@ class FundraisingCrawler extends BaseCrawler {
       const html = response.data;
 
       if (isManualTrigger) {
-        console.log(`[详情] HTML 长度: ${String(html?.length || 0)}`);
+        console.log(`[详情] HTML 类型: ${typeof html}`);
+        console.log(`[详情] HTML 是否为 Buffer: ${Buffer.isBuffer(html)}`);
+        console.log(`[详情] HTML 原始长度: ${html?.length || 0}`);
 
-        // 打印原始前 500 字符和去除空白后的前 500 字符
-        const htmlStr = String(html);
-        const trimmedStart = htmlStr.trimStart();
-        console.log(
-          `[详情] HTML 原始前 500 字符:\n${htmlStr.substring(0, 500)}`
-        );
-        console.log(
-          `[详情] HTML 去除开头空白后前 500 字符:\n${trimmedStart.substring(
-            0,
-            500
-          )}`
-        );
+        const htmlStr = Buffer.isBuffer(html)
+          ? html.toString("utf-8")
+          : String(html);
+        console.log(`[详情] 转换后字符串长度: ${htmlStr.length}`);
 
-        // 检查各种可能的 investor 类名格式
+        // 检查前 10 个字符的详细信息
+        const first10Chars = [];
+        for (let i = 0; i < Math.min(10, htmlStr.length); i++) {
+          first10Chars.push({
+            idx: i,
+            char:
+              htmlStr[i] === "\n"
+                ? "\\n"
+                : htmlStr[i] === "\r"
+                ? "\\r"
+                : htmlStr[i] === "\t"
+                ? "\\t"
+                : htmlStr[i],
+            code: htmlStr.charCodeAt(i),
+          });
+        }
+        console.log(`[详情] 前 10 个字符:`, JSON.stringify(first10Chars));
+
+        // 使用 JSON.stringify 安全打印前 500 字符
+        console.log(`[详情] HTML 前 500 字符 (JSON 格式):`);
+        console.log(JSON.stringify(htmlStr.substring(0, 500)));
+
+        // 检查 investor 关键词
+        const investorIndex = htmlStr.indexOf("investor");
+        if (investorIndex >= 0) {
+          console.log(`[详情] 'investor' 首次出现位置: ${investorIndex}`);
+          console.log(`[详情] 'investor' 周围内容 (JSON 格式):`);
+          console.log(
+            JSON.stringify(
+              htmlStr.substring(
+                Math.max(0, investorIndex - 100),
+                investorIndex + 200
+              )
+            )
+          );
+        }
+
+        // 检查是否包含 class="investor"
         console.log(
           `[详情] HTML 包含 'class="investor"': ${htmlStr.includes(
             'class="investor"'
           )}`
         );
         console.log(
-          `[详情] HTML 包含 'class=\\'investor\\'': ${htmlStr.includes(
-            "class='investor'"
+          `[详情] HTML 包含 '<div class="investor': ${htmlStr.includes(
+            '<div class="investor'
           )}`
         );
-        console.log(
-          `[详情] HTML 包含 'className="investor"': ${htmlStr.includes(
-            'className="investor"'
-          )}`
-        );
-        console.log(
-          `[详情] HTML 包含 'investor': ${htmlStr.includes("investor")}`
-        );
-
-        // 搜索 investor 关键词出现的位置
-        const investorIndex = htmlStr.indexOf("investor");
-        if (investorIndex >= 0) {
-          console.log(`[详情] 'investor' 首次出现位置: ${investorIndex}`);
-          console.log(
-            `[详情] 'investor' 周围内容:\n${htmlStr.substring(
-              Math.max(0, investorIndex - 100),
-              investorIndex + 200
-            )}`
-          );
-        }
       }
 
       // 将 HTML 注入到离线页面环境中，复用现有的 DOM 抓取逻辑
-      await _page.setContent(html, { waitUntil: "domcontentloaded" });
+      if (isManualTrigger) {
+        console.log(`[详情] 开始设置页面内容...`);
+      }
+
+      const htmlStr = Buffer.isBuffer(html)
+        ? html.toString("utf-8")
+        : String(html);
+      await _page.setContent(htmlStr, { waitUntil: "domcontentloaded" });
+
+      if (isManualTrigger) {
+        console.log(`[详情] setContent 完成，等待 .base_info 元素...`);
+      }
 
       await _page.waitForSelector(".base_info", { timeout: 20000 });
       if (isManualTrigger) {
         console.log(`[详情] DOM 就绪 (.base_info)`);
+
+        // 检查页面中是否真的有内容
+        const pageContent = await _page.content();
+        console.log(`[详情] 页面内容长度: ${pageContent.length}`);
+        console.log(
+          `[详情] 页面包含 'investor': ${pageContent.includes("investor")}`
+        );
+        console.log(
+          `[详情] 页面包含 'class="investor"': ${pageContent.includes(
+            'class="investor"'
+          )}`
+        );
       }
 
       // 第一阶段：点击展开更多按钮并抓取基础投资者数据
