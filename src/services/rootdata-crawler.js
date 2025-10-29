@@ -938,13 +938,16 @@ class FundraisingCrawler extends BaseCrawler {
 
   // 合并投资者数据（优先使用轮次数据）
   mergeInvestorData(initial, rounds) {
-    const map = new Map();
+    const resultMap = new Map(); // 最终结果：(projectName, round) -> 投资记录
+    const roundsProjectNames = new Set(); // 记录 rounds 中出现过的投资者
 
-    // 处理轮次数据 - 使用 (projectName, round) 作为唯一键
+    // 1. 处理轮次数据 - 使用 (projectName, round) 作为唯一键
     (rounds || []).forEach((inv) => {
       const uniqueKey = `${inv.projectName}|${inv.round || "no-round"}`;
-      if (!map.has(uniqueKey)) {
-        map.set(uniqueKey, {
+      roundsProjectNames.add(inv.projectName); // 记录投资者
+
+      if (!resultMap.has(uniqueKey)) {
+        resultMap.set(uniqueKey, {
           ...inv,
           projectLink: joinUrl(inv.projectLink, inv.projectName),
           formattedAmount: parseAmount(inv.amount),
@@ -954,11 +957,16 @@ class FundraisingCrawler extends BaseCrawler {
       }
     });
 
-    // 补充初始数据中独有的记录
+    // 2. 补充初始数据中独有的投资者（完全不在 rounds 中的）
     (initial || []).forEach((inv) => {
+      // 如果这个投资者已经在 rounds 中出现过（任何轮次），跳过
+      if (roundsProjectNames.has(inv.projectName)) {
+        return;
+      }
+
       const uniqueKey = `${inv.projectName}|no-round`;
-      if (!map.has(uniqueKey)) {
-        map.set(uniqueKey, {
+      if (!resultMap.has(uniqueKey)) {
+        resultMap.set(uniqueKey, {
           ...inv,
           projectLink: joinUrl(inv.projectLink, inv.projectName),
           round: null,
@@ -972,7 +980,7 @@ class FundraisingCrawler extends BaseCrawler {
       }
     });
 
-    return Array.from(map.values());
+    return Array.from(resultMap.values());
   }
 
   async updateInvestmentRelationships(project, investors) {
