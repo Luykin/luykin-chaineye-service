@@ -914,11 +914,8 @@ function bindDeleteRelationshipEvents() {
         const result = await response.json();
         if (response.ok) {
           alert("✅ 删除成功");
-          // 重新加载当前日期的数据
-          const datePicker = document.getElementById("rootdata-date-picker");
-          if (datePicker && datePicker.value) {
-            loadRootdataDailyStats(datePicker.value);
-          }
+          // 重新加载当前日期的数据（保持当前页码）
+          loadRootdataDailyStats(rootdataCurrentPage);
         } else {
           alert(`❌ 删除失败: ${result.message || "未知错误"}`);
         }
@@ -956,11 +953,8 @@ function bindDeleteRelationshipEvents() {
         const result = await response.json();
         if (response.ok) {
           alert(`✅ 成功删除 ${result.deletedCount} 条记录`);
-          // 重新加载当前日期的数据
-          const datePicker = document.getElementById("rootdata-date-picker");
-          if (datePicker && datePicker.value) {
-            loadRootdataDailyStats(datePicker.value);
-          }
+          // 重新加载当前日期的数据（保持当前页码）
+          loadRootdataDailyStats(rootdataCurrentPage);
         } else {
           alert(`❌ 删除失败: ${result.message || "未知错误"}`);
         }
