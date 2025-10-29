@@ -916,4 +916,106 @@ router.delete(
   }
 );
 
+/**
+ * POST /api/rootdata/manual-crawl
+ * 手动触发单个项目的爬取
+ */
+router.post("/manual-crawl", async (req, res) => {
+  try {
+    const { url } = req.body;
+
+    if (!url || !url.includes("rootdata.com")) {
+      return res.status(400).json({ error: "Invalid RootData URL" });
+    }
+
+    console.log(`🚀 手动触发爬虫: ${url}`);
+
+    const { Fundraising } = require("../../models/postgres-fundraising");
+    if (!Fundraising) {
+      return res.status(500).json({ error: "Database model not initialized" });
+    }
+
+    // 1. 检查项目是否已存在
+    let project = await Fundraising.Project.findOne({
+      where: { projectLink: url },
+    });
+
+    // 2. 如果不存在，创建项目记录
+    if (!project) {
+      // 从 URL 提取项目名称（简单处理）
+      const match = url.match(/\/detail\/([^?]+)/);
+      const projectName = match
+        ? decodeURIComponent(match[1])
+        : "Unknown Project";
+
+      project = await Fundraising.Project.create({
+        projectName,
+        projectLink: url,
+        isInitial: true,
+        detailFailuresNumber: 0,
+        detailFetchedAt: null,
+      });
+
+      console.log(`✨ 创建新项目: ${projectName}`);
+    }
+
+    // 3. 调用爬虫服务
+    const FundraisingCrawler = require("../../services/rootdata-crawler");
+    const crawler = new FundraisingCrawler();
+
+    // 初始化浏览器
+    const { browser, page } = await crawler.initBrowserAndPage();
+
+    try {
+      // 执行爬取
+      await crawler.scrapeAndUpdateProjectDetails(project, page);
+
+      // 重新获取项目数据（包含更新后的信息）
+      const updatedProject = await Fundraising.Project.findByPk(project.id, {
+        attributes: ["id", "projectName", "projectLink", "logo", "socialLinks"],
+      });
+
+      // 统计投资关系数量
+      const [investorsCount, relationshipsCount] = await Promise.all([
+        Fundraising.InvestmentRelationships.count({
+          where: { fundedProjectId: project.id },
+          distinct: true,
+          col: "investorProjectId",
+        }),
+        Fundraising.InvestmentRelationships.count({
+          where: { fundedProjectId: project.id },
+        }),
+      ]);
+
+      console.log(
+        `✅ 爬取完成: ${updatedProject.projectName}, 投资者: ${investorsCount}, 关系: ${relationshipsCount}`
+      );
+
+      res.json({
+        success: true,
+        message: "爬取成功",
+        data: {
+          projectName: updatedProject.projectName,
+          projectLink: updatedProject.projectLink,
+          logo: updatedProject.logo,
+          socialLinks: updatedProject.socialLinks,
+          investorsCount,
+          relationshipsCount,
+        },
+      });
+    } finally {
+      // 确保关闭浏览器
+      if (browser) {
+        await browser.close();
+      }
+    }
+  } catch (error) {
+    console.error("❌ 手动爬取失败:", error);
+    res.status(500).json({
+      error: "Failed to crawl project",
+      message: error.message || "Unknown error",
+    });
+  }
+});
+
 module.exports = router;

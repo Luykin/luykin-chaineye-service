@@ -491,6 +491,14 @@ function formatNumber(num) {
  * 绑定 Rootdata 页面事件
  */
 function bindRootdataEvents() {
+  // 绑定手动爬虫按钮
+  const manualCrawlBtn = document.getElementById("rootdata-manual-crawl-btn");
+  if (manualCrawlBtn) {
+    manualCrawlBtn.addEventListener("click", function () {
+      triggerManualCrawl();
+    });
+  }
+
   // 绑定配额刷新按钮
   const quotaRefreshBtn = document.getElementById("rootdata-quota-refresh-btn");
   if (quotaRefreshBtn) {
@@ -543,6 +551,108 @@ function bindRootdataEvents() {
 // 当前分页状态
 let rootdataCurrentPage = 1;
 let rootdataSelectedDate = null;
+
+/**
+ * 手动触发爬虫
+ */
+async function triggerManualCrawl() {
+  const urlInput = document.getElementById("rootdata-manual-url");
+  const statusDiv = document.getElementById("rootdata-crawl-status");
+  const statusText = document.getElementById("rootdata-crawl-status-text");
+  const messageDiv = document.getElementById("rootdata-crawl-message");
+  const resultDiv = document.getElementById("rootdata-crawl-result");
+  const crawlBtn = document.getElementById("rootdata-manual-crawl-btn");
+
+  const url = urlInput.value.trim();
+
+  if (!url) {
+    alert("请输入 RootData 项目详情页 URL");
+    return;
+  }
+
+  // 简单验证 URL 格式
+  if (!url.includes("rootdata.com")) {
+    alert("请输入有效的 RootData URL");
+    return;
+  }
+
+  // 显示状态
+  statusDiv.style.display = "block";
+  resultDiv.style.display = "none";
+  statusText.textContent = "爬取中...";
+  statusText.style.color = "#3b82f6";
+  messageDiv.textContent = `正在爬取: ${url}`;
+  crawlBtn.disabled = true;
+  crawlBtn.style.opacity = "0.5";
+  crawlBtn.style.cursor = "not-allowed";
+
+  try {
+    const response = await fetch("/api/rootdata/manual-crawl", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      statusText.textContent = "✅ 爬取成功";
+      statusText.style.color = "#10b981";
+      messageDiv.innerHTML = `
+        <div style="margin-top: 10px;">
+          <div><strong>项目名称：</strong>${result.data.projectName}</div>
+          <div><strong>链接：</strong><a href="${
+            result.data.projectLink
+          }" target="_blank">${result.data.projectLink}</a></div>
+          <div><strong>投资者数量：</strong>${
+            result.data.investorsCount || 0
+          }</div>
+          <div><strong>投资关系数：</strong>${
+            result.data.relationshipsCount || 0
+          }</div>
+        </div>
+      `;
+
+      // 显示详细结果
+      resultDiv.style.display = "block";
+      resultDiv.innerHTML = `
+        <div style="padding: 15px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 4px;">
+          <div style="color: #065f46; font-weight: 600; margin-bottom: 8px;">
+            ✅ 爬取完成
+          </div>
+          <div style="color: #047857; font-size: 13px;">
+            ${result.message || "数据已成功保存到数据库"}
+          </div>
+        </div>
+      `;
+    } else {
+      throw new Error(result.message || result.error || "爬取失败");
+    }
+  } catch (error) {
+    console.error("爬取失败:", error);
+    statusText.textContent = "❌ 爬取失败";
+    statusText.style.color = "#ef4444";
+    messageDiv.textContent = error.message;
+
+    resultDiv.style.display = "block";
+    resultDiv.innerHTML = `
+      <div style="padding: 15px; background: #fef2f2; border-left: 4px solid #ef4444; border-radius: 4px;">
+        <div style="color: #991b1b; font-weight: 600; margin-bottom: 8px;">
+          ❌ 爬取失败
+        </div>
+        <div style="color: #b91c1c; font-size: 13px;">
+          ${error.message}
+        </div>
+      </div>
+    `;
+  } finally {
+    crawlBtn.disabled = false;
+    crawlBtn.style.opacity = "1";
+    crawlBtn.style.cursor = "pointer";
+  }
+}
 
 /**
  * 加载 Rootdata 每日统计数据
