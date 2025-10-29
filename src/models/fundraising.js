@@ -15,12 +15,12 @@ module.exports = (sequelize) => {
         comment: "项目详情页链接，用于唯一标识项目",
       },
       description: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: true,
         comment: "项目描述，简要说明项目内容",
       },
       logo: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: true,
         comment: "项目 Logo 的 URL",
       },
