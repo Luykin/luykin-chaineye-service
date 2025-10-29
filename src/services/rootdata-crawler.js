@@ -853,39 +853,31 @@ class FundraisingCrawler extends BaseCrawler {
 
   // 抓取初始投资者数据（无轮次信息）
   async scrapeInitialInvestors(_page) {
-    return _page.evaluate(() => {
-      // 调试：打印可能的选择器
-      console.log(
-        "[详情] 查找 .investor 元素数量:",
-        document.querySelectorAll(".investor").length
-      );
-      console.log(
-        "[详情] 查找 .investor .row 元素数量:",
-        document.querySelectorAll(".investor .row").length
-      );
-      console.log(
-        "[详情] 查找 .investor .row .item 元素数量:",
-        document.querySelectorAll(".investor .row .item").length
-      );
-      console.log(
-        "[详情] 查找 .investor .item 元素数量:",
-        document.querySelectorAll(".investor .item").length
-      );
+    const result = await _page.evaluate(() => {
+      // 收集调试信息
+      const debug = {
+        investorCount: document.querySelectorAll(".investor").length,
+        rowCount: document.querySelectorAll(".investor .row").length,
+        rowItemCount: document.querySelectorAll(".investor .row .item").length,
+        itemCount: document.querySelectorAll(".investor .item").length,
+      };
 
       // 尝试不同的选择器
       let items = document.querySelectorAll(".investor .row .item");
+      let usedSelector = ".investor .row .item";
+
       if (items.length === 0) {
-        console.log("[详情] 尝试备用选择器: .investor .item");
         items = document.querySelectorAll(".investor .item");
+        usedSelector = ".investor .item";
       }
 
-      console.log("[详情] 最终找到的投资者元素数量:", items.length);
+      debug.usedSelector = usedSelector;
+      debug.finalCount = items.length;
 
-      return Array.from(items)
+      const investors = Array.from(items)
         .map((item) => {
           const link = item.querySelector("a");
           if (!link) {
-            console.log("[详情] 警告: item 没有找到 a 标签");
             return null;
           }
           return {
@@ -896,7 +888,27 @@ class FundraisingCrawler extends BaseCrawler {
           };
         })
         .filter(Boolean);
+
+      return { debug, investors };
     });
+
+    // 在外部打印调试信息
+    console.log(
+      `[详情] 查找 .investor 元素数量: ${result.debug.investorCount}`
+    );
+    console.log(
+      `[详情] 查找 .investor .row 元素数量: ${result.debug.rowCount}`
+    );
+    console.log(
+      `[详情] 查找 .investor .row .item 元素数量: ${result.debug.rowItemCount}`
+    );
+    console.log(
+      `[详情] 查找 .investor .item 元素数量: ${result.debug.itemCount}`
+    );
+    console.log(`[详情] 使用的选择器: ${result.debug.usedSelector}`);
+    console.log(`[详情] 最终找到的投资者元素数量: ${result.debug.finalCount}`);
+
+    return result.investors;
   }
 
   // 点击rounds按钮
@@ -913,20 +925,13 @@ class FundraisingCrawler extends BaseCrawler {
 
   // 处理轮次数据
   async processRounds(_page) {
-    return _page.evaluate(() => {
-      console.log("[详情] 开始处理轮次数据");
-      console.log(
-        "[详情] 查找 .investor 元素数量:",
-        document.querySelectorAll(".investor").length
-      );
-      console.log(
-        "[详情] 查找 .investor tr 元素数量:",
-        document.querySelectorAll(".investor tr").length
-      );
-      console.log(
-        "[详情] 查找 .investor thead 元素数量:",
-        document.querySelectorAll(".investor thead").length
-      );
+    const result = await _page.evaluate(() => {
+      // 收集调试信息
+      const debug = {
+        investorCount: document.querySelectorAll(".investor").length,
+        trCount: document.querySelectorAll(".investor tr").length,
+        theadCount: document.querySelectorAll(".investor thead").length,
+      };
 
       // 建立表头到列下标的映射，避免硬编码列序号
       const headerCells = Array.from(
@@ -935,14 +940,14 @@ class FundraisingCrawler extends BaseCrawler {
         )
       );
 
-      console.log("[详情] 找到表头单元格数量:", headerCells.length);
+      debug.headerCellsCount = headerCells.length;
 
       const normalize = (str) =>
         String(str || "")
           .trim()
           .toLowerCase();
       const headerTexts = headerCells.map((th) => normalize(th.textContent));
-      console.log("[详情] 表头文本:", headerTexts);
+      debug.headerTexts = headerTexts;
 
       const findIndexBy = (regex, fallbackIndex) => {
         const idx = headerTexts.findIndex((t) => regex.test(t));
@@ -953,23 +958,22 @@ class FundraisingCrawler extends BaseCrawler {
       const idxAmount = findIndexBy(/amount/i, 1);
       const idxValuation = findIndexBy(/valuation/i, 2);
       const idxDate = findIndexBy(/date/i, 3);
-      // Investors 可能叫 Investor/Investors
       const idxInvestors = findIndexBy(/investor/i, headerCells.length - 1);
 
-      console.log("[详情] 列索引:", {
+      debug.columnIndexes = {
         idxRound,
         idxAmount,
         idxValuation,
         idxDate,
         idxInvestors,
-      });
+      };
 
       const rows = Array.from(document.querySelectorAll(".investor tr")).slice(
         1
       );
-      console.log("[详情] 数据行数量:", rows.length);
+      debug.dataRowsCount = rows.length;
 
-      return rows
+      const investors = rows
         .map((row) => {
           const cells = row.querySelectorAll("td");
           const round = cells[idxRound]?.textContent?.trim();
@@ -979,12 +983,10 @@ class FundraisingCrawler extends BaseCrawler {
 
           const investorCell = cells[idxInvestors];
           if (!investorCell) {
-            console.log("[详情] 警告: 未找到投资者单元格");
             return [];
           }
 
           const investorLinks = investorCell.querySelectorAll("a");
-          console.log("[详情] 该行投资者链接数量:", investorLinks.length);
 
           return Array.from(investorLinks).map((a) => ({
             projectLink: a.href,
@@ -998,7 +1000,25 @@ class FundraisingCrawler extends BaseCrawler {
           }));
         })
         .flat();
+
+      return { debug, investors };
     });
+
+    // 在外部打印调试信息
+    console.log(`[详情] 开始处理轮次数据`);
+    console.log(
+      `[详情] 查找 .investor 元素数量: ${result.debug.investorCount}`
+    );
+    console.log(`[详情] 查找 .investor tr 元素数量: ${result.debug.trCount}`);
+    console.log(
+      `[详情] 查找 .investor thead 元素数量: ${result.debug.theadCount}`
+    );
+    console.log(`[详情] 找到表头单元格数量: ${result.debug.headerCellsCount}`);
+    console.log(`[详情] 表头文本: ${JSON.stringify(result.debug.headerTexts)}`);
+    console.log(`[详情] 列索引: ${JSON.stringify(result.debug.columnIndexes)}`);
+    console.log(`[详情] 数据行数量: ${result.debug.dataRowsCount}`);
+
+    return result.investors;
   }
 
   // 合并投资者数据（优先使用轮次数据）
