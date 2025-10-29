@@ -185,7 +185,66 @@ async function cleanupSingleProject(deleteProjectId, keepProjectId) {
   try {
     console.log(`\n🔧 开始处理项目 ID=${deleteProjectId}...`);
 
-    // 1. 更新作为投资方的关系
+    // 策略：先删除会产生重复的关系，再转移不会重复的关系
+    // 这样可以避免唯一约束冲突
+
+    // 1. 删除作为投资方时会产生重复的关系
+    const deleteInvestorDuplicatesQuery = `
+      DELETE FROM "InvestmentRelationships" 
+      WHERE id IN (
+        SELECT r1.id
+        FROM "InvestmentRelationships" r1
+        WHERE r1."investorProjectId" = :deleteProjectId
+          AND EXISTS (
+            SELECT 1 
+            FROM "InvestmentRelationships" r2
+            WHERE r2."investorProjectId" = :keepProjectId
+              AND r2."fundedProjectId" = r1."fundedProjectId"
+              AND COALESCE(r2."round", '') = COALESCE(r1."round", '')
+          )
+      )
+    `;
+
+    const [deletedInvestorDuplicates] =
+      await Fundraising.Project.sequelize.query(deleteInvestorDuplicatesQuery, {
+        replacements: { deleteProjectId, keepProjectId },
+        transaction,
+      });
+
+    if (deletedInvestorDuplicates > 0) {
+      console.log(`   🗑️  删除投资方重复关系: ${deletedInvestorDuplicates} 条`);
+    }
+
+    // 2. 删除作为被投方时会产生重复的关系
+    const deleteFundedDuplicatesQuery = `
+      DELETE FROM "InvestmentRelationships" 
+      WHERE id IN (
+        SELECT r1.id
+        FROM "InvestmentRelationships" r1
+        WHERE r1."fundedProjectId" = :deleteProjectId
+          AND EXISTS (
+            SELECT 1 
+            FROM "InvestmentRelationships" r2
+            WHERE r2."fundedProjectId" = :keepProjectId
+              AND r2."investorProjectId" = r1."investorProjectId"
+              AND COALESCE(r2."round", '') = COALESCE(r1."round", '')
+          )
+      )
+    `;
+
+    const [deletedFundedDuplicates] = await Fundraising.Project.sequelize.query(
+      deleteFundedDuplicatesQuery,
+      {
+        replacements: { deleteProjectId, keepProjectId },
+        transaction,
+      }
+    );
+
+    if (deletedFundedDuplicates > 0) {
+      console.log(`   🗑️  删除被投方重复关系: ${deletedFundedDuplicates} 条`);
+    }
+
+    // 3. 转移剩余的不会重复的关系（作为投资方）
     const investorUpdateCount =
       await Fundraising.InvestmentRelationships.update(
         { investorProjectId: keepProjectId },
@@ -194,9 +253,9 @@ async function cleanupSingleProject(deleteProjectId, keepProjectId) {
           transaction,
         }
       );
-    console.log(`   ✅ 更新投资方关系: ${investorUpdateCount[0]} 条`);
+    console.log(`   ✅ 转移投资方关系: ${investorUpdateCount[0]} 条`);
 
-    // 2. 更新作为被投方的关系
+    // 4. 转移剩余的不会重复的关系（作为被投方）
     const fundedUpdateCount = await Fundraising.InvestmentRelationships.update(
       { fundedProjectId: keepProjectId },
       {
@@ -204,40 +263,9 @@ async function cleanupSingleProject(deleteProjectId, keepProjectId) {
         transaction,
       }
     );
-    console.log(`   ✅ 更新被投方关系: ${fundedUpdateCount[0]} 条`);
+    console.log(`   ✅ 转移被投方关系: ${fundedUpdateCount[0]} 条`);
 
-    // 3. 删除可能产生的重复关系（转移后可能有重复）
-    // 使用原生 SQL 删除重复关系，保留 ID 最小的
-    const deleteDuplicatesQuery = `
-      DELETE FROM "InvestmentRelationships" 
-      WHERE id IN (
-        SELECT id FROM (
-          SELECT id, 
-                 ROW_NUMBER() OVER (
-                   PARTITION BY "investorProjectId", "fundedProjectId", "round" 
-                   ORDER BY id ASC
-                 ) as row_num
-          FROM "InvestmentRelationships"
-          WHERE "investorProjectId" = :keepProjectId 
-             OR "fundedProjectId" = :keepProjectId
-        ) t
-        WHERE row_num > 1
-      )
-    `;
-
-    const [duplicateResults] = await Fundraising.Project.sequelize.query(
-      deleteDuplicatesQuery,
-      {
-        replacements: { keepProjectId },
-        transaction,
-      }
-    );
-
-    if (duplicateResults && duplicateResults > 0) {
-      console.log(`   🗑️  删除重复关系: ${duplicateResults} 条`);
-    }
-
-    // 4. 删除项目
+    // 5. 删除项目
     await Fundraising.Project.destroy({
       where: { id: deleteProjectId },
       transaction,
