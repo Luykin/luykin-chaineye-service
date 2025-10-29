@@ -854,17 +854,48 @@ class FundraisingCrawler extends BaseCrawler {
   // 抓取初始投资者数据（无轮次信息）
   async scrapeInitialInvestors(_page) {
     return _page.evaluate(() => {
-      return Array.from(document.querySelectorAll(".investor .row .item")).map(
-        (item) => {
+      // 调试：打印可能的选择器
+      console.log(
+        "[详情] 查找 .investor 元素数量:",
+        document.querySelectorAll(".investor").length
+      );
+      console.log(
+        "[详情] 查找 .investor .row 元素数量:",
+        document.querySelectorAll(".investor .row").length
+      );
+      console.log(
+        "[详情] 查找 .investor .row .item 元素数量:",
+        document.querySelectorAll(".investor .row .item").length
+      );
+      console.log(
+        "[详情] 查找 .investor .item 元素数量:",
+        document.querySelectorAll(".investor .item").length
+      );
+
+      // 尝试不同的选择器
+      let items = document.querySelectorAll(".investor .row .item");
+      if (items.length === 0) {
+        console.log("[详情] 尝试备用选择器: .investor .item");
+        items = document.querySelectorAll(".investor .item");
+      }
+
+      console.log("[详情] 最终找到的投资者元素数量:", items.length);
+
+      return Array.from(items)
+        .map((item) => {
           const link = item.querySelector("a");
+          if (!link) {
+            console.log("[详情] 警告: item 没有找到 a 标签");
+            return null;
+          }
           return {
             projectLink: link.href,
             projectName: link.querySelector("h2")?.textContent?.trim(),
             lead: !!item.querySelector(".status_icon.status_position"),
             source: "initial",
           };
-        }
-      );
+        })
+        .filter(Boolean);
     });
   }
 
@@ -883,6 +914,20 @@ class FundraisingCrawler extends BaseCrawler {
   // 处理轮次数据
   async processRounds(_page) {
     return _page.evaluate(() => {
+      console.log("[详情] 开始处理轮次数据");
+      console.log(
+        "[详情] 查找 .investor 元素数量:",
+        document.querySelectorAll(".investor").length
+      );
+      console.log(
+        "[详情] 查找 .investor tr 元素数量:",
+        document.querySelectorAll(".investor tr").length
+      );
+      console.log(
+        "[详情] 查找 .investor thead 元素数量:",
+        document.querySelectorAll(".investor thead").length
+      );
+
       // 建立表头到列下标的映射，避免硬编码列序号
       const headerCells = Array.from(
         document.querySelectorAll(
@@ -890,11 +935,14 @@ class FundraisingCrawler extends BaseCrawler {
         )
       );
 
+      console.log("[详情] 找到表头单元格数量:", headerCells.length);
+
       const normalize = (str) =>
         String(str || "")
           .trim()
           .toLowerCase();
       const headerTexts = headerCells.map((th) => normalize(th.textContent));
+      console.log("[详情] 表头文本:", headerTexts);
 
       const findIndexBy = (regex, fallbackIndex) => {
         const idx = headerTexts.findIndex((t) => regex.test(t));
@@ -908,8 +956,20 @@ class FundraisingCrawler extends BaseCrawler {
       // Investors 可能叫 Investor/Investors
       const idxInvestors = findIndexBy(/investor/i, headerCells.length - 1);
 
-      return Array.from(document.querySelectorAll(".investor tr"))
-        .slice(1)
+      console.log("[详情] 列索引:", {
+        idxRound,
+        idxAmount,
+        idxValuation,
+        idxDate,
+        idxInvestors,
+      });
+
+      const rows = Array.from(document.querySelectorAll(".investor tr")).slice(
+        1
+      );
+      console.log("[详情] 数据行数量:", rows.length);
+
+      return rows
         .map((row) => {
           const cells = row.querySelectorAll("td");
           const round = cells[idxRound]?.textContent?.trim();
@@ -918,9 +978,15 @@ class FundraisingCrawler extends BaseCrawler {
           const date = cells[idxDate]?.textContent?.trim();
 
           const investorCell = cells[idxInvestors];
-          if (!investorCell) return [];
+          if (!investorCell) {
+            console.log("[详情] 警告: 未找到投资者单元格");
+            return [];
+          }
 
-          return Array.from(investorCell.querySelectorAll("a")).map((a) => ({
+          const investorLinks = investorCell.querySelectorAll("a");
+          console.log("[详情] 该行投资者链接数量:", investorLinks.length);
+
+          return Array.from(investorLinks).map((a) => ({
             projectLink: a.href,
             projectName: a.textContent.replace("*", "").trim(),
             lead: a.textContent.includes("*"),
