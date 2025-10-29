@@ -709,98 +709,40 @@ class FundraisingCrawler extends BaseCrawler {
         );
       }
 
-      // 访问项目详情页（使用随机代理或直连，失败自动重试）
+      // 【关键修改】直接用 Puppeteer 访问页面，让 JavaScript 执行渲染 .investor 元素
       if (isManualTrigger) {
-        console.log(`[详情] 拉取 HTML...`);
+        console.log(`[详情] 使用 Puppeteer 访问页面（让 JS 执行）...`);
       }
-      const response = await this.axiosRequestWithRetry(project.projectLink, {
-        timeout: 20000,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-          Accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
-          Connection: "keep-alive",
-        },
-        // 避免 axios 自动跟随 302 到登录页
-        maxRedirects: 0,
-        validateStatus: (status) => status >= 200 && status < 400,
+
+      // 直接用 page.goto() 访问，而不是 axios + setContent
+      await _page.goto(project.projectLink, {
+        waitUntil: "networkidle2", // 等待网络空闲
+        timeout: 30000,
       });
-      const html = response.data;
 
       if (isManualTrigger) {
-        const htmlStr = Buffer.isBuffer(html)
-          ? html.toString("utf-8")
-          : String(html);
-
-        console.log(`[详情] HTML 长度: ${htmlStr.length}`);
-        console.log(`[详情] HTML 前 100 字符: ${htmlStr.substring(0, 100)}`);
-
-        // 检查 investor 关键词
-        const investorIndex = htmlStr.indexOf("investor");
-        console.log(`[详情] 'investor' 首次出现位置: ${investorIndex}`);
-
-        if (investorIndex >= 0) {
-          const around = htmlStr.substring(
-            Math.max(0, investorIndex - 150),
-            investorIndex + 150
-          );
-          console.log(`[详情] 'investor' 周围 300 字符:`);
-          console.log(around);
-        }
-
-        // 检查各种可能的 investor 选择器
-        const checks = [
-          'class="investor"',
-          "class='investor'",
-          'class="investor ',
-          'className="investor"',
-          '<div class="investor',
-          '<section class="investor',
-        ];
-
-        console.log(`[详情] HTML 内容检查:`);
-        checks.forEach((check) => {
-          const found = htmlStr.includes(check);
-          if (found) {
-            const index = htmlStr.indexOf(check);
-            console.log(`  ✓ 包含 '${check}' (位置: ${index})`);
-          } else {
-            console.log(`  ✗ 不包含 '${check}'`);
-          }
-        });
-      }
-
-      // 将 HTML 注入到离线页面环境中，复用现有的 DOM 抓取逻辑
-      if (isManualTrigger) {
-        console.log(`[详情] 开始设置页面内容...`);
-      }
-
-      const htmlStr = Buffer.isBuffer(html)
-        ? html.toString("utf-8")
-        : String(html);
-      await _page.setContent(htmlStr, { waitUntil: "domcontentloaded" });
-
-      if (isManualTrigger) {
-        console.log(`[详情] setContent 完成，等待 .base_info 元素...`);
+        console.log(`[详情] 页面加载完成`);
       }
 
       await _page.waitForSelector(".base_info", { timeout: 20000 });
       if (isManualTrigger) {
         console.log(`[详情] DOM 就绪 (.base_info)`);
 
-        // 检查页面中是否真的有内容
-        const pageContent = await _page.content();
-        console.log(`[详情] 页面内容长度: ${pageContent.length}`);
-        console.log(
-          `[详情] 页面包含 'investor': ${pageContent.includes("investor")}`
-        );
-        console.log(
-          `[详情] 页面包含 'class="investor"': ${pageContent.includes(
-            'class="investor"'
-          )}`
-        );
+        // 检查页面中是否有 .investor 元素
+        const investorCount = await _page.evaluate(() => {
+          return document.querySelectorAll(".investor").length;
+        });
+        console.log(`[详情] 页面中 .investor 元素数量: ${investorCount}`);
+
+        // 如果找到了，打印一些调试信息
+        if (investorCount > 0) {
+          const investorHtml = await _page.evaluate(() => {
+            const el = document.querySelector(".investor");
+            return el ? el.outerHTML.substring(0, 500) : "未找到";
+          });
+          console.log(`[详情] 第一个 .investor 元素 HTML (前 500 字符):`);
+          console.log(investorHtml);
+        }
       }
 
       // 第一阶段：点击展开更多按钮并抓取基础投资者数据
