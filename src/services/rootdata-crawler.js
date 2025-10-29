@@ -940,22 +940,25 @@ class FundraisingCrawler extends BaseCrawler {
   mergeInvestorData(initial, rounds) {
     const map = new Map();
 
-    // 处理轮次数据
+    // 处理轮次数据 - 使用 (projectName, round) 作为唯一键
     (rounds || []).forEach((inv) => {
-      map.set(inv.projectName, {
-        ...inv,
-        projectLink: joinUrl(inv.projectLink, inv.projectName),
-        formattedAmount: parseAmount(inv.amount),
-        formattedValuation: parseAmount(inv.valuation),
-        timestamp: parseDate(inv.date),
-      });
+      const uniqueKey = `${inv.projectName}|${inv.round || "no-round"}`;
+      if (!map.has(uniqueKey)) {
+        map.set(uniqueKey, {
+          ...inv,
+          projectLink: joinUrl(inv.projectLink, inv.projectName),
+          formattedAmount: parseAmount(inv.amount),
+          formattedValuation: parseAmount(inv.valuation),
+          timestamp: parseDate(inv.date),
+        });
+      }
     });
 
     // 补充初始数据中独有的记录
-    const _initial = (initial || [])
-      .filter((inv) => !map.has(inv.projectName))
-      .map((inv) => {
-        return {
+    (initial || []).forEach((inv) => {
+      const uniqueKey = `${inv.projectName}|no-round`;
+      if (!map.has(uniqueKey)) {
+        map.set(uniqueKey, {
           ...inv,
           projectLink: joinUrl(inv.projectLink, inv.projectName),
           round: null,
@@ -965,19 +968,11 @@ class FundraisingCrawler extends BaseCrawler {
           formattedAmount: null,
           formattedValuation: null,
           timestamp: 1230739200000, //2009/01/01 00:00:00
-        };
-      });
-    const _rounds = rounds.map((inv) => {
-      return {
-        ...inv,
-        projectLink: joinUrl(inv.projectLink, inv.projectName),
-        formattedAmount: parseAmount(inv.amount),
-        formattedValuation: parseAmount(inv.valuation),
-        timestamp: parseDate(inv.date),
-      };
+        });
+      }
     });
 
-    return [..._rounds, ..._initial];
+    return Array.from(map.values());
   }
 
   async updateInvestmentRelationships(project, investors) {
