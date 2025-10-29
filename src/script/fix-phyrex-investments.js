@@ -66,12 +66,12 @@ async function fixPhyrexInvestments() {
     console.log("🚀 开始修复 phyrex_ni 的投资数据...\n");
 
     // 1. 查找或创建 phyrex_ni 的项目
+    // 使用 projectLink 作为查询条件（唯一索引），避免重复创建
     const [phyrexProject, phyrexCreated] =
       await Fundraising.Project.findOrCreate({
         where: {
-          socialLinks: {
-            x: "https://x.com/Phyrex_Ni",
-          },
+          projectLink:
+            "https://www.rootdata.com/member/Phyrex%20Ni?k=MjA0OTI%3D",
         },
         defaults: {
           projectName: "Phyrex",
@@ -103,6 +103,7 @@ async function fixPhyrexInvestments() {
       console.log(`📝 处理项目: ${investment.name}...`);
 
       // 2.1 查找或创建被投资项目
+      // 优先用 Twitter 链接作为 projectLink 和查询条件
       let [fundedProject, created] = await Fundraising.Project.findOrCreate({
         where: {
           socialLinks: {
