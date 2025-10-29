@@ -639,10 +639,14 @@ function bindRootdataEvents() {
   }
 }
 
+// 当前分页状态
+let rootdataCurrentPage = 1;
+let rootdataSelectedDate = null;
+
 /**
  * 加载 Rootdata 每日统计数据
  */
-async function loadRootdataDailyStats() {
+async function loadRootdataDailyStats(page = 1) {
   const dateInput = document.getElementById("rootdata-date-picker");
   const selectedDate = dateInput.value;
 
@@ -650,6 +654,9 @@ async function loadRootdataDailyStats() {
     alert("请选择日期");
     return;
   }
+
+  rootdataSelectedDate = selectedDate;
+  rootdataCurrentPage = page;
 
   // 显示加载状态
   document.getElementById("rootdata-daily-loading").style.display = "block";
@@ -660,7 +667,7 @@ async function loadRootdataDailyStats() {
 
   try {
     const response = await fetch(
-      `/api/xhunt/stats/rootdata-daily?date=${selectedDate}`
+      `/api/xhunt/stats/rootdata-daily?date=${selectedDate}&page=${page}&limit=50`
     );
 
     if (!response.ok) {
@@ -698,11 +705,11 @@ async function loadRootdataDailyStats() {
     // 显示 Tab
     document.getElementById("rootdata-daily-tabs").style.display = "block";
 
-    // 渲染项目列表
-    renderRootdataProjects(data.projects);
+    // 渲染项目列表（带分页）
+    renderRootdataProjects(data.projects, data.pagination);
 
-    // 渲染投资关系列表
-    renderRootdataRelationships(data.relationships);
+    // 渲染投资关系列表（带分页）
+    renderRootdataRelationships(data.relationships, data.pagination);
   } catch (error) {
     console.error("加载 Rootdata 每日数据失败:", error);
     document.getElementById("rootdata-daily-loading").style.display = "none";
@@ -715,7 +722,7 @@ async function loadRootdataDailyStats() {
 /**
  * 渲染项目列表
  */
-function renderRootdataProjects(projects) {
+function renderRootdataProjects(projects, pagination) {
   const container = document.getElementById("rootdata-projects-table");
 
   if (!projects || projects.length === 0) {
@@ -734,7 +741,9 @@ function renderRootdataProjects(projects) {
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">Logo</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">项目名称</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">描述</th>
-          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">Twitter</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">社交链接</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">融资时间</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">抓取状态</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">创建时间</th>
           <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">链接</th>
         </tr>
@@ -745,11 +754,43 @@ function renderRootdataProjects(projects) {
   projects.forEach((project, index) => {
     const bgColor = index % 2 === 0 ? "#ffffff" : "#f9fafb";
     const createdAt = new Date(project.createdAt).toLocaleString("zh-CN");
-    const twitter = project.twitterUrl || project.socialLinks?.x || "-";
-    const twitterDisplay =
-      twitter !== "-"
-        ? `<a href="${twitter}" target="_blank" style="color: #3b82f6; text-decoration: none;">🔗 查看</a>`
-        : "-";
+
+    // 社交链接处理
+    const socialLinks = project.socialLinks || {};
+    const socialLinksHtml = [];
+    if (socialLinks.x)
+      socialLinksHtml.push(
+        `<a href="${socialLinks.x}" target="_blank" style="color: #3b82f6; text-decoration: none; margin-right: 5px;">🐦 X</a>`
+      );
+    if (socialLinks.discord)
+      socialLinksHtml.push(
+        `<a href="${socialLinks.discord}" target="_blank" style="color: #5865F2; text-decoration: none; margin-right: 5px;">💬 Discord</a>`
+      );
+    if (socialLinks.telegram)
+      socialLinksHtml.push(
+        `<a href="${socialLinks.telegram}" target="_blank" style="color: #0088cc; text-decoration: none; margin-right: 5px;">✈️ Telegram</a>`
+      );
+    const socialDisplay =
+      socialLinksHtml.length > 0 ? socialLinksHtml.join("") : "-";
+
+    // 融资时间
+    const fundedAt = project.fundedAt
+      ? new Date(project.fundedAt).toLocaleDateString("zh-CN")
+      : "-";
+
+    // 抓取状态
+    const detailFetchedAt = project.detailFetchedAt
+      ? new Date(project.detailFetchedAt).toLocaleString("zh-CN")
+      : "未抓取";
+    const failures = project.detailFailuresNumber || 0;
+    const fetchStatusColor =
+      failures === 0 ? "#10b981" : failures < 3 ? "#f59e0b" : "#ef4444";
+    const fetchStatus = `
+      <div style="font-size: 12px;">
+        <div style="color: ${fetchStatusColor}; font-weight: 600;">失败: ${failures}次</div>
+        <div style="color: #6b7280; font-size: 11px;">${detailFetchedAt}</div>
+      </div>
+    `;
 
     html += `
       <tr style="background: ${bgColor}; border-bottom: 1px solid #e5e7eb;">
@@ -768,7 +809,9 @@ function renderRootdataProjects(projects) {
         }">
           ${project.description || "-"}
         </td>
-        <td style="padding: 12px;">${twitterDisplay}</td>
+        <td style="padding: 12px; font-size: 12px;">${socialDisplay}</td>
+        <td style="padding: 12px; color: #6b7280; font-size: 13px;">${fundedAt}</td>
+        <td style="padding: 12px;">${fetchStatus}</td>
         <td style="padding: 12px; color: #6b7280; font-size: 13px;">${createdAt}</td>
         <td style="padding: 12px;">
           <a href="${
@@ -784,13 +827,22 @@ function renderRootdataProjects(projects) {
     </table>
   `;
 
+  // 添加分页控件
+  if (pagination && pagination.totalProjectPages > 1) {
+    html += renderPagination(
+      pagination.currentPage,
+      pagination.totalProjectPages,
+      "projects"
+    );
+  }
+
   container.innerHTML = html;
 }
 
 /**
  * 渲染投资关系列表
  */
-function renderRootdataRelationships(relationships) {
+function renderRootdataRelationships(relationships, pagination) {
   const container = document.getElementById("rootdata-relationships-table");
 
   if (!relationships || relationships.length === 0) {
@@ -876,7 +928,40 @@ function renderRootdataRelationships(relationships) {
     </table>
   `;
 
+  // 添加分页控件
+  if (pagination && pagination.totalRelationshipPages > 1) {
+    html += renderPagination(
+      pagination.currentPage,
+      pagination.totalRelationshipPages,
+      "relationships"
+    );
+  }
+
   container.innerHTML = html;
+}
+
+/**
+ * 渲染分页控件
+ */
+function renderPagination(currentPage, totalPages, type) {
+  let html = `
+    <div style="display: flex; justify-content: center; align-items: center; padding: 20px; gap: 10px;">
+      <button onclick="loadRootdataDailyStats(${currentPage - 1})" ${
+    currentPage <= 1 ? "disabled" : ""
+  } style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+        ← 上一页
+      </button>
+      <span style="color: #374151; font-weight: 600;">
+        第 ${currentPage} / ${totalPages} 页
+      </span>
+      <button onclick="loadRootdataDailyStats(${currentPage + 1})" ${
+    currentPage >= totalPages ? "disabled" : ""
+  } style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+        下一页 →
+      </button>
+    </div>
+  `;
+  return html;
 }
 
 /**

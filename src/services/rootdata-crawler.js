@@ -997,7 +997,10 @@ class FundraisingCrawler extends BaseCrawler {
           where: { projectLink },
           defaults: {
             projectName: inv.projectName || "Unknown",
-            isInitial: false,
+            isInitial: false, // 投资者项目，由 subDetailsCrawl() 处理
+            socialLinks: null, // ✅ 初始化为 null，满足 subDetailsCrawl 条件
+            detailFailuresNumber: 0, // ✅ 初始化失败次数为 0
+            detailFetchedAt: null, // ✅ 初始化抓取时间为 null，等待爬虫抓取
           },
           transaction,
         });

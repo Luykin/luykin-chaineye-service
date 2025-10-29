@@ -217,11 +217,13 @@ class RootdataDataFixService {
       projectLink: fullProjectLink,
       logo: investor.logo,
       description: investor.name, // 使用名称作为描述
-      isInitial: false, // 标记为投资者项目
+      isInitial: true, // ✅ 标记为初始项目，以便爬虫抓取详细信息
       socialLinks: investor.X ? { x: investor.X } : null,
+      detailFailuresNumber: 0, // ✅ 初始化失败次数为 0
+      detailFetchedAt: null, // ✅ 初始化抓取时间为 null，等待爬虫抓取
     });
 
-    console.log(`✨ 创建新投资者项目: ${investor.name}`);
+    console.log(`✨ 创建新投资者项目: ${investor.name} (待爬虫抓取详情)`);
     return newProject;
   }
 

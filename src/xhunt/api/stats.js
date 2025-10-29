@@ -1454,7 +1454,7 @@ router.get("/health", (req, res) => {
  */
 router.get("/rootdata-daily", basicAuth, async (req, res) => {
   try {
-    const { date } = req.query;
+    const { date, page = 1, limit = 50 } = req.query;
 
     if (!date) {
       return res.status(400).json({
@@ -1487,50 +1487,81 @@ router.get("/rootdata-daily", basicAuth, async (req, res) => {
     const startDate = new Date(date + "T00:00:00.000Z");
     const endDate = new Date(date + "T23:59:59.999Z");
 
-    // 查询新增的项目
-    const newProjects = await Fundraising.Project.findAll({
-      where: {
-        createdAt: {
-          [require("sequelize").Op.gte]: startDate,
-          [require("sequelize").Op.lte]: endDate,
-        },
-      },
-      attributes: [
-        "id",
-        "projectName",
-        "projectLink",
-        "logo",
-        "description",
-        "twitterUrl",
-        "socialLinks",
-        "createdAt",
-      ],
-      order: [["createdAt", "DESC"]],
-      raw: true,
-    });
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
 
-    // 查询新增的投资关系
-    const newRelationships = await Fundraising.InvestmentRelationships.findAll({
-      where: {
-        createdAt: {
-          [require("sequelize").Op.gte]: startDate,
-          [require("sequelize").Op.lte]: endDate,
+    // 查询新增的项目（分页）
+    const [newProjects, totalProjects] = await Promise.all([
+      Fundraising.Project.findAll({
+        where: {
+          createdAt: {
+            [require("sequelize").Op.gte]: startDate,
+            [require("sequelize").Op.lte]: endDate,
+          },
         },
-      },
-      include: [
-        {
-          model: Fundraising.Project,
-          as: "investorProject",
-          attributes: ["id", "projectName", "projectLink", "logo"],
+        attributes: [
+          "id",
+          "projectName",
+          "projectLink",
+          "logo",
+          "description",
+          "twitterUrl",
+          "socialLinks",
+          "fundedAt",
+          "detailFailuresNumber",
+          "detailFetchedAt",
+          "createdAt",
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: limitNum,
+        offset: offset,
+        raw: true,
+      }),
+      Fundraising.Project.count({
+        where: {
+          createdAt: {
+            [require("sequelize").Op.gte]: startDate,
+            [require("sequelize").Op.lte]: endDate,
+          },
         },
-        {
-          model: Fundraising.Project,
-          as: "fundedProject",
-          attributes: ["id", "projectName", "projectLink", "logo"],
+      }),
+    ]);
+
+    // 查询新增的投资关系（分页）
+    const [newRelationships, totalRelationships] = await Promise.all([
+      Fundraising.InvestmentRelationships.findAll({
+        where: {
+          createdAt: {
+            [require("sequelize").Op.gte]: startDate,
+            [require("sequelize").Op.lte]: endDate,
+          },
         },
-      ],
-      order: [["createdAt", "DESC"]],
-    });
+        include: [
+          {
+            model: Fundraising.Project,
+            as: "investorProject",
+            attributes: ["id", "projectName", "projectLink", "logo"],
+          },
+          {
+            model: Fundraising.Project,
+            as: "fundedProject",
+            attributes: ["id", "projectName", "projectLink", "logo"],
+          },
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: limitNum,
+        offset: offset,
+      }),
+      Fundraising.InvestmentRelationships.count({
+        where: {
+          createdAt: {
+            [require("sequelize").Op.gte]: startDate,
+            [require("sequelize").Op.lte]: endDate,
+          },
+        },
+      }),
+    ]);
 
     res.json({
       success: true,
@@ -1539,8 +1570,16 @@ router.get("/rootdata-daily", basicAuth, async (req, res) => {
         projects: newProjects,
         relationships: newRelationships,
         summary: {
-          projectsCount: newProjects.length,
-          relationshipsCount: newRelationships.length,
+          projectsCount: totalProjects,
+          relationshipsCount: totalRelationships,
+        },
+        pagination: {
+          currentPage: pageNum,
+          pageSize: limitNum,
+          totalProjects,
+          totalRelationships,
+          totalProjectPages: Math.ceil(totalProjects / limitNum),
+          totalRelationshipPages: Math.ceil(totalRelationships / limitNum),
         },
       },
     });
