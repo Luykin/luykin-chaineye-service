@@ -931,16 +931,16 @@ function bindDeleteRelationshipEvents() {
     btn.addEventListener("click", async function () {
       const fundedProjectId = this.getAttribute("data-funded-project-id");
       const projectName = this.getAttribute("data-funded-project-name");
-      
+
       // 获取当前查看的日期
       const datePicker = document.getElementById("rootdata-date-picker");
       const selectedDate = datePicker ? datePicker.value : null;
-      
+
       if (!selectedDate) {
         alert("无法获取当前日期");
         return;
       }
-      
+
       if (
         !confirm(
           `确定要删除【${projectName}】在 ${selectedDate} 新增的所有投资关系记录吗？此操作不可恢复！`
