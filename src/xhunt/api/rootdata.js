@@ -476,7 +476,7 @@ router.get("/search", async (req, res) => {
       try {
         await req.redisClient.setEx(
           cacheKey,
-          60,
+          3600,
           JSON.stringify(notFoundResponse)
         );
       } catch (error) {
