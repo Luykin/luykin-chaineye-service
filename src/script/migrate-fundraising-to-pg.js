@@ -134,6 +134,7 @@ async function migrateFundraisingData() {
               detailFailuresNumber: sqliteProject.detailFailuresNumber,
               isInitial: sqliteProject.isInitial,
               socialLinks: sqliteProject.socialLinks,
+              twitterUrl: sqliteProject.twitterUrl, // 同步 Twitter URL
               teamMembers: sqliteProject.teamMembers,
               originalPageNumber: sqliteProject.originalPageNumber,
               isVcListed: sqliteProject.isVcListed,
@@ -164,6 +165,7 @@ async function migrateFundraisingData() {
             detailFailuresNumber: sqliteProject.detailFailuresNumber,
             isInitial: sqliteProject.isInitial,
             socialLinks: sqliteProject.socialLinks,
+            twitterUrl: sqliteProject.twitterUrl, // 同步 Twitter URL
             teamMembers: sqliteProject.teamMembers,
             originalPageNumber: sqliteProject.originalPageNumber,
             isVcListed: sqliteProject.isVcListed,
