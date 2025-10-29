@@ -42,6 +42,7 @@ class RootdataAPIService {
    */
   static async getFundingInfo(projectId) {
     try {
+      console.log(`   📡 调用 Rootdata API: project_id=${projectId}`);
       const response = await axios.post(
         `${ROOTDATA_API_BASE}/get_fac`,
         { project_id: projectId },
@@ -55,13 +56,23 @@ class RootdataAPIService {
         }
       );
 
+      console.log(
+        `   📥 API 响应: result=${response.data?.result}, items=${
+          response.data?.data?.items?.length || 0
+        }`
+      );
+
       if (response.data?.result === 200) {
         return response.data.data;
       }
 
       throw new Error(`API returned result: ${response.data?.result}`);
     } catch (error) {
-      console.error("Rootdata API Error (get_fac):", error.message);
+      console.error("   ❌ Rootdata API Error (get_fac):", error.message);
+      if (error.response) {
+        console.error(`   响应状态: ${error.response.status}`);
+        console.error(`   响应数据:`, error.response.data);
+      }
       throw error;
     }
   }
@@ -111,12 +122,16 @@ class RootdataDataFixService {
 
       // 2. 调用 Rootdata API
       console.log(`🔍 验证项目数据: ${projectLink}`);
+      const projectId = RootdataAPIService.extractProjectId(projectLink);
+      console.log(`   提取的 Project ID: ${projectId}`);
+
       const apiData = await RootdataAPIService.getProjectFundingData(
         projectLink
       );
 
       if (!apiData || !apiData.items || apiData.items.length === 0) {
         console.log(`⚠️ 未找到API数据，跳过修正: ${projectLink}`);
+        console.log(`   API 返回数据:`, JSON.stringify(apiData, null, 2));
         return null;
       }
       console.log(`🔍 API数据-有几轮: ${apiData.items.length}`);
@@ -578,6 +593,7 @@ router.get("/search", async (req, res) => {
       name: investment.fundedProject?.projectName || "",
       twitter: investment.fundedProject?.socialLinks?.x || "",
       lead_investor: investment.fundedProject?.lead || false,
+      amount: investment.formattedAmount || 0, // 🔧 修复：添加 amount 字段
     }));
 
     const fundedProjects = Array.from(
@@ -596,12 +612,15 @@ router.get("/search", async (req, res) => {
         .values()
     );
 
+    // 🔧 修复：正确计算投出的总金额
+    const totalInvestment = (investmentsGiven || []).reduce(
+      (sum, inv) => sum + (inv.formattedAmount || 0),
+      0
+    );
+
     const investorData = {
       investors: fundedProjects,
-      total_funding: fundedProjects.reduce(
-        (sum, proj) => sum + (proj.amount || 0),
-        0
-      ),
+      total_funding: totalInvestment,
     };
 
     // 10. 异步更新头像（如果有缺失的头像）
