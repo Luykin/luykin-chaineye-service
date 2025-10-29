@@ -423,14 +423,20 @@ router.get("/search", async (req, res) => {
     const targetTwitterUrl = `https://x.com/${sanitizedKeyword}`;
     const targetTwitterUrlWithSlash = `https://x.com/${sanitizedKeyword}/`;
 
-    // 5. 优化查询：先找到项目，再分别查询关联
+    // 5. 优化查询：使用 twitterUrl 字段，速度更快（带索引）
     const project = await Fundraising.Project.findOne({
       where: {
         [Op.or]: [
-          literal(`LOWER("socialLinks"->>'x') = LOWER('${targetTwitterUrl}')`),
-          literal(
-            `LOWER("socialLinks"->>'x') = LOWER('${targetTwitterUrlWithSlash}')`
-          ),
+          {
+            twitterUrl: {
+              [Op.iLike]: targetTwitterUrl,
+            },
+          },
+          {
+            twitterUrl: {
+              [Op.iLike]: targetTwitterUrlWithSlash,
+            },
+          },
         ],
       },
       order: [["id", "DESC"]],

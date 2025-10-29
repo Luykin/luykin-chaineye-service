@@ -81,6 +81,11 @@ module.exports = (sequelize) => {
         comment:
           "社交链接信息，包含官网、Twitter、LinkedIn、博客等链接的 JSON 对象",
       },
+      twitterUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: "Twitter/X 链接，从 socialLinks.x 提取，用于快速查询",
+      },
       teamMembers: {
         type: DataTypes.JSON,
         allowNull: true,
@@ -113,7 +118,26 @@ module.exports = (sequelize) => {
           unique: true,
           fields: ["projectLink"],
         },
+        {
+          name: "idx_twitter_url",
+          fields: ["twitterUrl"],
+          comment: "Twitter URL 索引，用于快速查询 Twitter 账号",
+        },
       ],
+      hooks: {
+        // 在保存前自动从 socialLinks 提取 twitterUrl
+        beforeSave: (instance) => {
+          if (instance.socialLinks) {
+            const possibleKeys = ["x", "X", "twitter", "Twitter"];
+            for (const key of possibleKeys) {
+              if (instance.socialLinks[key]) {
+                instance.twitterUrl = instance.socialLinks[key];
+                break;
+              }
+            }
+          }
+        },
+      },
     }
   );
 
