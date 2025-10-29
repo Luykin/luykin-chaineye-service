@@ -70,14 +70,14 @@ async function fixPhyrexInvestments() {
       await Fundraising.Project.findOrCreate({
         where: {
           socialLinks: {
-            x: "https://x.com/phyrex_ni",
+            x: "https://x.com/Phyrex_Ni",
           },
         },
         defaults: {
           projectName: "Phyrex",
           projectLink:
             "https://www.rootdata.com/member/Phyrex%20Ni?k=MjA0OTI%3D", // 必填字段
-          socialLinks: { x: "https://x.com/phyrex_ni" },
+          socialLinks: { x: "https://x.com/Phyrex_Ni" },
           logo: "https://pbs.twimg.com/profile_images/1760613636918476800/OYd_SQc5_400x400.jpg",
           description: "Crypto Investor & KOL",
           isInitial: false, // 标记为投资者
