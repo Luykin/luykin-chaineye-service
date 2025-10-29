@@ -472,7 +472,7 @@ router.get("/search", async (req, res) => {
           req.redisClient,
           cacheKey // 传入搜索缓存key，修正后会清除
         );
-        console.log(`✅ 数据修正完成: ${cacheKey}`);
+        // console.log(`✅ 数据修正完成: ${cacheKey}`);
       } catch (error) {
         console.error("数据修正失败:", error);
       }
