@@ -398,7 +398,7 @@ router.get("/search", async (req, res) => {
     }
 
     const sanitizedKeyword = keyword.trim();
-    const cacheKey = `rootdata_search_${sanitizedKeyword}`;
+    const cacheKey = `rootdata_search_${sanitizedKeyword}_1029`;
 
     // 2. 从 Redis 获取缓存
     let cachedData;
@@ -461,7 +461,7 @@ router.get("/search", async (req, res) => {
       try {
         await req.redisClient.setEx(
           cacheKey,
-          3600,
+          60,
           JSON.stringify(notFoundResponse)
         );
       } catch (error) {
