@@ -1,0 +1,363 @@
+<!-- Rootdata 统计页面 -->
+<div class="stats-section">
+  <!-- 🔑 Rootdata API 配额状态 -->
+  <div class="section" id="rootdata-quota-section">
+    <h2 class="section-title">🔑 Rootdata API 配额</h2>
+    <div class="stat-card" style="max-width: 800px; margin: 0 auto">
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+        "
+      >
+        <div>
+          <div class="stat-title">API 额度使用情况</div>
+          <div style="font-size: 14px; color: #6b7280; margin-top: 4px">
+            <span id="rootdata-level" style="font-weight: 600; color: #3b82f6"
+              >-</span
+            >
+            级别
+          </div>
+        </div>
+        <div style="text-align: right">
+          <div
+            style="font-size: 24px; font-weight: 700; color: #10b981"
+            id="rootdata-remaining"
+          >
+            -
+          </div>
+          <div style="font-size: 14px; color: #6b7280">
+            剩余 / <span id="rootdata-total">-</span> 总额
+          </div>
+        </div>
+      </div>
+
+      <!-- 进度条 -->
+      <div
+        style="
+          width: 100%;
+          height: 30px;
+          background: #e5e7eb;
+          border-radius: 15px;
+          overflow: hidden;
+          position: relative;
+          margin-bottom: 15px;
+        "
+      >
+        <div
+          id="rootdata-progress-bar"
+          style="
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #10b981, #3b82f6);
+            transition: width 0.5s ease, background 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+          "
+        >
+          <span
+            id="rootdata-progress-text"
+            style="color: white; font-weight: 600; font-size: 14px"
+          ></span>
+        </div>
+      </div>
+
+      <!-- 详细信息 -->
+      <div
+        style="
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 15px;
+          font-size: 14px;
+        "
+      >
+        <div style="display: flex; justify-content: space-between">
+          <span style="color: #6b7280">已使用：</span>
+          <span id="rootdata-used" style="font-weight: 600; color: #374151"
+            >-</span
+          >
+        </div>
+        <div style="display: flex; justify-content: space-between">
+          <span style="color: #6b7280">使用率：</span>
+          <span
+            id="rootdata-usage-percent"
+            style="font-weight: 600; color: #374151"
+            >-</span
+          >
+        </div>
+        <div style="display: flex; justify-content: space-between">
+          <span style="color: #6b7280">周期开始：</span>
+          <span
+            id="rootdata-period-start"
+            style="font-weight: 600; color: #374151"
+            >-</span
+          >
+        </div>
+        <div style="display: flex; justify-content: space-between">
+          <span style="color: #6b7280">周期结束：</span>
+          <span
+            id="rootdata-period-end"
+            style="font-weight: 600; color: #374151"
+            >-</span
+          >
+        </div>
+      </div>
+
+      <!-- 加载状态 -->
+      <div
+        id="rootdata-loading"
+        style="text-align: center; padding: 20px; display: none"
+      >
+        <div style="color: #6b7280">正在加载配额信息...</div>
+      </div>
+
+      <!-- 错误提示 -->
+      <div
+        id="rootdata-error"
+        style="
+          display: none;
+          padding: 15px;
+          background: #fef2f2;
+          border-left: 4px solid #ef4444;
+          border-radius: 4px;
+          margin-top: 15px;
+        "
+      >
+        <div style="color: #dc2626; font-weight: 600; margin-bottom: 4px">
+          ⚠️ 加载失败
+        </div>
+        <div
+          style="color: #991b1b; font-size: 13px"
+          id="rootdata-error-message"
+        ></div>
+      </div>
+    </div>
+
+    <!-- 刷新按钮 -->
+    <div style="text-align: center; margin-top: 15px">
+      <button
+        onclick="loadRootdataQuota()"
+        style="
+          padding: 8px 20px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+        "
+      >
+        🔄 刷新配额
+      </button>
+    </div>
+  </div>
+
+  <!-- 📊 按天查询新增数据 -->
+  <div
+    class="section"
+    id="rootdata-daily-stats-section"
+    style="margin-top: 30px"
+  >
+    <h2 class="section-title">📊 按天新增数据统计</h2>
+
+    <!-- 日期选择器 -->
+    <div style="text-align: center; margin-bottom: 20px">
+      <label style="font-size: 14px; color: #374151; margin-right: 10px">
+        选择日期：
+      </label>
+      <input
+        type="date"
+        id="rootdata-date-picker"
+        style="
+          padding: 8px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 14px;
+          cursor: pointer;
+        "
+      />
+      <button
+        onclick="loadRootdataDailyStats()"
+        style="
+          margin-left: 10px;
+          padding: 8px 20px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+        "
+      >
+        🔍 查询
+      </button>
+    </div>
+
+    <!-- 加载状态 -->
+    <div
+      id="rootdata-daily-loading"
+      style="text-align: center; padding: 40px; display: none"
+    >
+      <div style="color: #6b7280; font-size: 16px">正在加载数据...</div>
+    </div>
+
+    <!-- 错误提示 -->
+    <div
+      id="rootdata-daily-error"
+      style="
+        display: none;
+        padding: 20px;
+        background: #fef2f2;
+        border-left: 4px solid #ef4444;
+        border-radius: 4px;
+        margin: 20px 0;
+      "
+    >
+      <div style="color: #dc2626; font-weight: 600; margin-bottom: 4px">
+        ⚠️ 加载失败
+      </div>
+      <div
+        style="color: #991b1b; font-size: 13px"
+        id="rootdata-daily-error-message"
+      ></div>
+    </div>
+
+    <!-- 统计概览 -->
+    <div id="rootdata-daily-summary" style="display: none; margin-bottom: 30px">
+      <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr)">
+        <div class="stat-card">
+          <div class="stat-title">新增项目数</div>
+          <div class="stat-value" id="rootdata-new-projects-count">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">新增投资关系数</div>
+          <div class="stat-value" id="rootdata-new-relationships-count">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">查询日期</div>
+          <div
+            class="stat-value"
+            style="font-size: 1.2rem"
+            id="rootdata-query-date"
+          >
+            -
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 切换 (项目 / 投资关系) -->
+    <div id="rootdata-daily-tabs" style="display: none">
+      <div
+        style="
+          display: flex;
+          gap: 10px;
+          margin-bottom: 20px;
+          border-bottom: 2px solid #e5e7eb;
+        "
+      >
+        <button
+          class="rootdata-tab-btn active"
+          data-rootdata-tab="projects"
+          onclick="switchRootdataTab('projects')"
+          style="
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #6b7280;
+            transition: all 0.3s;
+          "
+        >
+          📦 新增项目
+        </button>
+        <button
+          class="rootdata-tab-btn"
+          data-rootdata-tab="relationships"
+          onclick="switchRootdataTab('relationships')"
+          style="
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #6b7280;
+            transition: all 0.3s;
+          "
+        >
+          🔗 新增投资关系
+        </button>
+      </div>
+
+      <!-- 项目列表 -->
+      <div id="rootdata-projects-list" class="rootdata-tab-content">
+        <div
+          id="rootdata-projects-table"
+          style="
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          "
+        >
+          <!-- 表格将通过 JS 动态填充 -->
+        </div>
+      </div>
+
+      <!-- 投资关系列表 -->
+      <div
+        id="rootdata-relationships-list"
+        class="rootdata-tab-content"
+        style="display: none"
+      >
+        <div
+          id="rootdata-relationships-table"
+          style="
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          "
+        >
+          <!-- 表格将通过 JS 动态填充 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 空状态 -->
+    <div
+      id="rootdata-daily-empty"
+      style="
+        display: none;
+        text-align: center;
+        padding: 60px 20px;
+        color: #9ca3af;
+      "
+    >
+      <div style="font-size: 48px; margin-bottom: 10px">📭</div>
+      <div style="font-size: 16px">该日期暂无新增数据</div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .rootdata-tab-btn.active {
+    color: #3b82f6 !important;
+    border-bottom-color: #3b82f6 !important;
+  }
+
+  .rootdata-tab-btn:hover {
+    color: #3b82f6;
+  }
+</style>

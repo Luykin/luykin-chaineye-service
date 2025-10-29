@@ -480,3 +480,372 @@ function hideExportStatus() {
     statusDiv.style.display = "none";
   }
 }
+
+// ============ Rootdata API 配额相关功能 ============
+
+/**
+ * 加载 Rootdata API 配额信息
+ */
+async function loadRootdataQuota() {
+  const loadingEl = document.getElementById("rootdata-loading");
+  const errorEl = document.getElementById("rootdata-error");
+
+  // 显示加载状态
+  if (loadingEl) loadingEl.style.display = "block";
+  if (errorEl) errorEl.style.display = "none";
+
+  try {
+    const response = await fetch("/api/xhunt/stats/rootdata-quota");
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.message || "获取配额失败");
+    }
+
+    const data = result.data;
+
+    // 更新显示
+    updateRootdataQuotaUI(data);
+  } catch (error) {
+    console.error("加载 Rootdata 配额失败:", error);
+
+    // 显示错误信息
+    if (errorEl) {
+      errorEl.style.display = "block";
+      const errorMsg = document.getElementById("rootdata-error-message");
+      if (errorMsg) {
+        errorMsg.textContent = error.message;
+      }
+    }
+  } finally {
+    // 隐藏加载状态
+    if (loadingEl) loadingEl.style.display = "none";
+  }
+}
+
+/**
+ * 更新 Rootdata 配额 UI
+ */
+function updateRootdataQuotaUI(data) {
+  // 更新文本
+  document.getElementById("rootdata-level").textContent =
+    data.level.toUpperCase();
+  document.getElementById("rootdata-remaining").textContent = formatNumber(
+    data.credits
+  );
+  document.getElementById("rootdata-total").textContent = formatNumber(
+    data.totalCredits
+  );
+  document.getElementById("rootdata-used").textContent = formatNumber(
+    data.used
+  );
+  document.getElementById("rootdata-usage-percent").textContent =
+    data.usagePercent + "%";
+
+  // 格式化日期
+  const startDate = new Date(data.periodStart);
+  const endDate = new Date(data.periodEnd);
+  document.getElementById("rootdata-period-start").textContent =
+    startDate.toLocaleDateString("zh-CN");
+  document.getElementById("rootdata-period-end").textContent =
+    endDate.toLocaleDateString("zh-CN");
+
+  // 更新进度条
+  const progressBar = document.getElementById("rootdata-progress-bar");
+  const progressText = document.getElementById("rootdata-progress-text");
+
+  if (progressBar && progressText) {
+    progressBar.style.width = data.usagePercent + "%";
+    progressText.textContent = data.usagePercent + "%";
+
+    // 根据使用率改变颜色
+    if (data.usagePercent >= 90) {
+      progressBar.style.background = "linear-gradient(90deg, #ef4444, #dc2626)"; // 红色
+    } else if (data.usagePercent >= 70) {
+      progressBar.style.background = "linear-gradient(90deg, #f59e0b, #d97706)"; // 橙色
+    } else {
+      progressBar.style.background = "linear-gradient(90deg, #10b981, #3b82f6)"; // 绿蓝渐变
+    }
+  }
+
+  // 更新剩余额度颜色
+  const remainingEl = document.getElementById("rootdata-remaining");
+  if (remainingEl) {
+    if (data.usagePercent >= 90) {
+      remainingEl.style.color = "#ef4444"; // 红色
+    } else if (data.usagePercent >= 70) {
+      remainingEl.style.color = "#f59e0b"; // 橙色
+    } else {
+      remainingEl.style.color = "#10b981"; // 绿色
+    }
+  }
+}
+
+/**
+ * 格式化数字（添加千位分隔符）
+ */
+function formatNumber(num) {
+  if (num === undefined || num === null) return "-";
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// 页面加载时自动获取配额
+document.addEventListener("DOMContentLoaded", function () {
+  // 延迟加载，确保页面已完全渲染
+  setTimeout(() => {
+    loadRootdataQuota();
+  }, 500);
+
+  // 初始化日期选择器为今天
+  const dateInput = document.getElementById("rootdata-date-picker");
+  if (dateInput) {
+    const today = new Date().toISOString().split("T")[0];
+    dateInput.value = today;
+  }
+});
+
+/**
+ * 加载 Rootdata 每日统计数据
+ */
+async function loadRootdataDailyStats() {
+  const dateInput = document.getElementById("rootdata-date-picker");
+  const selectedDate = dateInput.value;
+
+  if (!selectedDate) {
+    alert("请选择日期");
+    return;
+  }
+
+  // 显示加载状态
+  document.getElementById("rootdata-daily-loading").style.display = "block";
+  document.getElementById("rootdata-daily-error").style.display = "none";
+  document.getElementById("rootdata-daily-summary").style.display = "none";
+  document.getElementById("rootdata-daily-tabs").style.display = "none";
+  document.getElementById("rootdata-daily-empty").style.display = "none";
+
+  try {
+    const response = await fetch(
+      `/api/stats/rootdata-daily?date=${selectedDate}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.message || "Failed to load data");
+    }
+
+    const { data } = result;
+
+    // 隐藏加载状态
+    document.getElementById("rootdata-daily-loading").style.display = "none";
+
+    // 检查是否有数据
+    if (data.summary.projectsCount === 0 && data.summary.relationshipsCount === 0) {
+      document.getElementById("rootdata-daily-empty").style.display = "block";
+      return;
+    }
+
+    // 显示统计概览
+    document.getElementById("rootdata-daily-summary").style.display = "block";
+    document.getElementById("rootdata-new-projects-count").textContent =
+      data.summary.projectsCount;
+    document.getElementById("rootdata-new-relationships-count").textContent =
+      data.summary.relationshipsCount;
+    document.getElementById("rootdata-query-date").textContent = selectedDate;
+
+    // 显示 Tab
+    document.getElementById("rootdata-daily-tabs").style.display = "block";
+
+    // 渲染项目列表
+    renderRootdataProjects(data.projects);
+
+    // 渲染投资关系列表
+    renderRootdataRelationships(data.relationships);
+  } catch (error) {
+    console.error("加载 Rootdata 每日数据失败:", error);
+    document.getElementById("rootdata-daily-loading").style.display = "none";
+    document.getElementById("rootdata-daily-error").style.display = "block";
+    document.getElementById("rootdata-daily-error-message").textContent =
+      error.message;
+  }
+}
+
+/**
+ * 渲染项目列表
+ */
+function renderRootdataProjects(projects) {
+  const container = document.getElementById("rootdata-projects-table");
+
+  if (!projects || projects.length === 0) {
+    container.innerHTML = `
+      <div style="padding: 40px; text-align: center; color: #9ca3af;">
+        暂无新增项目
+      </div>
+    `;
+    return;
+  }
+
+  let html = `
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">Logo</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">项目名称</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">描述</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">Twitter</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">创建时间</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">链接</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  projects.forEach((project, index) => {
+    const bgColor = index % 2 === 0 ? "#ffffff" : "#f9fafb";
+    const createdAt = new Date(project.createdAt).toLocaleString("zh-CN");
+    const twitter = project.twitterUrl || project.socialLinks?.x || "-";
+    const twitterDisplay = twitter !== "-" ? 
+      `<a href="${twitter}" target="_blank" style="color: #3b82f6; text-decoration: none;">🔗 查看</a>` : 
+      "-";
+
+    html += `
+      <tr style="background: ${bgColor}; border-bottom: 1px solid #e5e7eb;">
+        <td style="padding: 12px;">
+          ${project.logo ? 
+            `<img src="${project.logo}" alt="${project.projectName}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">` :
+            `<div style="width: 40px; height: 40px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7280;">无</div>`
+          }
+        </td>
+        <td style="padding: 12px; font-weight: 600; color: #111827;">${project.projectName}</td>
+        <td style="padding: 12px; color: #6b7280; font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${project.description || '-'}">
+          ${project.description || "-"}
+        </td>
+        <td style="padding: 12px;">${twitterDisplay}</td>
+        <td style="padding: 12px; color: #6b7280; font-size: 13px;">${createdAt}</td>
+        <td style="padding: 12px;">
+          <a href="${project.projectLink}" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 13px;">🔗 查看详情</a>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `
+      </tbody>
+    </table>
+  `;
+
+  container.innerHTML = html;
+}
+
+/**
+ * 渲染投资关系列表
+ */
+function renderRootdataRelationships(relationships) {
+  const container = document.getElementById("rootdata-relationships-table");
+
+  if (!relationships || relationships.length === 0) {
+    container.innerHTML = `
+      <div style="padding: 40px; text-align: center; color: #9ca3af;">
+        暂无新增投资关系
+      </div>
+    `;
+    return;
+  }
+
+  let html = `
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">投资方</th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #374151;">→</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">被投项目</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">轮次</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">金额</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">主导</th>
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151;">创建时间</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  relationships.forEach((rel, index) => {
+    const bgColor = index % 2 === 0 ? "#ffffff" : "#f9fafb";
+    const createdAt = new Date(rel.createdAt).toLocaleString("zh-CN");
+    const amount = rel.formattedAmount ? `$${rel.formattedAmount.toFixed(2)}M` : "-";
+    const lead = rel.lead ? "✅" : "-";
+
+    html += `
+      <tr style="background: ${bgColor}; border-bottom: 1px solid #e5e7eb;">
+        <td style="padding: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${rel.investorProject?.logo ?
+              `<img src="${rel.investorProject.logo}" alt="${rel.investorProject.projectName}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
+              `<div style="width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb;"></div>`
+            }
+            <div>
+              <div style="font-weight: 600; color: #111827;">${rel.investorProject?.projectName || "-"}</div>
+              <a href="${rel.investorProject?.projectLink || "#"}" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 11px;">查看</a>
+            </div>
+          </div>
+        </td>
+        <td style="padding: 12px; text-align: center; font-size: 20px; color: #9ca3af;">→</td>
+        <td style="padding: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${rel.fundedProject?.logo ?
+              `<img src="${rel.fundedProject.logo}" alt="${rel.fundedProject.projectName}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
+              `<div style="width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb;"></div>`
+            }
+            <div>
+              <div style="font-weight: 600; color: #111827;">${rel.fundedProject?.projectName || "-"}</div>
+              <a href="${rel.fundedProject?.projectLink || "#"}" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 11px;">查看</a>
+            </div>
+          </div>
+        </td>
+        <td style="padding: 12px; color: #6b7280;">${rel.round || "-"}</td>
+        <td style="padding: 12px; color: #10b981; font-weight: 600;">${amount}</td>
+        <td style="padding: 12px; text-align: center;">${lead}</td>
+        <td style="padding: 12px; color: #6b7280; font-size: 13px;">${createdAt}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+      </tbody>
+    </table>
+  `;
+
+  container.innerHTML = html;
+}
+
+/**
+ * 切换 Rootdata Tab（项目 / 投资关系）
+ */
+function switchRootdataTab(tabName) {
+  // 更新 tab 按钮状态
+  document.querySelectorAll(".rootdata-tab-btn").forEach((btn) => {
+    btn.classList.remove("active");
+  });
+  document
+    .querySelector(`[data-rootdata-tab="${tabName}"]`)
+    .classList.add("active");
+
+  // 切换内容显示
+  document.querySelectorAll(".rootdata-tab-content").forEach((content) => {
+    content.style.display = "none";
+  });
+
+  if (tabName === "projects") {
+    document.getElementById("rootdata-projects-list").style.display = "block";
+  } else if (tabName === "relationships") {
+    document.getElementById("rootdata-relationships-list").style.display = "block";
+  }
+}

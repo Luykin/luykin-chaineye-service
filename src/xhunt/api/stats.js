@@ -1379,6 +1379,60 @@ router.get("/daily-cohorts", basicAuth, async (req, res) => {
 });
 
 /**
+ * GET /rootdata-quota
+ * 获取 Rootdata API 配额信息
+ */
+router.get("/rootdata-quota", basicAuth, async (req, res) => {
+  try {
+    const axios = require("axios");
+
+    const response = await axios.post(
+      "https://api.rootdata.com/open/quotacredits",
+      {},
+      {
+        headers: {
+          apikey: "0TpF08MLXdb50VCGx1H8buExoMwgADbR",
+          language: "en",
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      }
+    );
+
+    if (response.data?.result === 200 && response.data?.data) {
+      const data = response.data.data;
+
+      // 计算使用率
+      const used = data.total_credits - data.credits;
+      const usagePercent = ((used / data.total_credits) * 100).toFixed(2);
+
+      res.json({
+        success: true,
+        data: {
+          level: data.level,
+          credits: data.credits, // 剩余额度
+          totalCredits: data.total_credits, // 总额度
+          used: used, // 已使用
+          usagePercent: parseFloat(usagePercent), // 使用率百分比
+          lastMonthCredits: data.last_mo_credits,
+          periodStart: new Date(data.start).toISOString(),
+          periodEnd: new Date(data.end).toISOString(),
+        },
+      });
+    } else {
+      throw new Error("Invalid API response");
+    }
+  } catch (error) {
+    console.error("获取 Rootdata 配额失败:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch Rootdata quota",
+      message: error.message,
+    });
+  }
+});
+
+/**
  * GET /health
  * 健康检查接口（无需认证）
  */
@@ -1388,6 +1442,112 @@ router.get("/health", (req, res) => {
     timestamp: new Date().toISOString(),
     service: "xhunt-stats-api",
   });
+});
+
+/**
+ * GET /api/stats/rootdata-daily
+ * 获取指定日期新增的 Rootdata 项目和投资关系
+ */
+router.get("/rootdata-daily", basicAuth, async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing date parameter",
+        message: "Please provide a date in YYYY-MM-DD format",
+      });
+    }
+
+    // 验证日期格式
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid date format",
+        message: "Date must be in YYYY-MM-DD format",
+      });
+    }
+
+    // 获取 PostgreSQL Fundraising 模型
+    const { Fundraising } = require("../../models/postgres-fundraising");
+    if (!Fundraising) {
+      return res.status(500).json({
+        success: false,
+        error: "Database model not initialized",
+      });
+    }
+
+    // 计算日期范围（UTC 时间）
+    const startDate = new Date(date + "T00:00:00.000Z");
+    const endDate = new Date(date + "T23:59:59.999Z");
+
+    // 查询新增的项目
+    const newProjects = await Fundraising.Project.findAll({
+      where: {
+        createdAt: {
+          [require("sequelize").Op.gte]: startDate,
+          [require("sequelize").Op.lte]: endDate,
+        },
+      },
+      attributes: [
+        "id",
+        "projectName",
+        "projectLink",
+        "logo",
+        "description",
+        "twitterUrl",
+        "socialLinks",
+        "createdAt",
+      ],
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+
+    // 查询新增的投资关系
+    const newRelationships = await Fundraising.InvestmentRelationships.findAll({
+      where: {
+        createdAt: {
+          [require("sequelize").Op.gte]: startDate,
+          [require("sequelize").Op.lte]: endDate,
+        },
+      },
+      include: [
+        {
+          model: Fundraising.Project,
+          as: "investorProject",
+          attributes: ["id", "projectName", "projectLink", "logo"],
+        },
+        {
+          model: Fundraising.Project,
+          as: "fundedProject",
+          attributes: ["id", "projectName", "projectLink", "logo"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.json({
+      success: true,
+      data: {
+        date,
+        projects: newProjects,
+        relationships: newRelationships,
+        summary: {
+          projectsCount: newProjects.length,
+          relationshipsCount: newRelationships.length,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("获取 Rootdata 每日数据失败:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch Rootdata daily data",
+      message: error.message,
+    });
+  }
 });
 
 module.exports = router;

@@ -42,7 +42,6 @@ class RootdataAPIService {
    */
   static async getFundingInfo(projectId) {
     try {
-      console.log(`   📡 调用 Rootdata API: project_id=${projectId}`);
       const response = await axios.post(
         `${ROOTDATA_API_BASE}/get_fac`,
         { project_id: projectId },
@@ -56,23 +55,13 @@ class RootdataAPIService {
         }
       );
 
-      console.log(
-        `   📥 API 响应: result=${response.data?.result}, items=${
-          response.data?.data?.items?.length || 0
-        }`
-      );
-
       if (response.data?.result === 200) {
         return response.data.data;
       }
 
       throw new Error(`API returned result: ${response.data?.result}`);
     } catch (error) {
-      console.error("   ❌ Rootdata API Error (get_fac):", error.message);
-      if (error.response) {
-        console.error(`   响应状态: ${error.response.status}`);
-        console.error(`   响应数据:`, error.response.data);
-      }
+      console.error("❌ Rootdata API Error:", error.message);
       throw error;
     }
   }
@@ -113,17 +102,14 @@ class RootdataDataFixService {
       const projectLink = project.projectLink;
       const cacheKey = `rootdata_verified:${projectLink}`;
 
-      // 1. 检查24小时内是否已修正
+      // 1. 检查20天内是否已修正
       const cached = await redisClient.get(cacheKey);
       if (cached) {
-        console.log(`✅ 使用缓存数据，跳过API调用: ${projectLink}`);
         return JSON.parse(cached);
       }
 
       // 2. 调用 Rootdata API
       console.log(`🔍 验证项目数据: ${projectLink}`);
-      const projectId = RootdataAPIService.extractProjectId(projectLink);
-      console.log(`   提取的 Project ID: ${projectId}`);
 
       const apiData = await RootdataAPIService.getProjectFundingData(
         projectLink
@@ -131,31 +117,28 @@ class RootdataDataFixService {
 
       if (!apiData || !apiData.items || apiData.items.length === 0) {
         console.log(`⚠️ 未找到API数据，跳过修正: ${projectLink}`);
-        console.log(`   API 返回数据:`, JSON.stringify(apiData, null, 2));
         return null;
       }
-      console.log(`🔍 API数据-有几轮: ${apiData.items.length}`);
-      console.log(`开始修正数据... ${project.projectName} ${projectLink}`);
+
       // 3. 修正数据
       await this.fixProjectData(project, apiData, Fundraising);
-      console.log(`修正数据完成... ${project.projectName} ${projectLink}`);
+
       // 4. 清除搜索结果缓存，让下次请求获取修正后的数据
       if (searchCacheKey) {
         try {
           await redisClient.del(searchCacheKey);
-          console.log(`🗑️ 已清除搜索结果缓存: ${searchCacheKey}`);
         } catch (error) {
           console.error("清除缓存失败:", error);
         }
       }
 
-      // 5. 缓存验证结果（24小时）
+      // 5. 缓存验证结果（20天）
       const cacheData = {
         verified: true,
         verifiedAt: Date.now(),
         data: apiData,
       };
-      await redisClient.setEx(cacheKey, 86400, JSON.stringify(cacheData));
+      await redisClient.setEx(cacheKey, 1728000, JSON.stringify(cacheData)); // 20天 = 20 * 24 * 3600
 
       console.log(`✅ 数据修正完成并已缓存: ${projectLink}`);
       return cacheData;
@@ -260,25 +243,6 @@ class RootdataDataFixService {
     });
 
     if (existing) {
-      console.log(
-        `✅ 已存在投资关系，这一个无需新建: ${investorProjectId} -> ${fundedProjectId} (${round})`
-      );
-      //   // 更新现有关系
-      //   await Fundraising.InvestmentRelationships.update(
-      //     {
-      //       amount: relationshipData.amount,
-      //       formattedAmount: relationshipData.formattedAmount,
-      //       date: relationshipData.date,
-      //       lead: relationshipData.lead,
-      //     },
-      //     {
-      //       where: {
-      //         investorProjectId,
-      //         fundedProjectId,
-      //         round,
-      //       },
-      //     }
-      //   );
       return;
     }
 
