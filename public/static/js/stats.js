@@ -800,7 +800,7 @@ function renderRootdataProjects(projects, pagination) {
     // 抓取状态
     const detailFetchedAt = project.detailFetchedAt
       ? new Date(project.detailFetchedAt).toLocaleString("zh-CN")
-      : "未抓取";
+      : "-";
     const failures = project.detailFailuresNumber || 0;
 
     // 判断抓取状态
