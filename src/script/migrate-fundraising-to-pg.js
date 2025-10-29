@@ -12,7 +12,7 @@ const sqliteInstance = new Sequelize({
 const pgInstance = new Sequelize({
   dialect: "postgres",
   host: process.env.PG_HOST || "150.5.158.179",
-  port: parseInt(process.env.PG_PORT || "5433", 10),
+  port: parseInt(process.env.PG_PORT || "5432", 10), // 默认使用 5432 端口
   database: process.env.PG_DATABASE || "luykindatabase",
   username: process.env.PG_USERNAME || "luykin",
   password: process.env.PG_PASSWORD || "wtf.0813",
