@@ -65,6 +65,23 @@ async function migrateFundraisingData() {
 
     // 2. 同步 PostgreSQL 表结构
     console.log("\n📋 同步 PostgreSQL 表结构...");
+
+    // 先检查是否需要修改 projectLink 字段类型
+    const [results] = await pgInstance.query(`
+      SELECT data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'Projects' AND column_name = 'projectLink';
+    `);
+
+    if (results && results.length > 0 && results[0].data_type !== "text") {
+      console.log("   修改 projectLink 字段类型为 TEXT...");
+      await pgInstance.query(`
+        ALTER TABLE "Projects" 
+        ALTER COLUMN "projectLink" TYPE TEXT;
+      `);
+      console.log("   ✅ projectLink 字段类型已修改");
+    }
+
     await pgInstance.sync({ alter: true });
     console.log("✅ 表结构同步完成");
 

@@ -10,7 +10,7 @@ module.exports = (sequelize) => {
         comment: "项目名称，例如 'Ripple' 或 'TradeBlock'",
       },
       projectLink: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: false,
         comment: "项目详情页链接，用于唯一标识项目",
       },
