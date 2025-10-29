@@ -245,22 +245,25 @@ class RootdataDataFixService {
     });
 
     if (existing) {
-      // 更新现有关系
-      await Fundraising.InvestmentRelationships.update(
-        {
-          amount: relationshipData.amount,
-          formattedAmount: relationshipData.formattedAmount,
-          date: relationshipData.date,
-          lead: relationshipData.lead,
-        },
-        {
-          where: {
-            investorProjectId,
-            fundedProjectId,
-            round,
-          },
-        }
+      console.log(
+        `✅ 已存在投资关系，这一个无需新建: ${investorProjectId} -> ${fundedProjectId} (${round})`
       );
+      //   // 更新现有关系
+      //   await Fundraising.InvestmentRelationships.update(
+      //     {
+      //       amount: relationshipData.amount,
+      //       formattedAmount: relationshipData.formattedAmount,
+      //       date: relationshipData.date,
+      //       lead: relationshipData.lead,
+      //     },
+      //     {
+      //       where: {
+      //         investorProjectId,
+      //         fundedProjectId,
+      //         round,
+      //       },
+      //     }
+      //   );
       return;
     }
 
