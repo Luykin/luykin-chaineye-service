@@ -160,7 +160,7 @@
         refreshBtn.disabled = true;
 
         // 调用API获取设备状态
-        const response = await fetch("/xhunt/api/device-status");
+        const response = await fetch("/api/xhunt/stats/device-status");
         const data = await response.json();
 
         if (!response.ok) {
