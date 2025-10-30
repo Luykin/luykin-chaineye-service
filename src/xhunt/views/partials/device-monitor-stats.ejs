@@ -764,21 +764,43 @@
         // 判断是同步还是异步处理
         if (data.sync) {
           // 同步处理完成，显示详细结果
-          let resultText = `✅ 成功清除 ${data.deletedCount} 个缓存键`;
-          if (data.samples && data.samples.length > 0) {
-            resultText += `\n示例: ${data.samples.slice(0, 3).join(", ")}${
-              data.samples.length > 3 ? "..." : ""
-            }`;
+          let resultText =
+            data.message || `✅ 成功清除 ${data.deletedCount} 个缓存键`;
+
+          // 处理超时情况
+          if (data.timeout) {
+            if (data.deletedCount === 0) {
+              resultText = `⚠️ ${data.message || "未找到匹配的缓存键"}`;
+              if (data.scanCount) {
+                resultText += `\n提示: Redis 中键太多，扫描 ${data.scanCount} 次后超时`;
+              }
+              clearCacheResult.style.background = "#fef3c7";
+              clearCacheResult.style.color = "#92400e";
+            } else {
+              resultText = `⚠️ ${data.message || "部分清除完成"}`;
+              clearCacheResult.style.background = "#fed7aa";
+              clearCacheResult.style.color = "#9a3412";
+            }
+          } else {
+            if (data.samples && data.samples.length > 0) {
+              resultText += `\n示例: ${data.samples.slice(0, 3).join(", ")}${
+                data.samples.length > 3 ? "..." : ""
+              }`;
+            }
+            clearCacheResult.style.background = "#d1fae5";
+            clearCacheResult.style.color = "#065f46";
           }
+
           clearCacheResult.textContent = resultText;
           clearCacheResult.style.display = "block";
-          clearCacheResult.style.background = "#d1fae5";
-          clearCacheResult.style.color = "#065f46";
           clearCacheResult.style.whiteSpace = "pre-line";
 
-          console.log(`✅ 清除缓存成功: ${data.deletedCount} 个键`);
+          console.log(`✅ 清除缓存完成: ${data.deletedCount} 个键`);
           if (data.samples) {
             console.log("删除的键:", data.samples);
+          }
+          if (data.timeout) {
+            console.warn(`⚠️ 扫描提前终止（扫描了 ${data.scanCount} 次）`);
           }
         } else {
           // 异步处理，显示进度提示

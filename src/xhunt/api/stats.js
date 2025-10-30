@@ -1954,11 +1954,36 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
     let cursor = "0";
     const allMatchedKeys = [];
     let scanCount = 0;
+    const scanStartTime = Date.now();
+    const MAX_SCAN_TIME = 50000; // 最大扫描时间 50 秒
+    const MAX_SCAN_COUNT = 10000; // 最大扫描次数 10000 次
+    let isTimeout = false;
 
     // 先扫描所有匹配的键
     do {
       scanCount++;
       const scanStart = Date.now();
+
+      // 检查是否超时
+      if (scanStart - scanStartTime > MAX_SCAN_TIME) {
+        console.log(
+          `${logPrefix} ⚠️ SCAN 超时（已扫描 ${scanCount} 次，耗时 ${
+            scanStart - scanStartTime
+          }ms），提前终止`
+        );
+        isTimeout = true;
+        break;
+      }
+
+      // 检查扫描次数是否过多
+      if (scanCount > MAX_SCAN_COUNT) {
+        console.log(
+          `${logPrefix} ⚠️ SCAN 次数超限（已扫描 ${scanCount} 次），提前终止`
+        );
+        isTimeout = true;
+        break;
+      }
+
       const reply = await redisClient.scan(cursor, {
         MATCH: pattern,
         COUNT: 100,
@@ -1981,16 +2006,38 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
       // 每10次扫描输出一次进度
       if (scanCount % 10 === 0) {
         console.log(
-          `${logPrefix} 📊 扫描进度: 已扫描${scanCount}次, 累计找到=${allMatchedKeys.length}个匹配键`
+          `${logPrefix} 📊 扫描进度: 已扫描${scanCount}次, 累计找到=${
+            allMatchedKeys.length
+          }个匹配键, 已耗时=${Date.now() - scanStartTime}ms`
         );
       }
     } while (cursor !== "0");
 
     const totalKeys = allMatchedKeys.length;
     const scanDuration = Date.now() - startTime;
-    console.log(
-      `${logPrefix} ✅ 扫描完成: 共扫描${scanCount}次, 找到${totalKeys}个匹配键, 耗时=${scanDuration}ms`
-    );
+
+    if (isTimeout) {
+      console.log(
+        `${logPrefix} ⚠️ 扫描未完成（超时/超限）: 共扫描${scanCount}次, 找到${totalKeys}个匹配键, 耗时=${scanDuration}ms`
+      );
+    } else {
+      console.log(
+        `${logPrefix} ✅ 扫描完成: 共扫描${scanCount}次, 找到${totalKeys}个匹配键, 耗时=${scanDuration}ms`
+      );
+    }
+
+    // 如果扫描超时，立即返回已找到的结果
+    if (isTimeout && totalKeys === 0 && deletedCount === 0) {
+      return res.json({
+        success: true,
+        input: prefix,
+        deletedCount: 0,
+        message: `未找到匹配的缓存键（扫描了 ${scanCount} 次后超时）`,
+        timeout: true,
+        scanCount: scanCount,
+        sync: true,
+      });
+    }
 
     // 如果匹配的键数量较少（< 500），同步删除并返回结果
     if (totalKeys < 500) {
@@ -2016,7 +2063,11 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
         input: prefix,
         deletedCount: deletedCount,
         samples: deletedKeys.slice(0, 10), // 返回前10个被删除的键作为示例
-        message: `成功清除 ${deletedCount} 个缓存键`,
+        message: isTimeout
+          ? `成功清除 ${deletedCount} 个缓存键（扫描提前终止，可能还有未删除的键）`
+          : `成功清除 ${deletedCount} 个缓存键`,
+        timeout: isTimeout,
+        scanCount: scanCount,
         sync: true,
       });
     }
