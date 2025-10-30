@@ -585,6 +585,8 @@ router.get("/search", async (req, res) => {
         "socialLinks",
         "logo",
         "amount",
+        "twitterUrl",
+        "socialLinks",
       ],
       raw: true,
     });
