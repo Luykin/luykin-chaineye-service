@@ -20,6 +20,82 @@ class FundraisingCrawler extends BaseCrawler {
     // 'axios' = 优先使用方案1（axios + setContent，快速但可能遇到登录问题）
     // 'puppeteer' = 优先使用方案2（puppeteer + goto，慢但支持cookie登录）
     this.fetchStrategy = "puppeteer"; // 可选值: 'axios' | 'puppeteer'
+
+    // 【配置】统一的登录cookie配置（只维护一份）
+    this.loginCookies = {
+      // Puppeteer格式（用于setCookie）
+      forPuppeteer: [
+        {
+          name: "_ga",
+          value: "GA1.1.1402673237.1726906805",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "i18n_redirected",
+          value: "en",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.theme",
+          value: "light",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.uuid",
+          value: "d61dd521-025b-4858-9a4d-2879bd62c381",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.currency",
+          value: "FIAT_USD",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.auth._token.local1",
+          value: "false",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.auth._token_expiration.local1",
+          value: "false",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.auth.strategy",
+          value: "local3",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.auth._token.local3",
+          value: "f9z34n5sby-70155-58-k68qapsgjb-1761787942202",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.auth._token_expiration.local3",
+          value: "1764379950916",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "_ga_TXPS04VGH2",
+          value: "GS2.1.s1761793200$o126$g1$t1761795302$j43$l0$h0",
+          domain: ".rootdata.com",
+        },
+      ],
+      // Axios格式（用于Cookie header字符串）
+      forAxios: [
+        "_ga=GA1.1.1402673237.1726906805",
+        "i18n_redirected=en",
+        "rd_v1.theme=light",
+        "rd_v1.uuid=d61dd521-025b-4858-9a4d-2879bd62c381",
+        "rd_v1.currency=FIAT_USD",
+        "rd_v1.auth._token.local1=false",
+        "rd_v1.auth._token_expiration.local1=false",
+        "rd_v1.auth.strategy=local3",
+        "rd_v1.auth._token.local3=f9z34n5sby-70155-58-k68qapsgjb-1761787942202",
+        "rd_v1.auth._token_expiration.local3=1764379950916",
+        "_ga_TXPS04VGH2=GS2.1.s1761793200$o126$g1$t1761795302$j43$l0$h0",
+      ].join("; "),
+    };
   }
 
   /**
@@ -723,20 +799,8 @@ class FundraisingCrawler extends BaseCrawler {
             console.log(`[详情] axios 请求尝试 ${attemptNum}/3`);
           }
           try {
-            // 【新增】准备cookie字符串
-            const cookieString = [
-              "_ga=GA1.1.1402673237.1726906805",
-              "i18n_redirected=en",
-              "rd_v1.theme=light",
-              "rd_v1.uuid=d61dd521-025b-4858-9a4d-2879bd62c381",
-              "rd_v1.currency=FIAT_USD",
-              "rd_v1.auth._token.local1=false",
-              "rd_v1.auth._token_expiration.local1=false",
-              "rd_v1.auth.strategy=local3",
-              "rd_v1.auth._token.local3=f9z34n5sby-70155-58-k68qapsgjb-1761787942202",
-              "rd_v1.auth._token_expiration.local3=1764379950916",
-              "_ga_TXPS04VGH2=GS2.1.s1761793200$o126$g1$t1761795302$j43$l0$h0",
-            ].join("; ");
+            // 使用统一的cookie配置
+            const cookieString = this.loginCookies.forAxios;
 
             if (isManualTrigger) {
               console.log(
@@ -883,61 +947,17 @@ class FundraisingCrawler extends BaseCrawler {
     }
 
     try {
-      // 【新增】设置cookie来模拟登录状态
+      // 设置cookie来模拟登录状态（使用统一配置）
       if (isManualTrigger) {
         console.log(`[详情] 设置登录cookie...`);
       }
 
-      const cookies = [
-        {
-          name: "_ga",
-          value: "GA1.1.1402673237.1726906805",
-          domain: ".rootdata.com",
-        },
-        { name: "i18n_redirected", value: "en", domain: ".rootdata.com" },
-        { name: "rd_v1.theme", value: "light", domain: ".rootdata.com" },
-        {
-          name: "rd_v1.uuid",
-          value: "d61dd521-025b-4858-9a4d-2879bd62c381",
-          domain: ".rootdata.com",
-        },
-        { name: "rd_v1.currency", value: "FIAT_USD", domain: ".rootdata.com" },
-        {
-          name: "rd_v1.auth._token.local1",
-          value: "false",
-          domain: ".rootdata.com",
-        },
-        {
-          name: "rd_v1.auth._token_expiration.local1",
-          value: "false",
-          domain: ".rootdata.com",
-        },
-        {
-          name: "rd_v1.auth.strategy",
-          value: "local3",
-          domain: ".rootdata.com",
-        },
-        {
-          name: "rd_v1.auth._token.local3",
-          value: "f9z34n5sby-70155-58-k68qapsgjb-1761787942202",
-          domain: ".rootdata.com",
-        },
-        {
-          name: "rd_v1.auth._token_expiration.local3",
-          value: "1764379950916",
-          domain: ".rootdata.com",
-        },
-        {
-          name: "_ga_TXPS04VGH2",
-          value: "GS2.1.s1761793200$o126$g1$t1761795302$j43$l0$h0",
-          domain: ".rootdata.com",
-        },
-      ];
-
-      await _page.setCookie(...cookies);
+      await _page.setCookie(...this.loginCookies.forPuppeteer);
 
       if (isManualTrigger) {
-        console.log(`[详情] Cookie设置完成，共${cookies.length}个`);
+        console.log(
+          `[详情] Cookie设置完成，共${this.loginCookies.forPuppeteer.length}个`
+        );
         console.log(`[详情] 启用请求拦截...`);
       }
       // 启用请求拦截，阻止重定向到登录页
@@ -1628,96 +1648,141 @@ class FundraisingCrawler extends BaseCrawler {
         );
       }
 
-      // 2. 点击 VC Tab 并抓取
+      // 2. 点击 VC Tab 并抓取（仅在投资者详情页执行）
+      const currentUrl = _page.url();
+      const isInvestorDetailPage = currentUrl.includes("Investors/detail/");
+
       if (isManualTrigger) {
-        console.log(`[详情] 点击 VC Tab...`);
+        console.log(`[详情] 当前页面URL: ${currentUrl}`);
+        console.log(
+          `[详情] 是否为投资者详情页: ${
+            isInvestorDetailPage ? "是" : "否，跳过VC Tab"
+          }`
+        );
       }
 
-      // 使用 dispatchEvent 触发完整的点击事件
-      try {
-        // 找到并点击 VC 按钮
-        await _page.evaluate(() => {
-          const buttons = Array.from(
-            document.querySelectorAll(".investment .tabs button")
-          );
-          const vcBtn = buttons.find((btn) => btn.textContent.includes("VC"));
-          if (vcBtn) {
-            // 使用 dispatchEvent 触发完整事件（包括冒泡），确保 Vue/React 事件监听器被触发
-            vcBtn.dispatchEvent(
-              new MouseEvent("click", {
-                view: window,
-                bubbles: true,
-                cancelable: true,
-              })
+      if (isInvestorDetailPage) {
+        // 只在投资者详情页才抓取VC项目
+        if (isManualTrigger) {
+          console.log(`[详情] 准备点击 VC Tab...`);
+        }
+
+        // 【关键】在点击VC Tab之前重新设置cookie，确保登录状态（使用统一配置）
+        try {
+          if (isManualTrigger) {
+            console.log(`[详情] 重新设置登录cookie（确保VC访问权限）...`);
+          }
+
+          await _page.setCookie(...this.loginCookies.forPuppeteer);
+
+          if (isManualTrigger) {
+            console.log(
+              `[详情] Cookie重新设置完成，共${this.loginCookies.forPuppeteer.length}个`
             );
           }
-        });
-
-        // 等待内容动态加载
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-
-        if (isManualTrigger) {
-          console.log(`[详情] VC Tab 已点击`);
+        } catch (cookieError) {
+          if (isManualTrigger) {
+            console.log(
+              `[详情] ⚠️  Cookie重新设置失败: ${cookieError.message}`
+            );
+          }
         }
-      } catch (e) {
-        if (isManualTrigger) {
-          console.log(`[详情] VC Tab 点击失败: ${e.message}`);
-        }
-      }
 
-      const vcProjects = await _page.evaluate(() => {
-        const projects = [];
-        const items = document.querySelectorAll(
-          ".investment .row.list .item a.card"
-        );
-        items.forEach((item) => {
-          let link = item.getAttribute("href") || item.href;
-          const name = item.querySelector("h2")?.textContent?.trim();
+        // 使用 dispatchEvent 触发完整的点击事件
+        try {
+          if (isManualTrigger) {
+            console.log(`[详情] 开始点击 VC Tab...`);
+          }
 
-          // 确保是绝对路径
-          if (link && !link.startsWith("http")) {
-            try {
-              link = new URL(link, "https://www.rootdata.com").href;
-            } catch (e) {
-              // URL 解析失败
+          // 找到并点击 VC 按钮
+          await _page.evaluate(() => {
+            const buttons = Array.from(
+              document.querySelectorAll(".investment .tabs button")
+            );
+            const vcBtn = buttons.find((btn) => btn.textContent.includes("VC"));
+            if (vcBtn) {
+              // 使用 dispatchEvent 触发完整事件（包括冒泡），确保 Vue/React 事件监听器被触发
+              vcBtn.dispatchEvent(
+                new MouseEvent("click", {
+                  view: window,
+                  bubbles: true,
+                  cancelable: true,
+                })
+              );
             }
+          });
+
+          // 等待内容动态加载
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+
+          if (isManualTrigger) {
+            console.log(`[详情] VC Tab 已点击`);
           }
-
-          if (link && name) {
-            projects.push({
-              projectLink: link,
-              projectName: name,
-              type: "vc",
-            });
+        } catch (e) {
+          if (isManualTrigger) {
+            console.log(`[详情] VC Tab 点击失败: ${e.message}`);
           }
-        });
-        return projects;
-      });
-
-      if (isManualTrigger) {
-        console.log(`[详情] VC 项目数: ${vcProjects.length}`);
-      }
-
-      // 去重后添加 VC 项目
-      let vcAdded = 0;
-      for (const proj of vcProjects) {
-        if (
-          !addedLinks.has(proj.projectLink) &&
-          !addedNames.has(proj.projectName)
-        ) {
-          allProjects.push(proj);
-          addedLinks.add(proj.projectLink);
-          addedNames.add(proj.projectName);
-          vcAdded++;
         }
-      }
 
-      if (isManualTrigger && vcAdded < vcProjects.length) {
-        console.log(
-          `[详情] VC 去重后: ${vcAdded} 个（过滤了 ${
-            vcProjects.length - vcAdded
-          } 个重复）`
-        );
+        const vcProjects = await _page.evaluate(() => {
+          const projects = [];
+          const items = document.querySelectorAll(
+            ".investment .row.list .item a.card"
+          );
+          items.forEach((item) => {
+            let link = item.getAttribute("href") || item.href;
+            const name = item.querySelector("h2")?.textContent?.trim();
+
+            // 确保是绝对路径
+            if (link && !link.startsWith("http")) {
+              try {
+                link = new URL(link, "https://www.rootdata.com").href;
+              } catch (e) {
+                // URL 解析失败
+              }
+            }
+
+            if (link && name) {
+              projects.push({
+                projectLink: link,
+                projectName: name,
+                type: "vc",
+              });
+            }
+          });
+          return projects;
+        });
+
+        if (isManualTrigger) {
+          console.log(`[详情] VC 项目数: ${vcProjects.length}`);
+        }
+
+        // 去重后添加 VC 项目
+        let vcAdded = 0;
+        for (const proj of vcProjects) {
+          if (
+            !addedLinks.has(proj.projectLink) &&
+            !addedNames.has(proj.projectName)
+          ) {
+            allProjects.push(proj);
+            addedLinks.add(proj.projectLink);
+            addedNames.add(proj.projectName);
+            vcAdded++;
+          }
+        }
+
+        if (isManualTrigger && vcAdded < vcProjects.length) {
+          console.log(
+            `[详情] VC 去重后: ${vcAdded} 个（过滤了 ${
+              vcProjects.length - vcAdded
+            } 个重复）`
+          );
+        }
+      } else {
+        // 非投资者详情页，跳过VC Tab
+        if (isManualTrigger) {
+          console.log(`[详情] ⏭️  非投资者详情页，跳过 VC Tab 抓取`);
+        }
       }
 
       if (isManualTrigger) {
