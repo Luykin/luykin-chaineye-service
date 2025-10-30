@@ -792,17 +792,20 @@ class FundraisingCrawler extends BaseCrawler {
 
       // 使用 setContent，增加超时时间以处理大 HTML
       await _page.setContent(htmlStr, {
-        waitUntil: "domcontentloaded",
+        waitUntil: "networkidle0", // 等待网络空闲（包括所有 script 执行）
         timeout: 60000, // 60秒超时
       });
 
       if (isManualTrigger) {
         console.log(`[详情] setContent 完成`);
-        console.log(`[详情] 等待 .base_info 元素...`);
+        console.log(`[详情] 等待 JavaScript 初始化...`);
       }
 
       // 等待关键元素加载
       await _page.waitForSelector(".base_info", { timeout: 20000 });
+
+      // 额外等待 JavaScript 完全初始化（Vue/React 等框架需要时间）
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       if (isManualTrigger) {
         console.log(`[详情] 页面加载完成`);
@@ -1386,21 +1389,52 @@ class FundraisingCrawler extends BaseCrawler {
       }
 
       const allProjects = [];
+      const addedLinks = new Set(); // 用于去重 projectLink
+      const addedNames = new Set(); // 用于去重 projectName
 
       // 1. 点击 Portfolio Tab 并抓取
       if (isManualTrigger) {
         console.log(`[详情] 点击 Portfolio Tab...`);
       }
-      await _page.evaluate(() => {
-        const buttons = document.querySelectorAll(".investment .tabs button");
-        for (const btn of buttons) {
-          if (btn.textContent.includes("Portfolio")) {
-            btn.click();
-            break;
+
+      // 使用 dispatchEvent 触发完整的点击事件（而不是简单的 btn.click()）
+      try {
+        // 等待 tab 按钮出现并可交互
+        await _page.waitForSelector(".investment .tabs button", {
+          timeout: 5000,
+        });
+
+        // 找到并点击 Portfolio 按钮
+        await _page.evaluate(() => {
+          const buttons = Array.from(
+            document.querySelectorAll(".investment .tabs button")
+          );
+          const portfolioBtn = buttons.find((btn) =>
+            btn.textContent.includes("Portfolio")
+          );
+          if (portfolioBtn) {
+            // 使用 dispatchEvent 触发完整事件（包括冒泡），确保 Vue/React 事件监听器被触发
+            portfolioBtn.dispatchEvent(
+              new MouseEvent("click", {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+              })
+            );
           }
+        });
+
+        // 等待内容动态加载
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        if (isManualTrigger) {
+          console.log(`[详情] Portfolio Tab 已点击`);
         }
-      });
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // 等待加载
+      } catch (e) {
+        if (isManualTrigger) {
+          console.log(`[详情] Portfolio Tab 点击失败: ${e.message}`);
+        }
+      }
 
       const portfolioProjects = await _page.evaluate(() => {
         const projects = [];
@@ -1434,22 +1468,65 @@ class FundraisingCrawler extends BaseCrawler {
       if (isManualTrigger) {
         console.log(`[详情] Portfolio 项目数: ${portfolioProjects.length}`);
       }
-      allProjects.push(...portfolioProjects);
+
+      // 去重后添加 Portfolio 项目
+      let portfolioAdded = 0;
+      for (const proj of portfolioProjects) {
+        if (
+          !addedLinks.has(proj.projectLink) &&
+          !addedNames.has(proj.projectName)
+        ) {
+          allProjects.push(proj);
+          addedLinks.add(proj.projectLink);
+          addedNames.add(proj.projectName);
+          portfolioAdded++;
+        }
+      }
+
+      if (isManualTrigger && portfolioAdded < portfolioProjects.length) {
+        console.log(
+          `[详情] Portfolio 去重后: ${portfolioAdded} 个（过滤了 ${
+            portfolioProjects.length - portfolioAdded
+          } 个重复）`
+        );
+      }
 
       // 2. 点击 VC Tab 并抓取
       if (isManualTrigger) {
         console.log(`[详情] 点击 VC Tab...`);
       }
-      await _page.evaluate(() => {
-        const buttons = document.querySelectorAll(".investment .tabs button");
-        for (const btn of buttons) {
-          if (btn.textContent.includes("VC")) {
-            btn.click();
-            break;
+
+      // 使用 dispatchEvent 触发完整的点击事件
+      try {
+        // 找到并点击 VC 按钮
+        await _page.evaluate(() => {
+          const buttons = Array.from(
+            document.querySelectorAll(".investment .tabs button")
+          );
+          const vcBtn = buttons.find((btn) => btn.textContent.includes("VC"));
+          if (vcBtn) {
+            // 使用 dispatchEvent 触发完整事件（包括冒泡），确保 Vue/React 事件监听器被触发
+            vcBtn.dispatchEvent(
+              new MouseEvent("click", {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+              })
+            );
           }
+        });
+
+        // 等待内容动态加载
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        if (isManualTrigger) {
+          console.log(`[详情] VC Tab 已点击`);
         }
-      });
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // 等待加载
+      } catch (e) {
+        if (isManualTrigger) {
+          console.log(`[详情] VC Tab 点击失败: ${e.message}`);
+        }
+      }
 
       const vcProjects = await _page.evaluate(() => {
         const projects = [];
@@ -1483,7 +1560,34 @@ class FundraisingCrawler extends BaseCrawler {
       if (isManualTrigger) {
         console.log(`[详情] VC 项目数: ${vcProjects.length}`);
       }
-      allProjects.push(...vcProjects);
+
+      // 去重后添加 VC 项目
+      let vcAdded = 0;
+      for (const proj of vcProjects) {
+        if (
+          !addedLinks.has(proj.projectLink) &&
+          !addedNames.has(proj.projectName)
+        ) {
+          allProjects.push(proj);
+          addedLinks.add(proj.projectLink);
+          addedNames.add(proj.projectName);
+          vcAdded++;
+        }
+      }
+
+      if (isManualTrigger && vcAdded < vcProjects.length) {
+        console.log(
+          `[详情] VC 去重后: ${vcAdded} 个（过滤了 ${
+            vcProjects.length - vcAdded
+          } 个重复）`
+        );
+      }
+
+      if (isManualTrigger) {
+        console.log(
+          `[详情] 总计对外投资项目: ${allProjects.length} 个（去重后）`
+        );
+      }
 
       return allProjects;
     } catch (error) {
