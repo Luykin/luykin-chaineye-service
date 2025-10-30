@@ -140,6 +140,10 @@ const rateLimiter = rateLimit({
   max: 1500, // 限制请求次数
   standardHeaders: true,
   legacyHeaders: false,
+  // 跳过内部监控路由
+  skip: (req) => {
+    return req.path.startsWith("/api/xhunt/stats");
+  },
   handler: (req, res) => {
     res.status(429).json({
       error: "请求过于频繁，请稍后再试",

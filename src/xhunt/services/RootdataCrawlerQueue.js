@@ -246,8 +246,8 @@ class RootdataCrawlerQueue {
       browser = result.browser;
       page = result.page;
 
-      // 执行爬取（不打印详细日志）
-      await crawler.scrapeAndUpdateProjectDetails(fullProject, page, false);
+      // 执行爬取 = 等同于手动触发爬虫
+      await crawler.scrapeAndUpdateProjectDetails(fullProject, page, true);
     } finally {
       // 确保浏览器被关闭
       if (browser) {
