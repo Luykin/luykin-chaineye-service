@@ -64,7 +64,9 @@ class RootdataAPIService {
 
       throw new Error(`API returned result: ${response.data?.result}`);
     } catch (error) {
-      console.error("❌ Rootdata API Error:", error.message);
+      console.error(
+        `[rootdata 获取融资信息] ❌ ${error.message} projectId: ${projectId}, api: ${ROOTDATA_API_BASE}/get_fac`
+      );
       throw error;
     }
   }
