@@ -671,20 +671,6 @@ router.get("/search", async (req, res) => {
       0
     );
 
-    // 额外计算：按轮次分组的融资额
-    const roundsFunding = {};
-    Object.values(groupedInvestments).forEach((group) => {
-      const amount = group.formattedAmount || 0;
-      const roundKey = group.round || "----";
-
-      // 累加同一轮次的金额（如果有多个日期记录）
-      if (roundsFunding[roundKey]) {
-        roundsFunding[roundKey] += amount;
-      } else {
-        roundsFunding[roundKey] = amount;
-      }
-    });
-
     // 构造 investors 数据并去重
     const rawInvestors = Object.values(groupedInvestments).flatMap((group) =>
       group.investors.map((investor) => ({
@@ -711,10 +697,24 @@ router.get("/search", async (req, res) => {
         .values()
     );
 
+    // 移除 grouped_investments 中每一项的 investors 字段
+    const groupedInvestmentsWithoutInvestors = Object.entries(
+      groupedInvestments
+    ).reduce((acc, [date, group]) => {
+      acc[date] = {
+        round: group.round,
+        amount: group.amount,
+        valuation: group.valuation,
+        formattedAmount: group.formattedAmount,
+        formattedValuation: group.formattedValuation,
+      };
+      return acc;
+    }, {});
+
     const investedData = {
       investors,
       total_funding: totalFunding,
-      rounds_funding: roundsFunding, // 按轮次分组的融资额，格式：{ "Seed": 5000000, "Series A": 10000000 }
+      grouped_investments: groupedInvestmentsWithoutInvestors,
     };
 
     // 9. 处理 investor（投出的项目）数据
