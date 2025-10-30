@@ -1,130 +1,217 @@
 <!-- 在线用户统计 -->
 <div class="stats-section">
-    <div class="section">
-        <h2 class="section-title">🟢 在线用户</h2>
-        <p style="color: #6b7280; margin-bottom: 20px; font-size: 14px;">
-            显示最近20分钟内有活动的已登录用户，按最后使用时间排序
-        </p>
+  <div class="section">
+    <h2 class="section-title">🟢 在线用户</h2>
+    <p style="color: #6b7280; margin-bottom: 20px; font-size: 14px">
+      显示最近20分钟内有活动的已登录用户，按最后使用时间排序
+    </p>
 
-        <!-- 统计信息 -->
-        <div id="online-summary" style="display: none; margin-bottom: 30px;">
-            <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-                <div class="stat-card">
-                    <div class="stat-title">在线用户数</div>
-                    <div class="stat-value" id="online-total-count">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-title">当前页</div>
-                    <div class="stat-value" id="online-current-page">1</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-title">总页数</div>
-                    <div class="stat-value" id="online-total-pages">1</div>
-                </div>
-            </div>
+    <!-- 统计信息 -->
+    <div id="online-summary" style="display: none; margin-bottom: 30px">
+      <div
+        class="stats-grid"
+        style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))"
+      >
+        <div class="stat-card">
+          <div class="stat-title">在线用户数</div>
+          <div class="stat-value" id="online-total-count">0</div>
         </div>
-
-        <!-- 用户列表 -->
-        <div id="online-users-container" style="display: none;">
-            <div style="margin-bottom: 20px; display: flex; justify-content: between; align-items: center;">
-                <h3 style="font-size: 1.3rem; color: #374151; margin: 0;">用户列表</h3>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input 
-                        type="text" 
-                        id="online-search" 
-                        placeholder="搜索用户名..." 
-                        style="
-                            padding: 6px 12px;
-                            border: 1px solid #d1d5db;
-                            border-radius: 4px;
-                            font-size: 14px;
-                            width: 200px;
-                        "
-                    >
-                    <button 
-                        id="refresh-online-users" 
-                        style="
-                            padding: 6px 12px;
-                            background: #3b82f6;
-                            color: white;
-                            border: none;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-size: 14px;
-                        "
-                        onmouseover="this.style.background='#2563eb'"
-                        onmouseout="this.style.background='#3b82f6'"
-                    >
-                        刷新
-                    </button>
-                </div>
-            </div>
-
-            <div class="table-container">
-                <table id="online-users-table" style="width: 100%; border-collapse: collapse; background: white;">
-                    <thead style="background: #f9fafb;">
-                        <tr>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户名</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">显示名称</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">推特ID</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">最后使用时间</th>
-                        </tr>
-                    </thead>
-                    <tbody id="online-users-tbody">
-                        <!-- 数据将通过JavaScript动态填充 -->
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- 分页控件 -->
-            <div id="online-pagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px;">
-                <!-- 分页控件将通过JavaScript动态填充 -->
-            </div>
+        <div class="stat-card">
+          <div class="stat-title">当前页</div>
+          <div class="stat-value" id="online-current-page">1</div>
         </div>
-
-        <!-- 无数据提示 -->
-        <div id="online-no-data" style="display: none; text-align: center; padding: 60px 20px; color: #6b7280;">
-            <div style="font-size: 48px; margin-bottom: 20px;">🟢</div>
-            <h3 style="margin-bottom: 10px; color: #374151;">暂无在线用户</h3>
-            <p>最近20分钟内没有用户活动</p>
+        <div class="stat-card">
+          <div class="stat-title">总页数</div>
+          <div class="stat-value" id="online-total-pages">1</div>
         </div>
-
-        <!-- 加载状态 -->
-        <div id="online-loading" style="display: none; text-align: center; padding: 40px 20px; color: #6b7280;">
-            <div style="display: inline-block; width: 24px; height: 24px; border: 3px solid #3b82f6; border-top: 3px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px;"></div>
-            <p>加载中...</p>
-        </div>
+      </div>
     </div>
+
+    <!-- 用户列表 -->
+    <div id="online-users-container" style="display: none">
+      <div
+        style="
+          margin-bottom: 20px;
+          display: flex;
+          justify-content: between;
+          align-items: center;
+        "
+      >
+        <h3 style="font-size: 1.3rem; color: #374151; margin: 0">用户列表</h3>
+        <div style="display: flex; gap: 10px; align-items: center">
+          <input
+            type="text"
+            id="online-search"
+            placeholder="搜索用户名..."
+            style="
+              padding: 6px 12px;
+              border: 1px solid #d1d5db;
+              border-radius: 4px;
+              font-size: 14px;
+              width: 200px;
+            "
+          />
+          <button
+            id="refresh-online-users"
+            style="
+              padding: 6px 12px;
+              background: #3b82f6;
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 14px;
+            "
+            onmouseover="this.style.background='#2563eb'"
+            onmouseout="this.style.background='#3b82f6'"
+          >
+            刷新
+          </button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table
+          id="online-users-table"
+          style="width: 100%; border-collapse: collapse; background: white"
+        >
+          <thead style="background: #f9fafb">
+            <tr>
+              <th
+                style="
+                  padding: 12px;
+                  text-align: left;
+                  border-bottom: 1px solid #e5e7eb;
+                  font-weight: 600;
+                "
+              >
+                用户名
+              </th>
+              <th
+                style="
+                  padding: 12px;
+                  text-align: left;
+                  border-bottom: 1px solid #e5e7eb;
+                  font-weight: 600;
+                "
+              >
+                显示名称
+              </th>
+              <th
+                style="
+                  padding: 12px;
+                  text-align: left;
+                  border-bottom: 1px solid #e5e7eb;
+                  font-weight: 600;
+                "
+              >
+                推特ID
+              </th>
+              <th
+                style="
+                  padding: 12px;
+                  text-align: left;
+                  border-bottom: 1px solid #e5e7eb;
+                  font-weight: 600;
+                "
+              >
+                最后使用时间
+              </th>
+            </tr>
+          </thead>
+          <tbody id="online-users-tbody">
+            <!-- 数据将通过JavaScript动态填充 -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 分页控件 -->
+      <div
+        id="online-pagination"
+        style="
+          margin-top: 20px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 10px;
+        "
+      >
+        <!-- 分页控件将通过JavaScript动态填充 -->
+      </div>
+    </div>
+
+    <!-- 无数据提示 -->
+    <div
+      id="online-no-data"
+      style="
+        display: none;
+        text-align: center;
+        padding: 60px 20px;
+        color: #6b7280;
+      "
+    >
+      <div style="font-size: 48px; margin-bottom: 20px">🟢</div>
+      <h3 style="margin-bottom: 10px; color: #374151">暂无在线用户</h3>
+      <p>最近20分钟内没有用户活动</p>
+    </div>
+
+    <!-- 加载状态 -->
+    <div
+      id="online-loading"
+      style="
+        display: none;
+        text-align: center;
+        padding: 40px 20px;
+        color: #6b7280;
+      "
+    >
+      <div
+        style="
+          display: inline-block;
+          width: 24px;
+          height: 24px;
+          border: 3px solid #3b82f6;
+          border-top: 3px solid transparent;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin-bottom: 10px;
+        "
+      ></div>
+      <p>加载中...</p>
+    </div>
+  </div>
 </div>
 
 <style>
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
 
-.online-user-row:hover {
+  .online-user-row:hover {
     background-color: #f3f4f6;
-}
+  }
 
-
-
-.online-user-name {
+  .online-user-name {
     font-weight: 600;
     color: #374151;
-}
+  }
 
-.online-user-handle {
+  .online-user-handle {
     color: #6b7280;
     font-size: 14px;
-}
+  }
 
-.online-user-time {
+  .online-user-time {
     color: #6b7280;
     font-size: 14px;
-}
+  }
 
-.pagination-btn {
+  .pagination-btn {
     padding: 8px 12px;
     border: 1px solid #d1d5db;
     background: white;
@@ -133,149 +220,155 @@
     border-radius: 4px;
     font-size: 14px;
     transition: all 0.2s;
-}
+  }
 
-.pagination-btn:hover:not(:disabled) {
+  .pagination-btn:hover:not(:disabled) {
     background: #f3f4f6;
     border-color: #9ca3af;
-}
+  }
 
-.pagination-btn:disabled {
+  .pagination-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-}
+  }
 
-.pagination-btn.active {
+  .pagination-btn.active {
     background: #3b82f6;
     color: white;
     border-color: #3b82f6;
-}
+  }
 
-.pagination-info {
+  .pagination-info {
     color: #6b7280;
     font-size: 14px;
     margin: 0 15px;
-}
+  }
 </style>
 
 <script>
-// 在线用户相关JavaScript
-document.addEventListener('DOMContentLoaded', function() {
-    const summaryDiv = document.getElementById('online-summary');
-    const containerDiv = document.getElementById('online-users-container');
-    const noDataDiv = document.getElementById('online-no-data');
-    const loadingDiv = document.getElementById('online-loading');
-    const searchInput = document.getElementById('online-search');
-    const refreshButton = document.getElementById('refresh-online-users');
-    
+  // 在线用户相关JavaScript
+  document.addEventListener("DOMContentLoaded", function () {
+    const summaryDiv = document.getElementById("online-summary");
+    const containerDiv = document.getElementById("online-users-container");
+    const noDataDiv = document.getElementById("online-no-data");
+    const loadingDiv = document.getElementById("online-loading");
+    const searchInput = document.getElementById("online-search");
+    const refreshButton = document.getElementById("refresh-online-users");
+
     let currentOnlineData = [];
     let filteredOnlineData = [];
     let currentPage = 1;
     let totalPages = 1;
     let totalCount = 0;
-    
+
     // 搜索功能
-    searchInput.addEventListener('input', filterOnlineData);
-    
+    searchInput.addEventListener("input", filterOnlineData);
+
     // 刷新功能
-    refreshButton.addEventListener('click', loadOnlineUsers);
-    
+    refreshButton.addEventListener("click", loadOnlineUsers);
+
     // 页面加载时自动加载数据
     loadOnlineUsers();
-    
+
     async function loadOnlineUsers(page = 1) {
-        // 显示加载状态
-        loadingDiv.style.display = 'block';
-        summaryDiv.style.display = 'none';
-        containerDiv.style.display = 'none';
-        noDataDiv.style.display = 'none';
-        
-        try {
-            const response = await fetch(`/api/xhunt/stats/online-users?page=${page}&limit=100`);
-            const result = await response.json();
-            
-            if (result.success) {
-                currentOnlineData = result.data.users;
-                filteredOnlineData = [...currentOnlineData];
-                currentPage = result.data.pagination.currentPage;
-                totalPages = result.data.pagination.totalPages;
-                totalCount = result.data.pagination.totalCount;
-                
-                updateOnlineSummary();
-                updateOnlineTable();
-                updatePagination();
-                
-                if (totalCount > 0) {
-                    summaryDiv.style.display = 'block';
-                    containerDiv.style.display = 'block';
-                    noDataDiv.style.display = 'none';
-                } else {
-                    summaryDiv.style.display = 'none';
-                    containerDiv.style.display = 'none';
-                    noDataDiv.style.display = 'block';
-                }
-            } else {
-                alert('加载数据失败: ' + result.error);
-            }
-        } catch (error) {
-            console.error('Error loading online users:', error);
-            alert('加载数据失败，请检查网络连接');
-        } finally {
-            // 隐藏加载状态
-            loadingDiv.style.display = 'none';
-        }
-    }
-    
-    function updateOnlineSummary() {
-        document.getElementById('online-total-count').textContent = totalCount.toLocaleString();
-        document.getElementById('online-current-page').textContent = currentPage;
-        document.getElementById('online-total-pages').textContent = totalPages;
-    }
-    
-    function filterOnlineData() {
-        const searchTerm = searchInput.value.toLowerCase();
-        
-        if (!searchTerm) {
-            filteredOnlineData = [...currentOnlineData];
+      // 显示加载状态
+      loadingDiv.style.display = "block";
+      summaryDiv.style.display = "none";
+      containerDiv.style.display = "none";
+      noDataDiv.style.display = "none";
+
+      try {
+        const response = await fetch(
+          `/api/xhunt/stats/online-users?page=${page}&limit=100`
+        );
+        const result = await response.json();
+
+        if (result.success) {
+          currentOnlineData = result.data.users;
+          filteredOnlineData = [...currentOnlineData];
+          currentPage = result.data.pagination.currentPage;
+          totalPages = result.data.pagination.totalPages;
+          totalCount = result.data.pagination.totalCount;
+
+          updateOnlineSummary();
+          updateOnlineTable();
+          updatePagination();
+
+          if (totalCount > 0) {
+            summaryDiv.style.display = "block";
+            containerDiv.style.display = "block";
+            noDataDiv.style.display = "none";
+          } else {
+            summaryDiv.style.display = "none";
+            containerDiv.style.display = "none";
+            noDataDiv.style.display = "block";
+          }
         } else {
-            filteredOnlineData = currentOnlineData.filter(user => 
-                user.username.toLowerCase().includes(searchTerm) ||
-                user.displayName.toLowerCase().includes(searchTerm) ||
-                user.twitterId.toLowerCase().includes(searchTerm)
-            );
+          alert("加载数据失败: " + result.error);
         }
-        
-        updateOnlineTable();
+      } catch (error) {
+        console.error("Error loading online users:", error);
+        alert("加载数据失败，请检查网络连接");
+      } finally {
+        // 隐藏加载状态
+        loadingDiv.style.display = "none";
+      }
     }
-    
+
+    function updateOnlineSummary() {
+      document.getElementById("online-total-count").textContent =
+        totalCount.toLocaleString();
+      document.getElementById("online-current-page").textContent = currentPage;
+      document.getElementById("online-total-pages").textContent = totalPages;
+    }
+
+    function filterOnlineData() {
+      const searchTerm = searchInput.value.toLowerCase();
+
+      if (!searchTerm) {
+        filteredOnlineData = [...currentOnlineData];
+      } else {
+        filteredOnlineData = currentOnlineData.filter(
+          (user) =>
+            user.username.toLowerCase().includes(searchTerm) ||
+            user.displayName.toLowerCase().includes(searchTerm) ||
+            user.twitterId.toLowerCase().includes(searchTerm)
+        );
+      }
+
+      updateOnlineTable();
+    }
+
     function updateOnlineTable() {
-        const tbody = document.getElementById('online-users-tbody');
-        
-        // 清空现有内容
-        tbody.innerHTML = '';
-        
-        if (filteredOnlineData.length === 0) {
-            tbody.innerHTML = `
+      const tbody = document.getElementById("online-users-tbody");
+
+      // 清空现有内容
+      tbody.innerHTML = "";
+
+      if (filteredOnlineData.length === 0) {
+        tbody.innerHTML = `
                 <tr>
                     <td colspan="4" style="text-align: center; padding: 40px; color: #6b7280;">
                         没有找到匹配的数据
                     </td>
                 </tr>
             `;
-            return;
-        }
-        
-        // 填充表格数据
-        filteredOnlineData.forEach((user, index) => {
-            const row = document.createElement('tr');
-            row.className = 'online-user-row';
-            
-            // 格式化时间
-            const lastUsed = new Date(user.lastUsed);
-            const timeAgo = getTimeAgo(lastUsed);
-            const chinaTime = lastUsed.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-            
-            row.innerHTML = `
+        return;
+      }
+
+      // 填充表格数据
+      filteredOnlineData.forEach((user, index) => {
+        const row = document.createElement("tr");
+        row.className = "online-user-row";
+
+        // 格式化时间
+        const lastUsed = new Date(user.lastUsed);
+        const timeAgo = getTimeAgo(lastUsed);
+        const chinaTime = lastUsed.toLocaleString("zh-CN", {
+          timeZone: "Asia/Shanghai",
+        });
+
+        row.innerHTML = `
                 <td style="padding: 12px;">
                     <span class="online-user-name">${user.username}</span>
                 </td>
@@ -289,65 +382,86 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="online-user-time" title="${chinaTime}">${timeAgo}</span>
                 </td>
             `;
-            
-            tbody.appendChild(row);
-        });
+
+        tbody.appendChild(row);
+      });
     }
-    
+
     function updatePagination() {
-        const paginationDiv = document.getElementById('online-pagination');
-        
-        if (totalPages <= 1) {
-            paginationDiv.innerHTML = '';
-            return;
-        }
-        
-        let paginationHtml = '';
-        
-        // 上一页按钮
-        paginationHtml += `
-            <button class="pagination-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="loadOnlineUsers(${currentPage - 1})">
+      const paginationDiv = document.getElementById("online-pagination");
+
+      if (totalPages <= 1) {
+        paginationDiv.innerHTML = "";
+        return;
+      }
+
+      let paginationHtml = "";
+
+      // 上一页按钮
+      paginationHtml += `
+            <button id="online-prev-btn" class="pagination-btn" ${
+              currentPage === 1 ? "disabled" : ""
+            }>
                 上一页
             </button>
         `;
-        
-        // 页码信息
-        paginationHtml += `
+
+      // 页码信息
+      paginationHtml += `
             <span class="pagination-info">
                 第 ${currentPage} 页，共 ${totalPages} 页
             </span>
         `;
-        
-        // 下一页按钮
-        paginationHtml += `
-            <button class="pagination-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="loadOnlineUsers(${currentPage + 1})">
+
+      // 下一页按钮
+      paginationHtml += `
+            <button id="online-next-btn" class="pagination-btn" ${
+              currentPage === totalPages ? "disabled" : ""
+            }>
                 下一页
             </button>
         `;
-        
-        paginationDiv.innerHTML = paginationHtml;
+
+      paginationDiv.innerHTML = paginationHtml;
+
+      // 绑定事件监听器
+      const prevBtn = document.getElementById("online-prev-btn");
+      const nextBtn = document.getElementById("online-next-btn");
+
+      if (prevBtn && !prevBtn.disabled) {
+        prevBtn.addEventListener("click", () =>
+          loadOnlineUsers(currentPage - 1)
+        );
+      }
+
+      if (nextBtn && !nextBtn.disabled) {
+        nextBtn.addEventListener("click", () =>
+          loadOnlineUsers(currentPage + 1)
+        );
+      }
     }
-    
+
     function getTimeAgo(date) {
-        // 确保使用中国时区
-        const now = new Date();
-        const chinaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
-        const chinaDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
-        
-        const diffMs = chinaNow - chinaDate;
-        const diffMins = Math.floor(diffMs / (1000 * 60));
-        
-        if (diffMins < 1) {
-            return '刚刚';
-        } else if (diffMins < 60) {
-            return `${diffMins}分钟前`;
-        } else {
-            const diffHours = Math.floor(diffMins / 60);
-            return `${diffHours}小时前`;
-        }
+      // 确保使用中国时区
+      const now = new Date();
+      const chinaNow = new Date(
+        now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
+      );
+      const chinaDate = new Date(
+        date.toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
+      );
+
+      const diffMs = chinaNow - chinaDate;
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+
+      if (diffMins < 1) {
+        return "刚刚";
+      } else if (diffMins < 60) {
+        return `${diffMins}分钟前`;
+      } else {
+        const diffHours = Math.floor(diffMins / 60);
+        return `${diffHours}小时前`;
+      }
     }
-    
-    // 将函数暴露到全局作用域，供分页按钮使用
-    window.loadOnlineUsers = loadOnlineUsers;
-});
+  });
 </script>
