@@ -1,0 +1,293 @@
+<div class="stats-section">
+  <div class="section-header">
+    <h2>🖥️ 设备监控</h2>
+    <button
+      id="refreshDeviceStatus"
+      class="action-btn"
+      style="margin-left: auto"
+    >
+      🔄 获取当前设备状态
+    </button>
+  </div>
+
+  <!-- 加载状态 -->
+  <div id="deviceLoadingStatus" class="info-message" style="display: none">
+    ⏳ 正在获取设备状态...
+  </div>
+
+  <!-- 错误提示 -->
+  <div
+    id="deviceErrorMessage"
+    class="error-message"
+    style="display: none"
+  ></div>
+
+  <!-- 设备状态展示区域 -->
+  <div id="deviceStatusContainer" style="display: none">
+    <!-- 系统信息 -->
+    <div class="stat-card">
+      <h3>📋 系统信息</h3>
+      <div class="stat-row">
+        <span class="stat-label">操作系统:</span>
+        <span class="stat-value" id="systemOS">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">主机名:</span>
+        <span class="stat-value" id="systemHostname">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">运行时间:</span>
+        <span class="stat-value" id="systemUptime">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">更新时间:</span>
+        <span class="stat-value" id="updateTime">-</span>
+      </div>
+    </div>
+
+    <!-- CPU 信息 -->
+    <div class="stat-card">
+      <h3>💻 CPU 使用情况</h3>
+      <div class="stat-row">
+        <span class="stat-label">CPU 核心数:</span>
+        <span class="stat-value" id="cpuCores">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">CPU 使用率:</span>
+        <span class="stat-value" id="cpuUsage">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">负载平均值 (1/5/15分钟):</span>
+        <span class="stat-value" id="loadAverage">-</span>
+      </div>
+    </div>
+
+    <!-- 内存信息 -->
+    <div class="stat-card">
+      <h3>💾 内存使用情况</h3>
+      <div class="stat-row">
+        <span class="stat-label">总内存:</span>
+        <span class="stat-value" id="memTotal">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">已使用:</span>
+        <span class="stat-value" id="memUsed">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">可用内存:</span>
+        <span class="stat-value" id="memFree">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">使用率:</span>
+        <span class="stat-value" id="memUsagePercent">-</span>
+      </div>
+    </div>
+
+    <!-- PM2 状态 -->
+    <div class="stat-card">
+      <h3>🔄 PM2 进程状态</h3>
+      <div id="pm2Status">
+        <div class="info-message">暂无数据</div>
+      </div>
+    </div>
+
+    <!-- Redis 状态 -->
+    <div class="stat-card">
+      <h3>📦 Redis 状态</h3>
+      <div class="stat-row">
+        <span class="stat-label">连接状态:</span>
+        <span class="stat-value" id="redisStatus">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">已用内存:</span>
+        <span class="stat-value" id="redisMemory">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Key 数量:</span>
+        <span class="stat-value" id="redisKeys">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">运行天数:</span>
+        <span class="stat-value" id="redisUptime">-</span>
+      </div>
+    </div>
+
+    <!-- PostgreSQL 状态 -->
+    <div class="stat-card">
+      <h3>🐘 PostgreSQL 状态</h3>
+      <div class="stat-row">
+        <span class="stat-label">连接状态:</span>
+        <span class="stat-value" id="pgStatus">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">版本:</span>
+        <span class="stat-value" id="pgVersion">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">数据库大小:</span>
+        <span class="stat-value" id="pgSize">-</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">活跃连接数:</span>
+        <span class="stat-value" id="pgConnections">-</span>
+      </div>
+    </div>
+
+    <!-- 磁盘信息 -->
+    <div class="stat-card">
+      <h3>💿 磁盘使用情况</h3>
+      <div id="diskStatus">
+        <div class="info-message">暂无数据</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 设备监控相关逻辑
+  (function () {
+    const refreshBtn = document.getElementById("refreshDeviceStatus");
+    const loadingStatus = document.getElementById("deviceLoadingStatus");
+    const errorMessage = document.getElementById("deviceErrorMessage");
+    const statusContainer = document.getElementById("deviceStatusContainer");
+
+    refreshBtn.addEventListener("click", async () => {
+      try {
+        // 显示加载状态
+        loadingStatus.style.display = "block";
+        errorMessage.style.display = "none";
+        statusContainer.style.display = "none";
+        refreshBtn.disabled = true;
+
+        // 调用API获取设备状态
+        const response = await fetch("/xhunt/api/device-status");
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "获取设备状态失败");
+        }
+
+        // 更新界面
+        updateDeviceStatus(data);
+
+        // 显示数据
+        loadingStatus.style.display = "none";
+        statusContainer.style.display = "block";
+      } catch (error) {
+        console.error("获取设备状态失败:", error);
+        errorMessage.textContent = "❌ " + error.message;
+        errorMessage.style.display = "block";
+        loadingStatus.style.display = "none";
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    });
+
+    function updateDeviceStatus(data) {
+      // 更新系统信息
+      document.getElementById("systemOS").textContent =
+        data.system.platform || "-";
+      document.getElementById("systemHostname").textContent =
+        data.system.hostname || "-";
+      document.getElementById("systemUptime").textContent =
+        data.system.uptime || "-";
+      document.getElementById("updateTime").textContent = data.timestamp || "-";
+
+      // 更新CPU信息
+      document.getElementById("cpuCores").textContent = data.cpu.cores || "-";
+      document.getElementById("cpuUsage").textContent = data.cpu.usage || "-";
+      document.getElementById("loadAverage").textContent =
+        data.cpu.loadAverage || "-";
+
+      // 更新内存信息
+      document.getElementById("memTotal").textContent =
+        data.memory.total || "-";
+      document.getElementById("memUsed").textContent = data.memory.used || "-";
+      document.getElementById("memFree").textContent = data.memory.free || "-";
+      document.getElementById("memUsagePercent").textContent =
+        data.memory.usagePercent || "-";
+
+      // 更新PM2状态
+      const pm2Container = document.getElementById("pm2Status");
+      if (data.pm2 && data.pm2.length > 0) {
+        pm2Container.innerHTML = data.pm2
+          .map(
+            (app) => `
+        <div class="stat-row">
+          <span class="stat-label">${app.name}:</span>
+          <span class="stat-value" style="color: ${
+            app.status === "online" ? "#4caf50" : "#f44336"
+          }">
+            ${app.status} | CPU: ${app.cpu} | Mem: ${app.memory} | 重启: ${
+              app.restarts
+            }次
+          </span>
+        </div>
+      `
+          )
+          .join("");
+      } else {
+        pm2Container.innerHTML =
+          '<div class="info-message">PM2 未运行或无进程</div>';
+      }
+
+      // 更新Redis状态
+      const redisStatusEl = document.getElementById("redisStatus");
+      if (data.redis.connected) {
+        redisStatusEl.textContent = "✅ 已连接";
+        redisStatusEl.style.color = "#4caf50";
+        document.getElementById("redisMemory").textContent =
+          data.redis.memory || "-";
+        document.getElementById("redisKeys").textContent =
+          data.redis.keys || "-";
+        document.getElementById("redisUptime").textContent =
+          data.redis.uptime || "-";
+      } else {
+        redisStatusEl.textContent = "❌ 未连接";
+        redisStatusEl.style.color = "#f44336";
+        document.getElementById("redisMemory").textContent = "-";
+        document.getElementById("redisKeys").textContent = "-";
+        document.getElementById("redisUptime").textContent = "-";
+      }
+
+      // 更新PostgreSQL状态
+      const pgStatusEl = document.getElementById("pgStatus");
+      if (data.postgresql.connected) {
+        pgStatusEl.textContent = "✅ 已连接";
+        pgStatusEl.style.color = "#4caf50";
+        document.getElementById("pgVersion").textContent =
+          data.postgresql.version || "-";
+        document.getElementById("pgSize").textContent =
+          data.postgresql.size || "-";
+        document.getElementById("pgConnections").textContent =
+          data.postgresql.connections || "-";
+      } else {
+        pgStatusEl.textContent = "❌ 未连接";
+        pgStatusEl.style.color = "#f44336";
+        document.getElementById("pgVersion").textContent = "-";
+        document.getElementById("pgSize").textContent = "-";
+        document.getElementById("pgConnections").textContent = "-";
+      }
+
+      // 更新磁盘信息
+      const diskContainer = document.getElementById("diskStatus");
+      if (data.disk && data.disk.length > 0) {
+        diskContainer.innerHTML = data.disk
+          .map(
+            (disk) => `
+        <div class="stat-row">
+          <span class="stat-label">${disk.filesystem} (${disk.mounted}):</span>
+          <span class="stat-value">
+            已用: ${disk.used} / 总计: ${disk.size} (${disk.usePercent})
+          </span>
+        </div>
+      `
+          )
+          .join("");
+      } else {
+        diskContainer.innerHTML =
+          '<div class="info-message">暂无磁盘数据</div>';
+      }
+    }
+  })();
+</script>

@@ -1664,4 +1664,216 @@ router.post("/rootdata-daily/set-initial", basicAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/stats/device-status
+ * 获取设备状态信息（CPU、内存、PM2、Redis、PostgreSQL等）
+ */
+router.get("/device-status", basicAuth, async (req, res) => {
+  try {
+    const { exec } = require("child_process");
+    const util = require("util");
+    const execPromise = util.promisify(exec);
+
+    // 格式化字节大小
+    const formatBytes = (bytes) => {
+      if (bytes === 0) return "0 B";
+      const k = 1024;
+      const sizes = ["B", "KB", "MB", "GB", "TB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+    };
+
+    // 格式化运行时间
+    const formatUptime = (seconds) => {
+      const days = Math.floor(seconds / 86400);
+      const hours = Math.floor((seconds % 86400) / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      return `${days}天 ${hours}小时 ${minutes}分钟`;
+    };
+
+    const deviceStatus = {
+      timestamp: new Date().toLocaleString("zh-CN", {
+        timeZone: "Asia/Shanghai",
+      }),
+    };
+
+    // 1. 系统信息
+    deviceStatus.system = {
+      platform: `${os.type()} ${os.release()}`,
+      hostname: os.hostname(),
+      uptime: formatUptime(os.uptime()),
+      arch: os.arch(),
+    };
+
+    // 2. CPU 信息
+    const cpus = os.cpus();
+    const loadAvg = os.loadavg();
+
+    // 计算 CPU 使用率
+    let totalIdle = 0;
+    let totalTick = 0;
+    cpus.forEach((cpu) => {
+      for (let type in cpu.times) {
+        totalTick += cpu.times[type];
+      }
+      totalIdle += cpu.times.idle;
+    });
+    const cpuUsagePercent = (100 - ~~((100 * totalIdle) / totalTick)).toFixed(
+      2
+    );
+
+    deviceStatus.cpu = {
+      cores: cpus.length,
+      model: cpus[0].model,
+      usage: `${cpuUsagePercent}%`,
+      loadAverage: `${loadAvg[0].toFixed(2)} / ${loadAvg[1].toFixed(
+        2
+      )} / ${loadAvg[2].toFixed(2)}`,
+    };
+
+    // 3. 内存信息
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+    const memUsagePercent = ((usedMem / totalMem) * 100).toFixed(2);
+
+    deviceStatus.memory = {
+      total: formatBytes(totalMem),
+      used: formatBytes(usedMem),
+      free: formatBytes(freeMem),
+      usagePercent: `${memUsagePercent}%`,
+    };
+
+    // 4. PM2 状态
+    try {
+      const { stdout: pm2Output } = await execPromise("pm2 jlist");
+      const pm2List = JSON.parse(pm2Output);
+      deviceStatus.pm2 = pm2List.map((app) => ({
+        name: app.name,
+        status: app.pm2_env.status,
+        cpu: `${app.monit.cpu}%`,
+        memory: formatBytes(app.monit.memory),
+        restarts: app.pm2_env.restart_time,
+        uptime: formatUptime(
+          Math.floor((Date.now() - app.pm2_env.pm_uptime) / 1000)
+        ),
+      }));
+    } catch (error) {
+      console.error("获取 PM2 状态失败:", error.message);
+      deviceStatus.pm2 = [];
+    }
+
+    // 5. Redis 状态
+    deviceStatus.redis = {
+      connected: false,
+    };
+    try {
+      const redis = require("../../utils/redis");
+      if (redis && redis.status === "ready") {
+        const info = await redis.info();
+        const lines = info.split("\r\n");
+        const redisInfo = {};
+        lines.forEach((line) => {
+          if (line && !line.startsWith("#")) {
+            const [key, value] = line.split(":");
+            if (key && value) {
+              redisInfo[key] = value;
+            }
+          }
+        });
+
+        // 获取所有key数量
+        const dbKeys = await redis.dbsize();
+
+        deviceStatus.redis = {
+          connected: true,
+          memory: redisInfo.used_memory_human || "-",
+          keys: dbKeys || 0,
+          uptime: redisInfo.uptime_in_days
+            ? `${redisInfo.uptime_in_days} 天`
+            : "-",
+          version: redisInfo.redis_version || "-",
+        };
+      }
+    } catch (error) {
+      console.error("获取 Redis 状态失败:", error.message);
+    }
+
+    // 6. PostgreSQL 状态
+    deviceStatus.postgresql = {
+      connected: false,
+    };
+    try {
+      const { Fundraising } = require("../../models/postgres-fundraising");
+      if (Fundraising && Fundraising.Project.sequelize) {
+        const sequelize = Fundraising.Project.sequelize;
+
+        // 测试连接
+        await sequelize.authenticate();
+
+        // 获取版本
+        const [versionResult] = await sequelize.query("SELECT version()");
+        const version = versionResult[0].version.split(" ")[1];
+
+        // 获取数据库大小
+        const [sizeResult] = await sequelize.query(
+          "SELECT pg_size_pretty(pg_database_size(current_database())) as size"
+        );
+        const size = sizeResult[0].size;
+
+        // 获取活跃连接数
+        const [connResult] = await sequelize.query(
+          "SELECT count(*) as count FROM pg_stat_activity WHERE state = 'active'"
+        );
+        const connections = connResult[0].count;
+
+        deviceStatus.postgresql = {
+          connected: true,
+          version: version,
+          size: size,
+          connections: connections,
+        };
+      }
+    } catch (error) {
+      console.error("获取 PostgreSQL 状态失败:", error.message);
+    }
+
+    // 7. 磁盘信息
+    deviceStatus.disk = [];
+    try {
+      const { stdout: dfOutput } = await execPromise("df -h");
+      const lines = dfOutput.split("\n").slice(1); // 跳过表头
+      lines.forEach((line) => {
+        if (line.trim()) {
+          const parts = line.split(/\s+/);
+          if (
+            parts.length >= 6 &&
+            !parts[0].includes("tmpfs") &&
+            !parts[0].includes("devfs")
+          ) {
+            deviceStatus.disk.push({
+              filesystem: parts[0],
+              size: parts[1],
+              used: parts[2],
+              available: parts[3],
+              usePercent: parts[4],
+              mounted: parts[5],
+            });
+          }
+        }
+      });
+    } catch (error) {
+      console.error("获取磁盘信息失败:", error.message);
+    }
+
+    res.json(deviceStatus);
+  } catch (error) {
+    console.error("获取设备状态失败:", error.message);
+    res.status(500).json({
+      error: "Failed to fetch device status",
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;

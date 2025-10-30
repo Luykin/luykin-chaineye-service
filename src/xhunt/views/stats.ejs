@@ -39,6 +39,7 @@
           <button class="tab-btn" data-tab="rootdata">🍊 Rootdata</button>
           <button class="tab-btn" data-tab="notes">📝 备注查看</button>
           <button class="tab-btn" data-tab="log-search">🔍 日志搜索</button>
+          <button class="tab-btn" data-tab="device-monitor">🖥️ 设备监控</button>
           <% if (typeof user !== 'undefined' && user && user.role === 'luykin')
           { %>
           <button class="tab-btn" data-tab="messages">💬 发送私信</button>
@@ -77,6 +78,11 @@
           <!-- 日志搜索 Tab (所有人可见) -->
           <div class="tab-pane" id="log-search">
             <%- include('partials/log-search-stats') %>
+          </div>
+
+          <!-- 设备监控 Tab (所有人可见) -->
+          <div class="tab-pane" id="device-monitor">
+            <%- include('partials/device-monitor-stats') %>
           </div>
 
           <!-- 发送私信 Tab (仅 luykin 可见) -->
