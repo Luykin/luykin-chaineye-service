@@ -1,5 +1,6 @@
 const retry = require("async-retry");
 const axios = require("axios");
+const { JSDOM } = require("jsdom");
 // 从 SQLite 导入爬取状态管理
 const { NewCrawlState, C_STATE_TYPE } = require("../models/sqlite-start");
 // 从 PostgreSQL 导入 Fundraising 模型
@@ -690,6 +691,136 @@ class FundraisingCrawler extends BaseCrawler {
     );
   }
 
+  /**
+   * 方案1：使用 axios + jsdom 获取页面并返回 document
+   * 优点：快速，不需要浏览器，HTML 内容完整
+   * 缺点：不执行 JavaScript（但 RootData 的 HTML 本身包含完整结构）
+   */
+  async fetchPageWithAxios(url, isManualTrigger = false) {
+    if (isManualTrigger) {
+      console.log(`[详情] 方案1: 使用 axios + jsdom 获取页面...`);
+    }
+
+    try {
+      const response = await this.axiosRequestWithRetry(url, {
+        timeout: 20000,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
+          Connection: "keep-alive",
+        },
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400,
+      });
+
+      const html = response.data;
+      const htmlStr = Buffer.isBuffer(html)
+        ? html.toString("utf-8")
+        : String(html);
+
+      if (isManualTrigger) {
+        console.log(`[详情] axios 获取成功，HTML 长度: ${htmlStr.length}`);
+      }
+
+      // 检查是否被重定向到登录页
+      if (htmlStr.includes('window.location.href="/login')) {
+        throw new Error("页面重定向到登录页");
+      }
+
+      // 使用 jsdom 解析 HTML
+      const dom = new JSDOM(htmlStr, {
+        url: url,
+        contentType: "text/html",
+        includeNodeLocations: false,
+        storageQuota: 10000000,
+      });
+
+      if (isManualTrigger) {
+        console.log(`[详情] jsdom 解析完成`);
+      }
+
+      return dom.window.document;
+    } catch (error) {
+      if (isManualTrigger) {
+        console.log(`[详情] ❌ 方案1失败: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 方案2：使用 Puppeteer 访问页面
+   * 优点：完整的浏览器环境，JavaScript 执行
+   * 缺点：较慢，可能遇到登录限制
+   */
+  async fetchPageWithPuppeteer(url, _page, isManualTrigger = false) {
+    if (isManualTrigger) {
+      console.log(`[详情] 方案2: 使用 Puppeteer 访问页面...`);
+    }
+
+    try {
+      // 启用请求拦截，阻止重定向到登录页
+      await _page.setRequestInterception(true);
+
+      const requestHandler = (interceptedRequest) => {
+        const reqUrl = interceptedRequest.url();
+        if (reqUrl.includes("/login") || reqUrl.includes("fromUrl=")) {
+          if (isManualTrigger) {
+            console.log(`[详情] ⚠️ 检测到登录页重定向，阻止: ${reqUrl}`);
+          }
+          interceptedRequest.abort("aborted");
+        } else {
+          interceptedRequest.continue();
+        }
+      };
+
+      _page.on("request", requestHandler);
+
+      // 访问页面
+      try {
+        await _page.goto(url, {
+          waitUntil: "networkidle2",
+          timeout: 30000,
+        });
+      } catch (error) {
+        if (
+          error.message.includes("net::ERR_ABORTED") ||
+          error.message.includes("aborted")
+        ) {
+          if (isManualTrigger) {
+            console.log(`[详情] 登录页重定向已被阻止`);
+          }
+        } else {
+          throw error;
+        }
+      } finally {
+        _page.off("request", requestHandler);
+        await _page.setRequestInterception(false);
+      }
+
+      // 检查当前 URL
+      const currentUrl = _page.url();
+      if (currentUrl.includes("/login")) {
+        throw new Error("页面被重定向到登录页");
+      }
+
+      if (isManualTrigger) {
+        console.log(`[详情] Puppeteer 页面加载完成`);
+      }
+
+      // 返回 Puppeteer page 对象（不是 document）
+      return _page;
+    } catch (error) {
+      if (isManualTrigger) {
+        console.log(`[详情] ❌ 方案2失败: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
   async scrapeAndUpdateProjectDetails(project, _page, isManualTrigger = false) {
     try {
       if (!_page || _page.isClosed()) {
@@ -709,103 +840,79 @@ class FundraisingCrawler extends BaseCrawler {
         );
       }
 
-      // 【关键修改】直接用 Puppeteer 访问页面，让 JavaScript 执行渲染 .investor 元素
-      if (isManualTrigger) {
-        console.log(`[详情] 使用 Puppeteer 访问页面（让 JS 执行）...`);
-      }
+      // 【核心重构】优先使用方案1（axios + jsdom），失败后使用方案2（Puppeteer）
+      let document = null;
+      let usePuppeteer = false;
 
-      // 启用请求拦截，阻止重定向到登录页
-      await _page.setRequestInterception(true);
-
-      const requestHandler = (interceptedRequest) => {
-        const url = interceptedRequest.url();
-        // 如果是重定向到登录页，中止请求
-        if (url.includes("/login") || url.includes("fromUrl=")) {
-          if (isManualTrigger) {
-            console.log(`[详情] ⚠️ 检测到登录页重定向，阻止: ${url}`);
-          }
-          interceptedRequest.abort("aborted");
-        } else {
-          interceptedRequest.continue();
-        }
-      };
-
-      _page.on("request", requestHandler);
-
-      // 直接用 page.goto() 访问
-      let gotoSuccess = false;
+      // 方案1：axios + jsdom（优先）
       try {
-        await _page.goto(project.projectLink, {
-          waitUntil: "networkidle2",
-          timeout: 30000,
-        });
-        gotoSuccess = true;
-      } catch (error) {
-        // 如果因为中止登录页而失败，这是预期行为
-        if (
-          error.message.includes("net::ERR_ABORTED") ||
-          error.message.includes("aborted")
-        ) {
-          if (isManualTrigger) {
-            console.log(`[详情] 登录页重定向已被阻止`);
-          }
-          // 继续执行，页面可能已部分加载
-        } else {
-          throw error;
+        document = await this.fetchPageWithAxios(
+          project.projectLink,
+          isManualTrigger
+        );
+        if (isManualTrigger) {
+          console.log(`[详情] ✅ 方案1成功，使用 jsdom document`);
         }
-      } finally {
-        // 移除请求拦截
-        _page.off("request", requestHandler);
-        await _page.setRequestInterception(false);
+      } catch (axiosError) {
+        if (isManualTrigger) {
+          console.log(`[详情] 方案1失败，切换到方案2 (Puppeteer)`);
+        }
+
+        // 方案2：Puppeteer（fallback）
+        try {
+          await this.fetchPageWithPuppeteer(
+            project.projectLink,
+            _page,
+            isManualTrigger
+          );
+          usePuppeteer = true;
+          if (isManualTrigger) {
+            console.log(`[详情] ✅ 方案2成功，使用 Puppeteer page`);
+          }
+        } catch (puppeteerError) {
+          throw new Error(
+            `两种方案都失败: axios=${axiosError.message}, puppeteer=${puppeteerError.message}`
+          );
+        }
       }
 
-      // 检查当前 URL
-      const currentUrl = _page.url();
-      if (isManualTrigger) {
-        console.log(`[详情] 当前 URL: ${currentUrl}`);
-      }
-
-      // 如果最终还是在登录页，抛出错误
-      if (currentUrl.includes("/login")) {
-        throw new Error(`[详情] 页面需要登录才能访问: ${project.projectLink}`);
-      }
-
-      if (isManualTrigger) {
-        console.log(`[详情] 页面加载完成`);
-      }
-
-      await _page.waitForSelector(".base_info", { timeout: 20000 });
-      if (isManualTrigger) {
-        console.log(`[详情] DOM 就绪 (.base_info)`);
-
-        // 检查页面中是否有 .investor 元素
-        const investorCount = await _page.evaluate(() => {
-          return document.querySelectorAll(".investor").length;
-        });
-        console.log(`[详情] 页面中 .investor 元素数量: ${investorCount}`);
-
-        // 如果找到了，打印一些调试信息
-        if (investorCount > 0) {
-          const investorHtml = await _page.evaluate(() => {
-            const el = document.querySelector(".investor");
-            return el ? el.outerHTML.substring(0, 500) : "未找到";
+      // 统一接口：等待 DOM 就绪
+      if (usePuppeteer) {
+        await _page.waitForSelector(".base_info", { timeout: 20000 });
+        if (isManualTrigger) {
+          console.log(`[详情] DOM 就绪 (.base_info) - Puppeteer`);
+          const investorCount = await _page.evaluate(() => {
+            return document.querySelectorAll(".investor").length;
           });
-          console.log(`[详情] 第一个 .investor 元素 HTML (前 500 字符):`);
-          console.log(investorHtml);
+          console.log(`[详情] .investor 元素数量: ${investorCount}`);
+        }
+      } else {
+        // jsdom 方式：检查元素是否存在
+        const hasBaseInfo = document.querySelectorAll(".base_info").length > 0;
+        if (!hasBaseInfo) {
+          throw new Error("页面缺少 .base_info 元素，可能加载不完整");
+        }
+        if (isManualTrigger) {
+          console.log(`[详情] DOM 就绪 (.base_info) - jsdom`);
+          const investorCount = document.querySelectorAll(".investor").length;
+          console.log(`[详情] .investor 元素数量: ${investorCount}`);
         }
       }
 
       // 第一阶段：点击展开更多按钮并抓取基础投资者数据
+      if (usePuppeteer) {
+        await this.clickExpandButtons(_page);
+      }
+      // jsdom 不需要点击，因为 HTML 已经包含完整内容
 
-      await this.clickExpandButtons(_page);
       let mergedInvestors = []; //谁对它投资的投资者数据
-
       let investedProjects = []; //它对外投资的投资者数据
 
       if (effectiveIsInitial) {
         const initialInvestors = await this.scrapeInitialInvestors(
-          _page,
-          isManualTrigger
+          usePuppeteer ? _page : document,
+          isManualTrigger,
+          usePuppeteer
         );
         if (isManualTrigger) {
           console.log(`[详情] 初始投资者: ${initialInvestors?.length || 0}`);
@@ -814,8 +921,16 @@ class FundraisingCrawler extends BaseCrawler {
         // 第二阶段：点击 rounds 按钮并抓取轮次数据
         let roundsInvestors = [];
 
-        await this.clickRoundsButton(_page);
-        roundsInvestors = await this.processRounds(_page, isManualTrigger);
+        if (usePuppeteer) {
+          await this.clickRoundsButton(_page);
+        }
+        // jsdom 不需要点击
+
+        roundsInvestors = await this.processRounds(
+          usePuppeteer ? _page : document,
+          isManualTrigger,
+          usePuppeteer
+        );
         if (isManualTrigger) {
           console.log(`[详情] 轮次投资者: ${roundsInvestors?.length || 0}`);
         }
@@ -834,15 +949,16 @@ class FundraisingCrawler extends BaseCrawler {
           initialInvestors,
           roundsInvestors
         );
+
         // 第三阶段：抓取它投资的项目（.investment 部分）
-        //   const isInvestorPage = project.projectLink.includes("/Investors/detail");
         if (effectiveIsInitial) {
           if (isManualTrigger) {
-            console.log(`[详情] 检测到投资者页面，开始抓取对外投资...`);
+            console.log(`[详情] 开始抓取对外投资...`);
           }
           investedProjects = await this.scrapeInvestments(
-            _page,
-            isManualTrigger
+            usePuppeteer ? _page : document,
+            isManualTrigger,
+            usePuppeteer
           );
           if (isManualTrigger) {
             console.log(
@@ -853,8 +969,38 @@ class FundraisingCrawler extends BaseCrawler {
       }
 
       // 抓取基础信息
+      let details;
+      if (usePuppeteer) {
+        details = await _page.evaluate(() => {
+          const socialLinks = {};
+          document.querySelectorAll(".base_info .links a").forEach((link) => {
+            const type = link
+              .querySelector("span")
+              ?.textContent?.trim()
+              .toLowerCase();
+            if (type) socialLinks[type] = link.href;
+          });
 
-      const details = await _page.evaluate(() => {
+          const teamMembers = Array.from(
+            document.querySelectorAll(".team_member .item")
+          ).map((member) => ({
+            name: member.querySelector(".content h2")?.textContent?.trim(),
+            position: member.querySelector(".content p")?.textContent?.trim(),
+            avatar: member.querySelector(".logo-wraper img")?.src || "",
+            profileLink: member.querySelector(".card")?.href || "",
+          }));
+
+          return {
+            socialLinks,
+            teamMembers,
+            projectName: document
+              .querySelector(".detail_info_head h1.name")
+              ?.textContent?.trim(),
+            logo: document.querySelector(".detail_info_head .logo")?.src || "",
+          };
+        });
+      } else {
+        // jsdom 方式
         const socialLinks = {};
         document.querySelectorAll(".base_info .links a").forEach((link) => {
           const type = link
@@ -873,7 +1019,7 @@ class FundraisingCrawler extends BaseCrawler {
           profileLink: member.querySelector(".card")?.href || "",
         }));
 
-        return {
+        details = {
           socialLinks,
           teamMembers,
           projectName: document
@@ -881,7 +1027,7 @@ class FundraisingCrawler extends BaseCrawler {
             ?.textContent?.trim(),
           logo: document.querySelector(".detail_info_head .logo")?.src || "",
         };
-      });
+      }
 
       // 更新项目基础信息
       const isCrawlSuccess =
@@ -979,8 +1125,13 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   // 抓取初始投资者数据（无轮次信息）
-  async scrapeInitialInvestors(_page, isManualTrigger = false) {
-    const result = await _page.evaluate(() => {
+  async scrapeInitialInvestors(
+    target,
+    isManualTrigger = false,
+    usePuppeteer = false
+  ) {
+    // 抓取逻辑（独立函数，可在两种环境中执行）
+    const scrapeLogic = () => {
       // 收集调试信息
       const debug = {
         investorCount: document.querySelectorAll(".investor").length,
@@ -1011,7 +1162,12 @@ class FundraisingCrawler extends BaseCrawler {
           // 获取链接并确保是绝对路径
           let projectLink = link.getAttribute("href") || link.href;
           if (projectLink && !projectLink.startsWith("http")) {
-            projectLink = new URL(projectLink, "https://www.rootdata.com").href;
+            try {
+              projectLink = new URL(projectLink, "https://www.rootdata.com")
+                .href;
+            } catch (e) {
+              // URL 解析失败，保持原样
+            }
           }
 
           return {
@@ -1024,7 +1180,16 @@ class FundraisingCrawler extends BaseCrawler {
         .filter(Boolean);
 
       return { debug, investors };
-    });
+    };
+
+    // 执行抓取
+    let result;
+    if (usePuppeteer) {
+      result = await target.evaluate(scrapeLogic);
+    } else {
+      // jsdom: 直接在 Node.js 环境执行
+      result = scrapeLogic.call({ document: target });
+    }
 
     // 仅在手动触发时打印详细调试信息
     if (isManualTrigger) {
@@ -1062,8 +1227,9 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   // 处理轮次数据
-  async processRounds(_page, isManualTrigger = false) {
-    const result = await _page.evaluate(() => {
+  async processRounds(target, isManualTrigger = false, usePuppeteer = false) {
+    // 抓取逻辑（独立函数，可在两种环境中执行）
+    const scrapeLogic = () => {
       // 收集调试信息
       const debug = {
         investorCount: document.querySelectorAll(".investor").length,
@@ -1130,8 +1296,12 @@ class FundraisingCrawler extends BaseCrawler {
             // 获取链接并确保是绝对路径
             let projectLink = a.getAttribute("href") || a.href;
             if (projectLink && !projectLink.startsWith("http")) {
-              projectLink = new URL(projectLink, "https://www.rootdata.com")
-                .href;
+              try {
+                projectLink = new URL(projectLink, "https://www.rootdata.com")
+                  .href;
+              } catch (e) {
+                // URL 解析失败，保持原样
+              }
             }
 
             return {
@@ -1149,7 +1319,16 @@ class FundraisingCrawler extends BaseCrawler {
         .flat();
 
       return { debug, investors };
-    });
+    };
+
+    // 执行抓取
+    let result;
+    if (usePuppeteer) {
+      result = await target.evaluate(scrapeLogic);
+    } else {
+      // jsdom: 直接在 Node.js 环境执行
+      result = scrapeLogic.call({ document: target });
+    }
 
     // 仅在手动触发时打印详细调试信息
     if (isManualTrigger) {
@@ -1177,11 +1356,26 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   // 抓取投资者对外投资的项目（.investment 部分）
-  async scrapeInvestments(_page, isManualTrigger = false) {
+  async scrapeInvestments(
+    target,
+    isManualTrigger = false,
+    usePuppeteer = false
+  ) {
     try {
       if (isManualTrigger) {
         console.log(`[详情] 开始抓取 .investment 部分...`);
       }
+
+      // jsdom 模式：由于无法点击 tab，跳过此功能
+      if (!usePuppeteer) {
+        if (isManualTrigger) {
+          console.log(`[详情] jsdom 模式无法点击 tab，跳过 .investment 抓取`);
+        }
+        return [];
+      }
+
+      // Puppeteer 模式：继续原逻辑
+      const _page = target;
 
       // 检查是否存在 .investment 元素
       const hasInvestment = await _page.evaluate(() => {
@@ -1223,7 +1417,11 @@ class FundraisingCrawler extends BaseCrawler {
 
           // 确保是绝对路径
           if (link && !link.startsWith("http")) {
-            link = new URL(link, "https://www.rootdata.com").href;
+            try {
+              link = new URL(link, "https://www.rootdata.com").href;
+            } catch (e) {
+              // URL 解析失败
+            }
           }
 
           if (link && name) {
@@ -1268,7 +1466,11 @@ class FundraisingCrawler extends BaseCrawler {
 
           // 确保是绝对路径
           if (link && !link.startsWith("http")) {
-            link = new URL(link, "https://www.rootdata.com").href;
+            try {
+              link = new URL(link, "https://www.rootdata.com").href;
+            } catch (e) {
+              // URL 解析失败
+            }
           }
 
           if (link && name) {
