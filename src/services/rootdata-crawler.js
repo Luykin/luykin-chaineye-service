@@ -15,6 +15,11 @@ class FundraisingCrawler extends BaseCrawler {
     super();
     // 合并所有代理到扁平数组
     this.allProxies = [...ip1, ...ip2, ...ip3, ...ip4];
+
+    // 【配置】页面获取方案优先级
+    // 'axios' = 优先使用方案1（axios + setContent，快速但可能遇到登录问题）
+    // 'puppeteer' = 优先使用方案2（puppeteer + goto，慢但支持cookie登录）
+    this.fetchStrategy = "puppeteer"; // 可选值: 'axios' | 'puppeteer'
   }
 
   /**
@@ -718,15 +723,51 @@ class FundraisingCrawler extends BaseCrawler {
             console.log(`[详情] axios 请求尝试 ${attemptNum}/3`);
           }
           try {
+            // 【新增】准备cookie字符串
+            const cookieString = [
+              "_ga=GA1.1.1402673237.1726906805",
+              "i18n_redirected=en",
+              "rd_v1.theme=light",
+              "rd_v1.uuid=d61dd521-025b-4858-9a4d-2879bd62c381",
+              "rd_v1.currency=FIAT_USD",
+              "rd_v1.auth._token.local1=false",
+              "rd_v1.auth._token_expiration.local1=false",
+              "rd_v1.auth.strategy=local3",
+              "rd_v1.auth._token.local3=f9z34n5sby-70155-58-k68qapsgjb-1761787942202",
+              "rd_v1.auth._token_expiration.local3=1764379950916",
+              "_ga_TXPS04VGH2=GS2.1.s1761793200$o126$g1$t1761795302$j43$l0$h0",
+            ].join("; ");
+
+            if (isManualTrigger) {
+              console.log(
+                `[详情] 使用cookie进行请求 (${cookieString.substring(
+                  0,
+                  80
+                )}...)`
+              );
+            }
+
             const res = await axios.get(url, {
               timeout: 20000,
               headers: {
                 "User-Agent":
-                  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+                  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
                 Accept:
-                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
+                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Cache-Control": "max-age=0",
                 Connection: "keep-alive",
+                Cookie: cookieString,
+                "Sec-Ch-Ua":
+                  '"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"macOS"',
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "same-origin",
+                "Sec-Fetch-User": "?1",
+                "Upgrade-Insecure-Requests": "1",
               },
               maxRedirects: 0,
               validateStatus: (status) => status >= 200 && status < 400,
@@ -832,7 +873,7 @@ class FundraisingCrawler extends BaseCrawler {
 
   /**
    * 方案2：使用 Puppeteer 访问页面
-   * 优点：完整的浏览器环境，JavaScript 执行
+   * 优点：完整的浏览器环境，JavaScript 执行，支持cookie登录
    * 缺点：较慢，可能遇到登录限制
    */
   async fetchPageWithPuppeteer(url, _page, isManualTrigger = false) {
@@ -842,7 +883,61 @@ class FundraisingCrawler extends BaseCrawler {
     }
 
     try {
+      // 【新增】设置cookie来模拟登录状态
       if (isManualTrigger) {
+        console.log(`[详情] 设置登录cookie...`);
+      }
+
+      const cookies = [
+        {
+          name: "_ga",
+          value: "GA1.1.1402673237.1726906805",
+          domain: ".rootdata.com",
+        },
+        { name: "i18n_redirected", value: "en", domain: ".rootdata.com" },
+        { name: "rd_v1.theme", value: "light", domain: ".rootdata.com" },
+        {
+          name: "rd_v1.uuid",
+          value: "d61dd521-025b-4858-9a4d-2879bd62c381",
+          domain: ".rootdata.com",
+        },
+        { name: "rd_v1.currency", value: "FIAT_USD", domain: ".rootdata.com" },
+        {
+          name: "rd_v1.auth._token.local1",
+          value: "false",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.auth._token_expiration.local1",
+          value: "false",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.auth.strategy",
+          value: "local3",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.auth._token.local3",
+          value: "f9z34n5sby-70155-58-k68qapsgjb-1761787942202",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "rd_v1.auth._token_expiration.local3",
+          value: "1764379950916",
+          domain: ".rootdata.com",
+        },
+        {
+          name: "_ga_TXPS04VGH2",
+          value: "GS2.1.s1761793200$o126$g1$t1761795302$j43$l0$h0",
+          domain: ".rootdata.com",
+        },
+      ];
+
+      await _page.setCookie(...cookies);
+
+      if (isManualTrigger) {
+        console.log(`[详情] Cookie设置完成，共${cookies.length}个`);
         console.log(`[详情] 启用请求拦截...`);
       }
       // 启用请求拦截，阻止重定向到登录页
@@ -941,35 +1036,77 @@ class FundraisingCrawler extends BaseCrawler {
         );
       }
 
-      // 【核心】优先使用方案1（axios + setContent），失败后使用方案2（page.goto）
-      // 方案1：axios + setContent（优先）
-      try {
-        await this.fetchPageWithAxios(
-          project.projectLink,
-          _page,
-          isManualTrigger
-        );
-        if (isManualTrigger) {
-          console.log(`[详情] ✅ 方案1成功，使用 axios + setContent`);
-        }
-      } catch (axiosError) {
-        if (isManualTrigger) {
-          console.log(`[详情] 方案1失败，切换到方案2 (page.goto)`);
-        }
+      // 【核心】根据配置选择优先方案，失败后自动fallback
+      const primaryStrategy = this.fetchStrategy || "puppeteer";
+      const fallbackStrategy =
+        primaryStrategy === "axios" ? "puppeteer" : "axios";
 
-        // 方案2：page.goto（fallback）
-        try {
+      if (isManualTrigger) {
+        console.log(
+          `[详情] 使用策略: ${primaryStrategy} (fallback: ${fallbackStrategy})`
+        );
+      }
+
+      let primaryError = null;
+      let success = false;
+
+      // 尝试主要方案
+      try {
+        if (primaryStrategy === "axios") {
+          await this.fetchPageWithAxios(
+            project.projectLink,
+            _page,
+            isManualTrigger
+          );
+          if (isManualTrigger) {
+            console.log(`[详情] ✅ 方案1 (axios) 成功`);
+          }
+        } else {
           await this.fetchPageWithPuppeteer(
             project.projectLink,
             _page,
             isManualTrigger
           );
           if (isManualTrigger) {
-            console.log(`[详情] ✅ 方案2成功，使用 page.goto`);
+            console.log(`[详情] ✅ 方案2 (puppeteer) 成功`);
           }
-        } catch (puppeteerError) {
+        }
+        success = true;
+      } catch (error) {
+        primaryError = error;
+        if (isManualTrigger) {
+          console.log(
+            `[详情] ❌ 主方案 (${primaryStrategy}) 失败: ${error.message}`
+          );
+          console.log(`[详情] 🔄 切换到备选方案 (${fallbackStrategy})...`);
+        }
+      }
+
+      // 如果主方案失败，尝试fallback方案
+      if (!success) {
+        try {
+          if (fallbackStrategy === "axios") {
+            await this.fetchPageWithAxios(
+              project.projectLink,
+              _page,
+              isManualTrigger
+            );
+            if (isManualTrigger) {
+              console.log(`[详情] ✅ 备选方案1 (axios) 成功`);
+            }
+          } else {
+            await this.fetchPageWithPuppeteer(
+              project.projectLink,
+              _page,
+              isManualTrigger
+            );
+            if (isManualTrigger) {
+              console.log(`[详情] ✅ 备选方案2 (puppeteer) 成功`);
+            }
+          }
+        } catch (fallbackError) {
           throw new Error(
-            `两种方案都失败: axios=${axiosError.message}, puppeteer=${puppeteerError.message}`
+            `两种方案都失败 | 主方案(${primaryStrategy}): ${primaryError.message} | 备选(${fallbackStrategy}): ${fallbackError.message}`
           );
         }
       }
