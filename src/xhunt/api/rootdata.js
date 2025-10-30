@@ -65,7 +65,11 @@ class RootdataAPIService {
       throw new Error(`API returned result: ${response.data?.result}`);
     } catch (error) {
       console.error(
-        `[rootdata api 失败] ❌ ${error.message} projectId: ${projectId}, api: ${ROOTDATA_API_BASE}/get_fac, projectLink:${projectLink}`
+        `[rootdata api 失败] ❌ ${
+          error.message
+        } , projectId: ${projectId} projectIdNumber: ${Number(
+          projectId
+        )}, api: ${ROOTDATA_API_BASE}/get_fac, projectLink:${projectLink}`
       );
       throw error;
     }
