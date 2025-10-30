@@ -1898,25 +1898,32 @@ router.get("/device-status", basicAuth, async (req, res) => {
  * 清除指定的 Redis 缓存（先精确删除，再模糊匹配）
  */
 router.post("/clear-cache", basicAuth, async (req, res) => {
+  const requestId = Date.now().toString(36);
+  const logPrefix = `[redis 手动清除][${requestId}]`;
   try {
     const { prefix } = req.body;
+    console.log(`${logPrefix} 📥 收到清除缓存请求: prefix="${prefix}"`);
 
     if (!prefix || typeof prefix !== "string") {
+      console.log(`${logPrefix} ❌ 参数无效`);
       return res.status(400).json({ error: "缺少有效的 prefix 参数" });
     }
 
     // 验证前缀格式，防止误删除
     if (prefix.trim().length === 0) {
+      console.log(`${logPrefix} ❌ prefix 为空`);
       return res.status(400).json({ error: "prefix 不能为空" });
     }
 
     // 防止删除所有键
     if (prefix === "*" || prefix === "**") {
+      console.log(`${logPrefix} ❌ 不允许使用通配符`);
       return res.status(403).json({ error: "不允许使用通配符删除所有键" });
     }
 
     const redisClient = req.redisClient;
     if (!redisClient) {
+      console.log(`${logPrefix} ❌ Redis 客户端未初始化`);
       return res.status(500).json({ error: "Redis 客户端未初始化" });
     }
 
@@ -1925,25 +1932,33 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
     const deletedKeys = [];
 
     // 1. 先尝试精确删除（传入的可能是完整的键名）
+    console.log(`${logPrefix} 🔍 步骤1: 检查精确键是否存在...`);
     try {
       const exactExists = await redisClient.exists(prefix);
+      console.log(
+        `${logPrefix} 🔍 精确键检查结果: ${exactExists ? "存在" : "不存在"}`
+      );
       if (exactExists) {
         await redisClient.del(prefix);
         deletedCount++;
         deletedKeys.push(prefix);
-        console.log(`🎯 精确删除键: ${prefix}`);
+        console.log(`${logPrefix} 🎯 精确删除键: ${prefix}`);
       }
     } catch (exactError) {
-      console.error("精确删除失败:", exactError);
+      console.error(`${logPrefix} ❌ 精确删除失败:`, exactError);
     }
 
     // 2. 模糊匹配删除（删除所有以此为前缀的键）
     const pattern = `${prefix}*`;
+    console.log(`${logPrefix} 🔍 步骤2: 开始扫描匹配键，模式="${pattern}"`);
     let cursor = "0";
     const allMatchedKeys = [];
+    let scanCount = 0;
 
     // 先扫描所有匹配的键
     do {
+      scanCount++;
+      const scanStart = Date.now();
       const reply = await redisClient.scan(cursor, {
         MATCH: pattern,
         COUNT: 100,
@@ -1952,27 +1967,48 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
       cursor = reply.cursor;
       const keys = reply.keys;
 
+      const scanDuration = Date.now() - scanStart;
+      console.log(
+        `${logPrefix} 🔄 SCAN #${scanCount}: cursor=${cursor}, 找到=${keys.length}个键, 耗时=${scanDuration}ms`
+      );
+
       if (keys && keys.length > 0) {
         // 过滤掉已经删除的精确键
         const newKeys = keys.filter((k) => k !== prefix);
         allMatchedKeys.push(...newKeys);
       }
+
+      // 每10次扫描输出一次进度
+      if (scanCount % 10 === 0) {
+        console.log(
+          `${logPrefix} 📊 扫描进度: 已扫描${scanCount}次, 累计找到=${allMatchedKeys.length}个匹配键`
+        );
+      }
     } while (cursor !== "0");
 
     const totalKeys = allMatchedKeys.length;
+    const scanDuration = Date.now() - startTime;
+    console.log(
+      `${logPrefix} ✅ 扫描完成: 共扫描${scanCount}次, 找到${totalKeys}个匹配键, 耗时=${scanDuration}ms`
+    );
 
     // 如果匹配的键数量较少（< 500），同步删除并返回结果
     if (totalKeys < 500) {
+      console.log(`${logPrefix} 📝 匹配键数量 < 500，使用同步模式删除...`);
       if (totalKeys > 0) {
+        console.log(`${logPrefix} 🗑️ 开始批量删除 ${totalKeys} 个键...`);
+        const deleteStart = Date.now();
         // 批量删除
         await redisClient.del(allMatchedKeys);
+        const deleteDuration = Date.now() - deleteStart;
         deletedCount += totalKeys;
         deletedKeys.push(...allMatchedKeys.slice(0, 10)); // 只记录前10个
+        console.log(`${logPrefix} ✅ 批量删除完成，耗时=${deleteDuration}ms`);
       }
 
       const duration = Date.now() - startTime;
       console.log(
-        `✅ 清除缓存完成: 输入="${prefix}", 删除数量=${deletedCount}, 耗时=${duration}ms`
+        `${logPrefix} ✅ 清除缓存完成: 输入="${prefix}", 删除数量=${deletedCount}, 总耗时=${duration}ms`
       );
 
       return res.json({
@@ -1986,6 +2022,9 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
     }
 
     // 如果匹配的键数量很多（>= 500），异步处理
+    console.log(`${logPrefix} 📝 匹配键数量 >= 500，使用异步模式处理...`);
+    console.log(`${logPrefix} 📤 立即返回响应给客户端`);
+
     res.json({
       success: true,
       input: prefix,
@@ -1997,6 +2036,7 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
     });
 
     // 异步批量删除大量键
+    console.log(`${logPrefix} 🔄 开始后台异步删除任务...`);
     setImmediate(async () => {
       try {
         let asyncDeleted = 0;
@@ -2008,7 +2048,7 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
 
           if (asyncDeleted % 500 === 0) {
             console.log(
-              `🔄 清除进度: 输入="${prefix}", 已删除=${
+              `${logPrefix} 🔄 清除进度: 输入="${prefix}", 已删除=${
                 deletedCount + asyncDeleted
               }/${deletedCount + totalKeys}`
             );
@@ -2017,16 +2057,19 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
 
         const duration = Date.now() - startTime;
         console.log(
-          `✅ 清除缓存完成: 输入="${prefix}", 删除数量=${
+          `${logPrefix} ✅ 异步清除缓存完成: 输入="${prefix}", 删除数量=${
             deletedCount + asyncDeleted
-          }, 耗时=${duration}ms`
+          }, 总耗时=${duration}ms`
         );
       } catch (error) {
-        console.error(`❌ 异步清除缓存失败: 输入="${prefix}"`, error);
+        console.error(
+          `${logPrefix} ❌ 异步清除缓存失败: 输入="${prefix}"`,
+          error
+        );
       }
     });
   } catch (error) {
-    console.error("清除缓存失败:", error);
+    console.error(`${logPrefix} ❌ 清除缓存失败:`, error);
     res.status(500).json({
       error: "清除缓存失败",
       message: error.message,
