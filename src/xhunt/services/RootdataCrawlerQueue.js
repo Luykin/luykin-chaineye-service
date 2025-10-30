@@ -227,16 +227,27 @@ class RootdataCrawlerQueue {
    */
   async executeCrawl(project) {
     const crawler = require("../../services/rootdata-crawler");
+    const { Fundraising } = require("../../models/postgres-fundraising");
+
     let browser = null;
     let page = null;
 
     try {
+      // 从数据库重新查询完整的项目对象（确保有 Sequelize 方法）
+      const fullProject = await Fundraising.Project.findOne({
+        where: { projectLink: project.projectLink },
+      });
+
+      if (!fullProject) {
+        throw new Error(`项目未找到: ${project.projectLink}`);
+      }
+
       const result = await crawler.initBrowserAndPage();
       browser = result.browser;
       page = result.page;
 
       // 执行爬取（不打印详细日志）
-      await crawler.scrapeAndUpdateProjectDetails(project, page, false);
+      await crawler.scrapeAndUpdateProjectDetails(fullProject, page, false);
     } finally {
       // 确保浏览器被关闭
       if (browser) {
