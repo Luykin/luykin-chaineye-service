@@ -3,6 +3,9 @@ const { Op, literal } = require("sequelize");
 const axios = require("axios");
 const router = express.Router();
 
+// 爬虫队列服务（双重验证机制）
+const crawlerQueue = require("../services/RootdataCrawlerQueue");
+
 // Redis 缓存时间：2小时 = 7200 秒
 const CACHE_TTL_ROOTDATA = 7200;
 // HTTP 缓存时间：2分钟 = 120 秒（确保修正后能快速获取新数据）
@@ -578,10 +581,11 @@ router.get("/search", async (req, res) => {
       return res.json(notFoundResponse);
     }
 
-    // 6. 异步验证和修正数据（不影响响应速度）
+    // 6. 异步验证和修正数据（双重验证机制，不影响响应速度）
     // 修正完成后会自动清除缓存，确保下次请求能获取最新数据
     setImmediate(async () => {
       try {
+        // 第一重：API验证和修正
         await RootdataDataFixService.verifyAndFixProject(
           project,
           Fundraising,
@@ -589,6 +593,9 @@ router.get("/search", async (req, res) => {
           cacheKey // 传入搜索缓存key，修正后会清除
         );
         // console.log(`✅ 数据修正完成: ${cacheKey}`);
+
+        // 第二重：爬虫更新验证（队列化、节流、去重）
+        crawlerQueue.updateCrawl(project);
       } catch (error) {
         console.error("数据修正失败:", error);
       }
