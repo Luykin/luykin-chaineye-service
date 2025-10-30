@@ -127,6 +127,16 @@ class RootdataDataFixService {
 
       if (!apiData || !apiData.items || apiData.items.length === 0) {
         console.log(`⚠️ 未找到API数据，跳过修正: ${projectLink}`);
+
+        // 缓存"未找到"状态（1天），避免重复请求
+        const notFoundCache = {
+          verified: false,
+          notFound: true,
+          checkedAt: Date.now(),
+        };
+        await redisClient.setEx(cacheKey, 86400, JSON.stringify(notFoundCache)); // 1天 = 24 * 3600
+        console.log(`📝 已缓存"未找到"状态（1天）: ${projectLink}`);
+
         return null;
       }
 
