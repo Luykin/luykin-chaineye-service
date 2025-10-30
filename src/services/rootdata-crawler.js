@@ -1,6 +1,5 @@
 const retry = require("async-retry");
 const axios = require("axios");
-const { JSDOM } = require("jsdom");
 // 从 SQLite 导入爬取状态管理
 const { NewCrawlState, C_STATE_TYPE } = require("../models/sqlite-start");
 // 从 PostgreSQL 导入 Fundraising 模型
@@ -692,13 +691,13 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   /**
-   * 方案1：使用 axios + jsdom 获取页面并返回 document
-   * 优点：快速，不需要浏览器，HTML 内容完整
-   * 缺点：不执行 JavaScript（但 RootData 的 HTML 本身包含完整结构）
+   * 方案1：使用 axios + page.setContent 获取页面
+   * 优点：axios 获取快速，可以处理大 HTML
+   * 缺点：setContent 可能遇到大文件问题
    */
-  async fetchPageWithAxios(url, isManualTrigger = false) {
+  async fetchPageWithAxios(url, _page, isManualTrigger = false) {
     if (isManualTrigger) {
-      console.log(`[详情] 方案1开始: axios + jsdom`);
+      console.log(`[详情] 方案1开始: axios + setContent`);
       console.log(`[详情] URL: ${url}`);
     }
 
@@ -780,30 +779,46 @@ class FundraisingCrawler extends BaseCrawler {
         throw new Error("页面重定向到登录页");
       }
 
+      // 【关键】使用 Puppeteer 的 setContent 设置 HTML
+      // 为了处理大 HTML，先导航到空白页，然后设置内容
       if (isManualTrigger) {
-        console.log(`[详情] 开始 jsdom 解析...`);
+        console.log(`[详情] 先导航到空白页...`);
+      }
+      await _page.goto("about:blank", { waitUntil: "domcontentloaded" });
+
+      if (isManualTrigger) {
+        console.log(`[详情] 开始 setContent (HTML: ${htmlStr.length} 字节)...`);
       }
 
-      // 使用 jsdom 解析 HTML
-      const dom = new JSDOM(htmlStr, {
-        url: url,
-        contentType: "text/html",
-        includeNodeLocations: false,
-        storageQuota: 10000000,
+      // 使用 setContent，增加超时时间以处理大 HTML
+      await _page.setContent(htmlStr, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000, // 60秒超时
       });
 
       if (isManualTrigger) {
-        console.log(`[详情] jsdom 解析完成`);
-        const baseInfoCount =
-          dom.window.document.querySelectorAll(".base_info").length;
-        const investorCount =
-          dom.window.document.querySelectorAll(".investor").length;
+        console.log(`[详情] setContent 完成`);
+        console.log(`[详情] 等待 .base_info 元素...`);
+      }
+
+      // 等待关键元素加载
+      await _page.waitForSelector(".base_info", { timeout: 20000 });
+
+      if (isManualTrigger) {
+        console.log(`[详情] 页面加载完成`);
+        const baseInfoCount = await _page.evaluate(() => {
+          return document.querySelectorAll(".base_info").length;
+        });
+        const investorCount = await _page.evaluate(() => {
+          return document.querySelectorAll(".investor").length;
+        });
         console.log(
           `[详情] 页面元素: .base_info=${baseInfoCount}, .investor=${investorCount}`
         );
       }
 
-      return dom.window.document;
+      // 返回 Puppeteer page 对象
+      return _page;
     } catch (error) {
       if (isManualTrigger) {
         console.log(`[详情] ❌ 方案1失败: ${error.message}`);
@@ -923,34 +938,31 @@ class FundraisingCrawler extends BaseCrawler {
         );
       }
 
-      // 【核心重构】优先使用方案1（axios + jsdom），失败后使用方案2（Puppeteer）
-      let document = null;
-      let usePuppeteer = false;
-
-      // 方案1：axios + jsdom（优先）
+      // 【核心】优先使用方案1（axios + setContent），失败后使用方案2（page.goto）
+      // 方案1：axios + setContent（优先）
       try {
-        document = await this.fetchPageWithAxios(
+        await this.fetchPageWithAxios(
           project.projectLink,
+          _page,
           isManualTrigger
         );
         if (isManualTrigger) {
-          console.log(`[详情] ✅ 方案1成功，使用 jsdom document`);
+          console.log(`[详情] ✅ 方案1成功，使用 axios + setContent`);
         }
       } catch (axiosError) {
         if (isManualTrigger) {
-          console.log(`[详情] 方案1失败，切换到方案2 (Puppeteer)`);
+          console.log(`[详情] 方案1失败，切换到方案2 (page.goto)`);
         }
 
-        // 方案2：Puppeteer（fallback）
+        // 方案2：page.goto（fallback）
         try {
           await this.fetchPageWithPuppeteer(
             project.projectLink,
             _page,
             isManualTrigger
           );
-          usePuppeteer = true;
           if (isManualTrigger) {
-            console.log(`[详情] ✅ 方案2成功，使用 Puppeteer page`);
+            console.log(`[详情] ✅ 方案2成功，使用 page.goto`);
           }
         } catch (puppeteerError) {
           throw new Error(
@@ -959,60 +971,35 @@ class FundraisingCrawler extends BaseCrawler {
         }
       }
 
-      // 统一接口：等待 DOM 就绪
-      if (usePuppeteer) {
-        await _page.waitForSelector(".base_info", { timeout: 20000 });
-        if (isManualTrigger) {
-          console.log(`[详情] DOM 就绪 (.base_info) - Puppeteer`);
-          const investorCount = await _page.evaluate(() => {
-            return document.querySelectorAll(".investor").length;
-          });
-          console.log(`[详情] .investor 元素数量: ${investorCount}`);
-        }
-      } else {
-        // jsdom 方式：检查元素是否存在
-        const hasBaseInfo = document.querySelectorAll(".base_info").length > 0;
-        if (!hasBaseInfo) {
-          throw new Error("页面缺少 .base_info 元素，可能加载不完整");
-        }
-        if (isManualTrigger) {
-          console.log(`[详情] DOM 就绪 (.base_info) - jsdom`);
-          const investorCount = document.querySelectorAll(".investor").length;
-          console.log(`[详情] .investor 元素数量: ${investorCount}`);
-        }
+      // 【统一】两个方案都已经返回了可用的 _page，DOM 已就绪
+      if (isManualTrigger) {
+        const investorCount = await _page.evaluate(() => {
+          return document.querySelectorAll(".investor").length;
+        });
+        console.log(`[详情] .investor 元素数量: ${investorCount}`);
       }
 
-      // 第一阶段：点击展开更多按钮并抓取基础投资者数据
-      if (usePuppeteer) {
-        await this.clickExpandButtons(_page);
-      }
-      // jsdom 不需要点击，因为 HTML 已经包含完整内容
+      // 点击展开更多按钮
+      await this.clickExpandButtons(_page);
 
       let mergedInvestors = []; //谁对它投资的投资者数据
       let investedProjects = []; //它对外投资的投资者数据
 
       if (effectiveIsInitial) {
         const initialInvestors = await this.scrapeInitialInvestors(
-          usePuppeteer ? _page : document,
-          isManualTrigger,
-          usePuppeteer
+          _page,
+          isManualTrigger
         );
         if (isManualTrigger) {
           console.log(`[详情] 初始投资者: ${initialInvestors?.length || 0}`);
         }
 
         // 第二阶段：点击 rounds 按钮并抓取轮次数据
-        let roundsInvestors = [];
+        await this.clickRoundsButton(_page);
 
-        if (usePuppeteer) {
-          await this.clickRoundsButton(_page);
-        }
-        // jsdom 不需要点击
-
-        roundsInvestors = await this.processRounds(
-          usePuppeteer ? _page : document,
-          isManualTrigger,
-          usePuppeteer
+        const roundsInvestors = await this.processRounds(
+          _page,
+          isManualTrigger
         );
         if (isManualTrigger) {
           console.log(`[详情] 轮次投资者: ${roundsInvestors?.length || 0}`);
@@ -1034,56 +1021,19 @@ class FundraisingCrawler extends BaseCrawler {
         );
 
         // 第三阶段：抓取它投资的项目（.investment 部分）
-        if (effectiveIsInitial) {
-          if (isManualTrigger) {
-            console.log(`[详情] 开始抓取对外投资...`);
-          }
-          investedProjects = await this.scrapeInvestments(
-            usePuppeteer ? _page : document,
-            isManualTrigger,
-            usePuppeteer
+        if (isManualTrigger) {
+          console.log(`[详情] 开始抓取对外投资...`);
+        }
+        investedProjects = await this.scrapeInvestments(_page, isManualTrigger);
+        if (isManualTrigger) {
+          console.log(
+            `[详情] 对外投资项目数: ${investedProjects?.length || 0}`
           );
-          if (isManualTrigger) {
-            console.log(
-              `[详情] 对外投资项目数: ${investedProjects?.length || 0}`
-            );
-          }
         }
       }
 
-      // 抓取基础信息
-      let details;
-      if (usePuppeteer) {
-        details = await _page.evaluate(() => {
-          const socialLinks = {};
-          document.querySelectorAll(".base_info .links a").forEach((link) => {
-            const type = link
-              .querySelector("span")
-              ?.textContent?.trim()
-              .toLowerCase();
-            if (type) socialLinks[type] = link.href;
-          });
-
-          const teamMembers = Array.from(
-            document.querySelectorAll(".team_member .item")
-          ).map((member) => ({
-            name: member.querySelector(".content h2")?.textContent?.trim(),
-            position: member.querySelector(".content p")?.textContent?.trim(),
-            avatar: member.querySelector(".logo-wraper img")?.src || "",
-            profileLink: member.querySelector(".card")?.href || "",
-          }));
-
-          return {
-            socialLinks,
-            teamMembers,
-            projectName: document
-              .querySelector(".detail_info_head h1.name")
-              ?.textContent?.trim(),
-            logo: document.querySelector(".detail_info_head .logo")?.src || "",
-          };
-        });
-      } else {
-        // jsdom 方式
+      // 抓取基础信息（使用 Puppeteer）
+      const details = await _page.evaluate(() => {
         const socialLinks = {};
         document.querySelectorAll(".base_info .links a").forEach((link) => {
           const type = link
@@ -1102,7 +1052,7 @@ class FundraisingCrawler extends BaseCrawler {
           profileLink: member.querySelector(".card")?.href || "",
         }));
 
-        details = {
+        return {
           socialLinks,
           teamMembers,
           projectName: document
@@ -1110,7 +1060,7 @@ class FundraisingCrawler extends BaseCrawler {
             ?.textContent?.trim(),
           logo: document.querySelector(".detail_info_head .logo")?.src || "",
         };
-      }
+      });
 
       // 更新项目基础信息
       const isCrawlSuccess =
@@ -1208,82 +1158,23 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   // 抓取初始投资者数据（无轮次信息）
-  async scrapeInitialInvestors(
-    target,
-    isManualTrigger = false,
-    usePuppeteer = false
-  ) {
-    // 执行抓取
-    let result;
-    if (usePuppeteer) {
-      // Puppeteer 模式：在浏览器环境执行
-      result = await target.evaluate(() => {
-        // 收集调试信息
-        const debug = {
-          investorCount: document.querySelectorAll(".investor").length,
-          rowCount: document.querySelectorAll(".investor .row").length,
-          rowItemCount: document.querySelectorAll(".investor .row .item")
-            .length,
-          itemCount: document.querySelectorAll(".investor .item").length,
-        };
-
-        // 尝试不同的选择器
-        let items = document.querySelectorAll(".investor .row .item");
-        let usedSelector = ".investor .row .item";
-
-        if (items.length === 0) {
-          items = document.querySelectorAll(".investor .item");
-          usedSelector = ".investor .item";
-        }
-
-        debug.usedSelector = usedSelector;
-        debug.finalCount = items.length;
-
-        const investors = Array.from(items)
-          .map((item) => {
-            const link = item.querySelector("a");
-            if (!link) {
-              return null;
-            }
-
-            // 获取链接并确保是绝对路径
-            let projectLink = link.getAttribute("href") || link.href;
-            if (projectLink && !projectLink.startsWith("http")) {
-              try {
-                projectLink = new URL(projectLink, "https://www.rootdata.com")
-                  .href;
-              } catch (e) {
-                // URL 解析失败，保持原样
-              }
-            }
-
-            return {
-              projectLink: projectLink,
-              projectName: link.querySelector("h2")?.textContent?.trim(),
-              lead: !!item.querySelector(".status_icon.status_position"),
-              source: "initial",
-            };
-          })
-          .filter(Boolean);
-
-        return { debug, investors };
-      });
-    } else {
-      // jsdom 模式：在 Node.js 环境直接操作 DOM
-      const doc = target; // jsdom document
+  async scrapeInitialInvestors(_page, isManualTrigger = false) {
+    // Puppeteer 模式：在浏览器环境执行
+    const result = await _page.evaluate(() => {
+      // 收集调试信息
       const debug = {
-        investorCount: doc.querySelectorAll(".investor").length,
-        rowCount: doc.querySelectorAll(".investor .row").length,
-        rowItemCount: doc.querySelectorAll(".investor .row .item").length,
-        itemCount: doc.querySelectorAll(".investor .item").length,
+        investorCount: document.querySelectorAll(".investor").length,
+        rowCount: document.querySelectorAll(".investor .row").length,
+        rowItemCount: document.querySelectorAll(".investor .row .item").length,
+        itemCount: document.querySelectorAll(".investor .item").length,
       };
 
       // 尝试不同的选择器
-      let items = doc.querySelectorAll(".investor .row .item");
+      let items = document.querySelectorAll(".investor .row .item");
       let usedSelector = ".investor .row .item";
 
       if (items.length === 0) {
-        items = doc.querySelectorAll(".investor .item");
+        items = document.querySelectorAll(".investor .item");
         usedSelector = ".investor .item";
       }
 
@@ -1317,8 +1208,8 @@ class FundraisingCrawler extends BaseCrawler {
         })
         .filter(Boolean);
 
-      result = { debug, investors };
-    }
+      return { debug, investors };
+    });
 
     // 仅在手动触发时打印详细调试信息
     if (isManualTrigger) {
@@ -1356,114 +1247,19 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   // 处理轮次数据
-  async processRounds(target, isManualTrigger = false, usePuppeteer = false) {
-    // 执行抓取
-    let result;
-    if (usePuppeteer) {
-      // Puppeteer 模式：在浏览器环境执行
-      result = await target.evaluate(() => {
-        // 收集调试信息
-        const debug = {
-          investorCount: document.querySelectorAll(".investor").length,
-          trCount: document.querySelectorAll(".investor tr").length,
-          theadCount: document.querySelectorAll(".investor thead").length,
-        };
-
-        // 建立表头到列下标的映射，避免硬编码列序号
-        const headerCells = Array.from(
-          document.querySelectorAll(
-            ".investor thead th, .investor tr:first-child th, .investor tr:first-child td"
-          )
-        );
-
-        debug.headerCellsCount = headerCells.length;
-
-        const normalize = (str) =>
-          String(str || "")
-            .trim()
-            .toLowerCase();
-        const headerTexts = headerCells.map((th) => normalize(th.textContent));
-        debug.headerTexts = headerTexts;
-
-        const findIndexBy = (regex, fallbackIndex) => {
-          const idx = headerTexts.findIndex((t) => regex.test(t));
-          return idx >= 0 ? idx : fallbackIndex;
-        };
-
-        const idxRound = findIndexBy(/round/i, 0);
-        const idxAmount = findIndexBy(/amount/i, 1);
-        const idxValuation = findIndexBy(/valuation/i, 2);
-        const idxDate = findIndexBy(/date/i, 3);
-        const idxInvestors = findIndexBy(/investor/i, headerCells.length - 1);
-
-        debug.columnIndexes = {
-          idxRound,
-          idxAmount,
-          idxValuation,
-          idxDate,
-          idxInvestors,
-        };
-
-        const rows = Array.from(
-          document.querySelectorAll(".investor tr")
-        ).slice(1);
-        debug.dataRowsCount = rows.length;
-
-        const investors = rows
-          .map((row) => {
-            const cells = row.querySelectorAll("td");
-            const round = cells[idxRound]?.textContent?.trim();
-            const amount = cells[idxAmount]?.textContent?.trim();
-            const valuation = cells[idxValuation]?.textContent?.trim();
-            const date = cells[idxDate]?.textContent?.trim();
-
-            const investorCell = cells[idxInvestors];
-            if (!investorCell) {
-              return [];
-            }
-
-            const investorLinks = investorCell.querySelectorAll("a");
-
-            return Array.from(investorLinks).map((a) => {
-              // 获取链接并确保是绝对路径
-              let projectLink = a.getAttribute("href") || a.href;
-              if (projectLink && !projectLink.startsWith("http")) {
-                try {
-                  projectLink = new URL(projectLink, "https://www.rootdata.com")
-                    .href;
-                } catch (e) {
-                  // URL 解析失败，保持原样
-                }
-              }
-
-              return {
-                projectLink: projectLink,
-                projectName: a.textContent.replace("*", "").trim(),
-                lead: a.textContent.includes("*"),
-                round,
-                amount,
-                valuation,
-                date,
-                source: "rounds",
-              };
-            });
-          })
-          .flat();
-
-        return { debug, investors };
-      });
-    } else {
-      // jsdom 模式：在 Node.js 环境直接操作 DOM
-      const doc = target; // jsdom document
+  async processRounds(_page, isManualTrigger = false) {
+    // Puppeteer 模式：在浏览器环境执行
+    const result = await _page.evaluate(() => {
+      // 收集调试信息
       const debug = {
-        investorCount: doc.querySelectorAll(".investor").length,
-        trCount: doc.querySelectorAll(".investor tr").length,
-        theadCount: doc.querySelectorAll(".investor thead").length,
+        investorCount: document.querySelectorAll(".investor").length,
+        trCount: document.querySelectorAll(".investor tr").length,
+        theadCount: document.querySelectorAll(".investor thead").length,
       };
 
       // 建立表头到列下标的映射，避免硬编码列序号
       const headerCells = Array.from(
-        doc.querySelectorAll(
+        document.querySelectorAll(
           ".investor thead th, .investor tr:first-child th, .investor tr:first-child td"
         )
       );
@@ -1496,7 +1292,9 @@ class FundraisingCrawler extends BaseCrawler {
         idxInvestors,
       };
 
-      const rows = Array.from(doc.querySelectorAll(".investor tr")).slice(1);
+      const rows = Array.from(document.querySelectorAll(".investor tr")).slice(
+        1
+      );
       debug.dataRowsCount = rows.length;
 
       const investors = rows
@@ -1540,8 +1338,8 @@ class FundraisingCrawler extends BaseCrawler {
         })
         .flat();
 
-      result = { debug, investors };
-    }
+      return { debug, investors };
+    });
 
     // 仅在手动触发时打印详细调试信息
     if (isManualTrigger) {
@@ -1569,26 +1367,11 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   // 抓取投资者对外投资的项目（.investment 部分）
-  async scrapeInvestments(
-    target,
-    isManualTrigger = false,
-    usePuppeteer = false
-  ) {
+  async scrapeInvestments(_page, isManualTrigger = false) {
     try {
       if (isManualTrigger) {
         console.log(`[详情] 开始抓取 .investment 部分...`);
       }
-
-      // jsdom 模式：由于无法点击 tab，跳过此功能
-      if (!usePuppeteer) {
-        if (isManualTrigger) {
-          console.log(`[详情] jsdom 模式无法点击 tab，跳过 .investment 抓取`);
-        }
-        return [];
-      }
-
-      // Puppeteer 模式：继续原逻辑
-      const _page = target;
 
       // 检查是否存在 .investment 元素
       const hasInvestment = await _page.evaluate(() => {
