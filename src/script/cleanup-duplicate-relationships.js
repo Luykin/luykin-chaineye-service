@@ -17,6 +17,7 @@ async function cleanupDuplicateRelationships() {
   let transaction;
   let mixedDuplicates = [];
   let mixedDeleted = 0;
+  let dashDuplicatesDeleted = 0;
   let updatedCount = 0;
   let totalDeleted = 0;
 
@@ -71,20 +72,60 @@ async function cleanupDuplicateRelationships() {
       `   发现 ${mixedDuplicates.length} 组混合重复（null + '--'）\n`
     );
 
-    // ========== 步骤3：删除混合重复中的多余记录 ==========
+    // ========== 步骤3：删除混合重复中的 null 记录（保留 '--' 记录）==========
     if (mixedDuplicates.length > 0) {
-      console.log("🗑️  步骤3：删除混合重复中的多余记录...");
+      console.log("🗑️  步骤3：删除混合重复中的 null 记录（优先保留 '--'）...");
       for (const dup of mixedDuplicates) {
-        const idsToDelete = dup.all_ids.filter((id) => id !== dup.keep_id);
+        // 删除这个组合中所有的 null 记录
         const deletedCount = await Fundraising.InvestmentRelationships.destroy({
           where: {
-            id: { [Op.in]: idsToDelete },
+            investorProjectId: dup.investorProjectId,
+            fundedProjectId: dup.fundedProjectId,
+            round: null,
           },
           transaction,
         });
         mixedDeleted += deletedCount;
       }
-      console.log(`   ✅ 删除了 ${mixedDeleted} 条混合重复记录\n`);
+      console.log(
+        `   ✅ 删除了 ${mixedDeleted} 条 null 记录（已有对应的 '--' 记录）\n`
+      );
+
+      // 步骤3.5：清理混合组中可能重复的 '--' 记录
+      console.log("🔍 步骤3.5：清理混合组中可能重复的 '--' 记录...");
+      for (const dup of mixedDuplicates) {
+        // 查找这个组合中的所有 '--' 记录
+        const dashRecords = await Fundraising.InvestmentRelationships.findAll({
+          where: {
+            investorProjectId: dup.investorProjectId,
+            fundedProjectId: dup.fundedProjectId,
+            round: "--",
+          },
+          attributes: ["id"],
+          order: [["id", "ASC"]],
+          transaction,
+        });
+
+        if (dashRecords.length > 1) {
+          // 保留第一条，删除其他
+          const keepId = dashRecords[0].id;
+          const deleteIds = dashRecords.slice(1).map((r) => r.id);
+          const deleted = await Fundraising.InvestmentRelationships.destroy({
+            where: {
+              id: { [Op.in]: deleteIds },
+            },
+            transaction,
+          });
+          dashDuplicatesDeleted += deleted;
+        }
+      }
+      if (dashDuplicatesDeleted > 0) {
+        console.log(
+          `   ✅ 额外删除了 ${dashDuplicatesDeleted} 条重复的 '--' 记录\n`
+        );
+      } else {
+        console.log(`   ✅ 没有发现重复的 '--' 记录\n`);
+      }
     }
 
     // ========== 步骤4：将所有剩余的 round=null 改为 '--' ==========
@@ -191,10 +232,15 @@ async function cleanupDuplicateRelationships() {
     // 最终统计
     console.log("=".repeat(60));
     console.log("📊 清理汇总：");
-    console.log(`   - 删除了 ${mixedDeleted} 条混合重复记录（null + '--'）`);
+    console.log(`   - 删除了 ${mixedDeleted} 条冲突的 null 记录`);
+    console.log(`   - 删除了 ${dashDuplicatesDeleted} 条重复的 '--' 记录`);
     console.log(`   - 将 ${updatedCount} 条记录的 round 从 null 改为 '--'`);
-    console.log(`   - 删除了 ${totalDeleted} 条同值重复记录`);
-    console.log(`   - 总计删除: ${mixedDeleted + totalDeleted} 条重复记录`);
+    console.log(`   - 删除了 ${totalDeleted} 条其他重复记录`);
+    console.log(
+      `   - 总计删除: ${
+        mixedDeleted + dashDuplicatesDeleted + totalDeleted
+      } 条重复记录`
+    );
     console.log(`   - 数据总量：${totalCount} → ${finalCount}`);
     console.log("=".repeat(60));
   } catch (error) {
