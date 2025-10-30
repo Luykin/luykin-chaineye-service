@@ -6,10 +6,10 @@ const router = express.Router();
 // 爬虫队列服务（双重验证机制）
 const crawlerQueue = require("../services/RootdataCrawlerQueue");
 
-// Redis 缓存时间：2小时 = 7200 秒
-const CACHE_TTL_ROOTDATA = 7200;
-// HTTP 缓存时间：2分钟 = 120 秒（确保修正后能快速获取新数据）
-const HTTP_CACHE_TTL = 120;
+// Redis 缓存时间：10分钟 = 600 秒
+const CACHE_TTL_ROOTDATA = 600;
+// HTTP 缓存时间：100分钟 = 6000 秒
+const HTTP_CACHE_TTL = 6000;
 
 // Rootdata API 配置
 const ROOTDATA_API_BASE = "https://api.rootdata.com/open";
@@ -629,13 +629,15 @@ router.get("/search", async (req, res) => {
       try {
         await req.redisClient.setEx(
           cacheKey,
-          3600,
+          CACHE_TTL_ROOTDATA,
           JSON.stringify(notFoundResponse)
         );
       } catch (error) {
         console.error("Redis Client Error (SET):", error);
       }
 
+      res.set("Cache-Control", `public, max-age=${HTTP_CACHE_TTL}`);
+      res.set("X-Cache-Status", "MISS");
       return res.json(notFoundResponse);
     }
 
@@ -880,7 +882,7 @@ router.get("/search", async (req, res) => {
       projectLink: project?.projectLink,
     };
 
-    // 12. 缓存结果到 Redis（2小时）
+    // 12. 缓存结果到 Redis 10分钟
     try {
       await req.redisClient.setEx(
         cacheKey,
