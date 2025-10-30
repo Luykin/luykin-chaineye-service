@@ -1,143 +1,338 @@
 <div class="stats-section">
-  <div class="section-header">
-    <h2>🖥️ 设备监控</h2>
-    <button
-      id="refreshDeviceStatus"
-      class="action-btn"
-      style="margin-left: auto"
-    >
-      🔄 获取当前设备状态
-    </button>
-  </div>
+  <div class="section" id="device-monitor-section">
+    <h2 class="section-title">🖥️ 设备监控</h2>
 
-  <!-- 加载状态 -->
-  <div id="deviceLoadingStatus" class="info-message" style="display: none">
-    ⏳ 正在获取设备状态...
-  </div>
+    <div class="stat-card" style="max-width: 900px; margin: 0 auto 20px">
+      <button
+        id="refreshDeviceStatus"
+        style="
+          width: 100%;
+          padding: 12px 20px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+        "
+      >
+        🔄 获取当前设备状态
+      </button>
 
-  <!-- 错误提示 -->
-  <div
-    id="deviceErrorMessage"
-    class="error-message"
-    style="display: none"
-  ></div>
+      <!-- 加载状态 -->
+      <div
+        id="deviceLoadingStatus"
+        style="
+          display: none;
+          padding: 15px;
+          background: #f3f4f6;
+          border-radius: 6px;
+          margin-top: 15px;
+          color: #374151;
+          font-weight: 600;
+        "
+      >
+        ⏳ 正在获取设备状态...
+      </div>
 
-  <!-- 设备状态展示区域 -->
-  <div id="deviceStatusContainer" style="display: none">
-    <!-- 系统信息 -->
-    <div class="stat-card">
-      <h3>📋 系统信息</h3>
-      <div class="stat-row">
-        <span class="stat-label">操作系统:</span>
-        <span class="stat-value" id="systemOS">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">主机名:</span>
-        <span class="stat-value" id="systemHostname">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">运行时间:</span>
-        <span class="stat-value" id="systemUptime">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">更新时间:</span>
-        <span class="stat-value" id="updateTime">-</span>
-      </div>
+      <!-- 错误提示 -->
+      <div
+        id="deviceErrorMessage"
+        style="
+          display: none;
+          padding: 15px;
+          background: #fee2e2;
+          border-radius: 6px;
+          margin-top: 15px;
+          color: #991b1b;
+          font-weight: 600;
+        "
+      ></div>
     </div>
 
-    <!-- CPU 信息 -->
-    <div class="stat-card">
-      <h3>💻 CPU 使用情况</h3>
-      <div class="stat-row">
-        <span class="stat-label">CPU 核心数:</span>
-        <span class="stat-value" id="cpuCores">-</span>
+    <!-- 设备状态展示区域 -->
+    <div id="deviceStatusContainer" style="display: none">
+      <!-- 系统信息 -->
+      <div class="stat-card" style="max-width: 900px; margin: 0 auto 20px">
+        <div class="stat-title" style="margin-bottom: 15px">📋 系统信息</div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >操作系统:</span
+          >
+          <span
+            class="stat-value"
+            id="systemOS"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >主机名:</span
+          >
+          <span
+            class="stat-value"
+            id="systemHostname"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >运行时间:</span
+          >
+          <span
+            class="stat-value"
+            id="systemUptime"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >更新时间:</span
+          >
+          <span
+            class="stat-value"
+            id="updateTime"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
       </div>
-      <div class="stat-row">
-        <span class="stat-label">CPU 使用率:</span>
-        <span class="stat-value" id="cpuUsage">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">负载平均值 (1/5/15分钟):</span>
-        <span class="stat-value" id="loadAverage">-</span>
-      </div>
-    </div>
 
-    <!-- 内存信息 -->
-    <div class="stat-card">
-      <h3>💾 内存使用情况</h3>
-      <div class="stat-row">
-        <span class="stat-label">总内存:</span>
-        <span class="stat-value" id="memTotal">-</span>
+      <!-- CPU 信息 -->
+      <div class="stat-card" style="max-width: 900px; margin: 0 auto 20px">
+        <div class="stat-title" style="margin-bottom: 15px">
+          💻 CPU 使用情况
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >CPU 核心数:</span
+          >
+          <span
+            class="stat-value"
+            id="cpuCores"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >CPU 使用率:</span
+          >
+          <span
+            class="stat-value"
+            id="cpuUsage"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >负载平均值 (1/5/15分钟):</span
+          >
+          <span
+            class="stat-value"
+            id="loadAverage"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
       </div>
-      <div class="stat-row">
-        <span class="stat-label">已使用:</span>
-        <span class="stat-value" id="memUsed">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">可用内存:</span>
-        <span class="stat-value" id="memFree">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">使用率:</span>
-        <span class="stat-value" id="memUsagePercent">-</span>
-      </div>
-    </div>
 
-    <!-- PM2 状态 -->
-    <div class="stat-card">
-      <h3>🔄 PM2 进程状态</h3>
-      <div id="pm2Status">
-        <div class="info-message">暂无数据</div>
+      <!-- 内存信息 -->
+      <div class="stat-card" style="max-width: 900px; margin: 0 auto 20px">
+        <div class="stat-title" style="margin-bottom: 15px">
+          💾 内存使用情况
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >总内存:</span
+          >
+          <span
+            class="stat-value"
+            id="memTotal"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >已使用:</span
+          >
+          <span
+            class="stat-value"
+            id="memUsed"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >可用内存:</span
+          >
+          <span
+            class="stat-value"
+            id="memFree"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >使用率:</span
+          >
+          <span
+            class="stat-value"
+            id="memUsagePercent"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
       </div>
-    </div>
 
-    <!-- Redis 状态 -->
-    <div class="stat-card">
-      <h3>📦 Redis 状态</h3>
-      <div class="stat-row">
-        <span class="stat-label">连接状态:</span>
-        <span class="stat-value" id="redisStatus">-</span>
+      <!-- PM2 状态 -->
+      <div class="stat-card" style="max-width: 900px; margin: 0 auto 20px">
+        <div class="stat-title" style="margin-bottom: 15px">
+          🔄 PM2 进程状态
+        </div>
+        <div id="pm2Status">
+          <div style="color: #6b7280; font-size: 14px">暂无数据</div>
+        </div>
       </div>
-      <div class="stat-row">
-        <span class="stat-label">已用内存:</span>
-        <span class="stat-value" id="redisMemory">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">Key 数量:</span>
-        <span class="stat-value" id="redisKeys">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">运行天数:</span>
-        <span class="stat-value" id="redisUptime">-</span>
-      </div>
-    </div>
 
-    <!-- PostgreSQL 状态 -->
-    <div class="stat-card">
-      <h3>🐘 PostgreSQL 状态</h3>
-      <div class="stat-row">
-        <span class="stat-label">连接状态:</span>
-        <span class="stat-value" id="pgStatus">-</span>
+      <!-- Redis 状态 -->
+      <div class="stat-card" style="max-width: 900px; margin: 0 auto 20px">
+        <div class="stat-title" style="margin-bottom: 15px">📦 Redis 状态</div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >连接状态:</span
+          >
+          <span
+            class="stat-value"
+            id="redisStatus"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >已用内存:</span
+          >
+          <span
+            class="stat-value"
+            id="redisMemory"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >内存限制:</span
+          >
+          <span
+            class="stat-value"
+            id="redisMaxMemory"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >内存使用率:</span
+          >
+          <span
+            class="stat-value"
+            id="redisMemoryUsagePercent"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >Key 数量:</span
+          >
+          <span
+            class="stat-value"
+            id="redisKeys"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >运行天数:</span
+          >
+          <span
+            class="stat-value"
+            id="redisUptime"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
       </div>
-      <div class="stat-row">
-        <span class="stat-label">版本:</span>
-        <span class="stat-value" id="pgVersion">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">数据库大小:</span>
-        <span class="stat-value" id="pgSize">-</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">活跃连接数:</span>
-        <span class="stat-value" id="pgConnections">-</span>
-      </div>
-    </div>
 
-    <!-- 磁盘信息 -->
-    <div class="stat-card">
-      <h3>💿 磁盘使用情况</h3>
-      <div id="diskStatus">
-        <div class="info-message">暂无数据</div>
+      <!-- PostgreSQL 状态 -->
+      <div class="stat-card" style="max-width: 900px; margin: 0 auto 20px">
+        <div class="stat-title" style="margin-bottom: 15px">
+          🐘 PostgreSQL 状态
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >连接状态:</span
+          >
+          <span
+            class="stat-value"
+            id="pgStatus"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >版本:</span
+          >
+          <span
+            class="stat-value"
+            id="pgVersion"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >数据库大小:</span
+          >
+          <span
+            class="stat-value"
+            id="pgSize"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+        <div class="stat-row">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px"
+            >活跃连接数:</span
+          >
+          <span
+            class="stat-value"
+            id="pgConnections"
+            style="color: #111827; font-size: 14px; font-weight: 600"
+            >-</span
+          >
+        </div>
+      </div>
+
+      <!-- 磁盘信息 -->
+      <div class="stat-card" style="max-width: 900px; margin: 0 auto 20px">
+        <div class="stat-title" style="margin-bottom: 15px">
+          💿 磁盘使用情况
+        </div>
+        <div id="diskStatus">
+          <div style="color: #6b7280; font-size: 14px">暂无数据</div>
+        </div>
       </div>
     </div>
   </div>
@@ -214,10 +409,12 @@
           .map(
             (app) => `
         <div class="stat-row">
-          <span class="stat-label">${app.name}:</span>
+          <span class="stat-label" style="color: #6b7280; font-size: 14px;">${
+            app.name
+          }:</span>
           <span class="stat-value" style="color: ${
-            app.status === "online" ? "#4caf50" : "#f44336"
-          }">
+            app.status === "online" ? "#10b981" : "#ef4444"
+          }; font-size: 14px; font-weight: 600;">
             ${app.status} | CPU: ${app.cpu} | Mem: ${app.memory} | 重启: ${
               app.restarts
             }次
@@ -228,24 +425,30 @@
           .join("");
       } else {
         pm2Container.innerHTML =
-          '<div class="info-message">PM2 未运行或无进程</div>';
+          '<div style="color: #6b7280; font-size: 14px;">PM2 未运行或无进程</div>';
       }
 
       // 更新Redis状态
       const redisStatusEl = document.getElementById("redisStatus");
       if (data.redis.connected) {
         redisStatusEl.textContent = "✅ 已连接";
-        redisStatusEl.style.color = "#4caf50";
+        redisStatusEl.style.color = "#10b981";
         document.getElementById("redisMemory").textContent =
           data.redis.memory || "-";
+        document.getElementById("redisMaxMemory").textContent =
+          data.redis.maxMemory || "-";
+        document.getElementById("redisMemoryUsagePercent").textContent =
+          data.redis.memoryUsagePercent || "-";
         document.getElementById("redisKeys").textContent =
           data.redis.keys || "-";
         document.getElementById("redisUptime").textContent =
           data.redis.uptime || "-";
       } else {
         redisStatusEl.textContent = "❌ 未连接";
-        redisStatusEl.style.color = "#f44336";
+        redisStatusEl.style.color = "#ef4444";
         document.getElementById("redisMemory").textContent = "-";
+        document.getElementById("redisMaxMemory").textContent = "-";
+        document.getElementById("redisMemoryUsagePercent").textContent = "-";
         document.getElementById("redisKeys").textContent = "-";
         document.getElementById("redisUptime").textContent = "-";
       }
@@ -254,7 +457,7 @@
       const pgStatusEl = document.getElementById("pgStatus");
       if (data.postgresql.connected) {
         pgStatusEl.textContent = "✅ 已连接";
-        pgStatusEl.style.color = "#4caf50";
+        pgStatusEl.style.color = "#10b981";
         document.getElementById("pgVersion").textContent =
           data.postgresql.version || "-";
         document.getElementById("pgSize").textContent =
@@ -263,7 +466,7 @@
           data.postgresql.connections || "-";
       } else {
         pgStatusEl.textContent = "❌ 未连接";
-        pgStatusEl.style.color = "#f44336";
+        pgStatusEl.style.color = "#ef4444";
         document.getElementById("pgVersion").textContent = "-";
         document.getElementById("pgSize").textContent = "-";
         document.getElementById("pgConnections").textContent = "-";
@@ -276,8 +479,8 @@
           .map(
             (disk) => `
         <div class="stat-row">
-          <span class="stat-label">${disk.filesystem} (${disk.mounted}):</span>
-          <span class="stat-value">
+          <span class="stat-label" style="color: #6b7280; font-size: 14px;">${disk.filesystem} (${disk.mounted}):</span>
+          <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
             已用: ${disk.used} / 总计: ${disk.size} (${disk.usePercent})
           </span>
         </div>
@@ -286,7 +489,7 @@
           .join("");
       } else {
         diskContainer.innerHTML =
-          '<div class="info-message">暂无磁盘数据</div>';
+          '<div style="color: #6b7280; font-size: 14px;">暂无磁盘数据</div>';
       }
     }
   })();

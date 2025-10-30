@@ -1768,26 +1768,43 @@ router.get("/device-status", basicAuth, async (req, res) => {
       connected: false,
     };
     try {
-      const redis = require("../../utils/redis");
-      if (redis && redis.status === "ready") {
-        const info = await redis.info();
+      const redisClient = req.redisClient;
+      if (redisClient && redisClient.isReady) {
+        // 获取Redis INFO信息
+        const info = await redisClient.info();
         const lines = info.split("\r\n");
         const redisInfo = {};
         lines.forEach((line) => {
           if (line && !line.startsWith("#")) {
             const [key, value] = line.split(":");
             if (key && value) {
-              redisInfo[key] = value;
+              redisInfo[key] = value.trim();
             }
           }
         });
 
         // 获取所有key数量
-        const dbKeys = await redis.dbsize();
+        const dbKeys = await redisClient.dbSize();
+
+        // 计算内存使用率
+        let memoryUsagePercent = "-";
+        const usedMemory = parseInt(redisInfo.used_memory);
+        const maxMemory = parseInt(redisInfo.maxmemory);
+
+        if (maxMemory > 0 && usedMemory > 0) {
+          // 如果设置了maxmemory，计算使用率
+          memoryUsagePercent =
+            ((usedMemory / maxMemory) * 100).toFixed(2) + "%";
+        } else if (usedMemory > 0) {
+          // 如果没有设置maxmemory，显示提示
+          memoryUsagePercent = "未设置限制";
+        }
 
         deviceStatus.redis = {
           connected: true,
           memory: redisInfo.used_memory_human || "-",
+          maxMemory: redisInfo.maxmemory_human || "未设置",
+          memoryUsagePercent: memoryUsagePercent,
           keys: dbKeys || 0,
           uptime: redisInfo.uptime_in_days
             ? `${redisInfo.uptime_in_days} 天`
