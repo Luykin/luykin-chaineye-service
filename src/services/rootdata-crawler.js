@@ -703,16 +703,23 @@ class FundraisingCrawler extends BaseCrawler {
     }
 
     try {
-      // 直接使用 axios，使用 retry 包装以提高成功率
+      // 检查 axios 是否可用
+      if (!axios || typeof axios.get !== "function") {
+        throw new Error("axios 模块未正确加载");
+      }
+
+      if (isManualTrigger) {
+        console.log(`[详情] axios 模块检查通过`);
+      }
+
+      // 直接使用 axios.get，使用 retry 包装以提高成功率
       const response = await retry(
         async (bail, attemptNum) => {
           if (isManualTrigger) {
             console.log(`[详情] axios 请求尝试 ${attemptNum}/3`);
           }
           try {
-            const res = await axios({
-              method: "GET",
-              url: url,
+            const res = await axios.get(url, {
               timeout: 20000,
               headers: {
                 "User-Agent":
