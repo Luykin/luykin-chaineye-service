@@ -19,6 +19,7 @@ async function cleanupDuplicateRelationships() {
   let mixedDeleted = 0;
   let dashDuplicatesDeleted = 0;
   let additionalDeleted = 0;
+  let nullDuplicatesDeleted = 0;
   let updatedCount = 0;
   let totalDeleted = 0;
 
@@ -129,14 +130,13 @@ async function cleanupDuplicateRelationships() {
       }
     }
 
-    // ========== 步骤4：删除所有重复的 null 记录（只保留没有其他 round 的 null）==========
-    console.log("🔍 步骤4：删除所有重复的 null 记录...");
+    // ========== 步骤4：删除有其他 round 值的组合中的 null 记录 ==========
+    console.log("🗑️  步骤4：删除有其他 round 值的组合中的 null 记录...");
     console.log(
-      "   策略：如果 (A, B) 组合有非 null 的 round，删除所有 (A, B, null) 记录\n"
+      "   策略：如果 (A, B) 有非 null 的 round，删除所有 (A, B, null)\n"
     );
 
-    // 直接删除所有 round=null 且存在其他 round 值的记录
-    const deleteResult = await sequelize.query(
+    const deleteWithOtherRound = await sequelize.query(
       `
       DELETE FROM "InvestmentRelationships"
       WHERE round IS NULL
@@ -154,11 +154,56 @@ async function cleanupDuplicateRelationships() {
       }
     );
 
-    additionalDeleted = deleteResult[1] || 0; // PostgreSQL 返回 [result, rowCount]
-    console.log(`   ✅ 删除了 ${additionalDeleted} 条重复的 null 记录\n`);
+    additionalDeleted = deleteWithOtherRound[1] || 0;
+    console.log(`   ✅ 删除了 ${additionalDeleted} 条 null 记录\n`);
 
-    // ========== 步骤5：将剩余的 round=null 改为 '--'（这些不会冲突）==========
-    console.log("🔧 步骤5：将剩余的 round=null 改为 '--'...");
+    // ========== 步骤5：处理只有 null 记录的组合（保留一条，删除重复）==========
+    console.log("🔍 步骤5：查找只有 null 记录的重复组合...");
+
+    // 找出 (A, B) 组合只有 null 记录且有多条的情况
+    const nullOnlyDuplicates = await sequelize.query(
+      `
+      SELECT 
+        "investorProjectId",
+        "fundedProjectId",
+        COUNT(*) as count,
+        MIN(id) as keep_id,
+        ARRAY_AGG(id ORDER BY id) as all_ids
+      FROM "InvestmentRelationships"
+      WHERE round IS NULL
+      GROUP BY "investorProjectId", "fundedProjectId"
+      HAVING COUNT(*) > 1
+      `,
+      {
+        type: sequelize.QueryTypes.SELECT,
+        transaction,
+      }
+    );
+
+    console.log(
+      `   发现 ${nullOnlyDuplicates.length} 组只有 null 的重复记录\n`
+    );
+
+    let nullDuplicatesDeleted = 0;
+    if (nullOnlyDuplicates.length > 0) {
+      console.log(
+        "🗑️  步骤5.5：删除这些组合中的重复 null 记录（保留第一条）..."
+      );
+      for (const dup of nullOnlyDuplicates) {
+        const idsToDelete = dup.all_ids.filter((id) => id !== dup.keep_id);
+        const deleted = await Fundraising.InvestmentRelationships.destroy({
+          where: {
+            id: { [Op.in]: idsToDelete },
+          },
+          transaction,
+        });
+        nullDuplicatesDeleted += deleted;
+      }
+      console.log(`   ✅ 删除了 ${nullDuplicatesDeleted} 条重复的 null 记录\n`);
+    }
+
+    // ========== 步骤6：将剩余的唯一 null 改为 '--' ==========
+    console.log("🔧 步骤6：将剩余的 null 改为 '--'...");
     [updatedCount] = await Fundraising.InvestmentRelationships.update(
       { round: "--" },
       {
@@ -168,8 +213,8 @@ async function cleanupDuplicateRelationships() {
     );
     console.log(`   ✅ 更新了 ${updatedCount} 条记录\n`);
 
-    // ========== 步骤6：查找剩余的重复关系（同一 round 值的重复）==========
-    console.log("🔍 步骤6：查找剩余的重复投资关系...");
+    // ========== 步骤7：查找剩余的重复关系（同一 round 值的重复）==========
+    console.log("🔍 步骤7：查找剩余的重复投资关系...");
 
     // 使用原生 SQL 查找重复
     const duplicates = await sequelize.query(
@@ -194,7 +239,7 @@ async function cleanupDuplicateRelationships() {
 
     console.log(`   发现 ${duplicates.length} 组重复数据\n`);
 
-    // ========== 步骤7：删除剩余的重复记录 ==========
+    // ========== 步骤8：删除剩余的重复记录 ==========
     if (duplicates.length > 0) {
       console.log("📋 重复数据详情（前10组）：");
       for (let i = 0; i < Math.min(10, duplicates.length); i++) {
@@ -212,7 +257,7 @@ async function cleanupDuplicateRelationships() {
         );
       }
 
-      console.log("\n🗑️  步骤7：删除剩余的重复记录（保留ID最小的）...");
+      console.log("\n🗑️  步骤8：删除剩余的重复记录（保留ID最小的）...");
 
       for (const dup of duplicates) {
         // 删除除了最小 ID 之外的所有记录
@@ -231,8 +276,8 @@ async function cleanupDuplicateRelationships() {
       console.log(`   ✅ 删除了 ${totalDeleted} 条剩余重复记录\n`);
     }
 
-    // ========== 步骤8：验证结果 ==========
-    console.log("✅ 步骤8：验证清理结果...");
+    // ========== 步骤9：验证结果 ==========
+    console.log("✅ 步骤9：验证清理结果...");
     const finalCount = await Fundraising.InvestmentRelationships.count({
       transaction,
     });
@@ -265,13 +310,18 @@ async function cleanupDuplicateRelationships() {
     console.log(
       `   - 删除了 ${dashDuplicatesDeleted} 条混合组的重复 '--' 记录`
     );
-    console.log(`   - 删除了 ${additionalDeleted} 条额外冲突的 null 记录`);
-    console.log(`   - 将 ${updatedCount} 条 null 记录改为 '--'`);
+    console.log(`   - 删除了 ${additionalDeleted} 条有其他 round 的 null 记录`);
+    console.log(`   - 删除了 ${nullDuplicatesDeleted} 条只有 null 的重复记录`);
+    console.log(`   - 将 ${updatedCount} 条唯一的 null 改为 '--'`);
     console.log(`   - 删除了 ${totalDeleted} 条其他重复记录`);
     console.log(
       `   - 总计删除: ${
-        mixedDeleted + dashDuplicatesDeleted + additionalDeleted + totalDeleted
-      } 条重复记录`
+        mixedDeleted +
+        dashDuplicatesDeleted +
+        additionalDeleted +
+        nullDuplicatesDeleted +
+        totalDeleted
+      } 条记录`
     );
     console.log(`   - 数据总量：${totalCount} → ${finalCount}`);
     console.log("=".repeat(60));
