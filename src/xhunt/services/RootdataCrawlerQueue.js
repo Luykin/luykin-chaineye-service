@@ -113,8 +113,8 @@ class RootdataCrawlerQueue {
    */
   async checkOtherCrawlerStatus() {
     try {
-      // 延迟加载，避免循环依赖
-      const { NewCrawlState } = require("../../../models");
+      // 从 SQLite 引入 NewCrawlState
+      const { NewCrawlState } = require("../../models/sqlite-start");
 
       // 检查 quickUpdate (type='quick'), detailsCrawl (type='detail'), subDetailsCrawl (type='detail2')
       const runningCrawlers = await NewCrawlState.findAll({
