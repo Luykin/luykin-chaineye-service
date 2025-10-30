@@ -43,7 +43,7 @@ class RootdataAPIService {
    * 调用 Rootdata API - 获取项目融资信息
    * @param {string} projectId - 项目ID
    */
-  static async getFundingInfo(projectId) {
+  static async getFundingInfo(projectId, projectLink) {
     try {
       const response = await axios.post(
         `${ROOTDATA_API_BASE}/get_fac`,
@@ -65,7 +65,7 @@ class RootdataAPIService {
       throw new Error(`API returned result: ${response.data?.result}`);
     } catch (error) {
       console.error(
-        `[rootdata 获取融资信息] ❌ ${error.message} projectId: ${projectId}, api: ${ROOTDATA_API_BASE}/get_fac`
+        `[rootdata api 失败] ❌ ${error.message} projectId: ${projectId}, api: ${ROOTDATA_API_BASE}/get_fac, projectLink:${projectLink}`
       );
       throw error;
     }
@@ -81,7 +81,7 @@ class RootdataAPIService {
       throw new Error("Failed to extract project_id from projectLink");
     }
 
-    return await this.getFundingInfo(projectId);
+    return await this.getFundingInfo(projectId, projectLink);
   }
 }
 
