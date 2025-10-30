@@ -272,6 +272,65 @@
             >-</span
           >
         </div>
+
+        <!-- 缓存清除功能 -->
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+          <div style="margin-bottom: 10px; color: #374151; font-weight: 600; font-size: 14px;">
+            🗑️ 清除缓存
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+            <input
+              type="text"
+              id="cacheKeyPrefix"
+              placeholder="输入缓存 key 前缀"
+              style="
+                flex: 1;
+                padding: 8px 12px;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                font-size: 14px;
+                outline: none;
+              "
+            />
+            <button
+              id="clearCacheBtn"
+              style="
+                padding: 8px 16px;
+                background: #ef4444;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+                white-space: nowrap;
+              "
+            >
+              清除
+            </button>
+          </div>
+          <div id="clearCacheResult" style="display: none; padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 10px;"></div>
+          <details style="margin-top: 10px;">
+            <summary style="cursor: pointer; color: #6b7280; font-size: 13px; user-select: none;">
+              💡 常用缓存 Key 前缀示例（点击展开）
+            </summary>
+            <div style="margin-top: 10px; padding: 10px; background: #f9fafb; border-radius: 6px; font-size: 12px; line-height: 1.8;">
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">rootdata_verified:</code> - Rootdata 数据验证状态（20天缓存）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">rootdata_search_</code> - Rootdata 搜索结果（10分钟）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">dau:</code> - 每日活跃用户数据（8天）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">projects_</code> - 项目列表缓存（5分钟）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">project_search_</code> - 项目搜索结果（5分钟）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">vc_listed_projects_</code> - VC 投资项目列表（5分钟）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">mantle:register:cd:</code> - Mantle 注册冷却（10秒）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">mantle:invites:count:</code> - Mantle 邀请数量（10分钟）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">twitter_oauth_state:</code> - Twitter OAuth 状态（8分钟）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">user:points:</code> - 用户积分缓存</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">user:review:limit:</code> - 用户评论限制（6分钟）</div>
+              <div><code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">high_delay_report:</code> - 高延迟报告防重（10分钟）</div>
+              <div style="margin-top: 8px; color: #ef4444; font-weight: 600;">⚠️ 注意：清除缓存可能影响系统性能，请谨慎操作！</div>
+            </div>
+          </details>
+        </div>
       </div>
 
       <!-- PostgreSQL 状态 -->
@@ -492,5 +551,65 @@
           '<div style="color: #6b7280; font-size: 14px;">暂无磁盘数据</div>';
       }
     }
+
+    // 清除缓存功能
+    const clearCacheBtn = document.getElementById("clearCacheBtn");
+    const cacheKeyPrefixInput = document.getElementById("cacheKeyPrefix");
+    const clearCacheResult = document.getElementById("clearCacheResult");
+
+    clearCacheBtn.addEventListener("click", async () => {
+      const prefix = cacheKeyPrefixInput.value.trim();
+      
+      if (!prefix) {
+        clearCacheResult.textContent = "⚠️ 请输入缓存 key 前缀";
+        clearCacheResult.style.display = "block";
+        clearCacheResult.style.background = "#fef3c7";
+        clearCacheResult.style.color = "#92400e";
+        return;
+      }
+
+      if (!confirm(`确定要清除所有以 "${prefix}" 开头的缓存吗？\n\n此操作不可撤销！`)) {
+        return;
+      }
+
+      try {
+        clearCacheBtn.disabled = true;
+        clearCacheBtn.textContent = "清除中...";
+        
+        const response = await fetch("/api/xhunt/stats/clear-cache", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ prefix }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "清除缓存失败");
+        }
+
+        clearCacheResult.textContent = `✅ 成功清除 ${data.deletedCount} 个缓存键`;
+        clearCacheResult.style.display = "block";
+        clearCacheResult.style.background = "#d1fae5";
+        clearCacheResult.style.color = "#065f46";
+        
+        // 3秒后隐藏提示
+        setTimeout(() => {
+          clearCacheResult.style.display = "none";
+        }, 3000);
+        
+      } catch (error) {
+        console.error("清除缓存失败:", error);
+        clearCacheResult.textContent = "❌ " + error.message;
+        clearCacheResult.style.display = "block";
+        clearCacheResult.style.background = "#fee2e2";
+        clearCacheResult.style.color = "#991b1b";
+      } finally {
+        clearCacheBtn.disabled = false;
+        clearCacheBtn.textContent = "清除";
+      }
+    });
   })();
 </script>

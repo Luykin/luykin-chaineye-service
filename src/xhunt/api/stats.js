@@ -1893,4 +1893,70 @@ router.get("/device-status", basicAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/xhunt/stats/clear-cache
+ * 清除指定前缀的 Redis 缓存
+ */
+router.post("/clear-cache", basicAuth, async (req, res) => {
+  try {
+    const { prefix } = req.body;
+
+    if (!prefix || typeof prefix !== "string") {
+      return res.status(400).json({ error: "缺少有效的 prefix 参数" });
+    }
+
+    // 验证前缀格式，防止误删除
+    if (prefix.trim().length === 0) {
+      return res.status(400).json({ error: "prefix 不能为空" });
+    }
+
+    // 防止删除所有键
+    if (prefix === "*" || prefix === "**") {
+      return res.status(403).json({ error: "不允许使用通配符删除所有键" });
+    }
+
+    const redisClient = req.redisClient;
+    if (!redisClient) {
+      return res.status(500).json({ error: "Redis 客户端未初始化" });
+    }
+
+    // 使用 SCAN 命令安全地查找并删除匹配的键
+    let cursor = "0";
+    let deletedCount = 0;
+    const pattern = `${prefix}*`;
+
+    do {
+      // SCAN 返回 [新游标, [匹配的键数组]]
+      const reply = await redisClient.scan(cursor, {
+        MATCH: pattern,
+        COUNT: 100,
+      });
+
+      cursor = reply.cursor;
+      const keys = reply.keys;
+
+      if (keys && keys.length > 0) {
+        // 批量删除找到的键
+        await redisClient.del(keys);
+        deletedCount += keys.length;
+      }
+    } while (cursor !== "0");
+
+    console.log(`✅ 清除缓存成功: 前缀="${prefix}", 删除数量=${deletedCount}`);
+
+    res.json({
+      success: true,
+      prefix: prefix,
+      deletedCount: deletedCount,
+      message: `成功清除 ${deletedCount} 个缓存键`,
+    });
+  } catch (error) {
+    console.error("清除缓存失败:", error);
+    res.status(500).json({
+      error: "清除缓存失败",
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;
