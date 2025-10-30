@@ -19,7 +19,7 @@ class FundraisingCrawler extends BaseCrawler {
     // 【配置】页面获取方案优先级
     // 'axios' = 优先使用方案1（axios + setContent，快速但可能遇到登录问题）
     // 'puppeteer' = 优先使用方案2（puppeteer + goto，慢但支持cookie登录）
-    this.fetchStrategy = "puppeteer"; // 可选值: 'axios' | 'puppeteer'
+    this.fetchStrategy = "axios"; // 可选值: 'axios' | 'puppeteer'
 
     // 【配置】统一的登录cookie配置（只维护一份）
     this.loginCookies = {
