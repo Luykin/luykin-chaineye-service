@@ -417,6 +417,12 @@ const RENAME_MAP = {
 const groupInvestmentsByDate = (investmentsReceived) => {
   return investmentsReceived.reduce((acc, investment) => {
     const dateKey = investment.date;
+
+    // 跳过日期为 null 或 undefined 的记录
+    if (!dateKey) {
+      return acc;
+    }
+
     if (!acc[dateKey]) {
       acc[dateKey] = {
         round: investment.round,
@@ -665,6 +671,20 @@ router.get("/search", async (req, res) => {
       0
     );
 
+    // 额外计算：按轮次分组的融资额
+    const roundsFunding = {};
+    Object.values(groupedInvestments).forEach((group) => {
+      const amount = group.formattedAmount || 0;
+      const roundKey = group.round || "----";
+
+      // 累加同一轮次的金额（如果有多个日期记录）
+      if (roundsFunding[roundKey]) {
+        roundsFunding[roundKey] += amount;
+      } else {
+        roundsFunding[roundKey] = amount;
+      }
+    });
+
     // 构造 investors 数据并去重
     const rawInvestors = Object.values(groupedInvestments).flatMap((group) =>
       group.investors.map((investor) => ({
@@ -694,6 +714,7 @@ router.get("/search", async (req, res) => {
     const investedData = {
       investors,
       total_funding: totalFunding,
+      rounds_funding: roundsFunding, // 按轮次分组的融资额，格式：{ "Seed": 5000000, "Series A": 10000000 }
     };
 
     // 9. 处理 investor（投出的项目）数据

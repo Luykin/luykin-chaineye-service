@@ -1892,6 +1892,7 @@ class FundraisingCrawler extends BaseCrawler {
       // 2. 批量写入投资关系（事务内执行）
       await Fundraising.InvestmentRelationships.bulkCreate(investorRecords, {
         transaction,
+        /** 这里一定要更新，因为在保存自己被投资的时候没有保存round date lead (updateInvestedRelationships方法中没有保存这些字段)*/
         updateOnDuplicate: [
           "lead",
           "round",
