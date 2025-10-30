@@ -698,23 +698,63 @@ class FundraisingCrawler extends BaseCrawler {
    */
   async fetchPageWithAxios(url, isManualTrigger = false) {
     if (isManualTrigger) {
-      console.log(`[详情] 方案1: 使用 axios + jsdom 获取页面...`);
+      console.log(`[详情] 方案1开始: axios + jsdom`);
+      console.log(`[详情] URL: ${url}`);
     }
 
     try {
-      const response = await this.axiosRequestWithRetry(url, {
-        timeout: 20000,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-          Accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
-          Connection: "keep-alive",
+      // 直接使用 axios，使用 retry 包装以提高成功率
+      const response = await retry(
+        async (bail, attemptNum) => {
+          if (isManualTrigger) {
+            console.log(`[详情] axios 请求尝试 ${attemptNum}/3`);
+          }
+          try {
+            const res = await axios({
+              method: "GET",
+              url: url,
+              timeout: 20000,
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+                Accept:
+                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
+                Connection: "keep-alive",
+              },
+              maxRedirects: 0,
+              validateStatus: (status) => status >= 200 && status < 400,
+            });
+            if (isManualTrigger) {
+              console.log(`[详情] axios 响应成功，状态: ${res.status}`);
+            }
+            return res;
+          } catch (err) {
+            if (isManualTrigger) {
+              console.log(`[详情] axios 请求错误: ${err.message}`);
+            }
+            // 如果是重定向或其他致命错误，不重试
+            if (
+              err.response &&
+              err.response.status >= 300 &&
+              err.response.status < 400
+            ) {
+              if (isManualTrigger) {
+                console.log(`[详情] 检测到重定向: ${err.response.status}`);
+              }
+              bail(new Error("页面被重定向"));
+              return;
+            }
+            throw err;
+          }
         },
-        maxRedirects: 0,
-        validateStatus: (status) => status >= 200 && status < 400,
-      });
+        {
+          retries: 3,
+          factor: 2,
+          minTimeout: 1000,
+          maxTimeout: 5000,
+        }
+      );
 
       const html = response.data;
       const htmlStr = Buffer.isBuffer(html)
@@ -722,12 +762,19 @@ class FundraisingCrawler extends BaseCrawler {
         : String(html);
 
       if (isManualTrigger) {
-        console.log(`[详情] axios 获取成功，HTML 长度: ${htmlStr.length}`);
+        console.log(`[详情] HTML 长度: ${htmlStr.length} 字节`);
       }
 
       // 检查是否被重定向到登录页
       if (htmlStr.includes('window.location.href="/login')) {
+        if (isManualTrigger) {
+          console.log(`[详情] HTML 包含登录重定向脚本`);
+        }
         throw new Error("页面重定向到登录页");
+      }
+
+      if (isManualTrigger) {
+        console.log(`[详情] 开始 jsdom 解析...`);
       }
 
       // 使用 jsdom 解析 HTML
@@ -740,6 +787,13 @@ class FundraisingCrawler extends BaseCrawler {
 
       if (isManualTrigger) {
         console.log(`[详情] jsdom 解析完成`);
+        const baseInfoCount =
+          dom.window.document.querySelectorAll(".base_info").length;
+        const investorCount =
+          dom.window.document.querySelectorAll(".investor").length;
+        console.log(
+          `[详情] 页面元素: .base_info=${baseInfoCount}, .investor=${investorCount}`
+        );
       }
 
       return dom.window.document;
@@ -758,10 +812,14 @@ class FundraisingCrawler extends BaseCrawler {
    */
   async fetchPageWithPuppeteer(url, _page, isManualTrigger = false) {
     if (isManualTrigger) {
-      console.log(`[详情] 方案2: 使用 Puppeteer 访问页面...`);
+      console.log(`[详情] 方案2开始: Puppeteer`);
+      console.log(`[详情] URL: ${url}`);
     }
 
     try {
+      if (isManualTrigger) {
+        console.log(`[详情] 启用请求拦截...`);
+      }
       // 启用请求拦截，阻止重定向到登录页
       await _page.setRequestInterception(true);
 
@@ -769,7 +827,7 @@ class FundraisingCrawler extends BaseCrawler {
         const reqUrl = interceptedRequest.url();
         if (reqUrl.includes("/login") || reqUrl.includes("fromUrl=")) {
           if (isManualTrigger) {
-            console.log(`[详情] ⚠️ 检测到登录页重定向，阻止: ${reqUrl}`);
+            console.log(`[详情] 拦截登录页请求: ${reqUrl.substring(0, 80)}`);
           }
           interceptedRequest.abort("aborted");
         } else {
@@ -780,35 +838,53 @@ class FundraisingCrawler extends BaseCrawler {
       _page.on("request", requestHandler);
 
       // 访问页面
+      if (isManualTrigger) {
+        console.log(`[详情] 开始 page.goto...`);
+      }
       try {
         await _page.goto(url, {
           waitUntil: "networkidle2",
           timeout: 30000,
         });
+        if (isManualTrigger) {
+          console.log(`[详情] page.goto 完成`);
+        }
       } catch (error) {
         if (
           error.message.includes("net::ERR_ABORTED") ||
           error.message.includes("aborted")
         ) {
           if (isManualTrigger) {
-            console.log(`[详情] 登录页重定向已被阻止`);
+            console.log(`[详情] 登录页重定向已阻止`);
           }
         } else {
+          if (isManualTrigger) {
+            console.log(`[详情] page.goto 错误: ${error.message}`);
+          }
           throw error;
         }
       } finally {
         _page.off("request", requestHandler);
         await _page.setRequestInterception(false);
+        if (isManualTrigger) {
+          console.log(`[详情] 请求拦截已关闭`);
+        }
       }
 
       // 检查当前 URL
       const currentUrl = _page.url();
+      if (isManualTrigger) {
+        console.log(`[详情] 当前URL: ${currentUrl}`);
+      }
       if (currentUrl.includes("/login")) {
+        if (isManualTrigger) {
+          console.log(`[详情] 检测到仍在登录页`);
+        }
         throw new Error("页面被重定向到登录页");
       }
 
       if (isManualTrigger) {
-        console.log(`[详情] Puppeteer 页面加载完成`);
+        console.log(`[详情] ✅ 方案2成功`);
       }
 
       // 返回 Puppeteer page 对象（不是 document）
