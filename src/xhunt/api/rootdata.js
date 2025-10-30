@@ -415,45 +415,73 @@ class RootdataDataFixService {
   }
 }
 
-/**
- * 手动维护部分更名推特
- */
-const RENAME_MAP = {
-  //   YZiLabs: "BinanceLabs",
-  //   yzilabs: "BinanceLabs",
-};
+// /**
+//  * 手动维护部分更名推特
+//  */
+// const RENAME_MAP = {
+//   //   YZiLabs: "BinanceLabs",
+//   //   yzilabs: "BinanceLabs",
+// };
 
 /**
  * 辅助函数：按日期分组投资记录
+ * 使用天数作为分组key，避免时区差异导致同一天的融资被分到不同组
+ * 差距在24小时内的时间戳会被分到相邻的组（相差小于0.5天会被分到同一组）
  */
 const groupInvestmentsByDate = (investmentsReceived) => {
-  return investmentsReceived.reduce((acc, investment) => {
-    const dateKey = investment.date;
+  // 先按时间戳排序
+  const sorted = [...investmentsReceived].sort(
+    (a, b) => (a.date || 0) - (b.date || 0)
+  );
+
+  const groups = [];
+  let currentGroup = null;
+
+  sorted.forEach((investment) => {
+    const timestamp = investment.date;
 
     // 跳过日期为 null 或 undefined 的记录
-    if (!dateKey) {
-      return acc;
+    if (!timestamp) {
+      return;
     }
 
-    if (!acc[dateKey]) {
-      acc[dateKey] = {
+    // 如果是第一条记录，或者与当前组的时间差超过24小时，创建新组
+    if (
+      !currentGroup ||
+      timestamp - currentGroup.minTimestamp > 24 * 60 * 60 * 1000
+    ) {
+      currentGroup = {
         round: investment.round,
         amount: investment.amount,
         valuation: investment.valuation,
         formattedAmount: investment.formattedAmount,
         formattedValuation: investment.formattedValuation,
         investors: [],
+        minTimestamp: timestamp,
+        maxTimestamp: timestamp,
       };
+      groups.push(currentGroup);
+    } else {
+      // 更新当前组的最大时间戳
+      currentGroup.maxTimestamp = Math.max(
+        currentGroup.maxTimestamp,
+        timestamp
+      );
     }
 
-    acc[dateKey].investors.push({
+    currentGroup.investors.push({
       lead: investment.lead,
       projectName: investment.investorProject?.projectName,
       projectLink: investment.investorProject?.projectLink,
       socialLinks: investment.investorProject?.socialLinks,
       logo: investment.investorProject?.logo,
     });
+  });
 
+  // 转换为以时间戳为key的对象格式（保持原有API兼容性）
+  return groups.reduce((acc, group, index) => {
+    // 使用组的最小时间戳作为key
+    acc[group.minTimestamp] = group;
     return acc;
   }, {});
 };
@@ -528,12 +556,12 @@ router.get("/search", async (req, res) => {
       });
     }
 
-    const lowerKeyword = String(keyword).toLowerCase();
+    // const lowerKeyword = String(keyword).toLowerCase();
 
-    // 应用重命名映射
-    if (lowerKeyword in RENAME_MAP || keyword in RENAME_MAP) {
-      keyword = RENAME_MAP[lowerKeyword] || RENAME_MAP[keyword];
-    }
+    // // 应用重命名映射
+    // if (lowerKeyword in RENAME_MAP || keyword in RENAME_MAP) {
+    //   keyword = RENAME_MAP[lowerKeyword] || RENAME_MAP[keyword];
+    // }
 
     const sanitizedKeyword = keyword.trim();
     const cacheKey = `rootdata_search_${sanitizedKeyword}_1030_2`;
