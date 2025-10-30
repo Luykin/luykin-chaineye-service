@@ -207,6 +207,26 @@ module.exports = (sequelize) => {
           fields: ["investorProjectId", "fundedProjectId", "round"],
         },
       ],
+      hooks: {
+        // 在创建或更新前，自动将 null 或空 round 转换为 '--'
+        beforeCreate: (instance) => {
+          if (!instance.round || instance.round.trim() === "") {
+            instance.round = "--";
+          }
+        },
+        beforeUpdate: (instance) => {
+          if (!instance.round || instance.round.trim() === "") {
+            instance.round = "--";
+          }
+        },
+        beforeBulkCreate: (instances) => {
+          instances.forEach((instance) => {
+            if (!instance.round || instance.round.trim() === "") {
+              instance.round = "--";
+            }
+          });
+        },
+      },
     }
   );
 

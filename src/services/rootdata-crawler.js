@@ -1525,7 +1525,7 @@ class FundraisingCrawler extends BaseCrawler {
         resultMap.set(uniqueKey, {
           ...inv,
           projectLink: joinUrl(inv.projectLink, inv.projectName),
-          round: null,
+          round: "--", // 使用 '--' 而不是 null
           amount: null,
           valuation: null,
           date: null,
@@ -1573,7 +1573,7 @@ class FundraisingCrawler extends BaseCrawler {
         investorRecords.push({
           investorProjectId: investorProject.id,
           fundedProjectId: project.id,
-          round: inv.round || null,
+          round: inv.round || "--", // 使用 '--' 而不是 null，避免重复数据
           amount: inv.amount || null,
           formattedAmount: inv.formattedAmount || null,
           valuation: inv.valuation || null,
@@ -1651,7 +1651,7 @@ class FundraisingCrawler extends BaseCrawler {
         relationshipRecords.push({
           investorProjectId: investorProject.id, // 当前项目（投资者）
           fundedProjectId: fundedProject.id, // 被投资的项目
-          round: null, // .investment (有轮次信息，但太复杂了，需要翻页处理，所以暂时不处理)
+          round: "--", // 使用 '--' 而不是 null，避免重复数据
           amount: null,
           formattedAmount: null,
           valuation: null,
