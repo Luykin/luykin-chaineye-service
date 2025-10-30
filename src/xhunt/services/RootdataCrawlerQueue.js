@@ -22,6 +22,9 @@ class RootdataCrawlerQueue {
     this.lastExecutionTime = null; // 最后一次执行爬虫的时间戳（全局）
     this.THROTTLE_TIME = 3 * 60 * 1000; // 3分钟
 
+    // Redis 客户端（延迟加载，避免循环依赖）
+    this._redisClient = null;
+
     // 统计信息
     this.stats = {
       totalRequests: 0,
@@ -34,10 +37,35 @@ class RootdataCrawlerQueue {
   }
 
   /**
+   * 获取 Redis 客户端（延迟初始化，独立连接）
+   */
+  async getRedisClient() {
+    if (!this._redisClient || !this._redisClient.isReady) {
+      try {
+        const redis = require("redis");
+        this._redisClient = redis.createClient({
+          socket: {
+            host: "127.0.0.1",
+            port: 6379,
+          },
+        });
+        await this._redisClient.connect();
+        console.log("✅ [爬虫队列] Redis 连接成功");
+      } catch (error) {
+        console.error("❌ [爬虫队列] Redis 连接失败:", error.message);
+        this._redisClient = null;
+        throw error;
+      }
+    }
+    return this._redisClient;
+  }
+
+  /**
    * 触发爬虫更新
    * @param {Object} project - 项目对象（必须包含 projectLink）
+   * @param {string} cacheKey - 搜索缓存 key（可选）
    */
-  async updateCrawl(project) {
+  async updateCrawl(project, cacheKey = null) {
     if (!project || !project.projectLink) {
       console.log(`⚠️ [爬虫队列] 无效项目，跳过`);
       return;
@@ -96,8 +124,13 @@ class RootdataCrawlerQueue {
       return;
     }
 
-    // 4. 添加到队列
-    this.queue.push({ project, url, addedAt: Date.now() });
+    // 4. 添加到队列（只保存必要信息，不保存 redisClient 避免内存泄露）
+    this.queue.push({
+      project,
+      url,
+      cacheKey, // 只保存 cacheKey，执行时通过全局 Redis 客户端删除
+      addedAt: Date.now(),
+    });
     console.log(
       `📝 [爬虫队列] 已加入队列 (队列长度: ${this.queue.length}): ${url}`
     );
@@ -160,7 +193,7 @@ class RootdataCrawlerQueue {
 
     try {
       while (this.queue.length > 0) {
-        const { project, url, addedAt } = this.queue.shift();
+        const { project, url, cacheKey, addedAt } = this.queue.shift();
         const waitTime = ((Date.now() - addedAt) / 1000).toFixed(2);
 
         console.log(
@@ -173,8 +206,8 @@ class RootdataCrawlerQueue {
         const startTime = Date.now();
 
         try {
-          // 执行爬虫更新
-          await this.executeCrawl(project);
+          // 执行爬虫更新，只传递 cacheKey
+          await this.executeCrawl(project, cacheKey);
 
           // 成功后记录到去重列表
           this.addToRecentUrls(url);
@@ -224,8 +257,10 @@ class RootdataCrawlerQueue {
 
   /**
    * 执行实际的爬虫更新
+   * @param {Object} project - 项目对象
+   * @param {string} cacheKey - 搜索缓存 key（可选）
    */
-  async executeCrawl(project) {
+  async executeCrawl(project, cacheKey = null) {
     const crawler = require("../../services/rootdata-crawler");
     const { Fundraising } = require("../../models/postgres-fundraising");
 
@@ -248,6 +283,17 @@ class RootdataCrawlerQueue {
 
       // 执行爬取 = 等同于手动触发爬虫
       await crawler.scrapeAndUpdateProjectDetails(fullProject, page, true);
+
+      // 爬取成功后，清除搜索缓存（使用独立的 Redis 连接）
+      if (cacheKey) {
+        try {
+          const redisClient = await this.getRedisClient();
+          await redisClient.del(cacheKey);
+          console.log(`✅ [爬虫队列] 已清除搜索缓存: ${cacheKey}`);
+        } catch (cacheError) {
+          console.error(`⚠️ [爬虫队列] 清除缓存失败:`, cacheError.message);
+        }
+      }
     } finally {
       // 确保浏览器被关闭
       if (browser) {

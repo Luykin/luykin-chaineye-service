@@ -608,10 +608,9 @@ router.get("/search", async (req, res) => {
           req.redisClient,
           cacheKey // 传入搜索缓存key，修正后会清除
         );
-        // console.log(`✅ 数据修正完成: ${cacheKey}`);
 
         // 第二重：爬虫更新验证（队列化、节流、去重）
-        crawlerQueue.updateCrawl(project);
+        crawlerQueue.updateCrawl(project, cacheKey);
       } catch (error) {
         console.error("数据修正失败:", error);
       }
