@@ -1,6 +1,3 @@
-// 依赖引入
-const { NewCrawlState } = require("../../models");
-
 /**
  * RootData 爬虫更新队列
  *
@@ -116,6 +113,9 @@ class RootdataCrawlerQueue {
    */
   async checkOtherCrawlerStatus() {
     try {
+      // 延迟加载，避免循环依赖
+      const { NewCrawlState } = require("../../../models");
+
       // 检查 quickUpdate (type='quick'), detailsCrawl (type='detail'), subDetailsCrawl (type='detail2')
       const runningCrawlers = await NewCrawlState.findAll({
         where: {
