@@ -18,6 +18,7 @@ async function cleanupDuplicateRelationships() {
   let mixedDuplicates = [];
   let mixedDeleted = 0;
   let dashDuplicatesDeleted = 0;
+  let additionalDeleted = 0;
   let updatedCount = 0;
   let totalDeleted = 0;
 
@@ -128,8 +129,46 @@ async function cleanupDuplicateRelationships() {
       }
     }
 
-    // ========== 步骤4：将所有剩余的 round=null 改为 '--' ==========
-    console.log("🔧 步骤4：将剩余的 round=null 改为 '--'...");
+    // ========== 步骤4：再次查找并删除所有会与 '--' 冲突的 null 记录 ==========
+    console.log("🔍 步骤4：查找所有会与 '--' 冲突的 null 记录...");
+
+    // 查找所有 (investorProjectId, fundedProjectId) 既有 null 又有 '--' 的组合
+    const allConflictingNulls = await sequelize.query(
+      `
+      SELECT DISTINCT n.id
+      FROM "InvestmentRelationships" n
+      INNER JOIN "InvestmentRelationships" d
+        ON n."investorProjectId" = d."investorProjectId"
+        AND n."fundedProjectId" = d."fundedProjectId"
+      WHERE n.round IS NULL
+        AND d.round = '--'
+      `,
+      {
+        type: sequelize.QueryTypes.SELECT,
+        transaction,
+      }
+    );
+
+    if (allConflictingNulls.length > 0) {
+      console.log(
+        `   发现 ${allConflictingNulls.length} 条会冲突的 null 记录\n`
+      );
+      console.log("🗑️  步骤4.5：删除这些冲突的 null 记录...");
+
+      const idsToDelete = allConflictingNulls.map((r) => r.id);
+      additionalDeleted = await Fundraising.InvestmentRelationships.destroy({
+        where: {
+          id: { [Op.in]: idsToDelete },
+        },
+        transaction,
+      });
+      console.log(`   ✅ 删除了 ${additionalDeleted} 条冲突的 null 记录\n`);
+    } else {
+      console.log(`   ✅ 没有发现会冲突的 null 记录\n`);
+    }
+
+    // ========== 步骤5：将所有剩余的 round=null 改为 '--' ==========
+    console.log("🔧 步骤5：将剩余的 round=null 改为 '--'...");
     [updatedCount] = await Fundraising.InvestmentRelationships.update(
       { round: "--" },
       {
@@ -139,8 +178,8 @@ async function cleanupDuplicateRelationships() {
     );
     console.log(`   ✅ 更新了 ${updatedCount} 条记录\n`);
 
-    // ========== 步骤5：查找剩余的重复关系（同一 round 值的重复）==========
-    console.log("🔍 步骤5：查找剩余的重复投资关系...");
+    // ========== 步骤6：查找剩余的重复关系（同一 round 值的重复）==========
+    console.log("🔍 步骤6：查找剩余的重复投资关系...");
 
     // 使用原生 SQL 查找重复
     const duplicates = await sequelize.query(
@@ -165,7 +204,7 @@ async function cleanupDuplicateRelationships() {
 
     console.log(`   发现 ${duplicates.length} 组重复数据\n`);
 
-    // ========== 步骤6：删除剩余的重复记录 ==========
+    // ========== 步骤7：删除剩余的重复记录 ==========
     if (duplicates.length > 0) {
       console.log("📋 重复数据详情（前10组）：");
       for (let i = 0; i < Math.min(10, duplicates.length); i++) {
@@ -183,7 +222,7 @@ async function cleanupDuplicateRelationships() {
         );
       }
 
-      console.log("\n🗑️  步骤6：删除剩余的重复记录（保留ID最小的）...");
+      console.log("\n🗑️  步骤7：删除剩余的重复记录（保留ID最小的）...");
 
       for (const dup of duplicates) {
         // 删除除了最小 ID 之外的所有记录
@@ -202,8 +241,8 @@ async function cleanupDuplicateRelationships() {
       console.log(`   ✅ 删除了 ${totalDeleted} 条剩余重复记录\n`);
     }
 
-    // ========== 步骤7：验证结果 ==========
-    console.log("✅ 步骤7：验证清理结果...");
+    // ========== 步骤8：验证结果 ==========
+    console.log("✅ 步骤8：验证清理结果...");
     const finalCount = await Fundraising.InvestmentRelationships.count({
       transaction,
     });
@@ -232,13 +271,14 @@ async function cleanupDuplicateRelationships() {
     // 最终统计
     console.log("=".repeat(60));
     console.log("📊 清理汇总：");
-    console.log(`   - 删除了 ${mixedDeleted} 条冲突的 null 记录`);
-    console.log(`   - 删除了 ${dashDuplicatesDeleted} 条重复的 '--' 记录`);
-    console.log(`   - 将 ${updatedCount} 条记录的 round 从 null 改为 '--'`);
+    console.log(`   - 删除了 ${mixedDeleted} 条混合组的 null 记录`);
+    console.log(`   - 删除了 ${dashDuplicatesDeleted} 条混合组的重复 '--' 记录`);
+    console.log(`   - 删除了 ${additionalDeleted} 条额外冲突的 null 记录`);
+    console.log(`   - 将 ${updatedCount} 条 null 记录改为 '--'`);
     console.log(`   - 删除了 ${totalDeleted} 条其他重复记录`);
     console.log(
       `   - 总计删除: ${
-        mixedDeleted + dashDuplicatesDeleted + totalDeleted
+        mixedDeleted + dashDuplicatesDeleted + additionalDeleted + totalDeleted
       } 条重复记录`
     );
     console.log(`   - 数据总量：${totalCount} → ${finalCount}`);
