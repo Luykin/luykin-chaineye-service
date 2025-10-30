@@ -714,11 +714,61 @@ class FundraisingCrawler extends BaseCrawler {
         console.log(`[详情] 使用 Puppeteer 访问页面（让 JS 执行）...`);
       }
 
-      // 直接用 page.goto() 访问，而不是 axios + setContent
-      await _page.goto(project.projectLink, {
-        waitUntil: "networkidle2", // 等待网络空闲
-        timeout: 30000,
-      });
+      // 启用请求拦截，阻止重定向到登录页
+      await _page.setRequestInterception(true);
+
+      const requestHandler = (interceptedRequest) => {
+        const url = interceptedRequest.url();
+        // 如果是重定向到登录页，中止请求
+        if (url.includes("/login") || url.includes("fromUrl=")) {
+          if (isManualTrigger) {
+            console.log(`[详情] ⚠️ 检测到登录页重定向，阻止: ${url}`);
+          }
+          interceptedRequest.abort("aborted");
+        } else {
+          interceptedRequest.continue();
+        }
+      };
+
+      _page.on("request", requestHandler);
+
+      // 直接用 page.goto() 访问
+      let gotoSuccess = false;
+      try {
+        await _page.goto(project.projectLink, {
+          waitUntil: "networkidle2",
+          timeout: 30000,
+        });
+        gotoSuccess = true;
+      } catch (error) {
+        // 如果因为中止登录页而失败，这是预期行为
+        if (
+          error.message.includes("net::ERR_ABORTED") ||
+          error.message.includes("aborted")
+        ) {
+          if (isManualTrigger) {
+            console.log(`[详情] 登录页重定向已被阻止`);
+          }
+          // 继续执行，页面可能已部分加载
+        } else {
+          throw error;
+        }
+      } finally {
+        // 移除请求拦截
+        _page.off("request", requestHandler);
+        await _page.setRequestInterception(false);
+      }
+
+      // 检查当前 URL
+      const currentUrl = _page.url();
+      if (isManualTrigger) {
+        console.log(`[详情] 当前 URL: ${currentUrl}`);
+      }
+
+      // 如果最终还是在登录页，抛出错误
+      if (currentUrl.includes("/login")) {
+        throw new Error(`[详情] 页面需要登录才能访问: ${project.projectLink}`);
+      }
 
       if (isManualTrigger) {
         console.log(`[详情] 页面加载完成`);
@@ -748,41 +798,59 @@ class FundraisingCrawler extends BaseCrawler {
       // 第一阶段：点击展开更多按钮并抓取基础投资者数据
 
       await this.clickExpandButtons(_page);
+      let mergedInvestors = []; //谁对它投资的投资者数据
 
-      const initialInvestors = await this.scrapeInitialInvestors(
-        _page,
-        isManualTrigger
-      );
-      if (isManualTrigger) {
-        console.log(`[详情] 初始投资者: ${initialInvestors?.length || 0}`);
-      }
+      let investedProjects = []; //它对外投资的投资者数据
 
-      // 第二阶段：点击 rounds 按钮并抓取轮次数据
-      let roundsInvestors = [];
       if (effectiveIsInitial) {
+        const initialInvestors = await this.scrapeInitialInvestors(
+          _page,
+          isManualTrigger
+        );
+        if (isManualTrigger) {
+          console.log(`[详情] 初始投资者: ${initialInvestors?.length || 0}`);
+        }
+
+        // 第二阶段：点击 rounds 按钮并抓取轮次数据
+        let roundsInvestors = [];
+
         await this.clickRoundsButton(_page);
         roundsInvestors = await this.processRounds(_page, isManualTrigger);
         if (isManualTrigger) {
           console.log(`[详情] 轮次投资者: ${roundsInvestors?.length || 0}`);
         }
-      }
-
-      if (
-        isManualTrigger &&
-        initialInvestors?.length !== roundsInvestors?.length
-      ) {
-        console.log(
-          `[详情] ⚠️ 投资者数量不一致: initial=${
-            initialInvestors?.length || 0
-          }, rounds=${roundsInvestors?.length || 0}`
+        if (
+          isManualTrigger &&
+          initialInvestors?.length !== roundsInvestors?.length
+        ) {
+          console.log(
+            `[详情] ⚠️ 投资者数量不一致: initial=${
+              initialInvestors?.length || 0
+            }, rounds=${roundsInvestors?.length || 0}`
+          );
+        }
+        // 合并投资者数据（轮次数据优先）
+        mergedInvestors = this.mergeInvestorData(
+          initialInvestors,
+          roundsInvestors
         );
+        // 第三阶段：抓取它投资的项目（.investment 部分）
+        //   const isInvestorPage = project.projectLink.includes("/Investors/detail");
+        if (effectiveIsInitial) {
+          if (isManualTrigger) {
+            console.log(`[详情] 检测到投资者页面，开始抓取对外投资...`);
+          }
+          investedProjects = await this.scrapeInvestments(
+            _page,
+            isManualTrigger
+          );
+          if (isManualTrigger) {
+            console.log(
+              `[详情] 对外投资项目数: ${investedProjects?.length || 0}`
+            );
+          }
+        }
       }
-      // 合并投资者数据（轮次数据优先）
-
-      const mergedInvestors = this.mergeInvestorData(
-        initialInvestors,
-        roundsInvestors
-      );
 
       // 抓取基础信息
 
@@ -834,25 +902,53 @@ class FundraisingCrawler extends BaseCrawler {
         teamMembers: details.teamMembers,
         detailFetchedAt: isCrawlSuccess ? Date.now() : null,
         detailFailuresNumber: isCrawlSuccess
-          ? mergedInvestors.length
+          ? mergedInvestors?.length || investedProjects?.length
             ? 0
             : 99
           : (Number(project.detailFailuresNumber) || 0) + 1,
       });
       let updateRelationshipsLength = 0;
-      // 保存投资关系数据
+      // 保存投资关系数据（被投资关系）
       if (mergedInvestors.length > 0) {
+        if (isManualTrigger) {
+          console.log(
+            `[详情] 开始保存被投资关系 (${mergedInvestors.length} 个投资者)...`
+          );
+        }
         updateRelationshipsLength = await this.updateInvestmentRelationships(
           project,
           mergedInvestors
         );
-      } else {
+        if (isManualTrigger) {
+          console.log(
+            `[详情] 被投资关系保存成功: ${updateRelationshipsLength} 条`
+          );
+        }
+      }
+
+      // 保存对外投资关系（投资者视角）
+      let investedRelationshipsLength = 0;
+      if (investedProjects.length > 0) {
+        if (isManualTrigger) {
+          console.log(
+            `[详情] 开始保存对外投资关系 (${investedProjects.length} 个项目)...`
+          );
+        }
+        investedRelationshipsLength = await this.updateInvestedRelationships(
+          project,
+          investedProjects
+        );
+        if (isManualTrigger) {
+          console.log(
+            `[详情] 对外投资关系保存成功: ${investedRelationshipsLength} 条`
+          );
+        }
       }
 
       console.log(
         `抓取详情成功 ${project.projectName} ${
-          project.isInitial
-            ? `${updateRelationshipsLength}个数据关联成功`
+          effectiveIsInitial
+            ? `被投资关系: ${updateRelationshipsLength}, 对外投资关系: ${investedRelationshipsLength}`
             : "不需要关联"
         }`
       );
@@ -911,8 +1007,15 @@ class FundraisingCrawler extends BaseCrawler {
           if (!link) {
             return null;
           }
+
+          // 获取链接并确保是绝对路径
+          let projectLink = link.getAttribute("href") || link.href;
+          if (projectLink && !projectLink.startsWith("http")) {
+            projectLink = new URL(projectLink, "https://www.rootdata.com").href;
+          }
+
           return {
-            projectLink: link.href,
+            projectLink: projectLink,
             projectName: link.querySelector("h2")?.textContent?.trim(),
             lead: !!item.querySelector(".status_icon.status_position"),
             source: "initial",
@@ -1023,16 +1126,25 @@ class FundraisingCrawler extends BaseCrawler {
 
           const investorLinks = investorCell.querySelectorAll("a");
 
-          return Array.from(investorLinks).map((a) => ({
-            projectLink: a.href,
-            projectName: a.textContent.replace("*", "").trim(),
-            lead: a.textContent.includes("*"),
-            round,
-            amount,
-            valuation,
-            date,
-            source: "rounds",
-          }));
+          return Array.from(investorLinks).map((a) => {
+            // 获取链接并确保是绝对路径
+            let projectLink = a.getAttribute("href") || a.href;
+            if (projectLink && !projectLink.startsWith("http")) {
+              projectLink = new URL(projectLink, "https://www.rootdata.com")
+                .href;
+            }
+
+            return {
+              projectLink: projectLink,
+              projectName: a.textContent.replace("*", "").trim(),
+              lead: a.textContent.includes("*"),
+              round,
+              amount,
+              valuation,
+              date,
+              source: "rounds",
+            };
+          });
         })
         .flat();
 
@@ -1062,6 +1174,124 @@ class FundraisingCrawler extends BaseCrawler {
     }
 
     return result.investors;
+  }
+
+  // 抓取投资者对外投资的项目（.investment 部分）
+  async scrapeInvestments(_page, isManualTrigger = false) {
+    try {
+      if (isManualTrigger) {
+        console.log(`[详情] 开始抓取 .investment 部分...`);
+      }
+
+      // 检查是否存在 .investment 元素
+      const hasInvestment = await _page.evaluate(() => {
+        return document.querySelectorAll(".investment").length > 0;
+      });
+
+      if (!hasInvestment) {
+        if (isManualTrigger) {
+          console.log(`[详情] 页面无 .investment 元素，跳过`);
+        }
+        return [];
+      }
+
+      const allProjects = [];
+
+      // 1. 点击 Portfolio Tab 并抓取
+      if (isManualTrigger) {
+        console.log(`[详情] 点击 Portfolio Tab...`);
+      }
+      await _page.evaluate(() => {
+        const buttons = document.querySelectorAll(".investment .tabs button");
+        for (const btn of buttons) {
+          if (btn.textContent.includes("Portfolio")) {
+            btn.click();
+            break;
+          }
+        }
+      });
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // 等待加载
+
+      const portfolioProjects = await _page.evaluate(() => {
+        const projects = [];
+        const items = document.querySelectorAll(
+          ".investment .row.list .item a.card"
+        );
+        items.forEach((item) => {
+          let link = item.getAttribute("href") || item.href;
+          const name = item.querySelector("h2")?.textContent?.trim();
+
+          // 确保是绝对路径
+          if (link && !link.startsWith("http")) {
+            link = new URL(link, "https://www.rootdata.com").href;
+          }
+
+          if (link && name) {
+            projects.push({
+              projectLink: link,
+              projectName: name,
+              type: "portfolio",
+            });
+          }
+        });
+        return projects;
+      });
+
+      if (isManualTrigger) {
+        console.log(`[详情] Portfolio 项目数: ${portfolioProjects.length}`);
+      }
+      allProjects.push(...portfolioProjects);
+
+      // 2. 点击 VC Tab 并抓取
+      if (isManualTrigger) {
+        console.log(`[详情] 点击 VC Tab...`);
+      }
+      await _page.evaluate(() => {
+        const buttons = document.querySelectorAll(".investment .tabs button");
+        for (const btn of buttons) {
+          if (btn.textContent.includes("VC")) {
+            btn.click();
+            break;
+          }
+        }
+      });
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // 等待加载
+
+      const vcProjects = await _page.evaluate(() => {
+        const projects = [];
+        const items = document.querySelectorAll(
+          ".investment .row.list .item a.card"
+        );
+        items.forEach((item) => {
+          let link = item.getAttribute("href") || item.href;
+          const name = item.querySelector("h2")?.textContent?.trim();
+
+          // 确保是绝对路径
+          if (link && !link.startsWith("http")) {
+            link = new URL(link, "https://www.rootdata.com").href;
+          }
+
+          if (link && name) {
+            projects.push({
+              projectLink: link,
+              projectName: name,
+              type: "vc",
+            });
+          }
+        });
+        return projects;
+      });
+
+      if (isManualTrigger) {
+        console.log(`[详情] VC 项目数: ${vcProjects.length}`);
+      }
+      allProjects.push(...vcProjects);
+
+      return allProjects;
+    } catch (error) {
+      console.error(`[错误] 抓取 .investment 失败:`, error.message);
+      return [];
+    }
   }
 
   // 合并投资者数据（优先使用轮次数据）
@@ -1121,13 +1351,19 @@ class FundraisingCrawler extends BaseCrawler {
       // 1. 处理投资者项目（串行化处理）
       const investorRecords = [];
       for (const inv of investors) {
+        // 跳过没有项目名称的记录，避免创建 Unknown 项目
+        if (!inv.projectName || inv.projectName.trim() === "") {
+          console.log(`⏭️ 跳过无项目名称的投资者: ${inv.projectLink}`);
+          continue;
+        }
+
         const projectLink = joinUrl(inv.projectLink, inv.projectName);
 
         // 使用事务化的 findOrCreate
         const [investorProject] = await Fundraising.Project.findOrCreate({
           where: { projectLink },
           defaults: {
-            projectName: inv.projectName || "Unknown",
+            projectName: inv.projectName,
             isInitial: false, // 投资者项目，由 subDetailsCrawl() 处理
             socialLinks: null, // ✅ 初始化为 null，满足 subDetailsCrawl 条件
             detailFailuresNumber: 0, // ✅ 初始化失败次数为 0
@@ -1179,6 +1415,69 @@ class FundraisingCrawler extends BaseCrawler {
       throw error;
     } finally {
       this.retryCount = 0; // 重置重试计数
+    }
+  }
+
+  // 保存对外投资关系（投资者视角）
+  async updateInvestedRelationships(investorProject, investedProjects) {
+    const sequelize = Fundraising.Project.sequelize;
+    let transaction;
+
+    try {
+      transaction = await sequelize.transaction();
+
+      // 1. 处理被投资项目（串行化处理）
+      const relationshipRecords = [];
+      for (const proj of investedProjects) {
+        // 跳过没有项目名称的记录，避免创建 Unknown 项目
+        if (!proj.projectName || proj.projectName.trim() === "") {
+          console.log(`⏭️ 跳过无项目名称的投资项目: ${proj.projectLink}`);
+          continue;
+        }
+
+        const projectLink = joinUrl(proj.projectLink, proj.projectName);
+
+        // 使用事务化的 findOrCreate
+        const [fundedProject] = await Fundraising.Project.findOrCreate({
+          where: { projectLink },
+          defaults: {
+            projectName: proj.projectName,
+            isInitial: false,
+            socialLinks: null,
+            detailFailuresNumber: 0,
+            detailFetchedAt: null,
+          },
+          transaction,
+        });
+
+        relationshipRecords.push({
+          investorProjectId: investorProject.id, // 当前项目（投资者）
+          fundedProjectId: fundedProject.id, // 被投资的项目
+          round: null, // .investment (有轮次信息，但太复杂了，需要翻页处理，所以暂时不处理)
+          amount: null,
+          formattedAmount: null,
+          valuation: null,
+          formattedValuation: null,
+          date: null,
+          lead: false,
+        });
+      }
+
+      // 2. 批量写入投资关系（事务内执行）
+      await Fundraising.InvestmentRelationships.bulkCreate(
+        relationshipRecords,
+        {
+          transaction,
+          ignoreDuplicates: true, // 忽略重复（避免冲突）
+        }
+      );
+
+      await transaction.commit();
+      return relationshipRecords.length;
+    } catch (error) {
+      if (transaction) await transaction.rollback();
+      console.error("Failed to update invested relationships:", error);
+      throw error;
     }
   }
 }

@@ -929,44 +929,30 @@ router.delete(
  */
 router.post("/manual-crawl", async (req, res) => {
   const startTime = Date.now();
-  console.log("\n" + "=".repeat(80));
-  console.log("🚀 [手动爬虫] 开始执行");
-  console.log("=".repeat(80));
+  console.log(`🚀 [手动爬虫] 开始执行: ${req.body.url}`);
 
   try {
     const { url } = req.body;
-    console.log(`📝 [手动爬虫] 接收到 URL: ${url}`);
 
     if (!url || !url.includes("rootdata.com")) {
-      console.log(`❌ [手动爬虫] URL 验证失败: ${url}`);
       return res.status(400).json({ error: "Invalid RootData URL" });
     }
 
-    console.log(`✅ [手动爬虫] URL 验证通过`);
-
     const { Fundraising } = require("../../models/postgres-fundraising");
     if (!Fundraising) {
-      console.log(`❌ [手动爬虫] 数据库模型未初始化`);
       return res.status(500).json({ error: "Database model not initialized" });
     }
-    console.log(`✅ [手动爬虫] 数据库模型加载成功`);
 
-    // 1. 检查项目是否已存在
-    console.log(`🔍 [手动爬虫] 查找项目: ${url}`);
+    // 1. 查找或创建项目
     let project = await Fundraising.Project.findOne({
       where: { projectLink: url },
     });
 
-    // 2. 如果不存在，创建项目记录
     if (!project) {
-      console.log(`📦 [手动爬虫] 项目不存在，开始创建...`);
-      // 从 URL 提取项目名称（简单处理）
       const match = url.match(/\/detail\/([^?]+)/);
       const projectName = match
         ? decodeURIComponent(match[1])
         : "Unknown Project";
-
-      console.log(`📝 [手动爬虫] 提取项目名称: ${projectName}`);
 
       project = await Fundraising.Project.create({
         projectName,
@@ -975,96 +961,97 @@ router.post("/manual-crawl", async (req, res) => {
         detailFailuresNumber: 0,
         detailFetchedAt: null,
       });
-
-      console.log(
-        `✨ [手动爬虫] 创建新项目成功: ID=${project.id}, Name=${projectName}`
-      );
-    } else {
-      console.log(
-        `✅ [手动爬虫] 找到已存在项目: ID=${project.id}, Name=${project.projectName}`
-      );
+      console.log(`📦 [手动爬虫] 创建项目: ${projectName}`);
     }
 
-    // 3. 调用爬虫服务（导出的是单例实例，不是类）
-    console.log(`🕷️ [手动爬虫] 加载爬虫服务...`);
+    // 2. 执行爬取
     const crawler = require("../../services/rootdata-crawler");
-    console.log(`✅ [手动爬虫] 爬虫服务加载成功`);
-
-    // 初始化浏览器
-    console.log(`🌐 [手动爬虫] 初始化浏览器...`);
     const { browser, page } = await crawler.initBrowserAndPage();
-    console.log(`✅ [手动爬虫] 浏览器初始化成功`);
 
     try {
-      // 执行爬取
-      console.log(`🔄 [手动爬虫] 开始爬取项目详情...`);
-      console.log(`📄 [手动爬虫] Project ID: ${project.id}`);
-      console.log(`📄 [手动爬虫] Project Link: ${project.projectLink}`);
-
-      // 手动触发模式会在 scrapeAndUpdateProjectDetails 内部强制 isInitial=true
       await crawler.scrapeAndUpdateProjectDetails(project, page, true);
 
-      console.log(`✅ [手动爬虫] 爬取执行完成`);
-
-      // 重新获取项目数据（包含更新后的信息）
-      console.log(`🔍 [手动爬虫] 获取更新后的项目数据...`);
+      // 3. 获取更新后的数据
       const updatedProject = await Fundraising.Project.findByPk(project.id, {
         attributes: ["id", "projectName", "projectLink", "logo", "socialLinks"],
       });
-      console.log(
-        `✅ [手动爬虫] 项目数据获取成功: ${updatedProject.projectName}`
-      );
 
-      // 统计投资关系数量
-      console.log(`📊 [手动爬虫] 统计投资关系...`);
-      const [investorsCount, relationshipsCount] = await Promise.all([
-        Fundraising.InvestmentRelationships.count({
-          where: { fundedProjectId: project.id },
-          distinct: true,
-          col: "investorProjectId",
+      // 4. 统计投资关系（双向）
+      const [asInvestor, asInvestee] = await Promise.all([
+        // 作为投资者投资的项目
+        Fundraising.InvestmentRelationships.findAll({
+          where: { investorProjectId: project.id },
+          include: [
+            {
+              model: Fundraising.Project,
+              as: "fundedProject",
+              attributes: ["id", "projectName", "projectLink", "logo"],
+            },
+          ],
+          attributes: ["id", "round", "amount", "valuation", "date", "lead"],
         }),
-        Fundraising.InvestmentRelationships.count({
+        // 作为被投资者，被谁投资
+        Fundraising.InvestmentRelationships.findAll({
           where: { fundedProjectId: project.id },
+          include: [
+            {
+              model: Fundraising.Project,
+              as: "investorProject",
+              attributes: ["id", "projectName", "projectLink", "logo"],
+            },
+          ],
+          attributes: ["id", "round", "amount", "valuation", "date", "lead"],
         }),
       ]);
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.log(`✅ [手动爬虫] 统计完成:`);
-      console.log(`   - 投资者数量: ${investorsCount}`);
-      console.log(`   - 投资关系数: ${relationshipsCount}`);
-      console.log(`   - 耗时: ${duration}秒`);
-      console.log("=".repeat(80));
-      console.log(`🎉 [手动爬虫] 爬取成功: ${updatedProject.projectName}`);
-      console.log("=".repeat(80) + "\n");
+      console.log(
+        `✅ [手动爬虫] 完成: ${updatedProject.projectName} (${duration}秒)`
+      );
+      console.log(`   投资了 ${asInvestor.length} 个项目`);
+      console.log(`   被 ${asInvestee.length} 个投资者投资`);
 
       res.json({
         success: true,
         message: "爬取成功",
         data: {
-          projectName: updatedProject.projectName,
-          projectLink: updatedProject.projectLink,
-          logo: updatedProject.logo,
-          socialLinks: updatedProject.socialLinks,
-          investorsCount,
-          relationshipsCount,
+          project: {
+            id: updatedProject.id,
+            projectName: updatedProject.projectName,
+            projectLink: updatedProject.projectLink,
+            logo: updatedProject.logo,
+            socialLinks: updatedProject.socialLinks,
+          },
+          // 作为投资者投资的项目
+          asInvestor: asInvestor.map((r) => ({
+            id: r.id,
+            project: r.fundedProject,
+            round: r.round,
+            amount: r.amount,
+            valuation: r.valuation,
+            date: r.date,
+            lead: r.lead,
+          })),
+          // 被谁投资
+          asInvestee: asInvestee.map((r) => ({
+            id: r.id,
+            investor: r.investorProject,
+            round: r.round,
+            amount: r.amount,
+            valuation: r.valuation,
+            date: r.date,
+            lead: r.lead,
+          })),
         },
       });
     } finally {
-      // 确保关闭浏览器
-      console.log(`🔒 [手动爬虫] 关闭浏览器...`);
       if (browser) {
         await browser.close();
-        console.log(`✅ [手动爬虫] 浏览器已关闭`);
       }
     }
   } catch (error) {
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log("=".repeat(80));
-    console.error(`❌ [手动爬虫] 执行失败 (耗时: ${duration}秒)`);
-    console.error(`❌ [手动爬虫] 错误类型: ${error.name}`);
-    console.error(`❌ [手动爬虫] 错误信息: ${error.message}`);
-    console.error(`❌ [手动爬虫] 错误堆栈:\n${error.stack}`);
-    console.log("=".repeat(80) + "\n");
+    console.error(`❌ [手动爬虫] 失败 (${duration}秒): ${error.message}`);
 
     res.status(500).json({
       error: "Failed to crawl project",

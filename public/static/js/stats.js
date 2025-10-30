@@ -600,31 +600,144 @@ async function triggerManualCrawl() {
     if (response.ok && result.success) {
       statusText.textContent = "✅ 爬取成功";
       statusText.style.color = "#10b981";
+
+      const { project, asInvestor, asInvestee } = result.data;
+
       messageDiv.innerHTML = `
         <div style="margin-top: 10px;">
-          <div><strong>项目名称：</strong>${result.data.projectName}</div>
-          <div><strong>链接：</strong><a href="${
-            result.data.projectLink
-          }" target="_blank">${result.data.projectLink}</a></div>
-          <div><strong>投资者数量：</strong>${
-            result.data.investorsCount || 0
-          }</div>
-          <div><strong>投资关系数：</strong>${
-            result.data.relationshipsCount || 0
-          }</div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            ${
+              project.logo
+                ? `<img src="${project.logo}" style="width: 32px; height: 32px; border-radius: 50%;" />`
+                : ""
+            }
+            <strong style="font-size: 16px;">${project.projectName}</strong>
+          </div>
+          <div style="color: #6b7280; font-size: 13px; margin-bottom: 5px;">
+            <a href="${
+              project.projectLink
+            }" target="_blank" style="color: #3b82f6;">${
+        project.projectLink
+      }</a>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px;">
+            <div style="background: #eff6ff; padding: 10px; border-radius: 6px;">
+              <div style="color: #6b7280; font-size: 12px;">对外投资</div>
+              <div style="font-size: 24px; font-weight: 700; color: #3b82f6;">${
+                asInvestor.length
+              }</div>
+              <div style="color: #6b7280; font-size: 12px;">个项目</div>
+            </div>
+            <div style="background: #f0fdf4; padding: 10px; border-radius: 6px;">
+              <div style="color: #6b7280; font-size: 12px;">获得投资</div>
+              <div style="font-size: 24px; font-weight: 700; color: #10b981;">${
+                asInvestee.length
+              }</div>
+              <div style="color: #6b7280; font-size: 12px;">个投资者</div>
+            </div>
+          </div>
         </div>
       `;
 
       // 显示详细结果
       resultDiv.style.display = "block";
+
+      let investorListHtml = "";
+      if (asInvestor.length > 0) {
+        investorListHtml = `
+          <div style="margin-top: 15px;">
+            <div style="font-weight: 600; color: #374151; margin-bottom: 10px;">📤 对外投资 (${
+              asInvestor.length
+            })</div>
+            <div style="max-height: 200px; overflow-y: auto;">
+              ${asInvestor
+                .map(
+                  (r) => `
+                <div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: #f9fafb; border-radius: 4px; margin-bottom: 6px;">
+                  ${
+                    r.project.logo
+                      ? `<img src="${r.project.logo}" style="width: 24px; height: 24px; border-radius: 50%;" />`
+                      : ""
+                  }
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 13px;">${
+                      r.project.projectName
+                    }</div>
+                    ${
+                      r.round
+                        ? `<div style="color: #6b7280; font-size: 11px;">${
+                            r.round
+                          }${r.amount ? ` · ${r.amount}` : ""}</div>`
+                        : ""
+                    }
+                  </div>
+                  ${
+                    r.lead
+                      ? '<span style="background: #fbbf24; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">Lead</span>'
+                      : ""
+                  }
+                </div>
+              `
+                )
+                .join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      let investeeListHtml = "";
+      if (asInvestee.length > 0) {
+        investeeListHtml = `
+          <div style="margin-top: 15px;">
+            <div style="font-weight: 600; color: #374151; margin-bottom: 10px;">📥 获得投资 (${
+              asInvestee.length
+            })</div>
+            <div style="max-height: 200px; overflow-y: auto;">
+              ${asInvestee
+                .map(
+                  (r) => `
+                <div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: #f9fafb; border-radius: 4px; margin-bottom: 6px;">
+                  ${
+                    r.investor.logo
+                      ? `<img src="${r.investor.logo}" style="width: 24px; height: 24px; border-radius: 50%;" />`
+                      : ""
+                  }
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 13px;">${
+                      r.investor.projectName
+                    }</div>
+                    ${
+                      r.round
+                        ? `<div style="color: #6b7280; font-size: 11px;">${
+                            r.round
+                          }${r.amount ? ` · ${r.amount}` : ""}</div>`
+                        : ""
+                    }
+                  </div>
+                  ${
+                    r.lead
+                      ? '<span style="background: #fbbf24; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">Lead</span>'
+                      : ""
+                  }
+                </div>
+              `
+                )
+                .join("")}
+            </div>
+          </div>
+        `;
+      }
+
       resultDiv.innerHTML = `
         <div style="padding: 15px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 4px;">
           <div style="color: #065f46; font-weight: 600; margin-bottom: 8px;">
             ✅ 爬取完成
           </div>
-          <div style="color: #047857; font-size: 13px;">
+          <div style="color: #047857; font-size: 13px; margin-bottom: 10px;">
             ${result.message || "数据已成功保存到数据库"}
           </div>
+          ${investorListHtml}
+          ${investeeListHtml}
         </div>
       `;
     } else {
