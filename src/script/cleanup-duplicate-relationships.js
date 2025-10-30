@@ -129,45 +129,35 @@ async function cleanupDuplicateRelationships() {
       }
     }
 
-    // ========== 步骤4：再次查找并删除所有会与 '--' 冲突的 null 记录 ==========
-    console.log("🔍 步骤4：查找所有会与 '--' 冲突的 null 记录...");
+    // ========== 步骤4：删除所有重复的 null 记录（只保留没有其他 round 的 null）==========
+    console.log("🔍 步骤4：删除所有重复的 null 记录...");
+    console.log(
+      "   策略：如果 (A, B) 组合有非 null 的 round，删除所有 (A, B, null) 记录\n"
+    );
 
-    // 查找所有 (investorProjectId, fundedProjectId) 既有 null 又有 '--' 的组合
-    const allConflictingNulls = await sequelize.query(
+    // 直接删除所有 round=null 且存在其他 round 值的记录
+    const deleteResult = await sequelize.query(
       `
-      SELECT DISTINCT n.id
-      FROM "InvestmentRelationships" n
-      INNER JOIN "InvestmentRelationships" d
-        ON n."investorProjectId" = d."investorProjectId"
-        AND n."fundedProjectId" = d."fundedProjectId"
-      WHERE n.round IS NULL
-        AND d.round = '--'
+      DELETE FROM "InvestmentRelationships"
+      WHERE round IS NULL
+        AND EXISTS (
+          SELECT 1
+          FROM "InvestmentRelationships" AS other
+          WHERE other."investorProjectId" = "InvestmentRelationships"."investorProjectId"
+            AND other."fundedProjectId" = "InvestmentRelationships"."fundedProjectId"
+            AND other.round IS NOT NULL
+        )
       `,
       {
-        type: sequelize.QueryTypes.SELECT,
+        type: sequelize.QueryTypes.DELETE,
         transaction,
       }
     );
 
-    if (allConflictingNulls.length > 0) {
-      console.log(
-        `   发现 ${allConflictingNulls.length} 条会冲突的 null 记录\n`
-      );
-      console.log("🗑️  步骤4.5：删除这些冲突的 null 记录...");
+    additionalDeleted = deleteResult[1] || 0; // PostgreSQL 返回 [result, rowCount]
+    console.log(`   ✅ 删除了 ${additionalDeleted} 条重复的 null 记录\n`);
 
-      const idsToDelete = allConflictingNulls.map((r) => r.id);
-      additionalDeleted = await Fundraising.InvestmentRelationships.destroy({
-        where: {
-          id: { [Op.in]: idsToDelete },
-        },
-        transaction,
-      });
-      console.log(`   ✅ 删除了 ${additionalDeleted} 条冲突的 null 记录\n`);
-    } else {
-      console.log(`   ✅ 没有发现会冲突的 null 记录\n`);
-    }
-
-    // ========== 步骤5：将所有剩余的 round=null 改为 '--' ==========
+    // ========== 步骤5：将剩余的 round=null 改为 '--'（这些不会冲突）==========
     console.log("🔧 步骤5：将剩余的 round=null 改为 '--'...");
     [updatedCount] = await Fundraising.InvestmentRelationships.update(
       { round: "--" },
@@ -272,7 +262,9 @@ async function cleanupDuplicateRelationships() {
     console.log("=".repeat(60));
     console.log("📊 清理汇总：");
     console.log(`   - 删除了 ${mixedDeleted} 条混合组的 null 记录`);
-    console.log(`   - 删除了 ${dashDuplicatesDeleted} 条混合组的重复 '--' 记录`);
+    console.log(
+      `   - 删除了 ${dashDuplicatesDeleted} 条混合组的重复 '--' 记录`
+    );
     console.log(`   - 删除了 ${additionalDeleted} 条额外冲突的 null 记录`);
     console.log(`   - 将 ${updatedCount} 条 null 记录改为 '--'`);
     console.log(`   - 删除了 ${totalDeleted} 条其他重复记录`);
