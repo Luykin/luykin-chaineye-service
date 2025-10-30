@@ -30,8 +30,9 @@ class RootdataAPIService {
     if (!match) return null;
 
     try {
-      // Base64 解码
-      const decoded = Buffer.from(match[1], "base64").toString("utf-8");
+      // 先进行 URL 解码（将 %3D 转换为 =），然后再进行 Base64 解码
+      const urlDecoded = decodeURIComponent(match[1]);
+      const decoded = Buffer.from(urlDecoded, "base64").toString("utf-8");
       return decoded;
     } catch (error) {
       console.error("Failed to decode project_id:", error);
@@ -56,6 +57,11 @@ class RootdataAPIService {
           },
           timeout: 10000,
         }
+      );
+      console.log(
+        `[rootdata api 请求] ${ROOTDATA_API_BASE}/get_fac projectId: ${projectId} projectLink:${projectLink} response: ${JSON.stringify(
+          response.data?.result
+        )}`
       );
 
       if (response.data?.result === 200) {
