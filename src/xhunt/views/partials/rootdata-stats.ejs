@@ -1,85 +1,5 @@
 <!-- Rootdata 统计页面 -->
 <div class="stats-section">
-  <!-- 🚀 手动触发爬虫 -->
-  <div
-    class="section"
-    id="rootdata-manual-crawl-section"
-    style="margin-bottom: 30px"
-  >
-    <h2 class="section-title">🚀 手动触发爬虫</h2>
-    <div class="stat-card" style="max-width: 900px; margin: 0 auto">
-      <div style="margin-bottom: 15px">
-        <label
-          style="
-            display: block;
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 8px;
-          "
-        >
-          输入 RootData 项目详情页 URL：
-        </label>
-        <input
-          type="text"
-          id="rootdata-manual-url"
-          placeholder="https://www.rootdata.com/Investors/detail/YZi%20Labs?k=MjI5"
-          style="
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            font-size: 14px;
-          "
-        />
-      </div>
-
-      <div style="display: flex; gap: 10px; margin-bottom: 15px">
-        <button
-          id="rootdata-manual-crawl-btn"
-          style="
-            flex: 1;
-            padding: 10px 20px;
-            background: #3b82f6;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-          "
-        >
-          🕷️ 开始爬取
-        </button>
-      </div>
-
-      <!-- 爬取状态 -->
-      <div
-        id="rootdata-crawl-status"
-        style="
-          display: none;
-          padding: 15px;
-          background: #f3f4f6;
-          border-radius: 6px;
-          margin-top: 15px;
-        "
-      >
-        <div style="color: #374151; font-weight: 600; margin-bottom: 8px">
-          爬取状态：<span id="rootdata-crawl-status-text">准备中...</span>
-        </div>
-        <div
-          style="color: #6b7280; font-size: 13px"
-          id="rootdata-crawl-message"
-        ></div>
-      </div>
-
-      <!-- 爬取结果 -->
-      <div
-        id="rootdata-crawl-result"
-        style="display: none; margin-top: 15px"
-      ></div>
-    </div>
-  </div>
-
   <!-- 🔑 Rootdata API 配额状态 -->
   <div class="section" id="rootdata-quota-section">
     <h2 class="section-title">🔑 Rootdata API 配额</h2>
@@ -234,6 +154,86 @@
       >
         🔄 刷新配额
       </button>
+    </div>
+  </div>
+
+  <!-- 🚀 手动触发爬虫 -->
+  <div
+    class="section"
+    id="rootdata-manual-crawl-section"
+    style="margin-top: 30px"
+  >
+    <h2 class="section-title">🚀 手动触发爬虫</h2>
+    <div class="stat-card" style="max-width: 900px; margin: 0 auto">
+      <div style="margin-bottom: 15px">
+        <label
+          style="
+            display: block;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+          "
+        >
+          输入 RootData 项目详情页 URL：
+        </label>
+        <input
+          type="text"
+          id="rootdata-manual-url"
+          placeholder="https://www.rootdata.com/Investors/detail/YZi%20Labs?k=MjI5"
+          style="
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+          "
+        />
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-bottom: 15px">
+        <button
+          id="rootdata-manual-crawl-btn"
+          style="
+            flex: 1;
+            padding: 10px 20px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+          "
+        >
+          🕷️ 开始爬取
+        </button>
+      </div>
+
+      <!-- 爬取状态 -->
+      <div
+        id="rootdata-crawl-status"
+        style="
+          display: none;
+          padding: 15px;
+          background: #f3f4f6;
+          border-radius: 6px;
+          margin-top: 15px;
+        "
+      >
+        <div style="color: #374151; font-weight: 600; margin-bottom: 8px">
+          爬取状态：<span id="rootdata-crawl-status-text">准备中...</span>
+        </div>
+        <div
+          style="color: #6b7280; font-size: 13px"
+          id="rootdata-crawl-message"
+        ></div>
+      </div>
+
+      <!-- 爬取结果 -->
+      <div
+        id="rootdata-crawl-result"
+        style="display: none; margin-top: 15px"
+      ></div>
     </div>
   </div>
 

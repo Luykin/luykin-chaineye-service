@@ -377,6 +377,15 @@ function hideExportStatus() {
 // ============ Rootdata API 配额相关功能 ============
 
 /**
+ * 通过代理服务器加载图片URL（解决跨域问题）
+ */
+function getProxiedImageUrl(imageUrl) {
+  if (!imageUrl) return "";
+  // 使用服务器的图片代理
+  return `/api/proxy?url=${encodeURIComponent(imageUrl)}`;
+}
+
+/**
  * 加载 Rootdata API 配额信息
  */
 async function loadRootdataQuota() {
@@ -608,7 +617,9 @@ async function triggerManualCrawl() {
           <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
             ${
               project.logo
-                ? `<img src="${project.logo}" style="width: 32px; height: 32px; border-radius: 50%;" />`
+                ? `<img src="${getProxiedImageUrl(
+                    project.logo
+                  )}" style="width: 32px; height: 32px; border-radius: 50%;" />`
                 : ""
             }
             <strong style="font-size: 16px;">${project.projectName}</strong>
@@ -656,7 +667,9 @@ async function triggerManualCrawl() {
                 <div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: #f9fafb; border-radius: 4px; margin-bottom: 6px;">
                   ${
                     r.project.logo
-                      ? `<img src="${r.project.logo}" style="width: 24px; height: 24px; border-radius: 50%;" />`
+                      ? `<img src="${getProxiedImageUrl(
+                          r.project.logo
+                        )}" style="width: 24px; height: 24px; border-radius: 50%;" />`
                       : ""
                   }
                   <div style="flex: 1;">
@@ -699,7 +712,9 @@ async function triggerManualCrawl() {
                 <div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: #f9fafb; border-radius: 4px; margin-bottom: 6px;">
                   ${
                     r.investor.logo
-                      ? `<img src="${r.investor.logo}" style="width: 24px; height: 24px; border-radius: 50%;" />`
+                      ? `<img src="${getProxiedImageUrl(
+                          r.investor.logo
+                        )}" style="width: 24px; height: 24px; border-radius: 50%;" />`
                       : ""
                   }
                   <div style="flex: 1;">
@@ -944,7 +959,9 @@ function renderRootdataProjects(projects, pagination) {
         <td style="padding: 12px;">
           ${
             project.logo
-              ? `<img src="${project.logo}" alt="${project.projectName}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">`
+              ? `<img src="${getProxiedImageUrl(project.logo)}" alt="${
+                  project.projectName
+                }" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">`
               : `<div style="width: 40px; height: 40px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7280;">无</div>`
           }
         </td>
@@ -1033,7 +1050,11 @@ function renderRootdataRelationships(relationships, pagination) {
           <div style="display: flex; align-items: center; gap: 8px;">
             ${
               rel.investorProject?.logo
-                ? `<img src="${rel.investorProject.logo}" alt="${rel.investorProject.projectName}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">`
+                ? `<img src="${getProxiedImageUrl(
+                    rel.investorProject.logo
+                  )}" alt="${
+                    rel.investorProject.projectName
+                  }" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">`
                 : `<div style="width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb;"></div>`
             }
             <div>
@@ -1051,7 +1072,11 @@ function renderRootdataRelationships(relationships, pagination) {
           <div style="display: flex; align-items: center; gap: 8px;">
             ${
               rel.fundedProject?.logo
-                ? `<img src="${rel.fundedProject.logo}" alt="${rel.fundedProject.projectName}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">`
+                ? `<img src="${getProxiedImageUrl(
+                    rel.fundedProject.logo
+                  )}" alt="${
+                    rel.fundedProject.projectName
+                  }" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">`
                 : `<div style="width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb;"></div>`
             }
             <div>
