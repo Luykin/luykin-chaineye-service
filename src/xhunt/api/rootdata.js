@@ -369,7 +369,7 @@ class RootdataDataFixService {
       projectLink: normalizedProjectLink,
       logo: investor.logo,
       description: investor.name, // 使用名称作为描述
-      isInitial: true, // ✅ 标记为初始项目，以便爬虫抓取详细信息
+      isInitial: normalizedProjectLink.includes("/Projects/detail"), // ✅ 包含详情页链接则为初始项目
       socialLinks: investor.X ? { x: investor.X } : null,
       detailFailuresNumber: 0, // ✅ 初始化失败次数为 0
       detailFetchedAt: null, // ✅ 初始化抓取时间为 null，等待爬虫抓取
@@ -1031,7 +1031,7 @@ router.post("/manual-crawl", async (req, res) => {
       project = await Fundraising.Project.create({
         projectName,
         projectLink: url,
-        isInitial: true,
+        isInitial: url.includes("/Projects/detail"), // ✅ 包含详情页链接则为初始项目
         detailFailuresNumber: 0,
         detailFetchedAt: null,
       });
