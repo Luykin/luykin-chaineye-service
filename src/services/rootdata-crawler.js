@@ -1130,22 +1130,77 @@ class FundraisingCrawler extends BaseCrawler {
     isManualTrigger = false,
     usePuppeteer = false
   ) {
-    // 抓取逻辑（独立函数，可在两种环境中执行）
-    const scrapeLogic = () => {
-      // 收集调试信息
+    // 执行抓取
+    let result;
+    if (usePuppeteer) {
+      // Puppeteer 模式：在浏览器环境执行
+      result = await target.evaluate(() => {
+        // 收集调试信息
+        const debug = {
+          investorCount: document.querySelectorAll(".investor").length,
+          rowCount: document.querySelectorAll(".investor .row").length,
+          rowItemCount: document.querySelectorAll(".investor .row .item")
+            .length,
+          itemCount: document.querySelectorAll(".investor .item").length,
+        };
+
+        // 尝试不同的选择器
+        let items = document.querySelectorAll(".investor .row .item");
+        let usedSelector = ".investor .row .item";
+
+        if (items.length === 0) {
+          items = document.querySelectorAll(".investor .item");
+          usedSelector = ".investor .item";
+        }
+
+        debug.usedSelector = usedSelector;
+        debug.finalCount = items.length;
+
+        const investors = Array.from(items)
+          .map((item) => {
+            const link = item.querySelector("a");
+            if (!link) {
+              return null;
+            }
+
+            // 获取链接并确保是绝对路径
+            let projectLink = link.getAttribute("href") || link.href;
+            if (projectLink && !projectLink.startsWith("http")) {
+              try {
+                projectLink = new URL(projectLink, "https://www.rootdata.com")
+                  .href;
+              } catch (e) {
+                // URL 解析失败，保持原样
+              }
+            }
+
+            return {
+              projectLink: projectLink,
+              projectName: link.querySelector("h2")?.textContent?.trim(),
+              lead: !!item.querySelector(".status_icon.status_position"),
+              source: "initial",
+            };
+          })
+          .filter(Boolean);
+
+        return { debug, investors };
+      });
+    } else {
+      // jsdom 模式：在 Node.js 环境直接操作 DOM
+      const doc = target; // jsdom document
       const debug = {
-        investorCount: document.querySelectorAll(".investor").length,
-        rowCount: document.querySelectorAll(".investor .row").length,
-        rowItemCount: document.querySelectorAll(".investor .row .item").length,
-        itemCount: document.querySelectorAll(".investor .item").length,
+        investorCount: doc.querySelectorAll(".investor").length,
+        rowCount: doc.querySelectorAll(".investor .row").length,
+        rowItemCount: doc.querySelectorAll(".investor .row .item").length,
+        itemCount: doc.querySelectorAll(".investor .item").length,
       };
 
       // 尝试不同的选择器
-      let items = document.querySelectorAll(".investor .row .item");
+      let items = doc.querySelectorAll(".investor .row .item");
       let usedSelector = ".investor .row .item";
 
       if (items.length === 0) {
-        items = document.querySelectorAll(".investor .item");
+        items = doc.querySelectorAll(".investor .item");
         usedSelector = ".investor .item";
       }
 
@@ -1179,16 +1234,7 @@ class FundraisingCrawler extends BaseCrawler {
         })
         .filter(Boolean);
 
-      return { debug, investors };
-    };
-
-    // 执行抓取
-    let result;
-    if (usePuppeteer) {
-      result = await target.evaluate(scrapeLogic);
-    } else {
-      // jsdom: 直接在 Node.js 环境执行
-      result = scrapeLogic.call({ document: target });
+      result = { debug, investors };
     }
 
     // 仅在手动触发时打印详细调试信息
@@ -1228,18 +1274,113 @@ class FundraisingCrawler extends BaseCrawler {
 
   // 处理轮次数据
   async processRounds(target, isManualTrigger = false, usePuppeteer = false) {
-    // 抓取逻辑（独立函数，可在两种环境中执行）
-    const scrapeLogic = () => {
-      // 收集调试信息
+    // 执行抓取
+    let result;
+    if (usePuppeteer) {
+      // Puppeteer 模式：在浏览器环境执行
+      result = await target.evaluate(() => {
+        // 收集调试信息
+        const debug = {
+          investorCount: document.querySelectorAll(".investor").length,
+          trCount: document.querySelectorAll(".investor tr").length,
+          theadCount: document.querySelectorAll(".investor thead").length,
+        };
+
+        // 建立表头到列下标的映射，避免硬编码列序号
+        const headerCells = Array.from(
+          document.querySelectorAll(
+            ".investor thead th, .investor tr:first-child th, .investor tr:first-child td"
+          )
+        );
+
+        debug.headerCellsCount = headerCells.length;
+
+        const normalize = (str) =>
+          String(str || "")
+            .trim()
+            .toLowerCase();
+        const headerTexts = headerCells.map((th) => normalize(th.textContent));
+        debug.headerTexts = headerTexts;
+
+        const findIndexBy = (regex, fallbackIndex) => {
+          const idx = headerTexts.findIndex((t) => regex.test(t));
+          return idx >= 0 ? idx : fallbackIndex;
+        };
+
+        const idxRound = findIndexBy(/round/i, 0);
+        const idxAmount = findIndexBy(/amount/i, 1);
+        const idxValuation = findIndexBy(/valuation/i, 2);
+        const idxDate = findIndexBy(/date/i, 3);
+        const idxInvestors = findIndexBy(/investor/i, headerCells.length - 1);
+
+        debug.columnIndexes = {
+          idxRound,
+          idxAmount,
+          idxValuation,
+          idxDate,
+          idxInvestors,
+        };
+
+        const rows = Array.from(
+          document.querySelectorAll(".investor tr")
+        ).slice(1);
+        debug.dataRowsCount = rows.length;
+
+        const investors = rows
+          .map((row) => {
+            const cells = row.querySelectorAll("td");
+            const round = cells[idxRound]?.textContent?.trim();
+            const amount = cells[idxAmount]?.textContent?.trim();
+            const valuation = cells[idxValuation]?.textContent?.trim();
+            const date = cells[idxDate]?.textContent?.trim();
+
+            const investorCell = cells[idxInvestors];
+            if (!investorCell) {
+              return [];
+            }
+
+            const investorLinks = investorCell.querySelectorAll("a");
+
+            return Array.from(investorLinks).map((a) => {
+              // 获取链接并确保是绝对路径
+              let projectLink = a.getAttribute("href") || a.href;
+              if (projectLink && !projectLink.startsWith("http")) {
+                try {
+                  projectLink = new URL(projectLink, "https://www.rootdata.com")
+                    .href;
+                } catch (e) {
+                  // URL 解析失败，保持原样
+                }
+              }
+
+              return {
+                projectLink: projectLink,
+                projectName: a.textContent.replace("*", "").trim(),
+                lead: a.textContent.includes("*"),
+                round,
+                amount,
+                valuation,
+                date,
+                source: "rounds",
+              };
+            });
+          })
+          .flat();
+
+        return { debug, investors };
+      });
+    } else {
+      // jsdom 模式：在 Node.js 环境直接操作 DOM
+      const doc = target; // jsdom document
       const debug = {
-        investorCount: document.querySelectorAll(".investor").length,
-        trCount: document.querySelectorAll(".investor tr").length,
-        theadCount: document.querySelectorAll(".investor thead").length,
+        investorCount: doc.querySelectorAll(".investor").length,
+        trCount: doc.querySelectorAll(".investor tr").length,
+        theadCount: doc.querySelectorAll(".investor thead").length,
       };
 
       // 建立表头到列下标的映射，避免硬编码列序号
       const headerCells = Array.from(
-        document.querySelectorAll(
+        doc.querySelectorAll(
           ".investor thead th, .investor tr:first-child th, .investor tr:first-child td"
         )
       );
@@ -1272,9 +1413,7 @@ class FundraisingCrawler extends BaseCrawler {
         idxInvestors,
       };
 
-      const rows = Array.from(document.querySelectorAll(".investor tr")).slice(
-        1
-      );
+      const rows = Array.from(doc.querySelectorAll(".investor tr")).slice(1);
       debug.dataRowsCount = rows.length;
 
       const investors = rows
@@ -1318,16 +1457,7 @@ class FundraisingCrawler extends BaseCrawler {
         })
         .flat();
 
-      return { debug, investors };
-    };
-
-    // 执行抓取
-    let result;
-    if (usePuppeteer) {
-      result = await target.evaluate(scrapeLogic);
-    } else {
-      // jsdom: 直接在 Node.js 环境执行
-      result = scrapeLogic.call({ document: target });
+      result = { debug, investors };
     }
 
     // 仅在手动触发时打印详细调试信息
