@@ -161,24 +161,37 @@ class RootdataDataFixService {
     const fundedProjectId = project.id;
 
     // 获取项目的 Twitter URL（用于验证）
-    // 优先使用 twitterUrl 字段，如果没有则使用 socialLinks.x
     const projectTwitterUrl = project.twitterUrl || project.socialLinks?.x;
     if (!projectTwitterUrl) {
       console.log(
-        `⚠️ 项目缺少 Twitter URL，无法验证数据: ${project.projectLink}`
+        `[rootdata 对比起效] ⚠️ 无Twitter URL跳过: ${
+          project.projectName
+        } | 轮次:${apiData.items?.length || 0}`
       );
       return;
     }
 
+    console.log(
+      `[rootdata 对比起效] 🔍 开始: ${project.projectName} | API返回:${
+        apiData.items?.length || 0
+      }轮次 | Twitter:${projectTwitterUrl}`
+    );
+
+    let totalProcessed = 0; // 统计处理的投资者数量
+    let totalSkipped = 0; // 统计跳过的轮次数量
+    let totalMatched = 0; // 统计匹配成功的轮次数量
+
     for (const round of apiData.items) {
-      if (!round.invests || round.invests.length === 0) continue;
+      if (!round.invests || round.invests.length === 0) {
+        totalSkipped++;
+        continue;
+      }
 
       // ✅ 数据验证：确保 API 返回的是我们查询的项目数据
-      // RootData API 有时会返回错误的项目（相同 ID 但不同项目）
       if (round.X) {
         const normalizeUrl = (url) => {
           if (!url) return "";
-          return url.toLowerCase().replace(/\/$/, ""); // 移除末尾斜杠并转小写
+          return url.toLowerCase().replace(/\/$/, "");
         };
 
         const apiTwitterUrl = normalizeUrl(round.X);
@@ -186,15 +199,20 @@ class RootdataDataFixService {
 
         if (apiTwitterUrl !== expectedTwitterUrl) {
           console.log(
-            `⚠️ 跳过不匹配的数据: API返回 ${round.X}, 期望 ${projectTwitterUrl}`
+            `[rootdata 对比起效] ❌ Twitter不匹配跳过: ${round.rounds} | API:${apiTwitterUrl} vs 期望:${expectedTwitterUrl}`
           );
-          continue; // 跳过不匹配的 round
+          totalSkipped++;
+          continue;
         }
+
+        console.log(
+          `[rootdata 对比起效] ✅ Twitter匹配: ${round.rounds} | 投资者:${round.invests.length}个`
+        );
+        totalMatched++;
       }
 
       for (const investor of round.invests) {
         try {
-          // 查找或创建投资者项目
           const investorProject = await this.findOrCreateInvestor(
             investor,
             Fundraising
@@ -202,7 +220,6 @@ class RootdataDataFixService {
 
           if (!investorProject) continue;
 
-          // 查找或创建投资关系
           await this.findOrCreateRelationship(
             {
               investorProjectId: investorProject.id,
@@ -215,11 +232,17 @@ class RootdataDataFixService {
             },
             Fundraising
           );
+
+          totalProcessed++;
         } catch (error) {
-          console.error(`修正投资者失败:`, error.message);
+          console.error(`[rootdata 对比起效] ❌ 处理失败: ${error.message}`);
         }
       }
     }
+
+    console.log(
+      `[rootdata 对比起效] ✨ 完成: ${project.projectName} | 匹配:${totalMatched}轮次 跳过:${totalSkipped}轮次 投资者:${totalProcessed}个`
+    );
   }
 
   /**
