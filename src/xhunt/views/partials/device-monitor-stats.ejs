@@ -745,7 +745,7 @@
 
       try {
         clearCacheBtn.disabled = true;
-        clearCacheBtn.textContent = "清除中...";
+        clearCacheBtn.textContent = "处理中...";
 
         const response = await fetch("/api/xhunt/stats/clear-cache", {
           method: "POST",
@@ -761,21 +761,53 @@
           throw new Error(data.error || "清除缓存失败");
         }
 
-        clearCacheResult.textContent = `✅ 成功清除 ${data.deletedCount} 个缓存键`;
-        clearCacheResult.style.display = "block";
-        clearCacheResult.style.background = "#d1fae5";
-        clearCacheResult.style.color = "#065f46";
+        // 判断是同步还是异步处理
+        if (data.sync) {
+          // 同步处理完成，显示详细结果
+          let resultText = `✅ 成功清除 ${data.deletedCount} 个缓存键`;
+          if (data.samples && data.samples.length > 0) {
+            resultText += `\n示例: ${data.samples.slice(0, 3).join(", ")}${
+              data.samples.length > 3 ? "..." : ""
+            }`;
+          }
+          clearCacheResult.textContent = resultText;
+          clearCacheResult.style.display = "block";
+          clearCacheResult.style.background = "#d1fae5";
+          clearCacheResult.style.color = "#065f46";
+          clearCacheResult.style.whiteSpace = "pre-line";
 
-        // 3秒后隐藏提示
+          console.log(`✅ 清除缓存成功: ${data.deletedCount} 个键`);
+          if (data.samples) {
+            console.log("删除的键:", data.samples);
+          }
+        } else {
+          // 异步处理，显示进度提示
+          clearCacheResult.textContent = `🔄 ${
+            data.message || "正在后台处理..."
+          }`;
+          clearCacheResult.style.display = "block";
+          clearCacheResult.style.background = "#dbeafe";
+          clearCacheResult.style.color = "#1e40af";
+          clearCacheResult.style.whiteSpace = "normal";
+
+          console.log(`📝 缓存清除任务已提交: "${prefix}"`);
+          console.log(
+            `💡 已删除 ${data.deletedCount} 个精确键，约 ${data.estimatedTotal} 个键正在后台删除`
+          );
+          console.log("请查看服务器日志以了解详细进度");
+        }
+
+        // 5秒后隐藏提示
         setTimeout(() => {
           clearCacheResult.style.display = "none";
-        }, 3000);
+        }, 5000);
       } catch (error) {
         console.error("清除缓存失败:", error);
         clearCacheResult.textContent = "❌ " + error.message;
         clearCacheResult.style.display = "block";
         clearCacheResult.style.background = "#fee2e2";
         clearCacheResult.style.color = "#991b1b";
+        clearCacheResult.style.whiteSpace = "normal";
       } finally {
         clearCacheBtn.disabled = false;
         clearCacheBtn.textContent = "清除";
