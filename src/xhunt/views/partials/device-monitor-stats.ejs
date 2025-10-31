@@ -758,7 +758,9 @@
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.error || "清除缓存失败");
+          // 优先显示后端返回的详细错误信息
+          const errorMessage = data.message || data.error || "清除缓存失败";
+          throw new Error(errorMessage);
         }
 
         // 判断是同步还是异步处理

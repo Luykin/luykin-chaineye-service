@@ -436,10 +436,28 @@ router.get("/online-users", basicAuth, async (req, res) => {
 
 /**
  * GET /export/users/excel
- * 导出所有已登录用户数据为Excel文件（需要认证）
+ * 导出所有已登录用户数据为Excel文件（需要认证，仅 luykin 用户）
  */
 router.get("/export/users/excel", basicAuth, async (req, res) => {
   try {
+    // 权限检查：只有 luykin 用户可以执行数据导出操作
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `[数据导出] ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "权限不足",
+        message: "权限不足",
+      });
+    }
+
+    console.log(
+      `[数据导出] ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
+    );
+
     // 获取PostgreSQL模型
     const postgresModels = require("../../models/postgres-start");
     const XHuntUser = postgresModels.XHuntUser;
@@ -509,10 +527,28 @@ router.get("/export/users/excel", basicAuth, async (req, res) => {
 
 /**
  * GET /log-search
- * 日志搜索接口（需要认证）- 优化版本
+ * 日志搜索接口（需要认证，仅 luykin 用户）- 优化版本
  */
 router.get("/log-search", basicAuth, async (req, res) => {
   try {
+    // 权限检查：只有 luykin 用户可以执行日志搜索操作
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `[日志搜索] ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "权限不足",
+        message: "权限不足",
+      });
+    }
+
+    console.log(
+      `[日志搜索] ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
+    );
+
     const { query, contextLines = 3, limit = 5 } = req.query;
 
     if (!query || query.trim().length === 0) {
@@ -886,10 +922,28 @@ router.get("/notes", basicAuth, async (req, res) => {
 
 /**
  * POST /send-messages
- * 批量发送私信（需要认证）
+ * 批量发送私信（需要认证，仅 luykin 用户）
  */
 router.post("/send-messages", basicAuth, async (req, res) => {
   try {
+    // 权限检查：只有 luykin 用户可以执行批量发送私信操作
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `[批量发送私信] ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "权限不足",
+        message: "权限不足",
+      });
+    }
+
+    console.log(
+      `[批量发送私信] ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
+    );
+
     const { campaignId, title, content, handlers, reportUrls } = req.body;
 
     // 验证必需参数
@@ -1901,6 +1955,23 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
   const requestId = Date.now().toString(36);
   const logPrefix = `[redis 手动清除][${requestId}]`;
   try {
+    // 权限检查：只有 luykin 用户可以执行清除缓存操作
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `${logPrefix} ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        error: "权限不足",
+        message: "权限不足",
+      });
+    }
+
+    console.log(
+      `${logPrefix} ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
+    );
+
     const { prefix } = req.body;
     console.log(`${logPrefix} 📥 收到清除缓存请求: prefix="${prefix}"`);
 
