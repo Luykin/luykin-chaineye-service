@@ -423,7 +423,7 @@ router.post(
       if (currentCount >= maxCallsPerWeek) {
         return res.status(429).json({
           error: "每周最多只能调用3次，请一周后再试",
-          message: `本周已使用 ${currentCount}/${maxCallsPerWeek} 次，请一周后再试 (You have used ${currentCount}/${maxCallsPerWeek} times this week, please try again in one week)`,
+          message: `已经修改${currentCount}次，请下周再试 (You have modified ${currentCount} times, please try again next week)`,
           limit: maxCallsPerWeek,
           remaining: 0,
         });
