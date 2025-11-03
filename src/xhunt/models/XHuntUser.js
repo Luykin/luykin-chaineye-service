@@ -52,6 +52,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: "分类（如 KOL、项目方、机构、个人等）",
       },
+      evmAddresses: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+        comment: "用户绑定的多个 EVM 地址（数组格式）",
+      },
     },
     {
       tableName: "XHuntUsers", // 显式指定表名（可选）

@@ -332,6 +332,7 @@ router.post(
           classification: user.classification,
           kolRank20W: user.kolRank20W,
           twitterId: user.twitterId,
+          evmAddresses: user.evmAddresses || [],
         },
       });
     } catch (error) {
@@ -344,27 +345,6 @@ router.post(
 // 获取当前用户信息
 router.get("/me", authenticateToken, async (req, res) => {
   try {
-    // const cacheKey = `user:points:${req.user.id}`;
-
-    // // 优先从 Redis 获取积分
-    // const cachedPoints = await req.redisClient.get(cacheKey);
-
-    // let totalPoints = 0;
-
-    // if (cachedPoints !== null) {
-    //   totalPoints = parseInt(cachedPoints, 10);
-    // } else {
-    //   // 回退到数据库查询（冷启动或缓存过期）
-    //   totalPoints =
-    //     (await XPointRecord.sum("points", {
-    //       where: { xHuntUserId: req.user.id },
-    //     })) || 0;
-
-    //   // 写入缓存（异步非阻塞）
-    //   req.redisClient
-    //     .setEx(cacheKey, 3600, JSON.stringify(totalPoints))
-    //     .catch(console.error);
-    // }
     // 缓存策略：前端缓存 120s
     res.set("Cache-Control", "private, max-age=120");
     res.json({
@@ -372,6 +352,7 @@ router.get("/me", authenticateToken, async (req, res) => {
       displayName: req.user.displayName,
       avatar: req.user.avatar,
       twitterId: req.user.twitterId,
+      evmAddresses: req.user.evmAddresses || [],
       xPoints: -1,
     });
   } catch (error) {
@@ -402,6 +383,57 @@ router.post("/logout", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "登出失败，请稍后再试" });
   }
 });
+
+/**
+ * POST /evm-addresses
+ * 绑定/修改 EVM 地址接口
+ * 前端传递全量的 EVM 地址数组，后端会替换现有的所有地址
+ */
+router.post(
+  "/evm-addresses",
+  authenticateToken,
+  [
+    body("addresses").isArray({ min: 0 }).withMessage("addresses 必须是数组"),
+    body("addresses.*")
+      .isString()
+      .matches(/^0x[a-fA-F0-9]{40}$/)
+      .withMessage("每个地址必须是有效的 EVM 地址（0x + 40个十六进制字符）"),
+    validateRequest,
+  ],
+  async (req, res) => {
+    try {
+      const { addresses } = req.body;
+
+      // 标准化和去重地址
+      const normalizedAddresses = [
+        ...new Set(
+          addresses.map((addr) => {
+            const trimmed = String(addr || "").trim();
+            if (!trimmed) return null;
+            // 提取标准的 40 字节地址（0x + 40 hex）
+            const match = trimmed.match(/^0x[a-fA-F0-9]{40}$/i);
+            return match ? match[0].toLowerCase() : null;
+          })
+        ),
+      ].filter((addr) => addr !== null); // 过滤掉无效地址
+
+      // 更新用户的 evmAddresses 字段
+      await req.user.update({
+        evmAddresses: normalizedAddresses,
+      });
+
+      // 返回成功响应
+      res.json({
+        success: true,
+        addresses: normalizedAddresses,
+        count: normalizedAddresses.length,
+      });
+    } catch (error) {
+      console.error("Update EVM addresses error:", error);
+      res.status(500).json({ error: "更新 EVM 地址失败，请稍后再试" });
+    }
+  }
+);
 
 // // 刷新令牌
 // router.post('/refresh', async (req, res) => {
