@@ -388,6 +388,7 @@ router.post("/logout", authenticateToken, async (req, res) => {
  * POST /evm-addresses
  * 绑定/修改 EVM 地址接口
  * 前端传递全量的 EVM 地址数组，后端会替换现有的所有地址
+ * 每周最多只能调用3次
  */
 router.post(
   "/evm-addresses",
@@ -402,6 +403,32 @@ router.post(
   ],
   async (req, res) => {
     try {
+      // 每周速率限制检查
+      const userId = req.user.id;
+      const rateLimitKey = `evm_addresses_limit:user:${userId}`;
+      const maxCallsPerWeek = 3;
+      const oneWeekInSeconds = 7 * 24 * 60 * 60; // 7天
+
+      // 检查本周调用次数
+      let currentCount = 0;
+      try {
+        const countStr = await req.redisClient.get(rateLimitKey);
+        currentCount = countStr ? parseInt(countStr, 10) : 0;
+      } catch (redisErr) {
+        console.error("Redis GET evm addresses limit error:", redisErr);
+        // Redis 错误不阻断请求，但记录日志
+      }
+
+      // 检查是否超过限制
+      if (currentCount >= maxCallsPerWeek) {
+        return res.status(429).json({
+          error: "每周最多只能调用3次，请一周后再试",
+          message: `本周已使用 ${currentCount}/${maxCallsPerWeek} 次，请一周后再试 (You have used ${currentCount}/${maxCallsPerWeek} times this week, please try again in one week)`,
+          limit: maxCallsPerWeek,
+          remaining: 0,
+        });
+      }
+
       const { addresses } = req.body;
 
       // 标准化和去重地址
@@ -422,11 +449,35 @@ router.post(
         evmAddresses: normalizedAddresses,
       });
 
+      // 增加调用次数
+      let newCount = currentCount + 1;
+      try {
+        newCount = await req.redisClient.incr(rateLimitKey);
+        // 如果是第一次调用，设置过期时间为7天
+        if (newCount === 1) {
+          await req.redisClient.expire(rateLimitKey, oneWeekInSeconds);
+        }
+      } catch (redisErr) {
+        console.error("Redis SET evm addresses limit error:", redisErr);
+        // Redis 错误不阻断请求，但记录日志
+      }
+
+      // 在响应头中添加使用情况信息
+      res.setHeader("X-RateLimit-Limit", maxCallsPerWeek);
+      res.setHeader(
+        "X-RateLimit-Remaining",
+        Math.max(0, maxCallsPerWeek - newCount)
+      );
+
       // 返回成功响应
       res.json({
         success: true,
         addresses: normalizedAddresses,
         count: normalizedAddresses.length,
+        rateLimit: {
+          limit: maxCallsPerWeek,
+          remaining: Math.max(0, maxCallsPerWeek - newCount),
+        },
       });
     } catch (error) {
       console.error("Update EVM addresses error:", error);
