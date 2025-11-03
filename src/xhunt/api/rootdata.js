@@ -6,8 +6,8 @@ const router = express.Router();
 // 爬虫队列服务（双重验证机制）
 const crawlerQueue = require("../services/RootdataCrawlerQueue");
 
-// Redis 缓存时间：10分钟 = 600 秒
-const CACHE_TTL_ROOTDATA = 600;
+// Redis 缓存时间：1分钟 = 60 秒
+const CACHE_TTL_ROOTDATA = 60;
 // HTTP 缓存时间：100分钟 = 6000 秒
 const HTTP_CACHE_TTL = 6000;
 
