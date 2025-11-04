@@ -444,6 +444,45 @@ router.post(
         ),
       ].filter((addr) => addr !== null); // 过滤掉无效地址
 
+      // 跨用户唯一性校验：任一地址已被其他用户绑定则拦截
+      if (normalizedAddresses.length > 0) {
+        try {
+          const [conflicts] = await XHuntUser.sequelize.query(
+            `
+            SELECT u.id, u."evmAddresses"
+            FROM "XHuntUsers" u
+            WHERE u.id != :userId
+              AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements_text(u."evmAddresses"::jsonb) AS a(elem)
+                WHERE a.elem = ANY(:addrArray)
+              )
+            LIMIT 1
+            `,
+            {
+              replacements: {
+                userId: userId,
+                addrArray: normalizedAddresses,
+              },
+              type: XHuntUser.sequelize.QueryTypes.SELECT,
+            }
+          );
+
+          if (conflicts && conflicts.length > 0) {
+            return res.status(400).json({
+              error: "WALLET_ADDRESS_ALREADY_REGISTERED",
+              message:
+                "该钱包地址已注册，请使用其他地址进行注册。（This wallet address has already been registered. Please use a different address.）",
+            });
+          }
+        } catch (checkErr) {
+          console.error("EVM address uniqueness check failed:", checkErr);
+          return res
+            .status(500)
+            .json({ error: "检查地址唯一性失败，请稍后再试" });
+        }
+      }
+
       // 更新用户的 evmAddresses 字段
       await req.user.update({
         evmAddresses: normalizedAddresses,
