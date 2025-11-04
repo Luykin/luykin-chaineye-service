@@ -454,8 +454,8 @@ router.post(
             WHERE u.id != :userId
               AND EXISTS (
                 SELECT 1
-                FROM jsonb_array_elements_text(u."evmAddresses"::jsonb) AS a(elem)
-                WHERE a.elem = ANY(:addrArray)
+                FROM jsonb_array_elements_text(COALESCE(u."evmAddresses"::jsonb, '[]'::jsonb)) AS a(elem)
+                WHERE a.elem IN (:addrArray)
               )
             LIMIT 1
             `,
