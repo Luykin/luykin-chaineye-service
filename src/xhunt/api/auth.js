@@ -447,7 +447,7 @@ router.post(
       // 跨用户唯一性校验：任一地址已被其他用户绑定则拦截
       if (normalizedAddresses.length > 0) {
         try {
-          const [conflicts] = await XHuntUser.sequelize.query(
+          const conflicts = await XHuntUser.sequelize.query(
             `
             SELECT u.id, u."evmAddresses"
             FROM "XHuntUsers" u
@@ -468,7 +468,7 @@ router.post(
             }
           );
 
-          if (conflicts && conflicts.length > 0) {
+          if (Array.isArray(conflicts) && conflicts.length > 0) {
             return res.status(400).json({
               error: "WALLET_ADDRESS_ALREADY_REGISTERED",
               message:
