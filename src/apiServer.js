@@ -30,6 +30,7 @@ const xHuntStatsRoutes = require("./xhunt/api/stats");
 const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
+const xHuntSSERoutes = require("./xhunt/api/sse");
 const internalQueryRoutes = require("./api/internal-query");
 const {
   securityMiddleware,
@@ -168,10 +169,13 @@ app.use(
 );
 // 全局速率限制
 app.use(rateLimiter);
-// 条件性压缩：排除流式路由
+// 条件性压缩：排除流式路由和 SSE 路由
 app.use((req, res, next) => {
-  if (req.path.includes("/api/xhunt/proxy/public-stream/")) {
-    // 流式路由跳过压缩中间件
+  if (
+    req.path.includes("/api/xhunt/proxy/public-stream/") ||
+    req.path.includes("/api/xhunt/sse")
+  ) {
+    // 流式路由和 SSE 路由跳过压缩中间件
     return next();
   }
   // 非流式路由应用压缩
@@ -281,6 +285,15 @@ app.use("/api/xhunt/mantle", xHuntMantleRoutes);
 
 // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据
 app.use("/api/rootdata", xHuntRootdataRoutes);
+
+// SSE 接口 - 实时推送数据（包含 feeds 等）
+app.use(
+  "/api/xhunt/sse",
+  fingerprintLimiter,
+  browserOnlyMiddleware,
+  securityMiddleware,
+  xHuntSSERoutes
+);
 
 // 内部查询API - 使用随机字符前缀，无需安全中间件
 app.use("/api/internal-x9k2m7p4q8", internalQueryRoutes);
