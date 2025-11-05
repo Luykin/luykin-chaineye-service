@@ -129,6 +129,190 @@ async function fetchTopTweetData() {
 }
 
 /**
+ * 全局 SSE 连接管理器
+ */
+class SSEConnectionManager {
+  constructor() {
+    this.connections = new Set(); // 存储所有活跃的 SSE 连接
+    this.lastFeedData = null;
+    this.lastTopTweetData = null;
+    this.feedIntervalId = null;
+    this.topTweetIntervalId = null;
+    this.isInitialized = false;
+  }
+
+  /**
+   * 添加 SSE 连接
+   */
+  addConnection(res) {
+    this.connections.add(res);
+    console.log(`[sse feeds] 新增连接，当前连接数: ${this.connections.size}`);
+
+    // 初始化轮询（如果还没有初始化）
+    if (!this.isInitialized) {
+      this.initializePolling();
+    }
+  }
+
+  /**
+   * 移除 SSE 连接
+   */
+  removeConnection(res) {
+    this.connections.delete(res);
+    console.log(`[sse feeds] 移除连接，当前连接数: ${this.connections.size}`);
+
+    // 如果没有连接了，停止轮询
+    if (this.connections.size === 0 && this.isInitialized) {
+      this.stopPolling();
+    }
+  }
+
+  /**
+   * 向所有连接的客户端推送消息
+   */
+  broadcast(eventType, data) {
+    const message = {
+      type: eventType,
+      timestamp: new Date().toISOString(),
+      data: data,
+    };
+
+    const messageStr = `event: ${eventType}\ndata: ${JSON.stringify(
+      message
+    )}\n\n`;
+    let closedConnections = 0;
+
+    this.connections.forEach((res) => {
+      try {
+        res.write(messageStr);
+      } catch (error) {
+        // 连接已关闭，移除它
+        console.error(`[sse feeds] 推送消息失败（连接已关闭）:`, error);
+        closedConnections++;
+        this.connections.delete(res);
+      }
+    });
+
+    if (closedConnections > 0) {
+      console.log(`[sse feeds] 清理了 ${closedConnections} 个已关闭的连接`);
+    }
+
+    console.log(
+      `[sse feeds] 推送消息 ${eventType} 到 ${this.connections.size} 个客户端`
+    );
+  }
+
+  /**
+   * 初始化轮询
+   */
+  initializePolling() {
+    if (this.isInitialized) {
+      return;
+    }
+
+    this.isInitialized = true;
+    console.log(`[sse feeds] 初始化轮询服务`);
+
+    // 立即执行一次初始请求
+    this.pollFeed();
+    this.pollTopTweet();
+
+    // 设置定时器
+    this.feedIntervalId = setInterval(() => {
+      this.pollFeed();
+    }, 30 * 1000); // 每30秒
+
+    this.topTweetIntervalId = setInterval(() => {
+      this.pollTopTweet();
+    }, 2 * 60 * 1000); // 每2分钟
+  }
+
+  /**
+   * 停止轮询
+   */
+  stopPolling() {
+    if (this.feedIntervalId) {
+      clearInterval(this.feedIntervalId);
+      this.feedIntervalId = null;
+    }
+    if (this.topTweetIntervalId) {
+      clearInterval(this.topTweetIntervalId);
+      this.topTweetIntervalId = null;
+    }
+    this.isInitialized = false;
+    console.log(`[sse feeds] 停止轮询服务`);
+  }
+
+  /**
+   * 轮询 Feed 数据（每30秒）
+   */
+  async pollFeed() {
+    try {
+      const feedData = await fetchFeedData();
+
+      if (feedData) {
+        // 提取所有消息用于比较
+        const allMessages = [
+          ...(feedData.tweets_feed || []),
+          ...(feedData.follow_feed?.following_action || []),
+          ...(feedData.bwe_news || []),
+        ];
+
+        // 比较是否有新消息
+        const lastAllMessages = this.lastFeedData
+          ? [
+              ...(this.lastFeedData.tweets_feed || []),
+              ...(this.lastFeedData.follow_feed?.following_action || []),
+              ...(this.lastFeedData.bwe_news || []),
+            ]
+          : [];
+
+        if (hasNewMessages(lastAllMessages, allMessages)) {
+          console.log(`[sse feeds] 检测到 Feed 新消息，推送通知`);
+          this.broadcast("feed_update", {
+            source: "feed",
+            data: feedData,
+          });
+        }
+
+        // 更新缓存
+        this.lastFeedData = feedData;
+      }
+    } catch (error) {
+      console.error(`[sse feeds] Feed 轮询错误:`, error);
+    }
+  }
+
+  /**
+   * 轮询 Top Tweet 数据（每2分钟）
+   */
+  async pollTopTweet() {
+    try {
+      const topTweetData = await fetchTopTweetData();
+
+      if (topTweetData) {
+        // 比较是否有新消息
+        if (hasNewMessages(this.lastTopTweetData, topTweetData)) {
+          console.log(`[sse feeds] 检测到 Top Tweet 新消息，推送通知`);
+          this.broadcast("gossip_update", {
+            source: "top_tweet",
+            data: topTweetData,
+          });
+        }
+
+        // 更新缓存
+        this.lastTopTweetData = topTweetData;
+      }
+    } catch (error) {
+      console.error(`[sse feeds] Top Tweet 轮询错误:`, error);
+    }
+  }
+}
+
+// 创建全局单例
+const connectionManager = new SSEConnectionManager();
+
+/**
  * SSE (Server-Sent Events) 推送接口
  * GET /api/xhunt/sse/feeds
  *
@@ -143,120 +327,20 @@ router.get("/feeds", authenticateTokenFromQueryOptional, (req, res) => {
   res.write(": SSE connection established\n\n");
   res.flushHeaders();
 
-  // 存储上次的数据，用于比较
-  let lastFeedData = null;
-  let lastTopTweetData = null;
-
-  // 定时器 ID
-  let feedIntervalId = null;
-  let topTweetIntervalId = null;
-
-  // 清理定时器的函数
-  const cleanup = () => {
-    if (feedIntervalId) {
-      clearInterval(feedIntervalId);
-      feedIntervalId = null;
-    }
-    if (topTweetIntervalId) {
-      clearInterval(topTweetIntervalId);
-      topTweetIntervalId = null;
-    }
-  };
-
-  // 发送 SSE 消息的辅助函数
-  const sendSSEMessage = (eventType, data) => {
-    try {
-      const message = {
-        type: eventType,
-        timestamp: new Date().toISOString(),
-        data: data,
-      };
-      res.write(`event: ${eventType}\ndata: ${JSON.stringify(message)}\n\n`);
-    } catch (error) {
-      console.error(`[sse feeds] 发送消息错误:`, error);
-    }
-  };
-
-  // 轮询 Feed 数据（每30秒）
-  const pollFeed = async () => {
-    try {
-      const feedData = await fetchFeedData();
-
-      if (feedData) {
-        // 提取所有消息用于比较
-        const allMessages = [
-          ...(feedData.tweets_feed || []),
-          ...(feedData.follow_feed?.following_action || []),
-          ...(feedData.bwe_news || []),
-        ];
-
-        // 比较是否有新消息
-        const lastAllMessages = lastFeedData
-          ? [
-              ...(lastFeedData.tweets_feed || []),
-              ...(lastFeedData.follow_feed?.following_action || []),
-              ...(lastFeedData.bwe_news || []),
-            ]
-          : [];
-
-        if (hasNewMessages(lastAllMessages, allMessages)) {
-          console.log(`[sse feeds] 检测到 Feed 新消息，推送通知`);
-          sendSSEMessage("feed_update", {
-            source: "feed",
-            data: feedData,
-          });
-        }
-
-        // 更新缓存
-        lastFeedData = feedData;
-      }
-    } catch (error) {
-      console.error(`[sse feeds] Feed 轮询错误:`, error);
-    }
-  };
-
-  // 轮询 Top Tweet 数据（每2分钟）
-  const pollTopTweet = async () => {
-    try {
-      const topTweetData = await fetchTopTweetData();
-
-      if (topTweetData) {
-        // 比较是否有新消息
-        if (hasNewMessages(lastTopTweetData, topTweetData)) {
-          console.log(`[sse feeds] 检测到 Top Tweet 新消息，推送通知`);
-          sendSSEMessage("gossip_update", {
-            source: "top_tweet",
-            data: topTweetData,
-          });
-        }
-
-        // 更新缓存
-        lastTopTweetData = topTweetData;
-      }
-    } catch (error) {
-      console.error(`[sse feeds] Top Tweet 轮询错误:`, error);
-    }
-  };
-
-  // 立即执行一次初始请求
-  pollFeed();
-  pollTopTweet();
-
-  // 设置定时器
-  feedIntervalId = setInterval(pollFeed, 30 * 1000); // 每30秒
-  topTweetIntervalId = setInterval(pollTopTweet, 3 * 60 * 1000); // 每3分钟
+  // 添加到连接管理器
+  connectionManager.addConnection(res);
 
   // 处理客户端断开连接
   req.on("close", () => {
     console.log("[sse feeds] SSE 客户端断开连接");
-    cleanup();
+    connectionManager.removeConnection(res);
     res.end();
   });
 
   // 处理错误
   req.on("error", (error) => {
     console.error("[sse feeds] SSE 连接错误:", error);
-    cleanup();
+    connectionManager.removeConnection(res);
     res.end();
   });
 });
