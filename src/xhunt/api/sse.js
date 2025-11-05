@@ -126,6 +126,7 @@ class SSEConnectionManager {
     this.lastTopTweetData = null;
     this.feedIntervalId = null;
     this.topTweetIntervalId = null;
+    this.heartbeatIntervalId = null; // 心跳定时器
     this.isInitialized = false;
   }
 
@@ -193,6 +194,21 @@ class SSEConnectionManager {
   }
 
   /**
+   * 发送心跳（保持连接活跃）
+   */
+  sendHeartbeat() {
+    const heartbeat = ": heartbeat\n\n";
+    this.connections.forEach((res) => {
+      try {
+        res.write(heartbeat);
+      } catch (error) {
+        // 连接已关闭，移除它
+        this.connections.delete(res);
+      }
+    });
+  }
+
+  /**
    * 向所有连接的客户端推送消息
    */
   broadcast(eventType, data) {
@@ -240,6 +256,11 @@ class SSEConnectionManager {
     this.topTweetIntervalId = setInterval(() => {
       this.pollTopTweet();
     }, 2 * 60 * 1000); // 每2分钟
+
+    // 设置心跳定时器（每50秒发送一次心跳，保持连接活跃）
+    this.heartbeatIntervalId = setInterval(() => {
+      this.sendHeartbeat();
+    }, 50 * 1000); // 每50秒
   }
 
   /**
@@ -253,6 +274,10 @@ class SSEConnectionManager {
     if (this.topTweetIntervalId) {
       clearInterval(this.topTweetIntervalId);
       this.topTweetIntervalId = null;
+    }
+    if (this.heartbeatIntervalId) {
+      clearInterval(this.heartbeatIntervalId);
+      this.heartbeatIntervalId = null;
     }
     this.isInitialized = false;
   }
