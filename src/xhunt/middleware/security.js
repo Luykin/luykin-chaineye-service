@@ -313,11 +313,15 @@ const generateSignature = (method, path, timestamp, body, fingerprint) => {
  * 从请求中读取参数（支持从 header 或 query 读取，优先使用 header）
  * @param {express.Request} req - Express 请求对象
  * @param {string} paramName - 参数名称（不包含 x- 前缀）
+ * @param {boolean} allowQueryParams - 是否允许从查询参数读取（默认 true）
  * @returns {string|undefined} 参数值
  */
-const getRequestParam = (req, paramName) => {
+const getRequestParam = (req, paramName, allowQueryParams = true) => {
   const headerName = `x-${paramName}`;
-  return req.headers[headerName] || req.query[headerName];
+  if (allowQueryParams) {
+    return req.headers[headerName] || req.query[headerName];
+  }
+  return req.headers[headerName];
 };
 
 /**
@@ -399,13 +403,12 @@ const handleDAUTracking = (req, fingerprint, xUserId) => {
  */
 const validateBrowserEnvironment = (req, allowQueryParams = false) => {
   const userAgent = req.headers["user-agent"];
-  const windowLocationHref = allowQueryParams
-    ? req.headers["x-window-location-href"] ||
-      req.query["x-window-location-href"]
-    : req.headers["x-window-location-href"];
-  const version = allowQueryParams
-    ? req.headers["x-extension-version"] || req.query["x-extension-version"]
-    : req.headers["x-extension-version"];
+  const windowLocationHref = getRequestParam(
+    req,
+    "window-location-href",
+    allowQueryParams
+  );
+  const version = getRequestParam(req, "extension-version", allowQueryParams);
 
   if (!isBrowserEnvironment(userAgent, windowLocationHref)) {
     const currentPath = req.baseUrl + req.path;
@@ -426,19 +429,18 @@ const validateBrowserEnvironment = (req, allowQueryParams = false) => {
  * @returns {{isValid: boolean, error?: string, securityContext?: object}} 验证结果
  */
 const validateSecurityParams = (req, allowQueryParams = false) => {
-  // 从 header 或 query 读取参数
-  const getParam = (name) => {
-    if (allowQueryParams) {
-      return req.headers[`x-${name}`] || req.query[`x-${name}`];
-    }
-    return req.headers[`x-${name}`];
-  };
-
-  const requestId = getParam("request-id");
-  const timestamp = parseInt(getParam("request-timestamp"));
-  const fingerprint = getParam("device-fingerprint");
-  const signature = getParam("request-signature");
-  const version = getParam("extension-version");
+  // 使用统一的参数读取函数
+  const requestId = getRequestParam(req, "request-id", allowQueryParams);
+  const timestamp = parseInt(
+    getRequestParam(req, "request-timestamp", allowQueryParams)
+  );
+  const fingerprint = getRequestParam(
+    req,
+    "device-fingerprint",
+    allowQueryParams
+  );
+  const signature = getRequestParam(req, "request-signature", allowQueryParams);
+  const version = getRequestParam(req, "extension-version", allowQueryParams);
 
   // 验证请求头是否存在
   if (!requestId || !timestamp || !fingerprint || !signature || !version) {
@@ -461,10 +463,11 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
   }
 
   // 检查是否需要跳过签名验证
-  const windowLocationHref = allowQueryParams
-    ? req.headers["x-window-location-href"] ||
-      req.query["x-window-location-href"]
-    : req.headers["x-window-location-href"];
+  const windowLocationHref = getRequestParam(
+    req,
+    "window-location-href",
+    allowQueryParams
+  );
   const currentPath = req.baseUrl + req.path;
   const shouldSkipSignature =
     windowLocationHref === "background-script" &&
