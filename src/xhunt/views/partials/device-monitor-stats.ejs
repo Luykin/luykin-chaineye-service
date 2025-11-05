@@ -752,7 +752,7 @@
             ? "#f59e0b"
             : "#10b981";
         const redisStatusColor = sse.redis.connected ? "#10b981" : "#ef4444";
-        const pollingStatusColor = sse.polling.initialized
+        const pollingStatusColor = sse.polling.isInitialized
           ? "#10b981"
           : "#ef4444";
 
@@ -772,7 +772,7 @@
           <div class="stat-row">
             <span class="stat-label" style="color: #6b7280; font-size: 14px;">轮询状态:</span>
             <span class="stat-value" style="color: ${pollingStatusColor}; font-size: 14px; font-weight: 600;">
-              ${sse.polling.initialized ? "✅ 已初始化" : "❌ 未初始化"}
+              ${sse.polling.isInitialized ? "✅ 已初始化" : "❌ 未初始化"}
             </span>
           </div>
           <div class="stat-row">

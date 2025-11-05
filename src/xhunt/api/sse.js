@@ -507,7 +507,7 @@ class SSEConnectionManager {
         estimatedMemoryUsageFormatted: this.formatBytes(estimatedMemoryUsage),
       },
       polling: {
-        initialized: this.isInitialized,
+        isInitialized: this.isInitialized,
         feedInterval: this.feedIntervalId ? "运行中" : "未启动",
         topTweetInterval: this.topTweetIntervalId ? "运行中" : "未启动",
         lastFeedPollTime: this.lastFeedPollTime
