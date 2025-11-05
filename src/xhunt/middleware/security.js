@@ -726,13 +726,6 @@ const sseSecurityMiddleware = (req, res, next) => {
       return res.status(400).json({ error: validation.error });
     }
 
-    // 将验证后的信息添加到请求对象中
-    req.securityContext = validation.securityContext;
-
-    // 🔥 智能日活统计 - 使用统一的 DAU 处理函数
-    const xUserId = req.headers["x-user-id"] || req.query["x-user-id"];
-    handleDAUTracking(req, validation.securityContext.fingerprint, xUserId);
-
     next();
   } catch (error) {
     console.error("SSE Security middleware error:", error);
