@@ -610,7 +610,6 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
     version === "0.0.0";
 
   // 验证签名（除非满足跳过条件）
-  console.log("[sse签名] 验证签名 - shouldSkipSignature:", shouldSkipSignature);
   if (!shouldSkipSignature) {
     if (allowQueryParams) {
       // SSE 请求：使用 FNV-1a 哈希算法
