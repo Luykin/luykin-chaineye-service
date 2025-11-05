@@ -382,26 +382,42 @@ const generateSSESignature = (
   // 按照固定顺序组合参数：timestamp|fingerprint|method|path|requestId
   const input = `${timestamp}|${fingerprint}|${method}|${path}|${requestId}`;
 
+  console.log("[sse签名] 生成签名 - 输入参数:", {
+    requestId,
+    timestamp,
+    fingerprint,
+    method,
+    path,
+  });
+  console.log("[sse签名] 生成签名 - 组合字符串:", input);
+
   // 使用FNV-1a哈希算法生成主哈希值
   const hash1 = fnv1aHash(input);
+  console.log("[sse签名] 生成签名 - hash1:", hash1);
 
   // 对输入进行反转后再哈希，增加复杂性
   const reversedInput = input.split("").reverse().join("");
   const hash2 = fnv1aHash(reversedInput);
+  console.log("[sse签名] 生成签名 - hash2:", hash2);
 
   // 组合两个哈希值（64位）
   const combined = ((BigInt(hash1) << 32n) | BigInt(hash2))
     .toString(16)
     .padStart(16, "0");
+  console.log("[sse签名] 生成签名 - combined (hex):", combined);
 
   // 将16进制字符串转换为字节数组
   const bytes = [];
   for (let i = 0; i < combined.length; i += 2) {
     bytes.push(parseInt(combined.slice(i, i + 2), 16));
   }
+  console.log("[sse签名] 生成签名 - bytes:", bytes);
 
   // 使用Base64编码输出签名
-  return simpleBase64Encode(bytes);
+  const signature = simpleBase64Encode(bytes);
+  console.log("[sse签名] 生成签名 - 最终签名:", signature);
+
+  return signature;
 };
 
 /**
@@ -598,6 +614,16 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
     if (allowQueryParams) {
       // SSE 请求：使用 FNV-1a 哈希算法
       const path = extractSignaturePath(req);
+
+      console.log("[sse签名] 验证签名 - 接收到的参数:", {
+        requestId,
+        timestamp: timestamp.toString(),
+        fingerprint,
+        method: req.method.toUpperCase(),
+        path,
+        receivedSignature: signature,
+      });
+
       const expectedSignature = generateSSESignature(
         requestId,
         timestamp.toString(),
@@ -605,9 +631,20 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
         req.method.toUpperCase(),
         path
       );
+
+      console.log("[sse签名] 验证签名 - 期望签名:", expectedSignature);
+      console.log("[sse签名] 验证签名 - 接收签名:", signature);
+      console.log(
+        "[sse签名] 验证签名 - 匹配结果:",
+        signature === expectedSignature
+      );
+
       if (signature !== expectedSignature) {
+        console.log("[sse签名] 验证签名 - 签名验证失败");
         return { isValid: false, error: "411" };
       }
+
+      console.log("[sse签名] 验证签名 - 签名验证成功");
     } else {
       // 普通请求：使用 HMAC SHA256 算法
       const path = req.baseUrl + req.path;
