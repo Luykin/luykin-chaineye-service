@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { authenticateTokenFromQueryOptional } = require("../middleware/auth");
 
 /**
  * 设置 SSE (Server-Sent Events) 响应头的公共方法
@@ -16,17 +17,32 @@ function setupSSEHeaders(res) {
 
 /**
  * SSE (Server-Sent Events) 推送接口
- * GET /api/xhunt/feeds
+ * GET /api/xhunt/sse/feeds
  *
  * 用于实时推送 feed 数据
+ *
+ * 查询参数:
+ * - token: (可选) JWT token，用于用户认证
+ * - x-request-id: UUID v4 格式的请求ID
+ * - x-request-timestamp: 时间戳（毫秒）
+ * - x-device-fingerprint: 32位十六进制设备指纹
+ * - x-request-signature: HMAC SHA256 签名
+ * - x-extension-version: 扩展版本号
+ * - x-user-id: (可选) 用户ID
+ * - x-window-location-href: 窗口 location.href
  */
-router.get("/feeds", (req, res) => {
+router.get("/feeds", authenticateTokenFromQueryOptional, (req, res) => {
   // 设置 SSE 响应头
   setupSSEHeaders(res);
 
   // 发送初始连接确认
   res.write(": SSE connection established\n\n");
   res.flushHeaders();
+
+  // 如果有认证用户，可以在消息中包含用户信息
+  const userInfo = req.user
+    ? { userId: req.user.id, username: req.user.username }
+    : null;
 
   // 模拟数据生成器
   let messageId = 1;
@@ -50,6 +66,7 @@ router.get("/feeds", (req, res) => {
       type: feedType,
       message: message,
       timestamp: new Date().toISOString(),
+      user: userInfo, // 如果已认证，包含用户信息
       data: {
         title: `${
           feedType.charAt(0).toUpperCase() + feedType.slice(1)

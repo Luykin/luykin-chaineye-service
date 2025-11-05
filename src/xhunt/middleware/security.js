@@ -309,28 +309,218 @@ const generateSignature = (method, path, timestamp, body, fingerprint) => {
     .digest("hex");
 };
 
+/**
+ * 从请求中读取参数（支持从 header 或 query 读取，优先使用 header）
+ * @param {express.Request} req - Express 请求对象
+ * @param {string} paramName - 参数名称（不包含 x- 前缀）
+ * @returns {string|undefined} 参数值
+ */
+const getRequestParam = (req, paramName) => {
+  const headerName = `x-${paramName}`;
+  return req.headers[headerName] || req.query[headerName];
+};
+
+/**
+ * 处理 DAU 统计（异步写入 Redis 和 PostgreSQL）
+ * @param {express.Request} req - Express 请求对象
+ * @param {string} fingerprint - 设备指纹
+ * @param {string} xUserId - 用户ID
+ */
+const handleDAUTracking = (req, fingerprint, xUserId) => {
+  if (!dauCacheManager.shouldWriteToRedis(fingerprint, xUserId)) {
+    return; // 缓存期内，跳过
+  }
+
+  // 使用UTC方法计算北京时间（UTC+8）
+  const now = new Date();
+  const utcHours = now.getUTCHours();
+  const beijingHours = utcHours + 8;
+
+  // 如果北京时间超过24小时，说明是下一天
+  let beijingDate = new Date(now);
+  if (beijingHours >= 24) {
+    beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
+    beijingDate.setUTCHours(beijingHours - 24);
+  } else {
+    beijingDate.setUTCHours(beijingHours);
+  }
+
+  const today = beijingDate.toISOString().split("T")[0];
+
+  // 异步写入 Redis 和 PostgreSQL（非阻塞）
+  setImmediate(async () => {
+    try {
+      // 写入 Redis
+      const dauKey = `dau:${today}`;
+      // 使用 fingerprint,x-user-id 组合作为唯一标识，提高统计精确性
+      const uniqueIdentifier = `${fingerprint},${xUserId}`;
+      await req.redisClient.sAdd(dauKey, uniqueIdentifier);
+      // 设置过期时间（保留8天，确保7天数据完整）
+      await req.redisClient.expire(dauKey, 8 * 24 * 60 * 60);
+
+      // 写入 PostgreSQL（延迟加载模型避免循环依赖）
+      if (!DailyActiveUser) {
+        const postgresModels = require("../../models/postgres-start");
+        DailyActiveUser = postgresModels.DailyActiveUser;
+      }
+
+      // 注意：此方法只在 shouldWriteToRedis 返回 true 时才调用
+      // 而 shouldWriteToRedis 会确保 xUserId 存在
+      // 使用 xUserId 作为用户标识（只记录登录用户）
+      const [record, created] = await DailyActiveUser.findOrCreate({
+        where: {
+          userId: xUserId, // 只使用 xUserId，不fallback到fingerprint
+          date: today,
+        },
+        defaults: {
+          userId: xUserId,
+          date: today,
+        },
+      });
+
+      // 记录数据库写入日志
+      if (created) {
+        console.log(`📊 DAU数据库记录已创建: userId=${xUserId}, date=${today}`);
+      }
+    } catch (error) {
+      // 错误不影响主流程，只记录日志
+      console.error("DAU tracking error:", error);
+      // 失败时从缓存中移除，允许下次重试
+      dauCacheManager.removeFromCache(fingerprint, xUserId);
+    }
+  });
+};
+
+/**
+ * 验证浏览器环境（核心逻辑）
+ * @param {express.Request} req - Express 请求对象
+ * @param {boolean} allowQueryParams - 是否允许从查询参数读取
+ * @returns {boolean} 是否通过验证
+ */
+const validateBrowserEnvironment = (req, allowQueryParams = false) => {
+  const userAgent = req.headers["user-agent"];
+  const windowLocationHref = allowQueryParams
+    ? req.headers["x-window-location-href"] ||
+      req.query["x-window-location-href"]
+    : req.headers["x-window-location-href"];
+  const version = allowQueryParams
+    ? req.headers["x-extension-version"] || req.query["x-extension-version"]
+    : req.headers["x-extension-version"];
+
+  if (!isBrowserEnvironment(userAgent, windowLocationHref)) {
+    const currentPath = req.baseUrl + req.path;
+    const shouldSkipBrowserCheck =
+      windowLocationHref === "background-script" &&
+      SKIP_SIGNATURE_PATHS.includes(currentPath) &&
+      version === "0.0.0";
+    return shouldSkipBrowserCheck;
+  }
+
+  return true;
+};
+
+/**
+ * 验证安全参数（核心逻辑）
+ * @param {express.Request} req - Express 请求对象
+ * @param {boolean} allowQueryParams - 是否允许从查询参数读取
+ * @returns {{isValid: boolean, error?: string, securityContext?: object}} 验证结果
+ */
+const validateSecurityParams = (req, allowQueryParams = false) => {
+  // 从 header 或 query 读取参数
+  const getParam = (name) => {
+    if (allowQueryParams) {
+      return req.headers[`x-${name}`] || req.query[`x-${name}`];
+    }
+    return req.headers[`x-${name}`];
+  };
+
+  const requestId = getParam("request-id");
+  const timestamp = parseInt(getParam("request-timestamp"));
+  const fingerprint = getParam("device-fingerprint");
+  const signature = getParam("request-signature");
+  const version = getParam("extension-version");
+
+  // 验证请求头是否存在
+  if (!requestId || !timestamp || !fingerprint || !signature || !version) {
+    return { isValid: false, error: "400" };
+  }
+
+  // 验证指纹格式
+  if (!isValidFingerprint(fingerprint)) {
+    return { isValid: false, error: "400-1" };
+  }
+
+  // 验证请求ID格式
+  if (!isValidRequestId(requestId)) {
+    return { isValid: false, error: "400-2" };
+  }
+
+  // 验证时间戳
+  if (!isTimestampValid(timestamp)) {
+    return { isValid: false, error: "400-3" };
+  }
+
+  // 检查是否需要跳过签名验证
+  const windowLocationHref = allowQueryParams
+    ? req.headers["x-window-location-href"] ||
+      req.query["x-window-location-href"]
+    : req.headers["x-window-location-href"];
+  const currentPath = req.baseUrl + req.path;
+  const shouldSkipSignature =
+    windowLocationHref === "background-script" &&
+    SKIP_SIGNATURE_PATHS.includes(currentPath) &&
+    version === "0.0.0";
+
+  // 验证签名（除非满足跳过条件）
+  if (!shouldSkipSignature) {
+    // SSE 是 GET 请求，没有 body，所以使用空对象；普通请求使用 req.body
+    const body = allowQueryParams ? {} : req.body;
+    const expectedSignature = generateSignature(
+      req.method,
+      req.baseUrl + req.path,
+      timestamp,
+      body,
+      fingerprint
+    );
+    if (signature !== expectedSignature) {
+      return { isValid: false, error: "411" };
+    }
+  }
+
+  return {
+    isValid: true,
+    securityContext: {
+      requestId,
+      timestamp,
+      fingerprint,
+      version,
+    },
+  };
+};
+
 // 浏览器环境检测中间件
 const browserOnlyMiddleware = (req, res, next) => {
   try {
-    const userAgent = req.headers["user-agent"];
-    const windowLocationHref = req.headers["x-window-location-href"];
-    const version = req.headers["x-extension-version"];
-
-    if (!isBrowserEnvironment(userAgent, windowLocationHref)) {
-      const currentPath = req.baseUrl + req.path;
-      const shouldSkipBrowserCheck =
-        windowLocationHref === "background-script" &&
-        SKIP_SIGNATURE_PATHS.includes(currentPath) &&
-        version === "0.0.0";
-      if (!shouldSkipBrowserCheck) {
-        return res.status(403).json({ error: "403" });
-      }
+    if (!validateBrowserEnvironment(req, false)) {
+      return res.status(403).json({ error: "403" });
     }
-
     next();
   } catch (error) {
     console.error("Browser detection middleware error:", error);
     res.status(500).json({ error: "browserOnlyMiddleware 500" });
+  }
+};
+
+// SSE 专用的浏览器环境检测中间件（支持从查询参数读取）
+const sseBrowserOnlyMiddleware = (req, res, next) => {
+  try {
+    if (!validateBrowserEnvironment(req, true)) {
+      return res.status(403).json({ error: "403" });
+    }
+    next();
+  } catch (error) {
+    console.error("SSE Browser detection middleware error:", error);
+    res.status(500).json({ error: "sseBrowserOnlyMiddleware 500" });
   }
 };
 
@@ -340,129 +530,20 @@ const securityMiddleware = (req, res, next) => {
   dauCacheManager.init();
 
   try {
-    // 检查必要的请求头
-    const requestId = req.headers["x-request-id"];
-    const timestamp = parseInt(req.headers["x-request-timestamp"]);
-    const fingerprint = req.headers["x-device-fingerprint"];
-    const signature = req.headers["x-request-signature"];
-    const version = req.headers["x-extension-version"];
+    // 使用统一的安全验证逻辑
+    const validation = validateSecurityParams(req, false);
 
-    // 验证请求头是否存在
-    if (!requestId || !timestamp || !fingerprint || !signature || !version) {
-      return res.status(400).json({ error: "400" });
+    if (!validation.isValid) {
+      return res.status(400).json({ error: validation.error });
     }
-
-    // 验证指纹格式
-    if (!isValidFingerprint(fingerprint)) {
-      return res.status(400).json({ error: "400-1" });
-    }
-
-    // 验证请求ID格式
-    if (!isValidRequestId(requestId)) {
-      return res.status(400).json({ error: "400-2" });
-    }
-
-    // 验证时间戳
-    if (!isTimestampValid(timestamp)) {
-      return res.status(400).json({ error: "400-3" });
-    }
-
-    // 检查是否需要跳过签名验证
-    const windowLocationHref = req.headers["x-window-location-href"];
-    const currentPath = req.baseUrl + req.path;
-    const shouldSkipSignature =
-      windowLocationHref === "background-script" &&
-      SKIP_SIGNATURE_PATHS.includes(currentPath) &&
-      version === "0.0.0";
-
-    // 验证签名（除非满足跳过条件）
-    if (!shouldSkipSignature) {
-      const expectedSignature = generateSignature(
-        req.method,
-        req.baseUrl + req.path,
-        timestamp,
-        req.body,
-        fingerprint
-      );
-      if (signature !== expectedSignature) {
-        return res.status(411).json({ error: "411" });
-      }
-    }
-
-    // 🔥 智能日活统计 - 使用缓存管理器
-    const xUserId = req.headers["x-user-id"];
-
-    if (dauCacheManager.shouldWriteToRedis(fingerprint, xUserId)) {
-      // 使用UTC方法计算北京时间（UTC+8）
-      const now = new Date();
-      const utcHours = now.getUTCHours();
-      const beijingHours = utcHours + 8;
-
-      // 如果北京时间超过24小时，说明是下一天
-      let beijingDate = new Date(now);
-      if (beijingHours >= 24) {
-        beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
-        beijingDate.setUTCHours(beijingHours - 24);
-      } else {
-        beijingDate.setUTCHours(beijingHours);
-      }
-
-      const today = beijingDate.toISOString().split("T")[0];
-
-      // 异步写入 Redis 和 PostgreSQL（非阻塞）
-      setImmediate(async () => {
-        try {
-          // 写入 Redis
-          const dauKey = `dau:${today}`;
-          // 使用 fingerprint,x-user-id 组合作为唯一标识，提高统计精确性
-          const uniqueIdentifier = `${fingerprint},${xUserId}`;
-          await req.redisClient.sAdd(dauKey, uniqueIdentifier);
-          // 设置过期时间（保留8天，确保7天数据完整）
-          await req.redisClient.expire(dauKey, 8 * 24 * 60 * 60);
-
-          // 写入 PostgreSQL（延迟加载模型避免循环依赖）
-          if (!DailyActiveUser) {
-            const postgresModels = require("../../models/postgres-start");
-            DailyActiveUser = postgresModels.DailyActiveUser;
-          }
-
-          // 注意：此方法只在 shouldWriteToRedis 返回 true 时才调用
-          // 而 shouldWriteToRedis 会确保 xUserId 存在
-          // 使用 xUserId 作为用户标识（只记录登录用户）
-          const [record, created] = await DailyActiveUser.findOrCreate({
-            where: {
-              userId: xUserId, // 只使用 xUserId，不fallback到fingerprint
-              date: today,
-            },
-            defaults: {
-              userId: xUserId,
-              date: today,
-            },
-          });
-
-          // 记录数据库写入日志
-          if (created) {
-            console.log(
-              `📊 DAU数据库记录已创建: userId=${xUserId}, date=${today}`
-            );
-          }
-        } catch (error) {
-          // 错误不影响主流程，只记录日志
-          console.error("DAU tracking error:", error);
-          // 失败时从缓存中移除，允许下次重试
-          dauCacheManager.removeFromCache(fingerprint, xUserId);
-        }
-      });
-    }
-    // 如果在缓存期内，直接跳过（避免重复写入）
 
     // 将验证后的信息添加到请求对象中
-    req.securityContext = {
-      requestId,
-      timestamp,
-      fingerprint,
-      version,
-    };
+    req.securityContext = validation.securityContext;
+
+    // 🔥 智能日活统计 - 使用统一的 DAU 处理函数
+    const xUserId = req.headers["x-user-id"];
+    handleDAUTracking(req, validation.securityContext.fingerprint, xUserId);
+
     next();
   } catch (error) {
     console.error("Security middleware error:", error);
@@ -470,11 +551,40 @@ const securityMiddleware = (req, res, next) => {
   }
 };
 
+// SSE 专用的安全中间件（从查询参数读取，因为 EventSource 不支持自定义 headers）
+const sseSecurityMiddleware = (req, res, next) => {
+  // 确保缓存管理器已初始化
+  dauCacheManager.init();
+
+  try {
+    // 使用统一的安全验证逻辑（允许从查询参数读取）
+    const validation = validateSecurityParams(req, true);
+
+    if (!validation.isValid) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    // 将验证后的信息添加到请求对象中
+    req.securityContext = validation.securityContext;
+
+    // 🔥 智能日活统计 - 使用统一的 DAU 处理函数
+    const xUserId = req.headers["x-user-id"] || req.query["x-user-id"];
+    handleDAUTracking(req, validation.securityContext.fingerprint, xUserId);
+
+    next();
+  } catch (error) {
+    console.error("SSE Security middleware error:", error);
+    res.status(500).json({ error: "sseSecurityMiddleware 500" });
+  }
+};
+
 module.exports = {
   rateLimiter,
   fingerprintLimiter,
   securityMiddleware,
+  sseSecurityMiddleware,
   browserOnlyMiddleware,
+  sseBrowserOnlyMiddleware,
   generateSignature, // 导出用于测试
   dauCacheManager, // 导出缓存管理器（用于测试和监控）
 };
