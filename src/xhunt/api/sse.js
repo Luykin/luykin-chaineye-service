@@ -88,12 +88,12 @@ async function fetchFeedData() {
 
     const data = await response.json();
     console.log(`[sse feeds 调试] Feed 数据获取成功，数据量:`, {
-      tweets_feed: data?.data?.tweets_feed?.length || 0,
-      follow_feed: data?.data?.follow_feed?.following_action?.length || 0,
-      bwe_news: data?.data?.bwe_news?.length || 0,
+      tweets_feed: data?.data?.data?.tweets_feed?.length || 0,
+      follow_feed: data?.data?.data?.follow_feed?.following_action?.length || 0,
+      bwe_news: data?.data?.data?.bwe_news?.length || 0,
     });
 
-    return data?.data || null;
+    return data?.data?.data || null;
   } catch (error) {
     console.error(`[sse feeds 调试] Feed 请求错误:`, error);
     return null;
@@ -153,6 +153,47 @@ class SSEConnectionManager {
     // 初始化轮询（如果还没有初始化）
     if (!this.isInitialized) {
       this.initializePolling();
+    }
+
+    // 立即发送当前缓存的数据（如果有）
+    if (this.lastFeedData) {
+      console.log(`[sse feeds 调试] 发送初始 Feed 缓存数据`);
+      try {
+        const message = {
+          type: "feed_update",
+          timestamp: new Date().toISOString(),
+          data: {
+            source: "feed",
+            data: this.lastFeedData,
+          },
+        };
+        const messageStr = `event: feed_update\ndata: ${JSON.stringify(
+          message
+        )}\n\n`;
+        res.write(messageStr);
+      } catch (error) {
+        console.error(`[sse feeds 调试] 发送初始 Feed 数据失败:`, error);
+      }
+    }
+
+    if (this.lastTopTweetData) {
+      console.log(`[sse feeds 调试] 发送初始 Top Tweet 缓存数据`);
+      try {
+        const message = {
+          type: "gossip_update",
+          timestamp: new Date().toISOString(),
+          data: {
+            source: "top_tweet",
+            data: this.lastTopTweetData,
+          },
+        };
+        const messageStr = `event: gossip_update\ndata: ${JSON.stringify(
+          message
+        )}\n\n`;
+        res.write(messageStr);
+      } catch (error) {
+        console.error(`[sse feeds 调试] 发送初始 Top Tweet 数据失败:`, error);
+      }
     }
   }
 
