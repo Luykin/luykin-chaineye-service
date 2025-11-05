@@ -288,12 +288,7 @@ app.use("/api/xhunt/mantle", xHuntMantleRoutes);
 app.use("/api/rootdata", xHuntRootdataRoutes);
 
 // SSE 接口 - 实时推送数据（包含 feeds 等）
-app.use(
-  "/api/xhunt/sse",
-  fingerprintLimiter,
-  sseSecurityMiddleware,
-  xHuntSSERoutes
-);
+app.use("/api/xhunt/sse", rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
 
 // 内部查询API - 使用随机字符前缀，无需安全中间件
 app.use("/api/internal-x9k2m7p4q8", internalQueryRoutes);
