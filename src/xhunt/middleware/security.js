@@ -591,22 +591,6 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
         path
       );
 
-      console.log(
-        "[sse签名new2] 验证签名 - 期望签名:",
-        expectedSignature,
-        "接收签名:",
-        signature,
-        "接收到的参数:",
-        {
-          requestId,
-          timestamp: timestamp.toString(),
-          fingerprint,
-          method: req.method.toUpperCase(),
-          path,
-          receivedSignature: signature,
-        }
-      );
-
       if (signature !== expectedSignature) {
         return { isValid: false, error: "411" };
       }
