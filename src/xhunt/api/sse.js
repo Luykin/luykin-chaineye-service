@@ -124,10 +124,105 @@ class SSEConnectionManager {
     this.connections = new Set(); // 存储所有活跃的 SSE 连接
     this.lastFeedData = null;
     this.lastTopTweetData = null;
+    this.latestFeedItem = null; // 缓存的最新一条 Feed 数据
+    this.latestTopTweetItem = null; // 缓存的最新一条 Top Tweet 数据
     this.feedIntervalId = null;
     this.topTweetIntervalId = null;
-    this.heartbeatIntervalId = null; // 心跳定时器
     this.isInitialized = false;
+  }
+
+  /**
+   * 获取 Feed 数据中的最新一条
+   */
+  getLatestFeedItem(feedData) {
+    if (!feedData) return null;
+
+    // 收集所有消息，按时间排序
+    const allMessages = [
+      ...(feedData.tweets_feed || []).map((item) => ({
+        ...item,
+        source: "tweets_feed",
+      })),
+      ...(feedData.follow_feed?.following_action || []).map((item) => ({
+        ...item,
+        source: "follow_feed",
+      })),
+      ...(feedData.bwe_news || []).map((item) => ({
+        ...item,
+        source: "bwe_news",
+      })),
+    ];
+
+    if (allMessages.length === 0) return null;
+
+    // 按 create_time 降序排序，取最新的一条
+    allMessages.sort((a, b) => {
+      const timeA = new Date(a.create_time || 0).getTime();
+      const timeB = new Date(b.create_time || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return allMessages[0];
+  }
+
+  /**
+   * 获取 Top Tweet 数据中的最新一条
+   */
+  getLatestTopTweetItem(topTweetData) {
+    if (
+      !topTweetData ||
+      !Array.isArray(topTweetData) ||
+      topTweetData.length === 0
+    ) {
+      return null;
+    }
+
+    // 按时间排序，取最新的一条
+    const sorted = [...topTweetData].sort((a, b) => {
+      const timeA = new Date(
+        a.tweet?.create_time || a.create_time || 0
+      ).getTime();
+      const timeB = new Date(
+        b.tweet?.create_time || b.create_time || 0
+      ).getTime();
+      return timeB - timeA;
+    });
+
+    return sorted[0];
+  }
+
+  /**
+   * 将最新的一条 Feed 数据转换为全量数据结构格式
+   */
+  formatLatestFeedItem(latestItem) {
+    if (!latestItem) return null;
+
+    const source = latestItem.source || "tweets_feed";
+    const item = { ...latestItem };
+    delete item.source; // 移除临时添加的 source 字段
+
+    // 根据 source 构建对应的数据结构
+    if (source === "tweets_feed") {
+      return {
+        tweets_feed: [item],
+        follow_feed: { following_action: [] },
+        bwe_news: [],
+      };
+    } else if (source === "follow_feed") {
+      return {
+        tweets_feed: [],
+        follow_feed: { following_action: [item] },
+        bwe_news: [],
+      };
+    } else if (source === "bwe_news") {
+      return {
+        tweets_feed: [],
+        follow_feed: { following_action: [] },
+        bwe_news: [item],
+      };
+    }
+
+    return null;
   }
 
   /**
@@ -141,34 +236,37 @@ class SSEConnectionManager {
       this.initializePolling();
     }
 
-    // 立即发送当前缓存的数据（如果有）
-    if (this.lastFeedData) {
+    // 立即发送当前缓存的最新一条数据（如果有）
+    if (this.latestFeedItem) {
       try {
-        const message = {
-          type: "feed_update",
-          timestamp: new Date().toISOString(),
-          data: {
-            source: "feed",
-            data: this.lastFeedData,
-          },
-        };
-        const messageStr = `event: feed_update\ndata: ${JSON.stringify(
-          message
-        )}\n\n`;
-        res.write(messageStr);
+        const formattedData = this.formatLatestFeedItem(this.latestFeedItem);
+        if (formattedData) {
+          const message = {
+            type: "feed_update",
+            timestamp: new Date().toISOString(),
+            data: {
+              source: "feed",
+              data: formattedData,
+            },
+          };
+          const messageStr = `event: feed_update\ndata: ${JSON.stringify(
+            message
+          )}\n\n`;
+          res.write(messageStr);
+        }
       } catch (error) {
         console.error(`[sse feeds 核心] 发送初始 Feed 数据失败:`, error);
       }
     }
 
-    if (this.lastTopTweetData) {
+    if (this.latestTopTweetItem) {
       try {
         const message = {
           type: "gossip_update",
           timestamp: new Date().toISOString(),
           data: {
             source: "top_tweet",
-            data: this.lastTopTweetData,
+            data: [this.latestTopTweetItem], // 保持数组格式，但只有一条
           },
         };
         const messageStr = `event: gossip_update\ndata: ${JSON.stringify(
@@ -250,17 +348,13 @@ class SSEConnectionManager {
 
     // 设置定时器
     this.feedIntervalId = setInterval(() => {
+      this.sendHeartbeat(); // 设置心跳定时器（保持连接活跃）
       this.pollFeed();
     }, 30 * 1000); // 每30秒
 
     this.topTweetIntervalId = setInterval(() => {
       this.pollTopTweet();
     }, 2 * 60 * 1000); // 每2分钟
-
-    // 设置心跳定时器（每50秒发送一次心跳，保持连接活跃）
-    this.heartbeatIntervalId = setInterval(() => {
-      this.sendHeartbeat();
-    }, 50 * 1000); // 每50秒
   }
 
   /**
@@ -274,10 +368,6 @@ class SSEConnectionManager {
     if (this.topTweetIntervalId) {
       clearInterval(this.topTweetIntervalId);
       this.topTweetIntervalId = null;
-    }
-    if (this.heartbeatIntervalId) {
-      clearInterval(this.heartbeatIntervalId);
-      this.heartbeatIntervalId = null;
     }
     this.isInitialized = false;
   }
@@ -316,6 +406,8 @@ class SSEConnectionManager {
 
         // 更新缓存
         this.lastFeedData = feedData;
+        // 更新最新的一条 Feed 数据
+        this.latestFeedItem = this.getLatestFeedItem(feedData);
       }
     } catch (error) {
       console.error(`[sse feeds 核心] Feed 轮询错误:`, error);
@@ -341,6 +433,8 @@ class SSEConnectionManager {
 
         // 更新缓存
         this.lastTopTweetData = topTweetData;
+        // 更新最新的一条 Top Tweet 数据
+        this.latestTopTweetItem = this.getLatestTopTweetItem(topTweetData);
       }
     } catch (error) {
       console.error(`[sse feeds 核心] Top Tweet 轮询错误:`, error);
