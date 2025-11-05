@@ -218,7 +218,7 @@ app.use(express.json({ limit: "20kb" }));
 app.use(
   "/api/xhunt/report",
   express.json({
-    limit: "300kb", // 上报接口允许更大的请求体
+    limit: "100kb", // 上报接口允许更大的请求体
   })
 );
 
