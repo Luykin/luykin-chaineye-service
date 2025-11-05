@@ -110,10 +110,37 @@ async function authenticateTokenOptional(req, res, next) {
 }
 
 /**
+ * 清理 token（去掉两端的引号和空格）
+ * @param {string} token - 原始 token
+ * @returns {string} 清理后的 token
+ */
+function cleanToken(token) {
+  if (!token || typeof token !== "string") {
+    return token;
+  }
+  // 去掉两端空格
+  let cleaned = token.trim();
+  // 去掉两端的引号（单引号或双引号）
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  return cleaned;
+}
+
+/**
  * 从查询参数读取 token 的认证中间件（用于 SSE，因为 EventSource 不支持自定义 headers）
  */
 async function authenticateTokenFromQuery(req, res, next) {
-  const token = req.query.token;
+  const rawToken = req.query.token;
+
+  if (!rawToken) {
+    return res.status(401).json({ error: "TOKEN_REQUIRED" });
+  }
+
+  const token = cleanToken(rawToken);
 
   if (!token) {
     return res.status(401).json({ error: "TOKEN_REQUIRED" });
@@ -126,10 +153,16 @@ async function authenticateTokenFromQuery(req, res, next) {
  * 可选从查询参数读取 token 的认证中间件（用于 SSE）
  */
 async function authenticateTokenFromQueryOptional(req, res, next) {
-  const token = req.query.token;
+  const rawToken = req.query.token;
+
+  if (!rawToken) {
+    return next(); // 无 token 直接放行
+  }
+
+  const token = cleanToken(rawToken);
 
   if (!token) {
-    return next(); // 无 token 直接放行
+    return next(); // 清理后为空，也直接放行
   }
 
   await verifyToken(token, req, res, next);
