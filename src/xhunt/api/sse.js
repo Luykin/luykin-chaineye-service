@@ -131,6 +131,8 @@ class SSEConnectionManager {
     this.isInitialized = false;
     this.redisClient = null; // Redis 客户端（延迟设置）
     this.redisKeyPrefix = "sse:feeds:"; // Redis key 前缀
+    this.lastFeedPollTime = null; // 上次 Feed 轮询时间
+    this.lastTopTweetPollTime = null; // 上次 Top Tweet 轮询时间
   }
 
   /**
@@ -461,11 +463,117 @@ class SSEConnectionManager {
   }
 
   /**
+   * 获取统计信息
+   * @returns {Object} 统计信息对象
+   */
+  getStats() {
+    // 估算每个连接的内存占用（字节）
+    // 每个响应对象大约占用 1-2KB（包括响应流、缓冲区等）
+    const estimatedBytesPerConnection = 2048;
+    const connectionCount = this.connections.size;
+    const estimatedMemoryUsage = connectionCount * estimatedBytesPerConnection;
+
+    // 计算数据大小（字节）
+    const getDataSize = (data) => {
+      if (!data) return 0;
+      try {
+        return Buffer.byteLength(JSON.stringify(data), "utf8");
+      } catch (error) {
+        return 0;
+      }
+    };
+
+    const feedDataSize = getDataSize(this.lastFeedData);
+    const topTweetDataSize = getDataSize(this.lastTopTweetData);
+
+    // 格式化时间
+    const formatTime = (date) => {
+      if (!date) return "从未轮询";
+      return date.toLocaleString("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    };
+
+    return {
+      connections: {
+        active: connectionCount,
+        estimatedMemoryUsage: estimatedMemoryUsage,
+        estimatedMemoryUsageFormatted: this.formatBytes(estimatedMemoryUsage),
+      },
+      polling: {
+        initialized: this.isInitialized,
+        feedInterval: this.feedIntervalId ? "运行中" : "未启动",
+        topTweetInterval: this.topTweetIntervalId ? "运行中" : "未启动",
+        lastFeedPollTime: this.lastFeedPollTime
+          ? this.lastFeedPollTime.toISOString()
+          : null,
+        lastFeedPollTimeFormatted: formatTime(this.lastFeedPollTime),
+        lastTopTweetPollTime: this.lastTopTweetPollTime
+          ? this.lastTopTweetPollTime.toISOString()
+          : null,
+        lastTopTweetPollTimeFormatted: formatTime(this.lastTopTweetPollTime),
+      },
+      cache: {
+        feed: {
+          hasData: !!this.lastFeedData,
+          latestItemExists: !!this.latestFeedItem,
+          dataSize: feedDataSize,
+          dataSizeFormatted: this.formatBytes(feedDataSize),
+          lastData: this.lastFeedData
+            ? JSON.stringify(this.lastFeedData, null, 2)
+            : null,
+          latestItem: this.latestFeedItem
+            ? JSON.stringify(this.latestFeedItem, null, 2)
+            : null,
+        },
+        topTweet: {
+          hasData: !!this.lastTopTweetData,
+          latestItemExists: !!this.latestTopTweetItem,
+          dataSize: topTweetDataSize,
+          dataSizeFormatted: this.formatBytes(topTweetDataSize),
+          lastData: this.lastTopTweetData
+            ? JSON.stringify(this.lastTopTweetData, null, 2)
+            : null,
+          latestItem: this.latestTopTweetItem
+            ? JSON.stringify(this.latestTopTweetItem, null, 2)
+            : null,
+        },
+      },
+      redis: {
+        configured: !!this.redisClient,
+        connected: this.redisClient?.isReady || false,
+      },
+    };
+  }
+
+  /**
+   * 格式化字节大小
+   * @param {number} bytes - 字节数
+   * @returns {string} 格式化后的字符串
+   */
+  formatBytes(bytes) {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  }
+
+  /**
    * 轮询 Feed 数据（每30秒）
    */
   async pollFeed() {
     try {
       const feedData = await fetchFeedData();
+
+      // 更新轮询时间
+      this.lastFeedPollTime = new Date();
 
       if (feedData) {
         // 提取所有消息用于比较
@@ -507,6 +615,8 @@ class SSEConnectionManager {
       }
     } catch (error) {
       console.error(`[sse feeds 核心] Feed 轮询错误:`, error);
+      // 即使出错也更新轮询时间（表示尝试过）
+      this.lastFeedPollTime = new Date();
     }
   }
 
@@ -516,6 +626,9 @@ class SSEConnectionManager {
   async pollTopTweet() {
     try {
       const topTweetData = await fetchTopTweetData();
+
+      // 更新轮询时间
+      this.lastTopTweetPollTime = new Date();
 
       if (topTweetData) {
         // 比较是否有新消息
@@ -542,6 +655,8 @@ class SSEConnectionManager {
       }
     } catch (error) {
       console.error(`[sse feeds 核心] Top Tweet 轮询错误:`, error);
+      // 即使出错也更新轮询时间（表示尝试过）
+      this.lastTopTweetPollTime = new Date();
     }
   }
 }
@@ -588,3 +703,4 @@ router.get("/feeds", authenticateTokenFromQueryOptional, (req, res) => {
 
 module.exports = router;
 module.exports.setupSSEHeaders = setupSSEHeaders;
+module.exports.connectionManager = connectionManager;

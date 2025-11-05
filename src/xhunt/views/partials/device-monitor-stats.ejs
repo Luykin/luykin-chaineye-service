@@ -560,6 +560,16 @@
           <div style="color: #6b7280; font-size: 14px">暂无数据</div>
         </div>
       </div>
+
+      <!-- SSE 连接状态 -->
+      <div class="stat-card" style="max-width: 900px; margin: 0 auto 20px">
+        <div class="stat-title" style="margin-bottom: 15px">
+          📡 SSE (Server-Sent Events) 状态
+        </div>
+        <div id="sseStatus">
+          <div style="color: #6b7280; font-size: 14px">暂无数据</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -567,6 +577,19 @@
 <script>
   // 设备监控相关逻辑
   (function () {
+    // HTML 转义函数，防止 XSS
+    function escapeHtml(text) {
+      if (!text) return "";
+      const map = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      };
+      return text.replace(/[&<>"']/g, (m) => map[m]);
+    }
+
     const refreshBtn = document.getElementById("refreshDeviceStatus");
     const loadingStatus = document.getElementById("deviceLoadingStatus");
     const errorMessage = document.getElementById("deviceErrorMessage");
@@ -716,6 +739,144 @@
       } else {
         diskContainer.innerHTML =
           '<div style="color: #6b7280; font-size: 14px;">暂无磁盘数据</div>';
+      }
+
+      // 更新 SSE 状态
+      const sseContainer = document.getElementById("sseStatus");
+      if (data.sse && data.sse.available) {
+        const sse = data.sse;
+        const connectionsColor =
+          sse.connections.active > 100
+            ? "#ef4444"
+            : sse.connections.active > 50
+            ? "#f59e0b"
+            : "#10b981";
+        const redisStatusColor = sse.redis.connected ? "#10b981" : "#ef4444";
+        const pollingStatusColor = sse.polling.initialized
+          ? "#10b981"
+          : "#ef4444";
+
+        sseContainer.innerHTML = `
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">活跃连接数:</span>
+            <span class="stat-value" style="color: ${connectionsColor}; font-size: 14px; font-weight: 600;">
+              ${sse.connections.active} 个连接
+            </span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">连接内存占用:</span>
+            <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
+              ${sse.connections.estimatedMemoryUsageFormatted}
+            </span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">轮询状态:</span>
+            <span class="stat-value" style="color: ${pollingStatusColor}; font-size: 14px; font-weight: 600;">
+              ${sse.polling.initialized ? "✅ 已初始化" : "❌ 未初始化"}
+            </span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">Feed 轮询:</span>
+            <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
+              ${sse.polling.feedInterval}
+            </span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">上次 Feed 轮询时间:</span>
+            <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
+              ${sse.polling.lastFeedPollTimeFormatted || "从未轮询"}
+            </span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">Top Tweet 轮询:</span>
+            <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
+              ${sse.polling.topTweetInterval}
+            </span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">上次 Top Tweet 轮询时间:</span>
+            <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
+              ${sse.polling.lastTopTweetPollTimeFormatted || "从未轮询"}
+            </span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">Redis 连接:</span>
+            <span class="stat-value" style="color: ${redisStatusColor}; font-size: 14px; font-weight: 600;">
+              ${sse.redis.connected ? "✅ 已连接" : "❌ 未连接"}
+            </span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">Feed 缓存:</span>
+            <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
+              ${sse.cache.feed.hasData ? "✅ 有数据" : "❌ 无数据"} | ${
+          sse.cache.feed.dataSizeFormatted
+        }
+            </span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label" style="color: #6b7280; font-size: 14px;">Top Tweet 缓存:</span>
+            <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
+              ${sse.cache.topTweet.hasData ? "✅ 有数据" : "❌ 无数据"} | ${
+          sse.cache.topTweet.dataSizeFormatted
+        }
+            </span>
+          </div>
+          
+          <!-- Feed 最新数据展示 -->
+          ${
+            sse.cache.feed.latestItem
+              ? `
+          <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb;">
+            <div style="margin-bottom: 8px; color: #374151; font-weight: 600; font-size: 14px;">
+              📄 Feed 最新一条数据:
+            </div>
+            <pre style="
+              background: #f3f4f6;
+              border: 1px solid #d1d5db;
+              border-radius: 6px;
+              padding: 12px;
+              margin: 0;
+              font-size: 12px;
+              line-height: 1.5;
+              overflow-x: auto;
+              max-height: 300px;
+              overflow-y: auto;
+              font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            "><code>${escapeHtml(sse.cache.feed.latestItem)}</code></pre>
+          </div>
+          `
+              : ""
+          }
+          
+          <!-- Top Tweet 最新数据展示 -->
+          ${
+            sse.cache.topTweet.latestItem
+              ? `
+          <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb;">
+            <div style="margin-bottom: 8px; color: #374151; font-weight: 600; font-size: 14px;">
+              📄 Top Tweet 最新一条数据:
+            </div>
+            <pre style="
+              background: #f3f4f6;
+              border: 1px solid #d1d5db;
+              border-radius: 6px;
+              padding: 12px;
+              margin: 0;
+              font-size: 12px;
+              line-height: 1.5;
+              overflow-x: auto;
+              max-height: 300px;
+              overflow-y: auto;
+              font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            "><code>${escapeHtml(sse.cache.topTweet.latestItem)}</code></pre>
+          </div>
+          `
+              : ""
+          }
+        `;
+      } else {
+        sseContainer.innerHTML =
+          '<div style="color: #6b7280; font-size: 14px;">⚠️ SSE 服务不可用</div>';
       }
     }
 

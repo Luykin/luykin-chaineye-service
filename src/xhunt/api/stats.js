@@ -1937,6 +1937,23 @@ router.get("/device-status", basicAuth, async (req, res) => {
       console.error("获取磁盘信息失败:", error.message);
     }
 
+    // 8. SSE 连接状态
+    deviceStatus.sse = {
+      available: false,
+    };
+    try {
+      const { connectionManager } = require("./sse");
+      if (connectionManager) {
+        const sseStats = connectionManager.getStats();
+        deviceStatus.sse = {
+          available: true,
+          ...sseStats,
+        };
+      }
+    } catch (error) {
+      console.error("获取 SSE 状态失败:", error.message);
+    }
+
     res.json(deviceStatus);
   } catch (error) {
     console.error("获取设备状态失败:", error.message);
