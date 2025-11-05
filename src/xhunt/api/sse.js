@@ -129,6 +129,91 @@ class SSEConnectionManager {
     this.feedIntervalId = null;
     this.topTweetIntervalId = null;
     this.isInitialized = false;
+    this.redisClient = null; // Redis 客户端（延迟设置）
+    this.redisKeyPrefix = "sse:feeds:"; // Redis key 前缀
+  }
+
+  /**
+   * 设置 Redis 客户端
+   */
+  setRedisClient(redisClient) {
+    this.redisClient = redisClient;
+  }
+
+  /**
+   * 从 Redis 恢复缓存数据
+   */
+  async restoreFromRedis() {
+    if (!this.redisClient || !this.redisClient.isReady) {
+      return;
+    }
+
+    try {
+      // 恢复 Feed 数据
+      const feedDataStr = await this.redisClient.get(
+        `${this.redisKeyPrefix}feed:data`
+      );
+      if (feedDataStr) {
+        this.lastFeedData = JSON.parse(feedDataStr);
+        this.latestFeedItem = this.getLatestFeedItem(this.lastFeedData);
+      }
+
+      // 恢复 Top Tweet 数据
+      const topTweetDataStr = await this.redisClient.get(
+        `${this.redisKeyPrefix}top_tweet:data`
+      );
+      if (topTweetDataStr) {
+        this.lastTopTweetData = JSON.parse(topTweetDataStr);
+        this.latestTopTweetItem = this.getLatestTopTweetItem(
+          this.lastTopTweetData
+        );
+      }
+    } catch (error) {
+      console.error(`[sse feeds 核心] 从 Redis 恢复缓存失败:`, error);
+    }
+  }
+
+  /**
+   * 保存 Feed 数据到 Redis
+   */
+  async saveFeedDataToRedis(feedData) {
+    if (!this.redisClient || !this.redisClient.isReady) {
+      return;
+    }
+
+    try {
+      // 保存全量数据，设置过期时间为 7 天
+      await this.redisClient.setEx(
+        `${this.redisKeyPrefix}feed:data`,
+        7 * 24 * 60 * 60,
+        JSON.stringify(feedData)
+      );
+    } catch (error) {
+      console.error(`[sse feeds 核心] 保存 Feed 数据到 Redis 失败:`, error);
+    }
+  }
+
+  /**
+   * 保存 Top Tweet 数据到 Redis
+   */
+  async saveTopTweetDataToRedis(topTweetData) {
+    if (!this.redisClient || !this.redisClient.isReady) {
+      return;
+    }
+
+    try {
+      // 保存全量数据，设置过期时间为 7 天
+      await this.redisClient.setEx(
+        `${this.redisKeyPrefix}top_tweet:data`,
+        7 * 24 * 60 * 60,
+        JSON.stringify(topTweetData)
+      );
+    } catch (error) {
+      console.error(
+        `[sse feeds 核心] 保存 Top Tweet 数据到 Redis 失败:`,
+        error
+      );
+    }
   }
 
   /**
@@ -335,12 +420,15 @@ class SSEConnectionManager {
   /**
    * 初始化轮询
    */
-  initializePolling() {
+  async initializePolling() {
     if (this.isInitialized) {
       return;
     }
 
     this.isInitialized = true;
+
+    // 从 Redis 恢复缓存数据
+    await this.restoreFromRedis();
 
     // 立即执行一次初始请求
     this.pollFeed();
@@ -396,7 +484,10 @@ class SSEConnectionManager {
             ]
           : [];
 
-        if (hasNewMessages(lastAllMessages, allMessages)) {
+        const hasNew = hasNewMessages(lastAllMessages, allMessages);
+        const wasFirstLoad = !this.lastFeedData; // 在更新前检查是否首次加载
+
+        if (hasNew) {
           console.log(`[sse feeds 核心] 检测到 Feed 新消息，推送通知`);
           this.broadcast("feed_update", {
             source: "feed",
@@ -408,6 +499,11 @@ class SSEConnectionManager {
         this.lastFeedData = feedData;
         // 更新最新的一条 Feed 数据
         this.latestFeedItem = this.getLatestFeedItem(feedData);
+        // 保存到 Redis（只在有新消息时保存，避免无意义的覆盖写入）
+        // 如果是首次获取数据（没有旧数据），也需要保存
+        if (hasNew || wasFirstLoad) {
+          await this.saveFeedDataToRedis(feedData);
+        }
       }
     } catch (error) {
       console.error(`[sse feeds 核心] Feed 轮询错误:`, error);
@@ -423,7 +519,10 @@ class SSEConnectionManager {
 
       if (topTweetData) {
         // 比较是否有新消息
-        if (hasNewMessages(this.lastTopTweetData, topTweetData)) {
+        const hasNew = hasNewMessages(this.lastTopTweetData, topTweetData);
+        const wasFirstLoad = !this.lastTopTweetData; // 在更新前检查是否首次加载
+
+        if (hasNew) {
           console.log(`[sse feeds 核心] 检测到 Top Tweet 新消息，推送通知`);
           this.broadcast("gossip_update", {
             source: "top_tweet",
@@ -435,6 +534,11 @@ class SSEConnectionManager {
         this.lastTopTweetData = topTweetData;
         // 更新最新的一条 Top Tweet 数据
         this.latestTopTweetItem = this.getLatestTopTweetItem(topTweetData);
+        // 保存到 Redis（只在有新消息时保存，避免无意义的覆盖写入）
+        // 如果是首次获取数据（没有旧数据），也需要保存
+        if (hasNew || wasFirstLoad) {
+          await this.saveTopTweetDataToRedis(topTweetData);
+        }
       }
     } catch (error) {
       console.error(`[sse feeds 核心] Top Tweet 轮询错误:`, error);
@@ -453,6 +557,11 @@ const connectionManager = new SSEConnectionManager();
  *
  */
 router.get("/feeds", authenticateTokenFromQueryOptional, (req, res) => {
+  // 设置 Redis 客户端（如果还没有设置）
+  if (!connectionManager.redisClient && req.redisClient) {
+    connectionManager.setRedisClient(req.redisClient);
+  }
+
   // 设置 SSE 响应头
   setupSSEHeaders(res);
 
