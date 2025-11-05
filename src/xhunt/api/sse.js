@@ -78,16 +78,16 @@ async function fetchFeedData() {
     const timestamp = getTimestamp();
     const url = `https://data.cryptohunt.ai/fetch/twitter/feed?timestamp=${timestamp}`;
 
-    console.log(`[sse feeds] 获取 Feed 数据: ${url}`);
+    console.log(`[sse feeds 调试] 获取 Feed 数据: ${url}`);
     const response = await fetch(url);
 
     if (!response.ok) {
-      console.error(`[sse feeds] Feed 请求失败: ${response.status}`);
+      console.error(`[sse feeds 调试] Feed 请求失败: ${response.status}`);
       return null;
     }
 
     const data = await response.json();
-    console.log(`[sse feeds] Feed 数据获取成功，数据量:`, {
+    console.log(`[sse feeds 调试] Feed 数据获取成功，数据量:`, {
       tweets_feed: data?.data?.tweets_feed?.length || 0,
       follow_feed: data?.data?.follow_feed?.following_action?.length || 0,
       bwe_news: data?.data?.bwe_news?.length || 0,
@@ -95,7 +95,7 @@ async function fetchFeedData() {
 
     return data?.data || null;
   } catch (error) {
-    console.error(`[sse feeds] Feed 请求错误:`, error);
+    console.error(`[sse feeds 调试] Feed 请求错误:`, error);
     return null;
   }
 }
@@ -108,22 +108,22 @@ async function fetchTopTweetData() {
     const timestamp = getTimestamp();
     const url = `https://data.cryptohunt.ai/fetch/twitter/top_tweet?group=cn&days=1&by_view=false&filter_tag=gossip&timestamp=${timestamp}`;
 
-    console.log(`[sse feeds] 获取 Top Tweet 数据: ${url}`);
+    console.log(`[sse feeds 调试] 获取 Top Tweet 数据: ${url}`);
     const response = await fetch(url);
 
     if (!response.ok) {
-      console.error(`[sse feeds] Top Tweet 请求失败: ${response.status}`);
+      console.error(`[sse feeds 调试] Top Tweet 请求失败: ${response.status}`);
       return null;
     }
 
     const data = await response.json();
-    console.log(`[sse feeds] Top Tweet 数据获取成功，数据量:`, {
+    console.log(`[sse feeds 调试] Top Tweet 数据获取成功，数据量:`, {
       data: data?.data?.data?.length || 0,
     });
 
     return data?.data?.data || null;
   } catch (error) {
-    console.error(`[sse feeds] Top Tweet 请求错误:`, error);
+    console.error(`[sse feeds 调试] Top Tweet 请求错误:`, error);
     return null;
   }
 }
@@ -146,7 +146,9 @@ class SSEConnectionManager {
    */
   addConnection(res) {
     this.connections.add(res);
-    console.log(`[sse feeds] 新增连接，当前连接数: ${this.connections.size}`);
+    console.log(
+      `[sse feeds 调试] 新增连接，当前连接数: ${this.connections.size}`
+    );
 
     // 初始化轮询（如果还没有初始化）
     if (!this.isInitialized) {
@@ -159,7 +161,9 @@ class SSEConnectionManager {
    */
   removeConnection(res) {
     this.connections.delete(res);
-    console.log(`[sse feeds] 移除连接，当前连接数: ${this.connections.size}`);
+    console.log(
+      `[sse feeds 调试] 移除连接，当前连接数: ${this.connections.size}`
+    );
 
     // 如果没有连接了，停止轮询
     if (this.connections.size === 0 && this.isInitialized) {
@@ -187,18 +191,20 @@ class SSEConnectionManager {
         res.write(messageStr);
       } catch (error) {
         // 连接已关闭，移除它
-        console.error(`[sse feeds] 推送消息失败（连接已关闭）:`, error);
+        console.error(`[sse feeds 调试] 推送消息失败（连接已关闭）:`, error);
         closedConnections++;
         this.connections.delete(res);
       }
     });
 
     if (closedConnections > 0) {
-      console.log(`[sse feeds] 清理了 ${closedConnections} 个已关闭的连接`);
+      console.log(
+        `[sse feeds 调试] 清理了 ${closedConnections} 个已关闭的连接`
+      );
     }
 
     console.log(
-      `[sse feeds] 推送消息 ${eventType} 到 ${this.connections.size} 个客户端`
+      `[sse feeds 调试] 推送消息 ${eventType} 到 ${this.connections.size} 个客户端`
     );
   }
 
@@ -211,7 +217,7 @@ class SSEConnectionManager {
     }
 
     this.isInitialized = true;
-    console.log(`[sse feeds] 初始化轮询服务`);
+    console.log(`[sse feeds 调试] 初始化轮询服务`);
 
     // 立即执行一次初始请求
     this.pollFeed();
@@ -240,7 +246,7 @@ class SSEConnectionManager {
       this.topTweetIntervalId = null;
     }
     this.isInitialized = false;
-    console.log(`[sse feeds] 停止轮询服务`);
+    console.log(`[sse feeds 调试] 停止轮询服务`);
   }
 
   /**
@@ -268,7 +274,7 @@ class SSEConnectionManager {
           : [];
 
         if (hasNewMessages(lastAllMessages, allMessages)) {
-          console.log(`[sse feeds] 检测到 Feed 新消息，推送通知`);
+          console.log(`[sse feeds 调试] 检测到 Feed 新消息，推送通知`);
           this.broadcast("feed_update", {
             source: "feed",
             data: feedData,
@@ -279,7 +285,7 @@ class SSEConnectionManager {
         this.lastFeedData = feedData;
       }
     } catch (error) {
-      console.error(`[sse feeds] Feed 轮询错误:`, error);
+      console.error(`[sse feeds 调试] Feed 轮询错误:`, error);
     }
   }
 
@@ -293,7 +299,7 @@ class SSEConnectionManager {
       if (topTweetData) {
         // 比较是否有新消息
         if (hasNewMessages(this.lastTopTweetData, topTweetData)) {
-          console.log(`[sse feeds] 检测到 Top Tweet 新消息，推送通知`);
+          console.log(`[sse feeds 调试] 检测到 Top Tweet 新消息，推送通知`);
           this.broadcast("gossip_update", {
             source: "top_tweet",
             data: topTweetData,
@@ -304,7 +310,7 @@ class SSEConnectionManager {
         this.lastTopTweetData = topTweetData;
       }
     } catch (error) {
-      console.error(`[sse feeds] Top Tweet 轮询错误:`, error);
+      console.error(`[sse feeds 调试] Top Tweet 轮询错误:`, error);
     }
   }
 }
@@ -332,14 +338,14 @@ router.get("/feeds", authenticateTokenFromQueryOptional, (req, res) => {
 
   // 处理客户端断开连接
   req.on("close", () => {
-    console.log("[sse feeds] SSE 客户端断开连接");
+    console.log("[sse feeds 调试] SSE 客户端断开连接");
     connectionManager.removeConnection(res);
     res.end();
   });
 
   // 处理错误
   req.on("error", (error) => {
-    console.error("[sse feeds] SSE 连接错误:", error);
+    console.error("[sse feeds 调试] SSE 连接错误:", error);
     connectionManager.removeConnection(res);
     res.end();
   });
