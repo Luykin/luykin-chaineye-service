@@ -615,7 +615,7 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
       // SSE 请求：使用 FNV-1a 哈希算法
       const path = extractSignaturePath(req);
 
-      console.log("[sse签名] 验证签名 - 接收到的参数:", {
+      console.log("[sse签名new] 验证签名 - 接收到的参数:", {
         requestId,
         timestamp: timestamp.toString(),
         fingerprint,
@@ -632,19 +632,19 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
         path
       );
 
-      console.log("[sse签名] 验证签名 - 期望签名:", expectedSignature);
-      console.log("[sse签名] 验证签名 - 接收签名:", signature);
+      console.log("[sse签名new] 验证签名 - 期望签名:", expectedSignature);
+      console.log("[sse签名new] 验证签名 - 接收签名:", signature);
       console.log(
-        "[sse签名] 验证签名 - 匹配结果:",
+        "[sse签名new] 验证签名 - 匹配结果:",
         signature === expectedSignature
       );
 
       if (signature !== expectedSignature) {
-        console.log("[sse签名] 验证签名 - 签名验证失败");
+        console.log("[sse签名new] 验证签名 - 签名验证失败");
         return { isValid: false, error: "411" };
       }
 
-      console.log("[sse签名] 验证签名 - 签名验证成功");
+      console.log("[sse签名new] 验证签名 - 签名验证成功");
     } else {
       // 普通请求：使用 HMAC SHA256 算法
       const path = req.baseUrl + req.path;
