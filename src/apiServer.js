@@ -38,7 +38,6 @@ const {
   rateLimiter,
   browserOnlyMiddleware,
   sseSecurityMiddleware,
-  sseBrowserOnlyMiddleware,
 } = require("./xhunt/middleware/security");
 const StatsD = require("hot-shots");
 const dataDog = new StatsD();
@@ -292,7 +291,6 @@ app.use("/api/rootdata", xHuntRootdataRoutes);
 app.use(
   "/api/xhunt/sse",
   fingerprintLimiter,
-  sseBrowserOnlyMiddleware,
   sseSecurityMiddleware,
   xHuntSSERoutes
 );

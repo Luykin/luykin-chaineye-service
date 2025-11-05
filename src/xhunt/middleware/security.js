@@ -514,19 +514,6 @@ const browserOnlyMiddleware = (req, res, next) => {
   }
 };
 
-// SSE 专用的浏览器环境检测中间件（支持从查询参数读取）
-const sseBrowserOnlyMiddleware = (req, res, next) => {
-  try {
-    if (!validateBrowserEnvironment(req, true)) {
-      return res.status(403).json({ error: "403" });
-    }
-    next();
-  } catch (error) {
-    console.error("SSE Browser detection middleware error:", error);
-    res.status(500).json({ error: "sseBrowserOnlyMiddleware 500" });
-  }
-};
-
 // 安全中间件
 const securityMiddleware = (req, res, next) => {
   // 确保缓存管理器已初始化
@@ -587,7 +574,6 @@ module.exports = {
   securityMiddleware,
   sseSecurityMiddleware,
   browserOnlyMiddleware,
-  sseBrowserOnlyMiddleware,
   generateSignature, // 导出用于测试
   dauCacheManager, // 导出缓存管理器（用于测试和监控）
 };
