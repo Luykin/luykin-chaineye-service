@@ -296,17 +296,112 @@ const isBrowserEnvironment = (userAgent, windowLocationHref) => {
 
 // 生成签名
 const generateSignature = (method, path, timestamp, body, fingerprint) => {
+  // 处理 path：去掉末尾的斜杠
+  const normalizedPath = path.endsWith("/") ? path.slice(0, -1) : path;
+
+  // 处理 body：如果是 null 或 undefined，使用空字符串（与前端保持一致）
+  // 如果有 body，使用 JSON.stringify
+  const bodyString =
+    body === null || body === undefined ? "" : JSON.stringify(body);
+
   const payload = [
     method.toUpperCase(),
-    path.endsWith("/") ? path.slice(0, -1) : path,
+    normalizedPath,
     timestamp,
     fingerprint,
-    JSON.stringify(body || {}),
+    bodyString,
   ].join("|");
+
   return crypto
     .createHmac("sha256", process.env.XHUNT_API_SECRET)
     .update(payload)
     .digest("hex");
+};
+
+/**
+ * FNV-1a哈希算法（32位版本）
+ * @param {string} input - 输入字符串
+ * @returns {number} 32位无符号整数哈希值
+ */
+const fnv1aHash = (input) => {
+  const FNV_OFFSET_BASIS = 2166136261;
+  const FNV_PRIME = 16777619;
+
+  let hash = FNV_OFFSET_BASIS;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = (hash * FNV_PRIME) >>> 0; // 无符号32位整数
+  }
+
+  return hash >>> 0;
+};
+
+/**
+ * 简单的Base64编码（用于签名输出）
+ * @param {number[]} bytes - 字节数组
+ * @returns {string} Base64编码字符串
+ */
+const simpleBase64Encode = (bytes) => {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let result = "";
+
+  for (let i = 0; i < bytes.length; i += 3) {
+    const byte1 = bytes[i];
+    const byte2 = bytes[i + 1] || 0;
+    const byte3 = bytes[i + 2] || 0;
+
+    const bitmap = (byte1 << 16) | (byte2 << 8) | byte3;
+
+    result += chars.charAt((bitmap >> 18) & 63);
+    result += chars.charAt((bitmap >> 12) & 63);
+    result += i + 1 < bytes.length ? chars.charAt((bitmap >> 6) & 63) : "=";
+    result += i + 2 < bytes.length ? chars.charAt(bitmap & 63) : "=";
+  }
+
+  return result;
+};
+
+/**
+ * 生成基于请求参数的真实签名（用于 SSE）
+ * 使用FNV-1a哈希算法生成确定性签名
+ * @param {string} requestId - 请求ID
+ * @param {string} timestamp - 时间戳
+ * @param {string} fingerprint - 设备指纹
+ * @param {string} method - HTTP 方法
+ * @param {string} path - 请求路径（包含查询参数，如 x_language）
+ * @returns {string} Base64编码的签名
+ */
+const generateSSESignature = (
+  requestId,
+  timestamp,
+  fingerprint,
+  method,
+  path
+) => {
+  // 按照固定顺序组合参数：timestamp|fingerprint|method|path|requestId
+  const input = `${timestamp}|${fingerprint}|${method}|${path}|${requestId}`;
+
+  // 使用FNV-1a哈希算法生成主哈希值
+  const hash1 = fnv1aHash(input);
+
+  // 对输入进行反转后再哈希，增加复杂性
+  const reversedInput = input.split("").reverse().join("");
+  const hash2 = fnv1aHash(reversedInput);
+
+  // 组合两个哈希值（64位）
+  const combined = ((BigInt(hash1) << 32n) | BigInt(hash2))
+    .toString(16)
+    .padStart(16, "0");
+
+  // 将16进制字符串转换为字节数组
+  const bytes = [];
+  for (let i = 0; i < combined.length; i += 2) {
+    bytes.push(parseInt(combined.slice(i, i + 2), 16));
+  }
+
+  // 使用Base64编码输出签名
+  return simpleBase64Encode(bytes);
 };
 
 /**
@@ -318,10 +413,34 @@ const generateSignature = (method, path, timestamp, body, fingerprint) => {
  */
 const getRequestParam = (req, paramName, allowQueryParams = true) => {
   const headerName = `x-${paramName}`;
+  // 同时支持 x- 和 x_ 格式（query 参数中可能使用下划线）
+  const queryNameWithDash = `x-${paramName}`;
+  const queryNameWithUnderscore = `x_${paramName}`;
+
   if (allowQueryParams) {
-    return req.headers[headerName] || req.query[headerName];
+    return (
+      req.headers[headerName] ||
+      req.query[queryNameWithDash] ||
+      req.query[queryNameWithUnderscore]
+    );
   }
   return req.headers[headerName];
+};
+
+/**
+ * 提取用于签名的 path（只包含基本路径和 x_language）
+ * @param {express.Request} req - Express 请求对象
+ * @returns {string} 用于签名的 path
+ */
+const extractSignaturePath = (req) => {
+  const basePath = req.baseUrl + req.path;
+  const xLanguage = req.query["x_language"] || req.query["x-language"];
+
+  // path 只包含基本路径和 x_language
+  if (xLanguage) {
+    return `${basePath}?x_language=${xLanguage}`;
+  }
+  return basePath;
 };
 
 /**
@@ -476,17 +595,33 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
 
   // 验证签名（除非满足跳过条件）
   if (!shouldSkipSignature) {
-    // SSE 是 GET 请求，没有 body，所以使用空对象；普通请求使用 req.body
-    const body = allowQueryParams ? {} : req.body;
-    const expectedSignature = generateSignature(
-      req.method,
-      req.baseUrl + req.path,
-      timestamp,
-      body,
-      fingerprint
-    );
-    if (signature !== expectedSignature) {
-      return { isValid: false, error: "411" };
+    if (allowQueryParams) {
+      // SSE 请求：使用 FNV-1a 哈希算法
+      const path = extractSignaturePath(req);
+      const expectedSignature = generateSSESignature(
+        requestId,
+        timestamp.toString(),
+        fingerprint,
+        req.method.toUpperCase(),
+        path
+      );
+      if (signature !== expectedSignature) {
+        return { isValid: false, error: "411" };
+      }
+    } else {
+      // 普通请求：使用 HMAC SHA256 算法
+      const path = req.baseUrl + req.path;
+      const body = req.body;
+      const expectedSignature = generateSignature(
+        req.method,
+        path,
+        timestamp,
+        body,
+        fingerprint
+      );
+      if (signature !== expectedSignature) {
+        return { isValid: false, error: "411" };
+      }
     }
   }
 
@@ -574,6 +709,7 @@ module.exports = {
   securityMiddleware,
   sseSecurityMiddleware,
   browserOnlyMiddleware,
-  generateSignature, // 导出用于测试
+  generateSignature, // 导出用于测试（HMAC SHA256，普通 API）
+  generateSSESignature, // 导出用于测试（FNV-1a，SSE）
   dauCacheManager, // 导出缓存管理器（用于测试和监控）
 };
