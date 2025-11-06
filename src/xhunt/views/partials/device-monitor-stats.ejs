@@ -838,6 +838,111 @@
             </span>
           </div>
           
+          <!-- 进程列表展示 -->
+          ${
+            sse.processes && sse.processes.length > 0
+              ? `
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #e5e7eb;">
+            <div style="margin-bottom: 15px; color: #374151; font-weight: 600; font-size: 15px;">
+              🔍 进程详情 (${sse.processes.length} 个进程)
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              ${sse.processes
+                .map(
+                  (proc, index) => `
+              <div style="
+                background: #f9fafb;
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                padding: 15px;
+              ">
+                <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                  <span style="
+                    display: inline-block;
+                    width: 24px;
+                    height: 24px;
+                    line-height: 24px;
+                    text-align: center;
+                    background: ${proc.isInitialized ? "#10b981" : "#ef4444"};
+                    color: white;
+                    border-radius: 50%;
+                    font-size: 12px;
+                    font-weight: 600;
+                  ">${index + 1}</span>
+                  <span style="color: #111827; font-weight: 600; font-size: 14px;">
+                    进程 ID: ${proc.processId}
+                  </span>
+                  ${
+                    proc.timestamp
+                      ? `<span style="color: #6b7280; font-size: 12px; margin-left: auto;">
+                      更新: ${new Date(proc.timestamp).toLocaleTimeString(
+                        "zh-CN",
+                        {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        }
+                      )}
+                    </span>`
+                      : ""
+                  }
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
+                  <div class="stat-row">
+                    <span class="stat-label" style="color: #6b7280; font-size: 13px;">连接数:</span>
+                    <span class="stat-value" style="color: ${
+                      proc.connectionCount > 50 ? "#ef4444" : "#111827"
+                    }; font-size: 13px; font-weight: 600;">
+                      ${proc.connectionCount} 个
+                    </span>
+                  </div>
+                  <div class="stat-row">
+                    <span class="stat-label" style="color: #6b7280; font-size: 13px;">初始化状态:</span>
+                    <span class="stat-value" style="color: ${
+                      proc.isInitialized ? "#10b981" : "#ef4444"
+                    }; font-size: 13px; font-weight: 600;">
+                      ${proc.isInitialized ? "✅ 已初始化" : "❌ 未初始化"}
+                    </span>
+                  </div>
+                  <div class="stat-row">
+                    <span class="stat-label" style="color: #6b7280; font-size: 13px;">Feed 轮询:</span>
+                    <span class="stat-value" style="color: ${
+                      proc.feedIntervalActive ? "#10b981" : "#6b7280"
+                    }; font-size: 13px; font-weight: 600;">
+                      ${proc.feedIntervalActive ? "✅ 运行中" : "❌ 未启动"}
+                    </span>
+                  </div>
+                  <div class="stat-row">
+                    <span class="stat-label" style="color: #6b7280; font-size: 13px;">Top Tweet 轮询:</span>
+                    <span class="stat-value" style="color: ${
+                      proc.topTweetIntervalActive ? "#10b981" : "#6b7280"
+                    }; font-size: 13px; font-weight: 600;">
+                      ${proc.topTweetIntervalActive ? "✅ 运行中" : "❌ 未启动"}
+                    </span>
+                  </div>
+                  <div class="stat-row">
+                    <span class="stat-label" style="color: #6b7280; font-size: 13px;">上次 Feed 轮询:</span>
+                    <span class="stat-value" style="color: #111827; font-size: 13px; font-weight: 600;">
+                      ${proc.lastFeedPollTimeFormatted || "从未轮询"}
+                    </span>
+                  </div>
+                  <div class="stat-row">
+                    <span class="stat-label" style="color: #6b7280; font-size: 13px;">上次 Top Tweet 轮询:</span>
+                    <span class="stat-value" style="color: #111827; font-size: 13px; font-weight: 600;">
+                      ${proc.lastTopTweetPollTimeFormatted || "从未轮询"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              `
+                )
+                .join("")}
+            </div>
+          </div>
+          `
+              : ""
+          }
+          
           <!-- Feed 最新数据展示 -->
           ${
             sse.cache.feed.latestItem

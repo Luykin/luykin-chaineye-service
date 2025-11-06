@@ -674,9 +674,29 @@ class SSEConnectionManager {
       let latestTopTweetPollTime = this.lastTopTweetPollTime;
       let processCount = 1; // 当前进程
 
+      // 构建当前进程的详细信息
+      const processDetailList = [
+        {
+          processId: this.processId,
+          connectionCount: this.connections.size,
+          isInitialized: this.isInitialized,
+          feedIntervalActive: !!this.feedIntervalId,
+          topTweetIntervalActive: !!this.topTweetIntervalId,
+          lastFeedPollTime: this.lastFeedPollTime
+            ? this.lastFeedPollTime.toISOString()
+            : null,
+          lastFeedPollTimeFormatted: formatTime(this.lastFeedPollTime),
+          lastTopTweetPollTime: this.lastTopTweetPollTime
+            ? this.lastTopTweetPollTime.toISOString()
+            : null,
+          lastTopTweetPollTimeFormatted: formatTime(this.lastTopTweetPollTime),
+          timestamp: new Date().toISOString(),
+        },
+      ];
+
       // 遍历所有进程的统计信息
       for (const processStats of allProcessStats) {
-        // 跳过当前进程（已经在上面计算过了）
+        // 跳过当前进程（已经在上面添加过了）
         if (processStats.processId === this.processId) {
           continue;
         }
@@ -712,6 +732,28 @@ class SSEConnectionManager {
             latestTopTweetPollTime = processTopTweetPollTime;
           }
         }
+
+        // 添加到进程详情列表
+        processDetailList.push({
+          processId: processStats.processId,
+          connectionCount: processStats.connectionCount || 0,
+          isInitialized: processStats.isInitialized || false,
+          feedIntervalActive: processStats.feedIntervalActive || false,
+          topTweetIntervalActive: processStats.topTweetIntervalActive || false,
+          lastFeedPollTime: processStats.lastFeedPollTime || null,
+          lastFeedPollTimeFormatted: formatTime(
+            processStats.lastFeedPollTime
+              ? new Date(processStats.lastFeedPollTime)
+              : null
+          ),
+          lastTopTweetPollTime: processStats.lastTopTweetPollTime || null,
+          lastTopTweetPollTimeFormatted: formatTime(
+            processStats.lastTopTweetPollTime
+              ? new Date(processStats.lastTopTweetPollTime)
+              : null
+          ),
+          timestamp: processStats.timestamp || null,
+        });
       }
 
       const totalEstimatedMemoryUsage =
@@ -743,6 +785,7 @@ class SSEConnectionManager {
             : null,
           lastTopTweetPollTimeFormatted: formatTime(latestTopTweetPollTime),
         },
+        processes: processDetailList, // 详细的进程列表
         cache: {
           feed: {
             hasData: !!this.lastFeedData,
