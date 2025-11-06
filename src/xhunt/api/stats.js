@@ -1944,7 +1944,7 @@ router.get("/device-status", basicAuth, async (req, res) => {
     try {
       const { connectionManager } = require("./sse");
       if (connectionManager) {
-        const sseStats = connectionManager.getStats();
+        const sseStats = await connectionManager.getStats(true); // 聚合所有进程的统计信息
         deviceStatus.sse = {
           available: true,
           ...sseStats,

@@ -760,7 +760,11 @@
           <div class="stat-row">
             <span class="stat-label" style="color: #6b7280; font-size: 14px;">活跃连接数:</span>
             <span class="stat-value" style="color: ${connectionsColor}; font-size: 14px; font-weight: 600;">
-              ${sse.connections.active} 个连接
+              ${sse.connections.active} 个连接${
+          sse.connections.processCount
+            ? ` (${sse.connections.processCount} 个进程)`
+            : ""
+        }
             </span>
           </div>
           <div class="stat-row">
@@ -772,13 +776,21 @@
           <div class="stat-row">
             <span class="stat-label" style="color: #6b7280; font-size: 14px;">轮询状态:</span>
             <span class="stat-value" style="color: ${pollingStatusColor}; font-size: 14px; font-weight: 600;">
-              ${sse.polling.isInitialized ? "✅ 已初始化" : "❌ 未初始化"}
+              ${sse.polling.isInitialized ? "✅ 已初始化" : "❌ 未初始化"}${
+          sse.polling.initializedProcessCount !== undefined
+            ? ` (${sse.polling.initializedProcessCount} 个进程)`
+            : ""
+        }
             </span>
           </div>
           <div class="stat-row">
             <span class="stat-label" style="color: #6b7280; font-size: 14px;">Feed 轮询:</span>
             <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
-              ${sse.polling.feedInterval}
+              ${sse.polling.feedInterval}${
+          sse.polling.feedIntervalActiveCount !== undefined
+            ? ` (${sse.polling.feedIntervalActiveCount} 个进程)`
+            : ""
+        }
             </span>
           </div>
           <div class="stat-row">
@@ -790,7 +802,11 @@
           <div class="stat-row">
             <span class="stat-label" style="color: #6b7280; font-size: 14px;">Top Tweet 轮询:</span>
             <span class="stat-value" style="color: #111827; font-size: 14px; font-weight: 600;">
-              ${sse.polling.topTweetInterval}
+              ${sse.polling.topTweetInterval}${
+          sse.polling.topTweetIntervalActiveCount !== undefined
+            ? ` (${sse.polling.topTweetIntervalActiveCount} 个进程)`
+            : ""
+        }
             </span>
           </div>
           <div class="stat-row">

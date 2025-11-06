@@ -16,10 +16,10 @@ function setupSSEHeaders(res) {
 }
 
 /**
- * 获取时间戳（当前时间减去1小时，秒级时间戳）
+ * 获取时间戳（当前时间减去25分钟，秒级时间戳）
  */
 function getTimestamp() {
-  return Math.floor((Date.now() - 60 * 60 * 1000) / 1000);
+  return Math.floor((Date.now() - 25 * 60 * 1000) / 1000);
 }
 
 /**
@@ -133,6 +133,9 @@ class SSEConnectionManager {
     this.redisKeyPrefix = "sse:feeds:"; // Redis key 前缀
     this.lastFeedPollTime = null; // 上次 Feed 轮询时间
     this.lastTopTweetPollTime = null; // 上次 Top Tweet 轮询时间
+    this.statsSyncIntervalId = null; // 统计信息同步定时器
+    this.processId = process.pid; // 当前进程 ID
+    this.statsRedisKeyPrefix = "sse:stats:process:"; // 统计信息 Redis key 前缀
   }
 
   /**
@@ -318,6 +321,11 @@ class SSEConnectionManager {
   addConnection(res) {
     this.connections.add(res);
 
+    // 立即同步统计信息到 Redis（如果已初始化）
+    if (this.isInitialized) {
+      this.syncStatsToRedis();
+    }
+
     // 初始化轮询（如果还没有初始化）
     if (!this.isInitialized) {
       this.initializePolling();
@@ -371,6 +379,11 @@ class SSEConnectionManager {
    */
   removeConnection(res) {
     this.connections.delete(res);
+
+    // 立即同步统计信息到 Redis（如果已初始化）
+    if (this.isInitialized) {
+      this.syncStatsToRedis();
+    }
 
     // 如果没有连接了，停止轮询
     if (this.connections.size === 0 && this.isInitialized) {
@@ -436,6 +449,9 @@ class SSEConnectionManager {
     this.pollFeed();
     this.pollTopTweet();
 
+    // 立即同步一次统计信息
+    await this.syncStatsToRedis();
+
     // 设置定时器
     this.feedIntervalId = setInterval(() => {
       this.sendHeartbeat(); // 设置心跳定时器（保持连接活跃）
@@ -445,6 +461,11 @@ class SSEConnectionManager {
     this.topTweetIntervalId = setInterval(() => {
       this.pollTopTweet();
     }, 2 * 60 * 1000); // 每2分钟
+
+    // 设置统计信息同步定时器（每10秒同步一次）
+    this.statsSyncIntervalId = setInterval(() => {
+      this.syncStatsToRedis();
+    }, 10 * 1000); // 每10秒
   }
 
   /**
@@ -459,20 +480,101 @@ class SSEConnectionManager {
       clearInterval(this.topTweetIntervalId);
       this.topTweetIntervalId = null;
     }
+    if (this.statsSyncIntervalId) {
+      clearInterval(this.statsSyncIntervalId);
+      this.statsSyncIntervalId = null;
+    }
     this.isInitialized = false;
   }
 
   /**
-   * 获取统计信息
-   * @returns {Object} 统计信息对象
+   * 将当前进程的统计信息同步到 Redis
    */
-  getStats() {
-    // 估算每个连接的内存占用（字节）
-    // 每个响应对象大约占用 1-2KB（包括响应流、缓冲区等）
-    const estimatedBytesPerConnection = 2048;
-    const connectionCount = this.connections.size;
-    const estimatedMemoryUsage = connectionCount * estimatedBytesPerConnection;
+  async syncStatsToRedis() {
+    if (!this.redisClient || !this.redisClient.isReady) {
+      return;
+    }
 
+    try {
+      const statsKey = `${this.statsRedisKeyPrefix}${this.processId}`;
+      const statsData = {
+        processId: this.processId,
+        connectionCount: this.connections.size,
+        isInitialized: this.isInitialized,
+        feedIntervalActive: !!this.feedIntervalId,
+        topTweetIntervalActive: !!this.topTweetIntervalId,
+        lastFeedPollTime: this.lastFeedPollTime
+          ? this.lastFeedPollTime.toISOString()
+          : null,
+        lastTopTweetPollTime: this.lastTopTweetPollTime
+          ? this.lastTopTweetPollTime.toISOString()
+          : null,
+        timestamp: new Date().toISOString(),
+      };
+
+      // 保存统计信息，设置过期时间为 2 分钟（如果进程挂掉，数据会自动清理）
+      await this.redisClient.setEx(
+        statsKey,
+        120, // 2 分钟过期
+        JSON.stringify(statsData)
+      );
+    } catch (error) {
+      console.error(`[sse feeds 核心] 同步统计信息到 Redis 失败:`, error);
+    }
+  }
+
+  /**
+   * 从 Redis 获取所有进程的统计信息
+   */
+  async getAllProcessStatsFromRedis() {
+    if (!this.redisClient || !this.redisClient.isReady) {
+      return [];
+    }
+
+    try {
+      const statsKeyPattern = `${this.statsRedisKeyPrefix}*`;
+      const keys = [];
+      let cursor = 0;
+
+      // 使用 SCAN 遍历所有匹配的 key
+      do {
+        const result = await this.redisClient.scan(cursor, {
+          MATCH: statsKeyPattern,
+          COUNT: 100,
+        });
+        cursor = result.cursor;
+        keys.push(...result.keys);
+      } while (cursor !== 0);
+
+      // 获取所有进程的统计信息
+      const allStats = [];
+      if (keys.length > 0) {
+        const values = await this.redisClient.mGet(keys);
+        for (let i = 0; i < values.length; i++) {
+          if (values[i]) {
+            try {
+              const stats = JSON.parse(values[i]);
+              allStats.push(stats);
+            } catch (error) {
+              console.error(`[sse feeds 核心] 解析进程统计信息失败:`, error);
+            }
+          }
+        }
+      }
+
+      return allStats;
+    } catch (error) {
+      console.error(`[sse feeds 核心] 从 Redis 获取统计信息失败:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * 获取统计信息（聚合所有进程）
+   * @param {boolean} aggregateAllProcesses - 是否聚合所有进程的统计信息
+   * @returns {Promise<Object>} 统计信息对象
+   */
+  async getStats(aggregateAllProcesses = true) {
     // 计算数据大小（字节）
     const getDataSize = (data) => {
       if (!data) return 0;
@@ -500,56 +602,183 @@ class SSEConnectionManager {
       });
     };
 
-    return {
-      connections: {
-        active: connectionCount,
-        estimatedMemoryUsage: estimatedMemoryUsage,
-        estimatedMemoryUsageFormatted: this.formatBytes(estimatedMemoryUsage),
-      },
-      polling: {
-        isInitialized: this.isInitialized,
-        feedInterval: this.feedIntervalId ? "运行中" : "未启动",
-        topTweetInterval: this.topTweetIntervalId ? "运行中" : "未启动",
-        lastFeedPollTime: this.lastFeedPollTime
-          ? this.lastFeedPollTime.toISOString()
-          : null,
-        lastFeedPollTimeFormatted: formatTime(this.lastFeedPollTime),
-        lastTopTweetPollTime: this.lastTopTweetPollTime
-          ? this.lastTopTweetPollTime.toISOString()
-          : null,
-        lastTopTweetPollTimeFormatted: formatTime(this.lastTopTweetPollTime),
-      },
-      cache: {
-        feed: {
-          hasData: !!this.lastFeedData,
-          latestItemExists: !!this.latestFeedItem,
-          dataSize: feedDataSize,
-          dataSizeFormatted: this.formatBytes(feedDataSize),
-          lastData: this.lastFeedData
-            ? JSON.stringify(this.lastFeedData, null, 2)
-            : null,
-          latestItem: this.latestFeedItem
-            ? JSON.stringify(this.latestFeedItem, null, 2)
-            : null,
+    // 估算每个连接的内存占用（字节）
+    const estimatedBytesPerConnection = 2048;
+
+    // 如果不需要聚合所有进程，只返回当前进程的统计信息
+    if (!aggregateAllProcesses) {
+      const connectionCount = this.connections.size;
+      const estimatedMemoryUsage =
+        connectionCount * estimatedBytesPerConnection;
+
+      return {
+        connections: {
+          active: connectionCount,
+          estimatedMemoryUsage: estimatedMemoryUsage,
+          estimatedMemoryUsageFormatted: this.formatBytes(estimatedMemoryUsage),
         },
-        topTweet: {
-          hasData: !!this.lastTopTweetData,
-          latestItemExists: !!this.latestTopTweetItem,
-          dataSize: topTweetDataSize,
-          dataSizeFormatted: this.formatBytes(topTweetDataSize),
-          lastData: this.lastTopTweetData
-            ? JSON.stringify(this.lastTopTweetData, null, 2)
+        polling: {
+          isInitialized: this.isInitialized,
+          feedInterval: this.feedIntervalId ? "运行中" : "未启动",
+          topTweetInterval: this.topTweetIntervalId ? "运行中" : "未启动",
+          lastFeedPollTime: this.lastFeedPollTime
+            ? this.lastFeedPollTime.toISOString()
             : null,
-          latestItem: this.latestTopTweetItem
-            ? JSON.stringify(this.latestTopTweetItem, null, 2)
+          lastFeedPollTimeFormatted: formatTime(this.lastFeedPollTime),
+          lastTopTweetPollTime: this.lastTopTweetPollTime
+            ? this.lastTopTweetPollTime.toISOString()
             : null,
+          lastTopTweetPollTimeFormatted: formatTime(this.lastTopTweetPollTime),
         },
-      },
-      redis: {
-        configured: !!this.redisClient,
-        connected: this.redisClient?.isReady || false,
-      },
-    };
+        cache: {
+          feed: {
+            hasData: !!this.lastFeedData,
+            latestItemExists: !!this.latestFeedItem,
+            dataSize: feedDataSize,
+            dataSizeFormatted: this.formatBytes(feedDataSize),
+            lastData: this.lastFeedData
+              ? JSON.stringify(this.lastFeedData, null, 2)
+              : null,
+            latestItem: this.latestFeedItem
+              ? JSON.stringify(this.latestFeedItem, null, 2)
+              : null,
+          },
+          topTweet: {
+            hasData: !!this.lastTopTweetData,
+            latestItemExists: !!this.latestTopTweetItem,
+            dataSize: topTweetDataSize,
+            dataSizeFormatted: this.formatBytes(topTweetDataSize),
+            lastData: this.lastTopTweetData
+              ? JSON.stringify(this.lastTopTweetData, null, 2)
+              : null,
+            latestItem: this.latestTopTweetItem
+              ? JSON.stringify(this.latestTopTweetItem, null, 2)
+              : null,
+          },
+        },
+        redis: {
+          configured: !!this.redisClient,
+          connected: this.redisClient?.isReady || false,
+        },
+      };
+    }
+
+    // 聚合所有进程的统计信息
+    try {
+      const allProcessStats = await this.getAllProcessStatsFromRedis();
+      let totalConnections = this.connections.size; // 当前进程的连接数
+      let totalInitializedProcesses = this.isInitialized ? 1 : 0;
+      let totalFeedIntervalActive = this.feedIntervalId ? 1 : 0;
+      let totalTopTweetIntervalActive = this.topTweetIntervalId ? 1 : 0;
+      let latestFeedPollTime = this.lastFeedPollTime;
+      let latestTopTweetPollTime = this.lastTopTweetPollTime;
+      let processCount = 1; // 当前进程
+
+      // 遍历所有进程的统计信息
+      for (const processStats of allProcessStats) {
+        // 跳过当前进程（已经在上面计算过了）
+        if (processStats.processId === this.processId) {
+          continue;
+        }
+
+        processCount++;
+        totalConnections += processStats.connectionCount || 0;
+        if (processStats.isInitialized) {
+          totalInitializedProcesses++;
+        }
+        if (processStats.feedIntervalActive) {
+          totalFeedIntervalActive++;
+        }
+        if (processStats.topTweetIntervalActive) {
+          totalTopTweetIntervalActive++;
+        }
+
+        // 更新最新的轮询时间
+        if (processStats.lastFeedPollTime) {
+          const processFeedPollTime = new Date(processStats.lastFeedPollTime);
+          if (!latestFeedPollTime || processFeedPollTime > latestFeedPollTime) {
+            latestFeedPollTime = processFeedPollTime;
+          }
+        }
+
+        if (processStats.lastTopTweetPollTime) {
+          const processTopTweetPollTime = new Date(
+            processStats.lastTopTweetPollTime
+          );
+          if (
+            !latestTopTweetPollTime ||
+            processTopTweetPollTime > latestTopTweetPollTime
+          ) {
+            latestTopTweetPollTime = processTopTweetPollTime;
+          }
+        }
+      }
+
+      const totalEstimatedMemoryUsage =
+        totalConnections * estimatedBytesPerConnection;
+
+      return {
+        connections: {
+          active: totalConnections,
+          estimatedMemoryUsage: totalEstimatedMemoryUsage,
+          estimatedMemoryUsageFormatted: this.formatBytes(
+            totalEstimatedMemoryUsage
+          ),
+          processCount: processCount, // 显示有多少个进程
+        },
+        polling: {
+          isInitialized: totalInitializedProcesses > 0,
+          initializedProcessCount: totalInitializedProcesses,
+          feedInterval: totalFeedIntervalActive > 0 ? "运行中" : "未启动",
+          feedIntervalActiveCount: totalFeedIntervalActive,
+          topTweetInterval:
+            totalTopTweetIntervalActive > 0 ? "运行中" : "未启动",
+          topTweetIntervalActiveCount: totalTopTweetIntervalActive,
+          lastFeedPollTime: latestFeedPollTime
+            ? latestFeedPollTime.toISOString()
+            : null,
+          lastFeedPollTimeFormatted: formatTime(latestFeedPollTime),
+          lastTopTweetPollTime: latestTopTweetPollTime
+            ? latestTopTweetPollTime.toISOString()
+            : null,
+          lastTopTweetPollTimeFormatted: formatTime(latestTopTweetPollTime),
+        },
+        cache: {
+          feed: {
+            hasData: !!this.lastFeedData,
+            latestItemExists: !!this.latestFeedItem,
+            dataSize: feedDataSize,
+            dataSizeFormatted: this.formatBytes(feedDataSize),
+            lastData: this.lastFeedData
+              ? JSON.stringify(this.lastFeedData, null, 2)
+              : null,
+            latestItem: this.latestFeedItem
+              ? JSON.stringify(this.latestFeedItem, null, 2)
+              : null,
+          },
+          topTweet: {
+            hasData: !!this.lastTopTweetData,
+            latestItemExists: !!this.latestTopTweetItem,
+            dataSize: topTweetDataSize,
+            dataSizeFormatted: this.formatBytes(topTweetDataSize),
+            lastData: this.lastTopTweetData
+              ? JSON.stringify(this.lastTopTweetData, null, 2)
+              : null,
+            latestItem: this.latestTopTweetItem
+              ? JSON.stringify(this.latestTopTweetItem, null, 2)
+              : null,
+          },
+        },
+        redis: {
+          configured: !!this.redisClient,
+          connected: this.redisClient?.isReady || false,
+        },
+      };
+    } catch (error) {
+      console.error(`[sse feeds 核心] 聚合统计信息失败:`, error);
+      // 如果聚合失败，返回当前进程的统计信息
+      return this.getStats(false);
+    }
   }
 
   /**
