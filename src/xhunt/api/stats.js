@@ -2216,4 +2216,227 @@ router.post("/clear-cache", basicAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /grant-pro
+ * 手动开通 Pro 权限（需要认证，仅 luykin 用户）
+ */
+router.post("/grant-pro", basicAuth, async (req, res) => {
+  try {
+    // 权限检查：只有 luykin 用户可以执行手动开通 Pro 操作
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `[手动开通Pro] ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "权限不足",
+        message: "仅 luykin 用户可以执行此操作",
+      });
+    }
+
+    console.log(
+      `[手动开通Pro] ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
+    );
+
+    const { username, durationDays, reason } = req.body;
+
+    // 验证必需参数
+    if (!username || !durationDays) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必需参数",
+        message: "请提供 username 和 durationDays",
+      });
+    }
+
+    // 验证时长参数
+    const duration = parseInt(durationDays);
+    if (isNaN(duration) || duration <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "无效的时长参数",
+        message: "durationDays 必须是正整数",
+      });
+    }
+
+    // 获取PostgreSQL模型
+    const postgresModels = require("../../models/postgres-start");
+    const XHuntUser = postgresModels.XHuntUser;
+    const XHuntUserProSubscription = postgresModels.XHuntUserProSubscription;
+    const { Op } = require("sequelize");
+
+    // 查找用户（大小写不敏感）
+    const user = await XHuntUser.findOne({
+      where: {
+        username: {
+          [Op.iLike]: username,
+        },
+      },
+    });
+
+    if (!user) {
+      console.log(`[手动开通Pro] ❌ 用户未找到: ${username}`);
+      return res.status(404).json({
+        success: false,
+        error: "用户未找到",
+        message: `未找到用户名为 "${username}" 的用户`,
+      });
+    }
+
+    // 计算开通时间
+    const startTime = new Date();
+    const endTime = new Date(startTime.getTime() + duration * 24 * 60 * 60 * 1000);
+
+    // 创建 Pro 订阅记录
+    const subscription = await XHuntUserProSubscription.create({
+      userId: user.id,
+      startTime: startTime,
+      endTime: endTime,
+      planType: "vip-base",
+      reason: reason || "manual",
+      reasonDetail: `由 ${req.user.username} 手动开通，时长 ${duration} 天`,
+    });
+
+    console.log(
+      `[手动开通Pro] ✅ 成功为用户 ${username} (ID: ${user.id}) 开通 Pro，时长 ${duration} 天，过期时间: ${endTime}`
+    );
+
+    res.json({
+      success: true,
+      message: `成功为用户 "${username}" 开通 Pro ${duration} 天`,
+      data: {
+        userId: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        subscriptionId: subscription.id,
+        startTime: subscription.startTime,
+        endTime: subscription.endTime,
+        durationDays: duration,
+      },
+    });
+  } catch (error) {
+    console.error("[手动开通Pro] ❌ 开通失败:", error);
+    res.status(500).json({
+      success: false,
+      error: "开通 Pro 失败",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /pro-users
+ * 获取已开通 Pro 的用户列表（需要认证，仅 luykin 用户）
+ */
+router.get("/pro-users", basicAuth, async (req, res) => {
+  try {
+    // 权限检查：只有 luykin 用户可以查看 Pro 用户列表
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `[Pro用户列表] ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "权限不足",
+        message: "仅 luykin 用户可以查看此列表",
+      });
+    }
+
+    const { page = 1, limit = 50, status = "all" } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    // 获取PostgreSQL模型
+    const postgresModels = require("../../models/postgres-start");
+    const XHuntUser = postgresModels.XHuntUser;
+    const XHuntUserProSubscription = postgresModels.XHuntUserProSubscription;
+    const { Op } = require("sequelize");
+
+    // 构建查询条件
+    const whereConditions = {};
+    if (status === "active") {
+      whereConditions.endTime = { [Op.gt]: new Date() };
+    } else if (status === "expired") {
+      whereConditions.endTime = { [Op.lte]: new Date() };
+    }
+
+    // 查询 Pro 订阅记录
+    const { count, rows: subscriptions } = await XHuntUserProSubscription.findAndCountAll({
+      where: whereConditions,
+      include: [
+        {
+          model: XHuntUser,
+          as: "user",
+          attributes: ["id", "username", "displayName", "avatar"],
+        },
+      ],
+      order: [["endTime", "DESC"]],
+      limit: limitNum,
+      offset: (pageNum - 1) * limitNum,
+    });
+
+    // 格式化数据
+    const formattedSubscriptions = subscriptions.map((sub) => {
+      const now = new Date();
+      const isActive = sub.endTime > now;
+
+      return {
+        id: sub.id,
+        userId: sub.userId,
+        username: sub.user?.username || "未知",
+        displayName: sub.user?.displayName || sub.user?.username || "未知用户",
+        planType: sub.planType,
+        startTime: sub.startTime,
+        endTime: sub.endTime,
+        isActive: isActive,
+        reason: sub.reason || "-",
+        reasonDetail: sub.reasonDetail || "-",
+        createdAt: sub.createdAt,
+      };
+    });
+
+    // 统计信息
+    const totalActive = await XHuntUserProSubscription.count({
+      where: {
+        endTime: { [Op.gt]: new Date() },
+      },
+    });
+
+    const totalExpired = await XHuntUserProSubscription.count({
+      where: {
+        endTime: { [Op.lte]: new Date() },
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        subscriptions: formattedSubscriptions,
+        stats: {
+          totalActive: totalActive,
+          totalExpired: totalExpired,
+          total: totalActive + totalExpired,
+        },
+        pagination: {
+          currentPage: pageNum,
+          pageSize: limitNum,
+          totalCount: count,
+          totalPages: Math.ceil(count / limitNum),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("[Pro用户列表] ❌ 获取失败:", error);
+    res.status(500).json({
+      success: false,
+      error: "获取 Pro 用户列表失败",
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;

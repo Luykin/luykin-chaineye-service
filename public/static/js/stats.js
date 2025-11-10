@@ -45,6 +45,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // 绑定 Rootdata 页面事件
     bindRootdataEvents();
 
+    // 绑定 Pro 用户管理事件
+    bindProManagementEvents();
+
     console.log("✅ 所有初始化完成");
   } catch (error) {
     console.error("❌ 初始化过程中出错:", error);
@@ -1314,4 +1317,232 @@ function switchRootdataTab(tabName) {
     document.getElementById("rootdata-relationships-list").style.display =
       "block";
   }
+}
+
+// ============ Pro 用户管理功能 ============
+
+/**
+ * 绑定 Pro 用户管理事件
+ */
+function bindProManagementEvents() {
+  console.log("🔧 开始绑定 Pro 用户管理事件...");
+
+  // 绑定开通 Pro 表单提交事件
+  const grantProForm = document.getElementById("grant-pro-form");
+  if (grantProForm) {
+    grantProForm.addEventListener("submit", handleGrantPro);
+    console.log("✅ 开通 Pro 表单事件绑定成功");
+  }
+
+  // 绑定刷新列表按钮事件
+  const refreshBtn = document.getElementById("refresh-pro-list");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => loadProUsersList(1));
+    console.log("✅ 刷新列表按钮事件绑定成功");
+  }
+
+  // 监听 Tab 切换，当切换到 Pro 管理 tab 时加载列表
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const targetTab = this.getAttribute("data-tab");
+      if (targetTab === "pro-management") {
+        console.log("👑 切换到 Pro 用户管理 Tab，加载用户列表...");
+        loadProUsersList(1);
+      }
+    });
+  });
+}
+
+/**
+ * 处理开通 Pro 表单提交
+ */
+async function handleGrantPro(event) {
+  event.preventDefault();
+
+  const form = event.target;
+  const username = form.querySelector("#pro-username").value.trim();
+  const durationDays = form.querySelector("#pro-duration").value;
+  const reason = form.querySelector("#pro-reason").value.trim();
+
+  if (!username || !durationDays) {
+    showGrantResult("请填写用户名和选择开通时长", "error");
+    return;
+  }
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="btn-icon">⏳</span> 开通中...';
+
+  try {
+    const response = await fetch("/api/xhunt/stats/grant-pro", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        username: username,
+        durationDays: parseInt(durationDays),
+        reason: reason || "manual",
+      }),
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      showGrantResult(
+        `✅ ${result.message}<br>` +
+          `用户: ${result.data.displayName} (@${result.data.username})<br>` +
+          `时长: ${result.data.durationDays} 天<br>` +
+          `过期时间: ${new Date(result.data.endTime).toLocaleString("zh-CN")}`,
+        "success"
+      );
+      form.reset();
+      // 刷新 Pro 用户列表
+      loadProUsersList(1);
+    } else {
+      showGrantResult(`❌ ${result.message || result.error}`, "error");
+    }
+  } catch (error) {
+    console.error("开通 Pro 失败:", error);
+    showGrantResult(`❌ 开通失败: ${error.message}`, "error");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="btn-icon">✨</span> 开通 Pro';
+  }
+}
+
+/**
+ * 显示开通结果
+ */
+function showGrantResult(message, type) {
+  const resultDiv = document.getElementById("grant-result");
+  const resultContent = resultDiv.querySelector(".result-content");
+
+  resultDiv.className = `result-message ${type}`;
+  resultContent.innerHTML = message;
+  resultDiv.style.display = "block";
+
+  // 5秒后自动隐藏
+  setTimeout(() => {
+    resultDiv.style.display = "none";
+  }, 5000);
+}
+
+/**
+ * 加载 Pro 用户列表
+ */
+let currentProPage = 1;
+
+async function loadProUsersList(page = 1) {
+  console.log(`📋 加载 Pro 用户列表，页码: ${page}`);
+  currentProPage = page;
+
+  const tbody = document.getElementById("pro-users-tbody");
+  const countSpan = document.getElementById("pro-user-count");
+
+  // 显示加载状态
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="8" style="text-align: center; padding: 40px">
+        <div class="loading">加载中...</div>
+      </td>
+    </tr>
+  `;
+
+  try {
+    const response = await fetch(
+      `/api/xhunt/stats/pro-users?page=${page}&limit=50&status=all`
+    );
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.message || result.error);
+    }
+
+    const { subscriptions, stats, pagination } = result.data;
+
+    // 更新统计信息
+    countSpan.innerHTML = `
+      总计: ${stats.total} 个订阅 | 
+      <span style="color: #28a745">有效: ${stats.totalActive}</span> | 
+      <span style="color: #dc3545">过期: ${stats.totalExpired}</span>
+    `;
+
+    // 渲染表格
+    if (subscriptions.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" style="text-align: center; padding: 40px; color: #7f8c8d">
+            暂无 Pro 用户订阅记录
+          </td>
+        </tr>
+      `;
+    } else {
+      tbody.innerHTML = subscriptions
+        .map((sub, index) => {
+          const startIndex = (pagination.currentPage - 1) * pagination.pageSize;
+          const rowNumber = startIndex + index + 1;
+
+          const statusBadge = sub.isActive
+            ? '<span class="status-badge active">有效</span>'
+            : '<span class="status-badge expired">已过期</span>';
+
+          return `
+            <tr>
+              <td>${rowNumber}</td>
+              <td>${sub.username || "未知"}</td>
+              <td>${sub.displayName || "未知"}</td>
+              <td>${sub.planType}</td>
+              <td>${new Date(sub.startTime).toLocaleString("zh-CN")}</td>
+              <td>${new Date(sub.endTime).toLocaleString("zh-CN")}</td>
+              <td>${statusBadge}</td>
+              <td>${sub.reason}<br><small style="color: #7f8c8d">${sub.reasonDetail}</small></td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    // 渲染分页控件
+    renderProPagination(pagination);
+  } catch (error) {
+    console.error("加载 Pro 用户列表失败:", error);
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 40px; color: #dc3545">
+          ❌ 加载失败: ${error.message}
+        </td>
+      </tr>
+    `;
+    countSpan.textContent = "加载失败";
+  }
+}
+
+/**
+ * 渲染分页控件
+ */
+function renderProPagination(pagination) {
+  const container = document.getElementById("pro-list-pagination");
+
+  if (pagination.totalPages <= 1) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const { currentPage, totalPages, totalCount } = pagination;
+
+  let html = `
+    <button ${currentPage === 1 ? "disabled" : ""} onclick="loadProUsersList(${currentPage - 1})">
+      上一页
+    </button>
+    <span class="page-info">
+      第 ${currentPage} / ${totalPages} 页 (共 ${totalCount} 条记录)
+    </span>
+    <button ${currentPage === totalPages ? "disabled" : ""} onclick="loadProUsersList(${currentPage + 1})">
+      下一页
+    </button>
+  `;
+
+  container.innerHTML = html;
 }
