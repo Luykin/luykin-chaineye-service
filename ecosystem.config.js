@@ -49,6 +49,22 @@ module.exports = {
 				TZ: "Asia/Shanghai", // 设置时区为北京时间
 				NODE_ENV: "production",           // 生产环境变量
 			}
+		},
+		{
+			name: "luykin-chaineye-backup",     // 数据库备份服务
+			script: "./src/backupServer.js",     // 备份服务启动文件
+			instances: 1,                        // 单实例，确保只有一个进程执行备份
+			exec_mode: "fork",
+			watch: false,
+			time: true,
+			env: {
+				TZ: "Asia/Shanghai",
+				NODE_ENV: "development",
+			},
+			env_production: {
+				TZ: "Asia/Shanghai",
+				NODE_ENV: "production",
+			}
 		}
 	]
 };

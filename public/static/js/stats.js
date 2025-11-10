@@ -48,6 +48,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // 绑定 Pro 用户管理事件
     bindProManagementEvents();
 
+    // 绑定 数据库备份 事件
+    bindBackupEvents();
+
     console.log("✅ 所有初始化完成");
   } catch (error) {
     console.error("❌ 初始化过程中出错:", error);
@@ -70,6 +73,13 @@ function initTabs() {
       // 添加活跃状态
       this.classList.add("active");
       document.getElementById(targetTab).classList.add("active");
+
+      // 当切换到 backup 页时，自动刷新一次状态
+      if (targetTab === "backup") {
+        if (typeof loadBackupStatus === "function") {
+          loadBackupStatus();
+        }
+      }
     });
   });
 }
@@ -1005,6 +1015,113 @@ function renderRootdataProjects(projects, pagination) {
   }
 
   container.innerHTML = html;
+}
+
+/**
+ * 绑定 数据库备份 事件
+ */
+function bindBackupEvents() {
+  const refreshBtn = document.getElementById("btn-backup-refresh");
+  const runBtn = document.getElementById("btn-backup-run");
+  const backupTabBtn = document.querySelector('.tab-btn[data-tab="backup"]');
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => loadBackupStatus());
+  }
+  if (runBtn) {
+    runBtn.addEventListener("click", async () => {
+      await triggerManualBackup();
+    });
+  }
+  if (backupTabBtn) {
+    backupTabBtn.addEventListener("click", () => {
+      // 切到 tab 时加载一次
+      setTimeout(() => loadBackupStatus(), 0);
+    });
+  }
+}
+
+/** 加载备份状态 */
+async function loadBackupStatus() {
+  const statusBox = document.getElementById("backup-status");
+  const listBox = document.getElementById("backup-list");
+  if (!statusBox || !listBox) return;
+
+  statusBox.innerHTML = '<div class="status-line">⏳ 正在加载备份列表...</div>';
+  listBox.innerHTML = "";
+  try {
+    const res = await fetch("/api/xhunt/stats/backup-status", { credentials: "include" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "获取失败");
+
+    const backups = data.data.backups || [];
+    const stats = data.data.stats || {};
+
+    statusBox.innerHTML = `
+      <div class="status-line">备份目录：${stats.backupDir || '-'} </div>
+      <div class="status-line">备份数量：${stats.totalBackups || 0} / ${stats.maxBackups || 10}</div>
+      <div class="status-line">总大小：${stats.totalSizeMB || '0.00'} MB</div>
+    `;
+
+    if (!backups.length) {
+      listBox.innerHTML = '<div class="status-line">暂无备份文件</div>';
+      return;
+    }
+
+    const rows = backups
+      .map(
+        (b, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${b.name}</td>
+          <td>${b.sizeMB} MB</td>
+          <td>${b.mtimeStr}</td>
+          <td><code style="font-size:12px">${b.path}</code></td>
+        </tr>`
+      )
+      .join("");
+
+    listBox.innerHTML = `
+      <table class="simple-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>文件名</th>
+            <th>大小</th>
+            <th>时间</th>
+            <th>路径</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  } catch (err) {
+    statusBox.innerHTML = `<div class="status-line" style="color:#dc3545">❌ 加载失败：${err.message}</div>`;
+  }
+}
+
+/** 手动触发备份 */
+async function triggerManualBackup() {
+  const statusBox = document.getElementById("backup-status");
+  if (statusBox) {
+    statusBox.innerHTML = '<div class="status-line">🚀 已触发备份任务，请稍后刷新查看...</div>';
+  }
+  try {
+    const res = await fetch("/api/xhunt/stats/trigger-backup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+    // 稍等几秒再刷新
+    setTimeout(() => loadBackupStatus(), 3000);
+  } catch (err) {
+    if (statusBox) {
+      statusBox.innerHTML = `<div class="status-line" style="color:#dc3545">❌ 触发失败：${err.message}</div>`;
+    }
+  }
 }
 
 /**
