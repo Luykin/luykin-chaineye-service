@@ -2439,4 +2439,100 @@ router.get("/pro-users", basicAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /backup-status
+ * 获取 PostgreSQL 备份状态（需要认证，仅 luykin 用户）
+ */
+router.get("/backup-status", basicAuth, async (req, res) => {
+  try {
+    // 权限检查：只有 luykin 用户可以查看备份状态
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `[备份状态] ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "权限不足",
+        message: "仅 luykin 用户可以查看备份状态",
+      });
+    }
+
+    const pgBackupService = require("../../services/pg-backup-service");
+    const backups = await pgBackupService.listBackups();
+
+    // 计算总大小
+    const totalSizeMB = backups
+      .reduce((sum, backup) => sum + parseFloat(backup.sizeMB), 0)
+      .toFixed(2);
+
+    res.json({
+      success: true,
+      data: {
+        backups: backups,
+        stats: {
+          totalBackups: backups.length,
+          maxBackups: pgBackupService.maxBackups,
+          totalSizeMB: totalSizeMB,
+          backupDir: pgBackupService.backupDir,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("[备份状态] ❌ 获取失败:", error);
+    res.status(500).json({
+      success: false,
+      error: "获取备份状态失败",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /trigger-backup
+ * 手动触发数据库备份（需要认证，仅 luykin 用户）
+ */
+router.post("/trigger-backup", basicAuth, async (req, res) => {
+  try {
+    // 权限检查：只有 luykin 用户可以手动触发备份
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `[手动备份] ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "权限不足",
+        message: "仅 luykin 用户可以执行手动备份",
+      });
+    }
+
+    console.log(
+      `[手动备份] ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
+    );
+
+    const pgBackupService = require("../../services/pg-backup-service");
+    
+    // 异步执行备份，立即返回响应
+    res.json({
+      success: true,
+      message: "备份任务已启动，请稍后查看备份列表",
+    });
+
+    // 在后台执行备份
+    pgBackupService.manualBackup().catch((error) => {
+      console.error("[手动备份] ❌ 备份失败:", error);
+    });
+  } catch (error) {
+    console.error("[手动备份] ❌ 触发失败:", error);
+    res.status(500).json({
+      success: false,
+      error: "触发备份失败",
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;

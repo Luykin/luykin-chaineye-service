@@ -5,3 +5,5 @@ database.sqlite
 .env*
 # Ignore DAU backup files
 data/
+# Ignore PostgreSQL backup files
+backups/

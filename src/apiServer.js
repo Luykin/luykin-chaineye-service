@@ -39,6 +39,7 @@ const {
   browserOnlyMiddleware,
   sseSecurityMiddleware,
 } = require("./xhunt/middleware/security");
+const pgBackupService = require("./services/pg-backup-service");
 const StatsD = require("hot-shots");
 const dataDog = new StatsD();
 
@@ -331,6 +332,10 @@ async function startAPIServer() {
   await setupSqlite();
   await setupPostgres();
   await setupPostgresFundraising();
+  
+  // 启动 PostgreSQL 自动备份服务
+  await pgBackupService.start();
+  
   app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
 }
 
