@@ -1047,6 +1047,7 @@ async function loadBackupStatus() {
   const listBox = document.getElementById("backup-list");
   if (!statusBox || !listBox) return;
 
+  statusBox.style.display = "block";
   statusBox.innerHTML = '<div class="status-line">⏳ 正在加载备份列表...</div>';
   listBox.innerHTML = "";
   try {
@@ -1058,6 +1059,7 @@ async function loadBackupStatus() {
     const backups = data.data.backups || [];
     const stats = data.data.stats || {};
 
+    statusBox.style.display = "block";
     statusBox.innerHTML = `
       <div class="status-line">备份目录：${stats.backupDir || '-'} </div>
       <div class="status-line">备份数量：${stats.totalBackups || 0} / ${stats.maxBackups || 10}</div>
@@ -1097,6 +1099,7 @@ async function loadBackupStatus() {
       </table>
     `;
   } catch (err) {
+    statusBox.style.display = "block";
     statusBox.innerHTML = `<div class="status-line" style="color:#dc3545">❌ 加载失败：${err.message}</div>`;
   }
 }
@@ -1105,6 +1108,7 @@ async function loadBackupStatus() {
 async function triggerManualBackup() {
   const statusBox = document.getElementById("backup-status");
   if (statusBox) {
+    statusBox.style.display = "block";
     statusBox.innerHTML = '<div class="status-line">🚀 已触发备份任务，请稍后刷新查看...</div>';
   }
   try {
@@ -1119,6 +1123,7 @@ async function triggerManualBackup() {
     setTimeout(() => loadBackupStatus(), 3000);
   } catch (err) {
     if (statusBox) {
+      statusBox.style.display = "block";
       statusBox.innerHTML = `<div class="status-line" style="color:#dc3545">❌ 触发失败：${err.message}</div>`;
     }
   }
