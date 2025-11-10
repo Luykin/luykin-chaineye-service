@@ -10,6 +10,7 @@ const XPrivateNoteModel = require("../xhunt/models/XPrivateNote");
 const MantleRegistrationModel = require("../xhunt/models/MantleRegistration");
 const XPrivateMessageModel = require("../xhunt/models/XPrivateMessage");
 const DailyActiveUserModel = require("../xhunt/models/DailyActiveUser");
+const XHuntUserProSubscriptionModel = require("../xhunt/models/XHuntUserProSubscription");
 
 const pgInstance = new Sequelize({
   dialect: process.env.PG_DIALECT || "postgres",
@@ -38,6 +39,7 @@ const XPrivateNote = XPrivateNoteModel(pgInstance);
 const MantleRegistration = MantleRegistrationModel(pgInstance);
 const XPrivateMessage = XPrivateMessageModel(pgInstance);
 const DailyActiveUser = DailyActiveUserModel(pgInstance);
+const XHuntUserProSubscription = XHuntUserProSubscriptionModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -143,6 +145,17 @@ XPrivateMessage.belongsTo(XHuntUser, {
   as: "receiver",
 });
 
+// XHuntUserProSubscription 关系（Pro 订阅记录）
+XHuntUser.hasMany(XHuntUserProSubscription, {
+  foreignKey: "userId",
+  as: "proSubscriptions",
+});
+
+XHuntUserProSubscription.belongsTo(XHuntUser, {
+  foreignKey: "userId",
+  as: "user",
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 async function setupPostgres() {
@@ -178,4 +191,5 @@ module.exports = {
   MantleRegistration,
   XPrivateMessage,
   DailyActiveUser,
+  XHuntUserProSubscription,
 };

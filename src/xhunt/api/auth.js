@@ -4,6 +4,7 @@ const {
   XHuntUserToken,
   XHuntUser,
   XPointRecord,
+  XHuntUserProSubscription,
 } = require("../../models/postgres-start");
 const {
   generateTwitterAuthUrl,
@@ -345,8 +346,26 @@ router.post(
 // 获取当前用户信息
 router.get("/me", authenticateToken, async (req, res) => {
   try {
-    // 缓存策略：前端缓存 120s
-    res.set("Cache-Control", "private, max-age=120");
+    // 缓存策略：前端缓存
+    res.set("Cache-Control", "private, max-age=240"); // 4分钟
+
+    // 查询用户当前有效的 Pro 订阅
+    // 使用复合索引 idx_pro_subscription_user_end_time 优化查询
+    // 查询条件：userId = ? AND endTime > NOW()，按 endTime DESC 排序取最新的一条
+    const activeProSubscription = await XHuntUserProSubscription.findOne({
+      where: {
+        userId: req.user.id,
+        endTime: {
+          [Op.gt]: new Date(), // endTime > 当前时间，表示未过期
+        },
+      },
+      order: [["endTime", "DESC"]], // 按过期时间降序，取最新的
+      attributes: ["endTime", "planType"], // 只返回需要的字段
+    });
+
+    const isPro = !!activeProSubscription;
+    const proExpiryTime = activeProSubscription?.endTime || null;
+
     res.json({
       username: req.user.username,
       displayName: req.user.displayName,
@@ -354,6 +373,8 @@ router.get("/me", authenticateToken, async (req, res) => {
       twitterId: req.user.twitterId,
       evmAddresses: req.user.evmAddresses || [],
       xPoints: -1,
+      isPro,
+      proExpiryTime,
     });
   } catch (error) {
     console.error("Failed to fetch user info:", error);
