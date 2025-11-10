@@ -5,7 +5,7 @@ const {
   securityMiddleware,
 } = require("../middleware/security");
 const {
-  MantleRegistration,
+  MantleRegistration2,
   XHuntUser,
 } = require("../../models/postgres-start");
 const {
@@ -162,7 +162,7 @@ router.post(
       }
 
       // EVM地址查重校验（检查是否已被其他用户使用）
-      const existingEVM = await MantleRegistration.findOne({
+      const existingEVM = await MantleRegistration2.findOne({
         where: {
           evmAddress: trimmedAddress,
         },
@@ -252,7 +252,7 @@ router.post(
       // 已报名校验（同一用户或同一 twitterId 不允许重复报名）
       {
         const { Op } = require("sequelize");
-        const existed = await MantleRegistration.findOne({
+        const existed = await MantleRegistration2.findOne({
           where: {
             [Op.or]: [{ xHuntUserId: user.id }, { twitterId: user.twitterId }],
           },
@@ -280,7 +280,7 @@ router.post(
         : null;
 
       // 组装报名记录
-      const record = await MantleRegistration.create({
+      const record = await MantleRegistration2.create({
         xHuntUserId: user.id,
         twitterId: user.twitterId,
         username: user.username,
@@ -360,7 +360,7 @@ router.get("/registrations-n7f2k4s4hy", async (req, res) => {
     }
 
     const offset = (page - 1) * pageSize;
-    const result = await MantleRegistration.findAndCountAll({
+    const result = await MantleRegistration2.findAndCountAll({
       where,
       limit: pageSize,
       offset,
@@ -401,7 +401,7 @@ router.get(
       // 获取总报名人数（所有情况下都要返回）
       let totalRegistrations = 0;
       try {
-        totalRegistrations = await MantleRegistration.count();
+        totalRegistrations = await MantleRegistration2.count();
       } catch (countErr) {
         console.error("Total registrations count error:", countErr);
       }
@@ -413,7 +413,7 @@ router.get(
       // 统计当前用户已邀请的人数（带缓存）
       let invitedCount = 0;
 
-      const record = await MantleRegistration.findOne({
+      const record = await MantleRegistration2.findOne({
         where: { xHuntUserId: userId },
         order: [["createdAt", "DESC"]],
         attributes: { exclude: ["xHuntUserId"] },
@@ -497,7 +497,7 @@ router.get(
 
       if (cachedCount === null) {
         try {
-          invitedCount = await MantleRegistration.count({
+          invitedCount = await MantleRegistration2.count({
             where: { invitedByUserId: userId },
           });
           if (req.redisClient) {
