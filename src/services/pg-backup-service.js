@@ -31,6 +31,8 @@ class PostgresBackupService {
       username: process.env.PG_USERNAME || "luykin",
       password: process.env.PG_PASSWORD || "wtf.0813",
     };
+    // 运行 pg_dump 时优先走本机环回地址，避免本地 socket 认证与外网连通差异
+    this.dumpHost = process.env.PG_DUMP_HOST || "127.0.0.1";
 
     // 只备份 X 开头的表（XHunt 相关业务表）
     this.tablesToBackup = [
@@ -231,11 +233,12 @@ class PostgresBackupService {
         );
       }
 
+      // 将每个 -t 参数包裹为单引号整体，内部使用双引号精确匹配大小写表名：-t 'public."XHuntUsers"'
       const tableParams = existing
-        .map(({ schema, name }) => `-t ${this.quoteIdent(schema)}.${this.quoteIdent(name)}`)
+        .map(({ schema, name }) => `-t '${this.quoteIdent(schema)}.${this.quoteIdent(name)}'`)
         .join(" ");
 
-      const command = `PGPASSWORD="${this.dbConfig.password}" pg_dump -h ${this.dbConfig.host} -p ${this.dbConfig.port} -U ${this.dbConfig.username} -d ${this.dbConfig.database} ${tableParams} -F p --no-owner --no-privileges -f "${backupFilePath}"`;
+      const command = `PGPASSWORD="${this.dbConfig.password}" pg_dump -h ${this.dumpHost} -p ${this.dbConfig.port} -U ${this.dbConfig.username} -d ${this.dbConfig.database} ${tableParams} -F p --no-owner --no-privileges -f "${backupFilePath}"`;
 
       await execAsync(command);
 
