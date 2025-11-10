@@ -3,6 +3,7 @@ const { exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { promisify } = require("util");
+const { Client } = require("pg");
 
 const execAsync = promisify(exec);
 const readdir = promisify(fs.readdir);
@@ -44,6 +45,83 @@ class PostgresBackupService {
       "DailyActiveUsers",
       //   "MantleRegistrations",
     ];
+  }
+
+  /**
+   * 从数据库中发现实际存在的表名（public schema），用于构建 pg_dump 的 -t 参数
+   * - 同时支持精确名匹配（不区分大小写）和前缀匹配（X 开头）
+   */
+  async discoverExistingTables() {
+    const client = new Client({
+      host: this.dbConfig.host,
+      port: Number(this.dbConfig.port),
+      database: this.dbConfig.database,
+      user: this.dbConfig.username,
+      password: this.dbConfig.password,
+    });
+
+    const desired = this.tablesToBackup;
+
+    // 低配容错：添加常见的 snake_case 变体候选
+    const variants = new Set();
+    for (const t of desired) {
+      variants.add(t);
+      variants.add(t.toLowerCase());
+      // 简单把驼峰转下划线
+      const snake = t
+        .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+        .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
+        .toLowerCase();
+      variants.add(snake);
+    }
+
+    // 连接并查询 public 下的所有普通表
+    await client.connect();
+    try {
+      const res = await client.query(
+        `select schemaname, tablename
+         from pg_catalog.pg_tables
+         where schemaname = 'public'`
+      );
+
+      const allPublic = res.rows.map((r) => ({
+        schema: r.schemaname,
+        name: r.tablename,
+      }));
+
+      // 规则：
+      // 1) 名称出现在变体集合（大小写/下划线容错）
+      // 2) 或者 X/x 开头（历史规则）
+      const matches = allPublic.filter((t) => {
+        return (
+          variants.has(t.name) ||
+          t.name.startsWith("X") ||
+          t.name.startsWith("x")
+        );
+      });
+
+      // 额外确保 DailyActiveUsers（及其变体）纳入
+      const dauMatches = allPublic.filter(
+        (t) =>
+          t.name === "DailyActiveUsers" ||
+          t.name.toLowerCase() === "dailyactiveusers" ||
+          t.name === "daily_active_users"
+      );
+
+      const finalSet = new Map();
+      for (const t of [...matches, ...dauMatches]) {
+        finalSet.set(`${t.schema}.${t.name}`, t);
+      }
+
+      return Array.from(finalSet.values());
+    } finally {
+      await client.end();
+    }
+  }
+
+  // 简单的标识符引用（双引号包裹且转义内部双引号）
+  quoteIdent(ident) {
+    return '"' + String(ident).replace(/"/g, '""') + '"';
   }
 
   /**
@@ -145,12 +223,19 @@ class PostgresBackupService {
     );
 
     try {
-      // 使用 pg_dump 执行备份，只备份指定的表
-      // 使用 -t 参数指定要备份的表
-      const tableParams = this.tablesToBackup
-        .map((table) => `-t "${table}"`)
+      // 发现数据库中实际存在的表（public），并进行 schema 限定与正确引用
+      const existing = await this.discoverExistingTables();
+      if (!existing.length) {
+        throw new Error(
+          "没有发现需要备份的目标表。请确认表名/大小写/Schema 是否正确。"
+        );
+      }
+
+      const tableParams = existing
+        .map(({ schema, name }) => `-t ${this.quoteIdent(schema)}.${this.quoteIdent(name)}`)
         .join(" ");
-      const command = `PGPASSWORD="${this.dbConfig.password}" pg_dump -h ${this.dbConfig.host} -p ${this.dbConfig.port} -U ${this.dbConfig.username} -d ${this.dbConfig.database} ${tableParams} -F p -f "${backupFilePath}"`;
+
+      const command = `PGPASSWORD="${this.dbConfig.password}" pg_dump -h ${this.dbConfig.host} -p ${this.dbConfig.port} -U ${this.dbConfig.username} -d ${this.dbConfig.database} ${tableParams} -F p --no-owner --no-privileges -f "${backupFilePath}"`;
 
       await execAsync(command);
 
