@@ -9,7 +9,7 @@ const path = require("path");
 const os = require("os");
 
 // 将所有需要单实例运行的定时任务集中到这里启动（备份、日志清理等）
-// const pgBackupService = require("./services/pg-backup-service");
+const pgBackupService = require("./services/pg-backup-service");
 
 // 清理 PM2 日志（删除 3 天前的日志文件），每 30 分钟执行一次
 async function cleanupPm2Logs() {
@@ -54,7 +54,7 @@ async function cleanupPm2Logs() {
 
 (async () => {
   try {
-    // await pgBackupService.start();
+    await pgBackupService.start();
     console.log("单例任务服务运行中...（备份/日志清理等）");
 
     // 立即执行一次清理
