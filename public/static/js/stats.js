@@ -1043,12 +1043,12 @@ function bindBackupEvents() {
 
 /** 加载备份状态 */
 async function loadBackupStatus() {
-  const statusBox = document.getElementById("backup-status");
+  // const statusBox = document.getElementById("backup-status");
   const listBox = document.getElementById("backup-list");
-  if (!statusBox || !listBox) return;
+  if (!listBox) return;
 
-  statusBox.style.display = "block";
-  statusBox.innerHTML = '<div class="status-line">⏳ 正在加载备份列表...</div>';
+  // statusBox.style.display = "block";
+  // statusBox.innerHTML = '<div class="status-line">⏳ 正在加载备份列表...</div>';
   listBox.innerHTML = "";
   try {
     const res = await fetch("/api/xhunt/stats/backup-status", { credentials: "include" });
@@ -1059,12 +1059,12 @@ async function loadBackupStatus() {
     const backups = data.data.backups || [];
     const stats = data.data.stats || {};
 
-    statusBox.style.display = "block";
-    statusBox.innerHTML = `
-      <div class="status-line">备份目录：${stats.backupDir || '-'} </div>
-      <div class="status-line">备份数量：${stats.totalBackups || 0} / ${stats.maxBackups || 10}</div>
-      <div class="status-line">总大小：${stats.totalSizeMB || '0.00'} MB</div>
-    `;
+    // statusBox.style.display = "block";
+    // statusBox.innerHTML = `
+    //   <div class="status-line">备份目录：${stats.backupDir || '-'} </div>
+    //   <div class="status-line">备份数量：${stats.totalBackups || 0} / ${stats.maxBackups || 10}</div>
+    //   <div class="status-line">总大小：${stats.totalSizeMB || '0.00'} MB</div>
+    // `;
 
     if (!backups.length) {
       listBox.innerHTML = '<div class="status-line">暂无备份文件</div>';
@@ -1099,18 +1099,18 @@ async function loadBackupStatus() {
       </table>
     `;
   } catch (err) {
-    statusBox.style.display = "block";
-    statusBox.innerHTML = `<div class="status-line" style="color:#dc3545">❌ 加载失败：${err.message}</div>`;
+    // statusBox.style.display = "block";
+    // statusBox.innerHTML = `<div class="status-line" style="color:#dc3545">❌ 加载失败：${err.message}</div>`;
   }
 }
 
 /** 手动触发备份 */
 async function triggerManualBackup() {
-  const statusBox = document.getElementById("backup-status");
-  if (statusBox) {
-    statusBox.style.display = "block";
-    statusBox.innerHTML = '<div class="status-line">🚀 已触发备份任务，请稍后刷新查看...</div>';
-  }
+  // const statusBox = document.getElementById("backup-status");
+  // if (statusBox) {
+  //   statusBox.style.display = "block";
+  //   statusBox.innerHTML = '<div class="status-line">🚀 已触发备份任务，请稍后刷新查看...</div>';
+  // }
   try {
     const res = await fetch("/api/xhunt/stats/trigger-backup", {
       method: "POST",
@@ -1122,10 +1122,6 @@ async function triggerManualBackup() {
     // 稍等几秒再刷新
     setTimeout(() => loadBackupStatus(), 3000);
   } catch (err) {
-    if (statusBox) {
-      statusBox.style.display = "block";
-      statusBox.innerHTML = `<div class="status-line" style="color:#dc3545">❌ 触发失败：${err.message}</div>`;
-    }
   }
 }
 
@@ -1219,16 +1215,16 @@ function renderRootdataRelationships(relationships, pagination) {
         <td style="padding: 12px; text-align: center;">${lead}</td>
         <td style="padding: 12px; color: #6b7280; font-size: 13px;">${createdAt}</td>
         <td style="padding: 12px; text-align: center;">
-          <button 
-            class="delete-relationship-btn" 
+          <button
+            class="delete-relationship-btn"
             data-relationship-id="${rel.id}"
             style="padding: 4px 12px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 5px;"
             title="删除本条记录"
           >
             🗑️ 删除
           </button>
-          <button 
-            class="delete-funded-project-btn" 
+          <button
+            class="delete-funded-project-btn"
             data-funded-project-id="${rel.fundedProjectId}"
             data-funded-project-name="${rel.fundedProject?.projectName || ""}"
             style="padding: 4px 12px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;"
@@ -1586,8 +1582,8 @@ async function loadProUsersList(page = 1) {
 
     // 更新统计信息
     countSpan.innerHTML = `
-      总计: ${stats.total} 个订阅 | 
-      <span style="color: #28a745">有效: ${stats.totalActive}</span> | 
+      总计: ${stats.total} 个订阅 |
+      <span style="color: #28a745">有效: ${stats.totalActive}</span> |
       <span style="color: #dc3545">过期: ${stats.totalExpired}</span>
     `;
 
