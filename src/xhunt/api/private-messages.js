@@ -117,8 +117,8 @@ router.get("/", authenticateToken, async (req, res) => {
     const hasNext = pageNum < totalPages;
     const hasPrev = pageNum > 1;
 
-    // 设置前端缓存：私有缓存 10 分钟
-    res.set("Cache-Control", "private, max-age=600");
+    // 设置前端缓存：私有缓存 20 分钟
+    res.set("Cache-Control", "private, max-age=1200");
 
     return res.status(200).json({
       success: true,
