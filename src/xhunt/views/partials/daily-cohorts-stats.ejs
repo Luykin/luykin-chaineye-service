@@ -2,7 +2,7 @@
   <div class="header-section" style="margin-bottom: 30px">
     <h2>📈 天级留存分析</h2>
     <p style="color: #666; margin-top: 10px">
-      基于用户首次活跃日期，追踪用户在第2、3、4、5、6、7、8、9、10天的活跃情况
+      基于用户首次活跃日期，追踪用户在第2、3、4、5、6、7、8、9、10天的活跃情况（最大跨度：3个月）
     </p>
 
     <!-- 日期选择器 -->
@@ -79,9 +79,10 @@
         onmouseover="this.style.background='#7f8c8d'"
         onmouseout="this.style.background='#95a5a6'"
       >
-        重置为最近8天
+        重置为最近7天
       </button>
       <span id="date-range-info" style="color: #666; font-size: 14px"></span>
+      <span id="daily-date-error" style="color: #e74c3c; font-size: 14px; display: none; margin-left: 10px;"></span>
     </div>
   </div>
 
@@ -207,7 +208,13 @@
     const retryBtn = document.getElementById("retry-cohorts-btn");
 
     if (queryBtn) {
-      queryBtn.addEventListener("click", loadDailyCohorts);
+      queryBtn.addEventListener("click", function() {
+        const startDate = document.getElementById("start-date").value;
+        const endDate = document.getElementById("end-date").value;
+        if (validateDateRange(startDate, endDate)) {
+          loadDailyCohorts();
+        }
+      });
       console.log("✅ 查询按钮事件已绑定");
     } else {
       console.error("❌ 找不到查询按钮");
@@ -221,7 +228,13 @@
     }
 
     if (retryBtn) {
-      retryBtn.addEventListener("click", loadDailyCohorts);
+      retryBtn.addEventListener("click", function() {
+        const startDate = document.getElementById("start-date").value;
+        const endDate = document.getElementById("end-date").value;
+        if (validateDateRange(startDate, endDate)) {
+          loadDailyCohorts();
+        }
+      });
       console.log("✅ 重试按钮事件已绑定");
     } else {
       console.warn("⚠️  重试按钮未找到（正常，只在出错时显示）");
@@ -251,11 +264,41 @@
     loadDailyCohorts();
   });
 
-  // 初始化日期范围为最近8天
+  // 验证日期跨度（最大3个月 = 90天）
+  function validateDateRange(startDate, endDate) {
+    const errorEl = document.getElementById('daily-date-error');
+    errorEl.style.display = 'none';
+    
+    if (!startDate || !endDate) {
+      errorEl.textContent = '请选择开始和结束日期';
+      errorEl.style.display = 'inline';
+      return false;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (start > end) {
+      errorEl.textContent = '开始日期不能晚于结束日期';
+      errorEl.style.display = 'inline';
+      return false;
+    }
+
+    const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+    if (diffDays > 90) {
+      errorEl.textContent = '日期跨度不能超过3个月（90天）';
+      errorEl.style.display = 'inline';
+      return false;
+    }
+
+    return true;
+  }
+
+  // 初始化日期范围为最近7天
   function initializeDateRange() {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 8);
+    startDate.setDate(endDate.getDate() - 7);
 
     document.getElementById("end-date").value = endDate
       .toISOString()
@@ -265,10 +308,14 @@
       .split("T")[0];
   }
 
-  // 重置日期范围为最近8天
+  // 重置日期范围为最近7天
   function resetDateRange() {
     initializeDateRange();
-    loadDailyCohorts();
+    const startDate = document.getElementById("start-date").value;
+    const endDate = document.getElementById("end-date").value;
+    if (validateDateRange(startDate, endDate)) {
+      loadDailyCohorts();
+    }
   }
 
   async function loadDailyCohorts() {
@@ -454,6 +501,257 @@
       tableEl.style.display = "none";
     }
   }
+</script>
+
+<!-- 分隔线 -->
+<hr style="border: none; border-top: 2px solid #e5e7eb; margin: 40px 20px;" />
+
+<!-- 周级留存部分 -->
+<div class="section" style="padding: 20px">
+  <div class="header-section" style="margin-bottom: 30px">
+    <h2>📊 周级留存分析</h2>
+    <p style="color: #666; margin-top: 10px">
+      基于用户首次活跃周，追踪用户在第2、3、4周的活跃情况（最大跨度：3个月）
+    </p>
+
+    <!-- 日期选择器 -->
+    <div style="margin-top: 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <label for="weekly-start-date" style="font-weight: 500; color: #333;">开始日期：</label>
+        <input type="date" id="weekly-start-date" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;" />
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <label for="weekly-end-date" style="font-weight: 500; color: #333;">结束日期：</label>
+        <input type="date" id="weekly-end-date" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;" />
+      </div>
+      <button id="query-weekly-cohorts-btn" style="padding: 8px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 500; transition: background 0.3s;" onmouseover="this.style.background='#2980b9'" onmouseout="this.style.background='#3498db'">
+        加载数据
+      </button>
+      <span id="weekly-date-error" style="color: #e74c3c; font-size: 14px; display: none;"></span>
+    </div>
+  </div>
+
+  <!-- 加载状态 -->
+  <div id="weekly-cohorts-loading" style="display: none; text-align: center; padding: 40px">
+    <div class="loading-spinner"></div>
+    <p style="margin-top: 15px; color: #666">正在加载周级留存数据...</p>
+  </div>
+
+  <!-- 错误状态 -->
+  <div id="weekly-cohorts-error" style="display: none; text-align: center; padding: 40px">
+    <p style="color: #e74c3c; font-size: 16px">❌ 加载周级留存数据失败</p>
+    <button id="retry-weekly-cohorts-btn" style="margin-top: 15px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+      重试
+    </button>
+  </div>
+
+  <!-- 数据表格 -->
+  <div id="weekly-cohorts-table" style="display: none">
+    <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
+      <thead>
+        <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+          <th style="padding: 15px; text-align: left; font-weight: 600">首次活跃周</th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">新用户数</th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">第2周活跃</th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">第2周留存率</th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">第3周活跃</th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">第3周留存率</th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">第4周活跃</th>
+          <th style="padding: 15px; text-align: center; font-weight: 600">第4周留存率</th>
+        </tr>
+      </thead>
+      <tbody id="weekly-cohorts-tbody">
+        <!-- 数据将通过JavaScript填充 -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 空状态 -->
+  <div id="weekly-cohorts-empty" style="display: none; text-align: center; padding: 40px">
+    <p style="color: #999; font-size: 16px">暂无周级留存数据</p>
+  </div>
+</div>
+
+<script>
+  // 验证周级日期跨度
+  function validateWeeklyDateRange(startDate, endDate) {
+    const errorEl = document.getElementById('weekly-date-error');
+    errorEl.style.display = 'none';
+    
+    if (!startDate || !endDate) {
+      errorEl.textContent = '请选择开始和结束日期';
+      errorEl.style.display = 'inline';
+      return false;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (start > end) {
+      errorEl.textContent = '开始日期不能晚于结束日期';
+      errorEl.style.display = 'inline';
+      return false;
+    }
+
+    const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+    if (diffDays > 90) {
+      errorEl.textContent = '日期跨度不能超过3个月（90天）';
+      errorEl.style.display = 'inline';
+      return false;
+    }
+
+    return true;
+  }
+
+  // 初始化周级日期（最近30天，但不自动加载）
+  function initializeWeeklyDateRange() {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 30);
+
+    document.getElementById("weekly-end-date").value = endDate.toISOString().split("T")[0];
+    document.getElementById("weekly-start-date").value = startDate.toISOString().split("T")[0];
+  }
+
+  // 加载周级留存数据
+  async function loadWeeklyCohorts() {
+    const loadingEl = document.getElementById("weekly-cohorts-loading");
+    const errorEl = document.getElementById("weekly-cohorts-error");
+    const tableEl = document.getElementById("weekly-cohorts-table");
+    const emptyEl = document.getElementById("weekly-cohorts-empty");
+    const tbodyEl = document.getElementById("weekly-cohorts-tbody");
+
+    loadingEl.style.display = "block";
+    errorEl.style.display = "none";
+    tableEl.style.display = "none";
+    emptyEl.style.display = "none";
+
+    try {
+      const startDate = document.getElementById("weekly-start-date").value;
+      const endDate = document.getElementById("weekly-end-date").value;
+
+      const url = new URL("/api/xhunt/stats/weekly-cohorts", window.location.origin);
+      if (startDate) url.searchParams.append("startDate", startDate);
+      if (endDate) url.searchParams.append("endDate", endDate);
+
+      const response = await fetch(url.toString(), { credentials: "include" });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data && result.data.cohorts.length > 0) {
+        loadingEl.style.display = "none";
+        tableEl.style.display = "block";
+        errorEl.style.display = "none";
+
+        tbodyEl.innerHTML = result.data.cohorts.map((cohort) => {
+          const weekStartFormatted = new Date(cohort.weekStart).toLocaleDateString("zh-CN", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+
+          return `
+            <tr style="border-bottom: 1px solid #eee;">
+              <td style="padding: 15px; font-weight: 500; color: #333;">${weekStartFormatted}</td>
+              <td style="padding: 15px; text-align: center; font-weight: 600; color: #3498db;">${cohort.newUsers.toLocaleString()}</td>
+              <td style="padding: 15px; text-align: center;">
+                <span style="color: #27ae60; font-weight: 600;">${cohort.week2Active.toLocaleString()}</span>
+                <br><span style="font-size: 12px; color: #999;">(${parseFloat(cohort.week2Retention).toFixed(1)}%)</span>
+              </td>
+              <td style="padding: 15px; text-align: center; font-weight: 600; background-color: ${getRetentionColor(cohort.week2Retention)};">
+                ${parseFloat(cohort.week2Retention).toFixed(1)}%
+              </td>
+              <td style="padding: 15px; text-align: center;">
+                <span style="color: #27ae60; font-weight: 600;">${cohort.week3Active.toLocaleString()}</span>
+                <br><span style="font-size: 12px; color: #999;">(${parseFloat(cohort.week3Retention).toFixed(1)}%)</span>
+              </td>
+              <td style="padding: 15px; text-align: center; font-weight: 600; background-color: ${getRetentionColor(cohort.week3Retention)};">
+                ${parseFloat(cohort.week3Retention).toFixed(1)}%
+              </td>
+              <td style="padding: 15px; text-align: center;">
+                <span style="color: #27ae60; font-weight: 600;">${cohort.week4Active.toLocaleString()}</span>
+                <br><span style="font-size: 12px; color: #999;">(${parseFloat(cohort.week4Retention).toFixed(1)}%)</span>
+              </td>
+              <td style="padding: 15px; text-align: center; font-weight: 600; background-color: ${getRetentionColor(cohort.week4Retention)};">
+                ${parseFloat(cohort.week4Retention).toFixed(1)}%
+              </td>
+            </tr>
+          `;
+        }).join("");
+      } else {
+        loadingEl.style.display = "none";
+        emptyEl.style.display = "block";
+        tableEl.style.display = "none";
+      }
+    } catch (error) {
+      console.error("Error loading weekly cohorts:", error);
+      loadingEl.style.display = "none";
+      errorEl.style.display = "block";
+      tableEl.style.display = "none";
+    }
+  }
+
+  // 绑定周级留存事件
+  document.addEventListener("DOMContentLoaded", function () {
+    // 初始化周级日期
+    initializeWeeklyDateRange();
+
+    // 绑定加载按钮
+    const queryWeeklyBtn = document.getElementById("query-weekly-cohorts-btn");
+    if (queryWeeklyBtn) {
+      queryWeeklyBtn.addEventListener("click", function() {
+        const startDate = document.getElementById("weekly-start-date").value;
+        const endDate = document.getElementById("weekly-end-date").value;
+        if (validateWeeklyDateRange(startDate, endDate)) {
+          loadWeeklyCohorts();
+        }
+      });
+    }
+
+    // 绑定重试按钮
+    const retryWeeklyBtn = document.getElementById("retry-weekly-cohorts-btn");
+    if (retryWeeklyBtn) {
+      retryWeeklyBtn.addEventListener("click", function() {
+        const startDate = document.getElementById("weekly-start-date").value;
+        const endDate = document.getElementById("weekly-end-date").value;
+        if (validateWeeklyDateRange(startDate, endDate)) {
+          loadWeeklyCohorts();
+        }
+      });
+    }
+
+    // 日期输入框支持回车键查询
+    const weeklyStartInput = document.getElementById("weekly-start-date");
+    const weeklyEndInput = document.getElementById("weekly-end-date");
+
+    if (weeklyStartInput) {
+      weeklyStartInput.addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          const startDate = document.getElementById("weekly-start-date").value;
+          const endDate = document.getElementById("weekly-end-date").value;
+          if (validateWeeklyDateRange(startDate, endDate)) {
+            loadWeeklyCohorts();
+          }
+        }
+      });
+    }
+
+    if (weeklyEndInput) {
+      weeklyEndInput.addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          const startDate = document.getElementById("weekly-start-date").value;
+          const endDate = document.getElementById("weekly-end-date").value;
+          if (validateWeeklyDateRange(startDate, endDate)) {
+            loadWeeklyCohorts();
+          }
+        }
+      });
+    }
+  });
 </script>
 
 <style>

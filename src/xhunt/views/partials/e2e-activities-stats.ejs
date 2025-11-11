@@ -174,20 +174,79 @@
   .result-message.error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
   .list-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
   .list-stats { color: #7f8c8d; font-size: 14px; }
-  .activities-list { display: grid; gap: 15px; }
-  .activity-card { background: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px; transition: all 0.2s ease; }
-  .activity-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); }
-  .activity-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-  .activity-title { font-size: 18px; font-weight: 700; color: #2c3e50; margin-bottom: 6px; }
-  .activity-meta { font-size: 13px; color: #7f8c8d; }
-  .activity-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .activity-controls label { font-size: 13px; font-weight: 600; color: #2c3e50; }
-  .activity-controls select, .activity-controls input { padding: 6px 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 13px; }
-  .status-badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-  .status-badge.announced { background: #e3f2fd; color: #1976d2; }
-  .status-badge.active { background: #d4edda; color: #155724; }
-  .status-badge.ended { background: #f8d7da; color: #721c24; }
-  @media (max-width: 920px) { .form-row { grid-template-columns: 1fr; } }
+  .activities-list { display: grid; gap: 20px; }
+  
+  /* 活动卡片 */
+  .e2e-activity-card { background: white; border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden; transition: all 0.3s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+  .e2e-activity-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.12); transform: translateY(-4px); }
+  
+  /* 头部区域 */
+  .card-header-section { display: flex; gap: 16px; padding: 20px; background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-bottom: 1px solid #e5e7eb; }
+  .activity-avatar { width: 64px; height: 64px; border-radius: 12px; object-fit: cover; border: 2px solid #e5e7eb; }
+  .activity-avatar-placeholder { width: 64px; height: 64px; border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-size: 32px; }
+  .header-content { flex: 1; min-width: 0; }
+  .title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .card-title { font-size: 18px; font-weight: 700; color: #111827; margin: 0; flex: 1; }
+  .card-description { font-size: 14px; color: #6b7280; margin: 0; line-height: 1.5; }
+  
+  /* 状态徽章 */
+  .status-badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .status-badge.announced { background: #dbeafe; color: #1e40af; }
+  .status-badge.not_started { background: #fef3c7; color: #92400e; }
+  .status-badge.active { background: #d1fae5; color: #065f46; }
+  .status-badge.rewarding { background: #fce7f3; color: #9f1239; }
+  .status-badge.ended { background: #f3f4f6; color: #374151; }
+  
+  /* 信息区域 */
+  .card-info-section { padding: 20px; }
+  .info-grid { display: grid; gap: 16px; }
+  .info-item { display: flex; gap: 12px; align-items: flex-start; }
+  .info-icon { font-size: 20px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #f3f4f6; border-radius: 8px; flex-shrink: 0; }
+  .info-content { flex: 1; min-width: 0; }
+  .info-label { font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; margin-bottom: 4px; }
+  .info-value { font-size: 14px; color: #111827; font-weight: 500; }
+  .reward-item .info-value { font-size: 15px; font-weight: 600; color: #7c3aed; }
+  .reward-item .amount { color: #059669; margin-left: 8px; }
+  
+  /* 标签 */
+  .constraint-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .tag-pro { background: #fef3c7; color: #92400e; }
+  .tag-followers { background: #dbeafe; color: #1e40af; }
+  .tag-evm { background: #e0e7ff; color: #4338ca; }
+  .tag-open { background: #d1fae5; color: #065f46; }
+  
+  /* 推文链接 */
+  .tweet-link { color: #1d9bf0; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+  .tweet-link:hover { text-decoration: underline; }
+  
+  /* 技术信息 */
+  .tech-details { padding: 0 20px 12px; }
+  .tech-details summary { cursor: pointer; font-size: 13px; color: #6b7280; font-weight: 600; padding: 8px 0; user-select: none; }
+  .tech-details summary:hover { color: #111827; }
+  .tech-content { background: #f9fafb; border-radius: 8px; padding: 12px; margin-top: 8px; }
+  .tech-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+  .tech-row:last-child { margin-bottom: 0; }
+  .tech-label { color: #6b7280; font-weight: 600; min-width: 80px; }
+  .tech-row code { background: #ffffff; padding: 2px 6px; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; color: #7c3aed; }
+  
+  /* 管理操作区 */
+  .card-actions { padding: 16px 20px; background: #f9fafb; border-top: 1px solid #e5e7eb; display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+  .action-controls { display: flex; gap: 12px; flex: 1; flex-wrap: wrap; }
+  .control-label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; color: #374151; }
+  .control-select, .control-input { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; background: white; }
+  .control-select:focus, .control-input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
+  .btn-save { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  
+  @media (max-width: 768px) {
+    .card-header-section { flex-direction: column; }
+    .info-grid { grid-template-columns: 1fr; }
+    .action-controls { flex-direction: column; width: 100%; }
+    .control-label { width: 100%; }
+  }
+  @media (max-width: 920px) { 
+    .form-row { grid-template-columns: 1fr; }
+  }
 </style>
 
 <script>
@@ -227,32 +286,133 @@
     }
     listEl.innerHTML = items.map(item => {
       const endAt = item.endAt ? new Date(item.endAt).toISOString().slice(0,16) : '';
+      const startAt = item.startAt ? new Date(item.startAt).toISOString().slice(0,16) : '';
       const statusClass = item.status === 'active' ? 'active' : item.status === 'ended' ? 'ended' : 'announced';
+      const formatDate = (dateStr) => {
+        if (!dateStr) return '-';
+        const d = new Date(dateStr);
+        return d.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      };
+      
+      // 图片代理函数
+      const getProxiedImageUrl = (imageUrl) => {
+        if (!imageUrl) return '';
+        return `/api/proxy?url=${encodeURIComponent(imageUrl)}`;
+      };
+      
       return `
-        <div class="activity-card">
-          <div class="activity-header">
-            <div>
-              <div class="activity-title">${escapeHtml(item.title)}</div>
-              <div class="activity-meta">
+        <div class="e2e-activity-card">
+          <!-- 头部区域：头像 + 标题 + 状态 -->
+          <div class="card-header-section">
+            ${item.avatarImage ? `<img src="${getProxiedImageUrl(item.avatarImage)}" class="activity-avatar" onerror="this.style.display='none'" />` : '<div class="activity-avatar-placeholder">🎯</div>'}
+            <div class="header-content">
+              <div class="title-row">
+                <h3 class="card-title">${escapeHtml(item.title)}</h3>
                 <span class="status-badge ${statusClass}">${item.status}</span>
-                ${item.activitySlug ? `· slug: ${escapeHtml(item.activitySlug)}` : ''}
-                ${item.externalId ? `· ext: ${escapeHtml(item.externalId)}` : ''}
-                · 粉丝≥${item.minFollowers}
-                ${item.limitProOnly ? ' · Pro限定' : ''}
-                ${item.requiresEvmBound ? ' · 需EVM' : ''}
               </div>
+              ${item.description ? `<p class="card-description">${escapeHtml(item.description)}</p>` : ''}
             </div>
           </div>
-          <div class="activity-controls">
-            <label>状态
-              <select data-action="status" data-id="${item.id}">
-                ${['announced','not_started','active','rewarding','ended'].map(st => `<option value="${st}" ${st===item.status?'selected':''}>${st}</option>`).join('')}
-              </select>
-            </label>
-            <label>结束时间
-              <input data-action="endAt" data-id="${item.id}" type="datetime-local" value="${endAt}" />
-            </label>
-            <button class="btn btn-primary" data-action="save" data-id="${item.id}" style="padding:6px 16px;font-size:14px;">保存</button>
+
+          <!-- 信息区域：奖励 + 时间 + 条件 -->
+          <div class="card-info-section">
+            <div class="info-grid">
+              <!-- 奖励信息 -->
+              ${item.rewardLabel || item.rewardAmountUsd ? `
+              <div class="info-item reward-item">
+                <div class="info-icon">🎁</div>
+                <div class="info-content">
+                  <div class="info-label">奖励</div>
+                  <div class="info-value">
+                    ${item.rewardLabel ? escapeHtml(item.rewardLabel) : ''}
+                    ${item.rewardAmountUsd ? `<span class="amount">$${parseFloat(item.rewardAmountUsd).toLocaleString()}</span>` : ''}
+                  </div>
+                </div>
+              </div>` : ''}
+
+              <!-- 时间信息 -->
+              <div class="info-item">
+                <div class="info-icon">⏰</div>
+                <div class="info-content">
+                  <div class="info-label">活动时间</div>
+                  <div class="info-value">${formatDate(item.startAt)} ~ ${formatDate(item.endAt)}</div>
+                </div>
+              </div>
+
+              <!-- 参与条件 -->
+              <div class="info-item">
+                <div class="info-icon">📊</div>
+                <div class="info-content">
+                  <div class="info-label">参与条件</div>
+                  <div class="info-value">
+                    <div class="constraint-tags">
+                      ${item.limitProOnly ? '<span class="tag tag-pro">👑 Pro限定</span>' : ''}
+                      ${item.limitByFollowers ? `<span class="tag tag-followers">👥 粉丝≥${item.minFollowers}</span>` : ''}
+                      ${item.requiresEvmBound ? '<span class="tag tag-evm">🔗 需绑定EVM</span>' : ''}
+                      ${!item.limitProOnly && !item.limitByFollowers && !item.requiresEvmBound ? '<span class="tag tag-open">✅ 无限制</span>' : ''}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 推文链接 -->
+              ${item.tweetLink ? `
+              <div class="info-item">
+                <div class="info-icon">🐦</div>
+                <div class="info-content">
+                  <div class="info-label">推文链接</div>
+                  <div class="info-value">
+                    <a href="${escapeHtml(item.tweetLink)}" target="_blank" class="tweet-link">
+                      🔗 查看推文
+                    </a>
+                  </div>
+                </div>
+              </div>` : ''}
+            </div>
+          </div>
+
+          <!-- 技术信息（折叠） -->
+          <details class="tech-details">
+            <summary>🔧 技术信息</summary>
+            <div class="tech-content">
+              <div class="tech-row">
+                <span class="tech-label">ID:</span>
+                <code>${item.id}</code>
+              </div>
+              ${item.activitySlug ? `
+              <div class="tech-row">
+                <span class="tech-label">Slug:</span>
+                <code>${escapeHtml(item.activitySlug)}</code>
+              </div>` : ''}
+              ${item.externalId ? `
+              <div class="tech-row">
+                <span class="tech-label">External ID:</span>
+                <code>${escapeHtml(item.externalId)}</code>
+              </div>` : ''}
+              <div class="tech-row">
+                <span class="tech-label">创建时间:</span>
+                <span>${new Date(item.createdAt).toLocaleString('zh-CN')}</span>
+              </div>
+            </div>
+          </details>
+
+          <!-- 管理操作区 -->
+          <div class="card-actions">
+            <div class="action-controls">
+              <label class="control-label">
+                状态
+                <select data-action="status" data-id="${item.id}" class="control-select">
+                  ${['announced','not_started','active','rewarding','ended'].map(st => `<option value="${st}" ${st===item.status?'selected':''}>${st}</option>`).join('')}
+                </select>
+              </label>
+              <label class="control-label">
+                结束时间
+                <input data-action="endAt" data-id="${item.id}" type="datetime-local" value="${endAt}" class="control-input" />
+              </label>
+            </div>
+            <button class="btn btn-primary btn-save" data-action="save" data-id="${item.id}">
+              <span>✔️</span> 保存更改
+            </button>
           </div>
         </div>`;
     }).join('');
