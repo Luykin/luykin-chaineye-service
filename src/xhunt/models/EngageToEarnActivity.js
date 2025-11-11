@@ -76,6 +76,7 @@ module.exports = (sequelize) => {
           'announced',
           'not_started',
           'active',
+          'signup_paused',
           'rewarding',
           'ended'
         ),

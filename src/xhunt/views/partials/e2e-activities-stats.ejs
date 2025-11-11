@@ -43,6 +43,7 @@
                 <option value="announced">announced</option>
                 <option value="not_started">not_started</option>
                 <option value="active">active</option>
+                <option value="signup_paused">signup_paused</option>
                 <option value="rewarding">rewarding</option>
                 <option value="ended">ended</option>
               </select>
@@ -402,12 +403,56 @@
               <label class="control-label">
                 状态
                 <select data-action="status" data-id="${item.id}" class="control-select">
-                  ${['announced','not_started','active','rewarding','ended'].map(st => `<option value="${st}" ${st===item.status?'selected':''}>${st}</option>`).join('')}
+                  ${['announced','not_started','active','signup_paused','rewarding','ended'].map(st => `<option value="${st}" ${st===item.status?'selected':''}>${st}</option>`).join('')}
                 </select>
+              </label>
+              <label class="control-label">
+                开始时间
+                <input data-action="startAt" data-id="${item.id}" type="datetime-local" value="${startAt}" class="control-input" />
               </label>
               <label class="control-label">
                 结束时间
                 <input data-action="endAt" data-id="${item.id}" type="datetime-local" value="${endAt}" class="control-input" />
+              </label>
+              <label class="control-label">
+                标题
+                <input data-action="title" data-id="${item.id}" type="text" value="${escapeHtml(item.title)}" class="control-input" />
+              </label>
+              <label class="control-label">
+                奖励标签
+                <input data-action="rewardLabel" data-id="${item.id}" type="text" value="${item.rewardLabel ? escapeHtml(item.rewardLabel) : ''}" class="control-input" />
+              </label>
+              <label class="control-label">
+                奖励金额(USD)
+                <input data-action="rewardAmountUsd" data-id="${item.id}" type="number" step="0.01" value="${item.rewardAmountUsd || ''}" class="control-input" />
+              </label>
+              <label class="control-label">
+                最低粉丝数
+                <input data-action="minFollowers" data-id="${item.id}" type="number" min="0" value="${item.minFollowers || 0}" class="control-input" />
+              </label>
+              <label class="control-label">
+                头像URL
+                <input data-action="avatarImage" data-id="${item.id}" type="url" value="${item.avatarImage ? escapeHtml(item.avatarImage) : ''}" class="control-input" />
+              </label>
+              <label class="control-label">
+                推文链接
+                <input data-action="tweetLink" data-id="${item.id}" type="url" value="${item.tweetLink ? escapeHtml(item.tweetLink) : ''}" class="control-input" />
+              </label>
+              <label class="control-label" style="align-self:flex-start;">
+                描述
+                <input data-action="description" data-id="${item.id}" type="text" value="${item.description ? escapeHtml(item.description) : ''}" class="control-input" />
+              </label>
+              <label class="control-label">
+                仅限 Pro
+                <input data-action="limitProOnly" data-id="${item.id}" type="checkbox" ${item.limitProOnly ? 'checked' : ''} />
+              </label>
+              <label class="control-label">
+                限制粉丝数
+                <input data-action="limitByFollowers" data-id="${item.id}" type="checkbox" ${item.limitByFollowers ? 'checked' : ''} />
+              </label>
+              <label class="control-label">
+                需绑定EVM
+                <input data-action="requiresEvmBound" data-id="${item.id}" type="checkbox" ${item.requiresEvmBound ? 'checked' : ''} />
               </label>
             </div>
             <button class="btn btn-primary btn-save" data-action="save" data-id="${item.id}">
@@ -421,9 +466,32 @@
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.getAttribute('data-id');
         const status = listEl.querySelector(`select[data-action="status"][data-id="${id}"]`).value;
+        const startAtVal = listEl.querySelector(`input[data-action="startAt"][data-id="${id}"]`).value;
         const endAtVal = listEl.querySelector(`input[data-action="endAt"][data-id="${id}"]`).value;
+        const titleVal = listEl.querySelector(`input[data-action="title"][data-id="${id}"]`).value;
+        const rewardLabelVal = listEl.querySelector(`input[data-action="rewardLabel"][data-id="${id}"]`).value;
+        const rewardAmountUsdVal = listEl.querySelector(`input[data-action="rewardAmountUsd"][data-id="${id}"]`).value;
+        const minFollowersVal = listEl.querySelector(`input[data-action="minFollowers"][data-id="${id}"]`).value;
+        const avatarImageVal = listEl.querySelector(`input[data-action="avatarImage"][data-id="${id}"]`).value;
+        const tweetLinkVal = listEl.querySelector(`input[data-action="tweetLink"][data-id="${id}"]`).value;
+        const descriptionVal = listEl.querySelector(`input[data-action="description"][data-id="${id}"]`).value;
+        const limitProOnlyVal = listEl.querySelector(`input[data-action="limitProOnly"][data-id="${id}"]`).checked;
+        const limitByFollowersVal = listEl.querySelector(`input[data-action="limitByFollowers"][data-id="${id}"]`).checked;
+        const requiresEvmBoundVal = listEl.querySelector(`input[data-action="requiresEvmBound"][data-id="${id}"]`).checked;
+
         const payload = { status };
+        if (startAtVal !== undefined) payload.startAt = startAtVal || null;
         if (endAtVal !== undefined) payload.endAt = endAtVal || null;
+        if (titleVal !== undefined) payload.title = titleVal;
+        if (rewardLabelVal !== undefined) payload.rewardLabel = rewardLabelVal;
+        if (rewardAmountUsdVal !== undefined && rewardAmountUsdVal !== '') payload.rewardAmountUsd = rewardAmountUsdVal;
+        if (minFollowersVal !== undefined && minFollowersVal !== '') payload.minFollowers = Number(minFollowersVal) || 0;
+        if (avatarImageVal !== undefined) payload.avatarImage = avatarImageVal || null;
+        if (tweetLinkVal !== undefined) payload.tweetLink = tweetLinkVal || null;
+        if (descriptionVal !== undefined) payload.description = descriptionVal || null;
+        payload.limitProOnly = !!limitProOnlyVal;
+        payload.limitByFollowers = !!limitByFollowersVal;
+        payload.requiresEvmBound = !!requiresEvmBoundVal;
         e.currentTarget.disabled = true;
         try {
           const res = await fetch(`/api/xhunt/stats/e2e/activities/${id}`, {

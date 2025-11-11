@@ -2659,7 +2659,21 @@ router.put("/e2e/activities/:id", basicAuth, async (req, res) => {
     }
 
     const { id } = req.params;
-    const { status, endAt } = req.body || {};
+    const {
+      status,
+      startAt,
+      endAt,
+      title,
+      rewardLabel,
+      rewardAmountUsd,
+      minFollowers,
+      avatarImage,
+      tweetLink,
+      description,
+      limitProOnly,
+      limitByFollowers,
+      requiresEvmBound,
+    } = req.body || {};
 
     const { EngageToEarnActivity } = require("../../models/postgres-start");
     const activity = await EngageToEarnActivity.findByPk(id);
@@ -2669,9 +2683,22 @@ router.put("/e2e/activities/:id", basicAuth, async (req, res) => {
 
     const updates = {};
     if (status) updates.status = status;
+    if (typeof startAt !== "undefined") {
+      updates.startAt = startAt ? new Date(startAt) : null;
+    }
     if (typeof endAt !== "undefined") {
       updates.endAt = endAt ? new Date(endAt) : null;
     }
+    if (typeof title !== "undefined") updates.title = title;
+    if (typeof rewardLabel !== "undefined") updates.rewardLabel = rewardLabel;
+    if (typeof rewardAmountUsd !== "undefined") updates.rewardAmountUsd = rewardAmountUsd;
+    if (typeof minFollowers !== "undefined") updates.minFollowers = parseInt(minFollowers) || 0;
+    if (typeof avatarImage !== "undefined") updates.avatarImage = avatarImage || null;
+    if (typeof tweetLink !== "undefined") updates.tweetLink = tweetLink || null;
+    if (typeof description !== "undefined") updates.description = description || null;
+    if (typeof limitProOnly !== "undefined") updates.limitProOnly = !!limitProOnly;
+    if (typeof limitByFollowers !== "undefined") updates.limitByFollowers = !!limitByFollowers;
+    if (typeof requiresEvmBound !== "undefined") updates.requiresEvmBound = !!requiresEvmBound;
 
     await activity.update(updates);
     res.json({ success: true, data: activity });

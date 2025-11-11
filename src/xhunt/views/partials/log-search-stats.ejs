@@ -703,8 +703,9 @@
       // 显示文件信息
       function displayFileInfo(fileSizes) {
         fileList.innerHTML = "";
+        const filtered = fileSizes.filter((file) => file.size >= 1);
 
-        fileSizes.forEach((file) => {
+        filtered.forEach((file) => {
           const fileItem = document.createElement("div");
           fileItem.className = "file-item";
           fileItem.innerHTML = `
