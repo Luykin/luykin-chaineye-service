@@ -33,7 +33,7 @@
     <!-- 错误状态 -->
     <div id="daily-cohorts-error" style="display: none; text-align: center; padding: 40px;">
       <p style="color: #e74c3c; font-size: 16px;">❌ 加载天级留存数据失败</p>
-      <button onclick="loadDailyCohorts()" style="margin-top: 15px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+      <button id="retry-daily-cohorts-btn" style="margin-top: 15px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
         重试
       </button>
     </div>
@@ -78,7 +78,7 @@
     <!-- 错误状态 -->
     <div id="weekly-cohorts-error" style="display: none; text-align: center; padding: 40px;">
       <p style="color: #e74c3c; font-size: 16px;">❌ 加载周级留存数据失败</p>
-      <button onclick="loadWeeklyCohorts()" style="margin-top: 15px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+      <button id="retry-weekly-cohorts-btn" style="margin-top: 15px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
         重试
       </button>
     </div>
@@ -139,23 +139,49 @@ document.getElementById('load-weekly-cohorts-btn').addEventListener('click', fun
   }
 });
 
-// 设置默认日期（最近30天）
+// 设置默认日期
 function setDefaultDates() {
   const today = new Date();
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(today.getDate() - 7);
   const thirtyDaysAgo = new Date(today);
   thirtyDaysAgo.setDate(today.getDate() - 30);
   
   const formatDate = (date) => date.toISOString().split('T')[0];
   
-  // 天级留存默认日期
-  document.getElementById('daily-start-date').value = formatDate(thirtyDaysAgo);
+  // 天级留存默认日期（最近7天）
+  document.getElementById('daily-start-date').value = formatDate(sevenDaysAgo);
   document.getElementById('daily-end-date').value = formatDate(today);
   
-  // 周级留存默认日期
+  // 周级留存默认日期（最近30天，但不自动加载）
   document.getElementById('weekly-start-date').value = formatDate(thirtyDaysAgo);
   document.getElementById('weekly-end-date').value = formatDate(today);
 }
 
-// 页面加载时设置默认日期
+// 重试按钮事件
+document.getElementById('retry-daily-cohorts-btn').addEventListener('click', function() {
+  const startDate = document.getElementById('daily-start-date').value;
+  const endDate = document.getElementById('daily-end-date').value;
+  if (validateDateRange(startDate, endDate, 'daily-date-error')) {
+    loadDailyCohorts(startDate, endDate);
+  }
+});
+
+document.getElementById('retry-weekly-cohorts-btn').addEventListener('click', function() {
+  const startDate = document.getElementById('weekly-start-date').value;
+  const endDate = document.getElementById('weekly-end-date').value;
+  if (validateDateRange(startDate, endDate, 'weekly-date-error')) {
+    loadWeeklyCohorts(startDate, endDate);
+  }
+});
+
+// 页面加载时设置默认日期并自动加载天级留存
 setDefaultDates();
+
+// 自动加载天级留存（最近7天）
+const dailyStartDate = document.getElementById('daily-start-date').value;
+const dailyEndDate = document.getElementById('daily-end-date').value;
+if (dailyStartDate && dailyEndDate) {
+  loadDailyCohorts(dailyStartDate, dailyEndDate);
+}
 </script>
