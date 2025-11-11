@@ -26,18 +26,7 @@ router.get('/activities', [
       where.status = req.query.status;
     }
 
-    // 协商缓存：获取该查询条件下的最后更新时间
-    const lastUpdated = await EngageToEarnActivity.max('updatedAt', { where });
-    if (lastUpdated) {
-      const ifModifiedSince = req.headers['if-modified-since'] ? new Date(req.headers['if-modified-since']) : null;
-      if (ifModifiedSince && !isNaN(ifModifiedSince.getTime())) {
-        if (new Date(lastUpdated).getTime() <= ifModifiedSince.getTime()) {
-          res.setHeader('Cache-Control', 'public, max-age=600');
-          return res.status(304).end();
-        }
-      }
-      res.setHeader('Last-Modified', new Date(lastUpdated).toUTCString());
-    }
+    // 简单缓存策略：10分钟
     res.setHeader('Cache-Control', 'public, max-age=600');
 
     const { rows, count } = await EngageToEarnActivity.findAndCountAll({
@@ -53,11 +42,57 @@ router.get('/activities', [
       ]
     });
 
+    // 如果用户已登录，查询用户对每个活动的报名状态
+    let activitiesWithSignupStatus = rows;
+    if (req.user && req.user.id) {
+      const activityIds = rows.map(activity => activity.id);
+      
+      // 批量查询用户对这些活动的报名记录
+      const signups = await EngageToEarnSignup.findAll({
+        where: {
+          userId: req.user.id,
+          activityId: { [Op.in]: activityIds }
+        },
+        attributes: ['activityId', 'status', 'signupAt']
+      });
+
+      // 创建报名状态映射
+      const signupMap = new Map();
+      signups.forEach(signup => {
+        signupMap.set(signup.activityId, {
+          hasSignedUp: true,
+          signupStatus: signup.status,
+          signupAt: signup.signupAt
+        });
+      });
+
+      // 为每个活动添加报名状态
+      activitiesWithSignupStatus = rows.map(activity => {
+        const activityData = activity.toJSON();
+        const signupInfo = signupMap.get(activity.id);
+        
+        return {
+          ...activityData,
+          hasSignedUp: signupInfo ? signupInfo.hasSignedUp : false,
+          signupStatus: signupInfo ? signupInfo.signupStatus : null,
+          signupAt: signupInfo ? signupInfo.signupAt : null
+        };
+      });
+    } else {
+      // 未登录用户，所有活动都标记为未报名
+      activitiesWithSignupStatus = rows.map(activity => ({
+        ...activity.toJSON(),
+        hasSignedUp: false,
+        signupStatus: null,
+        signupAt: null
+      }));
+    }
+
     const totalPages = Math.ceil(count / limit);
 
     res.json({
       success: true,
-      data: rows,
+      data: activitiesWithSignupStatus,
       pagination: {
         page,
         limit,
@@ -200,18 +235,7 @@ router.get('/activities/:activityId/signups', [
       return res.status(404).json({ error: '活动不存在' });
     }
 
-    // 协商缓存：以报名表的最新更新时间为准
-    const lastUpdated = await EngageToEarnSignup.max('updatedAt', { where: { activityId } });
-    if (lastUpdated) {
-      const ifModifiedSince = req.headers['if-modified-since'] ? new Date(req.headers['if-modified-since']) : null;
-      if (ifModifiedSince && !isNaN(ifModifiedSince.getTime())) {
-        if (new Date(lastUpdated).getTime() <= ifModifiedSince.getTime()) {
-          res.setHeader('Cache-Control', 'public, max-age=600');
-          return res.status(304).end();
-        }
-      }
-      res.setHeader('Last-Modified', new Date(lastUpdated).toUTCString());
-    }
+    // 简单缓存策略：10分钟
     res.setHeader('Cache-Control', 'public, max-age=600');
 
     const signups = await EngageToEarnSignup.findAll({
