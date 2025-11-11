@@ -13,7 +13,7 @@ const mkdir = promisify(fs.mkdir);
 
 /**
  * PostgreSQL 数据库自动备份服务
- * - 每 1 小时自动备份一次
+ * - 每 30 分钟自动备份一次
  * - 只保留最近 10 个备份文件
  * - 备份文件存储在项目根目录的 backups/postgres 文件夹
  */
@@ -44,7 +44,6 @@ class PostgresBackupService {
       "XPrivateNotes",
       "XPrivateMessages",
       "XPointRecords",
-      "DailyActiveUsers",
       //   "MantleRegistrations",
     ];
   }
@@ -102,16 +101,8 @@ class PostgresBackupService {
         );
       });
 
-      // 额外确保 DailyActiveUsers（及其变体）纳入
-      const dauMatches = allPublic.filter(
-        (t) =>
-          t.name === "DailyActiveUsers" ||
-          t.name.toLowerCase() === "dailyactiveusers" ||
-          t.name === "daily_active_users"
-      );
-
       const finalSet = new Map();
-      for (const t of [...matches, ...dauMatches]) {
+      for (const t of [...matches]) {
         finalSet.set(`${t.schema}.${t.name}`, t);
       }
 
@@ -148,7 +139,7 @@ class PostgresBackupService {
 
   /**
    * 启动备份定时任务
-   * 每 1 小时执行一次备份
+   * 每 30 分钟执行一次备份
    */
   async start() {
     console.log("🗄️ PostgreSQL 备份服务启动中...");
@@ -166,9 +157,9 @@ class PostgresBackupService {
     // 立即执行一次备份（可选，启动时进行首次备份）
     // await this.performBackup();
 
-    // 设置定时任务：每 1 小时执行一次
-    // Cron 表达式：0 * * * * 表示每小时的第 0 分钟执行
-    this.backupJob = schedule.scheduleJob("0 * * * *", async () => {
+    // 设置定时任务：每 30 分钟执行一次
+    // Cron 表达式：*/30 * * * * 表示每 30 分钟执行
+    this.backupJob = schedule.scheduleJob("*/30 * * * *", async () => {
       console.log(`\n⏰ [${new Date().toISOString()}] 开始执行定时备份...`);
       try {
         await this.performBackup();
@@ -177,7 +168,7 @@ class PostgresBackupService {
       }
     });
 
-    console.log("✅ PostgreSQL 备份服务已启动，将每 1 小时自动备份一次");
+    console.log("✅ PostgreSQL 备份服务已启动，将每 30 分钟自动备份一次");
     console.log(`📁 备份文件存储路径: ${this.backupDir}`);
     console.log(`📊 最多保留备份数量: ${this.maxBackups} 个\n`);
   }

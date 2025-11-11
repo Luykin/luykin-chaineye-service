@@ -138,12 +138,6 @@ class FundraisingCrawler extends BaseCrawler {
         triedProxies.add(proxy.ip);
       }
 
-      console.log(
-        `[axios] 尝试 ${attempt + 1}/${maxRetries} (${
-          proxy ? `${proxy.ip}:${proxy.port}` : "直连"
-        })`
-      );
-
       try {
         const axiosConfig = {
           ...config,
@@ -168,13 +162,6 @@ class FundraisingCrawler extends BaseCrawler {
 
         return response;
       } catch (error) {
-        console.log(
-          `[axios] 尝试 ${attempt + 1}/${maxRetries} 失败 (${
-            proxy ? `${proxy.ip}:${proxy.port}` : "直连"
-          }):`,
-          error.message
-        );
-
         // 如果是最后一次尝试，抛出错误
         if (attempt === maxRetries - 1) {
           throw error;
@@ -191,7 +178,7 @@ class FundraisingCrawler extends BaseCrawler {
   async crawlPage(pageNum) {
     const { browser, page: pageInstance } = await this.initBrowserAndPage();
     try {
-      console.log("开始爬取", pageNum, "的数据");
+      console.log("开始爬取第", pageNum, "页");
       if (!pageInstance || pageInstance.isClosed()) {
         throw new Error("pageInstance not found");
       }
@@ -217,10 +204,9 @@ class FundraisingCrawler extends BaseCrawler {
           inputSelector,
           String(pageNum)
         );
-        console.log("页数对应上了，等待会儿继续", pageNum);
         await new Promise((resolve) => setTimeout(resolve, 1000));
       } catch (err) {
-        console.log("页面BUG了，页面page对应不上");
+        
         // 步骤2：直接操作DOM清空并设置值（核心逻辑）
         await pageInstance.evaluate(
           (selector, newValue) => {
@@ -274,7 +260,6 @@ class FundraisingCrawler extends BaseCrawler {
                   );
                 });
 
-                console.log("轮训查看DOM状态", result);
                 if (result) {
                   clearInterval(timer);
                   resolve();
@@ -298,7 +283,7 @@ class FundraisingCrawler extends BaseCrawler {
           //等待DOM加载状态消失（el-loading-parent--relative被移除）
           await waitForLoadingComplete();
         } catch (error) {
-          console.log("精确等待失败:", error);
+          
           await new Promise((resolve) => setTimeout(resolve, 10000));
         }
       }
@@ -328,7 +313,6 @@ class FundraisingCrawler extends BaseCrawler {
           });
       });
 
-      console.log("爬取完毕, 得到", fundraisingData.length);
       if (
         !fundraisingData ||
         !fundraisingData.length ||
@@ -375,11 +359,7 @@ class FundraisingCrawler extends BaseCrawler {
       // 应用层过滤
       if (filterFunction && typeof filterFunction === "function") {
         projectsToCrawl = projectsToCrawl.filter(filterFunction);
-        console.log(
-          `${crawlType} - 经过过滤后剩余 ${
-            projectsToCrawl.length || 0
-          } 项目待爬取`
-        );
+        
       }
 
       state.status = "running";
@@ -464,7 +444,7 @@ class FundraisingCrawler extends BaseCrawler {
         // if (!pageInstance || pageInstance?.isClosed?.()) {
         // 	throw new Error('pageInstance not found');
         // }
-        console.log(`开始爬取第 ${currentPage} 页的机构数据`);
+        
         let data = [];
         try {
           data = await retry(
@@ -477,7 +457,7 @@ class FundraisingCrawler extends BaseCrawler {
             }
           );
         } catch (err) {
-          console.log("爬取第 " + currentPage + " 页失败");
+          console.warn("爬取第 " + currentPage + " 页失败");
           data = [];
           failedPages = [...failedPages, currentPage];
         }
@@ -512,12 +492,12 @@ class FundraisingCrawler extends BaseCrawler {
 
       state.status = "completed";
       await state.save();
-      console.log("全量爬取项目任务完成，Crawling completed.");
+      console.log("全量爬取项目任务完成");
     } catch (error) {
       state.status = "failed";
       state.error = error.message;
       await state.save();
-      console.error("全量爬取项目任务失败.", error.message);
+      console.error("全量爬取项目任务失败", error.message);
       throw error;
     }
   }
@@ -568,18 +548,16 @@ class FundraisingCrawler extends BaseCrawler {
           });
           updateNum = updateNum + newData.length;
         } else {
-          console.log("No new data found on page", page);
+          
         }
         //除了更新项目本身，要去更新这一页的项目详情
         const totalCount = existingProject?.length;
         let sucUpdateCount = 0;
         let failedUpdateCount = 0;
-        console.log(
-          `第 ${page} 页的机构数据有${totalCount}个详情页数据还需要再爬取一遍`
-        );
+        
         for (const project of existingProject) {
           if (!project?.isInitial || !project?.projectLink) {
-            console.log("非列表项目，或者链接不存在，跳过～");
+            
             failedUpdateCount++;
             continue;
           }
@@ -601,7 +579,7 @@ class FundraisingCrawler extends BaseCrawler {
             sucUpdateCount++;
           } catch (err) {
             failedUpdateCount++;
-            console.log("前两页更新逻辑：详情抓取失败了,继续下一个");
+            
           } finally {
             browser && (await browser?.close?.());
             state.otherInfo = {
@@ -631,7 +609,7 @@ class FundraisingCrawler extends BaseCrawler {
       await state.save();
       // throw error;
     } finally {
-      console.log("quickUpdate finally: 关闭浏览器");
+      
       // pageInstance && pageInstance?.close?.();
     }
   }

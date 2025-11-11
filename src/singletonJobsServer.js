@@ -11,15 +11,15 @@ const os = require("os");
 // 将所有需要单实例运行的定时任务集中到这里启动（备份、日志清理等）
 const pgBackupService = require("./services/pg-backup-service");
 
-// 清理 PM2 日志（删除 3 天前的日志文件），每 30 分钟执行一次
+// 清理 PM2 日志（删除 2 天前的日志文件），每 4 小时执行一次
 async function cleanupPm2Logs() {
   try {
     const home = os.homedir();
     const logsDir = path.join(home, ".pm2", "logs");
 
     const now = Date.now();
-    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-    const cutoff = now - threeDaysMs;
+    const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+    const cutoff = now - twoDaysMs;
 
     const exists = fs.existsSync(logsDir);
     if (!exists) {
@@ -46,7 +46,7 @@ async function cleanupPm2Logs() {
       }
     }
 
-    console.log(`[PM2 Logs] 扫描 ${scanned} 个文件，删除 ${deleted} 个（阈值：3 天前）`);
+    console.log(`[PM2 Logs] 扫描 ${scanned} 个文件，删除 ${deleted} 个（阈值：2 天前）`);
   } catch (err) {
     console.error("[PM2 Logs] 清理出错:", err);
   }
@@ -60,8 +60,8 @@ async function cleanupPm2Logs() {
     // 立即执行一次清理
     cleanupPm2Logs();
 
-    // 每 30 分钟执行一次：*/30 * * * *
-    schedule.scheduleJob("*/30 * * * *", cleanupPm2Logs);
+    // 每 4 小时执行一次：0 */4 * * *
+    schedule.scheduleJob("0 */4 * * *", cleanupPm2Logs);
   } catch (err) {
     console.error("单例任务进程启动失败:", err);
     process.exit(1);
