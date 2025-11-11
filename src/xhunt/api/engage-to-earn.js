@@ -38,7 +38,7 @@ router.get('/activities', [
         'id', 'activitySlug', 'externalId', 'avatarImage', 'tweetLink',
         'rewardLabel', 'rewardAmountUsd', 'title', 'description',
         'startAt', 'endAt', 'limitProOnly', 'limitByFollowers', 'minFollowers', 'status',
-        'createdAt', 'updatedAt'
+        'participantCount', 'createdAt', 'updatedAt'
       ]
     });
 
@@ -205,6 +205,7 @@ router.post('/signups', [
       return res.status(409).json({ error: 'Already signed up for this activity' }); // 您已报名该活动
     }
 
+    // 创建报名记录
     await EngageToEarnSignup.create({
       xHuntUserId: req.user.id,
       xHuntUserName: req.user.displayName || req.user.username || '',
@@ -212,6 +213,9 @@ router.post('/signups', [
       activityTitle: activity.title,
       tweetLink: activity.tweetLink
     });
+
+    // 更新活动的报名人数
+    await activity.increment('participantCount', { by: 1 });
 
     res.status(201).json({ success: true });
   } catch (error) {

@@ -83,6 +83,12 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: 'announced',
       },
+      participantCount: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        comment: '报名人数统计',
+      },
     },
     {
       tableName: 'EngageToEarnActivities',
