@@ -12,6 +12,8 @@ const MantleRegistration2Model = require("../xhunt/models/MantleRegistration2");
 const XPrivateMessageModel = require("../xhunt/models/XPrivateMessage");
 const DailyActiveUserModel = require("../xhunt/models/DailyActiveUser");
 const XHuntUserProSubscriptionModel = require("../xhunt/models/XHuntUserProSubscription");
+const EngageToEarnActivityModel = require("../xhunt/models/EngageToEarnActivity");
+const EngageToEarnSignupModel = require("../xhunt/models/EngageToEarnSignup");
 
 const pgInstance = new Sequelize({
   dialect: process.env.PG_DIALECT || "postgres",
@@ -42,6 +44,8 @@ const MantleRegistration2 = MantleRegistration2Model(pgInstance);
 const XPrivateMessage = XPrivateMessageModel(pgInstance);
 const DailyActiveUser = DailyActiveUserModel(pgInstance);
 const XHuntUserProSubscription = XHuntUserProSubscriptionModel(pgInstance);
+const EngageToEarnActivity = EngageToEarnActivityModel(pgInstance);
+const EngageToEarnSignup = EngageToEarnSignupModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -169,6 +173,27 @@ XHuntUserProSubscription.belongsTo(XHuntUser, {
   as: "user",
 });
 
+// EngageToEarn 关系
+EngageToEarnActivity.hasMany(EngageToEarnSignup, {
+  foreignKey: "activityId",
+  as: "signups",
+});
+
+EngageToEarnSignup.belongsTo(EngageToEarnActivity, {
+  foreignKey: "activityId",
+  as: "activity",
+});
+
+XHuntUser.hasMany(EngageToEarnSignup, {
+  foreignKey: "xHuntUserId",
+  as: "activitySignups",
+});
+
+EngageToEarnSignup.belongsTo(XHuntUser, {
+  foreignKey: "xHuntUserId",
+  as: "xHuntUser",
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 async function setupPostgres() {
@@ -206,4 +231,6 @@ module.exports = {
   XPrivateMessage,
   DailyActiveUser,
   XHuntUserProSubscription,
+  EngageToEarnActivity,
+  EngageToEarnSignup,
 };
