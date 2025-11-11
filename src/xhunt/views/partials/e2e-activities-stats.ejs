@@ -1,220 +1,326 @@
-<div class="panel">
-  <h2>🎯 E2E 活动管理（仅 luykin）</h2>
-  <p class="muted">在这里新增活动、查看并管理现有活动的状态与结束时间。</p>
+<div class="e2e-management-container">
+  <div class="e2e-management-header">
+    <h2>🎯 E2E 活动管理</h2>
+    <p>创建和管理 Engage-to-Earn 活动</p>
+  </div>
 
-  <!-- 新增活动表单 -->
-  <form id="e2e-create-form" class="form-grid">
-    <div class="grid-2">
-      <label>
-        Title
-        <input name="title" type="text" placeholder="Activity title" required />
-      </label>
-      <label>
-        Activity Slug
-        <input name="activitySlug" type="text" placeholder="unique-slug (optional)" />
-      </label>
-    </div>
-    <div class="grid-2">
-      <label>
-        External ID
-        <input name="externalId" type="text" placeholder="external id (optional)" />
-      </label>
-      <label>
-        Avatar Image URL
-        <input name="avatarImage" type="url" placeholder="https://..." />
-      </label>
-    </div>
-    <div class="grid-2">
-      <label>
-        Tweet Link
-        <input name="tweetLink" type="url" placeholder="https://x.com/... (optional)" />
-      </label>
-      <label>
-        Reward Label
-        <input name="rewardLabel" type="text" placeholder="$1,000 in USDC / Points" />
-      </label>
-    </div>
-    <div class="grid-2">
-      <label>
-        Reward Amount (USD)
-        <input name="rewardAmountUsd" type="number" step="0.01" placeholder="1000.00" />
-      </label>
-      <label>
-        Status
-        <select name="status">
-          <option value="announced">announced</option>
-          <option value="not_started">not_started</option>
-          <option value="active">active</option>
-          <option value="rewarding">rewarding</option>
-          <option value="ended">ended</option>
-        </select>
-      </label>
-    </div>
-    <div class="grid-2">
-      <label>
-        Start At (UTC)
-        <input name="startAt" type="datetime-local" />
-      </label>
-      <label>
-        End At (UTC)
-        <input name="endAt" type="datetime-local" />
-      </label>
-    </div>
-    <div class="grid-3">
-      <label>
-        Limit Pro Only
-        <input name="limitProOnly" type="checkbox" />
-      </label>
-      <label>
-        Limit By Followers
-        <input name="limitByFollowers" type="checkbox" />
-      </label>
-      <label>
-        Min Followers
-        <input name="minFollowers" type="number" min="0" value="0" />
-      </label>
-    </div>
-    <div class="grid-1">
-      <label>
-        Requires EVM Bound
-        <input name="requiresEvmBound" type="checkbox" />
-      </label>
-    </div>
-    <div class="grid-1">
-      <label>
-        Description
-        <textarea name="description" rows="3" placeholder="Activity description (optional)"></textarea>
-      </label>
-    </div>
-    <div>
-      <button type="submit" class="btn-primary">Create Activity</button>
-      <span id="e2e-create-msg" class="muted"></span>
-    </div>
-  </form>
+  <!-- 新增活动 -->
+  <div class="e2e-create-section">
+    <div class="section-card">
+      <div class="section-card-header">
+        <h3>✨ 新增活动</h3>
+        <p>创建新的 Engage-to-Earn 活动</p>
+      </div>
+      <div class="section-card-content">
+        <form id="e2e-create-form" class="e2e-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label>活动标题 *</label>
+              <input name="title" type="text" placeholder="Activity title" required />
+            </div>
+            <div class="form-group">
+              <label>Activity Slug</label>
+              <input name="activitySlug" type="text" placeholder="unique-slug (optional)" />
+            </div>
+            <div class="form-group">
+              <label>External ID</label>
+              <input name="externalId" type="text" placeholder="external id (optional)" />
+            </div>
+          </div>
 
-  <hr />
+          <div class="form-row">
+            <div class="form-group">
+              <label>奖励标签</label>
+              <input name="rewardLabel" type="text" placeholder="$1,000 in USDC" />
+            </div>
+            <div class="form-group">
+              <label>奖励金额 (USD)</label>
+              <input name="rewardAmountUsd" type="number" step="0.01" placeholder="1000.00" />
+            </div>
+            <div class="form-group">
+              <label>状态</label>
+              <select name="status">
+                <option value="announced">announced</option>
+                <option value="not_started">not_started</option>
+                <option value="active">active</option>
+                <option value="rewarding">rewarding</option>
+                <option value="ended">ended</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>开始时间 (UTC)</label>
+              <input name="startAt" type="datetime-local" />
+            </div>
+            <div class="form-group">
+              <label>结束时间 (UTC)</label>
+              <input name="endAt" type="datetime-local" />
+            </div>
+            <div class="form-group">
+              <label>最低粉丝数</label>
+              <input name="minFollowers" type="number" min="0" value="0" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>头像图片 URL</label>
+              <input name="avatarImage" type="url" placeholder="https://..." />
+            </div>
+            <div class="form-group">
+              <label>推文链接</label>
+              <input name="tweetLink" type="url" placeholder="https://x.com/..." />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label>活动描述</label>
+              <textarea name="description" rows="2" placeholder="Activity description (optional)"></textarea>
+            </div>
+          </div>
+
+          <div class="form-row checkbox-row">
+            <label class="checkbox-label">
+              <input name="limitProOnly" type="checkbox" />
+              <span>仅限 Pro 用户</span>
+            </label>
+            <label class="checkbox-label">
+              <input name="limitByFollowers" type="checkbox" />
+              <span>限制粉丝数</span>
+            </label>
+            <label class="checkbox-label">
+              <input name="requiresEvmBound" type="checkbox" />
+              <span>要求绑定 EVM</span>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+              <span class="btn-icon">✨</span>
+              创建活动
+            </button>
+            <button type="reset" class="btn btn-secondary">重置</button>
+          </div>
+        </form>
+
+        <div id="e2e-create-result" class="result-message" style="display: none">
+          <div class="result-content"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- 活动列表 -->
-  <div class="list-header">
-    <h3>Existing Activities</h3>
-    <button id="e2e-refresh" class="btn">Refresh</button>
+  <div class="e2e-list-section">
+    <div class="section-card">
+      <div class="section-card-header">
+        <h3>📋 活动列表</h3>
+        <p>管理现有活动状态</p>
+      </div>
+      <div class="section-card-content">
+        <div class="list-controls">
+          <button id="e2e-refresh" class="btn btn-secondary">
+            <span class="btn-icon">🔄</span>
+            刷新列表
+          </button>
+          <div class="list-stats">
+            <span id="e2e-activity-count">加载中...</span>
+          </div>
+        </div>
+
+        <div id="e2e-list" class="activities-list"></div>
+      </div>
+    </div>
   </div>
-  <div id="e2e-list" class="card-list"></div>
 </div>
 
+<style>
+  .e2e-management-container { padding: 20px; max-width: 1400px; margin: 0 auto; }
+  .e2e-management-header { text-align: center; margin-bottom: 30px; }
+  .e2e-management-header h2 { color: #2c3e50; margin-bottom: 10px; }
+  .e2e-management-header p { color: #7f8c8d; font-size: 16px; }
+  .e2e-create-section, .e2e-list-section { margin-bottom: 30px; }
+  .section-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+  .section-card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; }
+  .section-card-header h3 { margin: 0 0 8px 0; font-size: 18px; }
+  .section-card-header p { margin: 0; opacity: 0.9; font-size: 14px; }
+  .section-card-content { padding: 30px; }
+  .e2e-form { max-width: 100%; }
+  .form-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 15px; }
+  .form-row.checkbox-row { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .form-group { display: flex; flex-direction: column; }
+  .form-group.full-width { grid-column: 1 / -1; }
+  .form-group label { display: block; margin-bottom: 6px; color: #2c3e50; font-weight: 600; font-size: 14px; }
+  .form-group input[type="text"], .form-group input[type="url"], .form-group input[type="number"], .form-group input[type="datetime-local"], .form-group select, .form-group textarea {
+    width: 100%; padding: 10px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; transition: border-color 0.3s ease;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #667eea; }
+  .checkbox-label { display: flex; align-items: center; gap: 8px; color: #2c3e50; font-weight: 600; font-size: 14px; }
+  .checkbox-label input[type="checkbox"] { width: auto; margin: 0; }
+  .form-actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
+  .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+  .btn-primary:hover { background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%); transform: translateY(-1px); box-shadow: 0 4px 8px rgba(102,126,234,0.3); }
+  .btn-secondary { background: #ecf0f1; color: #2c3e50; }
+  .btn-secondary:hover { background: #d5dbdb; }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-icon { font-size: 18px; }
+  .result-message { margin-top: 20px; padding: 15px; border-radius: 8px; animation: slideIn 0.3s ease; }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  .result-message.success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+  .result-message.error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+  .list-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .list-stats { color: #7f8c8d; font-size: 14px; }
+  .activities-list { display: grid; gap: 15px; }
+  .activity-card { background: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px; transition: all 0.2s ease; }
+  .activity-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); }
+  .activity-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .activity-title { font-size: 18px; font-weight: 700; color: #2c3e50; margin-bottom: 6px; }
+  .activity-meta { font-size: 13px; color: #7f8c8d; }
+  .activity-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .activity-controls label { font-size: 13px; font-weight: 600; color: #2c3e50; }
+  .activity-controls select, .activity-controls input { padding: 6px 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 13px; }
+  .status-badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .status-badge.announced { background: #e3f2fd; color: #1976d2; }
+  .status-badge.active { background: #d4edda; color: #155724; }
+  .status-badge.ended { background: #f8d7da; color: #721c24; }
+  @media (max-width: 920px) { .form-row { grid-template-columns: 1fr; } }
+</style>
+
 <script>
-  (function() {
-    const listEl = document.getElementById('e2e-list');
-    const refreshBtn = document.getElementById('e2e-refresh');
-    const form = document.getElementById('e2e-create-form');
-    const msgEl = document.getElementById('e2e-create-msg');
+(function() {
+  const listEl = document.getElementById('e2e-list');
+  const countEl = document.getElementById('e2e-activity-count');
+  const refreshBtn = document.getElementById('e2e-refresh');
+  const form = document.getElementById('e2e-create-form');
+  const resultEl = document.getElementById('e2e-create-result');
+  const resultContent = resultEl.querySelector('.result-content');
 
-    async function fetchActivities() {
-      listEl.innerHTML = '<div class="muted">Loading...</div>';
-      try {
-        const res = await fetch('/api/xhunt/stats/e2e/activities?page=1&limit=50', { credentials: 'include' });
-        const data = await res.json();
-        if (!data || !data.success) throw new Error(data?.error || 'Load failed');
-        renderList(data.data || []);
-      } catch (e) {
-        listEl.innerHTML = '<div class="error">Failed to load activities</div>';
-      }
+  function showResult(message, isSuccess) {
+    resultContent.textContent = message;
+    resultEl.className = 'result-message ' + (isSuccess ? 'success' : 'error');
+    resultEl.style.display = 'block';
+    setTimeout(() => { resultEl.style.display = 'none'; }, 5000);
+  }
+
+  async function fetchActivities() {
+    listEl.innerHTML = '<div style="text-align:center;padding:40px;color:#7f8c8d;">加载中...</div>';
+    try {
+      const res = await fetch('/api/xhunt/stats/e2e/activities?page=1&limit=50', { credentials: 'include' });
+      const data = await res.json();
+      if (!data || !data.success) throw new Error(data?.error || '加载失败');
+      renderList(data.data || []);
+      countEl.textContent = `共 ${data.data.length} 个活动`;
+    } catch (e) {
+      listEl.innerHTML = '<div style="text-align:center;padding:40px;color:#e74c3c;">加载失败</div>';
+      countEl.textContent = '加载失败';
     }
+  }
 
-    function renderList(items) {
-      if (!items.length) {
-        listEl.innerHTML = '<div class="muted">No activities yet</div>';
-        return;
-      }
-      listEl.innerHTML = items.map(item => {
-        const endAt = item.endAt ? new Date(item.endAt).toISOString().slice(0,16) : '';
-        return `
-          <div class="card">
-            <div class="card-body">
-              <div class="row">
-                <div class="col">
-                  <div class="title">${escapeHtml(item.title || '')}</div>
-                  <div class="muted">slug: ${escapeHtml(item.activitySlug || '-')}, ext: ${escapeHtml(item.externalId || '-')}</div>
-                  <div class="muted">status: <strong>${escapeHtml(item.status)}</strong> · followers >= ${item.minFollowers} · proOnly: ${item.limitProOnly ? 'yes' : 'no'} · requireEVM: ${item.requiresEvmBound ? 'yes' : 'no'}</div>
-                </div>
-                <div class="col actions">
-                  <label>Status
-                    <select data-action="status" data-id="${item.id}">
-                      ${['announced','not_started','active','rewarding','ended'].map(st => `<option value="${st}" ${st===item.status?'selected':''}>${st}</option>`).join('')}
-                    </select>
-                  </label>
-                  <label>End At
-                    <input data-action="endAt" data-id="${item.id}" type="datetime-local" value="${endAt}" />
-                  </label>
-                  <button class="btn" data-action="save" data-id="${item.id}">Save</button>
-                </div>
+  function renderList(items) {
+    if (!items.length) {
+      listEl.innerHTML = '<div style="text-align:center;padding:40px;color:#7f8c8d;">暂无活动</div>';
+      return;
+    }
+    listEl.innerHTML = items.map(item => {
+      const endAt = item.endAt ? new Date(item.endAt).toISOString().slice(0,16) : '';
+      const statusClass = item.status === 'active' ? 'active' : item.status === 'ended' ? 'ended' : 'announced';
+      return `
+        <div class="activity-card">
+          <div class="activity-header">
+            <div>
+              <div class="activity-title">${escapeHtml(item.title)}</div>
+              <div class="activity-meta">
+                <span class="status-badge ${statusClass}">${item.status}</span>
+                ${item.activitySlug ? `· slug: ${escapeHtml(item.activitySlug)}` : ''}
+                ${item.externalId ? `· ext: ${escapeHtml(item.externalId)}` : ''}
+                · 粉丝≥${item.minFollowers}
+                ${item.limitProOnly ? ' · Pro限定' : ''}
+                ${item.requiresEvmBound ? ' · 需EVM' : ''}
               </div>
             </div>
-          </div>`;
-      }).join('');
+          </div>
+          <div class="activity-controls">
+            <label>状态
+              <select data-action="status" data-id="${item.id}">
+                ${['announced','not_started','active','rewarding','ended'].map(st => `<option value="${st}" ${st===item.status?'selected':''}>${st}</option>`).join('')}
+              </select>
+            </label>
+            <label>结束时间
+              <input data-action="endAt" data-id="${item.id}" type="datetime-local" value="${endAt}" />
+            </label>
+            <button class="btn btn-primary" data-action="save" data-id="${item.id}" style="padding:6px 16px;font-size:14px;">保存</button>
+          </div>
+        </div>`;
+    }).join('');
 
-      // attach events
-      listEl.querySelectorAll('button[data-action="save"]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          const id = e.currentTarget.getAttribute('data-id');
-          const status = listEl.querySelector(`select[data-action="status"][data-id="${id}"]`).value;
-          const endAtVal = listEl.querySelector(`input[data-action="endAt"][data-id="${id}"]`).value;
-          const payload = { status };
-          if (endAtVal !== undefined) payload.endAt = endAtVal || null;
-          e.currentTarget.disabled = true;
-          try {
-            const res = await fetch(`/api/xhunt/stats/e2e/activities/${id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (!data || !data.success) throw new Error(data?.error || 'Update failed');
-            await fetchActivities();
-          } catch (err) {
-            alert('Update failed');
-          } finally {
-            e.currentTarget.disabled = false;
-          }
-        });
+    listEl.querySelectorAll('button[data-action="save"]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        const status = listEl.querySelector(`select[data-action="status"][data-id="${id}"]`).value;
+        const endAtVal = listEl.querySelector(`input[data-action="endAt"][data-id="${id}"]`).value;
+        const payload = { status };
+        if (endAtVal !== undefined) payload.endAt = endAtVal || null;
+        e.currentTarget.disabled = true;
+        try {
+          const res = await fetch(`/api/xhunt/stats/e2e/activities/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (!data || !data.success) throw new Error(data?.error || '更新失败');
+          await fetchActivities();
+          showResult('更新成功', true);
+        } catch (err) {
+          showResult('更新失败: ' + err.message, false);
+        } finally {
+          e.currentTarget.disabled = false;
+        }
       });
-    }
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      msgEl.textContent = '';
-      const fd = new FormData(form);
-      const payload = Object.fromEntries(fd.entries());
-      payload.limitProOnly = form.limitProOnly.checked;
-      payload.limitByFollowers = form.limitByFollowers.checked;
-      payload.requiresEvmBound = form.requiresEvmBound.checked;
-      if (payload.minFollowers) payload.minFollowers = Number(payload.minFollowers) || 0;
-      try {
-        const res = await fetch('/api/xhunt/stats/e2e/activities', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (!data || !data.success) throw new Error(data?.error || 'Create failed');
-        form.reset();
-        msgEl.textContent = 'Created';
-        fetchActivities();
-      } catch (err) {
-        msgEl.textContent = 'Create failed';
-      }
     });
+  }
 
-    function escapeHtml(str) {
-      return String(str).replace(/[&<>"])/g, function(c) {
-        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;','(':'&#40;',')':'&#41;'}[c] || c);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const fd = new FormData(form);
+    const payload = Object.fromEntries(fd.entries());
+    payload.limitProOnly = form.limitProOnly.checked;
+    payload.limitByFollowers = form.limitByFollowers.checked;
+    payload.requiresEvmBound = form.requiresEvmBound.checked;
+    if (payload.minFollowers) payload.minFollowers = Number(payload.minFollowers) || 0;
+    try {
+      const res = await fetch('/api/xhunt/stats/e2e/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
       });
+      const data = await res.json();
+      if (!data || !data.success) throw new Error(data?.error || '创建失败');
+      form.reset();
+      showResult('活动创建成功！', true);
+      await fetchActivities();
+    } catch (err) {
+      showResult('创建失败: ' + err.message, false);
+    } finally {
+      submitBtn.disabled = false;
     }
+  });
 
-    // 首次加载
-    fetchActivities();
-    refreshBtn.addEventListener('click', fetchActivities);
-  })();
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  fetchActivities();
+  refreshBtn.addEventListener('click', fetchActivities);
+})();
 </script>
