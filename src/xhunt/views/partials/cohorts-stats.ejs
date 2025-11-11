@@ -1,0 +1,161 @@
+<div class="cohorts-container" style="padding: 20px;">
+  <!-- 天级留存部分 -->
+  <div class="section" style="margin-bottom: 50px;">
+    <div class="header-section" style="margin-bottom: 30px;">
+      <h2>📈 天级留存分析</h2>
+      <p style="color: #666; margin-top: 10px;">
+        基于用户首次活跃日期，追踪用户在第2、3、4、5、6、7、8、9、10天的活跃情况（最大跨度：3个月）
+      </p>
+
+      <!-- 日期选择器 -->
+      <div style="margin-top: 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <label for="daily-start-date" style="font-weight: 500; color: #333;">开始日期：</label>
+          <input type="date" id="daily-start-date" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;" />
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <label for="daily-end-date" style="font-weight: 500; color: #333;">结束日期：</label>
+          <input type="date" id="daily-end-date" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;" />
+        </div>
+        <button id="load-daily-cohorts-btn" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;">
+          加载数据
+        </button>
+        <span id="daily-date-error" style="color: #e74c3c; font-size: 14px; display: none;"></span>
+      </div>
+    </div>
+
+    <!-- 加载状态 -->
+    <div id="daily-cohorts-loading" style="display: none; text-align: center; padding: 40px;">
+      <div class="loading-spinner"></div>
+      <p style="margin-top: 15px; color: #666;">正在加载天级留存数据...</p>
+    </div>
+
+    <!-- 错误状态 -->
+    <div id="daily-cohorts-error" style="display: none; text-align: center; padding: 40px;">
+      <p style="color: #e74c3c; font-size: 16px;">❌ 加载天级留存数据失败</p>
+      <button onclick="loadDailyCohorts()" style="margin-top: 15px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        重试
+      </button>
+    </div>
+
+    <!-- 数据表格 -->
+    <div id="daily-cohorts-table" style="display: none; overflow-x: auto;"></div>
+  </div>
+
+  <hr style="border: none; border-top: 2px solid #e5e7eb; margin: 40px 0;" />
+
+  <!-- 周级留存部分 -->
+  <div class="section">
+    <div class="header-section" style="margin-bottom: 30px;">
+      <h2>📊 周级留存分析</h2>
+      <p style="color: #666; margin-top: 10px;">
+        基于用户首次活跃周，追踪用户在第2、3、4周的活跃情况（最大跨度：3个月）
+      </p>
+
+      <!-- 日期选择器 -->
+      <div style="margin-top: 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <label for="weekly-start-date" style="font-weight: 500; color: #333;">开始日期：</label>
+          <input type="date" id="weekly-start-date" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;" />
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <label for="weekly-end-date" style="font-weight: 500; color: #333;">结束日期：</label>
+          <input type="date" id="weekly-end-date" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;" />
+        </div>
+        <button id="load-weekly-cohorts-btn" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;">
+          加载数据
+        </button>
+        <span id="weekly-date-error" style="color: #e74c3c; font-size: 14px; display: none;"></span>
+      </div>
+    </div>
+
+    <!-- 加载状态 -->
+    <div id="weekly-cohorts-loading" style="display: none; text-align: center; padding: 40px;">
+      <div class="loading-spinner"></div>
+      <p style="margin-top: 15px; color: #666;">正在加载周级留存数据...</p>
+    </div>
+
+    <!-- 错误状态 -->
+    <div id="weekly-cohorts-error" style="display: none; text-align: center; padding: 40px;">
+      <p style="color: #e74c3c; font-size: 16px;">❌ 加载周级留存数据失败</p>
+      <button onclick="loadWeeklyCohorts()" style="margin-top: 15px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        重试
+      </button>
+    </div>
+
+    <!-- 数据表格 -->
+    <div id="weekly-cohorts-table" style="display: none; overflow-x: auto;"></div>
+  </div>
+</div>
+
+<script>
+// 验证日期跨度（最大3个月 = 90天）
+function validateDateRange(startDate, endDate, errorElementId) {
+  const errorEl = document.getElementById(errorElementId);
+  errorEl.style.display = 'none';
+  
+  if (!startDate || !endDate) {
+    errorEl.textContent = '请选择开始和结束日期';
+    errorEl.style.display = 'inline';
+    return false;
+  }
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  if (start > end) {
+    errorEl.textContent = '开始日期不能晚于结束日期';
+    errorEl.style.display = 'inline';
+    return false;
+  }
+
+  const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+  if (diffDays > 90) {
+    errorEl.textContent = '日期跨度不能超过3个月（90天）';
+    errorEl.style.display = 'inline';
+    return false;
+  }
+
+  return true;
+}
+
+// 天级留存加载按钮事件
+document.getElementById('load-daily-cohorts-btn').addEventListener('click', function() {
+  const startDate = document.getElementById('daily-start-date').value;
+  const endDate = document.getElementById('daily-end-date').value;
+  
+  if (validateDateRange(startDate, endDate, 'daily-date-error')) {
+    loadDailyCohorts(startDate, endDate);
+  }
+});
+
+// 周级留存加载按钮事件
+document.getElementById('load-weekly-cohorts-btn').addEventListener('click', function() {
+  const startDate = document.getElementById('weekly-start-date').value;
+  const endDate = document.getElementById('weekly-end-date').value;
+  
+  if (validateDateRange(startDate, endDate, 'weekly-date-error')) {
+    loadWeeklyCohorts(startDate, endDate);
+  }
+});
+
+// 设置默认日期（最近30天）
+function setDefaultDates() {
+  const today = new Date();
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(today.getDate() - 30);
+  
+  const formatDate = (date) => date.toISOString().split('T')[0];
+  
+  // 天级留存默认日期
+  document.getElementById('daily-start-date').value = formatDate(thirtyDaysAgo);
+  document.getElementById('daily-end-date').value = formatDate(today);
+  
+  // 周级留存默认日期
+  document.getElementById('weekly-start-date').value = formatDate(thirtyDaysAgo);
+  document.getElementById('weekly-end-date').value = formatDate(today);
+}
+
+// 页面加载时设置默认日期
+setDefaultDates();
+</script>
