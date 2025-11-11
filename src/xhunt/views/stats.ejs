@@ -46,6 +46,7 @@
           <button class="tab-btn" data-tab="data-export">📤 数据导出</button>
           <button class="tab-btn" data-tab="pro-management">👑 Pro用户管理</button>
           <button class="tab-btn" data-tab="backup">💾 数据库备份</button>
+          <button class="tab-btn" data-tab="e2e-activities">🎯 E2E活动</button>
           <% } %>
         </div>
 
@@ -107,6 +108,11 @@
           <!-- 数据库备份 Tab (仅 luykin 可见) -->
           <div class="tab-pane" id="backup">
             <%- include('partials/backup-stats') %>
+          </div>
+          
+          <!-- E2E活动 Tab (仅 luykin 可见) -->
+          <div class="tab-pane" id="e2e-activities">
+            <%- include('partials/e2e-activities-stats') %>
           </div>
           <% } %>
 
