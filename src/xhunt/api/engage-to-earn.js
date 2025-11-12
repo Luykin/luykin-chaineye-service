@@ -50,10 +50,10 @@ router.get('/activities', [
       // 批量查询用户对这些活动的报名记录
       const signups = await EngageToEarnSignup.findAll({
         where: {
-          userId: req.user.id,
+          xHuntUserId: req.user.id,
           activityId: { [Op.in]: activityIds }
         },
-        attributes: ['activityId', 'status', 'signupAt']
+        attributes: ['activityId', 'signedAt']
       });
 
       // 创建报名状态映射
@@ -61,8 +61,7 @@ router.get('/activities', [
       signups.forEach(signup => {
         signupMap.set(signup.activityId, {
           hasSignedUp: true,
-          signupStatus: signup.status,
-          signupAt: signup.signupAt
+          signedAt: signup.signedAt
         });
       });
 
@@ -74,8 +73,7 @@ router.get('/activities', [
         return {
           ...activityData,
           hasSignedUp: signupInfo ? signupInfo.hasSignedUp : false,
-          signupStatus: signupInfo ? signupInfo.signupStatus : null,
-          signupAt: signupInfo ? signupInfo.signupAt : null
+          signedAt: signupInfo ? signupInfo.signedAt : null
         };
       });
     } else {
@@ -83,8 +81,7 @@ router.get('/activities', [
       activitiesWithSignupStatus = rows.map(activity => ({
         ...activity.toJSON(),
         hasSignedUp: false,
-        signupStatus: null,
-        signupAt: null
+        signedAt: null
       }));
     }
 
