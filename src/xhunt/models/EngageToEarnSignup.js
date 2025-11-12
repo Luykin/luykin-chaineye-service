@@ -58,7 +58,6 @@ module.exports = (sequelize) => {
         },
         { name: 'idx_signup_user', fields: ['xHuntUserId'] },
         { name: 'idx_signup_activity', fields: ['activityId'] },
-        { name: 'idx_signup_twitterId', fields: ['twitterId'] },
       ],
     }
   );
