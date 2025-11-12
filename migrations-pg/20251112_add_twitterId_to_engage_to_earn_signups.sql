@@ -1,3 +1,0 @@
-BEGIN;
-ALTER TABLE "EngageToEarnSignups" ADD COLUMN IF NOT EXISTS "twitterId" VARCHAR;
-COMMIT;
