@@ -271,6 +271,7 @@ router.post(
       await EngageToEarnSignup.create({
         xHuntUserId: req.user.id,
         xHuntUserName: req.user.displayName || req.user.username || "",
+        twitterId: user.twitterId,
         activityId: activity.id,
         activityTitle: activity.title,
         tweetLink: activity.tweetLink,

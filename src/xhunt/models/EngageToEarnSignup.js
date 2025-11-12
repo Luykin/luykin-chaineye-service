@@ -21,6 +21,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      twitterId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       activityId: {
         type: DataTypes.UUID,
         allowNull: false,
@@ -54,7 +58,7 @@ module.exports = (sequelize) => {
         },
         { name: 'idx_signup_user', fields: ['xHuntUserId'] },
         { name: 'idx_signup_activity', fields: ['activityId'] },
-        { name: 'idx_signup_signedAt', fields: ['signedAt'] },
+        { name: 'idx_signup_twitterId', fields: ['twitterId'] },
       ],
     }
   );
