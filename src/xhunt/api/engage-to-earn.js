@@ -170,10 +170,21 @@ router.post(
           "limitByFollowers",
           "minFollowers",
           "requiresEvmBound",
+          "status",
+          "endAt",
         ],
       });
       if (!activity) {
         return res.status(404).json({ error: "Activity not found" }); // 活动不存在
+      }
+
+      // 校验：仅允许在活动处于 active 且未到 endAt 时报名
+      const now = new Date();
+      if (activity.status !== "active") {
+        return res.status(400).json({ error: "Activity is not active" });
+      }
+      if (activity.endAt && now >= activity.endAt) {
+        return res.status(400).json({ error: "Activity has ended" });
       }
 
       // 读取用户信息（用于校验 Pro / EVM / 粉丝数）
