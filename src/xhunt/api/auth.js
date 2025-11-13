@@ -424,13 +424,11 @@ router.post(
   ],
   async (req, res) => {
     try {
-      // 每周速率限制检查
+      // 30天修改频率限制（首次绑定不计数）
       const userId = req.user.id;
-      const rateLimitKey = `evm_addresses_limit:user:${userId}`;
-      const maxCallsPerWeek = 3;
-      const oneWeekInSeconds = 7 * 24 * 60 * 60; // 7天
-
-      // 检查本周调用次数
+      const rateLimitKey = `evm_addresses_modify_limit:user:${userId}`;
+      const maxModsPerWindow = 1;
+      const thirtyDaysInSeconds = 30 * 24 * 60 * 60; // 30天
       let currentCount = 0;
       try {
         const countStr = await req.redisClient.get(rateLimitKey);
@@ -438,16 +436,6 @@ router.post(
       } catch (redisErr) {
         console.error("Redis GET evm addresses limit error:", redisErr);
         // Redis 错误不阻断请求，但记录日志
-      }
-
-      // 检查是否超过限制
-      if (currentCount >= maxCallsPerWeek) {
-        return res.status(429).json({
-          error: "每周最多只能调用3次，请一周后再试",
-          message: `已经修改${currentCount}次，请下周再试 (You have modified ${currentCount} times, please try again next week)`,
-          limit: maxCallsPerWeek,
-          remaining: 0,
-        });
       }
 
       const { addresses } = req.body;
@@ -464,6 +452,27 @@ router.post(
           })
         ),
       ].filter((addr) => addr !== null); // 过滤掉无效地址
+
+      // 判断是否首次绑定与是否实际发生变更
+      const existingAddresses = Array.isArray(req.user.evmAddresses)
+        ? req.user.evmAddresses.map((a) => (String(a || "").trim().toLowerCase()))
+        : [];
+      const isFirstBind = existingAddresses.length === 0;
+      const oldSet = new Set(existingAddresses);
+      const newSet = new Set(normalizedAddresses);
+      const isChanged =
+        oldSet.size !== newSet.size || [...newSet].some((a) => !oldSet.has(a));
+
+      // 如果不是首次绑定且发生了变更，则进行30天限流检查（仅允许1次）
+      if (!isFirstBind && isChanged && currentCount >= maxModsPerWindow) {
+        return res.status(429).json({
+          error: "MODIFY_TOO_FREQUENT",
+          message:
+            "30天内仅允许修改1次，请稍后再试 (Only one modification is allowed within 30 days)",
+          limit: maxModsPerWindow,
+          remaining: 0,
+        });
+      }
 
       // 跨用户唯一性校验：任一地址已被其他用户绑定则拦截
       if (normalizedAddresses.length > 0) {
@@ -509,24 +518,27 @@ router.post(
         evmAddresses: normalizedAddresses,
       });
 
-      // 增加调用次数
-      let newCount = currentCount + 1;
-      try {
-        newCount = await req.redisClient.incr(rateLimitKey);
-        // 如果是第一次调用，设置过期时间为7天
-        if (newCount === 1) {
-          await req.redisClient.expire(rateLimitKey, oneWeekInSeconds);
+      // 若为修改且实际发生变更，则记录一次并设置30天TTL
+      let newCount = currentCount;
+      if (!isFirstBind && isChanged) {
+        try {
+          newCount = await req.redisClient.incr(rateLimitKey);
+          if (newCount === 1) {
+            await req.redisClient.expire(rateLimitKey, thirtyDaysInSeconds);
+          }
+        } catch (redisErr) {
+          console.error("Redis SET evm addresses limit error:", redisErr);
+          // Redis 错误不阻断请求，但记录日志
         }
-      } catch (redisErr) {
-        console.error("Redis SET evm addresses limit error:", redisErr);
-        // Redis 错误不阻断请求，但记录日志
       }
 
       // 在响应头中添加使用情况信息
-      res.setHeader("X-RateLimit-Limit", maxCallsPerWeek);
+      res.setHeader("X-RateLimit-Limit", maxModsPerWindow);
       res.setHeader(
         "X-RateLimit-Remaining",
-        Math.max(0, maxCallsPerWeek - newCount)
+        isFirstBind || !isChanged
+          ? Math.max(0, maxModsPerWindow - currentCount)
+          : Math.max(0, maxModsPerWindow - newCount)
       );
 
       // 返回成功响应
@@ -535,8 +547,11 @@ router.post(
         addresses: normalizedAddresses,
         count: normalizedAddresses.length,
         rateLimit: {
-          limit: maxCallsPerWeek,
-          remaining: Math.max(0, maxCallsPerWeek - newCount),
+          limit: maxModsPerWindow,
+          remaining:
+            isFirstBind || !isChanged
+              ? Math.max(0, maxModsPerWindow - currentCount)
+              : Math.max(0, maxModsPerWindow - newCount),
         },
       });
     } catch (error) {
