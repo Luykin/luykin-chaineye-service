@@ -98,6 +98,7 @@ const SPECIAL_ALLOWED_USERNAMES = new Set([
   "broleonaus",
   "guomin184935",
   "jesse_meta",
+	"cuegod001"
 ]);
 
 // 1) Mantle 活动报名接口（受限：指纹/浏览器/安全中间件）
