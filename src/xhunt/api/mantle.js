@@ -441,7 +441,7 @@ router.get(
           const response = await axios.post(
             "https://data.cryptohunt.ai/pro/api/hunter_by_handle",
             {
-              campaign: "mantle",
+              campaign: "mantle2",
               handle: req.user.username,
             },
             {
