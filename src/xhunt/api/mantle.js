@@ -109,7 +109,8 @@ router.post(
   securityMiddleware,
   async (req, res) => {
     try {
-      const { invitedByCode, evmAddress, registrationUrl } = req.body || {};
+      const { invitedByCode, evmAddress, registrationUrl, mark } =
+        req.body || {};
 
       // 定位用户（仅使用 token）
       const authedUserId = req.user && req.user.id;
@@ -121,10 +122,10 @@ router.post(
         return res.status(404).json({ error: "对应的用户不存在" });
       }
 
-      const now = new Date(); // 本地时间，但可以转成 UTC 时间戳比较
-      const cutoffTime = new Date("2025-09-20T00:00:00Z"); // UTC 时间 00:00（北京时间 08:00）
+      // const now = new Date(); // 本地时间，但可以转成 UTC 时间戳比较
+      // const cutoffTime = new Date("2025-09-20T00:00:00Z"); // UTC 时间 00:00（北京时间 08:00）
 
-      if (now.getTime() >= cutoffTime.getTime()) {
+      if (!mark || mark !== "MantleRegistration2") {
         return res.status(403).json({
           error:
             "Registration has closed, the event registration period has ended",
