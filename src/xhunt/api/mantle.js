@@ -128,7 +128,7 @@ router.post(
       if (!mark || mark !== "MantleRegistration2") {
         return res.status(403).json({
           error:
-            "Registration has closed, the event registration period has ended",
+            "(MantleRegistration1) Registration has closed, the event registration period has ended",
         });
       }
 
