@@ -958,15 +958,20 @@ router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, r
     connectionManager.setRedisClient(req.redisClient);
   }
 
+  // 获取版本号（用于连接确认消息）
+  const version = getVersionFromRequest(req);
+
   // 设置 SSE 响应头
   setupSSEHeaders(res);
 
-  // 发送初始连接确认
-  res.write(": SSE connection established\n\n");
+  // 发送初始连接确认（包含版本号）
+  const connectionMessage = version
+    ? `: SSE connection established (version: ${version})\n\n`
+    : `: SSE connection established\n\n`;
+  res.write(connectionMessage);
   res.flushHeaders();
 
   // 检查版本号和 Pro 状态
-  const version = getVersionFromRequest(req);
   const shouldAddConnection = !(
     version &&
     isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO) &&
@@ -976,6 +981,17 @@ router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, r
   if (shouldAddConnection) {
     // Pro 用户或版本号 < 0.2.05，正常加入连接管理器
     connectionManager.addConnection(res);
+
+    // 推送一条确认消息
+    const connectionInfo = {
+      type: "connection_established",
+      message: "SSE connection established, you will receive real-time feed updates",
+      version: version || null,
+      isPro: req.isPro === true,
+      timestamp: new Date().toISOString(),
+    };
+    const infoMessageStr = `event: connection_established\ndata: ${JSON.stringify(connectionInfo)}\n\n`;
+    res.write(infoMessageStr);
 
     // 处理客户端断开连接
     req.on("close", () => {
