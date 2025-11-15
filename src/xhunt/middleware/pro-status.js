@@ -11,6 +11,27 @@ const {
 const MIN_VERSION_FOR_PRO = "0.2.05";
 
 /**
+ * 获取版本号（智能选择来源）
+ * 对于 SSE 请求，优先从查询参数获取（因为 EventSource 不支持自定义 headers）
+ * 对于其他请求，从 headers 获取
+ * @param {express.Request} req - Express 请求对象
+ * @returns {string|null} 版本号字符串，如果不存在返回 null
+ */
+function getVersion(req) {
+  // 检查是否是 SSE 请求（完整路径包含 /sse）
+  const fullPath = (req.baseUrl || "") + (req.path || "");
+  const isSSERequest = fullPath.includes("/sse");
+  
+  if (isSSERequest) {
+    // SSE 请求：优先从查询参数获取（因为 EventSource 不支持自定义 headers）
+    return req.query["x-extension-version"] || req.query["x_extension_version"] || getVersionFromRequest(req) || null;
+  }
+  
+  // 其他请求：从 headers 获取
+  return getVersionFromRequest(req);
+}
+
+/**
  * 检查用户 Pro 状态的中间件（可选模式）
  * 如果 req.user 存在，查询 Pro 状态并挂载到 req.isPro
  * 如果 req.user 不存在，设置 req.isPro = false 并继续
@@ -21,7 +42,7 @@ const MIN_VERSION_FOR_PRO = "0.2.05";
 async function checkProStatus(req, res, next) {
   try {
     // 检查版本号，如果版本号 < 0.2.05，直接跳过 Pro 检查
-    const version = getVersionFromRequest(req);
+    const version = getVersion(req);
     if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
       req.isPro = false;
       return next();
@@ -70,7 +91,7 @@ async function checkProStatus(req, res, next) {
 async function checkProStatusRequired(req, res, next) {
   try {
     // 检查版本号，如果版本号 < 0.2.05，直接跳过 Pro 检查
-    const version = getVersionFromRequest(req);
+    const version = getVersion(req);
     if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
       req.isPro = false;
       return next();
