@@ -993,6 +993,15 @@ router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, r
     // 非 Pro 用户且版本号 >= 0.2.05，不加入连接管理器，只处理断开连接
     // console.log("[sse feeds 核心] 非 Pro 用户且版本号 >= 0.2.05，不加入连接管理器");
 
+    // 立即推送一条消息，提示需要 Pro 订阅
+    const proMessage = {
+      type: "pro_required",
+      message: "Pro subscription required to receive real-time feed updates",
+      timestamp: new Date().toISOString(),
+    };
+    const messageStr = `event: pro_required\ndata: ${JSON.stringify(proMessage)}\n\n`;
+    res.write(messageStr);
+
     // 处理客户端断开连接（不需要调用 removeConnection，因为没有添加）
     req.on("close", () => {
       res.end();
