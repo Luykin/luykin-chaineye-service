@@ -950,42 +950,31 @@ const connectionManager = new SSEConnectionManager();
  *
  * 用于实时推送 feed 数据
  *
- * 注意：对于版本号 >= 0.2.05 且非 Pro 用户，直接返回 200 OK，不建立持续连接
+ * 注意：对于版本号 >= 0.2.05 且非 Pro 用户，建立 SSE 连接但不加入连接管理器，因此不会收到推送数据
  */
-router.get(
-  "/feeds",
-  authenticateTokenFromQueryOptional,
-  checkProStatus,
-  (req, res) => {
-    // 检查版本号和 Pro 状态
-    // 如果版本号 >= 0.2.05 且不是 Pro 用户，直接返回 200 OK，不建立 SSE 连接
-    const version = getVersionFromRequest(req);
-    if (
-      version &&
-      isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO) &&
-      req.isPro !== true
-    ) {
-      // 非 Pro 用户且版本号 >= 0.2.05，直接返回 200 OK
-      return res.status(200).json({
-        code: 200,
-        message: "Pro subscription required for SSE feeds",
-        proMessage: "Pro subscription required to get full information",
-      });
-    }
+router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, res) => {
+  // 设置 Redis 客户端（如果还没有设置）
+  if (!connectionManager.redisClient && req.redisClient) {
+    connectionManager.setRedisClient(req.redisClient);
+  }
 
-    // 设置 Redis 客户端（如果还没有设置）
-    if (!connectionManager.redisClient && req.redisClient) {
-      connectionManager.setRedisClient(req.redisClient);
-    }
+  // 设置 SSE 响应头
+  setupSSEHeaders(res);
 
-    // 设置 SSE 响应头
-    setupSSEHeaders(res);
+  // 发送初始连接确认
+  res.write(": SSE connection established\n\n");
+  res.flushHeaders();
 
-    // 发送初始连接确认
-    res.write(": SSE connection established\n\n");
-    res.flushHeaders();
+  // 检查版本号和 Pro 状态
+  const version = getVersionFromRequest(req);
+  const shouldAddConnection = !(
+    version &&
+    isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO) &&
+    req.isPro !== true
+  );
 
-    // 添加到连接管理器
+  if (shouldAddConnection) {
+    // Pro 用户或版本号 < 0.2.05，正常加入连接管理器
     connectionManager.addConnection(res);
 
     // 处理客户端断开连接
@@ -1000,8 +989,22 @@ router.get(
       connectionManager.removeConnection(res);
       res.end();
     });
+  } else {
+    // 非 Pro 用户且版本号 >= 0.2.05，不加入连接管理器，只处理断开连接
+    // console.log("[sse feeds 核心] 非 Pro 用户且版本号 >= 0.2.05，不加入连接管理器");
+
+    // 处理客户端断开连接（不需要调用 removeConnection，因为没有添加）
+    req.on("close", () => {
+      res.end();
+    });
+
+    // 处理错误
+    req.on("error", (error) => {
+      console.error("[sse feeds 核心] SSE 连接错误:", error);
+      res.end();
+    });
   }
-);
+});
 
 module.exports = router;
 module.exports.setupSSEHeaders = setupSSEHeaders;
