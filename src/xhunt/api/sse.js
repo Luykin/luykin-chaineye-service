@@ -959,7 +959,8 @@ router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, r
   }
 
   // 获取版本号（用于连接确认消息）
-  const version = getVersionFromRequest(req);
+  // SSE 请求从查询参数中获取版本号（因为 EventSource 不支持自定义 headers）
+  const version = req.query["x-extension-version"] || req.query["x_extension_version"] || null;
 
   // 设置 SSE 响应头
   setupSSEHeaders(res);
