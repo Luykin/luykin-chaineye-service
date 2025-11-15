@@ -1,0 +1,111 @@
+// middleware/pro-status.js
+
+const { XHuntUserProSubscription } = require("../../models/postgres-start");
+const { Op } = require("sequelize");
+const {
+  getVersionFromRequest,
+  isVersionGreaterOrEqual,
+} = require("../utils/version");
+
+// 最小版本号：只有 >= 0.2.05 的版本才启用 Pro 检查
+const MIN_VERSION_FOR_PRO = "0.2.05";
+
+/**
+ * 检查用户 Pro 状态的中间件（可选模式）
+ * 如果 req.user 存在，查询 Pro 状态并挂载到 req.isPro
+ * 如果 req.user 不存在，设置 req.isPro = false 并继续
+ * 适用于使用 authenticateTokenOptional 的路由
+ *
+ * 注意：只有版本号 >= 0.2.05 才会进行 Pro 检查，否则直接跳过
+ */
+async function checkProStatus(req, res, next) {
+  try {
+    // 检查版本号，如果版本号 < 0.2.05，直接跳过 Pro 检查
+    const version = getVersionFromRequest(req);
+    if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
+      req.isPro = false;
+      return next();
+    }
+
+    // 如果没有用户信息，默认不是 Pro
+    if (!req.user || !req.user.id) {
+      req.isPro = false;
+      return next();
+    }
+
+    // 查询用户当前有效的 Pro 订阅
+    // 使用复合索引 idx_pro_subscription_user_end_time 优化查询
+    // 查询条件：userId = ? AND endTime > NOW()，按 endTime DESC 排序取最新的一条
+    const activeProSubscription = await XHuntUserProSubscription.findOne({
+      where: {
+        userId: req.user.id,
+        endTime: {
+          [Op.gt]: new Date(), // endTime > 当前时间，表示未过期
+        },
+      },
+      order: [["endTime", "DESC"]], // 按过期时间降序，取最新的
+      attributes: ["endTime", "planType"], // 只返回需要的字段
+    });
+
+    // 挂载 Pro 状态到请求对象
+    req.isPro = !!activeProSubscription;
+    req.proExpiryTime = activeProSubscription?.endTime || null;
+
+    next();
+  } catch (error) {
+    console.error("Pro status check error:", error);
+    // 出错时默认不是 Pro，不阻塞请求
+    req.isPro = false;
+    next();
+  }
+}
+
+/**
+ * 检查用户 Pro 状态的中间件（强制模式）
+ * 必须有 req.user，否则返回错误
+ * 适用于使用 authenticateToken 的路由
+ *
+ * 注意：只有版本号 >= 0.2.05 才会进行 Pro 检查，否则直接跳过
+ */
+async function checkProStatusRequired(req, res, next) {
+  try {
+    // 检查版本号，如果版本号 < 0.2.05，直接跳过 Pro 检查
+    const version = getVersionFromRequest(req);
+    if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
+      req.isPro = false;
+      return next();
+    }
+
+    // 必须有用户信息
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ error: "TOKEN_REQUIRED" });
+    }
+
+    // 查询用户当前有效的 Pro 订阅
+    const activeProSubscription = await XHuntUserProSubscription.findOne({
+      where: {
+        userId: req.user.id,
+        endTime: {
+          [Op.gt]: new Date(),
+        },
+      },
+      order: [["endTime", "DESC"]],
+      attributes: ["endTime", "planType"],
+    });
+
+    // 挂载 Pro 状态到请求对象
+    req.isPro = !!activeProSubscription;
+    req.proExpiryTime = activeProSubscription?.endTime || null;
+
+    next();
+  } catch (error) {
+    console.error("Pro status check error:", error);
+    res.status(500).json({ error: "Pro 状态检查失败" });
+  }
+}
+
+module.exports = {
+  checkProStatus,
+  checkProStatusRequired,
+};
+

@@ -1,7 +1,12 @@
 const express = require("express");
 const { securityMiddleware } = require("../middleware/security");
-const { authenticateToken } = require("../middleware/auth");
+const {
+  authenticateToken,
+  authenticateTokenOptional,
+} = require("../middleware/auth");
 const { aiContentRateLimit } = require("../middleware/aiContentRateLimit");
+const { checkProStatus } = require("../middleware/pro-status");
+const { applyProDataFiltering } = require("../utils/pro-data-filtering");
 
 const router = express.Router();
 
@@ -92,6 +97,14 @@ async function proxyRequest(req, res, targetUrl) {
       }
     } catch (transformErr) {
       console.warn("Proxy response transform warning:", transformErr);
+    }
+
+    // Pro 用户数据裁切逻辑（统一管理）
+    // 针对非 Pro 用户进行数据过滤
+    try {
+      data = applyProDataFiltering(req, data);
+    } catch (filterErr) {
+      console.warn("Pro data filtering warning:", filterErr);
     }
 
     // 返回响应
@@ -285,6 +298,32 @@ async function handleStreamingResponse(response, res) {
 router.all(
   "/auth/*",
   authenticateToken,
+  securityMiddleware,
+  aiContentRateLimit,
+  async (req, res) => {
+    const targetUrl = getTargetUrl(req);
+    await proxyRequest(req, res, targetUrl);
+  }
+);
+
+// 代理路由 - 删帖接口（需要 Pro 状态检查）
+router.all(
+  "/public/fetch/tweet/deleted",
+  authenticateTokenOptional,
+  checkProStatus,
+  securityMiddleware,
+  aiContentRateLimit,
+  async (req, res) => {
+    const targetUrl = getTargetUrl(req);
+    await proxyRequest(req, res, targetUrl);
+  }
+);
+
+// 代理路由 - 账户profile接口（需要 Pro 状态检查）
+router.all(
+  "/public/fetch/twitter/user",
+  authenticateTokenOptional,
+  checkProStatus,
   securityMiddleware,
   aiContentRateLimit,
   async (req, res) => {
