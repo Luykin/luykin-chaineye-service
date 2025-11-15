@@ -15,7 +15,7 @@ const MIN_VERSION_FOR_PRO = "0.2.05";
  * - 删除账户信息：/public/fetch/twitter/user（部分字段）
  * - 实时feeds流：后续实现
  * - 账户profile改变：/public/fetch/twitter/user（部分字段）
- * - 最近5条关注和被关注：后续实现
+ * - 最近5条关注和被关注：/public/fetch/twitter/follow_relation
  *
  * 注意：只有版本号 >= 0.2.05 才会进行数据裁切，否则直接返回原始数据
  *
@@ -103,6 +103,59 @@ function applyProDataFiltering(req, data) {
             // 如果没有 name 字段，返回空对象
             return {};
           });
+      }
+
+      // 在 message 同级添加提示信息
+      filtered.proMessage = "Pro subscription required to get full information";
+
+      return filtered;
+    }
+    return data;
+  }
+
+  // 3. 关注关系接口：/public/fetch/twitter/follow_relation
+  // 非 Pro 用户：将 followed_action 和 following_action 数组的前 5 条数据变成空对象
+  // 数据结构：{ code: 200, message: "get data success", data: { data: { followed_action: [...], following_action: [...] } } }
+  if (path === "/public/fetch/twitter/follow_relation") {
+    if (data && typeof data === "object") {
+      const filtered = { ...data };
+
+      // 处理嵌套的 data.data.followed_action 数组
+      if (
+        filtered.data &&
+        typeof filtered.data === "object" &&
+        filtered.data.data &&
+        typeof filtered.data.data === "object" &&
+        Array.isArray(filtered.data.data.followed_action)
+      ) {
+        // 将前 5 条数据变成空对象
+        filtered.data.data.followed_action = filtered.data.data.followed_action.map(
+          (item, index) => {
+            if (index < 5) {
+              return {};
+            }
+            return item;
+          }
+        );
+      }
+
+      // 处理嵌套的 data.data.following_action 数组
+      if (
+        filtered.data &&
+        typeof filtered.data === "object" &&
+        filtered.data.data &&
+        typeof filtered.data.data === "object" &&
+        Array.isArray(filtered.data.data.following_action)
+      ) {
+        // 将前 5 条数据变成空对象
+        filtered.data.data.following_action = filtered.data.data.following_action.map(
+          (item, index) => {
+            if (index < 5) {
+              return {};
+            }
+            return item;
+          }
+        );
       }
 
       // 在 message 同级添加提示信息
