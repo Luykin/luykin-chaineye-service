@@ -2,6 +2,7 @@ const {
   getVersionFromRequest,
   isVersionGreaterOrEqual,
 } = require("./version");
+const { getXUserId, checkLegacyPro } = require("./legacy-pro");
 
 // 最小版本号：只有 >= 0.2.05 的版本才启用数据裁切
 const MIN_VERSION_FOR_PRO = "0.2.05";
@@ -35,7 +36,33 @@ function applyProDataFiltering(req, data) {
     return data;
   }
 
-  // 非 Pro 用户，根据路径进行数据裁切
+  // 检查是否是老用户 Pro（在活跃用户名单中且在 2025-12-29 之前）
+  // 优先使用 req.user.username（已验证的用户名），如果没有则使用 x-user-id
+  const username = req.user?.username || getXUserId(req);
+  const legacyProCheck = checkLegacyPro(username);
+  const isLegacyPro = legacyProCheck.isLegacyPro;
+
+  // 如果是老用户 Pro，不进行数据裁切，但添加提示信息
+  if (isLegacyPro) {
+    // 检查是否是需要特殊处理的接口
+    const path = req.path;
+    const needsLegacyMessage =
+      path === "/public/fetch/tweet/deleted" ||
+      path === "/public/fetch/twitter/user" ||
+      path === "/public/fetch/twitter/follow_relation";
+
+    if (needsLegacyMessage && data && typeof data === "object") {
+      const result = { ...data };
+      result.legacyProMessage =
+        "You are a legacy user. As a thank you for your early support, you have access to complete data until December 29, 2025.";
+      return result;
+    }
+
+    // 其他接口直接返回原始数据
+    return data;
+  }
+
+  // 非 Pro 用户且不是老用户，根据路径进行数据裁切
   const path = req.path;
 
   // 1. 删帖接口：/public/fetch/tweet/deleted
