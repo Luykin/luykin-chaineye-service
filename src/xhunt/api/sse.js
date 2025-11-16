@@ -409,6 +409,17 @@ class SSEConnectionManager {
         res.write(heartbeat);
       } catch (error) {
         // 连接已关闭，移除它
+        // 不记录 ECONNRESET、aborted、EPIPE 等正常断开连接的错误
+        if (
+          error.code !== "ECONNRESET" &&
+          error.message !== "aborted" &&
+          error.code !== "EPIPE"
+        ) {
+          console.error(
+            `[sse feeds 核心] 发送心跳时出错:`,
+            error.code || error.message
+          );
+        }
         this.connections.delete(res);
       }
     });
@@ -434,6 +445,17 @@ class SSEConnectionManager {
         res.write(messageStr);
       } catch (error) {
         // 连接已关闭，移除它
+        // 不记录 ECONNRESET、aborted、EPIPE 等正常断开连接的错误
+        if (
+          error.code !== "ECONNRESET" &&
+          error.message !== "aborted" &&
+          error.code !== "EPIPE"
+        ) {
+          console.error(
+            `[sse feeds 核心] 推送消息时出错:`,
+            error.code || error.message
+          );
+        }
         closedConnections++;
         this.connections.delete(res);
       }
@@ -1002,7 +1024,19 @@ router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, r
 
     // 处理错误
     req.on("error", (error) => {
-      console.error("[sse feeds 核心] SSE 连接错误:", error);
+      // 区分正常的断开连接和真正的错误
+      // ECONNRESET 和 aborted 通常是客户端正常断开连接，不应该记录为错误
+      if (
+        error.code === "ECONNRESET" ||
+        error.message === "aborted" ||
+        error.code === "EPIPE"
+      ) {
+        // 客户端正常断开连接，只记录调试信息
+        // console.log("[sse feeds 核心] 客户端断开连接:", error.code || error.message);
+      } else {
+        // 真正的错误才记录
+        console.error("[sse feeds 核心] SSE 连接错误:", error);
+      }
       connectionManager.removeConnection(res);
       res.end();
     });
@@ -1026,7 +1060,19 @@ router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, r
 
     // 处理错误
     req.on("error", (error) => {
-      console.error("[sse feeds 核心] SSE 连接错误:", error);
+      // 区分正常的断开连接和真正的错误
+      // ECONNRESET 和 aborted 通常是客户端正常断开连接，不应该记录为错误
+      if (
+        error.code === "ECONNRESET" ||
+        error.message === "aborted" ||
+        error.code === "EPIPE"
+      ) {
+        // 客户端正常断开连接，只记录调试信息
+        // console.log("[sse feeds 核心] 客户端断开连接:", error.code || error.message);
+      } else {
+        // 真正的错误才记录
+        console.error("[sse feeds 核心] SSE 连接错误:", error);
+      }
       res.end();
     });
   }

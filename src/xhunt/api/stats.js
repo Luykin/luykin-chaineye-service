@@ -552,80 +552,33 @@ router.get("/export/active-users/js", basicAuth, async (req, res) => {
     // 获取PostgreSQL模型
     const postgresModels = require("../../models/postgres-start");
     const DailyActiveUser = postgresModels.DailyActiveUser;
-    const XHuntUser = postgresModels.XHuntUser;
-    const { Op } = require("sequelize");
 
     // 查询所有活跃用户记录并在内存中去重
+    // 注意：DailyActiveUser.userId 存储的直接就是 username，不需要查询 XHuntUser 表
     const allActiveUsers = await DailyActiveUser.findAll({
       attributes: ["userId"],
       raw: true,
     });
-    const userIds = [...new Set(allActiveUsers.map((record) => record.userId))];
+    
+    // 直接从 userId 提取用户名并去重（过滤 null/undefined/空字符串）
+    const usernames = [
+      ...new Set(
+        allActiveUsers
+          .map((record) => record.userId)
+          .filter((username) => username && typeof username === "string" && username.trim() !== "")
+      ),
+    ].sort(); // 排序以便查看
 
     console.log(
-      `[数据导出] 找到 ${allActiveUsers.length} 条活跃记录，${userIds.length} 个唯一用户ID`
+      `[数据导出] 找到 ${allActiveUsers.length} 条活跃记录，${usernames.length} 个唯一用户名（去重后）`
     );
 
-    if (userIds.length === 0) {
+    if (usernames.length === 0) {
       return res.status(404).json({
         success: false,
         error: "没有找到活跃用户数据",
       });
     }
-
-    // 通过 userId 关联 XHuntUser 表获取 username
-    // 注意：DailyActiveUser.userId 存储的可能是 XHuntUser.id（UUID格式）或其他格式
-    // 需要过滤出有效的 UUID 格式才能查询 XHuntUser.id
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const validUserIds = userIds.filter((id) => {
-      // 只保留有效的 UUID 格式（36个字符，包含连字符）
-      return id && typeof id === "string" && uuidRegex.test(id.trim());
-    });
-
-    console.log(
-      `[数据导出] 过滤后：${validUserIds.length} 个有效UUID（共 ${userIds.length} 个用户ID）`
-    );
-
-    if (validUserIds.length === 0) {
-      console.log("[数据导出] ⚠️ 没有有效的用户ID");
-      return res.status(404).json({
-        success: false,
-        error: "没有找到有效的活跃用户数据",
-      });
-    }
-
-    // 如果用户ID太多，分批查询（避免 SQL IN 子句过长）
-    const batchSize = 1000;
-    let allUsers = [];
-
-    for (let i = 0; i < validUserIds.length; i += batchSize) {
-      const batch = validUserIds.slice(i, i + batchSize);
-      const batchUsers = await XHuntUser.findAll({
-        where: {
-          id: {
-            [Op.in]: batch,
-          },
-        },
-        attributes: ["id", "username"],
-        raw: true,
-      });
-      allUsers = allUsers.concat(batchUsers);
-    }
-
-    const users = allUsers;
-
-    console.log(
-      `[数据导出] 从 XHuntUser 表中找到 ${users.length} 个用户（共查询 ${userIds.length} 个ID）`
-    );
-
-    // 提取用户名并去重（过滤 null/undefined/空字符串）
-    const usernames = [
-      ...new Set(
-        users
-          .map((user) => user.username)
-          .filter((username) => username && username.trim() !== "")
-      ),
-    ].sort(); // 排序以便查看
 
     console.log(
       `[数据导出] 最终获得 ${usernames.length} 个有效用户名（去重后）`
