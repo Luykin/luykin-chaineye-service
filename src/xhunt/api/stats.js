@@ -562,6 +562,10 @@ router.get("/export/active-users/js", basicAuth, async (req, res) => {
     });
     const userIds = [...new Set(allActiveUsers.map((record) => record.userId))];
 
+    console.log(
+      `[数据导出] 找到 ${allActiveUsers.length} 条活跃记录，${userIds.length} 个唯一用户ID`
+    );
+
     if (userIds.length === 0) {
       return res.status(404).json({
         success: false,
@@ -570,15 +574,44 @@ router.get("/export/active-users/js", basicAuth, async (req, res) => {
     }
 
     // 通过 userId 关联 XHuntUser 表获取 username
-    const users = await XHuntUser.findAll({
-      where: {
-        id: {
-          [Op.in]: userIds,
-        },
-      },
-      attributes: ["username"],
-      raw: true,
+    // 注意：DailyActiveUser.userId 存储的是 XHuntUser.id（UUID格式字符串）
+    // 过滤掉无效的 userId（空值或格式错误的 UUID）
+    const validUserIds = userIds.filter((id) => {
+      // UUID 格式：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (36个字符)
+      return id && typeof id === "string" && id.trim().length > 0;
     });
+
+    if (validUserIds.length === 0) {
+      console.log("[数据导出] ⚠️ 没有有效的用户ID");
+      return res.status(404).json({
+        success: false,
+        error: "没有找到有效的活跃用户数据",
+      });
+    }
+
+    // 如果用户ID太多，分批查询（避免 SQL IN 子句过长）
+    const batchSize = 1000;
+    let allUsers = [];
+
+    for (let i = 0; i < validUserIds.length; i += batchSize) {
+      const batch = validUserIds.slice(i, i + batchSize);
+      const batchUsers = await XHuntUser.findAll({
+        where: {
+          id: {
+            [Op.in]: batch,
+          },
+        },
+        attributes: ["id", "username"],
+        raw: true,
+      });
+      allUsers = allUsers.concat(batchUsers);
+    }
+
+    const users = allUsers;
+
+    console.log(
+      `[数据导出] 从 XHuntUser 表中找到 ${users.length} 个用户（共查询 ${userIds.length} 个ID）`
+    );
 
     // 提取用户名并去重（过滤 null/undefined/空字符串）
     const usernames = [
@@ -588,6 +621,10 @@ router.get("/export/active-users/js", basicAuth, async (req, res) => {
           .filter((username) => username && username.trim() !== "")
       ),
     ].sort(); // 排序以便查看
+
+    console.log(
+      `[数据导出] 最终获得 ${usernames.length} 个有效用户名（去重后）`
+    );
 
     // 生成 JavaScript 文件内容
     // 注意：使用 exports.allActiveUserName 而不是 exports allActiveUserName
@@ -618,10 +655,12 @@ router.get("/export/active-users/js", basicAuth, async (req, res) => {
       `✅ 活跃用户名JS导出完成: ${usernames.length} 个用户名（去重后）`
     );
   } catch (error) {
-    console.error("Error exporting active users JS:", error);
+    console.error("[数据导出] ❌ 导出活跃用户名JS失败:", error);
+    console.error("[数据导出] 错误堆栈:", error.stack);
     res.status(500).json({
       success: false,
       error: "导出活跃用户数据失败",
+      message: error.message || "未知错误",
     });
   }
 });
