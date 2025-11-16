@@ -574,12 +574,17 @@ router.get("/export/active-users/js", basicAuth, async (req, res) => {
     }
 
     // 通过 userId 关联 XHuntUser 表获取 username
-    // 注意：DailyActiveUser.userId 存储的是 XHuntUser.id（UUID格式字符串）
-    // 过滤掉无效的 userId（空值或格式错误的 UUID）
+    // 注意：DailyActiveUser.userId 存储的可能是 XHuntUser.id（UUID格式）或其他格式
+    // 需要过滤出有效的 UUID 格式才能查询 XHuntUser.id
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const validUserIds = userIds.filter((id) => {
-      // UUID 格式：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (36个字符)
-      return id && typeof id === "string" && id.trim().length > 0;
+      // 只保留有效的 UUID 格式（36个字符，包含连字符）
+      return id && typeof id === "string" && uuidRegex.test(id.trim());
     });
+
+    console.log(
+      `[数据导出] 过滤后：${validUserIds.length} 个有效UUID（共 ${userIds.length} 个用户ID）`
+    );
 
     if (validUserIds.length === 0) {
       console.log("[数据导出] ⚠️ 没有有效的用户ID");
