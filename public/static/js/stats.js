@@ -128,6 +128,15 @@ function bindExportEvents() {
   } else {
     console.error("❌ 未找到Excel导出按钮");
   }
+
+  // 活跃用户名JS导出
+  const exportActiveUsersJsBtn = document.getElementById("export-active-users-js");
+  if (exportActiveUsersJsBtn) {
+    exportActiveUsersJsBtn.addEventListener("click", exportActiveUsersJs);
+    console.log("✅ 活跃用户名JS导出按钮事件绑定成功");
+  } else {
+    console.error("❌ 未找到活跃用户名JS导出按钮");
+  }
 }
 
 // 下载有灵魂的KOL评论者数据 - 已注释
@@ -361,6 +370,61 @@ function exportUsersExcel() {
     if (exportBtn) {
       exportBtn.disabled = false;
       exportBtn.innerHTML = '<span class="btn-icon">📊</span>导出用户Excel';
+    }
+
+    hideExportStatus();
+  }
+}
+
+// 导出活跃用户名JS文件
+function exportActiveUsersJs() {
+  console.log("开始导出活跃用户名JS文件...");
+
+  // 显示加载状态
+  showExportStatus("正在生成活跃用户名JS文件...");
+
+  // 禁用按钮防止重复点击
+  const exportBtn = document.getElementById("export-active-users-js");
+  if (exportBtn) {
+    exportBtn.disabled = true;
+    exportBtn.innerHTML = '<span class="btn-icon">⏳</span>正在生成...';
+  }
+
+  try {
+    // 创建下载链接
+    const downloadUrl = "/api/xhunt/stats/export/active-users/js";
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = `allActiveUserName_${
+      new Date().toISOString().split("T")[0]
+    }.js`;
+    link.style.display = "none";
+
+    // 添加到页面并触发下载
+    document.body.appendChild(link);
+    link.click();
+
+    // 清理
+    setTimeout(() => {
+      document.body.removeChild(link);
+      hideExportStatus();
+
+      // 恢复按钮状态
+      if (exportBtn) {
+        exportBtn.disabled = false;
+        exportBtn.innerHTML = '<span class="btn-icon">📝</span>导出活跃用户名JS';
+      }
+    }, 2000);
+
+    console.log("活跃用户名JS导出请求已发送");
+  } catch (error) {
+    console.error("导出活跃用户名JS失败:", error);
+    alert("导出失败: " + error.message);
+
+    // 恢复按钮状态
+    if (exportBtn) {
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = '<span class="btn-icon">📝</span>导出活跃用户名JS';
     }
 
     hideExportStatus();

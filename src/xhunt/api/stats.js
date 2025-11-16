@@ -526,6 +526,102 @@ router.get("/export/users/excel", basicAuth, async (req, res) => {
 });
 
 /**
+ * GET /export/active-users/js
+ * 导出所有活跃用户名为 JavaScript 文件（需要认证，仅 luykin 用户）
+ */
+router.get("/export/active-users/js", basicAuth, async (req, res) => {
+  try {
+    // 权限检查：只有 luykin 用户可以执行数据导出操作
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `[数据导出] ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "权限不足",
+        message: "权限不足",
+      });
+    }
+
+    console.log(
+      `[数据导出] ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
+    );
+
+    // 获取PostgreSQL模型
+    const postgresModels = require("../../models/postgres-start");
+    const DailyActiveUser = postgresModels.DailyActiveUser;
+    const XHuntUser = postgresModels.XHuntUser;
+    const { Op } = require("sequelize");
+
+    // 查询所有活跃用户记录并在内存中去重
+    const allActiveUsers = await DailyActiveUser.findAll({
+      attributes: ["userId"],
+      raw: true,
+    });
+    const userIds = [...new Set(allActiveUsers.map((record) => record.userId))];
+
+    if (userIds.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "没有找到活跃用户数据",
+      });
+    }
+
+    // 通过 userId 关联 XHuntUser 表获取 username
+    const users = await XHuntUser.findAll({
+      where: {
+        id: {
+          [Op.in]: userIds,
+        },
+      },
+      attributes: ["username"],
+      raw: true,
+    });
+
+    // 提取用户名并去重（过滤 null/undefined/空字符串）
+    const usernames = [
+      ...new Set(
+        users
+          .map((user) => user.username)
+          .filter((username) => username && username.trim() !== "")
+      ),
+    ].sort(); // 排序以便查看
+
+    // 生成 JavaScript 文件内容
+    // 注意：使用 exports.allActiveUserName 而不是 exports allActiveUserName
+    const jsContent = `exports.allActiveUserName = [\n${usernames
+      .map((username) => `  "${username.replace(/"/g, '\\"')}"`)
+      .join(",\n")}\n];\n`;
+
+    // 设置响应头
+    const fileName = `allActiveUserName_${
+      new Date().toISOString().split("T")[0]
+    }.js`;
+    res.setHeader("Content-Type", "application/javascript");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(fileName)}"`
+    );
+    res.setHeader("Content-Length", Buffer.byteLength(jsContent, "utf8"));
+
+    // 发送文件
+    res.send(jsContent);
+
+    console.log(
+      `✅ 活跃用户名JS导出完成: ${usernames.length} 个用户名（去重后）`
+    );
+  } catch (error) {
+    console.error("Error exporting active users JS:", error);
+    res.status(500).json({
+      success: false,
+      error: "导出活跃用户数据失败",
+    });
+  }
+});
+
+/**
  * GET /log-search
  * 日志搜索接口（需要认证，仅 luykin 用户）- 优化版本
  */

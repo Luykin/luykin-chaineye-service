@@ -26,6 +26,28 @@
         </div>
       </div>
     </div>
+
+    <!-- 活跃用户名导出 -->
+    <div class="export-card">
+      <div class="export-card-header">
+        <h3>👥 活跃用户名导出</h3>
+        <p>导出所有活跃用户名为 JavaScript 文件</p>
+      </div>
+      <div class="export-card-content">
+        <p class="export-description">
+          包含所有在 DailyActiveUser 表中的活跃用户名（已去重），导出为 JavaScript 数组格式。
+        </p>
+        <div class="export-actions">
+          <button id="export-active-users-js" class="export-btn tertiary">
+            <span class="btn-icon">📝</span>
+            导出活跃用户名JS
+          </button>
+          <div class="export-info">
+            <small>将下载包含所有活跃用户名的 JavaScript 文件</small>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 导出状态显示 -->
@@ -45,6 +67,13 @@
         <div class="history-content">
           <strong>用户数据</strong>
           <p>包含已登录插件的用户信息：Twitter ID、用户名和显示名称</p>
+        </div>
+      </div>
+      <div class="history-item">
+        <div class="history-icon">📝</div>
+        <div class="history-content">
+          <strong>活跃用户名</strong>
+          <p>包含所有在 DailyActiveUser 表中的活跃用户名（已去重），导出为 JavaScript 数组格式</p>
         </div>
       </div>
     </div>
