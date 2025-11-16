@@ -518,7 +518,7 @@ const validateBrowserEnvironment = (req, allowQueryParams = false) => {
     const shouldSkipBrowserCheck =
       windowLocationHref === "background-script" &&
       SKIP_SIGNATURE_PATHS.includes(currentPath) &&
-      (version === "0.0.0" || version === "9.09.0");
+      (version === "0.0.0" || version === "9.09.09");
     return shouldSkipBrowserCheck;
   }
 
@@ -575,7 +575,7 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
   const shouldSkipSignature =
     windowLocationHref === "background-script" &&
     SKIP_SIGNATURE_PATHS.includes(currentPath) &&
-    (version === "0.0.0" || version === "9.09.0");
+    (version === "0.0.0" || version === "9.09.09");
 
   // 验证签名（除非满足跳过条件）
   if (!shouldSkipSignature) {
