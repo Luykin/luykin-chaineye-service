@@ -6,6 +6,7 @@ const {
   getVersionFromRequest,
   isVersionGreaterOrEqual,
 } = require("../utils/version");
+const { getXUserId, checkLegacyPro } = require("../utils/legacy-pro");
 
 // 最小版本号：只有 >= 0.2.05 的版本才启用 Pro 检查
 const MIN_VERSION_FOR_PRO = "0.2.05";
@@ -68,9 +69,29 @@ async function checkProStatus(req, res, next) {
       attributes: ["endTime", "planType"], // 只返回需要的字段
     });
 
-    // 挂载 Pro 状态到请求对象
-    req.isPro = !!activeProSubscription;
-    req.proExpiryTime = activeProSubscription?.endTime || null;
+    // 如果有有效的 Pro 订阅，直接使用
+    if (activeProSubscription) {
+      req.isPro = true;
+      req.proExpiryTime = activeProSubscription.endTime;
+      return next();
+    }
+
+    // 如果没有有效的 Pro 订阅，检查是否是老用户 Pro
+    // 老用户 Pro：在活跃用户名单中且在 2025-12-29 之前
+    // 优先使用 req.user.username（已验证的用户名），如果没有则使用 x-user-id
+    const username = req.user?.username || getXUserId(req);
+    const legacyProCheck = checkLegacyPro(username);
+
+    if (legacyProCheck.isLegacyPro) {
+      req.isPro = true;
+      req.proExpiryTime = legacyProCheck.proExpiryTime;
+      console.log(
+        `[pro-status] ✅ 用户 ${req.user.username || req.user.id} 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
+      );
+    } else {
+      req.isPro = false;
+      req.proExpiryTime = null;
+    }
 
     next();
   } catch (error) {
@@ -114,9 +135,29 @@ async function checkProStatusRequired(req, res, next) {
       attributes: ["endTime", "planType"],
     });
 
-    // 挂载 Pro 状态到请求对象
-    req.isPro = !!activeProSubscription;
-    req.proExpiryTime = activeProSubscription?.endTime || null;
+    // 如果有有效的 Pro 订阅，直接使用
+    if (activeProSubscription) {
+      req.isPro = true;
+      req.proExpiryTime = activeProSubscription.endTime;
+      return next();
+    }
+
+    // 如果没有有效的 Pro 订阅，检查是否是老用户 Pro
+    // 老用户 Pro：在活跃用户名单中且在 2025-12-29 之前
+    // 优先使用 req.user.username（已验证的用户名），如果没有则使用 x-user-id
+    const username = req.user?.username || getXUserId(req);
+    const legacyProCheck = checkLegacyPro(username);
+
+    if (legacyProCheck.isLegacyPro) {
+      req.isPro = true;
+      req.proExpiryTime = legacyProCheck.proExpiryTime;
+      console.log(
+        `[pro-status] ✅ 用户 ${req.user.username || req.user.id} 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
+      );
+    } else {
+      req.isPro = false;
+      req.proExpiryTime = null;
+    }
 
     next();
   } catch (error) {

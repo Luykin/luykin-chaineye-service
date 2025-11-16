@@ -17,6 +17,7 @@ const { authenticateToken } = require("../middleware/auth");
 const { Op } = require("sequelize");
 const axios = require("axios");
 const retry = require("async-retry");
+const { getXUserId, checkLegacyPro } = require("../utils/legacy-pro");
 
 const router = express.Router();
 
@@ -363,8 +364,27 @@ router.get("/me", authenticateToken, async (req, res) => {
       attributes: ["endTime", "planType"], // 只返回需要的字段
     });
 
-    const isPro = !!activeProSubscription;
-    const proExpiryTime = activeProSubscription?.endTime || null;
+    // 如果有有效的 Pro 订阅，直接使用
+    let isPro = !!activeProSubscription;
+    let proExpiryTime = activeProSubscription?.endTime || null;
+    let isLegacyPro = false; // 标识是否是老用户 Pro（非数据库订阅）
+
+    // 如果没有有效的 Pro 订阅，检查是否是老用户 Pro
+    // 老用户 Pro：在活跃用户名单中且在 2025-12-29 之前
+    // 优先使用 req.user.username（已验证的用户名），如果没有则使用 x-user-id
+    if (!isPro) {
+      const username = req.user?.username || getXUserId(req);
+      const legacyProCheck = checkLegacyPro(username);
+
+      if (legacyProCheck.isLegacyPro) {
+        isPro = true;
+        proExpiryTime = legacyProCheck.proExpiryTime;
+        isLegacyPro = true; // 标记为老用户 Pro
+        console.log(
+          `[auth /me] ✅ 用户 ${req.user.username || req.user.id} 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
+        );
+      }
+    }
 
     res.json({
       username: req.user.username,
@@ -375,6 +395,7 @@ router.get("/me", authenticateToken, async (req, res) => {
       xPoints: -1,
       isPro,
       proExpiryTime,
+      isLegacyPro, // 标识是否是老用户 Pro（true 表示是老用户 Pro，false 表示是数据库订阅的 Pro 或非 Pro）
     });
   } catch (error) {
     console.error("Failed to fetch user info:", error);
