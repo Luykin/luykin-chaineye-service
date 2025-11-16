@@ -599,12 +599,17 @@ router.get("/export/active-users/js", basicAuth, async (req, res) => {
     const fileName = `allActiveUserName_${
       new Date().toISOString().split("T")[0]
     }.js`;
-    res.setHeader("Content-Type", "application/javascript");
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${encodeURIComponent(fileName)}"`
     );
     res.setHeader("Content-Length", Buffer.byteLength(jsContent, "utf8"));
+    
+    // 禁用缓存
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
 
     // 发送文件
     res.send(jsContent);

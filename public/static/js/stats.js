@@ -377,7 +377,7 @@ function exportUsersExcel() {
 }
 
 // 导出活跃用户名JS文件
-function exportActiveUsersJs() {
+async function exportActiveUsersJs() {
   console.log("开始导出活跃用户名JS文件...");
 
   // 显示加载状态
@@ -391,10 +391,24 @@ function exportActiveUsersJs() {
   }
 
   try {
-    // 创建下载链接
+    // 使用 fetch API 下载文件（这样可以确保认证信息被正确发送）
     const downloadUrl = "/api/xhunt/stats/export/active-users/js";
+    const response = await fetch(downloadUrl, {
+      method: "GET",
+      credentials: "include", // 包含 cookies
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    // 获取文件内容
+    const blob = await response.blob();
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = downloadUrl;
+    link.href = url;
     link.download = `allActiveUserName_${
       new Date().toISOString().split("T")[0]
     }.js`;
@@ -407,6 +421,7 @@ function exportActiveUsersJs() {
     // 清理
     setTimeout(() => {
       document.body.removeChild(link);
+      window.URL.revokeObjectURL(url); // 释放 URL 对象
       hideExportStatus();
 
       // 恢复按钮状态
@@ -414,9 +429,9 @@ function exportActiveUsersJs() {
         exportBtn.disabled = false;
         exportBtn.innerHTML = '<span class="btn-icon">📝</span>导出活跃用户名JS';
       }
-    }, 2000);
+    }, 1000);
 
-    console.log("活跃用户名JS导出请求已发送");
+    console.log("活跃用户名JS导出完成");
   } catch (error) {
     console.error("导出活跃用户名JS失败:", error);
     alert("导出失败: " + error.message);
