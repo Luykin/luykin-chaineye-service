@@ -652,8 +652,16 @@ const securityMiddleware = (req, res, next) => {
     req.securityContext = validation.securityContext;
 
     // 🔥 智能日活统计 - 使用统一的 DAU 处理函数
-    const xUserId = req.headers["x-user-id"];
-    handleDAUTracking(req, validation.securityContext.fingerprint, xUserId);
+    // 跳过 background-script 的日活统计
+    const windowLocationHref = getRequestParam(
+      req,
+      "window-location-href",
+      false
+    );
+    if (windowLocationHref !== "background-script") {
+      const xUserId = req.headers["x-user-id"];
+      handleDAUTracking(req, validation.securityContext.fingerprint, xUserId);
+    }
 
     next();
   } catch (error) {
