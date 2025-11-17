@@ -1,6 +1,6 @@
 const express = require('express');
 const { query } = require('express-validator');
-const { XReviewForAccount, XHuntUser, XAccount } = require('../models/postgres-start');
+const { XReviewForAccount, XHuntUser, XAccount, EngageToEarnSignup } = require('../models/postgres-start');
 const { Op } = require('sequelize');
 
 const router = express.Router();
@@ -182,6 +182,99 @@ router.get('/reviews', [
 		
 	} catch (error) {
 		console.error('Internal query error:', error);
+		res.status(500).json({
+			success: false,
+			error: '查询失败',
+			message: error.message
+		});
+	}
+});
+
+/**
+ * GET /e2e-activity-signups
+ * 内部查询接口：查询某个活动的所有报名用户
+ * @query activityId - 活动ID (必填，UUID格式)
+ * 
+ * 返回：所有报名该活动的用户信息列表（不包含内部ID）
+ */
+router.get('/e2e-activity-signups', [
+	query('activityId')
+		.notEmpty()
+		.withMessage('activityId参数是必填的')
+		.isUUID()
+		.withMessage('activityId必须是有效的UUID格式')
+], async (req, res) => {
+	try {
+		// 验证参数
+		const errors = [];
+		if (!req.query.activityId) {
+			errors.push({ field: 'activityId', message: 'activityId参数是必填的' });
+		} else {
+			// 验证UUID格式
+			const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+			if (!uuidRegex.test(req.query.activityId)) {
+				errors.push({ field: 'activityId', message: 'activityId必须是有效的UUID格式' });
+			}
+		}
+		
+		if (errors.length > 0) {
+			return res.status(400).json({
+				success: false,
+				error: '参数验证失败',
+				details: errors
+			});
+		}
+
+		const { activityId } = req.query;
+		
+		// 查询该活动的所有报名记录，包含用户信息
+		const signups = await EngageToEarnSignup.findAll({
+			where: {
+				activityId: activityId
+			},
+			include: [{
+				model: XHuntUser,
+				as: 'xHuntUser',
+				attributes: ['id', 'username', 'displayName', 'avatar', 'twitterId']
+			}],
+			attributes: [
+				'id',
+				'xHuntUserId',
+				'xHuntUserName',
+				'twitterId',
+				'activityId',
+				'activityTitle',
+				'tweetLink',
+				'signedAt',
+				'createdAt',
+				'updatedAt'
+			],
+			order: [['signedAt', 'DESC']] // 按报名时间降序排列
+		});
+		
+		// 格式化返回数据（不包含内部ID）
+		const formattedSignups = signups.map(signup => ({
+			signedAt: signup.signedAt,
+			tweetLink: signup.tweetLink,
+			user: {
+				username: signup.xHuntUser?.username || signup.xHuntUserName,
+				displayName: signup.xHuntUser?.displayName,
+				avatar: signup.xHuntUser?.avatar,
+				twitterId: signup.xHuntUser?.twitterId || signup.twitterId
+			},
+			activity: {
+				title: signup.activityTitle
+			}
+		}));
+		
+		return res.json({
+			success: true,
+			total: formattedSignups.length,
+			data: formattedSignups
+		});
+		
+	} catch (error) {
+		console.error('Activity signups query error:', error);
 		res.status(500).json({
 			success: false,
 			error: '查询失败',

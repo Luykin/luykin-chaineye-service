@@ -287,17 +287,17 @@ app.use(
   xHuntPrivateMessageRoutes
 );
 
-// 🆕 新增统计路由 - 无需安全中间件，方便内部监控
-app.use("/api/xhunt/stats", xHuntStatsRoutes);
-
-// Mantle 活动接口
+// Mantle 活动接口 内部有安全中间件
 app.use("/api/xhunt/mantle", xHuntMantleRoutes);
 
-// Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据
-app.use("/api/rootdata", xHuntRootdataRoutes);
-
-// SSE 接口 - 实时推送数据（包含 feeds 等）
+// SSE 接口 - 实时推送数据（包含 feeds 等）有安全中间件
 app.use("/api/xhunt/sse", rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
+
+// 新增统计路由 - 无需安全中间件，方便内部监控。管理后台使用，有basicAuth前端认证机制
+app.use("/api/xhunt/stats", xHuntStatsRoutes);
+
+// Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
+app.use("/api/rootdata", xHuntRootdataRoutes);
 
 // 内部查询API - 使用随机字符前缀，无需安全中间件
 app.use("/api/internal-x9k2m7p4q8", internalQueryRoutes);
