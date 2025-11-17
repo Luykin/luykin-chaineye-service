@@ -1,6 +1,6 @@
 const express = require('express');
 const { query } = require('express-validator');
-const { XReviewForAccount, XHuntUser, XAccount, EngageToEarnSignup } = require('../models/postgres-start');
+const { XReviewForAccount, XHuntUser, XAccount, EngageToEarnSignup, EngageToEarnActivity } = require('../models/postgres-start');
 const { Op } = require('sequelize');
 
 const router = express.Router();
@@ -182,6 +182,77 @@ router.get('/reviews', [
 		
 	} catch (error) {
 		console.error('Internal query error:', error);
+		res.status(500).json({
+			success: false,
+			error: '查询失败',
+			message: error.message
+		});
+	}
+});
+
+/**
+ * GET /e2e-activities
+ * 内部查询接口：查询所有 e2e 活动列表
+ * 
+ * 返回：所有活动信息列表（不包含内部ID）
+ */
+router.get('/e2e-activities', async (req, res) => {
+	try {
+		// 查询所有活动
+		const activities = await EngageToEarnActivity.findAll({
+			order: [['createdAt', 'DESC']], // 按创建时间降序排列
+			attributes: [
+				'activitySlug',
+				'externalId',
+				'avatarImage',
+				'tweetLink',
+				'rewardLabel',
+				'rewardAmountUsd',
+				'title',
+				'description',
+				'startAt',
+				'endAt',
+				'limitProOnly',
+				'limitByFollowers',
+				'minFollowers',
+				'requiresEvmBound',
+				'status',
+				'participantCount',
+				'createdAt',
+				'updatedAt'
+			]
+		});
+		
+		// 格式化返回数据（不包含内部ID）
+		const formattedActivities = activities.map(activity => ({
+			// activitySlug: activity.activitySlug,
+			// externalId: activity.externalId,
+			avatarImage: activity.avatarImage,
+			tweetLink: activity.tweetLink,
+			rewardLabel: activity.rewardLabel,
+			rewardAmountUsd: activity.rewardAmountUsd ? parseFloat(activity.rewardAmountUsd) : null,
+			title: activity.title,
+			description: activity.description,
+			startAt: activity.startAt,
+			endAt: activity.endAt,
+			limitProOnly: activity.limitProOnly,
+			limitByFollowers: activity.limitByFollowers,
+			minFollowers: activity.minFollowers,
+			requiresEvmBound: activity.requiresEvmBound,
+			status: activity.status,
+			participantCount: activity.participantCount,
+			createdAt: activity.createdAt,
+			updatedAt: activity.updatedAt
+		}));
+		
+		return res.json({
+			success: true,
+			total: formattedActivities.length,
+			data: formattedActivities
+		});
+		
+	} catch (error) {
+		console.error('E2E activities query error:', error);
 		res.status(500).json({
 			success: false,
 			error: '查询失败',
