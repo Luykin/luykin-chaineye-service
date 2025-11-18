@@ -571,43 +571,35 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
     "window-location-href",
     allowQueryParams
   );
-  const currentPath = req.baseUrl + req.path;
-  const shouldSkipSignature =
-    windowLocationHref === "background-script" &&
-    SKIP_SIGNATURE_PATHS.includes(currentPath) &&
-    (version === "0.0.0" || version === "9.09.09");
+  // const currentPath = req.baseUrl + req.path;
+  if (allowQueryParams || windowLocationHref === "background-script") {
+    // backgroun请求 和 SSE 请求：使用 FNV-1a 哈希算法
+    const path = req.baseUrl + req.path;
 
-  // 验证签名（除非满足跳过条件）
-  if (!shouldSkipSignature) {
-    if (allowQueryParams) {
-      // SSE 请求：使用 FNV-1a 哈希算法
-      const path = req.baseUrl + req.path;
+    const expectedSignature = generateSSESignature(
+      requestId,
+      timestamp.toString(),
+      fingerprint,
+      req.method.toUpperCase(),
+      path
+    );
 
-      const expectedSignature = generateSSESignature(
-        requestId,
-        timestamp.toString(),
-        fingerprint,
-        req.method.toUpperCase(),
-        path
-      );
-
-      if (signature !== expectedSignature) {
-        return { isValid: false, error: "411" };
-      }
-    } else {
-      // 普通请求：使用 HMAC SHA256 算法
-      const path = req.baseUrl + req.path;
-      const body = req.body;
-      const expectedSignature = generateSignature(
-        req.method,
-        path,
-        timestamp,
-        body,
-        fingerprint
-      );
-      if (signature !== expectedSignature) {
-        return { isValid: false, error: "411" };
-      }
+    if (signature !== expectedSignature) {
+      return { isValid: false, error: "411" };
+    }
+  } else {
+    // 网页的普通请求：使用 HMAC SHA256 算法
+    const path = req.baseUrl + req.path;
+    const body = req.body;
+    const expectedSignature = generateSignature(
+      req.method,
+      path,
+      timestamp,
+      body,
+      fingerprint
+    );
+    if (signature !== expectedSignature) {
+      return { isValid: false, error: "411" };
     }
   }
 
