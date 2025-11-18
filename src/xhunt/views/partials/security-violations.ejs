@@ -1,135 +1,315 @@
+<style>
+  #security-violations-section {
+    --border-color: #e5e7eb;
+    --bg-muted: #f9fafb;
+    --text-muted: #6b7280;
+    --badge-danger: #fee2e2;
+    --badge-danger-text: #b91c1c;
+    --badge-warning: #fef3c7;
+    --badge-warning-text: #92400e;
+    --badge-info: #dbeafe;
+    --badge-info-text: #1d4ed8;
+    --badge-default: #e5e7eb;
+    --badge-default-text: #374151;
+  }
+
+  .security-violations-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 0 4px;
+  }
+
+  .security-violations-toolbar .title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .security-violations-toolbar .title-block h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .security-violations-toolbar .title-block span {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .security-violations-toolbar .actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .security-violations-toolbar button {
+    padding: 9px 18px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+  }
+
+  #security-violation-refresh {
+    background: #2563eb;
+    color: white;
+    border-color: #1d4ed8;
+  }
+
+  #security-violation-refresh:hover {
+    background: #1d4ed8;
+  }
+
+  #security-violation-loading {
+    background: var(--bg-muted);
+    border-radius: 10px;
+    padding: 14px;
+    font-weight: 600;
+    color: #374151;
+    display: none;
+    margin-bottom: 14px;
+  }
+
+  #security-violation-error {
+    display: none;
+    padding: 14px;
+    border-radius: 10px;
+    background: #fee2e2;
+    color: #991b1b;
+    font-weight: 600;
+    margin-bottom: 14px;
+    white-space: pre-line;
+  }
+
+  .security-violation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .violation-card {
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 16px 18px;
+    background: white;
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
+  }
+
+  .violation-card__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+  }
+
+  .violation-card__time {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .violation-card__chip-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .violation-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--bg-muted);
+    border-radius: 999px;
+    font-size: 12px;
+    color: #374151;
+    border: 1px solid var(--border-color);
+  }
+
+  .violation-chip .chip-label {
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  .violation-card__body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+  }
+
+  .violation-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .violation-field .label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .violation-field .value {
+    font-size: 13px;
+    color: #111827;
+    line-height: 1.5;
+    word-break: break-all;
+  }
+
+  .violation-field .method-pill {
+    display: inline-flex;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+
+  .violation-details {
+    margin-top: 12px;
+    border-top: 1px dashed var(--border-color);
+    padding-top: 12px;
+  }
+
+  .violation-details summary {
+    cursor: pointer;
+    color: #2563eb;
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .violation-details pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    overflow-x: auto;
+    margin-top: 8px;
+    max-height: 200px;
+  }
+
+  .violation-empty {
+    padding: 40px;
+    text-align: center;
+    border: 2px dashed var(--border-color);
+    border-radius: 14px;
+    color: var(--text-muted);
+    background: var(--bg-muted);
+    font-weight: 600;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .badge.badge-danger {
+    background: var(--badge-danger);
+    color: var(--badge-danger-text);
+    border-color: #fecaca;
+  }
+
+  .badge.badge-warning {
+    background: var(--badge-warning);
+    color: var(--badge-warning-text);
+    border-color: #fcd34d;
+  }
+
+  .badge.badge-info {
+    background: var(--badge-info);
+    color: var(--badge-info-text);
+    border-color: #bfdbfe;
+  }
+
+  .badge.badge-default {
+    background: var(--badge-default);
+    color: var(--badge-default-text);
+    border-color: var(--border-color);
+  }
+
+  .security-violations-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+  }
+
+  .security-violations-pagination button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+    min-width: 110px;
+    transition: 0.2s ease;
+  }
+
+  .security-violations-pagination button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .security-violations-pagination button:not(:disabled):hover {
+    background: var(--bg-muted);
+  }
+
+  @media (max-width: 768px) {
+    .violation-card__body {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
 <div class="stats-section">
   <div class="section" id="security-violations-section">
-    <h2 class="section-title">🛡️ 安全拦截日志</h2>
-
-    <div class="stat-card" style="max-width: 1200px; margin: 0 auto">
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 16px;
-          flex-wrap: wrap;
-          gap: 10px;
-        "
-      >
-        <div>
-          <div style="font-weight: 600; color: #111827">最近安全校验失败记录</div>
-          <div id="security-violation-summary" style="color: #6b7280; font-size: 13px">
-            自动加载最新 50 条记录
-          </div>
-        </div>
-        <div style="display: flex; gap: 10px">
-          <button
-            id="security-violation-refresh"
-            style="
-              padding: 8px 16px;
-              background: #3b82f6;
-              color: white;
-              border: none;
-              border-radius: 6px;
-              cursor: pointer;
-              font-size: 13px;
-              font-weight: 600;
-            "
-          >
-            🔄 刷新
-          </button>
-        </div>
+    <div class="security-violations-toolbar">
+      <div class="title-block">
+        <h3>🛡️ 安全拦截日志</h3>
+        <span id="security-violation-summary">自动加载最新 50 条记录</span>
       </div>
-
-      <div
-        id="security-violation-loading"
-        style="
-          display: none;
-          padding: 15px;
-          background: #f3f4f6;
-          border-radius: 6px;
-          color: #374151;
-          font-weight: 600;
-          margin-bottom: 12px;
-        "
-      >
-        ⏳ 正在加载安全日志...
+      <div class="actions">
+        <button id="security-violation-refresh">🔄 刷新</button>
       </div>
+    </div>
 
-      <div
-        id="security-violation-error"
-        style="
-          display: none;
-          padding: 15px;
-          background: #fee2e2;
-          border-radius: 6px;
-          color: #991b1b;
-          font-weight: 600;
-          margin-bottom: 12px;
-          white-space: pre-line;
-        "
-      ></div>
+    <div id="security-violation-loading">⏳ 正在加载安全日志...</div>
+    <div id="security-violation-error"></div>
 
-      <div class="table-wrapper" style="overflow-x: auto">
-        <table class="stats-table">
-          <thead>
-            <tr>
-              <th style="width: 150px">时间 / 原因</th>
-              <th>失败详情</th>
-              <th>请求信息</th>
-              <th style="width: 220px">指纹 / 版本</th>
-              <th style="width: 220px">IP / 来源</th>
-              <th style="width: 140px">更多</th>
-            </tr>
-          </thead>
-          <tbody id="security-violation-tbody">
-            <tr>
-              <td colspan="6" class="empty-message">暂无数据</td>
-            </tr>
-          </tbody>
-        </table>
+    <div class="security-violation-list" id="security-violation-list">
+      <div class="violation-empty">暂无安全校验失败记录</div>
+    </div>
+
+    <div class="security-violations-pagination">
+      <div id="security-violation-pagination-info" style="color: #6b7280; font-size: 13px">
+        第 1 / 1 页，共 0 条
       </div>
-
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-top: 16px;
-          flex-wrap: wrap;
-          gap: 10px;
-        "
-      >
-        <div id="security-violation-pagination-info" style="color: #6b7280; font-size: 13px">
-          第 1 / 1 页，共 0 条
-        </div>
-        <div style="display: flex; gap: 8px">
-          <button
-            id="security-violation-prev"
-            style="
-              padding: 8px 14px;
-              border: 1px solid #d1d5db;
-              border-radius: 6px;
-              background: white;
-              cursor: pointer;
-              font-size: 13px;
-            "
-            disabled
-          >
-            ⬅️ 上一页
-          </button>
-          <button
-            id="security-violation-next"
-            style="
-              padding: 8px 14px;
-              border: 1px solid #d1d5db;
-              border-radius: 6px;
-              background: white;
-              cursor: pointer;
-              font-size: 13px;
-            "
-            disabled
-          >
-            下一页 ➡️
-          </button>
-        </div>
+      <div style="display: flex; gap: 8px">
+        <button id="security-violation-prev" disabled>⬅️ 上一页</button>
+        <button id="security-violation-next" disabled>下一页 ➡️</button>
       </div>
     </div>
   </div>
@@ -142,7 +322,7 @@
     let totalPages = 1;
     let isLoading = false;
 
-    const tbody = document.getElementById("security-violation-tbody");
+    const listContainer = document.getElementById("security-violation-list");
     const loadingEl = document.getElementById("security-violation-loading");
     const errorEl = document.getElementById("security-violation-error");
     const summaryEl = document.getElementById("security-violation-summary");
@@ -174,8 +354,8 @@
       isLoading = true;
       loadingEl.style.display = "block";
       errorEl.style.display = "none";
-      tbody.innerHTML =
-        '<tr><td colspan="6" class="empty-message">正在加载...</td></tr>';
+      listContainer.innerHTML =
+        '<div class="violation-empty">正在加载...</div>';
 
       try {
         const response = await fetch(
@@ -197,29 +377,29 @@
         currentPage = pagination.page;
         totalPages = pagination.totalPages;
 
-        renderTable(records);
+        renderList(records);
         updateSummary(pagination.total);
         updatePagination(pagination);
       } catch (error) {
         console.error("加载安全日志失败:", error);
         errorEl.textContent = "❌ " + error.message;
         errorEl.style.display = "block";
-        tbody.innerHTML =
-          '<tr><td colspan="6" class="empty-message">加载失败</td></tr>';
+        listContainer.innerHTML =
+          '<div class="violation-empty">加载失败</div>';
       } finally {
         isLoading = false;
         loadingEl.style.display = "none";
       }
     }
 
-    function renderTable(records) {
+    function renderList(records) {
       if (!records || records.length === 0) {
-        tbody.innerHTML =
-          '<tr><td colspan="6" class="empty-message">暂无安全校验失败记录</td></tr>';
+        listContainer.innerHTML =
+          '<div class="violation-empty">暂无安全校验失败记录</div>';
         return;
       }
 
-      tbody.innerHTML = records
+      listContainer.innerHTML = records
         .map((item) => {
           const createdAt = formatDateTime(item.createdAt);
           const reason = escapeHtml(item.reasonCode || "-");
@@ -239,52 +419,75 @@
             : "-";
           const headers = formatJson(item.headers);
           const requestBody = escapeHtml(item.requestBody || "-");
+          const reasonBadge = getReasonBadge(item.reasonCode || "");
 
           return `
-            <tr>
-              <td>
-                <div style="font-weight: 600; color: #111827">${createdAt}</div>
-                <div style="color: #2563eb; font-size: 12px; margin-top: 4px">
-                  ${reason}
+            <div class="violation-card">
+              <div class="violation-card__header">
+                <div>
+                  <div class="violation-card__time">${createdAt}</div>
+                  <div style="margin-top: 6px">${reasonBadge}</div>
                 </div>
-              </td>
-              <td>
-                <div style="color: #111827; font-size: 13px">${errorDetail}</div>
-              </td>
-              <td>
-                <div style="font-weight: 600; color: #111827">${method} ${requestPath}</div>
+                <div class="violation-card__chip-row">
+                  <span class="violation-chip">
+                    <span class="chip-label">IP</span>
+                    <span class="chip-value">${clientIp}</span>
+                  </span>
+                  <span class="violation-chip">
+                    <span class="chip-label">Fingerprint</span>
+                    <span class="chip-value">${fingerprint}</span>
+                  </span>
+                  <span class="violation-chip">
+                    <span class="chip-label">Version</span>
+                    <span class="chip-value">${version}</span>
+                  </span>
+                </div>
+              </div>
+              <div class="violation-card__body">
+                <div class="violation-field" style="grid-column: span 2;">
+                  <span class="label">失败详情</span>
+                  <span class="value">${errorDetail}</span>
+                </div>
+                <div class="violation-field">
+                  <span class="label">请求</span>
+                  <span class="value">
+                    <span class="method-pill">${method}</span>
+                    &nbsp;${requestPath}
+                  </span>
+                </div>
                 ${
                   queryString
-                    ? `<div style="color: #6b7280; font-size: 12px; margin-top: 4px">Query: ${queryString}</div>`
+                    ? `<div class="violation-field">
+                         <span class="label">Query</span>
+                         <span class="value">${queryString}</span>
+                       </div>`
                     : ""
                 }
-                <div style="color: #6b7280; font-size: 12px; margin-top: 4px">Request ID: ${requestId}</div>
-                <div style="color: #6b7280; font-size: 12px; margin-top: 4px">Timestamp: ${requestTimestamp}</div>
-              </td>
-              <td>
-                <div style="font-size: 13px">Fingerprint:</div>
-                <div style="font-weight: 600; color: #111827">${fingerprint}</div>
-                <div style="font-size: 12px; color: #6b7280; margin-top: 6px">Version: ${version}</div>
-              </td>
-              <td>
-                <div style="font-size: 13px">IP:</div>
-                <div style="font-weight: 600; color: #111827">${clientIp}</div>
-                <div style="font-size: 12px; color: #6b7280; margin-top: 6px">来源: ${windowLocation}</div>
-              </td>
-              <td>
-                <details>
-                  <summary style="cursor: pointer; color: #2563eb; font-size: 13px">查看详情</summary>
-                  <div style="margin-top: 8px">
-                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px">Headers</div>
-                    <pre style="background: #f9fafb; padding: 8px; border-radius: 6px; font-size: 11px; max-height: 180px; overflow: auto;">${headers}</pre>
-                  </div>
-                  <div style="margin-top: 8px">
-                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px">Body</div>
-                    <pre style="background: #f9fafb; padding: 8px; border-radius: 6px; font-size: 11px; max-height: 180px; overflow: auto;">${requestBody}</pre>
-                  </div>
-                </details>
-              </td>
-            </tr>
+                <div class="violation-field">
+                  <span class="label">Request ID</span>
+                  <span class="value">${requestId}</span>
+                </div>
+                <div class="violation-field">
+                  <span class="label">Timestamp</span>
+                  <span class="value">${requestTimestamp}</span>
+                </div>
+                <div class="violation-field">
+                  <span class="label">来源</span>
+                  <span class="value">${windowLocation}</span>
+                </div>
+              </div>
+              <details class="violation-details">
+                <summary>展开 Headers / Body 详情</summary>
+                <div style="margin-top: 10px">
+                  <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px">Headers</div>
+                  <pre>${headers}</pre>
+                </div>
+                <div style="margin-top: 12px">
+                  <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px">Body</div>
+                  <pre>${requestBody}</pre>
+                </div>
+              </details>
+            </div>
           `;
         })
         .join("");
@@ -345,6 +548,20 @@
         num = Number(num) || 0;
       }
       return num.toLocaleString("zh-CN");
+    }
+
+    function getReasonBadge(reasonCode) {
+      const code = (reasonCode || "").toLowerCase();
+      let className = "badge-default";
+      if (code.includes("signature") || code.includes("missing")) {
+        className = "badge-danger";
+      } else if (code.includes("timestamp")) {
+        className = "badge-warning";
+      } else if (code.includes("fingerprint")) {
+        className = "badge-info";
+      }
+      const label = escapeHtml(reasonCode || "UNKNOWN");
+      return `<span class="badge ${className}">${label}</span>`;
     }
 
     // 首次进入自动加载
