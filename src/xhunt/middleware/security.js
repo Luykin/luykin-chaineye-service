@@ -741,8 +741,8 @@ const SENSITIVE_HEADER_KEYS = new Set([
 ]);
 
 const SKIP_SSE_SECURITY_LOG_PATHS = [
-  "/api/xhunt/proxy/public/fetch/twitter/feed",
-  "/api/xhunt/proxy/public/fetch/twitter/top_tweet",
+  "fetch/twitter/feed",
+  "fetch/twitter/top_tweet",
 ];
 
 const shouldSkipSecurityViolationLog = (req) => {
