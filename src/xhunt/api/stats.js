@@ -2795,14 +2795,6 @@ function generateTimeWindows(startTime, endTime) {
 router.get("/url-stats", basicAuth, async (req, res) => {
   try {
     const { timeRange = "30m" } = req.query;
-    const redisClient = req.redisClient;
-
-    if (!redisClient) {
-      return res.status(500).json({
-        success: false,
-        error: "Redis客户端未初始化",
-      });
-    }
 
     // 计算时间范围
     const now = new Date();
@@ -2836,90 +2828,35 @@ router.get("/url-stats", basicAuth, async (req, res) => {
     // 生成所有5分钟时间窗口
     const timeWindows = generateTimeWindows(startTime, now);
 
-    // 从Redis和PostgreSQL读取数据
-    const urlStatsMap = new Map(); // urlPath -> totalCount
+    // 从PostgreSQL读取数据
+    const { UrlRequestStats, pgInstance } = require("../../models/postgres-start");
+    const { Op } = require("sequelize");
 
-    // 1. 从Redis读取实时数据（最近20分钟内的数据）
-    const redisCutoffTime = new Date(now.getTime() - 20 * 60 * 1000);
-    const redisTimeWindows = timeWindows.filter((tw) => new Date(tw) >= redisCutoffTime);
-    
-    const allKeys = [];
-    for (const timeWindow of redisTimeWindows) {
-      // 使用 | 作为分隔符，避免与时间窗口ISO字符串中的冒号冲突
-      const pattern = `url_stats:${timeWindow}|*`;
-      let cursor = "0";
-      
-      do {
-        const reply = await redisClient.scan(cursor, {
-          MATCH: pattern,
-          COUNT: 100,
-        });
-        cursor = reply.cursor;
-        allKeys.push(...reply.keys);
-      } while (cursor !== "0");
-    }
+    const pgStartTime = new Date(timeWindows[0]);
+    const pgEndTime = new Date(now);
 
-    // 批量读取所有key的值
-    if (allKeys.length > 0) {
-      const pipeline = redisClient.multi();
-      for (const key of allKeys) {
-        pipeline.get(key);
-      }
-
-      const results = await pipeline.exec();
-      
-      // 解析结果并聚合
-      for (let i = 0; i < allKeys.length; i++) {
-        const key = allKeys[i];
-        const result = results[i];
-        
-        if (result && result[1] !== null) {
-          const count = parseInt(result[1], 10) || 0;
-          
-          // 从key中提取URL路径
-          // key格式: url_stats:${timeWindow}|${urlPath}
-          const separatorIndex = key.indexOf("|");
-          if (separatorIndex > 0) {
-            const urlPath = key.substring(separatorIndex + 1);
-            const currentCount = urlStatsMap.get(urlPath) || 0;
-            urlStatsMap.set(urlPath, currentCount + count);
-          }
-        }
-      }
-    }
-
-    // 2. 从PostgreSQL读取历史数据（20分钟之前的数据）
-    const pgTimeWindows = timeWindows.filter((tw) => new Date(tw) < redisCutoffTime);
-    if (pgTimeWindows.length > 0) {
-      const { UrlRequestStats, pgInstance } = require("../../models/postgres-start");
-      const { Op } = require("sequelize");
-
-      const pgStartTime = new Date(pgTimeWindows[0]);
-      const pgEndTime = new Date(redisCutoffTime);
-
-      // 使用聚合查询，按urlPath分组求和
-      const pgStats = await UrlRequestStats.findAll({
-        where: {
-          timeWindow: {
-            [Op.gte]: pgStartTime,
-            [Op.lt]: pgEndTime,
-          },
+    // 使用聚合查询，按urlPath分组求和
+    const pgStats = await UrlRequestStats.findAll({
+      where: {
+        timeWindow: {
+          [Op.gte]: pgStartTime,
+          [Op.lte]: pgEndTime,
         },
-        attributes: [
-          "urlPath",
-          [pgInstance.fn("SUM", pgInstance.col("UrlRequestStats.request_count")), "totalCount"],
-        ],
-        group: ["urlPath"],
-        raw: true,
-      });
+      },
+      attributes: [
+        "urlPath",
+        [pgInstance.fn("SUM", pgInstance.col("UrlRequestStats.request_count")), "totalCount"],
+      ],
+      group: ["urlPath"],
+      raw: true,
+    });
 
-      // 聚合PostgreSQL数据
-      for (const stat of pgStats) {
-        const count = parseInt(stat.totalCount || 0, 10);
-        if (count > 0) {
-          const currentCount = urlStatsMap.get(stat.urlPath) || 0;
-          urlStatsMap.set(stat.urlPath, currentCount + count);
-        }
+    // 转换为Map并聚合数据
+    const urlStatsMap = new Map(); // urlPath -> totalCount
+    for (const stat of pgStats) {
+      const count = parseInt(stat.totalCount || 0, 10);
+      if (count > 0) {
+        urlStatsMap.set(stat.urlPath, count);
       }
     }
 

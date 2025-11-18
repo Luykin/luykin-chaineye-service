@@ -250,34 +250,34 @@ async function flushStats() {
   }
 }
 
-// 清理10天前的PostgreSQL统计数据（版本统计 + URL统计，每天执行一次）
+// 清理7天前的PostgreSQL统计数据（版本统计 + URL统计，每天执行一次）
 async function cleanupOldStats() {
   try {
     const { Op } = require("sequelize");
-    const tenDaysAgo = new Date();
-    tenDaysAgo.setUTCDate(tenDaysAgo.getUTCDate() - 10);
-    tenDaysAgo.setUTCHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
+    sevenDaysAgo.setUTCHours(0, 0, 0, 0);
 
     // 并行清理两个表
     const [versionDeletedCount, urlDeletedCount] = await Promise.all([
       VersionRequestStats.destroy({
         where: {
           timeWindow: {
-            [Op.lt]: tenDaysAgo,
+            [Op.lt]: sevenDaysAgo,
           },
         },
       }),
       UrlRequestStats.destroy({
         where: {
           timeWindow: {
-            [Op.lt]: tenDaysAgo,
+            [Op.lt]: sevenDaysAgo,
           },
         },
       }),
     ]);
 
     console.log(
-      `[统计数据清理] ✅ 已清理 ${versionDeletedCount} 条版本统计数据，${urlDeletedCount} 条URL统计数据（10天前）`
+      `[统计数据清理] ✅ 已清理 ${versionDeletedCount} 条版本统计数据，${urlDeletedCount} 条URL统计数据（7天前）`
     );
   } catch (error) {
     console.error("[统计数据清理] ❌ 清理旧数据失败:", error);
