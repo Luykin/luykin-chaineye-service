@@ -2633,4 +2633,124 @@ router.post("/trigger-backup", basicAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /version-stats
+ * 版本请求统计查询接口
+ * @query timeRange - 时间范围：30m (最近30分钟), 2h (最近2小时), 12h (最近12小时), 2d (最近2天)
+ */
+router.get("/version-stats", basicAuth, async (req, res) => {
+  try {
+    const { timeRange = "30m" } = req.query;
+
+    // 计算时间范围
+    const now = new Date();
+    let startTime;
+    switch (timeRange) {
+      case "30m":
+        startTime = new Date(now.getTime() - 30 * 60 * 1000);
+        break;
+      case "2h":
+        startTime = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+        break;
+      case "12h":
+        startTime = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+        break;
+      case "2d":
+        startTime = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: "无效的时间范围，支持: 30m, 2h, 12h, 2d",
+        });
+    }
+
+    const { VersionRequestStats } = require("../../models/postgres-start");
+    const { Op } = require("sequelize");
+
+    // 查询数据
+    const stats = await VersionRequestStats.findAll({
+      where: {
+        timeWindow: {
+          [Op.gte]: startTime,
+          [Op.lte]: now,
+        },
+      },
+      order: [["timeWindow", "ASC"]],
+      attributes: ["timeWindow", "version", "requestCount"],
+    });
+
+    // 按版本分组并格式化数据
+    const versionMap = new Map();
+    const timeLabels = new Set();
+
+    for (const stat of stats) {
+      const timeLabel = new Date(stat.timeWindow).toISOString();
+      timeLabels.add(timeLabel);
+
+      if (!versionMap.has(stat.version)) {
+        versionMap.set(stat.version, []);
+      }
+      versionMap.get(stat.version).push({
+        time: timeLabel,
+        count: stat.requestCount,
+      });
+    }
+
+    // 构建图表数据
+    const sortedTimeLabels = Array.from(timeLabels).sort();
+    const datasets = [];
+
+    for (const [version, data] of versionMap.entries()) {
+      const dataMap = new Map(data.map((d) => [d.time, d.count]));
+      const counts = sortedTimeLabels.map((time) => dataMap.get(time) || 0);
+
+      datasets.push({
+        label: version,
+        data: counts,
+        borderColor: getVersionColor(version),
+        backgroundColor: getVersionColor(version, 0.1),
+        tension: 0.4,
+      });
+    }
+
+    res.json({
+      success: true,
+      timeRange,
+      labels: sortedTimeLabels,
+      datasets,
+      totalVersions: versionMap.size,
+    });
+  } catch (error) {
+    console.error("版本统计查询错误:", error);
+    res.status(500).json({
+      success: false,
+      error: "查询失败",
+      message: error.message,
+    });
+  }
+});
+
+// 为不同版本生成颜色（简单的哈希函数）
+function getVersionColor(version, alpha = 1) {
+  const colors = [
+    `rgba(54, 162, 235, ${alpha})`, // 蓝色
+    `rgba(255, 99, 132, ${alpha})`, // 红色
+    `rgba(75, 192, 192, ${alpha})`, // 青色
+    `rgba(255, 206, 86, ${alpha})`, // 黄色
+    `rgba(153, 102, 255, ${alpha})`, // 紫色
+    `rgba(255, 159, 64, ${alpha})`, // 橙色
+    `rgba(199, 199, 199, ${alpha})`, // 灰色
+    `rgba(83, 102, 255, ${alpha})`, // 靛蓝色
+    `rgba(255, 99, 255, ${alpha})`, // 粉红色
+    `rgba(99, 255, 132, ${alpha})`, // 绿色
+  ];
+
+  let hash = 0;
+  for (let i = 0; i < version.length; i++) {
+    hash = version.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
 module.exports = router;

@@ -128,11 +128,126 @@ class DAUCacheManager {
 // 创建单例实例
 const dauCacheManager = new DAUCacheManager();
 
-// 定义跳过签名验证的路径列表
-const SKIP_SIGNATURE_PATHS = [
-  "/api/xhunt/proxy/public/fetch/twitter/feed",
-  "/api/xhunt/proxy/public/fetch/twitter/top_tweet",
-];
+// 🚀 版本请求统计管理器
+class VersionStatsManager {
+  constructor() {
+    this.memoryCounter = {}; // 内存计数器：{ timeWindow: { version: count } }
+    this.lastTimeWindow = null; // 上一个时间窗口
+    this.requestCount = 0; // 当前窗口的请求计数（用于每100个请求flush）
+    this.isInitialized = false;
+  }
+
+  // 初始化
+  init() {
+    if (this.isInitialized) {
+      return;
+    }
+    this.isInitialized = true;
+    console.log("🚀 版本请求统计管理器已初始化");
+  }
+
+  // 获取5分钟时间窗口（向下取整到5分钟）
+  get5MinWindow() {
+    const now = new Date();
+    const minutes = now.getUTCMinutes();
+    const roundedMinutes = Math.floor(minutes / 5) * 5;
+    const window = new Date(now);
+    window.setUTCMinutes(roundedMinutes);
+    window.setUTCSeconds(0);
+    window.setUTCMilliseconds(0);
+    return window.toISOString();
+  }
+
+  // 将内存数据flush到Redis
+  async flushMemoryToRedis(timeWindow, redisClient) {
+    if (!this.memoryCounter[timeWindow] || !redisClient) {
+      return;
+    }
+
+    const versions = this.memoryCounter[timeWindow];
+    const pipeline = redisClient.multi();
+
+    for (const [version, count] of Object.entries(versions)) {
+      if (count > 0) {
+        const key = `version_stats:${timeWindow}:${version}`;
+        pipeline.incrBy(key, count);
+        // 设置过期时间（20分钟）
+        pipeline.expire(key, 20 * 60);
+      }
+    }
+
+    try {
+      await pipeline.exec();
+      // 清空该时间窗口的内存数据
+      delete this.memoryCounter[timeWindow];
+    } catch (error) {
+      console.error(`[版本统计] Flush内存到Redis失败 (${timeWindow}):`, error);
+    }
+  }
+
+  // 处理版本统计
+  async handleVersionStats(req) {
+    if (!req.redisClient) {
+      return;
+    }
+
+    // 检查 windowLocationHref 是否为 background-script
+    const windowLocationHref = getRequestParam(
+      req,
+      "window-location-href",
+      false
+    );
+    if (windowLocationHref === "background-script") {
+      return;
+    }
+
+    // 获取版本号
+    const version = getRequestParam(req, "extension-version", true);
+    if (!version || version.trim() === "") {
+      return;
+    }
+
+    const currentTimeWindow = this.get5MinWindow();
+
+    // 如果时间窗口变化了，先flush上一个窗口的数据
+    if (this.lastTimeWindow && this.lastTimeWindow !== currentTimeWindow) {
+      await this.flushMemoryToRedis(this.lastTimeWindow, req.redisClient);
+    }
+
+    // 更新当前窗口
+    this.lastTimeWindow = currentTimeWindow;
+
+    // 初始化当前窗口的计数器
+    if (!this.memoryCounter[currentTimeWindow]) {
+      this.memoryCounter[currentTimeWindow] = {};
+    }
+
+    // 累加当前请求
+    this.memoryCounter[currentTimeWindow][version] =
+      (this.memoryCounter[currentTimeWindow][version] || 0) + 1;
+    this.requestCount++;
+
+    // 每100个请求flush当前窗口
+    if (this.requestCount >= 100) {
+      await this.flushMemoryToRedis(currentTimeWindow, req.redisClient);
+      this.requestCount = 0;
+    }
+  }
+
+  // 获取内存状态（用于调试）
+  getStatus() {
+    return {
+      memoryCounter: this.memoryCounter,
+      lastTimeWindow: this.lastTimeWindow,
+      requestCount: this.requestCount,
+      isInitialized: this.isInitialized,
+    };
+  }
+}
+
+// 创建单例实例
+const versionStatsManager = new VersionStatsManager();
+
 
 // 速率限制中间件
 const rateLimiter = rateLimit({
@@ -514,10 +629,8 @@ const validateBrowserEnvironment = (req, allowQueryParams = false) => {
   const version = getRequestParam(req, "extension-version", allowQueryParams);
 
   if (!isBrowserEnvironment(userAgent, windowLocationHref)) {
-    const currentPath = req.baseUrl + req.path;
     const shouldSkipBrowserCheck =
       windowLocationHref === "background-script" &&
-      SKIP_SIGNATURE_PATHS.includes(currentPath) &&
       (version === "0.0.0" || version === "9.09.09");
     return shouldSkipBrowserCheck;
   }
@@ -644,7 +757,6 @@ const securityMiddleware = (req, res, next) => {
     req.securityContext = validation.securityContext;
 
     // 🔥 智能日活统计 - 使用统一的 DAU 处理函数
-    // 跳过 background-script 的日活统计
     const windowLocationHref = getRequestParam(
       req,
       "window-location-href",
@@ -654,6 +766,14 @@ const securityMiddleware = (req, res, next) => {
       const xUserId = req.headers["x-user-id"];
       handleDAUTracking(req, validation.securityContext.fingerprint, xUserId);
     }
+
+    // 🔥 插件版本请求统计 - 异步处理，不阻塞请求
+    versionStatsManager.init();
+    setImmediate(() => {
+      versionStatsManager.handleVersionStats(req).catch((error) => {
+        console.error("[版本统计] 处理失败:", error);
+      });
+    });
 
     next();
   } catch (error) {
@@ -691,4 +811,5 @@ module.exports = {
   generateSignature, // 导出用于测试（HMAC SHA256，普通 API）
   generateSSESignature, // 导出用于测试（FNV-1a，SSE）
   dauCacheManager, // 导出缓存管理器（用于测试和监控）
+  versionStatsManager, // 导出版本统计管理器（用于测试和监控）
 };

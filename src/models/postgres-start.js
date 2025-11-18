@@ -12,6 +12,7 @@ const MantleRegistration2Model = require("../xhunt/models/MantleRegistration2");
 const XPrivateMessageModel = require("../xhunt/models/XPrivateMessage");
 const DailyActiveUserModel = require("../xhunt/models/DailyActiveUser");
 const XHuntUserProSubscriptionModel = require("../xhunt/models/XHuntUserProSubscription");
+const VersionRequestStatsModel = require("../xhunt/models/VersionRequestStats");
 
 const pgInstance = new Sequelize({
   dialect: process.env.PG_DIALECT || "postgres",
@@ -42,6 +43,7 @@ const MantleRegistration2 = MantleRegistration2Model(pgInstance);
 const XPrivateMessage = XPrivateMessageModel(pgInstance);
 const DailyActiveUser = DailyActiveUserModel(pgInstance);
 const XHuntUserProSubscription = XHuntUserProSubscriptionModel(pgInstance);
+const VersionRequestStats = VersionRequestStatsModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -206,4 +208,5 @@ module.exports = {
   XPrivateMessage,
   DailyActiveUser,
   XHuntUserProSubscription,
+  VersionRequestStats,
 };
