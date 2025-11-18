@@ -761,6 +761,8 @@ class SecurityViolationLogger {
     this.currentWindowStart = Date.now();
     this.windowCount = 0;
     this.droppedCount = 0;
+    this.invalidTimestampWindow = 2 * 60 * 60 * 1000; // 2小时
+    this.invalidTimestampLogTracker = new Map();
   }
 
   rotateWindow(now = Date.now()) {
@@ -779,6 +781,20 @@ class SecurityViolationLogger {
   logViolation(req, options = {}) {
     try {
       const now = Date.now();
+      const { errorCode, allowQueryParams = false } = options;
+      let invalidTimestampIdentifiers = null;
+      if (errorCode === "400-3") {
+        const throttleCheck = this.shouldThrottleInvalidTimestampLog(
+          req,
+          allowQueryParams,
+          now
+        );
+        if (throttleCheck.shouldThrottle) {
+          return;
+        }
+        invalidTimestampIdentifiers = throttleCheck.identifiers;
+      }
+
       if (!this.canWrite(now)) {
         this.droppedCount++;
         if (this.droppedCount === 1 || this.droppedCount % 10 === 0) {
@@ -792,6 +808,9 @@ class SecurityViolationLogger {
       const payload = this.buildRecord(req, options);
       if (!payload) {
         return;
+      }
+      if (errorCode === "400-3" && invalidTimestampIdentifiers?.length) {
+        this.updateInvalidTimestampTracker(invalidTimestampIdentifiers, now);
       }
 
       this.windowCount++;
@@ -810,6 +829,57 @@ class SecurityViolationLogger {
     } catch (error) {
       console.error("安全校验失败日志处理异常:", error);
     }
+  }
+
+  shouldThrottleInvalidTimestampLog(req, allowQueryParams, now) {
+    const identifiers = this.extractInvalidTimestampIdentifiers(
+      req,
+      allowQueryParams
+    );
+    if (!identifiers.length) {
+      return { shouldThrottle: false, identifiers };
+    }
+    let shouldThrottle = false;
+    for (const key of identifiers) {
+      const lastLoggedAt = this.invalidTimestampLogTracker.get(key);
+      if (lastLoggedAt && now - lastLoggedAt < this.invalidTimestampWindow) {
+        shouldThrottle = true;
+        break;
+      }
+      if (lastLoggedAt && now - lastLoggedAt >= this.invalidTimestampWindow) {
+        this.invalidTimestampLogTracker.delete(key);
+      }
+    }
+    return { shouldThrottle, identifiers };
+  }
+
+  extractInvalidTimestampIdentifiers(req, allowQueryParams) {
+    const identifiers = [];
+    const xUserId = this.normalizeIdentifier(req.headers?.["x-user-id"]);
+    if (xUserId) {
+      identifiers.push(`user:${xUserId}`);
+    }
+    const fingerprint = this.normalizeIdentifier(
+      getRequestParam(req, "device-fingerprint", allowQueryParams)
+    );
+    if (fingerprint) {
+      identifiers.push(`fp:${fingerprint}`);
+    }
+    return identifiers;
+  }
+
+  updateInvalidTimestampTracker(identifiers, timestamp) {
+    for (const key of identifiers) {
+      this.invalidTimestampLogTracker.set(key, timestamp);
+    }
+  }
+
+  normalizeIdentifier(value) {
+    if (typeof value !== "string") {
+      return "";
+    }
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : "";
   }
 
   buildRecord(req, options = {}) {
