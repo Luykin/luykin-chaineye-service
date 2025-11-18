@@ -418,6 +418,8 @@
     // 计算过滤后的统计信息
     const totalRequests = filteredStats.reduce((sum, item) => sum + item.count, 0);
     const totalUrls = filteredStats.length;
+    const MAX_DISPLAY = 50; // 最多显示50条
+    const displayedStats = filteredStats.slice(0, MAX_DISPLAY);
 
     // 更新统计摘要
     document.getElementById('total-requests').textContent = formatNumber(totalRequests);
@@ -432,9 +434,9 @@
       clearBtn.style.display = 'none';
     }
 
-    // 更新表格
-    if (filteredStats.length > 0) {
-      tbody.innerHTML = filteredStats.map((item, index) => {
+    // 更新表格（只显示前50条）
+    if (displayedStats.length > 0) {
+      tbody.innerHTML = displayedStats.map((item, index) => {
         const rank = index + 1;
         const rankClass = rank <= 3 ? `rank-${rank}` : '';
         // 高亮搜索关键词
@@ -448,6 +450,17 @@
           </tr>
         `;
       }).join('');
+      
+      // 如果总数超过50，显示提示信息
+      if (totalUrls > MAX_DISPLAY) {
+        tbody.innerHTML += `
+          <tr>
+            <td colspan="4" class="empty-message" style="font-style: normal; color: #6b7280;">
+              仅显示前 ${MAX_DISPLAY} 条，共 ${formatNumber(totalUrls)} 条接口
+            </td>
+          </tr>
+        `;
+      }
     } else {
       if (currentSearchTerm && currentSearchTerm.trim() !== '') {
         tbody.innerHTML = '<tr><td colspan="4" class="empty-message">未找到匹配的接口路径</td></tr>';
