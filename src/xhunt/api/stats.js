@@ -2905,13 +2905,20 @@ router.get("/security-violations", basicAuth, async (req, res) => {
     const limitQuery = parseInt(req.query.limit, 10) || 50;
     const limit = Math.min(Math.max(limitQuery, 1), 100);
     const offset = (page - 1) * limit;
+    const reasonCode = (req.query.reasonCode || "").trim();
 
     const { SecurityViolationLog } = require("../../models/postgres-start");
+
+    const where = {};
+    if (reasonCode) {
+      where.reasonCode = reasonCode;
+    }
 
     const { rows, count } = await SecurityViolationLog.findAndCountAll({
       order: [["createdAt", "DESC"]],
       offset,
       limit,
+      where,
     });
 
     res.json({

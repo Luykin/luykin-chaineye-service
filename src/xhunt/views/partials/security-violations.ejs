@@ -46,6 +46,7 @@
   .security-violations-toolbar .actions {
     display: flex;
     gap: 10px;
+    align-items: center;
   }
 
   .security-violations-toolbar button {
@@ -292,6 +293,14 @@
         <span id="security-violation-summary">自动加载最新 50 条记录</span>
       </div>
       <div class="actions">
+        <select id="security-violation-reason-filter">
+          <option value="">全部原因</option>
+          <option value="missing_headers">缺少必需的参数 (missing_headers)</option>
+          <option value="invalid_fingerprint">指纹不合法 (invalid_fingerprint)</option>
+          <option value="invalid_request_id">请求ID不合法 (invalid_request_id)</option>
+          <option value="invalid_timestamp">时间戳异常 (invalid_timestamp)</option>
+          <option value="invalid_signature">签名不匹配 (invalid_signature)</option>
+        </select>
         <button id="security-violation-refresh">🔄 刷新</button>
       </div>
     </div>
@@ -321,6 +330,7 @@
     let currentPage = 1;
     let totalPages = 1;
     let isLoading = false;
+    let currentReasonFilter = "";
 
     const listContainer = document.getElementById("security-violation-list");
     const loadingEl = document.getElementById("security-violation-loading");
@@ -332,10 +342,20 @@
     const prevBtn = document.getElementById("security-violation-prev");
     const nextBtn = document.getElementById("security-violation-next");
     const refreshBtn = document.getElementById("security-violation-refresh");
+    const reasonFilterSelect = document.getElementById(
+      "security-violation-reason-filter"
+    );
 
     refreshBtn.addEventListener("click", () => {
-      loadSecurityViolations(currentPage);
+      loadSecurityViolations(1);
     });
+
+    if (reasonFilterSelect) {
+      reasonFilterSelect.addEventListener("change", () => {
+        currentReasonFilter = reasonFilterSelect.value || "";
+        loadSecurityViolations(1);
+      });
+    }
 
     prevBtn.addEventListener("click", () => {
       if (currentPage > 1) {
@@ -358,8 +378,15 @@
         '<div class="violation-empty">正在加载...</div>';
 
       try {
+        const params = new URLSearchParams();
+        params.set("page", page);
+        params.set("limit", PAGE_SIZE);
+        if (currentReasonFilter) {
+          params.set("reasonCode", currentReasonFilter);
+        }
+
         const response = await fetch(
-          `/api/xhunt/stats/security-violations?page=${page}&limit=${PAGE_SIZE}`
+          `/api/xhunt/stats/security-violations?${params.toString()}`
         );
         const result = await response.json();
 
