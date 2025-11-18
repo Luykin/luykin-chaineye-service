@@ -31,7 +31,6 @@ const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const xHuntSSERoutes = require("./xhunt/api/sse");
-const xHuntEngageToEarnRoutes = require("./xhunt/api/engage-to-earn");
 const internalQueryRoutes = require("./api/internal-query");
 const {
   securityMiddleware,
@@ -262,14 +261,6 @@ app.use(
   browserOnlyMiddleware,
   securityMiddleware,
   xHuntNotesRoutes
-);
-
-app.use(
-  "/api/xhunt/engage-to-earn",
-  fingerprintLimiter,
-  browserOnlyMiddleware,
-  securityMiddleware,
-  xHuntEngageToEarnRoutes
 );
 
 app.use(
