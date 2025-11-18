@@ -18,6 +18,19 @@
     <button id="url-stats-refresh" class="btn-refresh">🔄 刷新</button>
   </div>
 
+  <!-- 搜索框 -->
+  <div class="search-container">
+    <label for="url-stats-search">搜索接口路径：</label>
+    <input 
+      type="text" 
+      id="url-stats-search" 
+      class="search-input" 
+      placeholder="例如：/me 或 /api/xhunt/proxy"
+    />
+    <button id="url-stats-search-btn" class="btn-search">🔍 搜索</button>
+    <button id="url-stats-clear-search" class="btn-clear" style="display: none;">清除</button>
+  </div>
+
   <!-- 统计摘要 -->
   <div id="url-stats-summary" class="stats-summary" style="display: none;">
     <div class="summary-item">
@@ -126,6 +139,69 @@
 
   .btn-refresh:hover {
     background: #2563eb;
+  }
+
+  .search-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+  }
+
+  .search-container label {
+    font-weight: 600;
+    color: #374151;
+    white-space: nowrap;
+  }
+
+  .search-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  }
+
+  .search-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  .btn-search {
+    padding: 8px 16px;
+    background: #10b981;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-search:hover {
+    background: #059669;
+  }
+
+  .btn-clear {
+    padding: 8px 16px;
+    background: #6b7280;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-clear:hover {
+    background: #4b5563;
   }
 
   .stats-summary {
@@ -274,6 +350,11 @@
 
 <script>
 (function() {
+  // 存储原始数据
+  let allUrlStats = [];
+  let currentSearchTerm = '';
+  let originalTimeWindows = 0;
+
   // 加载数据
   async function loadUrlStats() {
     const timeRange = document.getElementById('url-stats-time-range').value;
@@ -302,29 +383,12 @@
         throw new Error(data.error || '加载失败');
       }
 
-      // 更新统计摘要
-      document.getElementById('total-requests').textContent = formatNumber(data.data.totalRequests);
-      document.getElementById('total-urls').textContent = formatNumber(data.data.totalUrls);
-      document.getElementById('time-windows').textContent = formatNumber(data.data.timeWindows);
-      summaryEl.style.display = 'flex';
+      // 保存原始数据
+      allUrlStats = data.data.urlStats || [];
+      originalTimeWindows = data.data.timeWindows || 0;
 
-      // 更新表格
-      if (data.data.urlStats && data.data.urlStats.length > 0) {
-        tbody.innerHTML = data.data.urlStats.map((item, index) => {
-          const rank = index + 1;
-          const rankClass = rank <= 3 ? `rank-${rank}` : '';
-          return `
-            <tr class="${rankClass}">
-              <td class="rank-col">${rank}</td>
-              <td class="url-col">${escapeHtml(item.urlPath)}</td>
-              <td class="count-col">${formatNumber(item.count)}</td>
-              <td class="percent-col">${item.percent}%</td>
-            </tr>
-          `;
-        }).join('');
-      } else {
-        tbody.innerHTML = '<tr><td colspan="4" class="empty-message">暂无数据</td></tr>';
-      }
+      // 应用搜索过滤
+      applySearchFilter();
 
       loadingEl.style.display = 'none';
     } catch (error) {
@@ -335,6 +399,77 @@
       tbody.innerHTML = '<tr><td colspan="4" class="empty-message">加载失败</td></tr>';
     }
   }
+
+  // 应用搜索过滤
+  function applySearchFilter() {
+    const tbody = document.getElementById('url-stats-tbody');
+    const summaryEl = document.getElementById('url-stats-summary');
+    const clearBtn = document.getElementById('url-stats-clear-search');
+
+    // 过滤数据
+    let filteredStats = allUrlStats;
+    if (currentSearchTerm && currentSearchTerm.trim() !== '') {
+      const searchLower = currentSearchTerm.toLowerCase().trim();
+      filteredStats = allUrlStats.filter(item => 
+        item.urlPath.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // 计算过滤后的统计信息
+    const totalRequests = filteredStats.reduce((sum, item) => sum + item.count, 0);
+    const totalUrls = filteredStats.length;
+
+    // 更新统计摘要
+    document.getElementById('total-requests').textContent = formatNumber(totalRequests);
+    document.getElementById('total-urls').textContent = formatNumber(totalUrls);
+    document.getElementById('time-windows').textContent = formatNumber(originalTimeWindows);
+    summaryEl.style.display = 'flex';
+
+    // 显示/隐藏清除按钮
+    if (currentSearchTerm && currentSearchTerm.trim() !== '') {
+      clearBtn.style.display = 'inline-block';
+    } else {
+      clearBtn.style.display = 'none';
+    }
+
+    // 更新表格
+    if (filteredStats.length > 0) {
+      tbody.innerHTML = filteredStats.map((item, index) => {
+        const rank = index + 1;
+        const rankClass = rank <= 3 ? `rank-${rank}` : '';
+        // 高亮搜索关键词
+        const highlightedUrl = highlightSearchTerm(item.urlPath, currentSearchTerm);
+        return `
+          <tr class="${rankClass}">
+            <td class="rank-col">${rank}</td>
+            <td class="url-col">${highlightedUrl}</td>
+            <td class="count-col">${formatNumber(item.count)}</td>
+            <td class="percent-col">${item.percent}%</td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      if (currentSearchTerm && currentSearchTerm.trim() !== '') {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-message">未找到匹配的接口路径</td></tr>';
+      } else {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-message">暂无数据</td></tr>';
+      }
+    }
+  }
+
+  // 高亮搜索关键词
+  function highlightSearchTerm(text, searchTerm) {
+    if (!searchTerm || searchTerm.trim() === '') {
+      return escapeHtml(text);
+    }
+    
+    const escapedText = escapeHtml(text);
+    const escapedSearch = escapeHtml(searchTerm);
+    const regex = new RegExp(`(${escapedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    
+    return escapedText.replace(regex, '<mark style="background: #fef08a; padding: 2px 0;">$1</mark>');
+  }
+
 
   // 格式化数字（添加千分位分隔符）
   function formatNumber(num) {
@@ -355,18 +490,59 @@
   document.addEventListener('DOMContentLoaded', function() {
     const timeRangeSelect = document.getElementById('url-stats-time-range');
     const refreshBtn = document.getElementById('url-stats-refresh');
+    const searchInput = document.getElementById('url-stats-search');
+    const searchBtn = document.getElementById('url-stats-search-btn');
+    const clearBtn = document.getElementById('url-stats-clear-search');
 
     if (timeRangeSelect) {
-      timeRangeSelect.addEventListener('change', loadUrlStats);
+      timeRangeSelect.addEventListener('change', function() {
+        // 切换时间范围时清除搜索
+        currentSearchTerm = '';
+        if (searchInput) searchInput.value = '';
+        if (clearBtn) clearBtn.style.display = 'none';
+        loadUrlStats();
+      });
     }
 
     if (refreshBtn) {
       refreshBtn.addEventListener('click', loadUrlStats);
     }
 
+    if (searchInput) {
+      // 支持回车搜索
+      searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          performSearch();
+        }
+      });
+    }
+
+    if (searchBtn) {
+      searchBtn.addEventListener('click', performSearch);
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function() {
+        currentSearchTerm = '';
+        if (searchInput) searchInput.value = '';
+        clearBtn.style.display = 'none';
+        applySearchFilter();
+      });
+    }
+
     // 延迟加载数据
     setTimeout(loadUrlStats, 500);
   });
+
+  // 执行搜索
+  function performSearch() {
+    const searchInput = document.getElementById('url-stats-search');
+    if (searchInput) {
+      currentSearchTerm = searchInput.value;
+      applySearchFilter();
+    }
+  }
 
   // 监听 tab 切换事件
   document.addEventListener('click', function(e) {
