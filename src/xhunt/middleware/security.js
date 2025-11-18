@@ -757,7 +757,7 @@ const shouldSkipSecurityViolationLog = (req) => {
 class SecurityViolationLogger {
   constructor() {
     this.windowDuration = 10 * 60 * 1000; // 10分钟
-    this.windowLimit = 100; // 单窗口最多写入100条
+    this.windowLimit = 20; // 单窗口最多写入20条
     this.currentWindowStart = Date.now();
     this.windowCount = 0;
     this.droppedCount = 0;
