@@ -740,20 +740,6 @@ const SENSITIVE_HEADER_KEYS = new Set([
   "x-forwarded-authorization",
 ]);
 
-const SKIP_SSE_SECURITY_LOG_PATHS = [
-  "fetch/twitter/feed",
-  "fetch/twitter/top_tweet",
-];
-
-const shouldSkipSecurityViolationLog = (req) => {
-  const base = typeof req.baseUrl === "string" ? req.baseUrl : "";
-  const path = typeof req.path === "string" ? req.path : "";
-  const fullPath = `${base}${path}` || req.url || "";
-  return SKIP_SSE_SECURITY_LOG_PATHS.some(
-    (skipPath) => typeof skipPath === "string" && fullPath.includes(skipPath)
-  );
-};
-
 class SecurityViolationLogger {
   constructor() {
     this.windowDuration = 10 * 60 * 1000; // 10分钟
@@ -1224,13 +1210,6 @@ const sseSecurityMiddleware = (req, res, next) => {
     const validation = validateSecurityParams(req, true);
 
     if (!validation.isValid) {
-      if (!shouldSkipSecurityViolationLog(req)) {
-        securityViolationLogger.logViolation(req, {
-          errorCode: validation.error,
-          allowQueryParams: true,
-          context: "sse request",
-        });
-      }
       return res.status(400).json({ error: validation.error });
     }
 
