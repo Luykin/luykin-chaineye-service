@@ -60,7 +60,7 @@ module.exports = (sequelize) => {
       indexes: [
         {
           name: "idx_time_window",
-          fields: ["timeWindow"],
+          fields: ["time_window"],
           comment: "时间窗口索引：用于快速查询某个时间区间的数据",
         },
         {
@@ -71,7 +71,7 @@ module.exports = (sequelize) => {
         {
           name: "idx_time_window_version",
           unique: true,
-          fields: ["timeWindow", "version"],
+          fields: ["time_window", "version"],
           comment:
             "联合唯一索引：确保同一时间窗口同一版本只有一条记录，防止重复统计",
         },
