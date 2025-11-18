@@ -128,10 +128,11 @@ class DAUCacheManager {
 // 创建单例实例
 const dauCacheManager = new DAUCacheManager();
 
-// 🚀 版本请求统计管理器
-class VersionStatsManager {
+// 🚀 请求统计管理器（版本统计 + URL统计）
+class RequestStatsManager {
   constructor() {
-    this.memoryCounter = {}; // 内存计数器：{ timeWindow: { version: count } }
+    this.versionMemoryCounter = {}; // 版本内存计数器：{ timeWindow: { version: count } }
+    this.urlMemoryCounter = {}; // URL内存计数器：{ timeWindow: { urlPath: count } }
     this.lastTimeWindow = null; // 上一个时间窗口
     this.requestCount = 0; // 当前窗口的请求计数（用于每100个请求flush）
     this.isInitialized = false;
@@ -143,7 +144,7 @@ class VersionStatsManager {
       return;
     }
     this.isInitialized = true;
-    console.log("🚀 版本请求统计管理器已初始化");
+    console.log("🚀 请求统计管理器已初始化（版本统计 + URL统计）");
   }
 
   // 获取5分钟时间窗口（向下取整到5分钟）
@@ -158,13 +159,45 @@ class VersionStatsManager {
     return window.toISOString();
   }
 
-  // 将内存数据flush到Redis
-  async flushMemoryToRedis(timeWindow, redisClient) {
-    if (!this.memoryCounter[timeWindow] || !redisClient) {
+  // 提取URL路径（去掉查询参数）
+  extractUrlPath(req) {
+    try {
+      // 优先使用 baseUrl + path（这是 Express 的标准方式）
+      let pathname = (req.baseUrl || '') + (req.path || '');
+      
+      // 如果没有 path，尝试使用 originalUrl 或 url
+      if (!pathname || pathname === '/') {
+        const fullUrl = req.originalUrl || req.url || '';
+        
+        // 如果包含协议，使用URL对象解析
+        if (fullUrl.startsWith('http://') || fullUrl.startsWith('https://')) {
+          const url = new URL(fullUrl);
+          pathname = url.pathname;
+        } else {
+          // 否则直接提取路径部分（去掉查询参数）
+          pathname = fullUrl.split('?')[0];
+        }
+      } else {
+        // 去掉查询参数（如果有）
+        pathname = pathname.split('?')[0];
+      }
+      
+      // 确保返回的路径不为空
+      return pathname || '/';
+    } catch (error) {
+      // 如果解析失败，使用最简单的 fallback
+      const path = (req.baseUrl || '') + (req.path || '/');
+      return path.split('?')[0] || '/';
+    }
+  }
+
+  // 将版本统计内存数据flush到Redis
+  async flushVersionMemoryToRedis(timeWindow, redisClient) {
+    if (!this.versionMemoryCounter[timeWindow] || !redisClient) {
       return;
     }
 
-    const versions = this.memoryCounter[timeWindow];
+    const versions = this.versionMemoryCounter[timeWindow];
     const pipeline = redisClient.multi();
 
     for (const [version, count] of Object.entries(versions)) {
@@ -179,14 +212,42 @@ class VersionStatsManager {
     try {
       await pipeline.exec();
       // 清空该时间窗口的内存数据
-      delete this.memoryCounter[timeWindow];
+      delete this.versionMemoryCounter[timeWindow];
     } catch (error) {
       console.error(`[版本统计] Flush内存到Redis失败 (${timeWindow}):`, error);
     }
   }
 
-  // 处理版本统计
-  async handleVersionStats(req) {
+  // 将URL统计内存数据flush到Redis
+  async flushUrlMemoryToRedis(timeWindow, redisClient) {
+    if (!this.urlMemoryCounter[timeWindow] || !redisClient) {
+      return;
+    }
+
+    const urls = this.urlMemoryCounter[timeWindow];
+    const pipeline = redisClient.multi();
+
+    for (const [urlPath, count] of Object.entries(urls)) {
+      if (count > 0) {
+        // 使用 | 作为分隔符，避免与时间窗口ISO字符串中的冒号冲突
+        const key = `url_stats:${timeWindow}|${urlPath}`;
+        pipeline.incrBy(key, count);
+        // 设置过期时间（20分钟）
+        pipeline.expire(key, 20 * 60);
+      }
+    }
+
+    try {
+      await pipeline.exec();
+      // 清空该时间窗口的内存数据
+      delete this.urlMemoryCounter[timeWindow];
+    } catch (error) {
+      console.error(`[URL统计] Flush内存到Redis失败 (${timeWindow}):`, error);
+    }
+  }
+
+  // 处理请求统计（版本 + URL）
+  async handleRequestStats(req) {
     if (!req.redisClient) {
       return;
     }
@@ -201,35 +262,51 @@ class VersionStatsManager {
       return;
     }
 
-    // 获取版本号
-    const version = getRequestParam(req, "extension-version", true);
-    if (!version || version.trim() === "") {
-      return;
-    }
-
     const currentTimeWindow = this.get5MinWindow();
 
     // 如果时间窗口变化了，先flush上一个窗口的数据
     if (this.lastTimeWindow && this.lastTimeWindow !== currentTimeWindow) {
-      await this.flushMemoryToRedis(this.lastTimeWindow, req.redisClient);
+      await Promise.all([
+        this.flushVersionMemoryToRedis(this.lastTimeWindow, req.redisClient),
+        this.flushUrlMemoryToRedis(this.lastTimeWindow, req.redisClient),
+      ]);
     }
 
     // 更新当前窗口
     this.lastTimeWindow = currentTimeWindow;
 
-    // 初始化当前窗口的计数器
-    if (!this.memoryCounter[currentTimeWindow]) {
-      this.memoryCounter[currentTimeWindow] = {};
+    // 处理版本统计
+    const version = getRequestParam(req, "extension-version", true);
+    if (version && version.trim() !== "") {
+      // 初始化当前窗口的版本计数器
+      if (!this.versionMemoryCounter[currentTimeWindow]) {
+        this.versionMemoryCounter[currentTimeWindow] = {};
+      }
+      // 累加当前请求的版本
+      this.versionMemoryCounter[currentTimeWindow][version] =
+        (this.versionMemoryCounter[currentTimeWindow][version] || 0) + 1;
     }
 
-    // 累加当前请求
-    this.memoryCounter[currentTimeWindow][version] =
-      (this.memoryCounter[currentTimeWindow][version] || 0) + 1;
+    // 处理URL统计
+    const urlPath = this.extractUrlPath(req);
+    if (urlPath) {
+      // 初始化当前窗口的URL计数器
+      if (!this.urlMemoryCounter[currentTimeWindow]) {
+        this.urlMemoryCounter[currentTimeWindow] = {};
+      }
+      // 累加当前请求的URL
+      this.urlMemoryCounter[currentTimeWindow][urlPath] =
+        (this.urlMemoryCounter[currentTimeWindow][urlPath] || 0) + 1;
+    }
+
     this.requestCount++;
 
-    // 每100个请求flush当前窗口
+    // 每100个请求flush当前窗口（版本和URL一起flush）
     if (this.requestCount >= 100) {
-      await this.flushMemoryToRedis(currentTimeWindow, req.redisClient);
+      await Promise.all([
+        this.flushVersionMemoryToRedis(currentTimeWindow, req.redisClient),
+        this.flushUrlMemoryToRedis(currentTimeWindow, req.redisClient),
+      ]);
       this.requestCount = 0;
     }
   }
@@ -237,7 +314,8 @@ class VersionStatsManager {
   // 获取内存状态（用于调试）
   getStatus() {
     return {
-      memoryCounter: this.memoryCounter,
+      versionMemoryCounter: this.versionMemoryCounter,
+      urlMemoryCounter: this.urlMemoryCounter,
       lastTimeWindow: this.lastTimeWindow,
       requestCount: this.requestCount,
       isInitialized: this.isInitialized,
@@ -246,7 +324,9 @@ class VersionStatsManager {
 }
 
 // 创建单例实例
-const versionStatsManager = new VersionStatsManager();
+const requestStatsManager = new RequestStatsManager();
+// 保持向后兼容的别名
+const versionStatsManager = requestStatsManager;
 
 
 // 速率限制中间件
@@ -767,11 +847,11 @@ const securityMiddleware = (req, res, next) => {
       handleDAUTracking(req, validation.securityContext.fingerprint, xUserId);
     }
 
-    // 🔥 插件版本请求统计 - 异步处理，不阻塞请求
-    versionStatsManager.init();
+    // 🔥 请求统计（版本 + URL）- 异步处理，不阻塞请求
+    requestStatsManager.init();
     setImmediate(() => {
-      versionStatsManager.handleVersionStats(req).catch((error) => {
-        console.error("[版本统计] 处理失败:", error);
+      requestStatsManager.handleRequestStats(req).catch((error) => {
+        console.error("[请求统计] 处理失败:", error);
       });
     });
 
@@ -811,5 +891,6 @@ module.exports = {
   generateSignature, // 导出用于测试（HMAC SHA256，普通 API）
   generateSSESignature, // 导出用于测试（FNV-1a，SSE）
   dauCacheManager, // 导出缓存管理器（用于测试和监控）
-  versionStatsManager, // 导出版本统计管理器（用于测试和监控）
+  requestStatsManager, // 导出请求统计管理器（用于测试和监控）
+  versionStatsManager, // 保持向后兼容的别名
 };

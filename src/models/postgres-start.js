@@ -13,6 +13,7 @@ const XPrivateMessageModel = require("../xhunt/models/XPrivateMessage");
 const DailyActiveUserModel = require("../xhunt/models/DailyActiveUser");
 const XHuntUserProSubscriptionModel = require("../xhunt/models/XHuntUserProSubscription");
 const VersionRequestStatsModel = require("../xhunt/models/VersionRequestStats");
+const UrlRequestStatsModel = require("../xhunt/models/UrlRequestStats");
 
 const pgInstance = new Sequelize({
   dialect: process.env.PG_DIALECT || "postgres",
@@ -44,6 +45,7 @@ const XPrivateMessage = XPrivateMessageModel(pgInstance);
 const DailyActiveUser = DailyActiveUserModel(pgInstance);
 const XHuntUserProSubscription = XHuntUserProSubscriptionModel(pgInstance);
 const VersionRequestStats = VersionRequestStatsModel(pgInstance);
+const UrlRequestStats = UrlRequestStatsModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -209,4 +211,5 @@ module.exports = {
   DailyActiveUser,
   XHuntUserProSubscription,
   VersionRequestStats,
+  UrlRequestStats,
 };

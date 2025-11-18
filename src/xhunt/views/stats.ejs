@@ -40,6 +40,7 @@
           <button class="tab-btn" data-tab="log-search">🔍 日志搜索</button>
           <button class="tab-btn" data-tab="device-monitor">🖥️ 设备监控</button>
           <button class="tab-btn" data-tab="version-stats">📈 版本统计</button>
+          <button class="tab-btn" data-tab="url-stats">🔗 接口请求统计</button>
           <% if (typeof user !== 'undefined' && user && user.role === 'luykin')
           { %>
           <button class="tab-btn" data-tab="messages">💬 发送私信</button>
@@ -90,6 +91,11 @@
           <!-- 版本统计 Tab (所有人可见) -->
           <div class="tab-pane" id="version-stats">
             <%- include('partials/version-stats') %>
+          </div>
+
+          <!-- 接口请求统计 Tab (所有人可见) -->
+          <div class="tab-pane" id="url-stats">
+            <%- include('partials/url-stats') %>
           </div>
 
           <!-- 发送私信 Tab (仅 luykin 可见) -->

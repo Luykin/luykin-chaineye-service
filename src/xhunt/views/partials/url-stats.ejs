@@ -1,0 +1,381 @@
+<div class="url-stats-container">
+  <div class="url-stats-header">
+    <h2>🔗 接口请求统计</h2>
+    <p>查看各接口在不同时间段的请求排行榜</p>
+  </div>
+
+  <!-- 时间范围选择 -->
+  <div class="time-range-selector">
+    <label>时间范围：</label>
+    <select id="url-stats-time-range" class="time-range-select">
+      <option value="30m">最近30分钟</option>
+      <option value="1h">最近1小时</option>
+      <option value="2h">最近2小时</option>
+      <option value="4h">最近4小时</option>
+      <option value="1d">最近1天</option>
+      <option value="2d">最近2天</option>
+    </select>
+    <button id="url-stats-refresh" class="btn-refresh">🔄 刷新</button>
+  </div>
+
+  <!-- 统计摘要 -->
+  <div id="url-stats-summary" class="stats-summary" style="display: none;">
+    <div class="summary-item">
+      <span class="summary-label">总请求数：</span>
+      <span class="summary-value" id="total-requests">0</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-label">接口数量：</span>
+      <span class="summary-value" id="total-urls">0</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-label">时间窗口数：</span>
+      <span class="summary-value" id="time-windows">0</span>
+    </div>
+  </div>
+
+  <!-- 排行榜表格 -->
+  <div class="url-stats-table-container">
+    <table id="url-stats-table" class="url-stats-table">
+      <thead>
+        <tr>
+          <th class="rank-col">排名</th>
+          <th class="url-col">接口路径</th>
+          <th class="count-col">请求数量</th>
+          <th class="percent-col">占比</th>
+        </tr>
+      </thead>
+      <tbody id="url-stats-tbody">
+        <tr>
+          <td colspan="4" class="empty-message">加载中...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 加载状态 -->
+  <div id="url-stats-loading" class="loading-message" style="display: none;">
+    加载中...
+  </div>
+
+  <!-- 错误消息 -->
+  <div id="url-stats-error" class="error-message" style="display: none;"></div>
+</div>
+
+<style>
+  .url-stats-container {
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .url-stats-header {
+    margin-bottom: 20px;
+  }
+
+  .url-stats-header h2 {
+    color: #2c3e50;
+    margin-bottom: 8px;
+  }
+
+  .url-stats-header p {
+    color: #7f8c8d;
+    font-size: 14px;
+  }
+
+  .time-range-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+  }
+
+  .time-range-selector label {
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .time-range-select {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    cursor: pointer;
+  }
+
+  .time-range-select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  .btn-refresh {
+    padding: 8px 16px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-refresh:hover {
+    background: #2563eb;
+  }
+
+  .stats-summary {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f0f9ff;
+    border-radius: 8px;
+    border: 1px solid #bae6fd;
+  }
+
+  .summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .summary-label {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+  }
+
+  .summary-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1e40af;
+  }
+
+  .url-stats-table-container {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
+
+  .url-stats-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .url-stats-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #e5e7eb;
+  }
+
+  .url-stats-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    font-size: 14px;
+  }
+
+  .url-stats-table tbody tr {
+    border-bottom: 1px solid #e5e7eb;
+    transition: background 0.2s;
+  }
+
+  .url-stats-table tbody tr:hover {
+    background: #f9fafb;
+  }
+
+  .url-stats-table tbody td {
+    padding: 12px 16px;
+    font-size: 14px;
+    color: #1f2937;
+  }
+
+  .rank-col {
+    width: 80px;
+    text-align: center;
+    font-weight: 600;
+    color: #6b7280;
+  }
+
+  .url-col {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 13px;
+    word-break: break-all;
+    color: #1e40af;
+  }
+
+  .count-col {
+    width: 120px;
+    text-align: right;
+    font-weight: 600;
+    color: #059669;
+  }
+
+  .percent-col {
+    width: 100px;
+    text-align: right;
+    color: #7c3aed;
+  }
+
+  .empty-message {
+    text-align: center;
+    padding: 40px;
+    color: #9ca3af;
+    font-style: italic;
+  }
+
+  .loading-message {
+    text-align: center;
+    padding: 40px;
+    color: #6b7280;
+    font-size: 16px;
+  }
+
+  .error-message {
+    padding: 15px;
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    color: #991b1b;
+    margin-top: 20px;
+  }
+
+  /* 排名前三的特殊样式 */
+  .url-stats-table tbody tr.rank-1 {
+    background: #fef3c7;
+  }
+
+  .url-stats-table tbody tr.rank-1:hover {
+    background: #fde68a;
+  }
+
+  .url-stats-table tbody tr.rank-2 {
+    background: #f3f4f6;
+  }
+
+  .url-stats-table tbody tr.rank-2:hover {
+    background: #e5e7eb;
+  }
+
+  .url-stats-table tbody tr.rank-3 {
+    background: #fce7f3;
+  }
+
+  .url-stats-table tbody tr.rank-3:hover {
+    background: #fbcfe8;
+  }
+</style>
+
+<script>
+(function() {
+  // 加载数据
+  async function loadUrlStats() {
+    const timeRange = document.getElementById('url-stats-time-range').value;
+    const loadingEl = document.getElementById('url-stats-loading');
+    const errorEl = document.getElementById('url-stats-error');
+    const tbody = document.getElementById('url-stats-tbody');
+    const summaryEl = document.getElementById('url-stats-summary');
+
+    loadingEl.style.display = 'block';
+    errorEl.style.display = 'none';
+    summaryEl.style.display = 'none';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-message">加载中...</td></tr>';
+
+    try {
+      const response = await fetch(`/api/xhunt/stats/url-stats?timeRange=${timeRange}`, {
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || '加载失败');
+      }
+
+      // 更新统计摘要
+      document.getElementById('total-requests').textContent = formatNumber(data.data.totalRequests);
+      document.getElementById('total-urls').textContent = formatNumber(data.data.totalUrls);
+      document.getElementById('time-windows').textContent = formatNumber(data.data.timeWindows);
+      summaryEl.style.display = 'flex';
+
+      // 更新表格
+      if (data.data.urlStats && data.data.urlStats.length > 0) {
+        tbody.innerHTML = data.data.urlStats.map((item, index) => {
+          const rank = index + 1;
+          const rankClass = rank <= 3 ? `rank-${rank}` : '';
+          return `
+            <tr class="${rankClass}">
+              <td class="rank-col">${rank}</td>
+              <td class="url-col">${escapeHtml(item.urlPath)}</td>
+              <td class="count-col">${formatNumber(item.count)}</td>
+              <td class="percent-col">${item.percent}%</td>
+            </tr>
+          `;
+        }).join('');
+      } else {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-message">暂无数据</td></tr>';
+      }
+
+      loadingEl.style.display = 'none';
+    } catch (error) {
+      console.error('加载URL统计失败:', error);
+      loadingEl.style.display = 'none';
+      errorEl.textContent = '加载失败: ' + error.message;
+      errorEl.style.display = 'block';
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-message">加载失败</td></tr>';
+    }
+  }
+
+  // 格式化数字（添加千分位分隔符）
+  function formatNumber(num) {
+    if (num === null || num === undefined || isNaN(num)) {
+      return '0';
+    }
+    return num.toLocaleString();
+  }
+
+  // HTML转义
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // 绑定事件
+  document.addEventListener('DOMContentLoaded', function() {
+    const timeRangeSelect = document.getElementById('url-stats-time-range');
+    const refreshBtn = document.getElementById('url-stats-refresh');
+
+    if (timeRangeSelect) {
+      timeRangeSelect.addEventListener('change', loadUrlStats);
+    }
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', loadUrlStats);
+    }
+
+    // 延迟加载数据
+    setTimeout(loadUrlStats, 500);
+  });
+
+  // 监听 tab 切换事件
+  document.addEventListener('click', function(e) {
+    const tabBtn = e.target.closest('.tab-btn');
+    if (tabBtn && tabBtn.getAttribute('data-tab') === 'url-stats') {
+      // 延迟一点加载，确保 tab 已经切换完成
+      setTimeout(loadUrlStats, 100);
+    }
+  });
+})();
+</script>
+

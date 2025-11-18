@@ -2753,4 +2753,209 @@ function getVersionColor(version, alpha = 1) {
   return colors[Math.abs(hash) % colors.length];
 }
 
+/**
+ * 获取5分钟时间窗口（向下取整到5分钟）
+ */
+function get5MinWindow(date) {
+  const d = date || new Date();
+  const minutes = d.getUTCMinutes();
+  const roundedMinutes = Math.floor(minutes / 5) * 5;
+  const window = new Date(d);
+  window.setUTCMinutes(roundedMinutes);
+  window.setUTCSeconds(0);
+  window.setUTCMilliseconds(0);
+  return window.toISOString();
+}
+
+/**
+ * 生成指定时间范围内的所有5分钟时间窗口
+ */
+function generateTimeWindows(startTime, endTime) {
+  const windows = [];
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+  
+  // 获取第一个窗口（向下取整）
+  let current = new Date(get5MinWindow(start));
+  
+  while (current <= end) {
+    windows.push(current.toISOString());
+    // 增加5分钟
+    current = new Date(current.getTime() + 5 * 60 * 1000);
+  }
+  
+  return windows;
+}
+
+/**
+ * GET /url-stats
+ * URL请求统计查询接口（接口请求排行榜）
+ * @query timeRange - 时间范围：30m (最近30分钟), 1h (最近1小时), 2h (最近2小时), 4h (最近4小时), 1d (最近1天), 2d (最近2天)
+ */
+router.get("/url-stats", basicAuth, async (req, res) => {
+  try {
+    const { timeRange = "30m" } = req.query;
+    const redisClient = req.redisClient;
+
+    if (!redisClient) {
+      return res.status(500).json({
+        success: false,
+        error: "Redis客户端未初始化",
+      });
+    }
+
+    // 计算时间范围
+    const now = new Date();
+    let startTime;
+    switch (timeRange) {
+      case "30m":
+        startTime = new Date(now.getTime() - 30 * 60 * 1000);
+        break;
+      case "1h":
+        startTime = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+        break;
+      case "2h":
+        startTime = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+        break;
+      case "4h":
+        startTime = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+        break;
+      case "1d":
+        startTime = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
+        break;
+      case "2d":
+        startTime = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: "无效的时间范围，支持: 30m, 1h, 2h, 4h, 1d, 2d",
+        });
+    }
+
+    // 生成所有5分钟时间窗口
+    const timeWindows = generateTimeWindows(startTime, now);
+
+    // 从Redis和PostgreSQL读取数据
+    const urlStatsMap = new Map(); // urlPath -> totalCount
+
+    // 1. 从Redis读取实时数据（最近20分钟内的数据）
+    const redisCutoffTime = new Date(now.getTime() - 20 * 60 * 1000);
+    const redisTimeWindows = timeWindows.filter((tw) => new Date(tw) >= redisCutoffTime);
+    
+    const allKeys = [];
+    for (const timeWindow of redisTimeWindows) {
+      // 使用 | 作为分隔符，避免与时间窗口ISO字符串中的冒号冲突
+      const pattern = `url_stats:${timeWindow}|*`;
+      let cursor = "0";
+      
+      do {
+        const reply = await redisClient.scan(cursor, {
+          MATCH: pattern,
+          COUNT: 100,
+        });
+        cursor = reply.cursor;
+        allKeys.push(...reply.keys);
+      } while (cursor !== "0");
+    }
+
+    // 批量读取所有key的值
+    if (allKeys.length > 0) {
+      const pipeline = redisClient.multi();
+      for (const key of allKeys) {
+        pipeline.get(key);
+      }
+
+      const results = await pipeline.exec();
+      
+      // 解析结果并聚合
+      for (let i = 0; i < allKeys.length; i++) {
+        const key = allKeys[i];
+        const result = results[i];
+        
+        if (result && result[1] !== null) {
+          const count = parseInt(result[1], 10) || 0;
+          
+          // 从key中提取URL路径
+          // key格式: url_stats:${timeWindow}|${urlPath}
+          const separatorIndex = key.indexOf("|");
+          if (separatorIndex > 0) {
+            const urlPath = key.substring(separatorIndex + 1);
+            const currentCount = urlStatsMap.get(urlPath) || 0;
+            urlStatsMap.set(urlPath, currentCount + count);
+          }
+        }
+      }
+    }
+
+    // 2. 从PostgreSQL读取历史数据（20分钟之前的数据）
+    const pgTimeWindows = timeWindows.filter((tw) => new Date(tw) < redisCutoffTime);
+    if (pgTimeWindows.length > 0) {
+      const { UrlRequestStats, pgInstance } = require("../../models/postgres-start");
+      const { Op } = require("sequelize");
+
+      const pgStartTime = new Date(pgTimeWindows[0]);
+      const pgEndTime = new Date(redisCutoffTime);
+
+      // 使用聚合查询，按urlPath分组求和
+      const pgStats = await UrlRequestStats.findAll({
+        where: {
+          timeWindow: {
+            [Op.gte]: pgStartTime,
+            [Op.lt]: pgEndTime,
+          },
+        },
+        attributes: [
+          "urlPath",
+          [pgInstance.fn("SUM", pgInstance.col("UrlRequestStats.request_count")), "totalCount"],
+        ],
+        group: ["urlPath"],
+        raw: true,
+      });
+
+      // 聚合PostgreSQL数据
+      for (const stat of pgStats) {
+        const count = parseInt(stat.totalCount || 0, 10);
+        if (count > 0) {
+          const currentCount = urlStatsMap.get(stat.urlPath) || 0;
+          urlStatsMap.set(stat.urlPath, currentCount + count);
+        }
+      }
+    }
+
+    // 转换为数组并按请求数量降序排序
+    const urlStats = Array.from(urlStatsMap.entries())
+      .map(([urlPath, count]) => ({
+        urlPath,
+        count,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    // 计算总数和百分比
+    const totalRequests = urlStats.reduce((sum, item) => sum + item.count, 0);
+    const urlStatsWithPercent = urlStats.map((item) => ({
+      ...item,
+      percent: totalRequests > 0 ? ((item.count / totalRequests) * 100).toFixed(2) : "0.00",
+    }));
+
+    res.json({
+      success: true,
+      timeRange,
+      data: {
+        urlStats: urlStatsWithPercent,
+        totalUrls: urlStats.length,
+        totalRequests: totalRequests,
+        timeWindows: timeWindows.length,
+      },
+    });
+  } catch (error) {
+    console.error("URL统计查询错误:", error);
+    res.status(500).json({
+      success: false,
+      error: "查询失败",
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;
