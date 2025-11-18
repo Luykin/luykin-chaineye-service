@@ -749,10 +749,8 @@ const shouldSkipSecurityViolationLog = (req) => {
   const base = typeof req.baseUrl === "string" ? req.baseUrl : "";
   const path = typeof req.path === "string" ? req.path : "";
   const fullPath = `${base}${path}` || req.url || "";
-  return SKIP_SSE_SECURITY_LOG_PATHS.some((skipPath) =>
-    typeof skipPath === "string" && skipPath.length > 0
-      ? fullPath.includes(skipPath)
-      : false,
+  return SKIP_SSE_SECURITY_LOG_PATHS.some(
+    (skipPath) => typeof skipPath === "string" && fullPath.includes(skipPath)
   );
 };
 
