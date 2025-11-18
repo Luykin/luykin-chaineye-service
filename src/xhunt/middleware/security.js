@@ -136,6 +136,7 @@ class RequestStatsManager {
     this.lastTimeWindow = null; // 上一个时间窗口
     this.requestCount = 0; // 当前窗口的请求计数（用于每100个请求flush）
     this.isInitialized = false;
+    this.MAX_MEMORY_WINDOWS = 3; // 最多在内存中保留的时间窗口数量（当前窗口 + 前2个窗口）
   }
 
   // 初始化
@@ -157,6 +158,37 @@ class RequestStatsManager {
     window.setUTCSeconds(0);
     window.setUTCMilliseconds(0);
     return window.toISOString();
+  }
+
+  // 清理旧的时间窗口数据（防止内存无限增长）
+  cleanupOldWindows(currentTimeWindow) {
+    // 合并两个计数器的所有窗口（去重）
+    const allWindows = new Set([
+      ...Object.keys(this.versionMemoryCounter),
+      ...Object.keys(this.urlMemoryCounter),
+    ]);
+    
+    // 如果窗口数量超过限制，清理最旧的窗口
+    if (allWindows.size > this.MAX_MEMORY_WINDOWS) {
+      // 按时间排序，保留最新的几个窗口
+      const sortedWindows = Array.from(allWindows).sort();
+      const windowsToKeep = sortedWindows.slice(-this.MAX_MEMORY_WINDOWS);
+      const windowsToRemove = sortedWindows.slice(0, -this.MAX_MEMORY_WINDOWS);
+      
+      for (const window of windowsToRemove) {
+        // 如果窗口不是当前窗口，可以安全删除
+        if (window !== currentTimeWindow) {
+          delete this.versionMemoryCounter[window];
+          delete this.urlMemoryCounter[window];
+        }
+      }
+      
+      if (windowsToRemove.length > 0) {
+        console.warn(
+          `[请求统计] ⚠️ 清理了 ${windowsToRemove.length} 个旧时间窗口的内存数据（防止内存增长，保留 ${windowsToKeep.length} 个窗口）`
+        );
+      }
+    }
   }
 
   // 提取URL路径（去掉查询参数）
@@ -253,14 +285,13 @@ class RequestStatsManager {
     }
 
     // 检查 windowLocationHref 是否为 background-script
+    // 注意：版本统计会跳过 background-script，但 URL 统计需要统计所有请求
     const windowLocationHref = getRequestParam(
       req,
       "window-location-href",
       false
     );
-    if (windowLocationHref === "background-script") {
-      return;
-    }
+    const isBackgroundScript = windowLocationHref === "background-script";
 
     const currentTimeWindow = this.get5MinWindow();
 
@@ -275,19 +306,24 @@ class RequestStatsManager {
     // 更新当前窗口
     this.lastTimeWindow = currentTimeWindow;
 
-    // 处理版本统计
-    const version = getRequestParam(req, "extension-version", true);
-    if (version && version.trim() !== "") {
-      // 初始化当前窗口的版本计数器
-      if (!this.versionMemoryCounter[currentTimeWindow]) {
-        this.versionMemoryCounter[currentTimeWindow] = {};
+    // 清理旧窗口（防止内存无限增长）
+    this.cleanupOldWindows(currentTimeWindow);
+
+    // 处理版本统计（跳过 background-script）
+    if (!isBackgroundScript) {
+      const version = getRequestParam(req, "extension-version", true);
+      if (version && version.trim() !== "") {
+        // 初始化当前窗口的版本计数器
+        if (!this.versionMemoryCounter[currentTimeWindow]) {
+          this.versionMemoryCounter[currentTimeWindow] = {};
+        }
+        // 累加当前请求的版本
+        this.versionMemoryCounter[currentTimeWindow][version] =
+          (this.versionMemoryCounter[currentTimeWindow][version] || 0) + 1;
       }
-      // 累加当前请求的版本
-      this.versionMemoryCounter[currentTimeWindow][version] =
-        (this.versionMemoryCounter[currentTimeWindow][version] || 0) + 1;
     }
 
-    // 处理URL统计
+    // 处理URL统计（所有请求都统计，包括 background-script）
     const urlPath = this.extractUrlPath(req);
     if (urlPath) {
       // 初始化当前窗口的URL计数器
