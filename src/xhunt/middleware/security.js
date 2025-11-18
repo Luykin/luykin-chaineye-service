@@ -2,6 +2,7 @@ const rateLimit = require("express-rate-limit");
 const crypto = require("crypto");
 // 延迟导入以避免循环依赖
 let DailyActiveUser = null;
+let SecurityViolationLog = null;
 
 // 🚀 智能日活统计缓存管理器
 class DAUCacheManager {
@@ -702,6 +703,258 @@ const getRequestParam = (req, paramName, allowQueryParams = true) => {
   return req.headers[headerName];
 };
 
+const SECURITY_ERROR_REASON_MAP = {
+  "400": {
+    reasonCode: "missing_headers",
+    message: "缺少必需的安全请求参数",
+  },
+  "400-1": {
+    reasonCode: "invalid_fingerprint",
+    message: "设备指纹格式不合法",
+  },
+  "400-2": {
+    reasonCode: "invalid_request_id",
+    message: "请求ID格式不合法",
+  },
+  "400-3": {
+    reasonCode: "invalid_timestamp",
+    message: "请求时间戳超出允许范围",
+  },
+  "411": {
+    reasonCode: "invalid_signature",
+    message: "请求签名不匹配",
+  },
+  default: {
+    reasonCode: "unknown",
+    message: "安全校验失败",
+  },
+};
+
+const SENSITIVE_HEADER_KEYS = new Set([
+  "authorization",
+  "cookie",
+  "x-api-key",
+  "x-access-token",
+  "proxy-authorization",
+  "cf-access-token",
+  "x-forwarded-authorization",
+]);
+
+class SecurityViolationLogger {
+  constructor() {
+    this.windowDuration = 10 * 60 * 1000; // 10分钟
+    this.windowLimit = 100; // 单窗口最多写入100条
+    this.currentWindowStart = Date.now();
+    this.windowCount = 0;
+    this.droppedCount = 0;
+  }
+
+  rotateWindow(now = Date.now()) {
+    if (now - this.currentWindowStart >= this.windowDuration) {
+      this.currentWindowStart = now;
+      this.windowCount = 0;
+      this.droppedCount = 0;
+    }
+  }
+
+  canWrite(now) {
+    this.rotateWindow(now);
+    return this.windowCount < this.windowLimit;
+  }
+
+  logViolation(req, options = {}) {
+    try {
+      const now = Date.now();
+      if (!this.canWrite(now)) {
+        this.droppedCount++;
+        if (this.droppedCount === 1 || this.droppedCount % 10 === 0) {
+          console.warn(
+            `[SecurityViolation] 日志写入被限流：10分钟内已写入 ${this.windowLimit} 条，已丢弃 ${this.droppedCount} 条`
+          );
+        }
+        return;
+      }
+
+      const payload = this.buildRecord(req, options);
+      if (!payload) {
+        return;
+      }
+
+      this.windowCount++;
+      setImmediate(async () => {
+        try {
+          if (!SecurityViolationLog) {
+            const postgresModels = require("../../models/postgres-start");
+            SecurityViolationLog = postgresModels.SecurityViolationLog;
+          }
+          await SecurityViolationLog.create(payload);
+        } catch (error) {
+          console.error("记录安全校验失败日志失败:", error);
+          this.windowCount = Math.max(this.windowCount - 1, 0);
+        }
+      });
+    } catch (error) {
+      console.error("安全校验失败日志处理异常:", error);
+    }
+  }
+
+  buildRecord(req, options = {}) {
+    const {
+      errorCode,
+      errorDetail,
+      allowQueryParams = false,
+      context,
+    } = options;
+
+    const reasonMeta =
+      SECURITY_ERROR_REASON_MAP[errorCode] || SECURITY_ERROR_REASON_MAP.default;
+
+    const detailParts = [
+      errorDetail || reasonMeta.message,
+      context,
+      errorCode ? `code=${errorCode}` : null,
+    ].filter(Boolean);
+    const fullDetail = detailParts.join(" | ");
+
+    const originalUrl = req.originalUrl || "";
+    const [pathOnly, queryString] = originalUrl.split("?");
+    const requestPath =
+      pathOnly ||
+      [req.baseUrl, req.path].filter(Boolean).join("") ||
+      req.path ||
+      req.url ||
+      "/";
+
+    const clientIp = this.getClientIp(req);
+    const sanitizedHeaders = this.sanitizeHeaders(req.headers);
+    const requestBody = this.extractRequestBody(req.body);
+
+    const requestId = getRequestParam(req, "request-id", allowQueryParams);
+    const fingerprint = getRequestParam(
+      req,
+      "device-fingerprint",
+      allowQueryParams
+    );
+    const extensionVersion = getRequestParam(
+      req,
+      "extension-version",
+      allowQueryParams
+    );
+    const windowLocationHref = getRequestParam(
+      req,
+      "window-location-href",
+      allowQueryParams
+    );
+    const requestTimestamp = getRequestParam(
+      req,
+      "request-timestamp",
+      allowQueryParams
+    );
+
+    return {
+      reasonCode: reasonMeta.reasonCode,
+      errorDetail: this.truncate(fullDetail, 2000),
+      requestMethod: (req.method || "GET").substring(0, 10),
+      requestPath: this.truncate(requestPath, 2000),
+      queryString: queryString ? this.truncate(queryString, 2000) : null,
+      clientIp: clientIp ? this.truncate(clientIp, 64) : null,
+      headers: sanitizedHeaders,
+      requestBody,
+      fingerprint: fingerprint ? this.truncate(fingerprint, 128) : null,
+      extensionVersion: extensionVersion
+        ? this.truncate(extensionVersion, 32)
+        : null,
+      requestTimestamp: requestTimestamp ? Number(requestTimestamp) || null : null,
+      requestId: requestId ? this.truncate(requestId, 128) : null,
+      windowLocationHref: windowLocationHref
+        ? this.truncate(windowLocationHref, 1024)
+        : null,
+      userAgent: req.headers["user-agent"]
+        ? this.truncate(req.headers["user-agent"], 1024)
+        : null,
+    };
+  }
+
+  sanitizeHeaders(headers = {}) {
+    const sanitized = {};
+    for (const [key, value] of Object.entries(headers || {})) {
+      if (!key) continue;
+      const lowerKey = key.toLowerCase();
+      if (SENSITIVE_HEADER_KEYS.has(lowerKey)) {
+        sanitized[key] = "[REDACTED]";
+        continue;
+      }
+      sanitized[key] = this.normalizeHeaderValue(value);
+    }
+    return Object.keys(sanitized).length > 0 ? sanitized : null;
+  }
+
+  normalizeHeaderValue(value) {
+    if (Array.isArray(value)) {
+      return value.slice(0, 5).map((item) => this.truncate(String(item), 512));
+    }
+    if (typeof value === "string") {
+      return this.truncate(value, 512);
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return value;
+    }
+    if (value === null || value === undefined) {
+      return value;
+    }
+    try {
+      return this.truncate(JSON.stringify(value), 512);
+    } catch (error) {
+      return "[unserializable]";
+    }
+  }
+
+  extractRequestBody(body) {
+    if (body === undefined || body === null) {
+      return null;
+    }
+    if (typeof body === "string") {
+      return this.truncate(body, 2000);
+    }
+    if (Buffer.isBuffer(body)) {
+      return `[buffer length=${body.length}]`;
+    }
+    try {
+      const serialized = JSON.stringify(body);
+      return this.truncate(serialized, 2000);
+    } catch (error) {
+      return "[unserializable body]";
+    }
+  }
+
+  getClientIp(req) {
+    const headerIP = req.headers["x-forwarded-for"];
+    if (typeof headerIP === "string" && headerIP.length > 0) {
+      return headerIP.split(",")[0].trim();
+    }
+    return (
+      req.headers["x-real-ip"] ||
+      req.connection?.remoteAddress ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      null
+    );
+  }
+
+  truncate(value, maxLength) {
+    if (value === null || value === undefined) {
+      return value;
+    }
+    const str = String(value);
+    if (str.length <= maxLength) {
+      return str;
+    }
+    return `${str.slice(0, maxLength - 15)}...[truncated]`;
+  }
+}
+
+const securityViolationLogger = new SecurityViolationLogger();
+
 /**
  * 处理 DAU 统计（异步写入 Redis 和 PostgreSQL）
  * @param {express.Request} req - Express 请求对象
@@ -910,6 +1163,11 @@ const securityMiddleware = (req, res, next) => {
     const validation = validateSecurityParams(req, false);
 
     if (!validation.isValid) {
+      securityViolationLogger.logViolation(req, {
+        errorCode: validation.error,
+        allowQueryParams: false,
+        context: "standard request",
+      });
       return res.status(400).json({ error: validation.error });
     }
 
@@ -952,6 +1210,11 @@ const sseSecurityMiddleware = (req, res, next) => {
     const validation = validateSecurityParams(req, true);
 
     if (!validation.isValid) {
+      securityViolationLogger.logViolation(req, {
+        errorCode: validation.error,
+        allowQueryParams: true,
+        context: "sse request",
+      });
       return res.status(400).json({ error: validation.error });
     }
 

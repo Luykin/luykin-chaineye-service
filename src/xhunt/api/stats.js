@@ -2895,4 +2895,43 @@ router.get("/url-stats", basicAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /security-violations
+ * 安全校验失败日志查询（分页）
+ */
+router.get("/security-violations", basicAuth, async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limitQuery = parseInt(req.query.limit, 10) || 50;
+    const limit = Math.min(Math.max(limitQuery, 1), 100);
+    const offset = (page - 1) * limit;
+
+    const { SecurityViolationLog } = require("../../models/postgres-start");
+
+    const { rows, count } = await SecurityViolationLog.findAndCountAll({
+      order: [["createdAt", "DESC"]],
+      offset,
+      limit,
+    });
+
+    res.json({
+      success: true,
+      data: rows.map((row) => row.toJSON()),
+      pagination: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.max(Math.ceil(count / limit), 1),
+      },
+    });
+  } catch (error) {
+    console.error("安全校验失败日志查询错误:", error);
+    res.status(500).json({
+      success: false,
+      error: "查询失败",
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;

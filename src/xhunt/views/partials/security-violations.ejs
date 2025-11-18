@@ -1,0 +1,354 @@
+<div class="stats-section">
+  <div class="section" id="security-violations-section">
+    <h2 class="section-title">🛡️ 安全拦截日志</h2>
+
+    <div class="stat-card" style="max-width: 1200px; margin: 0 auto">
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+          gap: 10px;
+        "
+      >
+        <div>
+          <div style="font-weight: 600; color: #111827">最近安全校验失败记录</div>
+          <div id="security-violation-summary" style="color: #6b7280; font-size: 13px">
+            自动加载最新 50 条记录
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px">
+          <button
+            id="security-violation-refresh"
+            style="
+              padding: 8px 16px;
+              background: #3b82f6;
+              color: white;
+              border: none;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 13px;
+              font-weight: 600;
+            "
+          >
+            🔄 刷新
+          </button>
+        </div>
+      </div>
+
+      <div
+        id="security-violation-loading"
+        style="
+          display: none;
+          padding: 15px;
+          background: #f3f4f6;
+          border-radius: 6px;
+          color: #374151;
+          font-weight: 600;
+          margin-bottom: 12px;
+        "
+      >
+        ⏳ 正在加载安全日志...
+      </div>
+
+      <div
+        id="security-violation-error"
+        style="
+          display: none;
+          padding: 15px;
+          background: #fee2e2;
+          border-radius: 6px;
+          color: #991b1b;
+          font-weight: 600;
+          margin-bottom: 12px;
+          white-space: pre-line;
+        "
+      ></div>
+
+      <div class="table-wrapper" style="overflow-x: auto">
+        <table class="stats-table">
+          <thead>
+            <tr>
+              <th style="width: 150px">时间 / 原因</th>
+              <th>失败详情</th>
+              <th>请求信息</th>
+              <th style="width: 220px">指纹 / 版本</th>
+              <th style="width: 220px">IP / 来源</th>
+              <th style="width: 140px">更多</th>
+            </tr>
+          </thead>
+          <tbody id="security-violation-tbody">
+            <tr>
+              <td colspan="6" class="empty-message">暂无数据</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 16px;
+          flex-wrap: wrap;
+          gap: 10px;
+        "
+      >
+        <div id="security-violation-pagination-info" style="color: #6b7280; font-size: 13px">
+          第 1 / 1 页，共 0 条
+        </div>
+        <div style="display: flex; gap: 8px">
+          <button
+            id="security-violation-prev"
+            style="
+              padding: 8px 14px;
+              border: 1px solid #d1d5db;
+              border-radius: 6px;
+              background: white;
+              cursor: pointer;
+              font-size: 13px;
+            "
+            disabled
+          >
+            ⬅️ 上一页
+          </button>
+          <button
+            id="security-violation-next"
+            style="
+              padding: 8px 14px;
+              border: 1px solid #d1d5db;
+              border-radius: 6px;
+              background: white;
+              cursor: pointer;
+              font-size: 13px;
+            "
+            disabled
+          >
+            下一页 ➡️
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const PAGE_SIZE = 50;
+    let currentPage = 1;
+    let totalPages = 1;
+    let isLoading = false;
+
+    const tbody = document.getElementById("security-violation-tbody");
+    const loadingEl = document.getElementById("security-violation-loading");
+    const errorEl = document.getElementById("security-violation-error");
+    const summaryEl = document.getElementById("security-violation-summary");
+    const paginationInfo = document.getElementById(
+      "security-violation-pagination-info"
+    );
+    const prevBtn = document.getElementById("security-violation-prev");
+    const nextBtn = document.getElementById("security-violation-next");
+    const refreshBtn = document.getElementById("security-violation-refresh");
+
+    refreshBtn.addEventListener("click", () => {
+      loadSecurityViolations(currentPage);
+    });
+
+    prevBtn.addEventListener("click", () => {
+      if (currentPage > 1) {
+        loadSecurityViolations(currentPage - 1);
+      }
+    });
+
+    nextBtn.addEventListener("click", () => {
+      if (currentPage < totalPages) {
+        loadSecurityViolations(currentPage + 1);
+      }
+    });
+
+    async function loadSecurityViolations(page = 1) {
+      if (isLoading) return;
+      isLoading = true;
+      loadingEl.style.display = "block";
+      errorEl.style.display = "none";
+      tbody.innerHTML =
+        '<tr><td colspan="6" class="empty-message">正在加载...</td></tr>';
+
+      try {
+        const response = await fetch(
+          `/api/xhunt/stats/security-violations?page=${page}&limit=${PAGE_SIZE}`
+        );
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || "加载安全日志失败");
+        }
+
+        const records = result.data || [];
+        const pagination = result.pagination || {
+          page: 1,
+          totalPages: 1,
+          total: 0,
+        };
+
+        currentPage = pagination.page;
+        totalPages = pagination.totalPages;
+
+        renderTable(records);
+        updateSummary(pagination.total);
+        updatePagination(pagination);
+      } catch (error) {
+        console.error("加载安全日志失败:", error);
+        errorEl.textContent = "❌ " + error.message;
+        errorEl.style.display = "block";
+        tbody.innerHTML =
+          '<tr><td colspan="6" class="empty-message">加载失败</td></tr>';
+      } finally {
+        isLoading = false;
+        loadingEl.style.display = "none";
+      }
+    }
+
+    function renderTable(records) {
+      if (!records || records.length === 0) {
+        tbody.innerHTML =
+          '<tr><td colspan="6" class="empty-message">暂无安全校验失败记录</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = records
+        .map((item) => {
+          const createdAt = formatDateTime(item.createdAt);
+          const reason = escapeHtml(item.reasonCode || "-");
+          const errorDetail = escapeHtml(item.errorDetail || "-");
+          const requestPath = escapeHtml(item.requestPath || "-");
+          const method = escapeHtml(item.requestMethod || "-");
+          const queryString = item.queryString
+            ? escapeHtml(item.queryString)
+            : "";
+          const fingerprint = escapeHtml(item.fingerprint || "-");
+          const version = escapeHtml(item.extensionVersion || "-");
+          const clientIp = escapeHtml(item.clientIp || "-");
+          const windowLocation = escapeHtml(item.windowLocationHref || "-");
+          const requestId = escapeHtml(item.requestId || "-");
+          const requestTimestamp = item.requestTimestamp
+            ? escapeHtml(String(item.requestTimestamp))
+            : "-";
+          const headers = formatJson(item.headers);
+          const requestBody = escapeHtml(item.requestBody || "-");
+
+          return `
+            <tr>
+              <td>
+                <div style="font-weight: 600; color: #111827">${createdAt}</div>
+                <div style="color: #2563eb; font-size: 12px; margin-top: 4px">
+                  ${reason}
+                </div>
+              </td>
+              <td>
+                <div style="color: #111827; font-size: 13px">${errorDetail}</div>
+              </td>
+              <td>
+                <div style="font-weight: 600; color: #111827">${method} ${requestPath}</div>
+                ${
+                  queryString
+                    ? `<div style="color: #6b7280; font-size: 12px; margin-top: 4px">Query: ${queryString}</div>`
+                    : ""
+                }
+                <div style="color: #6b7280; font-size: 12px; margin-top: 4px">Request ID: ${requestId}</div>
+                <div style="color: #6b7280; font-size: 12px; margin-top: 4px">Timestamp: ${requestTimestamp}</div>
+              </td>
+              <td>
+                <div style="font-size: 13px">Fingerprint:</div>
+                <div style="font-weight: 600; color: #111827">${fingerprint}</div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 6px">Version: ${version}</div>
+              </td>
+              <td>
+                <div style="font-size: 13px">IP:</div>
+                <div style="font-weight: 600; color: #111827">${clientIp}</div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 6px">来源: ${windowLocation}</div>
+              </td>
+              <td>
+                <details>
+                  <summary style="cursor: pointer; color: #2563eb; font-size: 13px">查看详情</summary>
+                  <div style="margin-top: 8px">
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px">Headers</div>
+                    <pre style="background: #f9fafb; padding: 8px; border-radius: 6px; font-size: 11px; max-height: 180px; overflow: auto;">${headers}</pre>
+                  </div>
+                  <div style="margin-top: 8px">
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px">Body</div>
+                    <pre style="background: #f9fafb; padding: 8px; border-radius: 6px; font-size: 11px; max-height: 180px; overflow: auto;">${requestBody}</pre>
+                  </div>
+                </details>
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    function updateSummary(total) {
+      summaryEl.textContent = `共 ${formatNumber(total || 0)} 条告警，单页展示 ${PAGE_SIZE} 条`;
+    }
+
+    function updatePagination(pagination) {
+      paginationInfo.textContent = `第 ${pagination.page} / ${
+        pagination.totalPages
+      } 页，共 ${formatNumber(pagination.total)} 条`;
+      prevBtn.disabled = pagination.page <= 1;
+      nextBtn.disabled = pagination.page >= pagination.totalPages;
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "-";
+      try {
+        const date = new Date(value);
+        return date.toLocaleString("zh-CN", {
+          hour12: false,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      } catch (error) {
+        return value;
+      }
+    }
+
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return "";
+      return text
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function formatJson(obj) {
+      if (!obj) return "-";
+      try {
+        return escapeHtml(JSON.stringify(obj, null, 2));
+      } catch (error) {
+        return "-";
+      }
+    }
+
+    function formatNumber(num) {
+      if (typeof num !== "number") {
+        num = Number(num) || 0;
+      }
+      return num.toLocaleString("zh-CN");
+    }
+
+    // 首次进入自动加载
+    loadSecurityViolations(1);
+  })();
+</script>
+
