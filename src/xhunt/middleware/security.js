@@ -191,7 +191,45 @@ class RequestStatsManager {
     }
   }
 
-  // 提取URL路径（去掉查询参数）
+  // 归一化URL路径（将带参数的路径归一化到基础路径）
+  normalizeUrlPath(pathname) {
+    // 定义需要归一化的路径模式
+    // 格式：{ 正则表达式: 替换为的路径 }
+    const normalizationRules = [
+      // /api/xhunt/notes/:handle -> /api/xhunt/notes/*
+      {
+        pattern: /^\/api\/xhunt\/notes\/([^\/]+)$/,
+        replacement: '/api/xhunt/notes/*'
+      },
+      // /api/xhunt/reviews/:handle -> /api/xhunt/reviews/*
+      {
+        pattern: /^\/api\/xhunt\/reviews\/([^\/]+)$/,
+        replacement: '/api/xhunt/reviews/*'
+      },
+      // /api/xhunt/reviews/:handle/comments -> /api/xhunt/reviews/*/comments
+      {
+        pattern: /^\/api\/xhunt\/reviews\/([^\/]+)\/comments$/,
+        replacement: '/api/xhunt/reviews/*/comments'
+      },
+      // /api/xhunt/rootdata/relationship/:id -> /api/xhunt/rootdata/relationship/*
+      {
+        pattern: /^\/api\/xhunt\/rootdata\/relationship\/([^\/]+)$/,
+        replacement: '/api/xhunt/rootdata/relationship/*'
+      },
+    ];
+
+    // 应用归一化规则
+    for (const rule of normalizationRules) {
+      if (rule.pattern.test(pathname)) {
+        return rule.replacement;
+      }
+    }
+
+    // 如果没有匹配的规则，返回原始路径
+    return pathname;
+  }
+
+  // 提取URL路径（去掉查询参数并归一化）
   extractUrlPath(req) {
     try {
       // 优先使用 baseUrl + path（这是 Express 的标准方式）
@@ -215,11 +253,17 @@ class RequestStatsManager {
       }
       
       // 确保返回的路径不为空
-      return pathname || '/';
+      pathname = pathname || '/';
+      
+      // 应用路径归一化
+      pathname = this.normalizeUrlPath(pathname);
+      
+      return pathname;
     } catch (error) {
       // 如果解析失败，使用最简单的 fallback
       const path = (req.baseUrl || '') + (req.path || '/');
-      return path.split('?')[0] || '/';
+      const pathname = path.split('?')[0] || '/';
+      return this.normalizeUrlPath(pathname);
     }
   }
 
@@ -910,6 +954,14 @@ const sseSecurityMiddleware = (req, res, next) => {
     if (!validation.isValid) {
       return res.status(400).json({ error: validation.error });
     }
+
+    // 🔥 请求统计（版本 + URL）- 异步处理，不阻塞请求
+    requestStatsManager.init();
+    setImmediate(() => {
+      requestStatsManager.handleRequestStats(req).catch((error) => {
+        console.error("[请求统计] 处理失败:", error);
+      });
+    });
 
     next();
   } catch (error) {
