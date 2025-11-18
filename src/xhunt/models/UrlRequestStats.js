@@ -60,17 +60,17 @@ module.exports = (sequelize) => {
       timestamps: true,
       indexes: [
         {
-          name: "idx_time_window",
+          name: "idx_url_request_stats_time_window",
           fields: ["time_window"],
           comment: "时间窗口索引：用于快速查询某个时间区间的数据",
         },
         {
-          name: "idx_url_path",
+          name: "idx_url_request_stats_url_path",
           fields: ["url_path"],
           comment: "URL路径索引：用于快速查询某个URL的数据",
         },
         {
-          name: "idx_time_window_url_path",
+          name: "idx_url_request_stats_time_window_url_path",
           unique: true,
           fields: ["time_window", "url_path"],
           comment:
