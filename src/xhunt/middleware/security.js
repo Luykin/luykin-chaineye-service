@@ -477,6 +477,10 @@ const REQUEST_ID_DEDUP_REDIS_PREFIX = "security:reqid:";
 const REQUEST_ID_LOCAL_CACHE_MAX_SIZE = 2_000_000;
 const requestIdLocalCache = new Map();
 let lastRequestIdLocalPrune = 0;
+const SECURITY_MIDDLEWARE_FLAG = Symbol.for("xhunt.securityMiddlewareExecuted");
+const SSE_SECURITY_MIDDLEWARE_FLAG = Symbol.for(
+  "xhunt.sseSecurityMiddlewareExecuted"
+);
 
 const buildRequestIdDedupKey = (securityContext = {}) => {
   const { requestId, timestamp, signature, fingerprint } = securityContext;
@@ -1326,6 +1330,10 @@ const browserOnlyMiddleware = (req, res, next) => {
 
 // 安全中间件
 const securityMiddleware = async (req, res, next) => {
+  if (req[SECURITY_MIDDLEWARE_FLAG]) {
+    return next();
+  }
+  req[SECURITY_MIDDLEWARE_FLAG] = true;
   // 确保缓存管理器已初始化
   dauCacheManager.init();
 
@@ -1390,6 +1398,10 @@ const securityMiddleware = async (req, res, next) => {
 
 // SSE 专用的安全中间件（从查询参数读取，因为 EventSource 不支持自定义 headers）
 const sseSecurityMiddleware = async (req, res, next) => {
+  if (req[SSE_SECURITY_MIDDLEWARE_FLAG]) {
+    return next();
+  }
+  req[SSE_SECURITY_MIDDLEWARE_FLAG] = true;
   // 确保缓存管理器已初始化
   dauCacheManager.init();
 
