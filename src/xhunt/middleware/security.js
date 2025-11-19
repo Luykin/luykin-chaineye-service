@@ -448,11 +448,12 @@ const fingerprintLimiter = rateLimit({
   },
 });
 
+const SECURITY_TIME_WINDOW_MS = 30 * 60 * 1000; // 30分钟窗口，需与 requestId 去重保持一致
+
 // 验证时间戳是否在有效期内（30分钟）
 const isTimestampValid = (timestamp) => {
   const now = Date.now();
-  const thirtyMinutes = 30 * 60 * 1000;
-  return Math.abs(now - timestamp) <= thirtyMinutes;
+  return Math.abs(now - timestamp) <= SECURITY_TIME_WINDOW_MS;
 };
 
 // 验证指纹格式
@@ -470,7 +471,7 @@ const isValidRequestId = (requestId) => {
   return uuidV4Regex.test(requestId);
 };
 
-const REQUEST_ID_DEDUP_TTL_MS = 30 * 60 * 1000;
+const REQUEST_ID_DEDUP_TTL_MS = SECURITY_TIME_WINDOW_MS;
 const REQUEST_ID_DEDUP_TTL_SECONDS = Math.floor(REQUEST_ID_DEDUP_TTL_MS / 1000);
 const REQUEST_ID_DEDUP_REDIS_PREFIX = "security:reqid:";
 const REQUEST_ID_LOCAL_CACHE_MAX_SIZE = 2_000_000;

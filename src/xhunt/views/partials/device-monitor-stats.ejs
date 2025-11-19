@@ -272,6 +272,36 @@
             >-</span
           >
         </div>
+        <div
+          style="
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #e5e7eb;
+          "
+        >
+          <div
+            style="
+              margin-bottom: 6px;
+              color: #374151;
+              font-weight: 600;
+              font-size: 14px;
+            "
+          >
+            Key 前缀分布（采样）
+          </div>
+          <div
+            id="redisKeyDistributionMeta"
+            style="font-size: 12px; color: #6b7280; margin-bottom: 6px"
+          >
+            -
+          </div>
+          <div
+            id="redisKeyDistribution"
+            style="font-size: 13px; color: #111827"
+          >
+            暂无数据
+          </div>
+        </div>
 
         <!-- 缓存清除功能 -->
         <div
@@ -590,6 +620,15 @@
       return text.replace(/[&<>"']/g, (m) => map[m]);
     }
 
+    const formatNumber = (num) => {
+      if (typeof num !== "number") {
+        const parsed = Number(num);
+        if (!Number.isFinite(parsed)) return num || "-";
+        return parsed.toLocaleString("zh-CN");
+      }
+      return num.toLocaleString("zh-CN");
+    };
+
     const refreshBtn = document.getElementById("refreshDeviceStatus");
     const loadingStatus = document.getElementById("deviceLoadingStatus");
     const errorMessage = document.getElementById("deviceErrorMessage");
@@ -679,6 +718,12 @@
 
       // 更新Redis状态
       const redisStatusEl = document.getElementById("redisStatus");
+      const redisKeyDistributionMeta = document.getElementById(
+        "redisKeyDistributionMeta"
+      );
+      const redisKeyDistribution = document.getElementById(
+        "redisKeyDistribution"
+      );
       if (data.redis.connected) {
         redisStatusEl.textContent = "✅ 已连接";
         redisStatusEl.style.color = "#10b981";
@@ -692,6 +737,11 @@
           data.redis.keys || "-";
         document.getElementById("redisUptime").textContent =
           data.redis.uptime || "-";
+        updateRedisKeyDistribution(
+          data.redis.keyDistribution,
+          redisKeyDistributionMeta,
+          redisKeyDistribution
+        );
       } else {
         redisStatusEl.textContent = "❌ 未连接";
         redisStatusEl.style.color = "#ef4444";
@@ -700,6 +750,13 @@
         document.getElementById("redisMemoryUsagePercent").textContent = "-";
         document.getElementById("redisKeys").textContent = "-";
         document.getElementById("redisUptime").textContent = "-";
+        if (redisKeyDistributionMeta) {
+          redisKeyDistributionMeta.textContent = "Redis 未连接";
+        }
+        if (redisKeyDistribution) {
+          redisKeyDistribution.innerHTML =
+            '<div style="color: #6b7280;">暂无数据</div>';
+        }
       }
 
       // 更新PostgreSQL状态
@@ -1119,5 +1176,74 @@
         clearCacheBtn.textContent = "清除";
       }
     });
+
+    function updateRedisKeyDistribution(dist, metaEl, containerEl) {
+      if (!metaEl || !containerEl) {
+        return;
+      }
+      if (
+        !dist ||
+        !Array.isArray(dist.groups) ||
+        dist.groups.length === 0 ||
+        dist.sampled === 0
+      ) {
+        metaEl.textContent = dist?.error
+          ? `加载失败：${dist.error}`
+          : "暂无采样数据";
+        containerEl.innerHTML =
+          '<div style="color: #6b7280;">暂无数据</div>';
+        return;
+      }
+
+      const parts = [];
+      if (typeof dist.sampled === "number") {
+        parts.push(`采样 ${formatNumber(dist.sampled)} 个 key`);
+      }
+      if (typeof dist.totalKeys === "number") {
+        parts.push(`总数约 ${formatNumber(dist.totalKeys)} 个`);
+      }
+      if (dist.truncated) {
+        parts.push("（已截断）");
+      }
+      if (dist.scanIterations) {
+        parts.push(`扫描 ${dist.scanIterations} 次`);
+      }
+      metaEl.textContent = parts.join("，");
+
+      const headerRow = `
+        <tr>
+          <th style="text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-weight: 600;">前缀</th>
+          <th style="text-align: right; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-weight: 600;">数量</th>
+          <th style="text-align: right; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-weight: 600;">占比</th>
+        </tr>
+      `;
+
+      const rows = dist.groups
+        .map(
+          (group) => `
+          <tr>
+            <td style="padding: 6px 8px; border-bottom: 1px solid #f3f4f6;">${escapeHtml(
+              group.prefix
+            )}</td>
+            <td style="text-align: right; padding: 6px 8px; border-bottom: 1px solid #f3f4f6;">${formatNumber(
+              group.count
+            )}</td>
+            <td style="text-align: right; padding: 6px 8px; border-bottom: 1px solid #f3f4f6;">${
+              typeof group.percent === "number"
+                ? `${group.percent}%`
+                : "-"
+            }</td>
+          </tr>
+        `
+        )
+        .join("");
+
+      containerEl.innerHTML = `
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <thead>${headerRow}</thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
   })();
 </script>
