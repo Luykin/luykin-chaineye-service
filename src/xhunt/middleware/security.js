@@ -470,6 +470,69 @@ const isValidRequestId = (requestId) => {
   return uuidV4Regex.test(requestId);
 };
 
+const REQUEST_ID_DEDUP_TTL_MS = 30 * 60 * 1000;
+const REQUEST_ID_DEDUP_TTL_SECONDS = Math.floor(REQUEST_ID_DEDUP_TTL_MS / 1000);
+const REQUEST_ID_DEDUP_REDIS_PREFIX = "security:reqid:";
+const REQUEST_ID_LOCAL_CACHE_MAX_SIZE = 2_000_000;
+const requestIdLocalCache = new Map();
+let lastRequestIdLocalPrune = 0;
+
+const reserveRequestId = async (req, requestId) => {
+  const redisClient = req.redisClient;
+  if (redisClient && typeof redisClient.set === "function") {
+    const redisKey = `${REQUEST_ID_DEDUP_REDIS_PREFIX}${requestId}`;
+    try {
+      const result = await redisClient.set(redisKey, "1", {
+        NX: true,
+        EX: REQUEST_ID_DEDUP_TTL_SECONDS,
+      });
+      if (result !== null) {
+        return { allowed: true, source: "redis" };
+      }
+      return { allowed: false, source: "redis" };
+    } catch (error) {
+      console.error("[RequestIdDedup] Redis SET failed:", error);
+    }
+  }
+  return reserveRequestIdInMemory(requestId);
+};
+
+const reserveRequestIdInMemory = (requestId) => {
+  const now = Date.now();
+  pruneLocalRequestIdCache(now);
+  const lastUsedAt = requestIdLocalCache.get(requestId);
+  if (lastUsedAt && now - lastUsedAt < REQUEST_ID_DEDUP_TTL_MS) {
+    return { allowed: false, source: "memory" };
+  }
+  requestIdLocalCache.set(requestId, now);
+  return { allowed: true, source: "memory" };
+};
+
+const pruneLocalRequestIdCache = (now) => {
+  if (
+    requestIdLocalCache.size === 0 ||
+    (now - lastRequestIdLocalPrune < 60 * 1000 &&
+      requestIdLocalCache.size < REQUEST_ID_LOCAL_CACHE_MAX_SIZE)
+  ) {
+    return;
+  }
+  lastRequestIdLocalPrune = now;
+  for (const [key, timestamp] of requestIdLocalCache) {
+    if (now - timestamp > REQUEST_ID_DEDUP_TTL_MS) {
+      requestIdLocalCache.delete(key);
+    } else {
+      break;
+    }
+  }
+  while (requestIdLocalCache.size > REQUEST_ID_LOCAL_CACHE_MAX_SIZE) {
+    const oldestKey = requestIdLocalCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    requestIdLocalCache.delete(oldestKey);
+  }
+};
+
 // 检测是否为浏览器环境
 const isBrowserEnvironment = (userAgent, windowLocationHref) => {
   if (!userAgent || !windowLocationHref) {
@@ -719,6 +782,10 @@ const SECURITY_ERROR_REASON_MAP = {
   "400-3": {
     reasonCode: "invalid_timestamp",
     message: "请求时间戳超出允许范围",
+  },
+  "409": {
+    reasonCode: "duplicate_request",
+    message: "30分钟内重复的请求ID",
   },
   "411": {
     reasonCode: "invalid_signature",
@@ -1238,7 +1305,7 @@ const browserOnlyMiddleware = (req, res, next) => {
 };
 
 // 安全中间件
-const securityMiddleware = (req, res, next) => {
+const securityMiddleware = async (req, res, next) => {
   // 确保缓存管理器已初始化
   dauCacheManager.init();
 
@@ -1255,6 +1322,21 @@ const securityMiddleware = (req, res, next) => {
         });
       }
       return res.status(400).json({ error: validation.error });
+    }
+
+    const requestIdReservation = await reserveRequestId(
+      req,
+      validation.securityContext.requestId
+    );
+    if (!requestIdReservation.allowed) {
+      if (!shouldSkipSecurityViolationLog(req)) {
+        securityViolationLogger.logViolation(req, {
+          errorCode: "409",
+          allowQueryParams: false,
+          context: "standard request",
+        });
+      }
+      return res.status(409).json({ error: "409" });
     }
 
     // 将验证后的信息添加到请求对象中
@@ -1287,7 +1369,7 @@ const securityMiddleware = (req, res, next) => {
 };
 
 // SSE 专用的安全中间件（从查询参数读取，因为 EventSource 不支持自定义 headers）
-const sseSecurityMiddleware = (req, res, next) => {
+const sseSecurityMiddleware = async (req, res, next) => {
   // 确保缓存管理器已初始化
   dauCacheManager.init();
 
@@ -1304,6 +1386,21 @@ const sseSecurityMiddleware = (req, res, next) => {
         });
       }
       return res.status(400).json({ error: validation.error });
+    }
+
+    const requestIdReservation = await reserveRequestId(
+      req,
+      validation.securityContext.requestId
+    );
+    if (!requestIdReservation.allowed) {
+      if (!shouldSkipSecurityViolationLog(req)) {
+        securityViolationLogger.logViolation(req, {
+          errorCode: "409",
+          allowQueryParams: true,
+          context: "sse request",
+        });
+      }
+      return res.status(409).json({ error: "409" });
     }
 
     // 🔥 请求统计（版本 + URL）- 异步处理，不阻塞请求
