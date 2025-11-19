@@ -448,11 +448,11 @@ const fingerprintLimiter = rateLimit({
   },
 });
 
-// 验证时间戳是否在有效期内（5分钟）
+// 验证时间戳是否在有效期内（30分钟）
 const isTimestampValid = (timestamp) => {
   const now = Date.now();
-  const fiveMinutes = 5 * 60 * 1000;
-  return Math.abs(now - timestamp) <= fiveMinutes;
+  const thirtyMinutes = 30 * 60 * 1000;
+  return Math.abs(now - timestamp) <= thirtyMinutes;
 };
 
 // 验证指纹格式
