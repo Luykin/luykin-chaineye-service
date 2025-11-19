@@ -478,10 +478,28 @@ const REQUEST_ID_LOCAL_CACHE_MAX_SIZE = 2_000_000;
 const requestIdLocalCache = new Map();
 let lastRequestIdLocalPrune = 0;
 
-const reserveRequestId = async (req, requestId) => {
+const buildRequestIdDedupKey = (securityContext = {}) => {
+  const { requestId, timestamp, signature, fingerprint } = securityContext;
+  if (!requestId || !timestamp || !signature || !fingerprint) {
+    return null;
+  }
+  const raw = [
+    String(requestId),
+    String(timestamp),
+    String(signature),
+    String(fingerprint),
+  ].join("|");
+  return crypto.createHash("sha1").update(raw).digest("hex");
+};
+
+const reserveRequestId = async (req, securityContext = {}) => {
+  const dedupKey = buildRequestIdDedupKey(securityContext);
+  if (!dedupKey) {
+    return { allowed: true, source: "skipped" };
+  }
   const redisClient = req.redisClient;
   if (redisClient && typeof redisClient.set === "function") {
-    const redisKey = `${REQUEST_ID_DEDUP_REDIS_PREFIX}${requestId}`;
+    const redisKey = `${REQUEST_ID_DEDUP_REDIS_PREFIX}${dedupKey}`;
     try {
       const result = await redisClient.set(redisKey, "1", {
         NX: true,
@@ -495,17 +513,17 @@ const reserveRequestId = async (req, requestId) => {
       console.error("[RequestIdDedup] Redis SET failed:", error);
     }
   }
-  return reserveRequestIdInMemory(requestId);
+  return reserveRequestIdInMemory(dedupKey);
 };
 
-const reserveRequestIdInMemory = (requestId) => {
+const reserveRequestIdInMemory = (dedupKey) => {
   const now = Date.now();
   pruneLocalRequestIdCache(now);
-  const lastUsedAt = requestIdLocalCache.get(requestId);
+  const lastUsedAt = requestIdLocalCache.get(dedupKey);
   if (lastUsedAt && now - lastUsedAt < REQUEST_ID_DEDUP_TTL_MS) {
     return { allowed: false, source: "memory" };
   }
-  requestIdLocalCache.set(requestId, now);
+  requestIdLocalCache.set(dedupKey, now);
   return { allowed: true, source: "memory" };
 };
 
@@ -1288,6 +1306,7 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
       timestamp,
       fingerprint,
       version,
+      signature,
     },
   };
 };
@@ -1327,7 +1346,7 @@ const securityMiddleware = async (req, res, next) => {
 
     const requestIdReservation = await reserveRequestId(
       req,
-      validation.securityContext.requestId
+      validation.securityContext
     );
     if (!requestIdReservation.allowed) {
       if (!shouldSkipSecurityViolationLog(req)) {
@@ -1391,7 +1410,7 @@ const sseSecurityMiddleware = async (req, res, next) => {
 
     const requestIdReservation = await reserveRequestId(
       req,
-      validation.securityContext.requestId
+      validation.securityContext
     );
     if (!requestIdReservation.allowed) {
       if (!shouldSkipSecurityViolationLog(req)) {
