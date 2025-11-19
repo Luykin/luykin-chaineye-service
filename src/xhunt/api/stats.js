@@ -1816,6 +1816,107 @@ router.post("/rootdata-daily/set-initial", basicAuth, async (req, res) => {
   }
 });
 
+const extractRedisKeyPrefix = (key) => {
+  if (typeof key !== "string" || key.length === 0) {
+    return "(unknown)";
+  }
+  const colonIndex = key.indexOf(":");
+  if (colonIndex > 0) {
+    return `${key.slice(0, colonIndex + 1)}`;
+  }
+  const underscoreIndex = key.indexOf("_");
+  if (underscoreIndex > 0) {
+    return `${key.slice(0, underscoreIndex + 1)}`;
+  }
+  return key.length > 30 ? `${key.slice(0, 27)}...` : key;
+};
+
+const collectRedisKeyDistribution = async (
+  redisClient,
+  { maxSampledKeys = 10000, countPerScan = 1000, maxGroups = 10, totalKeys } = {}
+) => {
+  const prefixCounts = new Map();
+  let sampled = 0;
+  let iterations = 0;
+  let truncated = false;
+  const processKey = (key) => {
+    const keyStr = typeof key === "string" ? key : key?.toString();
+    if (!keyStr) {
+      return true;
+    }
+    const prefix = extractRedisKeyPrefix(keyStr);
+    prefixCounts.set(prefix, (prefixCounts.get(prefix) || 0) + 1);
+    sampled += 1;
+    if (sampled >= maxSampledKeys) {
+      truncated = true;
+      return false;
+    }
+    return true;
+  };
+
+  try {
+    if (typeof redisClient.scanIterator === "function") {
+      for await (const key of redisClient.scanIterator({
+        MATCH: "*",
+        COUNT: countPerScan,
+      })) {
+        iterations += 1;
+        if (!processKey(key)) {
+          break;
+        }
+      }
+    } else {
+      let cursor = "0";
+      do {
+        const [nextCursor, keys] = await redisClient.scan(cursor, {
+          MATCH: "*",
+          COUNT: countPerScan,
+        });
+        cursor = nextCursor;
+        for (const key of keys || []) {
+          if (!processKey(key)) {
+            cursor = "0";
+            break;
+          }
+        }
+        iterations += 1;
+        if (cursor === "0") {
+          break;
+        }
+      } while (cursor !== "0" && sampled < maxSampledKeys);
+    }
+  } catch (error) {
+    console.error("collectRedisKeyDistribution error:", error);
+    return {
+      sampled,
+      sampleLimit: maxSampledKeys,
+      truncated,
+      scanIterations: iterations,
+      totalKeys,
+      groups: [],
+      error: error.message,
+    };
+  }
+
+  const groups = Array.from(prefixCounts.entries())
+    .map(([prefix, count]) => ({
+      prefix,
+      count,
+      percent: sampled ? Number(((count / sampled) * 100).toFixed(2)) : 0,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, maxGroups);
+
+  return {
+    sampled,
+    sampleLimit: maxSampledKeys,
+    truncated,
+    scanIterations: iterations,
+    totalKeys,
+    groups,
+  };
+};
+
 /**
  * GET /api/stats/device-status
  * 获取设备状态信息（CPU、内存、PM2、Redis、PostgreSQL等）
@@ -1963,6 +2064,13 @@ router.get("/device-status", basicAuth, async (req, res) => {
             : "-",
           version: redisInfo.redis_version || "-",
         };
+
+        deviceStatus.redis.keyDistribution = await collectRedisKeyDistribution(
+          redisClient,
+          {
+            totalKeys: dbKeys || 0,
+          }
+        );
       }
     } catch (error) {
       console.error("获取 Redis 状态失败:", error.message);

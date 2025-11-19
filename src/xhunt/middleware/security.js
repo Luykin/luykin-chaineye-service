@@ -448,11 +448,12 @@ const fingerprintLimiter = rateLimit({
   },
 });
 
+const SECURITY_TIME_WINDOW_MS = 30 * 60 * 1000; // 30分钟窗口，需与 requestId 去重保持一致
+
 // 验证时间戳是否在有效期内（30分钟）
 const isTimestampValid = (timestamp) => {
   const now = Date.now();
-  const thirtyMinutes = 30 * 60 * 1000;
-  return Math.abs(now - timestamp) <= thirtyMinutes;
+  return Math.abs(now - timestamp) <= SECURITY_TIME_WINDOW_MS;
 };
 
 // 验证指纹格式
@@ -468,6 +469,91 @@ const isValidRequestId = (requestId) => {
   const uuidV4Regex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidV4Regex.test(requestId);
+};
+
+const REQUEST_ID_DEDUP_TTL_MS = SECURITY_TIME_WINDOW_MS;
+const REQUEST_ID_DEDUP_TTL_SECONDS = Math.floor(REQUEST_ID_DEDUP_TTL_MS / 1000);
+const REQUEST_ID_DEDUP_REDIS_PREFIX = "security:reqid:";
+const REQUEST_ID_LOCAL_CACHE_MAX_SIZE = 2_000_000;
+const requestIdLocalCache = new Map();
+let lastRequestIdLocalPrune = 0;
+const SECURITY_MIDDLEWARE_FLAG = Symbol.for("xhunt.securityMiddlewareExecuted");
+const SSE_SECURITY_MIDDLEWARE_FLAG = Symbol.for(
+  "xhunt.sseSecurityMiddlewareExecuted"
+);
+
+const buildRequestIdDedupKey = (securityContext = {}) => {
+  const { requestId, timestamp, signature, fingerprint } = securityContext;
+  if (!requestId || !timestamp || !signature || !fingerprint) {
+    return null;
+  }
+  const raw = [
+    String(requestId),
+    String(timestamp),
+    String(signature),
+    String(fingerprint),
+  ].join("|");
+  return crypto.createHash("sha1").update(raw).digest("hex");
+};
+
+const reserveRequestId = async (req, securityContext = {}) => {
+  const dedupKey = buildRequestIdDedupKey(securityContext);
+  if (!dedupKey) {
+    return { allowed: true, source: "skipped" };
+  }
+  const redisClient = req.redisClient;
+  if (redisClient && typeof redisClient.set === "function") {
+    const redisKey = `${REQUEST_ID_DEDUP_REDIS_PREFIX}${dedupKey}`;
+    try {
+      const result = await redisClient.set(redisKey, "1", {
+        NX: true,
+        EX: REQUEST_ID_DEDUP_TTL_SECONDS,
+      });
+      if (result !== null) {
+        return { allowed: true, source: "redis" };
+      }
+      return { allowed: false, source: "redis" };
+    } catch (error) {
+      console.error("[RequestIdDedup] Redis SET failed:", error);
+    }
+  }
+  return reserveRequestIdInMemory(dedupKey);
+};
+
+const reserveRequestIdInMemory = (dedupKey) => {
+  const now = Date.now();
+  pruneLocalRequestIdCache(now);
+  const lastUsedAt = requestIdLocalCache.get(dedupKey);
+  if (lastUsedAt && now - lastUsedAt < REQUEST_ID_DEDUP_TTL_MS) {
+    return { allowed: false, source: "memory" };
+  }
+  requestIdLocalCache.set(dedupKey, now);
+  return { allowed: true, source: "memory" };
+};
+
+const pruneLocalRequestIdCache = (now) => {
+  if (
+    requestIdLocalCache.size === 0 ||
+    (now - lastRequestIdLocalPrune < 60 * 1000 &&
+      requestIdLocalCache.size < REQUEST_ID_LOCAL_CACHE_MAX_SIZE)
+  ) {
+    return;
+  }
+  lastRequestIdLocalPrune = now;
+  for (const [key, timestamp] of requestIdLocalCache) {
+    if (now - timestamp > REQUEST_ID_DEDUP_TTL_MS) {
+      requestIdLocalCache.delete(key);
+    } else {
+      break;
+    }
+  }
+  while (requestIdLocalCache.size > REQUEST_ID_LOCAL_CACHE_MAX_SIZE) {
+    const oldestKey = requestIdLocalCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    requestIdLocalCache.delete(oldestKey);
+  }
 };
 
 // 检测是否为浏览器环境
@@ -719,6 +805,10 @@ const SECURITY_ERROR_REASON_MAP = {
   "400-3": {
     reasonCode: "invalid_timestamp",
     message: "请求时间戳超出允许范围",
+  },
+  "409": {
+    reasonCode: "duplicate_request",
+    message: "30分钟内重复的请求ID",
   },
   "411": {
     reasonCode: "invalid_signature",
@@ -1220,6 +1310,7 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
       timestamp,
       fingerprint,
       version,
+      signature,
     },
   };
 };
@@ -1238,7 +1329,11 @@ const browserOnlyMiddleware = (req, res, next) => {
 };
 
 // 安全中间件
-const securityMiddleware = (req, res, next) => {
+const securityMiddleware = async (req, res, next) => {
+  if (req[SECURITY_MIDDLEWARE_FLAG]) {
+    return next();
+  }
+  req[SECURITY_MIDDLEWARE_FLAG] = true;
   // 确保缓存管理器已初始化
   dauCacheManager.init();
 
@@ -1255,6 +1350,21 @@ const securityMiddleware = (req, res, next) => {
         });
       }
       return res.status(400).json({ error: validation.error });
+    }
+
+    const requestIdReservation = await reserveRequestId(
+      req,
+      validation.securityContext
+    );
+    if (!requestIdReservation.allowed) {
+      if (!shouldSkipSecurityViolationLog(req)) {
+        securityViolationLogger.logViolation(req, {
+          errorCode: "409",
+          allowQueryParams: false,
+          context: "standard request",
+        });
+      }
+      return res.status(409).json({ error: "409" });
     }
 
     // 将验证后的信息添加到请求对象中
@@ -1287,7 +1397,11 @@ const securityMiddleware = (req, res, next) => {
 };
 
 // SSE 专用的安全中间件（从查询参数读取，因为 EventSource 不支持自定义 headers）
-const sseSecurityMiddleware = (req, res, next) => {
+const sseSecurityMiddleware = async (req, res, next) => {
+  if (req[SSE_SECURITY_MIDDLEWARE_FLAG]) {
+    return next();
+  }
+  req[SSE_SECURITY_MIDDLEWARE_FLAG] = true;
   // 确保缓存管理器已初始化
   dauCacheManager.init();
 
@@ -1304,6 +1418,21 @@ const sseSecurityMiddleware = (req, res, next) => {
         });
       }
       return res.status(400).json({ error: validation.error });
+    }
+
+    const requestIdReservation = await reserveRequestId(
+      req,
+      validation.securityContext
+    );
+    if (!requestIdReservation.allowed) {
+      if (!shouldSkipSecurityViolationLog(req)) {
+        securityViolationLogger.logViolation(req, {
+          errorCode: "409",
+          allowQueryParams: true,
+          context: "sse request",
+        });
+      }
+      return res.status(409).json({ error: "409" });
     }
 
     // 🔥 请求统计（版本 + URL）- 异步处理，不阻塞请求
