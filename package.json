@@ -6,6 +6,7 @@
     "dev": "NODE_ENV=development nodemon ./src/apiServer.js",
     "dev:pro": "NODE_ENV=production nodemon ./src/apiServer.js",
     "dev-crawler": "NODE_ENV=development nodemon ./src/crawlerServer.js",
+    "directus:start": "env $(cat .env-pro | xargs) docker compose -f deploy/docker-compose.directus.yml up -d",
     "start": "pm2 start ecosystem.config.js --env production",
     "start-api": "pm2 start only-api-ecosystem.config.js --env production",
     "start:dev": "pm2 start ecosystem.config.js --env development",
