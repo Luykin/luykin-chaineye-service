@@ -202,4 +202,60 @@ router.get('/health', (req, res) => {
 	});
 });
 
+/**
+ * GET /users
+ * 根据用户 handle (username) 精确查询 XHuntUser 详情
+ * @query handle - 必填，XHuntUser.username
+ */
+router.get('/ud3s7adh8a-users', [
+	query('handle')
+		.notEmpty()
+		.withMessage('handle 参数必填')
+		.isString()
+		.trim()
+		.withMessage('handle 必须是字符串')
+], async (req, res) => {
+	try {
+		const handle = (req.query.handle || '').trim();
+		if (!handle) {
+			return res.status(400).json({
+				success: false,
+				error: '参数验证失败',
+				details: [{ field: 'handle', message: 'handle 参数必填' }]
+			});
+		}
+
+		const users = await XHuntUser.findAll({
+			where: {
+				username: {
+					[Op.iLike]: `%${handle}%`
+				}
+			},
+			order: [['updatedAt', 'DESC']],
+			limit: 50
+		});
+
+		if (!users || users.length === 0) {
+			return res.status(404).json({
+				success: false,
+				error: 'NOT_FOUND',
+				message: `未找到匹配 ${handle} 的用户`
+			});
+		}
+
+		return res.json({
+			success: true,
+			total: users.length,
+			data: users
+		});
+	} catch (error) {
+		console.error('Internal query /users error:', error);
+		res.status(500).json({
+			success: false,
+			error: '查询失败',
+			message: error.message
+		});
+	}
+});
+
 module.exports = router;
