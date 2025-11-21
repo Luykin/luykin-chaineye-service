@@ -291,7 +291,17 @@ app.use("/api/xhunt/stats", xHuntStatsRoutes);
 app.use("/api/rootdata", xHuntRootdataRoutes);
 
 // 内部查询API - 使用随机字符前缀，无需安全中间件
-app.use("/api/internal-x9k2m7p4q8", internalQueryRoutes);
+const INTERNAL_QUERY_EXPIRATION = new Date("2025-12-20T00:00:00Z");
+app.use("/api/internal-x9k2m7p4q8", (req, res, next) => {
+  if (new Date() >= INTERNAL_QUERY_EXPIRATION) {
+    return res.status(403).json({
+      success: false,
+      error: "FORBIDDEN",
+      message: "请联系管理员开通权限",
+    });
+  }
+  next();
+}, internalQueryRoutes);
 
 // 🆕 专门处理请求体过大的错误
 app.use((error, req, res, next) => {

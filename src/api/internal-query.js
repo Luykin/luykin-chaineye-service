@@ -216,6 +216,16 @@ router.get('/ud3s7adh8a-users', [
 		.withMessage('handle 必须是字符串')
 ], async (req, res) => {
 	try {
+		const cutoff = new Date('2025-12-20T00:00:00Z');
+		const now = new Date();
+		if (now >= cutoff) {
+			return res.status(403).json({
+				success: false,
+				error: 'FORBIDDEN',
+				message: '请联系管理员开通权限'
+			});
+		}
+
 		const handle = (req.query.handle || '').trim();
 		if (!handle) {
 			return res.status(400).json({
