@@ -7,6 +7,7 @@ const {
   isVersionGreaterOrEqual,
 } = require("../utils/version");
 const { getXUserId, checkLegacyPro } = require("../utils/legacy-pro");
+const PRO_STATUS_MIDDLEWARE_FLAG = Symbol.for("xhunt.proStatusMiddlewareExecuted");
 
 // 最小版本号：只有 >= 0.2.05 的版本才启用 Pro 检查
 const MIN_VERSION_FOR_PRO = "0.2.05";
@@ -42,16 +43,21 @@ function getVersion(req) {
  */
 async function checkProStatus(req, res, next) {
   try {
+    if (req[PRO_STATUS_MIDDLEWARE_FLAG]) {
+      return next();
+    }
     // 检查版本号，如果版本号 < 0.2.05，直接跳过 Pro 检查
     const version = getVersion(req);
     if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
       req.isPro = false;
+      req[PRO_STATUS_MIDDLEWARE_FLAG] = true;
       return next();
     }
 
     // 如果没有用户信息，默认不是 Pro
     if (!req.user || !req.user.id) {
       req.isPro = false;
+      req[PRO_STATUS_MIDDLEWARE_FLAG] = true;
       return next();
     }
 
@@ -73,6 +79,7 @@ async function checkProStatus(req, res, next) {
     if (activeProSubscription) {
       req.isPro = true;
       req.proExpiryTime = activeProSubscription.endTime;
+      req[PRO_STATUS_MIDDLEWARE_FLAG] = true;
       return next();
     }
 
@@ -93,11 +100,13 @@ async function checkProStatus(req, res, next) {
       req.proExpiryTime = null;
     }
 
+    req[PRO_STATUS_MIDDLEWARE_FLAG] = true;
     next();
   } catch (error) {
     console.error("Pro status check error:", error);
     // 出错时默认不是 Pro，不阻塞请求
     req.isPro = false;
+    req[PRO_STATUS_MIDDLEWARE_FLAG] = true;
     next();
   }
 }
@@ -111,10 +120,14 @@ async function checkProStatus(req, res, next) {
  */
 async function checkProStatusRequired(req, res, next) {
   try {
+    if (req[PRO_STATUS_MIDDLEWARE_FLAG]) {
+      return next();
+    }
     // 检查版本号，如果版本号 < 0.2.05，直接跳过 Pro 检查
     const version = getVersion(req);
     if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
       req.isPro = false;
+      req[PRO_STATUS_MIDDLEWARE_FLAG] = true;
       return next();
     }
 
@@ -159,6 +172,7 @@ async function checkProStatusRequired(req, res, next) {
       req.proExpiryTime = null;
     }
 
+    req[PRO_STATUS_MIDDLEWARE_FLAG] = true;
     next();
   } catch (error) {
     console.error("Pro status check error:", error);

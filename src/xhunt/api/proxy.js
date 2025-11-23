@@ -7,6 +7,7 @@ const {
 const { aiContentRateLimit } = require("../middleware/aiContentRateLimit");
 const { checkProStatus } = require("../middleware/pro-status");
 const { applyProDataFiltering } = require("../utils/pro-data-filtering");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 
 const router = express.Router();
 
@@ -327,6 +328,26 @@ router.all(
   securityMiddleware,
   aiContentRateLimit,
   async (req, res) => {
+    const targetUrl = getTargetUrl(req);
+    await proxyRequest(req, res, targetUrl);
+  }
+);
+
+// 代理路由 - 特殊接口访问控制（仅 XHunt VIP 允许返回真实数据）
+router.all(
+  "/public/fetch/twitter/unfollow_relation",
+  authenticateTokenOptional,
+  securityMiddleware,
+  aiContentRateLimit,
+  async (req, res) => {
+    try {
+      const isVip = isRequestXHuntVip(req);
+      if (!isVip) {
+        // 非 VIP 返回空数据
+        return res.status(200).json({ data: [] });
+      }
+    } catch (_) {}
+
     const targetUrl = getTargetUrl(req);
     await proxyRequest(req, res, targetUrl);
   }

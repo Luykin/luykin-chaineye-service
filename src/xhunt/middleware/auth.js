@@ -2,6 +2,7 @@
 
 const jwt = require("jsonwebtoken");
 const { XHuntUserToken, XHuntUser } = require("../../models/postgres-start");
+const AUTH_VERIFIED_FLAG = Symbol.for("xhunt.auth.verified");
 
 /**
  * 核心认证逻辑（提取为私有函数）
@@ -67,6 +68,8 @@ async function verifyToken(token, req, res, next) {
     // 挂载用户信息到请求对象
     req.user = tokenRecord.user;
     req.tokenRecord = tokenRecord;
+    // 幂等标记：本次请求已完成认证
+    req[AUTH_VERIFIED_FLAG] = true;
 
     next();
   } catch (error) {
@@ -85,6 +88,10 @@ async function verifyToken(token, req, res, next) {
  * 强制登录中间件
  */
 async function authenticateToken(req, res, next) {
+  // 已认证则直接放行（避免重复执行）
+  if (req[AUTH_VERIFIED_FLAG]) {
+    return next();
+  }
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -99,6 +106,10 @@ async function authenticateToken(req, res, next) {
  * 可选登录中间件（带 token 就解析，没带就 pass）
  */
 async function authenticateTokenOptional(req, res, next) {
+  // 已认证则直接放行（避免重复执行）
+  if (req[AUTH_VERIFIED_FLAG]) {
+    return next();
+  }
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -134,6 +145,10 @@ function cleanToken(token) {
  * 从查询参数读取 token 的认证中间件（用于 SSE，因为 EventSource 不支持自定义 headers）
  */
 async function authenticateTokenFromQuery(req, res, next) {
+  // 已认证则直接放行（避免重复执行）
+  if (req[AUTH_VERIFIED_FLAG]) {
+    return next();
+  }
   const rawToken = req.query.token;
 
   if (!rawToken) {
@@ -153,6 +168,10 @@ async function authenticateTokenFromQuery(req, res, next) {
  * 可选从查询参数读取 token 的认证中间件（用于 SSE）
  */
 async function authenticateTokenFromQueryOptional(req, res, next) {
+  // 已认证则直接放行（避免重复执行）
+  if (req[AUTH_VERIFIED_FLAG]) {
+    return next();
+  }
   const rawToken = req.query.token;
 
   if (!rawToken) {

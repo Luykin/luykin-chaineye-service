@@ -1,84 +1,11 @@
 // AI 内容生成频率限制中间件 检查推文是不是ai生成
+const AI_CONTENT_RATE_LIMIT_FLAG = Symbol.for("xhunt.aiContentRateLimitExecuted");
 
 // AI 内容生成白名单
-// - 200次/日名单
+// - 200次/日名单（保留）
 const AI_CONTENT_WHITELIST_200 = ["luoyukun4", "alpha_gege"];
-// - 20次/日名单
-const AI_CONTENT_WHITELIST_20 = [
-  "cuegod001",
-  "maid_crypto",
-  "Paris13Jeanne",
-  "momochenming",
-  "Mimoo1201",
-  "vvickym2",
-  "web3annie",
-  "charles48011843",
-  "bocaibocai_",
-  "Meta8Mate",
-  "zohanlin",
-  "qqzsss",
-  "0xAllen888",
-  "NeohexWu",
-  "ScarlettWeb3",
-  "AirdropAlchemis",
-  "timbro_bro",
-  "blockTVBee",
-  "0xMoon6626",
-  "captain_kent",
-  "border_crypto",
-  "DRbitcoin36",
-  "bclaobai",
-  "love_doge123",
-  "0xcryptoHowe",
-  "Monica_xiaoM",
-  "aiSunny224737",
-  "Cyrus_G3",
-  "0xJuliechen",
-  "chaozuoye",
-  "unaiyang",
-  "VireGeek",
-  "Ru7Longcrypto",
-  "EleveResearch",
-  "0xjasonli",
-  "dabiaogeggg",
-  "KuiGas",
-  "tmel0211",
-  "Rocky_Bitcoin",
-  "BTW0205",
-  "fishkiller",
-  "Alvin0617",
-  "0xBeyondLee",
-  "CryptoPainter_X",
-  "0x_Todd",
-  "Luyaoyuan1",
-  "CandyDAO_leaf",
-  "Web3Feng",
-  "jason_chen998",
-  "Wuhuoqiu",
-  "sea_bitcoin",
-  "BroLeonAus",
-  "Guomin184935",
-  "0x_xifeng",
-  "Baili1018",
-  "qklxsqf",
-  "crypto_pumpman",
-  "Crypto_He",
-  "yueya_eth",
-  "wang_xiaolou",
-  "xingpt",
-  "wenxue600",
-  "Airdrop_Guard",
-  "Jay21871836",
-  "egyptk6",
-  "Joensmoon",
-  "MEJ50749",
-  "guiguziben",
-  "xingxingjun8888",
-  "taowang1",
-  "btcpiggy",
-  "liushezhang",
-  "WWTLitee",
-];
+// - 20次/日名单：使用全局 XHunt VIP 名单
+const { isXHuntVipHandle } = require("../constants/xhuntVip");
 
 // 获取到明天00:00的秒数
 function getSecondsUntilMidnight(beijingTime) {
@@ -100,9 +27,16 @@ function getNextDayResetTime(beijingTime) {
 async function aiContentRateLimit(req, res, next) {
   try {
     // 只对 /pro/api/ai/content 的 POST 请求进行限制
-    if (req.method !== "POST" || !req.path.includes("/pro/api/ai/content")) {
+    const applies = req.method === "POST" && req.path.includes("/pro/api/ai/content");
+    if (!applies) {
       return next();
     }
+
+    // 幂等保护：防止重复执行导致计数重复
+    if (req[AI_CONTENT_RATE_LIMIT_FLAG]) {
+      return next();
+    }
+    req[AI_CONTENT_RATE_LIMIT_FLAG] = true;
 
     const xUserId = String(req.headers["x-user-id"]).toLocaleLowerCase();
     if (!xUserId) {
@@ -118,13 +52,7 @@ async function aiContentRateLimit(req, res, next) {
         String(xUserId).toLocaleLowerCase() === String(id).toLocaleLowerCase()
       );
     });
-    const isWhitelist20 =
-      !isWhitelist200 &&
-      AI_CONTENT_WHITELIST_20.some((id) => {
-        return (
-          String(xUserId).toLocaleLowerCase() === String(id).toLocaleLowerCase()
-        );
-      });
+    const isWhitelist20 = !isWhitelist200 && isXHuntVipHandle(xUserId);
 
     // 获取用户标识
     let userKey;

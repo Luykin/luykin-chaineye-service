@@ -481,6 +481,9 @@ const SECURITY_MIDDLEWARE_FLAG = Symbol.for("xhunt.securityMiddlewareExecuted");
 const SSE_SECURITY_MIDDLEWARE_FLAG = Symbol.for(
   "xhunt.sseSecurityMiddlewareExecuted"
 );
+const BROWSER_ONLY_MIDDLEWARE_FLAG = Symbol.for(
+  "xhunt.browserOnlyMiddlewareExecuted"
+);
 
 const buildRequestIdDedupKey = (securityContext = {}) => {
   const { requestId, timestamp, signature, fingerprint } = securityContext;
@@ -1318,6 +1321,10 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
 // 浏览器环境检测中间件
 const browserOnlyMiddleware = (req, res, next) => {
   try {
+    if (req[BROWSER_ONLY_MIDDLEWARE_FLAG]) {
+      return next();
+    }
+    req[BROWSER_ONLY_MIDDLEWARE_FLAG] = true;
     if (!validateBrowserEnvironment(req, false)) {
       return res.status(403).json({ error: "403" });
     }
