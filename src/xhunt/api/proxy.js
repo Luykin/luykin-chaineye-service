@@ -344,7 +344,7 @@ router.all(
       const isVip = isRequestXHuntVip(req);
       if (!isVip) {
         // 非 VIP 返回空数据
-        return res.status(200).json({ data: [] });
+        return res.status(200).json({ data: [], isVip: false });
       }
     } catch (_) {}
 
