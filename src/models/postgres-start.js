@@ -9,6 +9,7 @@ const XPointRecordModel = require("../xhunt/models/XPointRecord");
 const XPrivateNoteModel = require("../xhunt/models/XPrivateNote");
 const MantleRegistrationModel = require("../xhunt/models/MantleRegistration");
 const MantleRegistration2Model = require("../xhunt/models/MantleRegistration2");
+const CampaignRegistrationModel = require("../xhunt/models/CampaignRegistration");
 const XPrivateMessageModel = require("../xhunt/models/XPrivateMessage");
 const DailyActiveUserModel = require("../xhunt/models/DailyActiveUser");
 const XHuntUserProSubscriptionModel = require("../xhunt/models/XHuntUserProSubscription");
@@ -42,6 +43,7 @@ const XPointRecord = XPointRecordModel(pgInstance);
 const XPrivateNote = XPrivateNoteModel(pgInstance);
 const MantleRegistration = MantleRegistrationModel(pgInstance);
 const MantleRegistration2 = MantleRegistration2Model(pgInstance);
+const CampaignRegistration = CampaignRegistrationModel(pgInstance);
 const XPrivateMessage = XPrivateMessageModel(pgInstance);
 const DailyActiveUser = DailyActiveUserModel(pgInstance);
 const XHuntUserProSubscription = XHuntUserProSubscriptionModel(pgInstance);
@@ -143,6 +145,17 @@ MantleRegistration2.belongsTo(XHuntUser, {
   as: "xHuntUser",
 });
 
+// CampaignRegistration 关系（可能对应任意活动）
+XHuntUser.hasMany(CampaignRegistration, {
+  foreignKey: "xHuntUserId",
+  as: "campaignRegistrations",
+});
+
+CampaignRegistration.belongsTo(XHuntUser, {
+  foreignKey: "xHuntUserId",
+  as: "xHuntUser",
+});
+
 // XPrivateMessage 关系（私信）
 XHuntUser.hasMany(XPrivateMessage, {
   foreignKey: "senderId",
@@ -209,6 +222,7 @@ module.exports = {
   XPrivateNote,
   MantleRegistration,
   MantleRegistration2,
+  CampaignRegistration,
   XPrivateMessage,
   DailyActiveUser,
   XHuntUserProSubscription,

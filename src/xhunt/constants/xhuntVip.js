@@ -86,6 +86,8 @@ const XHUNT_VIP = new Set([
   "btcpiggy",
   "liushezhang",
   "wwtlitee",
+  "web3sistera",
+  "amelia_xuu"
 ]);
 
 function isXHuntVipHandle(handle) {

@@ -28,6 +28,7 @@ const xHuntNotesRoutes = require("./xhunt/api/notes");
 const xHuntReportRoutes = require("./xhunt/api/report");
 const xHuntStatsRoutes = require("./xhunt/api/stats");
 const xHuntMantleRoutes = require("./xhunt/api/mantle");
+const xHuntCampaignRoutes = require("./xhunt/api/campaign");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const xHuntSSERoutes = require("./xhunt/api/sse");
@@ -280,6 +281,8 @@ app.use(
 
 // Mantle 活动接口 内部有安全中间件
 app.use("/api/xhunt/mantle", xHuntMantleRoutes);
+// 通用活动报名接口
+app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
 
 // SSE 接口 - 实时推送数据（包含 feeds 等）有安全中间件
 app.use("/api/xhunt/sse", rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
