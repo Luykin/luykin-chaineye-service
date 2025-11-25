@@ -126,6 +126,10 @@ router.post(
           if (!inviter) {
             return res.status(400).json({ error: "Invalid invite code" });
           }
+          // 不能使用自己的邀请码
+          if (inviter.id === user.id) {
+            return res.status(400).json({ error: "Cannot use your own invite code" });
+          }
         }
       }
 
