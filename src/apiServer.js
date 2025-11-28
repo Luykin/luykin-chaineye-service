@@ -32,6 +32,7 @@ const xHuntCampaignRoutes = require("./xhunt/api/campaign");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const xHuntSSERoutes = require("./xhunt/api/sse");
+const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
 const internalQueryRoutes = require("./api/internal-query");
 const {
   securityMiddleware,
@@ -283,6 +284,9 @@ app.use(
 app.use("/api/xhunt/mantle", xHuntMantleRoutes);
 // 通用活动报名接口
 app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
+
+// 未注册用户登记接口
+app.use("/api/xhunt/user-entry", xHuntUserEntryRoutes);
 
 // SSE 接口 - 实时推送数据（包含 feeds 等）有安全中间件
 app.use("/api/xhunt/sse", rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
