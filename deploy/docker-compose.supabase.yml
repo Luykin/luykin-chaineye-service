@@ -202,6 +202,9 @@ services:
       DEFAULT_LOCALE: ${SUPABASE_DEFAULT_LOCALE:-zh-CN}
       # 设置初始语言为中文
       NEXT_PUBLIC_DEFAULT_LOCALE: ${SUPABASE_DEFAULT_LOCALE:-zh-CN}
+      # Dashboard 基本认证配置
+      DASHBOARD_USERNAME: ${SUPABASE_DASHBOARD_USERNAME:-supabase}
+      DASHBOARD_PASSWORD: ${SUPABASE_DASHBOARD_PASSWORD:-this_password_is_insecure_and_should_be_updated}
     ports:
       - "${SUPABASE_STUDIO_PORT:-3000}:3000"
     networks:
