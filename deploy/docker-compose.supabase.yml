@@ -1,7 +1,7 @@
 services:
   # Kong API Gateway - Supabase 的入口网关
   kong:
-    image: kong:2.8
+    image: kong:2.8.1
     restart: unless-stopped
     depends_on:
       - postgrest
@@ -25,7 +25,7 @@ services:
 
   # PostgREST - 自动生成 REST API
   postgrest:
-    image: postgrest/postgrest:v12
+    image: postgrest/postgrest:v13.0.7
     restart: unless-stopped
     depends_on:
       - db
@@ -44,7 +44,7 @@ services:
 
   # GoTrue - 认证服务
   gotrue:
-    image: supabase/gotrue:v2
+    image: supabase/gotrue:v2.183.0
     restart: unless-stopped
     depends_on:
       - db
@@ -92,7 +92,7 @@ services:
 
   # Realtime - WebSocket 实时服务
   realtime:
-    image: supabase/realtime:v2
+    image: supabase/realtime:v2.65.3
     restart: unless-stopped
     depends_on:
       - db
@@ -119,7 +119,7 @@ services:
 
   # Storage - 文件存储服务
   storage:
-    image: supabase/storage-api:v1
+    image: supabase/storage-api:v1.32.0
     restart: unless-stopped
     depends_on:
       - db
@@ -147,7 +147,7 @@ services:
 
   # Image Proxy - 图片处理服务
   imgproxy:
-    image: darthsim/imgproxy:v3
+    image: darthsim/imgproxy:v3.8.0
     restart: unless-stopped
     environment:
       IMGPROXY_BIND: ":5001"
@@ -161,7 +161,7 @@ services:
 
   # PostgREST (别名 rest) - 用于 Storage 服务
   rest:
-    image: postgrest/postgrest:v12
+    image: postgrest/postgrest:v13.0.7
     restart: unless-stopped
     depends_on:
       - db
@@ -180,7 +180,7 @@ services:
 
   # Supabase Studio - 管理界面
   studio:
-    image: supabase/studio:v2024
+    image: supabase/studio:2025.11.26-sha-8f096b5
     restart: unless-stopped
     depends_on:
       - kong
@@ -206,7 +206,7 @@ services:
 
   # Postgres Meta - 数据库元数据服务
   meta:
-    image: supabase/postgres-meta:v0
+    image: supabase/postgres-meta:v0.93.1
     restart: unless-stopped
     depends_on:
       - db
