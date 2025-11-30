@@ -42,13 +42,14 @@ services:
     plugins:
       - name: cors
 
-  - name: functions-v1
-    url: http://functions:9000/
-    routes:
-      - name: functions-v1
-        strip_path: true
-        paths:
-          - /functions/v1
-    plugins:
-      - name: cors
+  # Functions 服务已暂时注释掉
+  # - name: functions-v1
+  #   url: http://functions:9000/
+  #   routes:
+  #     - name: functions-v1
+  #       strip_path: true
+  #       paths:
+  #         - /functions/v1
+  #   plugins:
+  #     - name: cors
 

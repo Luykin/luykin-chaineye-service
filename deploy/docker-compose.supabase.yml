@@ -241,26 +241,25 @@ services:
       - supabase_network
 
   # Functions - Edge Functions (可选)
-  # 注意：如果不需要 Edge Functions，可以注释掉此服务
-  # 如果需要使用，请确保 supabase/functions 目录存在
-  functions:
-    image: supabase/edge-runtime:v1.67.4
-    restart: unless-stopped
-    depends_on:
-      - kong
-    environment:
-      JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      SUPABASE_URL: http://kong:8000
-      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8062}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
-    volumes:
-      - ./supabase/functions:/home/deno/functions:ro
-    ports:
-      - "${SUPABASE_FUNCTIONS_PORT:-9000}:9000"
-    networks:
-      - supabase_network
-    # 如果镜像拉取失败，可以暂时注释掉整个 functions 服务
+  # 注意：已暂时注释掉，因为镜像版本可能不存在
+  # 如果需要使用 Edge Functions，请先确认可用的镜像版本，然后取消注释
+  # functions:
+  #   image: supabase/edge-runtime:v1.67.4
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - kong
+  #   environment:
+  #     JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+  #     SUPABASE_URL: http://kong:8000
+  #     SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8062}
+  #     SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+  #     SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
+  #   volumes:
+  #     - ./supabase/functions:/home/deno/functions:ro
+  #   ports:
+  #     - "${SUPABASE_FUNCTIONS_PORT:-9000}:9000"
+  #   networks:
+  #     - supabase_network
 
 networks:
   supabase_network:
