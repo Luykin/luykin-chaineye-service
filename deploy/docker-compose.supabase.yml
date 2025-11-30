@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # Kong API Gateway - Supabase 的入口网关
   kong:
@@ -243,8 +241,10 @@ services:
       - supabase_network
 
   # Functions - Edge Functions (可选)
+  # 注意：如果不需要 Edge Functions，可以注释掉此服务
+  # 如果需要使用，请确保 supabase/functions 目录存在
   functions:
-    image: supabase/edge-runtime:v1.37.4
+    image: supabase/edge-runtime:v1.67.4
     restart: unless-stopped
     depends_on:
       - kong
@@ -260,6 +260,7 @@ services:
       - "${SUPABASE_FUNCTIONS_PORT:-9000}:9000"
     networks:
       - supabase_network
+    # 如果镜像拉取失败，可以暂时注释掉整个 functions 服务
 
 networks:
   supabase_network:
