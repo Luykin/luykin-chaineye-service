@@ -191,12 +191,47 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON TABLES TO luykin, postgres,
 ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON SEQUENCES TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
 ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON TYPES TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
 
--- 16. 清空迁移记录（让 GoTrue 认为没有迁移需要运行）
-DROP TABLE IF EXISTS public.schema_migrations;
+-- 16. 创建迁移记录表并标记所有迁移为已完成（关键！）
+-- 这样 GoTrue 就不会再尝试运行迁移了
+DROP TABLE IF EXISTS public.schema_migrations CASCADE;
 CREATE TABLE public.schema_migrations (
     version VARCHAR(255) PRIMARY KEY
 );
 
+-- 插入所有迁移版本（包括有问题的迁移），让 GoTrue 认为都已完成
+INSERT INTO public.schema_migrations (version) VALUES
+('init_auth_schema'),
+('alter_users'),
+('adds_confirmed_at'),
+('add_email_change_confirmed'),
+('create_identities_table'),
+('add_refresh_token_parent'),
+('create_user_id_idx'),
+('update_auth_functions'),
+('update_auth_uid'),
+('update_user_idx'),
+('add_banned_until'),
+('add_user_reauthentication'),
+('add_unique_idx'),
+('add_auth_jwt_function'),
+('add_ip_address_to_audit_log'),
+('add_sessions_table'),
+('add_mfa_schema'),
+('add_aal_and_factor_id_to_sessions'),
+('add_mfa_indexes'),
+('add_sessions_user_id_index'),
+('add_refresh_tokens_session_id_revoked_index'),
+('add_saml'),
+('add_identities_user_id_idx'),
+('add_session_not_after_column'),
+('remove_parent_foreign_key_refresh_tokens'),
+('backfill_email_identity'),
+('20221208132122'),
+('20221011041400'),
+('20221208132122_backfill_email_last_sign_in_at'),
+('20221011041400_add_mfa_indexes')
+ON CONFLICT (version) DO NOTHING;
+
 -- 完成
-SELECT 'GoTrue 完整表结构创建完成' as status;
+SELECT 'GoTrue 完整表结构创建完成，所有迁移已标记为已完成' as status;
 
