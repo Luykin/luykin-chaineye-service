@@ -237,11 +237,11 @@ services:
     networks:
       - supabase_network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || wget --no-verbose --tries=1 --spider http://localhost:8080/health || nc -z localhost 8080 || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
 
   # 数据库连接器（用于连接到外部数据库）
   # 注意：由于使用外部数据库，这个服务仅作为占位符
