@@ -1,4 +1,4 @@
--- 简单创建 GoTrue 必需的表（跳过有问题的迁移）
+-- 完整创建 GoTrue 必需的表（包含所有列）
 -- 清空并重新创建 auth schema
 
 -- 1. 删除并重新创建 auth schema（会删除所有数据）
@@ -9,7 +9,7 @@ CREATE SCHEMA auth;
 GRANT ALL ON SCHEMA auth TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
 GRANT USAGE ON SCHEMA auth TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
 
--- 3. 创建 auth.users 表（GoTrue 的核心表）
+-- 3. 创建 auth.users 表（GoTrue 的完整表结构）
 CREATE TABLE auth.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     instance_id UUID,
@@ -42,7 +42,9 @@ CREATE TABLE auth.users (
     reauthentication_token VARCHAR(255),
     reauthentication_sent_at TIMESTAMPTZ,
     is_sso_user BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted_at TIMESTAMPTZ
+    deleted_at TIMESTAMPTZ,
+    is_anonymous BOOLEAN NOT NULL DEFAULT FALSE,
+    disabled BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- 4. 创建 auth.identities 表
@@ -54,7 +56,8 @@ CREATE TABLE auth.identities (
     last_sign_in_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    email TEXT GENERATED ALWAYS AS (lower((identity_data->>'email'))) STORED
+    email TEXT GENERATED ALWAYS AS (lower((identity_data->>'email'))) STORED,
+    UNIQUE(provider, id)
 );
 
 -- 5. 创建 auth.refresh_tokens 表
@@ -79,7 +82,27 @@ CREATE TABLE auth.audit_log_entries (
     ip_address VARCHAR(64) NOT NULL DEFAULT ''
 );
 
--- 7. 创建 auth.sessions 表
+-- 7. 创建必要的枚举类型（必须在创建使用它们的表之前）
+DO $$
+BEGIN
+    -- factor_type 枚举
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'factor_type' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'auth')) THEN
+        CREATE TYPE auth.factor_type AS ENUM ('totp', 'phone');
+    END IF;
+    
+    -- factor_status 枚举
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'factor_status' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'auth')) THEN
+        CREATE TYPE auth.factor_status AS ENUM ('unverified', 'verified');
+    END IF;
+    
+    -- code_challenge_method 枚举
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'code_challenge_method' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'auth')) THEN
+        CREATE TYPE auth.code_challenge_method AS ENUM ('plain', 'S256');
+    END IF;
+END
+$$;
+
+-- 8. 创建 auth.sessions 表
 CREATE TABLE auth.sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -90,11 +113,63 @@ CREATE TABLE auth.sessions (
     not_after TIMESTAMPTZ
 );
 
--- 8. 创建索引
+-- 9. 创建 auth.mfa_factors 表（MFA 支持）
+CREATE TABLE auth.mfa_factors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    friendly_name TEXT,
+    factor_type auth.factor_type NOT NULL,
+    status auth.factor_status NOT NULL,
+    secret TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 10. 创建 auth.mfa_challenges 表
+CREATE TABLE auth.mfa_challenges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    factor_id UUID NOT NULL REFERENCES auth.mfa_factors(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    verified_at TIMESTAMPTZ,
+    ip_address INET NOT NULL
+);
+
+-- 11. 创建 auth.mfa_amr_claims 表
+CREATE TABLE auth.mfa_amr_claims (
+    session_id UUID NOT NULL REFERENCES auth.sessions(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    authentication_method TEXT NOT NULL,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+);
+
+-- 12. 创建必要的枚举类型（已移到前面）
+DO $$
+BEGIN
+    -- factor_type 枚举
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'factor_type' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'auth')) THEN
+        CREATE TYPE auth.factor_type AS ENUM ('totp', 'phone');
+    END IF;
+    
+    -- factor_status 枚举
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'factor_status' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'auth')) THEN
+        CREATE TYPE auth.factor_status AS ENUM ('unverified', 'verified');
+    END IF;
+    
+    -- code_challenge_method 枚举
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'code_challenge_method' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'auth')) THEN
+        CREATE TYPE auth.code_challenge_method AS ENUM ('plain', 'S256');
+    END IF;
+END
+$$;
+
+-- 13. 创建索引
 CREATE INDEX idx_users_email ON auth.users(email);
 CREATE INDEX idx_users_instance_id ON auth.users(instance_id);
+CREATE INDEX idx_users_is_anonymous ON auth.users(is_anonymous);
 CREATE INDEX idx_identities_email ON auth.identities(email);
 CREATE INDEX idx_identities_user_id ON auth.identities(user_id);
+CREATE INDEX idx_identities_provider_id ON auth.identities(provider, id);
 CREATE INDEX idx_refresh_tokens_instance_id ON auth.refresh_tokens(instance_id);
 CREATE INDEX idx_refresh_tokens_instance_id_user_id ON auth.refresh_tokens(instance_id, user_id);
 CREATE INDEX idx_refresh_tokens_parent ON auth.refresh_tokens(parent);
@@ -102,21 +177,26 @@ CREATE INDEX idx_refresh_tokens_session_id_revoked ON auth.refresh_tokens(sessio
 CREATE INDEX idx_audit_logs_instance_id ON auth.audit_log_entries(instance_id);
 CREATE INDEX idx_sessions_user_id ON auth.sessions(user_id);
 CREATE INDEX idx_sessions_not_after ON auth.sessions(not_after);
+CREATE INDEX idx_mfa_factors_user_id ON auth.mfa_factors(user_id);
+CREATE INDEX idx_mfa_challenges_factor_id ON auth.mfa_challenges(factor_id);
+CREATE INDEX idx_mfa_amr_claims_session_id ON auth.mfa_amr_claims(session_id);
 
--- 9. 授予权限
+-- 14. 授予权限
 GRANT ALL ON ALL TABLES IN SCHEMA auth TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA auth TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
+GRANT ALL ON ALL TYPES IN SCHEMA auth TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
 
--- 10. 设置默认权限
+-- 15. 设置默认权限
 ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON TABLES TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
 ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON SEQUENCES TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON TYPES TO luykin, postgres, anon, authenticated, service_role, supabase_admin;
 
--- 11. 清空迁移记录（让 GoTrue 认为没有迁移需要运行）
+-- 16. 清空迁移记录（让 GoTrue 认为没有迁移需要运行）
 DROP TABLE IF EXISTS public.schema_migrations;
 CREATE TABLE public.schema_migrations (
     version VARCHAR(255) PRIMARY KEY
 );
 
 -- 完成
-SELECT 'GoTrue 表创建完成' as status;
+SELECT 'GoTrue 完整表结构创建完成' as status;
 
