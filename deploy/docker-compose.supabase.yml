@@ -1,0 +1,286 @@
+services:
+  # Kong API Gateway - Supabase 的入口网关
+  kong:
+    image: kong:2.8.1
+    restart: unless-stopped
+    depends_on:
+      - postgrest
+      - gotrue
+      - realtime
+      - storage
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+    ports:
+      - "${SUPABASE_KONG_PORT:-8062}:8000"      # HTTP - 外网访问端口
+      - "${SUPABASE_KONG_HTTPS_PORT:-8443}:8443" # HTTPS
+    volumes:
+      - ./kong/kong.yml:/var/lib/kong/kong.yml:ro
+    networks:
+      - supabase_network
+
+  # PostgREST - 自动生成 REST API
+  postgrest:
+    image: postgrest/postgrest:v13.0.7
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      PGRST_DB_URI: postgres://${PG_USERNAME}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_EXTRA_SEARCH_PATH: public,extensions
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_APP_SETTINGS_JWT_EXP: ${SUPABASE_JWT_EXP:-3600}
+    command: "postgrest"
+    networks:
+      - supabase_network
+
+  # GoTrue - 认证服务
+  gotrue:
+    image: supabase/gotrue:v2.183.0
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://${PG_USERNAME}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}?search_path=auth,public
+      GOTRUE_DB_AUTOMIGRATE: "false"
+      GOTRUE_SITE_URL: ${SUPABASE_SITE_URL:-http://localhost:8062}
+      API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8062}
+      GOTRUE_URI_ALLOW_LIST: ${SUPABASE_URI_ALLOW_LIST:-http://localhost:3000,http://localhost:8080}
+      GOTRUE_DISABLE_SIGNUP: ${SUPABASE_DISABLE_SIGNUP:-false}
+      GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      GOTRUE_JWT_EXP: ${SUPABASE_JWT_EXP:-3600}
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${SUPABASE_EXTERNAL_EMAIL_ENABLED:-true}
+      GOTRUE_MAILER_AUTOCONFIRM: ${SUPABASE_MAILER_AUTOCONFIRM:-false}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SUPABASE_SMTP_ADMIN_EMAIL:-admin@example.com}
+      GOTRUE_SMTP_HOST: ${SUPABASE_SMTP_HOST:-smtp.gmail.com}
+      GOTRUE_SMTP_PORT: ${SUPABASE_SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SUPABASE_SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SUPABASE_SMTP_PASS:-}
+      GOTRUE_SMTP_SENDER_NAME: ${SUPABASE_SMTP_SENDER_NAME:-Supabase}
+      GOTRUE_MAILER_URLPATH: ${SUPABASE_MAILER_URLPATH:-/auth/v1/verify}
+      GOTRUE_SMS_AUTOCONFIRM: ${SUPABASE_SMS_AUTOCONFIRM:-false}
+      GOTRUE_EXTERNAL_PHONE_ENABLED: ${SUPABASE_EXTERNAL_PHONE_ENABLED:-false}
+      GOTRUE_SMS_PROVIDER: ${SUPABASE_SMS_PROVIDER:-twilio}
+      GOTRUE_SMS_TWILIO_ACCOUNT_SID: ${SUPABASE_SMS_TWILIO_ACCOUNT_SID:-}
+      GOTRUE_SMS_TWILIO_AUTH_TOKEN: ${SUPABASE_SMS_TWILIO_AUTH_TOKEN:-}
+      GOTRUE_SMS_TWILIO_MESSAGE_SERVICE_SID: ${SUPABASE_SMS_TWILIO_MESSAGE_SERVICE_SID:-}
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${SUPABASE_EXTERNAL_ANONYMOUS_USERS_ENABLED:-false}
+      GOTRUE_HOOK_MFA_VERIFICATION_ATTEMPT_ENABLED: ${SUPABASE_HOOK_MFA_VERIFICATION_ATTEMPT_ENABLED:-false}
+      GOTRUE_HOOK_MFA_VERIFICATION_ATTEMPT_URI: ${SUPABASE_HOOK_MFA_VERIFICATION_ATTEMPT_URI:-}
+      GOTRUE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_ENABLED: ${SUPABASE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_ENABLED:-false}
+      GOTRUE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_URI: ${SUPABASE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_URI:-}
+      GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_ENABLED: ${SUPABASE_HOOK_CUSTOM_ACCESS_TOKEN_ENABLED:-false}
+      GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_URI: ${SUPABASE_HOOK_CUSTOM_ACCESS_TOKEN_URI:-}
+      GOTRUE_HOOK_SEND_SMS_ENABLED: ${SUPABASE_HOOK_SEND_SMS_ENABLED:-false}
+      GOTRUE_HOOK_SEND_SMS_URI: ${SUPABASE_HOOK_SEND_SMS_URI:-}
+      GOTRUE_HOOK_SEND_EMAIL_ENABLED: ${SUPABASE_HOOK_SEND_EMAIL_ENABLED:-false}
+      GOTRUE_HOOK_SEND_EMAIL_URI: ${SUPABASE_HOOK_SEND_EMAIL_URI:-}
+    ports:
+      - "${SUPABASE_GOTRUE_PORT:-9999}:9999"
+    networks:
+      - supabase_network
+
+  # Realtime - WebSocket 实时服务
+  realtime:
+    image: supabase/realtime:v2.65.3
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DB_HOST: ${PG_HOST}
+      DB_PORT: ${PG_PORT}
+      DB_USER: ${PG_USERNAME}
+      DB_PASSWORD: ${PG_PASSWORD}
+      DB_NAME: ${PG_DATABASE}
+      DB_AFTER_CONNECT_QUERY: 'SET search_path TO _realtime'
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      FLY_ALLOC_ID: fly123
+      FLY_APP_NAME: realtime
+      SECURE_CHANNELS: "true"
+      PORT: 4000
+      ERL_AFLAGS: -proto_dist inet_tcp
+      ENABLE_TAILSCALE: "false"
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "1048576"
+      SECRET_KEY_BASE: ${SUPABASE_SECRET_KEY_BASE:-your-super-secret-key-base-must-be-at-least-64-characters-long-for-realtime-and-supavisor-communications}
+    ports:
+      - "${SUPABASE_REALTIME_PORT:-4000}:4000"
+    networks:
+      - supabase_network
+
+  # Storage - 文件存储服务
+  storage:
+    image: supabase/storage-api:v1.32.0
+    restart: unless-stopped
+    depends_on:
+      - db
+      - rest
+    environment:
+      ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+      SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
+      POSTGREST_URL: http://rest:3000
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      DATABASE_URL: postgres://${PG_USERNAME}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}
+      FILE_SIZE_LIMIT: ${SUPABASE_STORAGE_FILE_SIZE_LIMIT:-52428800}
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: ${SUPABASE_STORAGE_REGION:-stub}
+      GLOBAL_S3_BUCKET: stub
+      ENABLE_IMAGE_TRANSFORMATION: "true"
+      IMGPROXY_URL: http://imgproxy:5001
+    ports:
+      - "${SUPABASE_STORAGE_PORT:-5000}:5000"
+    volumes:
+      - supabase-storage-data:/var/lib/storage
+    networks:
+      - supabase_network
+
+  # Image Proxy - 图片处理服务
+  imgproxy:
+    image: darthsim/imgproxy:v3.8.0
+    restart: unless-stopped
+    environment:
+      IMGPROXY_BIND: ":5001"
+      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
+      IMGPROXY_USE_ETAG: "true"
+      IMGPROXY_ENABLE_WEBP_DETECTION: ${SUPABASE_IMGPROXY_ENABLE_WEBP_DETECTION:-true}
+    volumes:
+      - supabase-storage-data:/var/lib/storage:ro
+    networks:
+      - supabase_network
+
+  # PostgREST (别名 rest) - 用于 Storage 服务
+  rest:
+    image: postgrest/postgrest:v13.0.7
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      PGRST_DB_URI: postgres://${PG_USERNAME}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_EXTRA_SEARCH_PATH: public,extensions
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_APP_SETTINGS_JWT_EXP: ${SUPABASE_JWT_EXP:-3600}
+    command: "postgrest"
+    networks:
+      - supabase_network
+
+  # Supabase Studio - 管理界面
+  studio:
+    image: supabase/studio:2025.11.26-sha-8f096b5
+    restart: unless-stopped
+    depends_on:
+      kong:
+        condition: service_started
+      meta:
+        condition: service_started
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      DEFAULT_ORGANIZATION_NAME: ${SUPABASE_DEFAULT_ORG_NAME:-Default Organization}
+      DEFAULT_PROJECT_NAME: ${SUPABASE_DEFAULT_PROJECT_NAME:-Default Project}
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8062}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
+      # 中文语言设置
+      STUDIO_DEFAULT_LOCALE: ${SUPABASE_STUDIO_DEFAULT_LOCALE:-zh-CN}
+      BROWSER_LOCALE: ${SUPABASE_BROWSER_LOCALE:-zh-CN}
+      DEFAULT_LOCALE: ${SUPABASE_DEFAULT_LOCALE:-zh-CN}
+      # 设置初始语言为中文
+      NEXT_PUBLIC_DEFAULT_LOCALE: ${SUPABASE_DEFAULT_LOCALE:-zh-CN}
+      # Dashboard 基本认证配置
+      DASHBOARD_USERNAME: ${SUPABASE_DASHBOARD_USERNAME:-supabase}
+      DASHBOARD_PASSWORD: ${SUPABASE_DASHBOARD_PASSWORD:-this_password_is_insecure_and_should_be_updated}
+      # 数据库连接信息（Studio 可能需要）
+      POSTGRES_HOST: ${PG_HOST}
+      POSTGRES_PORT: ${PG_PORT}
+      POSTGRES_DB: ${PG_DATABASE}
+      POSTGRES_USER: ${PG_USERNAME}
+    ports:
+      - "${SUPABASE_STUDIO_PORT:-3000}:3000"
+    networks:
+      - supabase_network
+
+  # Postgres Meta - 数据库元数据服务
+  meta:
+    image: supabase/postgres-meta:v0.93.1
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: ${PG_HOST}
+      PG_META_DB_PORT: ${PG_PORT}
+      PG_META_DB_NAME: ${PG_DATABASE}
+      PG_META_DB_USER: ${PG_USERNAME}
+      PG_META_DB_PASSWORD: ${PG_PASSWORD}
+      PG_META_DB_POOL_SIZE: 10
+    ports:
+      - "${SUPABASE_META_PORT:-18080}:8080"
+    networks:
+      - supabase_network
+
+  # 数据库连接器（用于连接到外部数据库）
+  # 注意：由于使用外部数据库，这个服务仅作为占位符
+  # 实际数据库连接通过环境变量配置到各个服务
+  db:
+    image: postgres:15-alpine
+    restart: "no"
+    environment:
+      POSTGRES_HOST: ${PG_HOST}
+      POSTGRES_PORT: ${PG_PORT}
+      POSTGRES_DB: ${PG_DATABASE}
+      POSTGRES_USER: ${PG_USERNAME}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+    # 不启动容器，仅用于依赖管理
+    command: ["echo", "Using external database"]
+    networks:
+      - supabase_network
+
+  # Functions - Edge Functions (可选)
+  # 注意：已暂时注释掉，因为镜像版本可能不存在
+  # 如果需要使用 Edge Functions，请先确认可用的镜像版本，然后取消注释
+  # functions:
+  #   image: supabase/edge-runtime:v1.67.4
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - kong
+  #   environment:
+  #     JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+  #     SUPABASE_URL: http://kong:8000
+  #     SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8062}
+  #     SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+  #     SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
+  #   volumes:
+  #     - ./supabase/functions:/home/deno/functions:ro
+  #   ports:
+  #     - "${SUPABASE_FUNCTIONS_PORT:-9000}:9000"
+  #   networks:
+  #     - supabase_network
+
+networks:
+  supabase_network:
+    driver: bridge
+
+volumes:
+  supabase-storage-data:
+    driver: local
+
