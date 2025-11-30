@@ -189,7 +189,7 @@ services:
       kong:
         condition: service_started
       meta:
-        condition: service_healthy
+        condition: service_started
     environment:
       STUDIO_PG_META_URL: http://meta:8080
       POSTGRES_PASSWORD: ${PG_PASSWORD}
@@ -236,12 +236,6 @@ services:
       - "${SUPABASE_META_PORT:-18080}:8080"
     networks:
       - supabase_network
-    healthcheck:
-      test: ["CMD-SHELL", "sh -c 'exec 3<>/dev/tcp/localhost/8080' || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 20s
 
   # 数据库连接器（用于连接到外部数据库）
   # 注意：由于使用外部数据库，这个服务仅作为占位符
