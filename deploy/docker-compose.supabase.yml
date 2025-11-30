@@ -53,7 +53,7 @@ services:
       GOTRUE_API_PORT: 9999
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgres://${PG_USERNAME}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}?search_path=auth,public
-      GOTRUE_DB_AUTOMIGRATE: "false"
+      GOTRUE_DB_AUTOMIGRATE: "true"
       GOTRUE_SITE_URL: ${SUPABASE_SITE_URL:-http://localhost:8062}
       API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8062}
       GOTRUE_URI_ALLOW_LIST: ${SUPABASE_URI_ALLOW_LIST:-http://localhost:3000,http://localhost:8080}
