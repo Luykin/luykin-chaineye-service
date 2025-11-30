@@ -219,7 +219,7 @@ services:
       PG_META_DB_PASSWORD: ${PG_PASSWORD}
       PG_META_DB_POOL_SIZE: 10
     ports:
-      - "${SUPABASE_META_PORT:-8080}:8080"
+      - "${SUPABASE_META_PORT:-18080}:8080"
     networks:
       - supabase_network
 
