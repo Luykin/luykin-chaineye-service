@@ -186,7 +186,10 @@ services:
     image: supabase/studio:2025.11.26-sha-8f096b5
     restart: unless-stopped
     depends_on:
-      - kong
+      kong:
+        condition: service_started
+      meta:
+        condition: service_healthy
     environment:
       STUDIO_PG_META_URL: http://meta:8080
       POSTGRES_PASSWORD: ${PG_PASSWORD}
@@ -205,6 +208,11 @@ services:
       # Dashboard 基本认证配置
       DASHBOARD_USERNAME: ${SUPABASE_DASHBOARD_USERNAME:-supabase}
       DASHBOARD_PASSWORD: ${SUPABASE_DASHBOARD_PASSWORD:-this_password_is_insecure_and_should_be_updated}
+      # 数据库连接信息（Studio 可能需要）
+      POSTGRES_HOST: ${PG_HOST}
+      POSTGRES_PORT: ${PG_PORT}
+      POSTGRES_DB: ${PG_DATABASE}
+      POSTGRES_USER: ${PG_USERNAME}
     ports:
       - "${SUPABASE_STUDIO_PORT:-3000}:3000"
     networks:
@@ -228,6 +236,12 @@ services:
       - "${SUPABASE_META_PORT:-18080}:8080"
     networks:
       - supabase_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # 数据库连接器（用于连接到外部数据库）
   # 注意：由于使用外部数据库，这个服务仅作为占位符
