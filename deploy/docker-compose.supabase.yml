@@ -114,6 +114,7 @@ services:
       ENABLE_TAILSCALE: "false"
       DNS_NODES: "''"
       RLIMIT_NOFILE: "1048576"
+      SECRET_KEY_BASE: ${SUPABASE_SECRET_KEY_BASE:-your-super-secret-key-base-must-be-at-least-64-characters-long-for-realtime-and-supavisor-communications}
     ports:
       - "${SUPABASE_REALTIME_PORT:-4000}:4000"
     networks:
