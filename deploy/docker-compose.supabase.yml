@@ -1,7 +1,7 @@
 services:
   # Kong API Gateway - Supabase 的入口网关
   kong:
-    image: kong:2.8.1
+    image: kong:latest
     restart: unless-stopped
     depends_on:
       - postgrest
@@ -25,7 +25,7 @@ services:
 
   # PostgREST - 自动生成 REST API
   postgrest:
-    image: postgrest/postgrest:v12.0.1
+    image: postgrest/postgrest:latest
     restart: unless-stopped
     depends_on:
       - db
@@ -44,7 +44,7 @@ services:
 
   # GoTrue - 认证服务
   gotrue:
-    image: supabase/gotrue:v2.99.0
+    image: supabase/gotrue:latest
     restart: unless-stopped
     depends_on:
       - db
@@ -92,7 +92,7 @@ services:
 
   # Realtime - WebSocket 实时服务
   realtime:
-    image: supabase/realtime:v2.25.35
+    image: supabase/realtime:latest
     restart: unless-stopped
     depends_on:
       - db
@@ -119,7 +119,7 @@ services:
 
   # Storage - 文件存储服务
   storage:
-    image: supabase/storage-api:v1.7.0
+    image: supabase/storage-api:latest
     restart: unless-stopped
     depends_on:
       - db
@@ -147,7 +147,7 @@ services:
 
   # Image Proxy - 图片处理服务
   imgproxy:
-    image: darthsim/imgproxy:v3.8.0
+    image: darthsim/imgproxy:latest
     restart: unless-stopped
     environment:
       IMGPROXY_BIND: ":5001"
@@ -161,7 +161,7 @@ services:
 
   # PostgREST (别名 rest) - 用于 Storage 服务
   rest:
-    image: postgrest/postgrest:v12.0.1
+    image: postgrest/postgrest:latest
     restart: unless-stopped
     depends_on:
       - db
@@ -180,7 +180,7 @@ services:
 
   # Supabase Studio - 管理界面
   studio:
-    image: supabase/studio:20231130-0a8c2f3
+    image: supabase/studio:latest
     restart: unless-stopped
     depends_on:
       - kong
@@ -206,7 +206,7 @@ services:
 
   # Postgres Meta - 数据库元数据服务
   meta:
-    image: supabase/postgres-meta:v0.80.0
+    image: supabase/postgres-meta:latest
     restart: unless-stopped
     depends_on:
       - db
@@ -227,7 +227,7 @@ services:
   # 注意：由于使用外部数据库，这个服务仅作为占位符
   # 实际数据库连接通过环境变量配置到各个服务
   db:
-    image: postgres:15.1-alpine
+    image: postgres:15-alpine
     restart: "no"
     environment:
       POSTGRES_HOST: ${PG_HOST}
