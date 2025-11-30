@@ -99,6 +99,7 @@ services:
     depends_on:
       - db
     environment:
+      APP_NAME: realtime
       DB_HOST: ${PG_HOST}
       DB_PORT: ${PG_PORT}
       DB_USER: ${PG_USERNAME}
