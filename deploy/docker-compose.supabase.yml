@@ -54,7 +54,7 @@ services:
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgres://${PG_USERNAME}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}?search_path=public
       GOTRUE_SITE_URL: ${SUPABASE_SITE_URL:-http://localhost:8062}
-      GOTRUE_API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8062}
+      API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8062}
       GOTRUE_URI_ALLOW_LIST: ${SUPABASE_URI_ALLOW_LIST:-http://localhost:3000,http://localhost:8080}
       GOTRUE_DISABLE_SIGNUP: ${SUPABASE_DISABLE_SIGNUP:-false}
       GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
