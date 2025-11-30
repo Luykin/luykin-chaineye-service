@@ -45,7 +45,8 @@ CREATE TABLE auth.users (
     deleted_at TIMESTAMPTZ,
     is_anonymous BOOLEAN NOT NULL DEFAULT FALSE,
     disabled BOOLEAN NOT NULL DEFAULT FALSE,
-    aud VARCHAR(255)
+    aud VARCHAR(255),
+    role VARCHAR(255)
 );
 
 -- 4. 创建 auth.identities 表
