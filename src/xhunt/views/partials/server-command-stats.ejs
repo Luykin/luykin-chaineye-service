@@ -1,0 +1,638 @@
+<div class="server-command-container">
+  <div class="server-command-header">
+    <h3>🖥️ 服务器命令终端</h3>
+    <div class="server-command-actions">
+      <button id="btn-command-clear" class="btn">清屏</button>
+      <button id="btn-command-pwd" class="btn">显示路径</button>
+    </div>
+  </div>
+
+  <!-- 终端输出区域 -->
+  <div class="terminal-output" id="terminal-output">
+    <div class="terminal-line">
+      <span class="terminal-prompt">$</span>
+      <span class="terminal-text">欢迎使用服务器命令终端</span>
+    </div>
+    <div class="terminal-line">
+      <span class="terminal-prompt">$</span>
+      <span class="terminal-text">输入命令并按 Enter 执行，支持命令历史（上下箭头键）</span>
+    </div>
+  </div>
+
+  <!-- 常见命令快捷按钮 -->
+  <div class="quick-commands-section">
+    <div class="quick-commands-header">
+      <span class="quick-commands-title">⚡ 常用命令</span>
+      <button id="btn-toggle-quick-commands" class="btn-toggle">展开</button>
+    </div>
+    <div class="quick-commands-grid" id="quick-commands-grid" style="display: none;">
+      <div class="quick-commands-group">
+        <div class="quick-commands-group-title">📦 PM2 管理</div>
+        <div class="quick-commands-buttons">
+          <button class="quick-command-btn" data-command="pm2 list">pm2 list</button>
+          <button class="quick-command-btn" data-command="pm2 restart all">pm2 restart all</button>
+          <button class="quick-command-btn" data-command="pm2 stop all">pm2 stop all</button>
+          <button class="quick-command-btn" data-command="pm2 logs">pm2 logs</button>
+          <button class="quick-command-btn" data-command="pm2 status">pm2 status</button>
+        </div>
+      </div>
+      <div class="quick-commands-group">
+        <div class="quick-commands-group-title">🗄️ 数据库</div>
+        <div class="quick-commands-buttons">
+          <button class="quick-command-btn" data-command="npm run db:migrate">npm run db:migrate</button>
+          <button class="quick-command-btn" data-command="npm run db:migrate:undo">npm run db:migrate:undo</button>
+        </div>
+      </div>
+      <div class="quick-commands-group">
+        <div class="quick-commands-group-title">🔒 防火墙</div>
+        <div class="quick-commands-buttons">
+          <button class="quick-command-btn" data-command="sudo ufw allow 80,443,5432,8864/tcp">ufw allow ports</button>
+          <button class="quick-command-btn" data-command="sudo ufw status">ufw status</button>
+        </div>
+      </div>
+      <div class="quick-commands-group">
+        <div class="quick-commands-group-title">📁 文件操作</div>
+        <div class="quick-commands-buttons">
+          <button class="quick-command-btn" data-command="ls -la">ls -la</button>
+          <button class="quick-command-btn" data-command="pwd">pwd</button>
+          <button class="quick-command-btn" data-command="df -h">df -h</button>
+          <button class="quick-command-btn" data-command="du -sh *">du -sh *</button>
+        </div>
+      </div>
+      <div class="quick-commands-group">
+        <div class="quick-commands-group-title">📝 日志查看</div>
+        <div class="quick-commands-buttons">
+          <button class="quick-command-btn" data-command="tail -n 50 logs/app-out.log">tail app-out.log</button>
+          <button class="quick-command-btn" data-command="tail -n 50 logs/app-err.log">tail app-err.log</button>
+          <button class="quick-command-btn" data-command="tail -f logs/app-out.log">tail -f app-out.log</button>
+        </div>
+      </div>
+      <div class="quick-commands-group">
+        <div class="quick-commands-group-title">🔧 Git 操作</div>
+        <div class="quick-commands-buttons">
+          <button class="quick-command-btn" data-command="git status">git status</button>
+          <button class="quick-command-btn" data-command="git pull">git pull</button>
+          <button class="quick-command-btn" data-command="git log --oneline -10">git log</button>
+        </div>
+      </div>
+      <div class="quick-commands-group">
+        <div class="quick-commands-group-title">💻 系统信息</div>
+        <div class="quick-commands-buttons">
+          <button class="quick-command-btn" data-command="free -h">free -h</button>
+          <button class="quick-command-btn" data-command="ps aux | grep node">ps node</button>
+          <button class="quick-command-btn" data-command="uptime">uptime</button>
+        </div>
+      </div>
+      <div class="quick-commands-group">
+        <div class="quick-commands-group-title">📦 NPM</div>
+        <div class="quick-commands-buttons">
+          <button class="quick-command-btn" data-command="npm install">npm install</button>
+          <button class="quick-command-btn" data-command="npm list --depth=0">npm list</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 命令输入区域 -->
+  <div class="terminal-input-container">
+    <span class="terminal-prompt">$</span>
+    <input
+      type="text"
+      id="command-input"
+      class="terminal-input"
+      placeholder="输入命令..."
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <button id="btn-command-execute" class="btn primary">执行</button>
+  </div>
+
+  <!-- 状态提示 -->
+  <div class="terminal-status" id="terminal-status"></div>
+</div>
+
+<style>
+  .server-command-container {
+    background: #1e1e1e;
+    border-radius: 8px;
+    padding: 20px;
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    min-height: 500px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .server-command-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #3e3e3e;
+  }
+
+  .server-command-header h3 {
+    color: #4ec9b0;
+    margin: 0;
+    font-size: 1.2rem;
+  }
+
+  .server-command-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .server-command-actions .btn {
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    background: #3e3e3e;
+    color: #d4d4d4;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .server-command-actions .btn:hover {
+    background: #4e4e4e;
+    border-color: #666;
+  }
+
+  .terminal-output {
+    flex: 1;
+    background: #0d0d0d;
+    border: 1px solid #3e3e3e;
+    border-radius: 4px;
+    padding: 15px;
+    overflow-y: auto;
+    max-height: 500px;
+    min-height: 300px;
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 15px;
+  }
+
+  .terminal-line {
+    margin-bottom: 4px;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+  }
+
+  .terminal-prompt {
+    color: #4ec9b0;
+    font-weight: bold;
+    margin-right: 8px;
+  }
+
+  .terminal-text {
+    color: #d4d4d4;
+  }
+
+  .terminal-text.error {
+    color: #f48771;
+  }
+
+  .terminal-text.success {
+    color: #4ec9b0;
+  }
+
+  .terminal-text.info {
+    color: #569cd6;
+  }
+
+  .terminal-input-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: #252526;
+    border: 1px solid #3e3e3e;
+    border-radius: 4px;
+  }
+
+  .terminal-input {
+    flex: 1;
+    background: #1e1e1e;
+    border: 1px solid #3e3e3e;
+    color: #d4d4d4;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    outline: none;
+  }
+
+  .terminal-input:focus {
+    border-color: #4ec9b0;
+  }
+
+  .terminal-input::placeholder {
+    color: #6a6a6a;
+  }
+
+  .terminal-status {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    display: none;
+  }
+
+  .terminal-status.loading {
+    display: block;
+    background: #1e3a5f;
+    color: #569cd6;
+    border: 1px solid #264f78;
+  }
+
+  .terminal-status.error {
+    display: block;
+    background: #5a1d1d;
+    color: #f48771;
+    border: 1px solid #7a2d2d;
+  }
+
+  .terminal-status.success {
+    display: block;
+    background: #1d3a1d;
+    color: #4ec9b0;
+    border: 1px solid #2d4a2d;
+  }
+
+  /* 滚动条样式 */
+  .terminal-output::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .terminal-output::-webkit-scrollbar-track {
+    background: #1e1e1e;
+  }
+
+  .terminal-output::-webkit-scrollbar-thumb {
+    background: #3e3e3e;
+    border-radius: 4px;
+  }
+
+  .terminal-output::-webkit-scrollbar-thumb:hover {
+    background: #4e4e4e;
+  }
+
+  /* 快捷命令区域样式 */
+  .quick-commands-section {
+    margin-bottom: 15px;
+    background: #252526;
+    border: 1px solid #3e3e3e;
+    border-radius: 4px;
+    padding: 12px;
+  }
+
+  .quick-commands-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .quick-commands-title {
+    color: #4ec9b0;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .btn-toggle {
+    background: #3e3e3e;
+    color: #d4d4d4;
+    border: 1px solid #555;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s;
+  }
+
+  .btn-toggle:hover {
+    background: #4e4e4e;
+    border-color: #666;
+  }
+
+  .quick-commands-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 15px;
+    margin-top: 10px;
+  }
+
+  .quick-commands-group {
+    background: #1e1e1e;
+    border: 1px solid #3e3e3e;
+    border-radius: 4px;
+    padding: 10px;
+  }
+
+  .quick-commands-group-title {
+    color: #569cd6;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #3e3e3e;
+  }
+
+  .quick-commands-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .quick-command-btn {
+    background: #2d2d2d;
+    color: #d4d4d4;
+    border: 1px solid #3e3e3e;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .quick-command-btn:hover {
+    background: #3e3e3e;
+    border-color: #4ec9b0;
+    color: #4ec9b0;
+    transform: translateY(-1px);
+  }
+
+  .quick-command-btn:active {
+    transform: translateY(0);
+  }
+</style>
+
+<script>
+  (function() {
+    let commandHistory = [];
+    let historyIndex = -1;
+    let currentWorkingDir = null;
+    let isExecuting = false;
+
+    const outputEl = document.getElementById('terminal-output');
+    const inputEl = document.getElementById('command-input');
+    const executeBtn = document.getElementById('btn-command-execute');
+    const clearBtn = document.getElementById('btn-command-clear');
+    const pwdBtn = document.getElementById('btn-command-pwd');
+    const statusEl = document.getElementById('terminal-status');
+    const quickCommandsGrid = document.getElementById('quick-commands-grid');
+    const toggleQuickCommandsBtn = document.getElementById('btn-toggle-quick-commands');
+
+    // 添加输出行
+    function addOutputLine(text, type = 'text') {
+      const line = document.createElement('div');
+      line.className = 'terminal-line';
+      
+      const prompt = document.createElement('span');
+      prompt.className = 'terminal-prompt';
+      prompt.textContent = '$';
+      
+      const textSpan = document.createElement('span');
+      textSpan.className = `terminal-text ${type}`;
+      textSpan.textContent = text;
+      
+      line.appendChild(prompt);
+      line.appendChild(textSpan);
+      outputEl.appendChild(line);
+      
+      // 自动滚动到底部
+      outputEl.scrollTop = outputEl.scrollHeight;
+    }
+
+    // 添加命令输入行
+    function addCommandLine(command) {
+      const line = document.createElement('div');
+      line.className = 'terminal-line';
+      
+      const prompt = document.createElement('span');
+      prompt.className = 'terminal-prompt';
+      prompt.textContent = '$';
+      
+      const textSpan = document.createElement('span');
+      textSpan.className = 'terminal-text';
+      textSpan.textContent = command;
+      
+      line.appendChild(prompt);
+      line.appendChild(textSpan);
+      outputEl.appendChild(line);
+      
+      outputEl.scrollTop = outputEl.scrollHeight;
+    }
+
+    // 显示状态
+    function showStatus(message, type = 'info') {
+      statusEl.textContent = message;
+      statusEl.className = `terminal-status ${type}`;
+      statusEl.style.display = 'block';
+      
+      if (type !== 'loading') {
+        setTimeout(() => {
+          statusEl.style.display = 'none';
+        }, 3000);
+      }
+    }
+
+    // 隐藏状态
+    function hideStatus() {
+      statusEl.style.display = 'none';
+    }
+
+    // 执行命令
+    async function executeCommand(command) {
+      if (!command || !command.trim()) {
+        return;
+      }
+
+      if (isExecuting) {
+        showStatus('上一个命令正在执行中，请稍候...', 'error');
+        return;
+      }
+
+      isExecuting = true;
+      inputEl.disabled = true;
+      executeBtn.disabled = true;
+      
+      // 显示命令
+      addCommandLine(command);
+      
+      // 添加到历史记录
+      if (commandHistory[commandHistory.length - 1] !== command) {
+        commandHistory.push(command);
+        if (commandHistory.length > 100) {
+          commandHistory.shift();
+        }
+      }
+      historyIndex = commandHistory.length;
+
+      // 显示加载状态
+      showStatus('执行中...', 'loading');
+
+      try {
+        const response = await fetch('/api/xhunt/stats/execute-command', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ command: command.trim() }),
+        });
+
+        hideStatus();
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+          throw new Error(errorData.error || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (!data.success) {
+          throw new Error(data.error || '执行失败');
+        }
+
+        // 更新工作目录
+        if (data.cwd) {
+          currentWorkingDir = data.cwd;
+        }
+
+        // 显示输出
+        if (data.stdout) {
+          const lines = data.stdout.split('\n');
+          lines.forEach(line => {
+            if (line.trim()) {
+              addOutputLine(line, 'text');
+            }
+          });
+        }
+
+        if (data.stderr) {
+          const lines = data.stderr.split('\n');
+          lines.forEach(line => {
+            if (line.trim()) {
+              addOutputLine(line, 'error');
+            }
+          });
+        }
+
+        // 显示退出码
+        if (data.exitCode !== undefined && data.exitCode !== 0) {
+          addOutputLine(`[退出码: ${data.exitCode}]`, 'error');
+        }
+
+        // 如果没有输出，显示提示
+        if (!data.stdout && !data.stderr) {
+          addOutputLine('[命令执行完成，无输出]', 'info');
+        }
+
+      } catch (error) {
+        hideStatus();
+        addOutputLine(`错误: ${error.message}`, 'error');
+        showStatus(`执行失败: ${error.message}`, 'error');
+      } finally {
+        isExecuting = false;
+        inputEl.disabled = false;
+        executeBtn.disabled = false;
+        inputEl.focus();
+      }
+    }
+
+    // 绑定事件
+    executeBtn.addEventListener('click', () => {
+      const command = inputEl.value.trim();
+      if (command) {
+        executeCommand(command);
+        inputEl.value = '';
+      }
+    });
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const command = inputEl.value.trim();
+        if (command) {
+          executeCommand(command);
+          inputEl.value = '';
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (commandHistory.length > 0) {
+          if (historyIndex > 0) {
+            historyIndex--;
+          }
+          inputEl.value = commandHistory[historyIndex] || '';
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (historyIndex < commandHistory.length - 1) {
+          historyIndex++;
+          inputEl.value = commandHistory[historyIndex] || '';
+        } else {
+          historyIndex = commandHistory.length;
+          inputEl.value = '';
+        }
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      outputEl.innerHTML = '';
+      addOutputLine('终端已清空', 'info');
+    });
+
+    pwdBtn.addEventListener('click', () => {
+      executeCommand('pwd');
+    });
+
+    // 快捷命令按钮点击事件
+    document.querySelectorAll('.quick-command-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const command = btn.getAttribute('data-command');
+        if (command) {
+          inputEl.value = command;
+          inputEl.focus();
+          // 选中所有文本，方便用户直接按回车执行或修改
+          inputEl.select();
+        }
+      });
+    });
+
+    // 切换快捷命令显示/隐藏
+    let quickCommandsVisible = false;
+    toggleQuickCommandsBtn.addEventListener('click', () => {
+      quickCommandsVisible = !quickCommandsVisible;
+      if (quickCommandsVisible) {
+        quickCommandsGrid.style.display = 'grid';
+        toggleQuickCommandsBtn.textContent = '收起';
+      } else {
+        quickCommandsGrid.style.display = 'none';
+        toggleQuickCommandsBtn.textContent = '展开';
+      }
+    });
+
+    // 初始化时获取当前工作目录（延迟执行，避免页面加载时立即执行）
+    setTimeout(() => {
+      executeCommand('pwd');
+    }, 500);
+
+    // 聚焦输入框
+    inputEl.focus();
+
+    // 监听 tab 切换事件，当切换到 server-command tab 时自动聚焦输入框
+    document.addEventListener('click', function(e) {
+      const tabBtn = e.target.closest('.tab-btn');
+      if (tabBtn && tabBtn.getAttribute('data-tab') === 'server-command') {
+        setTimeout(() => {
+          inputEl.focus();
+        }, 100);
+      }
+    });
+  })();
+</script>
+

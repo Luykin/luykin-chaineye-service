@@ -8,6 +8,9 @@ const fsSync = require("fs");
 const os = require("os");
 const { createReadStream } = require("fs");
 const readline = require("readline");
+const { exec } = require("child_process");
+const { promisify } = require("util");
+const execAsync = promisify(exec);
 
 const router = express.Router();
 
@@ -3044,6 +3047,163 @@ router.get("/security-violations", basicAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       error: "查询失败",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /execute-command
+ * 执行服务器命令（需要认证，仅 luykin 用户）
+ * @body {string} command - 要执行的命令
+ */
+router.post("/execute-command", basicAuth, async (req, res) => {
+  try {
+    // 权限检查：只有 luykin 用户可以执行命令
+    if (!req.user || req.user.role !== "luykin") {
+      console.log(
+        `[执行命令] ❌ 权限不足: 用户=${
+          req.user?.username || "unknown"
+        }, 角色=${req.user?.role || "unknown"}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "权限不足",
+        message: "仅 luykin 用户可以执行服务器命令",
+      });
+    }
+
+    const { command } = req.body;
+
+    if (!command || typeof command !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: "无效的命令",
+        message: "命令不能为空",
+      });
+    }
+
+    // 安全检查：禁止某些危险命令
+    const dangerousCommands = [
+      "rm -rf /",
+      "rm -rf /*",
+      "format",
+      "mkfs",
+      "dd if=",
+      "> /dev/sd",
+      ":(){ :|:& };:",
+    ];
+
+    const lowerCommand = command.toLowerCase().trim();
+    for (const dangerous of dangerousCommands) {
+      if (lowerCommand.includes(dangerous.toLowerCase())) {
+        console.log(
+          `[执行命令] 🛡️ 阻止危险命令: 用户=${req.user.username}, 命令=${command}`
+        );
+        return res.status(403).json({
+          success: false,
+          error: "命令被阻止",
+          message: "该命令可能对系统造成危险，已被阻止执行",
+        });
+      }
+    }
+
+    // 命令长度限制
+    if (command.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        error: "命令过长",
+        message: "命令长度不能超过 1000 个字符",
+      });
+    }
+
+    console.log(
+      `[执行命令] ✅ 执行命令: 用户=${req.user.username}, 命令=${command}`
+    );
+
+    // 执行命令，设置超时时间为 30 秒
+    const timeout = 30000; // 30秒
+    const startTime = Date.now();
+
+    try {
+      const { stdout, stderr } = await Promise.race([
+        execAsync(command, {
+          cwd: process.cwd(),
+          maxBuffer: 1024 * 1024 * 10, // 10MB 输出缓冲区
+          timeout: timeout,
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("命令执行超时")), timeout)
+        ),
+      ]);
+
+      const executionTime = Date.now() - startTime;
+
+      // 获取当前工作目录
+      let cwd;
+      try {
+        const { stdout: pwdOutput } = await execAsync("pwd");
+        cwd = pwdOutput.trim();
+      } catch (e) {
+        cwd = process.cwd();
+      }
+
+      console.log(
+        `[执行命令] ✅ 命令执行完成: 用户=${req.user.username}, 耗时=${executionTime}ms`
+      );
+
+      res.json({
+        success: true,
+        stdout: stdout || "",
+        stderr: stderr || "",
+        exitCode: 0,
+        cwd: cwd,
+        executionTime: executionTime,
+      });
+    } catch (error) {
+      const executionTime = Date.now() - startTime;
+
+      // 处理命令执行错误
+      let exitCode = 1;
+      let errorOutput = error.message || "命令执行失败";
+
+      // 如果是超时错误
+      if (error.message === "命令执行超时") {
+        errorOutput = `命令执行超时（超过 ${timeout / 1000} 秒）`;
+      } else if (error.code === "ETIMEDOUT" || error.signal === "SIGTERM") {
+        errorOutput = `命令执行超时（超过 ${timeout / 1000} 秒）`;
+      } else if (error.code) {
+        exitCode = error.code;
+        errorOutput = error.stderr || error.message;
+      }
+
+      // 获取当前工作目录
+      let cwd;
+      try {
+        const { stdout: pwdOutput } = await execAsync("pwd");
+        cwd = pwdOutput.trim();
+      } catch (e) {
+        cwd = process.cwd();
+      }
+
+      console.log(
+        `[执行命令] ⚠️ 命令执行失败: 用户=${req.user.username}, 错误=${errorOutput}, 耗时=${executionTime}ms`
+      );
+
+      res.json({
+        success: true, // 仍然返回 success，因为请求本身成功了
+        stdout: error.stdout || "",
+        stderr: errorOutput,
+        exitCode: exitCode,
+        cwd: cwd,
+        executionTime: executionTime,
+      });
+    }
+  } catch (error) {
+    console.error("[执行命令] ❌ 处理失败:", error);
+    res.status(500).json({
+      success: false,
+      error: "处理命令失败",
       message: error.message,
     });
   }

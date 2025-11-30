@@ -48,6 +48,7 @@
           <button class="tab-btn" data-tab="data-export">📤 数据导出</button>
           <button class="tab-btn" data-tab="pro-management">👑 Pro用户管理</button>
           <button class="tab-btn" data-tab="backup">💾 数据库备份</button>
+          <button class="tab-btn" data-tab="server-command">🖥️ 服务器命令</button>
           <% } %>
         </div>
 
@@ -124,6 +125,11 @@
           <!-- 数据库备份 Tab (仅 luykin 可见) -->
           <div class="tab-pane" id="backup">
             <%- include('partials/backup-stats') %>
+          </div>
+
+          <!-- 服务器命令 Tab (仅 luykin 可见) -->
+          <div class="tab-pane" id="server-command">
+            <%- include('partials/server-command-stats') %>
           </div>
           <% } %>
 
