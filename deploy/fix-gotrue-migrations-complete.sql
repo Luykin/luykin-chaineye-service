@@ -32,11 +32,36 @@ BEGIN
 END
 $$;
 
--- 步骤 2: 创建缺失的索引（迁移脚本想要创建的）
+-- 步骤 2: 修复 backfill_email_last_sign_in_at 迁移中的 SQL 错误
+-- 原错误：id = user_id::text (uuid = text 类型不匹配)
+-- 修复：id::text = user_id::text
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'auth' 
+        AND table_name = 'identities'
+    ) THEN
+        -- 执行修复后的迁移逻辑
+        UPDATE auth.identities
+        SET last_sign_in_at = '2022-11-25'::timestamp
+        WHERE
+            last_sign_in_at IS NULL AND
+            created_at = '2022-11-25'::timestamp AND
+            updated_at = '2022-11-25'::timestamp AND
+            provider = 'email' AND
+            id::text = user_id::text;
+        
+        RAISE NOTICE '已执行 backfill_email_last_sign_in_at 迁移修复';
+    END IF;
+END
+$$;
+
+-- 步骤 3: 创建缺失的索引（迁移脚本想要创建的）
 CREATE INDEX IF NOT EXISTS user_id_created_at_idx ON auth.sessions (user_id, created_at);
 CREATE INDEX IF NOT EXISTS factor_id_created_at_idx ON auth.mfa_factors (user_id, created_at);
 
--- 步骤 3: 标记所有迁移为已完成（关键步骤）
+-- 步骤 4: 标记所有迁移为已完成（关键步骤）
 -- GoTrue 使用 pop 迁移系统，迁移记录存储在 schema_migrations 表中
 DROP TABLE IF EXISTS public.schema_migrations;
 CREATE TABLE IF NOT EXISTS public.schema_migrations (
@@ -76,10 +101,11 @@ INSERT INTO public.schema_migrations (version) VALUES
 ('20221011041400')   -- add_mfa_indexes (数字版本)
 ON CONFLICT (version) DO NOTHING;
 
--- 步骤 4: 验证
+-- 步骤 5: 验证迁移记录
 SELECT 
     '修复完成' as status,
-    COUNT(*) as completed_migrations
+    COUNT(*) as completed_migrations,
+    string_agg(version, ', ' ORDER BY version) as migration_versions
 FROM public.schema_migrations;
 
 -- 显示当前主键状态
