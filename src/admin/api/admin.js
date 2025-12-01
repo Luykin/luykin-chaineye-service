@@ -48,21 +48,45 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
     // 注意：Microsoft Outlook 已禁用基本认证，需要使用应用密码（App Password）
     // 生成应用密码：https://account.microsoft.com/security -> 高级安全选项 -> 应用密码
     // 或者使用 OAuth2（需要额外配置）
+    
+    // 如果使用应用密码仍然失败，可能的原因：
+    // 1. 应用密码包含空格或特殊字符，需要去除空格
+    // 2. Office 365 管理员可能完全禁用了基本认证（需要联系管理员）
+    // 3. 账户可能启用了"安全默认值"，需要禁用或使用 OAuth2
+    
+    const cleanPass = pass ? pass.replace(/\s+/g, '') : pass; // 移除所有空格
+    
     const transporter = nodemailer.createTransport({
       host: "smtp.office365.com",
       port: 587,
-      secure: false, // true for 465, false for other ports
+      secure: false, // true for 465, false for other ports (587 uses STARTTLS)
       auth: { 
         user, 
-        pass // 这里应该使用应用密码，而不是普通密码
+        pass: cleanPass // 使用清理后的密码（移除空格）
       },
       tls: {
-        ciphers: 'SSLv3',
-        rejectUnauthorized: false
-      }
+        // 使用现代 TLS 配置
+        minVersion: 'TLSv1.2',
+        rejectUnauthorized: true // 验证证书
+      },
+      requireTLS: true, // 要求使用 TLS
+      connectionTimeout: 10000, // 10秒连接超时
+      greetingTimeout: 10000, // 10秒问候超时
+      socketTimeout: 10000 // 10秒socket超时
     });
 
     console.log(`[admin/password/send-code] 准备发送验证码到邮箱: ${email}`);
+    console.log(`[admin/password/send-code] 使用邮箱账户: ${user}`);
+    console.log(`[admin/password/send-code] 应用密码长度: ${pass ? pass.length : 0} 字符`);
+    
+    // 验证连接（可选，用于调试）
+    try {
+      await transporter.verify();
+      console.log(`[admin/password/send-code] ✅ SMTP 连接验证成功`);
+    } catch (verifyError) {
+      console.error(`[admin/password/send-code] ⚠️ SMTP 连接验证失败:`, verifyError.message);
+      // 继续尝试发送，有时 verify 失败但实际发送可以成功
+    }
     
     await transporter.sendMail({
       from,
@@ -109,16 +133,18 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
 
     // 如果是认证错误，提供更详细的错误信息
     if (isAuthError) {
-      console.error(`[admin/password/send-code] ⚠️ Outlook 认证失败，需要使用应用密码`);
-      console.error(`[admin/password/send-code] 解决方案：`);
-      console.error(`[admin/password/send-code] 1. 访问 https://account.microsoft.com/security`);
-      console.error(`[admin/password/send-code] 2. 进入"高级安全选项" -> "应用密码"`);
-      console.error(`[admin/password/send-code] 3. 生成新的应用密码`);
-      console.error(`[admin/password/send-code] 4. 将应用密码设置为 OUTLOOK_PASS 环境变量`);
+      console.error(`[admin/password/send-code] ⚠️ Outlook 认证失败`);
+      console.error(`[admin/password/send-code] 可能的原因和解决方案：`);
+      console.error(`[admin/password/send-code] 1. 确认已使用应用密码（不是普通密码）`);
+      console.error(`[admin/password/send-code] 2. 检查应用密码是否正确（去除所有空格）`);
+      console.error(`[admin/password/send-code] 3. 确认账户已启用两步验证（应用密码需要）`);
+      console.error(`[admin/password/send-code] 4. 如果使用 Office 365 企业账户，可能需要管理员启用基本认证`);
+      console.error(`[admin/password/send-code] 5. 检查是否启用了"安全默认值"，可能需要禁用或使用 OAuth2`);
+      console.error(`[admin/password/send-code] 6. 尝试重新生成应用密码：https://account.microsoft.com/security/app-passwords`);
       return res.status(500).json({ 
         success: false, 
         error: "邮件发送失败：Outlook 认证失败",
-        message: "需要使用应用密码而不是普通密码。请访问 https://account.microsoft.com/security 生成应用密码。"
+        message: "认证失败。请确认：1) 使用应用密码而非普通密码 2) 密码无空格 3) 已启用两步验证 4) 如为企业账户，联系管理员检查基本认证设置。"
       });
     }
 

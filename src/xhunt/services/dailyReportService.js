@@ -85,15 +85,20 @@ function buildTransport() {
   return nodemailer.createTransport({
     host: "smtp.office365.com",
     port: 587,
-    secure: false, // true for 465, false for other ports
+    secure: false, // true for 465, false for other ports (587 uses STARTTLS)
     auth: { 
       user, 
       pass // 这里应该使用应用密码，而不是普通密码
     },
     tls: {
-      ciphers: 'SSLv3',
-      rejectUnauthorized: false
-    }
+      // 移除过时的 SSLv3，使用默认的现代 TLS 配置
+      ciphers: 'TLSv1.2',
+      rejectUnauthorized: true // 验证证书
+    },
+    requireTLS: true, // 要求使用 TLS
+    connectionTimeout: 10000, // 10秒连接超时
+    greetingTimeout: 10000, // 10秒问候超时
+    socketTimeout: 10000 // 10秒socket超时
   });
 }
 
