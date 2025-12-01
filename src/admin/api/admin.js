@@ -572,9 +572,6 @@ router.post("/supabase/link-token", adminAuth, async (req, res) => {
 // 校验一次性票据（用于 Nginx auth_request）
 router.get("/supabase/verify-link", async (req, res) => {
   try {
-    console.log("[supabase/verify-link] force allow: returning 204 for all requests (temporary)");
-    res.set("Cache-Control","no-store");
-    return res.status(204).end();
     const { token } = req.query || {};
     console.log("[supabase/verify-link] incoming:", {
       ip: req.ip,
