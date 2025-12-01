@@ -1,6 +1,10 @@
 const path = require("path");
 const ejs = require("ejs");
 const { Op } = require("sequelize");
+const os = require("os");
+const { exec } = require("child_process");
+const util = require("util");
+const execPromise = util.promisify(exec);
 const { VersionRequestStats, UrlRequestStats, SecurityViolationLog, XhuntAdminManager } = require("../../models/postgres-start");
 const { getFullStats } = require("./statsService");
 
@@ -47,13 +51,123 @@ async function collectReportData(redisClient) {
     where: { createdAt: { [Op.gte]: cStart, [Op.lte]: cEnd } },
   });
 
+  // 4. 服务器状态采集（简版）
+  const deviceStatus = await collectDeviceStatus(redisClient);
+
   return {
     fullStats,
     recentVersion,
     recentUrl,
     todaySecurityCount,
+    deviceStatus,
     generatedAt: new Date(),
   };
+}
+
+async function collectDeviceStatus(redisClient) {
+  const status = {
+    timestamp: new Date(),
+    system: {},
+    cpu: {},
+    memory: {},
+    pm2: [],
+    redis: { connected: false },
+    disk: [],
+  };
+
+  // 系统信息
+  status.system = {
+    platform: `${os.type()} ${os.release()}`,
+    hostname: os.hostname(),
+    uptime: os.uptime(),
+  };
+
+  // CPU（使用负载均值作为近似）
+  const cpus = os.cpus() || [];
+  const la = os.loadavg();
+  status.cpu = {
+    cores: cpus.length,
+    loadAverage: `${(la[0] || 0).toFixed(2)} / ${(la[1] || 0).toFixed(2)} / ${(la[2] || 0).toFixed(2)}`,
+  };
+
+  // 内存
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  const memUsagePercent = totalMem > 0 ? ((usedMem / totalMem) * 100).toFixed(2) : "0";
+  status.memory = {
+    total: totalMem,
+    used: usedMem,
+    free: freeMem,
+    usagePercent: memUsagePercent,
+  };
+
+  // PM2 状态
+  try {
+    const { stdout } = await execPromise("pm2 jlist");
+    const pm2List = JSON.parse(stdout);
+    status.pm2 = pm2List.map((app) => ({
+      name: app.name,
+      status: app.pm2_env?.status,
+      cpu: app.monit?.cpu,
+      memory: app.monit?.memory,
+      restart: app.pm2_env?.restart_time,
+      uptime: app.pm2_env?.pm_uptime,
+    }));
+  } catch (e) {
+    status.pm2 = [];
+  }
+
+  // Redis 状态
+  try {
+    const info = await redisClient.info();
+    const lines = info.split("\n");
+    const map = {};
+    for (const line of lines) {
+      const idx = line.indexOf(":");
+      if (idx > 0) {
+        const k = line.slice(0, idx).trim();
+        const v = line.slice(idx + 1).trim();
+        map[k] = v;
+      }
+    }
+    status.redis = {
+      connected: true,
+      memory: map["used_memory_human"] || map["used_memory"] || "-",
+      maxMemory: map["maxmemory_human"] || map["maxmemory"] || "未设置",
+      memoryUsagePercent: map["used_memory"] && map["maxmemory"] && parseInt(map["maxmemory"]) > 0
+        ? ((parseInt(map["used_memory"]) / parseInt(map["maxmemory"])) * 100).toFixed(2) + "%"
+        : "未设置限制",
+      keys: map["db0"] ? (map["db0"].match(/keys=(\d+)/)?.[1] || "0") : "0",
+      uptimeDays: map["uptime_in_days"] || "-",
+      version: map["redis_version"] || "-",
+    };
+  } catch (e) {
+    status.redis = { connected: false };
+  }
+
+  // 磁盘信息
+  try {
+    const { stdout } = await execPromise("df -h");
+    const lines = stdout.split("\n").slice(1);
+    for (const line of lines) {
+      const parts = line.split(/\s+/).filter(Boolean);
+      if (parts.length >= 6 && !parts[0].includes("tmpfs") && !parts[0].includes("devfs")) {
+        status.disk.push({
+          filesystem: parts[0],
+          size: parts[1],
+          used: parts[2],
+          avail: parts[3],
+          usePercent: parts[4],
+          mountedOn: parts[5],
+        });
+      }
+    }
+  } catch (e) {
+    status.disk = [];
+  }
+
+  return status;
 }
 
 async function renderEmailHTML(data) {

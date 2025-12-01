@@ -30,12 +30,21 @@
     </div>
 
     <div class="card">
+      <h2>今日用户留存（近7天DAU曲线）</h2>
+      <table>
+        <thead><tr><th>日期</th><th>DAU</th></tr></thead>
+        <tbody>
+          <% (data.fullStats.dailyActiveUsersData||[]).forEach(function(row){ %>
+            <tr><td><%= row.displayDate %></td><td><%= row.activeUsers %></td></tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
       <h2>核心指标</h2>
       <div class="grid">
         <div class="kpi"><div class="label">日活</div><div class="value"><%= data.fullStats.coreMetrics.dailyActiveUsers.value %></div></div>
-        <div class="kpi"><div class="label">今日评论数</div><div class="value"><%= data.fullStats.coreMetrics.dailyReviews.value %></div></div>
-        <div class="kpi"><div class="label">今日参与评论用户</div><div class="value"><%= data.fullStats.coreMetrics.dailyReviewUsers.value %></div></div>
-        <div class="kpi"><div class="label">今日新增用户</div><div class="value"><%= data.fullStats.coreMetrics.dailyNewUsers.value %></div></div>
       </div>
     </div>
 
@@ -44,54 +53,76 @@
       <div>今日新增：<strong><%= data.todaySecurityCount %></strong></div>
     </div>
 
-    <div class="card">
-      <h2>最近30分钟 版本统计（按时间窗口）</h2>
-      <table>
-        <thead><tr><th>时间窗口(UTC)</th><th>版本</th><th>请求数</th></tr></thead>
-        <tbody>
-          <% if ((data.recentVersion||[]).length === 0) { %>
-            <tr><td colspan="3" class="muted">无数据</td></tr>
-          <% } else { %>
-            <% data.recentVersion.forEach(function(item){ %>
-              <tr>
-                <td><%= new Date(item.timeWindow).toISOString().slice(0,16).replace('T',' ') %></td>
-                <td><%= item.version %></td>
-                <td><%= item.requestCount %></td>
-              </tr>
-            <% }) %>
-          <% } %>
-        </tbody>
-      </table>
-    </div>
+    
+
 
     <div class="card">
-      <h2>最近30分钟 接口统计（按时间窗口）</h2>
-      <table>
-        <thead><tr><th>时间窗口(UTC)</th><th>接口</th><th>请求数</th></tr></thead>
+      <h2>服务器状态</h2>
+      <div class="muted">采集时间（北京时间）： <%= new Date(data.deviceStatus.timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) %></div>
+      <table style="margin-top:10px;">
+        <thead><tr><th>类别</th><th>内容</th></tr></thead>
         <tbody>
-          <% if ((data.recentUrl||[]).length === 0) { %>
-            <tr><td colspan="3" class="muted">无数据</td></tr>
-          <% } else { %>
-            <% data.recentUrl.forEach(function(item){ %>
-              <tr>
-                <td><%= new Date(item.timeWindow).toISOString().slice(0,16).replace('T',' ') %></td>
-                <td><%= item.urlPath %></td>
-                <td><%= item.requestCount %></td>
-              </tr>
-            <% }) %>
-          <% } %>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <h2>今日用户留存（近7天DAU曲线）</h2>
-      <table>
-        <thead><tr><th>日期</th><th>DAU</th></tr></thead>
-        <tbody>
-          <% (data.fullStats.dailyActiveUsersData||[]).forEach(function(row){ %>
-            <tr><td><%= row.displayDate %></td><td><%= row.activeUsers %></td></tr>
-          <% }) %>
+          <tr>
+            <td>系统</td>
+            <td>
+              平台：<%= data.deviceStatus.system.platform %><br/>
+              主机名：<%= data.deviceStatus.system.hostname %><br/>
+              运行秒数：<%= data.deviceStatus.system.uptime %>
+            </td>
+          </tr>
+          <tr>
+            <td>CPU</td>
+            <td>
+              核心数：<%= data.deviceStatus.cpu.cores %><br/>
+              负载(1/5/15m)：<%= data.deviceStatus.cpu.loadAverage %>
+            </td>
+          </tr>
+          <tr>
+            <td>内存</td>
+            <td>
+              总：<%= data.deviceStatus.memory.total %>，已用：<%= data.deviceStatus.memory.used %>，可用：<%= data.deviceStatus.memory.free %>，使用率：<%= data.deviceStatus.memory.usagePercent %>%
+            </td>
+          </tr>
+          <tr>
+            <td>PM2</td>
+            <td>
+              进程数：<%= (data.deviceStatus.pm2||[]).length %>
+              <% if ((data.deviceStatus.pm2||[]).length > 0) { %>
+                <div class="muted" style="margin-top:6px;">（名称/状态/CPU/内存）</div>
+                <ul>
+                  <% data.deviceStatus.pm2.slice(0,10).forEach(function(p){ %>
+                    <li><%= p.name %> / <%= p.status %> / <%= p.cpu %>% / <%= p.memory %></li>
+                  <% }) %>
+                </ul>
+              <% } %>
+            </td>
+          </tr>
+          <tr>
+            <td>Redis</td>
+            <td>
+              连接：<%= data.deviceStatus.redis.connected ? '已连接' : '未连接' %>
+              <% if (data.deviceStatus.redis.connected) { %>
+                ，内存：<%= data.deviceStatus.redis.memory %> / 限制：<%= data.deviceStatus.redis.maxMemory %>
+                ，使用率：<%= data.deviceStatus.redis.memoryUsagePercent %>
+                ，Keys：<%= data.deviceStatus.redis.keys %>
+                ，版本：<%= data.deviceStatus.redis.version %>
+              <% } %>
+            </td>
+          </tr>
+          <tr>
+            <td>磁盘</td>
+            <td>
+              <% if ((data.deviceStatus.disk||[]).length === 0) { %>
+                无
+              <% } else { %>
+                <ul>
+                  <% data.deviceStatus.disk.slice(0,5).forEach(function(d){ %>
+                    <li><%= d.filesystem %> <%= d.used %>/<%= d.size %> (<%= d.usePercent %>) @ <%= d.mountedOn %></li>
+                  <% }) %>
+                </ul>
+              <% } %>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>

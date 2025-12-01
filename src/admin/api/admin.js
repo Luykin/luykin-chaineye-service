@@ -150,14 +150,33 @@ router.post("/login", express.json(), async (req, res) => {
     if (!email || !password) return res.status(400).json({ success: false, error: "缺少参数" });
 
     const admin = await XhuntAdminManager.findOne({ where: { email } });
-    if (!admin || !admin.isActive || !admin.canLogin) {
+    if (!admin) {
       return res.status(401).json({ success: false, error: "邮箱或密码错误" });
+    }
+    if (!admin.isActive || !admin.canLogin) {
+      return res.status(423).json({ success: false, error: "账号已被锁定，请联系管理员" });
     }
 
     const ok = await bcrypt.compare(password, admin.passwordHash);
-    if (!ok) return res.status(401).json({ success: false, error: "邮箱或密码错误" });
+    if (!ok) {
+      try {
+        const key = `admin:loginfail:${email}`;
+        const count = await req.redisClient.incr(key);
+        if (count === 1) {
+          await req.redisClient.expire(key, 12 * 60 * 60);
+        }
+        if (count >= 6) {
+          await admin.update({ canLogin: false });
+          await req.redisClient.del(key);
+          try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "account-lock", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: `failed attempts: ${count}` }); } catch (e) {}
+          return res.status(423).json({ success: false, error: "账号已被锁定，请联系管理员" });
+        }
+      } catch (e) {}
+      return res.status(401).json({ success: false, error: "邮箱或密码错误" });
+    }
 
     await admin.update({ lastLoginAt: new Date() });
+    try { const key = `admin:loginfail:${email}`; await req.redisClient.del(key); } catch (e) {}
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
 
