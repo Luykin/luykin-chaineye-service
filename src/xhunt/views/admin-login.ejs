@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>管理后台登录</title>
-  <script src="/static/js/index.umd.min.js"></script>
+  <script src="/static/js/index.umd.min.js?v=<%= typeof v !== 'undefined' ? v : Date.now() %>"></script>
   <style>
     body { font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial; background:#f5f7fb; margin:0; }
     .wrap { max-width: 320px; margin: 12vh auto; background:#fff; border-radius:12px; box-shadow:0 6px 24px rgba(0,0,0,.08); padding:20px; }
@@ -117,14 +117,12 @@
           const verify = await verifyRes.json().catch(()=>({success:false,error:'非JSON响应'}));
           console.log('[admin-login] verify json:', verify);
           if (!verify.success) throw new Error(verify.error || '二次验证失败');
-          setError('✅ 二次验证成功，已建立后台会话。请在新标签访问 /api/xhunt/stats 或点击下方链接。');
-          const a=document.createElement('a'); a.href = verify.redirect || '/api/xhunt/stats'; a.textContent='进入后台'; a.style.display='block'; a.style.marginTop='8px';
-          err.appendChild(a);
+          console.log('[admin-login] 2FA success, redirecting to:', verify.redirect || '/api/xhunt/stats');
+          window.location.assign(verify.redirect || '/api/xhunt/stats');
           return;
         }
-        setError('✅ 登录成功（无二次验证）。请在新标签访问 /api/xhunt/stats 或点击下方链接。');
-        const a=document.createElement('a'); a.href = data.redirect || '/api/xhunt/stats'; a.textContent='进入后台'; a.style.display='block'; a.style.marginTop='8px';
-        err.appendChild(a);
+        console.log('[admin-login] login success, redirecting to:', data.redirect || '/api/xhunt/stats');
+        window.location.assign(data.redirect || '/api/xhunt/stats');
       }catch(ex){ setError(ex.message||'登录失败'); }
       finally{ btn.disabled = false; }
     });

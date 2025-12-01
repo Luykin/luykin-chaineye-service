@@ -24,13 +24,16 @@ const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 // 登录页面（EJS）
 router.get("/login", async (req, res) => {
   try {
-    res.set('Cache-Control','no-store');
+    res.set('Cache-Control','no-store, no-cache, must-revalidate, max-age=0');
+    res.set('Pragma','no-cache');
+    res.set('Expires','0');
+    res.set('Surrogate-Control','no-store');
     const app = req.app;
     app.set("view engine", "ejs");
     app.set("views", path.join(__dirname, "../../xhunt/views"));
     app.render(
       "admin-login",
-      { error: null },
+      { error: null, v: Date.now() },
       (err, html) => {
         if (err) return res.status(500).send("Render error");
         res.send(html);
@@ -260,7 +263,7 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
       `您的验证码是 ${code}，10 分钟内有效。`
     );
 
-    console.log(`[admin/password/send-code] ✅ 验证码邮件发送成功: ${email}`);
+    
 
     try { 
       await XhuntAdminAuditLog.create({ 
@@ -309,14 +312,7 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
 
     // 如果是认证错误，提供更详细的错误信息
     if (isAuthError) {
-      console.error(`[admin/password/send-code] ⚠️ Outlook 认证失败`);
-      console.error(`[admin/password/send-code] 可能的原因和解决方案：`);
-      console.error(`[admin/password/send-code] 1. 确认已使用应用密码（不是普通密码）`);
-      console.error(`[admin/password/send-code] 2. 检查应用密码是否正确（去除所有空格）`);
-      console.error(`[admin/password/send-code] 3. 确认账户已启用两步验证（应用密码需要）`);
-      console.error(`[admin/password/send-code] 4. 如果使用 Office 365 企业账户，可能需要管理员启用基本认证`);
-      console.error(`[admin/password/send-code] 5. 检查是否启用了"安全默认值"，可能需要禁用或使用 OAuth2`);
-      console.error(`[admin/password/send-code] 6. 尝试重新生成应用密码：https://account.microsoft.com/security/app-passwords`);
+      
       return res.status(500).json({ 
         success: false, 
         error: "邮件发送失败：Office 365 基本认证已被禁用",
@@ -390,7 +386,6 @@ router.post("/login", express.json(), async (req, res) => {
 
     // 判断是否存在 WebAuthn 凭证
     const credCount = await XhuntAdminWebAuthnCredential.count({ where: { adminId: admin.id } });
-    console.log(`[admin/login] email=${email} id=${admin.id} credCount=${credCount}`);
 
     try { const key = `admin:loginfail:${email}`; await req.redisClient.del(key); } catch (e) {}
 
