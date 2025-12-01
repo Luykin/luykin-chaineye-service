@@ -2,13 +2,13 @@
   <span>
     🔐 已认证访问 - <%= typeof user !== 'undefined' && user ? user.name : '用户' %>
   </span>
-  <a href="#" class="pwd-btn" style="margin-right:12px;">修改管理员密码</a>
+  <a href="#" class="logout-btn pwd-btn" style="margin-right:12px;">修改管理员密码</a>
   <a href="#" class="logout-btn">退出登录</a>
 </div>
 <script>
   (function () {
     try {
-      var logoutBtn = document.querySelector('.logout-btn');
+      var logoutBtn = document.querySelector('.logout-btn:not(.pwd-btn)');
       if (logoutBtn) logoutBtn.addEventListener('click', function (e) {
         e.preventDefault();
         fetch('/admin/logout', { method: 'POST', credentials: 'include' })

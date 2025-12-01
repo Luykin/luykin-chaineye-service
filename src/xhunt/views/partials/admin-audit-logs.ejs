@@ -72,9 +72,10 @@
         });
         document.getElementById('audit-page').textContent = String(page);
       })
-      .catch(function(){
+      .catch(function(err){
+        console.error('[admin-audit-logs] 加载失败:', err);
         var tb = document.getElementById('audit-tbody');
-        tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#f00;">加载失败</td></tr>';
+        tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#f00;">加载失败: ' + (err.message || '未知错误') + '</td></tr>';
       });
   }
   document.getElementById('audit-refresh').addEventListener('click', function(){ page = 1; load(); });

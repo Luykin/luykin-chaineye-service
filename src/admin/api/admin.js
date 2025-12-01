@@ -52,6 +52,8 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
       auth: { user, pass },
     });
 
+    console.log(`[admin/password/send-code] 准备发送验证码到邮箱: ${email}`);
+    
     await transporter.sendMail({
       from,
       to: email,
@@ -60,9 +62,18 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
       html: `<p>您的验证码是 <b>${code}</b>，10 分钟内有效。</p>`
     });
 
+    console.log(`[admin/password/send-code] ✅ 验证码邮件发送成功: ${email}`);
+
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email, action: "password-send-code", route: "/admin/password/send-code", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     res.json({ success: true });
   } catch (e) {
+    console.error(`[admin/password/send-code] ❌ 发送验证码失败:`, {
+      email: req.adminUser?.email,
+      error: e.message,
+      stack: e.stack,
+      nodemailerError: e.responseCode ? `SMTP错误码: ${e.responseCode}, 响应: ${e.response}` : undefined,
+      command: e.command
+    });
     try { await XhuntAdminAuditLog.create({ adminId: req.adminUser?.id, email: req.adminUser?.email, action: "password-send-code", route: "/admin/password/send-code", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
     res.status(500).json({ success: false, error: "发送失败" });
   }
