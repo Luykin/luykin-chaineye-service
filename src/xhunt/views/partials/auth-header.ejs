@@ -3,16 +3,16 @@
     🔐 已认证访问 - <%= typeof user !== 'undefined' && user ? user.name : '用户' %>
   </span>
   <div style="display:flex;gap:12px;align-items:center;">
-    <a href="#" class="logout-btn pwd-btn">修改管理员密码</a>
-    <a href="#" class="logout-btn webauthn-btn">生物识别登录</a>
-    <a href="#" class="logout-btn">退出登录</a>
+    <a href="#" class="btn-change-pwd">修改管理员密码</a>
+    <a href="#" class="btn-webauthn">生物识别登录</a>
+    <a href="#" class="btn-logout">退出登录</a>
   </div>
 </div>
 <script src="/static/js/index.umd.min.js"></script>
 <script>
   (function () {
     try {
-      var logoutBtn = document.querySelector('.logout-btn:not(.pwd-btn)');
+      var logoutBtn = document.querySelector('.btn-logout');
       if (logoutBtn) logoutBtn.addEventListener('click', function (e) {
         e.preventDefault();
         fetch('/admin/logout', { method: 'POST', credentials: 'include' })
@@ -21,7 +21,7 @@
       });
 
       // 创建简单的密码修改弹层
-      var pwdBtn = document.querySelector('.pwd-btn');
+      var pwdBtn = document.querySelector('.btn-change-pwd');
       if (pwdBtn) {
         var modal = document.createElement('div');
         modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999;';
@@ -142,7 +142,7 @@
       }
 
       // ========== WebAuthn 管理弹层 ==========
-      var waBtn = document.querySelector('.webauthn-btn');
+      var waBtn = document.querySelector('.btn-webauthn');
       if (waBtn) {
         var waModal = document.createElement('div');
         waModal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999;';
