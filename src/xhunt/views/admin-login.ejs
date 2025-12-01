@@ -70,9 +70,23 @@
           }
           // 获取认证参数并调用 WebAuthn
           const optRes = await fetch('/admin/webauthn/authentication/options?tempToken=' + encodeURIComponent(data.tempToken), { credentials:'include' });
+          if (!optRes.ok) {
+            const txt = await optRes.text().catch(()=> '');
+            throw new Error('获取认证参数失败：' + (txt || ('HTTP ' + optRes.status)));
+          }
+          const ctype = optRes.headers.get('content-type') || '';
+          if (!ctype.includes('application/json')) {
+            const txt = await optRes.text().catch(()=> '');
+            throw new Error('认证参数响应异常（可能被重定向到登录页）。请刷新重试：' + (txt ? txt.slice(0,120) : '')); 
+          }
           const optData = await optRes.json();
           if (!optData.success) throw new Error(optData.error || '获取认证参数失败');
-          const assertion = await window.SimpleWebAuthnBrowser.startAuthentication(optData.options);
+          let assertion;
+          try {
+            assertion = await window.SimpleWebAuthnBrowser.startAuthentication(optData.options);
+          } catch (we) {
+            throw new Error(we && we.message ? ('认证被取消或失败：' + we.message) : '认证被取消或失败');
+          }
           const verifyRes = await fetch('/admin/webauthn/authentication/verify', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
