@@ -2,7 +2,7 @@
     <h3>🚀 快捷入口</h3>
     <div class="links-grid">
         <div class="link-item">
-            <a href="/supabase/" target="_blank">
+            <a href="#" id="open-supabase" target="_blank">
                 <span class="link-icon">🗄️</span>
                 <div class="link-text">
                     <div class="link-title">Supabase</div>
@@ -10,6 +10,21 @@
                 </div>
             </a>
         </div>
+        <script>
+        (function(){
+          const a = document.getElementById('open-supabase');
+          if(!a) return;
+          a.addEventListener('click', async function(ev){
+            ev.preventDefault();
+            try{
+              const r = await fetch('/admin/supabase/link-token', { method:'POST', headers:{ 'Accept':'application/json' } });
+              const j = await r.json();
+              if(!j.success || !j.url){ throw new Error(j.error || '生成票据失败'); }
+              window.open(j.url, '_blank', 'noopener');
+            }catch(ex){ alert('打开失败：' + (ex.message || ex)); }
+          });
+        })();
+        </script>
 
         <!-- <div class="link-item">
             <a href="https://us5.datadoghq.com/apm/home" target="_blank">
