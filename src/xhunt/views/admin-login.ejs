@@ -52,11 +52,13 @@
       if(!e||!p){ setError('请输入邮箱和密码'); return; }
       btn.disabled = true;
       try{
+        console.log('[admin-login] start login click');
         const res = await fetch('/admin/login',{
           method:'POST',
           headers:{ 'Content-Type':'application/json', 'Accept':'application/json', 'X-Requested-With':'XMLHttpRequest' },
           body: JSON.stringify({ email:e, password:p })
         });
+        console.log('[admin-login] /admin/login status:', res.status, 'ctype:', res.headers.get('content-type'));
         if (!res.ok) {
           const txt = await res.text().catch(()=> '');
           throw new Error('登录失败：' + (txt || ('HTTP ' + res.status)));
@@ -82,7 +84,9 @@
           }
           // 获取认证参数并调用 WebAuthn
           const optUrl = '/admin/webauthn/authentication/options?tempToken=' + encodeURIComponent(data.tempToken) + '&_ts=' + Date.now();
+          console.log('[admin-login] fetching options:', optUrl);
           const optRes = await fetch(optUrl, { credentials:'include', headers: { 'Accept':'application/json', 'X-Requested-With':'XMLHttpRequest' } });
+          console.log('[admin-login] options status:', optRes.status, 'ctype:', optRes.headers.get('content-type'));
           if (!optRes.ok) {
             const txt = await optRes.text().catch(()=> '');
             throw new Error('获取认证参数失败：' + (txt || ('HTTP ' + optRes.status)));
@@ -93,10 +97,13 @@
             throw new Error('认证参数响应异常（可能被重定向到登录页）。请刷新重试：' + (txt ? txt.slice(0,120) : '')); 
           }
           const optData = await optRes.json();
+          console.log('[admin-login] options json:', optData);
           if (!optData.success) throw new Error(optData.error || '获取认证参数失败');
           let assertion;
           try {
+            console.log('[admin-login] startAuthentication...');
             assertion = await window.SimpleWebAuthnBrowser.startAuthentication(optData.options);
+            console.log('[admin-login] assertion obtained');
           } catch (we) {
             throw new Error(we && we.message ? ('认证被取消或失败：' + we.message) : '认证被取消或失败');
           }
@@ -106,12 +113,18 @@
             credentials:'include',
             body: JSON.stringify({ tempToken: data.tempToken, assertion })
           });
-          const verify = await verifyRes.json();
+          console.log('[admin-login] verify status:', verifyRes.status, 'ctype:', verifyRes.headers.get('content-type'));
+          const verify = await verifyRes.json().catch(()=>({success:false,error:'非JSON响应'}));
+          console.log('[admin-login] verify json:', verify);
           if (!verify.success) throw new Error(verify.error || '二次验证失败');
-          location.href = verify.redirect || '/api/xhunt/stats';
+          setError('✅ 二次验证成功，已建立后台会话。请在新标签访问 /api/xhunt/stats 或点击下方链接。');
+          const a=document.createElement('a'); a.href = verify.redirect || '/api/xhunt/stats'; a.textContent='进入后台'; a.style.display='block'; a.style.marginTop='8px';
+          err.appendChild(a);
           return;
         }
-        location.href = data.redirect || '/api/xhunt/stats';
+        setError('✅ 登录成功（无二次验证）。请在新标签访问 /api/xhunt/stats 或点击下方链接。');
+        const a=document.createElement('a'); a.href = data.redirect || '/api/xhunt/stats'; a.textContent='进入后台'; a.style.display='block'; a.style.marginTop='8px';
+        err.appendChild(a);
       }catch(ex){ setError(ex.message||'登录失败'); }
       finally{ btn.disabled = false; }
     });
