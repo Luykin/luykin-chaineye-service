@@ -45,37 +45,29 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
     const from = process.env.OUTLOOK_FROM || `XHunt Server <${user}>`;
     if (!user || !pass) return res.status(500).json({ success: false, error: "未配置邮箱服务" });
 
-    // 注意：Microsoft Outlook 已禁用基本认证，需要使用应用密码（App Password）
-    // 生成应用密码：https://account.microsoft.com/security -> 高级安全选项 -> 应用密码
-    // 或者使用 OAuth2（需要额外配置）
-    
-    // 如果使用应用密码仍然失败，可能的原因：
-    // 1. 应用密码包含空格或特殊字符，需要去除空格
-    // 2. Office 365 管理员可能完全禁用了基本认证（需要联系管理员）
-    // 3. 账户可能启用了"安全默认值"，需要禁用或使用 OAuth2
-    
     const cleanPass = pass ? pass.replace(/\s+/g, '') : pass; // 移除所有空格
     
-    const transporter = nodemailer.createTransport({
-      host: "smtp.office365.com",
+    // 参考 Stack Overflow 解决方案：https://stackoverflow.com/a
+    // 使用 secureConnection: true 和简化的 TLS 配置
+    const transportOptions = {
+      host: 'smtp.office365.com',
       port: 587,
-      secure: false, // true for 465, false for other ports (587 uses STARTTLS)
       auth: { 
         user, 
         pass: cleanPass // 使用清理后的密码（移除空格）
       },
-      tls: {
-        minVersion: 'TLSv1.2',
-        rejectUnauthorized: false, // 重要：改为false提高成功率
-        ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA'
+      secureConnection: true, // 使用安全连接
+      tls: { 
+        ciphers: 'SSLv3' // 参考代码使用 SSLv3（虽然过时，但可能在某些环境下有效）
       },
-      requireTLS: true, // 要求使用 TLS
       connectionTimeout: 15000, // 稍微延长超时时间
       greetingTimeout: 10000,
       socketTimeout: 15000,
       debug: process.env.NODE_ENV === 'development', // 开发环境开启调试
       logger: process.env.NODE_ENV === 'development'
-    });
+    };
+    
+    const transporter = nodemailer.createTransport(transportOptions);
 
     // 添加错误处理函数
     transporter.on('error', (error) => {
@@ -88,7 +80,7 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
 
     console.log(`[admin/password/send-code] 准备发送验证码到邮箱: ${email}`);
     console.log(`[admin/password/send-code] 使用邮箱账户: ${user}`);
-    console.log(`[admin/password/send-code] 应用密码长度: ${pass ? pass.length : 0} 字符`);
+    console.log(`[admin/password/send-code] 应用密码长度: ${pass} 字符`);
     
     // 验证连接（可选，用于调试）
     try {
@@ -154,8 +146,8 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
       console.error(`[admin/password/send-code] 6. 尝试重新生成应用密码：https://account.microsoft.com/security/app-passwords`);
       return res.status(500).json({ 
         success: false, 
-        error: "邮件发送失败：Outlook 认证失败",
-        message: "认证失败。请确认：1) 使用应用密码而非普通密码 2) 密码无空格 3) 已启用两步验证 4) 如为企业账户，联系管理员检查基本认证设置。"
+        error: "邮件发送失败：Office 365 基本认证已被禁用",
+        message: "Office 365 已完全禁用基本认证（SMTP AUTH）。解决方案：1) 联系管理员在 Azure Portal 启用 SMTP AUTH 2) 使用其他邮件服务（如 SendGrid、Gmail）3) 配置 OAuth2 认证。详细步骤请查看服务器日志。"
       });
     }
 

@@ -82,28 +82,28 @@ function buildTransport() {
   }
   // 注意：Microsoft Outlook 已禁用基本认证，需要使用应用密码（App Password）
   // 生成应用密码：https://account.microsoft.com/security -> 高级安全选项 -> 应用密码
+  // 参考 Stack Overflow 解决方案：https://stackoverflow.com/a
   const cleanPass = pass ? pass.replace(/\s+/g, '') : pass; // 移除所有空格
   
-  const transporter = nodemailer.createTransport({
-    host: "smtp.office365.com",
+  const transportOptions = {
+    host: 'smtp.office365.com',
     port: 587,
-    secure: false, // true for 465, false for other ports (587 uses STARTTLS)
     auth: { 
       user, 
       pass: cleanPass // 使用清理后的密码（移除空格）
     },
-    tls: {
-      minVersion: 'TLSv1.2',
-      rejectUnauthorized: false, // 重要：改为false提高成功率
-      ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA'
+    secureConnection: true, // 使用安全连接
+    tls: { 
+      ciphers: 'SSLv3' // 参考代码使用 SSLv3（虽然过时，但可能在某些环境下有效）
     },
-    requireTLS: true, // 要求使用 TLS
     connectionTimeout: 15000, // 稍微延长超时时间
     greetingTimeout: 10000,
     socketTimeout: 15000,
     debug: process.env.NODE_ENV === 'development', // 开发环境开启调试
     logger: process.env.NODE_ENV === 'development'
-  });
+  };
+  
+  const transporter = nodemailer.createTransport(transportOptions);
 
   // 添加错误处理函数
   transporter.on('error', (error) => {
