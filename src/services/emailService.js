@@ -29,22 +29,22 @@ let SMTPClient;
  * @returns {object} SMTP 配置对象
  */
 function getSMTPConfig() {
-  const user = process.env.OUTLOOK_USER;
-  const pass = process.env.OUTLOOK_PASS;
-  const from = process.env.OUTLOOK_FROM || `XHunt Server <${user}>`;
-  
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_PASS;
+  const from = process.env.GMAIL_FROM || `XHunt Server <${user}>`;
+
   if (!user || !pass) {
-    throw new Error("Outlook 配置不完整，请检查 OUTLOOK_USER 和 OUTLOOK_PASS 环境变量");
+    throw new Error("Gmail 配置不完整，请检查 GMAIL_USER 和 GMAIL_PASS 环境变量");
   }
-  
+
   // 清理密码（移除空格）
   const cleanPass = pass.replace(/\s+/g, '');
-  
+
   return {
     user,
     pass: cleanPass,
-    host: 'smtp.office365.com', // 使用 smtp.office365.com（更稳定）
-    port: 587, // Outlook 使用 587 端口（STARTTLS）
+    host: 'smtp.gmail.com',
+    port: 587, // Gmail 使用 587 端口（STARTTLS）
     tls: true, // 使用 STARTTLS，让系统自动选择安全的 TLS 版本和加密套件
     timeout: 30000, // 30秒超时
     from
