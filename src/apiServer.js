@@ -314,6 +314,46 @@ app.use("/api/internal-x9k2m7p4q8", (req, res, next) => {
   next();
 }, internalQueryRoutes);
 
+// 404 Catch-all: 所有未匹配到的路由
+app.use((req, res) => {
+  res.set('Cache-Control','no-store, no-cache, must-revalidate, max-age=0');
+  res.set('Pragma','no-cache');
+  res.set('Expires','0');
+  res.status(404).type('html').send(`<!DOCTYPE html>
+  <html lang="zh-CN">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>404 · XHunt Node</title>
+      <style>
+        body{margin:0;background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial}
+        .wrap{max-width:720px;margin:10vh auto;padding:24px}
+        .card{background:#0b1220;border:1px solid #1f2a44;border-radius:12px;padding:24px;box-shadow:0 6px 24px rgba(0,0,0,.3)}
+        h1{margin:0 0 8px;font-size:22px}
+        .sub{color:#94a3b8;font-size:13px;margin-bottom:16px}
+        .kv{display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:13px}
+        .k{color:#94a3b8}
+        .v{color:#e5e7eb;word-break:break-all}
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <div class="card">
+          <h1>未找到页面</h1>
+          <div class="kv">
+            <div class="k">Method</div><div class="v">${req.method}</div>
+            <div class="k">URL</div><div class="v">${req.originalUrl || req.url}</div>
+            <div class="k">Host</div><div class="v">${req.headers.host || ''}</div>
+            <div class="k">CF-Cache-Status</div><div class="v">${req.headers['cf-cache-status'] || '-'}</div>
+            <div class="k">X-Forwarded-For</div><div class="v">${req.headers['x-forwarded-for'] || '-'}</div>
+            <div class="k">User-Agent</div><div class="v">${req.headers['user-agent'] || ''}</div>
+          </div>
+        </div>
+      </div>
+    </body>
+  </html>`);
+});
+
 // 🆕 专门处理请求体过大的错误
 app.use((error, req, res, next) => {
   if (error.type === "entity.too.large") {
