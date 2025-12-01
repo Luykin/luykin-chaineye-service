@@ -3,11 +3,18 @@
     🔐 已认证访问 - <%= typeof user !== 'undefined' && user ? user.name : '用户' %>
   </span>
   <div style="display:flex;gap:12px;align-items:center;">
-    <a href="#" class="btn-change-pwd">修改管理员密码</a>
-    <a href="#" class="btn-webauthn">生物识别登录</a>
-    <a href="#" class="btn-logout">退出登录</a>
+    <a href="#" class="header-btn btn-change-pwd">修改管理员密码</a>
+    <a href="#" class="header-btn btn-webauthn">生物识别登录</a>
+    <a href="#" class="header-btn btn-logout">退出登录</a>
   </div>
 </div>
+<style>
+  .header-btn {
+    display:inline-block; padding:6px 10px; border-radius:6px; text-decoration:none;
+    color:#2563eb; background:#eef2ff; border:1px solid #dbeafe; font-size:13px;
+  }
+  .header-btn:hover { background:#e0e7ff; }
+</style>
 <script src="/static/js/index.umd.min.js"></script>
 <script>
   (function () {

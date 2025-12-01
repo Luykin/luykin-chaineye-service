@@ -60,7 +60,15 @@
         const data = await res.json();
         if(!data.success){ throw new Error(data.error||'登录失败'); }
         if (data.needsWebAuthn && data.tempToken) {
-          // 二次验证：获取认证参数并调用 WebAuthn
+          // 二次验证：若浏览器不支持 WebAuthn，则给出提示并阻止继续
+          try{
+            var supports = typeof window.SimpleWebAuthnBrowser !== 'undefined' && await window.SimpleWebAuthnBrowser.browserSupportsWebAuthn();
+          }catch(_){ var supports = (typeof window.PublicKeyCredential !== 'undefined'); }
+          if (!supports) {
+            setError('该账号已启用生物识别登录，请更换支持指纹/FaceID 的浏览器或设备完成验证');
+            return;
+          }
+          // 获取认证参数并调用 WebAuthn
           const optRes = await fetch('/admin/webauthn/authentication/options?tempToken=' + encodeURIComponent(data.tempToken), { credentials:'include' });
           const optData = await optRes.json();
           if (!optData.success) throw new Error(optData.error || '获取认证参数失败');

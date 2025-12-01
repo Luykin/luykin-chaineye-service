@@ -45,7 +45,7 @@ router.get("/webauthn/registration/options", adminAuth, async (req, res) => {
   try {
     const admin = req.adminUser;
     const existing = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
-    const excludeCredentials = existing.map(c => ({ id: c.credentialId, type: "public-key" }));
+    const excludeCredentials = existing.map(c => ({ id: base64url.toBuffer(c.credentialId), type: "public-key" }));
     const options = await generateRegistrationOptions({
       rpName: RP_NAME,
       rpID: RP_ID,
@@ -156,8 +156,15 @@ router.post("/webauthn/authentication/verify", express.json(), async (req, res) 
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
       authenticator: (function () {
-        const credIdB64 = base64url.encode(Buffer.from(assertion.id ?? assertion.rawId, 'base64'));
-        const found = credentialLookup.get(credIdB64);
+        // SimpleWebAuthn Browser 返回的 assertion.id 通常为 base64url 字符串，与我们存储的一致
+        let credKey = null;
+        if (typeof assertion?.id === 'string') {
+          credKey = assertion.id;
+        } else if (typeof assertion?.rawId === 'string') {
+          // 兼容某些实现可能提供 rawId(base64url)
+          credKey = assertion.rawId;
+        }
+        const found = credKey ? credentialLookup.get(credKey) : null;
         if (!found) return null;
         return {
           credentialID: base64url.toBuffer(found.credentialId),
