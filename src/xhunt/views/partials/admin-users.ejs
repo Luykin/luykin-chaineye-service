@@ -1,11 +1,15 @@
 <div class="export-card">
-  <div class="export-header">
-    <h3>👤 管理员列表与权限配置</h3>
+  <div class="export-header" style="display:flex; align-items:center; justify-content:space-between;">
+    <h3 style="margin:0;">👤 管理员列表与权限配置</h3>
   </div>
-  <!-- 新增管理员 -->
-  <div class="create-admin" style="margin-top:12px; padding:12px; border:1px solid #e5e7eb; border-radius:8px;">
-    <div style="font-weight:600; margin-bottom:8px;">新增管理员</div>
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:8px;">
+  <!-- 新增管理员（默认折叠） -->
+  <div class="stat-card" style="margin-top:12px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <div style="font-weight:600; font-size:14px;">新增管理员</div>
+      <button id="ca-toggle" class="btn">展开</button>
+    </div>
+    <div id="ca-body" style="display:none;">
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
       <div>
         <label for="ca-email">邮箱</label>
         <input id="ca-email" type="email" placeholder="you@example.com" autocomplete="off" />
@@ -22,17 +26,18 @@
         </select>
       </div>
     </div>
-    <div style="margin-top:10px;">
-      <div style="margin-bottom:6px; color:#6b7280;">权限选择（可多选）</div>
-      <div id="ca-preset" style="margin-bottom:8px;">
+    <div style="margin-top:12px;">
+      <div style="margin-bottom:8px; color:#6b7280; font-size:13px;">权限选择（可多选）</div>
+      <div id="ca-preset" style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
         <button id="ca-preset-all" class="btn">全部权限</button>
-        <button id="ca-preset-basic" class="btn" style="margin-left:6px;">基础权限</button>
-        <button id="ca-preset-clear" class="btn" style="margin-left:6px;">清空</button>
+        <button id="ca-preset-basic" class="btn">基础权限</button>
+        <button id="ca-preset-clear" class="btn">清空</button>
       </div>
-      <div id="ca-perm-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:6px;"></div>
+      <div id="ca-perm-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:8px;"></div>
     </div>
-    <div style="margin-top:10px;">
+    <div style="margin-top:12px; display:flex; gap:8px;">
       <button id="ca-submit" class="btn primary">创建</button>
+    </div>
     </div>
   </div>
   <div class="export-result" style="margin-top:12px;">
@@ -80,6 +85,44 @@
     "admin:manage-permissions"
   ];
 
+  // 权限说明（用于展示友好名称与归属 Tab）
+  const PERM_META = {
+    // Tabs
+    "overview": { type:"Tab", label:"数据概览" },
+    "dau-details": { type:"Tab", label:"日活详情" },
+    "online-users": { type:"Tab", label:"在线用户" },
+    "cohorts": { type:"Tab", label:"用户留存" },
+    "rootdata": { type:"Tab", label:"Rootdata" },
+    "notes": { type:"Tab", label:"备注查看" },
+    "log-search": { type:"Tab", label:"日志搜索" },
+    "device-monitor": { type:"Tab", label:"设备监控" },
+    "version-stats": { type:"Tab", label:"版本统计" },
+    "url-stats": { type:"Tab", label:"接口统计" },
+    "security-violations": { type:"Tab", label:"安全拦截" },
+    "messages": { type:"Tab", label:"发送私信" },
+    "data-export": { type:"Tab", label:"数据导出" },
+    "pro-management": { type:"Tab", label:"Pro 用户管理" },
+    "backup": { type:"Tab", label:"数据库备份" },
+    "server-command": { type:"Tab", label:"服务器命令" },
+    "admin-users": { type:"Tab", label:"管理员列表" },
+    "admin-audit-logs": { type:"Tab", label:"管理员操作记录" },
+    // APIs
+    "notes:read": { type:"API", label:"备注数据读取", tab:"notes" },
+    "rootdata:read": { type:"API", label:"Rootdata 读取", tab:"rootdata" },
+    "log-search:read": { type:"API", label:"日志搜索读取", tab:"log-search" },
+    "error-logs:read": { type:"API", label:"错误日志读取", tab:"log-search" },
+    "device-status:read": { type:"API", label:"设备状态读取", tab:"device-monitor" },
+    "export:users": { type:"API", label:"导出用户数据", tab:"data-export" },
+    "server:execute": { type:"API", label:"执行服务器命令", tab:"server-command" },
+    "backup:operate": { type:"API", label:"备份/恢复操作", tab:"backup" },
+    "messages:send": { type:"API", label:"发送私信操作", tab:"messages" },
+    "pro:manage": { type:"API", label:"Pro 用户管理操作", tab:"pro-management" },
+    "daily-report:send": { type:"API", label:"发送每日报告", tab:"admin-users" },
+    "audit-logs:read": { type:"API", label:"审计日志读取", tab:"admin-audit-logs" },
+    "admin:manage-permissions": { type:"API", label:"管理管理员权限", tab:"admin-users" },
+    "*": { type:"API", label:"全部权限" },
+  };
+
   // 快速预设
   const PRESETS = {
     ALL: ["*"],
@@ -90,18 +133,57 @@
   const caGrid = document.getElementById('ca-perm-grid');
   let caSelected = new Set();
   const caChecks = [];
+  function permLabelText(p){
+    const meta = PERM_META[p];
+    if (!meta) return p;
+    if (meta.type === 'Tab') return `[Tab] ${meta.label} (${p})`;
+    if (meta.type === 'API') return `[API] ${meta.label} (${p})`;
+    return `${meta.label||p} (${p})`;
+  }
+
+  function buildGroups(){
+    const tabs = ALL_PERMISSIONS.filter(p => PERM_META[p]?.type === 'Tab');
+    const groups = [];
+    const used = new Set();
+    tabs.forEach(tabKey => {
+      const tabMeta = PERM_META[tabKey];
+      const items = [tabKey];
+      ALL_PERMISSIONS.forEach(p => {
+        const m = PERM_META[p];
+        if (m && m.type === 'API' && m.tab === tabKey) {
+          items.push(p); used.add(p);
+        }
+      });
+      groups.push({ key: tabKey, label: tabMeta?.label || tabKey, items });
+    });
+    // 其余未归属的 API 放在“全局/其他”
+    const others = ALL_PERMISSIONS.filter(p => !tabs.includes(p) && !used.has(p));
+    if (others.length) groups.push({ key: '__others__', label: '全局/其他', items: others });
+    return groups;
+  }
+
+  function sectionHeader(text){
+    const h = document.createElement('div');
+    h.textContent = text; h.style.fontWeight='600'; h.style.margin='6px 0'; h.style.color='#374151';
+    return h;
+  }
+
   function renderCreatePerms(){
     caGrid.innerHTML = '';
-    ALL_PERMISSIONS.forEach(p=>{
-      const label = document.createElement('label');
-      label.style.display = 'flex'; label.style.alignItems = 'center'; label.style.gap = '6px';
-      const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p;
-      cb.checked = caSelected.has(p);
-      cb.addEventListener('change', ()=>{ if(cb.checked){ caSelected.add(p); } else { caSelected.delete(p); } });
-      label.appendChild(cb);
-      const span = document.createElement('span'); span.textContent = p; label.appendChild(span);
-      caGrid.appendChild(label);
-      caChecks.push(cb);
+    const groups = buildGroups();
+    groups.forEach(g => {
+      caGrid.appendChild(sectionHeader(`[${g.label}]`));
+      g.items.forEach(p => {
+        const label = document.createElement('label');
+        label.style.display = 'flex'; label.style.alignItems = 'center'; label.style.gap = '8px'; label.style.padding = '6px 8px'; label.style.border = '1px solid #e5e7eb'; label.style.borderRadius = '8px';
+        const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p;
+        cb.checked = caSelected.has(p);
+        cb.addEventListener('change', ()=>{ if(cb.checked){ caSelected.add(p); } else { caSelected.delete(p); } });
+        label.appendChild(cb);
+        const span = document.createElement('span'); span.textContent = permLabelText(p); label.appendChild(span);
+        caGrid.appendChild(label);
+        caChecks.push(cb);
+      });
     });
   }
   function caSync(){ caChecks.forEach(cb => { cb.checked = caSelected.has(cb.value); }); }
@@ -214,40 +296,43 @@
     row.className = 'perm-editor-row';
     const td = document.createElement('td');
     td.colSpan = 7;
-    td.style.background = '#0f172a0d';
-    td.style.padding = '12px';
+    td.style.background = '#f9fafb';
+    td.style.padding = '14px';
+    td.style.border = '1px solid #e5e7eb';
+    td.style.borderRadius = '8px';
 
     // 当前权限
     const current = new Set(Array.isArray(item.permissions) ? item.permissions : []);
 
     // 预设按钮
     const presetBar = document.createElement('div');
-    presetBar.style.marginBottom = '8px';
+    presetBar.style.marginBottom = '10px'; presetBar.style.display='flex'; presetBar.style.gap='8px'; presetBar.style.flexWrap='wrap';
     const btnAll = document.createElement('button'); btnAll.className='btn'; btnAll.textContent='全部权限'; btnAll.addEventListener('click',()=>{ selected = new Set(PRESETS.ALL); syncChecks(); });
-    const btnBasic = document.createElement('button'); btnBasic.className='btn'; btnBasic.style.marginLeft='6px'; btnBasic.textContent='基础权限'; btnBasic.addEventListener('click',()=>{ selected = new Set(PRESETS.BASIC); syncChecks(); });
+    const btnBasic = document.createElement('button'); btnBasic.className='btn'; btnBasic.textContent='基础权限'; btnBasic.addEventListener('click',()=>{ selected = new Set(PRESETS.BASIC); syncChecks(); });
     presetBar.appendChild(btnAll); presetBar.appendChild(btnBasic);
 
     // 权限复选区
     let selected = new Set(current);
     const grid = document.createElement('div');
-    grid.style.display = 'grid';
-    grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(220px, 1fr))';
-    grid.style.gap = '6px';
+    grid.style.display = 'grid'; grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))'; grid.style.gap = '8px';
 
     const checks = [];
-    ALL_PERMISSIONS.forEach(p=>{
-      const label = document.createElement('label');
-      label.style.display = 'flex';
-      label.style.alignItems = 'center';
-      label.style.gap = '6px';
-      const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p;
-      cb.checked = selected.has(p);
-      cb.addEventListener('change', ()=>{ if(cb.checked){ selected.add(p); } else { selected.delete(p); }});
-      label.appendChild(cb);
-      const span = document.createElement('span'); span.textContent=p;
-      label.appendChild(span);
-      grid.appendChild(label);
-      checks.push(cb);
+    const groups = buildGroups();
+    groups.forEach(g => {
+      const header = document.createElement('div'); header.textContent = `[${g.label}]`; header.style.fontWeight='600'; header.style.margin='6px 0'; header.style.color='#374151';
+      grid.appendChild(header);
+      g.items.forEach(p => {
+        const label = document.createElement('label');
+        label.style.display = 'flex'; label.style.alignItems = 'center'; label.style.gap = '8px'; label.style.padding='6px 8px'; label.style.border='1px solid #e5e7eb'; label.style.borderRadius='8px';
+        const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p;
+        cb.checked = selected.has(p);
+        cb.addEventListener('change', ()=>{ if(cb.checked){ selected.add(p); } else { selected.delete(p); }});
+        label.appendChild(cb);
+        const span = document.createElement('span'); span.textContent = permLabelText(p);
+        label.appendChild(span);
+        grid.appendChild(label);
+        checks.push(cb);
+      });
     });
 
     function syncChecks(){
@@ -255,10 +340,9 @@
     }
 
     // 保存/取消
-    const actions = document.createElement('div');
-    actions.style.marginTop = '10px';
+    const actions = document.createElement('div'); actions.style.marginTop='12px'; actions.style.display='flex'; actions.style.gap='8px';
     const saveBtn = document.createElement('button'); saveBtn.className='btn primary'; saveBtn.textContent='保存';
-    const cancelBtn = document.createElement('button'); cancelBtn.className='btn'; cancelBtn.style.marginLeft='8px'; cancelBtn.textContent='取消';
+    const cancelBtn = document.createElement('button'); cancelBtn.className='btn'; cancelBtn.textContent='取消';
     cancelBtn.addEventListener('click', ()=> row.remove());
     saveBtn.addEventListener('click', async ()=>{
       try{
