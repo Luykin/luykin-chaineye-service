@@ -74,7 +74,7 @@ async function renderEmailHTML(data) {
 }
 
 async function sendEmail(html, subject, toList) {
-  const emailService = require("../services/emailService");
+  const emailService = require("../../services/emailService");
   
   // 发送给多个收件人
   const sendPromises = toList.map(to => 

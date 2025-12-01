@@ -378,6 +378,7 @@
     let historyIndex = -1;
     let currentWorkingDir = null;
     let isExecuting = false;
+    let serverTabInitialized = false;
 
     const outputEl = document.getElementById('terminal-output');
     const inputEl = document.getElementById('command-input');
@@ -618,20 +619,21 @@
       }
     });
 
-    // 初始化时获取当前工作目录（延迟执行，避免页面加载时立即执行）
-    setTimeout(() => {
-      executeCommand('pwd');
-    }, 500);
+    // 初始化时不执行任何命令，改为在首次切换到 server-command 时再执行
 
     // 聚焦输入框
     inputEl.focus();
 
-    // 监听 tab 切换事件，当切换到 server-command tab 时自动聚焦输入框
+    // 监听 tab 切换事件，当切换到 server-command tab 时自动聚焦输入框并在首次进入时执行 pwd
     document.addEventListener('click', function(e) {
       const tabBtn = e.target.closest('.tab-btn');
       if (tabBtn && tabBtn.getAttribute('data-tab') === 'server-command') {
         setTimeout(() => {
           inputEl.focus();
+          if (!serverTabInitialized) {
+            serverTabInitialized = true;
+            executeCommand('pwd');
+          }
         }, 100);
       }
     });
