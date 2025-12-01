@@ -43,6 +43,9 @@
     const pwd = $('password');
     const btn = $('loginBtn');
     const err = $('err');
+    const qs = new URLSearchParams(window.location.search);
+    const nextRaw = qs.get('next');
+    const nextPath = (typeof nextRaw === 'string' && nextRaw.startsWith('/')) ? nextRaw : '/api/xhunt/stats';
 
     function setError(m){ err.textContent = m||''; }
 
@@ -117,12 +120,12 @@
           const verify = await verifyRes.json().catch(()=>({success:false,error:'非JSON响应'}));
           console.log('[admin-login] verify json:', verify);
           if (!verify.success) throw new Error(verify.error || '二次验证失败');
-          console.log('[admin-login] 2FA success, redirecting to:', verify.redirect || '/api/xhunt/stats');
-          window.location.assign(verify.redirect || '/api/xhunt/stats');
+          console.log('[admin-login] 2FA success, redirecting to:', nextPath || verify.redirect || '/api/xhunt/stats');
+          window.location.assign(nextPath || verify.redirect || '/api/xhunt/stats');
           return;
         }
-        console.log('[admin-login] login success, redirecting to:', data.redirect || '/api/xhunt/stats');
-        window.location.assign(data.redirect || '/api/xhunt/stats');
+        console.log('[admin-login] login success, redirecting to:', nextPath || data.redirect || '/api/xhunt/stats');
+        window.location.assign(nextPath || data.redirect || '/api/xhunt/stats');
       }catch(ex){ setError(ex.message||'登录失败'); }
       finally{ btn.disabled = false; }
     });

@@ -44,6 +44,16 @@ router.get("/login", async (req, res) => {
   }
 });
 
+// 提供给 Nginx auth_request 的轻量会话校验端点：会话有效返回 204
+router.get("/auth-check", adminAuth, async (req, res) => {
+  try {
+    res.set('Cache-Control','no-store');
+    return res.status(204).end();
+  } catch (e) {
+    return res.status(500).json({ success: false });
+  }
+});
+
 // ========== WebAuthn 注册（添加指纹/人脸） ==========
 router.get("/webauthn/registration/options", async (req, res) => {
   try {
