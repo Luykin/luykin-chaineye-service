@@ -24,6 +24,7 @@ const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 // 登录页面（EJS）
 router.get("/login", async (req, res) => {
   try {
+    res.set('Cache-Control','no-store');
     const app = req.app;
     app.set("view engine", "ejs");
     app.set("views", path.join(__dirname, "../../xhunt/views"));
@@ -43,6 +44,7 @@ router.get("/login", async (req, res) => {
 // ========== WebAuthn 注册（添加指纹/人脸） ==========
 router.get("/webauthn/registration/options", adminAuth, async (req, res) => {
   try {
+    res.set('Cache-Control','no-store');
     const admin = req.adminUser;
     const existing = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
     const excludeCredentials = existing.map(c => ({ id: base64url.toBuffer(c.credentialId), type: "public-key" }));
@@ -109,6 +111,7 @@ router.post("/webauthn/registration/verify", adminAuth, express.json(), async (r
 // ========== WebAuthn 认证（登录二次验证） ==========
 router.get("/webauthn/authentication/options", async (req, res) => {
   try {
+    res.set('Cache-Control','no-store');
     const { tempToken } = req.query || {};
     if (!tempToken) return res.status(400).json({ success: false, error: "缺少参数" });
     let decoded;
@@ -382,6 +385,8 @@ router.post("/login", express.json(), async (req, res) => {
       // 需要二次验证：签发一个临时 token（5 分钟有效），不下发会话
       const tempToken = jwt.sign({ aid: admin.id, email: admin.email, step: "pwd-ok" }, TEMP_JWT_SECRET, { expiresIn: 300 });
       try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login-password-ok", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: `credCount=${credCount}` }); } catch (e) {}
+      res.set('Cache-Control','no-store');
+      res.type('application/json');
       return res.json({ success: true, needsWebAuthn: true, tempToken, credCount });
     }
 
@@ -389,6 +394,8 @@ router.post("/login", express.json(), async (req, res) => {
     await admin.update({ lastLoginAt: new Date() });
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: `credCount=${credCount}` }); } catch (e) {}
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
+    res.set('Cache-Control','no-store');
+    res.type('application/json');
     res.json({ success: true, redirect: "/api/xhunt/stats", credCount });
   } catch (e) {
     console.error("[admin login] error:", e);
