@@ -63,6 +63,8 @@
 (async function(){
   const tbody = document.getElementById('dr-tbody');
   const statusEl = document.getElementById('dr-status');
+  const isSuper = (window.user && window.user.role === 'super');
+  const RESTRICTED = new Set(["admin-users","admin-audit-logs","daily-report:send","admin:manage-permissions","audit-logs:read"]);
 
   function setStatus(msg, ok=true){
     statusEl.textContent = msg;
@@ -179,6 +181,7 @@
       chip.style.display='inline-flex'; chip.style.alignItems='center'; chip.style.gap='6px';
       chip.style.padding='6px 10px'; chip.style.border='1px solid #e5e7eb'; chip.style.borderRadius='999px'; chip.style.background='#f9fafb';
       const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p; cb.checked = selectedSet.has(p);
+      if (!isSuper && RESTRICTED.has(p)) { cb.disabled = true; chip.style.opacity = '0.6'; }
       cb.addEventListener('change', ()=>{ if(cb.checked){ selectedSet.add(p); } else { selectedSet.delete(p); } });
       chip.appendChild(cb);
       const span = document.createElement('span'); span.textContent = permLabelText(p);
@@ -199,8 +202,8 @@
   renderCreatePerms();
 
   // 预设按钮绑定
-  document.getElementById('ca-preset-all').addEventListener('click', (e)=>{ e.preventDefault(); caSelected = new Set(PRESETS.ALL); caSync(); });
-  document.getElementById('ca-preset-basic').addEventListener('click', (e)=>{ e.preventDefault(); caSelected = new Set(PRESETS.BASIC); caSync(); });
+  document.getElementById('ca-preset-all').addEventListener('click', (e)=>{ e.preventDefault(); caSelected = new Set(PRESETS.ALL.filter(p => isSuper || !RESTRICTED.has(p))); caSync(); });
+  document.getElementById('ca-preset-basic').addEventListener('click', (e)=>{ e.preventDefault(); caSelected = new Set(PRESETS.BASIC.filter(p => isSuper || !RESTRICTED.has(p))); caSync(); });
   document.getElementById('ca-preset-clear').addEventListener('click', (e)=>{ e.preventDefault(); caSelected = new Set(); caSync(); });
 
   // 创建提交

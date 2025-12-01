@@ -231,6 +231,15 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
       perms = permissions.filter((p) => typeof p === "string").map((p) => p.trim()).filter((p) => p.length > 0);
     }
 
+    // 仅 super 可分配 管理员列表/操作记录 相关权限
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "daily-report:send", "admin:manage-permissions", "audit-logs:read"]);
+    if (req.adminUser.role !== "super") {
+      const containsRestricted = perms.some((p) => RESTRICTED.has(p));
+      if (containsRestricted) {
+        return res.status(403).json({ success: false, error: "仅 super 可配置管理员相关权限" });
+      }
+    }
+
     const exists = await XhuntAdminManager.findOne({ where: { email } });
     if (exists) {
       return res.status(409).json({ success: false, error: "邮箱已存在" });
@@ -287,6 +296,15 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
       .filter((p) => typeof p === "string")
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
+
+    // 仅 super 可分配 管理员列表/操作记录 相关权限
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "daily-report:send", "admin:manage-permissions", "audit-logs:read"]);
+    if (req.adminUser.role !== "super") {
+      const containsRestricted = sanitized.some((p) => RESTRICTED.has(p));
+      if (containsRestricted) {
+        return res.status(403).json({ success: false, error: "仅 super 可配置管理员相关权限" });
+      }
+    }
     const target = await XhuntAdminManager.findByPk(id);
     if (!target) return res.status(404).json({ success: false, error: "未找到" });
 
