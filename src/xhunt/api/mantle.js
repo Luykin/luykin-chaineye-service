@@ -64,13 +64,19 @@ router.post(
         return res.status(404).json({ error: "对应的用户不存在" });
       }
 
-      // const now = new Date(); // 本地时间，但可以转成 UTC 时间戳比较
-      // const cutoffTime = new Date("2025-09-20T00:00:00Z"); // UTC 时间 00:00（北京时间 08:00）
-
       if (!mark || mark !== "MantleRegistration2") {
         return res.status(403).json({
           error:
             "(MantleRegistration1) Registration has closed, the event registration period has ended",
+        });
+      }
+
+      // 检查报名截止时间：2025年11月30日 23:59:59（UTC）
+      const now = new Date();
+      const cutoffTime = new Date("2025-11-30T23:59:59Z"); // UTC 时间 2025-11-30 23:59:59
+      if (now > cutoffTime) {
+        return res.status(403).json({
+          error: "Registration has closed, the event registration period has ended",
         });
       }
 

@@ -126,21 +126,7 @@ async function sendEmailViaSMTP(to, subject, html, text = null) {
           err.message.includes('ECONNRESET') ||
           err.message.includes('ENOTFOUND')
         )) {
-          console.error('[emailService] ==========================================');
-          console.error('[emailService] 连接超时排查步骤：');
-          console.error('[emailService] ');
-          console.error('[emailService] 1. 检查网络连接：');
-          console.error('[emailService]    - 确认服务器可以访问互联网');
-          console.error('[emailService]    - 测试连接：telnet smtp.office365.com 587');
-          console.error('[emailService] ');
-          console.error('[emailService] 2. 检查防火墙设置：');
-          console.error('[emailService]    - 确认端口 587 未被阻止');
-          console.error('[emailService]    - 检查服务器防火墙规则');
-          console.error('[emailService] ');
-          console.error('[emailService] 3. 尝试使用备用 SMTP 服务器：');
-          console.error('[emailService]    - smtp.office365.com:587（当前使用）');
-          console.error('[emailService]    - smtp-mail.outlook.com:587');
-          console.error('[emailService] ==========================================');
+          console.error('[emailService] ⚠️ 连接超时 - 检查网络和防火墙，确认端口 587 可访问');
         }
         
         // 如果是认证错误，提供排查信息
@@ -148,17 +134,15 @@ async function sendEmailViaSMTP(to, subject, html, text = null) {
           err.message.includes('535') || 
           err.message.includes('Authentication') ||
           err.message.includes('authentication') ||
-          err.message.includes('authorization.failed')
+          err.message.includes('authorization.failed') ||
+          err.message.includes('basic authentication is disabled') ||
+          err.message.includes('5.7.139')
         )) {
-          console.error('[emailService] ==========================================');
-          console.error('[emailService] 认证失败排查步骤：');
-          console.error('[emailService] ');
-          console.error('[emailService] Outlook/Office 365:');
-          console.error('[emailService] - 个人账户（@outlook.com, @hotmail.com）可能无法使用 SMTP AUTH');
-          console.error('[emailService] - 确认使用应用密码（不是普通密码）');
-          console.error('[emailService] - 企业账户需要管理员启用 SMTP AUTH');
-          console.error('[emailService] - 获取应用密码：https://account.microsoft.com/security -> 高级安全选项 -> 应用密码');
-          console.error('[emailService] ==========================================');
+          if (err.message.includes('basic authentication is disabled') || err.message.includes('5.7.139')) {
+            console.error('[emailService] ⚠️ SMTP AUTH 已禁用 - 企业账户联系管理员启用，个人账户建议切换 Gmail/QQ 邮箱');
+          } else {
+            console.error('[emailService] ⚠️ 认证失败 - 确认使用应用密码（不是普通密码）');
+          }
         }
         
         reject(err);
