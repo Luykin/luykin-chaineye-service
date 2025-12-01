@@ -2604,10 +2604,10 @@ router.get("/backup-status", adminAuth, async (req, res) => {
 });
 
 /**
- * POST /execute-command
- * 手动触发数据库备份（需要认证，仅 luykin 用户）
+ * POST /trigger-backup
+ * 手动触发数据库备份（需要认证）
  */
-router.post("/execute-command", adminAuth, requirePermission("server:execute"), async (req, res) => {
+router.post("/trigger-backup", adminAuth, requirePermission("backup:operate"), async (req, res) => {
   try {
     console.log(`[执行命令] ✅ 权限验证通过: 用户=${req.user.username}`);
 
