@@ -1,0 +1,90 @@
+<div class="card">
+  <h2>📧 日报邮件配置</h2>
+  <div style="margin-bottom:12px;">
+    <button id="dr-send" style="padding:6px 10px;">手动发送一次</button>
+  </div>
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="border:1px solid #eee;padding:6px 8px;">ID</th>
+        <th style="border:1px solid #eee;padding:6px 8px;">邮箱</th>
+        <th style="border:1px solid #eee;padding:6px 8px;">是否接收日报</th>
+        <th style="border:1px solid #eee;padding:6px 8px;">角色</th>
+        <th style="border:1px solid #eee;padding:6px 8px;">状态</th>
+      </tr>
+    </thead>
+    <tbody id="dr-tbody"></tbody>
+  </table>
+  <div id="dr-status" style="margin-top:10px;color:#666;font-size:12px;"></div>
+</div>
+
+<script>
+(async function(){
+  const tbody = document.getElementById('dr-tbody');
+  const statusEl = document.getElementById('dr-status');
+  const sendBtn = document.getElementById('dr-send');
+
+  function setStatus(msg, ok=true){
+    statusEl.textContent = msg;
+    statusEl.style.color = ok ? '#16a34a' : '#dc2626';
+  }
+
+  async function loadList(){
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">加载中...</td></tr>';
+    try{
+      const res = await fetch('/admin/users');
+      const data = await res.json();
+      if(!data.success){ throw new Error(data.error||'加载失败'); }
+      const list = data.data||[];
+      if(list.length===0){
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;color:#666;">暂无收件人</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '';
+      list.forEach(item=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="border:1px solid #eee;padding:6px 8px;">${item.id}</td>
+          <td style="border:1px solid #eee;padding:6px 8px;">${item.email}</td>
+          <td style="border:1px solid #eee;padding:6px 8px;">
+            <input type="checkbox" ${item.receivesDailyReport?'checked':''} data-id="${item.id}" class="dr-toggle" />
+          </td>
+          <td style="border:1px solid #eee;padding:6px 8px;">${item.role}</td>
+          <td style="border:1px solid #eee;padding:6px 8px;">${item.isActive && item.canLogin ? '可登录' : '禁用'}</td>`;
+        tbody.appendChild(tr);
+      });
+    }catch(e){
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;color:#dc2626;">加载失败</td></tr>';
+    }
+  }
+
+  tbody.addEventListener('change', async (ev)=>{
+    const t = ev.target;
+    if(t && t.classList.contains('dr-toggle')){
+      const id = t.getAttribute('data-id');
+      const enabled = !!t.checked;
+      try{
+        const res = await fetch(`/admin/users/${id}`,{
+          method:'PATCH',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ receivesDailyReport: enabled })
+        });
+        const data = await res.json();
+        if(!data.success){ throw new Error(data.error||'更新失败'); }
+        setStatus('状态已更新');
+      }catch(e){ setStatus(e.message||'更新失败', false); }
+    }
+  });
+
+  sendBtn.onclick = async function(){
+    try{
+      const res = await fetch('/api/xhunt/stats/report/send',{ method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({}) });
+      const data = await res.json();
+      if(!data.success){ throw new Error(data.error||'发送失败'); }
+      setStatus('已触发发送');
+    }catch(e){ setStatus(e.message||'发送失败', false); }
+  };
+
+  loadList();
+})();
+</script>

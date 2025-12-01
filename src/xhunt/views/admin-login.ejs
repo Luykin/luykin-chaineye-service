@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>管理后台登录</title>
+  <style>
+    body { font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial; background:#f5f7fb; margin:0; }
+    .wrap { max-width: 380px; margin: 12vh auto; background:#fff; border-radius:12px; box-shadow:0 6px 24px rgba(0,0,0,.08); padding:24px; }
+    h1 { margin:0 0 16px; font-size:20px; }
+    .desc { color:#666; font-size:12px; margin-bottom:16px; }
+    .field { margin-bottom:12px; }
+    label { display:block; font-size:12px; color:#555; margin-bottom:6px; }
+    input { width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:14px; }
+    button { width:100%; padding:10px 12px; background:#2563eb; color:#fff; border:none; border-radius:8px; font-size:14px; cursor:pointer; }
+    button:disabled { opacity:.6; cursor:not-allowed; }
+    .error { color:#dc2626; font-size:12px; min-height:18px; margin-top:8px; }
+    .footer { margin-top:16px; color:#888; font-size:12px; text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🔐 管理后台登录</h1>
+    <div class="desc">请输入邮箱和密码登录</div>
+    <div class="field">
+      <label for="email">邮箱</label>
+      <input id="email" type="email" placeholder="you@example.com" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label for="password">密码</label>
+      <input id="password" type="password" placeholder="请输入密码" autocomplete="current-password" />
+    </div>
+    <button id="loginBtn">登录</button>
+    <div id="err" class="error"></div>
+    <div class="footer">© XHunt Admin</div>
+  </div>
+
+  <script>
+  (function(){
+    const $ = (id) => document.getElementById(id);
+    const email = $('email');
+    const pwd = $('password');
+    const btn = $('loginBtn');
+    const err = $('err');
+
+    function setError(m){ err.textContent = m||''; }
+
+    btn.addEventListener('click', async function(){
+      setError('');
+      const e=email.value.trim(), p=pwd.value;
+      if(!e||!p){ setError('请输入邮箱和密码'); return; }
+      btn.disabled = true;
+      try{
+        const res = await fetch('/admin/login',{
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ email:e, password:p })
+        });
+        const data = await res.json();
+        if(!data.success){ throw new Error(data.error||'登录失败'); }
+        location.href = data.redirect || '/api/xhunt/stats';
+      }catch(ex){ setError(ex.message||'登录失败'); }
+      finally{ btn.disabled = false; }
+    });
+  })();
+  </script>
+</body>
+</html>

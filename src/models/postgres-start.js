@@ -17,6 +17,8 @@ const VersionRequestStatsModel = require("../xhunt/models/VersionRequestStats");
 const UrlRequestStatsModel = require("../xhunt/models/UrlRequestStats");
 const SecurityViolationLogModel = require("../xhunt/models/SecurityViolationLog");
 const UnregisteredUserRegistrationModel = require("../xhunt/models/UnregisteredUserRegistration");
+const XhuntAdminManagerModel = require("../xhunt/models/XhuntAdminManager");
+const XhuntAdminAuditLogModel = require("../xhunt/models/XhuntAdminAuditLog");
 
 const pgInstance = new Sequelize({
   dialect: process.env.PG_DIALECT || "postgres",
@@ -52,6 +54,8 @@ const VersionRequestStats = VersionRequestStatsModel(pgInstance);
 const UrlRequestStats = UrlRequestStatsModel(pgInstance);
 const SecurityViolationLog = SecurityViolationLogModel(pgInstance);
 const UnregisteredUserRegistration = UnregisteredUserRegistrationModel(pgInstance);
+const XhuntAdminManager = XhuntAdminManagerModel(pgInstance);
+const XhuntAdminAuditLog = XhuntAdminAuditLogModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -232,4 +236,6 @@ module.exports = {
   UrlRequestStats,
   SecurityViolationLog,
   UnregisteredUserRegistration,
+  XhuntAdminManager,
+  XhuntAdminAuditLog,
 };

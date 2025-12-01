@@ -1,12 +1,22 @@
 <div class="auth-info">
   <span>
-    🔐 已认证访问 - <%= typeof user !== 'undefined' && user ? user.name : '用户'
-    %>
-    <span style="color: #999; font-size: 0.9em"
-      >[<%= typeof user !== 'undefined' && user ? user.role : 'unknown'
-      %>]</span
-    >
-    - 统计数据面板 [server-byteplus]
+    🔐 已认证访问 - <%= typeof user !== 'undefined' && user ? user.name : '用户' %>
   </span>
-  <a href="/api/xhunt/stats/logout" class="logout-btn">退出登录</a>
+  <a href="#" class="logout-btn">退出登录</a>
 </div>
+<script>
+  (function () {
+    try {
+      var btn = document.querySelector('.logout-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        fetch('/admin/logout', { method: 'POST', credentials: 'include' })
+          .then(function () { window.location.href = '/admin/login'; })
+          .catch(function () { window.location.reload(); });
+      });
+    } catch (e) {
+      // no-op
+    }
+  })();
+  </script>

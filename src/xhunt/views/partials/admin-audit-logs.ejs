@@ -1,0 +1,86 @@
+<div class="card">
+  <div class="card-header">
+    <h3>管理员操作记录</h3>
+    <div class="filters">
+      <input id="audit-email" type="text" placeholder="按邮箱筛选" />
+      <input id="audit-action" type="text" placeholder="按动作筛选 (如 clear-cache)" />
+      <button id="audit-refresh">查询</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div style="overflow:auto; max-height: 520px;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>邮箱</th>
+            <th>动作</th>
+            <th>方法</th>
+            <th>路径</th>
+            <th>成功</th>
+            <th>信息</th>
+            <th>IP</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr><td colspan="8" style="text-align:center;color:#888;">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button id="audit-prev">上一页</button>
+      <span id="audit-page">1</span>
+      <button id="audit-next">下一页</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var page = 1;
+  var limit = 50;
+  function fmt(ts){ try { return new Date(ts).toLocaleString('zh-CN', { hour12: false }); } catch(e){ return ts; } }
+  function load(){
+    var email = document.getElementById('audit-email').value.trim();
+    var action = document.getElementById('audit-action').value.trim();
+    var qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (email) qs.set('email', email);
+    if (action) qs.set('action', action);
+    fetch('/api/xhunt/stats/admin-audit/logs?' + qs.toString(), { credentials: 'include' })
+      .then(function(r){ return r.json(); })
+      .then(function(resp){
+        var tb = document.getElementById('audit-tbody');
+        tb.innerHTML = '';
+        if (!resp.success || !Array.isArray(resp.data) || resp.data.length === 0){
+          tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;">暂无数据</td></tr>';
+          document.getElementById('audit-page').textContent = String(page);
+          return;
+        }
+        resp.data.forEach(function(row){
+          var tr = document.createElement('tr');
+          tr.innerHTML = [
+            '<td>' + fmt(row.createdAt) + '</td>',
+            '<td>' + (row.email || '') + '</td>',
+            '<td>' + (row.action || '') + '</td>',
+            '<td>' + (row.method || '') + '</td>',
+            '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(row.route||'')+'">' + (row.route || '') + '</td>',
+            '<td>' + (row.success ? '✅' : '❌') + '</td>',
+            '<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(row.message||'')+'">' + (row.message || '') + '</td>',
+            '<td>' + (row.ip || '') + '</td>'
+          ].join('');
+          tb.appendChild(tr);
+        });
+        document.getElementById('audit-page').textContent = String(page);
+      })
+      .catch(function(){
+        var tb = document.getElementById('audit-tbody');
+        tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#f00;">加载失败</td></tr>';
+      });
+  }
+  document.getElementById('audit-refresh').addEventListener('click', function(){ page = 1; load(); });
+  document.getElementById('audit-prev').addEventListener('click', function(){ if (page>1){ page--; load(); } });
+  document.getElementById('audit-next').addEventListener('click', function(){ page++; load(); });
+  // 初次加载
+  load();
+})();
+</script>

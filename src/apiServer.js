@@ -31,6 +31,7 @@ const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntCampaignRoutes = require("./xhunt/api/campaign");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
+const adminRoutes = require("./admin/api/admin");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
 const internalQueryRoutes = require("./api/internal-query");
@@ -297,6 +298,9 @@ app.use("/api/xhunt/stats", xHuntStatsRoutes);
 // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
 app.use("/api/rootdata", xHuntRootdataRoutes);
 
+// 管理后台（登录、会话、管理员基础配置）
+app.use("/admin", adminRoutes);
+
 // 内部查询API - 使用随机字符前缀，无需安全中间件
 const INTERNAL_QUERY_EXPIRATION = new Date("2025-12-20T00:00:00Z");
 app.use("/api/internal-x9k2m7p4q8", (req, res, next) => {
@@ -348,6 +352,7 @@ async function startAPIServer() {
   await setupSqlite();
   await setupPostgres();
   await setupPostgresFundraising();
+  // 超级管理员初始化不在业务进程中进行，改为独立脚本执行
   // 不在 API 进程中启动备份服务，避免多实例重复备份
   
   app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));

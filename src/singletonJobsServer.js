@@ -290,6 +290,8 @@ async function cleanupOldStats() {
     await setupPostgres();
     console.log("✅ PostgreSQL 连接成功");
 
+    // 无需初始化独立收件人，直接使用 XhuntAdminManager.receivesDailyReport
+
     // 连接Redis
     await redisClient.connect();
     console.log("✅ Redis 连接成功");
@@ -309,6 +311,17 @@ async function cleanupOldStats() {
 
     // 清理旧数据：每天凌晨2点执行（UTC时间，对应北京时间10点）
     schedule.scheduleJob("0 2 * * *", cleanupOldStats);
+
+    // 日报邮件：每天 UTC 02:00（北京时间10:00）
+    schedule.scheduleJob("0 2 * * *", async () => {
+      try {
+        console.log("[DailyReport] ⏰ 触发每日邮件任务（UTC 02:00）");
+        const { sendDailyReport } = require("./xhunt/services/dailyReportService");
+        await sendDailyReport(redisClient);
+      } catch (e) {
+        console.error("[DailyReport] 发送失败:", e);
+      }
+    });
 
     console.log("✅ 统计数据定时任务已启动（每5分钟执行一次，处理版本统计和URL统计）");
     console.log("✅ 统计数据清理任务已启动（每天执行一次，清理版本统计和URL统计）");
