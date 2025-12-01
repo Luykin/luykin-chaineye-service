@@ -57,7 +57,19 @@
           headers:{ 'Content-Type':'application/json' },
           body: JSON.stringify({ email:e, password:p })
         });
+        if (!res.ok) {
+          const txt = await res.text().catch(()=> '');
+          throw new Error('登录失败：' + (txt || ('HTTP ' + res.status)));
+        }
+        const ctypeLogin = res.headers.get('content-type') || '';
+        if (!ctypeLogin.includes('application/json')) {
+          const txt = await res.text().catch(()=> '');
+          setError('登录响应异常（可能被重定向到登录页）。请刷新重试');
+          console.error('[admin-login] unexpected content-type for /admin/login:', ctypeLogin, txt && txt.slice(0,200));
+          return;
+        }
         const data = await res.json();
+        console.log('[admin-login] response:', data);
         if(!data.success){ throw new Error(data.error||'登录失败'); }
         if (data.needsWebAuthn && data.tempToken) {
           // 二次验证：若浏览器不支持 WebAuthn，则给出提示并阻止继续
