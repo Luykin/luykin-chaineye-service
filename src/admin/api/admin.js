@@ -12,6 +12,7 @@ const {
   verifyAuthenticationResponse,
 } = require("@simplewebauthn/server");
 const { adminAuth, requireRole, requirePermission, setSessionCookie } = require("../middleware/adminAuth");
+const { randomUUID } = require("crypto");
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ const RP_NAME = process.env.WEBAUTHN_RP_NAME || "XHunt Admin";
 const RP_ID = process.env.WEBAUTHN_RP_ID || (process.env.ADMIN_COOKIE_DOMAIN || "localhost");
 const ORIGIN = process.env.WEBAUTHN_ORIGIN || `https://${RP_ID}`;
 const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
+const LINK_SECRET = process.env.SUPABASE_LINK_SECRET || "change-me-link";
 
 // 登录页面（EJS）
 router.get("/login", async (req, res) => {
@@ -549,6 +551,41 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
     res.json({ success: true, data: { id: target.id, permissions: target.permissions } });
   } catch (e) {
     res.status(500).json({ success: false, error: "更新失败" });
+  }
+});
+
+// 生成一次性 Supabase 访问票据（后台已登录）
+router.post("/supabase/link-token", adminAuth, async (req, res) => {
+  try {
+    const admin = req.adminUser;
+    const jti = randomUUID();
+    const token = jwt.sign({ aid: admin.id, purpose: "supabase", jti }, LINK_SECRET, { expiresIn: 60 });
+    await req.redisClient.set(`supabase:link:jti:${jti}`, "1", { EX: 120 });
+    const targetIP = process.env.SUPABASE_IP || "150.5.158.179";
+    const url = `http://${targetIP}:8388/?token=${encodeURIComponent(token)}`;
+    return res.json({ success: true, token, url, ttl: 60 });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: "生成票据失败" });
+  }
+});
+
+// 校验一次性票据（用于 Nginx auth_request）
+router.get("/supabase/verify-link", async (req, res) => {
+  try {
+    const { token } = req.query || {};
+    if (!token) return res.status(401).json({ success: false });
+    let decoded;
+    try { decoded = jwt.verify(String(token), LINK_SECRET); } catch (_) { return res.status(401).json({ success: false }); }
+    if (decoded.purpose !== "supabase" || !decoded.jti) return res.status(401).json({ success: false });
+    const key = `supabase:link:jti:${decoded.jti}`;
+    const exists = await req.redisClient.get(key);
+    if (!exists) return res.status(401).json({ success: false });
+    await req.redisClient.del(key);
+    try { await XhuntAdminAuditLog.create({ adminId: decoded.aid || null, email: null, action: "supabase-link", route: "/admin/supabase/verify-link", method: "GET", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    res.set("Cache-Control","no-store");
+    return res.status(204).end();
+  } catch (e) {
+    return res.status(500).json({ success: false });
   }
 });
 
