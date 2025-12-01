@@ -573,7 +573,7 @@ router.post("/supabase/link-token", adminAuth, async (req, res) => {
 router.get("/supabase/verify-link", async (req, res) => {
   try {
     const { token } = req.query || {};
-    console.log("[supabase/verify-link] incoming:", {
+    console.log("[supabase/verify-link] incoming1111:", {
       ip: req.ip,
       ua: req.headers["user-agent"],
       hasToken: !!token,
@@ -582,7 +582,7 @@ router.get("/supabase/verify-link", async (req, res) => {
       xhr: req.headers["x-requested-with"],
     });
     if (!token) {
-      console.log("[supabase/verify-link] missing token");
+      console.log("[supabase/verify-link] missing token1111");
       return res.status(401).json({ success: false });
     }
     let decoded;
