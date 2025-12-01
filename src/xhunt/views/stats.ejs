@@ -46,8 +46,8 @@
           <button class="tab-btn" data-tab="pro-management">👑 Pro用户管理</button>
           <button class="tab-btn" data-tab="backup">💾 数据库备份</button>
           <button class="tab-btn" data-tab="server-command">🖥️ 服务器命令</button>
-          <button class="tab-btn" data-tab="daily-report-email">📧 日报邮件</button>
-          <button class="tab-btn" data-tab="admin-audit-logs">🧾 管理员操作记录</button>
+          <button class="tab-btn" data-tab="admin-users">� 管理员列表</button>
+          <button class="tab-btn" data-tab="admin-audit-logs">🧾 操作记录</button>
         </div>
 
         <!-- Tab 内容 -->
@@ -128,9 +128,9 @@
             <%- include('partials/server-command-stats') %>
           </div>
 
-          <!-- 日报邮件 Tab -->
-          <div class="tab-pane" id="daily-report-email">
-            <%- include('partials/daily-report-email') %>
+          <!-- 管理员列表 Tab -->
+          <div class="tab-pane" id="admin-users">
+            <%- include('partials/admin-users') %>
           </div>
           <!-- 管理员操作记录 Tab -->
           <div class="tab-pane" id="admin-audit-logs">

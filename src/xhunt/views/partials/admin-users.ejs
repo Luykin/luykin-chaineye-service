@@ -1,0 +1,291 @@
+<div class="export-card">
+  <div class="export-header">
+    <h3>👤 管理员列表与权限配置</h3>
+  </div>
+  <!-- 新增管理员 -->
+  <div class="create-admin" style="margin-top:12px; padding:12px; border:1px solid #e5e7eb; border-radius:8px;">
+    <div style="font-weight:600; margin-bottom:8px;">新增管理员</div>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:8px;">
+      <div>
+        <label for="ca-email">邮箱</label>
+        <input id="ca-email" type="email" placeholder="you@example.com" autocomplete="off" />
+      </div>
+      <div>
+        <label for="ca-password">初始密码（≥8位）</label>
+        <input id="ca-password" type="password" placeholder="至少8位" autocomplete="new-password" />
+      </div>
+      <div>
+        <label for="ca-role">角色</label>
+        <select id="ca-role">
+          <option value="admin">admin</option>
+          <option value="super">super</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <div style="margin-bottom:6px; color:#6b7280;">权限选择（可多选）</div>
+      <div id="ca-preset" style="margin-bottom:8px;">
+        <button id="ca-preset-all" class="btn">全部权限</button>
+        <button id="ca-preset-basic" class="btn" style="margin-left:6px;">基础权限</button>
+        <button id="ca-preset-clear" class="btn" style="margin-left:6px;">清空</button>
+      </div>
+      <div id="ca-perm-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:6px;"></div>
+    </div>
+    <div style="margin-top:10px;">
+      <button id="ca-submit" class="btn primary">创建</button>
+    </div>
+  </div>
+  <div class="export-result" style="margin-top:12px;">
+    <table class="simple-table">
+      <thead>
+        <tr>
+          <th style="width:60px;">ID</th>
+          <th>邮箱</th>
+          <th style="width:120px;">角色</th>
+          <th style="width:120px;">状态</th>
+          <th style="width:140px;">接收日报</th>
+          <th>权限</th>
+          <th style="width:160px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="dr-tbody"></tbody>
+    </table>
+  </div>
+  <div id="dr-status" style="margin-top:12px;padding:8px 12px;border-radius:6px;font-size:13px;display:none;"></div>
+</div>
+
+<script>
+(async function(){
+  const tbody = document.getElementById('dr-tbody');
+  const statusEl = document.getElementById('dr-status');
+
+  function setStatus(msg, ok=true){
+    statusEl.textContent = msg;
+    statusEl.style.display = 'block';
+    statusEl.style.background = ok ? '#d1fae5' : '#fee2e2';
+    statusEl.style.color = ok ? '#065f46' : '#991b1b';
+    statusEl.style.border = `1px solid ${ok ? '#a7f3d0' : '#fecaca'}`;
+    if(ok){
+      setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+    }
+  }
+
+  // 完整权限清单（Tab + API）
+  const ALL_PERMISSIONS = [
+    "overview","dau-details","online-users","cohorts","rootdata","notes","log-search","device-monitor",
+    "version-stats","url-stats","security-violations","messages","data-export","pro-management","backup",
+    "server-command","admin-users","admin-audit-logs",
+    "notes:read","rootdata:read","log-search:read","error-logs:read","device-status:read","export:users",
+    "server:execute","backup:operate","messages:send","pro:manage","daily-report:send","audit-logs:read",
+    "admin:manage-permissions"
+  ];
+
+  // 快速预设
+  const PRESETS = {
+    ALL: ["*"],
+    BASIC: ["overview","dau-details","online-users"],
+  };
+
+  // 新增管理员：权限编辑器初始化
+  const caGrid = document.getElementById('ca-perm-grid');
+  let caSelected = new Set();
+  const caChecks = [];
+  function renderCreatePerms(){
+    caGrid.innerHTML = '';
+    ALL_PERMISSIONS.forEach(p=>{
+      const label = document.createElement('label');
+      label.style.display = 'flex'; label.style.alignItems = 'center'; label.style.gap = '6px';
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p;
+      cb.checked = caSelected.has(p);
+      cb.addEventListener('change', ()=>{ if(cb.checked){ caSelected.add(p); } else { caSelected.delete(p); } });
+      label.appendChild(cb);
+      const span = document.createElement('span'); span.textContent = p; label.appendChild(span);
+      caGrid.appendChild(label);
+      caChecks.push(cb);
+    });
+  }
+  function caSync(){ caChecks.forEach(cb => { cb.checked = caSelected.has(cb.value); }); }
+  renderCreatePerms();
+
+  // 预设按钮绑定
+  document.getElementById('ca-preset-all').addEventListener('click', (e)=>{ e.preventDefault(); caSelected = new Set(PRESETS.ALL); caSync(); });
+  document.getElementById('ca-preset-basic').addEventListener('click', (e)=>{ e.preventDefault(); caSelected = new Set(PRESETS.BASIC); caSync(); });
+  document.getElementById('ca-preset-clear').addEventListener('click', (e)=>{ e.preventDefault(); caSelected = new Set(); caSync(); });
+
+  // 创建提交
+  document.getElementById('ca-submit').addEventListener('click', async ()=>{
+    try{
+      const email = (document.getElementById('ca-email').value||'').trim();
+      const password = document.getElementById('ca-password').value||'';
+      const role = document.getElementById('ca-role').value||'admin';
+      if(!email || !password){ setStatus('请填写邮箱与密码', false); return; }
+      setStatus('创建中...');
+      const res = await fetch('/admin/users',{
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password, role, permissions: Array.from(caSelected) })
+      });
+      const data = await res.json();
+      if(!data.success){ throw new Error(data.error||'创建失败'); }
+      setStatus('创建成功');
+      // 清空表单
+      document.getElementById('ca-email').value = '';
+      document.getElementById('ca-password').value = '';
+      document.getElementById('ca-role').value = 'admin';
+      caSelected = new Set(); caSync();
+      // 重新加载列表
+      loadList();
+    }catch(e){ setStatus(e.message||'创建失败', false); }
+  });
+
+  async function loadList(){
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:12px;text-align:center;color:#6b7280;">加载中...</td></tr>';
+    try{
+      const res = await fetch('/admin/users', { credentials: 'include' });
+      const data = await res.json();
+      if(!data.success){ throw new Error(data.error||'加载失败'); }
+      const list = data.data||[];
+      if(list.length===0){
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:12px;text-align:center;color:#6b7280;">暂无管理员</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '';
+      list.forEach(item=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.id}</td>
+          <td>${item.email}</td>
+          <td>${item.role}</td>
+          <td>${item.isActive && item.canLogin ? '✅ 可登录' : '❌ 禁用'}</td>`;
+        tbody.appendChild(tr);
+
+        // 接收日报 toggle
+        const tdReport = document.createElement('td');
+        tdReport.innerHTML = `<input type="checkbox" ${item.receivesDailyReport?'checked':''} data-id="${item.id}" class="dr-toggle" style="cursor:pointer;" />`;
+        tr.appendChild(tdReport);
+
+        // 权限展示
+        const tdPerm = document.createElement('td');
+        const perms = Array.isArray(item.permissions) ? item.permissions : [];
+        tdPerm.textContent = perms.length ? perms.join(', ') : '(空)';
+        tr.appendChild(tdPerm);
+
+        // 操作区
+        const tdActions = document.createElement('td');
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '编辑权限';
+        editBtn.className = 'btn';
+        editBtn.addEventListener('click', ()=> openEditor(item, tr, tdPerm));
+        tdActions.appendChild(editBtn);
+        tr.appendChild(tdActions);
+      });
+    }catch(e){
+      console.error('[admin-users] 加载失败:', e);
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:12px;text-align:center;color:#dc2626;">加载失败: ' + (e.message || '未知错误') + '</td></tr>';
+    }
+  }
+
+  tbody.addEventListener('change', async (ev)=>{
+    const t = ev.target;
+    if(t && t.classList.contains('dr-toggle')){
+      const id = t.getAttribute('data-id');
+      const enabled = !!t.checked;
+      try{
+        const res = await fetch(`/admin/users/${id}` ,{
+          method:'PATCH',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ receivesDailyReport: enabled })
+        });
+        const data = await res.json();
+        if(!data.success){ throw new Error(data.error||'更新失败'); }
+        setStatus('状态已更新');
+      }catch(e){ setStatus(e.message||'更新失败', false); }
+    }
+  });
+
+  // 打开权限编辑器（行下方展开一个编辑区）
+  function openEditor(item, tr, tdPerm){
+    // 若已有编辑器，先移除
+    const next = tr.nextElementSibling;
+    if(next && next.classList.contains('perm-editor-row')){ next.remove(); }
+
+    const row = document.createElement('tr');
+    row.className = 'perm-editor-row';
+    const td = document.createElement('td');
+    td.colSpan = 7;
+    td.style.background = '#0f172a0d';
+    td.style.padding = '12px';
+
+    // 当前权限
+    const current = new Set(Array.isArray(item.permissions) ? item.permissions : []);
+
+    // 预设按钮
+    const presetBar = document.createElement('div');
+    presetBar.style.marginBottom = '8px';
+    const btnAll = document.createElement('button'); btnAll.className='btn'; btnAll.textContent='全部权限'; btnAll.addEventListener('click',()=>{ selected = new Set(PRESETS.ALL); syncChecks(); });
+    const btnBasic = document.createElement('button'); btnBasic.className='btn'; btnBasic.style.marginLeft='6px'; btnBasic.textContent='基础权限'; btnBasic.addEventListener('click',()=>{ selected = new Set(PRESETS.BASIC); syncChecks(); });
+    presetBar.appendChild(btnAll); presetBar.appendChild(btnBasic);
+
+    // 权限复选区
+    let selected = new Set(current);
+    const grid = document.createElement('div');
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(220px, 1fr))';
+    grid.style.gap = '6px';
+
+    const checks = [];
+    ALL_PERMISSIONS.forEach(p=>{
+      const label = document.createElement('label');
+      label.style.display = 'flex';
+      label.style.alignItems = 'center';
+      label.style.gap = '6px';
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p;
+      cb.checked = selected.has(p);
+      cb.addEventListener('change', ()=>{ if(cb.checked){ selected.add(p); } else { selected.delete(p); }});
+      label.appendChild(cb);
+      const span = document.createElement('span'); span.textContent=p;
+      label.appendChild(span);
+      grid.appendChild(label);
+      checks.push(cb);
+    });
+
+    function syncChecks(){
+      checks.forEach(cb=>{ cb.checked = selected.has(cb.value); });
+    }
+
+    // 保存/取消
+    const actions = document.createElement('div');
+    actions.style.marginTop = '10px';
+    const saveBtn = document.createElement('button'); saveBtn.className='btn primary'; saveBtn.textContent='保存';
+    const cancelBtn = document.createElement('button'); cancelBtn.className='btn'; cancelBtn.style.marginLeft='8px'; cancelBtn.textContent='取消';
+    cancelBtn.addEventListener('click', ()=> row.remove());
+    saveBtn.addEventListener('click', async ()=>{
+      try{
+        const body = Array.from(selected);
+        const res = await fetch(`/admin/users/${item.id}/permissions`,{
+          method:'PATCH',
+          headers:{ 'Content-Type':'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ permissions: body })
+        });
+        const data = await res.json();
+        if(!data.success){ throw new Error(data.error||'保存失败'); }
+        tdPerm.textContent = (data.data.permissions||[]).join(', ');
+        setStatus('权限已更新');
+        row.remove();
+      }catch(e){ setStatus(e.message||'保存失败', false); }
+    });
+
+    td.appendChild(presetBar);
+    td.appendChild(grid);
+    td.appendChild(actions);
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    row.appendChild(td);
+    tr.after(row);
+  }
+
+  loadList();
+})();
+</script>

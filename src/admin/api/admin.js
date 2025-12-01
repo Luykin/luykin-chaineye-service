@@ -211,6 +211,49 @@ router.get("/users", adminAuth, async (req, res) => {
   }
 });
 
+// 新增管理员（需要 admin:manage-permissions）
+router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), express.json(), async (req, res) => {
+  try {
+    const { email, password, role = "admin", permissions } = req.body || {};
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ success: false, error: "邮箱无效" });
+    }
+    if (!password || typeof password !== "string" || password.length < 8) {
+      return res.status(400).json({ success: false, error: "密码至少8位" });
+    }
+    if (role !== "admin" && role !== "super") {
+      return res.status(400).json({ success: false, error: "角色无效" });
+    }
+
+    // 权限数组可选
+    let perms = [];
+    if (Array.isArray(permissions)) {
+      perms = permissions.filter((p) => typeof p === "string").map((p) => p.trim()).filter((p) => p.length > 0);
+    }
+
+    const exists = await XhuntAdminManager.findOne({ where: { email } });
+    if (exists) {
+      return res.status(409).json({ success: false, error: "邮箱已存在" });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    const row = await XhuntAdminManager.create({
+      email,
+      passwordHash: hash,
+      role,
+      isActive: true,
+      canLogin: true,
+      receivesDailyReport: true,
+      permissions: perms,
+    });
+
+    try { await XhuntAdminAuditLog.create({ adminId: req.adminUser.id, email: req.adminUser.email, action: "create-admin", route: "/admin/users", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: JSON.stringify({ id: row.id, email }) }); } catch (e) {}
+    return res.json({ success: true, data: { id: row.id, email: row.email, role: row.role, permissions: row.permissions } });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: "创建失败" });
+  }
+});
+
 // 切换是否接收日报：super 可修改任意，admin 仅可修改自己
 router.patch("/users/:id", adminAuth, async (req, res) => {
   try {
