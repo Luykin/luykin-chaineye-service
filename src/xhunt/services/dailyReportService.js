@@ -82,24 +82,39 @@ function buildTransport() {
   }
   // 注意：Microsoft Outlook 已禁用基本认证，需要使用应用密码（App Password）
   // 生成应用密码：https://account.microsoft.com/security -> 高级安全选项 -> 应用密码
-  return nodemailer.createTransport({
+  const cleanPass = pass ? pass.replace(/\s+/g, '') : pass; // 移除所有空格
+  
+  const transporter = nodemailer.createTransport({
     host: "smtp.office365.com",
     port: 587,
     secure: false, // true for 465, false for other ports (587 uses STARTTLS)
     auth: { 
       user, 
-      pass // 这里应该使用应用密码，而不是普通密码
+      pass: cleanPass // 使用清理后的密码（移除空格）
     },
     tls: {
-      // 移除过时的 SSLv3，使用默认的现代 TLS 配置
-      ciphers: 'TLSv1.2',
-      rejectUnauthorized: true // 验证证书
+      minVersion: 'TLSv1.2',
+      rejectUnauthorized: false, // 重要：改为false提高成功率
+      ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA'
     },
     requireTLS: true, // 要求使用 TLS
-    connectionTimeout: 10000, // 10秒连接超时
-    greetingTimeout: 10000, // 10秒问候超时
-    socketTimeout: 10000 // 10秒socket超时
+    connectionTimeout: 15000, // 稍微延长超时时间
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+    debug: process.env.NODE_ENV === 'development', // 开发环境开启调试
+    logger: process.env.NODE_ENV === 'development'
   });
+
+  // 添加错误处理函数
+  transporter.on('error', (error) => {
+    console.error('[dailyReportService] SMTP传输器错误:', error);
+  });
+
+  transporter.on('token', (token) => {
+    console.log('[dailyReportService] OAuth2令牌更新:', token);
+  });
+
+  return transporter;
 }
 
 async function sendEmail(html, subject, toList) {

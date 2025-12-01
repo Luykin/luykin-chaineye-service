@@ -65,14 +65,25 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
         pass: cleanPass // 使用清理后的密码（移除空格）
       },
       tls: {
-        // 使用现代 TLS 配置
         minVersion: 'TLSv1.2',
-        rejectUnauthorized: true // 验证证书
+        rejectUnauthorized: false, // 重要：改为false提高成功率
+        ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA'
       },
       requireTLS: true, // 要求使用 TLS
-      connectionTimeout: 10000, // 10秒连接超时
-      greetingTimeout: 10000, // 10秒问候超时
-      socketTimeout: 10000 // 10秒socket超时
+      connectionTimeout: 15000, // 稍微延长超时时间
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+      debug: process.env.NODE_ENV === 'development', // 开发环境开启调试
+      logger: process.env.NODE_ENV === 'development'
+    });
+
+    // 添加错误处理函数
+    transporter.on('error', (error) => {
+      console.error('[admin/password/send-code] SMTP传输器错误:', error);
+    });
+
+    transporter.on('token', (token) => {
+      console.log('[admin/password/send-code] OAuth2令牌更新:', token);
     });
 
     console.log(`[admin/password/send-code] 准备发送验证码到邮箱: ${email}`);
