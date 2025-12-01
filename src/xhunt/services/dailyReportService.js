@@ -73,60 +73,16 @@ async function renderEmailHTML(data) {
   });
 }
 
-function buildTransport() {
-  const nodemailer = require("nodemailer");
-  const user = process.env.OUTLOOK_USER;
-  const pass = process.env.OUTLOOK_PASS;
-  if (!user || !pass) {
-    throw new Error("OUTLOOK_USER/OUTLOOK_PASS 未配置");
-  }
-  // 注意：Microsoft Outlook 已禁用基本认证，需要使用应用密码（App Password）
-  // 生成应用密码：https://account.microsoft.com/security -> 高级安全选项 -> 应用密码
-  // 参考 Stack Overflow 解决方案：https://stackoverflow.com/a
-  const cleanPass = pass ? pass.replace(/\s+/g, '') : pass; // 移除所有空格
-  
-  const transportOptions = {
-    host: 'smtp.office365.com',
-    port: 587,
-    auth: { 
-      user, 
-      pass: cleanPass // 使用清理后的密码（移除空格）
-    },
-    secureConnection: true, // 使用安全连接
-    tls: { 
-      ciphers: 'SSLv3' // 参考代码使用 SSLv3（虽然过时，但可能在某些环境下有效）
-    },
-    connectionTimeout: 15000, // 稍微延长超时时间
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-    debug: process.env.NODE_ENV === 'development', // 开发环境开启调试
-    logger: process.env.NODE_ENV === 'development'
-  };
-  
-  const transporter = nodemailer.createTransport(transportOptions);
-
-  // 添加错误处理函数
-  transporter.on('error', (error) => {
-    console.error('[dailyReportService] SMTP传输器错误:', error);
-  });
-
-  transporter.on('token', (token) => {
-    console.log('[dailyReportService] OAuth2令牌更新:', token);
-  });
-
-  return transporter;
-}
-
 async function sendEmail(html, subject, toList) {
-  const transporter = buildTransport();
-  const from = process.env.OUTLOOK_FROM || process.env.OUTLOOK_USER;
-  const info = await transporter.sendMail({
-    from,
-    to: toList.join(","),
-    subject,
-    html,
-  });
-  return info;
+  const emailService = require("../services/emailService");
+  
+  // 发送给多个收件人
+  const sendPromises = toList.map(to => 
+    emailService.sendEmail(to, subject, html, html.replace(/<[^>]*>/g, ''))
+  );
+  
+  await Promise.all(sendPromises);
+  return { messageId: 'sent' };
 }
 
 async function sendDailyReport(redisClient, overrideRecipients) {

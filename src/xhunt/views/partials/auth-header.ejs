@@ -54,23 +54,88 @@
         modal.addEventListener('click', function(e){ if (e.target === modal) modal.style.display = 'none'; });
         modal.querySelector('#ap-cancel').addEventListener('click', function(){ modal.style.display = 'none'; });
         modal.querySelector('#ap-send').addEventListener('click', function(){
+          var sendBtn = this;
+          var submitBtn = modal.querySelector('#ap-submit');
+          var originalText = sendBtn.textContent;
+          
+          // 禁用按钮，防止重复点击
+          sendBtn.disabled = true;
+          sendBtn.style.opacity = '0.6';
+          sendBtn.style.cursor = 'not-allowed';
+          sendBtn.textContent = '发送中...';
+          submitBtn.disabled = true;
+          submitBtn.style.opacity = '0.6';
+          submitBtn.style.cursor = 'not-allowed';
+          
           setApStatus('发送中...', true);
+          
           fetch('/admin/password/send-code', { method:'POST', credentials:'include' })
             .then(function(r){ return r.json(); })
-            .then(function(d){ if(!d.success) throw new Error(d.error||'发送失败'); setApStatus('验证码已发送，请查收邮箱', true); })
-            .catch(function(err){ setApStatus(err.message||'发送失败', false); });
+            .then(function(d){
+              if(!d.success) throw new Error(d.error||'发送失败');
+              setApStatus('验证码已发送，请查收邮箱', true);
+            })
+            .catch(function(err){
+              setApStatus(err.message||'发送失败', false);
+            })
+            .finally(function(){
+              // 重新启用按钮
+              sendBtn.disabled = false;
+              sendBtn.style.opacity = '1';
+              sendBtn.style.cursor = 'pointer';
+              sendBtn.textContent = originalText;
+              submitBtn.disabled = false;
+              submitBtn.style.opacity = '1';
+              submitBtn.style.cursor = 'pointer';
+            });
         });
         modal.querySelector('#ap-submit').addEventListener('click', function(){
+          var submitBtn = this;
+          var sendBtn = modal.querySelector('#ap-send');
           var code = document.getElementById('ap-code').value.trim();
           var pwd = document.getElementById('ap-password').value;
           var hasLetter = /[A-Za-z]/.test(pwd);
           var hasDigit = /\d/.test(pwd);
-          if (!code || !pwd || pwd.length < 8 || !hasLetter || !hasDigit) { setApStatus('请输入验证码，并设置至少8位且包含字母和数字的新密码', false); return; }
+          
+          if (!code || !pwd || pwd.length < 8 || !hasLetter || !hasDigit) { 
+            setApStatus('请输入验证码，并设置至少8位且包含字母和数字的新密码', false); 
+            return; 
+          }
+          
+          var originalText = submitBtn.textContent;
+          
+          // 禁用按钮，防止重复提交
+          submitBtn.disabled = true;
+          submitBtn.style.opacity = '0.6';
+          submitBtn.style.cursor = 'not-allowed';
+          submitBtn.textContent = '提交中...';
+          sendBtn.disabled = true;
+          sendBtn.style.opacity = '0.6';
+          sendBtn.style.cursor = 'not-allowed';
+          
           setApStatus('提交中...', true);
+          
           fetch('/admin/password/reset', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ code: code, newPassword: pwd }) })
             .then(function(r){ return r.json(); })
-            .then(function(d){ if(!d.success) throw new Error(d.error||'重置失败'); setApStatus('密码已修改，请重新登录', true); })
-            .catch(function(err){ setApStatus(err.message||'重置失败', false); });
+            .then(function(d){
+              if(!d.success) throw new Error(d.error||'重置失败');
+              setApStatus('密码已修改，请重新登录', true);
+              // 成功后延迟关闭弹窗并跳转
+              setTimeout(function(){
+                window.location.href = '/admin/login';
+              }, 2000);
+            })
+            .catch(function(err){
+              setApStatus(err.message||'重置失败', false);
+              // 失败后重新启用按钮
+              submitBtn.disabled = false;
+              submitBtn.style.opacity = '1';
+              submitBtn.style.cursor = 'pointer';
+              submitBtn.textContent = originalText;
+              sendBtn.disabled = false;
+              sendBtn.style.opacity = '1';
+              sendBtn.style.cursor = 'pointer';
+            });
         });
       }
     } catch (e) {

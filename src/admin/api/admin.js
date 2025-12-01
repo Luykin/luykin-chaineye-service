@@ -37,72 +37,32 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
     // 存入 Redis，10 分钟有效
     await req.redisClient.set(key, code, { EX: 600 });
 
-    // 懒加载 nodemailer
-    let nodemailer;
-    try { nodemailer = require("nodemailer"); } catch (_) { return res.status(500).json({ success: false, error: "缺少邮件依赖" }); }
-    const user = process.env.OUTLOOK_USER;
-    const pass = process.env.OUTLOOK_PASS;
-    const from = process.env.OUTLOOK_FROM || `XHunt Server <${user}>`;
-    if (!user || !pass) return res.status(500).json({ success: false, error: "未配置邮箱服务" });
-
-    const cleanPass = pass ? pass.replace(/\s+/g, '') : pass; // 移除所有空格
+    // 使用邮件服务发送验证码
+    const emailService = require("../../services/emailService");
     
-    // 参考 Stack Overflow 解决方案：https://stackoverflow.com/a
-    // 使用 secureConnection: true 和简化的 TLS 配置
-    const transportOptions = {
-      host: 'smtp.office365.com',
-      port: 587,
-      auth: { 
-        user, 
-        pass: cleanPass // 使用清理后的密码（移除空格）
-      },
-      secureConnection: true, // 使用安全连接
-      tls: { 
-        ciphers: 'SSLv3' // 参考代码使用 SSLv3（虽然过时，但可能在某些环境下有效）
-      },
-      connectionTimeout: 15000, // 稍微延长超时时间
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-      debug: process.env.NODE_ENV === 'development', // 开发环境开启调试
-      logger: process.env.NODE_ENV === 'development'
-    };
-    
-    const transporter = nodemailer.createTransport(transportOptions);
-
-    // 添加错误处理函数
-    transporter.on('error', (error) => {
-      console.error('[admin/password/send-code] SMTP传输器错误:', error);
-    });
-
-    transporter.on('token', (token) => {
-      console.log('[admin/password/send-code] OAuth2令牌更新:', token);
-    });
-
-    console.log(`[admin/password/send-code] 准备发送验证码到邮箱: ${email}`);
-    console.log(`[admin/password/send-code] 使用邮箱账户: ${user}`);
-    console.log(`[admin/password/send-code] 应用密码长度: ${pass} 字符`);
-    
-    // 验证连接（可选，用于调试）
-    try {
-      await transporter.verify();
-      console.log(`[admin/password/send-code] ✅ SMTP 连接验证成功`);
-    } catch (verifyError) {
-      console.error(`[admin/password/send-code] ⚠️ SMTP 连接验证失败:`, verifyError.message);
-      // 继续尝试发送，有时 verify 失败但实际发送可以成功
-    }
-    
-    await transporter.sendMail({
-      from,
-      to: email,
-      subject: "XHunt 管理员修改密码验证码",
-      text: `您的验证码是 ${code}，10 分钟内有效。`,
-      html: `<p>您的验证码是 <b>${code}</b>，10 分钟内有效。</p>`
-    });
+    await emailService.sendEmail(
+      email,
+      "XHunt 管理员修改密码验证码",
+      `<p>您的验证码是 <b>${code}</b>，10 分钟内有效。</p>`,
+      `您的验证码是 ${code}，10 分钟内有效。`
+    );
 
     console.log(`[admin/password/send-code] ✅ 验证码邮件发送成功: ${email}`);
 
-    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email, action: "password-send-code", route: "/admin/password/send-code", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
-    res.json({ success: true });
+    try { 
+      await XhuntAdminAuditLog.create({ 
+        adminId: admin.id, 
+        email, 
+        action: "password-send-code", 
+        route: "/admin/password/send-code", 
+        method: "POST", 
+        ip: req.ip || "", 
+        userAgent: req.headers["user-agent"] || "", 
+        success: true 
+      }); 
+    } catch (e) {}
+    
+    return res.json({ success: true });
   } catch (e) {
     // 检查是否是认证失败错误
     const isAuthError = e.message && (
