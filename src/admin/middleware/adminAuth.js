@@ -35,17 +35,28 @@ async function adminAuth(req, res, next) {
     const cookieName = process.env.ADMIN_COOKIE_NAME || "xh_admin_session";
     const cookies = req.cookies || parseCookies(req.headers.cookie || "");
     const token = cookies[cookieName];
-    if (!token) return res.status(401).send(renderLoginRedirect());
+    if (!token) {
+      const wantsJson = String(req.headers['accept'] || '').includes('application/json') ||
+        String(req.headers['x-requested-with'] || '').toLowerCase() === 'xmlhttprequest';
+      if (wantsJson) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', needLogin: true });
+      return res.status(401).send(renderLoginRedirect());
+    }
 
     let decoded;
     try {
       decoded = jwt.verify(token, JWT_SECRET);
     } catch (e) {
+      const wantsJson = String(req.headers['accept'] || '').includes('application/json') ||
+        String(req.headers['x-requested-with'] || '').toLowerCase() === 'xmlhttprequest';
+      if (wantsJson) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', needLogin: true });
       return res.status(401).send(renderLoginRedirect());
     }
 
     const admin = await XhuntAdminManager.findByPk(decoded.id);
     if (!admin || !admin.isActive || !admin.canLogin) {
+      const wantsJson = String(req.headers['accept'] || '').includes('application/json') ||
+        String(req.headers['x-requested-with'] || '').toLowerCase() === 'xmlhttprequest';
+      if (wantsJson) return res.status(403).json({ success: false, error: 'FORBIDDEN', needLogin: true });
       return res.status(403).send(renderLoginRedirect());
     }
 

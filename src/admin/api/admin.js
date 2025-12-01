@@ -42,10 +42,17 @@ router.get("/login", async (req, res) => {
 });
 
 // ========== WebAuthn 注册（添加指纹/人脸） ==========
-router.get("/webauthn/registration/options", adminAuth, async (req, res) => {
+router.get("/webauthn/registration/options", async (req, res) => {
   try {
     res.set('Cache-Control','no-store');
-    const admin = req.adminUser;
+    // 手动校验已登录会话（避免使用 adminAuth 导致 HTML 重定向）
+    const cookieName = process.env.ADMIN_COOKIE_NAME || "xh_admin_session";
+    const rawCookie = req.cookies?.[cookieName] || (req.headers.cookie || '').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.split('=')[1];
+    if (!rawCookie) return res.status(401).json({ success: false, error: 'UNAUTHORIZED' });
+    let session;
+    try { session = jwt.verify(rawCookie, process.env.ADMIN_JWT_SECRET || 'change-me'); } catch (e) { return res.status(401).json({ success: false, error: 'UNAUTHORIZED' }); }
+    const admin = await XhuntAdminManager.findByPk(session.id);
+    if (!admin || !admin.isActive || !admin.canLogin) return res.status(403).json({ success: false, error: 'FORBIDDEN' });
     const existing = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
     const excludeCredentials = existing.map(c => ({ id: base64url.toBuffer(c.credentialId), type: "public-key" }));
     const options = await generateRegistrationOptions({
@@ -65,9 +72,15 @@ router.get("/webauthn/registration/options", adminAuth, async (req, res) => {
   }
 });
 
-router.post("/webauthn/registration/verify", adminAuth, express.json(), async (req, res) => {
+router.post("/webauthn/registration/verify", express.json(), async (req, res) => {
   try {
-    const admin = req.adminUser;
+    const cookieName = process.env.ADMIN_COOKIE_NAME || "xh_admin_session";
+    const rawCookie = req.cookies?.[cookieName] || (req.headers.cookie || '').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.split('=')[1];
+    if (!rawCookie) return res.status(401).json({ success: false, error: 'UNAUTHORIZED' });
+    let session;
+    try { session = jwt.verify(rawCookie, process.env.ADMIN_JWT_SECRET || 'change-me'); } catch (e) { return res.status(401).json({ success: false, error: 'UNAUTHORIZED' }); }
+    const admin = await XhuntAdminManager.findByPk(session.id);
+    if (!admin || !admin.isActive || !admin.canLogin) return res.status(403).json({ success: false, error: 'FORBIDDEN' });
     const { attResp, nickname } = req.body || {};
     const challengeKey = `webauthn:reg:challenge:${admin.id}`;
     const expectedChallenge = await req.redisClient.get(challengeKey);
@@ -103,7 +116,7 @@ router.post("/webauthn/registration/verify", adminAuth, express.json(), async (r
     await req.redisClient.del(challengeKey);
     res.json({ success: true });
   } catch (e) {
-    try { await XhuntAdminAuditLog.create({ adminId: req.adminUser?.id, email: req.adminUser?.email, action: "webauthn-register", route: "/admin/webauthn/registration/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
+    try { await XhuntAdminAuditLog.create({ adminId: null, email: null, action: "webauthn-register", route: "/admin/webauthn/registration/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
     res.status(500).json({ success: false, error: "注册失败" });
   }
 });
