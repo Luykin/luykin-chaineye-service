@@ -573,7 +573,7 @@ router.post("/supabase/link-token", adminAuth, async (req, res) => {
 router.get("/supabase/verify-link", async (req, res) => {
   try {
     const bearer = typeof req.headers["authorization"] === "string" ? req.headers["authorization"] : undefined;
-    const bearerToken = bearer && bearer.toLowerCase().startsWith("bearer ") ? bearer.slice(7) : undefined;
+    const bearerToken = bearer && bearer.toLowerCase().startsWith("bearer ") ? bearer.slice(7) : bearer;
     const headerToken = req.headers["x-auth-token"] || bearerToken;
     const { token: queryToken } = req.query || {};
     const token = queryToken || headerToken;
