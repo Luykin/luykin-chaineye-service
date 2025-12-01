@@ -19,6 +19,7 @@ const SecurityViolationLogModel = require("../xhunt/models/SecurityViolationLog"
 const UnregisteredUserRegistrationModel = require("../xhunt/models/UnregisteredUserRegistration");
 const XhuntAdminManagerModel = require("../xhunt/models/XhuntAdminManager");
 const XhuntAdminAuditLogModel = require("../xhunt/models/XhuntAdminAuditLog");
+const XhuntAdminWebAuthnCredentialModel = require("../xhunt/models/XhuntAdminWebAuthnCredential");
 
 const pgInstance = new Sequelize({
   dialect: process.env.PG_DIALECT || "postgres",
@@ -56,6 +57,7 @@ const SecurityViolationLog = SecurityViolationLogModel(pgInstance);
 const UnregisteredUserRegistration = UnregisteredUserRegistrationModel(pgInstance);
 const XhuntAdminManager = XhuntAdminManagerModel(pgInstance);
 const XhuntAdminAuditLog = XhuntAdminAuditLogModel(pgInstance);
+const XhuntAdminWebAuthnCredential = XhuntAdminWebAuthnCredentialModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -194,6 +196,17 @@ XHuntUserProSubscription.belongsTo(XHuntUser, {
   as: "user",
 });
 
+// Admin WebAuthn Credentials 关系
+XhuntAdminManager.hasMany(XhuntAdminWebAuthnCredential, {
+  foreignKey: "adminId",
+  as: "webauthnCredentials",
+});
+
+XhuntAdminWebAuthnCredential.belongsTo(XhuntAdminManager, {
+  foreignKey: "adminId",
+  as: "admin",
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 async function setupPostgres() {
@@ -238,4 +251,5 @@ module.exports = {
   UnregisteredUserRegistration,
   XhuntAdminManager,
   XhuntAdminAuditLog,
+  XhuntAdminWebAuthnCredential,
 };

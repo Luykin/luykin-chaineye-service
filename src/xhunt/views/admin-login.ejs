@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>管理后台登录</title>
+  <script src="/static/js/index.umd.min.js"></script>
   <style>
     body { font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial; background:#f5f7fb; margin:0; }
     .wrap { max-width: 320px; margin: 12vh auto; background:#fff; border-radius:12px; box-shadow:0 6px 24px rgba(0,0,0,.08); padding:20px; }
@@ -58,6 +59,23 @@
         });
         const data = await res.json();
         if(!data.success){ throw new Error(data.error||'登录失败'); }
+        if (data.needsWebAuthn && data.tempToken) {
+          // 二次验证：获取认证参数并调用 WebAuthn
+          const optRes = await fetch('/admin/webauthn/authentication/options?tempToken=' + encodeURIComponent(data.tempToken), { credentials:'include' });
+          const optData = await optRes.json();
+          if (!optData.success) throw new Error(optData.error || '获取认证参数失败');
+          const assertion = await window.SimpleWebAuthnBrowser.startAuthentication(optData.options);
+          const verifyRes = await fetch('/admin/webauthn/authentication/verify', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            credentials:'include',
+            body: JSON.stringify({ tempToken: data.tempToken, assertion })
+          });
+          const verify = await verifyRes.json();
+          if (!verify.success) throw new Error(verify.error || '二次验证失败');
+          location.href = verify.redirect || '/api/xhunt/stats';
+          return;
+        }
         location.href = data.redirect || '/api/xhunt/stats';
       }catch(ex){ setError(ex.message||'登录失败'); }
       finally{ btn.disabled = false; }

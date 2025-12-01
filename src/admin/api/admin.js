@@ -2,10 +2,24 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
 const path = require("path");
-const { XhuntAdminManager, XhuntAdminAuditLog } = require("../../models/postgres-start");
+const { XhuntAdminManager, XhuntAdminAuditLog, XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
+const jwt = require("jsonwebtoken");
+const base64url = require("base64url");
+const {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} = require("@simplewebauthn/server");
 const { adminAuth, requireRole, requirePermission, setSessionCookie } = require("../middleware/adminAuth");
 
 const router = express.Router();
+
+// WebAuthn 配置
+const RP_NAME = process.env.WEBAUTHN_RP_NAME || "XHunt Admin";
+const RP_ID = process.env.WEBAUTHN_RP_ID || (process.env.ADMIN_COOKIE_DOMAIN || "localhost");
+const ORIGIN = process.env.WEBAUTHN_ORIGIN || `https://${RP_ID}`;
+const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 
 // 登录页面（EJS）
 router.get("/login", async (req, res) => {
@@ -23,6 +37,182 @@ router.get("/login", async (req, res) => {
     );
   } catch (e) {
     res.status(500).send("Render error");
+  }
+});
+
+// ========== WebAuthn 注册（添加指纹/人脸） ==========
+router.get("/webauthn/registration/options", adminAuth, async (req, res) => {
+  try {
+    const admin = req.adminUser;
+    const existing = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    const excludeCredentials = existing.map(c => ({ id: c.credentialId, type: "public-key" }));
+    const options = await generateRegistrationOptions({
+      rpName: RP_NAME,
+      rpID: RP_ID,
+      userID: String(admin.id),
+      userName: admin.email,
+      attestationType: "none",
+      excludeCredentials,
+      authenticatorSelection: { residentKey: "preferred", userVerification: "preferred", authenticatorAttachment: "platform" },
+    });
+    const challengeKey = `webauthn:reg:challenge:${admin.id}`;
+    await req.redisClient.set(challengeKey, options.challenge, { EX: 300 });
+    res.json({ success: true, options });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "生成注册参数失败" });
+  }
+});
+
+router.post("/webauthn/registration/verify", adminAuth, express.json(), async (req, res) => {
+  try {
+    const admin = req.adminUser;
+    const { attResp, nickname } = req.body || {};
+    const challengeKey = `webauthn:reg:challenge:${admin.id}`;
+    const expectedChallenge = await req.redisClient.get(challengeKey);
+    if (!expectedChallenge) return res.status(400).json({ success: false, error: "注册超时" });
+
+    const verification = await verifyRegistrationResponse({
+      response: attResp,
+      expectedChallenge,
+      expectedOrigin: ORIGIN,
+      expectedRPID: RP_ID,
+    });
+
+    const { verified, registrationInfo } = verification;
+    if (!verified || !registrationInfo) return res.status(400).json({ success: false, error: "注册校验失败" });
+
+    const { credentialPublicKey, credentialID, counter, aaguid } = registrationInfo;
+    const credentialIdB64 = base64url.encode(Buffer.from(credentialID));
+    const publicKeyB64 = base64url.encode(Buffer.from(credentialPublicKey));
+
+    await XhuntAdminWebAuthnCredential.create({
+      adminId: admin.id,
+      credentialId: credentialIdB64,
+      publicKey: publicKeyB64,
+      counter: counter || 0,
+      aaguid: aaguid || null,
+      deviceType: registrationInfo.credentialDeviceType || null,
+      backedUp: registrationInfo.credentialBackedUp ?? null,
+      nickname: (typeof nickname === 'string' && nickname.trim()) ? nickname.trim() : null,
+      lastUsedAt: null,
+    });
+
+    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "webauthn-register", route: "/admin/webauthn/registration/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    await req.redisClient.del(challengeKey);
+    res.json({ success: true });
+  } catch (e) {
+    try { await XhuntAdminAuditLog.create({ adminId: req.adminUser?.id, email: req.adminUser?.email, action: "webauthn-register", route: "/admin/webauthn/registration/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
+    res.status(500).json({ success: false, error: "注册失败" });
+  }
+});
+
+// ========== WebAuthn 认证（登录二次验证） ==========
+router.get("/webauthn/authentication/options", async (req, res) => {
+  try {
+    const { tempToken } = req.query || {};
+    if (!tempToken) return res.status(400).json({ success: false, error: "缺少参数" });
+    let decoded;
+    try { decoded = jwt.verify(String(tempToken), TEMP_JWT_SECRET); } catch (e) { return res.status(401).json({ success: false, error: "无效的会话" }); }
+    if (decoded.step !== "pwd-ok") return res.status(401).json({ success: false, error: "无效的会话" });
+
+    const admin = await XhuntAdminManager.findByPk(decoded.aid);
+    if (!admin) return res.status(404).json({ success: false, error: "管理员不存在" });
+
+    const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    const allowCredentials = creds.map(c => ({ id: base64url.toBuffer(c.credentialId), type: "public-key" }));
+    const options = await generateAuthenticationOptions({
+      rpID: RP_ID,
+      userVerification: "preferred",
+      allowCredentials,
+    });
+    const challengeKey = `webauthn:auth:challenge:${admin.id}`;
+    await req.redisClient.set(challengeKey, options.challenge, { EX: 300 });
+    res.json({ success: true, options });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "生成认证参数失败" });
+  }
+});
+
+router.post("/webauthn/authentication/verify", express.json(), async (req, res) => {
+  try {
+    const { tempToken, assertion } = req.body || {};
+    if (!tempToken || !assertion) return res.status(400).json({ success: false, error: "缺少参数" });
+    let decoded;
+    try { decoded = jwt.verify(String(tempToken), TEMP_JWT_SECRET); } catch (e) { return res.status(401).json({ success: false, error: "无效的会话" }); }
+    if (decoded.step !== "pwd-ok") return res.status(401).json({ success: false, error: "无效的会话" });
+
+    const admin = await XhuntAdminManager.findByPk(decoded.aid);
+    if (!admin) return res.status(404).json({ success: false, error: "管理员不存在" });
+    const challengeKey = `webauthn:auth:challenge:${admin.id}`;
+    const expectedChallenge = await req.redisClient.get(challengeKey);
+    if (!expectedChallenge) return res.status(400).json({ success: false, error: "认证超时" });
+
+    const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    const credentialLookup = new Map(creds.map(c => [c.credentialId, c]));
+
+    const verification = await verifyAuthenticationResponse({
+      response: assertion,
+      expectedChallenge,
+      expectedOrigin: ORIGIN,
+      expectedRPID: RP_ID,
+      authenticator: (function () {
+        const credIdB64 = base64url.encode(Buffer.from(assertion.id ?? assertion.rawId, 'base64'));
+        const found = credentialLookup.get(credIdB64);
+        if (!found) return null;
+        return {
+          credentialID: base64url.toBuffer(found.credentialId),
+          credentialPublicKey: base64url.toBuffer(found.publicKey),
+          counter: Number(found.counter || 0),
+        };
+      })(),
+    });
+
+    const { verified, authenticationInfo } = verification;
+    if (!verified || !authenticationInfo) return res.status(401).json({ success: false, error: "验证失败" });
+
+    // 更新 counter 与 lastUsedAt
+    const credId = base64url.encode(Buffer.from(authenticationInfo.credentialID));
+    const row = await XhuntAdminWebAuthnCredential.findOne({ where: { credentialId: credId, adminId: admin.id } });
+    if (row) {
+      row.counter = Number(authenticationInfo.newCounter || authenticationInfo.counter || 0);
+      row.lastUsedAt = new Date();
+      await row.save();
+    }
+
+    await admin.update({ lastLoginAt: new Date() });
+    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
+    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    await req.redisClient.del(challengeKey);
+    res.json({ success: true, redirect: "/api/xhunt/stats" });
+  } catch (e) {
+    try { await XhuntAdminAuditLog.create({ adminId: null, email: null, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
+    res.status(500).json({ success: false, error: "验证失败" });
+  }
+});
+
+// ========== 凭证管理 ==========
+router.get("/webauthn/credentials", adminAuth, async (req, res) => {
+  try {
+    const admin = req.adminUser;
+    const rows = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id }, order: [["updatedAt", "DESC"]] });
+    res.json({ success: true, credentials: rows.map(r => ({ id: r.id, nickname: r.nickname, lastUsedAt: r.lastUsedAt, createdAt: r.createdAt })) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "获取失败" });
+  }
+});
+
+router.delete("/webauthn/credentials/:id", adminAuth, async (req, res) => {
+  try {
+    const admin = req.adminUser;
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ success: false, error: "参数无效" });
+    const row = await XhuntAdminWebAuthnCredential.findOne({ where: { id, adminId: admin.id } });
+    if (!row) return res.status(404).json({ success: false, error: "未找到" });
+    await row.destroy();
+    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "webauthn-delete", route: `/admin/webauthn/credentials/${id}`, method: "DELETE", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "删除失败" });
   }
 });
 
@@ -175,11 +365,22 @@ router.post("/login", express.json(), async (req, res) => {
       return res.status(401).json({ success: false, error: "邮箱或密码错误" });
     }
 
-    await admin.update({ lastLoginAt: new Date() });
+    // 判断是否存在 WebAuthn 凭证
+    const credCount = await XhuntAdminWebAuthnCredential.count({ where: { adminId: admin.id } });
+
     try { const key = `admin:loginfail:${email}`; await req.redisClient.del(key); } catch (e) {}
+
+    if (credCount > 0) {
+      // 需要二次验证：签发一个临时 token（5 分钟有效），不下发会话
+      const tempToken = jwt.sign({ aid: admin.id, email: admin.email, step: "pwd-ok" }, TEMP_JWT_SECRET, { expiresIn: 300 });
+      try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login-password-ok", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+      return res.json({ success: true, needsWebAuthn: true, tempToken });
+    }
+
+    // 无凭证：直接登录
+    await admin.update({ lastLoginAt: new Date() });
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
-
     res.json({ success: true, redirect: "/api/xhunt/stats" });
   } catch (e) {
     console.error("[admin login] error:", e);

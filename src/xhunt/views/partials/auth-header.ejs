@@ -4,9 +4,11 @@
   </span>
   <div style="display:flex;gap:12px;align-items:center;">
     <a href="#" class="logout-btn pwd-btn">修改管理员密码</a>
+    <a href="#" class="logout-btn webauthn-btn">生物识别登录</a>
     <a href="#" class="logout-btn">退出登录</a>
   </div>
 </div>
+<script src="/static/js/index.umd.min.js"></script>
 <script>
   (function () {
     try {
@@ -136,6 +138,97 @@
               sendBtn.style.opacity = '1';
               sendBtn.style.cursor = 'pointer';
             });
+        });
+      }
+
+      // ========== WebAuthn 管理弹层 ==========
+      var waBtn = document.querySelector('.webauthn-btn');
+      if (waBtn) {
+        var waModal = document.createElement('div');
+        waModal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999;';
+        waModal.innerHTML = '\
+        <div style="background:#fff;padding:16px;border-radius:10px;width:360px;max-width:90vw;box-shadow:0 10px 30px rgba(0,0,0,.2);">\
+          <h3 style="margin:0 0 10px;font-size:16px;">生物识别登录</h3>\
+          <div style="font-size:12px;color:#666;margin-bottom:10px;">在本设备添加或删除指纹/FaceID 登录凭证。</div>\
+          <div style="display:flex;gap:8px;margin-bottom:10px;">\
+            <input id="wa-nickname" placeholder="设备备注（可选）" style="flex:1;padding:8px 10px;border:1px solid #e5e7eb;border-radius:6px;" />\
+            <button id="wa-add" style="padding:8px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;">添加</button>\
+          </div>\
+          <div id="wa-status" style="font-size:12px;min-height:16px;margin-bottom:6px;color:#666;"></div>\
+          <div id="wa-list" style="max-height:220px;overflow:auto;border:1px solid #eee;border-radius:6px;padding:6px;">加载中...</div>\
+          <div style="margin-top:10px;text-align:right;">\
+            <button id="wa-close" style="padding:8px 10px;background:#e5e7eb;border:none;border-radius:6px;">关闭</button>\
+          </div>\
+        </div>';
+        document.body.appendChild(waModal);
+
+        function setWaStatus(msg, ok){
+          var el = document.getElementById('wa-status');
+          if(!el) return;
+          el.textContent = msg||'';
+          el.style.color = ok ? '#16a34a' : '#dc2626';
+        }
+
+        async function reloadCreds(){
+          try{
+            setWaStatus('加载中...', true);
+            var res = await fetch('/admin/webauthn/credentials', { credentials:'include' });
+            var data = await res.json();
+            var list = document.getElementById('wa-list');
+            if(!data.success){ list.textContent = data.error||'获取失败'; setWaStatus('', true); return; }
+            if(!data.credentials || !data.credentials.length){ list.textContent = '尚未添加任何设备'; setWaStatus('', true); return; }
+            list.innerHTML = '';
+            data.credentials.forEach(function(c){
+              var row = document.createElement('div');
+              row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px;border-bottom:1px solid #f1f5f9;';
+              var name = c.nickname || '设备 #' + c.id;
+              var info = (c.lastUsedAt ? (' 最近使用: ' + new Date(c.lastUsedAt).toLocaleString()) : '');
+              row.innerHTML = '<div style="font-size:13px;color:#334155;">'+ name +'<span style="color:#64748b;">'+ info +'</span></div>'+
+                              '<button data-id="'+c.id+'" class="wa-del" style="padding:6px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;">删除</button>';
+              list.appendChild(row);
+            });
+            Array.prototype.forEach.call(list.querySelectorAll('.wa-del'), function(btn){
+              btn.addEventListener('click', async function(){
+                var id = this.getAttribute('data-id');
+                if (!id) return;
+                if (!confirm('确认删除该设备？')) return;
+                try{
+                  var r = await fetch('/admin/webauthn/credentials/'+id, { method:'DELETE', credentials:'include' });
+                  var d = await r.json();
+                  if(!d.success) throw new Error(d.error||'删除失败');
+                  setWaStatus('已删除', true);
+                  reloadCreds();
+                }catch(ex){ setWaStatus(ex.message||'删除失败', false); }
+              });
+            });
+            setWaStatus('', true);
+          }catch(ex){ setWaStatus(ex.message||'加载失败', false); }
+        }
+
+        waBtn.addEventListener('click', function(e){ e.preventDefault(); waModal.style.display='flex'; reloadCreds(); });
+        waModal.addEventListener('click', function(e){ if(e.target===waModal) waModal.style.display='none'; });
+        waModal.querySelector('#wa-close').addEventListener('click', function(){ waModal.style.display='none'; });
+
+        waModal.querySelector('#wa-add').addEventListener('click', async function(){
+          try{
+            setWaStatus('准备注册...', true);
+            var optRes = await fetch('/admin/webauthn/registration/options', { credentials:'include' });
+            var optData = await optRes.json();
+            if(!optData.success) throw new Error(optData.error||'获取注册参数失败');
+            var attResp = await window.SimpleWebAuthnBrowser.startRegistration(optData.options);
+            var nickname = (document.getElementById('wa-nickname').value||'').trim();
+            var vRes = await fetch('/admin/webauthn/registration/verify', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              credentials:'include',
+              body: JSON.stringify({ attResp: attResp, nickname: nickname })
+            });
+            var vData = await vRes.json();
+            if(!vData.success) throw new Error(vData.error||'注册失败');
+            setWaStatus('已添加此设备，可用于登录二次验证', true);
+            document.getElementById('wa-nickname').value='';
+            reloadCreds();
+          }catch(ex){ setWaStatus(ex.message||'注册失败', false); }
         });
       }
     } catch (e) {
