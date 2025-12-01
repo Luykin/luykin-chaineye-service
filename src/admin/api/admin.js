@@ -572,11 +572,15 @@ router.post("/supabase/link-token", adminAuth, async (req, res) => {
 // 校验一次性票据（用于 Nginx auth_request）
 router.get("/supabase/verify-link", async (req, res) => {
   try {
-    const { token } = req.query || {};
+    const headerToken = req.headers["x-auth-token"];
+    const { token: queryToken } = req.query || {};
+    const token = queryToken || headerToken;
     console.log("[supabase/verify-link] incoming1111:", {
       ip: req.ip,
       ua: req.headers["user-agent"],
       hasToken: !!token,
+      hasHeaderToken: !!headerToken,
+      hasQueryToken: !!queryToken,
       queryKeys: Object.keys(req.query || {}),
       accept: req.headers["accept"],
       xhr: req.headers["x-requested-with"],
