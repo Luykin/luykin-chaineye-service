@@ -45,11 +45,21 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
     const from = process.env.OUTLOOK_FROM || `XHunt Server <${user}>`;
     if (!user || !pass) return res.status(500).json({ success: false, error: "未配置邮箱服务" });
 
+    // 注意：Microsoft Outlook 已禁用基本认证，需要使用应用密码（App Password）
+    // 生成应用密码：https://account.microsoft.com/security -> 高级安全选项 -> 应用密码
+    // 或者使用 OAuth2（需要额外配置）
     const transporter = nodemailer.createTransport({
       host: "smtp.office365.com",
       port: 587,
-      secure: false,
-      auth: { user, pass },
+      secure: false, // true for 465, false for other ports
+      auth: { 
+        user, 
+        pass // 这里应该使用应用密码，而不是普通密码
+      },
+      tls: {
+        ciphers: 'SSLv3',
+        rejectUnauthorized: false
+      }
     });
 
     console.log(`[admin/password/send-code] 准备发送验证码到邮箱: ${email}`);
@@ -67,14 +77,51 @@ router.post("/password/send-code", adminAuth, async (req, res) => {
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email, action: "password-send-code", route: "/admin/password/send-code", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     res.json({ success: true });
   } catch (e) {
+    // 检查是否是认证失败错误
+    const isAuthError = e.message && (
+      e.message.includes('535') || 
+      e.message.includes('Authentication unsuccessful') ||
+      e.message.includes('basic authentication is disabled')
+    );
+
     console.error(`[admin/password/send-code] ❌ 发送验证码失败:`, {
       email: req.adminUser?.email,
       error: e.message,
       stack: e.stack,
       nodemailerError: e.responseCode ? `SMTP错误码: ${e.responseCode}, 响应: ${e.response}` : undefined,
-      command: e.command
+      command: e.command,
+      isAuthError: isAuthError
     });
-    try { await XhuntAdminAuditLog.create({ adminId: req.adminUser?.id, email: req.adminUser?.email, action: "password-send-code", route: "/admin/password/send-code", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
+
+    try { 
+      await XhuntAdminAuditLog.create({ 
+        adminId: req.adminUser?.id, 
+        email: req.adminUser?.email, 
+        action: "password-send-code", 
+        route: "/admin/password/send-code", 
+        method: "POST", 
+        ip: req.ip || "", 
+        userAgent: req.headers["user-agent"] || "", 
+        success: false, 
+        message: e.message 
+      }); 
+    } catch (_) {}
+
+    // 如果是认证错误，提供更详细的错误信息
+    if (isAuthError) {
+      console.error(`[admin/password/send-code] ⚠️ Outlook 认证失败，需要使用应用密码`);
+      console.error(`[admin/password/send-code] 解决方案：`);
+      console.error(`[admin/password/send-code] 1. 访问 https://account.microsoft.com/security`);
+      console.error(`[admin/password/send-code] 2. 进入"高级安全选项" -> "应用密码"`);
+      console.error(`[admin/password/send-code] 3. 生成新的应用密码`);
+      console.error(`[admin/password/send-code] 4. 将应用密码设置为 OUTLOOK_PASS 环境变量`);
+      return res.status(500).json({ 
+        success: false, 
+        error: "邮件发送失败：Outlook 认证失败",
+        message: "需要使用应用密码而不是普通密码。请访问 https://account.microsoft.com/security 生成应用密码。"
+      });
+    }
+
     res.status(500).json({ success: false, error: "发送失败" });
   }
 });

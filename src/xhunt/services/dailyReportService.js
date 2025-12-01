@@ -80,11 +80,20 @@ function buildTransport() {
   if (!user || !pass) {
     throw new Error("OUTLOOK_USER/OUTLOOK_PASS 未配置");
   }
+  // 注意：Microsoft Outlook 已禁用基本认证，需要使用应用密码（App Password）
+  // 生成应用密码：https://account.microsoft.com/security -> 高级安全选项 -> 应用密码
   return nodemailer.createTransport({
     host: "smtp.office365.com",
     port: 587,
-    secure: false,
-    auth: { user, pass },
+    secure: false, // true for 465, false for other ports
+    auth: { 
+      user, 
+      pass // 这里应该使用应用密码，而不是普通密码
+    },
+    tls: {
+      ciphers: 'SSLv3',
+      rejectUnauthorized: false
+    }
   });
 }
 

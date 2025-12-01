@@ -1,15 +1,15 @@
-<div class="card">
-  <div class="card-header">
-    <h3>管理员操作记录</h3>
-    <div class="filters">
-      <input id="audit-email" type="text" placeholder="按邮箱筛选" />
-      <input id="audit-action" type="text" placeholder="按动作筛选 (如 clear-cache)" />
-      <button id="audit-refresh">查询</button>
+<div class="export-card">
+  <div class="export-header">
+    <h3>🧾 管理员操作记录</h3>
+    <div class="export-actions" style="display:flex;gap:8px;align-items:center;">
+      <input id="audit-email" type="text" placeholder="按邮箱筛选" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;width:180px;" />
+      <input id="audit-action" type="text" placeholder="按动作筛选" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;width:180px;" />
+      <button id="audit-refresh" class="btn primary">查询</button>
     </div>
   </div>
-  <div class="card-body">
-    <div style="overflow:auto; max-height: 520px;">
-      <table class="table">
+  <div class="export-result" style="margin-top:12px;">
+    <div style="overflow:auto;max-height:520px;">
+      <table class="simple-table">
         <thead>
           <tr>
             <th>时间</th>
@@ -23,15 +23,15 @@
           </tr>
         </thead>
         <tbody id="audit-tbody">
-          <tr><td colspan="8" style="text-align:center;color:#888;">加载中...</td></tr>
+          <tr><td colspan="8" style="padding:12px;text-align:center;color:#6b7280;">加载中...</td></tr>
         </tbody>
       </table>
     </div>
-    <div class="pagination">
-      <button id="audit-prev">上一页</button>
-      <span id="audit-page">1</span>
-      <button id="audit-next">下一页</button>
-    </div>
+  </div>
+  <div style="margin-top:12px;display:flex;justify-content:center;align-items:center;gap:12px;">
+    <button id="audit-prev" class="btn">上一页</button>
+    <span id="audit-page" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;font-size:14px;font-weight:600;color:#374151;">1</span>
+    <button id="audit-next" class="btn">下一页</button>
   </div>
 </div>
 
@@ -52,21 +52,21 @@
         var tb = document.getElementById('audit-tbody');
         tb.innerHTML = '';
         if (!resp.success || !Array.isArray(resp.data) || resp.data.length === 0){
-          tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;">暂无数据</td></tr>';
+          tb.innerHTML = '<tr><td colspan="8" style="padding:12px;text-align:center;color:#6b7280;">暂无数据</td></tr>';
           document.getElementById('audit-page').textContent = String(page);
           return;
         }
         resp.data.forEach(function(row){
           var tr = document.createElement('tr');
           tr.innerHTML = [
-            '<td>' + fmt(row.createdAt) + '</td>',
+            '<td style="white-space:nowrap;">' + fmt(row.createdAt) + '</td>',
             '<td>' + (row.email || '') + '</td>',
-            '<td>' + (row.action || '') + '</td>',
-            '<td>' + (row.method || '') + '</td>',
+            '<td><span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:500;">' + (row.action || '') + '</span></td>',
+            '<td><span style="background:#f3f4f6;color:#374151;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:500;">' + (row.method || '') + '</span></td>',
             '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(row.route||'')+'">' + (row.route || '') + '</td>',
-            '<td>' + (row.success ? '✅' : '❌') + '</td>',
+            '<td style="text-align:center;">' + (row.success ? '<span style="color:#16a34a;font-weight:600;">✅</span>' : '<span style="color:#dc2626;font-weight:600;">❌</span>') + '</td>',
             '<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(row.message||'')+'">' + (row.message || '') + '</td>',
-            '<td>' + (row.ip || '') + '</td>'
+            '<td style="font-family:monospace;font-size:12px;color:#6b7280;">' + (row.ip || '') + '</td>'
           ].join('');
           tb.appendChild(tr);
         });
@@ -75,10 +75,12 @@
       .catch(function(err){
         console.error('[admin-audit-logs] 加载失败:', err);
         var tb = document.getElementById('audit-tbody');
-        tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#f00;">加载失败: ' + (err.message || '未知错误') + '</td></tr>';
+        tb.innerHTML = '<tr><td colspan="8" style="padding:12px;text-align:center;color:#dc2626;">加载失败: ' + (err.message || '未知错误') + '</td></tr>';
       });
   }
   document.getElementById('audit-refresh').addEventListener('click', function(){ page = 1; load(); });
+  document.getElementById('audit-email').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
+  document.getElementById('audit-action').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
   document.getElementById('audit-prev').addEventListener('click', function(){ if (page>1){ page--; load(); } });
   document.getElementById('audit-next').addEventListener('click', function(){ page++; load(); });
   // 初次加载
