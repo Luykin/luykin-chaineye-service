@@ -43,9 +43,10 @@ function getSMTPConfig() {
   return {
     user,
     pass: cleanPass,
-    host: 'smtp-mail.outlook.com', // emailjs 推荐使用 smtp-mail.outlook.com
+    host: 'smtp.office365.com', // 使用 smtp.office365.com（更稳定）
     port: 587, // Outlook 使用 587 端口（STARTTLS）
     tls: true, // 使用 STARTTLS，让系统自动选择安全的 TLS 版本和加密套件
+    timeout: 30000, // 30秒超时
     from
   };
 }
@@ -75,13 +76,20 @@ async function sendEmailViaSMTP(to, subject, html, text = null) {
   console.log(`[emailService] - 收件人: ${to}`);
   
   // 创建 SMTP 客户端
-  const client = new SMTPClient({
+  const clientOptions = {
     user: smtpConfig.user,
     password: smtpConfig.pass,
     host: smtpConfig.host,
     port: smtpConfig.port,
     tls: smtpConfig.tls
-  });
+  };
+  
+  // 添加超时配置（如果支持）
+  if (smtpConfig.timeout) {
+    clientOptions.timeout = smtpConfig.timeout;
+  }
+  
+  const client = new SMTPClient(clientOptions);
   
   // 构建邮件消息
   // emailjs 支持 text 字段作为纯文本，attachment 中的 alternative: true 作为 HTML
@@ -110,11 +118,37 @@ async function sendEmailViaSMTP(to, subject, html, text = null) {
           console.error('[emailService] 错误详情:', err.message);
         }
         
+        // 如果是连接超时错误
+        if (err.message && (
+          err.message.includes('timeout') || 
+          err.message.includes('timedout') ||
+          err.message.includes('timed out') ||
+          err.message.includes('ECONNRESET') ||
+          err.message.includes('ENOTFOUND')
+        )) {
+          console.error('[emailService] ==========================================');
+          console.error('[emailService] 连接超时排查步骤：');
+          console.error('[emailService] ');
+          console.error('[emailService] 1. 检查网络连接：');
+          console.error('[emailService]    - 确认服务器可以访问互联网');
+          console.error('[emailService]    - 测试连接：telnet smtp.office365.com 587');
+          console.error('[emailService] ');
+          console.error('[emailService] 2. 检查防火墙设置：');
+          console.error('[emailService]    - 确认端口 587 未被阻止');
+          console.error('[emailService]    - 检查服务器防火墙规则');
+          console.error('[emailService] ');
+          console.error('[emailService] 3. 尝试使用备用 SMTP 服务器：');
+          console.error('[emailService]    - smtp.office365.com:587（当前使用）');
+          console.error('[emailService]    - smtp-mail.outlook.com:587');
+          console.error('[emailService] ==========================================');
+        }
+        
         // 如果是认证错误，提供排查信息
         if (err.message && (
           err.message.includes('535') || 
           err.message.includes('Authentication') ||
-          err.message.includes('authentication')
+          err.message.includes('authentication') ||
+          err.message.includes('authorization.failed')
         )) {
           console.error('[emailService] ==========================================');
           console.error('[emailService] 认证失败排查步骤：');
