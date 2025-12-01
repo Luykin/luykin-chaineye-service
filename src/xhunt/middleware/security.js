@@ -875,6 +875,10 @@ class SecurityViolationLogger {
     try {
       const now = Date.now();
       const { errorCode, allowQueryParams = false } = options;
+      // duplicate_request(409) 类型不写入数据库
+      if (errorCode === "409") {
+        return;
+      }
       let invalidTimestampIdentifiers = null;
       if (errorCode === "400-3") {
         const throttleCheck = this.shouldThrottleInvalidTimestampLog(

@@ -286,7 +286,7 @@ router.get("/dau-details", adminAuth, requirePermission("dau-details"), async (r
 
 /**
  * GET /online-users
- * 获取最近20分钟内的在线用户列表（需要认证）
+ * 获取最近10分钟内的在线用户列表（需要认证）
  */
 router.get("/online-users", adminAuth, requirePermission("online-users"), async (req, res) => {
   try {
@@ -294,8 +294,8 @@ router.get("/online-users", adminAuth, requirePermission("online-users"), async 
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
 
-    // 计算20分钟前的时间
-    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+    // 计算10分钟前的时间
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
 
     // 获取在线用户数据
     const postgresModels = require("../../models/postgres-start");
@@ -303,11 +303,11 @@ router.get("/online-users", adminAuth, requirePermission("online-users"), async 
     const XHuntUser = postgresModels.XHuntUser;
     const { Op } = require("sequelize");
 
-    // 查询最近20分钟内有活动的用户
+    // 查询最近10分钟内有活动的用户
     const onlineUsers = await XHuntUserToken.findAll({
       where: {
         lastUsed: {
-          [Op.gte]: twentyMinutesAgo,
+          [Op.gte]: tenMinutesAgo,
         },
         isRevoked: false,
       },
@@ -328,7 +328,7 @@ router.get("/online-users", adminAuth, requirePermission("online-users"), async 
     const totalCount = await XHuntUserToken.count({
       where: {
         lastUsed: {
-          [Op.gte]: twentyMinutesAgo,
+          [Op.gte]: tenMinutesAgo,
         },
         isRevoked: false,
       },
