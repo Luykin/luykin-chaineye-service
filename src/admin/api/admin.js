@@ -573,18 +573,44 @@ router.post("/supabase/link-token", adminAuth, async (req, res) => {
 router.get("/supabase/verify-link", async (req, res) => {
   try {
     const { token } = req.query || {};
-    if (!token) return res.status(401).json({ success: false });
+    console.log("[supabase/verify-link] incoming:", {
+      ip: req.ip,
+      ua: req.headers["user-agent"],
+      hasToken: !!token,
+      queryKeys: Object.keys(req.query || {}),
+      accept: req.headers["accept"],
+      xhr: req.headers["x-requested-with"],
+    });
+    if (!token) {
+      console.log("[supabase/verify-link] missing token");
+      return res.status(401).json({ success: false });
+    }
     let decoded;
-    try { decoded = jwt.verify(String(token), LINK_SECRET); } catch (_) { return res.status(401).json({ success: false }); }
-    if (decoded.purpose !== "supabase" || !decoded.jti) return res.status(401).json({ success: false });
+    try {
+      const brief = String(token).slice(0, 16) + "...";
+      decoded = jwt.verify(String(token), LINK_SECRET);
+      console.log("[supabase/verify-link] jwt ok:", { brief, aid: decoded?.aid, jti: decoded?.jti, purpose: decoded?.purpose });
+    } catch (e) {
+      console.log("[supabase/verify-link] jwt verify failed:", e?.message);
+      return res.status(401).json({ success: false });
+    }
+    if (decoded.purpose !== "supabase" || !decoded.jti) {
+      console.log("[supabase/verify-link] invalid payload fields:", { purpose: decoded?.purpose, jti: decoded?.jti });
+      return res.status(401).json({ success: false });
+    }
     const key = `supabase:link:jti:${decoded.jti}`;
     const exists = await req.redisClient.get(key);
-    if (!exists) return res.status(401).json({ success: false });
+    console.log("[supabase/verify-link] redis jti exists:", !!exists);
+    if (!exists) {
+      console.log("[supabase/verify-link] jti not found or already used:", key);
+      return res.status(401).json({ success: false });
+    }
     await req.redisClient.del(key);
     try { await XhuntAdminAuditLog.create({ adminId: decoded.aid || null, email: null, action: "supabase-link", route: "/admin/supabase/verify-link", method: "GET", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     res.set("Cache-Control","no-store");
     return res.status(204).end();
   } catch (e) {
+    console.log("[supabase/verify-link] error:", e?.message);
     return res.status(500).json({ success: false });
   }
 });
