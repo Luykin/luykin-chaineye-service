@@ -46,8 +46,10 @@
           <button class="tab-btn" data-tab="pro-management">👑 Pro用户管理</button>
           <button class="tab-btn" data-tab="backup">💾 数据库备份</button>
           <button class="tab-btn" data-tab="server-command">🖥️ 服务器命令</button>
-          <button class="tab-btn" data-tab="admin-users">� 管理员列表</button>
-          <button class="tab-btn" data-tab="admin-audit-logs">🧾 操作记录</button>
+          <% if (typeof user !== 'undefined' && user && user.role === 'super') { %>
+          <button class="tab-btn" data-tab="admin-users">👤 管理员列表</button>
+          <button class="tab-btn" data-tab="admin-audit-logs">🧾 管理员操作记录</button>
+          <% } %>
         </div>
 
         <!-- Tab 内容 -->
@@ -128,6 +130,7 @@
             <%- include('partials/server-command-stats') %>
           </div>
 
+          <% if (typeof user !== 'undefined' && user && user.role === 'super') { %>
           <!-- 管理员列表 Tab -->
           <div class="tab-pane" id="admin-users">
             <%- include('partials/admin-users') %>
@@ -136,6 +139,7 @@
           <div class="tab-pane" id="admin-audit-logs">
             <%- include('partials/admin-audit-logs') %>
           </div>
+          <% } %>
 
           <!-- 用户留存 Tab (合并天级和周级) -->
           <div class="tab-pane" id="cohorts">

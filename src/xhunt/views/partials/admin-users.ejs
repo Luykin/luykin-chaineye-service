@@ -27,13 +27,13 @@
       </div>
     </div>
     <div style="margin-top:12px;">
-      <div style="margin-bottom:8px; color:#6b7280; font-size:13px;">权限选择（可多选）</div>
+      <div style="margin-bottom:8px; color:#6b7280; font-size:13px;">权限选择（可多选） · <span style="color:#9ca3af;">标注：[Tab] 页面权限 / [API] 接口操作</span></div>
       <div id="ca-preset" style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
         <button id="ca-preset-all" class="btn">全部权限</button>
         <button id="ca-preset-basic" class="btn">基础权限</button>
         <button id="ca-preset-clear" class="btn">清空</button>
       </div>
-      <div id="ca-perm-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:8px;"></div>
+      <div id="ca-perm-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:12px;"></div>
     </div>
     <div style="margin-top:12px; display:flex; gap:8px;">
       <button id="ca-submit" class="btn primary">创建</button>
@@ -164,27 +164,36 @@
 
   function sectionHeader(text){
     const h = document.createElement('div');
-    h.textContent = text; h.style.fontWeight='600'; h.style.margin='6px 0'; h.style.color='#374151';
+    h.textContent = text; h.style.fontWeight='600'; h.style.margin='4px 0 8px'; h.style.color='#111827';
     return h;
+  }
+
+  function renderGroup(container, g, selectedSet, checksArr){
+    const card = document.createElement('div');
+    card.style.border = '1px solid #e5e7eb'; card.style.borderRadius = '10px'; card.style.padding='10px 12px'; card.style.background='#fff';
+    card.appendChild(sectionHeader(`[${g.label}]`));
+    const row = document.createElement('div');
+    row.style.display='flex'; row.style.flexWrap='wrap'; row.style.gap='8px';
+    g.items.forEach(p => {
+      const chip = document.createElement('label');
+      chip.style.display='inline-flex'; chip.style.alignItems='center'; chip.style.gap='6px';
+      chip.style.padding='6px 10px'; chip.style.border='1px solid #e5e7eb'; chip.style.borderRadius='999px'; chip.style.background='#f9fafb';
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p; cb.checked = selectedSet.has(p);
+      cb.addEventListener('change', ()=>{ if(cb.checked){ selectedSet.add(p); } else { selectedSet.delete(p); } });
+      chip.appendChild(cb);
+      const span = document.createElement('span'); span.textContent = permLabelText(p);
+      chip.appendChild(span);
+      row.appendChild(chip);
+      if (checksArr) checksArr.push(cb);
+    });
+    card.appendChild(row);
+    container.appendChild(card);
   }
 
   function renderCreatePerms(){
     caGrid.innerHTML = '';
     const groups = buildGroups();
-    groups.forEach(g => {
-      caGrid.appendChild(sectionHeader(`[${g.label}]`));
-      g.items.forEach(p => {
-        const label = document.createElement('label');
-        label.style.display = 'flex'; label.style.alignItems = 'center'; label.style.gap = '8px'; label.style.padding = '6px 8px'; label.style.border = '1px solid #e5e7eb'; label.style.borderRadius = '8px';
-        const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p;
-        cb.checked = caSelected.has(p);
-        cb.addEventListener('change', ()=>{ if(cb.checked){ caSelected.add(p); } else { caSelected.delete(p); } });
-        label.appendChild(cb);
-        const span = document.createElement('span'); span.textContent = permLabelText(p); label.appendChild(span);
-        caGrid.appendChild(label);
-        caChecks.push(cb);
-      });
-    });
+    groups.forEach(g => renderGroup(caGrid, g, caSelected, caChecks));
   }
   function caSync(){ caChecks.forEach(cb => { cb.checked = caSelected.has(cb.value); }); }
   renderCreatePerms();
@@ -314,26 +323,11 @@
     // 权限复选区
     let selected = new Set(current);
     const grid = document.createElement('div');
-    grid.style.display = 'grid'; grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))'; grid.style.gap = '8px';
+    grid.style.display = 'grid'; grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(320px, 1fr))'; grid.style.gap = '12px';
 
     const checks = [];
     const groups = buildGroups();
-    groups.forEach(g => {
-      const header = document.createElement('div'); header.textContent = `[${g.label}]`; header.style.fontWeight='600'; header.style.margin='6px 0'; header.style.color='#374151';
-      grid.appendChild(header);
-      g.items.forEach(p => {
-        const label = document.createElement('label');
-        label.style.display = 'flex'; label.style.alignItems = 'center'; label.style.gap = '8px'; label.style.padding='6px 8px'; label.style.border='1px solid #e5e7eb'; label.style.borderRadius='8px';
-        const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p;
-        cb.checked = selected.has(p);
-        cb.addEventListener('change', ()=>{ if(cb.checked){ selected.add(p); } else { selected.delete(p); }});
-        label.appendChild(cb);
-        const span = document.createElement('span'); span.textContent = permLabelText(p);
-        label.appendChild(span);
-        grid.appendChild(label);
-        checks.push(cb);
-      });
-    });
+    groups.forEach(g => renderGroup(grid, g, selected, checks));
 
     function syncChecks(){
       checks.forEach(cb=>{ cb.checked = selected.has(cb.value); });
