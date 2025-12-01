@@ -16,9 +16,8 @@
       <!-- 认证信息 -->
       <%- include('partials/auth-header', { formatDateTime }) %>
 
-      <!-- 快捷链接 (仅 luykin 可见) -->
-      <% if (typeof user !== 'undefined' && user && user.role === 'super') { %>
-      <%- include('partials/quick-links') %> <% } %>
+      <!-- 快捷链接 -->
+      <%- include('partials/quick-links') %>
 
       <!-- 页面标题 -->
       <div class="header">

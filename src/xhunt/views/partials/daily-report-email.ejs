@@ -32,7 +32,7 @@
   async function loadList(){
     tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;">加载中...</td></tr>';
     try{
-      const res = await fetch('/admin/users');
+      const res = await fetch('/admin/users', { credentials: 'include' });
       const data = await res.json();
       if(!data.success){ throw new Error(data.error||'加载失败'); }
       const list = data.data||[];
@@ -76,14 +76,20 @@
     }
   });
 
-  sendBtn.onclick = async function(){
+  sendBtn.addEventListener('click', async function(){
+    setStatus('正在触发发送...');
     try{
-      const res = await fetch('/api/xhunt/stats/report/send',{ method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({}) });
+      const res = await fetch('/api/xhunt/stats/report/send',{
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({})
+      });
       const data = await res.json();
       if(!data.success){ throw new Error(data.error||'发送失败'); }
       setStatus('已触发发送');
     }catch(e){ setStatus(e.message||'发送失败', false); }
-  };
+  });
 
   loadList();
 })();

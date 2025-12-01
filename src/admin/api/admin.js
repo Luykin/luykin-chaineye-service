@@ -26,6 +26,76 @@ router.get("/login", async (req, res) => {
   }
 });
 
+// 发送管理员密码修改验证码（发送到当前登录管理员邮箱）
+router.post("/password/send-code", adminAuth, async (req, res) => {
+  try {
+    const admin = req.adminUser;
+    const email = admin.email;
+    // 生成 6 位数字验证码
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const key = `admin:pwdreset:${email}`;
+    // 存入 Redis，10 分钟有效
+    await req.redisClient.set(key, code, { EX: 600 });
+
+    // 懒加载 nodemailer
+    let nodemailer;
+    try { nodemailer = require("nodemailer"); } catch (_) { return res.status(500).json({ success: false, error: "缺少邮件依赖" }); }
+    const user = process.env.OUTLOOK_USER;
+    const pass = process.env.OUTLOOK_PASS;
+    const from = process.env.OUTLOOK_FROM || `XHunt Server <${user}>`;
+    if (!user || !pass) return res.status(500).json({ success: false, error: "未配置邮箱服务" });
+
+    const transporter = nodemailer.createTransport({
+      host: "smtp.office365.com",
+      port: 587,
+      secure: false,
+      auth: { user, pass },
+    });
+
+    await transporter.sendMail({
+      from,
+      to: email,
+      subject: "XHunt 管理员修改密码验证码",
+      text: `您的验证码是 ${code}，10 分钟内有效。`,
+      html: `<p>您的验证码是 <b>${code}</b>，10 分钟内有效。</p>`
+    });
+
+    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email, action: "password-send-code", route: "/admin/password/send-code", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    res.json({ success: true });
+  } catch (e) {
+    try { await XhuntAdminAuditLog.create({ adminId: req.adminUser?.id, email: req.adminUser?.email, action: "password-send-code", route: "/admin/password/send-code", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
+    res.status(500).json({ success: false, error: "发送失败" });
+  }
+});
+
+// 使用验证码重置当前登录管理员密码
+router.post("/password/reset", adminAuth, express.json(), async (req, res) => {
+  try {
+    const admin = req.adminUser;
+    const email = admin.email;
+    const { code, newPassword } = req.body || {};
+    if (!code || !newPassword || typeof newPassword !== "string" || newPassword.length < 8) {
+      return res.status(400).json({ success: false, error: "参数无效（密码至少8位）" });
+    }
+    const key = `admin:pwdreset:${email}`;
+    const cached = await req.redisClient.get(key);
+    if (!cached || cached !== code) {
+      return res.status(400).json({ success: false, error: "验证码错误或已过期" });
+    }
+    const adminRow = await XhuntAdminManager.findByPk(admin.id);
+    if (!adminRow) return res.status(404).json({ success: false, error: "管理员不存在" });
+    const hash = await bcrypt.hash(newPassword, 10);
+    adminRow.passwordHash = hash;
+    await adminRow.save();
+    await req.redisClient.del(key);
+    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email, action: "password-reset", route: "/admin/password/reset", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    res.json({ success: true });
+  } catch (e) {
+    try { await XhuntAdminAuditLog.create({ adminId: req.adminUser?.id, email: req.adminUser?.email, action: "password-reset", route: "/admin/password/reset", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
+    res.status(500).json({ success: false, error: "重置失败" });
+  }
+});
+
 // 登录提交
 router.post("/login", express.json(), async (req, res) => {
   try {
