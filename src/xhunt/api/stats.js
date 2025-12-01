@@ -3180,7 +3180,7 @@ router.post("/report/send", adminAuth, async (req, res) => {
  * @query email - 按邮箱筛选（可选）
  * @query action - 按动作筛选（可选）
  */
-router.get("/admin-audit/logs", basicAuth, async (req, res) => {
+router.get("/admin-audit/logs", adminAuth, async (req, res) => {
   try {
     // 权限检查：只有 luykin 用户可以查看管理员操作记录
     if (!req.user || req.user.role !== "super") {
