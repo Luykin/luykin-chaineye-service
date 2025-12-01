@@ -61,6 +61,66 @@ document.addEventListener("DOMContentLoaded", function () {
 function initTabs() {
   const tabBtns = document.querySelectorAll(".tab-btn");
   const tabPanes = document.querySelectorAll(".tab-pane");
+  const perms = Array.isArray(window.adminPermissions) ? window.adminPermissions : [];
+
+  // Tab -> permission 映射（无映射则默认允许）
+  const tabPermMap = {
+    "dau-details": "dau-details",
+    "online-users": "online-users",
+    "cohorts": "cohorts",
+    "rootdata": "rootdata",
+    "notes": "notes",
+    "log-search": "log-search:read",
+    "device-monitor": "device-status:read",
+    "version-stats": "version-stats",
+    "url-stats": "url-stats",
+    "security-violations": "security-violations",
+    "messages": "messages",
+    "data-export": "export:users",
+    "pro-management": "pro-management",
+    "backup": "backup:operate",
+    "server-command": "server:execute",
+    "daily-report-email": "daily-report:send",
+    "admin-audit-logs": "audit-logs:read",
+  };
+
+  function hasPermissionForTab(tab) {
+    const need = tabPermMap[tab];
+    if (!need) return true; // 未配置则默认放行
+    if (perms.includes("*")) return true;
+    return perms.includes(need);
+  }
+
+  // 注入简单样式，标记无权限的 Tab 按钮更淡
+  (function ensureNoPermStyle() {
+    if (document.getElementById("no-perm-style")) return;
+    const style = document.createElement("style");
+    style.id = "no-perm-style";
+    style.textContent = `
+      .tab-btn.no-perm { opacity: 0.6; }
+    `;
+    document.head.appendChild(style);
+  })();
+
+  // 预标记无权限的 Tab 按钮
+  tabBtns.forEach((btn) => {
+    const t = btn.getAttribute("data-tab");
+    if (!hasPermissionForTab(t)) {
+      btn.classList.add("no-perm");
+      btn.title = "权限不足，请联系管理员";
+    }
+  });
+
+  function renderNoPermissionPane(tabId) {
+    const pane = document.getElementById(tabId);
+    if (!pane) return;
+    pane.innerHTML = `
+      <div style="padding: 40px; text-align: center; color: #9ca3af;">
+        <div style="font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 8px;">权限不足</div>
+        <div>请联系管理员为你开通访问权限</div>
+      </div>
+    `;
+  }
 
   tabBtns.forEach((btn) => {
     btn.addEventListener("click", function () {
@@ -73,6 +133,11 @@ function initTabs() {
       // 添加活跃状态
       this.classList.add("active");
       document.getElementById(targetTab).classList.add("active");
+
+      // 若无权限，渲染统一的权限不足提示
+      if (!hasPermissionForTab(targetTab)) {
+        renderNoPermissionPane(targetTab);
+      }
 
       // 当切换到 backup 页时，自动刷新一次状态
       if (targetTab === "backup") {

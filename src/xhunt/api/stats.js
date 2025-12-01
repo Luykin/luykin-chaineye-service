@@ -1,7 +1,7 @@
 const express = require("express");
 const path = require("path");
 const { getFullStats, getSimpleStats } = require("../services/statsService");
-const { adminAuth } = require("../../admin/middleware/adminAuth");
+const { adminAuth, requirePermission } = require("../../admin/middleware/adminAuth");
 const expressStatic = require("express");
 const XLSX = require("xlsx");
 const fs = require("fs").promises;
@@ -181,10 +181,13 @@ router.get("/", adminAuth, async (req, res) => {
       );
     });
 
-    // 在HTML中注入统计数据脚本
+    // 在HTML中注入统计数据脚本与权限
+    const permsScript = `<script>window.adminPermissions = ${(JSON.stringify(
+      req.user?.permissions || []
+    ))};</script>`;
     const finalHtml = renderedHtml.replace(
       "</body>",
-      `${statsDataScript}</body>`
+      `${statsDataScript}${permsScript}</body>`
     );
 
     res.send(finalHtml);
@@ -223,7 +226,7 @@ router.get("/json", adminAuth, async (req, res) => {
  * GET /dau-details
  * 获取指定日期的详细日活数据（需要认证）
  */
-router.get("/dau-details", adminAuth, async (req, res) => {
+router.get("/dau-details", adminAuth, requirePermission("dau-details"), async (req, res) => {
   try {
     const { date } = req.query;
 
@@ -285,7 +288,7 @@ router.get("/dau-details", adminAuth, async (req, res) => {
  * GET /online-users
  * 获取最近20分钟内的在线用户列表（需要认证）
  */
-router.get("/online-users", adminAuth, async (req, res) => {
+router.get("/online-users", adminAuth, requirePermission("online-users"), async (req, res) => {
   try {
     const { page = 1, limit = 100 } = req.query;
     const pageNum = parseInt(page);
@@ -366,25 +369,9 @@ router.get("/online-users", adminAuth, async (req, res) => {
  * GET /export/users/excel
  * 导出所有已登录用户数据为Excel文件（需要认证，仅 luykin 用户）
  */
-router.get("/export/users/excel", adminAuth, async (req, res) => {
+router.get("/export/users/excel", adminAuth, requirePermission("export:users"), async (req, res) => {
   try {
-    // 权限检查：只有 luykin 用户可以执行数据导出操作
-    if (!req.user || req.user.role !== "super") {
-      console.log(
-        `[数据导出] ❌ 权限不足: 用户=${
-          req.user?.username || "unknown"
-        }, 角色=${req.user?.role || "unknown"}`
-      );
-      return res.status(403).json({
-        success: false,
-        error: "权限不足",
-        message: "权限不足",
-      });
-    }
-
-    console.log(
-      `[数据导出] ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
-    );
+    console.log(`[数据导出] ✅ 权限验证通过: 用户=${req.user.username}`);
 
     // 获取PostgreSQL模型
     const postgresModels = require("../../models/postgres-start");
@@ -555,25 +542,9 @@ router.get("/export/active-users/js", adminAuth, async (req, res) => {
  * GET /log-search
  * 日志搜索接口（需要认证，仅 luykin 用户）- 优化版本
  */
-router.get("/log-search", adminAuth, async (req, res) => {
+router.get("/log-search", adminAuth, requirePermission("log-search:read"), async (req, res) => {
   try {
-    // 权限检查：只有 luykin 用户可以执行日志搜索操作
-    if (!req.user || req.user.role !== "super") {
-      console.log(
-        `[日志搜索] ❌ 权限不足: 用户=${
-          req.user?.username || "unknown"
-        }, 角色=${req.user?.role || "unknown"}`
-      );
-      return res.status(403).json({
-        success: false,
-        error: "权限不足",
-        message: "权限不足",
-      });
-    }
-
-    console.log(
-      `[日志搜索] ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
-    );
+    console.log(`[日志搜索] ✅ 权限验证通过: 用户=${req.user.username}`);
 
     const { query, contextLines = 3, limit = 5 } = req.query;
 
@@ -692,7 +663,7 @@ router.get("/log-search", adminAuth, async (req, res) => {
  * GET /error-logs
  * 获取最新API错误日志（需要认证）
  */
-router.get("/error-logs", adminAuth, async (req, res) => {
+router.get("/error-logs", adminAuth, requirePermission("error-logs:read"), async (req, res) => {
   try {
     const { lines = 1000 } = req.query;
     const linesNum = parseInt(lines);
@@ -1850,7 +1821,7 @@ const collectRedisKeyDistribution = async (
  * GET /api/stats/device-status
  * 获取设备状态信息（CPU、内存、PM2、Redis、PostgreSQL等）
  */
-router.get("/device-status", adminAuth, async (req, res) => {
+router.get("/device-status", adminAuth, requirePermission("device-status:read"), async (req, res) => {
   try {
     const { exec } = require("child_process");
     const util = require("util");
@@ -2633,29 +2604,12 @@ router.get("/backup-status", adminAuth, async (req, res) => {
 });
 
 /**
- * POST /trigger-backup
+ * POST /execute-command
  * 手动触发数据库备份（需要认证，仅 luykin 用户）
  */
-router.post("/trigger-backup", adminAuth, async (req, res) => {
+router.post("/execute-command", adminAuth, requirePermission("server:execute"), async (req, res) => {
   try {
-    // 权限检查：只有 luykin 用户可以手动触发备份
-    if (!req.user || req.user.role !== "super") {
-      console.log(
-        `[手动备份] ❌ 权限不足: 用户=${
-          req.user?.username || "unknown"
-        }, 角色=${req.user?.role || "unknown"}`
-      );
-      try { await logAdminAction(req, { action: "trigger-backup", success: false, message: "forbidden" }); } catch(e) {}
-      return res.status(403).json({
-        success: false,
-        error: "权限不足",
-        message: "仅 luykin 用户可以执行手动备份",
-      });
-    }
-
-    console.log(
-      `[手动备份] ✅ 权限验证通过: 用户=${req.user.username}, 角色=${req.user.role}`
-    );
+    console.log(`[执行命令] ✅ 权限验证通过: 用户=${req.user.username}`);
 
     const pgBackupService = require("../../services/pg-backup-service");
     

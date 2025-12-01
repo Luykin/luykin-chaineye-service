@@ -3,7 +3,7 @@ const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
 const path = require("path");
 const { XhuntAdminManager, XhuntAdminAuditLog } = require("../../models/postgres-start");
-const { adminAuth, requireRole, setSessionCookie } = require("../middleware/adminAuth");
+const { adminAuth, requireRole, requirePermission, setSessionCookie } = require("../middleware/adminAuth");
 
 const router = express.Router();
 
@@ -204,7 +204,7 @@ router.post("/logout", adminAuth, async (req, res) => {
 // 管理员列表（用于配置是否接收日报）
 router.get("/users", adminAuth, async (req, res) => {
   try {
-    const rows = await XhuntAdminManager.findAll({ attributes: ["id", "email", "role", "receivesDailyReport", "isActive", "canLogin", "lastLoginAt"], order: [["id", "ASC"]] });
+    const rows = await XhuntAdminManager.findAll({ attributes: ["id", "email", "role", "receivesDailyReport", "isActive", "canLogin", "lastLoginAt", "permissions"], order: [["id", "ASC"]] });
     res.json({ success: true, data: rows });
   } catch (e) {
     res.status(500).json({ success: false, error: "加载失败" });
@@ -227,6 +227,31 @@ router.patch("/users/:id", adminAuth, async (req, res) => {
     if (typeof receivesDailyReport === "boolean") target.receivesDailyReport = receivesDailyReport;
     await target.save();
     res.json({ success: true, data: { id: target.id, receivesDailyReport: target.receivesDailyReport } });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "更新失败" });
+  }
+});
+
+// 更新管理员权限清单（需要 admin:manage-permissions 权限）
+router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manage-permissions"), express.json(), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissions } = req.body || {};
+    if (!Array.isArray(permissions)) {
+      return res.status(400).json({ success: false, error: "permissions 必须是字符串数组" });
+    }
+    const sanitized = permissions
+      .filter((p) => typeof p === "string")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+    const target = await XhuntAdminManager.findByPk(id);
+    if (!target) return res.status(404).json({ success: false, error: "未找到" });
+
+    target.permissions = sanitized;
+    await target.save();
+    try { await XhuntAdminAuditLog.create({ adminId: req.adminUser.id, email: req.adminUser.email, action: "update-permissions", route: `/admin/users/${id}/permissions`, method: "PATCH", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: JSON.stringify(sanitized) }); } catch (e) {}
+
+    res.json({ success: true, data: { id: target.id, permissions: target.permissions } });
   } catch (e) {
     res.status(500).json({ success: false, error: "更新失败" });
   }

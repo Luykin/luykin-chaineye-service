@@ -11,6 +11,7 @@ module.exports = (sequelize) => {
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       canLogin: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       receivesDailyReport: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      permissions: { type: DataTypes.JSONB, allowNull: true },
       lastLoginAt: { type: DataTypes.DATE, allowNull: true },
     },
     {

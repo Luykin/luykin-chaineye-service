@@ -41,8 +41,6 @@
           <button class="tab-btn" data-tab="version-stats">📈 版本统计</button>
           <button class="tab-btn" data-tab="url-stats">🔗 接口统计</button>
           <button class="tab-btn" data-tab="security-violations">🛡️ 安全拦截</button>
-          <% if (typeof user !== 'undefined' && user && user.role === 'super')
-          { %>
           <button class="tab-btn" data-tab="messages">💬 发送私信</button>
           <button class="tab-btn" data-tab="data-export">📤 数据导出</button>
           <button class="tab-btn" data-tab="pro-management">👑 Pro用户管理</button>
@@ -50,7 +48,6 @@
           <button class="tab-btn" data-tab="server-command">🖥️ 服务器命令</button>
           <button class="tab-btn" data-tab="daily-report-email">📧 日报邮件</button>
           <button class="tab-btn" data-tab="admin-audit-logs">🧾 管理员操作记录</button>
-          <% } %>
         </div>
 
         <!-- Tab 内容 -->
@@ -106,42 +103,39 @@
             <%- include('partials/security-violations') %>
           </div>
 
-          <!-- 发送私信 Tab (仅 super 可见) -->
-          <% if (typeof user !== 'undefined' && user && user.role === 'super')
-          { %>
+          <!-- 发送私信 Tab -->
           <div class="tab-pane" id="messages">
             <%- include('partials/message-stats') %>
           </div>
 
-          <!-- 数据导出 Tab (仅 super 可见) -->
+          <!-- 数据导出 Tab -->
           <div class="tab-pane" id="data-export">
             <%- include('partials/data-export-stats') %>
           </div>
 
-          <!-- Pro 用户管理 Tab (仅 super 可见) -->
+          <!-- Pro 用户管理 Tab -->
           <div class="tab-pane" id="pro-management">
             <%- include('partials/pro-management-stats') %>
           </div>
 
-          <!-- 数据库备份 Tab (仅 super 可见) -->
+          <!-- 数据库备份 Tab -->
           <div class="tab-pane" id="backup">
             <%- include('partials/backup-stats') %>
           </div>
 
-          <!-- 服务器命令 Tab (仅 super 可见) -->
+          <!-- 服务器命令 Tab -->
           <div class="tab-pane" id="server-command">
             <%- include('partials/server-command-stats') %>
           </div>
 
-          <!-- 日报邮件 Tab (仅 super 可见) -->
+          <!-- 日报邮件 Tab -->
           <div class="tab-pane" id="daily-report-email">
             <%- include('partials/daily-report-email') %>
           </div>
-          <!-- 管理员操作记录 Tab (仅 super 可见) -->
+          <!-- 管理员操作记录 Tab -->
           <div class="tab-pane" id="admin-audit-logs">
             <%- include('partials/admin-audit-logs') %>
           </div>
-          <% } %>
 
           <!-- 用户留存 Tab (合并天级和周级) -->
           <div class="tab-pane" id="cohorts">
