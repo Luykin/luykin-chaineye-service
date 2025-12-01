@@ -49,21 +49,8 @@ async function adminAuth(req, res, next) {
       return res.status(403).send(renderLoginRedirect());
     }
 
-    // 载入权限：仅使用 DB 字段；若为空则使用角色默认权限兜底
+    // 载入权限：仅使用 DB 字段；为空则表示无任何细粒度权限
     let permissions = Array.isArray(admin.permissions) ? admin.permissions : [];
-
-    // 角色默认权限（仅用于初始化/兜底，不做强制）
-    if (!permissions || permissions.length === 0) {
-      if (admin.role === "super") {
-        permissions = ["*"]; // 全部
-      } else {
-        permissions = [
-          "overview",
-          "dau-details",
-          "online-users",
-        ];
-      }
-    }
 
     // Sliding expiration: re-issue cookie on each valid request
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
