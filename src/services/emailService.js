@@ -21,7 +21,8 @@
  * - 建议使用企业账户（Office 365/Microsoft 365）
  */
 
-const { SMTPClient } = require('emailjs');
+// emailjs 是 ES Module，需要使用动态导入
+let SMTPClient;
 
 /**
  * 获取 SMTP 配置
@@ -58,6 +59,12 @@ function getSMTPConfig() {
  * @returns {Promise<void>}
  */
 async function sendEmailViaSMTP(to, subject, html, text = null) {
+  // 动态导入 emailjs（ES Module）
+  if (!SMTPClient) {
+    const emailjs = await import('emailjs');
+    SMTPClient = emailjs.SMTPClient;
+  }
+  
   // 获取 SMTP 配置
   const smtpConfig = getSMTPConfig();
   
