@@ -374,21 +374,22 @@ router.post("/login", express.json(), async (req, res) => {
 
     // 判断是否存在 WebAuthn 凭证
     const credCount = await XhuntAdminWebAuthnCredential.count({ where: { adminId: admin.id } });
+    console.log(`[admin/login] email=${email} id=${admin.id} credCount=${credCount}`);
 
     try { const key = `admin:loginfail:${email}`; await req.redisClient.del(key); } catch (e) {}
 
     if (credCount > 0) {
       // 需要二次验证：签发一个临时 token（5 分钟有效），不下发会话
       const tempToken = jwt.sign({ aid: admin.id, email: admin.email, step: "pwd-ok" }, TEMP_JWT_SECRET, { expiresIn: 300 });
-      try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login-password-ok", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
-      return res.json({ success: true, needsWebAuthn: true, tempToken });
+      try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login-password-ok", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: `credCount=${credCount}` }); } catch (e) {}
+      return res.json({ success: true, needsWebAuthn: true, tempToken, credCount });
     }
 
     // 无凭证：直接登录
     await admin.update({ lastLoginAt: new Date() });
-    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: `credCount=${credCount}` }); } catch (e) {}
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
-    res.json({ success: true, redirect: "/api/xhunt/stats" });
+    res.json({ success: true, redirect: "/api/xhunt/stats", credCount });
   } catch (e) {
     console.error("[admin login] error:", e);
     res.status(500).json({ success: false, error: "登录失败" });
