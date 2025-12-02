@@ -572,12 +572,9 @@ router.post("/supabase/link-token", adminAuth, async (req, res) => {
 // 校验一次性票据（用于 Nginx auth_request）
 router.get("/supabase/verify-link", async (req, res) => {
   try {
-    const bearer = typeof req.headers["authorization"] === "string" ? req.headers["authorization"] : undefined;
-    const bearerToken = bearer && bearer.toLowerCase().startsWith("bearer ") ? bearer.slice(7) : bearer;
-    const headerToken = req.headers["x-auth-token"] || bearerToken;
-    const { token: queryToken } = req.query || {};
-    const token = queryToken || headerToken;
+    const token = req.headers["x-request-signature"];
     if (!token) {
+      console.log("[supabase/verify-link] missing token");
       return res.status(401).json({ success: false });
     }
     let decoded;
