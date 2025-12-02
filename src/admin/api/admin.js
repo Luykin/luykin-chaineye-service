@@ -562,7 +562,7 @@ router.post("/supabase/link-token", adminAuth, async (req, res) => {
     const token = jwt.sign({ aid: admin.id, purpose: "supabase", jti }, LINK_SECRET, { expiresIn: 60 });
     await req.redisClient.set(`supabase:link:jti:${jti}`, "1", { EX: 120 });
     const targetIP = process.env.SUPABASE_IP || "150.5.158.179";
-    const url = `http://${targetIP}:8388/?token=${encodeURIComponent(token)}`;
+    const url = `http://${targetIP}:8388/project/default?token=${encodeURIComponent(token)}`;
     return res.json({ success: true, token, url, ttl: 300 });
   } catch (e) {
     return res.status(500).json({ success: false, error: "生成票据失败" });
@@ -578,28 +578,24 @@ router.get("/supabase/verify-link", async (req, res) => {
     const { token: queryToken } = req.query || {};
     const token = queryToken || headerToken;
     if (!token) {
-      console.log("[supabase/verify-link] missing token");
       return res.status(401).json({ success: false });
     }
     let decoded;
     try {
       decoded = jwt.verify(String(token), LINK_SECRET);
     } catch (e) {
-      console.log("[supabase/verify-link] jwt verify failed:", e?.message);
       return res.status(401).json({ success: false });
     }
     if (decoded.purpose !== "supabase" || !decoded.jti) {
-      console.log("[supabase/verify-link] invalid payload fields");
       return res.status(401).json({ success: false });
     }
     const key = `supabase:link:jti:${decoded.jti}`;
     const exists = await req.redisClient.get(key);
     if (!exists) {
-      console.log("[supabase/verify-link] jti not found or used");
       return res.status(401).json({ success: false });
     }
-    // await req.redisClient.del(key);
-    // try { await XhuntAdminAuditLog.create({ adminId: decoded.aid || null, email: null, action: "supabase-link", route: "/admin/supabase/verify-link", method: "GET", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    await req.redisClient.del(key);
+    try { await XhuntAdminAuditLog.create({ adminId: decoded.aid || null, email: null, action: "supabase-link", route: "/admin/supabase/verify-link", method: "GET", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     res.set("Cache-Control","no-store");
     return res.status(204).end();
   } catch (e) {
