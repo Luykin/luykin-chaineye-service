@@ -594,7 +594,7 @@ router.get("/supabase/verify-link", async (req, res) => {
     if (!exists) {
       return res.status(401).json({ success: false });
     }
-    // await req.redisClient.del(key);
+    await req.redisClient.del(key);
     // try { await XhuntAdminAuditLog.create({ adminId: decoded.aid || null, email: null, action: "supabase-link", route: "/admin/supabase/verify-link", method: "GET", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     res.set("Cache-Control","no-store");
     return res.status(204).end();
