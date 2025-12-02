@@ -21,16 +21,38 @@ const XhuntAdminManagerModel = require("../xhunt/models/XhuntAdminManager");
 const XhuntAdminAuditLogModel = require("../xhunt/models/XhuntAdminAuditLog");
 const XhuntAdminWebAuthnCredentialModel = require("../xhunt/models/XhuntAdminWebAuthnCredential");
 
+const pgDialect = process.env.PG_DIALECT || "postgres";
+const pgHost = process.env.PG_HOST;
+const pgPort = process.env.PG_PORT ? parseInt(process.env.PG_PORT, 10) : undefined;
+const pgDatabase = process.env.PG_DATABASE;
+const pgUsername = process.env.PG_USERNAME;
+const pgPassword = process.env.PG_PASSWORD;
+
+if (!pgHost || !pgDatabase || !pgUsername || !pgPassword) {
+  throw new Error(
+    "PostgreSQL env incomplete: require PG_HOST, PG_DATABASE, PG_USERNAME, PG_PASSWORD"
+  );
+}
+
+const dialectOptions = {};
+if (process.env.PG_SSL === "true") {
+  dialectOptions.ssl = {
+    require: true,
+    rejectUnauthorized: process.env.PG_SSL_REJECT_UNAUTHORIZED !== "false",
+  };
+}
+
 const pgInstance = new Sequelize({
-  dialect: process.env.PG_DIALECT || "postgres",
-  host: process.env.PG_HOST || "150.5.158.179",
-  port: parseInt(process.env.PG_PORT || "5432", 10),
-  database: process.env.PG_DATABASE || "luykindatabase",
-  username: process.env.PG_USERNAME || "luykin",
-  password: process.env.PG_PASSWORD || "wtf.0813",
-  logging: process.env.PG_LOGGING === "true", // 转换为布尔值
-  // 对 Postgres：保持服务端与 ORM 都使用 UTC，避免跨时区偏差
+  dialect: pgDialect,
+  host: pgHost,
+  port: pgPort,
+  database: pgDatabase,
+  username: pgUsername,
+  password: pgPassword,
+  logging: process.env.PG_LOGGING === "true",
   timezone: "+00:00",
+  pool: { max: 10, min: 0, idle: 10000, acquire: 20000 },
+  dialectOptions,
 });
 
 /** 🏖️这是 https://www.cryptohunt.ai/ 的数据表 start====== **/
