@@ -563,7 +563,7 @@ router.post("/supabase/link-token", adminAuth, async (req, res) => {
     await req.redisClient.set(`supabase:link:jti:${jti}`, "1", { EX: 120 });
     const targetIP = process.env.SUPABASE_IP || "150.5.158.179";
     const url = `http://${targetIP}:8388/?token=${encodeURIComponent(token)}`;
-    return res.json({ success: true, token, url, ttl: 60 });
+    return res.json({ success: true, token, url, ttl: 300 });
   } catch (e) {
     return res.status(500).json({ success: false, error: "生成票据失败" });
   }
@@ -612,8 +612,8 @@ router.get("/supabase/verify-link", async (req, res) => {
       console.log("[supabase/verify-link] jti not found or already used:", key);
       return res.status(401).json({ success: false });
     }
-    await req.redisClient.del(key);
-    try { await XhuntAdminAuditLog.create({ adminId: decoded.aid || null, email: null, action: "supabase-link", route: "/admin/supabase/verify-link", method: "GET", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
+    // await req.redisClient.del(key);
+    // try { await XhuntAdminAuditLog.create({ adminId: decoded.aid || null, email: null, action: "supabase-link", route: "/admin/supabase/verify-link", method: "GET", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     res.set("Cache-Control","no-store");
     return res.status(204).end();
   } catch (e) {
