@@ -567,8 +567,7 @@ router.post("/supabase/link-token", adminAuth, async (req, res) => {
       return res.status(403).json({ success: false, error: "需要先录入生物识别" });
     }
     const jti = randomUUID();
-    const token = jwt.sign({ aid: admin.id, purpose: "supabase", jti }, LINK_SECRET, { expiresIn: 60 });
-    await req.redisClient.set(`supabase:link:jti:${jti}`, "1", { EX: 120 });
+    const token = jwt.sign({ aid: admin.id, purpose: "supabase", jti }, LINK_SECRET, { expiresIn: 600 });
     const targetIP = process.env.SUPABASE_IP || "150.5.158.179";
     const url = `http://${targetIP}:8388/project/default?token=${encodeURIComponent(token)}`;
     return res.json({ success: true, token, url, ttl: 300 });
@@ -594,13 +593,6 @@ router.get("/supabase/verify-link", async (req, res) => {
     if (decoded.purpose !== "supabase" || !decoded.jti) {
       return res.status(401).json({ success: false });
     }
-    const key = `supabase:link:jti:${decoded.jti}`;
-    const exists = await req.redisClient.get(key);
-    if (!exists) {
-      return res.status(401).json({ success: false });
-    }
-    await req.redisClient.del(key);
-    // try { await XhuntAdminAuditLog.create({ adminId: decoded.aid || null, email: null, action: "supabase-link", route: "/admin/supabase/verify-link", method: "GET", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     res.set("Cache-Control","no-store");
     return res.status(204).end();
   } catch (e) {
