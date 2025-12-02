@@ -59,7 +59,39 @@ router.post(
 
       const normalizedCampaign = normalizeCampaign(campaign);
       if (!normalizedCampaign) {
-        return res.status(400).json({ error: "campaign 为必填字段" });
+        return res.status(400).json({ error: "campaign is required" });
+      }
+
+      try {
+        const cfgResp = await axios.get(
+          "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_campaigns&group=DEFAULT_GROUP",
+          { timeout: 7000 }
+        );
+        const cfg = cfgResp && cfgResp.data ? cfgResp.data : null;
+        if (!cfg || !Array.isArray(cfg.campaigns)) {
+          return res.status(502).json({ error: "Failed to fetch campaigns config: incomplete data" });
+        }
+        const found = cfg.campaigns.find(
+          (c) => c && c.campaignKey === normalizedCampaign
+        );
+        if (!found) {
+          return res.status(400).json({ error: "Invalid campaign identifier" });
+        }
+        if (!found.enabled) {
+          return res.status(400).json({ error: "Campaign is not enabled" });
+        }
+        const now = new Date();
+        const startAt = found.enrollmentWindow && found.enrollmentWindow.startAt ? new Date(found.enrollmentWindow.startAt) : null;
+        const endAt = found.enrollmentWindow && found.enrollmentWindow.endAt ? new Date(found.enrollmentWindow.endAt) : null;
+        if (!startAt || !endAt || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+          return res.status(502).json({ error: "Invalid enrollment window in config" });
+        }
+        if (now < startAt || now > endAt) {
+          return res.status(400).json({ error: "Not within the enrollment window" });
+        }
+      } catch (cfgErr) {
+        console.error("Fetch campaigns config error:", cfgErr);
+        return res.status(502).json({ error: "Campaign configuration service unavailable" });
       }
 
       const authedUserId = req.user && req.user.id;
