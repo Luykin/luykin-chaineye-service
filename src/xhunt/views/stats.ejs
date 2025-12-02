@@ -56,8 +56,11 @@
         <div class="tab-content">
           <!-- 数据概览 Tab -->
           <div class="tab-pane active" id="overview">
-            <%- include('partials/overview-stats', { stats, formatNumber,
-            formatDateTime }) %>
+            <% if (typeof user !== 'undefined' && user && (user.role === 'super' || (Array.isArray(user.permissions) && user.permissions.includes('overview')))) { %>
+            <%- include('partials/overview-stats', { stats, formatNumber, formatDateTime }) %>
+            <% } else { %>
+            <div style="padding:12px;color:#6b7280;">无权限查看该内容</div>
+            <% } %>
           </div>
 
           <!-- 日活详情 Tab -->

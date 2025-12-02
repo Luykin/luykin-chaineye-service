@@ -392,6 +392,8 @@
         tdPerm.textContent = (data.data.permissions||[]).join(', ');
         setStatus('权限已更新');
         row.remove();
+        // 刷新列表，确保展示最新数据
+        if (typeof loadList === 'function') { loadList(); }
       }catch(e){ setStatus(e.message||'保存失败', false); }
     });
 
