@@ -577,39 +577,25 @@ router.get("/supabase/verify-link", async (req, res) => {
     const headerToken = req.headers["x-auth-token"] || bearerToken;
     const { token: queryToken } = req.query || {};
     const token = queryToken || headerToken;
-    console.log("[supabase/verify-link] incoming1111:", {
-      ip: req.ip,
-      ua: req.headers["user-agent"],
-      hasToken: !!token,
-      hasBearer: !!bearerToken,
-      hasHeaderToken: !!headerToken,
-      hasQueryToken: !!queryToken,
-      queryKeys: Object.keys(req.query || {}),
-      accept: req.headers["accept"],
-      xhr: req.headers["x-requested-with"],
-    });
     if (!token) {
-      console.log("[supabase/verify-link] missing token1111");
+      console.log("[supabase/verify-link] missing token");
       return res.status(401).json({ success: false });
     }
     let decoded;
     try {
-      const brief = String(token).slice(0, 16) + "...";
       decoded = jwt.verify(String(token), LINK_SECRET);
-      console.log("[supabase/verify-link] jwt ok:", { brief, aid: decoded?.aid, jti: decoded?.jti, purpose: decoded?.purpose });
     } catch (e) {
       console.log("[supabase/verify-link] jwt verify failed:", e?.message);
       return res.status(401).json({ success: false });
     }
     if (decoded.purpose !== "supabase" || !decoded.jti) {
-      console.log("[supabase/verify-link] invalid payload fields:", { purpose: decoded?.purpose, jti: decoded?.jti });
+      console.log("[supabase/verify-link] invalid payload fields");
       return res.status(401).json({ success: false });
     }
     const key = `supabase:link:jti:${decoded.jti}`;
     const exists = await req.redisClient.get(key);
-    console.log("[supabase/verify-link] redis jti exists:", !!exists);
     if (!exists) {
-      console.log("[supabase/verify-link] jti not found or already used:", key);
+      console.log("[supabase/verify-link] jti not found or used");
       return res.status(401).json({ success: false });
     }
     // await req.redisClient.del(key);
