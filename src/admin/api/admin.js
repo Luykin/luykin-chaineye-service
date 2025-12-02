@@ -441,7 +441,10 @@ router.post("/logout", adminAuth, async (req, res) => {
 router.get("/users", adminAuth, async (req, res) => {
   try {
     const rows = await XhuntAdminManager.findAll({ attributes: ["id", "email", "role", "receivesDailyReport", "isActive", "canLogin", "lastLoginAt", "permissions"], order: [["id", "ASC"]] });
-    res.json({ success: true, data: rows });
+    const creds = await XhuntAdminWebAuthnCredential.findAll({ attributes: ["adminId"] });
+    const counts = {};
+    for (const c of creds) { const aid = c.adminId; counts[aid] = (counts[aid] || 0) + 1; }
+    res.json({ success: true, data: rows.map(r => ({ id: r.id, email: r.email, role: r.role, receivesDailyReport: r.receivesDailyReport, isActive: r.isActive, canLogin: r.canLogin, lastLoginAt: r.lastLoginAt, permissions: r.permissions, webauthnCount: counts[r.id] || 0 })) });
   } catch (e) {
     res.status(500).json({ success: false, error: "加载失败" });
   }

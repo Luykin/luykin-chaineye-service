@@ -48,6 +48,7 @@
           <th>邮箱</th>
           <th style="width:120px;">角色</th>
           <th style="width:120px;">状态</th>
+          <th style="width:120px;">生物识别</th>
           <th style="width:140px;">接收日报</th>
           <th>权限</th>
           <th style="width:160px;">操作</th>
@@ -268,14 +269,14 @@
   });
 
   async function loadList(){
-    tbody.innerHTML = '<tr><td colspan="7" style="padding:12px;text-align:center;color:#6b7280;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:12px;text-align:center;color:#6b7280;">加载中...</td></tr>';
     try{
       const res = await fetch('/admin/users', { credentials: 'include' });
       const data = await res.json();
       if(!data.success){ throw new Error(data.error||'加载失败'); }
       const list = data.data||[];
       if(list.length===0){
-        tbody.innerHTML = '<tr><td colspan="7" style="padding:12px;text-align:center;color:#6b7280;">暂无管理员</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="padding:12px;text-align:center;color:#6b7280;">暂无管理员</td></tr>';
         return;
       }
       tbody.innerHTML = '';
@@ -285,7 +286,8 @@
           <td>${item.id}</td>
           <td>${item.email}</td>
           <td>${item.role}</td>
-          <td>${item.isActive && item.canLogin ? '✅ 可登录' : '❌ 禁用'}</td>`;
+          <td>${item.isActive && item.canLogin ? '✅ 可登录' : '❌ 禁用'}</td>
+          <td>${Number(item.webauthnCount||0)}</td>`;
         tbody.appendChild(tr);
 
         // 接收日报 toggle
@@ -341,7 +343,7 @@
     const row = document.createElement('tr');
     row.className = 'perm-editor-row';
     const td = document.createElement('td');
-    td.colSpan = 7;
+    td.colSpan = 8;
     td.style.background = '#f9fafb';
     td.style.padding = '14px';
     td.style.border = '1px solid #e5e7eb';
