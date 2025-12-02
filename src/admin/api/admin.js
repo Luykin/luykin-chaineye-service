@@ -558,6 +558,11 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
 router.post("/supabase/link-token", adminAuth, async (req, res) => {
   try {
     const admin = req.adminUser;
+    // 需要已录入至少一个 WebAuthn 凭证
+    const credCount = await XhuntAdminWebAuthnCredential.count({ where: { adminId: admin.id } });
+    if (!credCount || credCount <= 0) {
+      return res.status(403).json({ success: false, error: "需要先录入生物识别" });
+    }
     const jti = randomUUID();
     const token = jwt.sign({ aid: admin.id, purpose: "supabase", jti }, LINK_SECRET, { expiresIn: 60 });
     await req.redisClient.set(`supabase:link:jti:${jti}`, "1", { EX: 120 });

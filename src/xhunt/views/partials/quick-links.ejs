@@ -19,6 +19,10 @@
             try{
               const r = await fetch('/admin/supabase/link-token', { method:'POST', headers:{ 'Accept':'application/json' } });
               const j = await r.json();
+              if(r.status === 403 && j && j.error === '需要先录入生物识别'){
+                alert('请先在“账号安全”中录入生物识别（指纹/面容），再使用 Supabase 入口。');
+                return;
+              }
               if(!j.success || !j.url){ throw new Error(j.error || '生成票据失败'); }
               window.open(j.url, '_blank', 'noopener');
             }catch(ex){ alert('打开失败：' + (ex.message || ex)); }
