@@ -14,7 +14,7 @@ const router = express.Router();
 // URL映射配置
 const URL_MAPPINGS = {
   kota: "https://kota.chaineye.tools",
-  kb: "http://150.5.158.179:8087",
+  kb: "http://127.0.0.1:8087",
   kota_temporary: "http://172.31.0.8:16531",
   k8s_kota: "https://data.cryptohunt.ai",
 };
