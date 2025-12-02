@@ -85,7 +85,7 @@
     "server-command","admin-users","admin-audit-logs",
     "notes:read","rootdata:read","log-search:read","error-logs:read","device-status:read","export:users",
     "server:execute","backup:operate","messages:send","pro:manage","daily-report:send","audit-logs:read",
-    "admin:manage-permissions"
+    "admin:manage-permissions","supabase"
   ];
 
   // 权限说明（用于展示友好名称与归属 Tab）
@@ -123,6 +123,7 @@
     "daily-report:send": { type:"API", label:"发送每日报告", tab:"admin-users" },
     "audit-logs:read": { type:"API", label:"审计日志读取", tab:"admin-audit-logs" },
     "admin:manage-permissions": { type:"API", label:"管理管理员权限", tab:"admin-users" },
+    "supabase": { type:"API", label:"Supabase 访问票据" },
     "*": { type:"API", label:"全部权限" },
   };
 

@@ -558,7 +558,7 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
 });
 
 // 生成一次性 Supabase 访问票据（后台已登录）
-router.post("/supabase/link-token", adminAuth, async (req, res) => {
+router.post("/supabase/link-token", adminAuth, requirePermission("supabase"), async (req, res) => {
   try {
     const admin = req.adminUser;
     // 需要已录入至少一个 WebAuthn 凭证
