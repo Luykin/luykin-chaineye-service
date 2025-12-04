@@ -95,7 +95,7 @@ router.get('/:handle', [
 		// Step 2: 使用 Redis 缓存聚合数据（不包含 currentUserReview）
 		const summaryCacheKey = `reviews:summary:${accountId}:onlyKOL:${onlyKOL ? 1 : 0}`;
 		const realTotalCacheKey = `reviews:realTotal:${accountId}`;
-		const ttlSeconds = 120;
+		const ttlSeconds = 360; // 6分钟内不会再计算同一个kol的数据
 		let cachedSummary = null;
 		let cachedRealTotal = null;
 		try {
