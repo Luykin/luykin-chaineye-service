@@ -2,6 +2,7 @@
 // Exported as a Set for efficient membership checks
 
 const XHUNT_VIP = new Set([
+  "kotaweb3",
   "sea_bitcoin",
   "floriat96249",
   "luoyukun4",
