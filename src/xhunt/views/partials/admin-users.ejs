@@ -12,18 +12,38 @@
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
       <div>
         <label for="ca-email">邮箱</label>
-        <input id="ca-email" type="email" placeholder="you@example.com" autocomplete="off" />
+        <input id="ca-email" type="email" placeholder="you@example.com" autocomplete="off"
+               style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; outline:none; transition: box-shadow .15s, border-color .15s;"
+               onfocus="this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.15)'; this.style.borderColor='#93c5fd'"
+               onblur="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb'"/>
       </div>
       <div>
         <label for="ca-password">初始密码（≥8位）</label>
-        <input id="ca-password" type="password" placeholder="至少8位" autocomplete="new-password" />
+        <input id="ca-password" type="password" placeholder="至少8位" autocomplete="new-password"
+               style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; outline:none; transition: box-shadow .15s, border-color .15s;"
+               onfocus="this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.15)'; this.style.borderColor='#93c5fd'"
+               onblur="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb'"/>
       </div>
       <div>
         <label for="ca-role">角色</label>
-        <select id="ca-role">
+        <select id="ca-role"
+                style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; outline:none; transition: box-shadow .15s, border-color .15s; appearance:none; background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%), linear-gradient(135deg, #6b7280 50%, transparent 50%), linear-gradient(to right, #e5e7eb, #e5e7eb); background-position: calc(100% - 20px) calc(1em + 2px), calc(100% - 15px) calc(1em + 2px), calc(100% - 2.5em) 0.5em; background-size: 5px 5px, 5px 5px, 1px 2em; background-repeat: no-repeat;"
+                onfocus="this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.15)'; this.style.borderColor='#93c5fd'"
+                onblur="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb'">
           <option value="admin">admin</option>
           <option value="super">super</option>
         </select>
+      </div>
+      <div>
+        <label for="ca-daily-report">接收日报</label>
+        <div style="display:flex; align-items:center; gap:8px; padding:6px 0;">
+          <label style="position:relative; display:inline-block; width:46px; height:26px;">
+            <input id="ca-daily-report" type="checkbox" style="display:none;" />
+            <span id="ca-daily-report-ui" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#e5e7eb; border-radius:999px; transition: .2s;"></span>
+            <span id="ca-daily-report-knob" style="position:absolute; left:3px; top:3px; width:20px; height:20px; background:#fff; border-radius:999px; box-shadow:0 1px 2px rgba(0,0,0,0.1); transition:.2s;"></span>
+          </label>
+          <span style="font-size:12px; color:#6b7280;">默认关闭，可在列表中随时切换</span>
+        </div>
       </div>
     </div>
     <div style="margin-top:12px;">
@@ -66,6 +86,20 @@
   const statusEl = document.getElementById('dr-status');
   const isSuper = (window.user && window.user.role === 'super');
   const RESTRICTED = new Set(["admin-users","admin-audit-logs","daily-report:send","admin:manage-permissions","audit-logs:read"]);
+
+  // 接收日报（创建表单）开关 UI 同步
+  const caDrCb = document.getElementById('ca-daily-report');
+  const caDrUI = document.getElementById('ca-daily-report-ui');
+  const caDrKnob = document.getElementById('ca-daily-report-knob');
+  function updateDailyReportToggleUI(checked){
+    if (!caDrUI || !caDrKnob) return;
+    caDrUI.style.background = checked ? '#34d399' : '#e5e7eb';
+    caDrKnob.style.transform = checked ? 'translateX(20px)' : 'translateX(0)';
+  }
+  if (caDrCb) {
+    updateDailyReportToggleUI(!!caDrCb.checked);
+    caDrCb.addEventListener('change', ()=> updateDailyReportToggleUI(!!caDrCb.checked));
+  }
 
   function setStatus(msg, ok=true){
     statusEl.textContent = msg;
@@ -248,13 +282,14 @@
       const email = (document.getElementById('ca-email').value||'').trim();
       const password = document.getElementById('ca-password').value||'';
       const role = document.getElementById('ca-role').value||'admin';
+      const receivesDailyReport = !!document.getElementById('ca-daily-report').checked;
       if(!email || !password){ setStatus('请填写邮箱与密码', false); return; }
       setStatus('创建中...');
       const res = await fetch('/admin/users',{
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email, password, role, permissions: Array.from(caSelected) })
+        body: JSON.stringify({ email, password, role, receivesDailyReport, permissions: Array.from(caSelected) })
       });
       const data = await res.json();
       if(!data.success){ throw new Error(data.error||'创建失败'); }
@@ -263,6 +298,9 @@
       document.getElementById('ca-email').value = '';
       document.getElementById('ca-password').value = '';
       document.getElementById('ca-role').value = 'admin';
+      // reset toggle
+      const drCb = document.getElementById('ca-daily-report');
+      if (drCb) { drCb.checked = false; updateDailyReportToggleUI(false); }
       caSelected = new Set(); caSync();
       // 重新加载列表
       loadList();
