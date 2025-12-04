@@ -45,16 +45,26 @@ router.get('/:handle', [
 ], async (req, res) => {
 	try {
 		const handle = req.params.handle;
+		const twid = req.twid;
 		const onlyKOL = req.query.onlyKOL === true;
-		// Step 1: 获取 XAccount 及其基础信息 - 大小写不敏感查找
-		const xAccount = await XAccount.findOne({
-			where: {
-				handle: {
-					[Op.iLike]: handle // 使用 iLike 进行大小写不敏感查找
-				}
-			},
-			attributes: ['id']
-		});
+		// Step 1: 获取 XAccount 及其基础信息 - 优先用 twid 匹配 xId
+		let xAccount = null;
+		if (twid) {
+			xAccount = await XAccount.findOne({
+				where: { xId: twid },
+				attributes: ['id']
+			});
+		}
+		if (!xAccount) {
+			xAccount = await XAccount.findOne({
+				where: {
+					handle: {
+						[Op.iLike]: handle
+					}
+				},
+				attributes: ['id']
+			});
+		}
 		
 		if (!xAccount) {
 			return res.json({
@@ -186,20 +196,30 @@ router.get('/:handle/comments', [
 ], async (req, res) => {
 	try {
 		const handle = req.params.handle;
+		const twid = req.twid;
 		const page = parseInt(req.query.page) || 1;
 		const limit = parseInt(req.query.limit) || 10;
 		const onlyKOL = req.query.onlyKOL === true;
 		const offset = (page - 1) * limit;
 		
-		// Step 1: 查找目标账号 - 大小写不敏感
-		const xAccount = await XAccount.findOne({
-			where: {
-				handle: {
-					[Op.iLike]: handle
-				}
-			},
-			attributes: ['id', 'handle', 'displayName', 'avatar']
-		});
+		// Step 1: 查找目标账号 - 优先用 twid 匹配 xId，其次按 handle（大小写不敏感）
+		let xAccount = null;
+		if (twid) {
+			xAccount = await XAccount.findOne({
+				where: { xId: twid },
+				attributes: ['id', 'handle', 'displayName', 'avatar']
+			});
+		}
+		if (!xAccount) {
+			xAccount = await XAccount.findOne({
+				where: {
+					handle: {
+						[Op.iLike]: handle
+					}
+				},
+				attributes: ['id', 'handle', 'displayName', 'avatar']
+			});
+		}
 		
 		if (!xAccount) {
 			return res.status(404).json({ error: 'Account not found' });
@@ -320,20 +340,27 @@ router.post('/', [
 ], validateRequest, async (req, res) => {
 	try {
 		const { handle, xLink, displayName, avatar, followers, following, rating, tags, note, comment } = req.body;
+		const twid = req.twid;
 		/** 提前检查评论数量上限 **/
 		const cacheKey = `user:review:limit:${req.user.id}`;
 		const userReviewsLimit = await req.redisClient.get(cacheKey);
 		if (userReviewsLimit) {
 			return res.status(403).json({ status: 'error', error: '您今日已达到最大评论次数（5次）' });
 		}
-		// Step 1: 查找或创建 XAccount - 大小写不敏感查找
-		let xAccount = await XAccount.findOne({
-			where: {
-				handle: {
-					[Op.iLike]: handle // 使用 iLike 进行大小写不敏感查找
+		// Step 1: 查找或创建 XAccount - 优先按 twid 匹配 xId，其次按 handle（大小写不敏感）
+		let xAccount = null;
+		if (twid) {
+			xAccount = await XAccount.findOne({ where: { xId: twid } });
+		}
+		if (!xAccount) {
+			xAccount = await XAccount.findOne({
+				where: {
+					handle: {
+						[Op.iLike]: handle // 使用 iLike 进行大小写不敏感查找
+					}
 				}
-			}
-		});
+			});
+		}
 		
 		if (!xAccount) {
 			// 如果不存在，创建一个新的 XAccount
@@ -344,6 +371,7 @@ router.post('/', [
 				avatar,
 				followers: followers || 0,
 				following: following || 0,
+				...(twid ? { xId: twid } : {})
 			});
 		} else {
 			// 如果存在，更新相关信息
@@ -352,6 +380,7 @@ router.post('/', [
 				avatar,
 				followers: followers || 0,
 				following: following || 0,
+				...(twid ? { xId: twid } : {})
 			});
 		}
 		

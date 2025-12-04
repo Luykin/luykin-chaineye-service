@@ -1310,6 +1310,18 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
     }
   }
 
+  // 从 requestId 中解析 twid（例如: <uuid>-twid1570682472358346752），若存在则挂载到 req 上
+  try {
+    if (typeof requestId === "string") {
+      const match = requestId.match(/-twid(\d{5,})$/);
+      if (match) {
+        req.twid = match[1];
+      }
+    }
+  } catch (e) {
+    // 忽略解析异常，不影响后续流程
+  }
+
   return {
     isValid: true,
     securityContext: {
