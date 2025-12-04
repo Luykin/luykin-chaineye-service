@@ -62,7 +62,21 @@ router.get('/:handle', [
 						[Op.iLike]: handle
 					}
 				},
-				attributes: ['id']
+				attributes: ['id', 'xId']
+			});
+		}
+
+		// 如果通过 handle 找到了 xAccount，且存在 twid，但 xId 尚未写入，则异步补写
+		if (xAccount && twid && (!xAccount.xId || xAccount.xId === '')) {
+			setImmediate(async () => {
+				try {
+					await XAccount.update(
+						{ xId: twid },
+						{ where: { id: xAccount.id, xId: null } }
+					);
+				} catch (e) {
+					console.error('补写 XAccount.xId 失败:', e);
+				}
 			});
 		}
 		
@@ -77,76 +91,106 @@ router.get('/:handle', [
 		}
 		
 		const accountId = xAccount.id;
-		
-		// Step 2: 使用 Sequelize 执行聚合查询（带关联）- 根据 onlyKOL 筛选
-		const stats = await XReviewForAccount.findOne({
-			where: { xAccountId: accountId },
-			include: [{
-				model: XHuntUser,
-				as: 'xHuntUser',
-				where: onlyKOL ? { kolRank20W: { [Op.ne]: null } } : undefined,
-				required: onlyKOL,
-				attributes: []
-			}],
-			attributes: [
-				[fn('AVG', col('rating')), 'averageRating'],
-				[fn('COUNT', col('XReviewForAccount.id')), 'totalReviews'],
-				[fn('JSON_AGG', col('tags')), 'allTags']
-			],
-			raw: true,
-			nest: true
-		});
-		
-		// Step 2.1: 新增 - 获取真实的总评论数（不受 onlyKOL 筛选影响）
-		const realTotalReviews = await XReviewForAccount.count({
-			where: { xAccountId: accountId }
-		});
-		
-		let averageRating = Number(Number(stats.averageRating || 0).toFixed(2));
-		const totalReviews = parseInt(stats.totalReviews, 10);
-		
-		// Step 3: 解析所有标签（扁平化数组）
-		let allTags = [];
-		if (stats.allTags) {
-			stats.allTags.forEach(tagArr => {
-				allTags = [...allTags, ...tagArr];
-			});
+
+		// Step 2: 使用 Redis 缓存聚合数据（不包含 currentUserReview）
+		const summaryCacheKey = `reviews:summary:${accountId}:onlyKOL:${onlyKOL ? 1 : 0}`;
+		const realTotalCacheKey = `reviews:realTotal:${accountId}`;
+		const ttlSeconds = 120;
+		let cachedSummary = null;
+		let cachedRealTotal = null;
+		try {
+			if (req.redisClient?.get) {
+				const [summaryStr, realTotalStr] = await Promise.all([
+					req.redisClient.get(summaryCacheKey),
+					req.redisClient.get(realTotalCacheKey)
+				]);
+				cachedSummary = summaryStr ? JSON.parse(summaryStr) : null;
+				cachedRealTotal = realTotalStr ? parseInt(realTotalStr, 10) : null;
+			}
+		} catch (e) {
+			// 忽略缓存读取错误
 		}
-		
-		// Step 4: 构建 tagCloud（仅前 10 个高频标签）
-		const tagCounts = {};
-		allTags.forEach(tag => {
-			tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-		});
-		const allTagCount = Object.keys(tagCounts || {}).length;
-		
-		// 只取前 10 个
-		const tagCloud = Object.entries(tagCounts)
-			.map(([text, value]) => ({ text, value }))
-			.sort((a, b) => b.value - a.value)
-			.slice(0, 10);
-		
-		// Step 5: 获取前 5 条评论用户（避免加载全部评论）
-		let topReviewers = await XReviewForAccount.findAll({
-			where: { xAccountId: accountId },
-			limit: 5,
-			order: [['createdAt', 'DESC']],
-			attributes: ['userAvatar', 'userName'],
-			include: [{
-				model: XHuntUser,
-				as: 'xHuntUser',
-				where: onlyKOL ? { kolRank20W: { [Op.ne]: null } } : undefined,
-				required: onlyKOL
-			}],
-			raw: true,
-			// group: ['xHuntUser.displayName', 'xHuntUser.id'], // 必须包含所有非聚合字段
-			// having: fn('COUNT', col('XReviewForAccount.id')) > 0,
-			// raw: true
-		});
-		topReviewers = topReviewers.map(review => ({
-			avatar: review.userAvatar,
-			name: review.userName
-		}));
+
+		let averageRating, totalReviews, tagCloud, topReviewers, realTotalReviews, allTagCount;
+		if (cachedSummary && Number.isFinite(cachedSummary.averageRating) && Number.isFinite(cachedSummary.totalReviews)) {
+			averageRating = cachedSummary.averageRating;
+			totalReviews = cachedSummary.totalReviews;
+			tagCloud = cachedSummary.tagCloud || [];
+			topReviewers = cachedSummary.topReviewers || [];
+			allTagCount = cachedSummary.allTagCount || 0;
+		} else {
+			// 计算聚合统计
+			const stats = await XReviewForAccount.findOne({
+				where: { xAccountId: accountId },
+				include: [{
+					model: XHuntUser,
+					as: 'xHuntUser',
+					where: onlyKOL ? { kolRank20W: { [Op.ne]: null } } : undefined,
+					required: onlyKOL,
+					attributes: []
+				}],
+				attributes: [
+					[fn('AVG', col('rating')), 'averageRating'],
+					[fn('COUNT', col('XReviewForAccount.id')), 'totalReviews'],
+					[fn('JSON_AGG', col('tags')), 'allTags']
+				],
+				raw: true,
+				nest: true
+			});
+
+			averageRating = Number(Number(stats.averageRating || 0).toFixed(2));
+			totalReviews = parseInt(stats.totalReviews, 10);
+
+			let allTags = [];
+			if (stats.allTags) {
+				stats.allTags.forEach(tagArr => {
+					allTags = [...allTags, ...tagArr];
+				});
+			}
+			const tagCounts = {};
+			allTags.forEach(tag => {
+				tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+			});
+			allTagCount = Object.keys(tagCounts || {}).length;
+			tagCloud = Object.entries(tagCounts)
+				.map(([text, value]) => ({ text, value }))
+				.sort((a, b) => b.value - a.value)
+				.slice(0, 10);
+
+			let top = await XReviewForAccount.findAll({
+				where: { xAccountId: accountId },
+				limit: 5,
+				order: [['createdAt', 'DESC']],
+				attributes: ['userAvatar', 'userName'],
+				include: [{
+					model: XHuntUser,
+					as: 'xHuntUser',
+					where: onlyKOL ? { kolRank20W: { [Op.ne]: null } } : undefined,
+					required: onlyKOL
+				}],
+				raw: true,
+			});
+			topReviewers = top.map(review => ({ avatar: review.userAvatar, name: review.userName }));
+
+			// 写入缓存
+			try {
+				if (req.redisClient?.setEx) {
+					const payload = JSON.stringify({ averageRating, totalReviews, tagCloud, topReviewers, allTagCount });
+					await req.redisClient.setEx(summaryCacheKey, ttlSeconds, payload);
+				}
+			} catch (e) { /* 忽略缓存写入错误 */ }
+		}
+
+		if (typeof cachedRealTotal === 'number' && !Number.isNaN(cachedRealTotal)) {
+			realTotalReviews = cachedRealTotal;
+		} else {
+			realTotalReviews = await XReviewForAccount.count({ where: { xAccountId: accountId } });
+			try {
+				if (req.redisClient?.setEx) {
+					await req.redisClient.setEx(realTotalCacheKey, ttlSeconds, String(realTotalReviews));
+				}
+			} catch (e) { /* 忽略缓存写入错误 */ }
+		}
 		
 		// Step 6: 如果登录了，检查当前用户是否评论过
 		let currentUserReview = null;
@@ -289,6 +333,11 @@ router.get('/:handle/comments', [
 		const totalPages = Math.ceil(totalComments / limit);
 		
 		// Step 7: 返回结果
+		// 设置浏览器缓存10分钟
+		try {
+			res.setHeader('Cache-Control', 'public, max-age=600');
+			res.setHeader('Expires', new Date(Date.now() + 10 * 60 * 1000).toUTCString());
+		} catch (e) { /* 忽略设置header错误 */ }
 		res.json({
 			success: true,
 			data: {
@@ -423,6 +472,14 @@ router.post('/', [
 				note: sanitizeNote(note || ''), //本字段即将需要被废弃⚠️
 				comment: sanitizeComment(comment || '')
 			});
+			// 失效聚合缓存
+			try {
+				await Promise.all([
+					req.redisClient?.del?.(`reviews:summary:${xAccount.id}:onlyKOL:0`),
+					req.redisClient?.del?.(`reviews:summary:${xAccount.id}:onlyKOL:1`),
+					req.redisClient?.del?.(`reviews:realTotal:${xAccount.id}`),
+				]);
+			} catch (e) { /* 忽略缓存删除错误 */ }
 		} else {
 			// Step 3: 创建新评论
 			const newReview = await XReviewForAccount.create({
@@ -444,6 +501,14 @@ router.post('/', [
 			});
 			const cacheKey1 = `user:points:${req.user.id}`;
 			await req.redisClient.del(cacheKey1);
+			// 失效聚合缓存
+			try {
+				await Promise.all([
+					req.redisClient?.del?.(`reviews:summary:${xAccount.id}:onlyKOL:0`),
+					req.redisClient?.del?.(`reviews:summary:${xAccount.id}:onlyKOL:1`),
+					req.redisClient?.del?.(`reviews:realTotal:${xAccount.id}`),
+				]);
+			} catch (e) { /* 忽略缓存删除错误 */ }
 		}
 		
 		res.status(201).json({ status: 'success' });
