@@ -200,17 +200,27 @@ morgan.token("custom-info", function (req, res) {
   const version = req.headers["x-extension-version"] || "no-version";
   const windowLocationHref =
     req.headers["x-window-location-href"] || "no-location";
+  const requestId = req.headers["x-request-id"] || "no-request-id";
 
   // 获取IP信息
   const realIp = req.headers["x-real-ip"] || "no-real-ip";
   const forwardedFor = req.headers["x-forwarded-for"] || "no-forwarded-for";
 
-  return `pm2_app=luykin-chaineye-api custom_info=xhunt-service user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref} real_ip=${realIp} forwarded_for=${forwardedFor} is_extension=${isChromeExtension}`;
+  return `pm2_app=luykin-chaineye-api custom_info=xhunt-service request_id=${requestId} user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref} real_ip=${realIp} forwarded_for=${forwardedFor} is_extension=${isChromeExtension}`;
 });
 
+// 打印入口日志（请求刚到达时）
 app.use(
   morgan(
-    ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" :custom-info'
+    'in request_id=:req[x-request-id] method=:method url=:url ua=":user-agent"',
+    { immediate: true }
+  )
+);
+
+// 打印出口日志（响应返回时），包含状态与耗时；如有错误状态，额外标注
+app.use(
+  morgan(
+    'out request_id=:req[x-request-id] status=:status method=:method url=:url origin=":req[origin]" allow_origin=":res[Access-Control-Allow-Origin]" cost_ms=:response-time[3] len=:res[content-length] ref=":referrer" ua=":user-agent"'
   )
 );
 app.use(helmet.hidePoweredBy());
