@@ -166,7 +166,7 @@ router.post('/', [
 				console.error('清空 reviews 表中的 note 字段失败:', error);
 			}
 		});
-		
+		console.log(`[notes api] 保存备注成功 handle: ${handle} xLink: ${xLink} displayName: ${displayName} avatar: ${avatar} note: ${note}`);
 		res.status(200).json({
 			status: 'success',
 			message: '备注保存成功'
