@@ -126,6 +126,10 @@ const corsOptions = {
       "https://x.com",
       "https://kb.cryptohunt.ai",
       "http://kb.cryptohunt.ai",
+      "https://kb.xhunt.ai",
+      "http://kb.xhunt.ai",
+      "https://xhunt.ai",
+      "http://xhunt.ai",
     ];
 
     // 允许 chrome-extension:// 来源（任何插件）
@@ -141,7 +145,7 @@ const corsOptions = {
     // 否则拒绝
     callback(new Error("Not allowed by CORS"));
   },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: [
     "Content-Type",
     "Authorization",
@@ -155,6 +159,7 @@ const corsOptions = {
     "x-window-location-href",
   ],
   credentials: true,
+  optionsSuccessStatus: 204,
 };
 
 app.set("trust proxy", 1); // 仅信任最靠近 Express 的一层代理
