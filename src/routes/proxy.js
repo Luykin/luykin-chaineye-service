@@ -9,6 +9,19 @@ const crypto = require("crypto");
 const CACHE_TTL = 60 * 60; // 缓存时间（秒）
 const CACHE_MAX_SIZE = 1024 * 1024; // 单条缓存最大体积（1MB）
 
+// 仅在未设置时补充 CORS 头，避免覆盖上游自带配置
+const ensureCorsHeaders = (res, allowMethods) => {
+  if (!res.hasHeader("Access-Control-Allow-Origin")) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+  if (!res.hasHeader("Access-Control-Allow-Credentials")) {
+    res.setHeader("Access-Control-Allow-Credentials", "false");
+  }
+  if (!res.hasHeader("Access-Control-Allow-Methods")) {
+    res.setHeader("Access-Control-Allow-Methods", allowMethods);
+  }
+};
+
 // 生成MD5哈希作为缓存键
 const getCacheKey = (url) =>
   crypto.createHash("md5").update(`${url}_202503162029`).digest("hex");
@@ -42,10 +55,7 @@ router.get("/", async (req, res) => {
         Object.entries(headers).forEach(([key, value]) => {
           res.setHeader(key, value);
         });
-        // 设置 CORS 响应头
-        res.setHeader("Access-Control-Allow-Origin", "*"); // 动态设置 Origin
-        res.setHeader("Access-Control-Allow-Credentials", "false"); // 允许凭据
-        res.setHeader("Access-Control-Allow-Methods", "GET"); // 支持 GET 方法
+        ensureCorsHeaders(res, "GET");
 
         return res.send(body);
       } catch (parseError) {
@@ -93,10 +103,7 @@ router.get("/", async (req, res) => {
     Object.entries(proxyRes.headers).forEach(([key, value]) => {
       res.setHeader(key, value);
     });
-    // 设置 CORS 响应头
-    res.setHeader("Access-Control-Allow-Origin", "*"); // 动态设置 Origin
-    res.setHeader("Access-Control-Allow-Credentials", "false"); // 允许凭据
-    res.setHeader("Access-Control-Allow-Methods", "GET"); // 支持 GET 方法
+    ensureCorsHeaders(res, "GET");
 
     res.send(responseBody);
   } catch (err) {
@@ -154,11 +161,10 @@ router.post("/", async (req, res) => {
     Object.entries(proxyRes.headers).forEach(([key, value]) => {
       res.setHeader(key, value);
     });
-    // 设置 CORS 响应头
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Credentials", "false");
-    res.setHeader("Access-Control-Allow-Methods", "POST");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    ensureCorsHeaders(res, "POST");
+    if (!res.hasHeader("Access-Control-Allow-Headers")) {
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    }
 
     res.send(responseBody);
   } catch (err) {
