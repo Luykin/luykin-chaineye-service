@@ -199,6 +199,9 @@ morgan.token("xhunt-identity", (req) => {
   return `request_id=${requestId} user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref}`;
 });
 
+// 错误信息 token（仅在错误处理中设置，默认 "-"）
+morgan.token("error-info", (req, res) => res.locals.errorMessage || "-");
+
 // 打印入口日志（请求刚到达时）
 app.use(
   morgan(
@@ -213,7 +216,7 @@ app.use(
 // 打印出口日志（响应返回时），包含状态与耗时；如有错误状态，额外标注
 app.use(
   morgan(
-    'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:url',
+    'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:url err=":error-info"',
     {
       skip: (req) => req.path === "/api/xhunt/stats/log-search",
     }
@@ -380,6 +383,9 @@ app.use((error, req, res, next) => {
 app.use((err, req, res, next) => {
   console.error("❌ 服务器错误:", err.message);
   console.error("❌ 错误堆栈:", err.stack);
+
+  // 供出口日志使用的错误信息
+  res.locals.errorMessage = err.message;
 
   // 如果是CORS错误，返回更友好的错误信息
   if (err.message === "Not allowed by CORS") {
