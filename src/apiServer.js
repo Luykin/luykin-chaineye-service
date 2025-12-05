@@ -189,30 +189,20 @@ app.use((req, res, next) => {
   // 非流式路由应用压缩
   compression()(req, res, next);
 });
-// 自定义 morgan 日志格式
-morgan.token("custom-info", function (req, res) {
-  const userAgent = req.get("User-Agent") || "";
-  const isChromeExtension = userAgent.includes("chrome-extension://");
-
-  // 获取需要的用户相关信息
+// 合并常用头部为一个 token，减少重复
+morgan.token("xhunt-identity", (req) => {
+  const requestId = req.headers["x-request-id"] || "no-request-id";
   const userId = req.headers["x-user-id"] || "anonymous";
   const fingerprint = req.headers["x-device-fingerprint"] || "no-fingerprint";
   const version = req.headers["x-extension-version"] || "no-version";
-  const windowLocationHref =
-    req.headers["x-window-location-href"] || "no-location";
-  const requestId = req.headers["x-request-id"] || "no-request-id";
-
-  // 获取IP信息
-  const realIp = req.headers["x-real-ip"] || "no-real-ip";
-  const forwardedFor = req.headers["x-forwarded-for"] || "no-forwarded-for";
-
-  return `pm2_app=luykin-chaineye-api custom_info=xhunt-service request_id=${requestId} user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref} real_ip=${realIp} forwarded_for=${forwardedFor} is_extension=${isChromeExtension}`;
+  const windowLocationHref = req.headers["x-window-location-href"] || "no-location";
+  return `request_id=${requestId} user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref}`;
 });
 
 // 打印入口日志（请求刚到达时）
 app.use(
   morgan(
-    'in request_id=:req[x-request-id] method=:method url=:url ua=":user-agent"',
+    'in :xhunt-identity method=:method url=:url ua=":user-agent"',
     { immediate: true }
   )
 );
@@ -220,7 +210,7 @@ app.use(
 // 打印出口日志（响应返回时），包含状态与耗时；如有错误状态，额外标注
 app.use(
   morgan(
-    'out request_id=:req[x-request-id] status=:status method=:method url=:url origin=":req[origin]" allow_origin=":res[Access-Control-Allow-Origin]" cost_ms=:response-time[3] len=:res[content-length] ref=":referrer" ua=":user-agent"'
+    'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:url'
   )
 );
 app.use(helmet.hidePoweredBy());
