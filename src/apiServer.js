@@ -203,14 +203,20 @@ morgan.token("xhunt-identity", (req) => {
 app.use(
   morgan(
     'in :xhunt-identity method=:method url=:url ua=":user-agent"',
-    { immediate: true }
+    {
+      immediate: true,
+      skip: (req) => req.path === "/api/xhunt/stats/log-search",
+    }
   )
 );
 
 // 打印出口日志（响应返回时），包含状态与耗时；如有错误状态，额外标注
 app.use(
   morgan(
-    'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:url'
+    'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:url',
+    {
+      skip: (req) => req.path === "/api/xhunt/stats/log-search",
+    }
   )
 );
 app.use(helmet.hidePoweredBy());
