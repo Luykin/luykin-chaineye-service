@@ -44,7 +44,7 @@ const {
 } = require("./xhunt/middleware/security");
 const {
   requestContextMiddleware,
-  consoleErrorWithRequestId,
+  enhanceConsoleWithRequestId,
 } = require("./xhunt/utils/request-id");
 const StatsD = require("hot-shots");
 const dataDog = new StatsD();
@@ -52,8 +52,9 @@ const dataDog = new StatsD();
 const app = express();
 const PORT = process.env.PORT || 8090;
 
-// 全局增强 console.error，自动补充 requestId 标签（若已有则跳过）
-console.error = consoleErrorWithRequestId(console.error);
+// 全局增强所有 console 方法（log, error, warn, info, debug），自动在日志中注入 requestId
+// 如果第一个参数是字符串，requestId 会直接拼接到字符串前面
+enhanceConsoleWithRequestId();
 
 // 初始化 Redis 客户端
 const redisClient = redis.createClient({

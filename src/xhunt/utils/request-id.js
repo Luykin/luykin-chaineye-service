@@ -23,37 +23,72 @@ const requestContextMiddleware = (req, _res, next) => {
 
 const getCurrentRequest = () => requestContext.getStore()?.req;
 
-const consoleErrorWithRequestId =
-  (originalConsoleError = console.error) =>
-  (...args) => {
-    const firstArg = args[0];
-    const hasTag =
-      typeof firstArg === "string" && firstArg.startsWith("[requestId=");
-
-    if (hasTag) {
-      return originalConsoleError(...args);
+/**
+ * 通用的 console 方法包装器，自动在日志中注入 requestId
+ * 如果第一个参数是字符串，直接在字符串前面拼接 requestId
+ * 如果第一个参数不是字符串，在前面插入 requestId 标签
+ */
+const wrapConsoleMethod = (originalMethod) => {
+  return (...args) => {
+    if (args.length === 0) {
+      return originalMethod(...args);
     }
 
-    // 如果调用方显式传入了 req，优先使用；否则尝试从上下文获取
-    const reqFromArgs =
-      firstArg && typeof firstArg === "object" && firstArg.headers
-        ? firstArg
-        : null;
+    const firstArg = args[0];
+
+    // 检查是否已经包含 requestId 标签（避免重复添加）
+    const hasTag =
+      typeof firstArg === "string" && firstArg.includes("[requestId=");
+
+    if (hasTag) {
+      return originalMethod(...args);
+    }
+
+    // 尝试获取 requestId
+    let reqFromArgs = null;
+    if (firstArg && typeof firstArg === "object" && firstArg.headers) {
+      reqFromArgs = firstArg;
+    }
 
     const requestIdTag = formatRequestIdTag(
       reqFromArgs || getCurrentRequest() || "unknown"
     );
 
-    // 如果第一个参数就是 req，为避免打印出整个对象，这里剔除它
-    const printableArgs = reqFromArgs ? args.slice(1) : args;
+    // 如果第一个参数是字符串，直接在字符串前面拼接 requestId
+    if (typeof firstArg === "string") {
+      const enhancedMessage = `${requestIdTag} ${firstArg}`;
+      return originalMethod(enhancedMessage, ...args.slice(1));
+    }
 
-    return originalConsoleError(requestIdTag, ...printableArgs);
+    // 如果第一个参数不是字符串，在前面插入 requestId 标签
+    // 但如果第一个参数是 req 对象，为了避免打印整个对象，跳过它
+    if (reqFromArgs) {
+      return originalMethod(requestIdTag, ...args.slice(1));
+    }
+
+    return originalMethod(requestIdTag, ...args);
   };
+};
+
+/**
+ * 包装所有 console 方法，自动注入 requestId
+ */
+const enhanceConsoleWithRequestId = () => {
+  const methodsToWrap = ["log", "error", "warn", "info", "debug"];
+  const originalConsole = { ...console };
+
+  methodsToWrap.forEach((method) => {
+    console[method] = wrapConsoleMethod(originalConsole[method]);
+  });
+
+  return originalConsole;
+};
 
 module.exports = {
   getRequestId,
   formatRequestIdTag,
   requestContextMiddleware,
-  consoleErrorWithRequestId,
+  wrapConsoleMethod,
+  enhanceConsoleWithRequestId,
 };
 
