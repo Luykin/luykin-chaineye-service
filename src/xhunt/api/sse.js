@@ -975,106 +975,176 @@ const connectionManager = new SSEConnectionManager();
  * 注意：对于版本号 >= 0.2.05 且非 Pro 用户，建立 SSE 连接但不加入连接管理器，因此不会收到推送数据
  */
 router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, res) => {
-  // 设置 Redis 客户端（如果还没有设置）
-  if (!connectionManager.redisClient && req.redisClient) {
-    connectionManager.setRedisClient(req.redisClient);
+  // 检查是否已经有响应发送（中间件可能已经返回错误）
+  if (res.headersSent || res.writableEnded) {
+    return;
   }
 
-  // 获取版本号（用于连接确认消息）
-  // SSE 请求从查询参数中获取版本号（因为 EventSource 不支持自定义 headers）
-  const version = req.query["x-extension-version"] || req.query["x_extension_version"] || null;
+  try {
+    // 设置 Redis 客户端（如果还没有设置）
+    if (!connectionManager.redisClient && req.redisClient) {
+      connectionManager.setRedisClient(req.redisClient);
+    }
 
-  // 设置 SSE 响应头
-  setupSSEHeaders(res);
+    // 获取版本号（用于连接确认消息）
+    // SSE 请求从查询参数中获取版本号（因为 EventSource 不支持自定义 headers）
+    const version = req.query["x-extension-version"] || req.query["x_extension_version"] || null;
 
-  // 发送初始连接确认（包含版本号）
-  const connectionMessage = version
-    ? `: SSE connection established (version: ${version})\n\n`
-    : `: SSE connection established\n\n`;
-  res.write(connectionMessage);
-  res.flushHeaders();
+    // 设置 SSE 响应头
+    setupSSEHeaders(res);
 
-  // 检查版本号和 Pro 状态
-  const shouldAddConnection = !(
-    version &&
-    isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO) &&
-    req.isPro !== true
-  );
+    // 发送初始连接确认（包含版本号）
+    const connectionMessage = version
+      ? `: SSE connection established (version: ${version})\n\n`
+      : `: SSE connection established\n\n`;
+    res.write(connectionMessage);
+    res.flushHeaders();
 
-  if (shouldAddConnection) {
-    // Pro 用户或版本号 < 0.2.05，正常加入连接管理器
-    connectionManager.addConnection(res);
+    // 检查版本号和 Pro 状态
+    const shouldAddConnection = !(
+      version &&
+      isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO) &&
+      req.isPro !== true
+    );
 
-    // 推送一条确认消息
-    const connectionInfo = {
-      type: "connection_established",
-      message: "SSE connection established, you will receive real-time feed updates",
-      version: version || null,
-      isPro: req.isPro === true,
-      timestamp: new Date().toISOString(),
-    };
-    const infoMessageStr = `event: connection_established\ndata: ${JSON.stringify(connectionInfo)}\n\n`;
-    res.write(infoMessageStr);
+    if (shouldAddConnection) {
+      // Pro 用户或版本号 < 0.2.05，正常加入连接管理器
+      try {
+        connectionManager.addConnection(res);
 
-    // 处理客户端断开连接
-    req.on("close", () => {
-      connectionManager.removeConnection(res);
-      res.end();
-    });
-
-    // 处理错误
-    req.on("error", (error) => {
-      // 区分正常的断开连接和真正的错误
-      // ECONNRESET 和 aborted 通常是客户端正常断开连接，不应该记录为错误
-      if (
-        error.code === "ECONNRESET" ||
-        error.message === "aborted" ||
-        error.code === "EPIPE"
-      ) {
-        // 客户端正常断开连接，只记录调试信息
-        // console.log("[sse feeds 核心] 客户端断开连接:", error.code || error.message);
-      } else {
-        // 真正的错误才记录
-        console.error("[sse feeds 核心] SSE 连接错误:", error);
+        // 推送一条确认消息
+        const connectionInfo = {
+          type: "connection_established",
+          message: "SSE connection established, you will receive real-time feed updates",
+          version: version || null,
+          isPro: req.isPro === true,
+          timestamp: new Date().toISOString(),
+        };
+        const infoMessageStr = `event: connection_established\ndata: ${JSON.stringify(connectionInfo)}\n\n`;
+        res.write(infoMessageStr);
+      } catch (error) {
+        console.error("[sse feeds 核心] 加入连接管理器或推送确认消息失败:", error);
+        // 响应头已发送，只能关闭连接
+        try {
+          res.end();
+        } catch (endError) {
+          // 忽略关闭时的错误
+        }
+        return;
       }
-      connectionManager.removeConnection(res);
-      res.end();
-    });
-  } else {
-    // 非 Pro 用户且版本号 >= 0.2.05，不加入连接管理器，只处理断开连接
-    // console.log("[sse feeds 核心] 非 Pro 用户且版本号 >= 0.2.05，不加入连接管理器");
 
-    // 立即推送一条消息，提示需要 Pro 订阅
-    const proMessage = {
-      type: "pro_required",
-      message: "Pro subscription required to receive real-time feed updates",
-      timestamp: new Date().toISOString(),
-    };
-    const messageStr = `event: pro_required\ndata: ${JSON.stringify(proMessage)}\n\n`;
-    res.write(messageStr);
+      // 处理客户端断开连接
+      req.on("close", () => {
+        try {
+          connectionManager.removeConnection(res);
+          if (!res.writableEnded) {
+            res.end();
+          }
+        } catch (error) {
+          // 忽略断开连接时的错误
+        }
+      });
 
-    // 处理客户端断开连接（不需要调用 removeConnection，因为没有添加）
-    req.on("close", () => {
-      res.end();
-    });
-
-    // 处理错误
-    req.on("error", (error) => {
-      // 区分正常的断开连接和真正的错误
-      // ECONNRESET 和 aborted 通常是客户端正常断开连接，不应该记录为错误
-      if (
-        error.code === "ECONNRESET" ||
-        error.message === "aborted" ||
-        error.code === "EPIPE"
-      ) {
-        // 客户端正常断开连接，只记录调试信息
-        // console.log("[sse feeds 核心] 客户端断开连接:", error.code || error.message);
-      } else {
-        // 真正的错误才记录
-        console.error("[sse feeds 核心] SSE 连接错误:", error);
+      // 处理错误
+      req.on("error", (error) => {
+        // 区分正常的断开连接和真正的错误
+        if (
+          error.code === "ECONNRESET" ||
+          error.message === "aborted" ||
+          error.code === "EPIPE"
+        ) {
+          // 正常断开，不记录
+        } else {
+          console.error("[sse feeds 核心] SSE 连接错误:", {
+            code: error.code,
+            message: error.message,
+          });
+        }
+        try {
+          connectionManager.removeConnection(res);
+          if (!res.writableEnded) {
+            res.end();
+          }
+        } catch (removeError) {
+          // 忽略移除连接时的错误
+        }
+      });
+    } else {
+      // 非 Pro 用户且版本号 >= 0.2.05，不加入连接管理器
+      try {
+        const proMessage = {
+          type: "pro_required",
+          message: "Pro subscription required to receive real-time feed updates",
+          timestamp: new Date().toISOString(),
+        };
+        const messageStr = `event: pro_required\ndata: ${JSON.stringify(proMessage)}\n\n`;
+        res.write(messageStr);
+      } catch (error) {
+        console.error("[sse feeds 核心] 推送 Pro 订阅提示消息失败:", error);
+        try {
+          res.end();
+        } catch (endError) {
+          // 忽略关闭时的错误
+        }
+        return;
       }
-      res.end();
+
+      // 处理客户端断开连接
+      req.on("close", () => {
+        try {
+          if (!res.writableEnded) {
+            res.end();
+          }
+        } catch (error) {
+          // 忽略断开连接时的错误
+        }
+      });
+
+      // 处理错误
+      req.on("error", (error) => {
+        if (
+          error.code === "ECONNRESET" ||
+          error.message === "aborted" ||
+          error.code === "EPIPE"
+        ) {
+          // 正常断开，不记录
+        } else {
+          console.error("[sse feeds 核心] SSE 连接错误:", {
+            code: error.code,
+            message: error.message,
+          });
+        }
+        try {
+          if (!res.writableEnded) {
+            res.end();
+          }
+        } catch (endError) {
+          // 忽略关闭时的错误
+        }
+      });
+    }
+  } catch (error) {
+    console.error("[sse feeds 核心] SSE 连接处理过程中发生严重错误:", {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
     });
+    try {
+      // 如果响应头还没发送，可以返回 JSON 错误
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "SSE connection setup failed",
+          message: error.message,
+        });
+      } else {
+        // 响应头已发送，只能关闭连接
+        if (!res.writableEnded) {
+          res.end();
+        }
+      }
+    } catch (endError) {
+      console.error("[sse feeds 核心] 发送错误响应时失败:", endError);
+    }
   }
 });
 
