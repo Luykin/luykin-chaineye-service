@@ -10,13 +10,15 @@ const CACHE_TTL = 60 * 60; // 缓存时间（秒）
 const CACHE_MAX_SIZE = 1024 * 1024; // 单条缓存最大体积（1MB）
 
 // 仅在未设置时补充 CORS 头，避免覆盖上游自带配置
-const ensureCorsHeaders = (res, allowMethods) => {
-  if (!res.hasHeader("Access-Control-Allow-Origin")) {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-  }
+const ensureCorsHeaders = (req, res, allowMethods) => {
+  const requestOrigin = req.headers.origin;
+
+  res.setHeader("Access-Control-Allow-Origin", requestOrigin || "*");
+
   if (!res.hasHeader("Access-Control-Allow-Credentials")) {
     res.setHeader("Access-Control-Allow-Credentials", "false");
   }
+  
   if (!res.hasHeader("Access-Control-Allow-Methods")) {
     res.setHeader("Access-Control-Allow-Methods", allowMethods);
   }
@@ -55,7 +57,7 @@ router.get("/", async (req, res) => {
         Object.entries(headers).forEach(([key, value]) => {
           res.setHeader(key, value);
         });
-        ensureCorsHeaders(res, "GET");
+        ensureCorsHeaders(req, res, "GET");
 
         return res.send(body);
       } catch (parseError) {
@@ -103,7 +105,7 @@ router.get("/", async (req, res) => {
     Object.entries(proxyRes.headers).forEach(([key, value]) => {
       res.setHeader(key, value);
     });
-    ensureCorsHeaders(res, "GET");
+    ensureCorsHeaders(req, res, "GET");
 
     res.send(responseBody);
   } catch (err) {
@@ -161,7 +163,7 @@ router.post("/", async (req, res) => {
     Object.entries(proxyRes.headers).forEach(([key, value]) => {
       res.setHeader(key, value);
     });
-    ensureCorsHeaders(res, "POST");
+    ensureCorsHeaders(req, res, "POST");
     if (!res.hasHeader("Access-Control-Allow-Headers")) {
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     }

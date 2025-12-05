@@ -72,34 +72,6 @@ async function proxyRequest(req, res, targetUrl) {
     // 设置浏览器缓存策略
     setBrowserCacheHeaders(res, req.method);
 
-    // // 针对特定路径做响应数据增强处理
-    // try {
-    //   const isHotBoardPath = req.path === "/public/info/board/hot";
-    //   if (
-    //     isHotBoardPath &&
-    //     data &&
-    //     data.data &&
-    //     Array.isArray(data.data.data)
-    //   ) {
-    //     data.data.data = data.data.data.map((item) => {
-    //       try {
-    //         const statistic =
-    //           item && item.tweet && item.tweet.statistic
-    //             ? item.tweet.statistic
-    //             : null;
-    //         if (statistic && typeof statistic === "object") {
-    //           // 增加别名字段，不修改原有字段
-    //           statistic.like_count = statistic.likes;
-    //           statistic.view_count = statistic.views;
-    //         }
-    //       } catch (_) {}
-    //       return item;
-    //     });
-    //   }
-    // } catch (transformErr) {
-    //   console.warn("Proxy response transform warning:", transformErr);
-    // }
-
     // Pro 用户数据裁切逻辑（统一管理）
     // 针对非 Pro 用户进行数据过滤
     try {
