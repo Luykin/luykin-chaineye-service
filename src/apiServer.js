@@ -159,7 +159,6 @@ const corsOptions = {
     "x-window-location-href",
   ],
   credentials: true,
-  optionsSuccessStatus: 204,
 };
 
 app.set("trust proxy", 1); // 仅信任最靠近 Express 的一层代理
