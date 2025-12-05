@@ -42,11 +42,18 @@ const {
   browserOnlyMiddleware,
   sseSecurityMiddleware,
 } = require("./xhunt/middleware/security");
+const {
+  requestContextMiddleware,
+  consoleErrorWithRequestId,
+} = require("./xhunt/utils/request-id");
 const StatsD = require("hot-shots");
 const dataDog = new StatsD();
 
 const app = express();
 const PORT = process.env.PORT || 8090;
+
+// 全局增强 console.error，自动补充 requestId 标签（若已有则跳过）
+console.error = consoleErrorWithRequestId(console.error);
 
 // 初始化 Redis 客户端
 const redisClient = redis.createClient({
@@ -66,6 +73,9 @@ const redisClient = redis.createClient({
     console.error("Redis 连接失败:", error);
   }
 })();
+
+// 将请求注入异步上下文，便于日志获取 requestId
+app.use(requestContextMiddleware);
 
 app.use((req, res, next) => {
   req.redisClient = redisClient;
