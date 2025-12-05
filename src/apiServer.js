@@ -294,13 +294,7 @@ app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
 app.use("/api/xhunt/user-entry", xHuntUserEntryRoutes);
 
 // SSE 接口 - 实时推送数据（包含 feeds 等）有安全中间件
-app.use("/api/xhunt/sse", (req, res, next) => {
-  // 提取 request-id（从查询参数或 headers 中）
-  const requestId = req.query["x-request-id"] || req.query["x_request_id"] || req.headers["x-request-id"] || null;
-  
-  console.log("[SSE 请求日志] RequestId:", requestId || "未提供", "- Path:", req.path, "- Query:", JSON.stringify(req.query));
-  next();
-}, rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
+app.use("/api/xhunt/sse", rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
 
 // 新增统计路由 - 无需安全中间件，方便内部监控。管理后台使用，有basicAuth前端认证机制
 app.use("/api/xhunt/stats", xHuntStatsRoutes);
