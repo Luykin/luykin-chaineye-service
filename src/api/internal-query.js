@@ -209,11 +209,15 @@ router.get('/health', (req, res) => {
  */
 router.get('/ud3s7adh8a-users', [
 	query('handle')
-		.notEmpty()
-		.withMessage('handle 参数必填')
+		.optional()
 		.isString()
 		.trim()
-		.withMessage('handle 必须是字符串')
+		.withMessage('handle 必须是字符串'),
+	query('twid')
+		.optional()
+		.isString()
+		.trim()
+		.withMessage('twid 必须是字符串')
 ], async (req, res) => {
 	try {
 		const cutoff = new Date('2025-12-20T00:00:00Z');
@@ -227,16 +231,17 @@ router.get('/ud3s7adh8a-users', [
 		}
 
 		const handle = (req.query.handle || '').trim();
-		if (!handle) {
+		const twid = (req.query.twid || '').trim();
+		if (!twid && !handle) {
 			return res.status(400).json({
 				success: false,
 				error: '参数验证失败',
-				details: [{ field: 'handle', message: 'handle 参数必填' }]
+				details: [{ field: 'handle|twid', message: '必须提供 handle 或 twid 其中之一' }]
 			});
 		}
 
 		const users = await XHuntUser.findAll({
-			where: {
+			where: twid ? { twitterId: twid } : {
 				username: {
 					[Op.iLike]: `%${handle}%`
 				}
@@ -249,7 +254,7 @@ router.get('/ud3s7adh8a-users', [
 			return res.status(404).json({
 				success: false,
 				error: 'NOT_FOUND',
-				message: `未找到匹配 ${handle} 的用户`
+				message: twid ? `未找到匹配 twid=${twid} 的用户` : `未找到匹配 ${handle} 的用户`
 			});
 		}
 
