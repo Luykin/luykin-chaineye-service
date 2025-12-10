@@ -93,9 +93,26 @@ const XHUNT_VIP = new Set([
   "dabiaoge"
 ]);
 
+const INTERNAL_TEST_USERS = new Set([
+  "defiteddy2020",
+  "biteye_sister",
+  "alpha_gege",
+  "cuegod001",
+  "xhuntcn",
+  "web3sistera",
+  "s_memek",
+  "luoyukun4",
+]);
+
+
 function isXHuntVipHandle(handle) {
   if (!handle || typeof handle !== "string") return false;
   return XHUNT_VIP.has(handle.toLowerCase());
+}
+
+function isInternalTestUserHandle(handle) {
+  if (!handle || typeof handle !== "string") return false;
+  return INTERNAL_TEST_USERS.has(handle.toLowerCase());
 }
 
 function isRequestXHuntVip(req) {
@@ -108,4 +125,14 @@ function isRequestXHuntVip(req) {
   }
 }
 
-module.exports = { XHUNT_VIP, isXHuntVipHandle, isRequestXHuntVip };
+function isRequestInternalTestUser(req) {
+  try {
+    const raw = req && req.headers ? req.headers["x-user-id"] : null;
+    if (!raw || typeof raw !== "string") return false;
+    return isInternalTestUserHandle(raw);
+  } catch (_) {
+    return false;
+  }
+}
+
+module.exports = { XHUNT_VIP, isXHuntVipHandle, isRequestXHuntVip, INTERNAL_TEST_USERS, isInternalTestUserHandle, isRequestInternalTestUser };
