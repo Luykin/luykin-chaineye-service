@@ -90,7 +90,11 @@ const XHUNT_VIP = new Set([
   "web3sistera",
   "amelia_xuu",
   "s_memek",
-  "dabiaoge"
+  "dabiaoge",
+  "nftsiy",
+  "gcsbtc",
+  "cheuk_baby",
+  "egyptk6"
 ]);
 
 const INTERNAL_TEST_USERS = new Set([
