@@ -352,7 +352,7 @@ class RootdataDataFixService {
     Fundraising,
     redisClient,
     searchCacheKey = null,
-    verifyMoreType = false,
+    updateProgram = 'auto_api_fix',
   ) {
     try {
       const projectLink = project.projectLink;
@@ -362,10 +362,10 @@ class RootdataDataFixService {
         console.log(`⏭️ 跳过验证（空链接）: ${projectLink}`);
         return null;
       }
-      if(!verifyMoreType && !projectLink.includes("/Projects/detail")) {
-        console.log(`⏭️ 跳过验证（非项目链接,未开启verifyMoreType验证）: ${projectLink}`);
-        return null;
-      }
+      // if(!verifyMoreType && !projectLink.includes("/Projects/detail")) {
+      //   console.log(`⏭️ 跳过验证（非项目链接,未开启verifyMoreType验证）: ${projectLink}`);
+      //   return null;
+      // }
       if(!projectLink.includes("/Investors/detail") && !projectLink.includes("/Projects/detail") && !projectLink.includes("/member")) {
         console.log(`⏭️ 跳过验证（非VC链接/非项目链接/非member）: ${projectLink}`);
         return null;
@@ -418,7 +418,7 @@ class RootdataDataFixService {
       console.log(`[rootdata verify] fetched count=${count} entityType=${entityType}`);
 
       // 3. 修正数据（显式传入 entityType，内部按类型分支处理）
-      await this.fixProjectData(project, apiData, Fundraising, entityType);
+      await this.fixProjectData(project, apiData, Fundraising, entityType, updateProgram);
 
       // 4. 清除搜索结果缓存，让下次请求获取修正后的数据
       if (searchCacheKey) {
@@ -447,7 +447,7 @@ class RootdataDataFixService {
   /**
    * 修正项目数据
    */
-  static async fixProjectData(project, apiData, Fundraising, entityType = 'project') {
+  static async fixProjectData(project, apiData, Fundraising, entityType = 'project', updateProgram = 'auto_api_fix') {
     const fundedProjectId = project.id;
 
     // 获取项目的 Twitter URL（用于验证）
@@ -521,6 +521,7 @@ class RootdataDataFixService {
               socialLinks: null,
               detailFailuresNumber: 0,
               detailFetchedAt: null,
+              updateProgram,
             });
             // 缓存到映射，避免后续重复创建
             existingMap.set(shortRelative, target.get ? target.get({ plain: true }) : target);
@@ -539,6 +540,7 @@ class RootdataDataFixService {
               formattedAmount: 0,
               date: null,
               lead: false,
+              updateProgram,
             },
             Fundraising
           );
@@ -591,6 +593,7 @@ class RootdataDataFixService {
               twitterUrl: twitterUrl || null,
               detailFailuresNumber: 0,
               detailFetchedAt: null,
+              updateProgram,
             });
           }
 
@@ -603,6 +606,7 @@ class RootdataDataFixService {
               formattedAmount: 0,
               date: null,
               lead: false,
+              updateProgram,
             },
             Fundraising
           );
@@ -656,7 +660,8 @@ class RootdataDataFixService {
         try {
           const investorProject = await this.findOrCreateInvestor(
             investor,
-            Fundraising
+            Fundraising,
+            updateProgram
           );
 
           if (!investorProject) continue;
@@ -670,6 +675,7 @@ class RootdataDataFixService {
               formattedAmount: round.amount || null,
               date: this.parseDate(round.published_time),
               lead: investor.lead_investor === 1,
+              updateProgram,
             },
             Fundraising
           );
@@ -735,7 +741,7 @@ class RootdataDataFixService {
   /**
    * 查找或创建投资者项目
    */
-  static async findOrCreateInvestor(investor, Fundraising) {
+  static async findOrCreateInvestor(investor, Fundraising, updateProgram = 'auto_api_fix') {
     // 提取 projectLink
     const projectLink = investor.rootdataurl;
     if (!projectLink) return null;
@@ -789,6 +795,7 @@ class RootdataDataFixService {
       socialLinks: investor.X ? { x: investor.X } : null,
       detailFailuresNumber: 0, // ✅ 初始化失败次数为 0
       detailFetchedAt: null, // ✅ 初始化抓取时间为 null，等待爬虫抓取
+      updateProgram,
     });
 
     console.log(`✨ 创建新投资者项目: ${investor.name} (待爬虫抓取详情)`);
@@ -1058,7 +1065,8 @@ router.get("/search", async (req, res) => {
           project,
           Fundraising,
           req.redisClient,
-          cacheKey // 传入搜索缓存key，修正后会清除
+          cacheKey, // 传入搜索缓存key，修正后会清除
+          'auto_api_fix'
         );
 
         // 第二重：爬虫更新验证（队列化、节流、去重）
@@ -1426,7 +1434,7 @@ router.get("/force-verify", adminAuth, async (req, res) => {
         Fundraising,
         req.redisClient,
         searchCacheKey,
-        true
+        'manual_api_fix'
       );
       console.log(`[force-verify] ✅ verifyAndFixProject done`);
       try { await logAdminAction(req, { action: "force-verify", success: true, message: `projectId=${project.id}` }); } catch(_) {}

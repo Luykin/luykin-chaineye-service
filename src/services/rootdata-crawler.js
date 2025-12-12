@@ -327,6 +327,7 @@ class FundraisingCrawler extends BaseCrawler {
         formattedValuation: parseAmount(item.valuation),
         fundedAt: parseDate(item.date),
         originalPageNumber: Number(pageNum),
+        updateProgram: 'auto_crawler',
       }));
     } catch (error) {
       console.error(`Error crawling page ${pageNum}:`, error?.message);
@@ -1015,7 +1016,7 @@ class FundraisingCrawler extends BaseCrawler {
     }
   }
 
-  async scrapeAndUpdateProjectDetails(project, _page, isManualTrigger = false) {
+  async scrapeAndUpdateProjectDetails(project, _page, isManualTrigger = false, programOverride = null) {
     try {
       if (!_page || _page.isClosed()) {
         throw new Error("网页不见了，Detail page not initialized");
@@ -1023,6 +1024,7 @@ class FundraisingCrawler extends BaseCrawler {
 
       // 手动触发时，强制视为初始项目以确保完整抓取
       const effectiveIsInitial = isManualTrigger ? true : project.isInitial;
+      const program = programOverride || (isManualTrigger ? 'manual_crawler' : 'auto_crawler');
 
       if (isManualTrigger) {
         console.log(
@@ -1223,6 +1225,7 @@ class FundraisingCrawler extends BaseCrawler {
             ? 0
             : 99
           : (Number(project.detailFailuresNumber) || 0) + 1,
+        updateProgram: program,
       });
       let updateRelationshipsLength = 0;
       // 保存投资关系数据（被投资关系）
@@ -1234,7 +1237,8 @@ class FundraisingCrawler extends BaseCrawler {
         }
         updateRelationshipsLength = await this.updateInvestmentRelationships(
           project,
-          mergedInvestors
+          mergedInvestors,
+          program
         );
         if (isManualTrigger) {
           console.log(
@@ -1253,7 +1257,8 @@ class FundraisingCrawler extends BaseCrawler {
         }
         investedRelationshipsLength = await this.updateInvestedRelationships(
           project,
-          investedProjects
+          investedProjects,
+          program
         );
         if (isManualTrigger) {
           console.log(
@@ -1823,7 +1828,7 @@ class FundraisingCrawler extends BaseCrawler {
     return Array.from(resultMap.values());
   }
 
-  async updateInvestmentRelationships(project, investors) {
+  async updateInvestmentRelationships(project, investors, program = 'auto_crawler') {
     const sequelize = Fundraising.Project.sequelize;
     let transaction;
 
@@ -1850,6 +1855,7 @@ class FundraisingCrawler extends BaseCrawler {
             socialLinks: null, // ✅ 初始化为 null，满足 subDetailsCrawl 条件
             detailFailuresNumber: 0, // ✅ 初始化失败次数为 0
             detailFetchedAt: null, // ✅ 初始化抓取时间为 null，等待爬虫抓取
+            updateProgram: program,
           },
           transaction,
         });
@@ -1864,6 +1870,7 @@ class FundraisingCrawler extends BaseCrawler {
           formattedValuation: inv.formattedValuation || null,
           date: inv.timestamp || null,
           lead: !!inv.lead,
+          updateProgram: program,
         });
       }
 
@@ -1902,7 +1909,7 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   // 保存对外投资关系（投资者视角）
-  async updateInvestedRelationships(investorProject, investedProjects) {
+  async updateInvestedRelationships(investorProject, investedProjects, program = 'auto_crawler') {
     const sequelize = Fundraising.Project.sequelize;
     let transaction;
 
@@ -1929,6 +1936,7 @@ class FundraisingCrawler extends BaseCrawler {
             socialLinks: null,
             detailFailuresNumber: 0,
             detailFetchedAt: null,
+            updateProgram: program,
           },
           transaction,
         });
@@ -1943,6 +1951,7 @@ class FundraisingCrawler extends BaseCrawler {
           formattedValuation: null,
           date: null,
           lead: false,
+          updateProgram: program,
         });
       }
 

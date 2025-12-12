@@ -108,6 +108,17 @@ module.exports = (sequelize) => {
         defaultValue: null,
         comment: "在风险投资者列表中的页码",
       },
+      updateProgram: {
+        type: DataTypes.ENUM(
+          "auto_crawler",
+          "manual_crawler",
+          "auto_api_fix",
+          "manual_api_fix",
+          "auto_crawler_fix"
+        ),
+        allowNull: true,
+        comment: "记录由哪个程序流程创建或更新",
+      },
     },
     {
       comment: "项目表，包含每个项目的基本信息以及融资和投资记录",
@@ -196,6 +207,17 @@ module.exports = (sequelize) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
         comment: "是否是主导投资人",
+      },
+      updateProgram: {
+        type: DataTypes.ENUM(
+          "auto_crawler",
+          "manual_crawler",
+          "auto_api_fix",
+          "manual_api_fix",
+          "auto_crawler_fix"
+        ),
+        allowNull: true,
+        comment: "记录由哪个程序流程创建或更新",
       },
     },
     {

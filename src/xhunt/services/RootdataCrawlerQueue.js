@@ -281,8 +281,8 @@ class RootdataCrawlerQueue {
       browser = result.browser;
       page = result.page;
 
-      // 执行爬取 = 等同于手动触发爬虫
-      await crawler.scrapeAndUpdateProjectDetails(fullProject, page, true);
+      // 执行爬取（队列触发，标记为自动爬虫修复）
+      await crawler.scrapeAndUpdateProjectDetails(fullProject, page, false, 'auto_crawler_fix');
 
       // 爬取成功后，清除搜索缓存（使用独立的 Redis 连接）
       if (cacheKey) {
