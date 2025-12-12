@@ -1392,7 +1392,9 @@ router.get("/force-verify", adminAuth, async (req, res) => {
 
     if (!project) {
       console.log(`[force-verify] 🔎 project not found`);
-      try { await logAdminAction(req, { action: "force-verify", success: false, message: "project not found" }); } catch(_) {}
+      if (req.admin && req.admin.id) {
+        try { await logAdminAction(req, { action: "force-verify", success: false, message: "project not found" }); } catch(_) {}
+      }
       return res.json({ success: false, message: "No matching project found", requestId: reqId });
     }
 
@@ -1437,16 +1439,22 @@ router.get("/force-verify", adminAuth, async (req, res) => {
         'manual_api_fix'
       );
       console.log(`[force-verify] ✅ verifyAndFixProject done`);
-      try { await logAdminAction(req, { action: "force-verify", success: true, message: `projectId=${project.id}` }); } catch(_) {}
+      if (req.admin && req.admin.id) {
+        try { await logAdminAction(req, { action: "force-verify", success: true, message: `projectId=${project.id}` }); } catch(_) {}
+      }
     } catch (e) {
       console.error(`verifyAndFixProject failed:`, e);
-      try { await logAdminAction(req, { action: "force-verify", success: false, message: e.message || "verify failed" }); } catch(_) {}
+      if (req.admin && req.admin.id) {
+        try { await logAdminAction(req, { action: "force-verify", success: false, message: e.message || "verify failed" }); } catch(_) {}
+      }
     }
 
     res.json({ success: true, projectId: project.id, projectLink: project.projectLink, requestId: reqId });
   } catch (error) {
     console.error("Error in force-verify:", error);
-    try { await logAdminAction(req, { action: "force-verify", success: false, message: error.message || "error" }); } catch(_) {}
+    if (req.admin && req.admin.id) {
+      try { await logAdminAction(req, { action: "force-verify", success: false, message: error.message || "error" }); } catch(_) {}
+    }
     res.status(500).json({
       error: "Failed to force verify project",
       message: error.message || "Unknown error",

@@ -330,7 +330,8 @@
 
           const resp = await fetch(url + '?' + params.toString(), {
             method: 'GET',
-            headers: { 'x-request-id': reqId }
+            headers: { 'x-request-id': reqId },
+            credentials: 'include'
           });
           const data = await resp.json().catch(() => ({}));
           if (resp.ok) {
