@@ -254,6 +254,9 @@
         <button id="rootdata-force-btn" style="flex:1;padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;">⚡ 强制更新</button>
       </div>
       <div id="rootdata-force-status" style="display:none;margin-top:12px;padding:12px;background:#f3f4f6;border-radius:6px;color:#374151;font-size:14px"></div>
+      <div id="rootdata-force-reqid-wrap" style="display:none;margin-top:8px;color:#6b7280;font-size:13px;">
+        本次请求ID：<code id="rootdata-force-reqid-text" style="color:#374151;background:#eef2ff;padding:2px 6px;border-radius:4px"></code>
+      </div>
     </div>
   </div>
 
@@ -262,6 +265,8 @@
       const btn = document.getElementById('rootdata-force-btn');
       const input = document.getElementById('rootdata-force-input');
       const statusEl = document.getElementById('rootdata-force-status');
+      const reqIdWrap = document.getElementById('rootdata-force-reqid-wrap');
+      const reqIdText = document.getElementById('rootdata-force-reqid-text');
       let busy = false;
       let debounceTimer = null;
 
@@ -315,14 +320,28 @@
           btn.disabled = true;
           const oldText = btn.textContent;
           btn.textContent = '处理中...';
-          setStatus('请求中...', true);
+          // 生成 UUID v4 作为 reqId，满足后端 isValidRequestId 校验
+          const reqId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
+          setStatus(`请求中... reqId=${reqId}`, true);
 
-          const resp = await fetch(url + '?' + params.toString(), { method: 'GET' });
+          const resp = await fetch(url + '?' + params.toString(), {
+            method: 'GET',
+            headers: { 'x-request-id': reqId }
+          });
           const data = await resp.json().catch(() => ({}));
           if (resp.ok) {
-            setStatus('已触发成功：' + (data?.message || 'OK'), true);
+            const echoedReqId = data?.requestId || reqId;
+            setStatus('已触发成功：' + (data?.message || 'OK') + ` | reqId=${echoedReqId}` , true);
+            if (reqIdText) { reqIdText.textContent = echoedReqId; }
+            if (reqIdWrap) { reqIdWrap.style.display = 'block'; }
           } else {
-            setStatus('触发失败：' + (data?.message || resp.statusText), false);
+            setStatus('触发失败：' + (data?.message || resp.statusText) + ` | reqId=${reqId}` , false);
+            if (reqIdText) { reqIdText.textContent = reqId; }
+            if (reqIdWrap) { reqIdWrap.style.display = 'block'; }
           }
 
           btn.textContent = oldText;

@@ -186,12 +186,14 @@ class RootdataDataFixService {
 
       // 包含Investors的标识是VC,否则是普通Projects
       const isVC = !!projectLink.includes("/Investors/detail")
+      console.log(`[rootdata verify] isVC=${isVC} link=${projectLink}`);
 
       const cacheKey = `rootdata_verified:${projectLink}`;
 
       // 1. 检查20天内是否已修正
       const cached = await redisClient.get(cacheKey);
       if (cached) {
+        console.log(`[rootdata verify] cache hit, skip verify`);
         return JSON.parse(cached);
       }
 
@@ -222,6 +224,9 @@ class RootdataDataFixService {
 
         return null;
       }
+
+      const count = isVC ? (apiData.investments?.length || 0) : (apiData.items?.length || 0);
+      console.log(`[rootdata verify] fetched count=${count} isVC=${isVC}`);
 
       // 3. 修正数据（显式传入 isVC，内部按 VC/非VC 分支处理）
       await this.fixProjectData(project, apiData, Fundraising, isVC);
@@ -745,7 +750,7 @@ router.get("/search", async (req, res) => {
     // 3. 获取 Fundraising 模型（从 PostgreSQL）
     const { Fundraising } = require("../../models/postgres-fundraising");
     if (!Fundraising) {
-      return res.status(500).json({ error: "Database model not initialized" });
+      return res.status(500).json({ error: "Database model not initialized", requestId: reqId });
     }
 
     // 4. 构造查询条件
@@ -1074,11 +1079,14 @@ router.get("/search", async (req, res) => {
 // 支持三选一传参：keyword（与 /search 一样）、projectLink、twitterUrl
 router.get("/force-verify", async (req, res) => {
   try {
+    const reqId = req.headers["x-request-id"] || `rv-${Date.now()}-${Math.random().toString(16).slice(2,8)}`;
+    console.log(`[force-verify] ▶️ start reqId=${reqId}`);
     let { keyword, projectLink, twitterUrl } = req.query;
 
     if (!keyword && !projectLink && !twitterUrl) {
       return res.status(400).json({
         error: "One of keyword, projectLink, or twitterUrl is required",
+        requestId: reqId,
       });
     }
 
@@ -1135,8 +1143,12 @@ router.get("/force-verify", async (req, res) => {
     }
 
     if (!project) {
-      return res.json({ success: false, message: "No matching project found" });
+      console.log(`[force-verify] 🔎 project not found reqId=${reqId}`);
+      return res.json({ success: false, message: "No matching project found", requestId: reqId });
     }
+
+    const isVCLink = Boolean(project.projectLink && project.projectLink.includes('/Investors/detail'));
+    console.log(`[force-verify] ✅ project id=${project.id} isVC=${isVCLink} reqId=${reqId}`);
 
     // 先删除相关缓存，确保强制触发
     const toDeleteKeys = [];
@@ -1148,25 +1160,25 @@ router.get("/force-verify", async (req, res) => {
         await req.redisClient.del(k);
       }
     } catch (e) {
-      console.error("Redis Client Error (DEL):", e);
+      console.error(`Redis Client Error (DEL) reqId=${reqId}:`, e);
     }
 
     // 在强制校验前，按项目类型清空关系：VC 清理其作为投资方的关系；项目清理其作为被投方的关系
     try {
-      const isVCLink = Boolean(project.projectLink && project.projectLink.includes('/Investors/detail'));
       if (isVCLink) {
         const delAsInvestor = await Fundraising.InvestmentRelationships.destroy({ where: { investorProjectId: project.id } });
-        console.log(`🧹 已清理旧关系(VC 作为投资方) 数量: ${delAsInvestor} | projectId=${project.id}`);
+        console.log(`🧹 清理(VC作为投资方)=${delAsInvestor} projectId=${project.id} reqId=${reqId}`);
       } else {
         const delAsFunded = await Fundraising.InvestmentRelationships.destroy({ where: { fundedProjectId: project.id } });
-        console.log(`🧹 已清理旧关系(项目 作为被投方) 数量: ${delAsFunded} | projectId=${project.id}`);
+        console.log(`🧹 清理(项目作为被投方)=${delAsFunded} projectId=${project.id} reqId=${reqId}`);
       }
     } catch (e) {
-      console.error('清理旧投资关系失败:', e);
+      console.error(`清理旧投资关系失败 reqId=${reqId}:`, e);
     }
 
     // 强制触发验证与修正
     try {
+      console.log(`[force-verify] 🔁 verifyAndFixProject start reqId=${reqId}`);
       await RootdataDataFixService.verifyAndFixProject(
         project,
         Fundraising,
@@ -1174,16 +1186,18 @@ router.get("/force-verify", async (req, res) => {
         searchCacheKey,
         true
       );
+      console.log(`[force-verify] ✅ verifyAndFixProject done reqId=${reqId}`);
     } catch (e) {
-      console.error("verifyAndFixProject failed:", e);
+      console.error(`verifyAndFixProject failed reqId=${reqId}:`, e);
     }
 
-    res.json({ success: true, projectId: project.id, projectLink: project.projectLink });
+    res.json({ success: true, projectId: project.id, projectLink: project.projectLink, requestId: reqId });
   } catch (error) {
     console.error("Error in force-verify:", error);
     res.status(500).json({
       error: "Failed to force verify project",
       message: error.message || "Unknown error",
+      requestId: req.headers["x-request-id"] || undefined,
     });
   }
 });
