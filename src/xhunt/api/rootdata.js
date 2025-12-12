@@ -510,23 +510,28 @@ class RootdataDataFixService {
           // 3) 使用批量查询结果映射，避免逐条查库
           let target = existingMap.get(shortRelative) || existingMap.get(shortRelativeUnencoded);
 
-          // 4) 如未找到则创建
+          // 4) 如未找到则创建（使用 findOrCreate 防止竞态与唯一冲突）
           if (!target) {
-            target = await Fundraising.Project.create({
-              projectName: inv.name,
-              projectLink: fullLink,
-              logo: inv.logo,
-              description: inv.name,
-              isInitial: true,
-              socialLinks: null,
-              detailFailuresNumber: 0,
-              detailFetchedAt: null,
-              updateProgram,
+            const [instance, created] = await Fundraising.Project.findOrCreate({
+              where: { projectLink: fullLink },
+              defaults: {
+                projectName: inv.name,
+                projectLink: fullLink,
+                logo: inv.logo,
+                description: inv.name,
+                isInitial: true,
+                socialLinks: null,
+                detailFailuresNumber: 0,
+                detailFetchedAt: null,
+                updateProgram,
+              },
             });
+            const plain = instance.get ? instance.get({ plain: true }) : instance;
+            target = plain;
             // 缓存到映射，避免后续重复创建
-            existingMap.set(shortRelative, target.get ? target.get({ plain: true }) : target);
+            existingMap.set(shortRelative, plain);
             if (shortRelativeUnencoded) {
-              existingMap.set(shortRelativeUnencoded, target.get ? target.get({ plain: true }) : target);
+              existingMap.set(shortRelativeUnencoded, plain);
             }
           }
 
@@ -546,7 +551,8 @@ class RootdataDataFixService {
           );
           totalProcessed++;
         } catch (error) {
-          console.error(`[rootdata VC 处理] ❌ 处理失败: ${error.message}`);
+          const details = error?.errors ? JSON.stringify(error.errors.map(e => ({ path: e.path, message: e.message, type: e.type, validatorKey: e.validatorKey }))) : '';
+          console.error(`[rootdata VC 处理] ❌ 处理失败: ${error.name || 'Error'} ${error.message} ${details}`);
         }
       }
 
@@ -812,28 +818,52 @@ class RootdataDataFixService {
       ? "--"
       : relationshipData.round;
 
-    // 检查是否存在
+    // 检查是否存在（兼容历史数据：round 可能为 null 或 '--'）
     const existing = await Fundraising.InvestmentRelationships.findOne({
       where: {
         investorProjectId,
         fundedProjectId,
-        round: normRound,
+        [Op.or]: [
+          { round: normRound },
+          { round: null },
+          { round: '' },
+          { round: ' ' },
+        ],
       },
       raw: true,
     });
 
     if (existing) {
+      // 如命中 legacy(null) 轮次，做一次就地修复为规范值，避免后续重复
+      if ((existing.round === null || existing.round === '' || existing.round === ' ') && normRound) {
+        try {
+          await Fundraising.InvestmentRelationships.update(
+            { round: normRound },
+            { where: { investorProjectId, fundedProjectId, round: { [Op.in]: [null, '', ' '] } } }
+          );
+        } catch (_) {}
+      }
       return;
     }
 
     // 创建新关系（使用归一化后的轮次）
-    await Fundraising.InvestmentRelationships.create({
-      ...relationshipData,
-      round: normRound,
-    });
-    console.log(
-      `✨ 创建投资关系: ${investorProjectId} -> ${fundedProjectId} (${normRound})`
-    );
+    try {
+      await Fundraising.InvestmentRelationships.create({
+        ...relationshipData,
+        round: normRound,
+      });
+      console.log(
+        `✨ 创建投资关系: ${investorProjectId} -> ${fundedProjectId} (${normRound})`
+      );
+    } catch (err) {
+      const name = err && err.name ? String(err.name) : '';
+      // 兼容并发/历史数据导致的重复创建，忽略唯一/校验错误
+      if (name.includes('UniqueConstraint') || name.includes('Validation')) {
+        console.warn(`⚠️ 关系已存在或校验失败(忽略): ${investorProjectId} -> ${fundedProjectId} (${normRound})`);
+        return;
+      }
+      throw err;
+    }
   }
 
   /**
