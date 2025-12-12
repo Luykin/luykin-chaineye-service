@@ -1,6 +1,7 @@
 const express = require("express");
 const { Op, literal } = require("sequelize");
 const axios = require("axios");
+const { adminAuth } = require("../../admin/middleware/adminAuth");
 const router = express.Router();
 
 // 爬虫队列服务（双重验证机制）
@@ -185,6 +186,25 @@ class RootdataAPIService {
     }
     // 普通项目
     return await this.getFundingInfo(projectId, projectLink);
+  }
+}
+
+// 轻量管理员操作日志（类外的顶层函数）
+async function logAdminAction(req, { action, success, message }) {
+  try {
+    const { XhuntAdminAuditLog } = require("../../models/postgres-start");
+    const email = req.user?.username || req.adminUser?.email || "unknown";
+    await XhuntAdminAuditLog.create({
+      email,
+      action,
+      method: req.method,
+      route: req.originalUrl || req.url,
+      success: !!success,
+      message: typeof message === "string" ? message.slice(0, 1000) : JSON.stringify(message || {}).slice(0, 1000),
+      ip: req.headers["x-forwarded-for"] || req.ip || "",
+    });
+  } catch (e) {
+    console.error("[admin-audit] log failed:", e.message);
   }
 }
 
@@ -1187,7 +1207,7 @@ router.get("/search", async (req, res) => {
 
 // 强制触发 RootdataDataFixService.verifyAndFixProject（先清缓存再执行）
 // 支持三选一传参：keyword（与 /search 一样）、projectLink、twitterUrl
-router.get("/force-verify", async (req, res) => {
+router.get("/force-verify", adminAuth, async (req, res) => {
   try {
     const reqId = req.headers["x-request-id"] || `rv-${Date.now()}-${Math.random().toString(16).slice(2,8)}`;
     console.log(`[force-verify] ▶️ start`);
@@ -1254,6 +1274,7 @@ router.get("/force-verify", async (req, res) => {
 
     if (!project) {
       console.log(`[force-verify] 🔎 project not found`);
+      try { await logAdminAction(req, { action: "force-verify", success: false, message: "project not found" }); } catch(_) {}
       return res.json({ success: false, message: "No matching project found", requestId: reqId });
     }
 
@@ -1298,13 +1319,16 @@ router.get("/force-verify", async (req, res) => {
         true
       );
       console.log(`[force-verify] ✅ verifyAndFixProject done`);
+      try { await logAdminAction(req, { action: "force-verify", success: true, message: `projectId=${project.id}` }); } catch(_) {}
     } catch (e) {
       console.error(`verifyAndFixProject failed:`, e);
+      try { await logAdminAction(req, { action: "force-verify", success: false, message: e.message || "verify failed" }); } catch(_) {}
     }
 
     res.json({ success: true, projectId: project.id, projectLink: project.projectLink, requestId: reqId });
   } catch (error) {
     console.error("Error in force-verify:", error);
+    try { await logAdminAction(req, { action: "force-verify", success: false, message: error.message || "error" }); } catch(_) {}
     res.status(500).json({
       error: "Failed to force verify project",
       message: error.message || "Unknown error",
@@ -1317,7 +1341,7 @@ router.get("/force-verify", async (req, res) => {
  * DELETE /api/rootdata/relationship/:id
  * 删除单条投资关系记录
  */
-router.delete("/relationship/:id", async (req, res) => {
+router.delete("/relationship/:id", adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1340,6 +1364,7 @@ router.delete("/relationship/:id", async (req, res) => {
     await relationship.destroy();
 
     console.log(`✅ 删除投资关系记录: ID=${id}`);
+    try { await logAdminAction(req, { action: "relationship-delete", success: true, message: `id=${id}` }); } catch(_) {}
 
     res.json({
       success: true,
@@ -1348,6 +1373,7 @@ router.delete("/relationship/:id", async (req, res) => {
     });
   } catch (error) {
     console.error("删除投资关系失败:", error);
+    try { await logAdminAction(req, { action: "relationship-delete", success: false, message: error.message || "delete failed" }); } catch(_) {}
     res.status(500).json({
       error: "Failed to delete relationship",
       message: error.message,
@@ -1364,6 +1390,7 @@ router.delete("/relationship/:id", async (req, res) => {
  */
 router.delete(
   "/relationships/funded-project/:fundedProjectId",
+  adminAuth,
   async (req, res) => {
     try {
       const { fundedProjectId } = req.params;
@@ -1417,6 +1444,7 @@ router.delete(
       });
 
       console.log(`✅ 成功删除 ${result} 条记录`);
+      try { await logAdminAction(req, { action: "relationships-delete-funded", success: true, message: `fundedProjectId=${fundedProjectId} deleted=${result} date=${date || 'all'}` }); } catch(_) {}
 
       res.json({
         success: true,
@@ -1427,6 +1455,7 @@ router.delete(
       });
     } catch (error) {
       console.error("删除被投项目投资关系失败:", error);
+      try { await logAdminAction(req, { action: "relationships-delete-funded", success: false, message: error.message || "delete failed" }); } catch(_) {}
       res.status(500).json({
         error: "Failed to delete relationships",
         message: error.message,
