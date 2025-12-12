@@ -121,6 +121,91 @@ class RootdataAPIService {
   }
   
   /**
+   * 获取 ID 映射表
+   * type: 1 Project, 2 VC, 3 People
+   */
+  static async getIdMap(type) {
+    try {
+      const response = await axios.post(
+        `${ROOTDATA_API_BASE}/id_map`,
+        { type },
+        {
+          headers: {
+            apikey: ROOTDATA_API_KEY,
+            language: "en",
+            "Content-Type": "application/json",
+          },
+          timeout: 20000,
+        }
+      );
+      if (response.data?.result === 200 && Array.isArray(response.data?.data)) {
+        return response.data.data; // [{id, name}]
+      }
+      throw new Error(`id_map result=${response.data?.result}`);
+    } catch (e) {
+      console.error(`[rootdata id_map] ❌ type=${type} error:`, e.message);
+      throw e;
+    }
+  }
+
+  // 内存缓存（避免每次请求）
+  static _idMapCache = {
+    fetchedAt: 0,
+    ttlMs: 140 * 60 * 60 * 1000, // 140 小时
+    byType: {
+      1: new Map(),
+      2: new Map(),
+      3: new Map(),
+    },
+  };
+
+  static async ensureIdMaps() {
+    const now = Date.now();
+    if (now - this._idMapCache.fetchedAt < this._idMapCache.ttlMs) return;
+    const [proj, vc, people] = await Promise.all([
+      this.getIdMap(1),
+      this.getIdMap(2),
+      this.getIdMap(3),
+    ]);
+    const toMap = (arr) => {
+      const m = new Map();
+      for (const it of arr || []) {
+        if (it && (it.id !== undefined)) m.set(String(it.id), String(it.name || '').trim());
+      }
+      return m;
+    };
+    this._idMapCache.byType[1] = toMap(proj);
+    this._idMapCache.byType[2] = toMap(vc);
+    this._idMapCache.byType[3] = toMap(people);
+    this._idMapCache.fetchedAt = now;
+    console.log(`[rootdata id_map] ✅ cached: proj=${proj?.length||0} vc=${vc?.length||0} people=${people?.length||0}`);
+  }
+
+  /**
+   * 基于 id+name 反推实体类型，并生成相对与完整链接
+   */
+  static async resolveLinkByIdName(id, name) {
+    await this.ensureIdMaps();
+    const idStr = String(id);
+    const nm = String(name || '').trim();
+    const maps = this._idMapCache.byType;
+    const matches = [];
+    if (maps[1].has(idStr)) matches.push(1);
+    if (maps[2].has(idStr)) matches.push(2);
+    if (maps[3].has(idStr)) matches.push(3);
+    let type = matches.length === 1 ? matches[0] : null;
+    if (!type) type = 1; // 默认按 Project 处理，保证回退
+
+    const encoded = encodeURIComponent(Buffer.from(String(idStr), 'utf-8').toString('base64'));
+    const encodedName = encodeURIComponent(nm);
+
+    const prefix = type === 1 ? '/Projects/detail' : (type === 2 ? '/Investors/detail' : '/member/detail');
+    const relativeLink = `${prefix}/${encodedName}?k=${encoded}`;
+    const fullLink = `https://www.rootdata.com${relativeLink}`;
+    return { type, relativeLink, fullLink, encodedName, encoded };
+  }
+
+  /**
    * 调用 Rootdata API - 获取机构(VC)信息（含团队与投资）
    * @param {number|string} orgId - 机构ID
    * @param {Object} options
@@ -348,26 +433,13 @@ class RootdataDataFixService {
       const vcProjectId = project.id;
 
       // 预处理：生成所有候选链接，批量查询已存在项目，减少 N+1 查询
-      const vcItems = apiData.investments.map((inv) => {
-        const base64 = Buffer.from(String(inv.project_id), "utf-8").toString("base64");
-        const encoded = encodeURIComponent(base64);
+      const vcItems = await Promise.all(apiData.investments.map(async (inv) => {
         const rawName = String(inv.name || "").trim();
-        const encodedName = encodeURIComponent(rawName);
-        const relativeLink = `/Projects/detail/${encodedName}?k=${encoded}`;
-        const fullLink = `https://www.rootdata.com${relativeLink}`;
+        const { relativeLink, fullLink, encodedName, encoded } = await RootdataAPIService.resolveLinkByIdName(inv.project_id, rawName);
         const shortRelative = `/detail/${encodedName}?k=${encoded}`;
         const shortRelativeUnencoded = `/detail/${rawName}?k=${encoded}`;
-        return {
-          inv,
-          rawName,
-          encodedName,
-          encoded,
-          relativeLink,
-          fullLink,
-          shortRelative,
-          shortRelativeUnencoded,
-        };
-      });
+        return { inv, rawName, encodedName, encoded, relativeLink, fullLink, shortRelative, shortRelativeUnencoded };
+      }));
 
       const linkKeys = Array.from(
         new Set(
@@ -465,12 +537,8 @@ class RootdataDataFixService {
 
           // 如未找到，则以 id 生成标准链接创建
           if (!target) {
-            const base64 = Buffer.from(String(inv.id), 'utf-8').toString('base64');
-            const encoded = encodeURIComponent(base64);
-            const encodedName = encodeURIComponent(String(inv.name || '').trim());
-            const relativeLink = `/Projects/detail/${encodedName}?k=${encoded}`;
-            const fullLink = `https://www.rootdata.com${relativeLink}`;
-
+            const nm = String(inv.name || '').trim();
+            const { relativeLink, fullLink } = await RootdataAPIService.resolveLinkByIdName(inv.id, nm);
             target = await Fundraising.Project.create({
               projectName: inv.name,
               projectLink: fullLink,
