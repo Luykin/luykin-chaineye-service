@@ -237,6 +237,111 @@
     </div>
   </div>
 
+  <!-- 🔧 强制 API 更新数据（调用 /api/rootdata/force-verify） -->
+  <div class="section" id="rootdata-force-verify-section" style="margin-top: 30px">
+    <h2 class="section-title">🔧 强制api更新数据</h2>
+    <div class="stat-card" style="max-width: 900px; margin: 0 auto">
+      <div style="margin-bottom: 15px">
+        <label style="display:block;font-weight:600;color:#374151;margin-bottom:8px;">输入 Keyword / Twitter 链接 / RootData 链接：</label>
+        <input
+          type="text"
+          id="rootdata-force-input"
+          placeholder="如：yzilabs 或 https://x.com/yzilabs 或 https://www.rootdata.com/Investors/detail/YZi%20Labs?k=MjI5"
+          style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;"
+        />
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button id="rootdata-force-btn" style="flex:1;padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;">⚡ 强制更新</button>
+      </div>
+      <div id="rootdata-force-status" style="display:none;margin-top:12px;padding:12px;background:#f3f4f6;border-radius:6px;color:#374151;font-size:14px"></div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const btn = document.getElementById('rootdata-force-btn');
+      const input = document.getElementById('rootdata-force-input');
+      const statusEl = document.getElementById('rootdata-force-status');
+      let busy = false;
+      let debounceTimer = null;
+
+      function setStatus(text, ok){
+        statusEl.style.display = 'block';
+        statusEl.style.background = ok ? '#ecfdf5' : '#fef2f2';
+        statusEl.style.color = ok ? '#065f46' : '#991b1b';
+        statusEl.textContent = text;
+      }
+
+      function buildParams(v){
+        const params = new URLSearchParams();
+        // RootData 链接
+        if (/rootdata\.com\//i.test(v)) {
+          if (!/\/Projects\/detail\//i.test(v) && !/\/Investors\/detail\//i.test(v)) {
+            return { error: 'RootData 链接格式不正确，应包含 /Projects/detail 或 /Investors/detail' };
+          }
+          if (!/[?&]k=/.test(v)) {
+            return { error: 'RootData 链接缺少 k= 参数' };
+          }
+          params.set('projectLink', v);
+          return { params };
+        }
+        // Twitter 链接
+        if (/^https?:\/\/x\.com\//i.test(v)) {
+          if (!/^https?:\/\/x\.com\/[^/]+\/?$/i.test(v)) {
+            return { error: 'Twitter 链接应为 https://x.com/<handle>' };
+          }
+          params.set('twitterUrl', v);
+          return { params };
+        }
+        // 关键词
+        if (v.length < 2) {
+          return { error: '关键词长度至少为 2 个字符' };
+        }
+        params.set('keyword', v.toLowerCase());
+        return { params };
+      }
+
+      async function submit(){
+        if (busy) return; // 并发保护
+        const v = (input.value || '').trim();
+        if (!v) return setStatus('请输入内容', false);
+
+        const { params, error } = buildParams(v);
+        if (error) return setStatus(error, false);
+
+        const url = '/api/rootdata/force-verify';
+        try {
+          busy = true;
+          btn.disabled = true;
+          const oldText = btn.textContent;
+          btn.textContent = '处理中...';
+          setStatus('请求中...', true);
+
+          const resp = await fetch(url + '?' + params.toString(), { method: 'GET' });
+          const data = await resp.json().catch(() => ({}));
+          if (resp.ok) {
+            setStatus('已触发成功：' + (data?.message || 'OK'), true);
+          } else {
+            setStatus('触发失败：' + (data?.message || resp.statusText), false);
+          }
+
+          btn.textContent = oldText;
+          btn.disabled = false;
+          busy = false;
+        } catch (e) {
+          setStatus('请求异常：' + (e?.message || e), false);
+          btn.disabled = false;
+          busy = false;
+        }
+      }
+
+      btn && btn.addEventListener('click', () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(submit, 400);
+      });
+    })();
+  </script>
+
   <!-- 📊 按天查询新增数据 -->
   <div
     class="section"

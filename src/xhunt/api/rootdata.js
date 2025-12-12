@@ -84,14 +84,67 @@ class RootdataAPIService {
   /**
    * 根据 projectLink 获取完整的融资信息
    */
-  static async getProjectFundingData(projectLink) {
+  static async getProjectFundingData(projectLink, isVC = false) {
     const projectId = this.extractProjectId(projectLink);
 
     if (!projectId) {
       throw new Error("Failed to extract project_id from projectLink");
     }
 
-    return await this.getFundingInfo(projectId, projectLink);
+    if(isVC) {
+      // 是vc就要调用get_org接口
+      return await this.getOrgInfo(projectId);
+    } else {
+      // 是普通项目就调用get_fac接口
+      return await this.getFundingInfo(projectId, projectLink);
+    }
+  }
+  
+  /**
+   * 调用 Rootdata API - 获取机构(VC)信息（含团队与投资）
+   * @param {number|string} orgId - 机构ID
+   * @param {Object} options
+   * @param {boolean} options.includeTeam - 是否返回团队信息，默认 true
+   * @param {boolean} options.includeInvestments - 是否返回投资信息，默认 true
+   */
+  static async getOrgInfo(
+    orgId,
+    { includeTeam = true, includeInvestments = true } = {}
+  ) {
+    try {
+      const response = await axios.post(
+        `${ROOTDATA_API_BASE}/get_org`,
+        {
+          org_id: orgId,
+          include_team: includeTeam,
+          include_investments: includeInvestments,
+        },
+        {
+          headers: {
+            apikey: ROOTDATA_API_KEY,
+            language: "en",
+            "Content-Type": "application/json",
+          },
+          timeout: 10000,
+        }
+      );
+      console.log(
+        `[rootdata api 请求] ${ROOTDATA_API_BASE}/get_org orgId: ${orgId} response: ${JSON.stringify(
+          response.data?.result
+        )}`
+      );
+
+      if (response.data?.result === 200) {
+        return response.data.data;
+      }
+
+      throw new Error(`API returned result: ${response.data?.result}`);
+    } catch (error) {
+      console.error(
+        `[rootdata api 失败] ❌ ${error.message} , orgId: ${orgId}, api: ${ROOTDATA_API_BASE}/get_org`
+      );
+      throw error;
+    }
   }
 }
 
@@ -111,16 +164,28 @@ class RootdataDataFixService {
     project,
     Fundraising,
     redisClient,
-    searchCacheKey = null
+    searchCacheKey = null,
+    verifyVC = false,
   ) {
     try {
       const projectLink = project.projectLink;
 
       // 只验证项目链接，不验证投资者链接
-      if (!projectLink || !projectLink.includes("/Projects/detail")) {
+      if (!projectLink) {
+        console.log(`⏭️ 跳过验证（空链接）: ${projectLink}`);
+        return null;
+      }
+      if(!verifyVC && !projectLink.includes("/Projects/detail")) {
         console.log(`⏭️ 跳过验证（非项目链接）: ${projectLink}`);
         return null;
       }
+      if(!projectLink.includes("/Investors/detail")) {
+        console.log(`⏭️ 跳过验证（非VC链接）: ${projectLink}`);
+        return null;
+      }
+
+      // 包含Investors的标识是VC,否则是普通Projects
+      const isVC = !!projectLink.includes("/Investors/detail")
 
       const cacheKey = `rootdata_verified:${projectLink}`;
 
@@ -134,10 +199,16 @@ class RootdataDataFixService {
       console.log(`🔍 验证项目数据: ${projectLink}`);
 
       const apiData = await RootdataAPIService.getProjectFundingData(
-        projectLink
+        projectLink,
+        isVC
       );
 
-      if (!apiData || !apiData.items || apiData.items.length === 0) {
+      // 根据是否为 VC 判断返回数据结构
+      const noData = isVC
+        ? (!apiData || !Array.isArray(apiData.investments) || apiData.investments.length === 0)
+        : (!apiData || !Array.isArray(apiData.items) || apiData.items.length === 0);
+
+      if (noData) {
         console.log(`⚠️ 未找到API数据，跳过修正: ${projectLink}`);
 
         // 缓存"未找到"状态（1天），避免重复请求
@@ -152,8 +223,8 @@ class RootdataDataFixService {
         return null;
       }
 
-      // 3. 修正数据
-      await this.fixProjectData(project, apiData, Fundraising);
+      // 3. 修正数据（显式传入 isVC，内部按 VC/非VC 分支处理）
+      await this.fixProjectData(project, apiData, Fundraising, isVC);
 
       // 4. 清除搜索结果缓存，让下次请求获取修正后的数据
       if (searchCacheKey) {
@@ -182,29 +253,129 @@ class RootdataDataFixService {
   /**
    * 修正项目数据
    */
-  static async fixProjectData(project, apiData, Fundraising) {
+  static async fixProjectData(project, apiData, Fundraising, isVC = false) {
     const fundedProjectId = project.id;
 
     // 获取项目的 Twitter URL（用于验证）
     const projectTwitterUrl = project.twitterUrl || project.socialLinks?.x;
+    const roundsCount = isVC
+      ? (apiData?.investments?.length || 0)
+      : (apiData?.items?.length || 0);
     if (!projectTwitterUrl) {
       console.log(
         `[rootdata 对比起效] ⚠️ 无Twitter URL跳过: ${
           project.projectName
-        } | 轮次:${apiData.items?.length || 0}`
+        } | 轮次:${roundsCount}`
       );
       return;
     }
 
     console.log(
       `[rootdata 对比起效] 🔍 开始: ${project.projectName} | API返回:${
-        apiData.items?.length || 0
+        roundsCount
       }轮次 | Twitter:${projectTwitterUrl}`
     );
 
     let totalProcessed = 0; // 统计处理的投资者数量
     let totalSkipped = 0; // 统计跳过的轮次数量
     let totalMatched = 0; // 统计匹配成功的轮次数量
+
+    // 兼容 VC 机构返回的数据结构（apiData.investments）
+    if (isVC && Array.isArray(apiData?.investments)) {
+      const vcProjectId = project.id;
+
+      // 预处理：生成所有候选链接，批量查询已存在项目，减少 N+1 查询
+      const vcItems = apiData.investments.map((inv) => {
+        const base64 = Buffer.from(String(inv.project_id), "utf-8").toString("base64");
+        const encoded = encodeURIComponent(base64);
+        const rawName = String(inv.name || "").trim();
+        const encodedName = encodeURIComponent(rawName);
+        const relativeLink = `/Projects/detail/${encodedName}?k=${encoded}`;
+        const fullLink = `https://www.rootdata.com${relativeLink}`;
+        const shortRelative = `/detail/${encodedName}?k=${encoded}`;
+        const shortRelativeUnencoded = `/detail/${rawName}?k=${encoded}`;
+        return {
+          inv,
+          rawName,
+          encodedName,
+          encoded,
+          relativeLink,
+          fullLink,
+          shortRelative,
+          shortRelativeUnencoded,
+        };
+      });
+
+      const linkKeys = Array.from(
+        new Set(
+          vcItems
+            .flatMap((it) => [it.shortRelative, it.shortRelativeUnencoded])
+            .filter(Boolean)
+        )
+      );
+
+      const existingRows = linkKeys.length
+        ? await Fundraising.Project.findAll({
+            where: { projectLink: { [Op.in]: linkKeys } },
+            attributes: ["id", "projectLink", "projectName", "logo"],
+            raw: true,
+          })
+        : [];
+
+      const existingMap = new Map();
+      for (const row of existingRows) {
+        existingMap.set(row.projectLink, row);
+      }
+
+      for (const item of vcItems) {
+        const { inv, fullLink, shortRelative, shortRelativeUnencoded } = item;
+        try {
+          // 3) 使用批量查询结果映射，避免逐条查库
+          let target = existingMap.get(shortRelative) || existingMap.get(shortRelativeUnencoded);
+
+          // 4) 如未找到则创建
+          if (!target) {
+            target = await Fundraising.Project.create({
+              projectName: inv.name,
+              projectLink: fullLink,
+              logo: inv.logo,
+              description: inv.name,
+              isInitial: true,
+              socialLinks: null,
+              detailFailuresNumber: 0,
+              detailFetchedAt: null,
+            });
+            // 缓存到映射，避免后续重复创建
+            existingMap.set(shortRelative, target.get ? target.get({ plain: true }) : target);
+            if (shortRelativeUnencoded) {
+              existingMap.set(shortRelativeUnencoded, target.get ? target.get({ plain: true }) : target);
+            }
+          }
+
+          // 5) 建立投资关系（VC -> 被投项目）
+          await this.findOrCreateRelationship(
+            {
+              investorProjectId: vcProjectId,
+              fundedProjectId: target.id,
+              round: null,
+              amount: null,
+              formattedAmount: 0,
+              date: null,
+              lead: false,
+            },
+            Fundraising
+          );
+          totalProcessed++;
+        } catch (error) {
+          console.error(`[rootdata VC 处理] ❌ 处理失败: ${error.message}`);
+        }
+      }
+
+      console.log(
+        `[rootdata 对比起效] ✨ VC完成: ${project.projectName} | 处理被投项目:${apiData.investments.length}个`
+      );
+      return;
+    }
 
     for (const round of apiData.items) {
       if (!round.invests || round.invests.length === 0) {
@@ -415,14 +586,6 @@ class RootdataDataFixService {
   }
 }
 
-// /**
-//  * 手动维护部分更名推特
-//  */
-// const RENAME_MAP = {
-//   //   YZiLabs: "BinanceLabs",
-//   //   yzilabs: "BinanceLabs",
-// };
-
 /**
  * 辅助函数：按日期分组投资记录
  * 使用天数作为分组key，避免时区差异导致同一天的融资被分到不同组
@@ -563,7 +726,7 @@ router.get("/search", async (req, res) => {
     //   keyword = RENAME_MAP[lowerKeyword] || RENAME_MAP[keyword];
     // }
 
-    const sanitizedKeyword = keyword.trim();
+    const sanitizedKeyword = String(keyword.trim()).toLowerCase();
     const cacheKey = `rootdata_search_${sanitizedKeyword}_1030_2`;
 
     // 2. 从 Redis 获取缓存
@@ -900,6 +1063,126 @@ router.get("/search", async (req, res) => {
     console.error("Error in rootdata search:", error);
     res.status(500).json({
       error: "Failed to search project",
+      message: error.message || "Unknown error",
+    });
+  }
+});
+
+
+
+// 强制触发 RootdataDataFixService.verifyAndFixProject（先清缓存再执行）
+// 支持三选一传参：keyword（与 /search 一样）、projectLink、twitterUrl
+router.get("/force-verify", async (req, res) => {
+  try {
+    let { keyword, projectLink, twitterUrl } = req.query;
+
+    if (!keyword && !projectLink && !twitterUrl) {
+      return res.status(400).json({
+        error: "One of keyword, projectLink, or twitterUrl is required",
+      });
+    }
+
+    const { Fundraising } = require("../../models/postgres-fundraising");
+    if (!Fundraising) {
+      return res.status(500).json({ error: "Database model not initialized" });
+    }
+
+    let project = null;
+    let searchCacheKey = null;
+
+    if (projectLink) {
+      project = await Fundraising.Project.findOne({
+        where: { projectLink },
+        raw: true,
+      });
+    } else {
+      let handle = keyword;
+      if (!handle && twitterUrl) {
+        const m = String(twitterUrl).match(/x\.com\/([^/]+)/i);
+        handle = m ? m[1] : null;
+      }
+
+      if (!handle || String(handle).trim().length < 2) {
+        return res.json({ success: false, message: "No valid identifier provided" });
+      }
+
+      const sanitizedKeyword = String(keyword.trim()).toLowerCase();
+      searchCacheKey = `rootdata_search_${sanitizedKeyword}_1030_2`;
+
+      const targetTwitterUrl = `https://x.com/${sanitizedKeyword}`;
+      const targetTwitterUrlWithSlash = `https://x.com/${sanitizedKeyword}/`;
+
+      project = await Fundraising.Project.findOne({
+        where: {
+          [Op.or]: [
+            { twitterUrl: { [Op.iLike]: targetTwitterUrl } },
+            { twitterUrl: { [Op.iLike]: targetTwitterUrlWithSlash } },
+          ],
+        },
+        order: [["id", "DESC"]],
+        attributes: [
+          "id",
+          "projectName",
+          "projectLink",
+          "socialLinks",
+          "logo",
+          "amount",
+          "twitterUrl",
+          "socialLinks",
+        ],
+        raw: true,
+      });
+    }
+
+    if (!project) {
+      return res.json({ success: false, message: "No matching project found" });
+    }
+
+    // 先删除相关缓存，确保强制触发
+    const toDeleteKeys = [];
+    if (searchCacheKey) toDeleteKeys.push(searchCacheKey);
+    if (project.projectLink) toDeleteKeys.push(`rootdata_verified:${project.projectLink}`);
+
+    try {
+      for (const k of toDeleteKeys) {
+        await req.redisClient.del(k);
+      }
+    } catch (e) {
+      console.error("Redis Client Error (DEL):", e);
+    }
+
+    // 在强制校验前，按项目类型清空关系：VC 清理其作为投资方的关系；项目清理其作为被投方的关系
+    try {
+      const isVCLink = Boolean(project.projectLink && project.projectLink.includes('/Investors/detail'));
+      if (isVCLink) {
+        const delAsInvestor = await Fundraising.InvestmentRelationships.destroy({ where: { investorProjectId: project.id } });
+        console.log(`🧹 已清理旧关系(VC 作为投资方) 数量: ${delAsInvestor} | projectId=${project.id}`);
+      } else {
+        const delAsFunded = await Fundraising.InvestmentRelationships.destroy({ where: { fundedProjectId: project.id } });
+        console.log(`🧹 已清理旧关系(项目 作为被投方) 数量: ${delAsFunded} | projectId=${project.id}`);
+      }
+    } catch (e) {
+      console.error('清理旧投资关系失败:', e);
+    }
+
+    // 强制触发验证与修正
+    try {
+      await RootdataDataFixService.verifyAndFixProject(
+        project,
+        Fundraising,
+        req.redisClient,
+        searchCacheKey,
+        true
+      );
+    } catch (e) {
+      console.error("verifyAndFixProject failed:", e);
+    }
+
+    res.json({ success: true, projectId: project.id, projectLink: project.projectLink });
+  } catch (error) {
+    console.error("Error in force-verify:", error);
+    res.status(500).json({
+      error: "Failed to force verify project",
       message: error.message || "Unknown error",
     });
   }
