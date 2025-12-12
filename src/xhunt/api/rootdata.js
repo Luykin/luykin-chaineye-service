@@ -1080,7 +1080,7 @@ router.get("/search", async (req, res) => {
 router.get("/force-verify", async (req, res) => {
   try {
     const reqId = req.headers["x-request-id"] || `rv-${Date.now()}-${Math.random().toString(16).slice(2,8)}`;
-    console.log(`[force-verify] ▶️ start reqId=${reqId}`);
+    console.log(`[force-verify] ▶️ start`);
     let { keyword, projectLink, twitterUrl } = req.query;
 
     if (!keyword && !projectLink && !twitterUrl) {
@@ -1143,12 +1143,12 @@ router.get("/force-verify", async (req, res) => {
     }
 
     if (!project) {
-      console.log(`[force-verify] 🔎 project not found reqId=${reqId}`);
+      console.log(`[force-verify] 🔎 project not found`);
       return res.json({ success: false, message: "No matching project found", requestId: reqId });
     }
 
     const isVCLink = Boolean(project.projectLink && project.projectLink.includes('/Investors/detail'));
-    console.log(`[force-verify] ✅ project id=${project.id} isVC=${isVCLink} reqId=${reqId}`);
+    console.log(`[force-verify] ✅ project id=${project.id} isVC=${isVCLink}`);
 
     // 先删除相关缓存，确保强制触发
     const toDeleteKeys = [];
@@ -1160,25 +1160,25 @@ router.get("/force-verify", async (req, res) => {
         await req.redisClient.del(k);
       }
     } catch (e) {
-      console.error(`Redis Client Error (DEL) reqId=${reqId}:`, e);
+      console.error(`Redis Client Error (DEL)`, e);
     }
 
     // 在强制校验前，按项目类型清空关系：VC 清理其作为投资方的关系；项目清理其作为被投方的关系
     try {
       if (isVCLink) {
         const delAsInvestor = await Fundraising.InvestmentRelationships.destroy({ where: { investorProjectId: project.id } });
-        console.log(`🧹 清理(VC作为投资方)=${delAsInvestor} projectId=${project.id} reqId=${reqId}`);
+        console.log(`🧹 清理(VC作为投资方)=${delAsInvestor} projectId=${project.id}`);
       } else {
         const delAsFunded = await Fundraising.InvestmentRelationships.destroy({ where: { fundedProjectId: project.id } });
-        console.log(`🧹 清理(项目作为被投方)=${delAsFunded} projectId=${project.id} reqId=${reqId}`);
+        console.log(`🧹 清理(项目作为被投方)=${delAsFunded} projectId=${project.id}`);
       }
     } catch (e) {
-      console.error(`清理旧投资关系失败 reqId=${reqId}:`, e);
+      console.error(`清理旧投资关系失败:`, e);
     }
 
     // 强制触发验证与修正
     try {
-      console.log(`[force-verify] 🔁 verifyAndFixProject start reqId=${reqId}`);
+      console.log(`[force-verify] 🔁 verifyAndFixProject start`);
       await RootdataDataFixService.verifyAndFixProject(
         project,
         Fundraising,
@@ -1186,9 +1186,9 @@ router.get("/force-verify", async (req, res) => {
         searchCacheKey,
         true
       );
-      console.log(`[force-verify] ✅ verifyAndFixProject done reqId=${reqId}`);
+      console.log(`[force-verify] ✅ verifyAndFixProject done`);
     } catch (e) {
-      console.error(`verifyAndFixProject failed reqId=${reqId}:`, e);
+      console.error(`verifyAndFixProject failed:`, e);
     }
 
     res.json({ success: true, projectId: project.id, projectLink: project.projectLink, requestId: reqId });
