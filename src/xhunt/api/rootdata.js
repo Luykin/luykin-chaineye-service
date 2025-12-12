@@ -176,11 +176,11 @@ class RootdataDataFixService {
         return null;
       }
       if(!verifyVC && !projectLink.includes("/Projects/detail")) {
-        console.log(`⏭️ 跳过验证（非项目链接）: ${projectLink}`);
+        console.log(`⏭️ 跳过验证（非项目链接,未开启VC验证）: ${projectLink}`);
         return null;
       }
-      if(!projectLink.includes("/Investors/detail")) {
-        console.log(`⏭️ 跳过验证（非VC链接）: ${projectLink}`);
+      if(!projectLink.includes("/Investors/detail") && !projectLink.includes("/Projects/detail")) {
+        console.log(`⏭️ 跳过验证（非VC链接/非项目链接）: ${projectLink}`);
         return null;
       }
 
