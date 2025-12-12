@@ -151,7 +151,7 @@ class RootdataAPIService {
   // 内存缓存（避免每次请求）
   static _idMapCache = {
     fetchedAt: 0,
-    ttlMs: 140 * 60 * 60 * 1000, // 140 小时
+    ttlMs: 240 * 60 * 60 * 1000, // 240 小时
     byType: {
       1: new Map(),
       2: new Map(),
@@ -159,14 +159,56 @@ class RootdataAPIService {
     },
   };
 
+  // Redis 持久缓存 TTL（秒）
+  static _IDMAP_REDIS_TTL_SEC = 240 * 60 * 60;
+
+  static async _getIdMapFromRedis(type) {
+    try {
+      const client = global.__xhuntRedis;
+      if (!client) return null;
+      const key = `rootdata:id_map:${type}`;
+      const cached = await client.get(key);
+      if (!cached) return null;
+      const parsed = JSON.parse(cached);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch (e) {
+      console.error(`[rootdata id_map redis] get fail type=${type}:`, e.message);
+      return null;
+    }
+  }
+
+  static async _setIdMapToRedis(type, data) {
+    try {
+      const client = global.__xhuntRedis;
+      if (!client) return;
+      const key = `rootdata:id_map:${type}`;
+      await client.setEx(key, this._IDMAP_REDIS_TTL_SEC, JSON.stringify(data || []));
+    } catch (e) {
+      console.error(`[rootdata id_map redis] set fail type=${type}:`, e.message);
+    }
+  }
+
   static async ensureIdMaps() {
     const now = Date.now();
     if (now - this._idMapCache.fetchedAt < this._idMapCache.ttlMs) return;
-    const [proj, vc, people] = await Promise.all([
-      this.getIdMap(1),
-      this.getIdMap(2),
-      this.getIdMap(3),
+    // 优先读取 Redis；缺失则回源 API 并写回 Redis
+    let [proj, vc, people] = await Promise.all([
+      this._getIdMapFromRedis(1),
+      this._getIdMapFromRedis(2),
+      this._getIdMapFromRedis(3),
     ]);
+    const needFetch1 = !Array.isArray(proj) || proj.length === 0;
+    const needFetch2 = !Array.isArray(vc) || vc.length === 0;
+    const needFetch3 = !Array.isArray(people) || people.length === 0;
+    if (needFetch1) {
+      try { proj = await this.getIdMap(1); await this._setIdMapToRedis(1, proj); } catch (_) {}
+    }
+    if (needFetch2) {
+      try { vc = await this.getIdMap(2); await this._setIdMapToRedis(2, vc); } catch (_) {}
+    }
+    if (needFetch3) {
+      try { people = await this.getIdMap(3); await this._setIdMapToRedis(3, people); } catch (_) {}
+    }
     const toMap = (arr) => {
       const m = new Map();
       for (const it of arr || []) {

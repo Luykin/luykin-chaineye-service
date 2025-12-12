@@ -70,6 +70,8 @@ const redisClient = redis.createClient({
   try {
     await redisClient.connect();
     console.log("Redis 连接成功");
+    // 全局暴露，便于工具模块（如 RootdataAPIService）读取/写入共享缓存
+    global.__xhuntRedis = redisClient;
   } catch (error) {
     console.error("Redis 连接失败:", error);
   }
