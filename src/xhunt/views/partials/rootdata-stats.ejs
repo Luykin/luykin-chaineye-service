@@ -246,7 +246,7 @@
         <input
           type="text"
           id="rootdata-force-input"
-          placeholder="如：yzilabs 或 https://x.com/yzilabs 或 https://www.rootdata.com/Investors/detail/YZi%20Labs?k=MjI5"
+          placeholder="如：yzilabs 或 https://x.com/yzilabs 或 https://www.rootdata.com/Investors/detail/YZi%20Labs?k=MjI5 或 https://www.rootdata.com/member/Robert%20Chen?k=MTg1NDM%3D"
           style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;"
         />
       </div>
@@ -281,8 +281,8 @@
         const params = new URLSearchParams();
         // RootData 链接
         if (/rootdata\.com\//i.test(v)) {
-          if (!/\/Projects\/detail\//i.test(v) && !/\/Investors\/detail\//i.test(v)) {
-            return { error: 'RootData 链接格式不正确，应包含 /Projects/detail 或 /Investors/detail' };
+          if (!/\/Projects\/detail\//i.test(v) && !/\/Investors\/detail\//i.test(v) && !/\/member\//i.test(v)) {
+            return { error: 'RootData 链接格式不正确，应包含 /Projects/detail 或 /Investors/detail 或 /member' };
           }
           if (!/[?&]k=/.test(v)) {
             return { error: 'RootData 链接缺少 k= 参数' };
