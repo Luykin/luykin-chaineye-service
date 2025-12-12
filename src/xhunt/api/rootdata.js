@@ -1619,6 +1619,7 @@ router.post("/manual-crawl", async (req, res) => {
         isInitial: url.includes("/Projects/detail"), // ✅ 包含详情页链接则为初始项目
         detailFailuresNumber: 0,
         detailFetchedAt: null,
+        updateProgram: 'manual_crawler',
       });
       console.log(`📦 [手动爬虫] 创建项目: ${projectName}`);
     }
