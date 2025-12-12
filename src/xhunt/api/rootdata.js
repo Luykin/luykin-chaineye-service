@@ -806,14 +806,18 @@ class RootdataDataFixService {
    * 查找或创建投资关系
    */
   static async findOrCreateRelationship(relationshipData, Fundraising) {
-    const { investorProjectId, fundedProjectId, round } = relationshipData;
+    const { investorProjectId, fundedProjectId } = relationshipData;
+    // 归一化轮次：与模型 hooks(beforeCreate/Update/BulkCreate)保持一致，空或空白字符串统一为 '--'
+    const normRound = (!relationshipData.round || String(relationshipData.round).trim() === "")
+      ? "--"
+      : relationshipData.round;
 
     // 检查是否存在
     const existing = await Fundraising.InvestmentRelationships.findOne({
       where: {
         investorProjectId,
         fundedProjectId,
-        round,
+        round: normRound,
       },
       raw: true,
     });
@@ -822,10 +826,13 @@ class RootdataDataFixService {
       return;
     }
 
-    // 创建新关系
-    await Fundraising.InvestmentRelationships.create(relationshipData);
+    // 创建新关系（使用归一化后的轮次）
+    await Fundraising.InvestmentRelationships.create({
+      ...relationshipData,
+      round: normRound,
+    });
     console.log(
-      `✨ 创建投资关系: ${investorProjectId} -> ${fundedProjectId} (${round})`
+      `✨ 创建投资关系: ${investorProjectId} -> ${fundedProjectId} (${normRound})`
     );
   }
 
