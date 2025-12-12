@@ -94,7 +94,9 @@ const XHUNT_VIP = new Set([
   "nftsiy",
   "gcsbtc",
   "cheuk_baby",
-  "egyptk6"
+  "egyptk6",
+  "0xborder",
+  "abyssofgambling"
 ]);
 
 const INTERNAL_TEST_USERS = new Set([
