@@ -7,8 +7,8 @@ const {
 } = require("../utils/version");
 const { checkProStatus } = require("../middleware/pro-status");
 
-// 最小版本号：只有 >= 0.2.05 的版本才启用 Pro 检查
-const MIN_VERSION_FOR_PRO = "0.2.05";
+// 最小版本号：只有 >= 0.2.10 的版本才启用 Pro 检查
+const MIN_VERSION_FOR_PRO = "0.2.10";
 
 /**
  * 设置 SSE (Server-Sent Events) 响应头的公共方法
@@ -972,7 +972,7 @@ const connectionManager = new SSEConnectionManager();
  *
  * 用于实时推送 feed 数据
  *
- * 注意：对于版本号 >= 0.2.05 且非 Pro 用户，建立 SSE 连接但不加入连接管理器，因此不会收到推送数据
+ * 注意：对于版本号 >= 0.2.10 且非 Pro 用户，建立 SSE 连接但不加入连接管理器，因此不会收到推送数据
  */
 router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, res) => {
   // 检查是否已经有响应发送（中间件可能已经返回错误）
@@ -1008,7 +1008,7 @@ router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, r
   );
 
   if (shouldAddConnection) {
-    // Pro 用户或版本号 < 0.2.05，正常加入连接管理器
+    // Pro 用户或版本号 < 0.2.10，正常加入连接管理器
       try {
     connectionManager.addConnection(res);
 
@@ -1070,7 +1070,7 @@ router.get("/feeds", authenticateTokenFromQueryOptional, checkProStatus, (req, r
         }
     });
   } else {
-      // 非 Pro 用户且版本号 >= 0.2.05，不加入连接管理器
+      // 非 Pro 用户且版本号 >= 0.2.10，不加入连接管理器
       try {
     const proMessage = {
       type: "pro_required",
