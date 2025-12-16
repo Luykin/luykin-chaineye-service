@@ -366,7 +366,7 @@ router.get('/:handle/comments', [
 		res.status(500).json({ error: 'Failed to fetch comments' });
 	}
 });
-
+const blacklist = ["Btc1x99", "1596002796985163776", "Metta8253340353"].map(_ => String(_).toLocaleLowerCase());
 router.post('/', [
 	authenticateToken,
 	body('handle').trim().notEmpty(),
@@ -390,6 +390,9 @@ router.post('/', [
 	try {
 		const { handle, xLink, displayName, avatar, followers, following, rating, tags, note, comment } = req.body;
 		const twid = req.twid;
+		if (blacklist.includes(twid) || blacklist.includes(req.user.id)) {
+			return res.status(403).json({ status: 'error', error: 'Temporarily unavailable' });
+		}
 		/** 提前检查评论数量上限 **/
 		const cacheKey = `user:review:limit:${req.user.id}`;
 		const userReviewsLimit = await req.redisClient.get(cacheKey);
