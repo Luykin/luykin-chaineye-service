@@ -390,7 +390,7 @@ router.post('/', [
 	try {
 		const { handle, xLink, displayName, avatar, followers, following, rating, tags, note, comment } = req.body;
 		const twid = req.twid;
-		if (blacklist.includes(twid) || blacklist.includes(req.user.id)) {
+		if (blacklist.includes(twid) || blacklist.includes(req.user.id) || blacklist.includes(req.user?.username)) {
 			return res.status(403).json({ status: 'error', error: 'Temporarily unavailable' });
 		}
 		/** 提前检查评论数量上限 **/
