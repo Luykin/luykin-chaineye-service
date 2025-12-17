@@ -592,22 +592,26 @@ class RootdataDataFixService {
             }
           }
 
-          // 如未找到，则以 id 生成标准链接创建
+          // 如未找到，则以 id 生成标准链接创建（使用 findOrCreate 防止唯一约束冲突）
           if (!target) {
             const nm = String(inv.name || '').trim();
             const { relativeLink, fullLink } = await RootdataAPIService.resolveLinkByIdName(inv.id, nm);
-            target = await Fundraising.Project.create({
-              projectName: inv.name,
-              projectLink: fullLink,
-              logo: inv.logo,
-              description: inv.one_liner || inv.name,
-              isInitial: true,
-              socialLinks: twitterUrl ? { x: twitterUrl } : null,
-              twitterUrl: twitterUrl || null,
-              detailFailuresNumber: 0,
-              detailFetchedAt: null,
-              updateProgram,
+            const [instance] = await Fundraising.Project.findOrCreate({
+              where: { projectLink: fullLink },
+              defaults: {
+                projectName: inv.name,
+                projectLink: fullLink,
+                logo: inv.logo,
+                description: inv.one_liner || inv.name,
+                isInitial: true,
+                socialLinks: twitterUrl ? { x: twitterUrl } : null,
+                twitterUrl: twitterUrl || null,
+                detailFailuresNumber: 0,
+                detailFetchedAt: null,
+                updateProgram,
+              },
             });
+            target = instance.get ? instance.get({ plain: true }) : instance;
           }
 
           await this.findOrCreateRelationship(
