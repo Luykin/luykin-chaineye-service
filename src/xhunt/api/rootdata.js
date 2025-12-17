@@ -259,7 +259,7 @@ class RootdataAPIService {
   /**
    * 基于 id+name 反推实体类型，并生成相对与完整链接
    */
-  static async resolveLinkByIdName(id, name) {
+  static async resolveLinkByIdName(id, name, options = {}) {
     await this.ensureIdMaps();
     const idStr = String(id);
     const nm = String(name || '').trim();
@@ -269,6 +269,10 @@ class RootdataAPIService {
     if (maps[2].has(idStr)) matches.push(2);
     if (maps[3].has(idStr)) matches.push(3);
     let type = matches.length === 1 ? matches[0] : null;
+    const forceType = (options && (options.forceType === 1 || options.forceType === 2 || options.forceType === 3))
+      ? options.forceType
+      : null;
+    if (forceType) type = forceType;
     if (!type) type = 1; // 默认按 Project 处理，保证回退
 
     const encoded = encodeURIComponent(Buffer.from(String(idStr), 'utf-8').toString('base64'));
@@ -786,7 +790,7 @@ class RootdataDataFixService {
           const rawName = String(m.name || '').trim();
           if (!rawName || !m.people_id) continue;
           // 通过 people_id + name 生成标准的 member 详情链接
-          const { fullLink } = await RootdataAPIService.resolveLinkByIdName(m.people_id, rawName);
+          const { fullLink } = await RootdataAPIService.resolveLinkByIdName(m.people_id, rawName, { forceType: 3 });
 
           const xUrl = m.X || m.x || null;
 
