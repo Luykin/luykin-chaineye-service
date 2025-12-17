@@ -714,12 +714,22 @@ class RootdataDataFixService {
    */
   static async syncTeamPositions(project, apiData, Fundraising, entityType = 'project', updateProgram = 'auto_api_fix') {
     try {
-      if (!apiData) return;
-      if (entityType !== 'vc' && entityType !== 'project') return;
+      if (!apiData) {
+        console.log('[team_positions] skip: no apiData');
+        return;
+      }
+      if (entityType !== 'vc' && entityType !== 'project') {
+        console.log(`[team_positions] skip: unsupported type=${entityType}`);
+        return;
+      }
       const members = Array.isArray(apiData.team_members) ? apiData.team_members : [];
-      if (members.length === 0) return;
+      if (members.length === 0) {
+        console.log('[team_positions] skip: no members');
+        return;
+      }
 
       const objectProjectId = project.id;
+      console.log(`[team_positions] start type=${entityType} object=${objectProjectId} members=${members.length}`);
 
       for (const m of members) {
         try {
@@ -731,7 +741,7 @@ class RootdataDataFixService {
           const xUrl = m.X || m.x || null;
 
           // 成员 Project
-          const [memberProj] = await Fundraising.Project.findOrCreate({
+          const [memberProj, createdMember] = await Fundraising.Project.findOrCreate({
             where: { projectLink: fullLink },
             defaults: {
               projectName: rawName,
@@ -746,6 +756,9 @@ class RootdataDataFixService {
               updateProgram,
             },
           });
+          if (createdMember) {
+            console.log(`[team_positions] member created id=${memberProj.id} name=${rawName}`);
+          }
 
           // 职位关系（成员 -> 当前对象 VC/Project）
           await Fundraising.PositionRelationships.findOrCreate({
@@ -762,6 +775,7 @@ class RootdataDataFixService {
               updateProgram,
             },
           });
+          console.log(`[team_positions] link ${memberProj.id}->${objectProjectId} pos=${m.position || ''}`);
         } catch (e) {
           console.warn(`[syncTeamPositions] 单个成员处理失败: ${e.message}`);
         }
