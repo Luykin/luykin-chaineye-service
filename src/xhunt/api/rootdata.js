@@ -87,7 +87,10 @@ class RootdataAPIService {
     try {
       const response = await axios.post(
         `${ROOTDATA_API_BASE}/get_fac`,
-        { project_id: projectId },
+        { 
+          project_id: projectId,
+          include_team: true
+        },
         {
           headers: {
             apikey: ROOTDATA_API_KEY,
@@ -724,7 +727,7 @@ class RootdataDataFixService {
       }
       const members = Array.isArray(apiData.team_members) ? apiData.team_members : [];
       if (members.length === 0) {
-        console.log('[team_positions] skip: no members', JSON.stringify(apiData));
+        console.log('[team_positions] skip: no members');
         return;
       }
 
