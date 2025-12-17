@@ -394,6 +394,13 @@ class RootdataDataFixService {
         entityType
       );
 
+      // 3a. 职位关系同步（vc/project 的 team_members）
+      try {
+        await this.syncTeamPositions(project, apiData, Fundraising, entityType, updateProgram);
+      } catch (e) {
+        console.warn(`[rootdata team_positions] 同步失败: ${e.message}`);
+      }
+
       // 根据是否为 VC 判断返回数据结构
       const noData = (entityType === 'vc' || entityType === 'member')
         ? (!apiData || !Array.isArray(apiData.investments) || apiData.investments.length === 0)
@@ -416,13 +423,6 @@ class RootdataDataFixService {
 
       const count = (entityType === 'vc' || entityType === 'member') ? (apiData.investments?.length || 0) : (apiData.items?.length || 0);
       console.log(`[rootdata verify] fetched count=${count} entityType=${entityType}`);
-
-      // 3a. 职位关系同步（vc/project 的 team_members）
-      try {
-        await this.syncTeamPositions(project, apiData, Fundraising, entityType, updateProgram);
-      } catch (e) {
-        console.warn(`[rootdata team_positions] 同步失败: ${e.message}`);
-      }
 
       // 3b. 修正数据（显式传入 entityType，内部按类型分支处理）
       await this.fixProjectData(project, apiData, Fundraising, entityType, updateProgram);
@@ -724,7 +724,7 @@ class RootdataDataFixService {
       }
       const members = Array.isArray(apiData.team_members) ? apiData.team_members : [];
       if (members.length === 0) {
-        console.log('[team_positions] skip: no members');
+        console.log('[team_positions] skip: no members', JSON.stringify(apiData));
         return;
       }
 
