@@ -768,10 +768,10 @@ class RootdataDataFixService {
             }
           }
         } catch (_) {}
-        if (members.length === 0 && Array.isArray(project.teamMembers)) {
-          console.log('[team_positions] fallback to project.teamMembers');
-          members = project.teamMembers;
-        }
+        // if (members.length === 0 && Array.isArray(project.teamMembers)) {
+        //   console.log('[team_positions] fallback to project.teamMembers');
+        //   members = project.teamMembers;
+        // }
       }
       if (members.length === 0) {
         console.log('[team_positions] skip: no members');
