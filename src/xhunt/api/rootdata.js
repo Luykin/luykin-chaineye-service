@@ -417,7 +417,14 @@ class RootdataDataFixService {
       const count = (entityType === 'vc' || entityType === 'member') ? (apiData.investments?.length || 0) : (apiData.items?.length || 0);
       console.log(`[rootdata verify] fetched count=${count} entityType=${entityType}`);
 
-      // 3. 修正数据（显式传入 entityType，内部按类型分支处理）
+      // 3a. 职位关系同步（vc/project 的 team_members）
+      try {
+        await this.syncTeamPositions(project, apiData, Fundraising, entityType, updateProgram);
+      } catch (e) {
+        console.warn(`[rootdata team_positions] 同步失败: ${e.message}`);
+      }
+
+      // 3b. 修正数据（显式传入 entityType，内部按类型分支处理）
       await this.fixProjectData(project, apiData, Fundraising, entityType, updateProgram);
 
       // 4. 清除搜索结果缓存，让下次请求获取修正后的数据
@@ -696,6 +703,68 @@ class RootdataDataFixService {
     console.log(
       `[rootdata 对比起效] ✨ 完成: ${project.projectName} | 匹配:${totalMatched}轮次 跳过:${totalSkipped}轮次 投资者:${totalProcessed}个`
     );
+  }
+
+  /**
+   * 同步职位关系（VC/Project 的 team_members）
+   */
+  static async syncTeamPositions(project, apiData, Fundraising, entityType = 'project', updateProgram = 'auto_api_fix') {
+    try {
+      if (!apiData) return;
+      if (entityType !== 'vc' && entityType !== 'project') return;
+      const members = Array.isArray(apiData.team_members) ? apiData.team_members : [];
+      if (members.length === 0) return;
+
+      const objectProjectId = project.id;
+
+      for (const m of members) {
+        try {
+          const rawName = String(m.name || '').trim();
+          if (!rawName || !m.people_id) continue;
+          // 通过 people_id + name 生成标准的 member 详情链接
+          const { fullLink } = await RootdataAPIService.resolveLinkByIdName(m.people_id, rawName);
+
+          const xUrl = m.X || m.x || null;
+
+          // 成员 Project
+          const [memberProj] = await Fundraising.Project.findOrCreate({
+            where: { projectLink: fullLink },
+            defaults: {
+              projectName: rawName,
+              projectLink: fullLink,
+              logo: m.head_img || null,
+              description: rawName,
+              isInitial: true,
+              socialLinks: xUrl ? { x: xUrl } : null,
+              twitterUrl: xUrl || null,
+              detailFailuresNumber: 0,
+              detailFetchedAt: null,
+              updateProgram,
+            },
+          });
+
+          // 职位关系（成员 -> 当前对象 VC/Project）
+          await Fundraising.PositionRelationships.findOrCreate({
+            where: {
+              subjectProjectId: memberProj.id,
+              objectProjectId,
+              position: m.position || null,
+            },
+            defaults: {
+              subjectProjectId: memberProj.id,
+              objectProjectId,
+              position: m.position || null,
+              source: entityType,
+              updateProgram,
+            },
+          });
+        } catch (e) {
+          console.warn(`[syncTeamPositions] 单个成员处理失败: ${e.message}`);
+        }
+      }
+    } catch (e) {
+      console.warn(`[syncTeamPositions] 失败: ${e.message}`);
+    }
   }
 
   /**
@@ -1328,14 +1397,42 @@ router.get("/search", async (req, res) => {
       });
     }
 
-    // 11. 组装最终响应
+    // 11. 查询与该项目关联的成员（职位关系）
+    let members = [];
+    try {
+      const positions = await Fundraising.PositionRelationships.findAll({
+        where: { objectProjectId: project.id },
+        attributes: ["position", "subjectProjectId", "objectProjectId"],
+        include: [
+          {
+            model: Fundraising.Project,
+            as: "subjectProject",
+            attributes: ["projectName", "socialLinks", "logo", "twitterUrl"],
+          },
+        ],
+        raw: true,
+        nest: true,
+      });
+
+      members = (positions || []).map((row) => ({
+        name: row.subjectProject?.projectName || "",
+        position: row.position || "",
+        twitter: row.subjectProject?.twitterUrl || row.subjectProject?.socialLinks?.x || "",
+        avatar: row.subjectProject?.logo || "",
+      }));
+    } catch (e) {
+      console.warn("[search] 加载职位关系失败:", e.message);
+    }
+
+    // 12. 组装最终响应
     const response = {
       invested: investedData,
       investor: investorData,
       projectLink: project?.projectLink,
+      members,
     };
 
-    // 12. 缓存结果到 Redis 10分钟
+    // 13. 缓存结果到 Redis 10分钟
     try {
       await req.redisClient.setEx(
         cacheKey,

@@ -1214,17 +1214,22 @@ class FundraisingCrawler extends BaseCrawler {
           } 团队=${details.teamMembers?.length || 0}`
         );
       }
+      // 计算 detailFailuresNumber（可读性优化 + member 链接强制置为 99）
+      const isMemberLink = String(project.projectLink || "").includes("/member");
+      const nextDetailFailuresNumber = isMemberLink
+        ? 99
+        : (
+            isCrawlSuccess
+              ? ((mergedInvestors?.length || investedProjects?.length) ? 0 : 99)
+              : (Number(project.detailFailuresNumber) || 0) + 1
+          );
       await project.update({
         projectName: details.projectName,
         logo: details.logo,
         socialLinks: details.socialLinks,
         teamMembers: details.teamMembers,
         detailFetchedAt: isCrawlSuccess ? Date.now() : null,
-        detailFailuresNumber: isCrawlSuccess
-          ? mergedInvestors?.length || investedProjects?.length
-            ? 0
-            : 99
-          : (Number(project.detailFailuresNumber) || 0) + 1,
+        detailFailuresNumber: nextDetailFailuresNumber,
         updateProgram: program,
       });
       let updateRelationshipsLength = 0;

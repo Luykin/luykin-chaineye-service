@@ -252,6 +252,64 @@ module.exports = (sequelize) => {
     }
   );
 
+  // 人员-组织/项目 职位关系
+  const PositionRelationships = sequelize.define(
+    "PositionRelationships",
+    {
+      subjectProjectId: {
+        type: DataTypes.INTEGER,
+        references: { model: Project, key: "id" },
+        allowNull: false,
+        comment: "人员(成员)对应的 Project ID",
+      },
+      objectProjectId: {
+        type: DataTypes.INTEGER,
+        references: { model: Project, key: "id" },
+        allowNull: false,
+        comment: "组织/项目 对应的 Project ID",
+      },
+      position: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: "职位信息，例如 'Partner'、'Founder'",
+      },
+      source: {
+        type: DataTypes.ENUM("vc", "project"),
+        allowNull: true,
+        comment: "来源类型：来自 VC 或 Project 的 team_members",
+      },
+      updateProgram: {
+        type: DataTypes.ENUM(
+          "auto_crawler",
+          "manual_crawler",
+          "auto_api_fix",
+          "manual_api_fix",
+          "auto_crawler_fix"
+        ),
+        allowNull: true,
+        comment: "记录由哪个程序流程创建或更新",
+      },
+    },
+    {
+      timestamps: true,
+      indexes: [
+        {
+          name: "uniq_position_relation",
+          unique: true,
+          fields: ["subjectProjectId", "objectProjectId", "position"],
+        },
+        {
+          name: "idx_position_object",
+          fields: ["objectProjectId"],
+        },
+        {
+          name: "idx_position_subject",
+          fields: ["subjectProjectId"],
+        },
+      ],
+    }
+  );
+
   // 设置关联关系
   Project.hasMany(InvestmentRelationships, {
     foreignKey: "investorProjectId",
@@ -273,5 +331,26 @@ module.exports = (sequelize) => {
     as: "fundedProject", // 接受投资方
   });
 
-  return { Project, InvestmentRelationships };
+  // 职位关系关联
+  Project.hasMany(PositionRelationships, {
+    foreignKey: "subjectProjectId",
+    as: "positionsHeld", // 该成员在各组织/项目担任的职位
+  });
+
+  Project.hasMany(PositionRelationships, {
+    foreignKey: "objectProjectId",
+    as: "members", // 该组织/项目的成员
+  });
+
+  PositionRelationships.belongsTo(Project, {
+    foreignKey: "subjectProjectId",
+    as: "subjectProject", // 成员
+  });
+
+  PositionRelationships.belongsTo(Project, {
+    foreignKey: "objectProjectId",
+    as: "objectProject", // 组织/项目
+  });
+
+  return { Project, InvestmentRelationships, PositionRelationships };
 };
