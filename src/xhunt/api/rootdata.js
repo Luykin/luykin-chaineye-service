@@ -42,6 +42,36 @@ class RootdataAPIService {
   }
 
   /**
+   * 调用 Rootdata API - 获取项目详情（含 team_members）
+   */
+  static async getProjectItemInfo(projectId) {
+    try {
+      const response = await axios.post(
+        `${ROOTDATA_API_BASE}/get_item`,
+        {
+          project_id: projectId,
+          include_team: true,
+        },
+        {
+          headers: {
+            apikey: ROOTDATA_API_KEY,
+            language: "en",
+            "Content-Type": "application/json",
+          },
+          timeout: 10000,
+        }
+      );
+      if (response.data?.result === 200) {
+        return response.data.data;
+      }
+      throw new Error(`API returned result: ${response.data?.result}`);
+    } catch (error) {
+      console.error(`[rootdata api 失败] ❌ ${error.message} , api: ${ROOTDATA_API_BASE}/get_item project_id=${projectId}`);
+      return null;
+    }
+  }
+
+  /**
    * 调用 Rootdata API - 获取个人(Member)信息（含投资）
    * @param {number|string} peopleId - 个人ID
    */
@@ -725,7 +755,24 @@ class RootdataDataFixService {
         console.log(`[team_positions] skip: unsupported type=${entityType}`);
         return;
       }
-      const members = Array.isArray(apiData.team_members) ? apiData.team_members : [];
+      let members = Array.isArray(apiData.team_members) ? apiData.team_members : [];
+      // 当为 project 且 API 数据无 team_members 时，回源 /get_item 或使用本地爬虫数据作为兜底
+      if (entityType === 'project' && members.length === 0) {
+        try {
+          const projectId = RootdataAPIService.extractProjectId(project.projectLink);
+          if (projectId) {
+            console.log('[team_positions] fetch /get_item for team_members');
+            const itemData = await RootdataAPIService.getProjectItemInfo(projectId);
+            if (itemData && Array.isArray(itemData.team_members)) {
+              members = itemData.team_members;
+            }
+          }
+        } catch (_) {}
+        if (members.length === 0 && Array.isArray(project.teamMembers)) {
+          console.log('[team_positions] fallback to project.teamMembers');
+          members = project.teamMembers;
+        }
+      }
       if (members.length === 0) {
         console.log('[team_positions] skip: no members');
         return;
