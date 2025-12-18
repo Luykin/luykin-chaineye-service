@@ -1390,84 +1390,46 @@ router.get("/search", async (req, res) => {
       total_funding: totalInvestment,
     };
 
-    // 10. 异步更新头像（如果有缺失的头像）
-    const usernamesToFetch = new Set();
-
-    investors.forEach((investor) => {
-      if (investor.twitter) {
-        const username = extractUsername(investor.twitter);
-        if (
-          username &&
-          (!investor.avatar ||
-            !investor.avatar.startsWith("https://pbs.twimg.com"))
-        ) {
-          usernamesToFetch.add(username);
-        }
-      }
-    });
-
-    fundedProjects.forEach((project) => {
-      if (project.twitter) {
-        const username = extractUsername(project.twitter);
-        if (
-          username &&
-          (!project.avatar ||
-            !project.avatar.startsWith("https://pbs.twimg.com"))
-        ) {
-          usernamesToFetch.add(username);
-        }
-      }
-    });
-
-    // 异步获取和更新头像
-    if (usernamesToFetch.size > 0) {
+    // 10. 异步更新头像（优化：统一调度，避免重复）
+    const scheduleAvatarRefresh = (groups) => {
+      const need = new Set();
+      groups.forEach((arr) => {
+        (arr || []).forEach((it) => {
+          if (it && it.twitter) {
+            const u = extractUsername(it.twitter);
+            if (u && (!it.avatar || !String(it.avatar).startsWith("https://pbs.twimg.com"))) {
+              need.add(u);
+            }
+          }
+        });
+      });
+      if (need.size === 0) return;
       setImmediate(async () => {
         try {
-          const usernames = Array.from(usernamesToFetch);
-          const apiURL = `https://data.cryptohunt.ai/fetch/twitter/users?usernames=${usernames.join(
-            ","
-          )}`;
+          const usernames = Array.from(need);
+          const apiURL = `https://data.cryptohunt.ai/fetch/twitter/users?usernames=${usernames.join(",")}`;
           const response = await axios.get(apiURL);
           const userDataArray = response?.data?.data?.data || [];
-
           const avatarMap = {};
           userDataArray.forEach((user) => {
             if (user?.profile?.username && user?.profile?.profile_image_url) {
-              avatarMap[String(user?.profile?.username).toLowerCase()] =
-                user?.profile?.profile_image_url;
+              avatarMap[String(user.profile.username).toLowerCase()] = user.profile.profile_image_url;
             }
           });
-
-          // 更新内存中的数据（不等待数据库更新）
-          investors.forEach((investor) => {
-            if (investor.twitter) {
-              const username = String(
-                extractUsername(investor.twitter)
-              ).toLowerCase();
-              if (username && avatarMap[username]) {
-                investor.avatar = avatarMap[username];
+          groups.forEach((arr) => {
+            (arr || []).forEach((it) => {
+              if (it && it.twitter) {
+                const k = String(extractUsername(it.twitter)).toLowerCase();
+                if (k && avatarMap[k]) it.avatar = avatarMap[k];
               }
-            }
+            });
           });
-
-          fundedProjects.forEach((project) => {
-            if (project.twitter) {
-              const username = String(
-                extractUsername(project.twitter)
-              ).toLowerCase();
-              if (username && avatarMap[username]) {
-                project.avatar = avatarMap[username];
-              }
-            }
-          });
-
-          // 异步更新数据库
           await batchUpdateProjectLogos(avatarMap, Fundraising);
         } catch (error) {
           console.error("Error fetching/updating avatars:", error);
         }
       });
-    }
+    };
 
     // 11. 查询与该项目关联的成员（职位关系）
     let members = [];
@@ -1495,6 +1457,9 @@ router.get("/search", async (req, res) => {
     } catch (e) {
       console.warn("[search] 加载职位关系失败:", e.message);
     }
+
+    // 异步更新成员/投资者/被投项目头像（统一调度）
+    try { scheduleAvatarRefresh([investors, fundedProjects, members]); } catch (_) {}
 
     // 12. 组装最终响应
     const response = {
