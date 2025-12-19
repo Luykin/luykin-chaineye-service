@@ -97,7 +97,8 @@ const XHUNT_VIP = new Set([
   "egyptk6",
   "0xborder",
   "abyssofgambling",
-  "flyiiawei"
+  "flyiiawei",
+  "ttmbbo"
 ]);
 
 const INTERNAL_TEST_USERS = new Set([
