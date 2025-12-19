@@ -278,7 +278,7 @@ class RootdataAPIService {
     const encoded = encodeURIComponent(Buffer.from(String(idStr), 'utf-8').toString('base64'));
     const encodedName = encodeURIComponent(nm);
 
-    const prefix = type === 1 ? '/Projects/detail' : (type === 2 ? '/Investors/detail' : '/member/detail');
+    const prefix = type === 1 ? '/Projects/detail' : (type === 2 ? '/Investors/detail' : '/member');
     const relativeLink = `${prefix}/${encodedName}?k=${encoded}`;
     const fullLink = `https://www.rootdata.com${relativeLink}`;
     return { type, relativeLink, fullLink, encodedName, encoded };
