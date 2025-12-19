@@ -42,13 +42,13 @@ class CrawlerScheduler {
     });
     await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
     await this.resetAllState();
-    // /** 每次重启没必要执行一次 rootData 的更新 start ============ **/
-    // /** 开始RootData爬虫 **/
-    // this.startRootDataCrawl()
-    //   .then(() => {
-    //     console.log("首次启动任务执行完: startRootDataCrawl");
-    //   })
-    //   .catch((err) => console.log(err));
+    /** 每次重启没必要执行一次 rootData 的更新 start ============ **/
+    /** 开始RootData爬虫 **/
+    this.startRootDataCrawl()
+      .then(() => {
+        console.log("首次启动任务执行完: startRootDataCrawl");
+      })
+      .catch((err) => console.log(err));
     // await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
     // this.startInvestorsCrawl().then(r => r);
     // await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
