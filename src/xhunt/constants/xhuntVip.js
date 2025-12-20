@@ -98,7 +98,8 @@ const XHUNT_VIP = new Set([
   "0xborder",
   "abyssofgambling",
   "flyiiawei",
-  "TTMBbo"
+  "TTMBbo",
+	"shouyi16"
 ].map((s) => s.toLowerCase()));
 
 const INTERNAL_TEST_USERS = new Set([
@@ -110,6 +111,7 @@ const INTERNAL_TEST_USERS = new Set([
   "web3sistera",
   "s_memek",
   "luoyukun4",
+	"shouyi16"
 ]);
 
 
