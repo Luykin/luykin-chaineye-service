@@ -14,22 +14,37 @@ const pgInstance = new Sequelize({
 
 async function getTopActiveUsers(days = 30, limit = 500) {
   await pgInstance.authenticate();
-  // 近 N 天（含当日），按用户活跃天数倒序
+  // 近 N 天（含当日），联表 XHuntUsers 补齐字段
   const rows = await pgInstance.query(
-    `SELECT "userId", COUNT(*) AS active_days
-     FROM "DailyActiveUsers"
-     WHERE "date" >= CURRENT_DATE - INTERVAL '${days} day'
-     GROUP BY "userId"
-     ORDER BY active_days DESC, "userId" ASC
+    `SELECT 
+        u."username" AS handler,
+        u."twitterId" AS twid,
+        u."displayName" AS "displayName",
+        u."avatar" AS avatar,
+        u."createdAt" AS createdtime,
+        u."evmAddresses" AS "evmAddresses",
+        COUNT(d."date") AS activedays
+     FROM "DailyActiveUsers" d
+     JOIN "XHuntUsers" u ON u."username" = d."userId"
+     WHERE d."date" >= CURRENT_DATE - INTERVAL '${days} day'
+     GROUP BY handler, twid, "displayName", avatar, createdtime, "evmAddresses"
+     ORDER BY activedays DESC, handler ASC
      LIMIT ${limit}`,
     { type: Sequelize.QueryTypes.SELECT }
   );
 
-  // 转换为 { username: days } 的对象
+  // 结果映射为 { handler: { activedays, twid, handler, displayName, avatar, createdtime, evmAddresses } }
   const result = {};
   for (const r of rows) {
-    // COUNT(*) 返回字符串或数字，统一转为 Number
-    result[r.userId] = Number(r.active_days);
+    result[r.handler] = {
+      activedays: Number(r.activedays),
+      twid: r.twid || null,
+      handler: r.handler,
+      displayName: r.displayName || null,
+      avatar: r.avatar || null,
+      createdtime: r.createdtime,
+      evmAddresses: r.evmAddresses ?? null,
+    };
   }
   return result;
 }

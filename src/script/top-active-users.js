@@ -7,12 +7,10 @@ async function main() {
   try {
     console.log(`🔍 统计最近 ${days} 天活跃次数 Top ${limit} 用户...`);
     const data = await getTopActiveUsers(days, limit);
-    // 输出形如 {'xxx1': 30, 'xxx2': 29}
-    // 为保持与示例一致，使用单引号包裹 key（打印时构造字符串）
-    const jsonLike = `{${Object.entries(data)
-      .map(([k, v]) => `'${k}': ${v}`)
-      .join(", ")}}`;
-    console.log(jsonLike);
+    // 输出形如 {'handler': {activedays: 30, twid:'xx', handler: 'xxx', displayName: 'dada', avatar:'', createdtime:'', evmAddresses:[...]}}
+    // 使用 JSON 序列化后替换双引号为单引号，便于符合示例展示格式
+    const primaryOut = JSON.stringify(data);
+    console.log(primaryOut.replace(/"/g, "'"));
 
     // 同时输出标准 JSON 便于脚本管道使用
     console.log("\nJSON:");
