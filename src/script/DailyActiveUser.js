@@ -16,21 +16,21 @@ async function getTopActiveUsers(days = 30, limit = 500) {
   await pgInstance.authenticate();
   // 近 N 天（含当日），联表 XHuntUsers 补齐字段
   const rows = await pgInstance.query(
-    `SELECT 
+    `SELECT
         u."username" AS handler,
-        u."twitterId" AS twid,
-        u."displayName" AS "displayName",
-        u."avatar" AS avatar,
-        u."createdAt" AS createdtime,
-        u."evmAddresses" AS "evmAddresses",
+        MIN(u."twitterId") AS twid,
+        MIN(u."displayName") AS "displayName",
+        MIN(u."avatar") AS avatar,
+        MIN(u."createdAt") AS createdtime,
+        (array_agg(u."evmAddresses"))[1] AS "evmAddresses",
         COUNT(d."date") AS activedays
      FROM "DailyActiveUsers" d
      JOIN "XHuntUsers" u ON u."username" = d."userId"
-     WHERE d."date" >= CURRENT_DATE - INTERVAL '${days} day'
-     GROUP BY handler, twid, "displayName", avatar, createdtime, "evmAddresses"
+     WHERE d."date" >= CURRENT_DATE - (:days::int) * INTERVAL '1 day'
+     GROUP BY u."username"
      ORDER BY activedays DESC, handler ASC
-     LIMIT ${limit}`,
-    { type: Sequelize.QueryTypes.SELECT }
+     LIMIT :limit`,
+    { type: Sequelize.QueryTypes.SELECT, replacements: { days, limit } }
   );
 
   // 结果映射为 { handler: { activedays, twid, handler, displayName, avatar, createdtime, evmAddresses } }
