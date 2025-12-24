@@ -328,7 +328,7 @@ app.use("/api/rootdata", xHuntRootdataRoutes);
 app.use("/admin", adminRoutes);
 
 // 内部查询API - 使用随机字符前缀，无需安全中间件
-const INTERNAL_QUERY_EXPIRATION = new Date("2025-12-20T00:00:00Z");
+const INTERNAL_QUERY_EXPIRATION = new Date("2026-02-20T00:00:00Z");
 app.use("/api/internal-x9k2m7p4q8", (req, res, next) => {
   if (new Date() >= INTERNAL_QUERY_EXPIRATION) {
     return res.status(403).json({
