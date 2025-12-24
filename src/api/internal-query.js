@@ -1,7 +1,7 @@
 const express = require('express');
 const { query } = require('express-validator');
-const { XReviewForAccount, XHuntUser, XAccount } = require('../models/postgres-start');
-const { Op } = require('sequelize');
+const { XReviewForAccount, XHuntUser, XAccount, DailyActiveUser } = require('../models/postgres-start');
+const { Op, fn, col } = require('sequelize');
 
 const router = express.Router();
 
@@ -265,6 +265,219 @@ router.get('/ud3s7adh8a-users', [
 		});
 	} catch (error) {
 		console.error('Internal query /users error:', error);
+		res.status(500).json({
+			success: false,
+			error: '查询失败',
+			message: error.message
+		});
+	}
+});
+
+/**
+ * GET /user-stats
+ * 根据 handle (username) 查询用户统计信息
+ * @query handle - 必填，XHuntUser.username（不区分大小写）
+ * 
+ * 返回：
+ * 1. xhunt 首次登陆时间（XHuntUser.createdAt）
+ * 2. 总共使用天数（DailyActiveUser 中该用户的条目数量）
+ * 3. 一共给多少个人打了多少个 comment（总数、好评数 rating > 3、差评数 rating < 3）
+ * 4. 自己被别人评论多少个，评分多少（通过 XAccount.handle 查找，然后统计 XReviewForAccount）
+ */
+router.get('/MN4KJSH21DC-user-stats', [
+	query('handle')
+		.notEmpty()
+		.withMessage('handle 参数是必填的')
+		.isString()
+		.trim()
+		.withMessage('handle 必须是字符串')
+], async (req, res) => {
+	try {
+		const handle = (req.query.handle || '').trim();
+		if (!handle) {
+			return res.status(400).json({
+				success: false,
+				error: '参数验证失败',
+				details: [{ field: 'handle', message: 'handle 参数是必填的' }]
+			});
+		}
+
+		// Redis 缓存配置
+		const cacheKey = `internal-query:user-stats:${handle.toLowerCase()}`;
+		const redisCacheTTL = 20 * 60; // 20分钟（秒）
+		const httpCacheMaxAge = 10 * 60; // 10分钟（秒）
+
+		// 尝试从 Redis 获取缓存
+		let cachedData = null;
+		if (req.redisClient && typeof req.redisClient.get === 'function') {
+			try {
+				const cached = await req.redisClient.get(cacheKey);
+				if (cached) {
+					cachedData = JSON.parse(cached);
+				}
+			} catch (redisError) {
+				// Redis 读取失败不影响主流程
+				console.error('Redis GET failed:', redisError);
+			}
+		}
+
+		// 如果缓存命中，直接返回
+		if (cachedData) {
+			// 设置 HTTP 缓存头（10分钟）
+			res.setHeader('Cache-Control', `public, max-age=${httpCacheMaxAge}`);
+			res.setHeader(
+				'Expires',
+				new Date(Date.now() + httpCacheMaxAge * 1000).toUTCString()
+			);
+			return res.json(cachedData);
+		}
+
+		// 1. 根据 handle（不区分大小写）查找 XHuntUser
+		const user = await XHuntUser.findOne({
+			where: {
+				username: {
+					[Op.iLike]: handle // 不区分大小写匹配
+				}
+			}
+		});
+
+		if (!user) {
+			return res.status(404).json({
+				success: false,
+				error: 'NOT_FOUND',
+				message: `未找到匹配 handle=${handle} 的用户`
+			});
+		}
+
+		const userId = user.id;
+		const username = user.username;
+
+		// 2. 查询总共使用天数（DailyActiveUser 中该用户的条目数量）
+		// 注意：DailyActiveUser.userId 存储的是 username
+		const totalActiveDays = await DailyActiveUser.count({
+			where: {
+				userId: username
+			}
+		});
+
+		// 3. 查询给出的评论统计
+		const givenReviewsTotal = await XReviewForAccount.count({
+			where: {
+				xHuntUserId: userId
+			}
+		});
+
+		const goodReviewsCount = await XReviewForAccount.count({
+			where: {
+				xHuntUserId: userId,
+				rating: {
+					[Op.gt]: 3
+				}
+			}
+		});
+
+		const badReviewsCount = await XReviewForAccount.count({
+			where: {
+				xHuntUserId: userId,
+				rating: {
+					[Op.lt]: 3
+				}
+			}
+		});
+
+		// 4. 查询被评论的情况
+		// 先根据 handle 查找 XAccount
+		const xAccount = await XAccount.findOne({
+			where: {
+				handle: {
+					[Op.iLike]: handle // 不区分大小写匹配
+				}
+			}
+		});
+
+		let receivedReviewsCount = 0;
+		let receivedReviewsAvgRating = null;
+
+		if (xAccount) {
+			const xAccountId = xAccount.id;
+
+			// 统计被评论的数量
+			receivedReviewsCount = await XReviewForAccount.count({
+				where: {
+					xAccountId: xAccountId
+				}
+			});
+
+			// 计算平均评分
+			if (receivedReviewsCount > 0) {
+				const receivedReviewsStats = await XReviewForAccount.findAll({
+					where: {
+						xAccountId: xAccountId
+					},
+					attributes: [
+						[fn('AVG', col('rating')), 'avgRating']
+					],
+					raw: true
+				});
+
+				if (receivedReviewsStats && receivedReviewsStats.length > 0) {
+					const avgRating = receivedReviewsStats[0].avgRating;
+					if (avgRating !== null && avgRating !== undefined) {
+						receivedReviewsAvgRating = parseFloat(parseFloat(avgRating).toFixed(1));
+					}
+				}
+			}
+		}
+
+		// 组装返回数据
+		const result = {
+			success: true,
+			data: {
+				handle: username,
+				userId: userId,
+				// 1. xhunt 首次登陆时间
+				firstLoginTime: user.createdAt ? new Date(user.createdAt).toISOString() : null,
+				// 2. 总共使用天数
+				totalActiveDays: totalActiveDays,
+				// 3. 给出的评论统计
+				givenReviews: {
+					total: givenReviewsTotal,
+					good: goodReviewsCount, // 好评（rating > 3）
+					bad: badReviewsCount   // 差评（rating < 3）
+				},
+				// 4. 被评论统计
+				receivedReviews: {
+					count: receivedReviewsCount,
+					averageRating: receivedReviewsAvgRating
+				}
+			}
+		};
+
+		// 存储到 Redis 缓存（20分钟）
+		if (req.redisClient && typeof req.redisClient.set === 'function') {
+			try {
+				await req.redisClient.set(
+					cacheKey,
+					JSON.stringify(result),
+					'EX',
+					redisCacheTTL
+				);
+			} catch (redisError) {
+				// Redis 写入失败不影响响应
+				console.error('Redis SET failed:', redisError);
+			}
+		}
+
+		// 设置 HTTP 缓存头（10分钟）
+		res.setHeader('Cache-Control', `public, max-age=${httpCacheMaxAge}`);
+		res.setHeader(
+			'Expires',
+			new Date(Date.now() + httpCacheMaxAge * 1000).toUTCString()
+		);
+
+		return res.json(result);
+	} catch (error) {
+		console.error('Internal query /user-stats error:', error);
 		res.status(500).json({
 			success: false,
 			error: '查询失败',
