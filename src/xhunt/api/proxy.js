@@ -184,9 +184,16 @@ async function proxyRequest(req, res, targetUrl) {
       return res.status(statusCode).json(errorData);
     }
 
-    // 处理成功响应
-    let data;
+    // 处理成功响应（200-299）
+    // 设置 CORS 头
+    ensureCorsHeaders(req, res);
+
+    // 设置浏览器缓存策略
+    setBrowserCacheHeaders(res, req.method);
+
     if (isJson) {
+      // JSON 响应：解析并返回
+      let data;
       try {
         data = JSON.parse(responseText);
       } catch (jsonError) {
@@ -196,43 +203,41 @@ async function proxyRequest(req, res, targetUrl) {
           error: jsonError.message,
           rawResponse: responseText.substring(0, 1000), // 打印前 1000 字符
         });
-        ensureCorsHeaders(req, res);
         return res.status(502).json({
           error: "目标服务器返回了无效的JSON数据",
           details: "服务器响应格式错误",
         });
       }
+
+      // Pro 用户数据裁切逻辑（统一管理）
+      // 针对非 Pro 用户进行数据过滤
+      try {
+        data = applyProDataFiltering(req, data);
+      } catch (filterErr) {
+        console.warn("Pro data filtering warning:", filterErr);
+      }
+
+      // 返回 JSON 响应
+      return res.status(statusCode).json(data);
     } else {
-      // 非JSON响应，可能是HTML错误页面（虽然状态码是成功的）
-      console.error("Non-JSON response:", {
+      // 非JSON响应，但状态码正常：原样返回
+      // 记录日志但不报错
+      console.log("Non-JSON response (status OK):", {
         url: targetUrl,
         method: req.method,
+        status: statusCode,
         contentType: contentType,
-        rawResponse: responseText.substring(0, 1000), // 打印前 1000 字符
+        responseLength: responseText.length,
       });
-      ensureCorsHeaders(req, res);
-      return res.status(502).json({
-        error: "目标服务器返回了非JSON格式的响应",
-        details: "可能是服务器错误或维护中",
-      });
+
+      // 设置原始响应头
+      if (contentType) {
+        res.setHeader("Content-Type", contentType);
+      }
+
+      // 原样返回响应文本
+      return res.status(statusCode).send(responseText);
     }
-
-    // 设置 CORS 头
-    ensureCorsHeaders(req, res);
-
-    // 设置浏览器缓存策略
-    setBrowserCacheHeaders(res, req.method);
-
-    // Pro 用户数据裁切逻辑（统一管理）
-    // 针对非 Pro 用户进行数据过滤
-    try {
-      data = applyProDataFiltering(req, data);
-    } catch (filterErr) {
-      console.warn("Pro data filtering warning:", filterErr);
-    }
-
-    // 返回响应
-    res.status(response.status).json(data);
   } catch (error) {
     console.error("Proxy request error:", {
       url: targetUrl,
