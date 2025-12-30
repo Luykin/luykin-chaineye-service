@@ -21,6 +21,7 @@ const fundraisingRoutes = require("./routes/fundraising");
 const cryptoRoutes = require("./routes/cryptohunt-tg");
 const proxyRoutes = require("./routes/proxy");
 const newsRoutes = require("./routes/ex-news");
+const generalRoutes = require("./routes/general");
 const xHuntAuthRoutes = require("./xhunt/api/auth");
 const xHuntProxyRoutes = require("./xhunt/api/proxy");
 const xHuntReviewsRoutes = require("./xhunt/api/reviews");
@@ -259,6 +260,7 @@ app.use("/api/fundraising", fundraisingRoutes);
 app.use("/api/crypto", cryptoRoutes);
 app.use("/api/proxy", proxyRoutes);
 app.use("/api/news", newsRoutes);
+app.use("/api/general", generalRoutes);
 
 app.use(
   "/api/xhunt/auth",
