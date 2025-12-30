@@ -220,7 +220,7 @@ router.get('/ud3s7adh8a-users', [
 		.withMessage('twid 必须是字符串')
 ], async (req, res) => {
 	try {
-		const cutoff = new Date('2025-12-20T00:00:00Z');
+		const cutoff = new Date('2026-02-20T00:00:00Z');
 		const now = new Date();
 		if (now >= cutoff) {
 			return res.status(403).json({
