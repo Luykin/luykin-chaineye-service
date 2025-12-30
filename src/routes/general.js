@@ -7,6 +7,10 @@ const router = express.Router();
 
 // 通用：获取 Twitter 授权 URL（不经过 securityMiddleware）
 router.get("/twitter/url", async (req, res) => {
+  // 要求：必须携带 x-request-id（该文件其他不做检查）
+  if (!req.get("x-request-id")) {
+    return res.status(400).json({ error: "缺少 x-request-id" });
+  }
   try {
     const clientId = process.env.WEB_TWITTER_CLIENT_ID;
     const clientSecret = process.env.WEB_TWITTER_CLIENT_SECRET;
@@ -39,6 +43,10 @@ router.post(
   "/twitter/callback",
   [body("code").trim().notEmpty(), body("state").trim().notEmpty(), validateRequest],
   async (req, res) => {
+    // 要求：必须携带 x-request-id（该文件其他不做检查）
+    if (!req.get("x-request-id")) {
+      return res.status(400).json({ error: "缺少 x-request-id" });
+    }
     const { code, state } = req.body || {};
     try {
       const clientId = process.env.WEB_TWITTER_CLIENT_ID;
