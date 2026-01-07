@@ -1,3 +1,4 @@
+<script src="/static/js/echarts.min.js"></script>
 <div class="perf-monitor-container">
   <div class="controls">
     <div class="control-group">
@@ -75,7 +76,17 @@
         "metrics-chart-container"
       );
 
-      if (!scatterContainer || !metricsContainer || !echarts) return;
+      if (typeof echarts === "undefined") {
+        const errorHtml = `<div style="padding: 40px; text-align: center; color: #ef4444;">
+          <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">❌ 渲染错误</div>
+          <div>图表库 (ECharts) 加载失败。<br/>请检查您的网络连接、浏览器广告拦截插件或防火墙设置，然后刷新页面。</div>
+        </div>`;
+        if (scatterContainer) scatterContainer.innerHTML = errorHtml;
+        if (metricsContainer) metricsContainer.innerHTML = errorHtml;
+        return;
+      }
+
+      if (!scatterContainer || !metricsContainer) return;
 
       scatterChart = echarts.init(scatterContainer);
       metricsChart = echarts.init(metricsContainer);
