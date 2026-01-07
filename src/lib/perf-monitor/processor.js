@@ -1,6 +1,6 @@
 // src/lib/perf-monitor/processor.js
 
-const BATCH_SIZE = 500; // Increased batch size to handle high queue pressure
+const BATCH_SIZE = 500; // Keep increased batch size to handle high queue pressure
 
 class PerfDataProcessor {
   constructor(config) {
@@ -50,7 +50,6 @@ class PerfDataProcessor {
     if (!records || records.length === 0) return;
 
     const metricsByWindow = {};
-    // Corrected: Use multi() for redis v4 client
     const metricsMulti = this.redisClient.multi();
     const tracesMulti = this.redisClient.multi();
 
@@ -88,8 +87,8 @@ class PerfDataProcessor {
           status: event.status,
           hasDetail: event.hasDetail,
         });
-        // Corrected: Use zAdd with the correct syntax for redis v4
-        tracesMulti.zAdd(indexKey, { score: event.ts, value: scatterPoint });
+        // Corrected: zAdd for redis v4 expects an array of members
+        tracesMulti.zAdd(indexKey, [{ score: event.ts, value: scatterPoint }]);
         tracesMulti.expire(indexKey, this.traceConfig.retentionHours * 3600);
 
         // --- 3. Process Detailed Trace (only if detail exists) ---
@@ -97,8 +96,21 @@ class PerfDataProcessor {
           const detailKey = `perf:trace:detail:${event.requestId}`;
           const detailData = { ...event, ...event.details };
           delete detailData.details; // Flatten the structure
-          // Corrected: Use hSet for redis v4
-          tracesMulti.hSet(detailKey, detailData);
+
+          // Corrected: Ensure all values are strings for hSet to avoid type errors
+          const stringifiedDetailData = {};
+          for (const key in detailData) {
+            if (
+              typeof detailData[key] === "object" &&
+              detailData[key] !== null
+            ) {
+              stringifiedDetailData[key] = JSON.stringify(detailData[key]);
+            } else {
+              stringifiedDetailData[key] = String(detailData[key]);
+            }
+          }
+
+          tracesMulti.hSet(detailKey, stringifiedDetailData);
           tracesMulti.expire(detailKey, this.traceConfig.retentionHours * 3600);
         }
       } catch (e) {
@@ -110,7 +122,6 @@ class PerfDataProcessor {
     const metricsRetentionSeconds = this.metricsConfig.retentionHours * 3600;
     for (const [ts, metrics] of Object.entries(metricsByWindow)) {
       const key = `perf:metrics:${ts}`;
-      // Corrected: Use camelCase methods
       metricsMulti.hIncrBy(key, "request_count", metrics.request_count);
       metricsMulti.hIncrByFloat(key, "total_duration", metrics.total_duration);
       for (const [statusGroup, count] of Object.entries(metrics.status_codes)) {
@@ -120,7 +131,6 @@ class PerfDataProcessor {
     }
 
     // --- Finalize and clean up the queue ---
-    // Corrected: Use multi() and lTrim
     const cleanupMulti = this.redisClient.multi();
     cleanupMulti.lTrim("perf:events:queue", 0, -records.length - 1);
 
