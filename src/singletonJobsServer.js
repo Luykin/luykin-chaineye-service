@@ -325,7 +325,7 @@ async function cleanupOldStats() {
         .catch((err) =>
           console.error("[perf-monitor] Processor job failed:", err)
         );
-    }, 2000); // Run every 2 seconds
+    }, 5000); // Run every 5 seconds
     console.log(
       "✅ Performance monitor processor job started (every 2 seconds)."
     );

@@ -424,10 +424,12 @@
             trigger: "item",
             formatter: (params) => {
               const d = params.data;
-              const pathLine = d.path ? `<br/><b>path:</b> ${d.path}` : "";
+              //   const methodLine = `<br/><b>method:</b> ${d.method || ""}`;
+              const pathLine = `<br/><b>path:</b> ${d?.path || ""}`;
+              const userIdLine = `<br/><b>userId:</b> ${d?.userId || ""}`;
               return `<b>requestId:</b> ${
                 d.requestId
-              }${pathLine}<br/><b>status:</b> ${
+              }${pathLine}${userIdLine}<br/><b>status:</b> ${
                 d.status
               }<br/><b>duration:</b> ${Number(d.durationMs).toFixed(
                 2

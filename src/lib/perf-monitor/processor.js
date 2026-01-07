@@ -79,13 +79,15 @@ class PerfDataProcessor {
           (windowMetrics.status_codes[statusGroup] || 0) + 1;
 
         // --- 2. Process Scatter Plot Index (for every event) ---
+        // NOTE: path/userId must always exist in scatter payload, default to empty string
         const hourTs = new Date(event.ts).toISOString().substring(0, 13);
         const indexKey = `perf:trace:index:${hourTs}`;
         const scatterPoint = JSON.stringify({
           requestId: event.requestId,
           durationMs: event.durationMs,
           status: event.status,
-          hasDetail: event.hasDetail,
+          path: event.path || "",
+          userId: event.userId || "",
         });
         // Corrected: zAdd for redis v4 expects an array of members
         tracesMulti.zAdd(indexKey, [{ score: event.ts, value: scatterPoint }]);
