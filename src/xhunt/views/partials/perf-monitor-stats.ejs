@@ -111,6 +111,8 @@
       });
 
       fetchData();
+      fetchQueueStatus(); // Initial fetch
+      //   setInterval(fetchQueueStatus, 5000); // Refresh every 5 seconds
     }
 
     async function fetchData() {
