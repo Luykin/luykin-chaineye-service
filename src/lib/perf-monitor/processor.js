@@ -1,6 +1,6 @@
 // src/lib/perf-monitor/processor.js
 
-const BATCH_SIZE = 200; // Number of events to process from the queue at once
+const BATCH_SIZE = 500; // Increased batch size to handle high queue pressure
 
 class PerfDataProcessor {
   constructor(config) {
@@ -12,9 +12,7 @@ class PerfDataProcessor {
 
   async run() {
     if (this.processing) {
-      console.log(
-        "[perf-monitor] Processor is already running. Skipping cycle."
-      );
+      // console.log('[perf-monitor] Processor is already running. Skipping cycle.');
       return;
     }
     this.processing = true;
@@ -32,7 +30,7 @@ class PerfDataProcessor {
       const highWaterMark = 10000;
       if (queueSize > highWaterMark) {
         console.warn(
-          `[perf-monitor] High queue pressure detected! Events queue size: ${queueSize}. Consider increasing BATCH_SIZE.`
+          `[perf-monitor] High queue pressure detected! Events queue size: ${queueSize}. Consider increasing BATCH_SIZE or run interval.`
         );
       }
     } catch (monitoringError) {
@@ -52,8 +50,9 @@ class PerfDataProcessor {
     if (!records || records.length === 0) return;
 
     const metricsByWindow = {};
-    const metricsPipeline = this.redisClient.pipeline();
-    const tracesPipeline = this.redisClient.pipeline();
+    // Corrected: Use multi() for redis v4 client
+    const metricsMulti = this.redisClient.multi();
+    const tracesMulti = this.redisClient.multi();
 
     for (const record of records) {
       try {
@@ -89,19 +88,18 @@ class PerfDataProcessor {
           status: event.status,
           hasDetail: event.hasDetail,
         });
-        tracesPipeline.zAdd(indexKey, { score: event.ts, value: scatterPoint });
-        tracesPipeline.expire(indexKey, this.traceConfig.retentionHours * 3600);
+        // Corrected: Use zAdd with the correct syntax for redis v4
+        tracesMulti.zAdd(indexKey, { score: event.ts, value: scatterPoint });
+        tracesMulti.expire(indexKey, this.traceConfig.retentionHours * 3600);
 
         // --- 3. Process Detailed Trace (only if detail exists) ---
         if (event.hasDetail && event.details) {
           const detailKey = `perf:trace:detail:${event.requestId}`;
           const detailData = { ...event, ...event.details };
           delete detailData.details; // Flatten the structure
-          tracesPipeline.hSet(detailKey, detailData);
-          tracesPipeline.expire(
-            detailKey,
-            this.traceConfig.retentionHours * 3600
-          );
+          // Corrected: Use hSet for redis v4
+          tracesMulti.hSet(detailKey, detailData);
+          tracesMulti.expire(detailKey, this.traceConfig.retentionHours * 3600);
         }
       } catch (e) {
         console.warn("[perf-monitor] Failed to parse event record:", record, e);
@@ -112,26 +110,25 @@ class PerfDataProcessor {
     const metricsRetentionSeconds = this.metricsConfig.retentionHours * 3600;
     for (const [ts, metrics] of Object.entries(metricsByWindow)) {
       const key = `perf:metrics:${ts}`;
-      metricsPipeline.hIncrBy(key, "request_count", metrics.request_count);
-      metricsPipeline.hIncrByFloat(
-        key,
-        "total_duration",
-        metrics.total_duration
-      );
+      // Corrected: Use camelCase methods
+      metricsMulti.hIncrBy(key, "request_count", metrics.request_count);
+      metricsMulti.hIncrByFloat(key, "total_duration", metrics.total_duration);
       for (const [statusGroup, count] of Object.entries(metrics.status_codes)) {
-        metricsPipeline.hIncrBy(key, `status_${statusGroup}`, count);
+        metricsMulti.hIncrBy(key, `status_${statusGroup}`, count);
       }
-      metricsPipeline.expire(key, metricsRetentionSeconds);
+      metricsMulti.expire(key, metricsRetentionSeconds);
     }
 
     // --- Finalize and clean up the queue ---
-    const cleanupPipeline = this.redisClient.pipeline();
-    cleanupPipeline.lTrim("perf:events:queue", 0, -records.length - 1);
+    // Corrected: Use multi() and lTrim
+    const cleanupMulti = this.redisClient.multi();
+    cleanupMulti.lTrim("perf:events:queue", 0, -records.length - 1);
 
+    // Execute all batched commands in parallel
     await Promise.all([
-      metricsPipeline.exec(),
-      tracesPipeline.exec(),
-      cleanupPipeline.exec(),
+      metricsMulti.exec(),
+      tracesMulti.exec(),
+      cleanupMulti.exec(),
     ]);
   }
 }
