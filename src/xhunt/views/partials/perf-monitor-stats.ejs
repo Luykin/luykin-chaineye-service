@@ -1,8 +1,103 @@
+<style>
+  .perf-monitor-container {
+    width: 100%;
+  }
+  .perf-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+    margin-bottom: 12px;
+  }
+  .perf-controls .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .perf-controls label {
+    font-size: 12px;
+    color: #6b7280;
+  }
+  .perf-controls select,
+  .perf-controls input {
+    height: 34px;
+    padding: 6px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    outline: none;
+    font-size: 13px;
+    background: #fff;
+    min-width: 180px;
+  }
+  .perf-controls input {
+    min-width: 260px;
+  }
+  .perf-controls button {
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #111827;
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .perf-controls button.secondary {
+    background: #fff;
+    color: #111827;
+  }
+  .perf-controls .badge {
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    font-size: 12px;
+    color: #111827;
+  }
+  .perf-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .perf-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #fff;
+    padding: 12px;
+  }
+  .perf-card-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 10px;
+    color: #111827;
+  }
+  .chart-container {
+    width: 100%;
+    height: 520px;
+  }
+  .perf-help {
+    margin-top: 12px;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .perf-help code {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 6px;
+    color: #111827;
+  }
+</style>
+
 <script src="/static/js/echarts.min.js"></script>
+
 <div class="perf-monitor-container">
-  <div class="controls">
-    <div class="control-group">
-      <label for="perf-time-range">时间范围:</label>
+  <div class="perf-controls">
+    <div class="field">
+      <label for="perf-time-range">时间范围</label>
       <select id="perf-time-range">
         <option value="1" selected>最近 1 小时</option>
         <option value="2">最近 2 小时</option>
@@ -12,32 +107,72 @@
         <option value="48">最近 48 小时</option>
       </select>
     </div>
-    <div class="control-group">
-      <button id="refresh-perf-data">刷新数据</button>
+
+    <div class="field">
+      <label>&nbsp;</label>
+      <button id="refresh-perf-data" class="secondary">刷新数据</button>
     </div>
-    <!-- Request ID 搜索 -->
-    <div class="control-group">
+
+    <div class="field" style="flex: 1; min-width: 260px">
+      <label for="search-request-id">按 requestId 查询详情</label>
       <input
         id="search-request-id"
         type="text"
-        placeholder="输入 requestId"
-        style="padding: 4px 8px; width: 180px"
+        placeholder="支持前缀（例如 b6550afd-9194）"
       />
+    </div>
+
+    <div class="field">
+      <label>&nbsp;</label>
       <button id="search-request-btn">搜索</button>
     </div>
-    <div class="control-group queue-status-container">
-      <span id="queue-status-badge">队列积压: --</span>
+
+    <div class="field">
+      <label>&nbsp;</label>
+      <span id="queue-status-badge" class="badge">队列积压: --</span>
     </div>
   </div>
 
-  <div class="charts-grid">
-    <div class="chart-card">
-      <div class="chart-header">请求耗时分布 (散点图)</div>
+  <div class="perf-layout">
+    <div class="perf-card">
+      <div class="perf-card-title">请求耗时分布（散点图）</div>
       <div id="scatter-chart-container" class="chart-container"></div>
     </div>
-    <div class="chart-card">
-      <div class="chart-header">平均耗时 & RPS (折线图)</div>
-      <div id="metrics-chart-container" class="chart-container"></div>
+
+    <div class="perf-card">
+      <div class="perf-card-title">平均耗时与吞吐量（折线图）</div>
+      <div
+        id="metrics-chart-container"
+        class="chart-container"
+        style="height: 360px"
+      ></div>
+    </div>
+
+    <div class="perf-card">
+      <div class="perf-card-title">指标说明</div>
+      <div class="perf-help">
+        <div>
+          <b>RPS</b>（Requests Per Second）：每秒请求数，反映系统吞吐量。
+        </div>
+        <div>
+          <b>Avg Duration</b
+          >：统计窗口内的平均耗时（毫秒）。窗口大小由后端聚合（通常 60s 或
+          300s）。
+        </div>
+        <div>
+          <b>队列积压</b>：<code>perf:events:queue</code>
+          当前长度。持续升高表示后台消费速度不足。
+        </div>
+        <div style="margin-top: 8px">
+          <b>颜色规则</b>：绿色 &lt;= 500ms；橙色 &gt; 500ms；浅红 &gt;
+          5s；深红=HTTP 4xx/5xx。
+        </div>
+        <div style="margin-top: 8px">
+          <b>为什么搜索可能有延迟？</b> requestId
+          的详情写入是“采集→队列→单例处理器消费→落库”的异步流程，通常会有 1~5
+          秒延迟（队列积压时可能更久）。
+        </div>
+      </div>
     </div>
   </div>
 
@@ -59,6 +194,7 @@
 
     let scatterChart, metricsChart;
     let isInitialized = false;
+    let queueTimer = null;
 
     const timeRangeSelector = document.getElementById("perf-time-range");
     const refreshButton = document.getElementById("refresh-perf-data");
@@ -68,69 +204,51 @@
     const searchInput = document.getElementById("search-request-id");
     const searchButton = document.getElementById("search-request-btn");
 
-    function initializeCharts() {
-      const scatterContainer = document.getElementById(
+    function ensureEchartsReady() {
+      if (typeof echarts !== "undefined") return true;
+      const err = `图表库 (ECharts) 未加载。请确认 /static/js/echarts.min.js 可访问。`;
+      document.getElementById(
         "scatter-chart-container"
-      );
-      const metricsContainer = document.getElementById(
+      ).innerHTML = `<div style="padding:40px;color:#ef4444;text-align:center">${err}</div>`;
+      document.getElementById(
         "metrics-chart-container"
-      );
+      ).innerHTML = `<div style="padding:40px;color:#ef4444;text-align:center">${err}</div>`;
+      return false;
+    }
 
-      if (typeof echarts === "undefined") {
-        const errorHtml = `<div style="padding: 40px; text-align: center; color: #ef4444;">
-          <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">❌ 渲染错误</div>
-          <div>图表库 (ECharts) 加载失败。<br/>请检查您的网络连接、浏览器广告拦截插件或防火墙设置，然后刷新页面。</div>
-        </div>`;
-        if (scatterContainer) scatterContainer.innerHTML = errorHtml;
-        if (metricsContainer) metricsContainer.innerHTML = errorHtml;
-        return;
+    function initResize() {
+      window.addEventListener("resize", () => {
+        if (scatterChart) scatterChart.resize();
+        if (metricsChart) metricsChart.resize();
+      });
+    }
+
+    async function fetchQueueStatus() {
+      const badge = document.getElementById("queue-status-badge");
+      if (!badge) return;
+      try {
+        const response = await fetch("/api/stats/perf/queue-status");
+        if (!response.ok) {
+          badge.textContent = "队列积压: 获取失败";
+          badge.style.color = "#ef4444";
+          return;
+        }
+        const data = await response.json();
+        const queueLength = data.queueLength || 0;
+        badge.textContent = `队列积压: ${queueLength}`;
+        if (queueLength > 10000) badge.style.color = "#ef4444";
+        else if (queueLength > 1000) badge.style.color = "#f97316";
+        else badge.style.color = "#16a34a";
+      } catch (e) {
+        badge.textContent = "队列积压: 错误";
+        badge.style.color = "#ef4444";
       }
-
-      if (!scatterContainer || !metricsContainer) return;
-
-      scatterChart = echarts.init(scatterContainer);
-      metricsChart = echarts.init(metricsContainer);
-      isInitialized = true;
-
-      scatterChart.on("click", (params) => {
-        if (params.data && params.data.hasDetail) {
-          fetchTraceDetail(params.data.requestId);
-        }
-      });
-
-      scatterChart.getZr().on("mousemove", function (params) {
-        var pointInPixel = [params.offsetX, params.offsetY];
-        if (scatterChart.containPixel("grid", pointInPixel)) {
-          var pointInGrid = scatterChart.convertFromPixel("grid", pointInPixel);
-          var seriesIndex = 0;
-          var dataIndex = scatterChart
-            .getOption()
-            .series[seriesIndex].data.findIndex(function (item) {
-              return (
-                Math.abs(item.value[0] - pointInGrid[0]) < 1000 &&
-                Math.abs(item.value[1] - pointInGrid[1]) < 500
-              );
-            });
-          var item =
-            scatterChart.getOption().series[seriesIndex].data[dataIndex];
-          if (item && item.hasDetail) {
-            scatterChart.getZr().setCursorStyle("pointer");
-          } else {
-            scatterChart.getZr().setCursorStyle("default");
-          }
-        }
-      });
-
-      fetchData();
-      fetchQueueStatus(); // Initial fetch
-      //   setInterval(fetchQueueStatus, 5000); // Refresh every 5 seconds
     }
 
     async function fetchData() {
       if (!isInitialized) return;
       showLoading(scatterChart, "正在加载追踪数据...");
       showLoading(metricsChart, "正在加载聚合指标...");
-
       const hours = timeRangeSelector.value;
       await Promise.all([fetchTraces(hours), fetchMetrics(hours)]);
     }
@@ -144,15 +262,15 @@
           throw new Error(`HTTP ${response.status}: ${await response.text()}`);
         const data = await response.json();
         renderScatterChart(data);
-      } catch (error) {
-        console.error("Error fetching traces:", error);
+      } catch (e) {
+        console.error(e);
         showError(scatterChart, "加载追踪数据失败");
       }
     }
 
     async function fetchMetrics(hours) {
       try {
-        const intervalSecs = hours > 2 ? 300 : 60; // For larger ranges, use a larger interval
+        const intervalSecs = hours > 2 ? 300 : 60;
         const response = await fetch(
           `/api/stats/perf/metrics?rangeHours=${hours}&intervalSecs=${intervalSecs}`
         );
@@ -160,104 +278,160 @@
           throw new Error(`HTTP ${response.status}: ${await response.text()}`);
         const data = await response.json();
         renderMetricsChart(data, intervalSecs);
-      } catch (error) {
-        console.error("Error fetching metrics:", error);
+      } catch (e) {
+        console.error(e);
         showError(metricsChart, "加载聚合指标失败");
       }
     }
 
-    async function fetchTraceDetail(requestId) {
+    async function fetchTraceDetailExact(requestId) {
+      const response = await fetch(
+        `/api/stats/perf/trace/${encodeURIComponent(requestId)}`
+      );
+      if (!response.ok)
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      return response.json();
+    }
+
+    async function fetchTraceDetailByPrefix(prefix) {
+      // 简单实现：先拉当前时间范围点列表，在前端做前缀匹配（最多 2000）
+      const hours = timeRangeSelector.value;
+      const response = await fetch(
+        `/api/stats/perf/traces?hours=${hours}&limit=2000`
+      );
+      if (!response.ok)
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      const points = await response.json();
+      const match = points.find((p) => (p.requestId || "").startsWith(prefix));
+      if (!match) return null;
+      if (!match.hasDetail) {
+        return {
+          __noDetail: true,
+          requestId: match.requestId,
+          durationMs: match.durationMs,
+          status: match.status,
+          ts: match.ts,
+        };
+      }
+      return fetchTraceDetailExact(match.requestId);
+    }
+
+    async function openTraceDetail(requestIdOrPrefix) {
       try {
         traceDetailContent.textContent = "Loading...";
         modal.style.display = "block";
-        const response = await fetch(`/api/stats/perf/trace/${requestId}`);
-        if (!response.ok)
-          throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-        const data = await response.json();
-        renderTraceDetail(data);
-      } catch (error) {
-        console.error("Error fetching trace detail:", error);
-        traceDetailContent.textContent = `Failed to load details.\n${error.message}`;
+
+        // 优先按完整 ID 拉取；失败再按前缀匹配
+        try {
+          const data = await fetchTraceDetailExact(requestIdOrPrefix);
+          traceDetailContent.textContent = JSON.stringify(data, null, 2);
+          return;
+        } catch (e) {
+          // ignore
+        }
+
+        const data2 = await fetchTraceDetailByPrefix(requestIdOrPrefix);
+        if (!data2) {
+          traceDetailContent.textContent = `未找到匹配的 requestId（当前时间范围内）: ${requestIdOrPrefix}`;
+          return;
+        }
+        if (data2.__noDetail) {
+          traceDetailContent.textContent = JSON.stringify(
+            {
+              message:
+                "该请求点没有采样到详情（hasDetail=false），仅展示基础信息",
+              ...data2,
+            },
+            null,
+            2
+          );
+          return;
+        }
+        traceDetailContent.textContent = JSON.stringify(data2, null, 2);
+      } catch (err) {
+        console.error(err);
+        traceDetailContent.textContent = `Failed to load details.\n${err.message}`;
       }
     }
 
     function renderScatterChart(data) {
       const getColor = (item) => {
-        if (item.status >= 400) return "#ef4444"; // Deep Red for errors
-        if (item.durationMs > 5000) return "#fca5a5"; // Light Red for very slow
-        if (item.durationMs > 500) return "#f97316"; // Orange for slow
-        return "#22c55e"; // Green for normal
+        if (item.status >= 400) return "#b91c1c"; // deep red
+        if (item.durationMs > 5000) return "#fca5a5"; // light red
+        if (item.durationMs > 500) return "#f97316"; // orange
+        return "#22c55e"; // green
       };
 
-      const option = {
-        tooltip: {
-          trigger: "item",
-          formatter: (params) => {
-            const d = params.data;
-            return `<b>Request ID: ${d.requestId}</b><br/>Status: ${
-              d.status
-            }<br/>Duration: ${d.durationMs.toFixed(2)} ms<br/>${
-              d.hasDetail ? "<b>(点击查看详情)</b>" : "(无详情)"
-            }`;
-          },
-        },
-        xAxis: { type: "time", name: "Time" },
-        yAxis: { type: "value", name: "Duration (ms)", scale: true },
-        series: [
-          {
-            symbolSize: 8,
-            data: data.map((d) => ({
-              ...d,
-              value: [d.ts, d.durationMs],
-              itemStyle: { color: getColor(d) },
-            })),
-            type: "scatter",
-          },
-        ],
-        dataZoom: [{ type: "inside" }, { type: "slider" }],
-        grid: { bottom: 80 },
-      };
+      const seriesData = data.map((d) => ({
+        ...d,
+        value: [d.ts, d.durationMs],
+        itemStyle: { color: getColor(d) },
+      }));
+
       scatterChart.hideLoading();
-      scatterChart.setOption(option);
+      scatterChart.setOption(
+        {
+          tooltip: {
+            trigger: "item",
+            formatter: (params) => {
+              const d = params.data;
+              return `<b>requestId:</b> ${d.requestId}<br/><b>status:</b> ${
+                d.status
+              }<br/><b>duration:</b> ${Number(d.durationMs).toFixed(
+                2
+              )} ms<br/>${
+                d.hasDetail ? "<b>点击查看详情</b>" : "无详情（未采样）"
+              }`;
+            },
+          },
+          xAxis: { type: "time", name: "Time" },
+          yAxis: { type: "value", name: "Duration (ms)", scale: true },
+          series: [{ type: "scatter", symbolSize: 8, data: seriesData }],
+          dataZoom: [{ type: "inside" }, { type: "slider" }],
+          grid: { left: 50, right: 24, top: 20, bottom: 80 },
+        },
+        true
+      );
     }
 
     function renderMetricsChart(data, intervalSecs) {
-      const option = {
-        tooltip: { trigger: "axis" },
-        legend: { data: ["Avg Duration (ms)", "RPS"] },
-        xAxis: { type: "time" },
-        yAxis: [
-          { type: "value", name: "Duration (ms)", scale: true },
-          { type: "value", name: "RPS" },
-        ],
-        series: [
-          {
-            name: "Avg Duration (ms)",
-            type: "line",
-            showSymbol: false,
-            yAxisIndex: 0,
-            data: data.map((d) => [d.timestamp, d.avg_duration_ms.toFixed(2)]),
-          },
-          {
-            name: "RPS",
-            type: "line",
-            showSymbol: false,
-            yAxisIndex: 1,
-            data: data.map((d) => [
-              d.timestamp,
-              (d.request_count / intervalSecs).toFixed(2),
-            ]),
-          },
-        ],
-        dataZoom: [{ type: "inside" }, { type: "slider" }],
-        grid: { bottom: 80 },
-      };
       metricsChart.hideLoading();
-      metricsChart.setOption(option);
-    }
-
-    function renderTraceDetail(data) {
-      traceDetailContent.textContent = JSON.stringify(data, null, 2);
+      metricsChart.setOption(
+        {
+          tooltip: { trigger: "axis" },
+          legend: { data: ["Avg Duration (ms)", "RPS"] },
+          xAxis: { type: "time" },
+          yAxis: [
+            { type: "value", name: "Duration (ms)", scale: true },
+            { type: "value", name: "RPS" },
+          ],
+          series: [
+            {
+              name: "Avg Duration (ms)",
+              type: "line",
+              showSymbol: false,
+              yAxisIndex: 0,
+              data: data.map((d) => [
+                d.timestamp,
+                Number(d.avg_duration_ms).toFixed(2),
+              ]),
+            },
+            {
+              name: "RPS",
+              type: "line",
+              showSymbol: false,
+              yAxisIndex: 1,
+              data: data.map((d) => [
+                d.timestamp,
+                (d.request_count / intervalSecs).toFixed(2),
+              ]),
+            },
+          ],
+          dataZoom: [{ type: "inside" }, { type: "slider" }],
+          grid: { left: 50, right: 24, top: 20, bottom: 60 },
+        },
+        true
+      );
     }
 
     function showLoading(chartInstance, text) {
@@ -282,63 +456,64 @@
       );
     }
 
-    async function fetchQueueStatus() {
-      const badge = document.getElementById("queue-status-badge");
-      if (!badge) return;
-      try {
-        const response = await fetch("/api/stats/perf/queue-status");
-        if (!response.ok) {
-          badge.textContent = "队列积压: 获取失败";
-          badge.style.color = "#ef4444";
-          return;
-        }
-        const data = await response.json();
-        const queueLength = data.queueLength || 0;
-        badge.textContent = `队列积压: ${queueLength}`;
-        if (queueLength > 10000) {
-          badge.style.color = "#ef4444"; // Red for high pressure
-        } else if (queueLength > 1000) {
-          badge.style.color = "#f97316"; // Orange for moderate pressure
-        } else {
-          badge.style.color = "#22c55e"; // Green for normal
-        }
-      } catch (error) {
-        console.error("Error fetching queue status:", error);
-        badge.textContent = "队列积压: 错误";
-        badge.style.color = "#ef4444";
-      }
-    }
-
-    // Event Listeners
+    // events
     timeRangeSelector.addEventListener("change", fetchData);
     refreshButton.addEventListener("click", fetchData);
+
     closeModalButton.addEventListener(
       "click",
       () => (modal.style.display = "none")
     );
     window.addEventListener("click", (event) => {
-      if (event.target == modal) {
-        modal.style.display = "none";
-      }
+      if (event.target === modal) modal.style.display = "none";
     });
 
-    // Search by Request ID
     searchButton.addEventListener("click", () => {
-      const requestId = searchInput.value.trim();
-      if (requestId) {
-        fetchTraceDetail(requestId);
+      const q = searchInput.value.trim();
+      if (q) openTraceDetail(q);
+    });
+    searchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const q = searchInput.value.trim();
+        if (q) openTraceDetail(q);
       }
     });
 
-    searchInput.addEventListener("keypress", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault(); // Prevent form submission if it's in a form
-        const requestId = searchInput.value.trim();
-        if (requestId) {
-          fetchTraceDetail(requestId);
-        }
-      }
-    });
+    // When click point
+    function bindPointClick() {
+      scatterChart.on("click", (params) => {
+        if (!params?.data?.requestId) return;
+        // 即使 hasDetail=false 也给出基础提示
+        openTraceDetail(params.data.requestId);
+      });
+    }
+
+    function initializeCharts() {
+      if (!ensureEchartsReady()) return;
+
+      const scatterContainer = document.getElementById(
+        "scatter-chart-container"
+      );
+      const metricsContainer = document.getElementById(
+        "metrics-chart-container"
+      );
+      if (!scatterContainer || !metricsContainer) return;
+
+      scatterChart = echarts.init(scatterContainer);
+      metricsChart = echarts.init(metricsContainer);
+      isInitialized = true;
+
+      bindPointClick();
+      initResize();
+
+      fetchData();
+
+      // queue status refresh
+      fetchQueueStatus();
+      if (queueTimer) clearInterval(queueTimer);
+      queueTimer = setInterval(fetchQueueStatus, 5000);
+    }
 
     // Initialize charts only when the tab becomes visible
     const observer = new MutationObserver(() => {
