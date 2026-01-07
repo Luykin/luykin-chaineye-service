@@ -99,12 +99,13 @@
     <div class="field">
       <label for="perf-time-range">时间范围</label>
       <select id="perf-time-range">
-        <option value="1" selected>最近 1 小时</option>
+        <option value="0.5" selected>最近 30 分钟</option>
+        <option value="1">最近 1 小时</option>
         <option value="2">最近 2 小时</option>
         <option value="4">最近 4 小时</option>
         <option value="8">最近 8 小时</option>
-        <option value="24">最近 24 小时</option>
-        <option value="48">最近 48 小时</option>
+        <option value="24">最近 1 天</option>
+        <option value="48">最近 2 天</option>
       </select>
     </div>
 
@@ -176,11 +177,59 @@
     </div>
   </div>
 
-  <div id="trace-detail-modal" class="modal">
-    <div class="modal-content">
-      <span class="close-button">&times;</span>
-      <h3>请求追踪详情</h3>
-      <pre id="trace-detail-content"></pre>
+  <div
+    id="trace-detail-modal"
+    class="modal"
+    style="
+      display: none;
+      position: fixed;
+      z-index: 9999;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(17, 24, 39, 0.45);
+    "
+  >
+    <div
+      class="modal-content"
+      style="
+        background: #fff;
+        border-radius: 12px;
+        max-width: 880px;
+        width: calc(100% - 48px);
+        margin: 8vh auto;
+        padding: 16px 16px;
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+        position: relative;
+      "
+    >
+      <span
+        class="close-button"
+        style="
+          position: absolute;
+          right: 14px;
+          top: 10px;
+          font-size: 20px;
+          cursor: pointer;
+          color: #6b7280;
+        "
+        >&times;</span
+      >
+      <h3 style="margin: 0 0 10px; font-size: 16px">请求追踪详情</h3>
+      <pre
+        id="trace-detail-content"
+        style="
+          max-height: 60vh;
+          overflow: auto;
+          background: #0b1220;
+          color: #e5e7eb;
+          padding: 12px;
+          border-radius: 10px;
+          font-size: 12px;
+          line-height: 1.45;
+        "
+      ></pre>
     </div>
   </div>
 </div>
@@ -249,7 +298,7 @@
       if (!isInitialized) return;
       showLoading(scatterChart, "正在加载追踪数据...");
       showLoading(metricsChart, "正在加载聚合指标...");
-      const hours = timeRangeSelector.value;
+      const hours = parseFloat(timeRangeSelector.value);
       await Promise.all([fetchTraces(hours), fetchMetrics(hours)]);
     }
 
@@ -295,7 +344,7 @@
 
     async function fetchTraceDetailByPrefix(prefix) {
       // 简单实现：先拉当前时间范围点列表，在前端做前缀匹配（最多 2000）
-      const hours = timeRangeSelector.value;
+      const hours = parseFloat(timeRangeSelector.value);
       const response = await fetch(
         `/api/stats/perf/traces?hours=${hours}&limit=2000`
       );
@@ -375,7 +424,10 @@
             trigger: "item",
             formatter: (params) => {
               const d = params.data;
-              return `<b>requestId:</b> ${d.requestId}<br/><b>status:</b> ${
+              const pathLine = d.path ? `<br/><b>path:</b> ${d.path}` : "";
+              return `<b>requestId:</b> ${
+                d.requestId
+              }${pathLine}<br/><b>status:</b> ${
                 d.status
               }<br/><b>duration:</b> ${Number(d.durationMs).toFixed(
                 2
