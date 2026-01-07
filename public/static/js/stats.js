@@ -61,24 +61,27 @@ document.addEventListener("DOMContentLoaded", function () {
 function initTabs() {
   const tabBtns = document.querySelectorAll(".tab-btn");
   const tabPanes = document.querySelectorAll(".tab-pane");
-  const perms = Array.isArray(window.adminPermissions) ? window.adminPermissions : [];
+  const perms = Array.isArray(window.adminPermissions)
+    ? window.adminPermissions
+    : [];
 
   // Tab -> permission 映射（无映射则默认允许）
   const tabPermMap = {
     "dau-details": "dau-details",
     "online-users": "online-users",
-    "cohorts": "cohorts",
-    "rootdata": "rootdata",
-    "notes": "notes",
+    cohorts: "cohorts",
+    rootdata: "rootdata",
+    notes: "notes",
     "log-search": "log-search:read",
     "device-monitor": "device-status:read",
     "version-stats": "version-stats",
     "url-stats": "url-stats",
     "security-violations": "security-violations",
-    "messages": "messages",
+    messages: "messages",
     "data-export": "export:users",
     "pro-management": "pro-management",
-    "backup": "backup:operate",
+    "perf-monitor": "perf-monitor",
+    backup: "backup:operate",
     "server-command": "server:execute",
     "daily-report-email": "daily-report:send",
     "admin-audit-logs": "audit-logs:read",
@@ -195,7 +198,9 @@ function bindExportEvents() {
   }
 
   // 活跃用户名JS导出
-  const exportActiveUsersJsBtn = document.getElementById("export-active-users-js");
+  const exportActiveUsersJsBtn = document.getElementById(
+    "export-active-users-js"
+  );
   if (exportActiveUsersJsBtn) {
     exportActiveUsersJsBtn.addEventListener("click", exportActiveUsersJs);
     console.log("✅ 活跃用户名JS导出按钮事件绑定成功");
@@ -469,7 +474,7 @@ async function exportActiveUsersJs() {
 
     // 获取文件内容
     const blob = await response.blob();
-    
+
     // 创建下载链接
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -492,7 +497,8 @@ async function exportActiveUsersJs() {
       // 恢复按钮状态
       if (exportBtn) {
         exportBtn.disabled = false;
-        exportBtn.innerHTML = '<span class="btn-icon">📝</span>导出活跃用户名JS';
+        exportBtn.innerHTML =
+          '<span class="btn-icon">📝</span>导出活跃用户名JS';
       }
     }, 1000);
 
@@ -1195,7 +1201,9 @@ async function loadBackupStatus() {
   // statusBox.innerHTML = '<div class="status-line">⏳ 正在加载备份列表...</div>';
   listBox.innerHTML = "";
   try {
-    const res = await fetch("/api/xhunt/stats/backup-status", { credentials: "include" });
+    const res = await fetch("/api/xhunt/stats/backup-status", {
+      credentials: "include",
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "获取失败");
@@ -1262,11 +1270,11 @@ async function triggerManualBackup() {
       credentials: "include",
     });
     const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.success)
+      throw new Error(data.error || `HTTP ${res.status}`);
     // 稍等几秒再刷新
     setTimeout(() => loadBackupStatus(), 3000);
-  } catch (err) {
-  }
+  } catch (err) {}
 }
 
 /**
@@ -1759,7 +1767,9 @@ async function loadProUsersList(page = 1) {
               <td>${new Date(sub.startTime).toLocaleString("zh-CN")}</td>
               <td>${new Date(sub.endTime).toLocaleString("zh-CN")}</td>
               <td>${statusBadge}</td>
-              <td>${sub.reason}<br><small style="color: #7f8c8d">${sub.reasonDetail}</small></td>
+              <td>${sub.reason}<br><small style="color: #7f8c8d">${
+            sub.reasonDetail
+          }</small></td>
             </tr>
           `;
         })
@@ -1795,13 +1805,17 @@ function renderProPagination(pagination) {
   const { currentPage, totalPages, totalCount } = pagination;
 
   let html = `
-    <button ${currentPage === 1 ? "disabled" : ""} onclick="loadProUsersList(${currentPage - 1})">
+    <button ${currentPage === 1 ? "disabled" : ""} onclick="loadProUsersList(${
+    currentPage - 1
+  })">
       上一页
     </button>
     <span class="page-info">
       第 ${currentPage} / ${totalPages} 页 (共 ${totalCount} 条记录)
     </span>
-    <button ${currentPage === totalPages ? "disabled" : ""} onclick="loadProUsersList(${currentPage + 1})">
+    <button ${
+      currentPage === totalPages ? "disabled" : ""
+    } onclick="loadProUsersList(${currentPage + 1})">
       下一页
     </button>
   `;

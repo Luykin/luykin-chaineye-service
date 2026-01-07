@@ -11,8 +11,13 @@ const redis = require("redis");
 
 // 将所有需要单实例运行的定时任务集中到这里启动（备份、日志清理等）
 const pgBackupService = require("./services/pg-backup-service");
-const { setupPostgres, VersionRequestStats, UrlRequestStats } = require("./models/postgres-start");
+const {
+  setupPostgres,
+  VersionRequestStats,
+  UrlRequestStats,
+} = require("./models/postgres-start");
 const { requestStatsManager } = require("./xhunt/middleware/security");
+const { initPerfMonitor } = require("./lib/perf-monitor"); // 性能监控模块
 
 // 初始化 Redis 客户端
 const redisClient = redis.createClient({
@@ -57,7 +62,9 @@ async function cleanupPm2Logs() {
       }
     }
 
-    console.log(`[PM2 Logs] 扫描 ${scanned} 个文件，删除 ${deleted} 个（阈值：2 天前）`);
+    console.log(
+      `[PM2 Logs] 扫描 ${scanned} 个文件，删除 ${deleted} 个（阈值：2 天前）`
+    );
   } catch (err) {
     console.error("[PM2 Logs] 清理出错:", err);
   }
@@ -84,7 +91,8 @@ function getPrev5MinWindow() {
 // 统计数据定时任务：每5分钟执行一次（版本统计 + URL统计）
 async function flushStats() {
   try {
-    console.log(`\n⏰ [${new Date().toISOString()}] 开始执行统计数据定时任务...`);
+    console.log(`
+⏰ [${new Date().toISOString()}] 开始执行统计数据定时任务...`);
 
     // 1. 先flush所有内存中的数据（防止丢失）
     const status = requestStatsManager.getStatus();
@@ -214,7 +222,9 @@ async function flushStats() {
     const twentyMinutesAgo = new Date(now.getTime() - 20 * 60 * 1000);
     const oldWindows = [];
     for (let i = 0; i < 20; i++) {
-      const oldWindow = new Date(twentyMinutesAgo.getTime() - i * 5 * 60 * 1000);
+      const oldWindow = new Date(
+        twentyMinutesAgo.getTime() - i * 5 * 60 * 1000
+      );
       oldWindows.push(get5MinWindow(oldWindow));
     }
 
@@ -224,7 +234,7 @@ async function flushStats() {
     for (const oldWindow of oldWindows) {
       const versionPattern = `version_stats:${oldWindow}:*`;
       const urlPattern = `url_stats:${oldWindow}|*`;
-      
+
       const [versionKeys, urlKeys] = await Promise.all([
         redisClient.keys(versionPattern),
         redisClient.keys(urlPattern),
@@ -296,6 +306,31 @@ async function cleanupOldStats() {
     await redisClient.connect();
     console.log("✅ Redis 连接成功");
 
+    // --- Performance Monitor Initialization ---
+    const { processor: perfProcessor } = initPerfMonitor({
+      redisClient: redisClient,
+      trace: {
+        retentionHours: 48,
+      },
+      metrics: {
+        timeWindowSecs: 60,
+        retentionHours: 48,
+      },
+    });
+
+    // Start the performance data processor job
+    setInterval(() => {
+      perfProcessor
+        .run()
+        .catch((err) =>
+          console.error("[perf-monitor] Processor job failed:", err)
+        );
+    }, 2000); // Run every 2 seconds
+    console.log(
+      "✅ Performance monitor processor job started (every 2 seconds)."
+    );
+    // --- End Performance Monitor ---
+
     // 启动备份服务
     await pgBackupService.start();
     console.log("单例任务服务运行中...（备份/日志清理等）");
@@ -316,15 +351,21 @@ async function cleanupOldStats() {
     schedule.scheduleJob("0 2 * * *", async () => {
       try {
         console.log("[DailyReport] ⏰ 触发每日邮件任务（UTC 02:00）");
-        const { sendDailyReport } = require("./xhunt/services/dailyReportService");
+        const {
+          sendDailyReport,
+        } = require("./xhunt/services/dailyReportService");
         await sendDailyReport(redisClient);
       } catch (e) {
         console.error("[DailyReport] 发送失败:", e);
       }
     });
 
-    console.log("✅ 统计数据定时任务已启动（每5分钟执行一次，处理版本统计和URL统计）");
-    console.log("✅ 统计数据清理任务已启动（每天执行一次，清理版本统计和URL统计）");
+    console.log(
+      "✅ 统计数据定时任务已启动（每5分钟执行一次，处理版本统计和URL统计）"
+    );
+    console.log(
+      "✅ 统计数据清理任务已启动（每天执行一次，清理版本统计和URL统计）"
+    );
   } catch (err) {
     console.error("单例任务进程启动失败:", err);
     process.exit(1);

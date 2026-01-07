@@ -36,6 +36,7 @@ const adminRoutes = require("./admin/api/admin");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
 const internalQueryRoutes = require("./api/internal-query");
+const { initPerfMonitor } = require("./lib/perf-monitor"); // 性能监控模块
 const {
   securityMiddleware,
   fingerprintLimiter,
@@ -80,6 +81,35 @@ const redisClient = redis.createClient({
 
 // 将请求注入异步上下文，便于日志获取 requestId
 app.use(requestContextMiddleware);
+
+// --- Performance Monitor Initialization ---
+const { middleware: perfMiddleware, apiRouter: perfApiRouter } =
+  initPerfMonitor({
+    redisClient: redisClient,
+    // --- Data Extraction Config ---
+    requestIdFrom: ["headers", "x-request-id"],
+    collectDetailedInfo: {
+      userId: ["headers", "x-user-id"],
+      fingerprint: ["headers", "x-device-fingerprint"],
+      version: ["headers", "x-extension-version"],
+      location: ["headers", "x-window-location-href"],
+      ua: ["get", "user-agent"],
+    },
+    // --- Operational Config ---
+    flushThreshold: 100,
+    flushIntervalMs: 5000,
+    trace: {
+      sampleRate: 0.05, // 5% of fast/successful requests
+      slowThresholdMs: 500, // Trace all requests slower than 500ms
+      retentionHours: 48,
+    },
+    metrics: {
+      timeWindowSecs: 60, // Aggregate metrics every minute
+      retentionHours: 48,
+    },
+  });
+app.use(perfMiddleware);
+// --- End Performance Monitor ---
 
 app.use((req, res, next) => {
   req.redisClient = redisClient;
@@ -211,7 +241,8 @@ morgan.token("xhunt-identity", (req) => {
   const userId = req.headers["x-user-id"] || "anonymous";
   const fingerprint = req.headers["x-device-fingerprint"] || "no-fingerprint";
   const version = req.headers["x-extension-version"] || "no-version";
-  const windowLocationHref = req.headers["x-window-location-href"] || "no-location";
+  const windowLocationHref =
+    req.headers["x-window-location-href"] || "no-location";
   return `request_id=${requestId} user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref}`;
 });
 
@@ -220,13 +251,10 @@ morgan.token("error-info", (req, res) => res.locals.errorMessage || "-");
 
 // 打印入口日志（请求刚到达时）
 app.use(
-  morgan(
-    'in :xhunt-identity method=:method url=:url ua=":user-agent"',
-    {
-      immediate: true,
-      skip: (req) => req.path === "/api/xhunt/stats/log-search",
-    }
-  )
+  morgan('in :xhunt-identity method=:method url=:url ua=":user-agent"', {
+    immediate: true,
+    skip: (req) => req.path === "/api/xhunt/stats/log-search",
+  })
 );
 
 // 打印出口日志（响应返回时），包含状态与耗时；如有错误状态，额外标注
@@ -324,6 +352,7 @@ app.use("/api/xhunt/sse", rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
 
 // 新增统计路由 - 无需安全中间件，方便内部监控。管理后台使用，有basicAuth前端认证机制
 app.use("/api/xhunt/stats", xHuntStatsRoutes);
+app.use("/api/stats/perf", perfApiRouter);
 
 // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
 app.use("/api/rootdata", xHuntRootdataRoutes);
@@ -333,23 +362,27 @@ app.use("/admin", adminRoutes);
 
 // 内部查询API - 使用随机字符前缀，无需安全中间件
 const INTERNAL_QUERY_EXPIRATION = new Date("2026-02-20T00:00:00Z");
-app.use("/api/internal-x9k2m7p4q8", (req, res, next) => {
-  if (new Date() >= INTERNAL_QUERY_EXPIRATION) {
-    return res.status(403).json({
-      success: false,
-      error: "FORBIDDEN",
-      message: "请联系管理员开通权限",
-    });
-  }
-  next();
-}, internalQueryRoutes);
+app.use(
+  "/api/internal-x9k2m7p4q8",
+  (req, res, next) => {
+    if (new Date() >= INTERNAL_QUERY_EXPIRATION) {
+      return res.status(403).json({
+        success: false,
+        error: "FORBIDDEN",
+        message: "请联系管理员开通权限",
+      });
+    }
+    next();
+  },
+  internalQueryRoutes
+);
 
 // 404 Catch-all: 所有未匹配到的路由
 app.use((req, res) => {
-  res.set('Cache-Control','no-store, no-cache, must-revalidate, max-age=0');
-  res.set('Pragma','no-cache');
-  res.set('Expires','0');
-  res.status(404).type('html').send(`<!DOCTYPE html>
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  res.status(404).type("html").send(`<!DOCTYPE html>
   <html lang="zh-CN">
     <head>
       <meta charset="utf-8" />
@@ -372,11 +405,21 @@ app.use((req, res) => {
           <h1>未找到页面</h1>
           <div class="kv">
             <div class="k">Method</div><div class="v">${req.method}</div>
-            <div class="k">URL</div><div class="v">${req.originalUrl || req.url}</div>
-            <div class="k">Host</div><div class="v">${req.headers.host || ''}</div>
-            <div class="k">CF-Cache-Status</div><div class="v">${req.headers['cf-cache-status'] || '-'}</div>
-            <div class="k">X-Forwarded-For</div><div class="v">${req.headers['x-forwarded-for'] || '-'}</div>
-            <div class="k">User-Agent</div><div class="v">${req.headers['user-agent'] || ''}</div>
+            <div class="k">URL</div><div class="v">${
+              req.originalUrl || req.url
+            }</div>
+            <div class="k">Host</div><div class="v">${
+              req.headers.host || ""
+            }</div>
+            <div class="k">CF-Cache-Status</div><div class="v">${
+              req.headers["cf-cache-status"] || "-"
+            }</div>
+            <div class="k">X-Forwarded-For</div><div class="v">${
+              req.headers["x-forwarded-for"] || "-"
+            }</div>
+            <div class="k">User-Agent</div><div class="v">${
+              req.headers["user-agent"] || ""
+            }</div>
           </div>
         </div>
       </div>
@@ -427,7 +470,7 @@ async function startAPIServer() {
   await setupPostgresFundraising();
   // 超级管理员初始化不在业务进程中进行，改为独立脚本执行
   // 不在 API 进程中启动备份服务，避免多实例重复备份
-  
+
   app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
 }
 

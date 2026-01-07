@@ -1,0 +1,315 @@
+<div class="perf-monitor-container">
+  <div class="controls">
+    <div class="control-group">
+      <label for="perf-time-range">时间范围:</label>
+      <select id="perf-time-range">
+        <option value="1" selected>最近 1 小时</option>
+        <option value="2">最近 2 小时</option>
+        <option value="4">最近 4 小时</option>
+        <option value="8">最近 8 小时</option>
+        <option value="24">最近 24 小时</option>
+        <option value="48">最近 48 小时</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <button id="refresh-perf-data">刷新数据</button>
+    </div>
+    <!-- Request ID 搜索 -->
+    <div class="control-group">
+      <input
+        id="search-request-id"
+        type="text"
+        placeholder="输入 requestId"
+        style="padding: 4px 8px; width: 180px"
+      />
+      <button id="search-request-btn">搜索</button>
+    </div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">请求耗时分布 (散点图)</div>
+      <div id="scatter-chart-container" class="chart-container"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">平均耗时 & RPS (折线图)</div>
+      <div id="metrics-chart-container" class="chart-container"></div>
+    </div>
+  </div>
+
+  <div id="trace-detail-modal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h3>请求追踪详情</h3>
+      <pre id="trace-detail-content"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const perfMonitorTab = document.querySelector(
+      '.tab-btn[data-tab="perf-monitor"]'
+    );
+    if (!perfMonitorTab) return;
+
+    let scatterChart, metricsChart;
+    let isInitialized = false;
+
+    const timeRangeSelector = document.getElementById("perf-time-range");
+    const refreshButton = document.getElementById("refresh-perf-data");
+    const modal = document.getElementById("trace-detail-modal");
+    const closeModalButton = modal.querySelector(".close-button");
+    const traceDetailContent = document.getElementById("trace-detail-content");
+    const searchInput = document.getElementById("search-request-id");
+    const searchButton = document.getElementById("search-request-btn");
+
+    function initializeCharts() {
+      const scatterContainer = document.getElementById(
+        "scatter-chart-container"
+      );
+      const metricsContainer = document.getElementById(
+        "metrics-chart-container"
+      );
+
+      if (!scatterContainer || !metricsContainer || !echarts) return;
+
+      scatterChart = echarts.init(scatterContainer);
+      metricsChart = echarts.init(metricsContainer);
+      isInitialized = true;
+
+      scatterChart.on("click", (params) => {
+        if (params.data && params.data.hasDetail) {
+          fetchTraceDetail(params.data.requestId);
+        }
+      });
+
+      scatterChart.getZr().on("mousemove", function (params) {
+        var pointInPixel = [params.offsetX, params.offsetY];
+        if (scatterChart.containPixel("grid", pointInPixel)) {
+          var pointInGrid = scatterChart.convertFromPixel("grid", pointInPixel);
+          var seriesIndex = 0;
+          var dataIndex = scatterChart
+            .getOption()
+            .series[seriesIndex].data.findIndex(function (item) {
+              return (
+                Math.abs(item.value[0] - pointInGrid[0]) < 1000 &&
+                Math.abs(item.value[1] - pointInGrid[1]) < 500
+              );
+            });
+          var item =
+            scatterChart.getOption().series[seriesIndex].data[dataIndex];
+          if (item && item.hasDetail) {
+            scatterChart.getZr().setCursorStyle("pointer");
+          } else {
+            scatterChart.getZr().setCursorStyle("default");
+          }
+        }
+      });
+
+      fetchData();
+    }
+
+    async function fetchData() {
+      if (!isInitialized) return;
+      showLoading(scatterChart, "正在加载追踪数据...");
+      showLoading(metricsChart, "正在加载聚合指标...");
+
+      const hours = timeRangeSelector.value;
+      await Promise.all([fetchTraces(hours), fetchMetrics(hours)]);
+    }
+
+    async function fetchTraces(hours) {
+      try {
+        const response = await fetch(
+          `/api/stats/perf/traces?hours=${hours}&limit=2000`
+        );
+        if (!response.ok)
+          throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        const data = await response.json();
+        renderScatterChart(data);
+      } catch (error) {
+        console.error("Error fetching traces:", error);
+        showError(scatterChart, "加载追踪数据失败");
+      }
+    }
+
+    async function fetchMetrics(hours) {
+      try {
+        const intervalSecs = hours > 2 ? 300 : 60; // For larger ranges, use a larger interval
+        const response = await fetch(
+          `/api/stats/perf/metrics?rangeHours=${hours}&intervalSecs=${intervalSecs}`
+        );
+        if (!response.ok)
+          throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        const data = await response.json();
+        renderMetricsChart(data, intervalSecs);
+      } catch (error) {
+        console.error("Error fetching metrics:", error);
+        showError(metricsChart, "加载聚合指标失败");
+      }
+    }
+
+    async function fetchTraceDetail(requestId) {
+      try {
+        traceDetailContent.textContent = "Loading...";
+        modal.style.display = "block";
+        const response = await fetch(`/api/stats/perf/trace/${requestId}`);
+        if (!response.ok)
+          throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        const data = await response.json();
+        renderTraceDetail(data);
+      } catch (error) {
+        console.error("Error fetching trace detail:", error);
+        traceDetailContent.textContent = `Failed to load details.\n${error.message}`;
+      }
+    }
+
+    function renderScatterChart(data) {
+      const getColor = (item) => {
+        if (item.status >= 400) return "#ef4444"; // Deep Red for errors
+        if (item.durationMs > 5000) return "#fca5a5"; // Light Red for very slow
+        if (item.durationMs > 500) return "#f97316"; // Orange for slow
+        return "#22c55e"; // Green for normal
+      };
+
+      const option = {
+        tooltip: {
+          trigger: "item",
+          formatter: (params) => {
+            const d = params.data;
+            return `<b>Request ID: ${d.requestId}</b><br/>Status: ${
+              d.status
+            }<br/>Duration: ${d.durationMs.toFixed(2)} ms<br/>${
+              d.hasDetail ? "<b>(点击查看详情)</b>" : "(无详情)"
+            }`;
+          },
+        },
+        xAxis: { type: "time", name: "Time" },
+        yAxis: { type: "value", name: "Duration (ms)", scale: true },
+        series: [
+          {
+            symbolSize: 8,
+            data: data.map((d) => ({
+              ...d,
+              value: [d.ts, d.durationMs],
+              itemStyle: { color: getColor(d) },
+            })),
+            type: "scatter",
+          },
+        ],
+        dataZoom: [{ type: "inside" }, { type: "slider" }],
+        grid: { bottom: 80 },
+      };
+      scatterChart.hideLoading();
+      scatterChart.setOption(option);
+    }
+
+    function renderMetricsChart(data, intervalSecs) {
+      const option = {
+        tooltip: { trigger: "axis" },
+        legend: { data: ["Avg Duration (ms)", "RPS"] },
+        xAxis: { type: "time" },
+        yAxis: [
+          { type: "value", name: "Duration (ms)", scale: true },
+          { type: "value", name: "RPS" },
+        ],
+        series: [
+          {
+            name: "Avg Duration (ms)",
+            type: "line",
+            showSymbol: false,
+            yAxisIndex: 0,
+            data: data.map((d) => [d.timestamp, d.avg_duration_ms.toFixed(2)]),
+          },
+          {
+            name: "RPS",
+            type: "line",
+            showSymbol: false,
+            yAxisIndex: 1,
+            data: data.map((d) => [
+              d.timestamp,
+              (d.request_count / intervalSecs).toFixed(2),
+            ]),
+          },
+        ],
+        dataZoom: [{ type: "inside" }, { type: "slider" }],
+        grid: { bottom: 80 },
+      };
+      metricsChart.hideLoading();
+      metricsChart.setOption(option);
+    }
+
+    function renderTraceDetail(data) {
+      traceDetailContent.textContent = JSON.stringify(data, null, 2);
+    }
+
+    function showLoading(chartInstance, text) {
+      chartInstance.showLoading("default", {
+        text,
+        maskColor: "rgba(255, 255, 255, 0.1)",
+      });
+    }
+
+    function showError(chartInstance, message) {
+      chartInstance.hideLoading();
+      chartInstance.setOption(
+        {
+          title: {
+            text: message,
+            left: "center",
+            top: "center",
+            textStyle: { color: "#ef4444" },
+          },
+        },
+        true
+      );
+    }
+
+    // Event Listeners
+    timeRangeSelector.addEventListener("change", fetchData);
+    refreshButton.addEventListener("click", fetchData);
+    closeModalButton.addEventListener(
+      "click",
+      () => (modal.style.display = "none")
+    );
+    window.addEventListener("click", (event) => {
+      if (event.target == modal) {
+        modal.style.display = "none";
+      }
+    });
+
+    // Search by Request ID
+    searchButton.addEventListener("click", () => {
+      const requestId = searchInput.value.trim();
+      if (requestId) {
+        fetchTraceDetail(requestId);
+      }
+    });
+
+    searchInput.addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault(); // Prevent form submission if it's in a form
+        const requestId = searchInput.value.trim();
+        if (requestId) {
+          fetchTraceDetail(requestId);
+        }
+      }
+    });
+
+    // Initialize charts only when the tab becomes visible
+    const observer = new MutationObserver(() => {
+      if (perfMonitorTab.classList.contains("active") && !isInitialized) {
+        initializeCharts();
+      }
+    });
+    observer.observe(perfMonitorTab, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    if (perfMonitorTab.classList.contains("active") && !isInitialized) {
+      initializeCharts();
+    }
+  });
+</script>
