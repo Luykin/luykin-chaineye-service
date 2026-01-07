@@ -130,6 +130,12 @@ class PerfDataProcessor {
       tracesMulti.exec(),
       cleanupMulti.exec(),
     ]);
+
+    if (records.length > 0) {
+      console.log(
+        `[perf-monitor-success-processor] Processed ${records.length} events from the queue.`
+      );
+    }
   }
 }
 

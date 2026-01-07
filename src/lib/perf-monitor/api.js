@@ -26,19 +26,21 @@ function createApiRouter(config) {
       const startTs = endTs - rangeHours * 3600;
 
       const timeWindowSecs = metricsConfig.timeWindowSecs;
-      const pipeline = redisClient.pipeline();
+      // Corrected: Use multi() for redis v4
+      const multi = redisClient.multi();
 
       for (let ts = startTs; ts < endTs; ts += timeWindowSecs) {
         const windowStartTs = Math.floor(ts / timeWindowSecs) * timeWindowSecs;
         const key = `perf:metrics:${windowStartTs}`;
-        pipeline.hgetall(key);
+        // Corrected: Use hGetAll for redis v4
+        multi.hGetAll(key);
       }
 
-      const results = await pipeline.exec();
+      const results = await multi.exec();
       const metricsByInterval = {};
 
-      results.forEach(([, data], i) => {
-        if (Object.keys(data).length === 0) return;
+      results.forEach((data, i) => {
+        if (data === null || Object.keys(data).length === 0) return;
 
         const currentWindowTs = startTs + i * timeWindowSecs;
         const intervalKey =
@@ -53,7 +55,6 @@ function createApiRouter(config) {
         const intervalMetrics = metricsByInterval[intervalKey];
         intervalMetrics.request_count += parseInt(data.request_count, 10) || 0;
         intervalMetrics.total_duration += parseFloat(data.total_duration) || 0;
-        // Dynamically add status codes
         for (const key in data) {
           if (key.startsWith("status_")) {
             intervalMetrics[key] =
@@ -97,35 +98,29 @@ function createApiRouter(config) {
         indexKeys.push(`perf:trace:index:${d.toISOString().substring(0, 13)}`);
       }
 
-      const pipeline = redisClient.pipeline();
-      // Fetch with scores to get the timestamp
+      // Corrected: Use multi() for redis v4
+      const multi = redisClient.multi();
+      // Corrected: Use zRangeByScore for redis v4
       indexKeys.forEach((key) =>
-        pipeline.zrangebyscore(
-          key,
-          startTs,
-          now,
-          "WITHSCORES",
-          "LIMIT",
-          0,
-          limit
-        )
+        multi.zRangeByScoreWithScores(key, startTs, now, {
+          LIMIT: { offset: 0, count: limit },
+        })
       );
-      const results = await pipeline.exec();
+      const results = await multi.exec();
 
       const traces = [];
-      for (const [, rangeResult] of results) {
-        for (let i = 0; i < rangeResult.length; i += 2) {
+      for (const rangeResult of results) {
+        if (!rangeResult) continue;
+        for (const member of rangeResult) {
           try {
-            const pointData = JSON.parse(rangeResult[i]);
-            const timestamp = parseInt(rangeResult[i + 1], 10);
-            traces.push({ ...pointData, ts: timestamp });
+            const pointData = JSON.parse(member.value);
+            traces.push({ ...pointData, ts: member.score });
           } catch (e) {
             // Ignore parse errors for single points
           }
         }
       }
 
-      // Sort by timestamp and apply limit again as we merged multiple sources
       const finalTraces = traces.sort((a, b) => a.ts - b.ts).slice(-limit);
 
       res.json(finalTraces);
@@ -142,7 +137,8 @@ function createApiRouter(config) {
   router.get("/trace/:requestId", async (req, res) => {
     try {
       const { requestId } = req.params;
-      const trace = await redisClient.hgetall(`perf:trace:detail:${requestId}`);
+      // Corrected: Use hGetAll for redis v4
+      const trace = await redisClient.hGetAll(`perf:trace:detail:${requestId}`);
       if (Object.keys(trace).length === 0) {
         return res.status(404).json({ error: "Trace not found" });
       }
