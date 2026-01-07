@@ -28,7 +28,7 @@ class PerfDataProcessor {
 
     // After processing, check queue length for monitoring purposes
     try {
-      const queueSize = await this.redisClient.llen("perf:events:queue");
+      const queueSize = await this.redisClient.lLen("perf:events:queue");
       const highWaterMark = 10000;
       if (queueSize > highWaterMark) {
         console.warn(
@@ -44,7 +44,7 @@ class PerfDataProcessor {
   }
 
   async processEventsQueue() {
-    const records = await this.redisClient.lrange(
+    const records = await this.redisClient.lRange(
       "perf:events:queue",
       -BATCH_SIZE,
       -1
@@ -89,7 +89,7 @@ class PerfDataProcessor {
           status: event.status,
           hasDetail: event.hasDetail,
         });
-        tracesPipeline.zadd(indexKey, event.ts, scatterPoint);
+        tracesPipeline.zAdd(indexKey, { score: event.ts, value: scatterPoint });
         tracesPipeline.expire(indexKey, this.traceConfig.retentionHours * 3600);
 
         // --- 3. Process Detailed Trace (only if detail exists) ---
@@ -97,7 +97,7 @@ class PerfDataProcessor {
           const detailKey = `perf:trace:detail:${event.requestId}`;
           const detailData = { ...event, ...event.details };
           delete detailData.details; // Flatten the structure
-          tracesPipeline.hset(detailKey, detailData);
+          tracesPipeline.hSet(detailKey, detailData);
           tracesPipeline.expire(
             detailKey,
             this.traceConfig.retentionHours * 3600
@@ -112,21 +112,21 @@ class PerfDataProcessor {
     const metricsRetentionSeconds = this.metricsConfig.retentionHours * 3600;
     for (const [ts, metrics] of Object.entries(metricsByWindow)) {
       const key = `perf:metrics:${ts}`;
-      metricsPipeline.hincrby(key, "request_count", metrics.request_count);
-      metricsPipeline.hincrbyfloat(
+      metricsPipeline.hIncrBy(key, "request_count", metrics.request_count);
+      metricsPipeline.hIncrByFloat(
         key,
         "total_duration",
         metrics.total_duration
       );
       for (const [statusGroup, count] of Object.entries(metrics.status_codes)) {
-        metricsPipeline.hincrby(key, `status_${statusGroup}`, count);
+        metricsPipeline.hIncrBy(key, `status_${statusGroup}`, count);
       }
       metricsPipeline.expire(key, metricsRetentionSeconds);
     }
 
     // --- Finalize and clean up the queue ---
     const cleanupPipeline = this.redisClient.pipeline();
-    cleanupPipeline.ltrim("perf:events:queue", 0, -records.length - 1);
+    cleanupPipeline.lTrim("perf:events:queue", 0, -records.length - 1);
 
     await Promise.all([
       metricsPipeline.exec(),

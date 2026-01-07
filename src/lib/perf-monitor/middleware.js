@@ -34,10 +34,18 @@ async function flushBuffers(redisClient) {
   flushInProgress = true;
   const eventsToPush = eventsBuffer.splice(0, eventsBuffer.length);
   try {
+    // Corrected: Use camelCase lPush for redis v4 client
     await redisClient.lPush(
       "perf:events:queue",
       eventsToPush.map(JSON.stringify)
     );
+
+    // Add a success log
+    if (eventsToPush.length > 0) {
+      console.log(
+        `[perf-monitor-success] Flushed ${eventsToPush.length} events to Redis queue.`
+      );
+    }
   } catch (err) {
     console.warn("[perf-monitor] Buffer flush failed:", err);
     eventsBuffer.unshift(...eventsToPush);
