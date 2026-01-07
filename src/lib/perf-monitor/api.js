@@ -152,6 +152,20 @@ function createApiRouter(config) {
     }
   });
 
+  /**
+   * GET /queue-status
+   * Fetches the current length of the events queue.
+   */
+  router.get("/queue-status", async (req, res) => {
+    try {
+      const queueLength = await redisClient.lLen("perf:events:queue");
+      res.json({ success: true, queueLength });
+    } catch (err) {
+      console.error("[perf-monitor] API /queue-status failed:", err);
+      res.status(500).json({ error: "Failed to fetch queue status" });
+    }
+  });
+
   return router;
 }
 

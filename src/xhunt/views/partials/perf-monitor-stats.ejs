@@ -24,6 +24,9 @@
       />
       <button id="search-request-btn">搜索</button>
     </div>
+    <div class="control-group queue-status-container">
+      <span id="queue-status-badge">队列积压: --</span>
+    </div>
   </div>
 
   <div class="charts-grid">
@@ -264,6 +267,33 @@
         },
         true
       );
+    }
+
+    async function fetchQueueStatus() {
+      const badge = document.getElementById("queue-status-badge");
+      if (!badge) return;
+      try {
+        const response = await fetch("/api/stats/perf/queue-status");
+        if (!response.ok) {
+          badge.textContent = "队列积压: 获取失败";
+          badge.style.color = "#ef4444";
+          return;
+        }
+        const data = await response.json();
+        const queueLength = data.queueLength || 0;
+        badge.textContent = `队列积压: ${queueLength}`;
+        if (queueLength > 10000) {
+          badge.style.color = "#ef4444"; // Red for high pressure
+        } else if (queueLength > 1000) {
+          badge.style.color = "#f97316"; // Orange for moderate pressure
+        } else {
+          badge.style.color = "#22c55e"; // Green for normal
+        }
+      } catch (error) {
+        console.error("Error fetching queue status:", error);
+        badge.textContent = "队列积压: 错误";
+        badge.style.color = "#ef4444";
+      }
     }
 
     // Event Listeners
