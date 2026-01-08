@@ -310,8 +310,8 @@
           当前长度。持续升高表示后台消费速度不足。
         </div>
         <div style="margin-top: 8px">
-          <b>颜色规则</b>：深红 (HTTP 4xx/5xx)；浅红 (&gt;6s)；橙色 (3-6s)；浅绿
-          (500ms-3s)；绿色 (&lt;=500ms)。详见图表颜色图例。
+          <b>颜色规则</b>：深红 (5xx)；紫色 (4xx)；浅红 (&gt;6s)；橙色
+          (3-6s)；浅绿 (500ms-3s)；绿色 (&lt;=500ms)。详见图表颜色图例。
         </div>
         <div style="margin-top: 8px">
           <b>为什么搜索可能有延迟？</b> requestId
@@ -658,7 +658,8 @@
     }
 
     function renderScatterChart(data) {
-      const errorData = [];
+      const errorData5xx = [];
+      const errorData4xx = [];
       const normalData = [];
 
       data.forEach((d) => {
@@ -667,7 +668,9 @@
           value: [d.ts, d.durationMs],
         };
         if (d.status >= 500) {
-          errorData.push(point);
+          errorData5xx.push(point);
+        } else if (d.status >= 400) {
+          errorData4xx.push(point);
         } else {
           normalData.push(point);
         }
@@ -681,7 +684,7 @@
       scatterChart.setOption(
         {
           legend: {
-            data: ["Errors", "Success"],
+            data: ["Server Errors (5xx)", "Client Errors (4xx)", "Success"],
             right: 10,
           },
           tooltip: {
@@ -710,7 +713,7 @@
             type: "piecewise",
             orient: "horizontal",
             left: "center",
-            bottom: 25,
+            top: 10,
             pieces: [
               { min: 6000, label: "> 6s", color: "#fca5a5" },
               { min: 3000, max: 6000, label: "3s - 6s", color: "#f97316" },
@@ -725,12 +728,20 @@
           },
           series: [
             {
-              name: "Errors",
+              name: "Server Errors (5xx)",
               type: "effectScatter",
               symbolSize: 12,
               color: "#b91c1c",
-              data: errorData,
+              data: errorData5xx,
               z: 10,
+            },
+            {
+              name: "Client Errors (4xx)",
+              type: "effectScatter",
+              symbolSize: 12,
+              color: "#8b5cf6", // purple
+              data: errorData4xx,
+              z: 9,
             },
             {
               name: "Success",
@@ -793,8 +804,8 @@
             { type: "inside", disabled: true },
             {
               type: "slider",
-              startValue: now - 10 * 60 * 1000,
-              endValue: now,
+              startValue: tenMinAgo,
+              endValue: nowTs,
             },
           ],
           grid: { left: 50, right: 24, top: 20, bottom: 60 },
