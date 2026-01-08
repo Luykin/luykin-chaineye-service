@@ -57,6 +57,107 @@
     font-size: 12px;
     color: #111827;
   }
+  .perf-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin: 12px 0 14px;
+  }
+  @media (max-width: 1100px) {
+    .perf-kpis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 640px) {
+    .perf-kpis {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .kpi-card {
+    border: 1px solid rgba(229, 231, 235, 0.9);
+    border-radius: 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    padding: 12px 12px 10px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      120px 90px at 20% 0%,
+      rgba(59, 130, 246, 0.1),
+      transparent 60%
+    );
+    pointer-events: none;
+  }
+  .kpi-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .kpi-label {
+    font-size: 12px;
+    color: #6b7280;
+    letter-spacing: 0.2px;
+  }
+  .kpi-value {
+    margin-top: 6px;
+    font-size: 22px;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.2;
+  }
+  .kpi-sub {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6b7280;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .kpi-pill {
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    padding: 2px 8px;
+    background: rgba(243, 244, 246, 0.75);
+    color: #111827;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    font-size: 11px;
+  }
+  .kpi-trend {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 12px;
+    border: 1px solid #e5e7eb;
+    background: rgba(255, 255, 255, 0.85);
+    color: #111827;
+    white-space: nowrap;
+  }
+  .kpi-trend.up {
+    border-color: rgba(34, 197, 94, 0.35);
+    background: rgba(34, 197, 94, 0.1);
+    color: #166534;
+  }
+  .kpi-trend.down {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.1);
+    color: #991b1b;
+  }
+  .kpi-trend.neutral {
+    border-color: rgba(99, 102, 241, 0.25);
+    background: rgba(99, 102, 241, 0.08);
+    color: #3730a3;
+  }
+
   .perf-layout {
     display: grid;
     grid-template-columns: 1fr;
@@ -252,6 +353,60 @@
     <div class="field">
       <label>&nbsp;</label>
       <span id="queue-status-badge" class="badge">队列积压: --</span>
+    </div>
+  </div>
+
+  <div class="perf-kpis" id="perf-kpis">
+    <div class="kpi-card" data-kpi="totalRequests">
+      <div class="kpi-top">
+        <div>
+          <div class="kpi-label">请求数</div>
+          <div class="kpi-value" id="kpi-total-requests">--</div>
+        </div>
+        <div class="kpi-trend neutral" id="kpi-total-requests-trend">--</div>
+      </div>
+      <div class="kpi-sub">
+        <span class="kpi-pill" id="kpi-total-requests-prev">上一窗口: --</span>
+      </div>
+    </div>
+
+    <div class="kpi-card" data-kpi="rps">
+      <div class="kpi-top">
+        <div>
+          <div class="kpi-label">RPS</div>
+          <div class="kpi-value" id="kpi-rps">--</div>
+        </div>
+        <div class="kpi-trend neutral" id="kpi-rps-trend">--</div>
+      </div>
+      <div class="kpi-sub">
+        <span class="kpi-pill" id="kpi-rps-prev">上一窗口: --</span>
+      </div>
+    </div>
+
+    <div class="kpi-card" data-kpi="avgDuration">
+      <div class="kpi-top">
+        <div>
+          <div class="kpi-label">平均耗时</div>
+          <div class="kpi-value" id="kpi-avg-duration">--</div>
+        </div>
+        <div class="kpi-trend neutral" id="kpi-avg-duration-trend">--</div>
+      </div>
+      <div class="kpi-sub">
+        <span class="kpi-pill" id="kpi-avg-duration-prev">上一窗口: --</span>
+      </div>
+    </div>
+
+    <div class="kpi-card" data-kpi="p95">
+      <div class="kpi-top">
+        <div>
+          <div class="kpi-label">P95</div>
+          <div class="kpi-value" id="kpi-p95">--</div>
+        </div>
+        <div class="kpi-trend neutral" id="kpi-p95-trend">--</div>
+      </div>
+      <div class="kpi-sub">
+        <span class="kpi-pill" id="kpi-p95-prev">上一窗口: --</span>
+      </div>
     </div>
   </div>
 
@@ -572,6 +727,174 @@
       return { startMs, endMs };
     }
 
+    function setKpiCardsLoading(isLoading) {
+      const ids = [
+        "kpi-total-requests",
+        "kpi-rps",
+        "kpi-avg-duration",
+        "kpi-p95",
+        "kpi-total-requests-prev",
+        "kpi-rps-prev",
+        "kpi-avg-duration-prev",
+        "kpi-p95-prev",
+        "kpi-total-requests-trend",
+        "kpi-rps-trend",
+        "kpi-avg-duration-trend",
+        "kpi-p95-trend",
+      ];
+      ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.opacity = isLoading ? "0.55" : "1";
+      });
+    }
+
+    async function fetchKpis(startMs, endMs) {
+      try {
+        setKpiCardsLoading(true);
+        const response = await fetch(
+          `/api/stats/perf/kpis?startTime=${startMs}&endTime=${endMs}`
+        );
+        if (!response.ok)
+          throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        const data = await response.json();
+        updateKpiCards(data, startMs, endMs);
+      } catch (e) {
+        console.error(e);
+        updateKpiCards(null);
+      } finally {
+        setKpiCardsLoading(false);
+      }
+    }
+
+    function formatNumber(n, digits = 2) {
+      if (!Number.isFinite(n)) return "--";
+      return n.toLocaleString(undefined, {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      });
+    }
+
+    function formatInt(n) {
+      if (!Number.isFinite(n)) return "--";
+      return Math.round(n).toLocaleString();
+    }
+
+    function formatMs(n) {
+      if (!Number.isFinite(n)) return "--";
+      if (n >= 1000) return `${formatNumber(n / 1000, 2)} s`;
+      return `${formatNumber(n, 0)} ms`;
+    }
+
+    function setTrend(el, pct) {
+      if (!el) return;
+      el.classList.remove("up", "down", "neutral");
+
+      if (!Number.isFinite(pct)) {
+        el.classList.add("neutral");
+        el.textContent = "--";
+        return;
+      }
+
+      const sign = pct > 0 ? "+" : "";
+      el.textContent = `${sign}${formatNumber(pct, 1)}%`;
+
+      if (pct > 0.5) el.classList.add("up");
+      else if (pct < -0.5) el.classList.add("down");
+      else el.classList.add("neutral");
+    }
+
+    function calcPctChange(cur, prev) {
+      if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0)
+        return NaN;
+      return ((cur - prev) / prev) * 100;
+    }
+
+    function updateKpiCards(kpis) {
+      const elTotal = document.getElementById("kpi-total-requests");
+      const elRps = document.getElementById("kpi-rps");
+      const elAvg = document.getElementById("kpi-avg-duration");
+      const elP95 = document.getElementById("kpi-p95");
+
+      const elTotalPrev = document.getElementById("kpi-total-requests-prev");
+      const elRpsPrev = document.getElementById("kpi-rps-prev");
+      const elAvgPrev = document.getElementById("kpi-avg-duration-prev");
+      const elP95Prev = document.getElementById("kpi-p95-prev");
+
+      const elTotalTrend = document.getElementById("kpi-total-requests-trend");
+      const elRpsTrend = document.getElementById("kpi-rps-trend");
+      const elAvgTrend = document.getElementById("kpi-avg-duration-trend");
+      const elP95Trend = document.getElementById("kpi-p95-trend");
+
+      if (!kpis) {
+        if (elTotal) elTotal.textContent = "--";
+        if (elRps) elRps.textContent = "--";
+        if (elAvg) elAvg.textContent = "--";
+        if (elP95) elP95.textContent = "--";
+
+        if (elTotalPrev) elTotalPrev.textContent = "上一窗口: --";
+        if (elRpsPrev) elRpsPrev.textContent = "上一窗口: --";
+        if (elAvgPrev) elAvgPrev.textContent = "上一窗口: --";
+        if (elP95Prev) elP95Prev.textContent = "上一窗口: --";
+
+        setTrend(elTotalTrend, NaN);
+        setTrend(elRpsTrend, NaN);
+        setTrend(elAvgTrend, NaN);
+        setTrend(elP95Trend, NaN);
+        return;
+      }
+
+      // 兼容不同字段命名（后端如有调整，这里尽量不炸）
+      const cur = kpis.current || kpis.cur || kpis.data || kpis;
+      const prev = kpis.previous || kpis.prev || kpis.last || kpis.prevWindow;
+
+      const curRequests = Number(
+        cur.totalRequests ?? cur.requestCount ?? cur.total ?? cur.count
+      );
+      const curRps = Number(cur.rps ?? cur.avgRps ?? cur.throughput);
+      const curAvg = Number(
+        cur.avgDurationMs ?? cur.avg_duration_ms ?? cur.avg
+      );
+      const curP95 = Number(
+        cur.p95DurationMs ?? cur.p95_duration_ms ?? cur.p95
+      );
+
+      const prevRequests = prev
+        ? Number(
+            prev.totalRequests ?? prev.requestCount ?? prev.total ?? prev.count
+          )
+        : NaN;
+      const prevRps = prev
+        ? Number(prev.rps ?? prev.avgRps ?? prev.throughput)
+        : NaN;
+      const prevAvg = prev
+        ? Number(prev.avgDurationMs ?? prev.avg_duration_ms ?? prev.avg)
+        : NaN;
+      const prevP95 = prev
+        ? Number(prev.p95DurationMs ?? prev.p95_duration_ms ?? prev.p95)
+        : NaN;
+
+      if (elTotal) elTotal.textContent = formatInt(curRequests);
+      if (elRps) elRps.textContent = formatNumber(curRps, 2);
+      if (elAvg) elAvg.textContent = formatMs(curAvg);
+      if (elP95) elP95.textContent = formatMs(curP95);
+
+      if (elTotalPrev)
+        elTotalPrev.textContent = `上一窗口: ${formatInt(prevRequests)}`;
+      if (elRpsPrev)
+        elRpsPrev.textContent = `上一窗口: ${
+          Number.isFinite(prevRps) ? formatNumber(prevRps, 2) : "--"
+        }`;
+      if (elAvgPrev) elAvgPrev.textContent = `上一窗口: ${formatMs(prevAvg)}`;
+      if (elP95Prev) elP95Prev.textContent = `上一窗口: ${formatMs(prevP95)}`;
+
+      setTrend(elTotalTrend, calcPctChange(curRequests, prevRequests));
+      setTrend(elRpsTrend, calcPctChange(curRps, prevRps));
+      // 延迟类指标：上涨通常更差，但这里仍用上涨/下降展示，颜色仅代表方向
+      setTrend(elAvgTrend, calcPctChange(curAvg, prevAvg));
+      setTrend(elP95Trend, calcPctChange(curP95, prevP95));
+    }
+
     async function fetchData(startMs, endMs) {
       if (!isInitialized) return;
       showLoading(scatterChart, "正在加载追踪数据...");
@@ -579,6 +902,7 @@
       await Promise.all([
         fetchTraces(startMs, endMs),
         fetchMetrics(startMs, endMs),
+        fetchKpis(startMs, endMs),
       ]);
     }
 
