@@ -144,10 +144,48 @@
     background-color: #f3f4f6;
     cursor: pointer;
   }
-  .latency-table td:nth-child(2),
-  .latency-table td:nth-child(3) {
+  .latency-table th:nth-child(n + 2),
+  .latency-table td:nth-child(n + 2) {
     text-align: right;
     font-family: monospace;
+  }
+
+  /* Modal styles */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(17, 24, 39, 0.45);
+  }
+  .modal-content {
+    background: #fff;
+    border-radius: 12px;
+    margin: 8vh auto;
+    padding: 16px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+    position: relative;
+  }
+  .modal .close-button {
+    position: absolute;
+    right: 14px;
+    top: 10px;
+    font-size: 20px;
+    cursor: pointer;
+    color: #6b7280;
+  }
+  #url-stats-modal-content p {
+    font-size: 14px;
+    margin: 8px 0;
+    color: #374151;
+  }
+  #url-stats-modal-content strong {
+    color: #111827;
+    width: 90px;
+    display: inline-block;
   }
 </style>
 
@@ -219,6 +257,8 @@
             <tr>
               <th>接口路径</th>
               <th>平均延迟 (ms)</th>
+              <th>中位延迟 (ms)</th>
+              <th>最大延迟 (ms)</th>
               <th>请求数</th>
             </tr>
           </thead>
@@ -335,7 +375,7 @@
     </div>
   </div>
 
-  <div id="url-stats-modal" class="modal" style="display: none; z-index: 10000">
+  <div id="url-stats-modal" class="modal">
     <div class="modal-content" style="max-width: 600px">
       <span class="close-button">&times;</span>
       <h3 id="url-stats-modal-title" style="margin: 0 0 10px; font-size: 16px">
@@ -600,7 +640,7 @@
           ...d,
           value: [d.ts, d.durationMs],
         };
-        if (d.status >= 400) {
+        if (d.status >= 500) {
           errorData.push(point);
         } else {
           point.itemStyle = { color: getColor(d) };
@@ -619,7 +659,10 @@
             trigger: "item",
             formatter: (params) => {
               const d = params.data;
-              const pathLine = `<br/><b>path:</b> ${d?.path || ""}`;
+              const path = d?.path || "";
+              const truncatedPath =
+                path.length > 60 ? path.substring(0, 60) + "..." : path;
+              const pathLine = `<br/><b>path:</b> <span title="${path}">${truncatedPath}</span>`;
               const userIdLine = `<br/><b>userId:</b> ${d?.userId || ""}`;
               return `<b>requestId:</b> ${
                 d.requestId
@@ -641,12 +684,14 @@
               symbolSize: 12,
               color: "#b91c1c",
               data: errorData,
+              z: 10,
             },
             {
               name: "Success",
               type: "scatter",
               symbolSize: 8,
               data: normalData,
+              z: 5,
             },
           ],
           dataZoom: [
@@ -728,7 +773,7 @@
     function calculateAndRenderLatencyRanking(data) {
       if (!data || data.length === 0) {
         latencyRankingBody.innerHTML =
-          '<tr><td colspan="3" style="text-align: center;">暂无数据</td></tr>';
+          '<tr><td colspan="5" style="text-align: center;">暂无数据</td></tr>';
         return;
       }
 
@@ -740,19 +785,38 @@
 
         if (!urlStats[normalizedPath]) {
           urlStats[normalizedPath] = {
-            totalDuration: 0,
-            count: 0,
+            durations: [],
             path: normalizedPath,
           };
         }
-        urlStats[normalizedPath].totalDuration += item.durationMs;
-        urlStats[normalizedPath].count += 1;
+        urlStats[normalizedPath].durations.push(item.durationMs);
       });
 
-      const rankingData = Object.values(urlStats).map((stat) => ({
-        ...stat,
-        avgDuration: stat.totalDuration / stat.count,
-      }));
+      const rankingData = Object.values(urlStats).map((stat) => {
+        const count = stat.durations.length;
+        const sum = stat.durations.reduce((a, b) => a + b, 0);
+        const avgDuration = sum / count;
+
+        stat.durations.sort((a, b) => a - b);
+        const maxDuration = stat.durations[count - 1];
+
+        let medianDuration;
+        if (count % 2 === 0) {
+          const mid1 = stat.durations[count / 2 - 1];
+          const mid2 = stat.durations[count / 2];
+          medianDuration = (mid1 + mid2) / 2;
+        } else {
+          medianDuration = stat.durations[Math.floor(count / 2)];
+        }
+
+        return {
+          path: stat.path,
+          count: count,
+          avgDuration: avgDuration,
+          medianDuration: medianDuration,
+          maxDuration: maxDuration,
+        };
+      });
 
       rankingData.sort((a, b) => b.avgDuration - a.avgDuration);
 
@@ -765,6 +829,8 @@
         row.innerHTML = `
             <td>${item.path}</td>
             <td>${item.avgDuration.toFixed(2)}</td>
+            <td>${item.medianDuration.toFixed(2)}</td>
+            <td>${item.maxDuration.toFixed(2)}</td>
             <td>${item.count}</td>
         `;
         row.addEventListener("click", () => {
