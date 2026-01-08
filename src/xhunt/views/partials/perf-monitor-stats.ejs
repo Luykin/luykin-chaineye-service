@@ -211,6 +211,31 @@
       <button id="refresh-perf-data" class="secondary">刷新数据</button>
     </div>
 
+    <div class="field">
+      <label for="filter-by-userid">按 userId 筛选</label>
+      <input
+        id="filter-by-userid"
+        type="text"
+        placeholder="输入 userId (模糊匹配)"
+      />
+    </div>
+    <div class="field">
+      <label for="filter-by-path">按 path 筛选</label>
+      <input
+        id="filter-by-path"
+        type="text"
+        placeholder="输入 path (模糊匹配)"
+      />
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button id="apply-filters-btn">筛选</button>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button id="clear-filters-btn" class="secondary">清除</button>
+    </div>
+
     <div class="field" style="flex: 1; min-width: 260px">
       <label for="search-request-id">按 requestId 查询详情</label>
       <input
@@ -396,6 +421,12 @@
     let scatterChart, metricsChart;
     let isInitialized = false;
     let queueTimer = null;
+    let rawTraceData = []; // Cache for the original trace data
+
+    const filterByUserIdInput = document.getElementById("filter-by-userid");
+    const filterByPathInput = document.getElementById("filter-by-path");
+    const applyFiltersBtn = document.getElementById("apply-filters-btn");
+    const clearFiltersBtn = document.getElementById("clear-filters-btn");
 
     const timeRangeSelector = document.getElementById("perf-time-range");
     const refreshButton = document.getElementById("refresh-perf-data");
@@ -514,6 +545,7 @@
         if (!response.ok)
           throw new Error(`HTTP ${response.status}: ${await response.text()}`);
         const data = await response.json();
+        rawTraceData = data; // cache
         renderScatterChart(data);
       } catch (e) {
         console.error(e);
@@ -895,9 +927,39 @@
       }
     }
 
+    function applyFilters() {
+      const userIdFilter = filterByUserIdInput.value.trim().toLowerCase();
+      const pathFilter = filterByPathInput.value.trim().toLowerCase();
+
+      if (!userIdFilter && !pathFilter) {
+        renderScatterChart(rawTraceData);
+        return;
+      }
+
+      const filteredData = rawTraceData.filter((item) => {
+        const userIdMatch =
+          !userIdFilter ||
+          (item.userId && item.userId.toLowerCase().includes(userIdFilter));
+        const pathMatch =
+          !pathFilter ||
+          (item.path && item.path.toLowerCase().includes(pathFilter));
+        return userIdMatch && pathMatch;
+      });
+
+      renderScatterChart(filteredData);
+    }
+
+    function clearFilters() {
+      filterByUserIdInput.value = "";
+      filterByPathInput.value = "";
+      renderScatterChart(rawTraceData);
+    }
+
     // events
     timeRangeSelector.addEventListener("change", fetchData);
     refreshButton.addEventListener("click", fetchData);
+    applyFiltersBtn.addEventListener("click", applyFilters);
+    clearFiltersBtn.addEventListener("click", clearFilters);
 
     urlStatsModalCloseBtn.addEventListener("click", () => {
       urlStatsModal.style.display = "none";
