@@ -121,7 +121,7 @@ function createApiRouter(config) {
       const tracesWithoutDetail = allTraces.filter((t) => !t.hasDetail);
 
       const sampledTraces = tracesWithoutDetail.filter(
-        () => Math.random() < 0.3
+        () => Math.random() < 0.2
       );
 
       const combinedTraces = [...tracesWithDetail, ...sampledTraces];

@@ -88,8 +88,8 @@ const { middleware: perfMiddleware, apiRouter: perfApiRouter } =
     redisClient: redisClient,
     // --- Data Extraction Config ---
     requestIdFrom: ["headers", "x-request-id"],
+    userIdFrom: ["headers", "x-user-id"],
     collectDetailedInfo: {
-      userId: ["headers", "x-user-id"],
       fingerprint: ["headers", "x-device-fingerprint"],
       version: ["headers", "x-extension-version"],
       location: ["headers", "x-window-location-href"],
@@ -99,7 +99,7 @@ const { middleware: perfMiddleware, apiRouter: perfApiRouter } =
     flushThreshold: 100,
     flushIntervalMs: 5000,
     trace: {
-      sampleRate: 0.05, // 5% of fast/successful requests
+      sampleRate: 0.03, // 5% of fast/successful requests
       slowThresholdMs: 500, // Trace all requests slower than 500ms
       retentionHours: 48,
     },

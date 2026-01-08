@@ -310,8 +310,8 @@
           当前长度。持续升高表示后台消费速度不足。
         </div>
         <div style="margin-top: 8px">
-          <b>颜色规则</b>：绿色 &lt;= 500ms；橙色 &gt; 500ms；浅红 &gt;
-          5s；深红=HTTP 4xx/5xx。
+          <b>颜色规则</b>：深红 (HTTP 4xx/5xx)；浅红 (&gt;6s)；橙色 (3-6s)；浅绿
+          (500ms-3s)；绿色 (&lt;=500ms)。详见图表颜色图例。
         </div>
         <div style="margin-top: 8px">
           <b>为什么搜索可能有延迟？</b> requestId
@@ -658,12 +658,6 @@
     }
 
     function renderScatterChart(data) {
-      const getColor = (item) => {
-        if (item.durationMs > 5000) return "#fca5a5"; // light red
-        if (item.durationMs > 500) return "#f97316"; // orange
-        return "#22c55e"; // green
-      };
-
       const errorData = [];
       const normalData = [];
 
@@ -672,10 +666,9 @@
           ...d,
           value: [d.ts, d.durationMs],
         };
-        if (d.status >= 500) {
+        if (d.status >= 400) {
           errorData.push(point);
         } else {
-          point.itemStyle = { color: getColor(d) };
           normalData.push(point);
         }
       });
@@ -687,6 +680,10 @@
 
       scatterChart.setOption(
         {
+          legend: {
+            data: ["Errors", "Success"],
+            right: 10,
+          },
           tooltip: {
             trigger: "item",
             formatter: (params) => {
@@ -709,6 +706,23 @@
           },
           xAxis: { type: "time", name: "Time", scale: true },
           yAxis: { type: "value", name: "Duration (ms)", scale: true },
+          visualMap: {
+            type: "piecewise",
+            orient: "horizontal",
+            left: "center",
+            bottom: 25,
+            pieces: [
+              { min: 6000, label: "> 6s", color: "#fca5a5" },
+              { min: 3000, max: 6000, label: "3s - 6s", color: "#f97316" },
+              { min: 500, max: 3000, label: "500ms - 3s", color: "#86efac" },
+              { max: 500, label: "<= 500ms", color: "#22c55e" },
+            ],
+            dimension: 1, // Map to the second dimension (durationMs)
+            seriesIndex: 1, // Apply only to the 'Success' series
+            inRange: {
+              color: ["#22c55e", "#86efac", "#f97316", "#fca5a5"],
+            },
+          },
           series: [
             {
               name: "Errors",
@@ -734,7 +748,7 @@
               endValue: now,
             },
           ],
-          grid: { left: 50, right: 24, top: 20, bottom: 80 },
+          grid: { left: 50, right: 24, top: 60, bottom: 80 },
         },
         true
       );
@@ -742,6 +756,8 @@
 
     function renderMetricsChart(data, intervalSecs) {
       metricsChart.hideLoading();
+      const nowTs = Date.now();
+      const tenMinAgo = nowTs - 10 * 60 * 1000;
       metricsChart.setOption(
         {
           tooltip: { trigger: "axis" },
@@ -773,7 +789,14 @@
               ]),
             },
           ],
-          dataZoom: [{ type: "inside", disabled: true }, { type: "slider" }],
+          dataZoom: [
+            { type: "inside", disabled: true },
+            {
+              type: "slider",
+              startValue: now - 10 * 60 * 1000,
+              endValue: now,
+            },
+          ],
           grid: { left: 50, right: 24, top: 20, bottom: 60 },
         },
         true

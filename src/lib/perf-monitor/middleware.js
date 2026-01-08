@@ -61,6 +61,7 @@ function createPerfMiddleware(config) {
     flushIntervalMs,
     trace: traceConfig,
     requestIdFrom,
+    userIdFrom,
     collectDetailedInfo,
   } = config;
 
@@ -106,8 +107,11 @@ function createPerfMiddleware(config) {
       const shouldTrace =
         isError || isSlow || Math.random() < traceConfig.sampleRate;
 
+      const userId = extractValue(req, userIdFrom);
+
       const event = {
         requestId,
+        userId,
         ts: Date.now(),
         durationMs,
         status,
