@@ -310,11 +310,11 @@ async function cleanupOldStats() {
     const { processor: perfProcessor } = initPerfMonitor({
       redisClient: redisClient,
       trace: {
-        retentionHours: 48,
+        retentionHours: 36,
       },
       metrics: {
         timeWindowSecs: 60,
-        retentionHours: 48,
+        retentionHours: 36,
       },
     });
 
