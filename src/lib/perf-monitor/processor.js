@@ -88,6 +88,7 @@ class PerfDataProcessor {
           status: event.status,
           path: event.path || "",
           userId: event.userId || "",
+          hasDetail: !!event.hasDetail,
         });
         // Corrected: zAdd for redis v4 expects an array of members
         tracesMulti.zAdd(indexKey, [{ score: event.ts, value: scatterPoint }]);
