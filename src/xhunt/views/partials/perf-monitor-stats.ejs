@@ -230,6 +230,32 @@
           line-height: 1.45;
         "
       ></pre>
+
+      <div id="log-search-section" style="display: none; margin-top: 12px">
+        <button
+          id="search-logs-btn"
+          class="secondary"
+          style="margin-bottom: 8px; height: 30px; font-size: 12px"
+        >
+          🔍 搜索相关日志
+        </button>
+        <div
+          id="log-results-container"
+          style="
+            max-height: 40vh;
+            overflow: auto;
+            background: #f3f4f6;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #111827;
+          "
+        >
+          <!-- Log results will be injected here -->
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -366,37 +392,63 @@
     }
 
     async function openTraceDetail(requestIdOrPrefix) {
-      try {
-        traceDetailContent.textContent = "Loading...";
-        modal.style.display = "block";
+      const logSearchSection = document.getElementById("log-search-section");
+      const searchLogsBtn = document.getElementById("search-logs-btn");
+      const logResultsContainer = document.getElementById(
+        "log-results-container"
+      );
 
-        // 优先按完整 ID 拉取；失败再按前缀匹配
+      // Reset and hide the log search section initially
+      logSearchSection.style.display = "none";
+      logResultsContainer.innerHTML = "";
+      traceDetailContent.textContent = "Loading...";
+      modal.style.display = "block";
+
+      let traceData = null;
+
+      try {
+        // 优先按完整 ID 拉取
         try {
-          const data = await fetchTraceDetailExact(requestIdOrPrefix);
-          traceDetailContent.textContent = JSON.stringify(data, null, 2);
-          return;
+          traceData = await fetchTraceDetailExact(requestIdOrPrefix);
         } catch (e) {
-          // ignore
+          // 失败则按前缀匹配
+          traceData = await fetchTraceDetailByPrefix(requestIdOrPrefix);
         }
 
-        const data2 = await fetchTraceDetailByPrefix(requestIdOrPrefix);
-        if (!data2) {
+        if (!traceData) {
           traceDetailContent.textContent = `未找到匹配的 requestId（当前时间范围内）: ${requestIdOrPrefix}`;
           return;
         }
-        if (data2.__noDetail) {
+
+        if (traceData.__noDetail) {
           traceDetailContent.textContent = JSON.stringify(
             {
               message:
                 "该请求点没有采样到详情（hasDetail=false），仅展示基础信息",
-              ...data2,
+              ...traceData,
             },
             null,
             2
           );
-          return;
+        } else {
+          traceDetailContent.textContent = JSON.stringify(traceData, null, 2);
         }
-        traceDetailContent.textContent = JSON.stringify(data2, null, 2);
+
+        // 如果是错误请求 (status >= 400)，则显示日志搜索按钮
+        if (traceData.status >= 400 && traceData.requestId) {
+          logSearchSection.style.display = "block";
+
+          // 使用克隆节点的方式来避免重复绑定事件
+          const newSearchLogsBtn = searchLogsBtn.cloneNode(true);
+          searchLogsBtn.parentNode.replaceChild(
+            newSearchLogsBtn,
+            searchLogsBtn
+          );
+
+          newSearchLogsBtn.addEventListener("click", () => {
+            searchLogsForRequestId(traceData.requestId);
+          });
+        }
       } catch (err) {
         console.error(err);
         traceDetailContent.textContent = `Failed to load details.\n${err.message}`;
@@ -531,6 +583,43 @@
       if (event.target === modal) modal.style.display = "none";
     });
 
+    async function searchLogsForRequestId(requestId) {
+      const logResultsContainer = document.getElementById(
+        "log-results-container"
+      );
+      logResultsContainer.textContent = "搜索中...";
+      try {
+        const params = new URLSearchParams({
+          query: requestId,
+          contextLines: 3,
+          limit: 20,
+        });
+        const response = await fetch(`/api/xhunt/stats/log-search?${params}`);
+        const data = await response.json();
+        if (!data.success) {
+          logResultsContainer.textContent = `搜索失败: ${
+            data.error || "未知错误"
+          }`;
+          return;
+        }
+        if (data.data.totalMatches === 0) {
+          logResultsContainer.textContent = "未找到日志记录";
+          return;
+        }
+
+        // 渲染日志
+        const lines = data.data.results
+          .map((r) =>
+            r.context.map((c) => `${c.lineNumber}: ${c.content}`).join("\n")
+          )
+          .join("\n--------------------\n");
+        logResultsContainer.textContent = lines;
+      } catch (err) {
+        console.error(err);
+        logResultsContainer.textContent = `日志搜索失败: ${err.message}`;
+      }
+    }
+
     searchButton.addEventListener("click", () => {
       const q = searchInput.value.trim();
       if (q) openTraceDetail(q);
@@ -575,7 +664,7 @@
       // queue status refresh
       fetchQueueStatus();
       if (queueTimer) clearInterval(queueTimer);
-      queueTimer = setInterval(fetchQueueStatus, 11000);
+      queueTimer = setInterval(fetchQueueStatus, 30000);
     }
 
     // Initialize charts only when the tab becomes visible
