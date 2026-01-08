@@ -112,7 +112,7 @@ function createPerfMiddleware(config) {
         durationMs,
         status,
         method: req.method,
-        path: req.path,
+        path: req.originalUrl,
         hasDetail: shouldTrace,
       };
 
