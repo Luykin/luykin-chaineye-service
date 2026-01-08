@@ -90,6 +90,40 @@
     border-radius: 6px;
     color: #111827;
   }
+
+  /* Styles for log search results */
+  #log-search-section button {
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #fff;
+    color: #111827;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s ease;
+  }
+  #log-search-section button:hover {
+    background-color: #f3f4f6;
+  }
+  .log-context-line {
+    margin: 2px 0;
+    padding: 2px 0;
+    white-space: pre-wrap; /* Allow wrapping */
+    word-break: break-all; /* Break long words */
+  }
+  .log-line-number {
+    color: #6c757d;
+    margin-right: 10px;
+    user-select: none;
+  }
+  .log-highlight {
+    background: #fff3cd;
+    padding: 1px 3px;
+    border-radius: 3px;
+    font-weight: 600;
+    color: #111827;
+  }
 </style>
 
 <script src="/static/js/echarts.min.js"></script>
@@ -232,11 +266,7 @@
       ></pre>
 
       <div id="log-search-section" style="display: none; margin-top: 12px">
-        <button
-          id="search-logs-btn"
-          class="secondary"
-          style="margin-bottom: 8px; height: 30px; font-size: 12px"
-        >
+        <button id="search-logs-btn" style="margin-bottom: 8px">
           🔍 搜索相关日志
         </button>
         <div
@@ -278,6 +308,23 @@
     const traceDetailContent = document.getElementById("trace-detail-content");
     const searchInput = document.getElementById("search-request-id");
     const searchButton = document.getElementById("search-request-btn");
+
+    function escapeRegExp(string) {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function highlightText(text, query) {
+      if (!query) return text;
+      const escapedText = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      const regex = new RegExp(`(${escapeRegExp(query)})`, "gi");
+      return escapedText.replace(
+        regex,
+        '<span class="log-highlight">$1</span>'
+      );
+    }
 
     function ensureEchartsReady() {
       if (typeof echarts !== "undefined") return true;
@@ -369,7 +416,6 @@
     }
 
     async function fetchTraceDetailByPrefix(prefix) {
-      // 简单实现：先拉当前时间范围点列表，在前端做前缀匹配（最多 2000）
       const hours = parseFloat(timeRangeSelector.value);
       const response = await fetch(
         `/api/stats/perf/traces?hours=${hours}&limit=2000`
@@ -398,7 +444,6 @@
         "log-results-container"
       );
 
-      // Reset and hide the log search section initially
       logSearchSection.style.display = "none";
       logResultsContainer.innerHTML = "";
       traceDetailContent.textContent = "Loading...";
@@ -407,11 +452,9 @@
       let traceData = null;
 
       try {
-        // 优先按完整 ID 拉取
         try {
           traceData = await fetchTraceDetailExact(requestIdOrPrefix);
         } catch (e) {
-          // 失败则按前缀匹配
           traceData = await fetchTraceDetailByPrefix(requestIdOrPrefix);
         }
 
@@ -434,17 +477,13 @@
           traceDetailContent.textContent = JSON.stringify(traceData, null, 2);
         }
 
-        // 如果是错误请求 (status >= 400)，则显示日志搜索按钮
-        if (traceData.status >= 400 && traceData.requestId) {
+        if (traceData.requestId) {
           logSearchSection.style.display = "block";
-
-          // 使用克隆节点的方式来避免重复绑定事件
           const newSearchLogsBtn = searchLogsBtn.cloneNode(true);
           searchLogsBtn.parentNode.replaceChild(
             newSearchLogsBtn,
             searchLogsBtn
           );
-
           newSearchLogsBtn.addEventListener("click", () => {
             searchLogsForRequestId(traceData.requestId);
           });
@@ -457,17 +496,26 @@
 
     function renderScatterChart(data) {
       const getColor = (item) => {
-        if (item.status >= 400) return "#b91c1c"; // deep red
         if (item.durationMs > 5000) return "#fca5a5"; // light red
         if (item.durationMs > 500) return "#f97316"; // orange
         return "#22c55e"; // green
       };
 
-      const seriesData = data.map((d) => ({
-        ...d,
-        value: [d.ts, d.durationMs],
-        itemStyle: { color: getColor(d) },
-      }));
+      const errorData = [];
+      const normalData = [];
+
+      data.forEach((d) => {
+        const point = {
+          ...d,
+          value: [d.ts, d.durationMs],
+        };
+        if (d.status >= 400) {
+          errorData.push(point);
+        } else {
+          point.itemStyle = { color: getColor(d) };
+          normalData.push(point);
+        }
+      });
 
       scatterChart.hideLoading();
       const now = Date.now();
@@ -492,9 +540,23 @@
               }`;
             },
           },
-          xAxis: { type: "time", name: "Time" },
+          xAxis: { type: "time", name: "Time", scale: true },
           yAxis: { type: "value", name: "Duration (ms)", scale: true },
-          series: [{ type: "scatter", symbolSize: 8, data: seriesData }],
+          series: [
+            {
+              name: "Errors",
+              type: "effectScatter",
+              symbolSize: 12,
+              color: "#b91c1c",
+              data: errorData,
+            },
+            {
+              name: "Success",
+              type: "scatter",
+              symbolSize: 8,
+              data: normalData,
+            },
+          ],
           dataZoom: [
             { type: "inside" },
             {
@@ -571,6 +633,55 @@
       );
     }
 
+    async function searchLogsForRequestId(requestId) {
+      const logResultsContainer = document.getElementById(
+        "log-results-container"
+      );
+      logResultsContainer.innerHTML = "<p>搜索中...</p>";
+
+      try {
+        const params = new URLSearchParams({
+          query: requestId,
+          contextLines: 3,
+          limit: 20,
+        });
+        const response = await fetch(`/api/xhunt/stats/log-search?${params}`);
+        const data = await response.json();
+
+        if (!data.success) {
+          logResultsContainer.innerHTML = `<p style="color: #ef4444;">搜索失败: ${
+            data.error || "未知错误"
+          }</p>`;
+          return;
+        }
+        if (data.data.totalMatches === 0) {
+          logResultsContainer.innerHTML =
+            "<p>未找到与此 requestId 相关的日志记录。</p>";
+          return;
+        }
+
+        logResultsContainer.innerHTML = "";
+        data.data.results.forEach((result) => {
+          const fileTitle = document.createElement("div");
+          fileTitle.style.fontWeight = "bold";
+          fileTitle.style.marginTop = "8px";
+          fileTitle.textContent = `📄 ${result.file}`;
+          logResultsContainer.appendChild(fileTitle);
+
+          result.context.forEach((line) => {
+            const lineDiv = document.createElement("div");
+            lineDiv.className = "log-context-line";
+            const highlightedContent = highlightText(line.content, requestId);
+            lineDiv.innerHTML = `<span class="log-line-number">${line.lineNumber}:</span>${highlightedContent}`;
+            logResultsContainer.appendChild(lineDiv);
+          });
+        });
+      } catch (err) {
+        console.error(err);
+        logResultsContainer.innerHTML = `<p style="color: #ef4444;">日志搜索失败: ${err.message}</p>`;
+      }
+    }
+
     // events
     timeRangeSelector.addEventListener("change", fetchData);
     refreshButton.addEventListener("click", fetchData);
@@ -582,43 +693,6 @@
     window.addEventListener("click", (event) => {
       if (event.target === modal) modal.style.display = "none";
     });
-
-    async function searchLogsForRequestId(requestId) {
-      const logResultsContainer = document.getElementById(
-        "log-results-container"
-      );
-      logResultsContainer.textContent = "搜索中...";
-      try {
-        const params = new URLSearchParams({
-          query: requestId,
-          contextLines: 3,
-          limit: 20,
-        });
-        const response = await fetch(`/api/xhunt/stats/log-search?${params}`);
-        const data = await response.json();
-        if (!data.success) {
-          logResultsContainer.textContent = `搜索失败: ${
-            data.error || "未知错误"
-          }`;
-          return;
-        }
-        if (data.data.totalMatches === 0) {
-          logResultsContainer.textContent = "未找到日志记录";
-          return;
-        }
-
-        // 渲染日志
-        const lines = data.data.results
-          .map((r) =>
-            r.context.map((c) => `${c.lineNumber}: ${c.content}`).join("\n")
-          )
-          .join("\n--------------------\n");
-        logResultsContainer.textContent = lines;
-      } catch (err) {
-        console.error(err);
-        logResultsContainer.textContent = `日志搜索失败: ${err.message}`;
-      }
-    }
 
     searchButton.addEventListener("click", () => {
       const q = searchInput.value.trim();
@@ -632,11 +706,9 @@
       }
     });
 
-    // When click point
     function bindPointClick() {
       scatterChart.on("click", (params) => {
         if (!params?.data?.requestId) return;
-        // 即使 hasDetail=false 也给出基础提示
         openTraceDetail(params.data.requestId);
       });
     }
@@ -661,13 +733,11 @@
 
       fetchData();
 
-      // queue status refresh
       fetchQueueStatus();
       if (queueTimer) clearInterval(queueTimer);
       queueTimer = setInterval(fetchQueueStatus, 30000);
     }
 
-    // Initialize charts only when the tab becomes visible
     const observer = new MutationObserver(() => {
       if (perfMonitorTab.classList.contains("active") && !isInitialized) {
         initializeCharts();
