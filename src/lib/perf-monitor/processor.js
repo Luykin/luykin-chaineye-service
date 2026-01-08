@@ -86,8 +86,8 @@ class PerfDataProcessor {
           requestId: event.requestId,
           durationMs: event.durationMs,
           status: event.status,
-          path: event.path || "",
-          userId: event.userId || "",
+          path: event.path,
+          userId: event.details?.userId,
           hasDetail: !!event.hasDetail,
         });
         // Corrected: zAdd for redis v4 expects an array of members
