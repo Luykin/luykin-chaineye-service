@@ -529,7 +529,9 @@
       const d = new Date(ts);
       const pad = (n) => String(n).padStart(2, "0");
       // datetime-local 用本地时间，不带时区
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+        d.getDate()
+      )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
     function parsePickerToMs(pickerEl) {
@@ -569,7 +571,10 @@
       if (!isInitialized) return;
       showLoading(scatterChart, "正在加载追踪数据...");
       showLoading(metricsChart, "正在加载聚合指标...");
-      await Promise.all([fetchTraces(startMs, endMs), fetchMetrics(startMs, endMs)]);
+      await Promise.all([
+        fetchTraces(startMs, endMs),
+        fetchMetrics(startMs, endMs),
+      ]);
     }
 
     async function fetchTraces(startMs, endMs) {
@@ -618,7 +623,9 @@
 
     async function fetchTraceDetailByPrefix(prefix) {
       // 在当前已加载的点中前缀匹配（最多 2000），避免依赖旧 hours 逻辑
-      const points = Array.isArray(rawTraceData) ? rawTraceData.slice(-2000) : [];
+      const points = Array.isArray(rawTraceData)
+        ? rawTraceData.slice(-2000)
+        : [];
       const match = points.find((p) => (p.requestId || "").startsWith(prefix));
       if (!match) return null;
       if (!match.hasDetail) {
@@ -634,27 +641,6 @@
     }
 
     // legacy fetch removed
-    /*
-    async function fetchTraceDetailByPrefix_legacy(prefix) {
-      const response = await fetch(
-        `/api/stats/perf/traces?hours=${hours}&limit=2000`
-      );
-      if (!response.ok)
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-      const points = await response.json();
-      const match = points.find((p) => (p.requestId || "").startsWith(prefix));
-      if (!match) return null;
-      if (!match.hasDetail) {
-        return {
-          __noDetail: true,
-          requestId: match.requestId,
-          durationMs: match.durationMs,
-          status: match.status,
-          ts: match.ts,
-        };
-      }
-      return fetchTraceDetailExact(match.requestId);
-    }
 
     async function openTraceDetail(requestIdOrPrefix) {
       const logSearchSection = document.getElementById("log-search-section");
