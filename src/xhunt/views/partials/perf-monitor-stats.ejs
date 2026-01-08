@@ -309,7 +309,7 @@
           当前长度。持续升高表示后台消费速度不足。
         </div>
         <div style="margin-top: 8px">
-          <b>颜色规则</b>：深红 (5xx)；紫色 (4xx)；浅红 (&gt;6s)；橙色
+          <b>颜色规则</b>：深红 (5xx)；#144e33 (4xx)；浅红 (&gt;6s)；橙色
           (3-6s)；浅绿 (500ms-3s)；绿色 (&lt;=500ms)。详见图表颜色图例。
         </div>
         <div style="margin-top: 8px">
@@ -793,7 +793,7 @@
               name: "Client Errors (4xx)",
               type: "scatter", // Changed from effectScatter
               symbolSize: 10, // Slightly larger than normal
-              color: "#8b5cf6", // purple
+              color: "#144e33", // 4xx
               data: errorData4xx,
               z: 9,
             },
