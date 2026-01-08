@@ -626,19 +626,15 @@
           return;
         }
 
-        if (traceData.__noDetail) {
-          traceDetailContent.textContent = JSON.stringify(
-            {
+        // Always display the data, add a message if no detail is available.
+        const displayData = traceData.__noDetail
+          ? {
               message:
                 "该请求点没有采样到详情（hasDetail=false），仅展示基础信息",
               ...traceData,
-            },
-            null,
-            2
-          );
-        } else {
-          traceDetailContent.textContent = JSON.stringify(traceData, null, 2);
-        }
+            }
+          : traceData;
+        traceDetailContent.textContent = JSON.stringify(displayData, null, 2);
 
         if (traceData.requestId) {
           logSearchSection.style.display = "block";
@@ -664,9 +660,19 @@
 
       data.forEach((d) => {
         const point = {
-          ...d,
-          value: [d.ts, d.durationMs],
+          // Encode all necessary data into the value array
+          // [0: ts, 1: duration, 2: status, 3: hasDetail, 4: requestId, 5: path, 6: userId]
+          value: [
+            d.ts,
+            d.durationMs,
+            d.status,
+            d.hasDetail ? 1 : 0,
+            d.requestId,
+            d.path,
+            d.userId,
+          ],
         };
+
         if (d.status >= 500) {
           errorData5xx.push(point);
         } else if (d.status >= 400) {
@@ -690,20 +696,21 @@
           tooltip: {
             trigger: "item",
             formatter: (params) => {
-              const d = params.data;
-              const path = d?.path || "";
+              const v = params.value;
+              // [0: ts, 1: duration, 2: status, 3: hasDetail, 4: requestId, 5: path, 6: userId]
+              const path = v[5] || "";
               const truncatedPath =
                 path.length > 65 ? path.substring(0, 65) + "..." : path;
               const pathLine = `<br/><b>path:</b> <span title="${path}">${truncatedPath}</span>`;
-              const userIdLine = `<br/><b>userId:</b> ${d?.userId || ""}`;
+              const userIdLine = `<br/><b>userId:</b> ${v[6] || ""}`;
+              const hasDetail = v[3] === 1;
+
               return `<b>requestId:</b> ${
-                d.requestId
+                v[4]
               }${pathLine}${userIdLine}<br/><b>status:</b> ${
-                d.status
-              }<br/><b>duration:</b> ${Number(d.durationMs).toFixed(
-                2
-              )} ms<br/>${
-                d.hasDetail ? "<b>点击查看详情</b>" : "无详情（未采样）"
+                v[2]
+              }<br/><b>duration:</b> ${Number(v[1]).toFixed(2)} ms<br/>${
+                hasDetail ? "<b>点击查看详情</b>" : "无详情（未采样）"
               }`;
             },
           },
@@ -1023,8 +1030,10 @@
 
     function bindPointClick() {
       scatterChart.on("click", (params) => {
-        if (!params?.data?.requestId) return;
-        openTraceDetail(params.data.requestId);
+        // [0: ts, 1: duration, 2: status, 3: hasDetail, 4: requestId, ...]
+        const requestId = params?.value?.[4];
+        if (!requestId) return;
+        openTraceDetail(requestId);
       });
     }
 
