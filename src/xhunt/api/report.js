@@ -292,10 +292,10 @@ async function isDuplicateReport(req, clientIP) {
       if (timeDiff < tenMinutes) {
         // 记录重复上报统计
         if (req.dataDog) {
-          req.dataDog.increment("high_delay_report.duplicate", 1, [
-            `ip:${clientIP}`,
-            `time_since_last:${Math.round(timeDiff / 1000)}s`,
-          ]);
+          // req.dataDog.increment("high_delay_report.duplicate", 1, [
+          //   `ip:${clientIP}`,
+          //   `time_since_last:${Math.round(timeDiff / 1000)}s`,
+          // ]);
         }
         return true;
       }
@@ -308,9 +308,9 @@ async function isDuplicateReport(req, clientIP) {
     console.error("Redis error in duplicate check:", redisError);
     // Redis 出错时不阻止上报，但记录错误
     if (req.dataDog) {
-      req.dataDog.increment("high_delay_report.redis_error", 1, [
-        `error:${redisError.message.substring(0, 50)}`,
-      ]);
+      // req.dataDog.increment("high_delay_report.redis_error", 1, [
+      //   `error:${redisError.message.substring(0, 50)}`,
+      // ]);
     }
     return false;
   }
