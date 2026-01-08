@@ -1,7 +1,7 @@
 // This line must come before importing any instrumented module.
-const tracer = require("dd-trace").init({
-  logInjection: true,
-});
+// const tracer = require("dd-trace").init({
+//   logInjection: true,
+// });
 
 require("dotenv").config({
   path: `${process.env.NODE_ENV === "development" ? ".env-dev" : ".env-pro"}`,
@@ -48,8 +48,9 @@ const {
   requestContextMiddleware,
   enhanceConsoleWithRequestId,
 } = require("./xhunt/utils/request-id");
-const StatsD = require("hot-shots");
-const dataDog = new StatsD();
+// const StatsD = require("hot-shots");
+// const dataDog = new StatsD();
+const { adminAuth } = require("./admin/middleware/adminAuth");
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -113,40 +114,40 @@ app.use(perfMiddleware);
 
 app.use((req, res, next) => {
   req.redisClient = redisClient;
-  req.dataDog = dataDog;
+  // req.dataDog = dataDog;
   next();
 });
 
-//将指定请求头注入到 Datadog APM Span 中
-function injectHeadersToSpan(req, res, next) {
-  const span = tracer.scope().active();
-  if (span) {
-    // 要记录的请求头列表（全部使用小写形式匹配 req.headers）
-    const headersToCapture = [
-      "x-request-id",
-      "x-request-timestamp",
-      "x-device-fingerprint",
-      "x-request-signature",
-      "x-extension-version",
-      "x-user-id",
-      "x-window-location-href",
-    ];
+// //将指定请求头注入到 Datadog APM Span 中
+// function injectHeadersToSpan(req, res, next) {
+//   const span = tracer.scope().active();
+//   if (span) {
+//     // 要记录的请求头列表（全部使用小写形式匹配 req.headers）
+//     const headersToCapture = [
+//       "x-request-id",
+//       "x-request-timestamp",
+//       "x-device-fingerprint",
+//       "x-request-signature",
+//       "x-extension-version",
+//       "x-user-id",
+//       "x-window-location-href",
+//     ];
 
-    // 遍历并写入 Span Tags
-    headersToCapture.forEach((header) => {
-      const value = req.headers[header];
-      // value['my-env'] = process.env.ENV;
-      if (value) {
-        // 建议命名格式：http.request_header.<header_name>
-        span.setTag(`http.request_header.${header}`, String(value));
-      }
-    });
-  }
-  next();
-}
+//     // 遍历并写入 Span Tags
+//     headersToCapture.forEach((header) => {
+//       const value = req.headers[header];
+//       // value['my-env'] = process.env.ENV;
+//       if (value) {
+//         // 建议命名格式：http.request_header.<header_name>
+//         span.setTag(`http.request_header.${header}`, String(value));
+//       }
+//     });
+//   }
+//   next();
+// }
 
-// 使用中间件
-app.use(injectHeadersToSpan);
+// // 使用中间件
+// app.use(injectHeadersToSpan);
 
 // CORS 配置
 const corsOptions = {
@@ -352,7 +353,7 @@ app.use("/api/xhunt/sse", rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
 
 // 新增统计路由 - 无需安全中间件，方便内部监控。管理后台使用，有basicAuth前端认证机制
 app.use("/api/xhunt/stats", xHuntStatsRoutes);
-app.use("/api/stats/perf", perfApiRouter);
+app.use("/api/stats/perf", adminAuth, perfApiRouter);
 
 // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
 app.use("/api/rootdata", xHuntRootdataRoutes);

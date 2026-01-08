@@ -194,21 +194,16 @@
 <div class="perf-monitor-container">
   <div class="perf-controls">
     <div class="field">
-      <label for="perf-time-range">时间范围</label>
-      <select id="perf-time-range">
-        <option value="0.5" selected>最近 30 分钟</option>
-        <option value="1">最近 1 小时</option>
-        <option value="2">最近 2 小时</option>
-        <option value="4">最近 4 小时</option>
-        <option value="8">最近 8 小时</option>
-        <option value="24">最近 1 天</option>
-        <option value="48">最近 2 天</option>
-      </select>
+      <label for="start-time-picker">开始时间</label>
+      <input type="datetime-local" id="start-time-picker" />
     </div>
-
+    <div class="field">
+      <label for="end-time-picker">结束时间</label>
+      <input type="datetime-local" id="end-time-picker" />
+    </div>
     <div class="field">
       <label>&nbsp;</label>
-      <button id="refresh-perf-data" class="secondary">刷新数据</button>
+      <button id="query-time-range-btn">查询 (范围≤30分钟)</button>
     </div>
 
     <div class="field">
@@ -428,8 +423,9 @@
     const applyFiltersBtn = document.getElementById("apply-filters-btn");
     const clearFiltersBtn = document.getElementById("clear-filters-btn");
 
-    const timeRangeSelector = document.getElementById("perf-time-range");
-    const refreshButton = document.getElementById("refresh-perf-data");
+    const startTimePicker = document.getElementById("start-time-picker");
+    const endTimePicker = document.getElementById("end-time-picker");
+    const queryTimeRangeBtn = document.getElementById("query-time-range-btn");
     const modal = document.getElementById("trace-detail-modal");
     const closeModalButton = modal.querySelector(".close-button");
     const traceDetailContent = document.getElementById("trace-detail-content");

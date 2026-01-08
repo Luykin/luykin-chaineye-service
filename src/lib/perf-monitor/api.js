@@ -19,11 +19,18 @@ function createApiRouter(config) {
    */
   router.get("/metrics", async (req, res) => {
     try {
-      const rangeHours = parseInt(req.query.rangeHours, 10) || 24;
       const intervalSecs = parseInt(req.query.intervalSecs, 10) || 3600;
-      const now = Date.now();
-      const endTs = Math.floor(now / 1000);
-      const startTs = endTs - rangeHours * 3600;
+      let startTs, endTs;
+
+      if (req.query.startTime && req.query.endTime) {
+        startTs = Math.floor(parseInt(req.query.startTime, 10) / 1000);
+        endTs = Math.floor(parseInt(req.query.endTime, 10) / 1000);
+      } else {
+        const rangeHours = parseInt(req.query.rangeHours, 10) || 24;
+        const now = Date.now();
+        endTs = Math.floor(now / 1000);
+        startTs = endTs - rangeHours * 3600;
+      }
 
       const timeWindowSecs = metricsConfig.timeWindowSecs;
       // Corrected: Use multi() for redis v4
@@ -87,20 +94,37 @@ function createApiRouter(config) {
    */
   router.get("/traces", async (req, res) => {
     try {
-      const hours = parseInt(req.query.hours, 10) || 1;
       const limit = parseInt(req.query.limit, 10) || 10000;
-      const now = Date.now();
-      const startTs = now - hours * 3600 * 1000;
+      let startTs, endTs;
 
-      const indexKeys = [];
-      for (let i = 0; i <= hours; i++) {
-        const d = new Date(now - i * 3600 * 1000);
-        indexKeys.push(`perf:trace:index:${d.toISOString().substring(0, 13)}`);
+      if (req.query.startTime && req.query.endTime) {
+        startTs = parseInt(req.query.startTime, 10);
+        endTs = parseInt(req.query.endTime, 10);
+      } else {
+        const hours = parseInt(req.query.hours, 10) || 1;
+        endTs = Date.now();
+        startTs = endTs - hours * 3600 * 1000;
       }
 
+      const indexKeys = new Set();
+      let currentTime = new Date(startTs);
+      const endTimeDate = new Date(endTs);
+
+      // Iterate hour by hour to collect all relevant hourly index keys
+      while (currentTime <= endTimeDate) {
+        indexKeys.add(
+          `perf:trace:index:${currentTime.toISOString().substring(0, 13)}`
+        );
+        currentTime.setHours(currentTime.getHours() + 1);
+      }
+      // Also add the end time's index key just in case it spans an hour boundary
+      indexKeys.add(
+        `perf:trace:index:${endTimeDate.toISOString().substring(0, 13)}`
+      );
+
       const multi = redisClient.multi();
-      indexKeys.forEach((key) =>
-        multi.zRangeByScoreWithScores(key, startTs, now)
+      Array.from(indexKeys).forEach((key) =>
+        multi.zRangeByScoreWithScores(key, startTs, endTs)
       );
       const results = await multi.exec();
 
