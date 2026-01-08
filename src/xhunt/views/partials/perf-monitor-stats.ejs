@@ -647,14 +647,6 @@
         "kpi-rps",
         "kpi-avg-duration",
         "kpi-p95",
-        "kpi-total-requests-prev",
-        "kpi-rps-prev",
-        "kpi-avg-duration-prev",
-        "kpi-p95-prev",
-        "kpi-total-requests-trend",
-        "kpi-rps-trend",
-        "kpi-avg-duration-trend",
-        "kpi-p95-trend",
       ];
       ids.forEach((id) => {
         const el = document.getElementById(id);
@@ -700,128 +692,43 @@
       return `${formatNumber(n, 0)} ms`;
     }
 
-    function setTrend(el, pct) {
-      if (!el) return;
-      el.classList.remove("up", "down", "neutral");
-
-      if (!Number.isFinite(pct)) {
-        el.classList.add("neutral");
-        el.textContent = "--";
-        return;
-      }
-
-      const sign = pct > 0 ? "+" : "";
-      el.textContent = `${sign}${formatNumber(pct, 1)}%`;
-
-      if (pct > 0.5) el.classList.add("up");
-      else if (pct < -0.5) el.classList.add("down");
-      else el.classList.add("neutral");
-    }
-
-    function calcPctChange(cur, prev) {
-      if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0)
-        return NaN;
-      return ((cur - prev) / prev) * 100;
-    }
-
     function updateKpiCards(kpis, startMs, endMs) {
       const elTotal = document.getElementById("kpi-total-requests");
       const elRps = document.getElementById("kpi-rps");
       const elAvg = document.getElementById("kpi-avg-duration");
       const elP95 = document.getElementById("kpi-p95");
 
-      const elTotalPrev = document.getElementById("kpi-total-requests-prev");
-      const elRpsPrev = document.getElementById("kpi-rps-prev");
-      const elAvgPrev = document.getElementById("kpi-avg-duration-prev");
-      const elP95Prev = document.getElementById("kpi-p95-prev");
-
-      const elTotalTrend = document.getElementById("kpi-total-requests-trend");
-      const elRpsTrend = document.getElementById("kpi-rps-trend");
-      const elAvgTrend = document.getElementById("kpi-avg-duration-trend");
-      const elP95Trend = document.getElementById("kpi-p95-trend");
-
       if (!kpis) {
         if (elTotal) elTotal.textContent = "--";
         if (elRps) elRps.textContent = "--";
         if (elAvg) elAvg.textContent = "--";
         if (elP95) elP95.textContent = "--";
-
-        if (elTotalPrev) elTotalPrev.textContent = "上一窗口: --";
-        if (elRpsPrev) elRpsPrev.textContent = "上一窗口: --";
-        if (elAvgPrev) elAvgPrev.textContent = "上一窗口: --";
-        if (elP95Prev) elP95Prev.textContent = "上一窗口: --";
-
-        setTrend(elTotalTrend, NaN);
-        setTrend(elRpsTrend, NaN);
-        setTrend(elAvgTrend, NaN);
-        setTrend(elP95Trend, NaN);
         return;
       }
 
-      // 兼容不同字段命名（后端如有调整，这里尽量不炸）
       const cur = kpis.current || kpis.cur || kpis.data || kpis;
-      const prev = kpis.previous || kpis.prev || kpis.last || kpis.prevWindow;
 
       const curRequests = Number(
         cur.totalRequests ??
           cur.requestCount ??
-          cur.totalCount ?? // Added
+          cur.totalCount ??
           cur.total ??
           cur.count
       );
       const curAvg = Number(
-        cur.avgDurationMs ?? cur.avg_duration_ms ?? cur.avgMs ?? cur.avg // Added
+        cur.avgDurationMs ?? cur.avg_duration_ms ?? cur.avgMs ?? cur.avg
       );
       const curP95 = Number(
-        cur.p95DurationMs ?? cur.p95_duration_ms ?? cur.p95Ms ?? cur.p95 // Added
+        cur.p95DurationMs ?? cur.p95_duration_ms ?? cur.p95Ms ?? cur.p95
       );
 
-      const prevRequests = prev
-        ? Number(
-            prev.totalRequests ??
-              prev.requestCount ??
-              prev.totalCount ?? // Added
-              prev.total ??
-              prev.count
-          )
-        : NaN;
-      const prevAvg = prev
-        ? Number(
-            prev.avgDurationMs ?? prev.avg_duration_ms ?? prev.avgMs ?? prev.avg
-          ) // Added
-        : NaN;
-      const prevP95 = prev
-        ? Number(
-            prev.p95DurationMs ?? prev.p95_duration_ms ?? prev.p95Ms ?? prev.p95
-          ) // Added
-        : NaN;
-
-      // Calculate RPS on the fly
       const spanSec = (endMs - startMs) / 1000;
       const curRps = spanSec > 0 ? curRequests / spanSec : 0;
-      const prevSpanSec =
-        (kpis.previous?.endMs - kpis.previous?.startMs) / 1000;
-      const prevRps = prevSpanSec > 0 ? prevRequests / prevSpanSec : NaN;
 
       if (elTotal) elTotal.textContent = formatInt(curRequests);
       if (elRps) elRps.textContent = formatNumber(curRps, 2);
       if (elAvg) elAvg.textContent = formatMs(curAvg);
       if (elP95) elP95.textContent = formatMs(curP95);
-
-      if (elTotalPrev)
-        elTotalPrev.textContent = `上一窗口: ${formatInt(prevRequests)}`;
-      if (elRpsPrev)
-        elRpsPrev.textContent = `上一窗口: ${
-          Number.isFinite(prevRps) ? formatNumber(prevRps, 2) : "--"
-        }`;
-      if (elAvgPrev) elAvgPrev.textContent = `上一窗口: ${formatMs(prevAvg)}`;
-      if (elP95Prev) elP95Prev.textContent = `上一窗口: ${formatMs(prevP95)}`;
-
-      setTrend(elTotalTrend, calcPctChange(curRequests, prevRequests));
-      setTrend(elRpsTrend, calcPctChange(curRps, prevRps));
-      // 延迟类指标：上涨通常更差，但这里仍用上涨/下降展示，颜色仅代表方向
-      setTrend(elAvgTrend, calcPctChange(curAvg, prevAvg));
-      setTrend(elP95Trend, calcPctChange(curP95, prevP95));
     }
 
     async function fetchData(startMs, endMs) {
