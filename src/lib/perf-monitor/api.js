@@ -89,6 +89,128 @@ function createApiRouter(config) {
   });
 
   /**
+   * GET /kpis
+   * Fetches aggregated KPIs for a given time range.
+   */
+  router.get("/kpis", async (req, res) => {
+    try {
+      const {
+        startTime,
+        endTime,
+        minCountForPercentile = 20,
+        maxScan = 30000,
+      } = req.query;
+
+      if (!startTime || !endTime) {
+        return res
+          .status(400)
+          .json({ error: "startTime and endTime are required" });
+      }
+
+      const startTs = parseInt(startTime, 10);
+      const endTs = parseInt(endTime, 10);
+
+      const indexKeys = new Set();
+      let currentTime = new Date(startTs);
+      const endTimeDate = new Date(endTs);
+
+      // Iterate hour by hour to collect all relevant hourly index keys
+      while (currentTime <= endTimeDate) {
+        indexKeys.add(
+          `perf:trace:index:${currentTime.toISOString().substring(0, 13)}`
+        );
+        currentTime.setHours(currentTime.getHours() + 1);
+      }
+      // Also add the end time's index key just in case it spans an hour boundary
+      indexKeys.add(
+        `perf:trace:index:${endTimeDate.toISOString().substring(0, 13)}`
+      );
+
+      const multi = redisClient.multi();
+      Array.from(indexKeys).forEach((key) =>
+        multi.zRangeByScoreWithScores(key, startTs, endTs)
+      );
+      const results = await multi.exec();
+
+      let allTraces = [];
+      for (const rangeResult of results) {
+        if (!rangeResult) continue;
+        for (const member of rangeResult) {
+          try {
+            const pointData = JSON.parse(member.value);
+            allTraces.push({ ...pointData, ts: member.score });
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        if (allTraces.length >= maxScan) {
+          break; // Stop processing if maxScan is reached
+        }
+      }
+
+      if (allTraces.length > maxScan) {
+        allTraces = allTraces.slice(0, maxScan);
+      }
+
+      const totalCount = allTraces.length;
+      if (totalCount === 0) {
+        return res.json({
+          totalCount: 0,
+          avgMs: 0,
+          p50Ms: 0,
+          p95Ms: 0,
+          count4xx: 0,
+          count5xx: 0,
+          rate4xx: 0,
+          rate5xx: 0,
+        });
+      }
+
+      let sumDuration = 0;
+      let count4xx = 0;
+      let count5xx = 0;
+      const durations = [];
+
+      for (const trace of allTraces) {
+        sumDuration += trace.durationMs;
+        durations.push(trace.durationMs);
+        if (trace.status >= 400 && trace.status < 500) {
+          count4xx++;
+        } else if (trace.status >= 500) {
+          count5xx++;
+        }
+      }
+
+      durations.sort((a, b) => a - b);
+
+      const avgMs = sumDuration / totalCount;
+      let p50Ms = 0;
+      let p95Ms = 0;
+
+      if (totalCount >= minCountForPercentile) {
+        const p50Index = Math.max(0, Math.ceil(totalCount * 0.5) - 1);
+        const p95Index = Math.max(0, Math.ceil(totalCount * 0.95) - 1);
+        p50Ms = durations[p50Index];
+        p95Ms = durations[p95Index];
+      }
+
+      res.json({
+        totalCount,
+        avgMs,
+        p50Ms,
+        p95Ms,
+        count4xx,
+        count5xx,
+        rate4xx: totalCount > 0 ? count4xx / totalCount : 0,
+        rate5xx: totalCount > 0 ? count5xx / totalCount : 0,
+      });
+    } catch (err) {
+      console.error("[perf-monitor] API /kpis failed:", err);
+      res.status(500).json({ error: "Failed to fetch KPIs" });
+    }
+  });
+
+  /**
    * GET /traces
    * Fetches trace points for the scatter plot from the ZSET index.
    */
