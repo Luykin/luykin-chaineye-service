@@ -666,7 +666,7 @@
           ...d,
           value: [d.ts, d.durationMs],
         };
-        if (d.status >= 400) {
+        if (d.status >= 500) {
           errorData.push(point);
         } else {
           normalData.push(point);
