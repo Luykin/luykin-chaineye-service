@@ -810,7 +810,7 @@
       return ((cur - prev) / prev) * 100;
     }
 
-    function updateKpiCards(kpis) {
+    function updateKpiCards(kpis, startMs, endMs) {
       const elTotal = document.getElementById("kpi-total-requests");
       const elRps = document.getElementById("kpi-rps");
       const elAvg = document.getElementById("kpi-avg-duration");
@@ -849,30 +849,45 @@
       const prev = kpis.previous || kpis.prev || kpis.last || kpis.prevWindow;
 
       const curRequests = Number(
-        cur.totalRequests ?? cur.requestCount ?? cur.total ?? cur.count
+        cur.totalRequests ??
+          cur.requestCount ??
+          cur.totalCount ?? // Added
+          cur.total ??
+          cur.count
       );
-      const curRps = Number(cur.rps ?? cur.avgRps ?? cur.throughput);
       const curAvg = Number(
-        cur.avgDurationMs ?? cur.avg_duration_ms ?? cur.avg
+        cur.avgDurationMs ?? cur.avg_duration_ms ?? cur.avgMs ?? cur.avg // Added
       );
       const curP95 = Number(
-        cur.p95DurationMs ?? cur.p95_duration_ms ?? cur.p95
+        cur.p95DurationMs ?? cur.p95_duration_ms ?? cur.p95Ms ?? cur.p95 // Added
       );
 
       const prevRequests = prev
         ? Number(
-            prev.totalRequests ?? prev.requestCount ?? prev.total ?? prev.count
+            prev.totalRequests ??
+              prev.requestCount ??
+              prev.totalCount ?? // Added
+              prev.total ??
+              prev.count
           )
         : NaN;
-      const prevRps = prev
-        ? Number(prev.rps ?? prev.avgRps ?? prev.throughput)
-        : NaN;
       const prevAvg = prev
-        ? Number(prev.avgDurationMs ?? prev.avg_duration_ms ?? prev.avg)
+        ? Number(
+            prev.avgDurationMs ?? prev.avg_duration_ms ?? prev.avgMs ?? prev.avg
+          ) // Added
         : NaN;
       const prevP95 = prev
-        ? Number(prev.p95DurationMs ?? prev.p95_duration_ms ?? prev.p95)
+        ? Number(
+            prev.p95DurationMs ?? prev.p95_duration_ms ?? prev.p95Ms ?? prev.p95
+          ) // Added
         : NaN;
+
+      // Calculate RPS on the fly
+      const spanSec = (endMs - startMs) / 1000;
+      const curRps = spanSec > 0 ? curRequests / spanSec : 0;
+      const prevSpanSec =
+        (kpis.previous?.endMs - kpis.previous?.startMs) / 1000;
+      const prevRps = prevSpanSec > 0 ? prevRequests / prevSpanSec : NaN;
 
       if (elTotal) elTotal.textContent = formatInt(curRequests);
       if (elRps) elRps.textContent = formatNumber(curRps, 2);
