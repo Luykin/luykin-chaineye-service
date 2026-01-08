@@ -525,18 +525,57 @@
       }
     }
 
-    async function fetchData() {
+    function toDatetimeLocalValue(ts) {
+      const d = new Date(ts);
+      const pad = (n) => String(n).padStart(2, "0");
+      // datetime-local 用本地时间，不带时区
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function parsePickerToMs(pickerEl) {
+      const v = (pickerEl?.value || "").trim();
+      if (!v) return NaN;
+      const ms = new Date(v).getTime();
+      return ms;
+    }
+
+    function validateAndGetRangeMs() {
+      const startMs = parsePickerToMs(startTimePicker);
+      const endMs = parsePickerToMs(endTimePicker);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+        alert("请输入有效的开始/结束时间");
+        return null;
+      }
+      if (endMs <= startMs) {
+        alert("结束时间必须大于开始时间");
+        return null;
+      }
+      const spanMs = endMs - startMs;
+      const maxSpanMs = 30 * 60 * 1000;
+      if (spanMs > maxSpanMs) {
+        alert("时间跨度不能超过 30 分钟");
+        return null;
+      }
+      const now = Date.now();
+      const minAllowed = now - 48 * 3600 * 1000;
+      if (startMs < minAllowed || endMs < minAllowed) {
+        alert("仅支持查询最近 48 小时内的数据");
+        return null;
+      }
+      return { startMs, endMs };
+    }
+
+    async function fetchData(startMs, endMs) {
       if (!isInitialized) return;
       showLoading(scatterChart, "正在加载追踪数据...");
       showLoading(metricsChart, "正在加载聚合指标...");
-      const hours = parseFloat(timeRangeSelector.value);
-      await Promise.all([fetchTraces(hours), fetchMetrics(hours)]);
+      await Promise.all([fetchTraces(startMs, endMs), fetchMetrics(startMs, endMs)]);
     }
 
-    async function fetchTraces(hours) {
+    async function fetchTraces(startMs, endMs) {
       try {
         const response = await fetch(
-          `/api/stats/perf/traces?hours=${hours}&limit=10000`
+          `/api/stats/perf/traces?startTime=${startMs}&endTime=${endMs}&limit=10000`
         );
         if (!response.ok)
           throw new Error(`HTTP ${response.status}: ${await response.text()}`);
@@ -549,16 +588,19 @@
       }
     }
 
-    async function fetchMetrics(hours) {
+    async function fetchMetrics(startMs, endMs) {
       try {
-        const intervalSecs = hours > 2 ? 300 : 60;
+        const spanMs = endMs - startMs;
+        const spanSecs = spanMs / 1000;
+        // 30分钟窗口内，60秒粒度足够
+        const intervalSecs = spanSecs > 2 * 3600 ? 300 : 60;
         const response = await fetch(
-          `/api/stats/perf/metrics?rangeHours=${hours}&intervalSecs=${intervalSecs}`
+          `/api/stats/perf/metrics?startTime=${startMs}&endTime=${endMs}&intervalSecs=${intervalSecs}`
         );
         if (!response.ok)
           throw new Error(`HTTP ${response.status}: ${await response.text()}`);
         const data = await response.json();
-        renderMetricsChart(data, intervalSecs);
+        renderMetricsChart(data, intervalSecs, startMs, endMs);
       } catch (e) {
         console.error(e);
         showError(metricsChart, "加载聚合指标失败");
@@ -575,7 +617,25 @@
     }
 
     async function fetchTraceDetailByPrefix(prefix) {
-      const hours = parseFloat(timeRangeSelector.value);
+      // 在当前已加载的点中前缀匹配（最多 2000），避免依赖旧 hours 逻辑
+      const points = Array.isArray(rawTraceData) ? rawTraceData.slice(-2000) : [];
+      const match = points.find((p) => (p.requestId || "").startsWith(prefix));
+      if (!match) return null;
+      if (!match.hasDetail) {
+        return {
+          __noDetail: true,
+          requestId: match.requestId,
+          durationMs: match.durationMs,
+          status: match.status,
+          ts: match.ts,
+        };
+      }
+      return fetchTraceDetailExact(match.requestId);
+    }
+
+    // legacy fetch removed
+    /*
+    async function fetchTraceDetailByPrefix_legacy(prefix) {
       const response = await fetch(
         `/api/stats/perf/traces?hours=${hours}&limit=2000`
       );
@@ -770,8 +830,11 @@
 
     function renderMetricsChart(data, intervalSecs) {
       metricsChart.hideLoading();
+      // 默认 dataZoom 范围：优先使用当前选择的时间窗口，否则最近10分钟
       const nowTs = Date.now();
-      const tenMinAgo = nowTs - 10 * 60 * 1000;
+      const range = validateAndGetRangeMs();
+      const zoomStart = range ? range.startMs : nowTs - 10 * 60 * 1000;
+      const zoomEnd = range ? range.endMs : nowTs;
       metricsChart.setOption(
         {
           tooltip: { trigger: "axis" },
@@ -807,8 +870,8 @@
             { type: "inside", disabled: true },
             {
               type: "slider",
-              startValue: tenMinAgo,
-              endValue: nowTs,
+              startValue: zoomStart,
+              endValue: zoomEnd,
             },
           ],
           grid: { left: 50, right: 24, top: 20, bottom: 60 },
@@ -995,10 +1058,14 @@
     }
 
     // events
-    timeRangeSelector.addEventListener("change", fetchData);
-    refreshButton.addEventListener("click", fetchData);
     applyFiltersBtn.addEventListener("click", applyFilters);
     clearFiltersBtn.addEventListener("click", clearFilters);
+
+    queryTimeRangeBtn.addEventListener("click", async () => {
+      const range = validateAndGetRangeMs();
+      if (!range) return;
+      await fetchData(range.startMs, range.endMs);
+    });
 
     urlStatsModalCloseBtn.addEventListener("click", () => {
       urlStatsModal.style.display = "none";
@@ -1051,7 +1118,14 @@
       bindPointClick();
       initResize();
 
-      fetchData();
+      // 默认选择最近30分钟
+      const now = Date.now();
+      const start = now - 30 * 60 * 1000;
+      startTimePicker.value = toDatetimeLocalValue(start);
+      endTimePicker.value = toDatetimeLocalValue(now);
+
+      // 初次加载默认时间窗口
+      fetchData(start, now);
 
       fetchQueueStatus();
       if (queueTimer) clearInterval(queueTimer);
