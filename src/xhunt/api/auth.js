@@ -260,10 +260,10 @@ router.post(
             factor: 2, // 指数退避因子
             minTimeout: 500, // 第一次重试前等待1秒
             onRetry: (err, attempt) => {
-              req.dataDog.increment("user.retryInitRank", 1, [
-                `err:${err.message}`,
-                `attempt:${attempt}`,
-              ]);
+              // req.dataDog.increment("user.retryInitRank", 1, [
+              //   `err:${err.message}`,
+              //   `attempt:${attempt}`,
+              // ]);
               // console.error(`第 ${attempt} 次重试:`, err.message);
             },
           }
@@ -281,22 +281,22 @@ router.post(
         });
       } catch (finalError) {
         // 所有重试都失败了
-        req.dataDog.increment("user.initRankFinalFail", 1, [
-          `err:${finalError.message}`,
-        ]);
+        // req.dataDog.increment("user.initRankFinalFail", 1, [
+        //   `err:${finalError.message}`,
+        // ]);
         console.error("初始化用户排名最终请求失败:", finalError.message);
       }
 
       if (created) {
-        req.dataDog.increment("user.registrations", 1, [
-          `source:twitter`,
-          `classification:${user.classification || "unknown"}`,
-        ]);
+        // req.dataDog.increment("user.registrations", 1, [
+        //   `source:twitter`,
+        //   `classification:${user.classification || "unknown"}`,
+        // ]);
       } else {
-        req.dataDog.increment("user.logins", 1, [
-          `source:twitter`,
-          `classification:${user.classification || "unknown"}`,
-        ]);
+        // req.dataDog.increment("user.logins", 1, [
+        //   `source:twitter`,
+        //   `classification:${user.classification || "unknown"}`,
+        // ]);
       }
 
       // Step 7: 清除旧 token
@@ -381,7 +381,9 @@ router.get("/me", authenticateToken, async (req, res) => {
         proExpiryTime = legacyProCheck.proExpiryTime;
         isLegacyPro = true; // 标记为老用户 Pro
         console.log(
-          `[auth /me] ✅ 用户 ${req.user.username || req.user.id} 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
+          `[auth /me] ✅ 用户 ${
+            req.user.username || req.user.id
+          } 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
         );
       }
     }
@@ -476,7 +478,11 @@ router.post(
 
       // 判断是否首次绑定与是否实际发生变更
       const existingAddresses = Array.isArray(req.user.evmAddresses)
-        ? req.user.evmAddresses.map((a) => (String(a || "").trim().toLowerCase()))
+        ? req.user.evmAddresses.map((a) =>
+            String(a || "")
+              .trim()
+              .toLowerCase()
+          )
         : [];
       const isFirstBind = existingAddresses.length === 0;
       const oldSet = new Set(existingAddresses);
