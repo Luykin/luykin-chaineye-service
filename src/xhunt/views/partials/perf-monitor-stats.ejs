@@ -205,6 +205,10 @@
       <label>&nbsp;</label>
       <button id="query-time-range-btn">查询 (范围≤30分钟)</button>
     </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button id="reset-to-latest-btn" class="secondary">最近30分钟</button>
+    </div>
 
     <div class="field">
       <label for="filter-by-userid">按 userId 筛选</label>
@@ -426,6 +430,7 @@
     const startTimePicker = document.getElementById("start-time-picker");
     const endTimePicker = document.getElementById("end-time-picker");
     const queryTimeRangeBtn = document.getElementById("query-time-range-btn");
+    const resetToLatestBtn = document.getElementById("reset-to-latest-btn");
     const modal = document.getElementById("trace-detail-modal");
     const closeModalButton = modal.querySelector(".close-button");
     const traceDetailContent = document.getElementById("trace-detail-content");
@@ -1051,6 +1056,14 @@
       const range = validateAndGetRangeMs();
       if (!range) return;
       await fetchData(range.startMs, range.endMs);
+    });
+
+    resetToLatestBtn.addEventListener("click", async () => {
+      const now = Date.now();
+      const start = now - 30 * 60 * 1000;
+      startTimePicker.value = toDatetimeLocalValue(start);
+      endTimePicker.value = toDatetimeLocalValue(now);
+      await fetchData(start, now);
     });
 
     urlStatsModalCloseBtn.addEventListener("click", () => {
