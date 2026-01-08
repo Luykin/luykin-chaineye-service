@@ -88,7 +88,7 @@ function createApiRouter(config) {
   router.get("/traces", async (req, res) => {
     try {
       const hours = parseInt(req.query.hours, 10) || 1;
-      const limit = parseInt(req.query.limit, 10) || 2000;
+      const limit = parseInt(req.query.limit, 10) || 10000;
       const now = Date.now();
       const startTs = now - hours * 3600 * 1000;
 
@@ -98,30 +98,37 @@ function createApiRouter(config) {
         indexKeys.push(`perf:trace:index:${d.toISOString().substring(0, 13)}`);
       }
 
-      // Corrected: Use multi() for redis v4
       const multi = redisClient.multi();
-      // Corrected: Use zRangeByScore for redis v4
       indexKeys.forEach((key) =>
-        multi.zRangeByScoreWithScores(key, startTs, now, {
-          LIMIT: { offset: 0, count: limit },
-        })
+        multi.zRangeByScoreWithScores(key, startTs, now)
       );
       const results = await multi.exec();
 
-      const traces = [];
+      let allTraces = [];
       for (const rangeResult of results) {
         if (!rangeResult) continue;
         for (const member of rangeResult) {
           try {
             const pointData = JSON.parse(member.value);
-            traces.push({ ...pointData, ts: member.score });
+            allTraces.push({ ...pointData, ts: member.score });
           } catch (e) {
-            // Ignore parse errors for single points
+            // Ignore parse errors
           }
         }
       }
 
-      const finalTraces = traces.sort((a, b) => a.ts - b.ts).slice(-limit);
+      const tracesWithDetail = allTraces.filter((t) => t.hasDetail);
+      const tracesWithoutDetail = allTraces.filter((t) => !t.hasDetail);
+
+      const sampledTraces = tracesWithoutDetail.filter(
+        () => Math.random() < 0.4
+      );
+
+      const combinedTraces = [...tracesWithDetail, ...sampledTraces];
+
+      const finalTraces = combinedTraces
+        .sort((a, b) => a.ts - b.ts)
+        .slice(-limit);
 
       res.json(finalTraces);
     } catch (err) {

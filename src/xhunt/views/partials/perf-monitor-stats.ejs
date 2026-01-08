@@ -305,7 +305,7 @@
     async function fetchTraces(hours) {
       try {
         const response = await fetch(
-          `/api/stats/perf/traces?hours=${hours}&limit=2000`
+          `/api/stats/perf/traces?hours=${hours}&limit=10000`
         );
         if (!response.ok)
           throw new Error(`HTTP ${response.status}: ${await response.text()}`);
@@ -418,13 +418,15 @@
       }));
 
       scatterChart.hideLoading();
+      const now = Date.now();
+      const tenMinutesAgo = now - 10 * 60 * 1000;
+
       scatterChart.setOption(
         {
           tooltip: {
             trigger: "item",
             formatter: (params) => {
               const d = params.data;
-              //   const methodLine = `<br/><b>method:</b> ${d.method || ""}`;
               const pathLine = `<br/><b>path:</b> ${d?.path || ""}`;
               const userIdLine = `<br/><b>userId:</b> ${d?.userId || ""}`;
               return `<b>requestId:</b> ${
@@ -441,7 +443,14 @@
           xAxis: { type: "time", name: "Time" },
           yAxis: { type: "value", name: "Duration (ms)", scale: true },
           series: [{ type: "scatter", symbolSize: 8, data: seriesData }],
-          dataZoom: [{ type: "inside" }, { type: "slider" }],
+          dataZoom: [
+            { type: "inside" },
+            {
+              type: "slider",
+              startValue: tenMinutesAgo,
+              endValue: now,
+            },
+          ],
           grid: { left: 50, right: 24, top: 20, bottom: 80 },
         },
         true
@@ -566,7 +575,7 @@
       // queue status refresh
       fetchQueueStatus();
       if (queueTimer) clearInterval(queueTimer);
-      queueTimer = setInterval(fetchQueueStatus, 5000);
+      queueTimer = setInterval(fetchQueueStatus, 11000);
     }
 
     // Initialize charts only when the tab becomes visible
