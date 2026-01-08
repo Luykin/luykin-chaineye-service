@@ -124,6 +124,31 @@
     font-weight: 600;
     color: #111827;
   }
+  /* Styles for latency ranking table */
+  .latency-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .latency-table th,
+  .latency-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .latency-table th {
+    background-color: #f9fafb;
+    font-weight: 600;
+  }
+  .latency-table tbody tr:hover {
+    background-color: #f3f4f6;
+    cursor: pointer;
+  }
+  .latency-table td:nth-child(2),
+  .latency-table td:nth-child(3) {
+    text-align: right;
+    font-family: monospace;
+  }
 </style>
 
 <script src="/static/js/echarts.min.js"></script>
@@ -181,6 +206,27 @@
         class="chart-container"
         style="height: 360px"
       ></div>
+    </div>
+
+    <div class="perf-card">
+      <div class="perf-card-title">接口平均耗时排行榜 (Top 20)</div>
+      <div
+        id="latency-ranking-container"
+        style="max-height: 400px; overflow-y: auto"
+      >
+        <table class="latency-table">
+          <thead>
+            <tr>
+              <th>接口路径</th>
+              <th>平均延迟 (ms)</th>
+              <th>请求数</th>
+            </tr>
+          </thead>
+          <tbody id="latency-ranking-body">
+            <!-- Ranking will be injected here -->
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="perf-card">
@@ -288,6 +334,16 @@
       </div>
     </div>
   </div>
+
+  <div id="url-stats-modal" class="modal" style="display: none; z-index: 10000">
+    <div class="modal-content" style="max-width: 600px">
+      <span class="close-button">&times;</span>
+      <h3 id="url-stats-modal-title" style="margin: 0 0 10px; font-size: 16px">
+        接口请求详情
+      </h3>
+      <div id="url-stats-modal-content"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -308,6 +364,41 @@
     const traceDetailContent = document.getElementById("trace-detail-content");
     const searchInput = document.getElementById("search-request-id");
     const searchButton = document.getElementById("search-request-btn");
+    const latencyRankingBody = document.getElementById("latency-ranking-body");
+    const urlStatsModal = document.getElementById("url-stats-modal");
+    const urlStatsModalCloseBtn = urlStatsModal.querySelector(".close-button");
+    const urlStatsModalTitle = document.getElementById("url-stats-modal-title");
+    const urlStatsModalContent = document.getElementById(
+      "url-stats-modal-content"
+    );
+
+    const normalizationRules = [
+      {
+        pattern: /^\/api\/xhunt\/notes\/([^\/]+)$/,
+        replacement: "/api/xhunt/notes/*",
+      },
+      {
+        pattern: /^\/api\/xhunt\/reviews\/([^\/]+)$/,
+        replacement: "/api/xhunt/reviews/*",
+      },
+      {
+        pattern: /^\/api\/xhunt\/reviews\/([^\/]+)\/comments$/,
+        replacement: "/api/xhunt/reviews/*/comments",
+      },
+      {
+        pattern: /^\/api\/xhunt\/rootdata\/relationship\/([^\/]+)$/,
+        replacement: "/api/xhunt/rootdata/relationship/*",
+      },
+    ];
+
+    function normalizeUrlPath(pathname) {
+      for (const rule of normalizationRules) {
+        if (rule.pattern.test(pathname)) {
+          return rule.replacement;
+        }
+      }
+      return pathname;
+    }
 
     function escapeRegExp(string) {
       return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -517,6 +608,7 @@
         }
       });
 
+      calculateAndRenderLatencyRanking(data);
       scatterChart.hideLoading();
       const now = Date.now();
       const tenMinutesAgo = now - 10 * 60 * 1000;
@@ -633,6 +725,61 @@
       );
     }
 
+    function calculateAndRenderLatencyRanking(data) {
+      if (!data || data.length === 0) {
+        latencyRankingBody.innerHTML =
+          '<tr><td colspan="3" style="text-align: center;">暂无数据</td></tr>';
+        return;
+      }
+
+      const urlStats = {};
+
+      data.forEach((item) => {
+        const pathOnly = (item.path || "").split("?")[0];
+        const normalizedPath = normalizeUrlPath(pathOnly);
+
+        if (!urlStats[normalizedPath]) {
+          urlStats[normalizedPath] = {
+            totalDuration: 0,
+            count: 0,
+            path: normalizedPath,
+          };
+        }
+        urlStats[normalizedPath].totalDuration += item.durationMs;
+        urlStats[normalizedPath].count += 1;
+      });
+
+      const rankingData = Object.values(urlStats).map((stat) => ({
+        ...stat,
+        avgDuration: stat.totalDuration / stat.count,
+      }));
+
+      rankingData.sort((a, b) => b.avgDuration - a.avgDuration);
+
+      latencyRankingBody.innerHTML = "";
+      const top20 = rankingData.slice(0, 20);
+      const totalRequests = data.length;
+
+      top20.forEach((item) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${item.path}</td>
+            <td>${item.avgDuration.toFixed(2)}</td>
+            <td>${item.count}</td>
+        `;
+        row.addEventListener("click", () => {
+          const percentage = ((item.count / totalRequests) * 100).toFixed(2);
+          urlStatsModalTitle.textContent = `接口详情: ${item.path}`;
+          urlStatsModalContent.innerHTML = `
+                <p><strong>请求数量:</strong> ${item.count}</p>
+                <p><strong>请求占比:</strong> ${percentage}%</p>
+            `;
+          urlStatsModal.style.display = "block";
+        });
+        latencyRankingBody.appendChild(row);
+      });
+    }
+
     async function searchLogsForRequestId(requestId) {
       const logResultsContainer = document.getElementById(
         "log-results-container"
@@ -685,6 +832,10 @@
     // events
     timeRangeSelector.addEventListener("change", fetchData);
     refreshButton.addEventListener("click", fetchData);
+
+    urlStatsModalCloseBtn.addEventListener("click", () => {
+      urlStatsModal.style.display = "none";
+    });
 
     closeModalButton.addEventListener(
       "click",
