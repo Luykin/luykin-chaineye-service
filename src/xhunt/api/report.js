@@ -230,19 +230,8 @@ router.post(
           `total_count:${totalCount}`,
         ];
 
-        // 发送单次错误详情事件
-        req.dataDog.event("Frontend Error Batch", finalMessage, {
-          alert_type: priorityLevels.includes("critical")
-            ? "error"
-            : priorityLevels.includes("high")
-            ? "warning"
-            : "info",
-          tags: errorTags,
-          source_type_name: "frontend",
-          date_happened: reportData.timestamp
-            ? Math.floor(Number(reportData.timestamp) / 1000)
-            : undefined,
-        });
+        console.log("errorTags", errorTags);
+        console.log("finalMessage", finalMessage);
       }
 
       res.status(200).json({
