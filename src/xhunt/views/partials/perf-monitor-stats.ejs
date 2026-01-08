@@ -693,7 +693,7 @@
               const d = params.data;
               const path = d?.path || "";
               const truncatedPath =
-                path.length > 60 ? path.substring(0, 60) + "..." : path;
+                path.length > 65 ? path.substring(0, 65) + "..." : path;
               const pathLine = `<br/><b>path:</b> <span title="${path}">${truncatedPath}</span>`;
               const userIdLine = `<br/><b>userId:</b> ${d?.userId || ""}`;
               return `<b>requestId:</b> ${
@@ -721,7 +721,7 @@
               { max: 500, label: "<= 500ms", color: "#22c55e" },
             ],
             dimension: 1, // Map to the second dimension (durationMs)
-            seriesIndex: 1, // Apply only to the 'Success' series
+            seriesIndex: 2, // Apply only to the 'Success' series
             inRange: {
               color: ["#22c55e", "#86efac", "#f97316", "#fca5a5"],
             },
@@ -737,8 +737,8 @@
             },
             {
               name: "Client Errors (4xx)",
-              type: "effectScatter",
-              symbolSize: 12,
+              type: "scatter", // Changed from effectScatter
+              symbolSize: 10, // Slightly larger than normal
               color: "#8b5cf6", // purple
               data: errorData4xx,
               z: 9,
@@ -858,7 +858,7 @@
         urlStats[normalizedPath].durations.push(item.durationMs);
       });
 
-      const rankingData = Object.values(urlStats).map((stat) => {
+      let rankingData = Object.values(urlStats).map((stat) => {
         const count = stat.durations.length;
         const sum = stat.durations.reduce((a, b) => a + b, 0);
         const avgDuration = sum / count;
@@ -883,6 +883,8 @@
           maxDuration: maxDuration,
         };
       });
+
+      rankingData = rankingData.filter((item) => item.count >= 10);
 
       rankingData.sort((a, b) => b.avgDuration - a.avgDuration);
 
