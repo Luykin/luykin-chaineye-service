@@ -328,6 +328,41 @@
     <div class="perf-card">
       <div class="perf-card-title">请求耗时分布（散点图）（采样后）</div>
       <div id="scatter-chart-container" class="chart-container"></div>
+
+      <div style="margin-top: 10px">
+        <details id="error-scatter-details">
+          <summary style="cursor: pointer; color: #374151; font-size: 13px">
+            <span>500+ 错误请求分布（全量，点击展开后加载）</span>
+            <button
+              type="button"
+              id="errors-scatter-refresh-btn"
+              style="
+                margin-left: 10px;
+                padding: 2px 8px;
+                border: 1px solid #e5e7eb;
+                border-radius: 999px;
+                background: #fff;
+                color: #111827;
+                font-size: 12px;
+                cursor: pointer;
+              "
+              title="刷新 500+ 错误点"
+            >
+              刷新
+            </button>
+          </summary>
+          <div
+            id="errors-scatter-chart-container"
+            class="chart-container"
+            style="height: 360px; margin-top: 10px"
+          ></div>
+          <div style="margin-top: 8px; color: #6b7280; font-size: 12px">
+            说明：该图不受时间范围筛选影响，展示 Redis 已保留窗口内所有
+            <code>status >= 500</code>
+            的请求点。默认折叠，展开时才请求接口。
+          </div>
+        </details>
+      </div>
     </div>
 
     <div class="perf-card">
@@ -648,7 +683,7 @@
     );
     if (!perfMonitorTab) return;
 
-    let scatterChart, metricsChart;
+    let scatterChart, metricsChart, errorsScatterChart;
     let isInitialized = false;
     let queueTimer = null;
     let rawTraceData = []; // Cache for the original trace data
@@ -736,6 +771,7 @@
       window.addEventListener("resize", () => {
         if (scatterChart) scatterChart.resize();
         if (metricsChart) metricsChart.resize();
+        if (errorsScatterChart) errorsScatterChart.resize();
       });
     }
 
@@ -1215,6 +1251,132 @@
       );
     }
 
+    let errorsScatterLoaded = false;
+
+    async function fetchErrorTraces() {
+      // 不受时间范围控制：拉取 Redis 保留窗口内所有 500+ 点
+      const response = await fetch("/api/stats/perf/errors?maxScan=100000");
+      if (!response.ok)
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      return response.json();
+    }
+
+    function renderErrorsScatterChart(data) {
+      if (!errorsScatterChart) {
+        const container = document.getElementById(
+          "errors-scatter-chart-container"
+        );
+        if (!container) return;
+        errorsScatterChart = echarts.init(container);
+      }
+
+      const points = Array.isArray(data) ? data : [];
+      const seriesData = points.map((d) => ({
+        // [0: ts, 1: duration, 2: status, 3: requestId, 4: path, 5: userId]
+        value: [d.ts, d.durationMs, d.status, d.requestId, d.path, d.userId],
+      }));
+
+      errorsScatterChart.setOption(
+        {
+          tooltip: {
+            trigger: "item",
+            formatter: (params) => {
+              const v = params.value;
+              const path = v[4] || "";
+              const truncatedPath =
+                path.length > 65 ? path.substring(0, 65) + "..." : path;
+              return `<b>requestId:</b> ${
+                v[3]
+              }<br/><b>path:</b> <span title="${path}">${truncatedPath}</span><br/><b>status:</b> ${
+                v[2]
+              }<br/><b>duration:</b> ${Number(v[1]).toFixed(
+                2
+              )} ms<br/><b>点击查看详情</b>`;
+            },
+          },
+          xAxis: { type: "time", name: "Time", scale: true },
+          yAxis: { type: "value", name: "Duration (ms)", scale: true },
+          series: [
+            {
+              name: "5xx",
+              type: "scatter",
+              symbolSize: 8,
+              itemStyle: { color: "#ef4444" },
+              data: seriesData,
+            },
+          ],
+          grid: { left: 50, right: 24, top: 20, bottom: 60 },
+        },
+        true
+      );
+
+      // 绑定点击：打开详情
+      errorsScatterChart.off("click");
+      errorsScatterChart.on("click", (params) => {
+        const requestId = params?.value?.[3];
+        if (!requestId) return;
+        openTraceDetail(requestId);
+      });
+    }
+
+    async function reloadErrorsScatter() {
+      const details = document.getElementById("error-scatter-details");
+      if (!details || !details.open) return;
+
+      try {
+        renderErrorsScatterChart([]);
+        showLoading(errorsScatterChart, "正在加载 500+ 错误点... (全量)");
+        const data = await fetchErrorTraces();
+        errorsScatterChart.hideLoading();
+        renderErrorsScatterChart(data);
+        errorsScatterLoaded = true;
+      } catch (e) {
+        console.error(e);
+        if (errorsScatterChart) {
+          showError(errorsScatterChart, "加载 500+ 错误点失败");
+        }
+        errorsScatterLoaded = false;
+      }
+    }
+
+    function bindErrorsScatterExpand() {
+      const details = document.getElementById("error-scatter-details");
+      const refreshBtn = document.getElementById("errors-scatter-refresh-btn");
+      if (!details) return;
+
+      // 刷新按钮：不触发 summary 的折叠
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          // 确保已展开再刷新
+          if (!details.open) {
+            details.open = true;
+          }
+
+          refreshBtn.disabled = true;
+          const oldText = refreshBtn.textContent;
+          refreshBtn.textContent = "刷新中...";
+          await reloadErrorsScatter();
+          refreshBtn.textContent = oldText;
+          refreshBtn.disabled = false;
+        });
+      }
+
+      details.addEventListener("toggle", async () => {
+        if (!details.open) return;
+
+        // 展开后可能需要 resize
+        setTimeout(() => {
+          if (errorsScatterChart) errorsScatterChart.resize();
+        }, 50);
+
+        if (errorsScatterLoaded) return;
+        await reloadErrorsScatter();
+      });
+    }
+
     function calculateAndRenderLatencyRanking(data) {
       if (!data || data.length === 0) {
         latencyRankingBody.innerHTML =
@@ -1437,6 +1599,7 @@
       isInitialized = true;
 
       bindPointClick();
+      bindErrorsScatterExpand(); // 绑定错误散点图展开事件
       initResize();
 
       // 默认选择最近30分钟

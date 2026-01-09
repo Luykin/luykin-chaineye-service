@@ -141,6 +141,66 @@ function createApiRouter(config) {
   });
 
   /**
+   * GET /errors
+   * Fetches all error trace points (status >= 500) from the ZSET index within retention.
+   * Note: Not affected by UI time range; intended for ops/debug.
+   */
+  router.get("/errors", async (req, res) => {
+    try {
+      const now = Date.now();
+      const retentionHours = metricsConfig?.retentionHours || 48;
+      const startTs = now - retentionHours * 3600 * 1000;
+
+      // Build hourly index keys from retention window to now
+      const indexKeys = new Set();
+      let currentTime = new Date(startTs);
+      const endTimeDate = new Date(now);
+      while (currentTime <= endTimeDate) {
+        indexKeys.add(
+          `perf:trace:index:${currentTime.toISOString().substring(0, 13)}`
+        );
+        currentTime.setHours(currentTime.getHours() + 1);
+      }
+      indexKeys.add(
+        `perf:trace:index:${endTimeDate.toISOString().substring(0, 13)}`
+      );
+
+      const maxScan = parseInt(req.query.maxScan || "100000", 10);
+
+      const multi = redisClient.multi();
+      Array.from(indexKeys).forEach((key) =>
+        multi.zRangeByScoreWithScores(key, startTs, now)
+      );
+      const results = await multi.exec();
+
+      const allErrors = [];
+      for (const rangeResult of results) {
+        if (!rangeResult) continue;
+        for (const member of rangeResult) {
+          try {
+            const pointData = JSON.parse(member.value);
+            if ((pointData.status || 0) >= 500) {
+              allErrors.push({ ...pointData, ts: member.score });
+              if (allErrors.length >= maxScan) break;
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        if (allErrors.length >= maxScan) break;
+      }
+
+      // Sort by time ascending for chart
+      allErrors.sort((a, b) => a.ts - b.ts);
+
+      res.json(allErrors);
+    } catch (err) {
+      console.error("[perf-monitor] API /errors failed:", err);
+      res.status(500).json({ error: "Failed to fetch error traces" });
+    }
+  });
+
+  /**
    * GET /traces
    * Fetches trace points for the scatter plot from the ZSET index.
    */
