@@ -745,7 +745,7 @@
     async function fetchTraces(startMs, endMs) {
       try {
         const response = await fetch(
-          `/api/stats/perf/traces?startTime=${startMs}&endTime=${endMs}&limit=10000`
+          `/api/stats/perf/traces?startTime=${startMs}&endTime=${endMs}&limit=15000`
         );
         if (!response.ok)
           throw new Error(`HTTP ${response.status}: ${await response.text()}`);

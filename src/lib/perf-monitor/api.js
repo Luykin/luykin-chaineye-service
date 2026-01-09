@@ -88,126 +88,56 @@ function createApiRouter(config) {
     }
   });
 
+  const { Worker } = require("worker_threads");
+  const path = require("path");
+
   /**
    * GET /kpis
-   * Fetches aggregated KPIs for a given time range.
+   * Fetches aggregated KPIs for a given time range using a worker thread.
    */
-  router.get("/kpis", async (req, res) => {
-    try {
-      const {
+  router.get("/kpis", (req, res) => {
+    const { startTime, endTime } = req.query;
+
+    if (!startTime || !endTime) {
+      return res
+        .status(400)
+        .json({ error: "startTime and endTime are required" });
+    }
+
+    const worker = new Worker(path.resolve(__dirname, "kpi-worker.js"), {
+      workerData: {
         startTime,
         endTime,
-        minCountForPercentile = 20,
-        maxScan = 30000,
-      } = req.query;
+        // Pass other relevant query params if needed
+        minCountForPercentile: req.query.minCountForPercentile,
+        maxScan: req.query.maxScan,
+      },
+    });
 
-      if (!startTime || !endTime) {
-        return res
-          .status(400)
-          .json({ error: "startTime and endTime are required" });
+    worker.on("message", (message) => {
+      if (message.success) {
+        res.json(message.data);
+      } else {
+        console.error("[perf-monitor] KPI worker failed:", message.error);
+        res.status(500).json({ error: "Failed to fetch KPIs from worker" });
       }
+    });
 
-      const startTs = parseInt(startTime, 10);
-      const endTs = parseInt(endTime, 10);
+    worker.on("error", (err) => {
+      console.error("[perf-monitor] KPI worker errored:", err);
+      res
+        .status(500)
+        .json({ error: "An unexpected error occurred in the KPI worker" });
+    });
 
-      const indexKeys = new Set();
-      let currentTime = new Date(startTs);
-      const endTimeDate = new Date(endTs);
-
-      // Iterate hour by hour to collect all relevant hourly index keys
-      while (currentTime <= endTimeDate) {
-        indexKeys.add(
-          `perf:trace:index:${currentTime.toISOString().substring(0, 13)}`
+    worker.on("exit", (code) => {
+      if (code !== 0) {
+        console.error(
+          `[perf-monitor] KPI worker stopped with exit code ${code}`
         );
-        currentTime.setHours(currentTime.getHours() + 1);
+        // The response might have already been sent, so this is for logging.
       }
-      // Also add the end time's index key just in case it spans an hour boundary
-      indexKeys.add(
-        `perf:trace:index:${endTimeDate.toISOString().substring(0, 13)}`
-      );
-
-      const multi = redisClient.multi();
-      Array.from(indexKeys).forEach((key) =>
-        multi.zRangeByScoreWithScores(key, startTs, endTs)
-      );
-      const results = await multi.exec();
-
-      let allTraces = [];
-      for (const rangeResult of results) {
-        if (!rangeResult) continue;
-        for (const member of rangeResult) {
-          try {
-            const pointData = JSON.parse(member.value);
-            allTraces.push({ ...pointData, ts: member.score });
-          } catch (e) {
-            // Ignore parse errors
-          }
-        }
-        if (allTraces.length >= maxScan) {
-          break; // Stop processing if maxScan is reached
-        }
-      }
-
-      if (allTraces.length > maxScan) {
-        allTraces = allTraces.slice(0, maxScan);
-      }
-
-      const totalCount = allTraces.length;
-      if (totalCount === 0) {
-        return res.json({
-          totalCount: 0,
-          avgMs: 0,
-          p50Ms: 0,
-          p95Ms: 0,
-          count4xx: 0,
-          count5xx: 0,
-          rate4xx: 0,
-          rate5xx: 0,
-        });
-      }
-
-      let sumDuration = 0;
-      let count4xx = 0;
-      let count5xx = 0;
-      const durations = [];
-
-      for (const trace of allTraces) {
-        sumDuration += trace.durationMs;
-        durations.push(trace.durationMs);
-        if (trace.status >= 400 && trace.status < 500) {
-          count4xx++;
-        } else if (trace.status >= 500) {
-          count5xx++;
-        }
-      }
-
-      durations.sort((a, b) => a - b);
-
-      const avgMs = sumDuration / totalCount;
-      let p50Ms = 0;
-      let p95Ms = 0;
-
-      if (totalCount >= minCountForPercentile) {
-        const p50Index = Math.max(0, Math.ceil(totalCount * 0.5) - 1);
-        const p95Index = Math.max(0, Math.ceil(totalCount * 0.95) - 1);
-        p50Ms = durations[p50Index];
-        p95Ms = durations[p95Index];
-      }
-
-      res.json({
-        totalCount,
-        avgMs,
-        p50Ms,
-        p95Ms,
-        count4xx,
-        count5xx,
-        rate4xx: totalCount > 0 ? count4xx / totalCount : 0,
-        rate5xx: totalCount > 0 ? count5xx / totalCount : 0,
-      });
-    } catch (err) {
-      console.error("[perf-monitor] API /kpis failed:", err);
-      res.status(500).json({ error: "Failed to fetch KPIs" });
-    }
+    });
   });
 
   /**
@@ -216,7 +146,7 @@ function createApiRouter(config) {
    */
   router.get("/traces", async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit, 10) || 10000;
+      const limit = parseInt(req.query.limit, 10) || 15000;
       let startTs, endTs;
 
       if (req.query.startTime && req.query.endTime) {
@@ -267,7 +197,7 @@ function createApiRouter(config) {
       const tracesWithoutDetail = allTraces.filter((t) => !t.hasDetail);
 
       const sampledTraces = tracesWithoutDetail.filter(
-        () => Math.random() < 0.2
+        () => Math.random() < 0.08
       );
 
       const combinedTraces = [...tracesWithDetail, ...sampledTraces];
