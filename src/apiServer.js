@@ -332,7 +332,7 @@ app.use(
 app.use(
   "/api/xhunt/report",
   fingerprintLimiter,
-  browserOnlyMiddleware,
+  // browserOnlyMiddleware,
   xHuntReportRoutes
 );
 

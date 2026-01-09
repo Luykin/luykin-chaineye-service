@@ -319,7 +319,7 @@ router.post("/high-delay", async (req, res) => {
 
 /**
  * GET /health
- * 健康检查接口
+ * 健康检查接口 这个接口别删，cy那边会检测心跳
  */
 router.get("/health", (req, res) => {
   res.json({
