@@ -254,7 +254,9 @@ morgan.token("error-info", (req, res) => res.locals.errorMessage || "-");
 app.use(
   morgan('in :xhunt-identity method=:method url=:url ua=":user-agent"', {
     immediate: true,
-    skip: (req) => req.path === "/api/xhunt/stats/log-search",
+    skip: (req) =>
+      req.path === "/api/xhunt/stats/log-search" ||
+      req.path?.includes("/api/stats/perf"),
   })
 );
 
@@ -263,7 +265,9 @@ app.use(
   morgan(
     'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:url err=":error-info"',
     {
-      skip: (req) => req.path === "/api/xhunt/stats/log-search",
+      skip: (req) =>
+        req.path === "/api/xhunt/stats/log-search" ||
+        req.path?.includes("/api/stats/perf"),
     }
   )
 );
