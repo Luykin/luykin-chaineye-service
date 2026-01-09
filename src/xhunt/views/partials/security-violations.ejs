@@ -43,29 +43,76 @@
     color: var(--text-muted);
   }
 
-  .security-violations-toolbar .actions {
+  .security-violations-toolbar.glass {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(229, 231, 235, 0.8);
+    border-radius: 14px;
+    padding: 12px 14px;
+  }
+
+  .controls {
     display: flex;
     gap: 10px;
-    align-items: center;
+    align-items: flex-end;
   }
 
-  .security-violations-toolbar button {
-    padding: 9px 18px;
+  .control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .control-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    padding-left: 4px;
+  }
+
+  .control-input,
+  .control-select {
+    height: 38px;
+    padding: 0 12px;
     border-radius: 8px;
-    border: 1px solid transparent;
-    font-weight: 600;
+    border: 1px solid var(--border-color);
+    background: white;
+    font-size: 13px;
+    min-width: 200px;
+  }
+
+  .control-input:focus,
+  .control-select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+
+  .security-violations-toolbar .actions.controls {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .btn-primary {
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(37, 99, 235, 0.8);
+    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    font-weight: 700;
     cursor: pointer;
     transition: 0.2s ease;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
   }
 
-  #security-violation-refresh {
-    background: #2563eb;
-    color: white;
-    border-color: #1d4ed8;
+  .btn-primary:hover {
+    filter: brightness(0.98);
   }
 
-  #security-violation-refresh:hover {
-    background: #1d4ed8;
+  .btn-primary:active {
+    transform: translateY(1px);
   }
 
   #security-violation-loading {
@@ -96,11 +143,37 @@
   }
 
   .violation-card {
-    border: 1px solid var(--border-color);
-    border-radius: 14px;
+    border: 1px solid rgba(229, 231, 235, 0.9);
+    border-radius: 16px;
     padding: 16px 18px;
-    background: white;
-    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  }
+
+  .top-ips-card {
+    border: 1px solid rgba(229, 231, 235, 0.9);
+    border-radius: 16px;
+    padding: 12px 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfbff 100%);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  }
+
+  .top-ips-card h4 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #111827;
+  }
+
+  .top-ips-card h4::after {
+    content: "Last 7 days";
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
   }
 
   .violation-card__header {
@@ -128,18 +201,25 @@
   .violation-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: var(--bg-muted);
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(249, 250, 251, 0.9);
     border-radius: 999px;
     font-size: 12px;
-    color: #374151;
-    border: 1px solid var(--border-color);
+    color: #111827;
+    border: 1px solid rgba(229, 231, 235, 0.9);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
   }
 
   .violation-chip .chip-label {
-    font-weight: 600;
-    color: #1f2937;
+    font-weight: 700;
+    color: #374151;
+  }
+
+  .violation-chip .chip-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    color: #111827;
   }
 
   .violation-card__body {
@@ -287,227 +367,239 @@
 
 <div class="stats-section">
   <div class="section" id="security-violations-section">
-    <div class="security-violations-toolbar">
+    <div class="security-violations-toolbar glass">
       <div class="title-block">
         <h3>🛡️ 安全拦截日志</h3>
         <span id="security-violation-summary">自动加载最新 50 条记录</span>
       </div>
-      <div class="actions">
-        <input
-          type="text"
-          id="security-violation-ip-filter"
-          placeholder="按 IP 模糊筛选..."
-          style="
-            padding: 9px 12px;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            min-width: 180px;
-          "
-        />
-        <select id="security-violation-reason-filter">
-          <option value="">全部原因</option>
-          <option value="missing_headers">
-            缺少必需的参数 (missing_headers)
-          </option>
-          <option value="invalid_fingerprint">
-            指纹不合法 (invalid_fingerprint)
-          </option>
-          <option value="invalid_request_id">
-            请求ID不合法 (invalid_request_id)
-          </option>
-          <option value="invalid_timestamp">
-            时间戳异常 (invalid_timestamp)
-          </option>
-          <option value="invalid_signature">
-            签名不匹配 (invalid_signature)
-          </option>
-        </select>
-        <button id="security-violation-refresh">🔄 刷新</button>
+      <div class="actions controls">
+        <div class="control">
+          <label class="control-label" for="security-violation-ip-filter"
+            >IP</label
+          >
+          <input
+            type="text"
+            id="security-violation-ip-filter"
+            class="control-input"
+            placeholder="Search IP (fuzzy)"
+          />
+        </div>
+        <div class="control">
+          <label class="control-label" for="security-violation-reason-filter"
+            >Reason</label
+          >
+          <select id="security-violation-reason-filter" class="control-select">
+            <option value="">全部原因</option>
+            <option value="missing_headers">
+              缺少必需的参数 (missing_headers)
+            </option>
+            <option value="invalid_fingerprint">
+              指纹不合法 (invalid_fingerprint)
+            </option>
+            <option value="invalid_request_id">
+              请求ID不合法 (invalid_request_id)
+            </option>
+            <option value="invalid_timestamp">
+              时间戳异常 (invalid_timestamp)
+            </option>
+            <option value="invalid_signature">
+              签名不匹配 (invalid_signature)
+            </option>
+          </select>
+        </div>
+
+        <button id="security-violation-refresh" class="btn-primary">
+          Refresh
+        </button>
       </div>
-    </div>
 
-    <div id="security-violation-loading">⏳ 正在加载安全日志...</div>
-    <div id="security-violation-error"></div>
+      <div id="security-violation-loading">⏳ 正在加载安全日志...</div>
+      <div id="security-violation-error"></div>
 
-    <div id="top-ips-section" style="margin-bottom: 16px; display: none">
-      <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 8px">
-        Top 10 风险IP (最近7天)
-      </h4>
       <div
-        id="top-ips-list"
-        style="display: flex; flex-wrap: wrap; gap: 8px"
-      ></div>
-    </div>
-
-    <div class="security-violation-list" id="security-violation-list">
-      <div class="violation-empty">暂无安全校验失败记录</div>
-    </div>
-
-    <div class="security-violations-pagination">
-      <div
-        id="security-violation-pagination-info"
-        style="color: #6b7280; font-size: 13px"
+        id="top-ips-section"
+        class="top-ips-card"
+        style="margin-bottom: 16px; display: none"
       >
-        第 1 / 1 页，共 0 条
+        <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 8px">
+          Top 10 风险IP (最近7天)
+        </h4>
+        <div
+          id="top-ips-list"
+          style="display: flex; flex-wrap: wrap; gap: 8px"
+        ></div>
       </div>
-      <div style="display: flex; gap: 8px">
-        <button id="security-violation-prev" disabled>⬅️ 上一页</button>
-        <button id="security-violation-next" disabled>下一页 ➡️</button>
+
+      <div class="security-violation-list" id="security-violation-list">
+        <div class="violation-empty">暂无安全校验失败记录</div>
+      </div>
+
+      <div class="security-violations-pagination">
+        <div
+          id="security-violation-pagination-info"
+          style="color: #6b7280; font-size: 13px"
+        >
+          第 1 / 1 页，共 0 条
+        </div>
+        <div style="display: flex; gap: 8px">
+          <button id="security-violation-prev" disabled>⬅️ 上一页</button>
+          <button id="security-violation-next" disabled>下一页 ➡️</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<script>
-  (function () {
-    const PAGE_SIZE = 50;
-    let currentPage = 1;
-    let totalPages = 1;
-    let isLoading = false;
-    let currentReasonFilter = "";
-    let currentIpFilter = "";
+  <script>
+    (function () {
+      const PAGE_SIZE = 50;
+      let currentPage = 1;
+      let totalPages = 1;
+      let isLoading = false;
+      let currentReasonFilter = "";
+      let currentIpFilter = "";
 
-    const listContainer = document.getElementById("security-violation-list");
-    const topIpsSection = document.getElementById("top-ips-section");
-    const topIpsList = document.getElementById("top-ips-list");
-    const loadingEl = document.getElementById("security-violation-loading");
-    const errorEl = document.getElementById("security-violation-error");
-    const summaryEl = document.getElementById("security-violation-summary");
-    const paginationInfo = document.getElementById(
-      "security-violation-pagination-info"
-    );
-    const prevBtn = document.getElementById("security-violation-prev");
-    const nextBtn = document.getElementById("security-violation-next");
-    const refreshBtn = document.getElementById("security-violation-refresh");
-    const reasonFilterSelect = document.getElementById(
-      "security-violation-reason-filter"
-    );
-    const ipFilterInput = document.getElementById(
-      "security-violation-ip-filter"
-    );
+      const listContainer = document.getElementById("security-violation-list");
+      const topIpsSection = document.getElementById("top-ips-section");
+      const topIpsList = document.getElementById("top-ips-list");
+      const loadingEl = document.getElementById("security-violation-loading");
+      const errorEl = document.getElementById("security-violation-error");
+      const summaryEl = document.getElementById("security-violation-summary");
+      const paginationInfo = document.getElementById(
+        "security-violation-pagination-info"
+      );
+      const prevBtn = document.getElementById("security-violation-prev");
+      const nextBtn = document.getElementById("security-violation-next");
+      const refreshBtn = document.getElementById("security-violation-refresh");
+      const reasonFilterSelect = document.getElementById(
+        "security-violation-reason-filter"
+      );
+      const ipFilterInput = document.getElementById(
+        "security-violation-ip-filter"
+      );
 
-    refreshBtn.addEventListener("click", () => {
-      loadSecurityViolations(1);
-    });
-
-    if (reasonFilterSelect) {
-      reasonFilterSelect.addEventListener("change", () => {
-        currentReasonFilter = reasonFilterSelect.value || "";
-        loadSecurityViolations(1);
-      });
-    }
-
-    if (ipFilterInput) {
-      // 刷新按钮触发搜索
       refreshBtn.addEventListener("click", () => {
-        currentIpFilter = ipFilterInput.value || "";
         loadSecurityViolations(1);
       });
-      // 回车触发搜索
-      ipFilterInput.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") {
+
+      if (reasonFilterSelect) {
+        reasonFilterSelect.addEventListener("change", () => {
+          currentReasonFilter = reasonFilterSelect.value || "";
+          loadSecurityViolations(1);
+        });
+      }
+
+      if (ipFilterInput) {
+        // 刷新按钮触发搜索
+        refreshBtn.addEventListener("click", () => {
           currentIpFilter = ipFilterInput.value || "";
           loadSecurityViolations(1);
+        });
+        // 回车触发搜索
+        ipFilterInput.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") {
+            currentIpFilter = ipFilterInput.value || "";
+            loadSecurityViolations(1);
+          }
+        });
+      }
+
+      prevBtn.addEventListener("click", () => {
+        if (currentPage > 1) {
+          loadSecurityViolations(currentPage - 1);
         }
       });
-    }
 
-    prevBtn.addEventListener("click", () => {
-      if (currentPage > 1) {
-        loadSecurityViolations(currentPage - 1);
-      }
-    });
-
-    nextBtn.addEventListener("click", () => {
-      if (currentPage < totalPages) {
-        loadSecurityViolations(currentPage + 1);
-      }
-    });
-
-    async function loadSecurityViolations(page = 1) {
-      if (isLoading) return;
-      isLoading = true;
-      loadingEl.style.display = "block";
-      errorEl.style.display = "none";
-      listContainer.innerHTML =
-        '<div class="violation-empty">正在加载...</div>';
-
-      try {
-        const params = new URLSearchParams();
-        params.set("page", page);
-        params.set("limit", PAGE_SIZE);
-        if (currentReasonFilter) {
-          params.set("reasonCode", currentReasonFilter);
+      nextBtn.addEventListener("click", () => {
+        if (currentPage < totalPages) {
+          loadSecurityViolations(currentPage + 1);
         }
-        if (currentIpFilter) {
-          params.set("ip", currentIpFilter);
-        }
+      });
 
-        const response = await fetch(
-          `/api/xhunt/stats/security-violations?${params.toString()}`
-        );
-        const result = await response.json();
-
-        if (!response.ok || !result.success) {
-          throw new Error(result.error || "加载安全日志失败");
-        }
-
-        const records = result.data || [];
-        const pagination = result.pagination || {
-          page: 1,
-          totalPages: 1,
-          total: 0,
-        };
-
-        renderTopIps(result.topIps || []);
-
-        currentPage = pagination.page;
-        totalPages = pagination.totalPages;
-
-        renderList(records);
-        updateSummary(pagination.total);
-        updatePagination(pagination);
-      } catch (error) {
-        console.error("加载安全日志失败:", error);
-        errorEl.textContent = "❌ " + error.message;
-        errorEl.style.display = "block";
-        listContainer.innerHTML = '<div class="violation-empty">加载失败</div>';
-      } finally {
-        isLoading = false;
-        loadingEl.style.display = "none";
-      }
-    }
-
-    function renderList(records) {
-      if (!records || records.length === 0) {
+      async function loadSecurityViolations(page = 1) {
+        if (isLoading) return;
+        isLoading = true;
+        loadingEl.style.display = "block";
+        errorEl.style.display = "none";
         listContainer.innerHTML =
-          '<div class="violation-empty">暂无安全校验失败记录</div>';
-        return;
+          '<div class="violation-empty">正在加载...</div>';
+
+        try {
+          const params = new URLSearchParams();
+          params.set("page", page);
+          params.set("limit", PAGE_SIZE);
+          if (currentReasonFilter) {
+            params.set("reasonCode", currentReasonFilter);
+          }
+          if (currentIpFilter) {
+            params.set("ip", currentIpFilter);
+          }
+
+          const response = await fetch(
+            `/api/xhunt/stats/security-violations?${params.toString()}`
+          );
+          const result = await response.json();
+
+          if (!response.ok || !result.success) {
+            throw new Error(result.error || "加载安全日志失败");
+          }
+
+          const records = result.data || [];
+          const pagination = result.pagination || {
+            page: 1,
+            totalPages: 1,
+            total: 0,
+          };
+
+          renderTopIps(result.topIps || []);
+
+          currentPage = pagination.page;
+          totalPages = pagination.totalPages;
+
+          renderList(records);
+          updateSummary(pagination.total);
+          updatePagination(pagination);
+        } catch (error) {
+          console.error("加载安全日志失败:", error);
+          errorEl.textContent = "❌ " + error.message;
+          errorEl.style.display = "block";
+          listContainer.innerHTML =
+            '<div class="violation-empty">加载失败</div>';
+        } finally {
+          isLoading = false;
+          loadingEl.style.display = "none";
+        }
       }
 
-      listContainer.innerHTML = records
-        .map((item) => {
-          const createdAt = formatDateTime(item.createdAt);
-          const reason = escapeHtml(item.reasonCode || "-");
-          const errorDetail = escapeHtml(item.errorDetail || "-");
-          const requestPath = escapeHtml(item.requestPath || "-");
-          const method = escapeHtml(item.requestMethod || "-");
-          const queryString = item.queryString
-            ? escapeHtml(item.queryString)
-            : "";
-          const fingerprint = escapeHtml(item.fingerprint || "-");
-          const version = escapeHtml(item.extensionVersion || "-");
-          const clientIp = escapeHtml(item.clientIp || "-");
-          const windowLocation = escapeHtml(item.windowLocationHref || "-");
-          const requestId = escapeHtml(item.requestId || "-");
-          const requestTimestamp = item.requestTimestamp
-            ? escapeHtml(String(item.requestTimestamp))
-            : "-";
-          const headers = formatJson(item.headers);
-          const requestBody = escapeHtml(item.requestBody || "-");
-          const reasonBadge = getReasonBadge(item.reasonCode || "");
+      function renderList(records) {
+        if (!records || records.length === 0) {
+          listContainer.innerHTML =
+            '<div class="violation-empty">暂无安全校验失败记录</div>';
+          return;
+        }
 
-          return `
+        listContainer.innerHTML = records
+          .map((item) => {
+            const createdAt = formatDateTime(item.createdAt);
+            const reason = escapeHtml(item.reasonCode || "-");
+            const errorDetail = escapeHtml(item.errorDetail || "-");
+            const requestPath = escapeHtml(item.requestPath || "-");
+            const method = escapeHtml(item.requestMethod || "-");
+            const queryString = item.queryString
+              ? escapeHtml(item.queryString)
+              : "";
+            const fingerprint = escapeHtml(item.fingerprint || "-");
+            const version = escapeHtml(item.extensionVersion || "-");
+            const clientIp = escapeHtml(item.clientIp || "-");
+            const windowLocation = escapeHtml(item.windowLocationHref || "-");
+            const requestId = escapeHtml(item.requestId || "-");
+            const requestTimestamp = item.requestTimestamp
+              ? escapeHtml(String(item.requestTimestamp))
+              : "-";
+            const headers = formatJson(item.headers);
+            const requestBody = escapeHtml(item.requestBody || "-");
+            const reasonBadge = getReasonBadge(item.reasonCode || "");
+
+            return `
             <div class="violation-card">
               <div class="violation-card__header">
                 <div>
@@ -575,121 +667,122 @@
               </details>
             </div>
           `;
-        })
-        .join("");
-    }
-
-    function renderTopIps(topIps) {
-      if (!topIps || topIps.length === 0) {
-        if (topIpsSection) topIpsSection.style.display = "none";
-        return;
+          })
+          .join("");
       }
 
-      if (topIpsSection) topIpsSection.style.display = "block";
-      if (topIpsList) {
-        topIpsList.innerHTML = topIps
-          .map((item) => {
-            const ip = escapeHtml(item.ip);
-            const count = formatNumber(item.count);
-            return `
+      function renderTopIps(topIps) {
+        if (!topIps || topIps.length === 0) {
+          if (topIpsSection) topIpsSection.style.display = "none";
+          return;
+        }
+
+        if (topIpsSection) topIpsSection.style.display = "block";
+        if (topIpsList) {
+          topIpsList.innerHTML = topIps
+            .map((item) => {
+              const ip = escapeHtml(item.ip);
+              const count = formatNumber(item.count);
+              return `
             <span class="violation-chip" style="cursor: pointer; background: var(--badge-danger);" title="点击筛选此 IP">
               <span class="chip-label" style="color: var(--badge-danger-text); font-weight: 700;">${ip}</span>
               <span class="chip-value" style="color: var(--badge-danger-text);">${count} 次</span>
             </span>
           `;
-          })
-          .join("");
+            })
+            .join("");
 
-        // Add click listeners
-        topIpsList
-          .querySelectorAll(".violation-chip")
-          .forEach((chip, index) => {
-            chip.addEventListener("click", () => {
-              const ip = topIps[index].ip;
-              if (ipFilterInput) {
-                ipFilterInput.value = ip;
-                currentIpFilter = ip;
-                loadSecurityViolations(1);
-              }
+          // Add click listeners
+          topIpsList
+            .querySelectorAll(".violation-chip")
+            .forEach((chip, index) => {
+              chip.addEventListener("click", () => {
+                const ip = topIps[index].ip;
+                if (ipFilterInput) {
+                  ipFilterInput.value = ip;
+                  currentIpFilter = ip;
+                  loadSecurityViolations(1);
+                }
+              });
             });
+        }
+      }
+
+      function updateSummary(total) {
+        summaryEl.textContent = `共 ${formatNumber(
+          total || 0
+        )} 条告警，单页展示 ${PAGE_SIZE} 条`;
+      }
+
+      function updatePagination(pagination) {
+        paginationInfo.textContent = `第 ${pagination.page} / ${
+          pagination.totalPages
+        } 页，共 ${formatNumber(pagination.total)} 条`;
+        prevBtn.disabled = pagination.page <= 1;
+        nextBtn.disabled = pagination.page >= pagination.totalPages;
+      }
+
+      function formatDateTime(value) {
+        if (!value) return "-";
+        try {
+          const date = new Date(value);
+          return date.toLocaleString("zh-CN", {
+            hour12: false,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
           });
+        } catch (error) {
+          return value;
+        }
       }
-    }
 
-    function updateSummary(total) {
-      summaryEl.textContent = `共 ${formatNumber(
-        total || 0
-      )} 条告警，单页展示 ${PAGE_SIZE} 条`;
-    }
-
-    function updatePagination(pagination) {
-      paginationInfo.textContent = `第 ${pagination.page} / ${
-        pagination.totalPages
-      } 页，共 ${formatNumber(pagination.total)} 条`;
-      prevBtn.disabled = pagination.page <= 1;
-      nextBtn.disabled = pagination.page >= pagination.totalPages;
-    }
-
-    function formatDateTime(value) {
-      if (!value) return "-";
-      try {
-        const date = new Date(value);
-        return date.toLocaleString("zh-CN", {
-          hour12: false,
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
-      } catch (error) {
-        return value;
+      function escapeHtml(text) {
+        if (text === null || text === undefined) return "";
+        return text
+          .toString()
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
       }
-    }
 
-    function escapeHtml(text) {
-      if (text === null || text === undefined) return "";
-      return text
-        .toString()
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-
-    function formatJson(obj) {
-      if (!obj) return "-";
-      try {
-        return escapeHtml(JSON.stringify(obj, null, 2));
-      } catch (error) {
-        return "-";
+      function formatJson(obj) {
+        if (!obj) return "-";
+        try {
+          return escapeHtml(JSON.stringify(obj, null, 2));
+        } catch (error) {
+          return "-";
+        }
       }
-    }
 
-    function formatNumber(num) {
-      if (typeof num !== "number") {
-        num = Number(num) || 0;
+      function formatNumber(num) {
+        if (typeof num !== "number") {
+          num = Number(num) || 0;
+        }
+        return num.toLocaleString("zh-CN");
       }
-      return num.toLocaleString("zh-CN");
-    }
 
-    function getReasonBadge(reasonCode) {
-      const code = (reasonCode || "").toLowerCase();
-      let className = "badge-default";
-      if (code.includes("signature") || code.includes("missing")) {
-        className = "badge-danger";
-      } else if (code.includes("timestamp")) {
-        className = "badge-warning";
-      } else if (code.includes("fingerprint")) {
-        className = "badge-info";
+      function getReasonBadge(reasonCode) {
+        const code = (reasonCode || "").toLowerCase();
+        let className = "badge-default";
+        if (code.includes("signature") || code.includes("missing")) {
+          className = "badge-danger";
+        } else if (code.includes("timestamp")) {
+          className = "badge-warning";
+        } else if (code.includes("fingerprint")) {
+          className = "badge-info";
+        }
+        const label = escapeHtml(reasonCode || "UNKNOWN");
+        return `<span class="badge ${className}">${label}</span>`;
       }
-      const label = escapeHtml(reasonCode || "UNKNOWN");
-      return `<span class="badge ${className}">${label}</span>`;
-    }
 
-    // 首次进入自动加载
-    loadSecurityViolations(1);
-  })();
-</script>
+      // 首次进入自动加载
+      loadSecurityViolations(1);
+    })();
+  </script>
+</div>

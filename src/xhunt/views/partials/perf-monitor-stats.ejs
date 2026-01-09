@@ -920,6 +920,24 @@
       )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
+    function formatDateTime(value) {
+      if (!value) return "-";
+      try {
+        const date = new Date(value);
+        return date.toLocaleString("zh-CN", {
+          hour12: false,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      } catch (e) {
+        return String(value);
+      }
+    }
+
     function parsePickerToMs(pickerEl) {
       const v = (pickerEl?.value || "").trim();
       if (!v) return NaN;
@@ -1134,7 +1152,7 @@
     function renderSecurityScanResult(records, scannedIp) {
       const ip = escapeHtml(scannedIp || "");
       if (!records || records.length === 0) {
-        return `<div style="color:#6b7280; font-weight:700;">Not scanned yet. Click "Scan" to check.</div>`;
+        return `<div style="color:#065f46; font-weight:800;">No risk found.</div>`;
       }
 
       const items = records
@@ -1167,8 +1185,31 @@
       `;
     }
 
+    function getClientIpFromTrace(ipData) {
+      if (!ipData) return "";
+      // Case 1: It's already the clientIp string
+      if (typeof ipData === "string" && !ipData.startsWith("{")) {
+        return ipData;
+      }
+      // Case 2: It's an object
+      if (typeof ipData === "object" && ipData !== null) {
+        return ipData.clientIp || "";
+      }
+      // Case 3: It's a JSON string
+      if (typeof ipData === "string" && ipData.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(ipData);
+          return parsed.clientIp || "";
+        } catch (e) {
+          // Not a valid JSON, return the string itself as a fallback
+          return ipData;
+        }
+      }
+      return "";
+    }
+
     async function runSecurityScan(ip) {
-      const trimmed = String(ip || "").trim();
+      const trimmed = String(getClientIpFromTrace(ip) || "").trim();
       if (!trimmed) {
         setSecurityScanUi({
           visible: true,
@@ -1273,8 +1314,7 @@
 
         // 初始化安全扫描：默认填充本次 trace 的 ip（优先 traceData.ip）
         if (securityScanSection) {
-          const ipFromTrace =
-            traceData && traceData.ip ? String(traceData.ip) : "";
+          const ipFromTrace = getClientIpFromTrace(traceData && traceData.ip);
           setSecurityScanUi({
             visible: true,
             ip: ipFromTrace,
