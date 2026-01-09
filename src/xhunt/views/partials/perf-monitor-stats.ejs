@@ -570,7 +570,7 @@
             line-height: 1.5;
           "
         >
-          No risk found.
+          Not scanned yet. Click "Scan" to check.
         </div>
       </div>
 
@@ -1134,7 +1134,7 @@
     function renderSecurityScanResult(records, scannedIp) {
       const ip = escapeHtml(scannedIp || "");
       if (!records || records.length === 0) {
-        return `<div style="color:#065f46; font-weight:700;">No risk found.</div>`;
+        return `<div style="color:#6b7280; font-weight:700;">Not scanned yet. Click "Scan" to check.</div>`;
       }
 
       const items = records
@@ -1279,7 +1279,7 @@
             visible: true,
             ip: ipFromTrace,
             statusText: "",
-            html: `<div style="color:#065f46; font-weight:700;">No risk found.</div>`,
+            html: `<div style="color:#6b7280; font-weight:700;">Not scanned yet. Click "Scan" to check.</div>`,
             loading: false,
           });
         }
