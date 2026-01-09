@@ -59,13 +59,56 @@
       </div>
 
       <div class="field">
-        <label>内容（支持 HTML，比如 &lt;br&gt; &lt;a&gt;）</label>
-        <textarea
+        <label>内容（富文本编辑，可输出 HTML）</label>
+
+        <div class="rte-toolbar">
+          <button class="btn" type="button" id="nacos-rte-bold" title="加粗">
+            <b>B</b>
+          </button>
+          <button class="btn" type="button" id="nacos-rte-italic" title="斜体">
+            <i>I</i>
+          </button>
+          <button
+            class="btn"
+            type="button"
+            id="nacos-rte-underline"
+            title="下划线"
+          >
+            <u>U</u>
+          </button>
+          <button class="btn" type="button" id="nacos-rte-br" title="换行">
+            ⏎
+          </button>
+          <button
+            class="btn"
+            type="button"
+            id="nacos-rte-link"
+            title="插入链接"
+          >
+            🔗
+          </button>
+          <button
+            class="btn"
+            type="button"
+            id="nacos-rte-unlink"
+            title="移除链接"
+          >
+            ✖︎🔗
+          </button>
+          <span class="muted" style="margin-left: 8px"
+            >提示：可直接粘贴 HTML</span
+          >
+        </div>
+
+        <div
           id="nacos-msg-content"
-          rows="10"
-          placeholder="请输入公告内容"
-          disabled
-        ></textarea>
+          class="rte-editor"
+          contenteditable="false"
+          data-placeholder="请输入公告内容（支持 HTML）"
+        ></div>
+        <div class="muted" style="margin-top: 6px">
+          当前保存为 HTML 字符串（发布时写入 Nacos）。
+        </div>
       </div>
 
       <div class="preview">
@@ -262,7 +305,8 @@
     font-size: 13px;
   }
   .field input,
-  .field textarea {
+  .field textarea,
+  .rte-editor {
     border: 1px solid #d1d5db;
     border-radius: 8px;
     padding: 10px 10px;
@@ -270,9 +314,31 @@
     outline: none;
   }
   .field input:focus,
-  .field textarea:focus {
+  .field textarea:focus,
+  .rte-editor:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  }
+
+  .rte-toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .rte-editor {
+    min-height: 220px;
+    background: #fff;
+    line-height: 1.6;
+  }
+  .rte-editor[contenteditable="false"] {
+    background: #f9fafb;
+    color: #9ca3af;
+  }
+  .rte-editor:empty:before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
   }
   .preview {
     margin-top: 10px;
@@ -374,9 +440,24 @@
 
     function setControlsEnabled(enabled) {
       $("nacos-msg-title").disabled = !enabled;
-      $("nacos-msg-content").disabled = !enabled;
+      const editor = $("nacos-msg-content");
+      if (editor)
+        editor.setAttribute("contenteditable", enabled ? "true" : "false");
       $("nacos-msg-delete").disabled = !enabled;
       $("nacos-msg-publish").disabled = !enabled;
+
+      // 工具栏按钮也一起禁用
+      [
+        "nacos-rte-bold",
+        "nacos-rte-italic",
+        "nacos-rte-underline",
+        "nacos-rte-br",
+        "nacos-rte-link",
+        "nacos-rte-unlink",
+      ].forEach((id) => {
+        const btn = $(id);
+        if (btn) btn.disabled = !enabled;
+      });
     }
 
     function renderList() {
@@ -424,7 +505,7 @@
       if (!it) {
         setControlsEnabled(false);
         $("nacos-msg-title").value = "";
-        $("nacos-msg-content").value = "";
+        $("nacos-msg-content").innerHTML = "";
         $("nacos-msg-preview").innerHTML = "";
         $("nacos-msg-editor-hint").textContent = "选择左侧一条公告开始编辑";
         renderList();
@@ -433,7 +514,7 @@
 
       setControlsEnabled(true);
       $("nacos-msg-title").value = it.title || "";
-      $("nacos-msg-content").value = it.content || "";
+      $("nacos-msg-content").innerHTML = it.content || "";
       $("nacos-msg-preview").innerHTML = it.content || "";
       $("nacos-msg-editor-hint").textContent = `正在编辑：created=${
         it.created || ""
@@ -443,22 +524,51 @@
 
     function bindEditor() {
       const titleEl = $("nacos-msg-title");
-      const contentEl = $("nacos-msg-content");
+      const editorEl = $("nacos-msg-content");
 
-      function onChange() {
+      function syncToModel() {
         if (currentIndex < 0 || !items[currentIndex]) return;
         items[currentIndex] = {
           ...items[currentIndex],
           title: titleEl.value,
-          content: contentEl.value,
+          content: editorEl.innerHTML || "",
         };
-        $("nacos-msg-preview").innerHTML = contentEl.value || "";
+        $("nacos-msg-preview").innerHTML = editorEl.innerHTML || "";
         dirty = true;
         renderList();
       }
 
-      titleEl.addEventListener("input", onChange);
-      contentEl.addEventListener("input", onChange);
+      titleEl.addEventListener("input", syncToModel);
+      editorEl.addEventListener("input", syncToModel);
+
+      // 粘贴时尽量保留 HTML（默认浏览器会带格式）；这里不额外清洗
+      editorEl.addEventListener("paste", () => {
+        setTimeout(syncToModel, 0);
+      });
+
+      // 工具栏：execCommand（兼容性好，够用；后续可替换更高级编辑器）
+      function cmd(command, value) {
+        editorEl.focus();
+        document.execCommand(command, false, value);
+        syncToModel();
+      }
+
+      $("nacos-rte-bold").addEventListener("click", () => cmd("bold"));
+      $("nacos-rte-italic").addEventListener("click", () => cmd("italic"));
+      $("nacos-rte-underline").addEventListener("click", () =>
+        cmd("underline")
+      );
+      $("nacos-rte-br").addEventListener("click", () =>
+        cmd("insertHTML", "<br>")
+      );
+      $("nacos-rte-link").addEventListener("click", () => {
+        const url = window.prompt(
+          "请输入链接 URL（例如：https://t.me/xhunt_ai）"
+        );
+        if (!url) return;
+        cmd("createLink", url);
+      });
+      $("nacos-rte-unlink").addEventListener("click", () => cmd("unlink"));
     }
 
     async function apiGetConfig(dataId) {
@@ -526,9 +636,24 @@
       toast("加载完成", "success");
     }
 
+    const DEFAULT_FOOTER_HTML = `<br>请加入我们的<a href='https://t.me/xhunt_ai' target='_blank' style='color:rgb(29, 155, 240)'>电报群</a>获取最新资讯。`;
+
+    function ensureFooter(contentHtml) {
+      const html = String(contentHtml || "");
+      // 如果用户删除了，就不强行加回；仅在“新建默认”时加。
+      // 这里做个简单去重：避免重复插入。
+      if (html.includes("https://t.me/xhunt_ai") || html.includes("电报群"))
+        return html;
+      return (html ? html : "") + DEFAULT_FOOTER_HTML;
+    }
+
     function newItem() {
       const now = Date.now();
-      const it = { title: "", content: "", created: String(now) };
+      const it = {
+        title: "",
+        content: DEFAULT_FOOTER_HTML,
+        created: String(now),
+      };
       items.unshift(it);
       dirty = true;
       renderList();
@@ -561,6 +686,11 @@
       await apiPublishConfig({ dataId: did, content, group: "DEFAULT_GROUP" });
       dirty = false;
       toast("发布成功", "success");
+
+      // 发布后退出编辑模式（避免误改）
+      currentIndex = -1;
+      renderList();
+      selectItem(-1);
     }
 
     function setLang(lang) {
