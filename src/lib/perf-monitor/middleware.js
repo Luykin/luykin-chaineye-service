@@ -109,6 +109,30 @@ function createPerfMiddleware(config) {
 
       const userId = extractValue(req, userIdFrom);
 
+      // 记录 IP 链路（Cloudflare / Nginx / 多层反代场景下建议保留原始链路）
+      const cfConnectingIp = req.headers["cf-connecting-ip"];
+      const xRealIp = req.headers["x-real-ip"];
+      const xForwardedForRaw = req.headers["x-forwarded-for"];
+      const xForwardedForChain = String(xForwardedForRaw || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      // Express 视角 IP（受 trust proxy 影响）
+      const expressIp = req.ip;
+      const ips = Array.isArray(req.ips) ? req.ips : [];
+
+      // Socket 直连 IP（通常是上一跳：Nginx 或 CF）
+      const remoteAddress = req.socket?.remoteAddress;
+
+      // 选一个“最可能的真实客户端 IP”（优先 CF，然后 XFF 第一个，然后 X-Real-IP，然后 req.ip）
+      const clientIp =
+        cfConnectingIp ||
+        xForwardedForChain[0] ||
+        xRealIp ||
+        expressIp ||
+        remoteAddress;
+
       const event = {
         requestId,
         userId,
@@ -117,11 +141,28 @@ function createPerfMiddleware(config) {
         status,
         method: req.method,
         path: req.originalUrl,
+        // 基础事件只记录最可能的客户端 IP，避免事件体积暴增
+        ip: clientIp,
         hasDetail: shouldTrace,
       };
 
       if (shouldTrace) {
         event.details = {};
+
+        // 仅在错误请求时记录完整 IP 链路，避免详细事件体积增大
+        if (isError) {
+          event.details.ip = {
+            clientIp,
+            chain: xForwardedForChain,
+            cfConnectingIp,
+            xRealIp,
+            xForwardedFor: xForwardedForRaw,
+            expressIp,
+            expressIps: ips,
+            remoteAddress,
+          };
+        }
+
         for (const [key, sourceConfig] of Object.entries(collectDetailedInfo)) {
           const value = extractValue(req, sourceConfig);
           if (value !== undefined) {
