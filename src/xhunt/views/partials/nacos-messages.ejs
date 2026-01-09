@@ -635,11 +635,50 @@
 
         quill = new window.Quill("#nacos-msg-content", {
           theme: "snow",
-          modules: { toolbar: "#nacos-quill-toolbar" },
+          modules: {
+            toolbar: "#nacos-quill-toolbar",
+            // 使用 Quill 官方 clipboard matcher 更好地把粘贴的 HTML 转换成 Delta
+            clipboard: {
+              matchVisual: false,
+            },
+          },
         });
 
         quill.on("text-change", () => {
           syncToModel();
+        });
+
+        // 支持：直接粘贴 HTML 源码（例如粘贴包含 <br><a> 的字符串）
+        // 默认 Quill 会把这类字符串当纯文本，我们在粘贴事件中检测是否像 HTML，若是则用 dangerouslyPasteHTML 解析插入。
+        const root = quill.root;
+        root.addEventListener("paste", (e) => {
+          try {
+            const cd = e.clipboardData;
+            if (!cd) return;
+            const html = cd.getData("text/html");
+            const text = cd.getData("text/plain");
+
+            // 两种情况：
+            // 1) 系统剪贴板本身带 text/html（最理想） -> 直接 pasteHTML
+            // 2) 用户复制的是 HTML 源码字符串（只有 text/plain，但包含 <tag>） -> 也按 HTML 处理
+            const looksLikeHtml = (s) =>
+              typeof s === "string" && /<\/?[a-z][\s\S]*>/i.test(s);
+
+            const toInsert =
+              html && html.trim() ? html : looksLikeHtml(text) ? text : "";
+            if (!toInsert) return; // 交给 Quill 默认处理
+
+            e.preventDefault();
+
+            const range = quill.getSelection(true) || {
+              index: quill.getLength(),
+              length: 0,
+            };
+            quill.clipboard.dangerouslyPasteHTML(range.index, toInsert, "user");
+            quill.setSelection(range.index + 1, 0, "silent");
+          } catch (err) {
+            // 失败就让 Quill 默认处理
+          }
         });
 
         // 默认隐藏，等选中条目再显示
