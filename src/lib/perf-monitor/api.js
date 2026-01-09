@@ -144,60 +144,78 @@ function createApiRouter(config) {
    * GET /errors
    * Fetches all error trace points (status >= 500) from the ZSET index within retention.
    * Note: Not affected by UI time range; intended for ops/debug.
+   *
+   * Performance note:
+   * - This route can be expensive (multi zRange over many hourly keys + JSON parse).
+   * - To avoid impacting main thread, heavy work is delegated to a worker.
    */
-  router.get("/errors", async (req, res) => {
-    try {
-      const now = Date.now();
-      const retentionHours = metricsConfig?.retentionHours || 48;
-      const startTs = now - retentionHours * 3600 * 1000;
+  router.get("/errors", (req, res) => {
+    const now = Date.now();
+    const retentionHours = metricsConfig?.retentionHours || 48;
+    const startTs = now - retentionHours * 3600 * 1000;
 
-      // Build hourly index keys from retention window to now
-      const indexKeys = new Set();
-      let currentTime = new Date(startTs);
-      const endTimeDate = new Date(now);
-      while (currentTime <= endTimeDate) {
-        indexKeys.add(
-          `perf:trace:index:${currentTime.toISOString().substring(0, 13)}`
-        );
-        currentTime.setHours(currentTime.getHours() + 1);
-      }
-      indexKeys.add(
-        `perf:trace:index:${endTimeDate.toISOString().substring(0, 13)}`
+    // Build hourly index keys from retention window to now
+    const indexKeys = [];
+    let currentTime = new Date(startTs);
+    const endTimeDate = new Date(now);
+    while (currentTime <= endTimeDate) {
+      indexKeys.push(
+        `perf:trace:index:${currentTime.toISOString().substring(0, 13)}`
       );
-
-      const maxScan = parseInt(req.query.maxScan || "100000", 10);
-
-      const multi = redisClient.multi();
-      Array.from(indexKeys).forEach((key) =>
-        multi.zRangeByScoreWithScores(key, startTs, now)
-      );
-      const results = await multi.exec();
-
-      const allErrors = [];
-      for (const rangeResult of results) {
-        if (!rangeResult) continue;
-        for (const member of rangeResult) {
-          try {
-            const pointData = JSON.parse(member.value);
-            if ((pointData.status || 0) >= 500) {
-              allErrors.push({ ...pointData, ts: member.score });
-              if (allErrors.length >= maxScan) break;
-            }
-          } catch (e) {
-            // Ignore parse errors
-          }
-        }
-        if (allErrors.length >= maxScan) break;
-      }
-
-      // Sort by time ascending for chart
-      allErrors.sort((a, b) => a.ts - b.ts);
-
-      res.json(allErrors);
-    } catch (err) {
-      console.error("[perf-monitor] API /errors failed:", err);
-      res.status(500).json({ error: "Failed to fetch error traces" });
+      currentTime.setHours(currentTime.getHours() + 1);
     }
+    indexKeys.push(
+      `perf:trace:index:${endTimeDate.toISOString().substring(0, 13)}`
+    );
+
+    // de-duplicate
+    const uniqueKeys = Array.from(new Set(indexKeys));
+
+    const maxScan = parseInt(req.query.maxScan || "100000", 10);
+
+    // Create worker
+    const worker = new Worker(path.resolve(__dirname, "errors-worker.js"), {
+      workerData: {
+        // use same default as apiServer.js; can be overridden by env
+        redisConn: {
+          socket: {
+            host: process.env.REDIS_HOST || "127.0.0.1",
+            port: process.env.REDIS_PORT
+              ? Number(process.env.REDIS_PORT)
+              : 6379,
+          },
+          ...(process.env.REDIS_PASSWORD
+            ? { password: process.env.REDIS_PASSWORD }
+            : {}),
+        },
+        startTs,
+        endTs: now,
+        maxScan,
+        indexKeys: uniqueKeys,
+      },
+    });
+
+    worker.on("message", (message) => {
+      if (message && message.success) {
+        res.json(message.data);
+      } else {
+        console.error("[perf-monitor] errors worker failed:", message?.error);
+        res.status(500).json({ error: "Failed to fetch error traces" });
+      }
+    });
+
+    worker.on("error", (err) => {
+      console.error("[perf-monitor] errors worker errored:", err);
+      res.status(500).json({ error: "Failed to fetch error traces" });
+    });
+
+    worker.on("exit", (code) => {
+      if (code !== 0) {
+        console.error(
+          `[perf-monitor] errors worker stopped with exit code ${code}`
+        );
+      }
+    });
   });
 
   /**
