@@ -85,6 +85,7 @@ function initTabs() {
     "server-command": "server:execute",
     "daily-report-email": "daily-report:send",
     "admin-audit-logs": "audit-logs:read",
+    "nacos-messages": "nacos_config",
   };
 
   function hasPermissionForTab(tab) {

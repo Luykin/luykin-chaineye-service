@@ -1,7 +1,11 @@
 const express = require("express");
 const path = require("path");
 const { getFullStats, getSimpleStats } = require("../services/statsService");
-const { adminAuth, requirePermission } = require("../../admin/middleware/adminAuth");
+const {
+  adminAuth,
+  requirePermission,
+} = require("../../admin/middleware/adminAuth");
+const axios = require("axios");
 const expressStatic = require("express");
 const XLSX = require("xlsx");
 const fs = require("fs").promises;
@@ -15,6 +19,92 @@ const execAsync = promisify(exec);
 const { XhuntAdminAuditLog } = require("../../models/postgres-start");
 
 const router = express.Router();
+
+// -------------------- Nacos Config Admin (with auth) --------------------
+const NACOS_BASE_URL = process.env.NACOS_BASE_URL || "http://127.0.0.1:8848";
+const NACOS_USERNAME = process.env.NACOS_USERNAME || "nacos";
+const NACOS_PASSWORD = process.env.NACOS_PASSWORD || "nacos";
+
+let nacosTokenCache = { token: null, expireAt: 0 };
+
+async function getNacosAccessToken() {
+  const now = Date.now();
+  if (nacosTokenCache.token && now < nacosTokenCache.expireAt - 10_000) {
+    return nacosTokenCache.token;
+  }
+
+  // Nacos 登录 API：POST /nacos/v1/auth/users/login
+  // 返回结构通常包含：{ accessToken, tokenTtl }
+  const url = `${NACOS_BASE_URL}/nacos/v1/auth/users/login`;
+
+  const resp = await axios.post(
+    url,
+    new URLSearchParams({
+      username: NACOS_USERNAME,
+      password: NACOS_PASSWORD,
+    }).toString(),
+    {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      timeout: 8000,
+      validateStatus: () => true,
+    }
+  );
+
+  if (resp.status !== 200 || !resp.data) {
+    throw new Error(`Nacos 登录失败: status=${resp.status}`);
+  }
+
+  const token =
+    resp.data.accessToken || resp.data.token || resp.data.access_token;
+  const ttlSec = Number(resp.data.tokenTtl || resp.data.token_ttl || 1800);
+
+  if (!token) {
+    throw new Error("Nacos 登录失败: 未返回 accessToken");
+  }
+
+  nacosTokenCache = {
+    token,
+    expireAt: now + ttlSec * 1000,
+  };
+
+  return token;
+}
+
+async function nacosRequest(method, path, { params, data, headers } = {}) {
+  const token = await getNacosAccessToken();
+  const url = `${NACOS_BASE_URL}${path}`;
+
+  // 多数 Nacos 版本支持 accessToken 作为 query 参数
+  const finalParams = { ...(params || {}), accessToken: token };
+
+  const resp = await axios({
+    method,
+    url,
+    params: finalParams,
+    data,
+    headers,
+    timeout: 10000,
+    validateStatus: () => true,
+  });
+
+  // token 过期/无效：尝试刷新一次 token 再重试
+  if (resp.status === 403 || resp.status === 401) {
+    nacosTokenCache = { token: null, expireAt: 0 };
+    const token2 = await getNacosAccessToken();
+    const resp2 = await axios({
+      method,
+      url,
+      params: { ...(params || {}), accessToken: token2 },
+      data,
+      headers,
+      timeout: 10000,
+      validateStatus: () => true,
+    });
+    return resp2;
+  }
+
+  return resp;
+}
 
 // 文件缓存，避免重复读取
 const fileCache = new Map();
@@ -182,9 +272,13 @@ router.get("/", adminAuth, async (req, res) => {
     });
 
     // 在HTML中注入统计数据脚本与权限
-    const permsScript = `<script>window.adminPermissions = ${(JSON.stringify(
+    const permsScript = `<script>window.adminPermissions = ${JSON.stringify(
       req.user?.permissions || []
-    ))};</script>`;
+    )};</script><script>window.__adminRole=${JSON.stringify(
+      req.user?.role || ""
+    )};window.__isSuperAdmin=${JSON.stringify(
+      req.user?.role === "super"
+    )};</script>`;
     const finalHtml = renderedHtml.replace(
       "</body>",
       `${statsDataScript}${permsScript}</body>`
@@ -226,219 +320,234 @@ router.get("/json", adminAuth, async (req, res) => {
  * GET /dau-details
  * 获取指定日期的详细日活数据（需要认证）
  */
-router.get("/dau-details", adminAuth, requirePermission("dau-details"), async (req, res) => {
-  try {
-    const { date } = req.query;
+router.get(
+  "/dau-details",
+  adminAuth,
+  requirePermission("dau-details"),
+  async (req, res) => {
+    try {
+      const { date } = req.query;
 
-    // 如果没有指定日期，使用今天
-    let targetDate = date;
-    if (!targetDate) {
-      const beijingTime = new Date().toLocaleString("en-US", {
-        timeZone: "Asia/Shanghai",
-      });
-      targetDate = new Date(beijingTime).toISOString().split("T")[0];
-    }
-
-    // 验证日期格式
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
-      return res.status(400).json({
-        success: false,
-        error: "日期格式错误，请使用 YYYY-MM-DD 格式",
-      });
-    }
-
-    const dauKey = `dau:${targetDate}`;
-    const dauMembers = await req.redisClient.sMembers(dauKey);
-
-    // 解析每个成员，提取 fingerprint 和 x-user-id
-    const dauDetails = dauMembers.map((member) => {
-      const parts = member.split(",");
-      if (parts.length === 2) {
-        return {
-          fingerprint: parts[0],
-          userId: parts[1],
-        };
-      } else {
-        // 兼容旧格式（只有fingerprint）
-        return {
-          fingerprint: member,
-          userId: "未知",
-        };
+      // 如果没有指定日期，使用今天
+      let targetDate = date;
+      if (!targetDate) {
+        const beijingTime = new Date().toLocaleString("en-US", {
+          timeZone: "Asia/Shanghai",
+        });
+        targetDate = new Date(beijingTime).toISOString().split("T")[0];
       }
-    });
 
-    res.json({
-      success: true,
-      data: {
-        date: targetDate,
-        totalCount: dauDetails.length,
-        details: dauDetails,
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching DAU details:", error);
-    res.status(500).json({
-      success: false,
-      error: "获取日活详情失败",
-    });
+      // 验证日期格式
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+        return res.status(400).json({
+          success: false,
+          error: "日期格式错误，请使用 YYYY-MM-DD 格式",
+        });
+      }
+
+      const dauKey = `dau:${targetDate}`;
+      const dauMembers = await req.redisClient.sMembers(dauKey);
+
+      // 解析每个成员，提取 fingerprint 和 x-user-id
+      const dauDetails = dauMembers.map((member) => {
+        const parts = member.split(",");
+        if (parts.length === 2) {
+          return {
+            fingerprint: parts[0],
+            userId: parts[1],
+          };
+        } else {
+          // 兼容旧格式（只有fingerprint）
+          return {
+            fingerprint: member,
+            userId: "未知",
+          };
+        }
+      });
+
+      res.json({
+        success: true,
+        data: {
+          date: targetDate,
+          totalCount: dauDetails.length,
+          details: dauDetails,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching DAU details:", error);
+      res.status(500).json({
+        success: false,
+        error: "获取日活详情失败",
+      });
+    }
   }
-});
+);
 
 /**
  * GET /online-users
  * 获取最近10分钟内的在线用户列表（需要认证）
  */
-router.get("/online-users", adminAuth, requirePermission("online-users"), async (req, res) => {
-  try {
-    const { page = 1, limit = 100 } = req.query;
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+router.get(
+  "/online-users",
+  adminAuth,
+  requirePermission("online-users"),
+  async (req, res) => {
+    try {
+      const { page = 1, limit = 100 } = req.query;
+      const pageNum = parseInt(page);
+      const limitNum = parseInt(limit);
 
-    // 计算10分钟前的时间
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      // 计算10分钟前的时间
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
 
-    // 获取在线用户数据
-    const postgresModels = require("../../models/postgres-start");
-    const XHuntUserToken = postgresModels.XHuntUserToken;
-    const XHuntUser = postgresModels.XHuntUser;
-    const { Op } = require("sequelize");
+      // 获取在线用户数据
+      const postgresModels = require("../../models/postgres-start");
+      const XHuntUserToken = postgresModels.XHuntUserToken;
+      const XHuntUser = postgresModels.XHuntUser;
+      const { Op } = require("sequelize");
 
-    // 查询最近10分钟内有活动的用户
-    const onlineUsers = await XHuntUserToken.findAll({
-      where: {
-        lastUsed: {
-          [Op.gte]: tenMinutesAgo,
+      // 查询最近10分钟内有活动的用户
+      const onlineUsers = await XHuntUserToken.findAll({
+        where: {
+          lastUsed: {
+            [Op.gte]: tenMinutesAgo,
+          },
+          isRevoked: false,
         },
-        isRevoked: false,
-      },
-      include: [
-        {
-          model: XHuntUser,
-          as: "user",
-          attributes: ["id", "twitterId", "username", "displayName"],
-        },
-      ],
-      attributes: ["id", "lastUsed"],
-      order: [["lastUsed", "DESC"]],
-      limit: limitNum,
-      offset: (pageNum - 1) * limitNum,
-    });
+        include: [
+          {
+            model: XHuntUser,
+            as: "user",
+            attributes: ["id", "twitterId", "username", "displayName"],
+          },
+        ],
+        attributes: ["id", "lastUsed"],
+        order: [["lastUsed", "DESC"]],
+        limit: limitNum,
+        offset: (pageNum - 1) * limitNum,
+      });
 
-    // 获取总数
-    const totalCount = await XHuntUserToken.count({
-      where: {
-        lastUsed: {
-          [Op.gte]: tenMinutesAgo,
+      // 获取总数
+      const totalCount = await XHuntUserToken.count({
+        where: {
+          lastUsed: {
+            [Op.gte]: tenMinutesAgo,
+          },
+          isRevoked: false,
         },
-        isRevoked: false,
-      },
-    });
+      });
 
-    // 格式化数据
-    const formattedUsers = onlineUsers.map((token) => ({
-      id: token.user.id,
-      twitterId: token.user.twitterId,
-      username: token.user.username || token.user.twitterId,
-      displayName:
-        token.user.displayName || token.user.username || token.user.twitterId,
-      lastUsed: token.lastUsed,
-    }));
+      // 格式化数据
+      const formattedUsers = onlineUsers.map((token) => ({
+        id: token.user.id,
+        twitterId: token.user.twitterId,
+        username: token.user.username || token.user.twitterId,
+        displayName:
+          token.user.displayName || token.user.username || token.user.twitterId,
+        lastUsed: token.lastUsed,
+      }));
 
-    res.json({
-      success: true,
-      data: {
-        users: formattedUsers,
-        pagination: {
-          currentPage: pageNum,
-          pageSize: limitNum,
-          totalCount: totalCount,
-          totalPages: Math.ceil(totalCount / limitNum),
+      res.json({
+        success: true,
+        data: {
+          users: formattedUsers,
+          pagination: {
+            currentPage: pageNum,
+            pageSize: limitNum,
+            totalCount: totalCount,
+            totalPages: Math.ceil(totalCount / limitNum),
+          },
         },
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching online users:", error);
-    res.status(500).json({
-      success: false,
-      error: "获取在线用户失败",
-    });
+      });
+    } catch (error) {
+      console.error("Error fetching online users:", error);
+      res.status(500).json({
+        success: false,
+        error: "获取在线用户失败",
+      });
+    }
   }
-});
+);
 
 /**
  * GET /export/users/excel
  * 导出所有已登录用户数据为Excel文件（需要认证，仅 luykin 用户）
  */
-router.get("/export/users/excel", adminAuth, requirePermission("export:users"), async (req, res) => {
-  try {
-    console.log(`[数据导出] ✅ 权限验证通过: 用户=${req.user.username}`);
+router.get(
+  "/export/users/excel",
+  adminAuth,
+  requirePermission("export:users"),
+  async (req, res) => {
+    try {
+      console.log(`[数据导出] ✅ 权限验证通过: 用户=${req.user.username}`);
 
-    // 获取PostgreSQL模型
-    const postgresModels = require("../../models/postgres-start");
-    const XHuntUser = postgresModels.XHuntUser;
+      // 获取PostgreSQL模型
+      const postgresModels = require("../../models/postgres-start");
+      const XHuntUser = postgresModels.XHuntUser;
 
-    // 查询所有用户数据
-    const users = await XHuntUser.findAll({
-      attributes: ["twitterId", "username", "displayName"],
-      order: [["createdAt", "DESC"]],
-    });
+      // 查询所有用户数据
+      const users = await XHuntUser.findAll({
+        attributes: ["twitterId", "username", "displayName"],
+        order: [["createdAt", "DESC"]],
+      });
 
-    // 准备Excel数据
-    const excelData = users.map((user, index) => ({
-      序号: index + 1,
-      "Twitter ID": user.twitterId,
-      用户名: user.username || "",
-      显示名称: user.displayName || "",
-    }));
+      // 准备Excel数据
+      const excelData = users.map((user, index) => ({
+        序号: index + 1,
+        "Twitter ID": user.twitterId,
+        用户名: user.username || "",
+        显示名称: user.displayName || "",
+      }));
 
-    // 创建工作簿
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+      // 创建工作簿
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
 
-    // 设置列宽
-    const colWidths = [
-      { wch: 8 }, // 序号
-      { wch: 20 }, // Twitter ID
-      { wch: 25 }, // 用户名
-      { wch: 25 }, // 显示名称
-    ];
-    worksheet["!cols"] = colWidths;
+      // 设置列宽
+      const colWidths = [
+        { wch: 8 }, // 序号
+        { wch: 20 }, // Twitter ID
+        { wch: 25 }, // 用户名
+        { wch: 25 }, // 显示名称
+      ];
+      worksheet["!cols"] = colWidths;
 
-    // 添加工作表到工作簿
-    XLSX.utils.book_append_sheet(workbook, worksheet, "用户数据");
+      // 添加工作表到工作簿
+      XLSX.utils.book_append_sheet(workbook, worksheet, "用户数据");
 
-    // 生成Excel文件
-    const excelBuffer = XLSX.write(workbook, {
-      type: "buffer",
-      bookType: "xlsx",
-    });
+      // 生成Excel文件
+      const excelBuffer = XLSX.write(workbook, {
+        type: "buffer",
+        bookType: "xlsx",
+      });
 
-    // 设置响应头
-    const fileName = `XHunt用户数据_${
-      new Date().toISOString().split("T")[0]
-    }.xlsx`;
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${encodeURIComponent(fileName)}"`
-    );
-    res.setHeader("Content-Length", excelBuffer.length);
+      // 设置响应头
+      const fileName = `XHunt用户数据_${
+        new Date().toISOString().split("T")[0]
+      }.xlsx`;
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${encodeURIComponent(fileName)}"`
+      );
+      res.setHeader("Content-Length", excelBuffer.length);
 
-    // 发送文件
-    res.send(excelBuffer);
+      // 发送文件
+      res.send(excelBuffer);
 
-    console.log(`✅ 用户数据Excel导出完成: ${users.length} 个用户`);
-  } catch (error) {
-    console.error("Error exporting users Excel:", error);
-    res.status(500).json({
-      success: false,
-      error: "导出用户数据失败",
-    });
+      console.log(`✅ 用户数据Excel导出完成: ${users.length} 个用户`);
+    } catch (error) {
+      console.error("Error exporting users Excel:", error);
+      res.status(500).json({
+        success: false,
+        error: "导出用户数据失败",
+      });
+    }
   }
-});
+);
 
 /**
  * GET /export/active-users/js
@@ -474,13 +583,16 @@ router.get("/export/active-users/js", adminAuth, async (req, res) => {
       attributes: ["userId"],
       raw: true,
     });
-    
+
     // 直接从 userId 提取用户名并去重（过滤 null/undefined/空字符串）
     const usernames = [
       ...new Set(
         allActiveUsers
           .map((record) => record.userId)
-          .filter((username) => username && typeof username === "string" && username.trim() !== "")
+          .filter(
+            (username) =>
+              username && typeof username === "string" && username.trim() !== ""
+          )
       ),
     ].sort(); // 排序以便查看
 
@@ -515,7 +627,7 @@ router.get("/export/active-users/js", adminAuth, async (req, res) => {
       `attachment; filename="${encodeURIComponent(fileName)}"`
     );
     res.setHeader("Content-Length", Buffer.byteLength(jsContent, "utf8"));
-    
+
     // 禁用缓存
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Pragma", "no-cache");
@@ -542,232 +654,242 @@ router.get("/export/active-users/js", adminAuth, async (req, res) => {
  * GET /log-search
  * 日志搜索接口（需要认证，仅 luykin 用户）- 优化版本
  */
-router.get("/log-search", adminAuth, requirePermission("log-search:read"), async (req, res) => {
-  try {
-    console.log(`[日志搜索] ✅ 权限验证通过: 用户=${req.user.username}`);
-
-    const { query, contextLines = 3, limit = 5 } = req.query;
-
-    if (!query || query.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "搜索关键词不能为空",
-      });
-    }
-
-    // 获取 PM2 日志目录
-    const homeDir = os.homedir();
-    const pm2LogsDir = path.join(homeDir, ".pm2", "logs");
-
-    // 检查日志目录是否存在
+router.get(
+  "/log-search",
+  adminAuth,
+  requirePermission("log-search:read"),
+  async (req, res) => {
     try {
-      await fs.access(pm2LogsDir);
-    } catch (error) {
-      return res.status(404).json({
-        success: false,
-        error: "PM2 日志目录不存在",
-      });
-    }
+      console.log(`[日志搜索] ✅ 权限验证通过: 用户=${req.user.username}`);
 
-    // 获取所有日志文件
-    const files = await fs.readdir(pm2LogsDir);
-    const logFiles = [];
+      const { query, contextLines = 3, limit = 5 } = req.query;
 
-    // 并行过滤和检查日志文件
-    const fileCheckPromises = files
-      .filter((file) => file.endsWith(".log"))
-      .map(async (file) => {
-        const filePath = path.join(pm2LogsDir, file);
-        try {
-          const stats = await fs.stat(filePath);
-          const fileSizeMB = stats.size / (1024 * 1024);
+      if (!query || query.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "搜索关键词不能为空",
+        });
+      }
 
-          // 跳过大于200MB的文件或0MB的空文件
-          if (fileSizeMB > 200 || fileSizeMB === 0) {
+      // 获取 PM2 日志目录
+      const homeDir = os.homedir();
+      const pm2LogsDir = path.join(homeDir, ".pm2", "logs");
+
+      // 检查日志目录是否存在
+      try {
+        await fs.access(pm2LogsDir);
+      } catch (error) {
+        return res.status(404).json({
+          success: false,
+          error: "PM2 日志目录不存在",
+        });
+      }
+
+      // 获取所有日志文件
+      const files = await fs.readdir(pm2LogsDir);
+      const logFiles = [];
+
+      // 并行过滤和检查日志文件
+      const fileCheckPromises = files
+        .filter((file) => file.endsWith(".log"))
+        .map(async (file) => {
+          const filePath = path.join(pm2LogsDir, file);
+          try {
+            const stats = await fs.stat(filePath);
+            const fileSizeMB = stats.size / (1024 * 1024);
+
+            // 跳过大于200MB的文件或0MB的空文件
+            if (fileSizeMB > 200 || fileSizeMB === 0) {
+              return null;
+            }
+
+            return {
+              name: file,
+              path: filePath,
+              mtime: stats.mtime.getTime(),
+              size: fileSizeMB,
+            };
+          } catch (error) {
+            console.error(`Error checking file ${file}:`, error);
             return null;
           }
+        });
 
-          return {
-            name: file,
-            path: filePath,
-            mtime: stats.mtime.getTime(),
-            size: fileSizeMB,
-          };
+      const fileResults = await Promise.all(fileCheckPromises);
+      logFiles.push(...fileResults.filter((file) => file !== null));
+
+      // 按修改时间排序（最新的在前）
+      logFiles.sort((a, b) => b.mtime - a.mtime);
+
+      const results = [];
+      const contextLinesNum = parseInt(contextLines);
+      const limitNum = parseInt(limit);
+      let totalMatches = 0;
+
+      // 串行搜索日志文件（安全稳定）
+      for (const file of logFiles) {
+        if (totalMatches >= limitNum) break;
+
+        try {
+          const fileResults = await searchLogFile(
+            file.path,
+            query,
+            contextLinesNum,
+            limitNum - totalMatches
+          );
+
+          const formattedResults = fileResults.map((result) => ({
+            ...result,
+            file: file.name,
+            timestamp: file.mtime,
+          }));
+
+          results.push(...formattedResults);
+          totalMatches += formattedResults.length;
         } catch (error) {
-          console.error(`Error checking file ${file}:`, error);
-          return null;
+          console.error(`Error reading log file ${file.name}:`, error);
+          continue;
         }
-      });
-
-    const fileResults = await Promise.all(fileCheckPromises);
-    logFiles.push(...fileResults.filter((file) => file !== null));
-
-    // 按修改时间排序（最新的在前）
-    logFiles.sort((a, b) => b.mtime - a.mtime);
-
-    const results = [];
-    const contextLinesNum = parseInt(contextLines);
-    const limitNum = parseInt(limit);
-    let totalMatches = 0;
-
-    // 串行搜索日志文件（安全稳定）
-    for (const file of logFiles) {
-      if (totalMatches >= limitNum) break;
-
-      try {
-        const fileResults = await searchLogFile(
-          file.path,
-          query,
-          contextLinesNum,
-          limitNum - totalMatches
-        );
-
-        const formattedResults = fileResults.map((result) => ({
-          ...result,
-          file: file.name,
-          timestamp: file.mtime,
-        }));
-
-        results.push(...formattedResults);
-        totalMatches += formattedResults.length;
-      } catch (error) {
-        console.error(`Error reading log file ${file.name}:`, error);
-        continue;
       }
-    }
 
-    res.json({
-      success: true,
-      data: {
-        query: query,
-        totalMatches: totalMatches,
-        results: results,
-        searchedFiles: logFiles.length,
-        totalFiles: logFiles.length,
-        fileSizes: logFiles.map((f) => ({
-          name: f.name,
-          size: f.size,
-        })),
-      },
-    });
-  } catch (error) {
-    console.error("Error searching logs:", error);
-    res.status(500).json({
-      success: false,
-      error: "日志搜索失败",
-    });
+      res.json({
+        success: true,
+        data: {
+          query: query,
+          totalMatches: totalMatches,
+          results: results,
+          searchedFiles: logFiles.length,
+          totalFiles: logFiles.length,
+          fileSizes: logFiles.map((f) => ({
+            name: f.name,
+            size: f.size,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("Error searching logs:", error);
+      res.status(500).json({
+        success: false,
+        error: "日志搜索失败",
+      });
+    }
   }
-});
+);
 
 /**
  * GET /error-logs
  * 获取最新API错误日志（需要认证）
  */
-router.get("/error-logs", adminAuth, requirePermission("error-logs:read"), async (req, res) => {
-  try {
-    const { lines = 1000 } = req.query;
-    const linesNum = parseInt(lines);
-
-    // 获取 PM2 日志目录
-    const homeDir = os.homedir();
-    const pm2LogsDir = path.join(homeDir, ".pm2", "logs");
-
-    // 检查日志目录是否存在
+router.get(
+  "/error-logs",
+  adminAuth,
+  requirePermission("error-logs:read"),
+  async (req, res) => {
     try {
-      await fs.access(pm2LogsDir);
-    } catch (error) {
-      return res.status(404).json({
-        success: false,
-        error: "PM2 日志目录不存在",
-      });
-    }
+      const { lines = 1000 } = req.query;
+      const linesNum = parseInt(lines);
 
-    // 获取所有API错误日志文件
-    const files = await fs.readdir(pm2LogsDir);
-    const errorLogFiles = [];
+      // 获取 PM2 日志目录
+      const homeDir = os.homedir();
+      const pm2LogsDir = path.join(homeDir, ".pm2", "logs");
 
-    // 过滤API错误日志文件
-    for (const file of files) {
-      if (file.endsWith(".log") && file.includes("api-error")) {
-        const filePath = path.join(pm2LogsDir, file);
+      // 检查日志目录是否存在
+      try {
+        await fs.access(pm2LogsDir);
+      } catch (error) {
+        return res.status(404).json({
+          success: false,
+          error: "PM2 日志目录不存在",
+        });
+      }
 
-        try {
-          const stats = await fs.stat(filePath);
-          const fileSizeMB = stats.size / (1024 * 1024);
+      // 获取所有API错误日志文件
+      const files = await fs.readdir(pm2LogsDir);
+      const errorLogFiles = [];
 
-          // 跳过空文件
-          if (fileSizeMB === 0) {
+      // 过滤API错误日志文件
+      for (const file of files) {
+        if (file.endsWith(".log") && file.includes("api-error")) {
+          const filePath = path.join(pm2LogsDir, file);
+
+          try {
+            const stats = await fs.stat(filePath);
+            const fileSizeMB = stats.size / (1024 * 1024);
+
+            // 跳过空文件
+            if (fileSizeMB === 0) {
+              continue;
+            }
+
+            errorLogFiles.push({
+              name: file,
+              path: filePath,
+              mtime: stats.mtime.getTime(),
+              size: fileSizeMB,
+            });
+          } catch (error) {
+            console.error(`Error checking file ${file}:`, error);
             continue;
           }
+        }
+      }
 
-          errorLogFiles.push({
-            name: file,
-            path: filePath,
-            mtime: stats.mtime.getTime(),
-            size: fileSizeMB,
+      // 按修改时间排序（最新的在前）
+      errorLogFiles.sort((a, b) => b.mtime - a.mtime);
+
+      const allLogs = [];
+      let totalLines = 0;
+
+      // 读取每个错误日志文件的最新内容
+      for (const file of errorLogFiles) {
+        if (totalLines >= linesNum) break;
+
+        try {
+          const content = await fs.readFile(file.path, "utf8");
+          const lines = content
+            .split("\n")
+            .filter((line) => line.trim().length > 0);
+
+          // 从文件底部开始取最新的行
+          const remainingLines = linesNum - totalLines;
+          const startIndex = Math.max(0, lines.length - remainingLines);
+          const recentLines = lines.slice(startIndex);
+
+          // 为每行添加文件信息
+          recentLines.forEach((line) => {
+            allLogs.push(`[${file.name}] ${line}`);
           });
+
+          totalLines += recentLines.length;
         } catch (error) {
-          console.error(`Error checking file ${file}:`, error);
+          console.error(`Error reading log file ${file.name}:`, error);
           continue;
         }
       }
+
+      // 按时间倒序排列（最新的在前）
+      allLogs.reverse();
+
+      res.json({
+        success: true,
+        data: {
+          logs: allLogs,
+          totalLines: allLogs.length,
+          files: errorLogFiles.map((f) => ({
+            name: f.name,
+            size: f.size,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("Error loading error logs:", error);
+      res.status(500).json({
+        success: false,
+        error: "加载错误日志失败",
+      });
     }
-
-    // 按修改时间排序（最新的在前）
-    errorLogFiles.sort((a, b) => b.mtime - a.mtime);
-
-    const allLogs = [];
-    let totalLines = 0;
-
-    // 读取每个错误日志文件的最新内容
-    for (const file of errorLogFiles) {
-      if (totalLines >= linesNum) break;
-
-      try {
-        const content = await fs.readFile(file.path, "utf8");
-        const lines = content
-          .split("\n")
-          .filter((line) => line.trim().length > 0);
-
-        // 从文件底部开始取最新的行
-        const remainingLines = linesNum - totalLines;
-        const startIndex = Math.max(0, lines.length - remainingLines);
-        const recentLines = lines.slice(startIndex);
-
-        // 为每行添加文件信息
-        recentLines.forEach((line) => {
-          allLogs.push(`[${file.name}] ${line}`);
-        });
-
-        totalLines += recentLines.length;
-      } catch (error) {
-        console.error(`Error reading log file ${file.name}:`, error);
-        continue;
-      }
-    }
-
-    // 按时间倒序排列（最新的在前）
-    allLogs.reverse();
-
-    res.json({
-      success: true,
-      data: {
-        logs: allLogs,
-        totalLines: allLogs.length,
-        files: errorLogFiles.map((f) => ({
-          name: f.name,
-          size: f.size,
-        })),
-      },
-    });
-  } catch (error) {
-    console.error("Error loading error logs:", error);
-    res.status(500).json({
-      success: false,
-      error: "加载错误日志失败",
-    });
   }
-});
+);
 
 /**
  * GET /notes
@@ -925,7 +1047,11 @@ router.post("/send-messages", adminAuth, async (req, res) => {
   try {
     // 权限检查：只有 luykin 用户可以执行批量发送私信操作
     if (!req.user || req.user.role !== "super") {
-      await logAdminAction(req, { action: "send-messages", success: false, message: "forbidden" });
+      await logAdminAction(req, {
+        action: "send-messages",
+        success: false,
+        message: "forbidden",
+      });
       console.log(
         `[批量发送私信] ❌ 权限不足: 用户=${
           req.user?.username || "unknown"
@@ -1489,6 +1615,135 @@ router.get("/rootdata-quota", adminAuth, async (req, res) => {
 });
 
 /**
+ * -------------------- Nacos 配置管理（公告等） --------------------
+ * 权限：nacos_config（super 或被授予该权限的 admin）
+ */
+
+// 读取配置（返回 content 字符串）
+router.get(
+  "/nacos/config",
+  adminAuth,
+  requirePermission("nacos_config"),
+  async (req, res) => {
+    try {
+      const { dataId, group = "DEFAULT_GROUP", tenant } = req.query;
+      if (!dataId) {
+        return res.status(400).json({ success: false, error: "缺少 dataId" });
+      }
+
+      const resp = await nacosRequest("GET", "/nacos/v1/cs/configs", {
+        params: { dataId, group, ...(tenant ? { tenant } : {}) },
+      });
+
+      if (resp.status !== 200) {
+        return res.status(resp.status).json({
+          success: false,
+          error: "读取 Nacos 配置失败",
+          status: resp.status,
+          data: resp.data,
+        });
+      }
+
+      // Nacos GET configs 返回 body 直接是 content 字符串（不是 JSON）
+      res.json({
+        success: true,
+        data: {
+          dataId,
+          group,
+          tenant: tenant || null,
+          content:
+            typeof resp.data === "string"
+              ? resp.data
+              : JSON.stringify(resp.data),
+        },
+      });
+    } catch (e) {
+      console.error("[nacos_config] read error:", e);
+      res.status(500).json({ success: false, error: e.message || "读取失败" });
+    }
+  }
+);
+
+// 发布/更新配置（覆盖式写入）
+router.post(
+  "/nacos/config",
+  adminAuth,
+  requirePermission("nacos_config"),
+  async (req, res) => {
+    try {
+      const {
+        dataId,
+        group = "DEFAULT_GROUP",
+        tenant,
+        content,
+        type = "json",
+      } = req.body || {};
+
+      if (!dataId) {
+        return res.status(400).json({ success: false, error: "缺少 dataId" });
+      }
+      if (typeof content !== "string") {
+        return res
+          .status(400)
+          .json({ success: false, error: "content 必须是字符串" });
+      }
+
+      // 轻量校验：如果声明 type=json，则必须是合法 JSON
+      if (String(type).toLowerCase() === "json") {
+        try {
+          JSON.parse(content);
+        } catch (e) {
+          return res.status(400).json({
+            success: false,
+            error: "content 不是合法 JSON（type=json）",
+          });
+        }
+      }
+
+      const form = new URLSearchParams({
+        dataId,
+        group,
+        content,
+        type,
+      });
+      if (tenant) form.set("tenant", tenant);
+
+      const resp = await nacosRequest("POST", "/nacos/v1/cs/configs", {
+        data: form.toString(),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+
+      if (resp.status !== 200) {
+        return res.status(resp.status).json({
+          success: false,
+          error: "发布 Nacos 配置失败",
+          status: resp.status,
+          data: resp.data,
+        });
+      }
+
+      // Nacos 返回通常是 'true'
+      const ok = resp.data === true || resp.data === "true";
+      if (!ok) {
+        return res.status(500).json({
+          success: false,
+          error: "发布失败（Nacos 未返回 true）",
+          data: resp.data,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: { dataId, group, tenant: tenant || null, published: true },
+      });
+    } catch (e) {
+      console.error("[nacos_config] publish error:", e);
+      res.status(500).json({ success: false, error: e.message || "发布失败" });
+    }
+  }
+);
+
+/**
  * GET /health
  * 健康检查接口（无需认证）
  */
@@ -1733,7 +1988,12 @@ const extractRedisKeyPrefix = (key) => {
 
 const collectRedisKeyDistribution = async (
   redisClient,
-  { maxSampledKeys = 10000, countPerScan = 1000, maxGroups = 10, totalKeys } = {}
+  {
+    maxSampledKeys = 10000,
+    countPerScan = 1000,
+    maxGroups = 10,
+    totalKeys,
+  } = {}
 ) => {
   const prefixCounts = new Map();
   let sampled = 0;
@@ -1821,254 +2081,259 @@ const collectRedisKeyDistribution = async (
  * GET /api/stats/device-status
  * 获取设备状态信息（CPU、内存、PM2、Redis、PostgreSQL等）
  */
-router.get("/device-status", adminAuth, requirePermission("device-status:read"), async (req, res) => {
-  try {
-    const { exec } = require("child_process");
-    const util = require("util");
-    const execPromise = util.promisify(exec);
+router.get(
+  "/device-status",
+  adminAuth,
+  requirePermission("device-status:read"),
+  async (req, res) => {
+    try {
+      const { exec } = require("child_process");
+      const util = require("util");
+      const execPromise = util.promisify(exec);
 
-    // 格式化字节大小
-    const formatBytes = (bytes) => {
-      if (bytes === 0) return "0 B";
-      const k = 1024;
-      const sizes = ["B", "KB", "MB", "GB", "TB"];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
-    };
+      // 格式化字节大小
+      const formatBytes = (bytes) => {
+        if (bytes === 0) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return (
+          Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
+        );
+      };
 
-    // 格式化运行时间
-    const formatUptime = (seconds) => {
-      const days = Math.floor(seconds / 86400);
-      const hours = Math.floor((seconds % 86400) / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      return `${days}天 ${hours}小时 ${minutes}分钟`;
-    };
+      // 格式化运行时间
+      const formatUptime = (seconds) => {
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return `${days}天 ${hours}小时 ${minutes}分钟`;
+      };
 
-    const deviceStatus = {
-      timestamp: new Date().toLocaleString("zh-CN", {
-        timeZone: "Asia/Shanghai",
-      }),
-    };
+      const deviceStatus = {
+        timestamp: new Date().toLocaleString("zh-CN", {
+          timeZone: "Asia/Shanghai",
+        }),
+      };
 
-    // 1. 系统信息
-    deviceStatus.system = {
-      platform: `${os.type()} ${os.release()}`,
-      hostname: os.hostname(),
-      uptime: formatUptime(os.uptime()),
-      arch: os.arch(),
-    };
+      // 1. 系统信息
+      deviceStatus.system = {
+        platform: `${os.type()} ${os.release()}`,
+        hostname: os.hostname(),
+        uptime: formatUptime(os.uptime()),
+        arch: os.arch(),
+      };
 
-    // 2. CPU 信息
-    const cpus = os.cpus();
-    const loadAvg = os.loadavg();
+      // 2. CPU 信息
+      const cpus = os.cpus();
+      const loadAvg = os.loadavg();
 
-    // 计算 CPU 使用率
-    let totalIdle = 0;
-    let totalTick = 0;
-    cpus.forEach((cpu) => {
-      for (let type in cpu.times) {
-        totalTick += cpu.times[type];
-      }
-      totalIdle += cpu.times.idle;
-    });
-    const cpuUsagePercent = (100 - ~~((100 * totalIdle) / totalTick)).toFixed(
-      2
-    );
-
-    deviceStatus.cpu = {
-      cores: cpus.length,
-      model: cpus[0].model,
-      usage: `${cpuUsagePercent}%`,
-      loadAverage: `${loadAvg[0].toFixed(2)} / ${loadAvg[1].toFixed(
+      // 计算 CPU 使用率
+      let totalIdle = 0;
+      let totalTick = 0;
+      cpus.forEach((cpu) => {
+        for (let type in cpu.times) {
+          totalTick += cpu.times[type];
+        }
+        totalIdle += cpu.times.idle;
+      });
+      const cpuUsagePercent = (100 - ~~((100 * totalIdle) / totalTick)).toFixed(
         2
-      )} / ${loadAvg[2].toFixed(2)}`,
-    };
+      );
 
-    // 3. 内存信息
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
-    const usedMem = totalMem - freeMem;
-    const memUsagePercent = ((usedMem / totalMem) * 100).toFixed(2);
+      deviceStatus.cpu = {
+        cores: cpus.length,
+        model: cpus[0].model,
+        usage: `${cpuUsagePercent}%`,
+        loadAverage: `${loadAvg[0].toFixed(2)} / ${loadAvg[1].toFixed(
+          2
+        )} / ${loadAvg[2].toFixed(2)}`,
+      };
 
-    deviceStatus.memory = {
-      total: formatBytes(totalMem),
-      used: formatBytes(usedMem),
-      free: formatBytes(freeMem),
-      usagePercent: `${memUsagePercent}%`,
-    };
+      // 3. 内存信息
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const usedMem = totalMem - freeMem;
+      const memUsagePercent = ((usedMem / totalMem) * 100).toFixed(2);
 
-    // 4. PM2 状态
-    try {
-      const { stdout: pm2Output } = await execPromise("pm2 jlist");
-      const pm2List = JSON.parse(pm2Output);
-      deviceStatus.pm2 = pm2List.map((app) => ({
-        name: app.name,
-        status: app.pm2_env.status,
-        cpu: `${app.monit.cpu}%`,
-        memory: formatBytes(app.monit.memory),
-        restarts: app.pm2_env.restart_time,
-        uptime: formatUptime(
-          Math.floor((Date.now() - app.pm2_env.pm_uptime) / 1000)
-        ),
-      }));
-    } catch (error) {
-      console.error("获取 PM2 状态失败:", error.message);
-      deviceStatus.pm2 = [];
-    }
+      deviceStatus.memory = {
+        total: formatBytes(totalMem),
+        used: formatBytes(usedMem),
+        free: formatBytes(freeMem),
+        usagePercent: `${memUsagePercent}%`,
+      };
 
-    // 5. Redis 状态
-    deviceStatus.redis = {
-      connected: false,
-    };
-    try {
-      const redisClient = req.redisClient;
-      if (redisClient && redisClient.isReady) {
-        // 获取Redis INFO信息
-        const info = await redisClient.info();
-        const lines = info.split("\r\n");
-        const redisInfo = {};
+      // 4. PM2 状态
+      try {
+        const { stdout: pm2Output } = await execPromise("pm2 jlist");
+        const pm2List = JSON.parse(pm2Output);
+        deviceStatus.pm2 = pm2List.map((app) => ({
+          name: app.name,
+          status: app.pm2_env.status,
+          cpu: `${app.monit.cpu}%`,
+          memory: formatBytes(app.monit.memory),
+          restarts: app.pm2_env.restart_time,
+          uptime: formatUptime(
+            Math.floor((Date.now() - app.pm2_env.pm_uptime) / 1000)
+          ),
+        }));
+      } catch (error) {
+        console.error("获取 PM2 状态失败:", error.message);
+        deviceStatus.pm2 = [];
+      }
+
+      // 5. Redis 状态
+      deviceStatus.redis = {
+        connected: false,
+      };
+      try {
+        const redisClient = req.redisClient;
+        if (redisClient && redisClient.isReady) {
+          // 获取Redis INFO信息
+          const info = await redisClient.info();
+          const lines = info.split("\r\n");
+          const redisInfo = {};
+          lines.forEach((line) => {
+            if (line && !line.startsWith("#")) {
+              const [key, value] = line.split(":");
+              if (key && value) {
+                redisInfo[key] = value.trim();
+              }
+            }
+          });
+
+          // 获取所有key数量
+          const dbKeys = await redisClient.dbSize();
+
+          // 计算内存使用率
+          let memoryUsagePercent = "-";
+          const usedMemory = parseInt(redisInfo.used_memory);
+          const maxMemory = parseInt(redisInfo.maxmemory);
+
+          if (maxMemory > 0 && usedMemory > 0) {
+            // 如果设置了maxmemory，计算使用率
+            memoryUsagePercent =
+              ((usedMemory / maxMemory) * 100).toFixed(2) + "%";
+          } else if (usedMemory > 0) {
+            // 如果没有设置maxmemory，显示提示
+            memoryUsagePercent = "未设置限制";
+          }
+
+          deviceStatus.redis = {
+            connected: true,
+            memory: redisInfo.used_memory_human || "-",
+            maxMemory: redisInfo.maxmemory_human || "未设置",
+            memoryUsagePercent: memoryUsagePercent,
+            keys: dbKeys || 0,
+            uptime: redisInfo.uptime_in_days
+              ? `${redisInfo.uptime_in_days} 天`
+              : "-",
+            version: redisInfo.redis_version || "-",
+          };
+
+          deviceStatus.redis.keyDistribution =
+            await collectRedisKeyDistribution(redisClient, {
+              totalKeys: dbKeys || 0,
+            });
+        }
+      } catch (error) {
+        console.error("获取 Redis 状态失败:", error.message);
+      }
+
+      // 6. PostgreSQL 状态
+      deviceStatus.postgresql = {
+        connected: false,
+      };
+      try {
+        const { Fundraising } = require("../../models/postgres-fundraising");
+        if (Fundraising && Fundraising.Project.sequelize) {
+          const sequelize = Fundraising.Project.sequelize;
+
+          // 测试连接
+          await sequelize.authenticate();
+
+          // 获取版本
+          const [versionResult] = await sequelize.query("SELECT version()");
+          const version = versionResult[0].version.split(" ")[1];
+
+          // 获取数据库大小
+          const [sizeResult] = await sequelize.query(
+            "SELECT pg_size_pretty(pg_database_size(current_database())) as size"
+          );
+          const size = sizeResult[0].size;
+
+          // 获取活跃连接数
+          const [connResult] = await sequelize.query(
+            "SELECT count(*) as count FROM pg_stat_activity WHERE state = 'active'"
+          );
+          const connections = connResult[0].count;
+
+          deviceStatus.postgresql = {
+            connected: true,
+            version: version,
+            size: size,
+            connections: connections,
+          };
+        }
+      } catch (error) {
+        console.error("获取 PostgreSQL 状态失败:", error.message);
+      }
+
+      // 7. 磁盘信息
+      deviceStatus.disk = [];
+      try {
+        const { stdout: dfOutput } = await execPromise("df -h");
+        const lines = dfOutput.split("\n").slice(1); // 跳过表头
         lines.forEach((line) => {
-          if (line && !line.startsWith("#")) {
-            const [key, value] = line.split(":");
-            if (key && value) {
-              redisInfo[key] = value.trim();
+          if (line.trim()) {
+            const parts = line.split(/\s+/);
+            if (
+              parts.length >= 6 &&
+              !parts[0].includes("tmpfs") &&
+              !parts[0].includes("devfs")
+            ) {
+              deviceStatus.disk.push({
+                filesystem: parts[0],
+                size: parts[1],
+                used: parts[2],
+                available: parts[3],
+                usePercent: parts[4],
+                mounted: parts[5],
+              });
             }
           }
         });
-
-        // 获取所有key数量
-        const dbKeys = await redisClient.dbSize();
-
-        // 计算内存使用率
-        let memoryUsagePercent = "-";
-        const usedMemory = parseInt(redisInfo.used_memory);
-        const maxMemory = parseInt(redisInfo.maxmemory);
-
-        if (maxMemory > 0 && usedMemory > 0) {
-          // 如果设置了maxmemory，计算使用率
-          memoryUsagePercent =
-            ((usedMemory / maxMemory) * 100).toFixed(2) + "%";
-        } else if (usedMemory > 0) {
-          // 如果没有设置maxmemory，显示提示
-          memoryUsagePercent = "未设置限制";
-        }
-
-        deviceStatus.redis = {
-          connected: true,
-          memory: redisInfo.used_memory_human || "-",
-          maxMemory: redisInfo.maxmemory_human || "未设置",
-          memoryUsagePercent: memoryUsagePercent,
-          keys: dbKeys || 0,
-          uptime: redisInfo.uptime_in_days
-            ? `${redisInfo.uptime_in_days} 天`
-            : "-",
-          version: redisInfo.redis_version || "-",
-        };
-
-        deviceStatus.redis.keyDistribution = await collectRedisKeyDistribution(
-          redisClient,
-          {
-            totalKeys: dbKeys || 0,
-          }
-        );
+      } catch (error) {
+        console.error("获取磁盘信息失败:", error.message);
       }
-    } catch (error) {
-      console.error("获取 Redis 状态失败:", error.message);
-    }
 
-    // 6. PostgreSQL 状态
-    deviceStatus.postgresql = {
-      connected: false,
-    };
-    try {
-      const { Fundraising } = require("../../models/postgres-fundraising");
-      if (Fundraising && Fundraising.Project.sequelize) {
-        const sequelize = Fundraising.Project.sequelize;
-
-        // 测试连接
-        await sequelize.authenticate();
-
-        // 获取版本
-        const [versionResult] = await sequelize.query("SELECT version()");
-        const version = versionResult[0].version.split(" ")[1];
-
-        // 获取数据库大小
-        const [sizeResult] = await sequelize.query(
-          "SELECT pg_size_pretty(pg_database_size(current_database())) as size"
-        );
-        const size = sizeResult[0].size;
-
-        // 获取活跃连接数
-        const [connResult] = await sequelize.query(
-          "SELECT count(*) as count FROM pg_stat_activity WHERE state = 'active'"
-        );
-        const connections = connResult[0].count;
-
-        deviceStatus.postgresql = {
-          connected: true,
-          version: version,
-          size: size,
-          connections: connections,
-        };
-      }
-    } catch (error) {
-      console.error("获取 PostgreSQL 状态失败:", error.message);
-    }
-
-    // 7. 磁盘信息
-    deviceStatus.disk = [];
-    try {
-      const { stdout: dfOutput } = await execPromise("df -h");
-      const lines = dfOutput.split("\n").slice(1); // 跳过表头
-      lines.forEach((line) => {
-        if (line.trim()) {
-          const parts = line.split(/\s+/);
-          if (
-            parts.length >= 6 &&
-            !parts[0].includes("tmpfs") &&
-            !parts[0].includes("devfs")
-          ) {
-            deviceStatus.disk.push({
-              filesystem: parts[0],
-              size: parts[1],
-              used: parts[2],
-              available: parts[3],
-              usePercent: parts[4],
-              mounted: parts[5],
-            });
-          }
+      // 8. SSE 连接状态
+      deviceStatus.sse = {
+        available: false,
+      };
+      try {
+        const { connectionManager } = require("./sse");
+        if (connectionManager) {
+          const sseStats = await connectionManager.getStats(true); // 聚合所有进程的统计信息
+          deviceStatus.sse = {
+            available: true,
+            ...sseStats,
+          };
         }
+      } catch (error) {
+        console.error("获取 SSE 状态失败:", error.message);
+      }
+
+      res.json(deviceStatus);
+    } catch (error) {
+      console.error("获取设备状态失败:", error.message);
+      res.status(500).json({
+        error: "Failed to fetch device status",
+        message: error.message,
       });
-    } catch (error) {
-      console.error("获取磁盘信息失败:", error.message);
     }
-
-    // 8. SSE 连接状态
-    deviceStatus.sse = {
-      available: false,
-    };
-    try {
-      const { connectionManager } = require("./sse");
-      if (connectionManager) {
-        const sseStats = await connectionManager.getStats(true); // 聚合所有进程的统计信息
-        deviceStatus.sse = {
-          available: true,
-          ...sseStats,
-        };
-      }
-    } catch (error) {
-      console.error("获取 SSE 状态失败:", error.message);
-    }
-
-    res.json(deviceStatus);
-  } catch (error) {
-    console.error("获取设备状态失败:", error.message);
-    res.status(500).json({
-      error: "Failed to fetch device status",
-      message: error.message,
-    });
   }
-});
+);
 
 /**
  * POST /api/xhunt/stats/clear-cache
@@ -2085,7 +2350,13 @@ router.post("/clear-cache", adminAuth, async (req, res) => {
           req.user?.username || "unknown"
         }, 角色=${req.user?.role || "unknown"}`
       );
-      try { await logAdminAction(req, { action: "clear-cache", success: false, message: "forbidden" }); } catch (e) {}
+      try {
+        await logAdminAction(req, {
+          action: "clear-cache",
+          success: false,
+          message: "forbidden",
+        });
+      } catch (e) {}
       return res.status(403).json({
         error: "权限不足",
         message: "权限不足",
@@ -2232,7 +2503,13 @@ router.post("/clear-cache", adminAuth, async (req, res) => {
         scanCount: scanCount,
         sync: true,
       };
-      try { await logAdminAction(req, { action: "clear-cache", success: false, message: "timeout" }); } catch(e) {}
+      try {
+        await logAdminAction(req, {
+          action: "clear-cache",
+          success: false,
+          message: "timeout",
+        });
+      } catch (e) {}
       return res.json(resp);
     }
 
@@ -2267,7 +2544,13 @@ router.post("/clear-cache", adminAuth, async (req, res) => {
         scanCount: scanCount,
         sync: true,
       };
-      try { await logAdminAction(req, { action: "clear-cache", success: true, message: JSON.stringify(resp2) }); } catch(e) {}
+      try {
+        await logAdminAction(req, {
+          action: "clear-cache",
+          success: true,
+          message: JSON.stringify(resp2),
+        });
+      } catch (e) {}
       return res.json(resp2);
     }
 
@@ -2284,7 +2567,13 @@ router.post("/clear-cache", adminAuth, async (req, res) => {
       status: "processing",
       sync: false,
     };
-    try { await logAdminAction(req, { action: "clear-cache", success: true, message: JSON.stringify(resp3) }); } catch(e) {}
+    try {
+      await logAdminAction(req, {
+        action: "clear-cache",
+        success: true,
+        message: JSON.stringify(resp3),
+      });
+    } catch (e) {}
     res.json(resp3);
 
     // 异步批量删除大量键
@@ -2342,7 +2631,13 @@ router.post("/grant-pro", adminAuth, async (req, res) => {
           req.user?.username || "unknown"
         }, 角色=${req.user?.role || "unknown"}`
       );
-      try { await logAdminAction(req, { action: "grant-pro", success: false, message: "forbidden" }); } catch (e) {}
+      try {
+        await logAdminAction(req, {
+          action: "grant-pro",
+          success: false,
+          message: "forbidden",
+        });
+      } catch (e) {}
       return res.status(403).json({
         success: false,
         error: "权限不足",
@@ -2401,7 +2696,9 @@ router.post("/grant-pro", adminAuth, async (req, res) => {
 
     // 计算开通时间
     const startTime = new Date();
-    const endTime = new Date(startTime.getTime() + duration * 24 * 60 * 60 * 1000);
+    const endTime = new Date(
+      startTime.getTime() + duration * 24 * 60 * 60 * 1000
+    );
 
     // 创建 Pro 订阅记录
     const subscription = await XHuntUserProSubscription.create({
@@ -2479,19 +2776,20 @@ router.get("/pro-users", adminAuth, async (req, res) => {
     }
 
     // 查询 Pro 订阅记录
-    const { count, rows: subscriptions } = await XHuntUserProSubscription.findAndCountAll({
-      where: whereConditions,
-      include: [
-        {
-          model: XHuntUser,
-          as: "user",
-          attributes: ["id", "username", "displayName", "avatar"],
-        },
-      ],
-      order: [["endTime", "DESC"]],
-      limit: limitNum,
-      offset: (pageNum - 1) * limitNum,
-    });
+    const { count, rows: subscriptions } =
+      await XHuntUserProSubscription.findAndCountAll({
+        where: whereConditions,
+        include: [
+          {
+            model: XHuntUser,
+            as: "user",
+            attributes: ["id", "username", "displayName", "avatar"],
+          },
+        ],
+        order: [["endTime", "DESC"]],
+        limit: limitNum,
+        offset: (pageNum - 1) * limitNum,
+      });
 
     // 格式化数据
     const formattedSubscriptions = subscriptions.map((sub) => {
@@ -2607,30 +2905,44 @@ router.get("/backup-status", adminAuth, async (req, res) => {
  * POST /trigger-backup
  * 手动触发数据库备份（需要认证）
  */
-router.post("/trigger-backup", adminAuth, requirePermission("backup:operate"), async (req, res) => {
-  try {
-    console.log(`[执行命令] ✅ 权限验证通过: 用户=${req.user.username}`);
+router.post(
+  "/trigger-backup",
+  adminAuth,
+  requirePermission("backup:operate"),
+  async (req, res) => {
+    try {
+      console.log(`[执行命令] ✅ 权限验证通过: 用户=${req.user.username}`);
 
-    const pgBackupService = require("../../services/pg-backup-service");
-    
-    // 异步执行备份，立即返回响应
-    const resp = { success: true, message: "备份任务已启动，请稍后查看备份列表" };
-    try { await logAdminAction(req, { action: "trigger-backup", success: true, message: JSON.stringify(resp) }); } catch(e) {}
-    res.json(resp);
+      const pgBackupService = require("../../services/pg-backup-service");
 
-    // 在后台执行备份
-    pgBackupService.manualBackup().catch((error) => {
-      console.error("[手动备份] ❌ 备份失败:", error);
-    });
-  } catch (error) {
-    console.error("[手动备份] ❌ 触发失败:", error);
-    res.status(500).json({
-      success: false,
-      error: "触发备份失败",
-      message: error.message,
-    });
+      // 异步执行备份，立即返回响应
+      const resp = {
+        success: true,
+        message: "备份任务已启动，请稍后查看备份列表",
+      };
+      try {
+        await logAdminAction(req, {
+          action: "trigger-backup",
+          success: true,
+          message: JSON.stringify(resp),
+        });
+      } catch (e) {}
+      res.json(resp);
+
+      // 在后台执行备份
+      pgBackupService.manualBackup().catch((error) => {
+        console.error("[手动备份] ❌ 备份失败:", error);
+      });
+    } catch (error) {
+      console.error("[手动备份] ❌ 触发失败:", error);
+      res.status(500).json({
+        success: false,
+        error: "触发备份失败",
+        message: error.message,
+      });
+    }
   }
-});
+);
 
 /**
  * GET /version-stats
@@ -2773,16 +3085,16 @@ function generateTimeWindows(startTime, endTime) {
   const windows = [];
   const start = new Date(startTime);
   const end = new Date(endTime);
-  
+
   // 获取第一个窗口（向下取整）
   let current = new Date(get5MinWindow(start));
-  
+
   while (current <= end) {
     windows.push(current.toISOString());
     // 增加5分钟
     current = new Date(current.getTime() + 5 * 60 * 1000);
   }
-  
+
   return windows;
 }
 
@@ -2828,7 +3140,10 @@ router.get("/url-stats", adminAuth, async (req, res) => {
     const timeWindows = generateTimeWindows(startTime, now);
 
     // 从PostgreSQL读取数据
-    const { UrlRequestStats, pgInstance } = require("../../models/postgres-start");
+    const {
+      UrlRequestStats,
+      pgInstance,
+    } = require("../../models/postgres-start");
     const { Op } = require("sequelize");
 
     const pgStartTime = new Date(timeWindows[0]);
@@ -2844,7 +3159,10 @@ router.get("/url-stats", adminAuth, async (req, res) => {
       },
       attributes: [
         "urlPath",
-        [pgInstance.fn("SUM", pgInstance.col("UrlRequestStats.request_count")), "totalCount"],
+        [
+          pgInstance.fn("SUM", pgInstance.col("UrlRequestStats.request_count")),
+          "totalCount",
+        ],
       ],
       group: ["urlPath"],
       raw: true,
@@ -2871,7 +3189,10 @@ router.get("/url-stats", adminAuth, async (req, res) => {
     const totalRequests = urlStats.reduce((sum, item) => sum + item.count, 0);
     const urlStatsWithPercent = urlStats.map((item) => ({
       ...item,
-      percent: totalRequests > 0 ? ((item.count / totalRequests) * 100).toFixed(2) : "0.00",
+      percent:
+        totalRequests > 0
+          ? ((item.count / totalRequests) * 100).toFixed(2)
+          : "0.00",
     }));
 
     res.json({
@@ -2954,7 +3275,13 @@ router.post("/execute-command", adminAuth, async (req, res) => {
           req.user?.username || "unknown"
         }, 角色=${req.user?.role || "unknown"}`
       );
-      try { await logAdminAction(req, { action: "execute-command", success: false, message: "forbidden" }); } catch(e) {}
+      try {
+        await logAdminAction(req, {
+          action: "execute-command",
+          success: false,
+          message: "forbidden",
+        });
+      } catch (e) {}
       return res.status(403).json({
         success: false,
         error: "权限不足",
@@ -2989,7 +3316,13 @@ router.post("/execute-command", adminAuth, async (req, res) => {
         console.log(
           `[执行命令] 🛡️ 阻止危险命令: 用户=${req.user.username}, 命令=${command}`
         );
-        try { await logAdminAction(req, { action: "execute-command", success: false, message: "blocked-dangerous" }); } catch(e) {}
+        try {
+          await logAdminAction(req, {
+            action: "execute-command",
+            success: false,
+            message: "blocked-dangerous",
+          });
+        } catch (e) {}
         return res.status(403).json({
           success: false,
           error: "命令被阻止",
@@ -3050,7 +3383,13 @@ router.post("/execute-command", adminAuth, async (req, res) => {
         cwd: cwd,
         executionTime: executionTime,
       };
-      try { await logAdminAction(req, { action: "execute-command", success: true, message: `${command} ok ${executionTime}ms` }); } catch(e) {}
+      try {
+        await logAdminAction(req, {
+          action: "execute-command",
+          success: true,
+          message: `${command} ok ${executionTime}ms`,
+        });
+      } catch (e) {}
       res.json(resp);
     } catch (error) {
       const executionTime = Date.now() - startTime;
@@ -3090,7 +3429,13 @@ router.post("/execute-command", adminAuth, async (req, res) => {
         cwd: cwd,
         executionTime: executionTime,
       };
-      try { await logAdminAction(req, { action: "execute-command", success: false, message: `failed code=${exitCode}` }); } catch(e) {}
+      try {
+        await logAdminAction(req, {
+          action: "execute-command",
+          success: false,
+          message: `failed code=${exitCode}`,
+        });
+      } catch (e) {}
       res.json(respErr);
     }
   } catch (error) {
@@ -3103,25 +3448,42 @@ router.post("/execute-command", adminAuth, async (req, res) => {
   }
 });
 
-
 /**
  * 日报邮件：手动触发发送（仅 luykin）
  */
 router.post("/report/send", adminAuth, async (req, res) => {
   try {
     if (!req.user || req.user.role !== "super") {
-      try { await logAdminAction(req, { action: "report-send", success: false, message: "forbidden" }); } catch(e) {}
+      try {
+        await logAdminAction(req, {
+          action: "report-send",
+          success: false,
+          message: "forbidden",
+        });
+      } catch (e) {}
       return res.status(403).json({ success: false, error: "权限不足" });
     }
     const { recipients } = req.body || {};
     const { sendDailyReport } = require("../services/dailyReportService");
     const result = await sendDailyReport(req.redisClient, recipients);
     const resp = { success: true, data: result };
-    try { await logAdminAction(req, { action: "report-send", success: true, message: JSON.stringify(resp) }); } catch(e) {}
+    try {
+      await logAdminAction(req, {
+        action: "report-send",
+        success: true,
+        message: JSON.stringify(resp),
+      });
+    } catch (e) {}
     res.json(resp);
   } catch (e) {
     console.error("[DailyReport] manual send error:", e);
-    try { await logAdminAction(req, { action: "report-send", success: false, message: e.message || "发送失败" }); } catch(_e) {}
+    try {
+      await logAdminAction(req, {
+        action: "report-send",
+        success: false,
+        message: e.message || "发送失败",
+      });
+    } catch (_e) {}
     res.status(500).json({ success: false, error: e.message || "发送失败" });
   }
 });

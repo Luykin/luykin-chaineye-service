@@ -1,0 +1,624 @@
+<div class="nacos-msg-container">
+  <div class="nacos-msg-header">
+    <h2>📣 公告配置（Nacos）</h2>
+    <p>
+      可视化编辑 Nacos 配置：<code>xhunt_message</code> /
+      <code>xhunt_message_en</code>
+    </p>
+  </div>
+
+  <div class="nacos-msg-toolbar">
+    <div class="lang-switch">
+      <span class="label">语言：</span>
+      <button class="btn" id="nacos-msg-lang-zh" data-lang="zh">中文</button>
+      <button class="btn" id="nacos-msg-lang-en" data-lang="en">English</button>
+      <span class="current-did"
+        >当前 dataId：<code id="nacos-msg-dataid">-</code></span
+      >
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="nacos-msg-refresh">
+        🔄 从 Nacos 重新加载
+      </button>
+      <button class="btn" id="nacos-msg-new">➕ 新增公告</button>
+      <button class="btn danger" id="nacos-msg-delete" disabled>
+        🗑️ 删除当前
+      </button>
+      <button class="btn success" id="nacos-msg-publish" disabled>
+        🚀 发布到 Nacos
+      </button>
+    </div>
+  </div>
+
+  <div class="nacos-msg-body">
+    <div class="list">
+      <div class="list-header">
+        <strong>公告列表</strong>
+        <span class="muted" id="nacos-msg-count">0 条</span>
+      </div>
+      <div class="list-items" id="nacos-msg-list"></div>
+    </div>
+
+    <div class="editor">
+      <div class="editor-header">
+        <strong>编辑</strong>
+        <span class="muted" id="nacos-msg-editor-hint"
+          >选择左侧一条公告开始编辑</span
+        >
+      </div>
+
+      <div class="field">
+        <label>标题</label>
+        <input
+          id="nacos-msg-title"
+          type="text"
+          placeholder="请输入标题"
+          disabled
+        />
+      </div>
+
+      <div class="field">
+        <label>内容（支持 HTML，比如 &lt;br&gt; &lt;a&gt;）</label>
+        <textarea
+          id="nacos-msg-content"
+          rows="10"
+          placeholder="请输入公告内容"
+          disabled
+        ></textarea>
+      </div>
+
+      <div class="preview">
+        <div class="preview-header">
+          <strong>预览</strong>
+          <span class="muted">（按当前输入渲染）</span>
+        </div>
+        <div class="preview-box" id="nacos-msg-preview"></div>
+      </div>
+
+      <div class="tips">
+        <div class="tip-title">说明</div>
+        <ul>
+          <li>
+            点击“发布到 Nacos”会把当前语言对应的整个公告数组写入
+            Nacos（覆盖式更新）。
+          </li>
+          <li>
+            建议每条公告的
+            <code>created</code> 使用时间戳（毫秒），用于排序与追踪。
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="nacos-msg-toast" id="nacos-msg-toast" style="display: none"></div>
+</div>
+
+<style>
+  .nacos-msg-container {
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .nacos-msg-header h2 {
+    margin: 0 0 6px;
+    color: #2c3e50;
+  }
+  .nacos-msg-header p {
+    margin: 0 0 16px;
+    color: #7f8c8d;
+    font-size: 14px;
+  }
+  .nacos-msg-toolbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    align-items: center;
+  }
+  .lang-switch {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .lang-switch .label {
+    font-weight: 600;
+    color: #374151;
+  }
+  .current-did {
+    color: #6b7280;
+    font-size: 13px;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .btn:hover {
+    background: #f3f4f6;
+  }
+  .btn.primary {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+  }
+  .btn.primary:hover {
+    background: #2563eb;
+  }
+  .btn.success {
+    background: #10b981;
+    border-color: #10b981;
+    color: #fff;
+  }
+  .btn.success:hover {
+    background: #059669;
+  }
+  .btn.danger {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #fff;
+  }
+  .btn.danger:hover {
+    background: #dc2626;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .nacos-msg-body {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    .nacos-msg-body {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .list {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 12px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .muted {
+    color: #6b7280;
+    font-size: 13px;
+  }
+  .list-items {
+    max-height: 620px;
+    overflow: auto;
+  }
+  .item {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+  }
+  .item:hover {
+    background: #f9fafb;
+  }
+  .item.active {
+    background: #eff6ff;
+    border-left: 3px solid #3b82f6;
+  }
+  .item-title {
+    font-weight: 600;
+    color: #111827;
+    font-size: 14px;
+    margin-bottom: 4px;
+    line-height: 1.2;
+  }
+  .item-meta {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .editor {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .field label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 13px;
+  }
+  .field input,
+  .field textarea {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 10px 10px;
+    font-size: 14px;
+    outline: none;
+  }
+  .field input:focus,
+  .field textarea:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  }
+  .preview {
+    margin-top: 10px;
+  }
+  .preview-header {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .preview-box {
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 120px;
+    background: #fafafa;
+    color: #111827;
+  }
+  .tips {
+    margin-top: 12px;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .tip-title {
+    font-weight: 700;
+    color: #0c4a6e;
+    margin-bottom: 6px;
+  }
+
+  .nacos-msg-toast {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    max-width: 520px;
+    background: #111827;
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    font-size: 13px;
+    z-index: 9999;
+  }
+</style>
+
+<script>
+  (function () {
+    // 仅在 tab 被点击后再初始化
+    let inited = false;
+
+    const DATA_IDS = {
+      zh: "xhunt_message",
+      en: "xhunt_message_en",
+    };
+
+    let currentLang = "zh";
+    let currentIndex = -1;
+    let items = []; // 当前语言的公告数组
+    let dirty = false;
+
+    function $(id) {
+      return document.getElementById(id);
+    }
+
+    function toast(msg, type) {
+      const el = $("nacos-msg-toast");
+      if (!el) return;
+      el.textContent = msg;
+      el.style.display = "block";
+      el.style.background =
+        type === "error"
+          ? "#991b1b"
+          : type === "success"
+          ? "#065f46"
+          : "#111827";
+      setTimeout(() => {
+        el.style.display = "none";
+      }, 2400);
+    }
+
+    function fmtTs(ts) {
+      const n = Number(ts);
+      if (!n) return "-";
+      try {
+        return new Date(n).toLocaleString("zh-CN", {
+          timeZone: "Asia/Shanghai",
+        });
+      } catch (e) {
+        return String(ts);
+      }
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement("div");
+      div.textContent = s == null ? "" : String(s);
+      return div.innerHTML;
+    }
+
+    function setControlsEnabled(enabled) {
+      $("nacos-msg-title").disabled = !enabled;
+      $("nacos-msg-content").disabled = !enabled;
+      $("nacos-msg-delete").disabled = !enabled;
+      $("nacos-msg-publish").disabled = !enabled;
+    }
+
+    function renderList() {
+      const listEl = $("nacos-msg-list");
+      const countEl = $("nacos-msg-count");
+      if (!listEl) return;
+
+      // created 倒序
+      const sorted = [...items].sort(
+        (a, b) => Number(b.created || 0) - Number(a.created || 0)
+      );
+
+      listEl.innerHTML =
+        sorted
+          .map((it, idx) => {
+            // idx 是排序后的索引；我们需要映射回原数组索引
+            const originalIndex = items.indexOf(it);
+            const active = originalIndex === currentIndex ? "active" : "";
+            return `
+        <div class="item ${active}" data-idx="${originalIndex}">
+          <div class="item-title">${escapeHtml(it.title || "(无标题)")}</div>
+          <div class="item-meta">created: ${escapeHtml(
+            String(it.created || "")
+          )} · ${escapeHtml(fmtTs(it.created))}</div>
+        </div>
+      `;
+          })
+          .join("") ||
+        `<div style="padding:14px;color:#9ca3af;">暂无公告，点击“新增公告”创建</div>`;
+
+      if (countEl) countEl.textContent = `${items.length} 条`;
+
+      // bind click
+      listEl.querySelectorAll(".item").forEach((node) => {
+        node.addEventListener("click", () => {
+          const idx = Number(node.getAttribute("data-idx"));
+          selectItem(idx);
+        });
+      });
+    }
+
+    function selectItem(idx) {
+      currentIndex = idx;
+      const it = items[idx];
+      if (!it) {
+        setControlsEnabled(false);
+        $("nacos-msg-title").value = "";
+        $("nacos-msg-content").value = "";
+        $("nacos-msg-preview").innerHTML = "";
+        $("nacos-msg-editor-hint").textContent = "选择左侧一条公告开始编辑";
+        renderList();
+        return;
+      }
+
+      setControlsEnabled(true);
+      $("nacos-msg-title").value = it.title || "";
+      $("nacos-msg-content").value = it.content || "";
+      $("nacos-msg-preview").innerHTML = it.content || "";
+      $("nacos-msg-editor-hint").textContent = `正在编辑：created=${
+        it.created || ""
+      }`;
+      renderList();
+    }
+
+    function bindEditor() {
+      const titleEl = $("nacos-msg-title");
+      const contentEl = $("nacos-msg-content");
+
+      function onChange() {
+        if (currentIndex < 0 || !items[currentIndex]) return;
+        items[currentIndex] = {
+          ...items[currentIndex],
+          title: titleEl.value,
+          content: contentEl.value,
+        };
+        $("nacos-msg-preview").innerHTML = contentEl.value || "";
+        dirty = true;
+        renderList();
+      }
+
+      titleEl.addEventListener("input", onChange);
+      contentEl.addEventListener("input", onChange);
+    }
+
+    async function apiGetConfig(dataId) {
+      const resp = await fetch(
+        `/api/xhunt/stats/nacos/config?dataId=${encodeURIComponent(
+          dataId
+        )}&group=DEFAULT_GROUP`,
+        {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        }
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (!json.success) throw new Error(json.error || "加载失败");
+      return json.data;
+    }
+
+    async function apiPublishConfig({ dataId, content, group }) {
+      const resp = await fetch(`/api/xhunt/stats/nacos/config`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          dataId,
+          group: group || "DEFAULT_GROUP",
+          content,
+          type: "json",
+        }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (!json.success) throw new Error(json.error || "发布失败");
+      return json.data;
+    }
+
+    async function loadFromNacos() {
+      const did = DATA_IDS[currentLang];
+      $("nacos-msg-dataid").textContent = did;
+
+      toast("正在从 Nacos 加载...", "info");
+      const data = await apiGetConfig(did);
+
+      // data.content 是字符串（可能是 JSON）
+      let parsed;
+      try {
+        parsed = JSON.parse(data.content || "[]");
+      } catch (e) {
+        // 兼容：有些 nacos 返回可能不是纯 JSON
+        throw new Error("Nacos content 不是合法 JSON，请检查当前配置内容");
+      }
+
+      if (!Array.isArray(parsed)) {
+        throw new Error("当前配置不是数组结构（期望：公告数组）");
+      }
+
+      items = parsed;
+      dirty = false;
+      currentIndex = -1;
+      renderList();
+      selectItem(-1);
+      toast("加载完成", "success");
+    }
+
+    function newItem() {
+      const now = Date.now();
+      const it = { title: "", content: "", created: String(now) };
+      items.unshift(it);
+      dirty = true;
+      renderList();
+      selectItem(0);
+      toast("已新增一条公告（未发布）", "info");
+    }
+
+    function deleteCurrent() {
+      if (currentIndex < 0) return;
+      const it = items[currentIndex];
+      const ok = window.confirm(`确认删除该公告？\n\n标题：${it?.title || ""}`);
+      if (!ok) return;
+      items.splice(currentIndex, 1);
+      dirty = true;
+      currentIndex = -1;
+      renderList();
+      selectItem(-1);
+      toast("已删除（未发布）", "info");
+    }
+
+    async function publish() {
+      const did = DATA_IDS[currentLang];
+      const content = JSON.stringify(items, null, 2);
+      const ok = window.confirm(
+        `确认发布到 Nacos？\n\n将覆盖 dataId=${did} 的 content（数组整体覆盖）。`
+      );
+      if (!ok) return;
+
+      toast("正在发布到 Nacos...", "info");
+      await apiPublishConfig({ dataId: did, content, group: "DEFAULT_GROUP" });
+      dirty = false;
+      toast("发布成功", "success");
+    }
+
+    function setLang(lang) {
+      if (lang !== "zh" && lang !== "en") return;
+      if (dirty) {
+        const ok = window.confirm(
+          "你当前有未发布的修改，切换语言会丢失未发布修改。\n确认继续切换？"
+        );
+        if (!ok) return;
+      }
+      currentLang = lang;
+      // 按钮状态
+      $("nacos-msg-lang-zh").classList.toggle("primary", lang === "zh");
+      $("nacos-msg-lang-en").classList.toggle("primary", lang === "en");
+      loadFromNacos().catch((e) => toast("加载失败：" + e.message, "error"));
+    }
+
+    function init() {
+      if (inited) return;
+      inited = true;
+
+      // init button styles
+      $("nacos-msg-lang-zh").classList.add("primary");
+
+      $("nacos-msg-lang-zh").addEventListener("click", () => setLang("zh"));
+      $("nacos-msg-lang-en").addEventListener("click", () => setLang("en"));
+      $("nacos-msg-refresh").addEventListener("click", async () => {
+        if (dirty) {
+          const ok = window.confirm(
+            "你当前有未发布的修改，重新加载会丢失这些修改。\n确认重新加载？"
+          );
+          if (!ok) return;
+        }
+        try {
+          await loadFromNacos();
+        } catch (e) {
+          toast("加载失败：" + e.message, "error");
+        }
+      });
+
+      $("nacos-msg-new").addEventListener("click", newItem);
+      $("nacos-msg-delete").addEventListener("click", deleteCurrent);
+      $("nacos-msg-publish").addEventListener("click", () => {
+        publish().catch((e) => toast("发布失败：" + e.message, "error"));
+      });
+
+      bindEditor();
+
+      // first load
+      loadFromNacos().catch((e) => toast("加载失败：" + e.message, "error"));
+    }
+
+    // 监听 tab 切换事件
+    document.addEventListener("click", function (e) {
+      const tabBtn = e.target.closest(".tab-btn");
+      if (tabBtn && tabBtn.getAttribute("data-tab") === "nacos-messages") {
+        setTimeout(init, 80);
+      }
+    });
+  })();
+</script>
