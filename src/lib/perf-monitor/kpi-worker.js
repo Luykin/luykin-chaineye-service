@@ -1,14 +1,20 @@
 // src/lib/perf-monitor/kpi-worker.js
 
 const { workerData, parentPort } = require("worker_threads");
-const Redis = require("ioredis");
+const redis = require("redis");
 
-// NOTE: The worker creates its own Redis connection.
-// Ensure Redis connection options are available here if needed (e.g., via environment variables).
-const redisClient = new Redis();
+// The worker creates its own Redis connection using the same library as the main app.
+const redisClient = redis.createClient({
+  socket: {
+    host: "127.0.0.1",
+    port: 6379,
+  },
+});
 
 async function calculateKpis() {
   try {
+    await redisClient.connect();
+
     const {
       startTime,
       endTime,
@@ -39,24 +45,18 @@ async function calculateKpis() {
 
     const multi = redisClient.multi();
     Array.from(indexKeys).forEach((key) =>
-      multi.zrangebyscore(key, startTs, endTs, "WITHSCORES")
+      multi.zRangeByScoreWithScores(key, startTs, endTs)
     );
     const results = await multi.exec();
 
     let allTraces = [];
-    // The format from ioredis for zrange with scores is [value1, score1, value2, score2, ...]
+    // Logic adapted for 'redis' v4 library which returns an array of { score, value } objects
     for (const rangeResult of results) {
-      if (!rangeResult || rangeResult[0]) {
-        // Error check
-        continue;
-      }
-      const flatResult = rangeResult[1] || [];
-      for (let i = 0; i < flatResult.length; i += 2) {
+      if (!rangeResult) continue;
+      for (const member of rangeResult) {
         try {
-          const value = flatResult[i];
-          const score = parseInt(flatResult[i + 1], 10);
-          const pointData = JSON.parse(value);
-          allTraces.push({ ...pointData, ts: score });
+          const pointData = JSON.parse(member.value);
+          allTraces.push({ ...pointData, ts: member.score });
         } catch (e) {
           // Ignore parse errors
         }
@@ -136,5 +136,5 @@ calculateKpis()
     parentPort.postMessage({ success: false, error: err.message });
   })
   .finally(() => {
-    redisClient.quit();
+    redisClient.disconnect();
   });
