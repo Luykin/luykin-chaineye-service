@@ -331,8 +331,7 @@ app.use(
 
 app.use(
   "/api/xhunt/report",
-  fingerprintLimiter,
-  // browserOnlyMiddleware,
+  fingerprintLimiter, //这里不要加浏览器验证，外部会检查健康状态
   xHuntReportRoutes
 );
 
