@@ -154,11 +154,8 @@
 </div>
 
 <!-- 轻量流行 CDN 富文本：Quill（按需加载，避免影响其他 tab） -->
-<link
-  rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css"
-/>
-<script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
+<link rel="stylesheet" href="/static/css/quill.snow.css" />
+<script src="/static/js/quill.min.js"></script>
 
 <style>
   .nacos-msg-container {
@@ -894,6 +891,13 @@
       loadFromNacos().catch((e) => toast("加载失败：" + e.message, "error"));
     }
 
+    function tryInitIfActive() {
+      const pane = document.getElementById("nacos-messages");
+      if (pane && pane.classList.contains("active")) {
+        setTimeout(init, 30);
+      }
+    }
+
     // 监听 tab 切换事件
     document.addEventListener("click", function (e) {
       const tabBtn = e.target.closest(".tab-btn");
@@ -901,5 +905,10 @@
         setTimeout(init, 80);
       }
     });
+
+    // 若刷新页面时本 tab 就是激活状态（URL hash 直接落在 nacos-messages），也要自动初始化
+    document.addEventListener("DOMContentLoaded", tryInitIfActive);
+    // 兼容：有些情况下 initTabs 先于/后于 DOMContentLoaded 切换 active，这里再延迟尝试一次
+    setTimeout(tryInitIfActive, 300);
   })();
 </script>
