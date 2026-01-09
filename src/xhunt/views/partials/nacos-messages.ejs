@@ -61,7 +61,20 @@
       <div class="field">
         <label>内容（富文本编辑，可输出 HTML）</label>
 
-        <div class="rte-toolbar">
+        <!-- Quill 需要的容器：工具栏 + 编辑器 -->
+        <div
+          id="nacos-quill-toolbar"
+          class="ql-toolbar ql-snow"
+          style="display: none"
+        ></div>
+        <div
+          id="nacos-msg-content"
+          class="ql-container ql-snow"
+          style="display: none"
+        ></div>
+
+        <!-- fallback：若 CDN 加载失败，仍可用原生编辑器（保持可用性） -->
+        <div class="rte-toolbar" id="nacos-rte-toolbar">
           <button class="btn" type="button" id="nacos-rte-bold" title="加粗">
             <b>B</b>
           </button>
@@ -101,11 +114,13 @@
         </div>
 
         <div
-          id="nacos-msg-content"
+          id="nacos-msg-content-fallback"
           class="rte-editor"
           contenteditable="false"
           data-placeholder="请输入公告内容（支持 HTML）"
+          style="display: none"
         ></div>
+
         <div class="muted" style="margin-top: 6px">
           当前保存为 HTML 字符串（发布时写入 Nacos）。
         </div>
@@ -137,6 +152,13 @@
 
   <div class="nacos-msg-toast" id="nacos-msg-toast" style="display: none"></div>
 </div>
+
+<!-- 轻量流行 CDN 富文本：Quill（按需加载，避免影响其他 tab） -->
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css"
+/>
+<script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
 
 <style>
   .nacos-msg-container {
@@ -304,22 +326,19 @@
     color: #374151;
     font-size: 13px;
   }
-  .field input,
-  .field textarea,
-  .rte-editor {
+  .field input {
     border: 1px solid #d1d5db;
     border-radius: 8px;
     padding: 10px 10px;
     font-size: 14px;
     outline: none;
   }
-  .field input:focus,
-  .field textarea:focus,
-  .rte-editor:focus {
+  .field input:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
   }
 
+  /* fallback editor */
   .rte-toolbar {
     display: flex;
     gap: 8px;
@@ -328,6 +347,11 @@
     margin-bottom: 8px;
   }
   .rte-editor {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 10px 10px;
+    font-size: 14px;
+    outline: none;
     min-height: 220px;
     background: #fff;
     line-height: 1.6;
@@ -340,6 +364,16 @@
     content: attr(data-placeholder);
     color: #9ca3af;
   }
+
+  /* quill tweaks */
+  #nacos-quill-toolbar {
+    border-radius: 8px 8px 0 0;
+  }
+  #nacos-msg-content {
+    border-radius: 0 0 8px 8px;
+    min-height: 240px;
+  }
+
   .preview {
     margin-top: 10px;
   }
@@ -400,6 +434,12 @@
     let items = []; // 当前语言的公告数组
     let dirty = false;
 
+    // editor impl
+    let editorMode = null; // 'quill' | 'fallback'
+    let quill = null;
+
+    const DEFAULT_FOOTER_HTML = `<br>请加入我们的<a href='https://t.me/xhunt_ai' target='_blank' style='color:rgb(29, 155, 240)'>电报群</a>获取最新资讯。`;
+
     function $(id) {
       return document.getElementById(id);
     }
@@ -438,15 +478,47 @@
       return div.innerHTML;
     }
 
-    function setControlsEnabled(enabled) {
-      $("nacos-msg-title").disabled = !enabled;
-      const editor = $("nacos-msg-content");
-      if (editor)
-        editor.setAttribute("contenteditable", enabled ? "true" : "false");
-      $("nacos-msg-delete").disabled = !enabled;
-      $("nacos-msg-publish").disabled = !enabled;
+    function isEditorEnabled() {
+      return currentIndex >= 0 && !!items[currentIndex];
+    }
 
-      // 工具栏按钮也一起禁用
+    function getEditorHtml() {
+      if (editorMode === "quill" && quill) {
+        return quill.root.innerHTML || "";
+      }
+      return $("nacos-msg-content-fallback").innerHTML || "";
+    }
+
+    function setEditorHtml(html) {
+      const value = html || "";
+      if (editorMode === "quill" && quill) {
+        // Quill 内部更喜欢 delta，但也支持 pasteHTML
+        quill.clipboard.dangerouslyPasteHTML(value);
+        return;
+      }
+      $("nacos-msg-content-fallback").innerHTML = value;
+    }
+
+    function setEditorEnabled(enabled) {
+      if (editorMode === "quill" && quill) {
+        quill.enable(!!enabled);
+        // 工具栏显示/隐藏
+        $("nacos-quill-toolbar").style.display = enabled ? "block" : "none";
+        $("nacos-msg-content").style.display = enabled ? "block" : "none";
+        $("nacos-rte-toolbar").style.display = "none";
+        $("nacos-msg-content-fallback").style.display = "none";
+        return;
+      }
+
+      // fallback
+      $("nacos-rte-toolbar").style.display = "flex";
+      $("nacos-msg-content-fallback").style.display = "block";
+      $("nacos-quill-toolbar").style.display = "none";
+      $("nacos-msg-content").style.display = "none";
+
+      const editor = $("nacos-msg-content-fallback");
+      editor.setAttribute("contenteditable", enabled ? "true" : "false");
+
       [
         "nacos-rte-bold",
         "nacos-rte-italic",
@@ -458,6 +530,27 @@
         const btn = $(id);
         if (btn) btn.disabled = !enabled;
       });
+    }
+
+    function setControlsEnabled(enabled) {
+      $("nacos-msg-title").disabled = !enabled;
+      $("nacos-msg-delete").disabled = !enabled;
+      $("nacos-msg-publish").disabled = !enabled;
+      setEditorEnabled(enabled);
+    }
+
+    function syncToModel() {
+      if (!isEditorEnabled()) return;
+      const titleEl = $("nacos-msg-title");
+      const html = getEditorHtml();
+      items[currentIndex] = {
+        ...items[currentIndex],
+        title: titleEl.value,
+        content: html,
+      };
+      $("nacos-msg-preview").innerHTML = html || "";
+      dirty = true;
+      renderList();
     }
 
     function renderList() {
@@ -472,7 +565,7 @@
 
       listEl.innerHTML =
         sorted
-          .map((it, idx) => {
+          .map((it) => {
             // idx 是排序后的索引；我们需要映射回原数组索引
             const originalIndex = items.indexOf(it);
             const active = originalIndex === currentIndex ? "active" : "";
@@ -505,7 +598,7 @@
       if (!it) {
         setControlsEnabled(false);
         $("nacos-msg-title").value = "";
-        $("nacos-msg-content").innerHTML = "";
+        setEditorHtml("");
         $("nacos-msg-preview").innerHTML = "";
         $("nacos-msg-editor-hint").textContent = "选择左侧一条公告开始编辑";
         renderList();
@@ -514,7 +607,7 @@
 
       setControlsEnabled(true);
       $("nacos-msg-title").value = it.title || "";
-      $("nacos-msg-content").innerHTML = it.content || "";
+      setEditorHtml(it.content || "");
       $("nacos-msg-preview").innerHTML = it.content || "";
       $("nacos-msg-editor-hint").textContent = `正在编辑：created=${
         it.created || ""
@@ -522,31 +615,59 @@
       renderList();
     }
 
-    function bindEditor() {
-      const titleEl = $("nacos-msg-title");
-      const editorEl = $("nacos-msg-content");
+    function initEditor() {
+      // 优先使用 Quill（CDN），失败则 fallback
+      if (window.Quill) {
+        editorMode = "quill";
 
-      function syncToModel() {
-        if (currentIndex < 0 || !items[currentIndex]) return;
-        items[currentIndex] = {
-          ...items[currentIndex],
-          title: titleEl.value,
-          content: editorEl.innerHTML || "",
-        };
-        $("nacos-msg-preview").innerHTML = editorEl.innerHTML || "";
-        dirty = true;
-        renderList();
+        // 构建 quill toolbar
+        const toolbarEl = $("nacos-quill-toolbar");
+        toolbarEl.innerHTML = `
+          <span class="ql-formats">
+            <button class="ql-bold"></button>
+            <button class="ql-italic"></button>
+            <button class="ql-underline"></button>
+          </span>
+          <span class="ql-formats">
+            <button class="ql-link"></button>
+          </span>
+          <span class="ql-formats">
+            <button class="ql-clean"></button>
+          </span>
+        `;
+
+        quill = new window.Quill("#nacos-msg-content", {
+          theme: "snow",
+          modules: { toolbar: "#nacos-quill-toolbar" },
+        });
+
+        quill.on("text-change", () => {
+          syncToModel();
+        });
+
+        // 默认隐藏，等选中条目再显示
+        $("nacos-quill-toolbar").style.display = "none";
+        $("nacos-msg-content").style.display = "none";
+        $("nacos-rte-toolbar").style.display = "none";
+        $("nacos-msg-content-fallback").style.display = "none";
+
+        return;
       }
+
+      // fallback
+      editorMode = "fallback";
+      $("nacos-rte-toolbar").style.display = "flex";
+      $("nacos-msg-content-fallback").style.display = "block";
+      $("nacos-quill-toolbar").style.display = "none";
+      $("nacos-msg-content").style.display = "none";
+
+      const titleEl = $("nacos-msg-title");
+      const editorEl = $("nacos-msg-content-fallback");
 
       titleEl.addEventListener("input", syncToModel);
       editorEl.addEventListener("input", syncToModel);
+      editorEl.addEventListener("paste", () => setTimeout(syncToModel, 0));
 
-      // 粘贴时尽量保留 HTML（默认浏览器会带格式）；这里不额外清洗
-      editorEl.addEventListener("paste", () => {
-        setTimeout(syncToModel, 0);
-      });
-
-      // 工具栏：execCommand（兼容性好，够用；后续可替换更高级编辑器）
       function cmd(command, value) {
         editorEl.focus();
         document.execCommand(command, false, value);
@@ -620,7 +741,6 @@
       try {
         parsed = JSON.parse(data.content || "[]");
       } catch (e) {
-        // 兼容：有些 nacos 返回可能不是纯 JSON
         throw new Error("Nacos content 不是合法 JSON，请检查当前配置内容");
       }
 
@@ -634,17 +754,6 @@
       renderList();
       selectItem(-1);
       toast("加载完成", "success");
-    }
-
-    const DEFAULT_FOOTER_HTML = `<br>请加入我们的<a href='https://t.me/xhunt_ai' target='_blank' style='color:rgb(29, 155, 240)'>电报群</a>获取最新资讯。`;
-
-    function ensureFooter(contentHtml) {
-      const html = String(contentHtml || "");
-      // 如果用户删除了，就不强行加回；仅在“新建默认”时加。
-      // 这里做个简单去重：避免重复插入。
-      if (html.includes("https://t.me/xhunt_ai") || html.includes("电报群"))
-        return html;
-      return (html ? html : "") + DEFAULT_FOOTER_HTML;
     }
 
     function newItem() {
@@ -661,17 +770,55 @@
       toast("已新增一条公告（未发布）", "info");
     }
 
-    function deleteCurrent() {
+    async function deleteCurrent() {
       if (currentIndex < 0) return;
       const it = items[currentIndex];
-      const ok = window.confirm(`确认删除该公告？\n\n标题：${it?.title || ""}`);
+      const ok = window.confirm(
+        `确认删除该公告？\n\n标题：${
+          it?.title || ""
+        }\n\n提示：删除会立即发布到 Nacos 生效。`
+      );
       if (!ok) return;
+
+      // 先本地删除
       items.splice(currentIndex, 1);
       dirty = true;
-      currentIndex = -1;
-      renderList();
-      selectItem(-1);
-      toast("已删除（未发布）", "info");
+
+      // 立即发布（使删除立刻生效）
+      try {
+        toast("正在删除并发布到 Nacos...", "info");
+        const did = DATA_IDS[currentLang];
+        const content = JSON.stringify(items, null, 2);
+        await apiPublishConfig({
+          dataId: did,
+          content,
+          group: "DEFAULT_GROUP",
+        });
+        dirty = false;
+
+        // 重新从 Nacos 加载，确保与服务端一致
+        await loadFromNacos();
+
+        // 退出编辑模式
+        currentIndex = -1;
+        renderList();
+        selectItem(-1);
+
+        toast("删除已生效（已发布）", "success");
+      } catch (e) {
+        // 发布失败则提示，并保留 dirty 状态方便用户手动发布/重试
+        console.error("deleteCurrent publish error:", e);
+        toast(
+          "删除未能发布：" +
+            (e.message || "未知错误") +
+            "（你可以点击发布按钮重试）",
+          "error"
+        );
+        // 刷新 UI（此时为本地已删但未发布）
+        currentIndex = -1;
+        renderList();
+        selectItem(-1);
+      }
     }
 
     async function publish() {
@@ -715,6 +862,12 @@
       // init button styles
       $("nacos-msg-lang-zh").classList.add("primary");
 
+      // init editor once
+      initEditor();
+
+      // bind model sync (title)
+      $("nacos-msg-title").addEventListener("input", syncToModel);
+
       $("nacos-msg-lang-zh").addEventListener("click", () => setLang("zh"));
       $("nacos-msg-lang-en").addEventListener("click", () => setLang("en"));
       $("nacos-msg-refresh").addEventListener("click", async () => {
@@ -736,8 +889,6 @@
       $("nacos-msg-publish").addEventListener("click", () => {
         publish().catch((e) => toast("发布失败：" + e.message, "error"));
       });
-
-      bindEditor();
 
       // first load
       loadFromNacos().catch((e) => toast("加载失败：" + e.message, "error"));
