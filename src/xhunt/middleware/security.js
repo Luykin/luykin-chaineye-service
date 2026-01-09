@@ -168,14 +168,14 @@ class RequestStatsManager {
       ...Object.keys(this.versionMemoryCounter),
       ...Object.keys(this.urlMemoryCounter),
     ]);
-    
+
     // 如果窗口数量超过限制，清理最旧的窗口
     if (allWindows.size > this.MAX_MEMORY_WINDOWS) {
       // 按时间排序，保留最新的几个窗口
       const sortedWindows = Array.from(allWindows).sort();
       const windowsToKeep = sortedWindows.slice(-this.MAX_MEMORY_WINDOWS);
       const windowsToRemove = sortedWindows.slice(0, -this.MAX_MEMORY_WINDOWS);
-      
+
       for (const window of windowsToRemove) {
         // 如果窗口不是当前窗口，可以安全删除
         if (window !== currentTimeWindow) {
@@ -183,7 +183,7 @@ class RequestStatsManager {
           delete this.urlMemoryCounter[window];
         }
       }
-      
+
       if (windowsToRemove.length > 0) {
         console.warn(
           `[请求统计] ⚠️ 清理了 ${windowsToRemove.length} 个旧时间窗口的内存数据（防止内存增长，保留 ${windowsToKeep.length} 个窗口）`
@@ -200,22 +200,22 @@ class RequestStatsManager {
       // /api/xhunt/notes/:handle -> /api/xhunt/notes/*
       {
         pattern: /^\/api\/xhunt\/notes\/([^\/]+)$/,
-        replacement: '/api/xhunt/notes/*'
+        replacement: "/api/xhunt/notes/*",
       },
       // /api/xhunt/reviews/:handle -> /api/xhunt/reviews/*
       {
         pattern: /^\/api\/xhunt\/reviews\/([^\/]+)$/,
-        replacement: '/api/xhunt/reviews/*'
+        replacement: "/api/xhunt/reviews/*",
       },
       // /api/xhunt/reviews/:handle/comments -> /api/xhunt/reviews/*/comments
       {
         pattern: /^\/api\/xhunt\/reviews\/([^\/]+)\/comments$/,
-        replacement: '/api/xhunt/reviews/*/comments'
+        replacement: "/api/xhunt/reviews/*/comments",
       },
       // /api/xhunt/rootdata/relationship/:id -> /api/xhunt/rootdata/relationship/*
       {
         pattern: /^\/api\/xhunt\/rootdata\/relationship\/([^\/]+)$/,
-        replacement: '/api/xhunt/rootdata/relationship/*'
+        replacement: "/api/xhunt/rootdata/relationship/*",
       },
     ];
 
@@ -234,36 +234,36 @@ class RequestStatsManager {
   extractUrlPath(req) {
     try {
       // 优先使用 baseUrl + path（这是 Express 的标准方式）
-      let pathname = (req.baseUrl || '') + (req.path || '');
-      
+      let pathname = (req.baseUrl || "") + (req.path || "");
+
       // 如果没有 path，尝试使用 originalUrl 或 url
-      if (!pathname || pathname === '/') {
-        const fullUrl = req.originalUrl || req.url || '';
-        
+      if (!pathname || pathname === "/") {
+        const fullUrl = req.originalUrl || req.url || "";
+
         // 如果包含协议，使用URL对象解析
-        if (fullUrl.startsWith('http://') || fullUrl.startsWith('https://')) {
+        if (fullUrl.startsWith("http://") || fullUrl.startsWith("https://")) {
           const url = new URL(fullUrl);
           pathname = url.pathname;
         } else {
           // 否则直接提取路径部分（去掉查询参数）
-          pathname = fullUrl.split('?')[0];
+          pathname = fullUrl.split("?")[0];
         }
       } else {
         // 去掉查询参数（如果有）
-        pathname = pathname.split('?')[0];
+        pathname = pathname.split("?")[0];
       }
-      
+
       // 确保返回的路径不为空
-      pathname = pathname || '/';
-      
+      pathname = pathname || "/";
+
       // 应用路径归一化
       pathname = this.normalizeUrlPath(pathname);
-      
+
       return pathname;
     } catch (error) {
       // 如果解析失败，使用最简单的 fallback
-      const path = (req.baseUrl || '') + (req.path || '/');
-      const pathname = path.split('?')[0] || '/';
+      const path = (req.baseUrl || "") + (req.path || "/");
+      const pathname = path.split("?")[0] || "/";
       return this.normalizeUrlPath(pathname);
     }
   }
@@ -408,7 +408,6 @@ class RequestStatsManager {
 const requestStatsManager = new RequestStatsManager();
 // 保持向后兼容的别名
 const versionStatsManager = requestStatsManager;
-
 
 // 速率限制中间件
 const rateLimiter = rateLimit({
@@ -793,7 +792,7 @@ const getRequestParam = (req, paramName, allowQueryParams = true) => {
 };
 
 const SECURITY_ERROR_REASON_MAP = {
-  "400": {
+  400: {
     reasonCode: "missing_headers",
     message: "缺少必需的安全请求参数",
   },
@@ -809,11 +808,11 @@ const SECURITY_ERROR_REASON_MAP = {
     reasonCode: "invalid_timestamp",
     message: "请求时间戳超出允许范围",
   },
-  "409": {
+  409: {
     reasonCode: "duplicate_request",
     message: "30分钟内重复的请求ID",
   },
-  "411": {
+  411: {
     reasonCode: "invalid_signature",
     message: "请求签名不匹配",
   },
@@ -1045,7 +1044,9 @@ class SecurityViolationLogger {
       extensionVersion: extensionVersion
         ? this.truncate(extensionVersion, 32)
         : null,
-      requestTimestamp: requestTimestamp ? Number(requestTimestamp) || null : null,
+      requestTimestamp: requestTimestamp
+        ? Number(requestTimestamp) || null
+        : null,
       requestId: requestId ? this.truncate(requestId, 128) : null,
       windowLocationHref: windowLocationHref
         ? this.truncate(windowLocationHref, 1024)
@@ -1254,21 +1255,37 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
 
   // 验证请求头是否存在
   if (!requestId || !timestamp || !fingerprint || !signature || !version) {
+    console.error("validateSecurityParams error:", {
+      requestId,
+      timestamp,
+      fingerprint,
+      signature,
+      version,
+    });
     return { isValid: false, error: "400" };
   }
 
   // 验证指纹格式
   if (!isValidFingerprint(fingerprint)) {
+    console.error("validateSecurityParams fingerprint error:", {
+      fingerprint,
+    });
     return { isValid: false, error: "400-1" };
   }
 
   // 验证请求ID格式
   if (!isValidRequestId(requestId)) {
+    console.error("validateSecurityParams requestId error:", {
+      requestId,
+    });
     return { isValid: false, error: "400-2" };
   }
 
   // 验证时间戳
   if (!isTimestampValid(timestamp)) {
+    console.error("validateSecurityParams timestamp error:", {
+      timestamp,
+    });
     return { isValid: false, error: "400-3" };
   }
 
@@ -1292,6 +1309,10 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
     );
 
     if (signature !== expectedSignature) {
+      console.error("sse validateSecurityParams signature error:", {
+        signature,
+        expectedSignature,
+      });
       return { isValid: false, error: "411" };
     }
   } else {
@@ -1306,6 +1327,10 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
       fingerprint
     );
     if (signature !== expectedSignature) {
+      console.error("web validateSecurityParams signature error:", {
+        signature,
+        expectedSignature,
+      });
       return { isValid: false, error: "411" };
     }
   }
@@ -1342,6 +1367,11 @@ const browserOnlyMiddleware = (req, res, next) => {
     }
     req[BROWSER_ONLY_MIDDLEWARE_FLAG] = true;
     if (!validateBrowserEnvironment(req, false)) {
+      console.error("browserOnlyMiddleware validateBrowserEnvironment error:", {
+        userAgent,
+        windowLocationHref,
+        version,
+      });
       return res.status(403).json({ error: "403" });
     }
     next();
@@ -1372,6 +1402,9 @@ const securityMiddleware = async (req, res, next) => {
           context: "standard request",
         });
       }
+      console.error("securityMiddleware validateSecurityParams error:", {
+        validation,
+      });
       return res.status(400).json({ error: validation.error });
     }
 
@@ -1387,6 +1420,9 @@ const securityMiddleware = async (req, res, next) => {
           context: "standard request",
         });
       }
+      console.error("securityMiddleware requestIdReservation error:", {
+        requestIdReservation,
+      });
       return res.status(409).json({ error: "409" });
     }
 
@@ -1440,6 +1476,9 @@ const sseSecurityMiddleware = async (req, res, next) => {
           context: "sse request",
         });
       }
+      console.error("sseSecurityMiddleware validateSecurityParams error:", {
+        validation,
+      });
       return res.status(400).json({ error: validation.error });
     }
 
@@ -1455,6 +1494,9 @@ const sseSecurityMiddleware = async (req, res, next) => {
           context: "sse request",
         });
       }
+      console.error("sseSecurityMiddleware requestIdReservation error:", {
+        requestIdReservation,
+      });
       return res.status(409).json({ error: "409" });
     }
 
