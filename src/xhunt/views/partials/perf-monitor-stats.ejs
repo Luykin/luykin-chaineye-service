@@ -747,6 +747,15 @@
       return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
 
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
     function highlightText(text, query) {
       if (!query) return text;
       const escapedText = text
@@ -1071,7 +1080,7 @@
       data.forEach((d) => {
         const point = {
           // Encode all necessary data into the value array
-          // [0: ts, 1: duration, 2: status, 3: hasDetail, 4: requestId, 5: path, 6: userId]
+          // [0: ts, 1: duration, 2: status, 3: hasDetail, 4: requestId, 5: path, 6: userId, 7: ip]
           value: [
             d.ts,
             d.durationMs,
@@ -1080,6 +1089,7 @@
             d.requestId,
             d.path,
             d.userId,
+            d.ip,
           ],
         };
 
@@ -1107,17 +1117,26 @@
             trigger: "item",
             formatter: (params) => {
               const v = params.value;
-              // [0: ts, 1: duration, 2: status, 3: hasDetail, 4: requestId, 5: path, 6: userId]
+              // [0: ts, 1: duration, 2: status, 3: hasDetail, 4: requestId, 5: path, 6: userId, 7: ip]
               const path = v[5] || "";
               const truncatedPath =
                 path.length > 65 ? path.substring(0, 65) + "..." : path;
               const pathLine = `<br/><b>path:</b> <span title="${path}">${truncatedPath}</span>`;
               const userIdLine = `<br/><b>userId:</b> ${v[6] || ""}`;
+              const ip = v[7] || "";
+              const maxIpLen = 40;
+              const ipTruncated =
+                ip.length > maxIpLen ? ip.slice(0, maxIpLen) + "..." : ip;
+              const ipLine = ip
+                ? `<br/><b>ip:</b> <span title="${escapeHtml(ip)}">${escapeHtml(
+                    ipTruncated
+                  )}</span>`
+                : "";
               const hasDetail = v[3] === 1;
 
               return `<b>requestId:</b> ${
                 v[4]
-              }${pathLine}${userIdLine}<br/><b>status:</b> ${
+              }${pathLine}${userIdLine}${ipLine}<br/><b>status:</b> ${
                 v[2]
               }<br/><b>duration:</b> ${Number(v[1]).toFixed(2)} ms<br/>${
                 hasDetail ? "<b>点击查看详情</b>" : "无详情（未采样）"

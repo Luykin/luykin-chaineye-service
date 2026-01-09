@@ -88,6 +88,8 @@ class PerfDataProcessor {
           status: event.status,
           path: event.path,
           userId: event.userId || event.details?.userId || "N/A",
+          // 基础索引点也记录 clientIp，便于前端按 IP 筛选/定位异常流量
+          ip: event.ip || "",
           hasDetail: !!event.hasDetail,
         });
         // Corrected: zAdd for redis v4 expects an array of members
