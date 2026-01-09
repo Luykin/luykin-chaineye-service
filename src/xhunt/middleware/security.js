@@ -1367,6 +1367,13 @@ const browserOnlyMiddleware = (req, res, next) => {
     }
     req[BROWSER_ONLY_MIDDLEWARE_FLAG] = true;
     if (!validateBrowserEnvironment(req, false)) {
+      const userAgent = req.headers["user-agent"];
+      const windowLocationHref = getRequestParam(
+        req,
+        "window-location-href",
+        false
+      );
+      const version = getRequestParam(req, "extension-version", false);
       console.error("browserOnlyMiddleware validateBrowserEnvironment error:", {
         userAgent,
         windowLocationHref,
