@@ -3226,24 +3226,64 @@ router.get("/security-violations", adminAuth, async (req, res) => {
     const limit = Math.min(Math.max(limitQuery, 1), 100);
     const offset = (page - 1) * limit;
     const reasonCode = (req.query.reasonCode || "").trim();
+    const clientIpFilter = (req.query.ip || "").trim();
 
-    const { SecurityViolationLog } = require("../../models/postgres-start");
+    const {
+      SecurityViolationLog,
+      pgInstance,
+    } = require("../../models/postgres-start");
+    const { Op } = require("sequelize");
 
     const where = {};
     if (reasonCode) {
       where.reasonCode = reasonCode;
     }
+    if (clientIpFilter) {
+      where.clientIp = {
+        [Op.iLike]: `%${clientIpFilter}%`,
+      };
+    }
 
-    const { rows, count } = await SecurityViolationLog.findAndCountAll({
-      order: [["createdAt", "DESC"]],
-      offset,
-      limit,
-      where,
-    });
+    // 并行执行数据查询和 Top 10 IP 聚合
+    const [logResult, topIps] = await Promise.all([
+      // 1. 查询日志列表（分页）
+      SecurityViolationLog.findAndCountAll({
+        order: [["createdAt", "DESC"]],
+        offset,
+        limit,
+        where,
+      }),
+      // 2. 查询 Top 10 风险 IP (仅在无 IP 筛选时计算全局 Top 10)
+      !clientIpFilter
+        ? SecurityViolationLog.findAll({
+            attributes: [
+              "clientIp",
+              [pgInstance.fn("COUNT", pgInstance.col("client_ip")), "count"],
+            ],
+            where: {
+              clientIp: { [Op.not]: null },
+              // 统计最近7天的数据，避免全量扫描
+              createdAt: {
+                [Op.gte]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+              },
+            },
+            group: ["clientIp"],
+            order: [[pgInstance.literal("count"), "DESC"]],
+            limit: 10,
+            raw: true,
+          })
+        : Promise.resolve([]), // 如果正在按 IP 筛选，则不计算 Top 10
+    ]);
+
+    const { rows, count } = logResult;
 
     res.json({
       success: true,
       data: rows.map((row) => row.toJSON()),
+      topIps: topIps.map((item) => ({
+        ip: item.clientIp,
+        count: parseInt(item.count, 10),
+      })),
       pagination: {
         page,
         limit,
