@@ -125,31 +125,59 @@ function initTabs() {
     `;
   }
 
-  tabBtns.forEach((btn) => {
-    btn.addEventListener("click", function () {
-      const targetTab = this.getAttribute("data-tab");
+  function activateTab(tabId) {
+    // 移除所有活跃状态
+    tabBtns.forEach((b) => b.classList.remove("active"));
+    tabPanes.forEach((p) => p.classList.remove("active"));
 
-      // 移除所有活跃状态
-      tabBtns.forEach((b) => b.classList.remove("active"));
-      tabPanes.forEach((p) => p.classList.remove("active"));
+    const targetBtn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+    const targetPane = document.getElementById(tabId);
 
+    if (targetBtn && targetPane) {
       // 添加活跃状态
-      this.classList.add("active");
-      document.getElementById(targetTab).classList.add("active");
+      targetBtn.classList.add("active");
+      targetPane.classList.add("active");
+
+      // 更新 URL hash
+      window.location.hash = tabId;
 
       // 若无权限，渲染统一的权限不足提示
-      if (!hasPermissionForTab(targetTab)) {
-        renderNoPermissionPane(targetTab);
+      if (!hasPermissionForTab(tabId)) {
+        renderNoPermissionPane(tabId);
       }
 
       // 当切换到 backup 页时，自动刷新一次状态
-      if (targetTab === "backup") {
+      if (tabId === "backup") {
         if (typeof loadBackupStatus === "function") {
           loadBackupStatus();
         }
       }
+    }
+  }
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const targetTab = this.getAttribute("data-tab");
+      activateTab(targetTab);
     });
   });
+
+  // 页面加载时检查 hash 并激活对应 Tab
+  const currentHash = window.location.hash.substring(1);
+  if (currentHash) {
+    const targetBtn = document.querySelector(
+      `.tab-btn[data-tab="${currentHash}"]`
+    );
+    if (targetBtn) {
+      activateTab(currentHash);
+    }
+  } else {
+    // 如果没有 hash，默认激活第一个 Tab
+    const firstTab = tabBtns[0]?.getAttribute("data-tab");
+    if (firstTab) {
+      activateTab(firstTab);
+    }
+  }
 }
 
 // 绑定下载事件
