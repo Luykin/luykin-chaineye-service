@@ -277,6 +277,10 @@
       />
     </div>
     <div class="field">
+      <label for="filter-by-ip">按 IP 筛选</label>
+      <input id="filter-by-ip" type="text" placeholder="输入 IP (模糊匹配)" />
+    </div>
+    <div class="field">
       <label>&nbsp;</label>
       <button id="apply-filters-btn">筛选</button>
     </div>
@@ -690,6 +694,7 @@
 
     const filterByUserIdInput = document.getElementById("filter-by-userid");
     const filterByPathInput = document.getElementById("filter-by-path");
+    const filterByIpInput = document.getElementById("filter-by-ip");
     const applyFiltersBtn = document.getElementById("apply-filters-btn");
     const clearFiltersBtn = document.getElementById("clear-filters-btn");
 
@@ -1507,8 +1512,9 @@
     function applyFilters() {
       const userIdFilter = filterByUserIdInput.value.trim().toLowerCase();
       const pathFilter = filterByPathInput.value.trim().toLowerCase();
+      const ipFilter = (filterByIpInput?.value || "").trim().toLowerCase();
 
-      if (!userIdFilter && !pathFilter) {
+      if (!userIdFilter && !pathFilter && !ipFilter) {
         renderScatterChart(rawTraceData);
         return;
       }
@@ -1520,7 +1526,12 @@
         const pathMatch =
           !pathFilter ||
           (item.path && item.path.toLowerCase().includes(pathFilter));
-        return userIdMatch && pathMatch;
+
+        // perf 事件基础字段里我们记录的是 ip: clientIp（字符串）
+        const ipVal = (item.ip || "").toString().toLowerCase();
+        const ipMatch = !ipFilter || ipVal.includes(ipFilter);
+
+        return userIdMatch && pathMatch && ipMatch;
       });
 
       renderScatterChart(filteredData);
@@ -1529,6 +1540,7 @@
     function clearFilters() {
       filterByUserIdInput.value = "";
       filterByPathInput.value = "";
+      if (filterByIpInput) filterByIpInput.value = "";
       renderScatterChart(rawTraceData);
     }
 

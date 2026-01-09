@@ -1522,12 +1522,40 @@ const sseSecurityMiddleware = async (req, res, next) => {
   }
 };
 
+// 通用：基于真实客户端 IP 的封禁中间件（可用于指定路由）
+// 优先：CF-Connecting-IP，其次：X-Forwarded-For 第一个，再兜底 req.ip
+const createIpBlocker = (blockedIps = [], options = {}) => {
+  const blockedSet = new Set(blockedIps);
+  // 默认使用自定义状态码，便于在日志/监控中“一眼识别”该类请求被策略拦截
+  // 说明：4xx 里 451 语义接近（法律原因不可用），这里用 418 作为“策略拦截”专用码（不会与常见业务码冲突）
+  const statusCode = options.statusCode || 418;
+
+  return (req, res, next) => {
+    const cfIp = req.headers["cf-connecting-ip"];
+    const xff = String(req.headers["x-forwarded-for"] || "")
+      .split(",")[0]
+      ?.trim();
+    const clientIp = cfIp || xff || req.ip;
+
+    if (clientIp && blockedSet.has(clientIp)) {
+      return res.status(statusCode).json({
+        success: false,
+        error: "ACCESS_RESTRICTED",
+        message:
+          "This request is temporarily unavailable. Please try again later.",
+      });
+    }
+    next();
+  };
+};
+
 module.exports = {
   rateLimiter,
   fingerprintLimiter,
   securityMiddleware,
   sseSecurityMiddleware,
   browserOnlyMiddleware,
+  createIpBlocker,
   generateSignature, // 导出用于测试（HMAC SHA256，普通 API）
   generateSSESignature, // 导出用于测试（FNV-1a，SSE）
   dauCacheManager, // 导出缓存管理器（用于测试和监控）

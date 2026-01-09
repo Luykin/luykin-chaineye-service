@@ -43,6 +43,7 @@ const {
   rateLimiter,
   browserOnlyMiddleware,
   sseSecurityMiddleware,
+  createIpBlocker,
 } = require("./xhunt/middleware/security");
 const {
   requestContextMiddleware,
@@ -307,6 +308,7 @@ app.use(
 
 app.use(
   "/api/xhunt/proxy",
+  // createIpBlocker(["205.198.72.202"]),
   fingerprintLimiter,
   browserOnlyMiddleware,
   securityMiddleware,
