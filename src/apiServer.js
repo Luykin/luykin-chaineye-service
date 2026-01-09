@@ -103,11 +103,11 @@ const { middleware: perfMiddleware, apiRouter: perfApiRouter } =
     trace: {
       sampleRate: 0.03, // 5% of fast/successful requests
       slowThresholdMs: 500, // Trace all requests slower than 500ms
-      retentionHours: 36,
+      retentionHours: 30,
     },
     metrics: {
       timeWindowSecs: 60, // Aggregate metrics every minute
-      retentionHours: 36,
+      retentionHours: 30,
     },
   });
 app.use(perfMiddleware);
