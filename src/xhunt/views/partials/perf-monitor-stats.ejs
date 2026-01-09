@@ -218,6 +218,8 @@
     padding: 16px;
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
     position: relative;
+    max-height: 85vh; /* 限制最大高度 */
+    overflow-y: auto; /* 内容超长时可滚动 */
   }
   .modal .close-button {
     position: absolute;
@@ -458,6 +460,8 @@
         padding: 16px 16px;
         box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
         position: relative;
+        max-height: 84vh;
+        overflow: auto;
       "
     >
       <span
@@ -486,6 +490,89 @@
           line-height: 1.45;
         "
       ></pre>
+
+      <!-- Security Scan Section (in modal) -->
+      <div
+        id="security-scan-section"
+        style="
+          display: none;
+          margin-top: 14px;
+          border-top: 1px solid #e5e7eb;
+          padding-top: 12px;
+        "
+      >
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+          "
+        >
+          <h4
+            style="font-size: 14px; font-weight: 700; margin: 0; color: #111827"
+          >
+            🛡️ Security Scan
+          </h4>
+          <span
+            id="security-scan-status"
+            style="font-size: 12px; color: #6b7280"
+          ></span>
+        </div>
+
+        <div
+          style="
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+            margin-bottom: 10px;
+          "
+        >
+          <input
+            type="text"
+            id="security-scan-ip-input"
+            placeholder="IP (editable)"
+            style="
+              flex: 1;
+              padding: 8px 10px;
+              border: 1px solid #d1d5db;
+              border-radius: 8px;
+              font-size: 13px;
+            "
+          />
+          <button
+            id="security-scan-btn"
+            style="
+              padding: 8px 14px;
+              border-radius: 8px;
+              border: 1px solid #d1d5db;
+              background: #fff;
+              cursor: pointer;
+              font-size: 13px;
+            "
+          >
+            Scan
+          </button>
+        </div>
+
+        <div
+          id="security-scan-results"
+          style="
+            font-size: 12px;
+            max-height: 220px;
+            overflow-y: auto;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 10px;
+            line-height: 1.5;
+          "
+        >
+          No risk found.
+        </div>
+      </div>
 
       <div
         class="status-code-help"
@@ -714,6 +801,19 @@
     const urlStatsModalContent = document.getElementById(
       "url-stats-modal-content"
     );
+
+    // Security Scan Elements
+    const securityScanSection = document.getElementById(
+      "security-scan-section"
+    );
+    const securityScanIpInput = document.getElementById(
+      "security-scan-ip-input"
+    );
+    const securityScanBtn = document.getElementById("security-scan-btn");
+    const securityScanResults = document.getElementById(
+      "security-scan-results"
+    );
+    const securityScanStatus = document.getElementById("security-scan-status");
 
     const normalizationRules = [
       {
@@ -1019,6 +1119,122 @@
 
     // legacy fetch removed
 
+    function setSecurityScanUi({ visible, ip, statusText, html, loading }) {
+      if (!securityScanSection) return;
+      securityScanSection.style.display = visible ? "block" : "none";
+      if (securityScanIpInput && typeof ip === "string")
+        securityScanIpInput.value = ip;
+      if (securityScanStatus) securityScanStatus.textContent = statusText || "";
+      if (securityScanBtn) securityScanBtn.disabled = !!loading;
+      if (securityScanResults && typeof html === "string") {
+        securityScanResults.innerHTML = html;
+      }
+    }
+
+    function renderSecurityScanResult(records, scannedIp) {
+      const ip = escapeHtml(scannedIp || "");
+      if (!records || records.length === 0) {
+        return `<div style="color:#065f46; font-weight:700;">No risk found.</div>`;
+      }
+
+      const items = records
+        .map((r) => {
+          const t = escapeHtml(formatDateTime(r.createdAt));
+          const reason = escapeHtml(r.reasonCode || "-");
+          const path = escapeHtml((r.requestPath || "-").slice(0, 120));
+          const detail = escapeHtml((r.errorDetail || "-").slice(0, 160));
+          return `
+            <div style="padding:8px 10px; border-bottom:1px solid #e5e7eb;">
+              <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                <div style="font-weight:700; color:#111827;">${reason}</div>
+                <div style="color:#6b7280;">${t}</div>
+              </div>
+              <div style="margin-top:4px; color:#111827; font-family:monospace; font-size:12px;">${path}</div>
+              <div style="margin-top:4px; color:#6b7280;">${detail}</div>
+            </div>
+          `;
+        })
+        .join("");
+
+      return `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+          <div style="color:#b91c1c; font-weight:800;">Risk detected</div>
+          <div style="color:#6b7280; font-size:12px;">ip=${ip} · showing ${records.length}</div>
+        </div>
+        <div style="border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; background:#fff;">
+          ${items}
+        </div>
+      `;
+    }
+
+    async function runSecurityScan(ip) {
+      const trimmed = String(ip || "").trim();
+      if (!trimmed) {
+        setSecurityScanUi({
+          visible: true,
+          ip: "",
+          statusText: "",
+          html: `<div style="color:#92400e; font-weight:700;">Please input an IP.</div>`,
+          loading: false,
+        });
+        return;
+      }
+
+      setSecurityScanUi({
+        visible: true,
+        ip: trimmed,
+        statusText: "Scanning...",
+        html: `<div style="color:#6b7280;">Loading...</div>`,
+        loading: true,
+      });
+
+      try {
+        const params = new URLSearchParams();
+        params.set("ip", trimmed);
+        params.set("page", "1");
+        params.set("limit", "10");
+        const resp = await fetch(
+          `/api/xhunt/stats/security-violations?${params.toString()}`
+        );
+        const json = await resp.json();
+        if (!resp.ok || !json.success) {
+          throw new Error(json.error || `HTTP ${resp.status}`);
+        }
+        const records = Array.isArray(json.data) ? json.data : [];
+        const html = renderSecurityScanResult(records, trimmed);
+        setSecurityScanUi({
+          visible: true,
+          ip: trimmed,
+          statusText: records.length ? `Risk: ${records.length}` : "No risk",
+          html,
+          loading: false,
+        });
+      } catch (e) {
+        setSecurityScanUi({
+          visible: true,
+          ip: trimmed,
+          statusText: "",
+          html: `<div style="color:#991b1b; font-weight:700;">Scan failed: ${escapeHtml(
+            e.message || "unknown"
+          )}</div>`,
+          loading: false,
+        });
+      }
+    }
+
+    if (securityScanBtn) {
+      securityScanBtn.addEventListener("click", () => {
+        runSecurityScan(securityScanIpInput?.value);
+      });
+    }
+    if (securityScanIpInput) {
+      securityScanIpInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          runSecurityScan(securityScanIpInput.value);
+        }
+      });
+    }
+
     async function openTraceDetail(requestIdOrPrefix) {
       const logSearchSection = document.getElementById("log-search-section");
       const searchLogsBtn = document.getElementById("search-logs-btn");
@@ -1054,6 +1270,19 @@
             }
           : traceData;
         traceDetailContent.textContent = JSON.stringify(displayData, null, 2);
+
+        // 初始化安全扫描：默认填充本次 trace 的 ip（优先 traceData.ip）
+        if (securityScanSection) {
+          const ipFromTrace =
+            traceData && traceData.ip ? String(traceData.ip) : "";
+          setSecurityScanUi({
+            visible: true,
+            ip: ipFromTrace,
+            statusText: "",
+            html: `<div style="color:#065f46; font-weight:700;">No risk found.</div>`,
+            loading: false,
+          });
+        }
 
         if (traceData.requestId) {
           logSearchSection.style.display = "block";
