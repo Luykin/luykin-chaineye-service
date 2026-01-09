@@ -326,12 +326,12 @@
 
   <div class="perf-layout">
     <div class="perf-card">
-      <div class="perf-card-title">请求耗时分布（散点图）</div>
+      <div class="perf-card-title">请求耗时分布（散点图）（采样后）</div>
       <div id="scatter-chart-container" class="chart-container"></div>
     </div>
 
     <div class="perf-card">
-      <div class="perf-card-title">平均耗时与吞吐量（折线图）</div>
+      <div class="perf-card-title">平均耗时与吞吐量（折线图）（采样后）</div>
       <div
         id="metrics-chart-container"
         class="chart-container"
@@ -340,7 +340,7 @@
     </div>
 
     <div class="perf-card">
-      <div class="perf-card-title">接口平均耗时排行榜 (Top 20)</div>
+      <div class="perf-card-title">接口平均耗时排行榜（采样后）</div>
       <div
         id="latency-ranking-container"
         style="max-height: 400px; overflow-y: auto"
@@ -385,6 +385,10 @@
           <b>为什么搜索可能有延迟？</b> requestId
           的详情写入是“采集→队列→单例处理器消费→落库”的异步流程，通常会有 1~5
           秒延迟（队列积压时可能更久）。
+        </div>
+        <div style="margin-top: 8px">
+          <b>采样规则</b>： 对于较快请求 (500ms内)的，散点图里面只返回
+          0.08%，其余全量返回（包含所有错误情况）。且较快请求部分无详情采集。
         </div>
       </div>
     </div>
@@ -443,6 +447,152 @@
           line-height: 1.45;
         "
       ></pre>
+
+      <div class="status-code-help" style="margin-top: 12px; font-size: 12px">
+        <details>
+          <summary style="cursor: pointer; font-weight: 600; color: #374151">
+            状态码说明 (点击展开)
+          </summary>
+          <ul
+            style="
+              list-style-type: none;
+              padding-left: 10px;
+              margin-top: 8px;
+              color: #4b5563;
+              line-height: 1.6;
+            "
+          >
+            <li style="margin-bottom: 6px">
+              <b>400 Bad Request:</b> 一般表示请求参数有误或缺失。
+              <ul
+                style="
+                  list-style-type: circle;
+                  padding-left: 20px;
+                  margin-top: 4px;
+                "
+              >
+                <li>
+                  <code>缺少 x-request-id</code>：见
+                  <code>src/routes/general.js</code>
+                </li>
+                <li>
+                  <code>INVALID_ADDRESS</code
+                  >/<code>SIGNATURE_VERIFY_FAILED</code>/<code
+                    >NONCE_MISMATCH</code
+                  >
+                  等：登录/签名相关参数或校验失败（<code>src/xhunt/api/auth.js</code>）
+                </li>
+                <li>
+                  <code>prefix 不能为空</code
+                  >：统计清理/查询参数不合法（<code>src/xhunt/api/stats.js</code>）
+                </li>
+                <li>
+                  其他表单/参数校验失败（如活动报名、rootdata 参数错误等）
+                </li>
+              </ul>
+            </li>
+            <li style="margin-bottom: 6px">
+              <b>401 Unauthorized:</b> 未登录 / 缺少 token / 会话无效。
+              <ul
+                style="
+                  list-style-type: circle;
+                  padding-left: 20px;
+                  margin-top: 4px;
+                "
+              >
+                <li>
+                  <code>TOKEN_REQUIRED</code>：缺少 token（例如
+                  <code>src/xhunt/middleware/auth.js</code
+                  >、<code>src/xhunt/middleware/pro-status.js</code>）
+                </li>
+                <li>
+                  管理后台 <code>UNAUTHORIZED</code>：未登录或 cookie/session
+                  无效（<code>src/admin/api/admin.js</code>、<code>src/admin/middleware/adminAuth.js</code>）
+                </li>
+              </ul>
+            </li>
+            <li style="margin-bottom: 6px">
+              <b>403 Forbidden:</b> 已登录但权限不足 / 功能受限。
+              <ul
+                style="
+                  list-style-type: circle;
+                  padding-left: 20px;
+                  margin-top: 4px;
+                "
+              >
+                <li>
+                  <code>权限不足</code
+                  >/<code>FORBIDDEN</code>：权限校验失败（多处：<code>src/xhunt/api/stats.js</code>、<code
+                    >src/admin/*</code
+                  >
+                  等）
+                </li>
+                <li>
+                  <code>Temporarily unavailable</code>
+                  或今日次数限制：业务规则限制（<code>src/xhunt/api/reviews.js</code>）
+                </li>
+              </ul>
+            </li>
+            <li style="margin-bottom: 6px">
+              <b>409 Conflict:</b> 与当前状态冲突（重复提交/资源已存在）。
+              <ul
+                style="
+                  list-style-type: circle;
+                  padding-left: 20px;
+                  margin-top: 4px;
+                "
+              >
+                <li>
+                  例如：<code>您已报名，无需重复提交</code>（<code>src/xhunt/api/campaign.js</code>、<code>src/xhunt/api/mantle.js</code>）
+                </li>
+                <li>
+                  管理后台：<code>邮箱已存在</code>（<code>src/admin/api/admin.js</code>）
+                </li>
+              </ul>
+            </li>
+            <li style="margin-bottom: 6px">
+              <b>419 (自定义):</b> Token 相关异常（通常需要重新登录）。
+              <ul
+                style="
+                  list-style-type: circle;
+                  padding-left: 20px;
+                  margin-top: 4px;
+                "
+              >
+                <li>
+                  <code>TOKEN_INVALID</code>：token
+                  无效/被篡改（<code>src/xhunt/middleware/auth.js</code>）
+                </li>
+                <li>
+                  <code>TOKEN_EXPIRED</code>：token
+                  已过期（<code>src/xhunt/middleware/auth.js</code>）
+                </li>
+                <li>
+                  <code>DEVICE_MISMATCH_LOGOUT</code
+                  >：设备不匹配被强制登出（<code>src/xhunt/middleware/auth.js</code>）
+                </li>
+              </ul>
+            </li>
+            <li style="margin-bottom: 6px">
+              <b>429 Too Many Requests:</b> 触发限流/频控。
+              <ul
+                style="
+                  list-style-type: circle;
+                  padding-left: 20px;
+                  margin-top: 4px;
+                "
+              >
+                <li>
+                  例如登录/活动/评论等接口频率过高（<code>src/xhunt/api/auth.js</code>、<code>src/xhunt/api/campaign.js</code>、<code>src/xhunt/middleware/security.js</code>、<code
+                    >src/xhunt/middleware/aiContentRateLimit.js</code
+                  >
+                  等）
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </details>
+      </div>
 
       <div id="log-search-section" style="display: none; margin-top: 12px">
         <button id="search-logs-btn" style="margin-bottom: 8px">
