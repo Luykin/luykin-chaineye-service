@@ -86,6 +86,7 @@ function initTabs() {
     "daily-report-email": "daily-report:send",
     "admin-audit-logs": "audit-logs:read",
     "nacos-messages": "nacos_config",
+    "feature-flags": "feature_flags_config",
   };
 
   function hasPermissionForTab(tab) {

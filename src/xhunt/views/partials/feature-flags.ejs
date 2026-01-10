@@ -1,0 +1,620 @@
+<div class="ff-container">
+  <!-- Header & Actions -->
+  <div class="ff-header">
+    <div class="ff-title">
+      <h3>⚙️ 功能开关 (Feature Flags)</h3>
+      <p>管理 <code>xhunt_config</code>, 控制测试功能对特定用户的可见性。</p>
+    </div>
+    <div class="ff-actions">
+      <button id="ff-reload-btn" class="btn secondary">
+        🔄 Reload from Nacos
+      </button>
+      <button id="ff-publish-btn" class="btn primary">
+        🚀 Publish to Nacos
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="ff-content">
+    <!-- Flexible Testing Card -->
+    <div class="ff-card flexible-card">
+      <div class="ff-card-header">
+        <h4>Flexible Testing</h4>
+        <span class="priority-badge high">Highest Priority</span>
+      </div>
+      <p class="ff-card-desc">
+        在这里定义的功能，其用户名单拥有最高优先级，将覆盖下方 Test 和 Canary
+        组的同名功能配置。
+      </p>
+      <div id="ff-flexible-list" class="ff-flexible-list"></div>
+      <button id="ff-add-flexible-btn" class="btn add-rule-btn">
+        + Add Flexible Rule
+      </button>
+    </div>
+
+    <div class="ff-group-cards">
+      <!-- Test Config Card -->
+      <div class="ff-card">
+        <div class="ff-card-header">
+          <h4>Test Config</h4>
+          <span class="priority-badge medium">Medium Priority</span>
+        </div>
+        <div class="ff-field">
+          <label>Test Features</label>
+          <div id="ff-test-features" class="tag-input-container"></div>
+        </div>
+        <div class="ff-field">
+          <label>Testers</label>
+          <div id="ff-test-testers" class="tag-input-container"></div>
+        </div>
+      </div>
+
+      <!-- Canary Config Card -->
+      <div class="ff-card">
+        <div class="ff-card-header">
+          <h4>Canary Config</h4>
+          <span class="priority-badge low">Lowest Priority</span>
+        </div>
+        <div class="ff-field">
+          <label>Canary Features</label>
+          <div id="ff-canary-features" class="tag-input-container"></div>
+        </div>
+        <div class="ff-field">
+          <label>Canaries</label>
+          <div id="ff-canary-canaries" class="tag-input-container"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Other Configs (Read-only) -->
+    <div class="ff-card readonly-card">
+      <div class="ff-card-header">
+        <h4>Other Configs (Read-only)</h4>
+      </div>
+      <div id="ff-readonly-list" class="ff-readonly-list"></div>
+    </div>
+  </div>
+
+  <div class="ff-toast" id="ff-toast" style="display: none"></div>
+</div>
+
+<style>
+  /* Main Layout */
+  .ff-container {
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .ff-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .ff-title h3 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    color: #111827;
+  }
+  .ff-title p {
+    margin: 0;
+    font-size: 14px;
+    color: #6b7280;
+  }
+  .ff-actions {
+    display: flex;
+    gap: 12px;
+  }
+  .ff-actions .btn {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .ff-actions .btn.secondary {
+    background: #fff;
+    color: #374151;
+  }
+  .ff-actions .btn.secondary:hover {
+    background: #f9fafb;
+  }
+  .ff-actions .btn.primary {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+  }
+  .ff-actions .btn.primary:hover {
+    background: #1d4ed8;
+  }
+
+  .ff-content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .ff-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05),
+      0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  }
+  .ff-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .ff-card-header h4 {
+    margin: 0;
+    font-size: 16px;
+    color: #111827;
+  }
+  .ff-card-desc {
+    font-size: 13px;
+    color: #6b7280;
+    margin-top: -4px;
+    margin-bottom: 16px;
+    max-width: 80ch;
+  }
+
+  .priority-badge {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 99px;
+  }
+  .priority-badge.high {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+  .priority-badge.medium {
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .priority-badge.low {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  .ff-group-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .ff-group-cards {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .ff-field {
+    margin-bottom: 16px;
+  }
+  .ff-field:last-child {
+    margin-bottom: 0;
+  }
+  .ff-field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 6px;
+  }
+
+  /* Tag Input Component */
+  .tag-input-container {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 80px;
+  }
+  .tag-input-container:focus-within {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+  .tag-item {
+    display: inline-flex;
+    align-items: center;
+    background: #f3f4f6;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 13px;
+    color: #1f2937;
+  }
+  .tag-remove {
+    margin-left: 6px;
+    cursor: pointer;
+    color: #9ca3af;
+    font-weight: bold;
+  }
+  .tag-remove:hover {
+    color: #1f2937;
+  }
+  .tag-input {
+    flex-grow: 1;
+    border: none;
+    outline: none;
+    padding: 4px;
+    background: transparent;
+    min-width: 120px;
+  }
+
+  /* Flexible Testing Card Specifics */
+  .ff-flexible-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .flexible-rule-card {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 16px;
+    position: relative;
+  }
+  .flexible-rule-card .ff-field {
+    margin-bottom: 12px;
+  }
+  .flexible-rule-card .delete-rule-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #9ca3af;
+    cursor: pointer;
+  }
+  .flexible-rule-card .delete-rule-btn:hover {
+    color: #ef4444;
+  }
+  .add-rule-btn {
+    background: #fff;
+    border: 1px dashed #d1d5db;
+    color: #374151;
+    padding: 10px 16px;
+    width: 100%;
+    font-weight: 600;
+  }
+  .add-rule-btn:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+  }
+
+  /* Readonly Card */
+  .readonly-card .ff-readonly-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    font-size: 13px;
+  }
+  .readonly-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: #f9fafb;
+    padding: 8px 12px;
+    border-radius: 8px;
+  }
+  .readonly-item .key {
+    font-weight: 600;
+    color: #374151;
+  }
+  .readonly-item .value {
+    color: #6b7280;
+    word-break: break-all;
+  }
+
+  /* Toast */
+  .ff-toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    background: #111827;
+    color: #fff;
+    padding: 12px 18px;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1),
+      0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    font-size: 14px;
+    z-index: 10000;
+  }
+</style>
+
+<script>
+  (function () {
+    let inited = false;
+    let configData = {};
+    let dirty = false;
+
+    function $(id) {
+      return document.getElementById(id);
+    }
+
+    function toast(msg, type) {
+      const el = $("ff-toast");
+      if (!el) return;
+      el.textContent = msg;
+      el.style.display = "block";
+      el.style.background =
+        type === "error"
+          ? "#991b1b"
+          : type === "success"
+          ? "#065f46"
+          : "#111827";
+      setTimeout(() => {
+        el.style.display = "none";
+      }, 2400);
+    }
+
+    // --- Tag Input Component ---
+    function createTagInput(container, initialTags = [], onChange) {
+      let tags = [...initialTags];
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "tag-input";
+      input.placeholder = "Add users...";
+
+      function render() {
+        container.innerHTML = "";
+        tags.forEach((tag, index) => {
+          const tagEl = document.createElement("span");
+          tagEl.className = "tag-item";
+          tagEl.textContent = tag;
+          const removeEl = document.createElement("span");
+          removeEl.className = "tag-remove";
+          removeEl.textContent = "×";
+          removeEl.onclick = () => {
+            tags.splice(index, 1);
+            render();
+            onChange(tags);
+          };
+          tagEl.appendChild(removeEl);
+          container.appendChild(tagEl);
+        });
+        container.appendChild(input);
+        input.focus();
+      }
+
+      function addTags(newTags) {
+        const toAdd = newTags
+          .split(/[,\s]+/)
+          .map((t) => t.trim())
+          .filter(Boolean);
+        if (toAdd.length > 0) {
+          tags.push(...toAdd);
+          tags = [...new Set(tags)]; // remove duplicates
+          render();
+          onChange(tags);
+        }
+      }
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === ",") {
+          e.preventDefault();
+          addTags(input.value);
+          input.value = "";
+        }
+      });
+      input.addEventListener("blur", () => {
+        addTags(input.value);
+        input.value = "";
+      });
+      render();
+      return { getTags: () => tags };
+    }
+
+    // --- API Calls ---
+    async function loadConfig() {
+      toast("Loading config...", "info");
+      const resp = await fetch("/api/xhunt/stats/feature-flags", {
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (!json.success) throw new Error(json.error || "Failed to load");
+      configData = JSON.parse(json.data.content || "{}");
+      dirty = false;
+      renderUI();
+      toast("Config loaded successfully!", "success");
+    }
+
+    async function publishConfig() {
+      if (!dirty) {
+        toast("No changes to publish.", "info");
+        return;
+      }
+      const ok = window.confirm(
+        "Are you sure you want to publish these changes to Nacos?"
+      );
+      if (!ok) return;
+
+      toast("Publishing...", "info");
+      const content = JSON.stringify(configData, null, 2);
+      const resp = await fetch("/api/xhunt/stats/feature-flags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ content }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (!json.success) throw new Error(json.error || "Failed to publish");
+      dirty = false;
+      toast("Published successfully!", "success");
+    }
+
+    // --- UI Rendering ---
+    function renderUI() {
+      renderFlexibleTesting();
+      renderTestConfig();
+      renderCanaryConfig();
+      renderReadonlyConfig();
+    }
+
+    function renderFlexibleTesting() {
+      const container = $("ff-flexible-list");
+      container.innerHTML = "";
+      const flexibleConfig = configData.flexibleTesting || {};
+      for (const key in flexibleConfig) {
+        const card = createFlexibleRuleCard(key, flexibleConfig[key]);
+        container.appendChild(card);
+      }
+    }
+
+    function createFlexibleRuleCard(key, users) {
+      const card = document.createElement("div");
+      card.className = "flexible-rule-card";
+      card.innerHTML = `
+            <button class="delete-rule-btn" title="Delete this rule">×</button>
+            <div class="ff-field">
+                <label>Feature Name</label>
+                <input type="text" class="control-input feature-name-input" value="${key}">
+            </div>
+            <div class="ff-field">
+                <label>User Handles</label>
+                <div class="tag-input-container"></div>
+            </div>
+        `;
+      const tagInputContainer = card.querySelector(".tag-input-container");
+      createTagInput(tagInputContainer, users, (newUsers) => {
+        configData.flexibleTesting[key] = newUsers;
+        dirty = true;
+      });
+
+      card.querySelector(".delete-rule-btn").onclick = () => {
+        delete configData.flexibleTesting[key];
+        dirty = true;
+        renderFlexibleTesting();
+      };
+
+      card.querySelector(".feature-name-input").onchange = (e) => {
+        const newKey = e.target.value.trim();
+        if (newKey && newKey !== key) {
+          configData.flexibleTesting[newKey] = configData.flexibleTesting[key];
+          delete configData.flexibleTesting[key];
+          dirty = true;
+          renderFlexibleTesting(); // Re-render to update keys
+        }
+      };
+      return card;
+    }
+
+    function renderTestConfig() {
+      createTagInput(
+        $("ff-test-features"),
+        configData.testConfig?.features || [],
+        (tags) => {
+          if (!configData.testConfig) configData.testConfig = {};
+          configData.testConfig.features = tags;
+          dirty = true;
+        }
+      );
+      createTagInput(
+        $("ff-test-testers"),
+        configData.testConfig?.testers || [],
+        (tags) => {
+          if (!configData.testConfig) configData.testConfig = {};
+          configData.testConfig.testers = tags;
+          dirty = true;
+        }
+      );
+    }
+
+    function renderCanaryConfig() {
+      createTagInput(
+        $("ff-canary-features"),
+        configData.canaryConfig?.features || [],
+        (tags) => {
+          if (!configData.canaryConfig) configData.canaryConfig = {};
+          configData.canaryConfig.features = tags;
+          dirty = true;
+        }
+      );
+      createTagInput(
+        $("ff-canary-canaries"),
+        configData.canaryConfig?.canaries || [],
+        (tags) => {
+          if (!configData.canaryConfig) configData.canaryConfig = {};
+          configData.canaryConfig.canaries = tags;
+          dirty = true;
+        }
+      );
+    }
+
+    function renderReadonlyConfig() {
+      const container = $("ff-readonly-list");
+      container.innerHTML = "";
+      const managedKeys = new Set([
+        "flexibleTesting",
+        "testConfig",
+        "canaryConfig",
+      ]);
+      for (const key in configData) {
+        if (managedKeys.has(key)) continue;
+        const item = document.createElement("div");
+        item.className = "readonly-item";
+        const value =
+          typeof configData[key] === "object"
+            ? JSON.stringify(configData[key])
+            : configData[key];
+        item.innerHTML = `<span class="key">${key}</span><span class="value">${value}</span>`;
+        container.appendChild(item);
+      }
+    }
+
+    // --- Init & Event Listeners ---
+    function init() {
+      if (inited) return;
+      inited = true;
+
+      $("ff-reload-btn").addEventListener("click", () => {
+        if (
+          dirty &&
+          !window.confirm(
+            "You have unsaved changes. Are you sure you want to reload?"
+          )
+        )
+          return;
+        loadConfig().catch((e) => toast("Error: " + e.message, "error"));
+      });
+
+      $("ff-publish-btn").addEventListener("click", () => {
+        publishConfig().catch((e) => toast("Error: " + e.message, "error"));
+      });
+
+      $("ff-add-flexible-btn").addEventListener("click", () => {
+        if (!configData.flexibleTesting) configData.flexibleTesting = {};
+        const newKey = `newFeature_${Date.now()}`;
+        configData.flexibleTesting[newKey] = [];
+        dirty = true;
+        renderFlexibleTesting();
+      });
+
+      loadConfig().catch((e) => toast("Error: " + e.message, "error"));
+    }
+
+    document.addEventListener("click", (e) => {
+      const tabBtn = e.target.closest(".tab-btn");
+      if (tabBtn && tabBtn.getAttribute("data-tab") === "feature-flags") {
+        setTimeout(init, 80);
+      }
+    });
+
+    // Also init if loaded directly via hash
+    if (window.location.hash === "#feature-flags") {
+      setTimeout(init, 80);
+    }
+  })();
+</script>

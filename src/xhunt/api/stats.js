@@ -1747,6 +1747,107 @@ router.post(
  * GET /health
  * 健康检查接口（无需认证）
  */
+/**
+ * -------------------- Feature Flags Config Admin (xhunt_config) --------------------
+ * 权限：feature_flags或被授予该权限的 admin）
+ */
+
+// 读取 xhunt_config
+router.get(
+  "/feature-flags",
+  adminAuth,
+  requirePermission("feature_flags_config"),
+  async (req, res) => {
+    try {
+      const dataId = "xhunt_config";
+      const group = "DEFAULT_GROUP";
+
+      const resp = await nacosRequest("GET", "/nacos/v1/cs/configs", {
+        params: { dataId, group },
+      });
+
+      if (resp.status !== 200) {
+        return res.status(resp.status).json({
+          success: false,
+          error: "读取 Nacos xhunt_config 失败",
+          status: resp.status,
+          data: resp.data,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          dataId,
+          group,
+          content: typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data),
+        },
+      });
+    } catch (e) {
+      console.error("[feature_flags_config] read error:", e);
+      res.status(500).json({ success: false, error: e.message || "读取失败" });
+    }
+  }
+);
+
+// 发布/更新 xhunt_config
+router.post(
+  "/feature-flags",
+  adminAuth,
+  requirePermission("feature_flags_config"),
+  async (req, res) => {
+    try {
+      const { content } = req.body || {};
+      const dataId = "xhunt_config";
+      const group = "DEFAULT_GROUP";
+      const type = "json";
+
+      if (typeof content !== "string") {
+        return res.status(400).json({ success: false, error: "content 必须是字符串" });
+      }
+
+      try {
+        JSON.parse(content);
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          error: "content 不是合法 JSON",
+        });
+      }
+
+      const form = new URLSearchParams({
+        dataId,
+        group,
+        content,
+        type,
+      });
+
+      const resp = await nacosRequest("POST", "/nacos/v1/cs/configs", {
+        data: form.toString(),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+
+      if (resp.status !== 200 || (resp.data !== true && resp.data !== "true")) {
+        return res.status(resp.status || 500).json({
+          success: false,
+          error: "发布 Nacos xhunt_config 失败",
+          status: resp.status,
+          data: resp.data,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: { dataId, group, published: true },
+      });
+    } catch (e) {
+      console.error("[feature_flags_config] publish error:", e);
+      res.status(500).json({ success: false, error: e.message || "发布失败" });
+    }
+  }
+);
+
+
 router.get("/health", (req, res) => {
   res.json({
     status: "ok",
