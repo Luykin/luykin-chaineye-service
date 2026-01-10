@@ -622,7 +622,9 @@
         throw new Error(`HTTP error ${resp.status}`);
       }
       const data = await resp.json();
-      const i18nConfig = data.configContent || {};
+      console.log("Translations API response:", data);
+      console.log("Translations configContent:", data.configContent);
+      const i18nConfig = JSON.parse(data.configContent || "{}");
       if (i18nConfig && i18nConfig.zh) {
         FEATURE_KEYS = i18nConfig.zh;
       } else {
@@ -913,17 +915,6 @@
 
   // --- Main Entry Point ---
   // This logic correctly handles both cases: tab is already active on load, or tab is clicked later.
-  const ffTab = document.querySelector('.tab-btn[data-tab="feature-flags"]');
-  if (ffTab && ffTab.classList.contains("active")) {
-    initFeatureFlagPanel();
-  } else {
-    const onTabClick = (e) => {
-      if (e.target.closest('.tab-btn[data-tab="feature-flags"]')) {
-        initFeatureFlagPanel();
-        // Clean up the event listener after it has done its job.
-        document.removeEventListener("click", onTabClick);
-      }
-    };
-    document.addEventListener("click", onTabClick);
-  }
+  // Always initialize the panel since this partial is loaded.
+  initFeatureFlagPanel();
 </script>
