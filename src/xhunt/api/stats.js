@@ -1780,7 +1780,10 @@ router.get(
         data: {
           dataId,
           group,
-          content: typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data),
+          content:
+            typeof resp.data === "string"
+              ? resp.data
+              : JSON.stringify(resp.data),
         },
       });
     } catch (e) {
@@ -1803,7 +1806,9 @@ router.post(
       const type = "json";
 
       if (typeof content !== "string") {
-        return res.status(400).json({ success: false, error: "content 必须是字符串" });
+        return res
+          .status(400)
+          .json({ success: false, error: "content 必须是字符串" });
       }
 
       try {
@@ -1846,7 +1851,6 @@ router.post(
     }
   }
 );
-
 
 router.get("/health", (req, res) => {
   res.json({
