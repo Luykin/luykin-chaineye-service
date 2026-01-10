@@ -616,7 +616,7 @@
   async function loadTranslations() {
     try {
       const resp = await fetch(
-        "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_i18n&group=DEFAULT_GROUP"
+        "https://kb.cryptohunt.ai/nacos-configs?dataId=xhunt_i18n&group=DEFAULT_GROUP"
       );
       if (!resp.ok) {
         throw new Error(`HTTP error ${resp.status}`);
