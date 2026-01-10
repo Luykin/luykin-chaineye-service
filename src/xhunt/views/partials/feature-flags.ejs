@@ -521,44 +521,7 @@
     let originalConfigData = {}; // For diffing
     let dirty = false;
 
-    const FEATURE_KEYS = {
-      showPanel: "显示主面板",
-      showSidebarIcon: "显示侧边栏图标",
-      showAvatarRank: "显示头像排名",
-      showTokenAnalysis: "显示代币分析",
-      showTweetAIAnalysis: "显示推文AI分析",
-      showSearchPanel: "显示搜索面板",
-      showAnnualReport: "显示年度报告",
-      showHunterCampaign: "显示猎人活动",
-      showNotes: "显示备注",
-      showOfficialTags: "显示官方标签",
-      showRealtimeSubscription: "显示实时订阅",
-      showEngageToEarn: "显示 Engage-to-Earn",
-      enableBnbFeeds: "启用 BNB Feeds",
-      enableGossip: "启用 Gossip",
-      enableListing: "启用 Listing",
-      showProjectMembers: "显示项目成员",
-      showInvestors: "显示获投资",
-      showPortfolio: "显示已投资",
-      show90dMention: "显示90天代币提及",
-      show90dPerformance: "显示90天收益率",
-      showPersonalityType: "显示性格类型",
-      showRenameInfo: "显示改名记录",
-      showDelInfo: "显示删帖记录",
-      showDiscussion: "显示讨论功能",
-      showKolAbilityModel: "显示KOL能力模型",
-      showSoulIndex: "显示灵魂浓度",
-      showNarrative: "显示叙事功能",
-      showArticleBottomRightArea: "显示 XHunt 推广",
-      showKolFollowers: "显示全球KOL粉丝",
-      showTop100Kols: "显示TOP100 KOLs",
-      showCnKols: "显示中文KOLs",
-      showFqRank: "显示全球影响力排名",
-      showCnRank: "显示华语影响力排名",
-      showEnInfluenceRank: "显示英文影响力排名",
-      showProjectRank: "显示项目影响力排名",
-      showReviews: "显示评论功能",
-    };
+    let FEATURE_KEYS = {}; // Will be populated from API
 
     function $(id) {
       return document.getElementById(id);
@@ -656,6 +619,23 @@
       if (!isForDiff) toast("Config loaded successfully!", "success");
     }
 
+    async function loadTranslations() {
+      try {
+        const resp = await fetch(
+          "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_i18n&group=DEFAULT_GROUP"
+        );
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const i18nConfig = JSON.parse(data.configContent || "{}");
+        if (i18nConfig && i18nConfig.zh) {
+          FEATURE_KEYS = i18nConfig.zh;
+        }
+      } catch (e) {
+        console.error("Failed to load feature key translations:", e);
+        toast("Could not load translations", "error");
+      }
+    }
+
     async function publishConfig() {
       toast("Publishing...", "info");
       const content = JSON.stringify(configData, null, 2);
@@ -722,16 +702,26 @@
         renderFlexibleTesting();
       };
 
-      card.querySelector(".feature-name-input").onchange = (e) => {
+      const nameInput = card.querySelector(".feature-name-input");
+      const translationDiv = card.querySelector(".feature-key-translation");
+
+      nameInput.addEventListener("input", (e) => {
+        const currentKey = e.target.value.trim();
+        translationDiv.textContent = FEATURE_KEYS[currentKey] || "";
+      });
+
+      nameInput.addEventListener("change", (e) => {
         const newKey = e.target.value.trim();
         if (newKey && newKey !== key) {
           if (!configData.flexibleTesting) configData.flexibleTesting = {};
           configData.flexibleTesting[newKey] = configData.flexibleTesting[key];
           delete configData.flexibleTesting[key];
           dirty = true;
-          renderFlexibleTesting(); // Re-render to update keys
+          // No full re-render needed, just update the key for future operations
+          // But a re-render is safer to keep everything in sync
+          renderFlexibleTesting();
         }
-      };
+      });
       return card;
     }
 
@@ -850,9 +840,11 @@
     }
 
     // --- Init & Event Listeners ---
-    function init() {
+    async function init() {
       if (inited) return;
       inited = true;
+
+      await loadTranslations();
 
       // Tab switching
       const tabBtns = document.querySelectorAll(".ff-tab-btn");
@@ -907,9 +899,6 @@
 
       loadConfig().catch((e) => toast("Error: " + e.message, "error"));
     }
-
-    // Always render the feature keys reference list on initial load
-    renderFeatureKeys();
 
     document.addEventListener("click", (e) => {
       const tabBtn = e.target.closest(".tab-btn");
