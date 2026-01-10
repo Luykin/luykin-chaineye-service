@@ -622,7 +622,7 @@
         throw new Error(`HTTP error ${resp.status}`);
       }
       const data = await resp.json();
-      console.log("Translations API response:", data);
+
       if (data && data.zh) {
         FEATURE_KEYS = data.zh;
       } else {
@@ -704,8 +704,25 @@
     const translationDiv = card.querySelector(".feature-key-translation");
 
     nameInput.addEventListener("input", (e) => {
-      const currentKey = e.target.value.trim();
-      translationDiv.textContent = FEATURE_KEYS[currentKey] || "";
+      let inputValue = e.target.value.trim();
+      const hasUnderscore = inputValue.startsWith("_");
+      if (hasUnderscore) {
+        inputValue = inputValue.substring(1);
+      }
+
+      let translation = "";
+      if (inputValue) {
+        const matchedKey = Object.keys(FEATURE_KEYS).find((key) =>
+          key.startsWith(inputValue)
+        );
+        if (matchedKey) {
+          translation = FEATURE_KEYS[matchedKey];
+        }
+      }
+
+      translationDiv.textContent = hasUnderscore
+        ? `_${translation}`
+        : translation;
     });
 
     nameInput.addEventListener("change", (e) => {
@@ -803,6 +820,7 @@
   function renderFeatureKeys() {
     const container = $("ff-keys-list");
     container.innerHTML = Object.entries(FEATURE_KEYS)
+      .filter(([key]) => key.startsWith("show"))
       .map(([key, desc]) => {
         return `<div class="key-item"><span class="key-name">${key}</span><span class="key-desc">${desc}</span></div>`;
       })
@@ -839,9 +857,6 @@
 
   // --- Init & Event Listeners ---
   function bindDomEvents() {
-    if (inited) return;
-    inited = true;
-
     // Tab switching
     const tabBtns = document.querySelectorAll(".ff-tab-btn");
     const tabPanes = document.querySelectorAll(".ff-tab-pane");
