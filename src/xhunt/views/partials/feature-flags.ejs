@@ -47,8 +47,13 @@
           <div id="ff-test-features" class="tag-input-container"></div>
         </div>
         <div class="ff-field">
-          <label>Testers</label>
-          <div id="ff-test-testers" class="tag-input-container large"></div>
+          <details class="ff-collapsible-list">
+            <summary>
+              <label>Testers</label>
+              <span class="user-count"></span>
+            </summary>
+            <div id="ff-test-testers" class="tag-input-container large"></div>
+          </details>
         </div>
       </div>
     </div>
@@ -66,8 +71,16 @@
           <div id="ff-canary-features" class="tag-input-container"></div>
         </div>
         <div class="ff-field">
-          <label>Canaries</label>
-          <div id="ff-canary-canaries" class="tag-input-container large"></div>
+          <details class="ff-collapsible-list">
+            <summary>
+              <label>Canaries</label>
+              <span class="user-count"></span>
+            </summary>
+            <div
+              id="ff-canary-canaries"
+              class="tag-input-container large"
+            ></div>
+          </details>
         </div>
       </div>
     </div>
@@ -292,6 +305,14 @@
     height: 34px;
     border-radius: 6px;
     padding: 0 10px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .feature-key-translation {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 4px;
+    padding-left: 2px;
   }
   .flexible-rule-card .delete-rule-btn {
     position: absolute;
@@ -317,6 +338,32 @@
   .add-rule-btn:hover {
     background: #f9fafb;
     border-color: #9ca3af;
+  }
+
+  /* Collapsible Lists */
+  .ff-collapsible-list summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    list-style: none; /* Hide the default marker */
+  }
+  .ff-collapsible-list summary::-webkit-details-marker {
+    display: none; /* Hide the default marker in Chrome */
+  }
+  .ff-collapsible-list summary label {
+    margin-bottom: 0; /* Override default margin */
+  }
+  .ff-collapsible-list .user-count {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 500;
+    background-color: #f3f4f6;
+    padding: 2px 8px;
+    border-radius: 12px;
+  }
+  .ff-collapsible-list .tag-input-container {
+    margin-top: 8px;
   }
 
   /* Reference Card */
@@ -633,7 +680,6 @@
       renderTestConfig();
       renderCanaryConfig();
       renderReadonlyConfig();
-      renderFeatureKeys();
     }
 
     function renderFlexibleTesting() {
@@ -654,6 +700,9 @@
             <div class="ff-field">
                 <label>Feature Name</label>
                 <input type="text" class="control-input feature-name-input" value="${key}">
+                <div class="feature-key-translation">${
+                  FEATURE_KEYS[key] || ""
+                }</div>
             </div>
             <div class="ff-field">
                 <label>User Handles</label>
@@ -697,16 +746,21 @@
           dirty = true;
         }
       );
-      createTagInput(
-        $("ff-test-testers"),
-        configData.testConfig?.testers || [],
-        (tags) => {
-          if (!configData.testConfig)
-            configData.testConfig = { features: [], testers: [] };
-          configData.testConfig.testers = tags;
-          dirty = true;
-        }
-      );
+
+      const testers = configData.testConfig?.testers || [];
+      const testersContainer = $("ff-test-testers");
+      const testersCountEl = testersContainer
+        .closest(".ff-collapsible-list")
+        .querySelector(".user-count");
+      testersCountEl.textContent = `${testers.length} users`;
+
+      createTagInput(testersContainer, testers, (tags) => {
+        if (!configData.testConfig)
+          configData.testConfig = { features: [], testers: [] };
+        configData.testConfig.testers = tags;
+        testersCountEl.textContent = `${tags.length} users`;
+        dirty = true;
+      });
     }
 
     function renderCanaryConfig() {
@@ -720,16 +774,21 @@
           dirty = true;
         }
       );
-      createTagInput(
-        $("ff-canary-canaries"),
-        configData.canaryConfig?.canaries || [],
-        (tags) => {
-          if (!configData.canaryConfig)
-            configData.canaryConfig = { features: [], canaries: [] };
-          configData.canaryConfig.canaries = tags;
-          dirty = true;
-        }
-      );
+
+      const canaries = configData.canaryConfig?.canaries || [];
+      const canariesContainer = $("ff-canary-canaries");
+      const canariesCountEl = canariesContainer
+        .closest(".ff-collapsible-list")
+        .querySelector(".user-count");
+      canariesCountEl.textContent = `${canaries.length} users`;
+
+      createTagInput(canariesContainer, canaries, (tags) => {
+        if (!configData.canaryConfig)
+          configData.canaryConfig = { features: [], canaries: [] };
+        configData.canaryConfig.canaries = tags;
+        canariesCountEl.textContent = `${tags.length} users`;
+        dirty = true;
+      });
     }
 
     function renderReadonlyConfig() {
@@ -848,6 +907,9 @@
 
       loadConfig().catch((e) => toast("Error: " + e.message, "error"));
     }
+
+    // Always render the feature keys reference list on initial load
+    renderFeatureKeys();
 
     document.addEventListener("click", (e) => {
       const tabBtn = e.target.closest(".tab-btn");
