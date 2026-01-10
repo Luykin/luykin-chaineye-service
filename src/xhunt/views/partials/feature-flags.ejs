@@ -515,167 +515,166 @@
 <script src="/static/js/diff.min.js"></script>
 
 <script>
-  (function () {
-    let inited = false;
-    let configData = {};
-    let originalConfigData = {}; // For diffing
-    let dirty = false;
+  let inited = false;
+  let configData = {};
+  let originalConfigData = {}; // For diffing
+  let dirty = false;
 
-    let FEATURE_KEYS = {}; // Will be populated from API
+  let FEATURE_KEYS = {}; // Will be populated from API
 
-    function $(id) {
-      return document.getElementById(id);
-    }
+  function $(id) {
+    return document.getElementById(id);
+  }
 
-    function toast(msg, type) {
-      const el = $("ff-toast");
-      if (!el) return;
-      el.textContent = msg;
-      el.style.display = "block";
-      el.style.background =
-        type === "error"
-          ? "#991b1b"
-          : type === "success"
-          ? "#065f46"
-          : "#111827";
-      setTimeout(() => {
-        el.style.display = "none";
-      }, 2400);
-    }
+  function toast(msg, type) {
+    const el = $("ff-toast");
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = "block";
+    el.style.background =
+      type === "error" ? "#991b1b" : type === "success" ? "#065f46" : "#111827";
+    setTimeout(() => {
+      el.style.display = "none";
+    }, 2400);
+  }
 
-    // --- Tag Input Component ---
-    function createTagInput(container, initialTags = [], onChange) {
-      let tags = [...initialTags];
-      const input = document.createElement("input");
-      input.type = "text";
-      input.className = "tag-input";
-      input.placeholder = "Add users or features...";
+  // --- Tag Input Component ---
+  function createTagInput(container, initialTags = [], onChange) {
+    let tags = [...initialTags];
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "tag-input";
+    input.placeholder = "Add users or features...";
 
-      function render() {
-        container.innerHTML = "";
-        tags.forEach((tag, index) => {
-          const tagEl = document.createElement("span");
-          tagEl.className = "tag-item";
-          tagEl.textContent = tag;
-          const removeEl = document.createElement("span");
-          removeEl.className = "tag-remove";
-          removeEl.textContent = "×";
-          removeEl.onclick = () => {
-            tags.splice(index, 1);
-            render();
-            onChange(tags);
-          };
-          tagEl.appendChild(removeEl);
-          container.appendChild(tagEl);
-        });
-        container.appendChild(input);
-        input.focus();
-      }
-
-      function addTags(newTags) {
-        const toAdd = newTags
-          .split(/[,\s]+/)
-          .map((t) => t.trim())
-          .filter(Boolean);
-        if (toAdd.length > 0) {
-          tags.push(...toAdd);
-          tags = [...new Set(tags)]; // remove duplicates
+    function render() {
+      container.innerHTML = "";
+      tags.forEach((tag, index) => {
+        const tagEl = document.createElement("span");
+        tagEl.className = "tag-item";
+        tagEl.textContent = tag;
+        const removeEl = document.createElement("span");
+        removeEl.className = "tag-remove";
+        removeEl.textContent = "×";
+        removeEl.onclick = () => {
+          tags.splice(index, 1);
           render();
           onChange(tags);
-        }
-      }
-
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === ",") {
-          e.preventDefault();
-          addTags(input.value);
-          input.value = "";
-        }
+        };
+        tagEl.appendChild(removeEl);
+        container.appendChild(tagEl);
       });
-      input.addEventListener("blur", () => {
+      container.appendChild(input);
+      input.focus();
+    }
+
+    function addTags(newTags) {
+      const toAdd = newTags
+        .split(/[,\s]+/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+      if (toAdd.length > 0) {
+        tags.push(...toAdd);
+        tags = [...new Set(tags)]; // remove duplicates
+        render();
+        onChange(tags);
+      }
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === ",") {
+        e.preventDefault();
         addTags(input.value);
         input.value = "";
-      });
-      render();
-      return { getTags: () => tags };
-    }
-
-    // --- API Calls ---
-    async function loadConfig(isForDiff = false) {
-      if (!isForDiff) toast("Loading config...", "info");
-      const resp = await fetch("/api/xhunt/stats/feature-flags", {
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
-      if (!json.success) throw new Error(json.error || "Failed to load");
-      const parsed = JSON.parse(json.data.content || "{}");
-      if (isForDiff) return parsed;
-
-      configData = parsed;
-      originalConfigData = JSON.parse(JSON.stringify(parsed)); // Deep copy for diffing
-      dirty = false;
-      renderUI();
-      if (!isForDiff) toast("Config loaded successfully!", "success");
-    }
-
-    async function loadTranslations() {
-      try {
-        const resp = await fetch(
-          "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_i18n&group=DEFAULT_GROUP"
-        );
-        if (!resp.ok) return;
-        const data = await resp.json();
-        const i18nConfig = JSON.parse(data.configContent || "{}");
-        if (i18nConfig && i18nConfig.zh) {
-          FEATURE_KEYS = i18nConfig.zh;
-        }
-      } catch (e) {
-        console.error("Failed to load feature key translations:", e);
-        toast("Could not load translations", "error");
       }
-    }
+    });
+    input.addEventListener("blur", () => {
+      addTags(input.value);
+      input.value = "";
+    });
+    render();
+    return { getTags: () => tags };
+  }
 
-    async function publishConfig() {
-      toast("Publishing...", "info");
-      const content = JSON.stringify(configData, null, 2);
-      const resp = await fetch("/api/xhunt/stats/feature-flags", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ content }),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
-      if (!json.success) throw new Error(json.error || "Failed to publish");
-      dirty = false;
-      toast("Published successfully!", "success");
-      closeDiffModal();
-      await loadConfig(); // Reload to get fresh state
-    }
+  // --- API Calls ---
+  async function loadConfig(isForDiff = false) {
+    if (!isForDiff) toast("Loading config...", "info");
+    const resp = await fetch("/api/xhunt/stats/feature-flags", {
+      credentials: "include",
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || "Failed to load");
+    const parsed = JSON.parse(json.data.content || "{}");
+    if (isForDiff) return parsed;
 
-    // --- UI Rendering ---
-    function renderUI() {
-      renderFlexibleTesting();
-      renderTestConfig();
-      renderCanaryConfig();
-      renderReadonlyConfig();
-    }
+    configData = parsed;
+    originalConfigData = JSON.parse(JSON.stringify(parsed)); // Deep copy for diffing
+    dirty = false;
+    if (!isForDiff) toast("Config loaded successfully!", "success");
+  }
 
-    function renderFlexibleTesting() {
-      const container = $("ff-flexible-list");
-      container.innerHTML = "";
-      const flexibleConfig = configData.flexibleTesting || {};
-      for (const key in flexibleConfig) {
-        const card = createFlexibleRuleCard(key, flexibleConfig[key]);
-        container.appendChild(card);
+  async function loadTranslations() {
+    try {
+      const resp = await fetch(
+        "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_i18n&group=DEFAULT_GROUP"
+      );
+      if (!resp.ok) {
+        throw new Error(`HTTP error ${resp.status}`);
       }
+      const data = await resp.json();
+      const i18nConfig = JSON.parse(data.configContent || "{}");
+      if (i18nConfig && i18nConfig.zh) {
+        FEATURE_KEYS = i18nConfig.zh;
+      } else {
+        throw new Error("Translations format is invalid or missing 'zh' key");
+      }
+    } catch (e) {
+      console.error("Failed to load feature key translations:", e);
+      toast(`Translations Error: ${e.message}`, "error");
     }
+  }
 
-    function createFlexibleRuleCard(key, users) {
-      const card = document.createElement("div");
-      card.className = "flexible-rule-card";
-      card.innerHTML = `
+  async function publishConfig() {
+    toast("Publishing...", "info");
+    const content = JSON.stringify(configData, null, 2);
+    const resp = await fetch("/api/xhunt/stats/feature-flags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ content }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || "Failed to publish");
+    dirty = false;
+    toast("Published successfully!", "success");
+    closeDiffModal();
+    await loadConfig(); // Reload to get fresh state
+  }
+
+  // --- UI Rendering ---
+  function renderUI() {
+    renderFlexibleTesting();
+    renderTestConfig();
+    renderCanaryConfig();
+    renderReadonlyConfig();
+    renderFeatureKeys(); // Ensure keys are rendered with the rest of the UI
+  }
+
+  function renderFlexibleTesting() {
+    const container = $("ff-flexible-list");
+    container.innerHTML = "";
+    const flexibleConfig = configData.flexibleTesting || {};
+    for (const key in flexibleConfig) {
+      const card = createFlexibleRuleCard(key, flexibleConfig[key]);
+      container.appendChild(card);
+    }
+  }
+
+  function createFlexibleRuleCard(key, users) {
+    const card = document.createElement("div");
+    card.className = "flexible-rule-card";
+    card.innerHTML = `
             <button class="delete-rule-btn" title="Delete this rule">×</button>
             <div class="ff-field">
                 <label>Feature Name</label>
@@ -689,231 +688,243 @@
                 <div class="tag-input-container"></div>
             </div>
         `;
-      const tagInputContainer = card.querySelector(".tag-input-container");
-      createTagInput(tagInputContainer, users, (newUsers) => {
-        if (!configData.flexibleTesting) configData.flexibleTesting = {};
-        configData.flexibleTesting[key] = newUsers;
-        dirty = true;
-      });
+    const tagInputContainer = card.querySelector(".tag-input-container");
+    createTagInput(tagInputContainer, users, (newUsers) => {
+      if (!configData.flexibleTesting) configData.flexibleTesting = {};
+      configData.flexibleTesting[key] = newUsers;
+      dirty = true;
+    });
 
-      card.querySelector(".delete-rule-btn").onclick = () => {
+    card.querySelector(".delete-rule-btn").onclick = () => {
+      delete configData.flexibleTesting[key];
+      dirty = true;
+      renderFlexibleTesting();
+    };
+
+    const nameInput = card.querySelector(".feature-name-input");
+    const translationDiv = card.querySelector(".feature-key-translation");
+
+    nameInput.addEventListener("input", (e) => {
+      const currentKey = e.target.value.trim();
+      translationDiv.textContent = FEATURE_KEYS[currentKey] || "";
+    });
+
+    nameInput.addEventListener("change", (e) => {
+      const newKey = e.target.value.trim();
+      if (newKey && newKey !== key) {
+        if (!configData.flexibleTesting) configData.flexibleTesting = {};
+        configData.flexibleTesting[newKey] = configData.flexibleTesting[key];
         delete configData.flexibleTesting[key];
         dirty = true;
+        // No full re-render needed, just update the key for future operations
+        // But a re-render is safer to keep everything in sync
         renderFlexibleTesting();
-      };
+      }
+    });
+    return card;
+  }
 
-      const nameInput = card.querySelector(".feature-name-input");
-      const translationDiv = card.querySelector(".feature-key-translation");
-
-      nameInput.addEventListener("input", (e) => {
-        const currentKey = e.target.value.trim();
-        translationDiv.textContent = FEATURE_KEYS[currentKey] || "";
-      });
-
-      nameInput.addEventListener("change", (e) => {
-        const newKey = e.target.value.trim();
-        if (newKey && newKey !== key) {
-          if (!configData.flexibleTesting) configData.flexibleTesting = {};
-          configData.flexibleTesting[newKey] = configData.flexibleTesting[key];
-          delete configData.flexibleTesting[key];
-          dirty = true;
-          // No full re-render needed, just update the key for future operations
-          // But a re-render is safer to keep everything in sync
-          renderFlexibleTesting();
-        }
-      });
-      return card;
-    }
-
-    function renderTestConfig() {
-      createTagInput(
-        $("ff-test-features"),
-        configData.testConfig?.features || [],
-        (tags) => {
-          if (!configData.testConfig)
-            configData.testConfig = { features: [], testers: [] };
-          configData.testConfig.features = tags;
-          dirty = true;
-        }
-      );
-
-      const testers = configData.testConfig?.testers || [];
-      const testersContainer = $("ff-test-testers");
-      const testersCountEl = testersContainer
-        .closest(".ff-collapsible-list")
-        .querySelector(".user-count");
-      testersCountEl.textContent = `${testers.length} users`;
-
-      createTagInput(testersContainer, testers, (tags) => {
+  function renderTestConfig() {
+    createTagInput(
+      $("ff-test-features"),
+      configData.testConfig?.features || [],
+      (tags) => {
         if (!configData.testConfig)
           configData.testConfig = { features: [], testers: [] };
-        configData.testConfig.testers = tags;
-        testersCountEl.textContent = `${tags.length} users`;
+        configData.testConfig.features = tags;
         dirty = true;
-      });
-    }
+      }
+    );
 
-    function renderCanaryConfig() {
-      createTagInput(
-        $("ff-canary-features"),
-        configData.canaryConfig?.features || [],
-        (tags) => {
-          if (!configData.canaryConfig)
-            configData.canaryConfig = { features: [], canaries: [] };
-          configData.canaryConfig.features = tags;
-          dirty = true;
-        }
-      );
+    const testers = configData.testConfig?.testers || [];
+    const testersContainer = $("ff-test-testers");
+    const testersCountEl = testersContainer
+      .closest(".ff-collapsible-list")
+      .querySelector(".user-count");
+    testersCountEl.textContent = `${testers.length} users`;
 
-      const canaries = configData.canaryConfig?.canaries || [];
-      const canariesContainer = $("ff-canary-canaries");
-      const canariesCountEl = canariesContainer
-        .closest(".ff-collapsible-list")
-        .querySelector(".user-count");
-      canariesCountEl.textContent = `${canaries.length} users`;
+    createTagInput(testersContainer, testers, (tags) => {
+      if (!configData.testConfig)
+        configData.testConfig = { features: [], testers: [] };
+      configData.testConfig.testers = tags;
+      testersCountEl.textContent = `${tags.length} users`;
+      dirty = true;
+    });
+  }
 
-      createTagInput(canariesContainer, canaries, (tags) => {
+  function renderCanaryConfig() {
+    createTagInput(
+      $("ff-canary-features"),
+      configData.canaryConfig?.features || [],
+      (tags) => {
         if (!configData.canaryConfig)
           configData.canaryConfig = { features: [], canaries: [] };
-        configData.canaryConfig.canaries = tags;
-        canariesCountEl.textContent = `${tags.length} users`;
+        configData.canaryConfig.features = tags;
         dirty = true;
-      });
-    }
-
-    function renderReadonlyConfig() {
-      const container = $("ff-readonly-list");
-      container.innerHTML = "";
-      const managedKeys = new Set([
-        "flexibleTesting",
-        "testConfig",
-        "canaryConfig",
-      ]);
-      for (const key in configData) {
-        if (managedKeys.has(key)) continue;
-        const item = document.createElement("div");
-        item.className = "readonly-item";
-        const value =
-          typeof configData[key] === "object"
-            ? JSON.stringify(configData[key])
-            : configData[key];
-        item.innerHTML = `<span class="key">${key}</span><span class="value">${value}</span>`;
-        container.appendChild(item);
       }
+    );
+
+    const canaries = configData.canaryConfig?.canaries || [];
+    const canariesContainer = $("ff-canary-canaries");
+    const canariesCountEl = canariesContainer
+      .closest(".ff-collapsible-list")
+      .querySelector(".user-count");
+    canariesCountEl.textContent = `${canaries.length} users`;
+
+    createTagInput(canariesContainer, canaries, (tags) => {
+      if (!configData.canaryConfig)
+        configData.canaryConfig = { features: [], canaries: [] };
+      configData.canaryConfig.canaries = tags;
+      canariesCountEl.textContent = `${tags.length} users`;
+      dirty = true;
+    });
+  }
+
+  function renderReadonlyConfig() {
+    const container = $("ff-readonly-list");
+    container.innerHTML = "";
+    const managedKeys = new Set([
+      "flexibleTesting",
+      "testConfig",
+      "canaryConfig",
+    ]);
+    for (const key in configData) {
+      if (managedKeys.has(key)) continue;
+      const item = document.createElement("div");
+      item.className = "readonly-item";
+      const value =
+        typeof configData[key] === "object"
+          ? JSON.stringify(configData[key])
+          : configData[key];
+      item.innerHTML = `<span class="key">${key}</span><span class="value">${value}</span>`;
+      container.appendChild(item);
+    }
+  }
+
+  function renderFeatureKeys() {
+    const container = $("ff-keys-list");
+    container.innerHTML = Object.entries(FEATURE_KEYS)
+      .map(([key, desc]) => {
+        return `<div class="key-item"><span class="key-name">${key}</span><span class="key-desc">${desc}</span></div>`;
+      })
+      .join("");
+  }
+
+  // --- Diff Modal Logic ---
+  function openDiffModal(latestConfig) {
+    const oldStr = JSON.stringify(latestConfig, null, 2);
+    const newStr = JSON.stringify(configData, null, 2);
+
+    if (oldStr === newStr) {
+      toast("No changes detected compared to the latest version.", "info");
+      return;
     }
 
-    function renderFeatureKeys() {
-      const container = $("ff-keys-list");
-      container.innerHTML = Object.entries(FEATURE_KEYS)
-        .map(([key, desc]) => {
-          return `<div class="key-item"><span class="key-name">${key}</span><span class="key-desc">${desc}</span></div>`;
-        })
-        .join("");
-    }
+    const diff = Diff.diffJson(latestConfig, configData);
+    const fragment = document.createDocumentFragment();
+    diff.forEach((part) => {
+      const span = document.createElement("span");
+      span.className = part.added ? "added" : part.removed ? "removed" : "";
+      span.appendChild(document.createTextNode(part.value));
+      fragment.appendChild(span);
+    });
 
-    // --- Diff Modal Logic ---
-    function openDiffModal(latestConfig) {
-      const oldStr = JSON.stringify(latestConfig, null, 2);
-      const newStr = JSON.stringify(configData, null, 2);
+    $("ff-diff-output").innerHTML = "";
+    $("ff-diff-output").appendChild(fragment);
+    $("ff-diff-modal").style.display = "flex";
+  }
 
-      if (oldStr === newStr) {
-        toast("No changes detected compared to the latest version.", "info");
-        return;
-      }
+  function closeDiffModal() {
+    $("ff-diff-modal").style.display = "none";
+  }
 
-      const diff = Diff.diffJson(latestConfig, configData);
-      const fragment = document.createDocumentFragment();
-      diff.forEach((part) => {
-        const span = document.createElement("span");
-        span.className = part.added ? "added" : part.removed ? "removed" : "";
-        span.appendChild(document.createTextNode(part.value));
-        fragment.appendChild(span);
+  // --- Init & Event Listeners ---
+  function bindDomEvents() {
+    if (inited) return;
+    inited = true;
+
+    // Tab switching
+    const tabBtns = document.querySelectorAll(".ff-tab-btn");
+    const tabPanes = document.querySelectorAll(".ff-tab-pane");
+    tabBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        tabBtns.forEach((b) => b.classList.remove("active"));
+        tabPanes.forEach((p) => p.classList.remove("active"));
+        btn.classList.add("active");
+        const targetPane = $(`ff-tab-${btn.dataset.tab}`);
+        if (targetPane) targetPane.classList.add("active");
       });
+    });
 
-      $("ff-diff-output").innerHTML = "";
-      $("ff-diff-output").appendChild(fragment);
-      $("ff-diff-modal").style.display = "flex";
-    }
-
-    function closeDiffModal() {
-      $("ff-diff-modal").style.display = "none";
-    }
-
-    // --- Init & Event Listeners ---
-    async function initializePanel() {
-      if (inited) return;
-      inited = true;
-
-      // Tab switching
-      const tabBtns = document.querySelectorAll(".ff-tab-btn");
-      const tabPanes = document.querySelectorAll(".ff-tab-pane");
-      tabBtns.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          tabBtns.forEach((b) => b.classList.remove("active"));
-          tabPanes.forEach((p) => p.classList.remove("active"));
-          btn.classList.add("active");
-          const targetPane = $(`ff-tab-${btn.dataset.tab}`);
-          if (targetPane) targetPane.classList.add("active");
-        });
-      });
-
-      $("ff-reload-btn").addEventListener("click", () => {
-        if (
-          dirty &&
-          !window.confirm(
-            "You have unsaved changes. Are you sure you want to reload?"
-          )
+    $("ff-reload-btn").addEventListener("click", () => {
+      if (
+        dirty &&
+        !window.confirm(
+          "You have unsaved changes. Are you sure you want to reload?"
         )
-          return;
-        loadConfig().catch((e) => toast("Error: " + e.message, "error"));
-      });
+      )
+        return;
+      loadConfig().catch((e) => toast("Error: " + e.message, "error"));
+    });
 
-      $("ff-publish-btn").addEventListener("click", async () => {
-        if (!dirty) {
-          return toast("No changes to publish.", "info");
-        }
-        try {
-          const latestConfig = await loadConfig(true);
-          openDiffModal(latestConfig);
-        } catch (e) {
-          toast("Error fetching latest config for diff: " + e.message, "error");
-        }
-      });
-
-      $("ff-add-flexible-btn").addEventListener("click", () => {
-        if (!configData.flexibleTesting) configData.flexibleTesting = {};
-        const newKey = `newFeature_${Date.now()}`;
-        configData.flexibleTesting[newKey] = [];
-        dirty = true;
-        renderFlexibleTesting();
-      });
-
-      // Modal events
-      $("ff-diff-modal-close").addEventListener("click", closeDiffModal);
-      $("ff-diff-cancel-btn").addEventListener("click", closeDiffModal);
-      $("ff-diff-confirm-btn").addEventListener("click", () => {
-        publishConfig().catch((e) => toast("Error: " + e.message, "error"));
-      });
-
-      // Load the main config now that translations are ready and event listeners are set up.
-    }
-
-    async function initializePanel() {
-      await init();
-      await loadTranslations();
-      await loadConfig();
-    }
-
-    document.addEventListener("click", (e) => {
-      const tabBtn = e.target.closest(".tab-btn");
-      if (tabBtn && tabBtn.getAttribute("data-tab") === "feature-flags") {
-        setTimeout(init, 80);
+    $("ff-publish-btn").addEventListener("click", async () => {
+      if (!dirty) {
+        return toast("No changes to publish.", "info");
+      }
+      try {
+        const latestConfig = await loadConfig(true);
+        openDiffModal(latestConfig);
+      } catch (e) {
+        toast("Error fetching latest config for diff: " + e.message, "error");
       }
     });
 
-    // Also init if loaded directly via hash
-    if (window.location.hash === "#feature-flags") {
-      setTimeout(init, 80);
-    }
-  })();
+    $("ff-add-flexible-btn").addEventListener("click", () => {
+      if (!configData.flexibleTesting) configData.flexibleTesting = {};
+      const newKey = `newFeature_${Date.now()}`;
+      configData.flexibleTesting[newKey] = [];
+      dirty = true;
+      renderFlexibleTesting();
+    });
+
+    // Modal events
+    $("ff-diff-modal-close").addEventListener("click", closeDiffModal);
+    $("ff-diff-cancel-btn").addEventListener("click", closeDiffModal);
+    $("ff-diff-confirm-btn").addEventListener("click", () => {
+      publishConfig().catch((e) => toast("Error: " + e.message, "error"));
+    });
+
+    // Load the main config now that translations are ready and event listeners are set up.
+  }
+
+  async function initFeatureFlagPanel() {
+    if (inited) return; // Ensure it only runs once
+    inited = true;
+
+    // 1. Load all necessary data first.
+    await loadTranslations();
+    await loadConfig();
+
+    // 2. Bind all DOM events.
+    bindDomEvents();
+
+    // 3. Now that all data is ready and events are bound, render the UI.
+    renderUI();
+  }
+
+  // --- Main Entry Point ---
+  // This logic correctly handles both cases: tab is already active on load, or tab is clicked later.
+  const ffTab = document.querySelector('.tab-btn[data-tab="feature-flags"]');
+  if (ffTab && ffTab.classList.contains("active")) {
+    initFeatureFlagPanel();
+  } else {
+    const onTabClick = (e) => {
+      if (e.target.closest('.tab-btn[data-tab="feature-flags"]')) {
+        initFeatureFlagPanel();
+        // Clean up the event listener after it has done its job.
+        document.removeEventListener("click", onTabClick);
+      }
+    };
+    document.addEventListener("click", onTabClick);
+  }
 </script>
