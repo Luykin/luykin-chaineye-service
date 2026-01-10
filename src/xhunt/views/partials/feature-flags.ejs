@@ -622,7 +622,7 @@
         throw new Error(`HTTP error ${resp.status}`);
       }
       const data = await resp.json();
-      const i18nConfig = JSON.parse(data.configContent || "{}");
+      const i18nConfig = data.configContent || {};
       if (i18nConfig && i18nConfig.zh) {
         FEATURE_KEYS = i18nConfig.zh;
       } else {
