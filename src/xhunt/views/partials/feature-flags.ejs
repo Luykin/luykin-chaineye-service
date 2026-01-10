@@ -820,7 +820,7 @@
   function renderFeatureKeys() {
     const container = $("ff-keys-list");
     container.innerHTML = Object.entries(FEATURE_KEYS)
-      .filter(([key]) => key.startsWith("show"))
+      .filter(([key]) => key.includes("show"))
       .map(([key, desc]) => {
         return `<div class="key-item"><span class="key-name">${key}</span><span class="key-desc">${desc}</span></div>`;
       })
