@@ -6,85 +6,116 @@
       <p>管理 <code>xhunt_config</code>, 控制测试功能对特定用户的可见性。</p>
     </div>
     <div class="ff-actions">
-      <button id="ff-reload-btn" class="btn secondary">
-        🔄 Reload from Nacos
-      </button>
-      <button id="ff-publish-btn" class="btn primary">
-        🚀 Publish to Nacos
-      </button>
+      <button id="ff-reload-btn" class="btn secondary">🔄 Reload</button>
+      <button id="ff-publish-btn" class="btn primary">🚀 Publish</button>
     </div>
   </div>
 
-  <!-- Main Content -->
-  <div class="ff-content">
-    <!-- Flexible Testing Card -->
-    <div class="ff-card flexible-card">
-      <div class="ff-card-header">
-        <h4>Flexible Testing</h4>
-        <span class="priority-badge high">Highest Priority</span>
-      </div>
-      <p class="ff-card-desc">
-        在这里定义的功能，其用户名单拥有最高优先级，将覆盖下方 Test 和 Canary
-        组的同名功能配置。
+  <!-- Tab Navigation -->
+  <div class="ff-tabs-nav">
+    <button class="ff-tab-btn active" data-tab="flexible">
+      灵活测试 (Flexible)
+    </button>
+    <button class="ff-tab-btn" data-tab="test">测试组 (Test)</button>
+    <button class="ff-tab-btn" data-tab="canary">金丝雀 (Canary)</button>
+  </div>
+
+  <!-- Tab Content -->
+  <div class="ff-tabs-content">
+    <!-- Flexible Testing Tab -->
+    <div class="ff-tab-pane active" id="ff-tab-flexible">
+      <p class="ff-tab-desc">
+        <b>最高优先级：</b> 在这里定义的功能，其用户名单将覆盖下方 Test 和
+        Canary 组的同名功能配置。
       </p>
       <div id="ff-flexible-list" class="ff-flexible-list"></div>
       <button id="ff-add-flexible-btn" class="btn add-rule-btn">
-        + Add Flexible Rule
+        + 添加灵活规则
       </button>
     </div>
 
-    <div class="ff-group-cards">
-      <!-- Test Config Card -->
-      <div class="ff-card">
-        <div class="ff-card-header">
-          <h4>Test Config</h4>
-          <span class="priority-badge medium">Medium Priority</span>
-        </div>
+    <!-- Test Config Tab -->
+    <div class="ff-tab-pane" id="ff-tab-test">
+      <p class="ff-tab-desc">
+        <b>中等优先级：</b> 功能在这里定义后，只有 Testers
+        列表中的用户可见。若同一功能也存在于 Flexible Testing
+        中，则此处的配置被忽略。
+      </p>
+      <div class="ff-card compact">
         <div class="ff-field">
           <label>Test Features</label>
           <div id="ff-test-features" class="tag-input-container"></div>
         </div>
         <div class="ff-field">
           <label>Testers</label>
-          <div id="ff-test-testers" class="tag-input-container"></div>
+          <div id="ff-test-testers" class="tag-input-container large"></div>
         </div>
       </div>
+    </div>
 
-      <!-- Canary Config Card -->
-      <div class="ff-card">
-        <div class="ff-card-header">
-          <h4>Canary Config</h4>
-          <span class="priority-badge low">Lowest Priority</span>
-        </div>
+    <!-- Canary Config Tab -->
+    <div class="ff-tab-pane" id="ff-tab-canary">
+      <p class="ff-tab-desc">
+        <b>最低优先级：</b> 功能在这里定义后，只有 Canaries
+        列表中的用户可见。若同一功能也存在于 Flexible 或 Test
+        中，则此处的配置被忽略。
+      </p>
+      <div class="ff-card compact">
         <div class="ff-field">
           <label>Canary Features</label>
           <div id="ff-canary-features" class="tag-input-container"></div>
         </div>
         <div class="ff-field">
           <label>Canaries</label>
-          <div id="ff-canary-canaries" class="tag-input-container"></div>
+          <div id="ff-canary-canaries" class="tag-input-container large"></div>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Other Configs (Read-only) -->
-    <div class="ff-card readonly-card">
-      <div class="ff-card-header">
-        <h4>Other Configs (Read-only)</h4>
-      </div>
-      <div id="ff-readonly-list" class="ff-readonly-list"></div>
-    </div>
+  <!-- Feature Keys Reference -->
+  <div class="ff-reference-card">
+    <details>
+      <summary>查看所有可用的功能键 (Feature Keys)</summary>
+      <div id="ff-keys-list" class="ff-keys-list"></div>
+    </details>
   </div>
 
   <div class="ff-toast" id="ff-toast" style="display: none"></div>
+
+  <!-- Diff Modal -->
+  <div id="ff-diff-modal" class="ff-modal" style="display: none">
+    <div class="ff-modal-content">
+      <div class="ff-modal-header">
+        <h4>Review Changes</h4>
+        <span id="ff-diff-modal-close" class="close-btn">&times;</span>
+      </div>
+      <div class="ff-modal-body">
+        <p>
+          Please review your changes before publishing.
+          <span class="legend-added">Added</span> |
+          <span class="legend-removed">Removed</span>
+        </p>
+        <pre id="ff-diff-output"></pre>
+      </div>
+      <div class="ff-modal-footer">
+        <button id="ff-diff-cancel-btn" class="btn secondary">Cancel</button>
+        <button id="ff-diff-confirm-btn" class="btn primary">
+          Confirm & Publish
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
-  /* Main Layout */
+  /* Main Layout & Theme */
   .ff-container {
     padding: 20px;
-    max-width: 1400px;
+    max-width: 1200px;
     margin: 0 auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
   }
   .ff-header {
     display: flex;
@@ -92,29 +123,30 @@
     align-items: flex-start;
     gap: 16px;
     flex-wrap: wrap;
-    margin-bottom: 24px;
+    margin-bottom: 20px;
   }
   .ff-title h3 {
     margin: 0 0 4px;
-    font-size: 20px;
+    font-size: 18px;
     color: #111827;
   }
   .ff-title p {
     margin: 0;
-    font-size: 14px;
+    font-size: 13px;
     color: #6b7280;
   }
   .ff-actions {
     display: flex;
-    gap: 12px;
+    gap: 10px;
   }
   .ff-actions .btn {
-    padding: 10px 16px;
+    padding: 8px 14px;
     border-radius: 8px;
     border: 1px solid #d1d5db;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
+    font-size: 13px;
   }
   .ff-actions .btn.secondary {
     background: #fff;
@@ -132,77 +164,63 @@
     background: #1d4ed8;
   }
 
-  .ff-content {
+  /* Tabs */
+  .ff-tabs-nav {
     display: flex;
-    flex-direction: column;
-    gap: 24px;
+    gap: 4px;
+    border-bottom: 2px solid #e5e7eb;
+    margin-bottom: 20px;
   }
+  .ff-tab-btn {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: #6b7280;
+  }
+  .ff-tab-btn.active {
+    color: #2563eb;
+    border-color: #2563eb;
+  }
+  .ff-tab-pane {
+    display: none;
+  }
+  .ff-tab-pane.active {
+    display: block;
+  }
+  .ff-tab-desc {
+    font-size: 13px;
+    color: #4b5563;
+    margin: -8px 0 16px;
+    padding: 10px 14px;
+    background: #f9fafb;
+    border-radius: 8px;
+    border: 1px solid #f3f4f6;
+  }
+
+  /* Cards */
   .ff-card {
     background: #fff;
     border: 1px solid #e5e7eb;
     border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05),
-      0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    padding: 16px;
   }
-  .ff-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
+  .ff-card.compact {
+    padding: 16px;
   }
-  .ff-card-header h4 {
-    margin: 0;
-    font-size: 16px;
-    color: #111827;
-  }
-  .ff-card-desc {
-    font-size: 13px;
-    color: #6b7280;
-    margin-top: -4px;
-    margin-bottom: 16px;
-    max-width: 80ch;
-  }
-
-  .priority-badge {
-    font-size: 12px;
-    font-weight: 600;
-    padding: 4px 8px;
-    border-radius: 99px;
-  }
-  .priority-badge.high {
-    background: #fee2e2;
-    color: #991b1b;
-  }
-  .priority-badge.medium {
-    background: #fef3c7;
-    color: #92400e;
-  }
-  .priority-badge.low {
-    background: #dbeafe;
-    color: #1e40af;
-  }
-
-  .ff-group-cards {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-  }
-  @media (max-width: 900px) {
-    .ff-group-cards {
-      grid-template-columns: 1fr;
-    }
-  }
-
   .ff-field {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
   }
   .ff-field:last-child {
     margin-bottom: 0;
   }
   .ff-field label {
     display: block;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: #374151;
     margin-bottom: 6px;
@@ -212,33 +230,37 @@
   .tag-input-container {
     border: 1px solid #d1d5db;
     border-radius: 8px;
-    padding: 8px;
+    padding: 6px;
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    min-height: 80px;
+  }
+  .tag-input-container.large {
+    min-height: 120px;
+    align-content: flex-start;
   }
   .tag-input-container:focus-within {
     border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
   }
   .tag-item {
     display: inline-flex;
     align-items: center;
-    background: #f3f4f6;
+    background: #eef2ff;
     border-radius: 6px;
-    padding: 4px 8px;
+    padding: 2px 8px;
     font-size: 13px;
-    color: #1f2937;
+    color: #4338ca;
+    font-weight: 500;
   }
   .tag-remove {
     margin-left: 6px;
     cursor: pointer;
-    color: #9ca3af;
+    color: #a5b4fc;
     font-weight: bold;
   }
   .tag-remove:hover {
-    color: #1f2937;
+    color: #4338ca;
   }
   .tag-input {
     flex-grow: 1;
@@ -246,13 +268,13 @@
     outline: none;
     padding: 4px;
     background: transparent;
-    min-width: 120px;
+    min-width: 100px;
   }
 
-  /* Flexible Testing Card Specifics */
+  /* Flexible Testing Tab */
   .ff-flexible-list {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 16px;
     margin-bottom: 16px;
   }
@@ -260,19 +282,24 @@
     background: #f9fafb;
     border: 1px solid #e5e7eb;
     border-radius: 10px;
-    padding: 16px;
+    padding: 12px 16px;
     position: relative;
   }
   .flexible-rule-card .ff-field {
     margin-bottom: 12px;
   }
+  .flexible-rule-card .control-input {
+    height: 34px;
+    border-radius: 6px;
+    padding: 0 10px;
+  }
   .flexible-rule-card .delete-rule-btn {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    top: 8px;
+    right: 8px;
     background: none;
     border: none;
-    font-size: 18px;
+    font-size: 16px;
     color: #9ca3af;
     cursor: pointer;
   }
@@ -283,7 +310,7 @@
     background: #fff;
     border: 1px dashed #d1d5db;
     color: #374151;
-    padding: 10px 16px;
+    padding: 8px 14px;
     width: 100%;
     font-weight: 600;
   }
@@ -292,28 +319,38 @@
     border-color: #9ca3af;
   }
 
-  /* Readonly Card */
-  .readonly-card .ff-readonly-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 12px;
-    font-size: 13px;
+  /* Reference Card */
+  .ff-reference-card {
+    margin-top: 24px;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 20px;
   }
-  .readonly-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    background: #f9fafb;
-    padding: 8px 12px;
-    border-radius: 8px;
-  }
-  .readonly-item .key {
+  .ff-reference-card summary {
+    cursor: pointer;
     font-weight: 600;
     color: #374151;
   }
-  .readonly-item .value {
+  .ff-keys-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 8px 16px;
+    font-size: 12px;
+    margin-top: 12px;
+    background: #f9fafb;
+    padding: 12px;
+    border-radius: 8px;
+  }
+  .key-item {
+    display: flex;
+    flex-direction: column;
+  }
+  .key-item .key-name {
+    font-weight: 600;
+    color: #111827;
+    font-family: monospace;
+  }
+  .key-item .key-desc {
     color: #6b7280;
-    word-break: break-all;
   }
 
   /* Toast */
@@ -323,20 +360,158 @@
     bottom: 20px;
     background: #111827;
     color: #fff;
-    padding: 12px 18px;
+    padding: 10px 16px;
     border-radius: 8px;
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1),
       0 8px 10px -6px rgba(0, 0, 0, 0.1);
-    font-size: 14px;
+    font-size: 13px;
     z-index: 10000;
   }
+
+  /* Modal */
+  .ff-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+  }
+  .ff-modal-content {
+    background: #fff;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .ff-modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ff-modal-header h4 {
+    margin: 0;
+    font-size: 16px;
+  }
+  .ff-modal-header .close-btn {
+    font-size: 24px;
+    color: #9ca3af;
+    cursor: pointer;
+  }
+  .ff-modal-body {
+    padding: 16px 20px;
+    overflow-y: auto;
+  }
+  .ff-modal-body p {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 0 0 12px;
+  }
+  .ff-modal-body .legend-added {
+    color: #166534;
+    font-weight: 600;
+  }
+  .ff-modal-body .legend-removed {
+    color: #991b1b;
+    font-weight: 600;
+  }
+  .ff-modal-body pre {
+    background: #f9fafb;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .ff-modal-body pre span.added {
+    color: #166534;
+    background: #dcfce7;
+  }
+  .ff-modal-body pre span.removed {
+    color: #991b1b;
+    background: #fee2e2;
+    text-decoration: line-through;
+  }
+  .ff-modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  /* Mobile Responsive */
+  @media (max-width: 768px) {
+    .ff-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .ff-group-cards,
+    .ff-flexible-list {
+      grid-template-columns: 1fr;
+    }
+    .ff-tabs-nav {
+      overflow-x: auto;
+    }
+  }
 </style>
+
+<!-- jsdiff library for review-changes modal -->
+<script src="/static/js/diff.min.js"></script>
 
 <script>
   (function () {
     let inited = false;
     let configData = {};
+    let originalConfigData = {}; // For diffing
     let dirty = false;
+
+    const FEATURE_KEYS = {
+      showPanel: "显示主面板",
+      showSidebarIcon: "显示侧边栏图标",
+      showAvatarRank: "显示头像排名",
+      showTokenAnalysis: "显示代币分析",
+      showTweetAIAnalysis: "显示推文AI分析",
+      showSearchPanel: "显示搜索面板",
+      showAnnualReport: "显示年度报告",
+      showHunterCampaign: "显示猎人活动",
+      showNotes: "显示备注",
+      showOfficialTags: "显示官方标签",
+      showRealtimeSubscription: "显示实时订阅",
+      showEngageToEarn: "显示 Engage-to-Earn",
+      enableBnbFeeds: "启用 BNB Feeds",
+      enableGossip: "启用 Gossip",
+      enableListing: "启用 Listing",
+      showProjectMembers: "显示项目成员",
+      showInvestors: "显示获投资",
+      showPortfolio: "显示已投资",
+      show90dMention: "显示90天代币提及",
+      show90dPerformance: "显示90天收益率",
+      showPersonalityType: "显示性格类型",
+      showRenameInfo: "显示改名记录",
+      showDelInfo: "显示删帖记录",
+      showDiscussion: "显示讨论功能",
+      showKolAbilityModel: "显示KOL能力模型",
+      showSoulIndex: "显示灵魂浓度",
+      showNarrative: "显示叙事功能",
+      showArticleBottomRightArea: "显示 XHunt 推广",
+      showKolFollowers: "显示全球KOL粉丝",
+      showTop100Kols: "显示TOP100 KOLs",
+      showCnKols: "显示中文KOLs",
+      showFqRank: "显示全球影响力排名",
+      showCnRank: "显示华语影响力排名",
+      showEnInfluenceRank: "显示英文影响力排名",
+      showProjectRank: "显示项目影响力排名",
+      showReviews: "显示评论功能",
+    };
 
     function $(id) {
       return document.getElementById(id);
@@ -364,7 +539,7 @@
       const input = document.createElement("input");
       input.type = "text";
       input.className = "tag-input";
-      input.placeholder = "Add users...";
+      input.placeholder = "Add users or features...";
 
       function render() {
         container.innerHTML = "";
@@ -416,30 +591,25 @@
     }
 
     // --- API Calls ---
-    async function loadConfig() {
-      toast("Loading config...", "info");
+    async function loadConfig(isForDiff = false) {
+      if (!isForDiff) toast("Loading config...", "info");
       const resp = await fetch("/api/xhunt/stats/feature-flags", {
         credentials: "include",
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json = await resp.json();
       if (!json.success) throw new Error(json.error || "Failed to load");
-      configData = JSON.parse(json.data.content || "{}");
+      const parsed = JSON.parse(json.data.content || "{}");
+      if (isForDiff) return parsed;
+
+      configData = parsed;
+      originalConfigData = JSON.parse(JSON.stringify(parsed)); // Deep copy for diffing
       dirty = false;
       renderUI();
-      toast("Config loaded successfully!", "success");
+      if (!isForDiff) toast("Config loaded successfully!", "success");
     }
 
     async function publishConfig() {
-      if (!dirty) {
-        toast("No changes to publish.", "info");
-        return;
-      }
-      const ok = window.confirm(
-        "Are you sure you want to publish these changes to Nacos?"
-      );
-      if (!ok) return;
-
       toast("Publishing...", "info");
       const content = JSON.stringify(configData, null, 2);
       const resp = await fetch("/api/xhunt/stats/feature-flags", {
@@ -453,6 +623,8 @@
       if (!json.success) throw new Error(json.error || "Failed to publish");
       dirty = false;
       toast("Published successfully!", "success");
+      closeDiffModal();
+      await loadConfig(); // Reload to get fresh state
     }
 
     // --- UI Rendering ---
@@ -461,6 +633,7 @@
       renderTestConfig();
       renderCanaryConfig();
       renderReadonlyConfig();
+      renderFeatureKeys();
     }
 
     function renderFlexibleTesting() {
@@ -489,6 +662,7 @@
         `;
       const tagInputContainer = card.querySelector(".tag-input-container");
       createTagInput(tagInputContainer, users, (newUsers) => {
+        if (!configData.flexibleTesting) configData.flexibleTesting = {};
         configData.flexibleTesting[key] = newUsers;
         dirty = true;
       });
@@ -502,6 +676,7 @@
       card.querySelector(".feature-name-input").onchange = (e) => {
         const newKey = e.target.value.trim();
         if (newKey && newKey !== key) {
+          if (!configData.flexibleTesting) configData.flexibleTesting = {};
           configData.flexibleTesting[newKey] = configData.flexibleTesting[key];
           delete configData.flexibleTesting[key];
           dirty = true;
@@ -516,7 +691,8 @@
         $("ff-test-features"),
         configData.testConfig?.features || [],
         (tags) => {
-          if (!configData.testConfig) configData.testConfig = {};
+          if (!configData.testConfig)
+            configData.testConfig = { features: [], testers: [] };
           configData.testConfig.features = tags;
           dirty = true;
         }
@@ -525,7 +701,8 @@
         $("ff-test-testers"),
         configData.testConfig?.testers || [],
         (tags) => {
-          if (!configData.testConfig) configData.testConfig = {};
+          if (!configData.testConfig)
+            configData.testConfig = { features: [], testers: [] };
           configData.testConfig.testers = tags;
           dirty = true;
         }
@@ -537,7 +714,8 @@
         $("ff-canary-features"),
         configData.canaryConfig?.features || [],
         (tags) => {
-          if (!configData.canaryConfig) configData.canaryConfig = {};
+          if (!configData.canaryConfig)
+            configData.canaryConfig = { features: [], canaries: [] };
           configData.canaryConfig.features = tags;
           dirty = true;
         }
@@ -546,7 +724,8 @@
         $("ff-canary-canaries"),
         configData.canaryConfig?.canaries || [],
         (tags) => {
-          if (!configData.canaryConfig) configData.canaryConfig = {};
+          if (!configData.canaryConfig)
+            configData.canaryConfig = { features: [], canaries: [] };
           configData.canaryConfig.canaries = tags;
           dirty = true;
         }
@@ -574,10 +753,60 @@
       }
     }
 
+    function renderFeatureKeys() {
+      const container = $("ff-keys-list");
+      container.innerHTML = Object.entries(FEATURE_KEYS)
+        .map(([key, desc]) => {
+          return `<div class="key-item"><span class="key-name">${key}</span><span class="key-desc">${desc}</span></div>`;
+        })
+        .join("");
+    }
+
+    // --- Diff Modal Logic ---
+    function openDiffModal(latestConfig) {
+      const oldStr = JSON.stringify(latestConfig, null, 2);
+      const newStr = JSON.stringify(configData, null, 2);
+
+      if (oldStr === newStr) {
+        toast("No changes detected compared to the latest version.", "info");
+        return;
+      }
+
+      const diff = Diff.diffJson(latestConfig, configData);
+      const fragment = document.createDocumentFragment();
+      diff.forEach((part) => {
+        const span = document.createElement("span");
+        span.className = part.added ? "added" : part.removed ? "removed" : "";
+        span.appendChild(document.createTextNode(part.value));
+        fragment.appendChild(span);
+      });
+
+      $("ff-diff-output").innerHTML = "";
+      $("ff-diff-output").appendChild(fragment);
+      $("ff-diff-modal").style.display = "flex";
+    }
+
+    function closeDiffModal() {
+      $("ff-diff-modal").style.display = "none";
+    }
+
     // --- Init & Event Listeners ---
     function init() {
       if (inited) return;
       inited = true;
+
+      // Tab switching
+      const tabBtns = document.querySelectorAll(".ff-tab-btn");
+      const tabPanes = document.querySelectorAll(".ff-tab-pane");
+      tabBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          tabBtns.forEach((b) => b.classList.remove("active"));
+          tabPanes.forEach((p) => p.classList.remove("active"));
+          btn.classList.add("active");
+          const targetPane = $(`ff-tab-${btn.dataset.tab}`);
+          if (targetPane) targetPane.classList.add("active");
+        });
+      });
 
       $("ff-reload-btn").addEventListener("click", () => {
         if (
@@ -590,8 +819,16 @@
         loadConfig().catch((e) => toast("Error: " + e.message, "error"));
       });
 
-      $("ff-publish-btn").addEventListener("click", () => {
-        publishConfig().catch((e) => toast("Error: " + e.message, "error"));
+      $("ff-publish-btn").addEventListener("click", async () => {
+        if (!dirty) {
+          return toast("No changes to publish.", "info");
+        }
+        try {
+          const latestConfig = await loadConfig(true);
+          openDiffModal(latestConfig);
+        } catch (e) {
+          toast("Error fetching latest config for diff: " + e.message, "error");
+        }
       });
 
       $("ff-add-flexible-btn").addEventListener("click", () => {
@@ -600,6 +837,13 @@
         configData.flexibleTesting[newKey] = [];
         dirty = true;
         renderFlexibleTesting();
+      });
+
+      // Modal events
+      $("ff-diff-modal-close").addEventListener("click", closeDiffModal);
+      $("ff-diff-cancel-btn").addEventListener("click", closeDiffModal);
+      $("ff-diff-confirm-btn").addEventListener("click", () => {
+        publishConfig().catch((e) => toast("Error: " + e.message, "error"));
       });
 
       loadConfig().catch((e) => toast("Error: " + e.message, "error"));
