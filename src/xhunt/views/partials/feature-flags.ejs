@@ -1195,7 +1195,12 @@
   }
 
   // --- Tag Input Component ---
-  function createTagInput(container, initialTags = [], onChange) {
+  function createTagInput(
+    container,
+    initialTags = [],
+    onChange,
+    showTranslation = false
+  ) {
     let tags = [...initialTags];
     const input = document.createElement("input");
     input.type = "text";
@@ -1207,7 +1212,12 @@
       tags.forEach((tag, index) => {
         const tagEl = document.createElement("span");
         tagEl.className = "tag-item";
-        tagEl.textContent = tag;
+        if (showTranslation) {
+          const translation = FEATURE_KEYS[tag] || "";
+          tagEl.textContent = translation ? `${tag} (${translation})` : tag;
+        } else {
+          tagEl.textContent = tag;
+        }
         const removeEl = document.createElement("span");
         removeEl.className = "tag-remove";
         removeEl.textContent = "×";
@@ -1408,7 +1418,8 @@
           configData.testConfig = { features: [], testers: [] };
         configData.testConfig.features = tags;
         dirty = true;
-      }
+      },
+      true
     );
 
     const testers = configData.testConfig?.testers || [];
@@ -1436,7 +1447,8 @@
           configData.canaryConfig = { features: [], canaries: [] };
         configData.canaryConfig.features = tags;
         dirty = true;
-      }
+      },
+      true
     );
 
     const canaries = configData.canaryConfig?.canaries || [];
