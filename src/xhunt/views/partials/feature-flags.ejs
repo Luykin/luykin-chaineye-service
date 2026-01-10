@@ -177,6 +177,60 @@
     background: #1d4ed8;
   }
 
+  /* Summary Section */
+  .ff-summary-container {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  .summary-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid #f3f4f6;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  .summary-card h4 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: #111827;
+    border-bottom: 1px solid #f3f4f6;
+    padding-bottom: 8px;
+  }
+  .summary-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 13px;
+  }
+  .summary-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 2px;
+  }
+  .summary-list li .feature-name {
+    font-weight: 500;
+    color: #374151;
+  }
+  .summary-list li .user-count-badge {
+    background: #eef2ff;
+    color: #4338ca;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+  }
+  .summary-list .no-features {
+    color: #9ca3af;
+    padding: 4px 0;
+  }
+
   /* Tabs */
   .ff-tabs-nav {
     display: flex;
@@ -1322,7 +1376,59 @@
   }
 
   // --- UI Rendering ---
+  function renderSummary() {
+    const flexibleSummaryList = $("ff-summary-flexible-list");
+    const testSummaryList = $("ff-summary-test-list");
+
+    // Flexible Testing Summary
+    const flexibleConfig = configData.flexibleTesting || {};
+    const flexibleFeatures = Object.entries(flexibleConfig).filter(
+      ([key]) => !key.startsWith("_")
+    );
+
+    if (flexibleFeatures.length > 0) {
+      flexibleSummaryList.innerHTML = flexibleFeatures
+        .map(([key, users]) => {
+          const translation = FEATURE_KEYS[key] || "";
+          const displayName = translation ? `${key} (${translation})` : key;
+          return `
+                <li>
+                    <span class="feature-name">${displayName}</span>
+                    <span class="user-count-badge">${users.length} user(s)</span>
+                </li>
+            `;
+        })
+        .join("");
+    } else {
+      flexibleSummaryList.innerHTML =
+        '<li class="no-features">No active flexible rules.</li>';
+    }
+
+    // Test Group Summary
+    const testFeatures = (configData.testConfig?.features || []).filter(
+      (key) => !key.startsWith("_")
+    );
+
+    if (testFeatures.length > 0) {
+      testSummaryList.innerHTML = testFeatures
+        .map((key) => {
+          const translation = FEATURE_KEYS[key] || "";
+          const displayName = translation ? `${key} (${translation})` : key;
+          return `
+                <li>
+                    <span class="feature-name">${displayName}</span>
+                </li>
+            `;
+        })
+        .join("");
+    } else {
+      testSummaryList.innerHTML =
+        '<li class="no-features">No features in test group.</li>';
+    }
+  }
+
   function renderUI() {
+    renderSummary();
     renderFlexibleTesting();
     renderTestConfig();
     renderCanaryConfig();
