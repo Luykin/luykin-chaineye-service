@@ -11,6 +11,22 @@
     </div>
   </div>
 
+  <!-- Summary Section -->
+  <div class="ff-summary-container">
+    <div class="summary-card">
+      <h4>灵活测试 (Flexible)</h4>
+      <ul id="ff-summary-flexible-list" class="summary-list"></ul>
+    </div>
+    <div class="summary-card">
+      <h4>测试组 (Test)</h4>
+      <ul id="ff-summary-test-list" class="summary-list"></ul>
+    </div>
+    <div class="summary-card">
+      <h4>金丝雀 (Canary)</h4>
+      <ul id="ff-summary-canary-list" class="summary-list"></ul>
+    </div>
+  </div>
+
   <!-- Tab Navigation -->
   <div class="ff-tabs-nav">
     <button class="ff-tab-btn active" data-tab="flexible">
@@ -1379,6 +1395,7 @@
   function renderSummary() {
     const flexibleSummaryList = $("ff-summary-flexible-list");
     const testSummaryList = $("ff-summary-test-list");
+    const canarySummaryList = $("ff-summary-canary-list");
 
     // Flexible Testing Summary
     const flexibleConfig = configData.flexibleTesting || {};
@@ -1424,6 +1441,28 @@
     } else {
       testSummaryList.innerHTML =
         '<li class="no-features">No features in test group.</li>';
+    }
+
+    // Canary Group Summary
+    const canaryFeatures = (configData.canaryConfig?.features || []).filter(
+      (key) => !key.startsWith("_")
+    );
+
+    if (canaryFeatures.length > 0) {
+      canarySummaryList.innerHTML = canaryFeatures
+        .map((key) => {
+          const translation = FEATURE_KEYS[key] || "";
+          const displayName = translation ? `${key} (${translation})` : key;
+          return `
+                <li>
+                    <span class="feature-name">${displayName}</span>
+                </li>
+            `;
+        })
+        .join("");
+    } else {
+      canarySummaryList.innerHTML =
+        '<li class="no-features">No features in canary group.</li>';
     }
   }
 
