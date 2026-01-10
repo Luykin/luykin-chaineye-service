@@ -840,11 +840,9 @@
     }
 
     // --- Init & Event Listeners ---
-    async function init() {
+    async function initializePanel() {
       if (inited) return;
       inited = true;
-
-      await loadTranslations();
 
       // Tab switching
       const tabBtns = document.querySelectorAll(".ff-tab-btn");
@@ -897,7 +895,13 @@
         publishConfig().catch((e) => toast("Error: " + e.message, "error"));
       });
 
-      loadConfig().catch((e) => toast("Error: " + e.message, "error"));
+      // Load the main config now that translations are ready and event listeners are set up.
+    }
+
+    async function initializePanel() {
+      await init();
+      await loadTranslations();
+      await loadConfig();
     }
 
     document.addEventListener("click", (e) => {
