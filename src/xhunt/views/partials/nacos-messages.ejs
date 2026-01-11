@@ -621,6 +621,10 @@
         const toolbarEl = $("nacos-quill-toolbar");
         toolbarEl.innerHTML = `
           <span class="ql-formats">
+            <select class="ql-size"></select>
+            <select class="ql-color"></select>
+          </span>
+          <span class="ql-formats">
             <button class="ql-bold"></button>
             <button class="ql-italic"></button>
             <button class="ql-underline"></button>
@@ -630,6 +634,9 @@
           </span>
           <span class="ql-formats">
             <button class="ql-clean"></button>
+          </span>
+          <span class="ql-formats">
+            <button type="button" id="nacos-rte-html" title="编辑源码"><b>&lt;/&gt;</b></button>
           </span>
         `;
 
@@ -647,6 +654,19 @@
         quill.on("text-change", () => {
           syncToModel();
         });
+
+        // bind html source editor button
+        const htmlBtn = document.getElementById("nacos-rte-html");
+        if (htmlBtn) {
+          htmlBtn.addEventListener("click", () => {
+            const currentHtml = getEditorHtml();
+            const newHtml = window.prompt("请编辑 HTML 源码：", currentHtml);
+            if (newHtml !== null && newHtml !== currentHtml) {
+              setEditorHtml(newHtml);
+              syncToModel();
+            }
+          });
+        }
 
         // 支持：直接粘贴 HTML 源码（例如粘贴包含 <br><a> 的字符串）
         // 默认 Quill 会把这类字符串当纯文本，我们在粘贴事件中检测是否像 HTML，若是则用 dangerouslyPasteHTML 解析插入。
