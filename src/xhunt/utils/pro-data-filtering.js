@@ -1,11 +1,8 @@
-const {
-  getVersionFromRequest,
-  isVersionGreaterOrEqual,
-} = require("./version");
+const { getVersionFromRequest, isVersionGreaterOrEqual } = require("./version");
 const { getXUserId, checkLegacyPro } = require("./legacy-pro");
 
-// 最小版本号：只有 >= 0.2.10 的版本才启用数据裁切
-const MIN_VERSION_FOR_PRO = "0.2.10";
+// 最小版本号：只有 >= 0.4.05 的版本才启用数据裁切
+const MIN_VERSION_FOR_PRO = "0.4.05";
 
 /**
  * Pro 用户数据裁切逻辑（统一管理）
@@ -18,14 +15,14 @@ const MIN_VERSION_FOR_PRO = "0.2.10";
  * - 账户profile改变：/public/fetch/twitter/user（部分字段）
  * - 最近5条关注和被关注：/public/fetch/twitter/follow_relation
  *
- * 注意：只有版本号 >= 0.2.10 才会进行数据裁切，否则直接返回原始数据
+ * 注意：只有版本号 >= 0.4.05 才会进行数据裁切，否则直接返回原始数据
  *
  * @param {express.Request} req - Express 请求对象
  * @param {any} data - 原始响应数据
  * @returns {any} 过滤后的数据
  */
 function applyProDataFiltering(req, data) {
-  // 检查版本号，如果版本号 < 0.2.10，直接返回原始数据，不进行裁切
+  // 检查版本号，如果版本号 < 0.4.05，直接返回原始数据，不进行裁切
   const version = getVersionFromRequest(req);
   if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
     return data;
@@ -156,14 +153,13 @@ function applyProDataFiltering(req, data) {
         Array.isArray(filtered.data.data.followed_action)
       ) {
         // 将前 5 条数据变成空对象
-        filtered.data.data.followed_action = filtered.data.data.followed_action.map(
-          (item, index) => {
+        filtered.data.data.followed_action =
+          filtered.data.data.followed_action.map((item, index) => {
             if (index < 5) {
               return {};
             }
             return item;
-          }
-        );
+          });
       }
 
       // 处理嵌套的 data.data.following_action 数组
@@ -175,14 +171,13 @@ function applyProDataFiltering(req, data) {
         Array.isArray(filtered.data.data.following_action)
       ) {
         // 将前 5 条数据变成空对象
-        filtered.data.data.following_action = filtered.data.data.following_action.map(
-          (item, index) => {
+        filtered.data.data.following_action =
+          filtered.data.data.following_action.map((item, index) => {
             if (index < 5) {
               return {};
             }
             return item;
-          }
-        );
+          });
       }
 
       // 在 message 同级添加提示信息
@@ -200,4 +195,3 @@ function applyProDataFiltering(req, data) {
 module.exports = {
   applyProDataFiltering,
 };
-

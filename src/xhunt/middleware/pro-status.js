@@ -7,10 +7,12 @@ const {
   isVersionGreaterOrEqual,
 } = require("../utils/version");
 const { getXUserId, checkLegacyPro } = require("../utils/legacy-pro");
-const PRO_STATUS_MIDDLEWARE_FLAG = Symbol.for("xhunt.proStatusMiddlewareExecuted");
+const PRO_STATUS_MIDDLEWARE_FLAG = Symbol.for(
+  "xhunt.proStatusMiddlewareExecuted"
+);
 
-// 最小版本号：只有 >= 0.2.10 的版本才启用 Pro 检查
-const MIN_VERSION_FOR_PRO = "0.2.10";
+// 最小版本号：只有 >= 0.4.05 的版本才启用 Pro 检查
+const MIN_VERSION_FOR_PRO = "0.4.05";
 
 /**
  * 获取版本号（智能选择来源）
@@ -23,12 +25,17 @@ function getVersion(req) {
   // 检查是否是 SSE 请求（完整路径包含 /sse）
   const fullPath = (req.baseUrl || "") + (req.path || "");
   const isSSERequest = fullPath.includes("/sse");
-  
+
   if (isSSERequest) {
     // SSE 请求：优先从查询参数获取（因为 EventSource 不支持自定义 headers）
-    return req.query["x-extension-version"] || req.query["x_extension_version"] || getVersionFromRequest(req) || null;
+    return (
+      req.query["x-extension-version"] ||
+      req.query["x_extension_version"] ||
+      getVersionFromRequest(req) ||
+      null
+    );
   }
-  
+
   // 其他请求：从 headers 获取
   return getVersionFromRequest(req);
 }
@@ -39,14 +46,14 @@ function getVersion(req) {
  * 如果 req.user 不存在，设置 req.isPro = false 并继续
  * 适用于使用 authenticateTokenOptional 的路由
  *
- * 注意：只有版本号 >= 0.2.10 才会进行 Pro 检查，否则直接跳过
+ * 注意：只有版本号 >= 0.4.05 才会进行 Pro 检查，否则直接跳过
  */
 async function checkProStatus(req, res, next) {
   try {
     if (req[PRO_STATUS_MIDDLEWARE_FLAG]) {
       return next();
     }
-    // 检查版本号，如果版本号 < 0.2.10，直接跳过 Pro 检查
+    // 检查版本号，如果版本号 < 0.4.05，直接跳过 Pro 检查
     const version = getVersion(req);
     if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
       req.isPro = false;
@@ -93,7 +100,9 @@ async function checkProStatus(req, res, next) {
       req.isPro = true;
       req.proExpiryTime = legacyProCheck.proExpiryTime;
       console.log(
-        `[pro-status] ✅ 用户 ${req.user.username || req.user.id} 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
+        `[pro-status] ✅ 用户 ${
+          req.user.username || req.user.id
+        } 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
       );
     } else {
       req.isPro = false;
@@ -116,14 +125,14 @@ async function checkProStatus(req, res, next) {
  * 必须有 req.user，否则返回错误
  * 适用于使用 authenticateToken 的路由
  *
- * 注意：只有版本号 >= 0.2.10 才会进行 Pro 检查，否则直接跳过
+ * 注意：只有版本号 >= 0.4.05 才会进行 Pro 检查，否则直接跳过
  */
 async function checkProStatusRequired(req, res, next) {
   try {
     if (req[PRO_STATUS_MIDDLEWARE_FLAG]) {
       return next();
     }
-    // 检查版本号，如果版本号 < 0.2.10，直接跳过 Pro 检查
+    // 检查版本号，如果版本号 < 0.4.05，直接跳过 Pro 检查
     const version = getVersion(req);
     if (!version || !isVersionGreaterOrEqual(version, MIN_VERSION_FOR_PRO)) {
       req.isPro = false;
@@ -165,7 +174,9 @@ async function checkProStatusRequired(req, res, next) {
       req.isPro = true;
       req.proExpiryTime = legacyProCheck.proExpiryTime;
       console.log(
-        `[pro-status] ✅ 用户 ${req.user.username || req.user.id} 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
+        `[pro-status] ✅ 用户 ${
+          req.user.username || req.user.id
+        } 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
       );
     } else {
       req.isPro = false;
@@ -184,4 +195,3 @@ module.exports = {
   checkProStatus,
   checkProStatusRequired,
 };
-
