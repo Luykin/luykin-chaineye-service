@@ -397,23 +397,6 @@
           }
         });
 
-        // 新增管理员 折叠/展开
-        const caToggle = document.getElementById("ca-toggle");
-        const caBody = document.getElementById("ca-body");
-        if (caToggle && caBody) {
-          caToggle.addEventListener("click", (e) => {
-            e.preventDefault();
-            const isHidden =
-              caBody.style.display === "none" || caBody.style.display === "";
-            if (isHidden) {
-              caBody.style.display = "block";
-              caToggle.textContent = "收起";
-            } else {
-              caBody.style.display = "none";
-              caToggle.textContent = "展开";
-            }
-          });
-        }
         groups.push({ key: tabKey, label: tabMeta?.label || tabKey, items });
       });
       // 其余未归属的 API 放在“全局/其他”
