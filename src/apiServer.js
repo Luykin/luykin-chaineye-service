@@ -51,6 +51,7 @@ const {
 // const StatsD = require("hot-shots");
 // const dataDog = new StatsD();
 const { adminAuth } = require("./admin/middleware/adminAuth");
+const { setupRootdataProPostgres } = require("./rootdatapro/models");
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -470,11 +471,10 @@ app.use((err, req, res, next) => {
 
 // 启动 API 服务
 async function startAPIServer() {
-  await setupSqlite();
-  await setupPostgres();
-  await setupPostgresFundraising();
-  // 超级管理员初始化不在业务进程中进行，改为独立脚本执行
-  // 不在 API 进程中启动备份服务，避免多实例重复备份
+  await setupSqlite(); // 初始化本地 SQLite（用于轻量本地表/缓存类表，具体取决于 models/sqlite-start 的定义）
+  await setupPostgres(); // 初始化主 PostgreSQL（src/models/postgres-start.js：cryptohunt + xhunt 相关业务表）
+  await setupPostgresFundraising(); // 初始xhunt里面老版本化融资业务 PostgreSQL（src/models/postgres-fundraising.js：Fundraising 相关表与关系）
+  await setupRootdataProPostgres(); // 初始化新的 RootDataPro PostgreSQL（src/rootdatapro/models：database=rootdatapro，rootdatapro 专用表与关系）
 
   app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
 }
