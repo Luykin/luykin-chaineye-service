@@ -66,7 +66,9 @@ class RootdataAPIService {
       }
       throw new Error(`API returned result: ${response.data?.result}`);
     } catch (error) {
-      console.error(`[rootdata api 失败] ❌ ${error.message} , api: ${ROOTDATA_API_BASE}/get_item project_id=${projectId}`);
+      console.error(
+        `[rootdata api 失败] ❌ ${error.message} , api: ${ROOTDATA_API_BASE}/get_item project_id=${projectId}`
+      );
       return null;
     }
   }
@@ -106,7 +108,6 @@ class RootdataAPIService {
       );
       throw error;
     }
-  
   }
 
   /**
@@ -117,9 +118,9 @@ class RootdataAPIService {
     try {
       const response = await axios.post(
         `${ROOTDATA_API_BASE}/get_fac`,
-        { 
+        {
           project_id: projectId,
-          include_team: true
+          include_team: true,
         },
         {
           headers: {
@@ -152,7 +153,7 @@ class RootdataAPIService {
       throw error;
     }
   }
-  
+
   /**
    * 获取 ID 映射表
    * type: 1 Project, 2 VC, 3 People
@@ -205,7 +206,10 @@ class RootdataAPIService {
       const parsed = JSON.parse(cached);
       return Array.isArray(parsed) ? parsed : null;
     } catch (e) {
-      console.error(`[rootdata id_map redis] get fail type=${type}:`, e.message);
+      console.error(
+        `[rootdata id_map redis] get fail type=${type}:`,
+        e.message
+      );
       return null;
     }
   }
@@ -215,9 +219,16 @@ class RootdataAPIService {
       const client = global.__xhuntRedis;
       if (!client) return;
       const key = `rootdata:id_map:${type}`;
-      await client.setEx(key, this._IDMAP_REDIS_TTL_SEC, JSON.stringify(data || []));
+      await client.setEx(
+        key,
+        this._IDMAP_REDIS_TTL_SEC,
+        JSON.stringify(data || [])
+      );
     } catch (e) {
-      console.error(`[rootdata id_map redis] set fail type=${type}:`, e.message);
+      console.error(
+        `[rootdata id_map redis] set fail type=${type}:`,
+        e.message
+      );
     }
   }
 
@@ -234,18 +245,28 @@ class RootdataAPIService {
     const needFetch2 = !Array.isArray(vc) || vc.length === 0;
     const needFetch3 = !Array.isArray(people) || people.length === 0;
     if (needFetch1) {
-      try { proj = await this.getIdMap(1); await this._setIdMapToRedis(1, proj); } catch (_) {}
+      try {
+        proj = await this.getIdMap(1);
+        await this._setIdMapToRedis(1, proj);
+      } catch (_) {}
     }
     if (needFetch2) {
-      try { vc = await this.getIdMap(2); await this._setIdMapToRedis(2, vc); } catch (_) {}
+      try {
+        vc = await this.getIdMap(2);
+        await this._setIdMapToRedis(2, vc);
+      } catch (_) {}
     }
     if (needFetch3) {
-      try { people = await this.getIdMap(3); await this._setIdMapToRedis(3, people); } catch (_) {}
+      try {
+        people = await this.getIdMap(3);
+        await this._setIdMapToRedis(3, people);
+      } catch (_) {}
     }
     const toMap = (arr) => {
       const m = new Map();
       for (const it of arr || []) {
-        if (it && (it.id !== undefined)) m.set(String(it.id), String(it.name || '').trim());
+        if (it && it.id !== undefined)
+          m.set(String(it.id), String(it.name || "").trim());
       }
       return m;
     };
@@ -253,7 +274,11 @@ class RootdataAPIService {
     this._idMapCache.byType[2] = toMap(vc);
     this._idMapCache.byType[3] = toMap(people);
     this._idMapCache.fetchedAt = now;
-    console.log(`[rootdata id_map] ✅ cached: proj=${proj?.length||0} vc=${vc?.length||0} people=${people?.length||0}`);
+    console.log(
+      `[rootdata id_map] ✅ cached: proj=${proj?.length || 0} vc=${
+        vc?.length || 0
+      } people=${people?.length || 0}`
+    );
   }
 
   /**
@@ -262,23 +287,34 @@ class RootdataAPIService {
   static async resolveLinkByIdName(id, name, options = {}) {
     await this.ensureIdMaps();
     const idStr = String(id);
-    const nm = String(name || '').trim();
+    const nm = String(name || "").trim();
     const maps = this._idMapCache.byType;
     const matches = [];
     if (maps[1].has(idStr)) matches.push(1);
     if (maps[2].has(idStr)) matches.push(2);
     if (maps[3].has(idStr)) matches.push(3);
     let type = matches.length === 1 ? matches[0] : null;
-    const forceType = (options && (options.forceType === 1 || options.forceType === 2 || options.forceType === 3))
-      ? options.forceType
-      : null;
+    const forceType =
+      options &&
+      (options.forceType === 1 ||
+        options.forceType === 2 ||
+        options.forceType === 3)
+        ? options.forceType
+        : null;
     if (forceType) type = forceType;
     if (!type) type = 1; // 默认按 Project 处理，保证回退
 
-    const encoded = encodeURIComponent(Buffer.from(String(idStr), 'utf-8').toString('base64'));
+    const encoded = encodeURIComponent(
+      Buffer.from(String(idStr), "utf-8").toString("base64")
+    );
     const encodedName = encodeURIComponent(nm);
 
-    const prefix = type === 1 ? '/Projects/detail' : (type === 2 ? '/Investors/detail' : '/member');
+    const prefix =
+      type === 1
+        ? "/Projects/detail"
+        : type === 2
+        ? "/Investors/detail"
+        : "/member";
     const relativeLink = `${prefix}/${encodedName}?k=${encoded}`;
     const fullLink = `https://www.rootdata.com${relativeLink}`;
     return { type, relativeLink, fullLink, encodedName, encoded };
@@ -331,20 +367,20 @@ class RootdataAPIService {
     }
   }
 
-    /**
+  /**
    * 根据 projectLink 获取完整的融资信息
    */
-  static async getProjectFundingData(projectLink, entityType = 'project') {
+  static async getProjectFundingData(projectLink, entityType = "project") {
     const projectId = this.extractProjectId(projectLink);
 
     if (!projectId) {
       throw new Error("Failed to extract project_id from projectLink");
     }
 
-    if (entityType === 'vc') {
+    if (entityType === "vc") {
       // 机构 VC
       return await this.getOrgInfo(projectId);
-    } else if (entityType === 'member') {
+    } else if (entityType === "member") {
       // 个人 Member
       return await this.getPeopleInfo(projectId);
     }
@@ -364,7 +400,10 @@ async function logAdminAction(req, { action, success, message }) {
       method: req.method,
       route: req.originalUrl || req.url,
       success: !!success,
-      message: typeof message === "string" ? message.slice(0, 1000) : JSON.stringify(message || {}).slice(0, 1000),
+      message:
+        typeof message === "string"
+          ? message.slice(0, 1000)
+          : JSON.stringify(message || {}).slice(0, 1000),
       ip: req.headers["x-forwarded-for"] || req.ip || "",
     });
   } catch (e) {
@@ -389,7 +428,7 @@ class RootdataDataFixService {
     Fundraising,
     redisClient,
     searchCacheKey = null,
-    updateProgram = 'auto_api_fix',
+    updateProgram = "auto_api_fix"
   ) {
     try {
       const projectLink = project.projectLink;
@@ -403,16 +442,26 @@ class RootdataDataFixService {
       //   console.log(`⏭️ 跳过验证（非项目链接,未开启verifyMoreType验证）: ${projectLink}`);
       //   return null;
       // }
-      if(!projectLink.includes("/Investors/detail") && !projectLink.includes("/Projects/detail") && !projectLink.includes("/member")) {
-        console.log(`⏭️ 跳过验证（非VC链接/非项目链接/非member）: ${projectLink}`);
+      if (
+        !projectLink.includes("/Investors/detail") &&
+        !projectLink.includes("/Projects/detail") &&
+        !projectLink.includes("/member")
+      ) {
+        console.log(
+          `⏭️ 跳过验证（非VC链接/非项目链接/非member）: ${projectLink}`
+        );
         return null;
       }
 
       // 实体类型：vc / member / project
-      const entityType = projectLink.includes('/Investors/detail')
-        ? 'vc'
-        : (projectLink.includes('/member') ? 'member' : 'project');
-      console.log(`[rootdata verify] entityType=${entityType} link=${projectLink}`);
+      const entityType = projectLink.includes("/Investors/detail")
+        ? "vc"
+        : projectLink.includes("/member")
+        ? "member"
+        : "project";
+      console.log(
+        `[rootdata verify] entityType=${entityType} link=${projectLink}`
+      );
 
       const cacheKey = `rootdata_verified:${projectLink}`;
 
@@ -433,15 +482,26 @@ class RootdataDataFixService {
 
       // 3a. 职位关系同步（vc/project 的 team_members）
       try {
-        await this.syncTeamPositions(project, apiData, Fundraising, entityType, updateProgram);
+        await this.syncTeamPositions(
+          project,
+          apiData,
+          Fundraising,
+          entityType,
+          updateProgram
+        );
       } catch (e) {
         console.warn(`[rootdata team_positions] 同步失败: ${e.message}`);
       }
 
       // 根据是否为 VC 判断返回数据结构
-      const noData = (entityType === 'vc' || entityType === 'member')
-        ? (!apiData || !Array.isArray(apiData.investments) || apiData.investments.length === 0)
-        : (!apiData || !Array.isArray(apiData.items) || apiData.items.length === 0);
+      const noData =
+        entityType === "vc" || entityType === "member"
+          ? !apiData ||
+            !Array.isArray(apiData.investments) ||
+            apiData.investments.length === 0
+          : !apiData ||
+            !Array.isArray(apiData.items) ||
+            apiData.items.length === 0;
 
       if (noData) {
         console.log(`⚠️ 未找到API数据，跳过修正: ${projectLink}`);
@@ -458,11 +518,22 @@ class RootdataDataFixService {
         return null;
       }
 
-      const count = (entityType === 'vc' || entityType === 'member') ? (apiData.investments?.length || 0) : (apiData.items?.length || 0);
-      console.log(`[rootdata verify] fetched count=${count} entityType=${entityType}`);
+      const count =
+        entityType === "vc" || entityType === "member"
+          ? apiData.investments?.length || 0
+          : apiData.items?.length || 0;
+      console.log(
+        `[rootdata verify] fetched count=${count} entityType=${entityType}`
+      );
 
       // 3b. 修正数据（显式传入 entityType，内部按类型分支处理）
-      await this.fixProjectData(project, apiData, Fundraising, entityType, updateProgram);
+      await this.fixProjectData(
+        project,
+        apiData,
+        Fundraising,
+        entityType,
+        updateProgram
+      );
 
       // 4. 清除搜索结果缓存，让下次请求获取修正后的数据
       if (searchCacheKey) {
@@ -491,41 +562,67 @@ class RootdataDataFixService {
   /**
    * 修正项目数据
    */
-  static async fixProjectData(project, apiData, Fundraising, entityType = 'project', updateProgram = 'auto_api_fix') {
+  static async fixProjectData(
+    project,
+    apiData,
+    Fundraising,
+    entityType = "project",
+    updateProgram = "auto_api_fix"
+  ) {
     const fundedProjectId = project.id;
 
     // 获取项目的 Twitter URL（用于验证）
     const projectTwitterUrl = project.twitterUrl || project.socialLinks?.x;
-    const roundsCount = (entityType === 'vc' || entityType === 'member')
-      ? (apiData?.investments?.length || 0)
-      : (apiData?.items?.length || 0);
-    if (entityType === 'project' && !projectTwitterUrl) {
+    const roundsCount =
+      entityType === "vc" || entityType === "member"
+        ? apiData?.investments?.length || 0
+        : apiData?.items?.length || 0;
+    if (entityType === "project" && !projectTwitterUrl) {
       console.log(
-        `[rootdata 对比起效] ⚠️ 无Twitter URL跳过: ${
-          project.projectName
-        } | 轮次:${roundsCount}`
+        `[rootdata 对比起效] ⚠️ 无Twitter URL跳过: ${project.projectName} | 轮次:${roundsCount}`
       );
       return;
     }
 
-    console.log(`{rootdata 对比起效} 🔍 开始: ${project.projectName} | API返回:${roundsCount}轮次${projectTwitterUrl ? ` | Twitter:${projectTwitterUrl}` : ''}`);
+    console.log(
+      `{rootdata 对比起效} 🔍 开始: ${
+        project.projectName
+      } | API返回:${roundsCount}轮次${
+        projectTwitterUrl ? ` | Twitter:${projectTwitterUrl}` : ""
+      }`
+    );
 
     let totalProcessed = 0; // 统计处理的投资者数量
     let totalSkipped = 0; // 统计跳过的轮次数量
     let totalMatched = 0; // 统计匹配成功的轮次数量
 
     // 兼容 VC 机构返回的数据结构（apiData.investments）
-    if (entityType === 'vc' && Array.isArray(apiData?.investments)) {
+    if (entityType === "vc" && Array.isArray(apiData?.investments)) {
       const vcProjectId = project.id;
 
       // 预处理：生成所有候选链接，批量查询已存在项目，减少 N+1 查询
-      const vcItems = await Promise.all(apiData.investments.map(async (inv) => {
-        const rawName = String(inv.name || "").trim();
-        const { relativeLink, fullLink, encodedName, encoded } = await RootdataAPIService.resolveLinkByIdName(inv.project_id, rawName);
-        const shortRelative = `/detail/${encodedName}?k=${encoded}`;
-        const shortRelativeUnencoded = `/detail/${rawName}?k=${encoded}`;
-        return { inv, rawName, encodedName, encoded, relativeLink, fullLink, shortRelative, shortRelativeUnencoded };
-      }));
+      const vcItems = await Promise.all(
+        apiData.investments.map(async (inv) => {
+          const rawName = String(inv.name || "").trim();
+          const { relativeLink, fullLink, encodedName, encoded } =
+            await RootdataAPIService.resolveLinkByIdName(
+              inv.project_id,
+              rawName
+            );
+          const shortRelative = `/detail/${encodedName}?k=${encoded}`;
+          const shortRelativeUnencoded = `/detail/${rawName}?k=${encoded}`;
+          return {
+            inv,
+            rawName,
+            encodedName,
+            encoded,
+            relativeLink,
+            fullLink,
+            shortRelative,
+            shortRelativeUnencoded,
+          };
+        })
+      );
 
       const linkKeys = Array.from(
         new Set(
@@ -552,7 +649,9 @@ class RootdataDataFixService {
         const { inv, fullLink, shortRelative, shortRelativeUnencoded } = item;
         try {
           // 3) 使用批量查询结果映射，避免逐条查库
-          let target = existingMap.get(shortRelative) || existingMap.get(shortRelativeUnencoded);
+          let target =
+            existingMap.get(shortRelative) ||
+            existingMap.get(shortRelativeUnencoded);
 
           // 4) 如未找到则创建（使用 findOrCreate 防止竞态与唯一冲突）
           if (!target) {
@@ -570,7 +669,9 @@ class RootdataDataFixService {
                 updateProgram,
               },
             });
-            const plain = instance.get ? instance.get({ plain: true }) : instance;
+            const plain = instance.get
+              ? instance.get({ plain: true })
+              : instance;
             target = plain;
             // 缓存到映射，避免后续重复创建
             existingMap.set(shortRelative, plain);
@@ -595,8 +696,21 @@ class RootdataDataFixService {
           );
           totalProcessed++;
         } catch (error) {
-          const details = error?.errors ? JSON.stringify(error.errors.map(e => ({ path: e.path, message: e.message, type: e.type, validatorKey: e.validatorKey }))) : '';
-          console.error(`[rootdata VC 处理] ❌ 处理失败: ${error.name || 'Error'} ${error.message} ${details}`);
+          const details = error?.errors
+            ? JSON.stringify(
+                error.errors.map((e) => ({
+                  path: e.path,
+                  message: e.message,
+                  type: e.type,
+                  validatorKey: e.validatorKey,
+                }))
+              )
+            : "";
+          console.error(
+            `[rootdata VC 处理] ❌ 处理失败: ${error.name || "Error"} ${
+              error.message
+            } ${details}`
+          );
         }
       }
 
@@ -605,18 +719,22 @@ class RootdataDataFixService {
       );
       return;
     }
-    
+
     // 兼容 Member 个人返回的数据结构（apiData.investments）
-    if (entityType === 'member' && Array.isArray(apiData?.investments)) {
+    if (entityType === "member" && Array.isArray(apiData?.investments)) {
       const memberProjectId = project.id;
       for (const inv of apiData.investments) {
         try {
           // 优先根据 Twitter URL 查项目（兼容带/与不带/）
-          const twitterUrl = inv.X || inv.x || '';
+          const twitterUrl = inv.X || inv.x || "";
           let target = null;
           if (twitterUrl) {
-            const withSlash = twitterUrl.endsWith('/') ? twitterUrl : `${twitterUrl}/`;
-            const withoutSlash = twitterUrl.endsWith('/') ? twitterUrl.slice(0, -1) : twitterUrl;
+            const withSlash = twitterUrl.endsWith("/")
+              ? twitterUrl
+              : `${twitterUrl}/`;
+            const withoutSlash = twitterUrl.endsWith("/")
+              ? twitterUrl.slice(0, -1)
+              : twitterUrl;
             target = await Fundraising.Project.findOne({
               where: { twitterUrl: { [Op.iLike]: withoutSlash } },
               raw: true,
@@ -631,8 +749,9 @@ class RootdataDataFixService {
 
           // 如未找到，则以 id 生成标准链接创建（使用 findOrCreate 防止唯一约束冲突）
           if (!target) {
-            const nm = String(inv.name || '').trim();
-            const { relativeLink, fullLink } = await RootdataAPIService.resolveLinkByIdName(inv.id, nm);
+            const nm = String(inv.name || "").trim();
+            const { relativeLink, fullLink } =
+              await RootdataAPIService.resolveLinkByIdName(inv.id, nm);
             const [instance] = await Fundraising.Project.findOrCreate({
               where: { projectLink: fullLink },
               defaults: {
@@ -676,7 +795,7 @@ class RootdataDataFixService {
       return;
     }
 
-    if (entityType !== 'project') {
+    if (entityType !== "project") {
       return;
     }
 
@@ -749,24 +868,36 @@ class RootdataDataFixService {
   /**
    * 同步职位关系（VC/Project 的 team_members）
    */
-  static async syncTeamPositions(project, apiData, Fundraising, entityType = 'project', updateProgram = 'auto_api_fix') {
+  static async syncTeamPositions(
+    project,
+    apiData,
+    Fundraising,
+    entityType = "project",
+    updateProgram = "auto_api_fix"
+  ) {
     try {
       if (!apiData) {
-        console.log('[team_positions] skip: no apiData');
+        console.log("[team_positions] skip: no apiData");
         return;
       }
-      if (entityType !== 'vc' && entityType !== 'project') {
+      if (entityType !== "vc" && entityType !== "project") {
         console.log(`[team_positions] skip: unsupported type=${entityType}`);
         return;
       }
-      let members = Array.isArray(apiData.team_members) ? apiData.team_members : [];
+      let members = Array.isArray(apiData.team_members)
+        ? apiData.team_members
+        : [];
       // 当为 project 且 API 数据无 team_members 时，回源 /get_item 或使用本地爬虫数据作为兜底
-      if (entityType === 'project' && members.length === 0) {
+      if (entityType === "project" && members.length === 0) {
         try {
-          const projectId = RootdataAPIService.extractProjectId(project.projectLink);
+          const projectId = RootdataAPIService.extractProjectId(
+            project.projectLink
+          );
           if (projectId) {
-            console.log('[team_positions] fetch /get_item for team_members');
-            const itemData = await RootdataAPIService.getProjectItemInfo(projectId);
+            console.log("[team_positions] fetch /get_item for team_members");
+            const itemData = await RootdataAPIService.getProjectItemInfo(
+              projectId
+            );
             if (itemData && Array.isArray(itemData.team_members)) {
               members = itemData.team_members;
             }
@@ -778,40 +909,49 @@ class RootdataDataFixService {
         // }
       }
       if (members.length === 0) {
-        console.log('[team_positions] skip: no members');
+        console.log("[team_positions] skip: no members");
         return;
       }
 
       const objectProjectId = project.id;
-      console.log(`[team_positions] start type=${entityType} object=${objectProjectId} members=${members.length}`);
+      console.log(
+        `[team_positions] start type=${entityType} object=${objectProjectId} members=${members.length}`
+      );
 
       for (const m of members) {
         try {
-          const rawName = String(m.name || '').trim();
+          const rawName = String(m.name || "").trim();
           if (!rawName || !m.people_id) continue;
           // 通过 people_id + name 生成标准的 member 详情链接
-          const { fullLink } = await RootdataAPIService.resolveLinkByIdName(m.people_id, rawName, { forceType: 3 });
+          const { fullLink } = await RootdataAPIService.resolveLinkByIdName(
+            m.people_id,
+            rawName,
+            { forceType: 3 }
+          );
 
           const xUrl = m.X || m.x || null;
 
           // 成员 Project
-          const [memberProj, createdMember] = await Fundraising.Project.findOrCreate({
-            where: { projectLink: fullLink },
-            defaults: {
-              projectName: rawName,
-              projectLink: fullLink,
-              logo: m.head_img || null,
-              description: rawName,
-              isInitial: true,
-              socialLinks: xUrl ? { x: xUrl } : null,
-              twitterUrl: xUrl || null,
-              detailFailuresNumber: 0,
-              detailFetchedAt: null,
-              updateProgram,
-            },
-          });
+          const [memberProj, createdMember] =
+            await Fundraising.Project.findOrCreate({
+              where: { projectLink: fullLink },
+              defaults: {
+                projectName: rawName,
+                projectLink: fullLink,
+                logo: m.head_img || null,
+                description: rawName,
+                isInitial: true,
+                socialLinks: xUrl ? { x: xUrl } : null,
+                twitterUrl: xUrl || null,
+                detailFailuresNumber: 0,
+                detailFetchedAt: null,
+                updateProgram,
+              },
+            });
           if (createdMember) {
-            console.log(`[team_positions] member created id=${memberProj.id} name=${rawName}`);
+            console.log(
+              `[team_positions] member created id=${memberProj.id} name=${rawName}`
+            );
           }
 
           // 职位关系（成员 -> 当前对象 VC/Project）
@@ -829,7 +969,11 @@ class RootdataDataFixService {
               updateProgram,
             },
           });
-          console.log(`[team_positions] link ${memberProj.id}->${objectProjectId} pos=${m.position || ''}`);
+          console.log(
+            `[team_positions] link ${memberProj.id}->${objectProjectId} pos=${
+              m.position || ""
+            }`
+          );
         } catch (e) {
           console.warn(`[syncTeamPositions] 单个成员处理失败: ${e.message}`);
         }
@@ -888,7 +1032,11 @@ class RootdataDataFixService {
   /**
    * 查找或创建投资者项目
    */
-  static async findOrCreateInvestor(investor, Fundraising, updateProgram = 'auto_api_fix') {
+  static async findOrCreateInvestor(
+    investor,
+    Fundraising,
+    updateProgram = "auto_api_fix"
+  ) {
     // 提取 projectLink
     const projectLink = investor.rootdataurl;
     if (!projectLink) return null;
@@ -955,9 +1103,10 @@ class RootdataDataFixService {
   static async findOrCreateRelationship(relationshipData, Fundraising) {
     const { investorProjectId, fundedProjectId } = relationshipData;
     // 归一化轮次：与模型 hooks(beforeCreate/Update/BulkCreate)保持一致，空或空白字符串统一为 '--'
-    const normRound = (!relationshipData.round || String(relationshipData.round).trim() === "")
-      ? "--"
-      : relationshipData.round;
+    const normRound =
+      !relationshipData.round || String(relationshipData.round).trim() === ""
+        ? "--"
+        : relationshipData.round;
 
     // 检查是否存在（兼容历史数据：round 可能为 null 或 '--'）
     const existing = await Fundraising.InvestmentRelationships.findOne({
@@ -967,8 +1116,8 @@ class RootdataDataFixService {
         [Op.or]: [
           { round: normRound },
           { round: null },
-          { round: '' },
-          { round: ' ' },
+          { round: "" },
+          { round: " " },
         ],
       },
       raw: true,
@@ -976,11 +1125,22 @@ class RootdataDataFixService {
 
     if (existing) {
       // 如命中 legacy(null) 轮次，做一次就地修复为规范值，避免后续重复
-      if ((existing.round === null || existing.round === '' || existing.round === ' ') && normRound) {
+      if (
+        (existing.round === null ||
+          existing.round === "" ||
+          existing.round === " ") &&
+        normRound
+      ) {
         try {
           await Fundraising.InvestmentRelationships.update(
             { round: normRound },
-            { where: { investorProjectId, fundedProjectId, round: { [Op.in]: [null, '', ' '] } } }
+            {
+              where: {
+                investorProjectId,
+                fundedProjectId,
+                round: { [Op.in]: [null, "", " "] },
+              },
+            }
           );
         } catch (_) {}
       }
@@ -997,10 +1157,12 @@ class RootdataDataFixService {
         `✨ 创建投资关系: ${investorProjectId} -> ${fundedProjectId} (${normRound})`
       );
     } catch (err) {
-      const name = err && err.name ? String(err.name) : '';
+      const name = err && err.name ? String(err.name) : "";
       // 兼容并发/历史数据导致的重复创建，忽略唯一/校验错误
-      if (name.includes('UniqueConstraint') || name.includes('Validation')) {
-        console.warn(`⚠️ 关系已存在或校验失败(忽略): ${investorProjectId} -> ${fundedProjectId} (${normRound})`);
+      if (name.includes("UniqueConstraint") || name.includes("Validation")) {
+        console.warn(
+          `⚠️ 关系已存在或校验失败(忽略): ${investorProjectId} -> ${fundedProjectId} (${normRound})`
+        );
         return;
       }
       throw err;
@@ -1175,7 +1337,9 @@ router.get("/search", async (req, res) => {
     // 3. 获取 Fundraising 模型（从 PostgreSQL）
     const { Fundraising } = require("../../models/postgres-fundraising");
     if (!Fundraising) {
-      return res.status(500).json({ error: "Database model not initialized", requestId: reqId });
+      return res
+        .status(500)
+        .json({ error: "Database model not initialized", requestId: reqId });
     }
 
     // 4. 构造查询条件
@@ -1244,7 +1408,7 @@ router.get("/search", async (req, res) => {
           Fundraising,
           req.redisClient,
           cacheKey, // 传入搜索缓存key，修正后会清除
-          'auto_api_fix'
+          "auto_api_fix"
         );
 
         // 第二重：爬虫更新验证（队列化、节流、去重）
@@ -1397,7 +1561,11 @@ router.get("/search", async (req, res) => {
         (arr || []).forEach((it) => {
           if (it && it.twitter) {
             const u = extractUsername(it.twitter);
-            if (u && (!it.avatar || !String(it.avatar).startsWith("https://pbs.twimg.com"))) {
+            if (
+              u &&
+              (!it.avatar ||
+                !String(it.avatar).startsWith("https://pbs.twimg.com"))
+            ) {
               need.add(u);
             }
           }
@@ -1407,13 +1575,16 @@ router.get("/search", async (req, res) => {
       setImmediate(async () => {
         try {
           const usernames = Array.from(need);
-          const apiURL = `https://data.cryptohunt.ai/fetch/twitter/users?usernames=${usernames.join(",")}`;
+          const apiURL = `https://data.cryptohunt.ai/fetch/twitter/users?usernames=${usernames.join(
+            ","
+          )}`;
           const response = await axios.get(apiURL);
           const userDataArray = response?.data?.data?.data || [];
           const avatarMap = {};
           userDataArray.forEach((user) => {
             if (user?.profile?.username && user?.profile?.profile_image_url) {
-              avatarMap[String(user.profile.username).toLowerCase()] = user.profile.profile_image_url;
+              avatarMap[String(user.profile.username).toLowerCase()] =
+                user.profile.profile_image_url;
             }
           });
           groups.forEach((arr) => {
@@ -1451,7 +1622,10 @@ router.get("/search", async (req, res) => {
       members = (positions || []).map((row) => ({
         name: row.subjectProject?.projectName || "",
         position: row.position || "",
-        twitter: row.subjectProject?.twitterUrl || row.subjectProject?.socialLinks?.x || "",
+        twitter:
+          row.subjectProject?.twitterUrl ||
+          row.subjectProject?.socialLinks?.x ||
+          "",
         avatar: row.subjectProject?.logo || "",
       }));
     } catch (e) {
@@ -1459,7 +1633,9 @@ router.get("/search", async (req, res) => {
     }
 
     // 异步更新成员/投资者/被投项目头像（统一调度）
-    try { scheduleAvatarRefresh([investors, fundedProjects, members]); } catch (_) {}
+    try {
+      scheduleAvatarRefresh([investors, fundedProjects, members]);
+    } catch (_) {}
 
     // 12. 组装最终响应
     const response = {
@@ -1492,13 +1668,13 @@ router.get("/search", async (req, res) => {
   }
 });
 
-
-
 // 强制触发 RootdataDataFixService.verifyAndFixProject（先清缓存再执行）
 // 支持三选一传参：keyword（与 /search 一样）、projectLink、twitterUrl
 router.get("/force-verify", adminAuth, async (req, res) => {
   try {
-    const reqId = req.headers["x-request-id"] || `rv-${Date.now()}-${Math.random().toString(16).slice(2,8)}`;
+    const reqId =
+      req.headers["x-request-id"] ||
+      `rv-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
     console.log(`[force-verify] ▶️ start`);
     let { keyword, projectLink, twitterUrl } = req.query;
 
@@ -1530,7 +1706,10 @@ router.get("/force-verify", adminAuth, async (req, res) => {
       }
 
       if (!handle || String(handle).trim().length < 2) {
-        return res.json({ success: false, message: "No valid identifier provided" });
+        return res.json({
+          success: false,
+          message: "No valid identifier provided",
+        });
       }
 
       const sanitizedKeyword = String(keyword.trim()).toLowerCase();
@@ -1564,19 +1743,34 @@ router.get("/force-verify", adminAuth, async (req, res) => {
     if (!project) {
       console.log(`[force-verify] 🔎 project not found`);
       if (req.admin && req.admin.id) {
-        try { await logAdminAction(req, { action: "force-verify", success: false, message: "project not found" }); } catch(_) {}
+        try {
+          await logAdminAction(req, {
+            action: "force-verify",
+            success: false,
+            message: "project not found",
+          });
+        } catch (_) {}
       }
-      return res.json({ success: false, message: "No matching project found", requestId: reqId });
+      return res.json({
+        success: false,
+        message: "No matching project found",
+        requestId: reqId,
+      });
     }
 
-    const isVCLink = Boolean(project.projectLink && project.projectLink.includes('/Investors/detail'));
-    const isMemberLink = Boolean(project.projectLink && project.projectLink.includes('/member'));
+    const isVCLink = Boolean(
+      project.projectLink && project.projectLink.includes("/Investors/detail")
+    );
+    const isMemberLink = Boolean(
+      project.projectLink && project.projectLink.includes("/member")
+    );
     console.log(`[force-verify] ✅ project id=${project.id} isVC=${isVCLink}`);
 
     // 先删除相关缓存，确保强制触发
     const toDeleteKeys = [];
     if (searchCacheKey) toDeleteKeys.push(searchCacheKey);
-    if (project.projectLink) toDeleteKeys.push(`rootdata_verified:${project.projectLink}`);
+    if (project.projectLink)
+      toDeleteKeys.push(`rootdata_verified:${project.projectLink}`);
 
     try {
       for (const k of toDeleteKeys) {
@@ -1589,11 +1783,19 @@ router.get("/force-verify", adminAuth, async (req, res) => {
     // 在强制校验前，按项目类型清空关系：VC/Member 清理其作为投资方的关系；项目清理其作为被投方的关系
     try {
       if (isVCLink || isMemberLink) {
-        const delAsInvestor = await Fundraising.InvestmentRelationships.destroy({ where: { investorProjectId: project.id } });
-        console.log(`🧹 清理(VC/member作为投资方)=${delAsInvestor} projectId=${project.id}`);
+        const delAsInvestor = await Fundraising.InvestmentRelationships.destroy(
+          { where: { investorProjectId: project.id } }
+        );
+        console.log(
+          `🧹 清理(VC/member作为投资方)=${delAsInvestor} projectId=${project.id}`
+        );
       } else {
-        const delAsFunded = await Fundraising.InvestmentRelationships.destroy({ where: { fundedProjectId: project.id } });
-        console.log(`🧹 清理(项目作为被投方)=${delAsFunded} projectId=${project.id}`);
+        const delAsFunded = await Fundraising.InvestmentRelationships.destroy({
+          where: { fundedProjectId: project.id },
+        });
+        console.log(
+          `🧹 清理(项目作为被投方)=${delAsFunded} projectId=${project.id}`
+        );
       }
     } catch (e) {
       console.error(`清理旧投资关系失败:`, e);
@@ -1607,24 +1809,47 @@ router.get("/force-verify", adminAuth, async (req, res) => {
         Fundraising,
         req.redisClient,
         searchCacheKey,
-        'manual_api_fix'
+        "manual_api_fix"
       );
       console.log(`[force-verify] ✅ verifyAndFixProject done`);
       if (req.admin && req.admin.id) {
-        try { await logAdminAction(req, { action: "force-verify", success: true, message: `projectId=${project.id}` }); } catch(_) {}
+        try {
+          await logAdminAction(req, {
+            action: "force-verify",
+            success: true,
+            message: `projectId=${project.id}`,
+          });
+        } catch (_) {}
       }
     } catch (e) {
       console.error(`verifyAndFixProject failed:`, e);
       if (req.admin && req.admin.id) {
-        try { await logAdminAction(req, { action: "force-verify", success: false, message: e.message || "verify failed" }); } catch(_) {}
+        try {
+          await logAdminAction(req, {
+            action: "force-verify",
+            success: false,
+            message: e.message || "verify failed",
+          });
+        } catch (_) {}
       }
     }
 
-    res.json({ success: true, projectId: project.id, projectLink: project.projectLink, requestId: reqId });
+    res.json({
+      success: true,
+      projectId: project.id,
+      projectLink: project.projectLink,
+      requestId: reqId,
+    });
   } catch (error) {
     console.error("Error in force-verify:", error);
     if (req.admin && req.admin.id) {
-      try { await logAdminAction(req, { action: "force-verify", success: false, message: error.message || "error" }); } catch(_) {}
+      try {
+        await logAdminAction(req, {
+          action: "force-verify",
+          success: false,
+          message: error.message || "error",
+        });
+      } catch (_) {}
     }
     res.status(500).json({
       error: "Failed to force verify project",
@@ -1661,7 +1886,13 @@ router.delete("/relationship/:id", adminAuth, async (req, res) => {
     await relationship.destroy();
 
     console.log(`✅ 删除投资关系记录: ID=${id}`);
-    try { await logAdminAction(req, { action: "relationship-delete", success: true, message: `id=${id}` }); } catch(_) {}
+    try {
+      await logAdminAction(req, {
+        action: "relationship-delete",
+        success: true,
+        message: `id=${id}`,
+      });
+    } catch (_) {}
 
     res.json({
       success: true,
@@ -1670,7 +1901,13 @@ router.delete("/relationship/:id", adminAuth, async (req, res) => {
     });
   } catch (error) {
     console.error("删除投资关系失败:", error);
-    try { await logAdminAction(req, { action: "relationship-delete", success: false, message: error.message || "delete failed" }); } catch(_) {}
+    try {
+      await logAdminAction(req, {
+        action: "relationship-delete",
+        success: false,
+        message: error.message || "delete failed",
+      });
+    } catch (_) {}
     res.status(500).json({
       error: "Failed to delete relationship",
       message: error.message,
@@ -1741,7 +1978,15 @@ router.delete(
       });
 
       console.log(`✅ 成功删除 ${result} 条记录`);
-      try { await logAdminAction(req, { action: "relationships-delete-funded", success: true, message: `fundedProjectId=${fundedProjectId} deleted=${result} date=${date || 'all'}` }); } catch(_) {}
+      try {
+        await logAdminAction(req, {
+          action: "relationships-delete-funded",
+          success: true,
+          message: `fundedProjectId=${fundedProjectId} deleted=${result} date=${
+            date || "all"
+          }`,
+        });
+      } catch (_) {}
 
       res.json({
         success: true,
@@ -1752,7 +1997,13 @@ router.delete(
       });
     } catch (error) {
       console.error("删除被投项目投资关系失败:", error);
-      try { await logAdminAction(req, { action: "relationships-delete-funded", success: false, message: error.message || "delete failed" }); } catch(_) {}
+      try {
+        await logAdminAction(req, {
+          action: "relationships-delete-funded",
+          success: false,
+          message: error.message || "delete failed",
+        });
+      } catch (_) {}
       res.status(500).json({
         error: "Failed to delete relationships",
         message: error.message,
@@ -1798,7 +2049,7 @@ router.post("/manual-crawl", async (req, res) => {
         isInitial: url.includes("/Projects/detail"), // ✅ 包含详情页链接则为初始项目
         detailFailuresNumber: 0,
         detailFetchedAt: null,
-        updateProgram: 'manual_crawler',
+        updateProgram: "manual_crawler",
       });
       console.log(`📦 [手动爬虫] 创建项目: ${projectName}`);
     }
@@ -1895,6 +2146,30 @@ router.post("/manual-crawl", async (req, res) => {
     res.status(500).json({
       error: "Failed to crawl project",
       message: error.message || "Unknown error",
+    });
+  }
+});
+
+/**
+ * GET /api/rootdata/idmap-from-redis
+ * 从 Redis 获取 ID Map 数据
+ */
+router.get("/idmap-from-redis-type", async (req, res) => {
+  try {
+    const { type } = req.query;
+    if (!type || !["1", "2", "3"].includes(String(type))) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid or missing 'type' parameter. Must be 1, 2, or 3.",
+      });
+    }
+    const data = await RootdataAPIService._getIdMapFromRedis(type);
+    res.json({ success: true, type, data });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to retrieve ID map from Redis",
+      message: error.message,
     });
   }
 });
