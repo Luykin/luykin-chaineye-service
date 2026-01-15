@@ -16,11 +16,16 @@ module.exports = (sequelize) => {
         primaryKey: true,
         comment: "投资关系唯一标识",
       },
-      // 被投资方 (总是 Project)
-      fundedProjectId: {
-        type: DataTypes.INTEGER,
+      // 被投资方 (多态)
+      fundedId: {
+        type: DataTypes.BIGINT, // 使用 BIGINT 以兼容不同类型的 ID
         allowNull: false,
-        comment: "被投资项目的ID (关联 RootdataProjects.project_id)",
+        comment: "被投资方ID",
+      },
+      fundedType: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        comment: "被投资方类型 (Project or Organization)",
       },
       // 投资方 (多态)
       investorId: {
@@ -59,8 +64,20 @@ module.exports = (sequelize) => {
       tableName: "RootdataInvestments",
       timestamps: true,
       indexes: [
-        { fields: ["fundedProjectId"] },
+        { fields: ["fundedId", "fundedType"] },
         { fields: ["investorId", "investorType"] },
+        // 增加一个复合唯一索引来区分不同轮次的投资
+        {
+          unique: true,
+          fields: [
+            "investorId",
+            "investorType",
+            "fundedId",
+            "fundedType",
+            "round",
+          ],
+          name: "unique_investment_round",
+        },
       ],
     }
   );

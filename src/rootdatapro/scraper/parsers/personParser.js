@@ -1,0 +1,61 @@
+const { getNuxtData } = require("./utils");
+const typemapManager = require("../typemap/manager");
+
+/**
+ * 解析个人页面的 HTML 内容以提取数据。
+ * @param {string} htmlContent 页面的 HTML 内容。
+ * @returns {object|null} 包含提取数据的对象，如果解析失败则返回 null。
+ */
+function parsePersonPage(htmlContent) {
+  try {
+    const nuxtData = getNuxtData(htmlContent);
+    if (!nuxtData) {
+      return null; // getNuxtData 内部会打印错误
+    }
+
+    const personDetail = nuxtData?.data?.[0]?.detail;
+    if (!personDetail) {
+      console.error("在 __NUXT__ 数据中找不到个人详细信息。");
+      return null;
+    }
+
+    // 从 investRecordList.items 提取详细的投资记录
+    const investRecordList = nuxtData?.data?.[0]?.investRecordList?.items || [];
+    const investments = investRecordList.map((item) => ({
+      item_id: item.itemId,
+      item_type: typemapManager.getType(item.itemId) || 1, // 默认为 1 (Project) 作为回退
+      item_name: item.itemName?.en_value,
+      logo: item.logoImg,
+      description: item.intd?.en_value || "",
+      active: item.operateStatus === 1,
+      // 新增投资详情
+      round: item.roundsName?.en_value,
+      amount: item.facAmountUs,
+      date: item.facDate ? new Date(item.facDate) : null,
+    }));
+
+    const parsedData = {
+      people_id: personDetail.id,
+      introduce: personDetail.intd?.en_value || "",
+      head_img: personDetail.headImg,
+      one_liner: personDetail.briefIntd?.en_value || "",
+      X: personDetail.twitterUrl,
+      people_name: personDetail.name?.en_value,
+      linkedin: personDetail.lyingUrl,
+      followers: personDetail.followersCount,
+      following: personDetail.friendsCount,
+      heat: "-",
+      heat_rank: "-",
+      influence: "-",
+      influence_rank: "-",
+      investments,
+    };
+
+    return parsedData;
+  } catch (error) {
+    console.error("解析个人页面时出错:", error);
+    return null;
+  }
+}
+
+module.exports = { parsePersonPage };
