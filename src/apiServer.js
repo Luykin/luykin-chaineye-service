@@ -13,7 +13,8 @@ const path = require("path");
 const cors = require("cors");
 const compression = require("compression");
 const morgan = require("morgan");
-const redis = require("redis");
+// 由共享模块提供 Redis 客户端
+const { getRedisClient } = require("./lib/redisClient");
 const { setupSqlite } = require("./models/sqlite-start");
 const { setupPostgres } = require("./models/postgres-start");
 const { setupPostgresFundraising } = require("./models/postgres-fundraising");
@@ -60,335 +61,301 @@ const PORT = process.env.PORT || 8090;
 // 如果第一个参数是字符串，requestId 会直接拼接到字符串前面
 enhanceConsoleWithRequestId();
 
-// 初始化 Redis 客户端
-const redisClient = redis.createClient({
-  socket: {
-    host: "127.0.0.1", // Redis 地址
-    port: 6379, // Redis 端口
-  },
-  // password: process.env.REDIS_PASSWORD // 如果有密码
-});
-
-// 连接 Redis
-(async () => {
+// 将 Express 应用的设置和启动逻辑封装在一个异步函数中
+async function initializeAndStartServer() {
+  let redisClient;
   try {
-    await redisClient.connect();
-    console.log("Redis 连接成功");
-    // 全局暴露，便于工具模块（如 RootdataAPIService）读取/写入共享缓存
+    // 首先获取 Redis 客户端
+    redisClient = await getRedisClient();
+    console.log("Redis 客户端已在 apiServer 中成功获取");
+
+    // 全局暴露，便于旧模块兼容
     global.__xhuntRedis = redisClient;
   } catch (error) {
-    console.error("Redis 连接失败:", error);
+    console.error(
+      "在 apiServer 中获取 Redis 客户端失败，服务器无法启动:",
+      error
+    );
+    process.exit(1); // Redis 是关键依赖，获取失败则退出
   }
-})();
 
-// 将请求注入异步上下文，便于日志获取 requestId
-app.use(requestContextMiddleware);
+  // 将请求注入异步上下文，便于日志获取 requestId
+  app.use(requestContextMiddleware);
 
-// --- Performance Monitor Initialization ---
-const { middleware: perfMiddleware, apiRouter: perfApiRouter } =
-  initPerfMonitor({
-    redisClient: redisClient,
-    // --- Data Extraction Config ---
-    requestIdFrom: ["headers", "x-request-id"],
-    userIdFrom: ["headers", "x-user-id"],
-    collectDetailedInfo: {
-      fingerprint: ["headers", "x-device-fingerprint"],
-      version: ["headers", "x-extension-version"],
-      location: ["headers", "x-window-location-href"],
-      ua: ["get", "user-agent"],
-    },
-    // --- Operational Config ---
-    flushThreshold: 100,
-    flushIntervalMs: 5000,
-    trace: {
-      sampleRate: 0.03, // 5% of fast/successful requests
-      slowThresholdMs: 500, // Trace all requests slower than 500ms
-      retentionHours: 30,
-    },
-    metrics: {
-      timeWindowSecs: 60, // Aggregate metrics every minute
-      retentionHours: 30,
-    },
-  });
-app.use(perfMiddleware);
-// --- End Performance Monitor ---
-
-app.use((req, res, next) => {
-  req.redisClient = redisClient;
-  // req.dataDog = dataDog;
-  next();
-});
-
-// //将指定请求头注入到 Datadog APM Span 中
-// function injectHeadersToSpan(req, res, next) {
-//   const span = tracer.scope().active();
-//   if (span) {
-//     // 要记录的请求头列表（全部使用小写形式匹配 req.headers）
-//     const headersToCapture = [
-//       "x-request-id",
-//       "x-request-timestamp",
-//       "x-device-fingerprint",
-//       "x-request-signature",
-//       "x-extension-version",
-//       "x-user-id",
-//       "x-window-location-href",
-//     ];
-
-//     // 遍历并写入 Span Tags
-//     headersToCapture.forEach((header) => {
-//       const value = req.headers[header];
-//       // value['my-env'] = process.env.ENV;
-//       if (value) {
-//         // 建议命名格式：http.request_header.<header_name>
-//         span.setTag(`http.request_header.${header}`, String(value));
-//       }
-//     });
-//   }
-//   next();
-// }
-
-// // 使用中间件
-// app.use(injectHeadersToSpan);
-
-// CORS 配置
-const corsOptions = {
-  origin: (origin, callback) => {
-    // 白名单列表
-    const allowedOrigins = [
-      "https://chaineye.tools",
-      "https://minibridge.chaineye.tools",
-      "https://www.cryptohunt.ai",
-      "https://cryptohunt.ai",
-      "https://dev.cryptohunt.ai",
-      "http://cryptohunt.ai",
-      "http://www.cryptohunt.ai",
-      "http://dev.cryptohunt.ai",
-      "http://chaineye.tools",
-      "http://minibridge.chaineye.tools",
-      "http://localhost",
-      "http://localhost:5173",
-      "http://localhost:8000",
-      "http://localhost:3000",
-      "http://127.0.0.1",
-      "http://127.0.0.1:3000",
-      "https://x.com",
-      "https://kb.cryptohunt.ai",
-      "http://kb.cryptohunt.ai",
-      "https://kb.xhunt.ai",
-      "http://kb.xhunt.ai",
-      "https://xhunt.ai",
-      "http://xhunt.ai",
-    ];
-
-    // 允许 chrome-extension:// 来源（任何插件）
-    if (origin && origin.startsWith("chrome-extension://")) {
-      return callback(null, true);
-    }
-
-    // 白名单中的域名也放行
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    // 否则拒绝
-    callback(new Error("Not allowed by CORS"));
-  },
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "X-Request-Timestamp",
-    "x-request-id",
-    "x-request-timestamp",
-    "x-device-fingerprint",
-    "x-request-signature",
-    "x-extension-version",
-    "x-user-id",
-    "x-window-location-href",
-  ],
-  credentials: true,
-};
-
-app.set("trust proxy", 1); // 仅信任最靠近 Express 的一层代理
-app.use(cors(corsOptions));
-// 安全和速率限制
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "script-src": ["'self'", "'unsafe-inline'"],
-        "style-src": ["'self'", "'unsafe-inline'"],
+  // --- Performance Monitor Initialization ---
+  const { middleware: perfMiddleware, apiRouter: perfApiRouter } =
+    initPerfMonitor({
+      redisClient: redisClient,
+      // --- Data Extraction Config ---
+      requestIdFrom: ["headers", "x-request-id"],
+      userIdFrom: ["headers", "x-user-id"],
+      collectDetailedInfo: {
+        fingerprint: ["headers", "x-device-fingerprint"],
+        version: ["headers", "x-extension-version"],
+        location: ["headers", "x-window-location-href"],
+        ua: ["get", "user-agent"],
       },
+      // --- Operational Config ---
+      flushThreshold: 100,
+      flushIntervalMs: 5000,
+      trace: {
+        sampleRate: 0.03, // 5% of fast/successful requests
+        slowThresholdMs: 500, // Trace all requests slower than 500ms
+        retentionHours: 30,
+      },
+      metrics: {
+        timeWindowSecs: 60, // Aggregate metrics every minute
+        retentionHours: 30,
+      },
+    });
+  app.use(perfMiddleware);
+  // --- End Performance Monitor ---
+
+  app.use((req, res, next) => {
+    req.redisClient = redisClient;
+    // req.dataDog = dataDog;
+    next();
+  });
+
+  // CORS 配置
+  const corsOptions = {
+    origin: (origin, callback) => {
+      // 白名单列表
+      const allowedOrigins = [
+        "https://chaineye.tools",
+        "https://minibridge.chaineye.tools",
+        "https://www.cryptohunt.ai",
+        "https://cryptohunt.ai",
+        "https://dev.cryptohunt.ai",
+        "http://cryptohunt.ai",
+        "http://www.cryptohunt.ai",
+        "http://dev.cryptohunt.ai",
+        "http://chaineye.tools",
+        "http://minibridge.chaineye.tools",
+        "http://localhost",
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1",
+        "http://127.0.0.1:3000",
+        "https://x.com",
+        "https://kb.cryptohunt.ai",
+        "http://kb.cryptohunt.ai",
+        "https://kb.xhunt.ai",
+        "http://kb.xhunt.ai",
+        "https://xhunt.ai",
+        "http://xhunt.ai",
+      ];
+
+      // 允许 chrome-extension:// 来源（任何插件）
+      if (origin && origin.startsWith("chrome-extension://")) {
+        return callback(null, true);
+      }
+
+      // 白名单中的域名也放行
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // 否则拒绝
+      callback(new Error("Not allowed by CORS"));
     },
-  })
-);
-// 全局速率限制
-app.use(rateLimiter);
-// 条件性压缩：排除流式路由和 SSE 路由
-app.use((req, res, next) => {
-  if (
-    req.path.includes("/api/xhunt/proxy/public-stream/") ||
-    req.path.includes("/api/xhunt/sse")
-  ) {
-    // 流式路由和 SSE 路由跳过压缩中间件
-    return next();
-  }
-  // 非流式路由应用压缩
-  compression()(req, res, next);
-});
-// 合并常用头部为一个 token，减少重复
-morgan.token("xhunt-identity", (req) => {
-  const requestId = req.headers["x-request-id"] || "no-request-id";
-  const userId = req.headers["x-user-id"] || "anonymous";
-  const fingerprint = req.headers["x-device-fingerprint"] || "no-fingerprint";
-  const version = req.headers["x-extension-version"] || "no-version";
-  const windowLocationHref =
-    req.headers["x-window-location-href"] || "no-location";
-  return `request_id=${requestId} user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref}`;
-});
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Request-Timestamp",
+      "x-request-id",
+      "x-request-timestamp",
+      "x-device-fingerprint",
+      "x-request-signature",
+      "x-extension-version",
+      "x-user-id",
+      "x-window-location-href",
+    ],
+    credentials: true,
+  };
 
-// 错误信息 token（仅在错误处理中设置，默认 "-"）
-morgan.token("error-info", (req, res) => res.locals.errorMessage || "-");
+  app.set("trust proxy", 1); // 仅信任最靠近 Express 的一层代理
+  app.use(cors(corsOptions));
+  // 安全和速率限制
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          "script-src": ["'self'", "'unsafe-inline'"],
+          "style-src": ["'self'", "'unsafe-inline'"],
+        },
+      },
+    })
+  );
+  // 全局速率限制
+  app.use(rateLimiter);
+  // 条件性压缩：排除流式路由和 SSE 路由
+  app.use((req, res, next) => {
+    if (
+      req.path.includes("/api/xhunt/proxy/public-stream/") ||
+      req.path.includes("/api/xhunt/sse")
+    ) {
+      // 流式路由和 SSE 路由跳过压缩中间件
+      return next();
+    }
+    // 非流式路由应用压缩
+    compression()(req, res, next);
+  });
+  // 合并常用头部为一个 token，减少重复
+  morgan.token("xhunt-identity", (req) => {
+    const requestId = req.headers["x-request-id"] || "no-request-id";
+    const userId = req.headers["x-user-id"] || "anonymous";
+    const fingerprint = req.headers["x-device-fingerprint"] || "no-fingerprint";
+    const version = req.headers["x-extension-version"] || "no-version";
+    const windowLocationHref =
+      req.headers["x-window-location-href"] || "no-location";
+    return `request_id=${requestId} user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref}`;
+  });
 
-// 打印入口日志（请求刚到达时）
-app.use(
-  morgan('in :xhunt-identity method=:method url=:url ua=":user-agent"', {
-    immediate: true,
-    skip: (req) =>
-      req.path === "/api/xhunt/stats/log-search" ||
-      req.path?.includes("/api/stats/perf"),
-  })
-);
+  // 错误信息 token（仅在错误处理中设置，默认 "-"）
+  morgan.token("error-info", (req, res) => res.locals.errorMessage || "-");
 
-// 打印出口日志（响应返回时），包含状态与耗时；如有错误状态，额外标注
-app.use(
-  morgan(
-    'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:url err=":error-info"',
-    {
+  // 打印入口日志（请求刚到达时）
+  app.use(
+    morgan('in :xhunt-identity method=:method url=:url ua=":user-agent"', {
+      immediate: true,
       skip: (req) =>
         req.path === "/api/xhunt/stats/log-search" ||
         req.path?.includes("/api/stats/perf"),
-    }
-  )
-);
-app.use(helmet.hidePoweredBy());
-app.use(helmet.xssFilter());
-app.use(helmet.noSniff());
+    })
+  );
 
-// 🆕 针对不同路由设置不同的请求体大小限制
-// 普通接口：20KB 限制
-app.use(express.json({ limit: "20kb" }));
+  // 打印出口日志（响应返回时），包含状态与耗时；如有错误状态，额外标注
+  app.use(
+    morgan(
+      'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:url err=":error-info"',
+      {
+        skip: (req) =>
+          req.path === "/api/xhunt/stats/log-search" ||
+          req.path?.includes("/api/stats/perf"),
+      }
+    )
+  );
+  app.use(helmet.hidePoweredBy());
+  app.use(helmet.xssFilter());
+  app.use(helmet.noSniff());
 
-// 🆕 为上报接口设置更大的限制（但仍然合理）
-app.use(
-  "/api/xhunt/report",
-  express.json({
-    limit: "100kb", // 上报接口允许更大的请求体
-  })
-);
+  // 🆕 针对不同路由设置不同的请求体大小限制
+  // 普通接口：20KB 限制
+  app.use(express.json({ limit: "20kb" }));
 
-// 🆕 添加静态文件服务支持
-app.use("/static", express.static(path.join(__dirname, "../public/static")));
+  // 🆕 为上报接口设置更大的限制（但仍然合理）
+  app.use(
+    "/api/xhunt/report",
+    express.json({
+      limit: "100kb", // 上报接口允许更大的请求体
+    })
+  );
 
-// API 路由
-app.use("/api/fundraising", fundraisingRoutes);
-app.use("/api/crypto", cryptoRoutes);
-app.use("/api/proxy", proxyRoutes);
-app.use("/api/news", newsRoutes);
-app.use("/api/general", generalRoutes);
+  // 🆕 添加静态文件服务支持
+  app.use("/static", express.static(path.join(__dirname, "../public/static")));
 
-app.use(
-  "/api/xhunt/auth",
-  fingerprintLimiter,
-  browserOnlyMiddleware,
-  securityMiddleware,
-  xHuntAuthRoutes
-);
+  // API 路由
+  app.use("/api/fundraising", fundraisingRoutes);
+  app.use("/api/crypto", cryptoRoutes);
+  app.use("/api/proxy", proxyRoutes);
+  app.use("/api/news", newsRoutes);
+  app.use("/api/general", generalRoutes);
 
-app.use(
-  "/api/xhunt/proxy",
-  // createIpBlocker(["205.198.72.202"]),
-  fingerprintLimiter,
-  browserOnlyMiddleware,
-  securityMiddleware,
-  xHuntProxyRoutes
-);
+  app.use(
+    "/api/xhunt/auth",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntAuthRoutes
+  );
 
-app.use(
-  "/api/xhunt/reviews",
-  fingerprintLimiter,
-  browserOnlyMiddleware,
-  securityMiddleware,
-  xHuntReviewsRoutes
-);
+  app.use(
+    "/api/xhunt/proxy",
+    // createIpBlocker(["205.198.72.202"]),
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntProxyRoutes
+  );
 
-app.use(
-  "/api/xhunt/notes",
-  fingerprintLimiter,
-  browserOnlyMiddleware,
-  securityMiddleware,
-  xHuntNotesRoutes
-);
+  app.use(
+    "/api/xhunt/reviews",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntReviewsRoutes
+  );
 
-app.use(
-  "/api/xhunt/report",
-  fingerprintLimiter, //这里不要加浏览器验证，外部会检查健康状态
-  xHuntReportRoutes
-);
+  app.use(
+    "/api/xhunt/notes",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntNotesRoutes
+  );
 
-// 私信接口
-app.use(
-  "/api/xhunt/private-messages",
-  fingerprintLimiter,
-  browserOnlyMiddleware,
-  xHuntPrivateMessageRoutes
-);
+  app.use(
+    "/api/xhunt/report",
+    fingerprintLimiter, //这里不要加浏览器验证，外部会检查健康状态
+    xHuntReportRoutes
+  );
 
-// Mantle 活动接口 内部有安全中间件
-app.use("/api/xhunt/mantle", xHuntMantleRoutes);
-// 通用活动报名接口
-app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
+  // 私信接口
+  app.use(
+    "/api/xhunt/private-messages",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    xHuntPrivateMessageRoutes
+  );
 
-// 未注册用户登记接口
-app.use("/api/xhunt/user-entry", xHuntUserEntryRoutes);
+  // Mantle 活动接口 内部有安全中间件
+  app.use("/api/xhunt/mantle", xHuntMantleRoutes);
+  // 通用活动报名接口
+  app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
 
-// SSE 接口 - 实时推送数据（包含 feeds 等）有安全中间件
-app.use("/api/xhunt/sse", rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
+  // 未注册用户登记接口
+  app.use("/api/xhunt/user-entry", xHuntUserEntryRoutes);
 
-// 新增统计路由 - 无需安全中间件，方便内部监控。管理后台使用，有basicAuth前端认证机制
-app.use("/api/xhunt/stats", xHuntStatsRoutes);
-app.use("/api/stats/perf", adminAuth, perfApiRouter);
+  // SSE 接口 - 实时推送数据（包含 feeds 等）有安全中间件
+  app.use("/api/xhunt/sse", rateLimiter, sseSecurityMiddleware, xHuntSSERoutes);
 
-// Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
-app.use("/api/rootdata", xHuntRootdataRoutes);
+  // 新增统计路由 - 无需安全中间件，方便内部监控。管理后台使用，有basicAuth前端认证机制
+  app.use("/api/xhunt/stats", xHuntStatsRoutes);
+  app.use("/api/stats/perf", adminAuth, perfApiRouter);
 
-// 管理后台（登录、会话、管理员基础配置）
-app.use("/admin", adminRoutes);
+  // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
+  app.use("/api/rootdata", xHuntRootdataRoutes);
 
-// 内部查询API - 使用随机字符前缀，无需安全中间件
-const INTERNAL_QUERY_EXPIRATION = new Date("2026-02-20T00:00:00Z");
-app.use(
-  "/api/internal-x9k2m7p4q8",
-  (req, res, next) => {
-    if (new Date() >= INTERNAL_QUERY_EXPIRATION) {
-      return res.status(403).json({
-        success: false,
-        error: "FORBIDDEN",
-        message: "请联系管理员开通权限",
-      });
-    }
-    next();
-  },
-  internalQueryRoutes
-);
+  // 管理后台（登录、会话、管理员基础配置）
+  app.use("/admin", adminRoutes);
 
-// 404 Catch-all: 所有未匹配到的路由
-app.use((req, res) => {
-  res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-  res.set("Pragma", "no-cache");
-  res.set("Expires", "0");
-  res.status(404).type("html").send(`<!DOCTYPE html>
+  // 内部查询API - 使用随机字符前缀，无需安全中间件
+  const INTERNAL_QUERY_EXPIRATION = new Date("2026-02-20T00:00:00Z");
+  app.use(
+    "/api/internal-x9k2m7p4q8",
+    (req, res, next) => {
+      if (new Date() >= INTERNAL_QUERY_EXPIRATION) {
+        return res.status(403).json({
+          success: false,
+          error: "FORBIDDEN",
+          message: "请联系管理员开通权限",
+        });
+      }
+      next();
+    },
+    internalQueryRoutes
+  );
+
+  // 404 Catch-all: 所有未匹配到的路由
+  app.use((req, res) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.status(404).type("html").send(`<!DOCTYPE html>
   <html lang="zh-CN">
     <head>
       <meta charset="utf-8" />
@@ -431,53 +398,54 @@ app.use((req, res) => {
       </div>
     </body>
   </html>`);
-});
-
-// 🆕 专门处理请求体过大的错误
-app.use((error, req, res, next) => {
-  if (error.type === "entity.too.large") {
-    return res.status(413).json({
-      error: "请求数据过大，请减少上报数据量",
-      code: "PAYLOAD_TOO_LARGE",
-      maxSize: "300KB",
-    });
-  }
-  next(error);
-});
-
-// 错误处理中间件
-app.use((err, req, res, next) => {
-  console.error("❌ 服务器错误:", err.message);
-  console.error("❌ 错误堆栈:", err.stack);
-
-  // 供出口日志使用的错误信息
-  res.locals.errorMessage = err.message;
-
-  // 如果是CORS错误，返回更友好的错误信息
-  if (err.message === "Not allowed by CORS") {
-    return res.status(403).json({
-      error: "CORS错误：请求被阻止",
-      message: "请检查域名是否在白名单中",
-      origin: req.headers.origin,
-    });
-  }
-
-  res.status(500).json({
-    error: "服务器内部错误！",
-    message: err.message,
-    stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
   });
-});
 
-// 启动 API 服务
-async function startAPIServer() {
+  // 🆕 专门处理请求体过大的错误
+  app.use((error, req, res, next) => {
+    if (error.type === "entity.too.large") {
+      return res.status(413).json({
+        error: "请求数据过大，请减少上报数据量",
+        code: "PAYLOAD_TOO_LARGE",
+        maxSize: "300KB",
+      });
+    }
+    next(error);
+  });
+
+  // 错误处理中间件
+  app.use((err, req, res, next) => {
+    console.error("❌ 服务器错误:", err.message);
+    console.error("❌ 错误堆栈:", err.stack);
+
+    // 供出口日志使用的错误信息
+    res.locals.errorMessage = err.message;
+
+    // 如果是CORS错误，返回更友好的错误信息
+    if (err.message === "Not allowed by CORS") {
+      return res.status(403).json({
+        error: "CORS错误：请求被阻止",
+        message: "请检查域名是否在白名单中",
+        origin: req.headers.origin,
+      });
+    }
+
+    res.status(500).json({
+      error: "服务器内部错误！",
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+  });
+
+  // 初始化数据库
   // PostgreSQL版本: 16.9
   await setupSqlite(); // 初始化本地 SQLite（用于轻量本地表/缓存类表，具体取决于 models/sqlite-start 的定义）
   await setupPostgres(); // 初始化主 PostgreSQL（src/models/postgres-start.js：cryptohunt + xhunt 相关业务表）
   await setupPostgresFundraising(); // 初始xhunt里面老版本化融资业务 PostgreSQL（src/models/postgres-fundraising.js：Fundraising 相关表与关系）
   await setupRootdataProPostgres(); // 初始化新的 RootDataPro PostgreSQL（src/rootdatapro/models：database=rootdatapro，rootdatapro 专用表与关系）
 
+  // 启动服务器
   app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
 }
 
-startAPIServer().then((r) => r);
+// 启动服务器
+initializeAndStartServer();
