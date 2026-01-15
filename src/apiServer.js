@@ -471,6 +471,7 @@ app.use((err, req, res, next) => {
 
 // 启动 API 服务
 async function startAPIServer() {
+  // PostgreSQL版本: 16.9
   await setupSqlite(); // 初始化本地 SQLite（用于轻量本地表/缓存类表，具体取决于 models/sqlite-start 的定义）
   await setupPostgres(); // 初始化主 PostgreSQL（src/models/postgres-start.js：cryptohunt + xhunt 相关业务表）
   await setupPostgresFundraising(); // 初始xhunt里面老版本化融资业务 PostgreSQL（src/models/postgres-fundraising.js：Fundraising 相关表与关系）

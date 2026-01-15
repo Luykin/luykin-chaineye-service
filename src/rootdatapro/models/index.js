@@ -36,7 +36,7 @@ const sequelize = new Sequelize({
   password: pgPassword,
   logging: process.env.PG_LOGGING === "true",
   timezone: "+00:00",
-  pool: { max: 10, min: 0, idle: 10000, acquire: 20000 },
+  pool: { max: 5, min: 0, idle: 10000, acquire: 20000 },
   dialectOptions,
 });
 
