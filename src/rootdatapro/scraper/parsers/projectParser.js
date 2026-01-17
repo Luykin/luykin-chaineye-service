@@ -1,25 +1,5 @@
 const { JSDOM } = require("jsdom");
 
-function convertUnitToNumber(value) {
-  if (typeof value !== "string") return value;
-  const lowerCaseValue = value.trim().toLowerCase();
-
-  const match = lowerCaseValue.match(/^([0-9,]*\\.?\\d+)([mk])$/);
-
-  if (match) {
-    const num = parseFloat(match[1].replace(/,/g, ''));
-    const unit = match[2];
-    if (unit === "m") {
-      return num * 1000000;
-    } else if (unit === "k") {
-      return num * 1000;
-    }
-  }
-
-  const num = parseFloat(lowerCaseValue.replace(/,/g, ''));
-  return isNaN(num) ? value : num;
-}
-
 /**
  * 解析项目页面的内容以提取数据。
  * @param {{ mainDom: string|null, nuxtDataJson: string|null, url: string }} input
@@ -250,9 +230,9 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
       ).trim();
 
       if (label === "Followers") {
-        parsedData.followers = convertUnitToNumber(value);
+        parsedData.followers = (value);
       } else if (label === "Following") {
-        parsedData.following = convertUnitToNumber(value);
+        parsedData.following = (value);
       }
     }
   } catch (e) {
