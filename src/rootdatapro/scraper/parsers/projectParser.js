@@ -2,16 +2,22 @@ const { JSDOM } = require("jsdom");
 
 function convertUnitToNumber(value) {
   if (typeof value !== "string") return value;
-  const lowerCaseValue = value.toLowerCase();
-  const num = parseFloat(lowerCaseValue);
-  if (isNaN(num)) return value;
+  const lowerCaseValue = value.trim().toLowerCase();
 
-  if (lowerCaseValue.endsWith("m")) {
-    return num * 1000000;
-  } else if (lowerCaseValue.endsWith("k")) {
-    return num * 1000;
+  const match = lowerCaseValue.match(/^([0-9,]*\\.?\\d+)([mk])$/);
+
+  if (match) {
+    const num = parseFloat(match[1].replace(/,/g, ''));
+    const unit = match[2];
+    if (unit === "m") {
+      return num * 1000000;
+    } else if (unit === "k") {
+      return num * 1000;
+    }
   }
-  return num;
+
+  const num = parseFloat(lowerCaseValue.replace(/,/g, ''));
+  return isNaN(num) ? value : num;
 }
 
 /**
@@ -54,6 +60,8 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
     followers: undefined,
     following: undefined,
     teamMembers: [],
+    investors: { facAmountUS: null, facNum: 0, investList: [] },
+    investmentProjects: { investItemNum: 0, investList: [], lpList: [] },
   };
 
   let dom = null;
@@ -121,6 +129,93 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
       .filter(Boolean);
   } catch (e) {
     console.error("[projectParser] teamMembers 解析失败:", e);
+  }
+
+  // --- 投资机构 ---
+  try {
+    const investorsData = nuxtData?.data?.[0]?.investors;
+    if (investorsData) {
+      parsedData.investors.facAmountUS = investorsData.facAmountUS || null;
+      parsedData.investors.facNum = investorsData.facNum || 0;
+      const investList = investorsData.investList || [];
+      parsedData.investors.investList = (Array.isArray(investList) ? investList : []).map(inv => {
+        try {
+          return {
+            facDate: inv.facDate || null,
+            imgUrl: inv.imgUrl,
+            investId: inv.investId,
+            investName: inv.investName?.en_value,
+            ltNum: inv.ltNum,
+            type: inv.type,
+          };
+        } catch (e) {
+          console.error("[projectParser] investors.investList 单条解析失败:", e);
+          return null;
+        }
+      }).filter(Boolean);
+    }
+  } catch (e) {
+    console.error("[projectParser] investors 解析失败:", e);
+  }
+
+  // --- 对外投资项目 ---
+  try {
+    const investmentProjectsData = nuxtData?.data?.[0]?.investmentProjects;
+    if (investmentProjectsData) {
+      parsedData.investmentProjects.investItemNum = investmentProjectsData.investItemNum || 0;
+
+      const investList = investmentProjectsData.investList || [];
+      parsedData.investmentProjects.investList = (Array.isArray(investList) ? investList : []).map(item => {
+        try {
+          return {
+            briefIntd: item.briefIntd?.en_value,
+            facRounds: item.facRounds,
+            imgUrl: item.imgUrl,
+            intd: item.intd?.en_value,
+            itemId: item.itemId,
+            itemName: item.itemName?.en_value,
+            operateStatus: item.operateStatus,
+          };
+        } catch (e) {
+          console.error("[projectParser] investmentProjects.investList 单条解析失败:", e);
+          return null;
+        }
+      }).filter(Boolean);
+
+      const lpList = investmentProjectsData.lpList || [];
+      parsedData.investmentProjects.lpList = (Array.isArray(lpList) ? lpList : []).map(item => {
+        try {
+            const safeParseJson = (jsonString) => {
+                try {
+                    // 检查字符串是否为有效的 JSON 格式
+                    if (typeof jsonString === 'string' && jsonString.startsWith('{') && jsonString.endsWith('}')) {
+                         return JSON.parse(jsonString);
+                    }
+                    return {}; // 如果不是，返回空对象
+                } catch {
+                    return {};
+                }
+            };
+            const briefIntd = safeParseJson(item.briefIntd);
+            const intd = safeParseJson(item.intd);
+            const orgName = safeParseJson(item.orgName);
+
+          return {
+            briefIntd: briefIntd?.en_value,
+            imgUrl: item.imgUrl,
+            intd: intd?.en_value,
+            operateStatus: item.operateStatus,
+            orgId: item.orgId,
+            orgName: orgName?.en_value,
+          };
+        } catch (e) {
+          console.error("[projectParser] investmentProjects.lpList 单条解析失败:", e);
+          return null;
+        }
+      }).filter(Boolean);
+    }
+  } catch (e) {
+    console.error("[projectParser] investmentProjects 解析失败:", e);
   }
 
   // --- 从 DOM 中解析额外信息 ---
