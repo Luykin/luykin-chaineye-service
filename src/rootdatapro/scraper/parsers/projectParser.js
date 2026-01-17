@@ -156,7 +156,39 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
       (i) => i.name
     );
     parsedData.event = nuxtData.data[0].eventList || [];
-    parsedData.reports = nuxtData.data[0].reportList || [];
+    try {
+      const reportItems = dom.window.document.querySelectorAll(
+        ".detail_news_list .detail_news_item"
+      );
+      const reports = [];
+      for (const item of reportItems) {
+        try {
+          const date = (
+            item.querySelector(".item_date .time")?.textContent || ""
+          ).trim();
+          const titleEl = item.querySelector(".item_title");
+          const title = (titleEl?.textContent || "").trim();
+          const url = titleEl?.getAttribute("href") || "";
+          const source = (
+            item.querySelector(".item_origin")?.textContent || ""
+          ).trim();
+
+          if (date || title || url) {
+            reports.push({
+              date: date || null,
+              title: title || null,
+              url: url ? new URL(url, "https://www.rootdata.com").toString() : null,
+              source: source || null,
+            });
+          }
+        } catch (e) {
+          console.error("[projectParser] reports 单条解析失败:", e);
+        }
+      }
+      parsedData.reports = reports;
+    } catch (e) {
+      console.error("[projectParser] reports 列表解析失败:", e);
+    }
     parsedData.contracts = projectDetail.contracts || [];
     parsedData.support_exchanges = projectDetail.exchangeList || [];
   } catch (e) {
