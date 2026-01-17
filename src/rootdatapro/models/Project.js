@@ -54,6 +54,10 @@ module.exports = (sequelize) => {
         type: DataTypes.JSONB,
         comment: "社交媒体链接 (对象)",
       },
+      X: {
+        type: DataTypes.STRING,
+        comment: "X链接",
+      },
       similar_project: {
         type: DataTypes.JSONB,
         comment: "同类项目 (数组)",

@@ -38,6 +38,10 @@ module.exports = (sequelize) => {
         type: DataTypes.JSONB,
         comment: "社交媒体链接（官网、推特、LinkedIn）",
       },
+      X: {
+        type: DataTypes.STRING,
+        comment: "X链接",
+      },
       rootdataurl: {
         type: DataTypes.STRING,
         comment: "机构对应的RootData链接",
