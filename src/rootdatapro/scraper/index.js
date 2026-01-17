@@ -1,10 +1,10 @@
 const { fetchMainDomAndNuxtData } = require("./browser-fetcher");
 const { parseOrganizationPage } = require("./parsers/organizationParser");
 const { parsePersonPage } = require("./parsers/personParser");
-const {
-  updatePersonAndInvestments,
-  updateOrganization,
-} = require("./db-updater");
+// const {
+//   updatePersonAndInvestments,
+//   updateOrganization,
+// } = require("./db-updater");
 
 /**
  * 爬取项目（Project）页面。
@@ -12,6 +12,10 @@ const {
  */
 async function scrapeProject(url) {
   console.log(`[Project] 开始爬取 URL: ${url}`);
+  if(!url || !url.includes("/Projects")) {
+    console.error(`无效的项目 URL: ${url}`);
+    return;
+  }
   // TODO: 实现项目页面的 HTML 获取、解析和数据存储逻辑
 }
 
@@ -21,6 +25,10 @@ async function scrapeProject(url) {
  */
 async function scrapeOrganization(url) {
   console.log(`[Organization] 开始爬取 URL: ${url}`);
+  if(!url || !url.includes("/Investors")) {
+    console.error(`无效的组织 URL: ${url}`);
+    return;
+  }
   try {
     const { mainDom, nuxtDataJson } = await fetchMainDomAndNuxtData(url);
     if (!mainDom || !nuxtDataJson) {
@@ -30,7 +38,7 @@ async function scrapeOrganization(url) {
 
     const orgData = parseOrganizationPage({ mainDom, nuxtDataJson, url });
     if (orgData) {
-      console.log(`成功解析组织数据。`);
+      console.log(`成功解析组织数据。`, orgData);
       // await updateOrganization(orgData); // 调用 DB 更新器
     } else {
       console.error(`未能解析组织页面数据。`);
@@ -46,6 +54,10 @@ async function scrapeOrganization(url) {
  */
 async function scrapePerson(url) {
   console.log(`[Person] 开始爬取 URL: ${url}`);
+  if(!url || !url.includes("/member")) {
+    console.error(`无效的个人 URL: ${url}`);
+    return;
+  }
   try {
     const { mainDom, nuxtDataJson } = await fetchMainDomAndNuxtData(url);
     if (!mainDom || !nuxtDataJson) {
@@ -59,7 +71,7 @@ async function scrapePerson(url) {
       return;
     }
 
-    console.log(`成功解析个人数据。`);
+    console.log(`成功解析个人数据。`, personData);
     // await updatePersonAndInvestments(personData); // 调用 DB 更新器
   } catch (error) {
     console.error(`爬取个人页面 ${url} 时出错:`, error);

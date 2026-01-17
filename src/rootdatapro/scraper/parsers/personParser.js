@@ -33,8 +33,6 @@ function parsePersonPage({ mainDom, nuxtDataJson, url }) {
       item_name: item.itemName?.en_value,
       logo: item.logoImg,
       description: item.intd?.en_value || "",
-      active: item.operateStatus === 1,
-      // 新增投资详情
       round: item.roundsName?.en_value,
       amount: item.facAmountUs,
       date: item.facDate ? new Date(item.facDate) : null,
