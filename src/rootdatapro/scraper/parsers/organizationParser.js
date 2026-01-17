@@ -80,6 +80,7 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
     investorRounds: [],
     categories: [],
     events: [],
+    teamMembers: [],
   };
 
   let dom = null;
@@ -132,6 +133,31 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
       .filter(Boolean);
   } catch (e) {
     console.error("[organizationParser] categories 解析失败:", e);
+  }
+
+  try {
+    const memberList = nuxtData?.data?.[0]?.memberList || [];
+    parsedData.teamMembers = (Array.isArray(memberList) ? memberList : [])
+      .map((m) => {
+        try {
+          return {
+            organizationId: orgDetail.id,
+            personId: m.id,
+            position: m.position?.en_value,
+            people_name: m.name?.en_value,
+            head_img: m.headImg,
+            X: m.twitterUrl,
+            linkedin: m.lyingUrl,
+            blog: m.blogUrl,
+          };
+        } catch (e) {
+          console.error("[organizationParser] teamMembers 单条解析失败:", e);
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch (e) {
+    console.error("[organizationParser] teamMembers 解析失败:", e);
   }
 
   try {

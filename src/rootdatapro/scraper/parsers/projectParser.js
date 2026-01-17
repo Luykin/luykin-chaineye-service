@@ -37,6 +37,7 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
     influence_rank: "-",
     followers: undefined,
     following: undefined,
+    teamMembers: [],
   };
 
   let dom = null;
@@ -70,18 +71,45 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
     parsedData.one_liner = projectDetail.briefIntd?.en_value || "";
     parsedData.description = projectDetail.intd?.en_value || "";
     parsedData.total_funding = projectDetail.financingTotal || null;
-    parsedData.fully_diluted_market_cap = projectDetail.fdv;
-    parsedData.market_cap = projectDetail.marketValue;
+    parsedData.fully_diluted_market_cap = projectDetail.fullyDilutedMarketCap;
+    parsedData.market_cap = projectDetail.marketCap;
     parsedData.price = projectDetail.price;
-    parsedData.token_launch_time = projectDetail.publishDate || null;
+    parsedData.token_launch_time = projectDetail.hapDate || null;
     parsedData.followers = projectDetail.followersCount;
     parsedData.following = projectDetail.friendsCount;
     parsedData.X = projectDetail.twitterUrl;
+    parsedData.active = projectDetail.operateStatus === 1;
   } catch (e) {
     console.error("[projectParser] 基础字段解析失败:", e);
   }
 
-  // --- 成立日期 ---
+  // --- 团队成员 ---
+  try {
+    const teamList = nuxtData?.data?.[0]?.teamList || [];
+    parsedData.teamMembers = (Array.isArray(teamList) ? teamList : [])
+      .map((m) => {
+        try {
+          return {
+            projectId: projectDetail.id,
+            personId: m.id,
+            position: m.position?.en_value,
+            people_name: m.name?.en_value,
+            head_img: m.headImg,
+            X: m.twitterUrl,
+            linkedin: m.lyingUrl,
+            blog: m.blogUrl,
+          };
+        } catch (e) {
+          console.error("[projectParser] teamMembers 单条解析失败:", e);
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch (e) {
+    console.error("[projectParser] teamMembers 解析失败:", e);
+  }
+
+  // --- 成立日期 (从 DOM) ---
   try {
     const sideBarItems = dom.window.document.querySelectorAll(
       "main .side_bar_info .item"
@@ -101,17 +129,6 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
     console.error("[projectParser] 成立日期解析失败:", e);
   }
 
-  // --- Active 状态 ---
-  try {
-    parsedData.active =
-      !dom.window.document
-        .querySelector("main .detail_info_head .inactive")
-        ?.textContent?.trim()
-        ?.includes("(Inactive)");
-  } catch (e) {
-    console.error("[projectParser] active 状态解析失败:", e);
-  }
-
   // --- 社交媒体 ---
   try {
     parsedData.social_media = {
@@ -120,21 +137,27 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
       telegram: projectDetail.telegramUrl,
       discord: projectDetail.discordUrl,
       github: projectDetail.githubUrl,
-      medium: projectDetail.mediumUrl,
+      medium: projectDetail.type2Url,
     };
   } catch (e) {
     console.error("[projectParser] social_media 解析失败:", e);
   }
 
-  // --- 相似项目、网络、事件、报告、合约、交易所 ---
+  // --- 列表类信息 ---
   try {
     parsedData.similar_project = projectDetail.similarProjectList || [];
-    parsedData.on_main_net = (projectDetail.onlineMainnet || []).map(i => i.name);
-    parsedData.plan_to_launch = (projectDetail.planToLaunch || []).map(i => i.name);
-    parsedData.on_test_net = (projectDetail.onlineTestnet || []).map(i => i.name);
+    parsedData.on_main_net = (projectDetail.onlineMainnet || []).map(
+      (i) => i.name
+    );
+    parsedData.plan_to_launch = (projectDetail.planToLaunch || []).map(
+      (i) => i.name
+    );
+    parsedData.on_test_net = (projectDetail.onlineTestnet || []).map(
+      (i) => i.name
+    );
     parsedData.event = nuxtData.data[0].eventList || [];
     parsedData.reports = nuxtData.data[0].reportList || [];
-    parsedData.contracts = projectDetail.contractList || [];
+    parsedData.contracts = projectDetail.contracts || [];
     parsedData.support_exchanges = projectDetail.exchangeList || [];
   } catch (e) {
     console.error("[projectParser] 列表类信息解析失败:", e);
@@ -144,4 +167,3 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
 }
 
 module.exports = { parseProjectPage };
-
