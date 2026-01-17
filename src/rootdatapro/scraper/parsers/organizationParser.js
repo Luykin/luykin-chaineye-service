@@ -1,6 +1,55 @@
 const { JSDOM } = require("jsdom");
 const typemapManager = require("../typemap/manager");
 
+function parseItemFromRootdataHref({ href, name, logo }) {
+  const absoluteUrl = href
+    ? new URL(href, "https://www.rootdata.com").toString()
+    : "";
+
+  let item_id = null;
+  try {
+    const match = absoluteUrl.match(/[?&]k=([^&]+)/);
+    if (match) {
+      const urlDecoded = decodeURIComponent(match[1]);
+      item_id = Buffer.from(urlDecoded, "base64").toString("utf-8");
+    }
+  } catch (e) {
+    item_id = null;
+  }
+
+  let item_type = null;
+  try {
+    if (/\/Investors\/detail\//.test(absoluteUrl)) item_type = 2;
+    else if (/\/Projects\/detail\//.test(absoluteUrl)) item_type = 1;
+    else if (/\/People\/detail\//.test(absoluteUrl)) item_type = 3;
+    else if (/\/member\//.test(absoluteUrl)) item_type = 3;
+  } catch (e) {
+    item_type = null;
+  }
+
+  let item_name = name;
+  try {
+    if (absoluteUrl) {
+      const u = new URL(absoluteUrl);
+      const parts = (u.pathname || "").split("/").filter(Boolean);
+      const last = parts[parts.length - 1];
+      if (last) {
+        item_name = decodeURIComponent(last).trim();
+      }
+    }
+  } catch (e) {
+    item_name = name;
+  }
+
+  return {
+    item_id,
+    item_type,
+    item_name,
+    logo,
+    url: absoluteUrl,
+  };
+}
+
 /**
  * 解析组织页面的内容以提取数据。
  * @param {{ mainDom: string|null, nuxtDataJson: string|null, url: string }} input
@@ -28,6 +77,7 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
     influence_rank: "-",
     investments: [],
     investorCards: [],
+    investorRounds: [],
   };
 
   let dom = null;
@@ -111,13 +161,9 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
         const href = a.getAttribute("href") || "";
         const name = (a.querySelector("h2")?.textContent || "").trim();
         const logo = a.querySelector("img")?.getAttribute("src") || "";
-        parsedData.investorCards.push({
-          name,
-          logo,
-          url: href
-            ? new URL(href, "https://www.rootdata.com").toString()
-            : "",
-        });
+        parsedData.investorCards.push(
+          parseItemFromRootdataHref({ href, name, logo })
+        );
       } catch (e) {
         console.error("[organizationParser] investorCards 单卡解析失败:", e);
       }
@@ -127,24 +173,65 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
   }
 
   try {
-    const investRecordList = nuxtData?.data?.[0]?.investRecordList?.items || [];
-    parsedData.investments = investRecordList.map((item) => {
+    const roundRows = dom.window.document.querySelectorAll(
+      "main .investor .watermusk_table tbody tr"
+    );
+    for (const row of roundRows) {
       try {
-        return {
-          item_id: item.itemId,
-          item_type: typemapManager.getType(item.itemId) || 1,
-          item_name: item.itemName?.en_value,
-          logo: item.logoImg,
-          description: item.intd?.en_value || "",
-          round: item.roundsName?.en_value,
-          amount: item.facAmountUs,
-          date: item.facDate ? new Date(item.facDate) : null,
-        };
+        const dateText = (row.querySelector("td:nth-child(1) span")?.textContent || "").trim();
+        const amountText = (row.querySelector("td:nth-child(2)")?.textContent || "").trim();
+
+        const lps = [];
+        const lpLinks = row.querySelectorAll(
+          "td:nth-child(3) a.animation_underline"
+        );
+        for (const link of lpLinks) {
+          try {
+            const href = link.getAttribute("href") || "";
+            const name = (link.textContent || "").trim();
+            lps.push(parseItemFromRootdataHref({ href, name, logo: "" }));
+          } catch (e) {
+            console.error("[organizationParser] investorRounds LP 解析失败:", e);
+          }
+        }
+
+        parsedData.investorRounds.push({
+          date: dateText || null,
+          amount_text: amountText || null,
+          lps,
+        });
       } catch (e) {
-        console.error("[organizationParser] investments 单条解析失败:", e);
-        return null;
+        console.error("[organizationParser] investorRounds 单行解析失败:", e);
       }
-    }).filter(Boolean);
+    }
+  } catch (e) {
+    console.error("[organizationParser] investorRounds 表格解析失败:", e);
+  }
+
+  try {
+    const investItems =
+      nuxtData?.data?.[0]?.investRecord?.items ||
+      nuxtData?.data?.[0]?.investRecordList?.items ||
+      [];
+    parsedData.investments = investItems
+      .map((item) => {
+        try {
+          return {
+            item_id: item.itemId,
+            item_type: typemapManager.getType(item.itemId) || 1,
+            item_name: item.itemName?.en_value,
+            logo: item.logoImg,
+            description: item.intd?.en_value || "",
+            round: item.roundsName?.en_value,
+            amount: item.facAmountUs,
+            date: item.facDate ? new Date(item.facDate) : null,
+          };
+        } catch (e) {
+          console.error("[organizationParser] investments 单条解析失败:", e);
+          return null;
+        }
+      })
+      .filter(Boolean);
   } catch (e) {
     console.error("[organizationParser] investments 列表解析失败:", e);
   }
@@ -153,4 +240,3 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
 }
 
 module.exports = { parseOrganizationPage };
-
