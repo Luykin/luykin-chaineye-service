@@ -7,3 +7,4 @@ database.sqlite
 data/
 # Ignore PostgreSQL backup files
 backups/
+/src/rootdatapro/scraper/puppeteer_cache/

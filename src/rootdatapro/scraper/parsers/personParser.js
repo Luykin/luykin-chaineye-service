@@ -1,16 +1,22 @@
-const { getNuxtData } = require("./utils");
 const typemapManager = require("../typemap/manager");
 
 /**
- * 解析个人页面的 HTML 内容以提取数据。
- * @param {string} htmlContent 页面的 HTML 内容。
+ * 解析个人页面的内容以提取数据。
+ * @param {{ mainDom: string|null, nuxtDataJson: string|null, url: string }} input
  * @returns {object|null} 包含提取数据的对象，如果解析失败则返回 null。
  */
-function parsePersonPage(htmlContent) {
+function parsePersonPage({ mainDom, nuxtDataJson, url }) {
   try {
-    const nuxtData = getNuxtData(htmlContent);
+    let nuxtData = null;
+    try {
+      nuxtData = nuxtDataJson ? JSON.parse(nuxtDataJson) : null;
+    } catch (e) {
+      nuxtData = null;
+    }
+
     if (!nuxtData) {
-      return null; // getNuxtData 内部会打印错误
+      console.error("在 __NUXT__ 数据中找不到个人详细信息。");
+      return null;
     }
 
     const personDetail = nuxtData?.data?.[0]?.detail;
