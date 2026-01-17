@@ -1,6 +1,7 @@
 const { fetchMainDomAndNuxtData } = require("./browser-fetcher");
 const { parseOrganizationPage } = require("./parsers/organizationParser");
 const { parsePersonPage } = require("./parsers/personParser");
+const { parseProjectPage } = require("./parsers/projectParser");
 // const {
 //   updatePersonAndInvestments,
 //   updateOrganization,
@@ -16,7 +17,23 @@ async function scrapeProject(url) {
     console.error(`无效的项目 URL: ${url}`);
     return;
   }
-  // TODO: 实现项目页面的 HTML 获取、解析和数据存储逻辑
+  try {
+    const { mainDom, nuxtDataJson } = await fetchMainDomAndNuxtData(url);
+    if (!mainDom || !nuxtDataJson) {
+      console.error(`未能获取 ${url} 的 mainDom 或 __NUXT__ 数据。`);
+      return;
+    }
+
+    const projectData = parseProjectPage({ mainDom, nuxtDataJson, url });
+    if (projectData) {
+      console.log(`成功解析项目数据。`, projectData);
+      // await updateProject(projectData); // 调用 DB 更新器
+    } else {
+      console.error(`未能解析项目页面数据。`);
+    }
+  } catch (error) {
+    console.error(`爬取项目页面 ${url} 时出错:`, error);
+  }
 }
 
 /**

@@ -8,3 +8,4 @@ data/
 # Ignore PostgreSQL backup files
 backups/
 /src/rootdatapro/scraper/puppeteer_cache/
+/src/rootdatapro/scraper/examplehtml/
