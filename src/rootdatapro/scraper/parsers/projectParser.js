@@ -1,5 +1,19 @@
 const { JSDOM } = require("jsdom");
 
+function convertUnitToNumber(value) {
+  if (typeof value !== "string") return value;
+  const lowerCaseValue = value.toLowerCase();
+  const num = parseFloat(lowerCaseValue);
+  if (isNaN(num)) return value;
+
+  if (lowerCaseValue.endsWith("m")) {
+    return num * 1000000;
+  } else if (lowerCaseValue.endsWith("k")) {
+    return num * 1000;
+  }
+  return num;
+}
+
 /**
  * 解析项目页面的内容以提取数据。
  * @param {{ mainDom: string|null, nuxtDataJson: string|null, url: string }} input
@@ -31,6 +45,8 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
     token_launch_time: null,
     contracts: [],
     support_exchanges: [],
+    tags: [],
+    ecosystems: [],
     heat: "-",
     heat_rank: "-",
     influence: "-",
@@ -70,13 +86,11 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
     parsedData.token_symbol = projectDetail.lssuingCode;
     parsedData.one_liner = projectDetail.briefIntd?.en_value || "";
     parsedData.description = projectDetail.intd?.en_value || "";
-    parsedData.total_funding = projectDetail.financingTotal || null;
+    // parsedData.total_funding = projectDetail.financingTotal || null; // 改为从 DOM 中解析
     parsedData.fully_diluted_market_cap = projectDetail.fullyDilutedMarketCap;
     parsedData.market_cap = projectDetail.marketCap;
     parsedData.price = projectDetail.price;
     parsedData.token_launch_time = projectDetail.hapDate || null;
-    parsedData.followers = projectDetail.followersCount;
-    parsedData.following = projectDetail.friendsCount;
     parsedData.X = projectDetail.twitterUrl;
     parsedData.active = projectDetail.operateStatus === 1;
   } catch (e) {
@@ -107,6 +121,47 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
       .filter(Boolean);
   } catch (e) {
     console.error("[projectParser] teamMembers 解析失败:", e);
+  }
+
+  // --- 从 DOM 中解析额外信息 ---
+  try {
+    const tokenInfoItems = dom.window.document.querySelectorAll(
+      ".token_info .amount_list li"
+    );
+    for (const item of tokenInfoItems) {
+      const label = (item.querySelector(".label")?.textContent || "").trim();
+      const value = (item.querySelector(".value")?.textContent || "").trim();
+
+      if (label === "Total Raised") {
+        parsedData.total_funding = value;
+      }
+      // 在这里可以添加对 ATH, ATL 等其他字段的解析
+    }
+  } catch (e) {
+    console.error("[projectParser] .token_info 解析失败:", e);
+  }
+
+  // --- X 卡片信息 ---
+  try {
+    const analysisItems = dom.window.document.querySelectorAll(
+      ".analysis_card .analysis .item"
+    );
+    for (const item of analysisItems) {
+      const label = (
+        item.querySelector(".sub_title")?.textContent || ""
+      ).trim();
+      const value = (
+        item.querySelector(".analyze_value")?.textContent || ""
+      ).trim();
+
+      if (label === "Followers") {
+        parsedData.followers = convertUnitToNumber(value);
+      } else if (label === "Following") {
+        parsedData.following = convertUnitToNumber(value);
+      }
+    }
+  } catch (e) {
+    console.error("[projectParser] .analysis_card 解析失败:", e);
   }
 
   // --- 成立日期 (从 DOM) ---
@@ -145,17 +200,73 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
 
   // --- 列表类信息 ---
   try {
-    parsedData.similar_project = projectDetail.similarProjectList || [];
-    parsedData.on_main_net = (projectDetail.onlineMainnet || []).map(
-      (i) => i.name
-    );
-    parsedData.plan_to_launch = (projectDetail.planToLaunch || []).map(
-      (i) => i.name
-    );
-    parsedData.on_test_net = (projectDetail.onlineTestnet || []).map(
-      (i) => i.name
-    );
-    parsedData.event = nuxtData.data[0].eventList || [];
+    try {
+      const similarItems = dom.window.document.querySelectorAll(".apps .list .item");
+      const similarProjects = [];
+      for (const item of similarItems) {
+        try {
+          const name = (item.querySelector("h4")?.textContent || "").trim();
+          const description = (item.querySelector("p")?.textContent || "").trim();
+          const logo = item.querySelector("img")?.getAttribute("src") || "";
+          const url = item.getAttribute("href") || "";
+
+          if (name || url) {
+            similarProjects.push({
+              name,
+              description,
+              logo,
+              url: url ? new URL(url, "https://www.rootdata.com").toString() : null,
+            });
+          }
+        } catch (e) {
+          console.error("[projectParser] similar_project 单条解析失败:", e);
+        }
+      }
+      parsedData.similar_project = similarProjects;
+    } catch (e) {
+      console.error("[projectParser] similar_project 列表解析失败:", e);
+    }
+    // parsedData.on_main_net = (projectDetail.onlineMainnet || []).map(
+    //   (i) => i.name
+    // );
+    // parsedData.plan_to_launch = (projectDetail.planToLaunch || []).map(
+    //   (i) => i.name
+    // );
+    // parsedData.on_test_net = (projectDetail.onlineTestnet || []).map(
+    //   (i) => i.name
+    // );
+    try {
+      const eventEls = dom.window.document.querySelectorAll(
+        "#detail_section_essentials_milestones .timeline-container .timeline-step .content-box"
+      );
+      const events = [];
+      for (const el of eventEls) {
+        try {
+          const date = (
+            el.querySelector(".content-date span")?.textContent || ""
+          ).trim();
+          const infoEl = el.querySelector(".content-info");
+          const a = infoEl.querySelector("a");
+          const title = (a?.textContent || infoEl?.textContent || "").trim();
+          const link = (a?.getAttribute("href") || "").trim();
+
+          if (date || title) {
+            events.push({
+              date: date || null,
+              title: title || null,
+              url: link
+                ? new URL(link, "https://www.rootdata.com").toString()
+                : null,
+            });
+          }
+        } catch (e) {
+          console.error("[projectParser] events 单条解析失败:", e);
+        }
+      }
+      parsedData.event = events;
+    } catch (e) {
+      console.error("[projectParser] events 列表解析失败:", e);
+    }
     try {
       const reportItems = dom.window.document.querySelectorAll(
         ".detail_news_list .detail_news_item"
@@ -177,7 +288,9 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
             reports.push({
               date: date || null,
               title: title || null,
-              url: url ? new URL(url, "https://www.rootdata.com").toString() : null,
+              url: url
+                ? new URL(url, "https://www.rootdata.com").toString()
+                : null,
               source: source || null,
             });
           }
@@ -191,6 +304,14 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
     }
     parsedData.contracts = projectDetail.contracts || [];
     parsedData.support_exchanges = projectDetail.exchangeList || [];
+    parsedData.tags = (projectDetail.tagList || []).map((tag) => ({
+      tag_id: tag.id,
+      tag_name: tag.name?.en_value,
+    }));
+    parsedData.ecosystems = (projectDetail.sjList || []).map((eco) => ({
+      ecosystem_id: eco.id,
+      ecosystem_name: eco.name,
+    }));
   } catch (e) {
     console.error("[projectParser] 列表类信息解析失败:", e);
   }
