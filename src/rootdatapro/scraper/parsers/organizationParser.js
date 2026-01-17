@@ -78,6 +78,8 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
     investments: [],
     investorCards: [],
     investorRounds: [],
+    categories: [],
+    events: [],
   };
 
   let dom = null;
@@ -111,6 +113,25 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
     parsedData.following = orgDetail.friendsCount;
   } catch (e) {
     console.error("[organizationParser] 基础字段解析失败:", e);
+  }
+
+  try {
+    const vctList = orgDetail.vctList || [];
+    parsedData.categories = (Array.isArray(vctList) ? vctList : [])
+      .map((c) => {
+        try {
+          return {
+            category_id: c.id,
+            category_name: c.name?.en_value,
+          };
+        } catch (e) {
+          console.error("[organizationParser] categories 单条解析失败:", e);
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch (e) {
+    console.error("[organizationParser] categories 解析失败:", e);
   }
 
   try {
@@ -151,6 +172,32 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
   } catch (e) {
     console.error("[organizationParser] social_media 解析失败:", e);
   }
+  // 需要点击Significant Events 按钮
+  // try {
+  //   const eventEls = dom.window.document.querySelectorAll(
+  //     ".timeline-container .timeline-step .content-box"
+  //   );
+  //   for (const el of eventEls) {
+  //     try {
+  //       const date = (
+  //         el.querySelector(".content-date span")?.textContent || ""
+  //       ).trim();
+  //       const a = el.querySelector(".content-info a");
+  //       const title = (a?.textContent || "").trim();
+  //       const link = (a?.getAttribute("href") || "").trim();
+  //       if (!date && !title && !link) continue;
+  //       parsedData.events.push({
+  //         date: date || null,
+  //         title: title || null,
+  //         url: link || null,
+  //       });
+  //     } catch (e) {
+  //       console.error("[organizationParser] events 单条解析失败:", e);
+  //     }
+  //   }
+  // } catch (e) {
+  //   console.error("[organizationParser] events 解析失败:", e);
+  // }
 
   try {
     const investorItems = dom.window.document.querySelectorAll(
@@ -178,8 +225,12 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
     );
     for (const row of roundRows) {
       try {
-        const dateText = (row.querySelector("td:nth-child(1) span")?.textContent || "").trim();
-        const amountText = (row.querySelector("td:nth-child(2)")?.textContent || "").trim();
+        const dateText = (
+          row.querySelector("td:nth-child(1) span")?.textContent || ""
+        ).trim();
+        const amountText = (
+          row.querySelector("td:nth-child(2)")?.textContent || ""
+        ).trim();
 
         const lps = [];
         const lpLinks = row.querySelectorAll(
