@@ -2,10 +2,11 @@ const { fetchMainDomAndNuxtData } = require("./browser-fetcher");
 const { parseOrganizationPage } = require("./parsers/organizationParser");
 const { parsePersonPage } = require("./parsers/personParser");
 const { parseProjectPage } = require("./parsers/projectParser");
-// const {
-//   updatePersonAndInvestments,
-//   updateOrganization,
-// } = require("./db-updater");
+const {
+  updatePersonAndInvestments,
+  updateOrganization,
+  updateProject,
+} = require("./db-updater");
 
 /**
  * 爬取项目（Project）页面。
@@ -27,7 +28,7 @@ async function scrapeProject(url) {
     const projectData = parseProjectPage({ mainDom, nuxtDataJson, url });
     if (projectData) {
       console.log(`成功解析项目数据。`, projectData);
-      // await updateProject(projectData); // 调用 DB 更新器
+      await updateProject(projectData); // 调用 DB 更新器
     } else {
       console.error(`未能解析项目页面数据。`);
     }
@@ -56,7 +57,7 @@ async function scrapeOrganization(url) {
     const orgData = parseOrganizationPage({ mainDom, nuxtDataJson, url });
     if (orgData) {
       console.log(`成功解析组织数据。`, orgData);
-      // await updateOrganization(orgData); // 调用 DB 更新器
+      await updateOrganization(orgData); // 调用 DB 更新器
     } else {
       console.error(`未能解析组织页面数据。`);
     }
@@ -89,7 +90,7 @@ async function scrapePerson(url) {
     }
 
     console.log(`成功解析个人数据。`, personData);
-    // await updatePersonAndInvestments(personData); // 调用 DB 更新器
+    await updatePersonAndInvestments(personData); // 调用 DB 更新器
   } catch (error) {
     console.error(`爬取个人页面 ${url} 时出错:`, error);
   }

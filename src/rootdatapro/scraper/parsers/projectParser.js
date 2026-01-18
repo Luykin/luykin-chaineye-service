@@ -6,6 +6,49 @@ const { JSDOM } = require("jsdom");
  * @returns {object|null} 包含提取数据的对象，如果解析失败则返回 null。
  */
 function parseProjectPage({ mainDom, nuxtDataJson, url }) {
+  function parseMoneyToNumber(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    if (typeof v !== "string") return null;
+
+    const s = v.trim();
+    if (!s) return null;
+
+    const cleaned = s.replace(/[$,\s]/g, "");
+    const match = cleaned.match(/^(-?\d+(?:\.\d+)?)([mkb])?$/i);
+    if (!match) return null;
+
+    const num = parseFloat(match[1]);
+    if (!Number.isFinite(num)) return null;
+
+    const unit = (match[2] || "").toLowerCase();
+    if (unit === "k") return Math.round(num * 1e3);
+    if (unit === "m") return Math.round(num * 1e6);
+    if (unit === "b") return Math.round(num * 1e9);
+    return Math.round(num);
+  }
+
+  function parseUnitNumber(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    if (typeof v !== "string") return null;
+
+    const s = v.trim().toLowerCase().replace(/,/g, "");
+    if (!s) return null;
+
+    const match = s.match(/^(-?\d+(?:\.\d+)?)([mk])?$/);
+    if (!match) {
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? Math.round(n) : null;
+    }
+
+    const num = parseFloat(match[1]);
+    if (!Number.isFinite(num)) return null;
+    const unit = match[2] || "";
+    if (unit === "k") return Math.round(num * 1e3);
+    if (unit === "m") return Math.round(num * 1e6);
+    return Math.round(num);
+  }
   const parsedData = {
     project_id: undefined,
     project_name: undefined,
@@ -208,7 +251,7 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
       const value = (item.querySelector(".value")?.textContent || "").trim();
 
       if (label === "Total Raised") {
-        parsedData.total_funding = value;
+        parsedData.total_funding = parseMoneyToNumber(value) ?? value;
         break;
       }
     }
@@ -222,7 +265,8 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
         if (labelEl && labelEl.textContent.trim() === "Total Raised") {
           const valueEl = row.querySelector(".fundraisingTotal span");
           if (valueEl) {
-            parsedData.total_funding = valueEl.textContent.trim();
+            const raw = valueEl.textContent.trim();
+            parsedData.total_funding = parseMoneyToNumber(raw) ?? raw;
             break;
           }
         }
@@ -233,7 +277,7 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
   }
 
   // 如果 DOM 上无法解析到 Total Raised，则用 investors.facAmountUS 兜底
-  if (!parsedData.total_funding && parsedData.investors?.facAmountUS) {
+  if ((parsedData.total_funding === null || parsedData.total_funding === undefined || parsedData.total_funding === "") && parsedData.investors?.facAmountUS) {
     parsedData.total_funding = parsedData.investors.facAmountUS;
   }
 
@@ -251,9 +295,9 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
       ).trim();
 
       if (label === "Followers") {
-        parsedData.followers = (value);
+        parsedData.followers = parseUnitNumber(value);
       } else if (label === "Following") {
-        parsedData.following = (value);
+        parsedData.following = parseUnitNumber(value);
       }
     }
   } catch (e) {

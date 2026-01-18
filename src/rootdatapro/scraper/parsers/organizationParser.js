@@ -68,6 +68,7 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
       twitter: undefined,
       linkedin: undefined,
     },
+    X: undefined,
     rootdataurl: url,
     followers: undefined,
     following: undefined,
@@ -195,6 +196,7 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
       twitter: orgDetail.twitterUrl,
       linkedin: orgDetail.lyingUrl,
     };
+    parsedData.X = orgDetail.twitterUrl;
   } catch (e) {
     console.error("[organizationParser] social_media 解析失败:", e);
   }
