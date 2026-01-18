@@ -1402,14 +1402,14 @@ router.get("/search", async (req, res) => {
     // 修正完成后会自动清除缓存，确保下次请求能获取最新数据
     setImmediate(async () => {
       try {
-        // 第一重：API验证和修正
-        await RootdataDataFixService.verifyAndFixProject(
-          project,
-          Fundraising,
-          req.redisClient,
-          cacheKey, // 传入搜索缓存key，修正后会清除
-          "auto_api_fix"
-        );
+        // // 第一重：API验证和修正
+        // await RootdataDataFixService.verifyAndFixProject(
+        //   project,
+        //   Fundraising,
+        //   req.redisClient,
+        //   cacheKey, // 传入搜索缓存key，修正后会清除
+        //   "auto_api_fix"
+        // );
 
         // 第二重：爬虫更新验证（队列化、节流、去重）
         crawlerQueue.updateCrawl(project, cacheKey);

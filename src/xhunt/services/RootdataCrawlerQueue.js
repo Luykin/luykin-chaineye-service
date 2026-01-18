@@ -20,7 +20,7 @@ class RootdataCrawlerQueue {
 
     // 节流机制（全局）
     this.lastExecutionTime = null; // 最后一次执行爬虫的时间戳（全局）
-    this.THROTTLE_TIME = 3 * 60 * 1000; // 3分钟
+    this.THROTTLE_TIME = 10 * 60 * 1000; // 3分钟
 
     // Redis 客户端（延迟加载，避免循环依赖）
     this._redisClient = null;
