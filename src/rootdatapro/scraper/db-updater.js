@@ -217,6 +217,7 @@ async function updateOrganization(orgData) {
     console.log(`[DB] 更新组织成功: ${orgData.org_name}`);
   } catch (error) {
     console.error(`[DB] 更新组织 ${orgData.org_name} 时出错:`, error);
+    throw error;
   }
 }
 
@@ -311,6 +312,7 @@ async function updatePersonAndInvestments(personData) {
       `[DB] 更新个人 ${personData.people_name} 的数据时出错:`,
       error
     );
+    throw error;
   }
 }
 
@@ -479,6 +481,7 @@ async function updateProject(projectData) {
     console.log(`[DB] 更新项目成功: ${projectData.project_name}`);
   } catch (error) {
     console.error(`[DB] 更新项目 ${projectData.project_name} 时出错:`, error);
+    throw error;
   }
 }
 

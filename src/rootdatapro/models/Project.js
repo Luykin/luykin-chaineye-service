@@ -43,7 +43,7 @@ module.exports = (sequelize) => {
         comment: "true:运营中; false:停止运营",
       },
       total_funding: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.STRING,
         comment: "融资总额",
       },
       rootdataurl: {
@@ -111,7 +111,7 @@ module.exports = (sequelize) => {
         comment: "X热度值",
       },
       heat_rank: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.STRING,
         comment: "X热度排名",
       },
       influence: {
@@ -119,15 +119,15 @@ module.exports = (sequelize) => {
         comment: "X影响力",
       },
       influence_rank: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.STRING,
         comment: "X影响力排名",
       },
       followers: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.STRING,
         comment: "X关注者数量",
       },
       following: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.STRING,
         comment: "正在关注的数量",
       },
     },
