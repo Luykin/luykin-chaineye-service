@@ -1,5 +1,64 @@
 const db = require("../../models");
 
+function normalizeEntityType({ type, item_type }) {
+  if (type) return type;
+
+  if (item_type === 1) return "Project";
+  if (item_type === 2) return "Organization";
+  if (item_type === 3) return "Person";
+
+  return null;
+}
+
+async function ensureEntity({ type, item_type, id, name, logo }) {
+  if (!id) return null;
+
+  const resolvedType = normalizeEntityType({ type, item_type });
+  if (!resolvedType) return null;
+
+  if (resolvedType === "Organization") {
+    await db.Organization.findOrCreate({
+      where: { org_id: id },
+      defaults: {
+        org_id: id,
+        org_name: name,
+        logo,
+        description: "",
+        active: true,
+      },
+    });
+    return resolvedType;
+  }
+
+  if (resolvedType === "Project") {
+    await db.Project.findOrCreate({
+      where: { project_id: id },
+      defaults: {
+        project_id: id,
+        project_name: name,
+        logo,
+        description: "",
+        active: true,
+      },
+    });
+    return resolvedType;
+  }
+
+  if (resolvedType === "Person") {
+    await db.Person.findOrCreate({
+      where: { people_id: id },
+      defaults: {
+        people_id: id,
+        people_name: name,
+        head_img: logo,
+      },
+    });
+    return resolvedType;
+  }
+
+  return null;
+}
+
 /**
  * 更新或创建组织信息到数据库。
  * @param {object} orgData 从解析器获取的组织数据。
@@ -62,39 +121,76 @@ async function updateOrganization(orgData) {
       }
     }
 
+    // 机构标签 (Tag)
+    if (orgData.tags && orgData.tags.length > 0) {
+      for (const t of orgData.tags) {
+        if (!t?.tag_id) continue;
+
+        await db.Tag.findOrCreate({
+          where: { tag_id: t.tag_id },
+          defaults: { tag_id: t.tag_id, tag_name: t.tag_name },
+        });
+
+        await db.OrganizationTag.findOrCreate({
+          where: { organizationId: orgData.org_id, tagId: t.tag_id },
+          defaults: { organizationId: orgData.org_id, tagId: t.tag_id },
+        });
+      }
+    }
+
+    // 机构被投资关系 (Investor -> Organization)
+    if (orgData.fundingRounds && orgData.fundingRounds.length > 0) {
+      for (const r of orgData.fundingRounds) {
+        const roundKey = `${r?.date || ""}|${r?.amount_text || ""}`;
+        const investorList = r?.lps || [];
+
+        for (const inv of investorList) {
+          const investorId = inv?.item_id ? Number(inv.item_id) : null;
+          if (!investorId) continue;
+
+          const investorType = await ensureEntity({
+            item_type: inv.item_type,
+            id: investorId,
+            name: inv.item_name,
+            logo: inv.logo,
+          });
+          if (!investorType) continue;
+
+          await db.Investment.findOrCreate({
+            where: {
+              investorId: investorId,
+              investorType,
+              fundedId: orgData.org_id,
+              fundedType: "Organization",
+              round: roundKey,
+            },
+            defaults: {
+              investorId: investorId,
+              investorType,
+              fundedId: orgData.org_id,
+              fundedType: "Organization",
+              round: roundKey,
+              amount: null,
+              date: r?.date ? new Date(r.date) : null,
+              lead: false,
+            },
+          });
+        }
+      }
+    }
+
     // 机构对外投资关系 -> Investment
     if (orgData.investments && orgData.investments.length > 0) {
       for (const inv of orgData.investments) {
         if (!inv.item_id) continue;
 
-        let fundedType;
-        if (inv.item_type === 2) fundedType = "Organization";
-        else if (inv.item_type === 1) fundedType = "Project";
-        else continue;
-
-        if (fundedType === "Project") {
-          await db.Project.findOrCreate({
-            where: { project_id: inv.item_id },
-            defaults: {
-              project_id: inv.item_id,
-              project_name: inv.item_name,
-              logo: inv.logo,
-              description: inv.description,
-              active: true,
-            },
-          });
-        } else {
-          await db.Organization.findOrCreate({
-            where: { org_id: inv.item_id },
-            defaults: {
-              org_id: inv.item_id,
-              org_name: inv.item_name,
-              logo: inv.logo,
-              description: inv.description,
-              active: true,
-            },
-          });
-        }
+        const fundedType = await ensureEntity({
+          item_type: inv.item_type,
+          id: inv.item_id,
+          name: inv.item_name,
+          logo: inv.logo,
+        });
+        if (!fundedType) continue;
 
         await db.Investment.findOrCreate({
           where: {
@@ -176,16 +272,15 @@ async function updatePersonAndInvestments(personData) {
             continue;
         }
 
-        const [entity, entityCreated] = await entityModel.findOrCreate({
-          where: { [entityIdField]: investment.item_id },
-          defaults: {
-            [entityIdField]: investment.item_id,
-            [entityNameField]: investment.item_name,
-            logo: investment.logo,
-            description: investment.description,
-            active: investment.active,
-          },
+        await ensureEntity({
+          type: fundedEntityType,
+          id: investment.item_id,
+          name: investment.item_name,
+          logo: investment.logo,
         });
+
+        const entity = { [entityIdField]: investment.item_id };
+        const entityCreated = false;
 
         if (entityCreated) {
           console.log(
@@ -323,31 +418,29 @@ async function updateProject(projectData) {
       for (const inv of projectData.investors.investList) {
         if (!inv.investId) continue;
 
-        await db.Organization.findOrCreate({
-          where: { org_id: inv.investId },
-          defaults: {
-            org_id: inv.investId,
-            org_name: inv.investName,
-            logo: inv.imgUrl,
-            X: null,
-            rootdataurl: null,
-          },
+        const investorType = await ensureEntity({
+          item_type: inv.item_type,
+          id: inv.investId,
+          name: inv.investName,
+          logo: inv.imgUrl,
         });
+        if (!investorType) continue;
 
+        const roundKey = String(inv.facDate || "");
         await db.Investment.findOrCreate({
           where: {
             investorId: inv.investId,
-            investorType: "Organization",
+            investorType,
             fundedId: projectData.project_id,
             fundedType: "Project",
-            round: String(inv.facDate || ""),
+            round: roundKey,
           },
           defaults: {
             investorId: inv.investId,
-            investorType: "Organization",
+            investorType,
             fundedId: projectData.project_id,
             fundedType: "Project",
-            round: String(inv.facDate || ""),
+            round: roundKey,
             amount: null,
             date: inv.facDate ? new Date(inv.facDate) : null,
             lead: inv.ltNum === 1,
@@ -361,32 +454,29 @@ async function updateProject(projectData) {
       for (const item of projectData.investmentProjects.investList) {
         if (!item.itemId) continue;
 
-        await db.Project.findOrCreate({
-          where: { project_id: item.itemId },
-          defaults: {
-            project_id: item.itemId,
-            project_name: item.itemName,
-            logo: item.imgUrl,
-            one_liner: item.briefIntd,
-            description: item.intd,
-            active: item.operateStatus === 1,
-          },
+        const fundedType = await ensureEntity({
+          item_type: item.item_type || 1,
+          id: item.itemId,
+          name: item.itemName,
+          logo: item.imgUrl,
         });
+        if (!fundedType) continue;
 
+        const roundKey = `investmentProjects|${item.facRounds || ""}`;
         await db.Investment.findOrCreate({
           where: {
             investorId: projectData.project_id,
             investorType: "Project",
             fundedId: item.itemId,
-            fundedType: "Project",
-            round: null,
+            fundedType,
+            round: roundKey,
           },
           defaults: {
             investorId: projectData.project_id,
             investorType: "Project",
             fundedId: item.itemId,
-            fundedType: "Project",
-            round: null,
+            fundedType,
+            round: roundKey,
             amount: null,
             date: null,
             lead: false,

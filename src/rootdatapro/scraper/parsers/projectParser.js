@@ -1,4 +1,5 @@
 const { JSDOM } = require("jsdom");
+const typemapManager = require("../typemap/manager");
 
 /**
  * 解析项目页面的内容以提取数据。
@@ -170,6 +171,7 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
             investName: inv.investName?.en_value,
             ltNum: inv.ltNum,
             type: inv.type,
+            item_type: typemapManager.getType(inv.investId) || inv.type || null,
           };
         } catch (e) {
           console.error("[projectParser] investors.investList 单条解析失败:", e);
@@ -198,6 +200,7 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
             itemId: item.itemId,
             itemName: item.itemName?.en_value,
             operateStatus: item.operateStatus,
+            item_type: typemapManager.getType(item.itemId) || 1,
           };
         } catch (e) {
           console.error("[projectParser] investmentProjects.investList 单条解析失败:", e);

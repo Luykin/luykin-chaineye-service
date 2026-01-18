@@ -80,6 +80,8 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
     investorCards: [],
     investorRounds: [],
     categories: [],
+    tags: [],
+    fundingRounds: [],
     events: [],
     teamMembers: [],
   };
@@ -134,6 +136,25 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
       .filter(Boolean);
   } catch (e) {
     console.error("[organizationParser] categories 解析失败:", e);
+  }
+
+  try {
+    const tagList = orgDetail.tagList || [];
+    parsedData.tags = (Array.isArray(tagList) ? tagList : [])
+      .map((t) => {
+        try {
+          return {
+            tag_id: t.id,
+            tag_name: t.name?.en_value,
+          };
+        } catch (e) {
+          console.error("[organizationParser] tags 单条解析失败:", e);
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch (e) {
+    console.error("[organizationParser] tags 解析失败:", e);
   }
 
   try {
@@ -274,11 +295,13 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
           }
         }
 
-        parsedData.investorRounds.push({
+        const fundingRound = {
           date: dateText || null,
           amount_text: amountText || null,
           lps,
-        });
+        };
+        parsedData.investorRounds.push(fundingRound);
+        parsedData.fundingRounds.push(fundingRound);
       } catch (e) {
         console.error("[organizationParser] investorRounds 单行解析失败:", e);
       }
