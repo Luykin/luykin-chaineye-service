@@ -9,6 +9,11 @@ class TypemapManager {
         2: new Set(), // Organizations
         3: new Set(), // People
       },
+      nameByTypeId: {
+        1: new Map(),
+        2: new Map(),
+        3: new Map(),
+      },
       isLoaded: false,
     };
     this.loadIdMaps();
@@ -40,7 +45,11 @@ class TypemapManager {
           const type = parseInt(jsonData.type, 10);
           if (this._idMapCache.byType[type]) {
             for (const item of jsonData.data) {
-              this._idMapCache.byType[type].add(String(item.id));
+              const idStr = String(item.id);
+              this._idMapCache.byType[type].add(idStr);
+              if (this._idMapCache.nameByTypeId[type]) {
+                this._idMapCache.nameByTypeId[type].set(idStr, String(item.name || ""));
+              }
             }
           }
         }
@@ -64,6 +73,22 @@ class TypemapManager {
     if (this._idMapCache.byType[2].has(idStr)) return 2;
     if (this._idMapCache.byType[3].has(idStr)) return 3;
     return null;
+  }
+
+  /**
+   * 根据 ID 获取其名称（用于构建带 slug 的 URL）。
+   * @param {string|number} id 要查询的 ID。
+   * @param {number} type 类型 (1: Project, 2: Organization, 3: Person)
+   * @returns {string|null}
+   */
+  getNameById(id, type) {
+    const idStr = String(id);
+    const t = parseInt(type, 10);
+    const map = this._idMapCache.nameByTypeId[t];
+    if (!map) return null;
+    const name = map.get(idStr);
+    if (!name) return null;
+    return name;
   }
 }
 

@@ -174,4 +174,31 @@ router.post("/scrape", async (req, res) => {
   }
 });
 
+// --- Crawl Task Management API ---
+
+const taskManager = require("../scraper/taskManager");
+
+router.post("/internal/crawl/start", (req, res) => {
+  console.log("[rootdatapro] 收到启动爬虫任务请求");
+  taskManager.start();
+  res.json({ success: true, message: "Crawl task started." });
+});
+
+router.post("/internal/crawl/pause", (req, res) => {
+  console.log("[rootdatapro] 收到暂停爬虫任务请求");
+  taskManager.pause();
+  res.json({ success: true, message: "Crawl task paused." });
+});
+
+router.get("/internal/crawl/status", (req, res) => {
+  const status = taskManager.getStatus();
+  res.json({ success: true, data: status });
+});
+
+router.post("/internal/crawl/reset", async (req, res) => {
+    console.log("[rootdatapro] 收到重置爬虫任务请求");
+    await taskManager.initialize();
+    res.json({ success: true, message: "Crawl task reset and re-initialized." });
+});
+
 module.exports = router;
