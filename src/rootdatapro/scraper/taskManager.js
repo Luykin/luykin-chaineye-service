@@ -77,14 +77,17 @@ class CrawlTaskManager {
   async start() {
     const redis = await this._getRedis();
     const currentStatus = await redis.get(REDIS_KEYS.STATUS);
-    if (currentStatus === "running") return;
+
+    // 进程重启后，Redis 里可能还残留 running，但此时实际上没有任何运行中的循环。
+    // start() 应当具备“接管”能力：即便是 running 也再次触发 _run()。
     if (currentStatus === "finished") {
         console.log("[TaskManager] 所有任务已完成，如需重新开始请先重置。");
         return;
     }
+
     await redis.set(REDIS_KEYS.STATUS, "running");
     await redis.del(REDIS_KEYS.ERROR);
-    console.log("[TaskManager] 任务开始。");
+    console.log("[TaskManager] 任务开始/接管运行。");
     this._run(); // Fire-and-forget
   }
 

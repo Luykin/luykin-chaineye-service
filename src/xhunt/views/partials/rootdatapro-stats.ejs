@@ -348,7 +348,9 @@
           if (!statusInterval) {
             statusInterval = setInterval(updateCrawlStatus, 2000);
           }
-          $('rdp-task-start').disabled = true;
+          // 允许“接管运行”：即使状态为 running（可能是重启后残留），也允许再次点击启动触发后端 start()
+          $('rdp-task-start').disabled = false;
+          $('rdp-task-start').textContent = '接管/启动';
           $('rdp-task-pause').disabled = false;
         } else {
           if (statusInterval) {
@@ -356,6 +358,7 @@
             statusInterval = null;
           }
           $('rdp-task-start').disabled = status === 'finished';
+          $('rdp-task-start').textContent = '启动';
           $('rdp-task-pause').disabled = true;
         }
     } catch (error) {
