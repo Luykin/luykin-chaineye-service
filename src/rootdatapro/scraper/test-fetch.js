@@ -5,7 +5,7 @@ const URL_TO_TEST =
 
 async function run() {
   // 这里按需要切换调用：scrapeOrganization / scrapePerson / scrapeProject
-  await scrapeProject(URL_TO_TEST);
+  await scrapeProject(URL_TO_TEST, { updateDb: false });
 }
 
 run();

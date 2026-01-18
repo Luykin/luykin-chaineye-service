@@ -21,6 +21,40 @@ const DEFAULT_PUPPETEER_ARGS = [
   "--disable-translate",
 ];
 
+const PROXY_POOL = [
+  "163.5.88.220:6324:user81794:8ipjmd",
+  "108.165.167.7:6324:user81794:8ipjmd",
+  "108.165.167.11:6324:user81794:8ipjmd",
+  "45.135.251.198:6324:user81794:8ipjmd",
+  "45.135.251.37:6324:user81794:8ipjmd",
+];
+
+function parseProxyString(proxyStr) {
+  if (!proxyStr || typeof proxyStr !== "string") return null;
+  const parts = proxyStr.split(":");
+  if (parts.length < 2) return null;
+
+  const host = parts[0];
+  const port = parts[1];
+  const username = parts[2];
+  const password = parts[3];
+  if (!host || !port) return null;
+
+  return {
+    host,
+    port,
+    username,
+    password,
+    server: `http://${host}:${port}`,
+  };
+}
+
+function pickRandomProxy(proxyPool) {
+  if (!Array.isArray(proxyPool) || proxyPool.length === 0) return null;
+  const idx = Math.floor(Math.random() * proxyPool.length);
+  return proxyPool[idx];
+}
+
 async function setupRequestInterception(page) {
   await page.setRequestInterception(true);
   page.on("request", (req) => {
@@ -79,24 +113,47 @@ async function waitUntilReady(page) {
  * @param {boolean|string} [options.headless="new"]
  * @param {string} [options.userDataDir]
  * @param {string[]} [options.args]
- * @returns {Promise<{ mainDom: string|null, nuxtDataJson: string|null }>}
+ * @param {boolean} [options.useProxy=true] 是否启用代理池
+ * @param {string[]} [options.proxyPool] 自定义代理池（ip:port:user:pass）
+ * @param {string} [options.proxy] 指定固定代理（ip:port:user:pass）
+ * @returns {Promise<{ mainDom: string|null, nuxtDataJson: string|null }>} 
  */
 async function fetchMainDomAndNuxtData(url, options = {}) {
   const {
     headless = "new",
     userDataDir = path.join(__dirname, "./puppeteer_cache"),
     args = DEFAULT_PUPPETEER_ARGS,
+    useProxy = true,
+    proxyPool = PROXY_POOL,
+    proxy,
   } = options;
 
   let browser = null;
+
+  const selectedProxyStr = useProxy ? (proxy || pickRandomProxy(proxyPool)) : null;
+  const selectedProxy = parseProxyString(selectedProxyStr);
+
+  const launchArgs = [...args];
+  if (selectedProxy?.server) {
+    launchArgs.push(`--proxy-server=${selectedProxy.server}`);
+  }
+
   try {
     browser = await puppeteer.launch({
       headless,
-      args: [...args],
+      args: launchArgs,
       userDataDir,
     });
 
     const page = await browser.newPage();
+
+    if (selectedProxy?.username) {
+      await page.authenticate({
+        username: selectedProxy.username,
+        password: selectedProxy.password || "",
+      });
+      console.log(`authenticated with proxy: ${selectedProxy.server}`);
+    }
 
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
@@ -135,6 +192,18 @@ async function fetchMainDomAndNuxtData(url, options = {}) {
       } catch (_) {}
     }
     console.error(`fetchMainDomAndNuxtData error:`, error);
+
+    // 代理失败时回退直连重试一次
+    if (useProxy && selectedProxy?.server) {
+      console.log(`fetchMainDomAndNuxtData retry: ${selectedProxy.server}`);
+      try {
+        const retry = await fetchMainDomAndNuxtData(url, {
+          ...options,
+          useProxy: false,
+        });
+        return retry;
+      } catch (_) {}
+    }
   } finally {
     if (browser) {
       try {

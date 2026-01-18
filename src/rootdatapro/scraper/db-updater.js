@@ -1,4 +1,4 @@
-const db = require("../../models");
+const db = require("../models");
 
 function normalizeEntityType({ type, item_type }) {
   if (type) return type;
