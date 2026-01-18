@@ -10,6 +10,7 @@ const REDIS_KEYS = {
   QUEUE_ORG: "rdt_crawl:queue:2",
   QUEUE_PERSON: "rdt_crawl:queue:3",
   ERROR: "rdt_crawl:error",
+  CONSECUTIVE_ERRORS: "rdt_crawl:consecutive_errors",
 };
 
 class CrawlTaskManager {
@@ -87,6 +88,7 @@ class CrawlTaskManager {
 
     await redis.set(REDIS_KEYS.STATUS, "running");
     await redis.del(REDIS_KEYS.ERROR);
+    await redis.set(REDIS_KEYS.CONSECUTIVE_ERRORS, 0);
     console.log("[TaskManager] 任务开始/接管运行。");
     this._run(); // Fire-and-forget
   }
@@ -178,11 +180,23 @@ class CrawlTaskManager {
         if (type === 2) progressUpdates.push(redis.hIncrBy(REDIS_KEYS.PROGRESS, 'organization:completed', 1));
         if (type === 3) progressUpdates.push(redis.hIncrBy(REDIS_KEYS.PROGRESS, 'person:completed', 1));
         await Promise.all(progressUpdates);
+        await redis.set(REDIS_KEYS.CONSECUTIVE_ERRORS, 0);
 
       } catch (error) {
         const errorMessage = `ID ${id} 爬取失败: ${error.message}`;
         console.error(`[TaskManager] 爬取失败: [ID: ${id}]. 错误: ${error.message}`);
-        await redis.set(REDIS_KEYS.ERROR, errorMessage);
+
+        const consecutive = await redis.incr(REDIS_KEYS.CONSECUTIVE_ERRORS);
+        await redis.set(REDIS_KEYS.ERROR, `${errorMessage}（连续失败 ${consecutive} 次）`);
+
+        if (consecutive >= 10) {
+          await redis.set(REDIS_KEYS.STATUS, "paused");
+          await redis.set(
+            REDIS_KEYS.ERROR,
+            `连续失败 ${consecutive} 个任务，已自动暂停。请检查网络/目标站点/代理/解析逻辑后手动点击启动继续。最后错误：${error.message}`
+          );
+          console.error(`[TaskManager] 连续失败 ${consecutive} 次，已自动暂停任务。`);
+        }
       }
       
       await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500));

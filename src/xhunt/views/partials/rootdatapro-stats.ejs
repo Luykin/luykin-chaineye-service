@@ -346,7 +346,7 @@
 
         if (status === 'running') {
           if (!statusInterval) {
-            statusInterval = setInterval(updateCrawlStatus, 2000);
+            statusInterval = setInterval(updateCrawlStatus, 8000);
           }
           // 允许“接管运行”：即使状态为 running（可能是重启后残留），也允许再次点击启动触发后端 start()
           $('rdp-task-start').disabled = false;
