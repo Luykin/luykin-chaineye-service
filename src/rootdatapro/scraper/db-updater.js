@@ -279,26 +279,17 @@ async function updatePersonAndInvestments(personData) {
           logo: investment.logo,
         });
 
-        const entity = { [entityIdField]: investment.item_id };
-        const entityCreated = false;
-
-        if (entityCreated) {
-          console.log(
-            `[DB] 创建了新的 ${fundedEntityType}: ${investment.item_name}`
-          );
-        }
-
         await db.Investment.findOrCreate({
           where: {
             // 复合键确保投资事件的唯一性
             investorId: person.people_id,
             investorType: "Person",
-            fundedId: entity[entityIdField],
+            fundedId: investment.item_id,
             fundedType: fundedEntityType,
             round: investment.round, // 将轮次加入唯一性检查
           },
           defaults: {
-            fundedId: entity[entityIdField],
+            fundedId: investment.item_id,
             fundedType: fundedEntityType,
             investorId: person.people_id,
             investorType: "Person",

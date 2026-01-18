@@ -33,6 +33,7 @@ const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntCampaignRoutes = require("./xhunt/api/campaign");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
+const rootdataProRoutes = require("./rootdatapro/api/rootdatapro");
 const adminRoutes = require("./admin/api/admin");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
@@ -329,6 +330,9 @@ async function initializeAndStartServer() {
 
   // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
   app.use("/api/rootdata", xHuntRootdataRoutes);
+
+  // RootdataPro: 触发爬虫并入库
+  app.use("/api/rootdatapro", rootdataProRoutes);
 
   // 管理后台（登录、会话、管理员基础配置）
   app.use("/admin", adminRoutes);
