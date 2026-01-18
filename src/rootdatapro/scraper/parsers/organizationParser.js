@@ -1,6 +1,5 @@
 const { JSDOM } = require("jsdom");
 const typemapManager = require("../typemap/manager");
-const { parseUnitNumber } = require("./utils");
 
 function parseItemFromRootdataHref({ href, name, logo }) {
   const absoluteUrl = href
@@ -133,9 +132,9 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
       ).trim();
 
       if (label === "Followers") {
-        parsedData.followers = parseUnitNumber(value);
+        parsedData.followers = (value);
       } else if (label === "Following") {
-        parsedData.following = parseUnitNumber(value);
+        parsedData.following = (value);
       }
     }
   } catch (e) {

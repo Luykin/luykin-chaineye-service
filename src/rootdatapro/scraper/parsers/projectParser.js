@@ -1,6 +1,5 @@
 const { JSDOM } = require("jsdom");
 const typemapManager = require("../typemap/manager");
-const { parseUnitNumber } = require("./utils");
 
 /**
  * 解析项目页面的内容以提取数据。
@@ -257,9 +256,9 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
       ).trim();
 
       if (label === "Followers") {
-        parsedData.followers = parseUnitNumber(value);
+        parsedData.followers = (value);
       } else if (label === "Following") {
-        parsedData.following = parseUnitNumber(value);
+        parsedData.following = (value);
       }
     }
   } catch (e) {
