@@ -209,6 +209,30 @@
 
   <hr style="margin: 32px 0; border-color: #334155;" />
 
+  <!-- DB Query By ID Section -->
+  <div class="rdp-header">
+    <h2>按 ID 查询（仅数据库）</h2>
+    <p>通过不同类型的 ID 直接查询数据库，不会触发爬取。</p>
+  </div>
+  <div class="rdp-form-group" style="margin-top: 16px;">
+    <div class="rdp-input-wrapper" style="flex: 0.6; min-width: 160px;">
+      <label for="rdp-id-type" class="rdp-label">类型</label>
+      <select id="rdp-id-type" class="rdp-input">
+        <option value="Project">项目 (Project)</option>
+        <option value="Organization">机构 (Organization)</option>
+        <option value="Person">人物 (Person)</option>
+      </select>
+    </div>
+    <div class="rdp-input-wrapper">
+      <label for="rdp-id-value" class="rdp-label">ID</label>
+      <input id="rdp-id-value" type="text" inputmode="numeric" placeholder="输入 project_id / org_id / people_id" class="rdp-input" />
+    </div>
+    <button id="rdp-id-query-btn" class="rdp-btn">查询</button>
+  </div>
+  <pre id="rdp-id-query-result" class="rdp-result-pre">{"message": "等待查询..."}</pre>
+
+  <hr style="margin: 32px 0; border-color: #334155;" />
+
   <!-- Manual Scrape Section -->
   <div class="rdp-header">
     <h2>手动单次抓取</h2>
@@ -369,6 +393,42 @@
         await jsonFetch('/api/rootdatapro/internal/crawl/reset', { method: 'POST' });
         updateCrawlStatus();
     });
+  });
+
+  // Query by ID (DB only)
+  $('rdp-id-query-btn').addEventListener('click', () => {
+    handleApiCall($('rdp-id-query-btn'), $('rdp-id-query-result'), async () => {
+      const type = $('rdp-id-type').value;
+      const rawId = String($('rdp-id-value').value || '').trim();
+      const idNum = Number(rawId);
+      if (!rawId || !Number.isFinite(idNum)) {
+        throw new Error('请输入有效的数字 ID');
+      }
+
+      if (type === 'Project') {
+        const url = `/api/rootdatapro/open/get_item?project_id=${encodeURIComponent(String(idNum))}`;
+        return jsonFetch(url);
+      }
+
+      if (type === 'Organization') {
+        const url = `/api/rootdatapro/open/get_org?org_id=${encodeURIComponent(String(idNum))}`;
+        return jsonFetch(url);
+      }
+
+      if (type === 'Person') {
+        const url = `/api/rootdatapro/open/get_people?people_id=${encodeURIComponent(String(idNum))}`;
+        return jsonFetch(url);
+      }
+
+      throw new Error('不支持的类型');
+    });
+  });
+
+  $('rdp-id-value').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $('rdp-id-query-btn').click();
+    }
   });
 
   // Manual scrape
