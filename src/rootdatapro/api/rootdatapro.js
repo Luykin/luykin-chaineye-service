@@ -190,8 +190,8 @@ router.post("/crawl/pause", (req, res) => {
   res.json({ success: true, message: "Crawl task paused." });
 });
 
-router.get("/crawl/status", (req, res) => {
-  const status = taskManager.getStatus();
+router.get("/crawl/status", async (req, res) => {
+  const status = await taskManager.getStatus();
   res.json({ success: true, data: status });
 });
 

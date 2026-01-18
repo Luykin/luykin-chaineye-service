@@ -66,26 +66,75 @@
   .rdp-query-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 24px; }
 
   /* Task Section Styles */
-  .rdp-task-controls { display: flex; gap: 12px; margin-top: 16px; }
+  .rdp-topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .rdp-task-controls { display: flex; gap: 10px; margin-top: 0; flex-wrap: wrap; }
+
+  .rdp-btn { box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset; }
+  .rdp-btn:active { transform: translateY(1px); }
+
   .rdp-btn-start { background-color: #10b981; }
   .rdp-btn-start:hover { background-color: #059669; }
   .rdp-btn-pause { background-color: #f59e0b; }
   .rdp-btn-pause:hover { background-color: #d97706; }
   .rdp-btn-reset { background-color: #ef4444; }
   .rdp-btn-reset:hover { background-color: #dc2626; }
-  .rdp-task-status { margin-top: 20px; color: #cbd5e1; font-size: 14px; }
-  .rdp-task-status-value { font-weight: bold; padding: 4px 8px; border-radius: 6px; }
-  .status-idle { background-color: #374151; color: #d1d5db; }
-  .status-running { background-color: #1e40af; color: #bfdbfe; }
-  .status-paused { background-color: #b45309; color: #fef3c7; }
-  .status-finished { background-color: #064e3b; color: #a7f3d0; }
-  .status-error { background-color: #991b1b; color: #fecaca; }
-  
-  .rdp-progress-container { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
-  .rdp-progress-bar-bg { background-color: #334155; border-radius: 8px; height: 24px; width: 100%; overflow: hidden; position: relative; }
-  .rdp-progress-bar-fill { background-color: #38bdf8; height: 100%; transition: width 0.3s ease-in-out; }
-  .rdp-progress-label { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #f8fafc; font-size: 12px; font-weight: 500; }
-  .rdp-progress-sub-label { font-size: 14px; color: #94a3b8; margin-bottom: -4px; }
+
+  .rdp-btn-ghost {
+    background: transparent;
+    border: 1px solid #334155;
+    color: #e2e8f0;
+    padding: 8px 12px;
+  }
+  .rdp-btn-ghost:hover { background: rgba(148,163,184,0.08); }
+
+  .rdp-status-row {
+    margin-top: 14px;
+    padding: 12px;
+    background: linear-gradient(180deg, rgba(15,23,42,0.65), rgba(15,23,42,0.35));
+    border: 1px solid rgba(51,65,85,0.8);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .rdp-task-status { margin: 0; color: #cbd5e1; font-size: 14px; }
+  .rdp-task-status-value { font-weight: 700; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.3px; }
+  .status-idle { background-color: rgba(55,65,81,0.9); color: #e5e7eb; }
+  .status-running { background-color: rgba(30,64,175,0.9); color: #dbeafe; }
+  .status-paused { background-color: rgba(180,83,9,0.9); color: #fffbeb; }
+  .status-finished { background-color: rgba(6,78,59,0.9); color: #d1fae5; }
+  .status-error { background-color: rgba(153,27,27,0.9); color: #fee2e2; }
+
+  .rdp-status-meta { display: flex; align-items: center; gap: 10px; color: #94a3b8; font-size: 12px; }
+  .rdp-dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; box-shadow: 0 0 0 3px rgba(71,85,105,0.2); }
+  .rdp-dot.running { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.25); }
+  .rdp-dot.paused { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.25); }
+  .rdp-dot.idle { background: #64748b; box-shadow: 0 0 0 3px rgba(100,116,139,0.25); }
+  .rdp-dot.error { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.25); }
+
+  .rdp-progress-container { margin-top: 14px; display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .rdp-progress-tile {
+    padding: 12px;
+    border: 1px solid rgba(51,65,85,0.8);
+    border-radius: 12px;
+    background: rgba(15,23,42,0.45);
+  }
+  .rdp-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .rdp-progress-sub-label { font-size: 13px; color: #cbd5e1; margin: 0; font-weight: 600; }
+  .rdp-progress-mini { font-size: 12px; color: #94a3b8; font-variant-numeric: tabular-nums; }
+
+  .rdp-progress-bar-bg {
+    background-color: rgba(51,65,85,0.7);
+    border-radius: 999px;
+    height: 12px;
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+  }
+  .rdp-progress-bar-fill { background-color: #38bdf8; height: 100%; transition: width 0.35s ease-in-out; }
+  .rdp-progress-label { display: none; }
 
   @media (max-width: 768px) { .rdp-form-group { flex-direction: column; align-items: stretch; } }
   .rdp-result-pre .string { color: #a5d6ff; } .rdp-result-pre .number { color: #d8b4fe; }
@@ -93,45 +142,67 @@
 </style>
 
 <div class="rdp-card">
+  <div class="rdp-topbar">
+    <div class="rdp-header">
+      <h2>批量爬取任务</h2>
+      <p>启动、暂停和监控所有 typemap 中实体的爬取进度。</p>
+    </div>
+    <div class="rdp-task-controls">
+      <button id="rdp-task-start" class="rdp-btn rdp-btn-start">启动</button>
+      <button id="rdp-task-pause" class="rdp-btn rdp-btn-pause">暂停</button>
+      <button id="rdp-task-reset" class="rdp-btn rdp-btn-reset">重置</button>
+    </div>
+  </div>
+
+  <div class="rdp-status-row">
+    <div class="rdp-task-status">当前状态: <span id="rdp-task-status-value" class="rdp-task-status-value status-idle">-</span></div>
+    <div class="rdp-status-meta">
+      <span class="rdp-dot" id="rdp-live-dot"></span>
+      <span id="rdp-live-text">未自动刷新</span>
+      <button id="rdp-refresh-now" class="rdp-btn rdp-btn-ghost" type="button">立即刷新</button>
+    </div>
+  </div>
+
   <!-- Task Management Section -->
-  <div class="rdp-header">
-    <h2>批量爬取任务</h2>
-    <p>启动、暂停和监控所有 typemap 中实体的爬取进度。</p>
-  </div>
-  <div class="rdp-task-controls">
-    <button id="rdp-task-start" class="rdp-btn rdp-btn-start">启动</button>
-    <button id="rdp-task-pause" class="rdp-btn rdp-btn-pause">暂停</button>
-    <button id="rdp-task-reset" class="rdp-btn rdp-btn-reset">重置</button>
-  </div>
-  <div class="rdp-task-status">当前状态: <span id="rdp-task-status-value" class="status-idle">-</span></div>
-  
+
   <div class="rdp-progress-container">
-    <div>
-      <p class="rdp-progress-sub-label">总进度</p>
-      <div class="rdp-progress-bar-bg">
+    <div class="rdp-progress-tile">
+      <div class="rdp-progress-head">
+        <p class="rdp-progress-sub-label">总进度</p>
+        <span id="rdp-progress-total-mini" class="rdp-progress-mini">0 / 0 (0%)</span>
+      </div>
+      <div class="rdp-progress-bar-bg" aria-label="total-progress">
         <div id="rdp-progress-total-fill" class="rdp-progress-bar-fill"></div>
-        <span id="rdp-progress-total-label" class="rdp-progress-label">0 / 0 (0%)</span>
       </div>
     </div>
-    <div>
-      <p class="rdp-progress-sub-label">项目 (Projects)</p>
-      <div class="rdp-progress-bar-bg">
+
+    <div class="rdp-progress-tile">
+      <div class="rdp-progress-head">
+        <p class="rdp-progress-sub-label">项目 (Projects)</p>
+        <span id="rdp-progress-project-mini" class="rdp-progress-mini">0 / 0 (0%)</span>
+      </div>
+      <div class="rdp-progress-bar-bg" aria-label="project-progress">
         <div id="rdp-progress-project-fill" class="rdp-progress-bar-fill" style="background-color: #34d399;"></div>
-        <span id="rdp-progress-project-label" class="rdp-progress-label">0 / 0 (0%)</span>
       </div>
     </div>
-    <div>
-      <p class="rdp-progress-sub-label">机构 (Organizations)</p>
-      <div class="rdp-progress-bar-bg">
+
+    <div class="rdp-progress-tile">
+      <div class="rdp-progress-head">
+        <p class="rdp-progress-sub-label">机构 (Organizations)</p>
+        <span id="rdp-progress-org-mini" class="rdp-progress-mini">0 / 0 (0%)</span>
+      </div>
+      <div class="rdp-progress-bar-bg" aria-label="org-progress">
         <div id="rdp-progress-org-fill" class="rdp-progress-bar-fill" style="background-color: #fbbf24;"></div>
-        <span id="rdp-progress-org-label" class="rdp-progress-label">0 / 0 (0%)</span>
       </div>
     </div>
-    <div>
-      <p class="rdp-progress-sub-label">人物 (People)</p>
-      <div class="rdp-progress-bar-bg">
+
+    <div class="rdp-progress-tile">
+      <div class="rdp-progress-head">
+        <p class="rdp-progress-sub-label">人物 (People)</p>
+        <span id="rdp-progress-person-mini" class="rdp-progress-mini">0 / 0 (0%)</span>
+      </div>
+      <div class="rdp-progress-bar-bg" aria-label="person-progress">
         <div id="rdp-progress-person-fill" class="rdp-progress-bar-fill" style="background-color: #60a5fa;"></div>
-        <span id="rdp-progress-person-label" class="rdp-progress-label">0 / 0 (0%)</span>
       </div>
     </div>
   </div>
@@ -210,11 +281,15 @@
     const { total, completed, project, organization, person } = safeP;
 
     const updateBar = (type, data) => {
-        const c = data.completed || 0;
-        const t = data.total || 0;
-        const percent = t > 0 ? (c / t * 100).toFixed(1) : 0;
-        $(`rdp-progress-${type}-fill`).style.width = `${percent}%`;
-        $(`rdp-progress-${type}-label`).textContent = `${c} / ${t} (${percent}%)`;
+      const c = data.completed || 0;
+      const t = data.total || 0;
+      const percent = t > 0 ? (c / t * 100) : 0;
+      const percentText = Number.isFinite(percent) ? percent.toFixed(1) : '0.0';
+      const fillEl = $(`rdp-progress-${type}-fill`);
+      if (fillEl) fillEl.style.width = `${percent}%`;
+
+      const miniEl = $(`rdp-progress-${type}-mini`);
+      if (miniEl) miniEl.textContent = `${c} / ${t} (${percentText}%)`;
     };
 
     updateBar('total', { completed, total });
@@ -229,27 +304,43 @@
         const { status, progress } = res.data;
 
         const statusEl = $('rdp-task-status-value');
-        statusEl.textContent = status.toUpperCase();
+        statusEl.textContent = String(status || '-').toUpperCase();
         statusEl.className = `rdp-task-status-value status-${status}`;
+
+        const dotEl = $('rdp-live-dot');
+        const liveTextEl = $('rdp-live-text');
+        if (dotEl) {
+          dotEl.className = `rdp-dot ${status}`;
+        }
 
         updateProgress(progress);
 
+        const now = new Date();
+        if (liveTextEl) {
+          liveTextEl.textContent = `上次刷新 ${now.toLocaleTimeString()}`;
+        }
+
         if (status === 'running') {
-            if (!statusInterval) {
-                statusInterval = setInterval(updateCrawlStatus, 2000);
-            }
-            $('rdp-task-start').disabled = true;
-            $('rdp-task-pause').disabled = false;
+          if (!statusInterval) {
+            statusInterval = setInterval(updateCrawlStatus, 2000);
+          }
+          $('rdp-task-start').disabled = true;
+          $('rdp-task-pause').disabled = false;
         } else {
-            if (statusInterval) {
-                clearInterval(statusInterval);
-                statusInterval = null;
-            }
-            $('rdp-task-start').disabled = status === 'finished';
-            $('rdp-task-pause').disabled = true;
+          if (statusInterval) {
+            clearInterval(statusInterval);
+            statusInterval = null;
+          }
+          $('rdp-task-start').disabled = status === 'finished';
+          $('rdp-task-pause').disabled = true;
         }
     } catch (error) {
         console.error("Failed to fetch crawl status:", error);
+        const dotEl = $('rdp-live-dot');
+        const liveTextEl = $('rdp-live-text');
+        if (dotEl) dotEl.className = 'rdp-dot error';
+        if (liveTextEl) liveTextEl.textContent = '刷新失败';
+
         if (statusInterval) {
             clearInterval(statusInterval);
             statusInterval = null;
@@ -290,6 +381,10 @@
     });
   });
   
+  $('rdp-refresh-now').addEventListener('click', () => {
+    updateCrawlStatus();
+  });
+
   // Initial status load
   updateCrawlStatus();
 })();
