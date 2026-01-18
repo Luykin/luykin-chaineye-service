@@ -61,6 +61,7 @@
           <button class="tab-btn" data-tab="admin-audit-logs">
             🧾 管理员操作记录
           </button>
+          <button class="tab-btn" data-tab="rootdatapro-console">🚠 RootdataPro</button>
           <% } %>
         </div>
 
@@ -171,6 +172,11 @@
           <!-- 管理员操作记录 Tab -->
           <div class="tab-pane" id="admin-audit-logs">
             <%- include('partials/admin-audit-logs') %>
+          </div>
+
+          <!-- RootdataPro Console Tab -->
+          <div class="tab-pane" id="rootdatapro-console">
+            <%- include('partials/rootdatapro-stats') %>
           </div>
           <% } %>
 
