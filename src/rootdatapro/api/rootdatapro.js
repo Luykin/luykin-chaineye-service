@@ -1,5 +1,4 @@
 const express = require("express");
-const { scrapeProject, scrapeOrganization, scrapePerson } = require("../scraper/index");
 const db = require("../models");
 
 const router = express.Router();
@@ -58,6 +57,7 @@ function parseIdFromUrlByK(rawUrl) {
 }
 
 async function scrapeAndFetchSummary({ url, entityType }) {
+  const { scrapeProject, scrapeOrganization, scrapePerson } = require("../scraper/index");
   console.log(`[rootdatapro] 开始抓取 ${entityType}: ${url}`);
   const timeoutMs = 3 * 60 * 1000;
 

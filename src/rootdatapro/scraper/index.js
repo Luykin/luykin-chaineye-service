@@ -1,7 +1,5 @@
 const { fetchMainDomAndNuxtData } = require("./browser-fetcher");
-const { parseOrganizationPage } = require("./parsers/organizationParser");
-const { parsePersonPage } = require("./parsers/personParser");
-const { parseProjectPage } = require("./parsers/projectParser");
+
 let updatePersonAndInvestments;
 let updateOrganization;
 let updateProject;
@@ -96,6 +94,7 @@ async function scrapeProject(url, options = {}) {
       return;
     }
 
+    const { parseProjectPage } = require("./parsers/projectParser");
     projectData = parseProjectPage({ mainDom, nuxtDataJson, url });
     if (projectData) {
       console.log(`成功解析项目数据。`, projectData);
@@ -170,6 +169,7 @@ async function scrapeOrganization(url, options = {}) {
       return;
     }
 
+    const { parseOrganizationPage } = require("./parsers/organizationParser");
     orgData = parseOrganizationPage({ mainDom, nuxtDataJson, url });
     if (orgData) {
       console.log(`成功解析组织数据。`, orgData);
@@ -244,6 +244,7 @@ async function scrapePerson(url, options = {}) {
       return;
     }
 
+    const { parsePersonPage } = require("./parsers/personParser");
     personData = parsePersonPage({ mainDom, nuxtDataJson, url });
     if (!personData) {
       const msg = `未能解析个人页面数据。`;
