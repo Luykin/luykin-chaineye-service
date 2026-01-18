@@ -85,7 +85,7 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
     following: undefined,
     teamMembers: [],
     investors: { facAmountUS: null, facNum: 0, investList: [] },
-    investmentProjects: { investItemNum: 0, investList: [], lpList: [] },
+    investmentProjects: { investItemNum: 0, investList: [] },
   };
 
   let dom = null;
@@ -106,7 +106,7 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
 
   const projectDetail = nuxtData?.data?.[0]?.detail;
   if (!projectDetail) {
-    console.error("[projectParser] 在 __NUXT__ 数据中找不到项目详细信息。");
+    console.error("[projectParser] 在 __NUXT__ 数据中找不到项目详细信息。" );
     return null;
   }
 
@@ -155,93 +155,72 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
     console.error("[projectParser] teamMembers 解析失败:", e);
   }
 
-  // --- 投资机构 ---
+  // --- 投资机构 (修正后) ---
   try {
-    const investorsData = nuxtData?.data?.[0]?.investors;
-    if (investorsData) {
-      parsedData.investors.facAmountUS = investorsData.facAmountUS || null;
-      parsedData.investors.facNum = investorsData.facNum || 0;
-      const investList = investorsData.investList || [];
-      parsedData.investors.investList = (Array.isArray(investList) ? investList : []).map(inv => {
-        try {
-          return {
-            facDate: inv.facDate || null,
-            imgUrl: inv.imgUrl,
-            investId: inv.investId,
-            investName: inv.investName?.en_value,
-            ltNum: inv.ltNum,
-            type: inv.type,
-            item_type: typemapManager.getType(inv.investId) || inv.type || null,
-          };
-        } catch (e) {
-          console.error("[projectParser] investors.investList 单条解析失败:", e);
-          return null;
+    const investorsListData = nuxtData?.data?.[0]?.investorsList;
+    if (investorsListData && Array.isArray(investorsListData.items)) {
+      const allInvestors = [];
+      for (const round of investorsListData.items) {
+        const roundName = round.roundsName?.en_value || null;
+        const roundDate = round.facDate || null;
+        const roundAmount = round.facAmountUs || null;
+
+        if (Array.isArray(round.investList)) {
+          for (const inv of round.investList) {
+            try {
+              allInvestors.push({
+                round: roundName,
+                date: roundDate,
+                amount: roundAmount,
+                isLead: inv.isLt === 1,
+                investorId: inv.investId,
+                investorName: inv.investName?.en_value,
+                investorLogo: inv.imgUrl,
+                item_type: typemapManager.getType(inv.investId) || inv.type || null,
+              });
+            } catch (e) {
+              console.error("[projectParser] investorsList.items.investList 单条解析失败:", e);
+            }
+          }
         }
-      }).filter(Boolean);
+      }
+      parsedData.investors.investList = allInvestors;
+      parsedData.investors.facNum = investorsListData.total || allInvestors.length;
     }
   } catch (e) {
-    console.error("[projectParser] investors 解析失败:", e);
+    console.error("[projectParser] investorsList 解析失败:", e);
   }
 
-  // --- 对外投资项目 ---
+  // --- 对外投资项目 (修正后) ---
   try {
-    const investmentProjectsData = nuxtData?.data?.[0]?.investmentProjects;
-    if (investmentProjectsData) {
-      parsedData.investmentProjects.investItemNum = investmentProjectsData.investItemNum || 0;
+    const investmentProjectsListData = nuxtData?.data?.[0]?.investmentProjectsList;
+    if (investmentProjectsListData && Array.isArray(investmentProjectsListData.items)) {
+      parsedData.investmentProjects.investItemNum = investmentProjectsListData.total || 0;
 
-      const investList = investmentProjectsData.investList || [];
-      parsedData.investmentProjects.investList = (Array.isArray(investList) ? investList : []).map(item => {
+      const investList = [];
+      for (const item of investmentProjectsListData.items) {
         try {
-          return {
-            briefIntd: item.briefIntd?.en_value,
-            facRounds: item.facRounds,
-            imgUrl: item.imgUrl,
-            intd: item.intd?.en_value,
-            itemId: item.itemId,
-            itemName: item.itemName?.en_value,
-            operateStatus: item.operateStatus,
-            item_type: typemapManager.getType(item.itemId) || 1,
-          };
-        } catch (e) {
-          console.error("[projectParser] investmentProjects.investList 单条解析失败:", e);
-          return null;
-        }
-      }).filter(Boolean);
+          const fundedId = item.itemId;
+          if (!fundedId) continue;
 
-      const lpList = investmentProjectsData.lpList || [];
-      parsedData.investmentProjects.lpList = (Array.isArray(lpList) ? lpList : []).map(item => {
-        try {
-            const safeParseJson = (jsonString) => {
-                try {
-                    // 检查字符串是否为有效的 JSON 格式
-                    if (typeof jsonString === 'string' && jsonString.startsWith('{') && jsonString.endsWith('}')) {
-                         return JSON.parse(jsonString);
-                    }
-                    return {}; // 如果不是，返回空对象
-                } catch {
-                    return {};
-                }
-            };
-            const briefIntd = safeParseJson(item.briefIntd);
-            const intd = safeParseJson(item.intd);
-            const orgName = safeParseJson(item.orgName);
-
-          return {
-            briefIntd: briefIntd?.en_value,
-            imgUrl: item.imgUrl,
-            intd: intd?.en_value,
-            operateStatus: item.operateStatus,
-            orgId: item.orgId,
-            orgName: orgName?.en_value,
-          };
+          investList.push({
+            round: item.roundsName?.en_value || null,
+            date: item.facDate || null,
+            amount: item.facAmountUs || null,
+            isLead: item.isLt === 1,
+            fundedId: fundedId,
+            fundedName: item.itemName?.en_value,
+            fundedLogo: item.logoImg,
+            item_type: typemapManager.getType(fundedId) || null, // 不再假设默认为1
+          });
         } catch (e) {
-          console.error("[projectParser] investmentProjects.lpList 单条解析失败:", e);
-          return null;
+          console.error("[projectParser] investmentProjectsList.items 单条解析失败:", e);
         }
-      }).filter(Boolean);
+      }
+      parsedData.investmentProjects.investList = investList;
     }
   } catch (e) {
-    console.error("[projectParser] investmentProjects 解析失败:", e);
+    console.error("[projectParser] investmentProjectsList 解析失败:", e);
   }
 
   // --- 从 DOM 中解析额外信息 ---

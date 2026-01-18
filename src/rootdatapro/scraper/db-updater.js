@@ -30,7 +30,6 @@ async function ensureEntities(entities) {
         org_name: name,
         logo,
         description: "",
-        active: true,
       });
     } else if (resolvedType === "Project") {
       entitiesByType.Project.push({
@@ -38,7 +37,6 @@ async function ensureEntities(entities) {
         project_name: name,
         logo,
         description: "",
-        active: true,
       });
     } else if (resolvedType === "Person") {
       entitiesByType.Person.push({
@@ -141,7 +139,7 @@ async function updateOrganization(orgData) {
       const investmentsToCreate = [];
       const entitiesToEnsure = [];
       for (const r of orgData.fundingRounds) {
-        const roundKey = `${r?.date || ""}|${r?.amount_text || ""}`;
+        // const roundKey = `${r?.date || ""}|${r?.amount_text || ""}`;
         for (const inv of (r?.lps || [])) {
           const investorId = inv?.item_id ? Number(inv.item_id) : null;
           if (!investorId) continue;
@@ -155,7 +153,7 @@ async function updateOrganization(orgData) {
             investorType,
             fundedId: orgData.org_id,
             fundedType: "Organization",
-            round: roundKey,
+            round: "_UNKNOWN_",
             amount: null,
             date: r?.date ? new Date(r.date) : null,
             lead: false,
@@ -334,48 +332,50 @@ async function updateProject(projectData) {
       await db.ProjectEcosystem.bulkCreate(projectEcosystemsToCreate, { ignoreDuplicates: true });
     }
 
+    // 更新融资投资方 (修正后)
     if (projectData.investors?.investList && projectData.investors.investList.length > 0) {
       const investmentsToCreate = [];
       const entitiesToEnsure = [];
       for (const inv of projectData.investors.investList) {
-        if (!inv.investId) continue;
+        if (!inv.investorId) continue;
         const investorType = normalizeEntityType({ item_type: inv.item_type });
         if (!investorType) continue;
 
-        entitiesToEnsure.push({ item_type: inv.item_type, id: inv.investId, name: inv.investName, logo: inv.imgUrl });
+        entitiesToEnsure.push({ item_type: inv.item_type, id: inv.investorId, name: inv.investorName, logo: inv.investorLogo });
         investmentsToCreate.push({
-          investorId: inv.investId,
+          investorId: inv.investorId,
           investorType,
           fundedId: projectData.project_id,
           fundedType: "Project",
-          round: String(inv.facDate || ""),
-          amount: null,
-          date: inv.facDate ? new Date(inv.facDate) : null,
-          lead: inv.ltNum === 1,
+          round: inv.round,
+          amount: inv.amount,
+          date: inv.date ? new Date(inv.date) : null,
+          lead: inv.isLead,
         });
       }
       await ensureEntities(entitiesToEnsure);
       await db.Investment.bulkCreate(investmentsToCreate, { ignoreDuplicates: true });
     }
 
+    // 对外投资项目 (修正后)
     if (projectData.investmentProjects?.investList && projectData.investmentProjects.investList.length > 0) {
       const investmentsToCreate = [];
       const entitiesToEnsure = [];
       for (const item of projectData.investmentProjects.investList) {
-        if (!item.itemId) continue;
-        const fundedType = normalizeEntityType({ item_type: item.item_type || 1 });
+        if (!item.fundedId) continue;
+        const fundedType = normalizeEntityType({ item_type: item.item_type });
         if (!fundedType) continue;
 
-        entitiesToEnsure.push({ item_type: item.item_type || 1, id: item.itemId, name: item.itemName, logo: item.imgUrl });
+        entitiesToEnsure.push({ item_type: item.item_type, id: item.fundedId, name: item.fundedName, logo: item.fundedLogo });
         investmentsToCreate.push({
           investorId: projectData.project_id,
           investorType: "Project",
-          fundedId: item.itemId,
+          fundedId: item.fundedId,
           fundedType,
-          round: `investmentProjects|${item.facRounds || ""}`,
-          amount: null,
-          date: null,
-          lead: false,
+          round: item.round,
+          amount: item.amount,
+          date: item.date ? new Date(item.date) : null,
+          lead: item.isLead,
         });
       }
       await ensureEntities(entitiesToEnsure);
