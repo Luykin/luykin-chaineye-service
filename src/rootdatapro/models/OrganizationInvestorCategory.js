@@ -34,7 +34,11 @@ module.exports = (sequelize) => {
       tableName: "RootdataOrganizationInvestorCategories",
       timestamps: false,
       indexes: [
-        { unique: true, fields: ["organizationId", "categoryId"] },
+        {
+          name: "unique_org_category_idx",
+          unique: true,
+          fields: ["organizationId", "categoryId"],
+        },
       ],
     }
   );
