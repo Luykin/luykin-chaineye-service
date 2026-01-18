@@ -144,15 +144,25 @@ db.InvestorCategory.belongsToMany(db.Organization, {
 
 // --- 投资关系 (多态关联) ---
 
-// 一个投资关系属于一个被投项目（Project 主键为 project_id）
-db.Investment.belongsTo(db.Project, {
-  foreignKey: "fundedProjectId",
-  targetKey: "project_id",
-  as: "FundedProject",
-});
+// --- 投资关系 (多态关联) ---
+// Investment 模型使用 fundedId/fundedType + investorId/investorType 作为多态字段。
+// 注意：Project/Organization 既可能是投资方，也可能是被投资方；Person 仅作为投资方。
+
+// Project 被投资 (fundedType = Project)
 db.Project.hasMany(db.Investment, {
-  foreignKey: "fundedProjectId",
+  foreignKey: "fundedId",
   sourceKey: "project_id",
+  constraints: false,
+  scope: { fundedType: "Project" },
+  as: "FundingRounds",
+});
+
+// Organization 被投资 (fundedType = Organization)
+db.Organization.hasMany(db.Investment, {
+  foreignKey: "fundedId",
+  sourceKey: "org_id",
+  constraints: false,
+  scope: { fundedType: "Organization" },
   as: "FundingRounds",
 });
 
