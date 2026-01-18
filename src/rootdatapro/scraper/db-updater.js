@@ -46,12 +46,31 @@ async function updateOrganization(orgData) {
       }
     }
 
+    // 机构分类 (InvestorCategory)
+    if (orgData.categories && orgData.categories.length > 0) {
+      for (const c of orgData.categories) {
+        if (!c?.category_id) continue;
+        await db.InvestorCategory.findOrCreate({
+          where: { category_id: c.category_id },
+          defaults: { category_id: c.category_id, category_name: c.category_name },
+        });
+
+        await db.OrganizationInvestorCategory.findOrCreate({
+          where: { organizationId: orgData.org_id, categoryId: c.category_id },
+          defaults: { organizationId: orgData.org_id, categoryId: c.category_id },
+        });
+      }
+    }
+
     // 机构对外投资关系 -> Investment
     if (orgData.investments && orgData.investments.length > 0) {
       for (const inv of orgData.investments) {
         if (!inv.item_id) continue;
 
-        const fundedType = inv.item_type === 2 ? "Organization" : "Project";
+        let fundedType;
+        if (inv.item_type === 2) fundedType = "Organization";
+        else if (inv.item_type === 1) fundedType = "Project";
+        else continue;
 
         if (fundedType === "Project") {
           await db.Project.findOrCreate({
@@ -238,8 +257,6 @@ async function updateProject(projectData) {
       token_launch_time: projectData.token_launch_time,
       contracts: projectData.contracts,
       support_exchanges: projectData.support_exchanges,
-      tags: projectData.tags,
-      ecosystems: projectData.ecosystems,
       heat: projectData.heat,
       heat_rank: projectData.heat_rank,
       influence: projectData.influence,
@@ -267,6 +284,40 @@ async function updateProject(projectData) {
       }
     }
 
+    // Project <-> Tag
+    if (projectData.tags && projectData.tags.length > 0) {
+      for (const t of projectData.tags) {
+        if (!t?.tag_id) continue;
+
+        await db.Tag.findOrCreate({
+          where: { tag_id: t.tag_id },
+          defaults: { tag_id: t.tag_id, tag_name: t.tag_name },
+        });
+
+        await db.ProjectTag.findOrCreate({
+          where: { projectId: projectData.project_id, tagId: t.tag_id },
+          defaults: { projectId: projectData.project_id, tagId: t.tag_id },
+        });
+      }
+    }
+
+    // Project <-> Ecosystem
+    if (projectData.ecosystems && projectData.ecosystems.length > 0) {
+      for (const e of projectData.ecosystems) {
+        if (!e?.ecosystem_id) continue;
+
+        await db.Ecosystem.findOrCreate({
+          where: { ecosystem_id: e.ecosystem_id },
+          defaults: { ecosystem_id: e.ecosystem_id, ecosystem_name: e.ecosystem_name },
+        });
+
+        await db.ProjectEcosystem.findOrCreate({
+          where: { projectId: projectData.project_id, ecosystemId: e.ecosystem_id },
+          defaults: { projectId: projectData.project_id, ecosystemId: e.ecosystem_id },
+        });
+      }
+    }
+
     // 更新融资投资方 -> Investment
     if (projectData.investors?.investList && projectData.investors.investList.length > 0) {
       for (const inv of projectData.investors.investList) {
@@ -289,14 +340,14 @@ async function updateProject(projectData) {
             investorType: "Organization",
             fundedId: projectData.project_id,
             fundedType: "Project",
-            round: null,
+            round: String(inv.facDate || ""),
           },
           defaults: {
             investorId: inv.investId,
             investorType: "Organization",
             fundedId: projectData.project_id,
             fundedType: "Project",
-            round: null,
+            round: String(inv.facDate || ""),
             amount: null,
             date: inv.facDate ? new Date(inv.facDate) : null,
             lead: inv.ltNum === 1,
