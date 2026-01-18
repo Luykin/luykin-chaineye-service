@@ -32,19 +32,29 @@ function collectIdsByType(items, typeKey, idKey) {
 async function batchFetchEntities(entityType, ids) {
   if (!ids || ids.size === 0) return {};
   const idArray = [...ids];
-  let Model;
-  if (entityType === "Project") Model = db.Project;
-  else if (entityType === "Organization") Model = db.Organization;
-  else if (entityType === "Person") Model = db.Person;
-  else return {};
+  let Model, idColumn;
+
+  if (entityType === "Project") {
+    Model = db.Project;
+    idColumn = "project_id";
+  } else if (entityType === "Organization") {
+    Model = db.Organization;
+    idColumn = "org_id";
+  } else if (entityType === "Person") {
+    Model = db.Person;
+    idColumn = "people_id";
+  } else {
+    return {};
+  }
 
   const rows = await Model.findAll({
-    where: { id: idArray },
+    where: { [idColumn]: idArray },
     attributes: { exclude: ["createdAt", "updatedAt"] },
   });
+
   const res = {};
   for (const row of rows) {
-    res[row.id] = row.toJSON();
+    res[row[idColumn]] = row.toJSON();
   }
   return res;
 }

@@ -113,6 +113,9 @@
         style="text-align: center; padding: 20px; display: none"
       >
         <div style="color: #6b7280">正在加载配额信息...</div>
+        <div id="rootdata-quota-reqid-wrap" style="display:none;margin-top:8px;color:#6b7280;font-size:13px;">
+          请求ID：<code id="rootdata-quota-reqid-text" style="color:#374151;background:#eef2ff;padding:2px 6px;border-radius:4px"></code>
+        </div>
       </div>
 
       <!-- 错误提示 -->
@@ -227,6 +230,9 @@
           style="color: #6b7280; font-size: 13px"
           id="rootdata-crawl-message"
         ></div>
+        <div id="rootdata-crawl-reqid-wrap" style="display:none;margin-top:8px;color:#6b7280;font-size:13px;">
+          请求ID：<code id="rootdata-crawl-reqid-text" style="color:#374151;background:#eef2ff;padding:2px 6px;border-radius:4px"></code>
+        </div>
       </div>
 
       <!-- 爬取结果 -->
@@ -259,108 +265,6 @@
       </div>
     </div>
   </div>
-
-  <script>
-    (function(){
-      const btn = document.getElementById('rootdata-force-btn');
-      const input = document.getElementById('rootdata-force-input');
-      const statusEl = document.getElementById('rootdata-force-status');
-      const reqIdWrap = document.getElementById('rootdata-force-reqid-wrap');
-      const reqIdText = document.getElementById('rootdata-force-reqid-text');
-      let busy = false;
-      let debounceTimer = null;
-
-      function setStatus(text, ok){
-        statusEl.style.display = 'block';
-        statusEl.style.background = ok ? '#ecfdf5' : '#fef2f2';
-        statusEl.style.color = ok ? '#065f46' : '#991b1b';
-        statusEl.textContent = text;
-      }
-
-      function buildParams(v){
-        const params = new URLSearchParams();
-        // RootData 链接
-        if (/rootdata\.com\//i.test(v)) {
-          if (!/\/Projects\/detail\//i.test(v) && !/\/Investors\/detail\//i.test(v) && !/\/member\//i.test(v)) {
-            return { error: 'RootData 链接格式不正确，应包含 /Projects/detail 或 /Investors/detail 或 /member' };
-          }
-          if (!/[?&]k=/.test(v)) {
-            return { error: 'RootData 链接缺少 k= 参数' };
-          }
-          params.set('projectLink', v);
-          return { params };
-        }
-        // Twitter 链接
-        if (/^https?:\/\/x\.com\//i.test(v)) {
-          if (!/^https?:\/\/x\.com\/[^/]+\/?$/i.test(v)) {
-            return { error: 'Twitter 链接应为 https://x.com/<handle>' };
-          }
-          params.set('twitterUrl', v);
-          return { params };
-        }
-        // 关键词
-        if (v.length < 2) {
-          return { error: '关键词长度至少为 2 个字符' };
-        }
-        params.set('keyword', v.toLowerCase());
-        return { params };
-      }
-
-      async function submit(){
-        if (busy) return; // 并发保护
-        const v = (input.value || '').trim();
-        if (!v) return setStatus('请输入内容', false);
-
-        const { params, error } = buildParams(v);
-        if (error) return setStatus(error, false);
-
-        const url = '/api/rootdata/force-verify';
-        try {
-          busy = true;
-          btn.disabled = true;
-          const oldText = btn.textContent;
-          btn.textContent = '处理中...';
-          // 生成 UUID v4 作为 reqId，满足后端 isValidRequestId 校验
-          const reqId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-          });
-          setStatus(`请求中... reqId=${reqId}`, true);
-
-          const resp = await fetch(url + '?' + params.toString(), {
-            method: 'GET',
-            headers: { 'x-request-id': reqId },
-            credentials: 'include'
-          });
-          const data = await resp.json().catch(() => ({}));
-          if (resp.ok) {
-            const echoedReqId = data?.requestId || reqId;
-            setStatus('已触发成功：' + (data?.message || 'OK') + ` | reqId=${echoedReqId}` , true);
-            if (reqIdText) { reqIdText.textContent = echoedReqId; }
-            if (reqIdWrap) { reqIdWrap.style.display = 'block'; }
-          } else {
-            setStatus('触发失败：' + (data?.message || resp.statusText) + ` | reqId=${reqId}` , false);
-            if (reqIdText) { reqIdText.textContent = reqId; }
-            if (reqIdWrap) { reqIdWrap.style.display = 'block'; }
-          }
-
-          btn.textContent = oldText;
-          btn.disabled = false;
-          busy = false;
-        } catch (e) {
-          setStatus('请求异常：' + (e?.message || e), false);
-          btn.disabled = false;
-          busy = false;
-        }
-      }
-
-      btn && btn.addEventListener('click', () => {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(submit, 400);
-      });
-    })();
-  </script>
 
   <!-- 📊 按天查询新增数据 -->
   <div
@@ -402,22 +306,6 @@
       >
         🔍 查询
       </button>
-      <!-- <button
-        id="rootdata-set-initial-btn"
-        style="
-          margin-left: 10px;
-          padding: 8px 20px;
-          background: #10b981;
-          color: white;
-          border: none;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 600;
-        "
-      >
-        🔄 设为初始项目
-      </button> -->
     </div>
 
     <!-- 加载状态 -->
@@ -426,6 +314,9 @@
       style="text-align: center; padding: 40px; display: none"
     >
       <div style="color: #6b7280; font-size: 16px">正在加载数据...</div>
+      <div id="rootdata-daily-reqid-wrap" style="display:none;margin-top:8px;color:#6b7280;font-size:13px;">
+        请求ID：<code id="rootdata-daily-reqid-text" style="color:#374151;background:#eef2ff;padding:2px 6px;border-radius:4px"></code>
+      </div>
     </div>
 
     <!-- 错误提示 -->
@@ -580,3 +471,116 @@
     color: #3b82f6;
   }
 </style>
+
+<script>
+  (function(){
+    // --- 通用函数 ---
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    }
+
+    function showReqId(wrapId, textId, reqId) {
+      const wrap = document.getElementById(wrapId);
+      const text = document.getElementById(textId);
+      if (wrap && text) {
+        text.textContent = reqId;
+        wrap.style.display = 'block';
+      }
+    }
+
+    function hideReqId(wrapId) {
+      const wrap = document.getElementById(wrapId);
+      if (wrap) wrap.style.display = 'none';
+    }
+
+    // --- 强制 API 更新 ---
+    const forceBtn = document.getElementById('rootdata-force-btn');
+    const forceInput = document.getElementById('rootdata-force-input');
+    const forceStatusEl = document.getElementById('rootdata-force-status');
+    let forceBusy = false;
+
+    function setForceStatus(text, ok) {
+      forceStatusEl.style.display = 'block';
+      forceStatusEl.style.background = ok ? '#ecfdf5' : '#fef2f2';
+      forceStatusEl.style.color = ok ? '#065f46' : '#991b1b';
+      forceStatusEl.textContent = text;
+    }
+
+    function buildForceParams(v) {
+      const params = new URLSearchParams();
+      if (/rootdata\.com\//i.test(v)) {
+        if (!/\/Projects\/detail\//i.test(v) && !/\/Investors\/detail\//i.test(v) && !/\/member\//i.test(v)) {
+          return { error: 'RootData 链接格式不正确，应包含 /Projects/detail 或 /Investors/detail 或 /member' };
+        }
+        if (!/[?&]k=/.test(v)) return { error: 'RootData 链接缺少 k= 参数' };
+        params.set('projectLink', v);
+        return { params };
+      }
+      if (/^https?:\/\/x\.com\//i.test(v)) {
+        if (!/^https?:\/\/x\.com\/[^/]+\/?$/i.test(v)) return { error: 'Twitter 链接应为 https://x.com/<handle>' };
+        params.set('twitterUrl', v);
+        return { params };
+      }
+      if (v.length < 2) return { error: '关键词长度至少为 2 个字符' };
+      params.set('keyword', v.toLowerCase());
+      return { params };
+    }
+
+    async function submitForceUpdate() {
+      if (forceBusy) return;
+      const v = (forceInput.value || '').trim();
+      if (!v) return setForceStatus('请输入内容', false);
+
+      const { params, error } = buildForceParams(v);
+      if (error) return setForceStatus(error, false);
+
+      const url = '/api/rootdata/force-verify';
+      try {
+        forceBusy = true;
+        forceBtn.disabled = true;
+        const oldText = forceBtn.textContent;
+        forceBtn.textContent = '处理中...';
+        
+        const reqId = generateUUID();
+        setForceStatus(`请求中...`, true);
+        showReqId('rootdata-force-reqid-wrap', 'rootdata-force-reqid-text', reqId);
+
+        const resp = await fetch(url + '?' + params.toString(), {
+          method: 'GET',
+          headers: { 'x-request-id': reqId },
+          credentials: 'include'
+        });
+        const data = await resp.json().catch(() => ({}));
+        const echoedReqId = data?.requestId || reqId;
+        showReqId('rootdata-force-reqid-wrap', 'rootdata-force-reqid-text', echoedReqId);
+
+        if (resp.ok) {
+          setForceStatus('已触发成功：' + (data?.message || 'OK'), true);
+        } else {
+          setForceStatus('触发失败：' + (data?.message || resp.statusText), false);
+        }
+
+        forceBtn.textContent = oldText;
+        forceBtn.disabled = false;
+        forceBusy = false;
+      } catch (e) {
+        setForceStatus('请求异常：' + (e?.message || e), false);
+        forceBtn.disabled = false;
+        forceBusy = false;
+      }
+    }
+
+    forceBtn && forceBtn.addEventListener('click', () => {
+      let debounceTimer = null;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(submitForceUpdate, 400);
+    });
+
+    // --- 其他功能的脚本可以放在这里 ---
+
+  })();
+</script>
