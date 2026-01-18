@@ -333,10 +333,10 @@ async function initializeAndStartServer() {
   app.use("/api/rootdata", xHuntRootdataRoutes);
 
   // RootdataPro: 触发爬虫并入库
-  app.use("/api/rootdatapro", rootdataProRoutes);
+  app.use("/api/rootdatapro/internal", rootdataProRoutes);
 
   // RootdataPro: open 查询接口
-  app.use("/api/open", rootdataProOpenRoutes);
+  app.use("/api/rootdatapro/open", rootdataProOpenRoutes);
 
   // 管理后台（登录、会话、管理员基础配置）
   app.use("/admin", adminRoutes);
