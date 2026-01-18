@@ -138,6 +138,7 @@ module.exports = (sequelize) => {
         { unique: true, fields: ["project_id"] },
         { fields: ["project_name"] },
         { fields: ["token_symbol"] },
+        { fields: ["X"] },
       ],
     }
   );

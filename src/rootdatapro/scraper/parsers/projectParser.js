@@ -209,11 +209,32 @@ function parseProjectPage({ mainDom, nuxtDataJson, url }) {
 
       if (label === "Total Raised") {
         parsedData.total_funding = value;
+        break;
       }
-      // 在这里可以添加对 ATH, ATL 等其他字段的解析
+    }
+
+    if (!parsedData.total_funding) {
+      const comparisonTableRows = dom.window.document.querySelectorAll(
+        ".comparison_table_tr"
+      );
+      for (const row of comparisonTableRows) {
+        const labelEl = row.querySelector(".comparison_table_td:first-child");
+        if (labelEl && labelEl.textContent.trim() === "Total Raised") {
+          const valueEl = row.querySelector(".fundraisingTotal span");
+          if (valueEl) {
+            parsedData.total_funding = valueEl.textContent.trim();
+            break;
+          }
+        }
+      }
     }
   } catch (e) {
-    console.error("[projectParser] .token_info 解析失败:", e);
+    console.error("[projectParser] Total Raised 解析失败:", e);
+  }
+
+  // 如果 DOM 上无法解析到 Total Raised，则用 investors.facAmountUS 兜底
+  if (!parsedData.total_funding && parsedData.investors?.facAmountUS) {
+    parsedData.total_funding = parsedData.investors.facAmountUS;
   }
 
   // --- X 卡片信息 ---

@@ -78,7 +78,7 @@ module.exports = (sequelize) => {
     {
       tableName: "RootdataOrganizations",
       timestamps: true,
-      indexes: [{ unique: true, fields: ["org_id"] }, { fields: ["org_name"] }],
+      indexes: [{ unique: true, fields: ["org_id"] }, { fields: ["org_name"] }, { fields: ["X"] }],
     }
   );
 };
