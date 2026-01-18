@@ -76,7 +76,7 @@
     try {
       scrapeBtn.disabled = true;
       prettyPrint(scrapeResult, { loading: true });
-      const data = await jsonFetch('/api/rootdatapro/scrape', {
+      const data = await jsonFetch('/api/rootdatapro/internal/scrape', {
         method: 'POST',
         body: JSON.stringify({ url: scrapeUrl.value }),
       });
@@ -92,7 +92,7 @@
     try {
       prettyPrint(qResult, { loading: true });
       const id = $('rdp-project-id').value;
-      const data = await jsonFetch('/api/open/get_item?project_id=' + encodeURIComponent(id), { method: 'GET' });
+      const data = await jsonFetch('/api/rootdatapro/open/get_item?project_id=' + encodeURIComponent(id), { method: 'GET' });
       prettyPrint(qResult, data);
     } catch (e) {
       prettyPrint(qResult, { success: false, error: String(e.message || e) });
@@ -103,7 +103,7 @@
     try {
       prettyPrint(qResult, { loading: true });
       const id = $('rdp-org-id').value;
-      const data = await jsonFetch('/api/open/get_org?org_id=' + encodeURIComponent(id), { method: 'GET' });
+      const data = await jsonFetch('/api/rootdatapro/open/get_org?org_id=' + encodeURIComponent(id), { method: 'GET' });
       prettyPrint(qResult, data);
     } catch (e) {
       prettyPrint(qResult, { success: false, error: String(e.message || e) });
@@ -114,7 +114,7 @@
     try {
       prettyPrint(qResult, { loading: true });
       const id = $('rdp-people-id').value;
-      const data = await jsonFetch('/api/open/get_people?people_id=' + encodeURIComponent(id), { method: 'GET' });
+      const data = await jsonFetch('/api/rootdatapro/open/get_people?people_id=' + encodeURIComponent(id), { method: 'GET' });
       prettyPrint(qResult, data);
     } catch (e) {
       prettyPrint(qResult, { success: false, error: String(e.message || e) });
