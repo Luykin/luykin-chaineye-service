@@ -81,10 +81,8 @@ async function attachInvestorEntities(investments) {
     else if (inv.investorType === "Organization") investorSummary = orgMap[inv.investorId] || null;
     else if (inv.investorType === "Person") investorSummary = personMap[inv.investorId] || null;
 
-    result.push({
-      ...inv.toJSON(),
-      investor: investorSummary,
-    });
+    const { investorType, fundedType, ...rest } = inv.toJSON();
+    result.push({ ...rest, investor: investorSummary });
   }
   return result;
 }
@@ -105,10 +103,8 @@ async function attachFundedEntities(investments) {
     if (inv.fundedType === "Project") fundedSummary = projectMap[inv.fundedId] || null;
     else if (inv.fundedType === "Organization") fundedSummary = orgMap[inv.fundedId] || null;
 
-    result.push({
-      ...inv.toJSON(),
-      funded: fundedSummary,
-    });
+    const { investorType, fundedType, ...rest } = inv.toJSON();
+    result.push({ ...rest, funded: fundedSummary });
   }
   return result;
 }
@@ -126,7 +122,7 @@ router.get("/get_item", async (req, res) => {
       include: [
         { model: db.Tag, as: "Tags", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
         { model: db.Ecosystem, as: "Ecosystems", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
-        { model: db.Person, as: "TeamMembers", through: { attributes: ["position"] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
+        { model: db.Person, as: "TeamMembers", through: { attributes: ["position"] }, attributes: ["people_id", "people_name", "head_img", "X"] },
         { model: db.Investment, as: "InvestmentsMade", attributes: { exclude: ["id", "createdAt", "updatedAt"] } },
       ],
     });
@@ -172,7 +168,7 @@ router.get("/get_org", async (req, res) => {
       include: [
         { model: db.Tag, as: "Tags", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
         { model: db.InvestorCategory, as: "Categories", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
-        { model: db.Person, as: "TeamMembers", through: { attributes: ["position"] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
+        { model: db.Person, as: "TeamMembers", through: { attributes: ["position"] }, attributes: ["people_id", "people_name", "head_img", "X"] },
         { model: db.Investment, as: "InvestmentsMade", attributes: { exclude: ["id", "createdAt", "updatedAt"] } },
       ],
     });
