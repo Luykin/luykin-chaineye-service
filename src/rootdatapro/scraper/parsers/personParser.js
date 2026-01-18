@@ -1,4 +1,6 @@
 const typemapManager = require("../typemap/manager");
+const { JSDOM } = require("jsdom");
+const { parseUnitNumber } = require("./utils");
 
 /**
  * 解析个人页面的内容以提取数据。
@@ -54,6 +56,31 @@ function parsePersonPage({ mainDom, nuxtDataJson, url }) {
       influence_rank: "-",
       investments,
     };
+
+    if (mainDom) {
+      try {
+        const dom = new JSDOM(mainDom);
+        const analysisItems = dom.window.document.querySelectorAll(
+          ".analysis_card .analysis .item"
+        );
+        for (const item of analysisItems) {
+          const label = (
+            item.querySelector(".sub_title")?.textContent || ""
+          ).trim();
+          const value = (
+            item.querySelector(".analyze_value")?.textContent || ""
+          ).trim();
+
+          if (label === "Followers") {
+            parsedData.followers = parseUnitNumber(value);
+          } else if (label === "Following") {
+            parsedData.following = parseUnitNumber(value);
+          }
+        }
+      } catch (e) {
+        console.error("[personParser] .analysis_card 解析失败:", e);
+      }
+    }
 
     return parsedData;
   } catch (error) {

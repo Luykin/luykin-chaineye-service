@@ -1,5 +1,6 @@
 const { JSDOM } = require("jsdom");
 const typemapManager = require("../typemap/manager");
+const { parseUnitNumber } = require("./utils");
 
 function parseItemFromRootdataHref({ href, name, logo }) {
   const absoluteUrl = href
@@ -117,6 +118,28 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
     parsedData.following = orgDetail.friendsCount;
   } catch (e) {
     console.error("[organizationParser] 基础字段解析失败:", e);
+  }
+
+  try {
+    const analysisItems = dom.window.document.querySelectorAll(
+      ".analysis_card .analysis .item"
+    );
+    for (const item of analysisItems) {
+      const label = (
+        item.querySelector(".sub_title")?.textContent || ""
+      ).trim();
+      const value = (
+        item.querySelector(".analyze_value")?.textContent || ""
+      ).trim();
+
+      if (label === "Followers") {
+        parsedData.followers = parseUnitNumber(value);
+      } else if (label === "Following") {
+        parsedData.following = parseUnitNumber(value);
+      }
+    }
+  } catch (e) {
+    console.error("[organizationParser] .analysis_card 解析失败:", e);
   }
 
   try {

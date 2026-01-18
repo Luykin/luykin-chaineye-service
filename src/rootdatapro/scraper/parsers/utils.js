@@ -26,4 +26,26 @@ function getNuxtData(htmlContent) {
   }
 }
 
-module.exports = { getNuxtData };
+function parseUnitNumber(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v !== "string") return null;
+
+  const s = v.trim().toLowerCase().replace(/,/g, "");
+  if (!s) return null;
+
+  const match = s.match(/^(-?\d+(?:\.\d+)?)([mk])?$/);
+  if (!match) {
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? Math.round(n) : null;
+  }
+
+  const num = parseFloat(match[1]);
+  if (!Number.isFinite(num)) return null;
+  const unit = match[2] || "";
+  if (unit === "k") return Math.round(num * 1e3);
+  if (unit === "m") return Math.round(num * 1e6);
+  return Math.round(num);
+}
+
+module.exports = { getNuxtData, parseUnitNumber };
