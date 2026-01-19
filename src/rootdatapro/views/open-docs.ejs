@@ -720,13 +720,8 @@
 
         <div class="row" style="justify-content: space-between; align-items: center;">
           <div class="row">
-            <span class="pill" id="t-llm-format">Format</span>
-            <select id="llm-format" class="llm-select" aria-label="LLM Format">
-              <option value="universal">Universal Markdown</option>
-              <option value="chatgpt">ChatGPT</option>
-              <option value="claude">Claude</option>
-              <option value="gemini">Gemini</option>
-            </select>
+            <span class="pill" id="t-llm-format">For LLMs</span>
+            <span class="pill" id="t-llm-models">ChatGPT / Claude / Gemini / Others</span>
 
             <span class="pill" id="t-llm-lang">Language</span>
             <select id="llm-lang" class="llm-select" aria-label="LLM Language">
@@ -1268,7 +1263,6 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
 
       function buildLLMMarkdown(opts) {
         opts = opts || {};
-        var format = opts.format || 'universal';
         var lang = opts.lang || 'auto';
         if (lang === 'auto') lang = getPageLang();
 
@@ -1276,15 +1270,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         var title = getTextById('t-title') || (lang === 'zh' ? 'RootData API 增强服务' : 'RootData API Enhanced Services');
 
         var intro = [];
-        if (format === 'chatgpt') {
-          intro.push('You are ChatGPT. Learn the following API documentation and answer future questions using it.');
-        } else if (format === 'claude') {
-          intro.push('You are Claude. Please ingest the following API documentation and use it as reference.');
-        } else if (format === 'gemini') {
-          intro.push('You are Gemini. Please ingest the following API documentation and use it as reference.');
-        } else {
-          intro.push(lang === 'zh' ? '请学习下面的 API 文档，并在后续对话中以此为准回答问题。' : 'Please learn the API documentation below and use it as the source of truth for future answers.');
-        }
+        intro.push(lang === 'zh' ? '请学习下面的 API 文档，并在后续对话中以此为准回答问题。' : 'Please learn the API documentation below and use it as the source of truth for future answers.');
 
         var out = [];
         out.push('# ' + title);
