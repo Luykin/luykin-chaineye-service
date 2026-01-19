@@ -621,37 +621,50 @@ router.get("/get_item", proApiKeyAuth(2), async (req, res) => {
   }
 
   try {
-    const project = await db.Project.findByPk(project_id, {
-      attributes: { exclude: ["createdAt", "updatedAt"] },
-      include: [
-        { model: db.Tag, as: "Tags", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
-        { model: db.Ecosystem, as: "Ecosystems", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
-        { model: db.Person, as: "TeamMembers", through: { attributes: ["position"] }, attributes: ["people_id", "people_name", "head_img", "X"] },
-        { model: db.Investment, as: "InvestmentsMade", attributes: { exclude: ["id", "createdAt", "updatedAt"] } },
-      ],
-    });
+    // 1. 并行执行所有数据库查询
+    const [project, fundingRoundsRaw, investmentsMadeRaw] = await Promise.all([
+      // 1.1 获取项目主体信息（不含 include，速度最快）
+      db.Project.findByPk(project_id, {
+        attributes: { exclude: ["createdAt", "updatedAt"] },
+        include: [
+          { model: db.Tag, as: "Tags", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
+          { model: db.Ecosystem, as: "Ecosystems", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
+          { model: db.Person, as: "TeamMembers", through: { attributes: ["position"] }, attributes: ["people_id", "people_name", "head_img", "X"] },
+        ]
+      }),
+      // 1.2 获取项目的融资轮次
+      db.Investment.findAll({
+        where: { fundedType: "Project", fundedId: project_id },
+        attributes: { exclude: ["id", "createdAt", "updatedAt"] },
+        order: [["date", "DESC"]],
+      }),
+      // 1.3 获取项目作为投资方进行的投资
+      db.Investment.findAll({
+        where: { investorType: "Project", investorId: project_id },
+        attributes: { exclude: ["id", "createdAt", "updatedAt"] },
+        order: [["date", "DESC"]],
+      }),
+    ]);
 
+    // 2. 如果项目不存在，提前返回
     if (!project) {
       return res.status(404).json({ success: false, error: "NOT_FOUND" });
     }
 
-    const fundingRounds = await db.Investment.findAll({
-      where: { fundedType: "Project", fundedId: project_id },
-      attributes: { exclude: ["id", "createdAt", "updatedAt"] },
-      order: [["date", "DESC"]],
-    });
+    // 3. 并行处理获取到的原始数据，附加关联实体信息
+    const [fundingRounds, investmentsMade] = await Promise.all([
+      attachInvestorEntities(fundingRoundsRaw),
+      attachFundedEntities(investmentsMadeRaw),
+    ]);
 
-    const fundingRoundsWithInvestors = await attachInvestorEntities(fundingRounds);
-
+    // 4. 组装最终结果
     const projectJson = project.toJSON();
-    if (projectJson.InvestmentsMade) {
-      projectJson.InvestmentsMade = await attachFundedEntities(project.InvestmentsMade);
-    }
+    projectJson.InvestmentsMade = investmentsMade; // 将处理后的对外投资数据挂载到项目上
 
     return res.json({
       success: true,
       project: projectJson,
-      fundingRounds: fundingRoundsWithInvestors,
+      fundingRounds: fundingRounds,
     });
   } catch (err) {
     console.error("[rootdatapro] /open/get_item error", err);
@@ -667,37 +680,50 @@ router.get("/get_org", proApiKeyAuth(2), async (req, res) => {
   }
 
   try {
-    const org = await db.Organization.findByPk(org_id, {
-      attributes: { exclude: ["createdAt", "updatedAt"] },
-      include: [
-        { model: db.Tag, as: "Tags", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
-        { model: db.InvestorCategory, as: "Categories", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
-        { model: db.Person, as: "TeamMembers", through: { attributes: ["position"] }, attributes: ["people_id", "people_name", "head_img", "X"] },
-        { model: db.Investment, as: "InvestmentsMade", attributes: { exclude: ["id", "createdAt", "updatedAt"] } },
-      ],
-    });
+    // 1. 并行执行所有数据库查询
+    const [org, fundingRoundsRaw, investmentsMadeRaw] = await Promise.all([
+      // 1.1 获取机构主体信息（移除 InvestmentsMade include）
+      db.Organization.findByPk(org_id, {
+        attributes: { exclude: ["createdAt", "updatedAt"] },
+        include: [
+          { model: db.Tag, as: "Tags", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
+          { model: db.InvestorCategory, as: "Categories", through: { attributes: [] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
+          { model: db.Person, as: "TeamMembers", through: { attributes: ["position"] }, attributes: ["people_id", "people_name", "head_img", "X"] },
+        ],
+      }),
+      // 1.2 获取机构的融资轮次
+      db.Investment.findAll({
+        where: { fundedType: "Organization", fundedId: org_id },
+        attributes: { exclude: ["id", "createdAt", "updatedAt"] },
+        order: [["date", "DESC"]],
+      }),
+      // 1.3 获取机构作为投资方进行的投资
+      db.Investment.findAll({
+        where: { investorType: "Organization", investorId: org_id },
+        attributes: { exclude: ["id", "createdAt", "updatedAt"] },
+        order: [["date", "DESC"]],
+      }),
+    ]);
 
+    // 2. 如果机构不存在，提前返回
     if (!org) {
       return res.status(404).json({ success: false, error: "NOT_FOUND" });
     }
 
-    const fundingRounds = await db.Investment.findAll({
-      where: { fundedType: "Organization", fundedId: org_id },
-      attributes: { exclude: ["id", "createdAt", "updatedAt"] },
-      order: [["date", "DESC"]],
-    });
+    // 3. 并行处理获取到的原始数据，附加关联实体信息
+    const [fundingRounds, investmentsMade] = await Promise.all([
+      attachInvestorEntities(fundingRoundsRaw),
+      attachFundedEntities(investmentsMadeRaw),
+    ]);
 
-    const fundingRoundsWithInvestors = await attachInvestorEntities(fundingRounds);
-
+    // 4. 组装最终结果
     const orgJson = org.toJSON();
-    if (orgJson.InvestmentsMade) {
-      orgJson.InvestmentsMade = await attachFundedEntities(org.InvestmentsMade);
-    }
+    orgJson.InvestmentsMade = investmentsMade;
 
     return res.json({
       success: true,
       organization: orgJson,
-      fundingRounds: fundingRoundsWithInvestors,
+      fundingRounds: fundingRounds,
     });
   } catch (err) {
     console.error("[rootdatapro] /open/get_org error", err);
@@ -713,23 +739,35 @@ router.get("/get_people", proApiKeyAuth(2), async (req, res) => {
   }
 
   try {
-    const person = await db.Person.findByPk(people_id, {
-      attributes: { exclude: ["createdAt", "updatedAt"] },
-      include: [
-        { model: db.Project, as: "MemberOfProjects", through: { attributes: ["position"] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
-        { model: db.Organization, as: "MemberOfOrganizations", through: { attributes: ["position"] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
-        { model: db.Investment, as: "InvestmentsMade", attributes: { exclude: ["id", "createdAt", "updatedAt"] } },
-      ],
-    });
+    // 1. 并行执行所有数据库查询
+    const [person, investmentsMadeRaw] = await Promise.all([
+      // 1.1 获取人物主体信息（移除 InvestmentsMade include）
+      db.Person.findByPk(people_id, {
+        attributes: { exclude: ["createdAt", "updatedAt"] },
+        include: [
+          { model: db.Project, as: "MemberOfProjects", through: { attributes: ["position"] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
+          { model: db.Organization, as: "MemberOfOrganizations", through: { attributes: ["position"] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
+        ],
+      }),
+      // 1.2 获取人物作为投资方进行的投资
+      db.Investment.findAll({
+        where: { investorType: "Person", investorId: people_id },
+        attributes: { exclude: ["id", "createdAt", "updatedAt"] },
+        order: [["date", "DESC"]],
+      }),
+    ]);
 
+    // 2. 如果人物不存在，提前返回
     if (!person) {
       return res.status(404).json({ success: false, error: "NOT_FOUND" });
     }
 
+    // 3. 处理对外投资数据
+    const investmentsMade = await attachFundedEntities(investmentsMadeRaw);
+
+    // 4. 组装最终结果
     const personJson = person.toJSON();
-    if (personJson.InvestmentsMade) {
-      personJson.InvestmentsMade = await attachFundedEntities(person.InvestmentsMade);
-    }
+    personJson.InvestmentsMade = investmentsMade;
 
     return res.json({ success: true, people: personJson });
   } catch (err) {
