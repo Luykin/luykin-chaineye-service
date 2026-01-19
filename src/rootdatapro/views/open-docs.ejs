@@ -3,20 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RootData API 增强服务</title>
-  <meta name="description" content="RootData API 增强服务与开放接口文档：包含 APIKey 鉴权（pro-api-key）、额度/到期查询、项目/机构/人物详情、按生态/标签批量查询、按 X(Twitter) 账号查询、投资事件查询、批量详情与全文检索等能力。" />
-  <meta name="keywords" content="RootData, RootData API, RootData Pro, APIKey, pro-api-key, Web3, Crypto, VC, 投融资, 项目, 机构, 人物, X, Twitter, 投资事件, 批量查询, 全文检索" />
-  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
-  <link rel="canonical" href="https://rootdatapro.online/open-docs" />
+  <title>RootDataPro API Enhanced Services</title>
 
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="RootData API 增强服务 | Open Docs" />
-  <meta property="og:description" content="RootData API 增强服务与开放接口文档：APIKey 鉴权、额度查询、实体详情、批量查询、X 账号查询、投资事件查询等。" />
-  <meta property="og:url" content="https://rootdatapro.online/open-docs" />
-
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="RootData API 增强服务 | Open Docs" />
-  <meta name="twitter:description" content="RootData API 增强服务与开放接口文档：APIKey 鉴权、额度查询、批量查询、X 账号查询等。" />
 
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='30%25' cy='30%25' r='70%25'%3E%3Cstop offset='0%25' stop-color='%23FDBA74'/%3E%3Cstop offset='55%25' stop-color='%23F97316'/%3E%3Cstop offset='100%25' stop-color='%23C2410C'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect x='6' y='6' width='52' height='52' rx='14' fill='url(%23g)'/%3E%3Cpath d='M20 34c0-10 7-18 18-18 3 0 6 .6 8 1.7' fill='none' stroke='%230b1020' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M44 30c0 10-7 18-18 18-3 0-6-.6-8-1.7' fill='none' stroke='%23fff' stroke-width='6' stroke-linecap='round' opacity='.9'/%3E%3C/svg%3E" />
   <style>
@@ -353,7 +341,7 @@
           requiredV: 'Required',
           noneV: 'None',
           getItemDesc: 'Get project details by <code>project_id</code> (tags, ecosystems, team, investments).',
-          requiredLevel2V: 'Required (Credits: 2)',
+          requiredLevel2V: 'Required',
           requiredParam: 'required',
           getOrgDesc: 'Get organization details by <code>org_id</code> (tags, categories, team, investments).',
           getPeopleDesc: 'Get person details by <code>people_id</code> (related projects/orgs, investments).',
@@ -361,7 +349,7 @@
           projectsByTagsDesc: 'Obtain project information in bulk based on tag (POST JSON body: <code>tag_ids</code>). Supports pagination (<code>page</code>, <code>page_size</code>).',
           findByXDesc: 'Find matching people/projects/organizations by X (Twitter) handle (Query: <code>handle</code>).',
           queryInvestmentsDesc: 'Query investments by investor/funded/round/date/amount filters. Supports pagination (POST JSON body).',
-          batchGetDetailsDesc: 'Batch fetch entity details (Project/Organization/Person). Credits: 2 per item (POST JSON body: <code>items</code>).',
+          batchGetDetailsDesc: 'Batch fetch entity details (Project/Organization/Person).',
           searchDesc: 'Full-text search across Project/Organization/Person (Query: <code>q</code>). Supports pagination (<code>page</code>, <code>page_size</code>).',
           footer: 'Examples included: curl / JavaScript / Python / Java (pro-api-key).',
           featuresTitle: 'Features Included',
@@ -411,13 +399,13 @@
           serviceTitle: '增强服务说明',
           serviceDesc: '我们提供围绕 RootData 数据生态的增强能力与数据服务，例如：通过 X（推特）链接进行查询、组合查询与定制化数据流程等。',
           otherEndpoints: '你也可以将上面的 URL 替换为任意接口，例如：',
-          quotaDesc: '查询当前 APIKey 的额度/到期/状态信息。',
+          quotaDesc: '查询当前 APIKey 的到期/状态信息。',
           authK: '鉴权',
           queryK: 'Query',
           requiredV: '需要 APIKey',
           noneV: '无',
           getItemDesc: '根据 <code>project_id</code> 获取项目详情（含标签、生态、团队、投融资信息）。',
-          requiredLevel2V: '需要 APIKey（每次调用消耗 2 Credits）',
+          requiredLevel2V: '需要 APIKey',
           requiredParam: '必填',
           getOrgDesc: '根据 <code>org_id</code> 获取机构详情（含标签、分类、团队、投融资信息）。',
           getPeopleDesc: '根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。',
@@ -425,7 +413,7 @@
           projectsByTagsDesc: '基于标签批量获取项目信息（POST JSON 传参：<code>tag_ids</code>）。支持分页（<code>page</code>, <code>page_size</code>）。',
           findByXDesc: '通过 X（推特）账号查询匹配的人物/项目/机构信息（Query：<code>handle</code>）。',
           queryInvestmentsDesc: '按投资方/被投方/轮次/日期/金额等条件查询投资事件，支持分页（POST JSON）。',
-          batchGetDetailsDesc: '批量获取实体详情（Project/Organization/Person），每条消耗 2 Credits（积分）（POST JSON：<code>items</code>）。',
+          batchGetDetailsDesc: '批量获取实体详情（Project/Organization/Person）（POST JSON：<code>items</code>）。',
           searchDesc: '按关键词在 Project/Organization/Person 中检索（Query：<code>q</code>），支持分页（<code>page</code>, <code>page_size</code>）。',
           footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 pro-api-key）。',
           featuresTitle: '包含内容',
@@ -680,7 +668,7 @@
       <div class="callout">
         <div><strong id="t-auth-title">Authentication (Required)</strong></div>
         <div class="muted" style="margin-top:6px;">
-          <span id="t-auth-desc1">All endpoints require an <code>APIKey</code> and consume Credits.</span>
+          <span id="t-auth-desc1">All endpoints require an <code>APIKey</code>.</span>
           <br />
           <span id="t-auth-desc2">To get an <code>APIKey</code>, contact TG:</span>
           <a href="https://t.me/Niod88" target="_blank" rel="noreferrer">@Niod88</a>
@@ -780,7 +768,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-ecosystem-map-desc">Get ecosystem map list.</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-eco">Auth</div><div class="v">Required (Credits: 50)</div>
+          <div class="k" id="t-auth-k-eco">Auth</div><div class="v">Required</div>
           <div class="k" id="t-query-k-eco">Query</div><div class="v">None</div>
         </div>
         <details>
@@ -797,7 +785,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-tag-map-desc">Get tags map list.</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-tag">Auth</div><div class="v">Required (Credits: 50)</div>
+          <div class="k" id="t-auth-k-tag">Auth</div><div class="v">Required</div>
           <div class="k" id="t-query-k-tag">Query</div><div class="v">None</div>
         </div>
         <details>
@@ -814,7 +802,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-item-desc">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (Credits: 2)</div>
+          <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required</div>
           <div class="k" id="t-query-k-2">Query</div><div class="v"><code>project_id</code> (number, <span id="t-required-param">required</span>)</div>
         </div>
         <details>
@@ -990,7 +978,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-org-desc">Get organization details by <code>org_id</code> (tags, categories, team, investments).</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-3">Auth</div><div class="v" id="t-level2-2">Required (Credits: 2)</div>
+          <div class="k" id="t-auth-k-3">Auth</div><div class="v" id="t-level2-2">Required</div>
           <div class="k" id="t-query-k-3">Query</div><div class="v"><code>org_id</code> (number, <span id="t-required-param-2">required</span>)</div>
         </div>
         <details>
@@ -1007,7 +995,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-people-desc">Get person details by <code>people_id</code> (related projects/orgs, investments).</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-4">Auth</div><div class="v" id="t-level2-3">Required (Credits: 2)</div>
+          <div class="k" id="t-auth-k-4">Auth</div><div class="v" id="t-level2-3">Required</div>
           <div class="k" id="t-query-k-4">Query</div><div class="v"><code>people_id</code> (number, <span id="t-required-param-3">required</span>)</div>
         </div>
         <details>
@@ -1024,7 +1012,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-projects-by-ecosystems-desc">Obtain project information in bulk based on ecosystem (POST JSON body: <code>ecosystem_ids</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (Credits: 20)</div>
+          <div class="k">Auth</div><div class="v">Required</div>
           <div class="k">Body</div><div class="v"><code>ecosystem_ids</code> (array[number], required)<br><code>page</code> (number, optional)<br><code>page_size</code> (number, optional, max 200)</div>
         </div>
         <details>
@@ -1043,7 +1031,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-projects-by-tags-desc">Obtain project information in bulk based on tag (POST JSON body: <code>tag_ids</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (Credits: 20)</div>
+          <div class="k">Auth</div><div class="v">Required</div>
           <div class="k">Body</div><div class="v"><code>tag_ids</code> (array[number], required)<br><code>page</code> (number, optional)<br><code>page_size</code> (number, optional, max 200)</div>
         </div>
         <details>
@@ -1062,7 +1050,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-query-investments-desc">Query investments by investor/funded/round/date/amount filters. Supports pagination (POST JSON body).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (Credits: 30)</div>
+          <div class="k">Auth</div><div class="v">Required</div>
           <div class="k">Body</div><div class="v"><code>investor_filters</code>, <code>funded_filters</code>, <code>round_names</code>, <code>date_from</code>, <code>date_to</code>, <code>min_amount</code>, <code>max_amount</code>, <code>page</code>, <code>page_size</code></div>
         </div>
         <details>
@@ -1079,9 +1067,9 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <span class="method">POST</span>
           <span class="path">/batch_get_details</span>
         </div>
-        <div class="desc" id="t-batch-get-details-desc">Batch fetch entity details (Project/Organization/Person). Credits: 2 per item (POST JSON body: <code>items</code>).</div>
+        <div class="desc" id="t-batch-get-details-desc">Batch fetch entity details (Project/Organization/Person). (POST JSON body: <code>items</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (Credits: 2 / item)</div>
+          <div class="k">Auth</div><div class="v">Required</div>
           <div class="k">Body</div><div class="v"><code>items</code> (array[{"type","id"}], required; max 200)</div>
         </div>
         <details>
@@ -1100,7 +1088,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-search-desc">Full-text search across Project/Organization/Person (Query: <code>q</code>). Supports pagination (<code>page</code>, <code>page_size</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (Credits: 5)</div>
+          <div class="k">Auth</div><div class="v">Required</div>
           <div class="k">Query</div><div class="v"><code>q</code> (string, required)<br><code>entity_types</code> (optional, comma-separated: Project,Organization,Person)<br><code>page</code> (optional)<br><code>page_size</code> (optional, max 200)</div>
         </div>
         <details>
@@ -1117,7 +1105,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-find-by-x-desc">Find matching people/projects/organizations by X (Twitter) handle (Query: <code>handle</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (Credits: 2)</div>
+          <div class="k">Auth</div><div class="v">Required</div>
           <div class="k">Query</div><div class="v"><code>handle</code> (string, required)</div>
         </div>
         <details>
@@ -1135,7 +1123,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc">Get the current list of X hot projects.</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (Credits: 10)</div>
+          <div class="k">Auth</div><div class="v">Required</div>
           <div class="k">Body</div><div class="v">None</div>
         </div>
         <div class="soon-note">This endpoint is under development and will be available soon.</div>
@@ -1149,7 +1137,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc">Get the current list of hot people in X.</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (Credits: 10)</div>
+          <div class="k">Auth</div><div class="v">Required</div>
           <div class="k">Body</div><div class="v">None</div>
         </div>
         <div class="soon-note">This endpoint is under development and will be available soon.</div>

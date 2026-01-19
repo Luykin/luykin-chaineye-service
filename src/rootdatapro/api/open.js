@@ -12,7 +12,17 @@ function parseIntParam(v) {
 }
 
 router.get("/", (req, res) => {
-  const baseUrl = `rootdatapro.online`;
+  const requiredHost = "rootdatapro.online";
+
+  const forwardedHost = req.get("x-forwarded-host") || req.headers?.["x-forwarded-host"] || null;
+  const host = (forwardedHost || req.get("host") || req.headers?.host || "").toString().trim().toLowerCase();
+  const hostWithoutPort = host.split(":")[0];
+
+  if (hostWithoutPort !== requiredHost) {
+    return res.status(404).send("Not Found");
+  }
+
+  const baseUrl = requiredHost;
 
   const app = req.app;
   app.set("view engine", "ejs");
