@@ -28,10 +28,12 @@ module.exports = {
 			env: {
 				TZ: "Asia/Shanghai", // 设置时区为北京时间
 				NODE_ENV: "development",          // 开发环境变量
+				RDT_CRAWL_WORKERS: 4,
 			},
 			env_production: {
 				TZ: "Asia/Shanghai", // 设置时区为北京时间
 				NODE_ENV: "production",           // 生产环境变量
+				RDT_CRAWL_WORKERS: 4,
 			}
 		},
 		{

@@ -2,6 +2,8 @@ const { getRedisClient } = require("../../lib/redisClient");
 const typemapManager = require("./typemap/manager");
 const { scrapeProject, scrapeOrganization, scrapePerson } = require("./index");
 
+const WORKER_COUNT = Math.max(1, parseInt(process.env.RDT_CRAWL_WORKERS || "4", 10) || 4);
+
 const REDIS_KEYS = {
   STATUS: "rdt_crawl:status",
   PROGRESS: "rdt_crawl:progress",
@@ -79,18 +81,22 @@ class CrawlTaskManager {
     const redis = await this._getRedis();
     const currentStatus = await redis.get(REDIS_KEYS.STATUS);
 
-    // 进程重启后，Redis 里可能还残留 running，但此时实际上没有任何运行中的循环。
-    // start() 应当具备“接管”能力：即便是 running 也再次触发 _run()。
     if (currentStatus === "finished") {
-        console.log("[TaskManager] 所有任务已完成，如需重新开始请先重置。");
-        return;
+      console.log("[TaskManager] 所有任务已完成，如需重新开始请先重置。");
+      return;
     }
 
     await redis.set(REDIS_KEYS.STATUS, "running");
     await redis.del(REDIS_KEYS.ERROR);
     await redis.set(REDIS_KEYS.CONSECUTIVE_ERRORS, 0);
-    console.log("[TaskManager] 任务开始/接管运行。");
-    this._run(); // Fire-and-forget
+
+    console.log(`[TaskManager] 任务开始/接管运行。worker 数: ${WORKER_COUNT}`);
+
+    for (let i = 0; i < WORKER_COUNT; i++) {
+      this._workerLoop(i).catch((e) => {
+        console.error(`[TaskManager] worker ${i} 异常退出:`, e);
+      });
+    }
   }
 
   async pause() {
@@ -150,41 +156,49 @@ class CrawlTaskManager {
     }
   }
 
-  async _run() {
+  async _workerLoop(workerId) {
     const redis = await this._getRedis();
-    let currentStatus = await redis.get(REDIS_KEYS.STATUS);
 
-    while (currentStatus === "running") {
+    while ((await redis.get(REDIS_KEYS.STATUS)) === "running") {
       const nextTask = await this._getNextTask();
+
       if (!nextTask) {
-        await redis.set(REDIS_KEYS.STATUS, "finished");
-        console.log("[TaskManager] 所有任务已完成。");
-        break;
+        // 可能是暂时被其他 worker 抢空了；稍等后再确认
+        await new Promise((r) => setTimeout(r, 500));
+
+        const again = await this._getNextTask();
+        if (!again) {
+          await redis.set(REDIS_KEYS.STATUS, "finished");
+          console.log(`[TaskManager] worker ${workerId} 检测到队列为空，任务结束。`);
+          break;
+        }
+
+        // 抢到了任务就继续处理
+        nextTask = again;
       }
 
       const { id, type } = nextTask;
       const url = this._buildUrl(id, type);
 
       try {
-        console.log(`[TaskManager] 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
+        console.log(`[TaskManager] worker ${workerId} 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
         const scrapeFn = { 1: scrapeProject, 2: scrapeOrganization, 3: scrapePerson }[type];
         await Promise.race([
           scrapeFn(url, { updateDb: true }),
           new Promise((_, reject) => setTimeout(() => reject(new Error("SCRAPE_TIMEOUT")), 2 * 60 * 1000))
         ]);
-        console.log(`[TaskManager] 爬取成功: [ID: ${id}]`);
-        
+        console.log(`[TaskManager] worker ${workerId} 爬取成功: [ID: ${id}]`);
+
         await redis.sAdd(REDIS_KEYS.SCRAPED_IDS, id);
-        const progressUpdates = [redis.hIncrBy(REDIS_KEYS.PROGRESS, 'completed', 1)];
-        if (type === 1) progressUpdates.push(redis.hIncrBy(REDIS_KEYS.PROGRESS, 'project:completed', 1));
-        if (type === 2) progressUpdates.push(redis.hIncrBy(REDIS_KEYS.PROGRESS, 'organization:completed', 1));
-        if (type === 3) progressUpdates.push(redis.hIncrBy(REDIS_KEYS.PROGRESS, 'person:completed', 1));
+        const progressUpdates = [redis.hIncrBy(REDIS_KEYS.PROGRESS, "completed", 1)];
+        if (type === 1) progressUpdates.push(redis.hIncrBy(REDIS_KEYS.PROGRESS, "project:completed", 1));
+        if (type === 2) progressUpdates.push(redis.hIncrBy(REDIS_KEYS.PROGRESS, "organization:completed", 1));
+        if (type === 3) progressUpdates.push(redis.hIncrBy(REDIS_KEYS.PROGRESS, "person:completed", 1));
         await Promise.all(progressUpdates);
         await redis.set(REDIS_KEYS.CONSECUTIVE_ERRORS, 0);
-
       } catch (error) {
         const errorMessage = `ID ${id} 爬取失败: ${error.message}`;
-        console.error(`[TaskManager] 爬取失败: [ID: ${id}]. 错误: ${error.message}`);
+        console.error(`[TaskManager] worker ${workerId} 爬取失败: [ID: ${id}]. 错误: ${error.message}`);
 
         const consecutive = await redis.incr(REDIS_KEYS.CONSECUTIVE_ERRORS);
         await redis.set(REDIS_KEYS.ERROR, `${errorMessage}（连续失败 ${consecutive} 次）`);
@@ -198,12 +212,11 @@ class CrawlTaskManager {
           console.error(`[TaskManager] 连续失败 ${consecutive} 次，已自动暂停任务。`);
         }
       }
-      
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500));
-      currentStatus = await redis.get(REDIS_KEYS.STATUS); // Re-check status for the next loop iteration
+
+      await new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 1200));
     }
 
-    console.log(`[TaskManager] 运行循环结束。状态: ${await redis.get(REDIS_KEYS.STATUS)}`);
+    console.log(`[TaskManager] worker ${workerId} 运行循环结束。状态: ${await redis.get(REDIS_KEYS.STATUS)}`);
   }
 
   async _getNextTask() {
