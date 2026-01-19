@@ -2,7 +2,7 @@ const { getRedisClient } = require("../../lib/redisClient");
 const typemapManager = require("./typemap/manager");
 const { scrapeProject, scrapeOrganization, scrapePerson } = require("./index");
 
-const WORKER_COUNT = Math.max(1, parseInt(process.env.RDT_CRAWL_WORKERS || "3", 10) || 3);
+const WORKER_COUNT = Math.max(1, parseInt(process.env.RDT_CRAWL_WORKERS || "1", 10) || 1);
 
 const REDIS_KEYS = {
   STATUS: "rdt_crawl:status",

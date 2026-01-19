@@ -125,7 +125,7 @@ async function updateOrganization(orgData) {
     // 机构标签 (Tag)
     if (orgData.tags && orgData.tags.length > 0) {
       const tagsToCreate = orgData.tags.filter(t => t?.tag_id).map(t => ({ tag_id: t.tag_id, tag_name: t.tag_name }));
-      await db.Tag.bulkCreate(tagsToCreate, { ignoreDuplicates: true });
+      await db.Tag.bulkCreate(tagsToCreate, { updateOnDuplicate: ["tag_name"] });
 
       const orgTagsToCreate = orgData.tags.filter(t => t?.tag_id).map(t => ({
         organizationId: orgData.org_id,
@@ -309,7 +309,7 @@ async function updateProject(projectData) {
 
     if (projectData.tags && projectData.tags.length > 0) {
       const tagsToCreate = projectData.tags.filter(t => t?.tag_id).map(t => ({ tag_id: t.tag_id, tag_name: t.tag_name }));
-      await db.Tag.bulkCreate(tagsToCreate, { ignoreDuplicates: true });
+      await db.Tag.bulkCreate(tagsToCreate, { updateOnDuplicate: ["tag_name"] });
 
       const projectTagsToCreate = projectData.tags.filter(t => t?.tag_id).map(t => ({
         projectId: projectData.project_id,
