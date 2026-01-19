@@ -1,5 +1,5 @@
 const express = require('express');
-const { query } = require('express-validator');
+const { query, body } = require('express-validator');
 const { XReviewForAccount, XHuntUser, XAccount, DailyActiveUser } = require('../models/postgres-start');
 const { Op, fn, col } = require('sequelize');
 
@@ -265,6 +265,95 @@ router.get('/ud3s7adh8a-users', [
 		});
 	} catch (error) {
 		console.error('Internal query /users error:', error);
+		res.status(500).json({
+			success: false,
+			error: '查询失败',
+			message: error.message
+		});
+	}
+});
+
+/**
+ * POST /twitter-bind-addresses
+ * 通过 twitterId 批量查询用户绑定的 EVM 地址
+ * @body twitterIds - 必填，twitterId 数组，最多 100 个
+ *
+ * 返回：
+ * - data: { [twitterId]: { evmAddresses: string[] } | null }
+ */
+router.post('/kjawd-query-twitter-bind-addresses', [
+	body('twitterIds')
+		.isArray({ min: 1, max: 100 })
+		.withMessage('twitterIds 必须是数组，且长度 1-100'),
+	body('twitterIds.*')
+		.isString()
+		.trim()
+		.notEmpty()
+		.withMessage('twitterIds 数组元素必须是非空字符串')
+], async (req, res) => {
+	try {
+		const twitterIds = Array.isArray(req.body?.twitterIds) ? req.body.twitterIds : [];
+		if (!Array.isArray(twitterIds) || twitterIds.length === 0) {
+			return res.status(400).json({
+				success: false,
+				error: 'VALIDATION_ERROR',
+				details: [{ field: 'twitterIds', message: 'twitterIds must be a non-empty array' }]
+			});
+		}
+
+		if (twitterIds.length > 100) {
+			return res.status(400).json({
+				success: false,
+				error: 'VALIDATION_ERROR',
+				details: [{ field: 'twitterIds', message: 'twitterIds must contain at most 100 items' }]
+			});
+		}
+
+		const normalizedIds = twitterIds
+			.map((v) => (typeof v === 'string' ? v.trim() : ''))
+			.filter(Boolean);
+		const uniqueIds = Array.from(new Set(normalizedIds));
+
+		if (uniqueIds.length === 0) {
+			return res.status(400).json({
+				success: false,
+				error: 'VALIDATION_ERROR',
+				details: [{ field: 'twitterIds', message: 'twitterIds items must not be empty' }]
+			});
+		}
+
+		if (uniqueIds.length > 100) {
+			return res.status(400).json({
+				success: false,
+				error: 'VALIDATION_ERROR',
+				details: [{ field: 'twitterIds', message: 'twitterIds must contain at most 100 unique items' }]
+			});
+		}
+
+		const users = await XHuntUser.findAll({
+			where: {
+				twitterId: {
+					[Op.in]: uniqueIds
+				}
+			},
+			attributes: ['twitterId', 'evmAddresses']
+		});
+
+		const foundMap = new Map(users.map((u) => [u.twitterId, u]));
+		const data = {};
+
+		for (const id of uniqueIds) {
+			const u = foundMap.get(id);
+			data[id] = u ? { evmAddresses: Array.isArray(u.evmAddresses) ? u.evmAddresses : [] } : null;
+		}
+
+		return res.json({
+			success: true,
+			total: uniqueIds.length,
+			data
+		});
+	} catch (error) {
+		console.error('Internal query /twitter-bind-addresses error:', error);
 		res.status(500).json({
 			success: false,
 			error: '查询失败',
