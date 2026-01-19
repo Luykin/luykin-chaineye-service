@@ -550,6 +550,34 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
       <div class="card">
         <div class="row">
           <span class="method">GET</span>
+          <span class="path">/ecosystem_map</span>
+        </div>
+        <div class="desc" id="t-ecosystem-map-desc">Get ecosystem map list.</div>
+        <div class="kv">
+          <div class="k" id="t-auth-k-eco">Auth</div><div class="v">Required (cost: 50 Credits)</div>
+          <div class="k" id="t-query-k-eco">Query</div><div class="v">None</div>
+        </div>
+        <pre><code>curl -s 'https://rootdatapro.online/ecosystem_map' \
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">GET</span>
+          <span class="path">/tag_map</span>
+        </div>
+        <div class="desc" id="t-tag-map-desc">Get tags map list.</div>
+        <div class="kv">
+          <div class="k" id="t-auth-k-tag">Auth</div><div class="v">Required (cost: 50 Credits)</div>
+          <div class="k" id="t-query-k-tag">Query</div><div class="v">None</div>
+        </div>
+        <pre><code>curl -s 'https://rootdatapro.online/tag_map' \
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">GET</span>
           <span class="path">/get_item?project_id=123</span>
         </div>
         <div class="desc" id="t-item-desc">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</div>

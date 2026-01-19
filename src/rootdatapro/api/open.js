@@ -131,6 +131,44 @@ async function attachFundedEntities(investments) {
   return result;
 }
 
+router.get("/ecosystem_map", proApiKeyAuth(50), async (req, res) => {
+  console.log("[rootdatapro] /open/ecosystem_map");
+
+  try {
+    const rows = await db.Ecosystem.findAll({
+      attributes: ["ecosystem_id", "ecosystem_name"],
+      order: [["ecosystem_id", "ASC"]],
+    });
+
+    return res.json({
+      success: true,
+      ecosystems: rows.map((r) => r.toJSON()),
+    });
+  } catch (err) {
+    console.error("[rootdatapro] /open/ecosystem_map error", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
+router.get("/tag_map", proApiKeyAuth(50), async (req, res) => {
+  console.log("[rootdatapro] /open/tag_map");
+
+  try {
+    const rows = await db.Tag.findAll({
+      attributes: ["tag_id", "tag_name"],
+      order: [["tag_id", "ASC"]],
+    });
+
+    return res.json({
+      success: true,
+      tags: rows.map((r) => r.toJSON()),
+    });
+  } catch (err) {
+    console.error("[rootdatapro] /open/tag_map error", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
 router.get("/quota", proApiKeyAuth(0), async (req, res) => {
   console.log("[rootdatapro] /open/quota");
 
@@ -160,7 +198,7 @@ router.get("/quota", proApiKeyAuth(0), async (req, res) => {
       credits_remaining: Number(row.credits_remaining ?? 0),
       expires_at: row.expires_at,
       last_used_at: row.last_used_at,
-      remark: row.remark,
+
     });
   } catch (err) {
     console.error("[rootdatapro] /open/quota error", err);
