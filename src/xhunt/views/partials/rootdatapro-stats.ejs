@@ -528,15 +528,16 @@
   }
 
   // Task controls
+  // Task controls
   $('rdp-task-start').addEventListener('click', () => {
-    handleApiCall($('rdp-task-start'), null, async () => {
+    handleApiCall($('rdp-task-start'), null, null, async () => {
         await jsonFetch('/api/rootdatapro/internal/crawl/start', { method: 'POST' });
         updateCrawlStatus();
     });
   });
 
   $('rdp-task-pause').addEventListener('click', () => {
-    handleApiCall($('rdp-task-pause'), null, async () => {
+    handleApiCall($('rdp-task-pause'), null, null, async () => {
         await jsonFetch('/api/rootdatapro/internal/crawl/pause', { method: 'POST' });
         updateCrawlStatus();
     });
@@ -544,7 +545,7 @@
 
   $('rdp-task-reset').addEventListener('click', () => {
     if (!confirm('确定要重置所有爬取进度吗？这将从头开始重新爬取未完成的项目。')) return;
-    handleApiCall($('rdp-task-reset'), null, async () => {
+    handleApiCall($('rdp-task-reset'), null, null, async () => {
         await jsonFetch('/api/rootdatapro/internal/crawl/reset', { method: 'POST' });
         updateCrawlStatus();
     });

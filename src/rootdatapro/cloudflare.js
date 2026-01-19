@@ -88,6 +88,8 @@ export default {
       if (isHtmlErrorPage && allowHtmlResponse) {
         // 根路径的 HTML 响应，保留 text/html
         returnHeaders.set("Content-Type", responseContentType);
+        // 设置前端页面缓存2小时
+        returnHeaders.set("Cache-Control", "public, max-age=7200");
       } else {
         // 其他所有情况，统一返回 application/json
         returnHeaders.set("Content-Type", "application/json; charset=utf-8");
