@@ -196,6 +196,43 @@
     .features-list li { margin: 6px 0; }
     details > summary { cursor: pointer; }
     details > summary::marker { color: var(--brand); }
+
+    .construction-banner {
+      margin-top: 48px;
+      padding: 20px 24px;
+      border-radius: 18px;
+      border: 1px solid rgba(251, 146, 60, 0.4);
+      background: linear-gradient(135deg, rgba(251, 146, 60, 0.15), rgba(234, 88, 12, 0.1));
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      animation: pulse-border 3s infinite;
+    }
+
+    @keyframes pulse-border {
+      0% { border-color: rgba(251, 146, 60, 0.4); }
+      50% { border-color: rgba(251, 146, 60, 0.8); }
+      100% { border-color: rgba(251, 146, 60, 0.4); }
+    }
+
+    .construction-banner svg {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      color: #F97316;
+    }
+
+    .construction-banner .text-content h3 {
+      margin: 0 0 4px;
+      font-size: 16px;
+      color: #FDBA74;
+    }
+
+    .construction-banner .text-content p {
+      margin: 0;
+      font-size: 13px;
+      color: rgba(253, 186, 116, 0.8);
+    }
   </style>
 </head>
 <body>
@@ -668,13 +705,21 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-find-by-x-desc">Find matching people/projects/organizations by X (Twitter) link or handle (Query: <code>x</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (cost: 10 Credits)</div>
+          <div class="k">Auth</div><div class="v">Required (cost: 2 Credits)</div>
           <div class="k">Query</div><div class="v"><code>handle</code> (string, required)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/find_by_x?handle=elonmusk' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
       </div>
 
+    </div>
+
+    <div class="construction-banner">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L21.5 6.5V17.5L12 23L2.5 17.5V6.5L12 1ZM12 3.31562L4.5 7.65334V16.3467L12 20.6844L19.5 16.3467V7.65334L12 3.31562ZM12 16C14.2091 16 16 14.2091 16 12C16 9.79086 14.2091 8 12 8C9.79086 8 8 9.79086 8 12C8 14.2091 9.79086 16 12 16ZM12 14C13.1046 14 14 13.1046 14 12C14 10.8954 13.1046 10 12 10C10.8954 10 10 10.8954 10 12C10 13.1046 10.8954 14 12 14Z"></path></svg>
+      <div class="text-content">
+        <h3>持续构建中...</h3>
+        <p>更多增强功能与数据接口即将上线，敬请期待。</p>
+      </div>
     </div>
 
     <div class="footer">

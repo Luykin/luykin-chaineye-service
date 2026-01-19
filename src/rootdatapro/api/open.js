@@ -271,7 +271,7 @@ function normalizeXHandle(input) {
   return s;
 }
 
-router.get("/find_by_x", proApiKeyAuth(10), async (req, res) => {
+router.get("/find_by_x", proApiKeyAuth(2), async (req, res) => {
   console.log("[rootdatapro] /open/find_by_x", req.query);
 
   const raw = req.query?.handle || req.query?.x;
