@@ -43,47 +43,55 @@ function proApiKeyAuth(cost = 2) {
       }
 
       // cost=0 的接口只做鉴权，不扣费
+      // cost>0 的接口：这里只做余额检查，不立即扣费；扣费放到响应结束且为 2xx 时执行
       if (creditsCost > 0) {
         const remaining = Number(row.credits_remaining ?? 0);
         if (!Number.isFinite(remaining) || remaining < creditsCost) {
           return jsonError(res, 402, "INSUFFICIENT_CREDITS", "Insufficient credits");
-        }
-
-        const [affected] = await db.ApiKey.update(
-          {
-            credits_remaining: db.Sequelize.literal(
-              `GREATEST(credits_remaining - ${creditsCost}, 0)`
-            ),
-            last_used_at: now,
-          },
-          {
-            where: {
-              id: row.id,
-              status: "active",
-              ...(row.expires_at
-                ? { expires_at: { [db.Sequelize.Op.gt]: now } }
-                : {}),
-              credits_remaining: { [db.Sequelize.Op.gte]: creditsCost },
-            },
-          }
-        );
-
-        if (affected !== 1) {
-          return jsonError(
-            res,
-            402,
-            "INSUFFICIENT_CREDITS",
-            "Insufficient credits or key state changed, please retry"
-          );
         }
       }
 
       req.proApiKey = {
         id: row.id,
         key: row.key,
-        remark: row.remark,
         creditsCost,
       };
+
+      // 延迟扣费：仅当最终 HTTP 状态码是 2xx 才扣费
+      if (creditsCost > 0) {
+        let charged = false;
+
+        res.on("finish", async () => {
+          if (charged) return;
+          charged = true;
+
+          if (res.statusCode < 200 || res.statusCode >= 300) return;
+
+          try {
+            const endNow = new Date();
+            await db.ApiKey.update(
+              {
+                credits_remaining: db.Sequelize.literal(
+                  `GREATEST(credits_remaining - ${creditsCost}, 0)`
+                ),
+                last_used_at: endNow,
+              },
+              {
+                where: {
+                  id: row.id,
+                  status: "active",
+                  ...(row.expires_at
+                    ? { expires_at: { [db.Sequelize.Op.gt]: endNow } }
+                    : {}),
+                  credits_remaining: { [db.Sequelize.Op.gte]: creditsCost },
+                },
+              }
+            );
+          } catch (e) {
+            console.error("[rootdatapro] API key post-charge error", e);
+          }
+        });
+      }
 
       return next();
     } catch (e) {

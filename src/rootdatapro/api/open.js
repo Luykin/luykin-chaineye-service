@@ -177,8 +177,14 @@ router.post("/projects_by_ecosystems", proApiKeyAuth(20), async (req, res) => {
     return res.status(400).json({ success: false, error: "INVALID_ECOSYSTEM_IDS" });
   }
 
+  const page = Number.isFinite(Number(req.body?.page)) ? Math.max(parseInt(req.body.page, 10), 1) : 1;
+  const pageSizeRaw = Number.isFinite(Number(req.body?.page_size)) ? parseInt(req.body.page_size, 10) : 50;
+  const page_size = Math.min(Math.max(pageSizeRaw, 1), 200);
+  const offset = (page - 1) * page_size;
+
   try {
-    const projects = await db.Project.findAll({
+    const { count, rows } = await db.Project.findAndCountAll({
+      distinct: true,
       attributes: ["project_id", "project_name", "logo", "X"],
       include: [
         {
@@ -190,9 +196,18 @@ router.post("/projects_by_ecosystems", proApiKeyAuth(20), async (req, res) => {
           required: true,
         },
       ],
+      limit: page_size,
+      offset,
+      order: [["project_id", "ASC"]],
     });
 
-    return res.json({ success: true, projects: projects.map((p) => p.toJSON()) });
+    return res.json({
+      success: true,
+      page,
+      page_size,
+      total: count,
+      projects: rows.map((p) => p.toJSON()),
+    });
   } catch (err) {
     console.error("[rootdatapro] /open/projects_by_ecosystems error", err);
     return res.status(500).json({ success: false, error: err.message || String(err) });
@@ -207,8 +222,14 @@ router.post("/projects_by_tags", proApiKeyAuth(20), async (req, res) => {
     return res.status(400).json({ success: false, error: "INVALID_TAG_IDS" });
   }
 
+  const page = Number.isFinite(Number(req.body?.page)) ? Math.max(parseInt(req.body.page, 10), 1) : 1;
+  const pageSizeRaw = Number.isFinite(Number(req.body?.page_size)) ? parseInt(req.body.page_size, 10) : 50;
+  const page_size = Math.min(Math.max(pageSizeRaw, 1), 200);
+  const offset = (page - 1) * page_size;
+
   try {
-    const projects = await db.Project.findAll({
+    const { count, rows } = await db.Project.findAndCountAll({
+      distinct: true,
       attributes: ["project_id", "project_name", "logo", "X"],
       include: [
         {
@@ -220,9 +241,18 @@ router.post("/projects_by_tags", proApiKeyAuth(20), async (req, res) => {
           required: true,
         },
       ],
+      limit: page_size,
+      offset,
+      order: [["project_id", "ASC"]],
     });
 
-    return res.json({ success: true, projects: projects.map((p) => p.toJSON()) });
+    return res.json({
+      success: true,
+      page,
+      page_size,
+      total: count,
+      projects: rows.map((p) => p.toJSON()),
+    });
   } catch (err) {
     console.error("[rootdatapro] /open/projects_by_tags error", err);
     return res.status(500).json({ success: false, error: err.message || String(err) });
