@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-lang="en">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -44,8 +44,10 @@
       box-shadow: var(--shadow);
       backdrop-filter: blur(12px);
     }
+
     .title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
     .title h1 { margin: 0; font-size: 20px; letter-spacing: 0.2px; }
+
     .badge {
       font-size: 12px;
       padding: 4px 10px;
@@ -55,80 +57,6 @@
       color: var(--muted);
       word-break: break-all;
     }
-
-    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 14px; }
-    @media (min-width: 860px) {
-      .container { padding: 28px 18px 80px; }
-      .title h1 { font-size: 22px; }
-      .grid { grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
-      .top { padding: 20px; }
-    }
-
-    .card {
-      border: 1px solid var(--line);
-      background: rgba(255,255,255,0.05);
-      border-radius: 18px;
-      padding: 14px;
-      box-shadow: 0 14px 40px rgba(0,0,0,0.25);
-      backdrop-filter: blur(10px);
-      min-width: 0;
-    }
-    @media (min-width: 860px) {
-      .card { padding: 16px; }
-    }
-
-    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .method {
-      font-weight: 700;
-      font-size: 12px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      border: 1px solid rgba(34,197,94,0.35);
-      background: rgba(34,197,94,0.14);
-      color: rgba(220,255,234,0.95);
-    }
-    .path { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; color: rgba(255,255,255,0.9); }
-    .desc { color: var(--muted); font-size: 13px; margin: 8px 0 12px; }
-
-    .kv { display: grid; grid-template-columns: 106px 1fr; gap: 10px; font-size: 13px; margin-top: 10px; }
-    @media (min-width: 860px) { .kv { grid-template-columns: 120px 1fr; } }
-
-    .k { color: rgba(255,255,255,0.75); }
-    .v { color: rgba(255,255,255,0.92); }
-
-    pre {
-      margin: 10px 0 0;
-      padding: 12px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: var(--codebg);
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      font-size: 12px;
-      line-height: 1.45;
-    }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-
-    .callout {
-      border: 1px solid rgba(245,158,11,0.35);
-      background: rgba(245,158,11,0.12);
-      border-radius: 16px;
-      padding: 12px 14px;
-      color: rgba(255,255,255,0.9);
-      min-width: 0;
-    }
-    .callout strong { color: rgba(255,255,255,0.95); }
-    .muted { color: var(--muted); }
-    .pill {
-      font-size: 12px;
-      padding: 3px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      background: rgba(255,255,255,0.05);
-      color: var(--muted);
-    }
-    .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
-    .hr { height: 1px; background: var(--line); margin: 14px 0; }
 
     .lang {
       display: inline-flex;
@@ -151,29 +79,210 @@
       background: rgba(255,255,255,0.10);
     }
 
-    [data-lang] { display: none; }
-    html[data-lang="en"] [data-lang="en"],
-    html[data-lang="zh"] [data-lang="zh"] { display: inline; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 14px; }
+    @media (min-width: 860px) {
+      .container { padding: 28px 18px 80px; }
+      .title h1 { font-size: 22px; }
+      .grid { grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+      .top { padding: 20px; }
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.05);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 14px 40px rgba(0,0,0,0.25);
+      backdrop-filter: blur(10px);
+      min-width: 0;
+    }
+    @media (min-width: 860px) { .card { padding: 16px; } }
+
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    .method {
+      font-weight: 700;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(34,197,94,0.35);
+      background: rgba(34,197,94,0.14);
+      color: rgba(220,255,234,0.95);
+    }
+
+    .path { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; color: rgba(255,255,255,0.9); }
+    .desc { color: var(--muted); font-size: 13px; margin: 8px 0 12px; }
+
+    .kv { display: grid; grid-template-columns: 106px 1fr; gap: 10px; font-size: 13px; margin-top: 10px; }
+    @media (min-width: 860px) { .kv { grid-template-columns: 120px 1fr; } }
+
+    .k { color: rgba(255,255,255,0.75); }
+    .v { color: rgba(255,255,255,0.92); }
+
+    pre {
+      margin: 10px 0 0;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: var(--codebg);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .callout {
+      border: 1px solid rgba(245,158,11,0.35);
+      background: rgba(245,158,11,0.12);
+      border-radius: 16px;
+      padding: 12px 14px;
+      color: rgba(255,255,255,0.9);
+      min-width: 0;
+    }
+
+    .callout strong { color: rgba(255,255,255,0.95); }
+    .muted { color: var(--muted); }
+
+    .pill {
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.05);
+      color: var(--muted);
+    }
+
+    .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
+    .hr { height: 1px; background: var(--line); margin: 14px 0; }
   </style>
 </head>
 <body>
   <script>
     (function () {
-      function getLangFromQuery() {
+      var I18N = {
+        en: {
+          title: 'RootDataPro Open API',
+          baseUrlLabel: 'Base URL:',
+          authTitle: 'Authentication (Required)',
+          authDesc1: 'All endpoints require an <code>APIKey</code> (usage-based billing).',
+          authDesc2: 'To get an <code>APIKey</code>, contact TG:',
+          headerLabel: 'Header:',
+          responseLabel: 'Response: JSON',
+          errorLabel: 'Error: ',
+          authLabel: 'Auth: ',
+          quickStartTitle: 'Quick Start',
+          quickStartDescPrefix: 'Replace ',
+          quickStartDescSuffix: ' with your key.',
+          curlTitle: 'curl (CLI)',
+          jsTitle: 'JavaScript (Browser / Node 18+ fetch)',
+          pyTitle: 'Python (requests)',
+          javaTitle: 'Java (Java 11+ HttpClient)',
+          otherEndpoints: 'You can also replace the URL with other endpoints, e.g.:',
+          quotaDesc: 'Check your API key quota, expiry, and status.',
+          authK: 'Auth',
+          queryK: 'Query',
+          requiredV: 'Required',
+          noneV: 'None',
+          getItemDesc: 'Get project details by <code>project_id</code> (tags, ecosystems, team, investments).',
+          requiredLevel2V: 'Required (level: 2)',
+          requiredParam: 'required',
+          getOrgDesc: 'Get organization details by <code>org_id</code> (tags, categories, team, investments).',
+          getPeopleDesc: 'Get person details by <code>people_id</code> (related projects/orgs, investments).',
+          footer: 'Examples included: curl / JavaScript / Python / Java (X-API-Key).'
+        },
+        zh: {
+          title: 'RootDataPro Open API 文档',
+          baseUrlLabel: 'Base URL：',
+          authTitle: '鉴权说明（必须）',
+          authDesc1: '所有接口都需要 <code>APIKey</code>（按额度扣费）。',
+          authDesc2: '获取 <code>APIKey</code> 请联系 TG：',
+          headerLabel: '请求头：',
+          responseLabel: '返回格式：JSON',
+          errorLabel: '错误格式：',
+          authLabel: '鉴权：',
+          quickStartTitle: '快速调用示例',
+          quickStartDescPrefix: '所有示例均需要将 ',
+          quickStartDescSuffix: ' 替换为你的密钥。',
+          curlTitle: 'curl（命令行）',
+          jsTitle: 'JavaScript（浏览器 / Node 18+ fetch）',
+          pyTitle: 'Python（requests）',
+          javaTitle: 'Java（Java 11+ HttpClient）',
+          otherEndpoints: '你也可以将上面的 URL 替换为任意接口，例如：',
+          quotaDesc: '查询当前 APIKey 的额度/到期/状态信息。',
+          authK: '鉴权',
+          queryK: 'Query',
+          requiredV: '需要 APIKey',
+          noneV: '无',
+          getItemDesc: '根据 <code>project_id</code> 获取项目详情（含标签、生态、团队、投融资信息）。',
+          requiredLevel2V: '需要 APIKey（权限等级：2）',
+          requiredParam: '必填',
+          getOrgDesc: '根据 <code>org_id</code> 获取机构详情（含标签、分类、团队、投融资信息）。',
+          getPeopleDesc: '根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。',
+          footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 X-API-Key）。'
+        }
+      };
+
+      function getLang() {
         try {
           var params = new URLSearchParams(location.search);
           var l = (params.get('lang') || '').toLowerCase();
-          return l === 'zh' || l === 'cn' ? 'zh' : (l === 'en' ? 'en' : null);
-        } catch (e) {
-          return null;
-        }
+          if (l === 'zh' || l === 'cn') return 'zh';
+          if (l === 'en') return 'en';
+        } catch (e) {}
+        try {
+          var saved = localStorage.getItem('open_docs_lang');
+          if (saved === 'zh' || saved === 'en') return saved;
+        } catch (e) {}
+        return 'en';
       }
 
-      function applyLang(lang) {
-        var root = document.documentElement;
-        root.setAttribute('data-lang', lang);
-        root.setAttribute('lang', lang === 'zh' ? 'zh-CN' : 'en');
+      function setLang(lang) {
+        if (lang !== 'zh' && lang !== 'en') lang = 'en';
         try { localStorage.setItem('open_docs_lang', lang); } catch (e) {}
+        var dict = I18N[lang] || I18N.en;
+
+        document.documentElement.setAttribute('lang', lang === 'zh' ? 'zh-CN' : 'en');
+        document.title = dict.title;
+
+        function setText(id, html) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          el.innerHTML = html;
+        }
+
+        setText('t-title', dict.title);
+        setText('t-baseurl-label', dict.baseUrlLabel);
+        setText('t-auth-title', dict.authTitle);
+        setText('t-auth-desc1', dict.authDesc1);
+        setText('t-auth-desc2', dict.authDesc2);
+        setText('t-header-label', dict.headerLabel);
+        setText('t-response', dict.responseLabel);
+        setText('t-error', dict.errorLabel);
+        setText('t-auth', dict.authLabel);
+        setText('t-qs-title', dict.quickStartTitle);
+        setText('t-qs-desc-prefix', dict.quickStartDescPrefix);
+        setText('t-qs-desc-suffix', dict.quickStartDescSuffix);
+        setText('t-curl', dict.curlTitle);
+        setText('t-js', dict.jsTitle);
+        setText('t-py', dict.pyTitle);
+        setText('t-java', dict.javaTitle);
+        setText('t-other-endpoints', dict.otherEndpoints);
+
+        setText('t-quota-desc', dict.quotaDesc);
+        setText('t-auth-k', dict.authK);
+        setText('t-query-k', dict.queryK);
+        setText('t-required-v', dict.requiredV);
+        setText('t-none-v', dict.noneV);
+
+        setText('t-item-desc', dict.getItemDesc);
+        setText('t-org-desc', dict.getOrgDesc);
+        setText('t-people-desc', dict.getPeopleDesc);
+        setText('t-level2', dict.requiredLevel2V);
+        setText('t-required-param', dict.requiredParam);
+
+        setText('t-footer', dict.footer);
 
         var enBtn = document.getElementById('lang-en');
         var zhBtn = document.getElementById('lang-zh');
@@ -183,68 +292,56 @@
         }
       }
 
-      var q = getLangFromQuery();
-      var saved = null;
-      try { saved = localStorage.getItem('open_docs_lang'); } catch (e) {}
-
-      var lang = q || (saved === 'zh' ? 'zh' : 'en');
-      applyLang(lang);
-
-      window.__setOpenDocsLang = applyLang;
+      window.__openDocsSetLang = setLang;
+      setLang(getLang());
     })();
   </script>
 
   <div class="container">
     <div class="top">
       <div class="title">
-        <h1>
-          <span data-lang="en">RootDataPro Open API</span>
-          <span data-lang="zh">RootDataPro Open API 文档</span>
-        </h1>
+        <h1 id="t-title">RootDataPro Open API</h1>
 
         <span class="badge">
-          <span data-lang="en">Base URL:</span>
-          <span data-lang="zh">Base URL：</span>
+          <span id="t-baseurl-label">Base URL:</span>
           <span class="path">https://rootdatapro.online</span>
         </span>
 
         <span class="lang" role="group" aria-label="Language">
-          <button type="button" id="lang-en" onclick="window.__setOpenDocsLang && window.__setOpenDocsLang('en')">EN</button>
-          <button type="button" id="lang-zh" onclick="window.__setOpenDocsLang && window.__setOpenDocsLang('zh')">中文</button>
+          <button type="button" id="lang-en" onclick="window.__openDocsSetLang && window.__openDocsSetLang('en')">EN</button>
+          <button type="button" id="lang-zh" onclick="window.__openDocsSetLang && window.__openDocsSetLang('zh')">中文</button>
         </span>
       </div>
 
       <div class="callout">
-        <div><strong><span data-lang="en">Authentication (Required)</span><span data-lang="zh">鉴权说明（必须）</span></strong></div>
+        <div><strong id="t-auth-title">Authentication (Required)</strong></div>
         <div class="muted" style="margin-top:6px;">
-          <span data-lang="en">All endpoints require an <code>APIKey</code> (usage-based billing).</span>
-          <span data-lang="zh">所有接口都需要 <code>APIKey</code>（按额度扣费）。</span>
+          <span id="t-auth-desc1">All endpoints require an <code>APIKey</code> (usage-based billing).</span>
           <br />
-          <span data-lang="en">To get an <code>APIKey</code>, contact TG:</span>
-          <span data-lang="zh">获取 <code>APIKey</code> 请联系 TG：</span>
+          <span id="t-auth-desc2">To get an <code>APIKey</code>, contact TG:</span>
           <a href="https://t.me/Niod88" target="_blank" rel="noreferrer">@Niod88</a>
         </div>
         <div class="hr"></div>
-        <div class="muted"><span data-lang="en">Header:</span><span data-lang="zh">请求头：</span></div>
+        <div class="muted"><span id="t-header-label">Header:</span></div>
         <pre><code>X-API-Key: YOUR_API_KEY</code></pre>
       </div>
 
       <div class="row">
-        <span class="pill"><span data-lang="en">Response: JSON</span><span data-lang="zh">返回格式：JSON</span></span>
-        <span class="pill"><span data-lang="en">Error: </span><span data-lang="zh">错误格式：</span>{ success: false, error, message? }</span>
-        <span class="pill"><span data-lang="en">Auth: </span><span data-lang="zh">鉴权：</span>X-API-Key</span>
+        <span class="pill" id="t-response">Response: JSON</span>
+        <span class="pill"><span id="t-error">Error: </span>{ success: false, error, message? }</span>
+        <span class="pill"><span id="t-auth">Auth: </span>X-API-Key</span>
       </div>
 
       <div class="callout">
-        <div><strong><span data-lang="en">Quick Start</span><span data-lang="zh">快速调用示例</span></strong></div>
-        <div class="muted" style="margin-top:6px;"><span data-lang="en">Replace </span><code>YOUR_API_KEY</code><span data-lang="en"> with your key.</span><span data-lang="zh">所有示例均需要将 <code>YOUR_API_KEY</code> 替换为你的密钥。</span></div>
+        <div><strong id="t-qs-title">Quick Start</strong></div>
+        <div class="muted" style="margin-top:6px;"><span id="t-qs-desc-prefix">Replace </span><code>YOUR_API_KEY</code><span id="t-qs-desc-suffix"> with your key.</span></div>
 
         <div class="hr"></div>
-        <div class="muted"><span data-lang="en">curl (CLI)</span><span data-lang="zh">curl（命令行）</span></div>
+        <div class="muted" id="t-curl">curl (CLI)</div>
         <pre><code>curl -s 'https://rootdatapro.online/open/quota' \
   -H 'X-API-Key: YOUR_API_KEY'</code></pre>
 
-        <div class="muted" style="margin-top:10px;"><span data-lang="en">JavaScript (Browser / Node 18+ fetch)</span><span data-lang="zh">JavaScript（浏览器 / Node 18+ fetch）</span></div>
+        <div class="muted" style="margin-top:10px;" id="t-js">JavaScript (Browser / Node 18+ fetch)</div>
         <pre><code>const url = 'https://rootdatapro.online/open/quota';
 const res = await fetch(url, {
   method: 'GET',
@@ -255,7 +352,7 @@ const res = await fetch(url, {
 const data = await res.json();
 console.log(data);</code></pre>
 
-        <div class="muted" style="margin-top:10px;"><span data-lang="en">Python (requests)</span><span data-lang="zh">Python（requests）</span></div>
+        <div class="muted" style="margin-top:10px;" id="t-py">Python (requests)</div>
         <pre><code>import requests
 
 url = 'https://rootdatapro.online/open/quota'
@@ -266,7 +363,7 @@ resp = requests.get(url, headers=headers, timeout=30)
 print(resp.status_code)
 print(resp.json())</code></pre>
 
-        <div class="muted" style="margin-top:10px;"><span data-lang="en">Java (Java 11+ HttpClient)</span><span data-lang="zh">Java（Java 11+ HttpClient）</span></div>
+        <div class="muted" style="margin-top:10px;" id="t-java">Java (Java 11+ HttpClient)</div>
         <pre><code>import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -287,7 +384,7 @@ public class Demo {
   }
 }</code></pre>
 
-        <div class="muted" style="margin-top:8px;"><span data-lang="en">You can also replace the URL with other endpoints, e.g.:</span><span data-lang="zh">你也可以将上面的 URL 替换为任意接口，例如：</span></div>
+        <div class="muted" style="margin-top:8px;" id="t-other-endpoints">You can also replace the URL with other endpoints, e.g.:</div>
         <pre><code>https://rootdatapro.online/open/get_item?project_id=123
 https://rootdatapro.online/open/get_org?org_id=123
 https://rootdatapro.online/open/get_people?people_id=123</code></pre>
@@ -300,14 +397,13 @@ https://rootdatapro.online/open/get_people?people_id=123</code></pre>
           <span class="method">GET</span>
           <span class="path">/open/quota</span>
         </div>
-        <div class="desc"><span data-lang="en">Check your API key quota, expiry, and status.</span><span data-lang="zh">查询当前 APIKey 的额度/到期/状态信息。</span></div>
+        <div class="desc" id="t-quota-desc">Check your API key quota, expiry, and status.</div>
         <div class="kv">
-          <div class="k"><span data-lang="en">Auth</span><span data-lang="zh">鉴权</span></div><div class="v"><span data-lang="en">Required</span><span data-lang="zh">需要 APIKey</span></div>
-          <div class="k"><span data-lang="en">Query</span><span data-lang="zh">Query</span></div><div class="v"><span data-lang="en">None</span><span data-lang="zh">无</span></div>
+          <div class="k" id="t-auth-k">Auth</div><div class="v" id="t-required-v">Required</div>
+          <div class="k" id="t-query-k">Query</div><div class="v" id="t-none-v">None</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/open/quota' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
-
       </div>
 
       <div class="card">
@@ -315,14 +411,13 @@ https://rootdatapro.online/open/get_people?people_id=123</code></pre>
           <span class="method">GET</span>
           <span class="path">/open/get_item?project_id=123</span>
         </div>
-        <div class="desc"><span data-lang="en">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</span><span data-lang="zh">根据 <code>project_id</code> 获取项目详情（含标签、生态、团队、投融资信息）。</span></div>
+        <div class="desc" id="t-item-desc">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</div>
         <div class="kv">
-          <div class="k"><span data-lang="en">Auth</span><span data-lang="zh">鉴权</span></div><div class="v"><span data-lang="en">Required (level: 2)</span><span data-lang="zh">需要 APIKey（权限等级：2）</span></div>
-          <div class="k"><span data-lang="en">Query</span><span data-lang="zh">Query</span></div><div class="v"><code>project_id</code> (number, <span data-lang="en">required</span><span data-lang="zh">必填</span>)</div>
+          <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (level: 2)</div>
+          <div class="k" id="t-query-k-2">Query</div><div class="v"><code>project_id</code> (number, <span id="t-required-param">required</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/open/get_item?project_id=123' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
-
       </div>
 
       <div class="card">
@@ -330,14 +425,13 @@ https://rootdatapro.online/open/get_people?people_id=123</code></pre>
           <span class="method">GET</span>
           <span class="path">/open/get_org?org_id=123</span>
         </div>
-        <div class="desc"><span data-lang="en">Get organization details by <code>org_id</code> (tags, categories, team, investments).</span><span data-lang="zh">根据 <code>org_id</code> 获取机构详情（含标签、分类、团队、投融资信息）。</span></div>
+        <div class="desc" id="t-org-desc">Get organization details by <code>org_id</code> (tags, categories, team, investments).</div>
         <div class="kv">
-          <div class="k"><span data-lang="en">Auth</span><span data-lang="zh">鉴权</span></div><div class="v"><span data-lang="en">Required (level: 2)</span><span data-lang="zh">需要 APIKey（权限等级：2）</span></div>
-          <div class="k"><span data-lang="en">Query</span><span data-lang="zh">Query</span></div><div class="v"><code>org_id</code> (number, <span data-lang="en">required</span><span data-lang="zh">必填</span>)</div>
+          <div class="k" id="t-auth-k-3">Auth</div><div class="v" id="t-level2-2">Required (level: 2)</div>
+          <div class="k" id="t-query-k-3">Query</div><div class="v"><code>org_id</code> (number, <span id="t-required-param-2">required</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/open/get_org?org_id=123' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
-
       </div>
 
       <div class="card">
@@ -345,20 +439,49 @@ https://rootdatapro.online/open/get_people?people_id=123</code></pre>
           <span class="method">GET</span>
           <span class="path">/open/get_people?people_id=123</span>
         </div>
-        <div class="desc"><span data-lang="en">Get person details by <code>people_id</code> (related projects/orgs, investments).</span><span data-lang="zh">根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。</span></div>
+        <div class="desc" id="t-people-desc">Get person details by <code>people_id</code> (related projects/orgs, investments).</div>
         <div class="kv">
-          <div class="k"><span data-lang="en">Auth</span><span data-lang="zh">鉴权</span></div><div class="v"><span data-lang="en">Required (level: 2)</span><span data-lang="zh">需要 APIKey（权限等级：2）</span></div>
-          <div class="k"><span data-lang="en">Query</span><span data-lang="zh">Query</span></div><div class="v"><code>people_id</code> (number, <span data-lang="en">required</span><span data-lang="zh">必填</span>)</div>
+          <div class="k" id="t-auth-k-4">Auth</div><div class="v" id="t-level2-3">Required (level: 2)</div>
+          <div class="k" id="t-query-k-4">Query</div><div class="v"><code>people_id</code> (number, <span id="t-required-param-3">required</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/open/get_people?people_id=123' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
-
       </div>
     </div>
 
     <div class="footer">
-      <div><span data-lang="en">Examples included: curl / JavaScript / Python / Java (X-API-Key).</span><span data-lang="zh">调用示例已提供：curl / JavaScript / Python / Java（均使用 <code>X-API-Key</code>）。</span></div>
+      <div id="t-footer">Examples included: curl / JavaScript / Python / Java (X-API-Key).</div>
     </div>
   </div>
+
+  <script>
+    (function () {
+      function syncRepeats() {
+        var a = document.getElementById('t-auth-k');
+        var q = document.getElementById('t-query-k');
+        var r = document.getElementById('t-required-param');
+        var l = document.getElementById('t-level2');
+        if (!a || !q || !r || !l) return;
+
+        var idsAuth = ['t-auth-k-2','t-auth-k-3','t-auth-k-4'];
+        var idsQuery = ['t-query-k-2','t-query-k-3','t-query-k-4'];
+        var idsReq = ['t-required-param-2','t-required-param-3'];
+        var idsLvl2 = ['t-level2-2','t-level2-3'];
+
+        idsAuth.forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML = a.innerHTML; });
+        idsQuery.forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML = q.innerHTML; });
+        idsReq.forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML = r.innerHTML; });
+        idsLvl2.forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML = l.innerHTML; });
+      }
+
+      var old = window.__openDocsSetLang;
+      if (typeof old === 'function') {
+        window.__openDocsSetLang = function(lang){
+          try { old(lang); } finally { syncRepeats(); }
+        };
+        syncRepeats();
+      }
+    })();
+  </script>
 </body>
 </html>
