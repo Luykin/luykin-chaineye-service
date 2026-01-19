@@ -169,6 +169,66 @@ router.get("/tag_map", proApiKeyAuth(50), async (req, res) => {
   }
 });
 
+router.post("/projects_by_ecosystems", proApiKeyAuth(20), async (req, res) => {
+  console.log("[rootdatapro] /open/projects_by_ecosystems");
+
+  const ids = Array.isArray(req.body?.ecosystem_ids) ? req.body.ecosystem_ids : null;
+  if (!ids || ids.length === 0) {
+    return res.status(400).json({ success: false, error: "INVALID_ECOSYSTEM_IDS" });
+  }
+
+  try {
+    const projects = await db.Project.findAll({
+      attributes: ["project_id", "project_name", "logo", "X"],
+      include: [
+        {
+          model: db.Ecosystem,
+          as: "Ecosystems",
+          through: { attributes: [] },
+          where: { ecosystem_id: ids },
+          attributes: ["ecosystem_id", "ecosystem_name"],
+          required: true,
+        },
+      ],
+    });
+
+    return res.json({ success: true, projects: projects.map((p) => p.toJSON()) });
+  } catch (err) {
+    console.error("[rootdatapro] /open/projects_by_ecosystems error", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
+router.post("/projects_by_tags", proApiKeyAuth(20), async (req, res) => {
+  console.log("[rootdatapro] /open/projects_by_tags");
+
+  const ids = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids : null;
+  if (!ids || ids.length === 0) {
+    return res.status(400).json({ success: false, error: "INVALID_TAG_IDS" });
+  }
+
+  try {
+    const projects = await db.Project.findAll({
+      attributes: ["project_id", "project_name", "logo", "X"],
+      include: [
+        {
+          model: db.Tag,
+          as: "Tags",
+          through: { attributes: [] },
+          where: { tag_id: ids },
+          attributes: ["tag_id", "tag_name"],
+          required: true,
+        },
+      ],
+    });
+
+    return res.json({ success: true, projects: projects.map((p) => p.toJSON()) });
+  } catch (err) {
+    console.error("[rootdatapro] /open/projects_by_tags error", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
 router.get("/quota", proApiKeyAuth(0), async (req, res) => {
   console.log("[rootdatapro] /open/quota");
 

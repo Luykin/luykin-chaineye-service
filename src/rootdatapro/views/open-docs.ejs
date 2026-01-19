@@ -229,6 +229,8 @@
           requiredParam: 'required',
           getOrgDesc: 'Get organization details by <code>org_id</code> (tags, categories, team, investments).',
           getPeopleDesc: 'Get person details by <code>people_id</code> (related projects/orgs, investments).',
+          projectsByEcosystemsDesc: 'Obtain project information in bulk based on ecosystem (POST JSON body: <code>ecosystem_ids</code>).',
+          projectsByTagsDesc: 'Obtain project information in bulk based on tag (POST JSON body: <code>tag_ids</code>).',
           footer: 'Examples included: curl / JavaScript / Python / Java (pro-api-key).',
           pricingTitle: 'Pricing & Rules',
           monthlyTerm: '/ month',
@@ -276,6 +278,8 @@
           requiredParam: '必填',
           getOrgDesc: '根据 <code>org_id</code> 获取机构详情（含标签、分类、团队、投融资信息）。',
           getPeopleDesc: '根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。',
+          projectsByEcosystemsDesc: '基于生态批量获取项目信息（POST JSON 传参：<code>ecosystem_ids</code>）。',
+          projectsByTagsDesc: '基于标签批量获取项目信息（POST JSON 传参：<code>tag_ids</code>）。',
           footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 pro-api-key）。',
           pricingTitle: '价格与规则',
           monthlyTerm: '/ 月',
@@ -352,6 +356,8 @@
         setText('t-item-desc', dict.getItemDesc);
         setText('t-org-desc', dict.getOrgDesc);
         setText('t-people-desc', dict.getPeopleDesc);
+        setText('t-projects-by-ecosystems-desc', dict.projectsByEcosystemsDesc);
+        setText('t-projects-by-tags-desc', dict.projectsByTagsDesc);
         setText('t-level2', dict.requiredLevel2V);
         setText('t-required-param', dict.requiredParam);
 
@@ -616,6 +622,39 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         <pre><code>curl -s 'https://rootdatapro.online/get_people?people_id=123' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
       </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">POST</span>
+          <span class="path">/projects_by_ecosystems</span>
+        </div>
+        <div class="desc" id="t-projects-by-ecosystems-desc">Obtain project information in bulk based on ecosystem (POST JSON body: <code>ecosystem_ids</code>).</div>
+        <div class="kv">
+          <div class="k">Auth</div><div class="v">Required (cost: 20 Credits)</div>
+          <div class="k">Body</div><div class="v"><code>ecosystem_ids</code> (array[number], required)</div>
+        </div>
+        <pre><code>curl -s 'https://rootdatapro.online/projects_by_ecosystems' \
+  -H 'pro-api-key: YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"ecosystem_ids":[1,2,3]}' | jq .</code></pre>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">POST</span>
+          <span class="path">/projects_by_tags</span>
+        </div>
+        <div class="desc" id="t-projects-by-tags-desc">Obtain project information in bulk based on tag (POST JSON body: <code>tag_ids</code>).</div>
+        <div class="kv">
+          <div class="k">Auth</div><div class="v">Required (cost: 20 Credits)</div>
+          <div class="k">Body</div><div class="v"><code>tag_ids</code> (array[number], required)</div>
+        </div>
+        <pre><code>curl -s 'https://rootdatapro.online/projects_by_tags' \
+  -H 'pro-api-key: YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"tag_ids":[10,11,12]}' | jq .</code></pre>
+      </div>
+
     </div>
 
     <div class="footer">
