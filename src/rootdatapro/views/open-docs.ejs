@@ -238,6 +238,34 @@
       color: rgba(255,255,255,0.95);
     }
 
+    .llm-select {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.92);
+      padding: 6px 10px;
+      border-radius: 12px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .btn-sm {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.92);
+      padding: 7px 10px;
+      border-radius: 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .btn-sm.primary {
+      border-color: rgba(249, 115, 22, 0.45);
+      background: rgba(249, 115, 22, 0.22);
+      color: rgba(255,255,255,0.95);
+    }
+
     .features-list {
       margin: 10px 0 0;
       padding-left: 18px;
@@ -683,6 +711,46 @@
         <span class="pill"><span id="t-error">Error: </span>{ success: false, error, message? }</span>
         <span class="pill"><span id="t-auth">Auth: </span>pro-api-key</span>
       </div>
+
+      <details class="callout" id="llm-copy">
+        <summary><strong id="t-llm-title">Copy docs formatted for ChatGPT, Claude, Gemini, or any LLM integration</strong></summary>
+        <div class="muted" style="margin-top:6px;" id="t-llm-desc">One-click to copy an LLM-friendly Markdown version of this page (includes auth, base URL, and all endpoints).</div>
+
+        <div class="hr"></div>
+
+        <div class="row" style="justify-content: space-between; align-items: center;">
+          <div class="row">
+            <span class="pill" id="t-llm-format">Format</span>
+            <select id="llm-format" class="llm-select" aria-label="LLM Format">
+              <option value="universal">Universal Markdown</option>
+              <option value="chatgpt">ChatGPT</option>
+              <option value="claude">Claude</option>
+              <option value="gemini">Gemini</option>
+            </select>
+
+            <span class="pill" id="t-llm-lang">Language</span>
+            <select id="llm-lang" class="llm-select" aria-label="LLM Language">
+              <option value="auto">Auto (page language)</option>
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <button type="button" class="btn-sm primary" id="llm-copy-btn">Copy</button>
+            <button type="button" class="btn-sm" id="llm-download-btn">Download .md</button>
+          </div>
+        </div>
+
+        <div class="muted" style="margin-top:10px;">
+          <span id="llm-status" class="pill" style="display:none;"></span>
+        </div>
+
+        <details style="margin-top:10px;">
+          <summary id="t-llm-preview">Preview (first ~120 lines)</summary>
+          <pre><code id="llm-preview-code"></code></pre>
+        </details>
+      </details>
 
       <details class="callout">
         <summary><strong id="t-qs-title">Quick Start</strong></summary>
@@ -1179,8 +1247,225 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         idsLvl2.forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML = l.innerHTML; });
       }
 
+      function esc(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function getPageLang() {
+        var lang = document.documentElement.getAttribute('lang') || '';
+        lang = lang.toLowerCase();
+        if (lang.indexOf('zh') === 0) return 'zh';
+        return 'en';
+      }
+
+      function getTextById(id) {
+        var el = document.getElementById(id);
+        return el ? (el.textContent || '').trim() : '';
+      }
+
+      function buildLLMMarkdown(opts) {
+        opts = opts || {};
+        var format = opts.format || 'universal';
+        var lang = opts.lang || 'auto';
+        if (lang === 'auto') lang = getPageLang();
+
+        var baseUrl = 'https://rootdatapro.online';
+        var title = getTextById('t-title') || (lang === 'zh' ? 'RootData API 增强服务' : 'RootData API Enhanced Services');
+
+        var intro = [];
+        if (format === 'chatgpt') {
+          intro.push('You are ChatGPT. Learn the following API documentation and answer future questions using it.');
+        } else if (format === 'claude') {
+          intro.push('You are Claude. Please ingest the following API documentation and use it as reference.');
+        } else if (format === 'gemini') {
+          intro.push('You are Gemini. Please ingest the following API documentation and use it as reference.');
+        } else {
+          intro.push(lang === 'zh' ? '请学习下面的 API 文档，并在后续对话中以此为准回答问题。' : 'Please learn the API documentation below and use it as the source of truth for future answers.');
+        }
+
+        var out = [];
+        out.push('# ' + title);
+        out.push('');
+        out.push(intro.join('\n'));
+        out.push('');
+        out.push('## Base URL');
+        out.push('');
+        out.push('`' + baseUrl + '`');
+        out.push('');
+        out.push('## Authentication');
+        out.push('');
+        out.push('- Header: `pro-api-key: YOUR_API_KEY`');
+        out.push('- All endpoints require an APIKey unless explicitly noted otherwise.');
+        out.push('');
+        out.push('## Conventions');
+        out.push('');
+        out.push('- Response: JSON');
+        out.push('- Error: `{ success: false, error, message? }`');
+        out.push('');
+
+        out.push('## Endpoints');
+        out.push('');
+
+        var cards = Array.prototype.slice.call(document.querySelectorAll('.grid .card'));
+        cards.forEach(function(card) {
+          if (!card) return;
+          var comingSoon = card.classList.contains('coming-soon');
+
+          var methodEl = card.querySelector('.method');
+          var pathEl = card.querySelector('.path');
+          if (!methodEl || !pathEl) return;
+
+          var method = (methodEl.textContent || '').trim();
+          var path = (pathEl.textContent || '').trim();
+          var descEl = card.querySelector('.desc');
+          var desc = descEl ? (descEl.textContent || '').trim() : '';
+
+          out.push('### ' + method + ' ' + path + (comingSoon ? ' (Coming Soon)' : ''));
+          out.push('');
+          if (desc) {
+            out.push(desc);
+            out.push('');
+          }
+
+          var kv = card.querySelector('.kv');
+          if (kv) {
+            var lines = [];
+            var children = Array.prototype.slice.call(kv.children);
+            for (var i = 0; i < children.length; i += 2) {
+              var kEl = children[i];
+              var vEl = children[i + 1];
+              if (!kEl || !vEl) continue;
+              var k = (kEl.textContent || '').trim();
+              var v = (vEl.textContent || '').trim();
+              if (k && v) lines.push('- ' + k + ': ' + v);
+            }
+            if (lines.length) {
+              out.push(lines.join('\n'));
+              out.push('');
+            }
+          }
+
+          var curlDetails = Array.prototype.slice.call(card.querySelectorAll('details'))
+            .filter(function(d){
+              var s = d.querySelector('summary');
+              return s && (s.textContent || '').trim().toLowerCase() === 'curl';
+            })[0];
+
+          if (curlDetails) {
+            var codeEl = curlDetails.querySelector('pre code');
+            var curlText = codeEl ? (codeEl.textContent || '').trim() : '';
+            if (curlText) {
+              out.push('```bash');
+              out.push(curlText);
+              out.push('```');
+              out.push('');
+            }
+          }
+        });
+
+        out.push('');
+        out.push('---');
+        out.push('Generated from: ' + baseUrl + '/open-docs');
+
+        return out.join('\n');
+      }
+
+      function setStatus(text, ok) {
+        var el = document.getElementById('llm-status');
+        if (!el) return;
+        el.style.display = 'inline-flex';
+        el.textContent = text;
+        el.style.borderColor = ok ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
+        el.style.background = ok ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.12)';
+        el.style.color = ok ? 'rgba(220,255,234,0.95)' : 'rgba(255,255,255,0.92)';
+      }
+
+      async function copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+
+      function downloadText(filename, text) {
+        var blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 500);
+      }
+
+      function refreshPreview() {
+        var formatEl = document.getElementById('llm-format');
+        var langEl = document.getElementById('llm-lang');
+        var previewEl = document.getElementById('llm-preview-code');
+        if (!formatEl || !langEl || !previewEl) return;
+
+        var md = buildLLMMarkdown({ format: formatEl.value, lang: langEl.value });
+        var lines = md.split(/\n/).slice(0, 120).join('\n');
+        previewEl.innerHTML = esc(lines);
+      }
+
+      function bindLLMCopy() {
+        var formatEl = document.getElementById('llm-format');
+        var langEl = document.getElementById('llm-lang');
+        var copyBtn = document.getElementById('llm-copy-btn');
+        var dlBtn = document.getElementById('llm-download-btn');
+
+        if (formatEl) formatEl.addEventListener('change', refreshPreview);
+        if (langEl) langEl.addEventListener('change', refreshPreview);
+
+        if (copyBtn) {
+          copyBtn.addEventListener('click', async function () {
+            try {
+              var md = buildLLMMarkdown({
+                format: formatEl ? formatEl.value : 'universal',
+                lang: langEl ? langEl.value : 'auto'
+              });
+              await copyToClipboard(md);
+              setStatus(getPageLang() === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard', true);
+            } catch (e) {
+              setStatus(getPageLang() === 'zh' ? '复制失败，请重试' : 'Copy failed, please retry', false);
+            }
+          });
+        }
+
+        if (dlBtn) {
+          dlBtn.addEventListener('click', function () {
+            var md = buildLLMMarkdown({
+              format: formatEl ? formatEl.value : 'universal',
+              lang: langEl ? langEl.value : 'auto'
+            });
+            var name = 'rootdatapro-open-docs.md';
+            downloadText(name, md);
+            setStatus(getPageLang() === 'zh' ? '已下载 Markdown' : 'Downloaded Markdown', true);
+          });
+        }
+
+        refreshPreview();
+      }
+
       window.__openDocsSyncRepeats = syncRepeats;
+      window.__openDocsBindLLM = bindLLMCopy;
+
       syncRepeats();
+      bindLLMCopy();
     })();
   </script>
 </body>
