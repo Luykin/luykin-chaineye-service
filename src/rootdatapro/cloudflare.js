@@ -98,6 +98,11 @@ export default {
         returnHeaders.set("Content-Type", responseContentType);
         // 设置前端页面缓存2小时
         returnHeaders.set("Cache-Control", "public, max-age=7200");
+
+        // 强制要求通过 rootdatapro.online 域名访问（否则前端页不可用）
+        // 注：Worker 返回的 Host 不一定存在，所以优先使用 cf-visitor 的 host 信息（若有）
+        // 这里直接设置 X-Forwarded-Host，供上游 open.js 严格校验
+        returnHeaders.set("X-Forwarded-Host", "rootdatapro.online");
       } else {
         // 其他所有情况，统一返回 application/json
         returnHeaders.set("Content-Type", "application/json; charset=utf-8");
