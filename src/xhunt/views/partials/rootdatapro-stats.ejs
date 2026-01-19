@@ -526,19 +526,25 @@
         throw new Error('请输入有效的数字 ID');
       }
 
+      const proApiKey = "rk_d480491638fc914a8ae53c161ac4e2a9c36be02b5b349ce2";
+
+      const commonHeaders = {
+        'pro-api-key': proApiKey,
+      };
+
       if (type === 'Project') {
         const url = `/api/rootdatapro/open/get_item?project_id=${encodeURIComponent(String(idNum))}`;
-        return jsonFetch(url);
+        return jsonFetch(url, { headers: commonHeaders });
       }
 
       if (type === 'Organization') {
         const url = `/api/rootdatapro/open/get_org?org_id=${encodeURIComponent(String(idNum))}`;
-        return jsonFetch(url);
+        return jsonFetch(url, { headers: commonHeaders });
       }
 
       if (type === 'Person') {
         const url = `/api/rootdatapro/open/get_people?people_id=${encodeURIComponent(String(idNum))}`;
-        return jsonFetch(url);
+        return jsonFetch(url, { headers: commonHeaders });
       }
 
       throw new Error('不支持的类型');
