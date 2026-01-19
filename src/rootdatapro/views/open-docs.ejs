@@ -155,6 +155,23 @@
       color: var(--muted);
     }
 
+    .buy-button {
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: white;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .buy-button:hover {
+      background: transparent;
+      color: var(--brand);
+    }
+
     .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
     .hr { height: 1px; background: var(--line); margin: 14px 0; }
     .pricing-grid {
@@ -287,7 +304,11 @@
           f7: 'Query people profiles.',
           f8: '1V1 Tech Support',
           f9: 'Customized Services',
-          footerCustom: 'If you have special requirements, please contact us on TG: @Niod88. We can provide custom solutions.'
+          footerCustom: 'If you have special requirements, please contact us on TG: @Niod88. We can provide custom solutions.',
+          constructionTitle: 'Under Construction...',
+          constructionDesc: 'More enhanced features and data interfaces are coming soon, stay tuned.',
+          constructionExtra: 'Additionally, there are X-related interfaces. If you need them, please also contact TG: @Niod88',
+          buyNow: 'Buy Now'
         },
         zh: {
           title: 'RootData API 增强服务',
@@ -337,7 +358,11 @@
           f7: 'Query people profiles',
           f8: '1V1 Tech Support',
           f9: '定制化服务等',
-          footerCustom: '如有特殊需求，请通过 TG 联系我们：@Niod88，我们可为你定制解决方案。'
+          footerCustom: '如有特殊需求，请通过 TG 联系我们：@Niod88，我们可为你定制解决方案。',
+          constructionTitle: '持续构建中...',
+          constructionDesc: '更多增强功能与数据接口即将上线，敬请期待。',
+          constructionExtra: '另外有 X 相关接口，如有需要也请联系 TG: @Niod88',
+          buyNow: '立即购买'
         }
       };
 
@@ -422,6 +447,11 @@
         setText('t-footer', dict.footer);
         setText('t-footer-custom', dict.footerCustom);
 
+        setText('t-construction-title', dict.constructionTitle);
+        setText('t-construction-desc', dict.constructionDesc);
+        setText('t-construction-extra', dict.constructionExtra);
+        setText('t-buy-now', dict.buyNow);
+
         var enBtn = document.getElementById('lang-en');
         var zhBtn = document.getElementById('lang-zh');
         if (enBtn && zhBtn) {
@@ -487,7 +517,10 @@
             <div class="term" id="t-yearly-term">/ year</div>
           </div>
         </div>
-        <div class="muted" style="margin-top:10px;" id="t-pricing-credits">Includes 30,000 Credits per month.</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top:10px;">
+          <div class="muted" id="t-pricing-credits">Includes 30,000 Credits per month.</div>
+          <a href="https://t.me/Niod88" target="_blank" rel="noreferrer" class="buy-button" id="t-buy-now">Buy Now</a>
+        </div>
         <div class="hr"></div>
         <div style="font-weight: 600; font-size: 14px;" id="t-features-title">Features Included</div>
         <ul class="features-list">
@@ -592,8 +625,11 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-auth-k">Auth</div><div class="v" id="t-required-v">Required</div>
           <div class="k" id="t-query-k">Query</div><div class="v" id="t-none-v">None</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/quota' \
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/quota' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
       </div>
 
       <div class="card">
@@ -606,8 +642,11 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-auth-k-eco">Auth</div><div class="v">Required (cost: 50 Credits)</div>
           <div class="k" id="t-query-k-eco">Query</div><div class="v">None</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/ecosystem_map' \
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/ecosystem_map' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
       </div>
 
       <div class="card">
@@ -620,8 +659,11 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-auth-k-tag">Auth</div><div class="v">Required (cost: 50 Credits)</div>
           <div class="k" id="t-query-k-tag">Query</div><div class="v">None</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/tag_map' \
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/tag_map' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
       </div>
 
       <div class="card">
@@ -634,8 +676,11 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (cost: 2 Credits)</div>
           <div class="k" id="t-query-k-2">Query</div><div class="v"><code>project_id</code> (number, <span id="t-required-param">required</span>)</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/get_item?project_id=123' \
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/get_item?project_id=123' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
       </div>
 
       <div class="card">
@@ -648,8 +693,11 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-auth-k-3">Auth</div><div class="v" id="t-level2-2">Required (cost: 2 Credits)</div>
           <div class="k" id="t-query-k-3">Query</div><div class="v"><code>org_id</code> (number, <span id="t-required-param-2">required</span>)</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/get_org?org_id=123' \
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/get_org?org_id=123' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
       </div>
 
       <div class="card">
@@ -662,8 +710,11 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-auth-k-4">Auth</div><div class="v" id="t-level2-3">Required (cost: 2 Credits)</div>
           <div class="k" id="t-query-k-4">Query</div><div class="v"><code>people_id</code> (number, <span id="t-required-param-3">required</span>)</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/get_people?people_id=123' \
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/get_people?people_id=123' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
       </div>
 
       <div class="card">
@@ -676,10 +727,13 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k">Auth</div><div class="v">Required (cost: 20 Credits)</div>
           <div class="k">Body</div><div class="v"><code>ecosystem_ids</code> (array[number], required)<br><code>page</code> (number, optional)<br><code>page_size</code> (number, optional, max 200)</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/projects_by_ecosystems' \
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/projects_by_ecosystems' \
   -H 'pro-api-key: YOUR_API_KEY' \
   -H 'Content-Type: application/json' \
   -d '{"ecosystem_ids":[1,2,3], "page": 1, "page_size": 50}' | jq .</code></pre>
+        </details>
       </div>
 
       <div class="card">
@@ -692,10 +746,13 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k">Auth</div><div class="v">Required (cost: 20 Credits)</div>
           <div class="k">Body</div><div class="v"><code>tag_ids</code> (array[number], required)<br><code>page</code> (number, optional)<br><code>page_size</code> (number, optional, max 200)</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/projects_by_tags' \
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/projects_by_tags' \
   -H 'pro-api-key: YOUR_API_KEY' \
   -H 'Content-Type: application/json' \
   -d '{"tag_ids":[10,11,12], "page": 1, "page_size": 50}' | jq .</code></pre>
+        </details>
       </div>
 
       <div class="card">
@@ -708,8 +765,11 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k">Auth</div><div class="v">Required (cost: 2 Credits)</div>
           <div class="k">Query</div><div class="v"><code>handle</code> (string, required)</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/find_by_x?handle=elonmusk' \
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/find_by_x?handle=elonmusk' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
       </div>
 
     </div>
@@ -717,8 +777,9 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
     <div class="construction-banner">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L21.5 6.5V17.5L12 23L2.5 17.5V6.5L12 1ZM12 3.31562L4.5 7.65334V16.3467L12 20.6844L19.5 16.3467V7.65334L12 3.31562ZM12 16C14.2091 16 16 14.2091 16 12C16 9.79086 14.2091 8 12 8C9.79086 8 8 9.79086 8 12C8 14.2091 9.79086 16 12 16ZM12 14C13.1046 14 14 13.1046 14 12C14 10.8954 13.1046 10 12 10C10.8954 10 10 10.8954 10 12C10 13.1046 10.8954 14 12 14Z"></path></svg>
       <div class="text-content">
-        <h3>持续构建中...</h3>
-        <p>更多增强功能与数据接口即将上线，敬请期待。</p>
+        <h3 id="t-construction-title">持续构建中...</h3>
+        <p id="t-construction-desc">更多增强功能与数据接口即将上线，敬请期待。</p>
+        <p id="t-construction-extra" style="margin-top: 8px; color: rgba(253, 186, 116, 0.8);"></p>
       </div>
     </div>
 
