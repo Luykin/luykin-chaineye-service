@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RootDataPro Open API</title>
+  <title>RootData API 增强服务</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -200,7 +200,7 @@
     (function () {
       var I18N = {
         en: {
-          title: 'RootDataPro Open API',
+          title: 'RootData API Enhanced Services',
           baseUrlLabel: 'Base URL:',
           authTitle: 'Authentication (Required)',
           authDesc1: 'All endpoints require an <code>APIKey</code> (usage-based billing). Use request header: <code>pro-api-key</code>.',
@@ -216,6 +216,8 @@
           jsTitle: 'JavaScript (Browser / Node 18+ fetch)',
           pyTitle: 'Python (requests)',
           javaTitle: 'Java (Java 11+ HttpClient)',
+          serviceTitle: 'Enhanced Services',
+          serviceDesc: 'We provide enhanced services built on RootData, including advanced queries via X links and custom data workflows. RootData API access is provided as part of the service.',
           otherEndpoints: 'You can also replace the URL with other endpoints, e.g.:',
           quotaDesc: 'Check your API key quota, expiry, and status.',
           authK: 'Auth',
@@ -239,13 +241,13 @@
           f4: 'Ecosystem/Tag Data',
           f5: 'Query Investors',
           f6: 'Query Fundraising Rounds',
-          f7: 'Query people profiles, as well as X Impact, job changes, etc.',
+          f7: 'Query people profiles.',
           f8: '1V1 Tech Support',
           f9: 'Customized Services',
           footerCustom: 'If you have special requirements, please contact us on TG: @Niod88. We can provide custom solutions.'
         },
         zh: {
-          title: 'RootDataPro Open API 文档',
+          title: 'RootData API 增强服务',
           baseUrlLabel: 'Base URL：',
           authTitle: '鉴权说明（必须）',
           authDesc1: '所有接口都需要 <code>APIKey</code>（按额度扣费）。请求头使用：<code>pro-api-key</code>。',
@@ -261,6 +263,8 @@
           jsTitle: 'JavaScript（浏览器 / Node 18+ fetch）',
           pyTitle: 'Python（requests）',
           javaTitle: 'Java（Java 11+ HttpClient）',
+          serviceTitle: '增强服务说明',
+          serviceDesc: '我们不仅提供 RootData API 的标准接口调用，还提供更复杂的增强能力与数据服务，例如：通过 X（推特）链接进行查询、组合查询与定制化数据流程等；并在此基础上间接提供 RootData API 能力。',
           otherEndpoints: '你也可以将上面的 URL 替换为任意接口，例如：',
           quotaDesc: '查询当前 APIKey 的额度/到期/状态信息。',
           authK: '鉴权',
@@ -284,7 +288,7 @@
           f4: 'Ecosystem/Tag Data',
           f5: 'Query Investors',
           f6: 'Query Fundraising Rounds',
-          f7: 'Query people profiles（含 X Impact、工作变动等）',
+          f7: 'Query people profiles',
           f8: '1V1 Tech Support',
           f9: '定制化服务等',
           footerCustom: '如有特殊需求，请通过 TG 联系我们：@Niod88，我们可为你定制解决方案。'
@@ -335,6 +339,8 @@
         setText('t-js', dict.jsTitle);
         setText('t-py', dict.pyTitle);
         setText('t-java', dict.javaTitle);
+        setText('t-service-title', dict.serviceTitle);
+        setText('t-service-desc', dict.serviceDesc);
         setText('t-other-endpoints', dict.otherEndpoints);
 
         setText('t-quota-desc', dict.quotaDesc);
@@ -401,7 +407,7 @@
   <div class="container">
     <div class="top">
       <div class="title">
-        <h1 id="t-title">RootDataPro Open API</h1>
+        <h1 id="t-title">RootData API 增强服务</h1>
 
         <span class="badge">
           <span id="t-baseurl-label">Base URL:</span>
@@ -412,6 +418,11 @@
           <button type="button" id="lang-en">EN</button>
           <button type="button" id="lang-zh">中文</button>
         </span>
+      </div>
+
+      <div class="callout">
+        <div><strong id="t-service-title">Enhanced Services</strong></div>
+        <div class="muted" style="margin-top:6px;" id="t-service-desc">We provide enhanced services built on RootData, including advanced queries via X links and custom data workflows. RootData API access is provided as part of the service.</div>
       </div>
 
       <div class="callout">
@@ -469,14 +480,14 @@
         <div class="hr"></div>
         <div class="muted" id="t-curl">curl (CLI)</div>
         <pre><code>curl -s 'https://rootdatapro.online/quota' \
-  -H 'X-API-Key: YOUR_API_KEY'</code></pre>
+  -H 'pro-api-key: YOUR_API_KEY'</code></pre>
 
         <div class="muted" style="margin-top:10px;" id="t-js">JavaScript (Browser / Node 18+ fetch)</div>
         <pre><code>const url = 'https://rootdatapro.online/quota';
 const res = await fetch(url, {
   method: 'GET',
   headers: {
-    'X-API-Key': 'YOUR_API_KEY',
+    'pro-api-key': 'YOUR_API_KEY',
   },
 });
 const data = await res.json();
@@ -487,7 +498,7 @@ console.log(data);</code></pre>
 
 url = 'https://rootdatapro.online/quota'
 headers = {
-    'X-API-Key': 'YOUR_API_KEY',
+    'pro-api-key': 'YOUR_API_KEY',
 }
 resp = requests.get(url, headers=headers, timeout=30)
 print(resp.status_code)
@@ -504,7 +515,7 @@ public class Demo {
     HttpClient client = HttpClient.newHttpClient();
     HttpRequest request = HttpRequest.newBuilder()
         .uri(URI.create("https://rootdatapro.online/quota"))
-        .header("X-API-Key", "YOUR_API_KEY")
+        .header("pro-api-key", "YOUR_API_KEY")
         .GET()
         .build();
 
@@ -533,7 +544,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-query-k">Query</div><div class="v" id="t-none-v">None</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/quota' \
-  -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
       </div>
 
       <div class="card">
@@ -547,7 +558,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-query-k-2">Query</div><div class="v"><code>project_id</code> (number, <span id="t-required-param">required</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/get_item?project_id=123' \
-  -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
       </div>
 
       <div class="card">
@@ -561,7 +572,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-query-k-3">Query</div><div class="v"><code>org_id</code> (number, <span id="t-required-param-2">required</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/get_org?org_id=123' \
-  -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
       </div>
 
       <div class="card">
@@ -575,12 +586,11 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <div class="k" id="t-query-k-4">Query</div><div class="v"><code>people_id</code> (number, <span id="t-required-param-3">required</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/get_people?people_id=123' \
-  -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
       </div>
     </div>
 
     <div class="footer">
-      <div id="t-footer">Examples included: curl / JavaScript / Python / Java (X-API-Key).</div>
       <div id="t-footer-custom" style="margin-top: 8px;"></div>
     </div>
   </div>
