@@ -613,6 +613,153 @@
             <li id="t-feature-custom-services">Customized Services</li>
           </ul>
         </details>
+      </div>
+
+      <div class="callout">
+        <div><strong id="t-auth-title">Authentication (Required)</strong></div>
+        <div class="muted" style="margin-top:6px;">
+          <span id="t-auth-desc1">All endpoints require an <code>APIKey</code> (usage-based billing).</span>
+          <br />
+          <span id="t-auth-desc2">To get an <code>APIKey</code>, contact TG:</span>
+          <a href="https://t.me/Niod88" target="_blank" rel="noreferrer">@Niod88</a>
+        </div>
+        <div class="hr"></div>
+        <div class="muted"><span id="t-header-label">Header:</span></div>
+        <pre><code>pro-api-key: YOUR_API_KEY</code></pre>
+      </div>
+
+      <div class="row">
+        <span class="pill" id="t-response">Response: JSON</span>
+        <span class="pill"><span id="t-error">Error: </span>{ success: false, error, message? }</span>
+        <span class="pill"><span id="t-auth">Auth: </span>pro-api-key</span>
+      </div>
+
+      <details class="callout">
+        <summary><strong id="t-qs-title">Quick Start</strong></summary>
+        <div class="muted" style="margin-top:6px;"><span id="t-qs-desc-prefix">Replace </span><code>YOUR_API_KEY</code><span id="t-qs-desc-suffix"> with your key.</span></div>
+
+        <div class="hr"></div>
+        <div class="muted" id="t-curl">curl (CLI)</div>
+        <pre><code>curl -s 'https://rootdatapro.online/quota' \
+  -H 'pro-api-key: YOUR_API_KEY'</code></pre>
+
+        <div class="muted" style="margin-top:10px;" id="t-js">JavaScript (Browser / Node 18+ fetch)</div>
+        <pre><code>const url = 'https://rootdatapro.online/quota';
+const res = await fetch(url, {
+  method: 'GET',
+  headers: {
+    'pro-api-key': 'YOUR_API_KEY',
+  },
+});
+const data = await res.json();
+console.log(data);</code></pre>
+
+        <div class="muted" style="margin-top:10px;" id="t-py">Python (requests)</div>
+        <pre><code>import requests
+
+url = 'https://rootdatapro.online/quota'
+headers = {
+    'pro-api-key': 'YOUR_API_KEY',
+}
+resp = requests.get(url, headers=headers, timeout=30)
+print(resp.status_code)
+print(resp.json())</code></pre>
+
+        <div class="muted" style="margin-top:10px;" id="t-java">Java (Java 11+ HttpClient)</div>
+        <pre><code>import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+public class Demo {
+  public static void main(String[] args) throws Exception {
+    HttpClient client = HttpClient.newHttpClient();
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(URI.create("https://rootdatapro.online/quota"))
+        .header("pro-api-key", "YOUR_API_KEY")
+        .GET()
+        .build();
+
+    HttpResponse&lt;String&gt; response = client.send(request, HttpResponse.BodyHandlers.ofString());
+    System.out.println(response.statusCode());
+    System.out.println(response.body());
+  }
+}</code></pre>
+
+        <div class="muted" style="margin-top:8px;" id="t-other-endpoints">You can also replace the URL with other endpoints, e.g.:</div>
+        <pre><code>https://rootdatapro.online/get_item?project_id=123
+https://rootdatapro.online/get_org?org_id=123
+https://rootdatapro.online/get_people?people_id=123</code></pre>
+      </details>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="row">
+          <span class="method">GET</span>
+          <span class="path">/quota</span>
+        </div>
+        <div class="desc" id="t-quota-desc">Check your API key quota, expiry, and status.</div>
+        <div class="kv">
+          <div class="k" id="t-auth-k">Auth</div><div class="v" id="t-required-v">Required</div>
+          <div class="k" id="t-query-k">Query</div><div class="v" id="t-none-v">None</div>
+        </div>
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/quota' \
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">GET</span>
+          <span class="path">/ecosystem_map</span>
+        </div>
+        <div class="desc" id="t-ecosystem-map-desc">Get ecosystem map list.</div>
+        <div class="kv">
+          <div class="k" id="t-auth-k-eco">Auth</div><div class="v">Required (cost: 50 Credits)</div>
+          <div class="k" id="t-query-k-eco">Query</div><div class="v">None</div>
+        </div>
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/ecosystem_map' \
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">GET</span>
+          <span class="path">/tag_map</span>
+        </div>
+        <div class="desc" id="t-tag-map-desc">Get tags map list.</div>
+        <div class="kv">
+          <div class="k" id="t-auth-k-tag">Auth</div><div class="v">Required (cost: 50 Credits)</div>
+          <div class="k" id="t-query-k-tag">Query</div><div class="v">None</div>
+        </div>
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/tag_map' \
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">GET</span>
+          <span class="path">/get_item?project_id=123</span>
+        </div>
+        <div class="desc" id="t-item-desc">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</div>
+        <div class="kv">
+          <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (cost: 2 Credits)</div>
+          <div class="k" id="t-query-k-2">Query</div><div class="v"><code>project_id</code> (number, <span id="t-required-param">required</span>)</div>
+        </div>
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/get_item?project_id=123' \
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
         <details>
           <summary>Response</summary>
           <pre><code>{
@@ -771,153 +918,6 @@
     },
     "fundingRounds": []
 }</code></pre>
-        </details>
-      </div>
-
-      <div class="callout">
-        <div><strong id="t-auth-title">Authentication (Required)</strong></div>
-        <div class="muted" style="margin-top:6px;">
-          <span id="t-auth-desc1">All endpoints require an <code>APIKey</code> (usage-based billing).</span>
-          <br />
-          <span id="t-auth-desc2">To get an <code>APIKey</code>, contact TG:</span>
-          <a href="https://t.me/Niod88" target="_blank" rel="noreferrer">@Niod88</a>
-        </div>
-        <div class="hr"></div>
-        <div class="muted"><span id="t-header-label">Header:</span></div>
-        <pre><code>pro-api-key: YOUR_API_KEY</code></pre>
-      </div>
-
-      <div class="row">
-        <span class="pill" id="t-response">Response: JSON</span>
-        <span class="pill"><span id="t-error">Error: </span>{ success: false, error, message? }</span>
-        <span class="pill"><span id="t-auth">Auth: </span>pro-api-key</span>
-      </div>
-
-      <details class="callout">
-        <summary><strong id="t-qs-title">Quick Start</strong></summary>
-        <div class="muted" style="margin-top:6px;"><span id="t-qs-desc-prefix">Replace </span><code>YOUR_API_KEY</code><span id="t-qs-desc-suffix"> with your key.</span></div>
-
-        <div class="hr"></div>
-        <div class="muted" id="t-curl">curl (CLI)</div>
-        <pre><code>curl -s 'https://rootdatapro.online/quota' \
-  -H 'pro-api-key: YOUR_API_KEY'</code></pre>
-
-        <div class="muted" style="margin-top:10px;" id="t-js">JavaScript (Browser / Node 18+ fetch)</div>
-        <pre><code>const url = 'https://rootdatapro.online/quota';
-const res = await fetch(url, {
-  method: 'GET',
-  headers: {
-    'pro-api-key': 'YOUR_API_KEY',
-  },
-});
-const data = await res.json();
-console.log(data);</code></pre>
-
-        <div class="muted" style="margin-top:10px;" id="t-py">Python (requests)</div>
-        <pre><code>import requests
-
-url = 'https://rootdatapro.online/quota'
-headers = {
-    'pro-api-key': 'YOUR_API_KEY',
-}
-resp = requests.get(url, headers=headers, timeout=30)
-print(resp.status_code)
-print(resp.json())</code></pre>
-
-        <div class="muted" style="margin-top:10px;" id="t-java">Java (Java 11+ HttpClient)</div>
-        <pre><code>import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-
-public class Demo {
-  public static void main(String[] args) throws Exception {
-    HttpClient client = HttpClient.newHttpClient();
-    HttpRequest request = HttpRequest.newBuilder()
-        .uri(URI.create("https://rootdatapro.online/quota"))
-        .header("pro-api-key", "YOUR_API_KEY")
-        .GET()
-        .build();
-
-    HttpResponse&lt;String&gt; response = client.send(request, HttpResponse.BodyHandlers.ofString());
-    System.out.println(response.statusCode());
-    System.out.println(response.body());
-  }
-}</code></pre>
-
-        <div class="muted" style="margin-top:8px;" id="t-other-endpoints">You can also replace the URL with other endpoints, e.g.:</div>
-        <pre><code>https://rootdatapro.online/get_item?project_id=123
-https://rootdatapro.online/get_org?org_id=123
-https://rootdatapro.online/get_people?people_id=123</code></pre>
-      </details>
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <div class="row">
-          <span class="method">GET</span>
-          <span class="path">/quota</span>
-        </div>
-        <div class="desc" id="t-quota-desc">Check your API key quota, expiry, and status.</div>
-        <div class="kv">
-          <div class="k" id="t-auth-k">Auth</div><div class="v" id="t-required-v">Required</div>
-          <div class="k" id="t-query-k">Query</div><div class="v" id="t-none-v">None</div>
-        </div>
-        <details>
-          <summary>curl</summary>
-          <pre><code>curl -s 'https://rootdatapro.online/quota' \
-  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
-        </details>
-      </div>
-
-      <div class="card">
-        <div class="row">
-          <span class="method">GET</span>
-          <span class="path">/ecosystem_map</span>
-        </div>
-        <div class="desc" id="t-ecosystem-map-desc">Get ecosystem map list.</div>
-        <div class="kv">
-          <div class="k" id="t-auth-k-eco">Auth</div><div class="v">Required (cost: 50 Credits)</div>
-          <div class="k" id="t-query-k-eco">Query</div><div class="v">None</div>
-        </div>
-        <details>
-          <summary>curl</summary>
-          <pre><code>curl -s 'https://rootdatapro.online/ecosystem_map' \
-  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
-        </details>
-      </div>
-
-      <div class="card">
-        <div class="row">
-          <span class="method">GET</span>
-          <span class="path">/tag_map</span>
-        </div>
-        <div class="desc" id="t-tag-map-desc">Get tags map list.</div>
-        <div class="kv">
-          <div class="k" id="t-auth-k-tag">Auth</div><div class="v">Required (cost: 50 Credits)</div>
-          <div class="k" id="t-query-k-tag">Query</div><div class="v">None</div>
-        </div>
-        <details>
-          <summary>curl</summary>
-          <pre><code>curl -s 'https://rootdatapro.online/tag_map' \
-  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
-        </details>
-      </div>
-
-      <div class="card">
-        <div class="row">
-          <span class="method">GET</span>
-          <span class="path">/get_item?project_id=123</span>
-        </div>
-        <div class="desc" id="t-item-desc">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</div>
-        <div class="kv">
-          <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (cost: 2 Credits)</div>
-          <div class="k" id="t-query-k-2">Query</div><div class="v"><code>project_id</code> (number, <span id="t-required-param">required</span>)</div>
-        </div>
-        <details>
-          <summary>curl</summary>
-          <pre><code>curl -s 'https://rootdatapro.online/get_item?project_id=123' \
-  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
         </details>
       </div>
 
