@@ -619,9 +619,12 @@ router.get("/get_item", proApiKeyAuth(2), async (req, res) => {
   if (!project_id) {
     return res.status(400).json({ success: false, error: "INVALID_PROJECT_ID" });
   }
+  console.log(`[PERF] /get_item start for project_id: ${project_id}`);
 
   try {
     // 1. 并行执行所有数据库查询
+    const dbQueryStartTime = Date.now();
+    console.log(`[PERF] DB query start for project_id: ${project_id}`);
     const [project, fundingRoundsRaw, investmentsMadeRaw] = await Promise.all([
       // 1.1 获取项目主体信息（不含 include，速度最快）
       db.Project.findByPk(project_id, {
@@ -645,22 +648,28 @@ router.get("/get_item", proApiKeyAuth(2), async (req, res) => {
         order: [["date", "DESC"]],
       }),
     ]);
+    console.log(`[PERF] DB query end for project_id: ${project_id}. Duration: ${Date.now() - dbQueryStartTime}ms`);
 
     // 2. 如果项目不存在，提前返回
     if (!project) {
+      console.log(`[PERF] Project not found for project_id: ${project_id}. Total duration: ${Date.now() - startTime}ms`);
       return res.status(404).json({ success: false, error: "NOT_FOUND" });
     }
 
     // 3. 并行处理获取到的原始数据，附加关联实体信息
+    const processingStartTime = Date.now();
+    console.log(`[PERF] Data processing start for project_id: ${project_id}`);
     const [fundingRounds, investmentsMade] = await Promise.all([
       attachInvestorEntities(fundingRoundsRaw),
       attachFundedEntities(investmentsMadeRaw),
     ]);
+    console.log(`[PERF] Data processing end for project_id: ${project_id}. Duration: ${Date.now() - processingStartTime}ms`);
 
     // 4. 组装最终结果
     const projectJson = project.toJSON();
     projectJson.InvestmentsMade = investmentsMade; // 将处理后的对外投资数据挂载到项目上
 
+    console.log(`[PERF] /get_item request finished for project_id: ${project_id}. Total duration: ${Date.now() - startTime}ms`);
     return res.json({
       success: true,
       project: projectJson,
@@ -668,6 +677,7 @@ router.get("/get_item", proApiKeyAuth(2), async (req, res) => {
     });
   } catch (err) {
     console.error("[rootdatapro] /open/get_item error", err);
+    console.log(`[PERF] /get_item request failed for project_id: ${project_id}. Total duration: ${Date.now() - startTime}ms`);
     return res.status(500).json({ success: false, error: err.message || String(err) });
   }
 });
