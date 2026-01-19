@@ -5,7 +5,7 @@ const { DataTypes } = require("sequelize");
  * @param {import('sequelize').Sequelize} sequelize
  */
 module.exports = (sequelize) => {
-  return sequelize.define(
+  const CrawlLog = sequelize.define(
     "CrawlLog",
     {
       id: {
@@ -59,5 +59,18 @@ module.exports = (sequelize) => {
       ],
     }
   );
-};
 
+  /**
+   * 统计去重后的失败URL总数
+   * @returns {Promise<number>}
+   */
+  CrawlLog.countFailedUrls = async function () {
+    return await CrawlLog.count({
+      where: { status: 'failure' },
+      distinct: true,
+      col: 'url'
+    });
+  };
+
+  return CrawlLog;
+};

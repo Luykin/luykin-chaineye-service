@@ -195,6 +195,8 @@ router.post("/crawl/pause", (req, res) => {
 
 router.get("/crawl/status", async (req, res) => {
   const status = await taskManager.getStatus();
+  const failedUrlsCount = await db.CrawlLog.countFailedUrls();
+  status.failedUrlsCount = failedUrlsCount;
   res.json({ success: true, data: status });
 });
 
