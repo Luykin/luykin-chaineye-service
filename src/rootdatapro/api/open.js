@@ -12,16 +12,19 @@ function parseIntParam(v) {
 }
 
 router.get("/", (req, res) => {
-  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const baseUrl = `rootdatapro.online`;
 
   const app = req.app;
   app.set("view engine", "ejs");
   app.set("views", path.join(__dirname, "../views"));
 
+  const clientRegion = req.get("x-client-region") || req.headers?.["x-client-region"] || null;
+
   return app.render(
     "open-docs",
     {
       baseUrl,
+      clientRegion,
     },
     (err, html) => {
       if (err) {

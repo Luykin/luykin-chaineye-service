@@ -171,58 +171,85 @@
       color: var(--muted);
     }
 
-    .buy-button {
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--brand);
-      background: var(--brand);
-      color: white;
-      transition: all 0.2s ease;
-      white-space: nowrap;
-    }
-    .buy-button:hover {
-      background: transparent;
-      color: var(--brand);
-    }
-
     .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
     .hr { height: 1px; background: var(--line); margin: 14px 0; }
-    .pricing-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-      margin-top: 10px;
+
+    .legal-note {
+      border: 1px solid rgba(239, 68, 68, 0.32);
+      background: rgba(239, 68, 68, 0.10);
+      border-radius: 16px;
+      padding: 12px 14px;
+      color: rgba(255,255,255,0.92);
     }
-    @media (min-width: 520px) {
-      .pricing-grid { grid-template-columns: 1fr 1fr; }
+    .legal-note strong { color: rgba(255,255,255,0.96); }
+    .legal-note a { color: rgba(255,255,255,0.92); text-decoration: underline; text-underline-offset: 2px; }
+
+    .region-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(0,0,0,0.58);
+      backdrop-filter: blur(10px);
     }
-    .pricing-card {
-      border: 1px solid rgba(249, 115, 22, 0.35);
-      background: linear-gradient(135deg, rgba(249, 115, 22, 0.18), rgba(251, 146, 60, 0.10));
-      border-radius: 14px;
-      padding: 12px;
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 10px;
-      min-width: 0;
-      box-shadow: 0 12px 28px rgba(249, 115, 22, 0.12);
+    .region-gate.show { display: flex; }
+
+    .region-gate .modal {
+      width: min(560px, calc(100vw - 28px));
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06));
+      box-shadow: var(--shadow);
+      padding: 16px;
     }
-    .price {
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: 0.2px;
+
+    .region-gate .modal h2 {
+      margin: 0;
+      font-size: 16px;
       color: rgba(255,255,255,0.95);
-      text-shadow: 0 10px 28px rgba(249, 115, 22, 0.18);
     }
-    .term {
-      font-size: 12px;
-      color: var(--muted);
-      white-space: nowrap;
+
+    .region-gate .modal p {
+      margin: 10px 0 0;
+      font-size: 13px;
+      color: rgba(255,255,255,0.78);
+      line-height: 1.55;
     }
+
+    .region-gate .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .region-gate .btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.92);
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .region-gate .btn.primary {
+      border-color: rgba(249, 115, 22, 0.45);
+      background: rgba(249, 115, 22, 0.22);
+      color: rgba(255,255,255,0.95);
+    }
+
+    .region-gate .btn.danger {
+      border-color: rgba(239, 68, 68, 0.45);
+      background: rgba(239, 68, 68, 0.18);
+      color: rgba(255,255,255,0.95);
+    }
+
     .features-list {
       margin: 10px 0 0;
       padding-left: 18px;
@@ -304,7 +331,7 @@
           title: 'RootData API Enhanced Services',
           baseUrlLabel: 'Base URL:',
           authTitle: 'Authentication (Required)',
-          authDesc1: 'All endpoints require an <code>APIKey</code> (usage-based billing). Use request header: <code>pro-api-key</code>.',
+          authDesc1: 'All endpoints require an <code>APIKey</code> and consume Credits. Use request header: <code>pro-api-key</code>.',
           authDesc2: 'To get an <code>APIKey</code>, contact TG: @Niod88',
           headerLabel: 'Header:',
           responseLabel: 'Response: JSON',
@@ -326,7 +353,7 @@
           requiredV: 'Required',
           noneV: 'None',
           getItemDesc: 'Get project details by <code>project_id</code> (tags, ecosystems, team, investments).',
-          requiredLevel2V: 'Required (cost: 2 Credits)',
+          requiredLevel2V: 'Required (Credits: 2)',
           requiredParam: 'required',
           getOrgDesc: 'Get organization details by <code>org_id</code> (tags, categories, team, investments).',
           getPeopleDesc: 'Get person details by <code>people_id</code> (related projects/orgs, investments).',
@@ -334,13 +361,9 @@
           projectsByTagsDesc: 'Obtain project information in bulk based on tag (POST JSON body: <code>tag_ids</code>). Supports pagination (<code>page</code>, <code>page_size</code>).',
           findByXDesc: 'Find matching people/projects/organizations by X (Twitter) handle (Query: <code>handle</code>).',
           queryInvestmentsDesc: 'Query investments by investor/funded/round/date/amount filters. Supports pagination (POST JSON body).',
-          batchGetDetailsDesc: 'Batch fetch entity details (Project/Organization/Person). Cost = 2 Credits per item (POST JSON body: <code>items</code>).',
+          batchGetDetailsDesc: 'Batch fetch entity details (Project/Organization/Person). Credits: 2 per item (POST JSON body: <code>items</code>).',
           searchDesc: 'Full-text search across Project/Organization/Person (Query: <code>q</code>). Supports pagination (<code>page</code>, <code>page_size</code>).',
           footer: 'Examples included: curl / JavaScript / Python / Java (pro-api-key).',
-          pricingTitle: 'Pricing & Rules',
-          monthlyTerm: '/ month',
-          yearlyTerm: '/ year',
-          pricingCredits: 'Includes 30,000 Credits per month.',
           featuresTitle: 'Features Included',
           f1: 'Search Projects/VC',
           f2: 'Query Project & VC',
@@ -361,13 +384,18 @@
           constructionTitle: 'Under Construction...',
           constructionDesc: 'More enhanced features and data interfaces are coming soon, stay tuned.',
           constructionExtra: 'Additionally, there are X-related interfaces. If you need them, please also contact TG: @Niod88',
-          buyNow: 'Buy Now'
+          legalTitle: 'Disclaimer / Usage Restrictions',
+          legalDesc: 'This page is provided for learning, communication, and academic research only, and must not be used for any commercial purpose (including but not limited to resale, paid distribution, or providing any commercialized API/service to third parties). When using this project/page and any output generated from it, you are responsible for ensuring compliance with applicable laws and regulations, as well as the terms and policies of any third-party platforms or data sources. Any disputes, losses, or legal liabilities arising from improper use shall be borne solely by the user and are not attributable to this website or the author.',
+          regionTitle: 'Region Notice',
+          regionDesc: 'We detected that you may be located in Mainland China. This service is not provided to users in Mainland China. You may leave now, or proceed at your own risk if you fully understand the implications.',
+          regionExit: 'Leave',
+          regionContinue: 'Proceed Anyway'
         },
         zh: {
           title: 'RootData API 增强服务',
           baseUrlLabel: 'Base URL：',
           authTitle: '鉴权说明（必须）',
-          authDesc1: '所有接口都需要 <code>APIKey</code>（按额度扣费）。请求头使用：<code>pro-api-key</code>。',
+          authDesc1: '所有接口都需要 <code>APIKey</code>，并消耗 Credits（积分）。请求头使用：<code>pro-api-key</code>。',
           authDesc2: '获取 <code>APIKey</code> 请联系 TG：@Niod88',
           headerLabel: '请求头：',
           responseLabel: '返回格式：JSON',
@@ -397,13 +425,9 @@
           projectsByTagsDesc: '基于标签批量获取项目信息（POST JSON 传参：<code>tag_ids</code>）。支持分页（<code>page</code>, <code>page_size</code>）。',
           findByXDesc: '通过 X（推特）账号查询匹配的人物/项目/机构信息（Query：<code>handle</code>）。',
           queryInvestmentsDesc: '按投资方/被投方/轮次/日期/金额等条件查询投资事件，支持分页（POST JSON）。',
-          batchGetDetailsDesc: '批量获取实体详情（Project/Organization/Person），按条计费：每条 2 Credits（POST JSON：<code>items</code>）。',
+          batchGetDetailsDesc: '批量获取实体详情（Project/Organization/Person），每条消耗 2 Credits（积分）（POST JSON：<code>items</code>）。',
           searchDesc: '按关键词在 Project/Organization/Person 中检索（Query：<code>q</code>），支持分页（<code>page</code>, <code>page_size</code>）。',
           footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 pro-api-key）。',
-          pricingTitle: '价格与规则',
-          monthlyTerm: '/ 月',
-          yearlyTerm: '/ 年',
-          pricingCredits: '每月包含 30,000 Credits。',
           featuresTitle: '包含内容',
           f1: 'Search Projects/VC',
           f2: 'Query Project & VC',
@@ -424,7 +448,12 @@
           constructionTitle: '持续构建中...',
           constructionDesc: '更多增强功能与数据接口即将上线，敬请期待。',
           constructionExtra: '另外有 X 相关接口，如有需要也请联系 TG: @Niod88',
-          buyNow: '立即购买'
+          legalTitle: '免责声明 / 使用限制',
+          legalDesc: '本页面仅用于学习交流与学术研究目的，禁止用于任何商业用途（包括但不限于转售、代购、收费分发、对外提供商业化接口服务等）。你在使用本项目/页面及其输出结果时须确保遵守所在地法律法规及第三方平台/数据源的条款与政策。如因不当使用导致的任何纠纷、损失或法律责任，均由使用者自行承担，与本站及作者无关。',
+          regionTitle: '地区提示',
+          regionDesc: '检测到你可能位于中国大陆地区。本服务不面向中国大陆用户提供。你可以选择离开，或在充分理解相关风险后强行继续访问。',
+          regionExit: '离开',
+          regionContinue: '强行继续'
         }
       };
 
@@ -494,10 +523,6 @@
         setText('t-level2', dict.requiredLevel2V);
         setText('t-required-param', dict.requiredParam);
 
-        setText('t-pricing-title', dict.pricingTitle);
-        setText('t-monthly-term', dict.monthlyTerm);
-        setText('t-yearly-term', dict.yearlyTerm);
-        setText('t-pricing-credits', dict.pricingCredits);
         setText('t-features-title', dict.featuresTitle);
         setText('t-feature-search-project-vc', dict.f1);
         setText('t-feature-query-project-vc', dict.f2);
@@ -520,8 +545,15 @@
 
         setText('t-construction-title', dict.constructionTitle);
         setText('t-construction-desc', dict.constructionDesc);
+        setText('t-legal-title', dict.legalTitle);
+        setText('t-legal-desc', dict.legalDesc);
+
+        setText('t-region-title', dict.regionTitle);
+        setText('t-region-desc', dict.regionDesc);
+        setText('region-exit', dict.regionExit);
+        setText('region-continue', dict.regionContinue);
+
         setText('t-construction-extra', dict.constructionExtra);
-        setText('t-buy-now', dict.buyNow);
 
         var enBtn = document.getElementById('lang-en');
         var zhBtn = document.getElementById('lang-zh');
@@ -554,6 +586,67 @@
     })();
   </script>
 
+  <script>
+    window.__CLIENT_REGION__ = "<%= (clientRegion || '') %>";
+  </script>
+
+  <script>
+    (function () {
+      try {
+        var region = window.__CLIENT_REGION__ || null;
+        var isMainland = region === 'CN';
+        var dismissed = false;
+        try { dismissed = localStorage.getItem('region_gate_dismissed') === '1'; } catch (e) {}
+
+        var gate = document.getElementById('region-gate');
+        var btnExit = document.getElementById('region-exit');
+        var btnContinue = document.getElementById('region-continue');
+
+        function show() {
+          if (!gate) return;
+          gate.classList.add('show');
+          gate.setAttribute('aria-hidden', 'false');
+        }
+
+        function hide() {
+          if (!gate) return;
+          gate.classList.remove('show');
+          gate.setAttribute('aria-hidden', 'true');
+        }
+
+        if (btnExit) {
+          btnExit.addEventListener('click', function () {
+            try { location.href = 'about:blank'; } catch (e) { hide(); }
+          });
+        }
+
+        if (btnContinue) {
+          btnContinue.addEventListener('click', function () {
+            try { localStorage.setItem('region_gate_dismissed', '1'); } catch (e) {}
+            hide();
+          });
+        }
+
+        if (isMainland && !dismissed) {
+          show();
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  </script>
+
+  <div class="region-gate" id="region-gate" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-region-title" aria-describedby="t-region-desc">
+      <h2 id="t-region-title">地区提示</h2>
+      <p id="t-region-desc">检测到你可能位于中国大陆地区。本服务不面向中国大陆用户提供。你可以选择离开，或在充分理解相关风险后强行继续访问。</p>
+      <div class="actions">
+        <button type="button" class="btn danger" id="region-exit">离开</button>
+        <button type="button" class="btn primary" id="region-continue">强行继续</button>
+      </div>
+    </div>
+  </div>
+
   <div class="container">
     <div class="top">
       <div class="title">
@@ -570,55 +663,24 @@
         </span>
       </div>
 
+      <div class="legal-note" role="note" aria-label="Legal Notice">
+        <div><strong id="t-legal-title">免责声明 / 使用限制</strong></div>
+        <div class="muted" style="margin-top:6px;" id="t-legal-desc">
+          本页面仅用于学习交流与学术研究目的，禁止用于任何商业用途（包括但不限于转售、代购、收费分发、对外提供商业化接口服务等）。
+          你在使用本项目/页面及其输出结果时须确保遵守所在地法律法规及第三方平台/数据源的条款与政策。
+          如因不当使用导致的任何纠纷、损失或法律责任，均由使用者自行承担，与本站及作者无关。
+        </div>
+      </div>
+
       <div class="callout">
         <div><strong id="t-service-title">Enhanced Services</strong></div>
         <div class="muted" style="margin-top:6px;" id="t-service-desc">We provide enhanced services built on RootData, including advanced queries via X links and custom data workflows. RootData API access is provided as part of the service.</div>
       </div>
 
       <div class="callout">
-        <div><strong id="t-pricing-title">Pricing & Rules</strong></div>
-        <div class="hr"></div>
-        <div class="pricing-grid">
-          <div class="pricing-card">
-            <div class="price">$70</div>
-            <div class="term" id="t-monthly-term">/ month</div>
-          </div>
-          <div class="pricing-card">
-            <div class="price">$750</div>
-            <div class="term" id="t-yearly-term">/ year</div>
-          </div>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top:10px;">
-          <div class="muted" id="t-pricing-credits">Includes 30,000 Credits per month.</div>
-          <a href="https://t.me/Niod88" target="_blank" rel="noreferrer" class="buy-button" id="t-buy-now">Buy Now</a>
-        </div>
-        <div class="hr"></div>
-        <details>
-          <summary><strong style="font-weight: 600; font-size: 14px;" id="t-features-title">Features Included</strong></summary>
-          <ul class="features-list">
-            <li id="t-feature-search-project-vc">Search Projects/VC</li>
-            <li id="t-feature-query-project-vc">Query Project & VC</li>
-            <li id="t-feature-search-people">Search People</li>
-            <li id="t-feature-ecosystem-tag">Ecosystem/Tag Data</li>
-            <li id="t-feature-query-investors">Query Investors</li>
-            <li id="t-feature-query-fundraising">Query Fundraising Rounds</li>
-            <li id="t-feature-query-people-profiles">Query people profiles.</li>
-            <li id="t-feature-batch-ecosystem">Batch Query by Ecosystem</li>
-            <li id="t-feature-batch-tag">Batch Query by Tag</li>
-            <li id="t-feature-find-by-x">Find by X (Twitter) Handle</li>
-            <li id="t-feature-query-investments">Advanced Investment Query</li>
-            <li id="t-feature-batch-get-details">Batch Entity Details</li>
-            <li id="t-feature-fulltext-search">Full-text Search</li>
-            <li id="t-feature-tech-support">1V1 Tech Support</li>
-            <li id="t-feature-custom-services">Customized Services</li>
-          </ul>
-        </details>
-      </div>
-
-      <div class="callout">
         <div><strong id="t-auth-title">Authentication (Required)</strong></div>
         <div class="muted" style="margin-top:6px;">
-          <span id="t-auth-desc1">All endpoints require an <code>APIKey</code> (usage-based billing).</span>
+          <span id="t-auth-desc1">All endpoints require an <code>APIKey</code> and consume Credits.</span>
           <br />
           <span id="t-auth-desc2">To get an <code>APIKey</code>, contact TG:</span>
           <a href="https://t.me/Niod88" target="_blank" rel="noreferrer">@Niod88</a>
@@ -718,7 +780,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-ecosystem-map-desc">Get ecosystem map list.</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-eco">Auth</div><div class="v">Required (cost: 50 Credits)</div>
+          <div class="k" id="t-auth-k-eco">Auth</div><div class="v">Required (Credits: 50)</div>
           <div class="k" id="t-query-k-eco">Query</div><div class="v">None</div>
         </div>
         <details>
@@ -735,7 +797,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-tag-map-desc">Get tags map list.</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-tag">Auth</div><div class="v">Required (cost: 50 Credits)</div>
+          <div class="k" id="t-auth-k-tag">Auth</div><div class="v">Required (Credits: 50)</div>
           <div class="k" id="t-query-k-tag">Query</div><div class="v">None</div>
         </div>
         <details>
@@ -752,7 +814,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-item-desc">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (cost: 2 Credits)</div>
+          <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (Credits: 2)</div>
           <div class="k" id="t-query-k-2">Query</div><div class="v"><code>project_id</code> (number, <span id="t-required-param">required</span>)</div>
         </div>
         <details>
@@ -928,7 +990,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-org-desc">Get organization details by <code>org_id</code> (tags, categories, team, investments).</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-3">Auth</div><div class="v" id="t-level2-2">Required (cost: 2 Credits)</div>
+          <div class="k" id="t-auth-k-3">Auth</div><div class="v" id="t-level2-2">Required (Credits: 2)</div>
           <div class="k" id="t-query-k-3">Query</div><div class="v"><code>org_id</code> (number, <span id="t-required-param-2">required</span>)</div>
         </div>
         <details>
@@ -945,7 +1007,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-people-desc">Get person details by <code>people_id</code> (related projects/orgs, investments).</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-4">Auth</div><div class="v" id="t-level2-3">Required (cost: 2 Credits)</div>
+          <div class="k" id="t-auth-k-4">Auth</div><div class="v" id="t-level2-3">Required (Credits: 2)</div>
           <div class="k" id="t-query-k-4">Query</div><div class="v"><code>people_id</code> (number, <span id="t-required-param-3">required</span>)</div>
         </div>
         <details>
@@ -962,7 +1024,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-projects-by-ecosystems-desc">Obtain project information in bulk based on ecosystem (POST JSON body: <code>ecosystem_ids</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (cost: 20 Credits)</div>
+          <div class="k">Auth</div><div class="v">Required (Credits: 20)</div>
           <div class="k">Body</div><div class="v"><code>ecosystem_ids</code> (array[number], required)<br><code>page</code> (number, optional)<br><code>page_size</code> (number, optional, max 200)</div>
         </div>
         <details>
@@ -981,7 +1043,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-projects-by-tags-desc">Obtain project information in bulk based on tag (POST JSON body: <code>tag_ids</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (cost: 20 Credits)</div>
+          <div class="k">Auth</div><div class="v">Required (Credits: 20)</div>
           <div class="k">Body</div><div class="v"><code>tag_ids</code> (array[number], required)<br><code>page</code> (number, optional)<br><code>page_size</code> (number, optional, max 200)</div>
         </div>
         <details>
@@ -1000,7 +1062,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-query-investments-desc">Query investments by investor/funded/round/date/amount filters. Supports pagination (POST JSON body).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (cost: 30 Credits)</div>
+          <div class="k">Auth</div><div class="v">Required (Credits: 30)</div>
           <div class="k">Body</div><div class="v"><code>investor_filters</code>, <code>funded_filters</code>, <code>round_names</code>, <code>date_from</code>, <code>date_to</code>, <code>min_amount</code>, <code>max_amount</code>, <code>page</code>, <code>page_size</code></div>
         </div>
         <details>
@@ -1017,9 +1079,9 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
           <span class="method">POST</span>
           <span class="path">/batch_get_details</span>
         </div>
-        <div class="desc" id="t-batch-get-details-desc">Batch fetch entity details (Project/Organization/Person). Cost = 2 Credits per item (POST JSON body: <code>items</code>).</div>
+        <div class="desc" id="t-batch-get-details-desc">Batch fetch entity details (Project/Organization/Person). Credits: 2 per item (POST JSON body: <code>items</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (cost: 2 Credits / item)</div>
+          <div class="k">Auth</div><div class="v">Required (Credits: 2 / item)</div>
           <div class="k">Body</div><div class="v"><code>items</code> (array[{"type","id"}], required; max 200)</div>
         </div>
         <details>
@@ -1038,7 +1100,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-search-desc">Full-text search across Project/Organization/Person (Query: <code>q</code>). Supports pagination (<code>page</code>, <code>page_size</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (cost: 5 Credits)</div>
+          <div class="k">Auth</div><div class="v">Required (Credits: 5)</div>
           <div class="k">Query</div><div class="v"><code>q</code> (string, required)<br><code>entity_types</code> (optional, comma-separated: Project,Organization,Person)<br><code>page</code> (optional)<br><code>page_size</code> (optional, max 200)</div>
         </div>
         <details>
@@ -1055,7 +1117,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-find-by-x-desc">Find matching people/projects/organizations by X (Twitter) handle (Query: <code>handle</code>).</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (cost: 2 Credits)</div>
+          <div class="k">Auth</div><div class="v">Required (Credits: 2)</div>
           <div class="k">Query</div><div class="v"><code>handle</code> (string, required)</div>
         </div>
         <details>
@@ -1073,7 +1135,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc">Get the current list of X hot projects.</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (cost: 10 Credits)</div>
+          <div class="k">Auth</div><div class="v">Required (Credits: 10)</div>
           <div class="k">Body</div><div class="v">None</div>
         </div>
         <div class="soon-note">This endpoint is under development and will be available soon.</div>
@@ -1087,7 +1149,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc">Get the current list of hot people in X.</div>
         <div class="kv">
-          <div class="k">Auth</div><div class="v">Required (cost: 10 Credits)</div>
+          <div class="k">Auth</div><div class="v">Required (Credits: 10)</div>
           <div class="k">Body</div><div class="v">None</div>
         </div>
         <div class="soon-note">This endpoint is under development and will be available soon.</div>

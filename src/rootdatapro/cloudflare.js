@@ -39,6 +39,14 @@ export default {
       headers.delete("referer");
       headers.delete("origin");
 
+      // 标识中国大陆来源：仅认 Cloudflare 的国家码为 CN
+      // 防止客户端伪造：先清理再由 Worker 注入
+      headers.delete("x-client-region");
+      const cfIpCountry = headers.get("CF-IPCountry");
+      if (cfIpCountry === "CN") {
+        headers.set("x-client-region", "CN");
+      }
+
       // 构建转发到目标服务器的请求（添加AbortSignal优化，终止底层网络请求）
       const forwardRequest = new Request(fullTargetUrl, {
         method: method,
@@ -97,7 +105,7 @@ export default {
 
       // 设置跨域头
       returnHeaders.set("Access-Control-Allow-Origin", "*");
-      returnHeaders.set("Access-Control-Allow-Headers", "pro-api-key, Content-Type");
+      returnHeaders.set("Access-Control-Allow-Headers", "pro-api-key, Content-Type, x-client-region");
 
       return new Response(responseText, {
         status: response.status,
