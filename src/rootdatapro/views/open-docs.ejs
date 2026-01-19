@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en" data-lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RootDataPro Open API 文档</title>
+  <title>RootDataPro Open API</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -44,7 +44,7 @@
       box-shadow: var(--shadow);
       backdrop-filter: blur(12px);
     }
-    .title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+    .title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
     .title h1 { margin: 0; font-size: 20px; letter-spacing: 0.2px; }
     .badge {
       font-size: 12px;
@@ -130,54 +130,167 @@
     .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
     .hr { height: 1px; background: var(--line); margin: 14px 0; }
 
-    details {
-      margin-top: 12px;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.04);
-      border-radius: 14px;
+    .lang {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.05);
+      border-radius: 999px;
       overflow: hidden;
     }
-    summary {
+    .lang button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 6px 10px;
+      font-size: 12px;
       cursor: pointer;
-      list-style: none;
-      padding: 10px 12px;
-      user-select: none;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      color: rgba(255,255,255,0.88);
     }
-    summary::-webkit-details-marker { display: none; }
-    .sum-title { font-size: 13px; font-weight: 650; }
-    .sum-hint { font-size: 12px; color: var(--muted); }
-    .details-body { padding: 0 12px 12px; }
-    .schema-title { margin-top: 10px; font-size: 12px; color: rgba(255,255,255,0.78); }
+    .lang button.active {
+      color: rgba(255,255,255,0.92);
+      background: rgba(255,255,255,0.10);
+    }
+
+    [data-lang] { display: none; }
+    html[data-lang="en"] [data-lang="en"],
+    html[data-lang="zh"] [data-lang="zh"] { display: inline; }
   </style>
 </head>
 <body>
+  <script>
+    (function () {
+      function getLangFromQuery() {
+        try {
+          var params = new URLSearchParams(location.search);
+          var l = (params.get('lang') || '').toLowerCase();
+          return l === 'zh' || l === 'cn' ? 'zh' : (l === 'en' ? 'en' : null);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function applyLang(lang) {
+        var root = document.documentElement;
+        root.setAttribute('data-lang', lang);
+        root.setAttribute('lang', lang === 'zh' ? 'zh-CN' : 'en');
+        try { localStorage.setItem('open_docs_lang', lang); } catch (e) {}
+
+        var enBtn = document.getElementById('lang-en');
+        var zhBtn = document.getElementById('lang-zh');
+        if (enBtn && zhBtn) {
+          enBtn.classList.toggle('active', lang === 'en');
+          zhBtn.classList.toggle('active', lang === 'zh');
+        }
+      }
+
+      var q = getLangFromQuery();
+      var saved = null;
+      try { saved = localStorage.getItem('open_docs_lang'); } catch (e) {}
+
+      var lang = q || (saved === 'zh' ? 'zh' : 'en');
+      applyLang(lang);
+
+      window.__setOpenDocsLang = applyLang;
+    })();
+  </script>
+
   <div class="container">
     <div class="top">
       <div class="title">
-        <h1>RootDataPro Open API 文档</h1>
-        <span class="badge">Base URL: <span class="path">https://rootdatapro.online</span></span>
+        <h1>
+          <span data-lang="en">RootDataPro Open API</span>
+          <span data-lang="zh">RootDataPro Open API 文档</span>
+        </h1>
+
+        <span class="badge">
+          <span data-lang="en">Base URL:</span>
+          <span data-lang="zh">Base URL：</span>
+          <span class="path">https://rootdatapro.online</span>
+        </span>
+
+        <span class="lang" role="group" aria-label="Language">
+          <button type="button" id="lang-en" onclick="window.__setOpenDocsLang && window.__setOpenDocsLang('en')">EN</button>
+          <button type="button" id="lang-zh" onclick="window.__setOpenDocsLang && window.__setOpenDocsLang('zh')">中文</button>
+        </span>
       </div>
 
       <div class="callout">
-        <div><strong>鉴权说明（必须）</strong></div>
+        <div><strong><span data-lang="en">Authentication (Required)</span><span data-lang="zh">鉴权说明（必须）</span></strong></div>
         <div class="muted" style="margin-top:6px;">
-          所有接口都需要 <code>APIKey</code>（按额度扣费）。
-          获取 <code>APIKey</code> 请联系 TG：<a href="https://t.me/Niod88" target="_blank" rel="noreferrer">@Niod88</a>
+          <span data-lang="en">All endpoints require an <code>APIKey</code> (usage-based billing).</span>
+          <span data-lang="zh">所有接口都需要 <code>APIKey</code>（按额度扣费）。</span>
+          <br />
+          <span data-lang="en">To get an <code>APIKey</code>, contact TG:</span>
+          <span data-lang="zh">获取 <code>APIKey</code> 请联系 TG：</span>
+          <a href="https://t.me/Niod88" target="_blank" rel="noreferrer">@Niod88</a>
         </div>
         <div class="hr"></div>
-        <div class="muted">请求头（实际以服务端校验为准）：</div>
+        <div class="muted"><span data-lang="en">Header:</span><span data-lang="zh">请求头：</span></div>
         <pre><code>X-API-Key: YOUR_API_KEY</code></pre>
-        <div class="muted" style="margin-top:8px;">说明：仅支持 header：<code>X-API-Key</code>（不支持 Authorization）。</div>
       </div>
 
       <div class="row">
-        <span class="pill">返回格式：JSON</span>
-        <span class="pill">错误格式：{ success: false, error, message? }</span>
+        <span class="pill"><span data-lang="en">Response: JSON</span><span data-lang="zh">返回格式：JSON</span></span>
+        <span class="pill"><span data-lang="en">Error: </span><span data-lang="zh">错误格式：</span>{ success: false, error, message? }</span>
+        <span class="pill"><span data-lang="en">Auth: </span><span data-lang="zh">鉴权：</span>X-API-Key</span>
+      </div>
+
+      <div class="callout">
+        <div><strong><span data-lang="en">Quick Start</span><span data-lang="zh">快速调用示例</span></strong></div>
+        <div class="muted" style="margin-top:6px;"><span data-lang="en">Replace </span><code>YOUR_API_KEY</code><span data-lang="en"> with your key.</span><span data-lang="zh">所有示例均需要将 <code>YOUR_API_KEY</code> 替换为你的密钥。</span></div>
+
+        <div class="hr"></div>
+        <div class="muted"><span data-lang="en">curl (CLI)</span><span data-lang="zh">curl（命令行）</span></div>
+        <pre><code>curl -s 'https://rootdatapro.online/open/quota' \
+  -H 'X-API-Key: YOUR_API_KEY'</code></pre>
+
+        <div class="muted" style="margin-top:10px;"><span data-lang="en">JavaScript (Browser / Node 18+ fetch)</span><span data-lang="zh">JavaScript（浏览器 / Node 18+ fetch）</span></div>
+        <pre><code>const url = 'https://rootdatapro.online/open/quota';
+const res = await fetch(url, {
+  method: 'GET',
+  headers: {
+    'X-API-Key': 'YOUR_API_KEY',
+  },
+});
+const data = await res.json();
+console.log(data);</code></pre>
+
+        <div class="muted" style="margin-top:10px;"><span data-lang="en">Python (requests)</span><span data-lang="zh">Python（requests）</span></div>
+        <pre><code>import requests
+
+url = 'https://rootdatapro.online/open/quota'
+headers = {
+    'X-API-Key': 'YOUR_API_KEY',
+}
+resp = requests.get(url, headers=headers, timeout=30)
+print(resp.status_code)
+print(resp.json())</code></pre>
+
+        <div class="muted" style="margin-top:10px;"><span data-lang="en">Java (Java 11+ HttpClient)</span><span data-lang="zh">Java（Java 11+ HttpClient）</span></div>
+        <pre><code>import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+public class Demo {
+  public static void main(String[] args) throws Exception {
+    HttpClient client = HttpClient.newHttpClient();
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(URI.create("https://rootdatapro.online/open/quota"))
+        .header("X-API-Key", "YOUR_API_KEY")
+        .GET()
+        .build();
+
+    HttpResponse&lt;String&gt; response = client.send(request, HttpResponse.BodyHandlers.ofString());
+    System.out.println(response.statusCode());
+    System.out.println(response.body());
+  }
+}</code></pre>
+
+        <div class="muted" style="margin-top:8px;"><span data-lang="en">You can also replace the URL with other endpoints, e.g.:</span><span data-lang="zh">你也可以将上面的 URL 替换为任意接口，例如：</span></div>
+        <pre><code>https://rootdatapro.online/open/get_item?project_id=123
+https://rootdatapro.online/open/get_org?org_id=123
+https://rootdatapro.online/open/get_people?people_id=123</code></pre>
       </div>
     </div>
 
@@ -187,69 +300,14 @@
           <span class="method">GET</span>
           <span class="path">/open/quota</span>
         </div>
-        <div class="desc">查询当前 APIKey 的额度/到期/状态信息。</div>
+        <div class="desc"><span data-lang="en">Check your API key quota, expiry, and status.</span><span data-lang="zh">查询当前 APIKey 的额度/到期/状态信息。</span></div>
         <div class="kv">
-          <div class="k">鉴权</div><div class="v">需要 APIKey</div>
-          <div class="k">Query</div><div class="v">无</div>
+          <div class="k"><span data-lang="en">Auth</span><span data-lang="zh">鉴权</span></div><div class="v"><span data-lang="en">Required</span><span data-lang="zh">需要 APIKey</span></div>
+          <div class="k"><span data-lang="en">Query</span><span data-lang="zh">Query</span></div><div class="v"><span data-lang="en">None</span><span data-lang="zh">无</span></div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/open/quota' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
 
-        <details>
-          <summary>
-            <span class="sum-title">Schema</span>
-            <span class="sum-hint">请求/响应字段结构（点击展开）</span>
-          </summary>
-          <div class="details-body">
-            <div class="schema-title">请求</div>
-            <pre><code>{
-  "method": "GET",
-  "path": "/open/quota",
-  "headers": {
-    "X-API-Key": "&lt;APIKey&gt;"
-  }
-}</code></pre>
-
-            <div class="schema-title">成功响应（success = true）</div>
-            <pre><code>{
-  "type": "object",
-  "required": ["success", "data"],
-  "properties": {
-    "success": { "type": "boolean", "const": true },
-    "data": {
-      "type": "object",
-      "required": [
-        "key",
-        "status",
-        "expires_at",
-        "credits_total",
-        "credits_remaining",
-        "remark"
-      ],
-      "properties": {
-        "key": { "type": "string" },
-        "status": { "type": "string" },
-        "expires_at": { "type": ["string", "null"] },
-        "credits_total": { "type": "number" },
-        "credits_remaining": { "type": "number" },
-        "remark": { "type": ["string", "null"] }
-      }
-    }
-  }
-}</code></pre>
-
-            <div class="schema-title">错误响应（通用）</div>
-            <pre><code>{
-  "type": "object",
-  "required": ["success", "error"],
-  "properties": {
-    "success": { "type": "boolean", "const": false },
-    "error": { "type": "string" },
-    "message": { "type": "string" }
-  }
-}</code></pre>
-          </div>
-        </details>
       </div>
 
       <div class="card">
@@ -257,59 +315,14 @@
           <span class="method">GET</span>
           <span class="path">/open/get_item?project_id=123</span>
         </div>
-        <div class="desc">根据 <code>project_id</code> 获取项目详情（含标签、生态、团队、投融资信息）。</div>
+        <div class="desc"><span data-lang="en">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</span><span data-lang="zh">根据 <code>project_id</code> 获取项目详情（含标签、生态、团队、投融资信息）。</span></div>
         <div class="kv">
-          <div class="k">鉴权</div><div class="v">需要 APIKey（权限等级：2）</div>
-          <div class="k">Query</div><div class="v"><code>project_id</code> (number, 必填)</div>
+          <div class="k"><span data-lang="en">Auth</span><span data-lang="zh">鉴权</span></div><div class="v"><span data-lang="en">Required (level: 2)</span><span data-lang="zh">需要 APIKey（权限等级：2）</span></div>
+          <div class="k"><span data-lang="en">Query</span><span data-lang="zh">Query</span></div><div class="v"><code>project_id</code> (number, <span data-lang="en">required</span><span data-lang="zh">必填</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/open/get_item?project_id=123' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
 
-        <details>
-          <summary>
-            <span class="sum-title">Schema</span>
-            <span class="sum-hint">请求/响应字段结构（点击展开）</span>
-          </summary>
-          <div class="details-body">
-            <div class="schema-title">请求</div>
-            <pre><code>{
-  "method": "GET",
-  "path": "/open/get_item",
-  "query": {
-    "project_id": "number (required)"
-  },
-  "headers": {
-    "X-API-Key": "&lt;APIKey&gt;"
-  }
-}</code></pre>
-
-            <div class="schema-title">成功响应（success = true）</div>
-            <pre><code>{
-  "type": "object",
-  "required": ["success", "project", "fundingRounds"],
-  "properties": {
-    "success": { "type": "boolean", "const": true },
-    "project": { "type": "object", "description": "项目详情（字段较多，随库表变动）" },
-    "fundingRounds": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "description": "单轮融资记录（附带 investor 摘要）"
-      }
-    }
-  }
-}</code></pre>
-
-            <div class="schema-title">错误响应（该接口常见）</div>
-            <pre><code>{
-  "oneOf": [
-    { "type": "object", "required": ["success", "error"], "properties": { "success": {"const": false}, "error": {"const": "INVALID_PROJECT_ID"} } },
-    { "type": "object", "required": ["success", "error"], "properties": { "success": {"const": false}, "error": {"const": "NOT_FOUND"} } },
-    { "type": "object", "required": ["success", "error"], "properties": { "success": {"const": false}, "error": {"type": "string"}, "message": {"type": "string"} } }
-  ]
-}</code></pre>
-          </div>
-        </details>
       </div>
 
       <div class="card">
@@ -317,59 +330,14 @@
           <span class="method">GET</span>
           <span class="path">/open/get_org?org_id=123</span>
         </div>
-        <div class="desc">根据 <code>org_id</code> 获取机构详情（含标签、分类、团队、投融资信息）。</div>
+        <div class="desc"><span data-lang="en">Get organization details by <code>org_id</code> (tags, categories, team, investments).</span><span data-lang="zh">根据 <code>org_id</code> 获取机构详情（含标签、分类、团队、投融资信息）。</span></div>
         <div class="kv">
-          <div class="k">鉴权</div><div class="v">需要 APIKey（权限等级：2）</div>
-          <div class="k">Query</div><div class="v"><code>org_id</code> (number, 必填)</div>
+          <div class="k"><span data-lang="en">Auth</span><span data-lang="zh">鉴权</span></div><div class="v"><span data-lang="en">Required (level: 2)</span><span data-lang="zh">需要 APIKey（权限等级：2）</span></div>
+          <div class="k"><span data-lang="en">Query</span><span data-lang="zh">Query</span></div><div class="v"><code>org_id</code> (number, <span data-lang="en">required</span><span data-lang="zh">必填</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/open/get_org?org_id=123' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
 
-        <details>
-          <summary>
-            <span class="sum-title">Schema</span>
-            <span class="sum-hint">请求/响应字段结构（点击展开）</span>
-          </summary>
-          <div class="details-body">
-            <div class="schema-title">请求</div>
-            <pre><code>{
-  "method": "GET",
-  "path": "/open/get_org",
-  "query": {
-    "org_id": "number (required)"
-  },
-  "headers": {
-    "X-API-Key": "&lt;APIKey&gt;"
-  }
-}</code></pre>
-
-            <div class="schema-title">成功响应（success = true）</div>
-            <pre><code>{
-  "type": "object",
-  "required": ["success", "organization", "fundingRounds"],
-  "properties": {
-    "success": { "type": "boolean", "const": true },
-    "organization": { "type": "object", "description": "机构详情（字段较多，随库表变动）" },
-    "fundingRounds": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "description": "单轮融资记录（附带 investor 摘要）"
-      }
-    }
-  }
-}</code></pre>
-
-            <div class="schema-title">错误响应（该接口常见）</div>
-            <pre><code>{
-  "oneOf": [
-    { "type": "object", "required": ["success", "error"], "properties": { "success": {"const": false}, "error": {"const": "INVALID_ORG_ID"} } },
-    { "type": "object", "required": ["success", "error"], "properties": { "success": {"const": false}, "error": {"const": "NOT_FOUND"} } },
-    { "type": "object", "required": ["success", "error"], "properties": { "success": {"const": false}, "error": {"type": "string"}, "message": {"type": "string"} } }
-  ]
-}</code></pre>
-          </div>
-        </details>
       </div>
 
       <div class="card">
@@ -377,59 +345,20 @@
           <span class="method">GET</span>
           <span class="path">/open/get_people?people_id=123</span>
         </div>
-        <div class="desc">根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。</div>
+        <div class="desc"><span data-lang="en">Get person details by <code>people_id</code> (related projects/orgs, investments).</span><span data-lang="zh">根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。</span></div>
         <div class="kv">
-          <div class="k">鉴权</div><div class="v">需要 APIKey（权限等级：2）</div>
-          <div class="k">Query</div><div class="v"><code>people_id</code> (number, 必填)</div>
+          <div class="k"><span data-lang="en">Auth</span><span data-lang="zh">鉴权</span></div><div class="v"><span data-lang="en">Required (level: 2)</span><span data-lang="zh">需要 APIKey（权限等级：2）</span></div>
+          <div class="k"><span data-lang="en">Query</span><span data-lang="zh">Query</span></div><div class="v"><code>people_id</code> (number, <span data-lang="en">required</span><span data-lang="zh">必填</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/open/get_people?people_id=123' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
 
-        <details>
-          <summary>
-            <span class="sum-title">Schema</span>
-            <span class="sum-hint">请求/响应字段结构（点击展开）</span>
-          </summary>
-          <div class="details-body">
-            <div class="schema-title">请求</div>
-            <pre><code>{
-  "method": "GET",
-  "path": "/open/get_people",
-  "query": {
-    "people_id": "number (required)"
-  },
-  "headers": {
-    "X-API-Key": "&lt;APIKey&gt;"
-  }
-}</code></pre>
-
-            <div class="schema-title">成功响应（success = true）</div>
-            <pre><code>{
-  "type": "object",
-  "required": ["success", "people"],
-  "properties": {
-    "success": { "type": "boolean", "const": true },
-    "people": { "type": "object", "description": "人物详情（字段较多，随库表变动）" }
-  }
-}</code></pre>
-
-            <div class="schema-title">错误响应（该接口常见）</div>
-            <pre><code>{
-  "oneOf": [
-    { "type": "object", "required": ["success", "error"], "properties": { "success": {"const": false}, "error": {"const": "INVALID_PEOPLE_ID"} } },
-    { "type": "object", "required": ["success", "error"], "properties": { "success": {"const": false}, "error": {"const": "NOT_FOUND"} } },
-    { "type": "object", "required": ["success", "error"], "properties": { "success": {"const": false}, "error": {"type": "string"}, "message": {"type": "string"} } }
-  ]
-}</code></pre>
-          </div>
-        </details>
       </div>
     </div>
 
     <div class="footer">
-      <div>已提供可折叠 Schema（请求/响应字段结构）。如需补充更多接口或更严格的 OpenAPI 3.1 输出，也可以继续扩展。</div>
+      <div><span data-lang="en">Examples included: curl / JavaScript / Python / Java (X-API-Key).</span><span data-lang="zh">调用示例已提供：curl / JavaScript / Python / Java（均使用 <code>X-API-Key</code>）。</span></div>
     </div>
   </div>
 </body>
 </html>
-
