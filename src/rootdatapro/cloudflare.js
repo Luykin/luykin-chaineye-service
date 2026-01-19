@@ -76,16 +76,26 @@ export default {
         });
       }
 
-      // 3.5 若为正常响应，构建返回给调用者的响应（隐藏目标服务器信息，支持跨域）
-      const returnHeaders = new Headers(response.headers);
-      returnHeaders.delete("x-powered-by");
-      returnHeaders.delete("server");
-      returnHeaders.set("Access-Control-Allow-Origin", "*");
-      returnHeaders.set("Access-Control-Allow-Headers", "pro-api-key, Content-Type");
-      // 重置Content-Type为JSON（确保返回格式统一，避免上游返回非标准格式）
-      if (!responseContentType.includes("json")) {
+      // 3.5 若为正常响应，构建返回给调用者的响应（白名单模式，隐藏目标服务器信息，支持跨域）
+      const returnHeaders = new Headers();
+
+      // 只保留必要的、安全的响应头（白名单机制）
+      if (response.headers.has("Cache-Control")) returnHeaders.set("Cache-Control", response.headers.get("Cache-Control"));
+      if (response.headers.has("Expires")) returnHeaders.set("Expires", response.headers.get("Expires"));
+      if (response.headers.has("ETag")) returnHeaders.set("ETag", response.headers.get("ETag"));
+
+      // 根据场景设置 Content-Type
+      if (isHtmlErrorPage && allowHtmlResponse) {
+        // 根路径的 HTML 响应，保留 text/html
+        returnHeaders.set("Content-Type", responseContentType);
+      } else {
+        // 其他所有情况，统一返回 application/json
         returnHeaders.set("Content-Type", "application/json; charset=utf-8");
       }
+
+      // 设置跨域头
+      returnHeaders.set("Access-Control-Allow-Origin", "*");
+      returnHeaders.set("Access-Control-Allow-Headers", "pro-api-key, Content-Type");
 
       return new Response(responseText, {
         status: response.status,
