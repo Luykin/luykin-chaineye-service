@@ -286,6 +286,32 @@
 
   <hr style="margin: 32px 0; border-color: #334155;" />
 
+  <div class="rdp-topbar" style="margin-top: 4px;">
+    <div class="rdp-header">
+      <h2>Open API Key</h2>
+      <p>一键创建 pro-api-key（初始额度 100），用于访问 /api/rootdatapro/open/*。</p>
+    </div>
+    <div class="rdp-task-controls">
+      <button id="rdp-apikey-create" class="rdp-btn">创建 API Key</button>
+    </div>
+  </div>
+  <pre id="rdp-apikey-result" class="rdp-result-pre">{"message": "等待创建..."}</pre>
+
+  <div class="rdp-form-group" style="margin-top: 16px;">
+    <div class="rdp-input-wrapper">
+      <label for="rdp-apikey-topup-key" class="rdp-label">API Key</label>
+      <input id="rdp-apikey-topup-key" type="text" placeholder="输入要充值的 key" class="rdp-input" />
+    </div>
+    <div class="rdp-input-wrapper" style="flex: 0.4; min-width: 160px;">
+      <label for="rdp-apikey-topup-amount" class="rdp-label">充值额度 (Credits)</label>
+      <input id="rdp-apikey-topup-amount" type="number" min="1" step="1" value="100" class="rdp-input" />
+    </div>
+    <button id="rdp-apikey-topup" class="rdp-btn">充值</button>
+  </div>
+  <pre id="rdp-apikey-topup-result" class="rdp-result-pre">{"message": "等待充值..."}</pre>
+
+  <hr style="margin: 32px 0; border-color: #334155;" />
+
   <!-- Manual Scrape Section -->
   <div class="rdp-header">
     <h2>手动单次抓取</h2>
@@ -441,7 +467,6 @@
           if (!statusInterval) {
             statusInterval = setInterval(updateCrawlStatus, 8000);
           }
-          // 允许“接管运行”：即使状态为 running（可能是重启后残留），也允许再次点击启动触发后端 start()
           $('rdp-task-start').disabled = false;
           $('rdp-task-start').textContent = '接管/启动';
           $('rdp-task-pause').disabled = false;
@@ -525,6 +550,32 @@
       e.preventDefault();
       $('rdp-id-query-btn').click();
     }
+  });
+
+  $('rdp-apikey-create').addEventListener('click', () => {
+    handleApiCall($('rdp-apikey-create'), $('rdp-apikey-result'), async () => {
+      const remark = prompt('备注（可选）', '');
+      return jsonFetch('/api/rootdatapro/internal/apikey/create', {
+        method: 'POST',
+        body: JSON.stringify({ remark: remark || null }),
+      });
+    });
+  });
+
+  $('rdp-apikey-topup').addEventListener('click', () => {
+    handleApiCall($('rdp-apikey-topup'), $('rdp-apikey-topup-result'), async () => {
+      const key = String($('rdp-apikey-topup-key').value || '').trim();
+      const amountRaw = $('rdp-apikey-topup-amount').value;
+      const amount = Number(amountRaw);
+
+      if (!key) throw new Error('请输入要充值的 API Key');
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error('请输入正确的充值额度');
+
+      return jsonFetch('/api/rootdatapro/internal/apikey/topup', {
+        method: 'POST',
+        body: JSON.stringify({ key, amount }),
+      });
+    });
   });
 
   // Manual scrape

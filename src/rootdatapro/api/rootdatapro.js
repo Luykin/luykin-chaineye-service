@@ -1,7 +1,10 @@
 const express = require("express");
 const db = require("../models");
+const apiKeyRoutes = require("./apikey");
 
 const router = express.Router();
+
+router.use(apiKeyRoutes);
 
 function isValidRootdataUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== "string") return false;
