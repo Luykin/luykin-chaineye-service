@@ -203,8 +203,8 @@
           title: 'RootDataPro Open API',
           baseUrlLabel: 'Base URL:',
           authTitle: 'Authentication (Required)',
-          authDesc1: 'All endpoints require an <code>APIKey</code> (usage-based billing).',
-          authDesc2: 'To get an <code>APIKey</code>, contact TG:',
+          authDesc1: 'All endpoints require an <code>APIKey</code> (usage-based billing). Use request header: <code>pro-api-key</code>.',
+          authDesc2: 'To get an <code>APIKey</code>, contact TG: @Niod88',
           headerLabel: 'Header:',
           responseLabel: 'Response: JSON',
           errorLabel: 'Error: ',
@@ -227,7 +227,7 @@
           requiredParam: 'required',
           getOrgDesc: 'Get organization details by <code>org_id</code> (tags, categories, team, investments).',
           getPeopleDesc: 'Get person details by <code>people_id</code> (related projects/orgs, investments).',
-          footer: 'Examples included: curl / JavaScript / Python / Java (X-API-Key).',
+          footer: 'Examples included: curl / JavaScript / Python / Java (pro-api-key).',
           pricingTitle: 'Pricing & Rules',
           monthlyTerm: '/ month',
           yearlyTerm: '/ year',
@@ -241,14 +241,15 @@
           f6: 'Query Fundraising Rounds',
           f7: 'Query people profiles, as well as X Impact, job changes, etc.',
           f8: '1V1 Tech Support',
-          f9: 'Customized Services'
+          f9: 'Customized Services',
+          footerCustom: 'If you have special requirements, please contact us on TG: @Niod88. We can provide custom solutions.'
         },
         zh: {
           title: 'RootDataPro Open API 文档',
           baseUrlLabel: 'Base URL：',
           authTitle: '鉴权说明（必须）',
-          authDesc1: '所有接口都需要 <code>APIKey</code>（按额度扣费）。',
-          authDesc2: '获取 <code>APIKey</code> 请联系 TG：',
+          authDesc1: '所有接口都需要 <code>APIKey</code>（按额度扣费）。请求头使用：<code>pro-api-key</code>。',
+          authDesc2: '获取 <code>APIKey</code> 请联系 TG：@Niod88',
           headerLabel: '请求头：',
           responseLabel: '返回格式：JSON',
           errorLabel: '错误格式：',
@@ -271,7 +272,7 @@
           requiredParam: '必填',
           getOrgDesc: '根据 <code>org_id</code> 获取机构详情（含标签、分类、团队、投融资信息）。',
           getPeopleDesc: '根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。',
-          footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 X-API-Key）。',
+          footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 pro-api-key）。',
           pricingTitle: '价格与规则',
           monthlyTerm: '/ 月',
           yearlyTerm: '/ 年',
@@ -285,7 +286,8 @@
           f6: 'Query Fundraising Rounds',
           f7: 'Query people profiles（含 X Impact、工作变动等）',
           f8: '1V1 Tech Support',
-          f9: '定制化服务等'
+          f9: '定制化服务等',
+          footerCustom: '如有特殊需求，请通过 TG 联系我们：@Niod88，我们可为你定制解决方案。'
         }
       };
 
@@ -363,6 +365,7 @@
         setText('t-feature-custom-services', dict.f9);
 
         setText('t-footer', dict.footer);
+        setText('t-footer-custom', dict.footerCustom);
 
         var enBtn = document.getElementById('lang-en');
         var zhBtn = document.getElementById('lang-zh');
@@ -373,7 +376,25 @@
       }
 
       window.__openDocsSetLang = setLang;
-      setLang(getLang());
+
+      function bindLangButtons() {
+        var enBtn = document.getElementById('lang-en');
+        var zhBtn = document.getElementById('lang-zh');
+        if (enBtn) enBtn.addEventListener('click', function () { setLang('en'); if (window.__openDocsSyncRepeats) window.__openDocsSyncRepeats(); });
+        if (zhBtn) zhBtn.addEventListener('click', function () { setLang('zh'); if (window.__openDocsSyncRepeats) window.__openDocsSyncRepeats(); });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+          bindLangButtons();
+          setLang(getLang());
+          if (window.__openDocsSyncRepeats) window.__openDocsSyncRepeats();
+        });
+      } else {
+        bindLangButtons();
+        setLang(getLang());
+        if (window.__openDocsSyncRepeats) window.__openDocsSyncRepeats();
+      }
     })();
   </script>
 
@@ -388,8 +409,8 @@
         </span>
 
         <span class="lang" role="group" aria-label="Language">
-          <button type="button" id="lang-en" onclick="window.__openDocsSetLang && window.__openDocsSetLang('en')">EN</button>
-          <button type="button" id="lang-zh" onclick="window.__openDocsSetLang && window.__openDocsSetLang('zh')">中文</button>
+          <button type="button" id="lang-en">EN</button>
+          <button type="button" id="lang-zh">中文</button>
         </span>
       </div>
 
@@ -432,13 +453,13 @@
         </div>
         <div class="hr"></div>
         <div class="muted"><span id="t-header-label">Header:</span></div>
-        <pre><code>X-API-Key: YOUR_API_KEY</code></pre>
+        <pre><code>pro-api-key: YOUR_API_KEY</code></pre>
       </div>
 
       <div class="row">
         <span class="pill" id="t-response">Response: JSON</span>
         <span class="pill"><span id="t-error">Error: </span>{ success: false, error, message? }</span>
-        <span class="pill"><span id="t-auth">Auth: </span>X-API-Key</span>
+        <span class="pill"><span id="t-auth">Auth: </span>pro-api-key</span>
       </div>
 
       <div class="callout">
@@ -560,6 +581,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
 
     <div class="footer">
       <div id="t-footer">Examples included: curl / JavaScript / Python / Java (X-API-Key).</div>
+      <div id="t-footer-custom" style="margin-top: 8px;"></div>
     </div>
   </div>
 

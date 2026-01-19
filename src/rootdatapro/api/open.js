@@ -131,6 +131,43 @@ async function attachFundedEntities(investments) {
   return result;
 }
 
+router.get("/quota", proApiKeyAuth(0), async (req, res) => {
+  console.log("[rootdatapro] /open/quota");
+
+  try {
+    const apiKey = req.get("pro-api-key") || req.headers?.["pro-api-key"] || req.headers?.["pro-api-key".toLowerCase()] || null;
+    if (!apiKey) {
+      return res.status(401).json({
+        success: false,
+        error: "MISSING_API_KEY",
+        message: "Missing required header: pro-api-key",
+      });
+    }
+
+    const row = await db.ApiKey.findOne({ where: { key: apiKey } });
+    if (!row) {
+      return res.status(403).json({
+        success: false,
+        error: "INVALID_API_KEY",
+        message: "Invalid pro-api-key",
+      });
+    }
+
+    return res.json({
+      success: true,
+      status: row.status,
+      credits_total: Number(row.credits_total ?? 0),
+      credits_remaining: Number(row.credits_remaining ?? 0),
+      expires_at: row.expires_at,
+      last_used_at: row.last_used_at,
+      remark: row.remark,
+    });
+  } catch (err) {
+    console.error("[rootdatapro] /open/quota error", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
 router.get("/get_item", proApiKeyAuth(2), async (req, res) => {
   console.log("[rootdatapro] /open/get_item", req.query);
   const project_id = parseIntParam(req.query.project_id);
