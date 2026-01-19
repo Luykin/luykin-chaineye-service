@@ -14,10 +14,21 @@ function jsonError(res, status, error, message) {
   });
 }
 
-function proApiKeyAuth(cost = 2) {
-  const creditsCost = Number.isFinite(Number(cost)) ? Number(cost) : 2;
+function resolveCost(cost, req) {
+  if (typeof cost === "function") {
+    const v = cost(req);
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  }
+  const n = Number(cost);
+  return Number.isFinite(n) ? n : NaN;
+}
 
+function proApiKeyAuth(cost = 2) {
   return async (req, res, next) => {
+    let creditsCost = resolveCost(cost, req);
+    if (!Number.isFinite(creditsCost)) creditsCost = 2;
+
     try {
       const apiKey = getHeader(req, "pro-api-key");
       if (!apiKey) {

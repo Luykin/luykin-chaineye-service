@@ -289,6 +289,9 @@
           projectsByEcosystemsDesc: 'Obtain project information in bulk based on ecosystem (POST JSON body: <code>ecosystem_ids</code>). Supports pagination (<code>page</code>, <code>page_size</code>).',
           projectsByTagsDesc: 'Obtain project information in bulk based on tag (POST JSON body: <code>tag_ids</code>). Supports pagination (<code>page</code>, <code>page_size</code>).',
           findByXDesc: 'Find matching people/projects/organizations by X (Twitter) handle (Query: <code>handle</code>).',
+          queryInvestmentsDesc: 'Query investments by investor/funded/round/date/amount filters. Supports pagination (POST JSON body).',
+          batchGetDetailsDesc: 'Batch fetch entity details (Project/Organization/Person). Cost = 2 Credits per item (POST JSON body: <code>items</code>).',
+          searchDesc: 'Full-text search across Project/Organization/Person (Query: <code>q</code>). Supports pagination (<code>page</code>, <code>page_size</code>).',
           footer: 'Examples included: curl / JavaScript / Python / Java (pro-api-key).',
           pricingTitle: 'Pricing & Rules',
           monthlyTerm: '/ month',
@@ -343,6 +346,9 @@
           projectsByEcosystemsDesc: '基于生态批量获取项目信息（POST JSON 传参：<code>ecosystem_ids</code>）。支持分页（<code>page</code>, <code>page_size</code>）。',
           projectsByTagsDesc: '基于标签批量获取项目信息（POST JSON 传参：<code>tag_ids</code>）。支持分页（<code>page</code>, <code>page_size</code>）。',
           findByXDesc: '通过 X（推特）账号查询匹配的人物/项目/机构信息（Query：<code>handle</code>）。',
+          queryInvestmentsDesc: '按投资方/被投方/轮次/日期/金额等条件查询投资事件，支持分页（POST JSON）。',
+          batchGetDetailsDesc: '批量获取实体详情（Project/Organization/Person），按条计费：每条 2 Credits（POST JSON：<code>items</code>）。',
+          searchDesc: '按关键词在 Project/Organization/Person 中检索（Query：<code>q</code>），支持分页（<code>page</code>, <code>page_size</code>）。',
           footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 pro-api-key）。',
           pricingTitle: '价格与规则',
           monthlyTerm: '/ 月',
@@ -426,6 +432,9 @@
         setText('t-projects-by-ecosystems-desc', dict.projectsByEcosystemsDesc);
         setText('t-projects-by-tags-desc', dict.projectsByTagsDesc);
         setText('t-find-by-x-desc', dict.findByXDesc);
+        setText('t-query-investments-desc', dict.queryInvestmentsDesc);
+        setText('t-batch-get-details-desc', dict.batchGetDetailsDesc);
+        setText('t-search-desc', dict.searchDesc);
         setText('t-level2', dict.requiredLevel2V);
         setText('t-required-param', dict.requiredParam);
 
@@ -757,10 +766,65 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
 
       <div class="card">
         <div class="row">
+          <span class="method">POST</span>
+          <span class="path">/query_investments</span>
+        </div>
+        <div class="desc" id="t-query-investments-desc">Query investments by investor/funded/round/date/amount filters. Supports pagination (POST JSON body).</div>
+        <div class="kv">
+          <div class="k">Auth</div><div class="v">Required (cost: 30 Credits)</div>
+          <div class="k">Body</div><div class="v"><code>investor_filters</code>, <code>funded_filters</code>, <code>round_names</code>, <code>date_from</code>, <code>date_to</code>, <code>min_amount</code>, <code>max_amount</code>, <code>page</code>, <code>page_size</code></div>
+        </div>
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/query_investments' \
+  -H 'pro-api-key: YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"investor_filters":[{"type":"Organization","ids":[1,2]}],"round_names":["Seed"],"page":1,"page_size":50}' | jq .</code></pre>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">POST</span>
+          <span class="path">/batch_get_details</span>
+        </div>
+        <div class="desc" id="t-batch-get-details-desc">Batch fetch entity details (Project/Organization/Person). Cost = 2 Credits per item (POST JSON body: <code>items</code>).</div>
+        <div class="kv">
+          <div class="k">Auth</div><div class="v">Required (cost: 2 Credits / item)</div>
+          <div class="k">Body</div><div class="v"><code>items</code> (array[{"type","id"}], required; max 200)</div>
+        </div>
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/batch_get_details' \
+  -H 'pro-api-key: YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"items":[{"type":"Project","id":123},{"type":"Person","id":456}]}' | jq .</code></pre>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">GET</span>
+          <span class="path">/search?q=bitcoin</span>
+        </div>
+        <div class="desc" id="t-search-desc">Full-text search across Project/Organization/Person (Query: <code>q</code>). Supports pagination (<code>page</code>, <code>page_size</code>).</div>
+        <div class="kv">
+          <div class="k">Auth</div><div class="v">Required (cost: 5 Credits)</div>
+          <div class="k">Query</div><div class="v"><code>q</code> (string, required)<br><code>entity_types</code> (optional, comma-separated: Project,Organization,Person)<br><code>page</code> (optional)<br><code>page_size</code> (optional, max 200)</div>
+        </div>
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/search?q=bitcoin&entity_types=Project,Organization&page=1&page_size=20' \
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="row">
           <span class="method">GET</span>
           <span class="path">/find_by_x?handle=elonmusk</span>
         </div>
-        <div class="desc" id="t-find-by-x-desc">Find matching people/projects/organizations by X (Twitter) link or handle (Query: <code>x</code>).</div>
+        <div class="desc" id="t-find-by-x-desc">Find matching people/projects/organizations by X (Twitter) handle (Query: <code>handle</code>).</div>
         <div class="kv">
           <div class="k">Auth</div><div class="v">Required (cost: 2 Credits)</div>
           <div class="k">Query</div><div class="v"><code>handle</code> (string, required)</div>

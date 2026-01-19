@@ -259,6 +259,239 @@ router.post("/projects_by_tags", proApiKeyAuth(20), async (req, res) => {
   }
 });
 
+router.post("/query_investments", proApiKeyAuth(30), async (req, res) => {
+  console.log("[rootdatapro] /open/query_investments", req.body);
+
+  const page = Number.isFinite(Number(req.body?.page)) ? Math.max(parseInt(req.body.page, 10), 1) : 1;
+  const pageSizeRaw = Number.isFinite(Number(req.body?.page_size)) ? parseInt(req.body.page_size, 10) : 50;
+  const page_size = Math.min(Math.max(pageSizeRaw, 1), 200);
+  const offset = (page - 1) * page_size;
+
+  const where = {};
+  const ands = [];
+
+  const investorFilters = Array.isArray(req.body?.investor_filters) ? req.body.investor_filters : [];
+  if (investorFilters.length > 0) {
+    const ors = [];
+    for (const f of investorFilters) {
+      const type = f?.type;
+      const ids = Array.isArray(f?.ids) ? f.ids : null;
+      if (!type || !ids || ids.length === 0) continue;
+      ors.push({ investorType: type, investorId: { [db.Sequelize.Op.in]: ids } });
+    }
+    if (ors.length > 0) ands.push({ [db.Sequelize.Op.or]: ors });
+  }
+
+  const fundedFilters = Array.isArray(req.body?.funded_filters) ? req.body.funded_filters : [];
+  if (fundedFilters.length > 0) {
+    const ors = [];
+    for (const f of fundedFilters) {
+      const type = f?.type;
+      const ids = Array.isArray(f?.ids) ? f.ids : null;
+      if (!type || !ids || ids.length === 0) continue;
+      ors.push({ fundedType: type, fundedId: { [db.Sequelize.Op.in]: ids } });
+    }
+    if (ors.length > 0) ands.push({ [db.Sequelize.Op.or]: ors });
+  }
+
+  const roundNames = Array.isArray(req.body?.round_names) ? req.body.round_names : null;
+  if (roundNames && roundNames.length > 0) {
+    where.round = { [db.Sequelize.Op.in]: roundNames };
+  }
+
+  if (req.body?.date_from || req.body?.date_to) {
+    const range = {};
+    if (req.body.date_from) range[db.Sequelize.Op.gte] = new Date(req.body.date_from);
+    if (req.body.date_to) range[db.Sequelize.Op.lte] = new Date(req.body.date_to);
+    where.date = range;
+  }
+
+  if (req.body?.min_amount !== undefined || req.body?.max_amount !== undefined) {
+    const range = {};
+    if (req.body.min_amount !== undefined) range[db.Sequelize.Op.gte] = Number(req.body.min_amount);
+    if (req.body.max_amount !== undefined) range[db.Sequelize.Op.lte] = Number(req.body.max_amount);
+    where.amount = range;
+  }
+
+  if (ands.length > 0) where[db.Sequelize.Op.and] = ands;
+
+  try {
+    const { count, rows } = await db.Investment.findAndCountAll({
+      where,
+      limit: page_size,
+      offset,
+      order: [["date", "DESC"]],
+    });
+
+    const withInvestor = await attachInvestorEntities(rows);
+    const withFunded = await attachFundedEntities(rows);
+
+    const investments = withInvestor.map((inv, idx) => ({
+      ...inv,
+      funded: withFunded[idx]?.funded ?? null,
+    }));
+
+    return res.json({
+      success: true,
+      page,
+      page_size,
+      total: count,
+      investments,
+    });
+  } catch (err) {
+    console.error("[rootdatapro] /open/query_investments error", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
+router.post(
+  "/batch_get_details",
+  express.json(),
+  (req, res, next) => {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    req.dynamicCost = items.length * 2;
+    return next();
+  },
+  proApiKeyAuth((req) => req.dynamicCost),
+  async (req, res) => {
+    console.log("[rootdatapro] /open/batch_get_details", req.body);
+
+    const items = Array.isArray(req.body?.items) ? req.body.items : null;
+    if (!items || items.length === 0) {
+      return res.status(400).json({ success: false, error: "INVALID_ITEMS" });
+    }
+    if (items.length > 200) {
+      return res.status(400).json({ success: false, error: "TOO_MANY_ITEMS" });
+    }
+
+    const idsByType = { Project: new Set(), Organization: new Set(), Person: new Set() };
+    for (const it of items) {
+      const type = it?.type;
+      const id = it?.id;
+      if (!idsByType[type]) {
+        return res.status(400).json({ success: false, error: "INVALID_TYPE" });
+      }
+      if (!Number.isFinite(Number(id))) {
+        return res.status(400).json({ success: false, error: "INVALID_ID" });
+      }
+      idsByType[type].add(Number(id));
+    }
+
+    try {
+      const [projectMap, orgMap, personMap] = await Promise.all([
+        batchFetchEntities("Project", idsByType.Project),
+        batchFetchEntities("Organization", idsByType.Organization),
+        batchFetchEntities("Person", idsByType.Person),
+      ]);
+
+      return res.json({
+        success: true,
+        cost: req.proApiKey?.creditsCost,
+        results: {
+          Project: projectMap,
+          Organization: orgMap,
+          Person: personMap,
+        },
+      });
+    } catch (err) {
+      console.error("[rootdatapro] /open/batch_get_details error", err);
+      return res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  }
+);
+
+
+router.get("/search", proApiKeyAuth(5), async (req, res) => {
+  console.log("[rootdatapro] /open/search", req.query);
+
+  const q = String(req.query?.q || "").trim();
+  if (!q) {
+    return res.status(400).json({ success: false, error: "MISSING_Q" });
+  }
+
+  const page = Number.isFinite(Number(req.query?.page)) ? Math.max(parseInt(req.query.page, 10), 1) : 1;
+  const pageSizeRaw = Number.isFinite(Number(req.query?.page_size)) ? parseInt(req.query.page_size, 10) : 20;
+  const page_size = Math.min(Math.max(pageSizeRaw, 1), 200);
+  const offset = (page - 1) * page_size;
+
+  const typesParam = String(req.query?.entity_types || "").trim();
+  const allowed = new Set(["Project", "Organization", "Person"]);
+  const types = typesParam
+    ? typesParam.split(",").map((s) => s.trim()).filter((s) => allowed.has(s))
+    : ["Project", "Organization", "Person"];
+
+  const like = `%${q}%`;
+
+  try {
+    const results = [];
+
+    const queries = [];
+    if (types.includes("Project")) {
+      queries.push(
+        db.Project.findAll({
+          where: {
+            [db.Sequelize.Op.or]: [
+              { project_name: { [db.Sequelize.Op.iLike]: like } },
+              { one_liner: { [db.Sequelize.Op.iLike]: like } },
+            ],
+          },
+          attributes: ["project_id", "project_name", "logo", "X"],
+          limit: 200,
+        }).then((rows) => rows.map((r) => ({ type: "Project", entity: r.toJSON() })))
+      );
+    }
+
+    if (types.includes("Organization")) {
+      queries.push(
+        db.Organization.findAll({
+          where: {
+            [db.Sequelize.Op.or]: [
+              { org_name: { [db.Sequelize.Op.iLike]: like } },
+              { description: { [db.Sequelize.Op.iLike]: like } },
+            ],
+          },
+          attributes: ["org_id", "org_name", "logo", "X"],
+          limit: 200,
+        }).then((rows) => rows.map((r) => ({ type: "Organization", entity: r.toJSON() })))
+      );
+    }
+
+    if (types.includes("Person")) {
+      queries.push(
+        db.Person.findAll({
+          where: {
+            [db.Sequelize.Op.or]: [
+              { people_name: { [db.Sequelize.Op.iLike]: like } },
+              { one_liner: { [db.Sequelize.Op.iLike]: like } },
+            ],
+          },
+          attributes: ["people_id", "people_name", "head_img", "X"],
+          limit: 200,
+        }).then((rows) => rows.map((r) => ({ type: "Person", entity: r.toJSON() })))
+      );
+    }
+
+    const parts = await Promise.all(queries);
+    parts.forEach((arr) => results.push(...arr));
+
+    const total = results.length;
+    const paged = results.slice(offset, offset + page_size);
+
+    return res.json({
+      success: true,
+      q,
+      entity_types: types,
+      page,
+      page_size,
+      total,
+      results: paged,
+    });
+  } catch (err) {
+    console.error("[rootdatapro] /open/search error", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
 function normalizeXHandle(input) {
   if (!input) return null;
   let s = String(input).trim();
