@@ -11,15 +11,17 @@ function parseIntParam(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-router.get("/", (req, res) => {
-  const requiredHost = "rootdatapro.online";
+const requiredHost = "rootdatapro.online";
 
-  const forwardedHost = req.headers?.["x-forwarded-host"] || "";
-
+router.use((req, res, next) => {
+  const forwardedHost = String(req.headers?.["x-forwarded-host"] || "").toLowerCase();
   if (!forwardedHost.includes(requiredHost)) {
     return res.status(404).send("Not Found");
   }
+  return next();
+});
 
+router.get("/", (req, res) => {
   const baseUrl = requiredHost;
 
   const app = req.app;
