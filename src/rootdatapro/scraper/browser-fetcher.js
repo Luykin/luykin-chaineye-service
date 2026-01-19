@@ -131,7 +131,10 @@ async function fetchMainDomAndNuxtData(url, options = {}) {
 
   let browser = null;
 
-  const selectedProxyStr = useProxy ? (proxy || pickRandomProxy(proxyPool)) : null;
+  const bypassProxyRate = Number.parseFloat(process.env.RDT_PROXY_BYPASS_RATE || "0.1");
+  const shouldBypassProxy = useProxy && Number.isFinite(bypassProxyRate) && bypassProxyRate > 0 && Math.random() < bypassProxyRate;
+
+  const selectedProxyStr = useProxy && !shouldBypassProxy ? (proxy || pickRandomProxy(proxyPool)) : null;
   const selectedProxy = parseProxyString(selectedProxyStr);
 
   const launchArgs = [...args];
