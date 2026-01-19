@@ -27,10 +27,12 @@
       --text: rgba(255,255,255,0.92);
       --muted: rgba(255,255,255,0.68);
       --line: rgba(255,255,255,0.12);
-      --brand: #7c5cff;
+      --brand: #f97316;
       --ok: #22c55e;
       --warn: #f59e0b;
       --bad: #ef4444;
+      --brand2: #fb923c;
+      --brand3: #fdba74;
       --codebg: rgba(0,0,0,0.35);
       --shadow: 0 20px 60px rgba(0,0,0,0.45);
     }
@@ -198,8 +200,8 @@
       .pricing-grid { grid-template-columns: 1fr 1fr; }
     }
     .pricing-card {
-      border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(249, 115, 22, 0.35);
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.18), rgba(251, 146, 60, 0.10));
       border-radius: 14px;
       padding: 12px;
       display: flex;
@@ -207,12 +209,14 @@
       justify-content: space-between;
       gap: 10px;
       min-width: 0;
+      box-shadow: 0 12px 28px rgba(249, 115, 22, 0.12);
     }
     .price {
       font-size: 22px;
       font-weight: 800;
       letter-spacing: 0.2px;
       color: rgba(255,255,255,0.95);
+      text-shadow: 0 10px 28px rgba(249, 115, 22, 0.18);
     }
     .term {
       font-size: 12px;
