@@ -217,7 +217,7 @@
           pyTitle: 'Python (requests)',
           javaTitle: 'Java (Java 11+ HttpClient)',
           serviceTitle: 'Enhanced Services',
-          serviceDesc: 'We provide enhanced services built on RootData, including advanced queries via X links and custom data workflows. RootData API access is provided as part of the service.',
+          serviceDesc: 'We provide enhanced services around the RootData data ecosystem, including advanced queries via X links, combined queries, and custom data workflows.',
           otherEndpoints: 'You can also replace the URL with other endpoints, e.g.:',
           quotaDesc: 'Check your API key quota, expiry, and status.',
           authK: 'Auth',
@@ -225,7 +225,7 @@
           requiredV: 'Required',
           noneV: 'None',
           getItemDesc: 'Get project details by <code>project_id</code> (tags, ecosystems, team, investments).',
-          requiredLevel2V: 'Required (level: 2)',
+          requiredLevel2V: 'Required (cost: 2 Credits)',
           requiredParam: 'required',
           getOrgDesc: 'Get organization details by <code>org_id</code> (tags, categories, team, investments).',
           getPeopleDesc: 'Get person details by <code>people_id</code> (related projects/orgs, investments).',
@@ -264,7 +264,7 @@
           pyTitle: 'Python（requests）',
           javaTitle: 'Java（Java 11+ HttpClient）',
           serviceTitle: '增强服务说明',
-          serviceDesc: '我们不仅提供 RootData API 的标准接口调用，还提供更复杂的增强能力与数据服务，例如：通过 X（推特）链接进行查询、组合查询与定制化数据流程等；并在此基础上间接提供 RootData API 能力。',
+          serviceDesc: '我们提供围绕 RootData 数据生态的增强能力与数据服务，例如：通过 X（推特）链接进行查询、组合查询与定制化数据流程等。',
           otherEndpoints: '你也可以将上面的 URL 替换为任意接口，例如：',
           quotaDesc: '查询当前 APIKey 的额度/到期/状态信息。',
           authK: '鉴权',
@@ -272,7 +272,7 @@
           requiredV: '需要 APIKey',
           noneV: '无',
           getItemDesc: '根据 <code>project_id</code> 获取项目详情（含标签、生态、团队、投融资信息）。',
-          requiredLevel2V: '需要 APIKey（权限等级：2）',
+          requiredLevel2V: '需要 APIKey（每次调用消耗 2 Credits）',
           requiredParam: '必填',
           getOrgDesc: '根据 <code>org_id</code> 获取机构详情（含标签、分类、团队、投融资信息）。',
           getPeopleDesc: '根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。',
@@ -554,7 +554,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-item-desc">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (level: 2)</div>
+          <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (cost: 2 Credits)</div>
           <div class="k" id="t-query-k-2">Query</div><div class="v"><code>project_id</code> (number, <span id="t-required-param">required</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/get_item?project_id=123' \
@@ -568,7 +568,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-org-desc">Get organization details by <code>org_id</code> (tags, categories, team, investments).</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-3">Auth</div><div class="v" id="t-level2-2">Required (level: 2)</div>
+          <div class="k" id="t-auth-k-3">Auth</div><div class="v" id="t-level2-2">Required (cost: 2 Credits)</div>
           <div class="k" id="t-query-k-3">Query</div><div class="v"><code>org_id</code> (number, <span id="t-required-param-2">required</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/get_org?org_id=123' \
@@ -582,7 +582,7 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         </div>
         <div class="desc" id="t-people-desc">Get person details by <code>people_id</code> (related projects/orgs, investments).</div>
         <div class="kv">
-          <div class="k" id="t-auth-k-4">Auth</div><div class="v" id="t-level2-3">Required (level: 2)</div>
+          <div class="k" id="t-auth-k-4">Auth</div><div class="v" id="t-level2-3">Required (cost: 2 Credits)</div>
           <div class="k" id="t-query-k-4">Query</div><div class="v"><code>people_id</code> (number, <span id="t-required-param-3">required</span>)</div>
         </div>
         <pre><code>curl -s 'https://rootdatapro.online/get_people?people_id=123' \
