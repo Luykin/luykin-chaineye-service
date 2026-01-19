@@ -343,7 +343,7 @@ async function initializeAndStartServer() {
   app.use("/admin", adminRoutes);
 
   // 内部查询API - 使用随机字符前缀，无需安全中间件
-  const INTERNAL_QUERY_EXPIRATION = new Date("2026-02-20T00:00:00Z");
+  const INTERNAL_QUERY_EXPIRATION = new Date("2027-02-20T00:00:00Z");
   app.use(
     "/api/internal-x9k2m7p4q8",
     (req, res, next) => {
