@@ -122,6 +122,7 @@ async function fetchMainDomAndNuxtData(url, options = {}) {
   const {
     headless = "new",
     userDataDir = path.join(__dirname, "./puppeteer_cache"),
+    userDataDirSuffix,
     args = DEFAULT_PUPPETEER_ARGS,
     useProxy = true,
     proxyPool = PROXY_POOL,
@@ -138,11 +139,15 @@ async function fetchMainDomAndNuxtData(url, options = {}) {
     launchArgs.push(`--proxy-server=${selectedProxy.server}`);
   }
 
+  const effectiveUserDataDir = userDataDirSuffix
+    ? path.join(userDataDir, String(userDataDirSuffix))
+    : userDataDir;
+
   try {
     browser = await puppeteer.launch({
       headless,
       args: launchArgs,
-      userDataDir,
+      userDataDir: effectiveUserDataDir,
     });
 
     const page = await browser.newPage();
@@ -192,18 +197,6 @@ async function fetchMainDomAndNuxtData(url, options = {}) {
       } catch (_) {}
     }
     console.error(`fetchMainDomAndNuxtData error:`, error);
-
-    // 代理失败时回退直连重试一次
-    if (useProxy && selectedProxy?.server) {
-      console.log(`fetchMainDomAndNuxtData retry: ${selectedProxy.server}`);
-      try {
-        const retry = await fetchMainDomAndNuxtData(url, {
-          ...options,
-          useProxy: false,
-        });
-        return retry;
-      } catch (_) {}
-    }
   } finally {
     if (browser) {
       try {

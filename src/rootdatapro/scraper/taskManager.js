@@ -160,7 +160,7 @@ class CrawlTaskManager {
     const redis = await this._getRedis();
 
     while ((await redis.get(REDIS_KEYS.STATUS)) === "running") {
-      const nextTask = await this._getNextTask();
+      let nextTask = await this._getNextTask();
 
       if (!nextTask) {
         // 可能是暂时被其他 worker 抢空了；稍等后再确认
@@ -183,8 +183,10 @@ class CrawlTaskManager {
       try {
         console.log(`[TaskManager] worker ${workerId} 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
         const scrapeFn = { 1: scrapeProject, 2: scrapeOrganization, 3: scrapePerson }[type];
+        const userDataDirSuffix = String(workerId + 1).padStart(3, "0");
+
         await Promise.race([
-          scrapeFn(url, { updateDb: true }),
+          scrapeFn(url, { updateDb: true, fetchOptions: { userDataDirSuffix } }),
           new Promise((_, reject) => setTimeout(() => reject(new Error("SCRAPE_TIMEOUT")), 2 * 60 * 1000))
         ]);
         console.log(`[TaskManager] worker ${workerId} 爬取成功: [ID: ${id}]`);

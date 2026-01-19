@@ -64,6 +64,7 @@ async function writeCrawlLog({ entity_id, entity_type, url, status, error_messag
  * @param {string} url 要爬取的完整 URL。
  */
 async function scrapeProject(url, options = {}) {
+  const fetchOptions = options.fetchOptions || {};
   console.log(`[Project] 开始爬取 URL: ${url}`);
   if (!url || !url.includes("/Projects")) {
     const msg = `无效的项目 URL: ${url}`;
@@ -80,7 +81,7 @@ async function scrapeProject(url, options = {}) {
 
   let projectData = null;
   try {
-    const { mainDom, nuxtDataJson } = await fetchMainDomAndNuxtData(url);
+    const { mainDom, nuxtDataJson } = await fetchMainDomAndNuxtData(url, fetchOptions);
     if (!mainDom || !nuxtDataJson) {
       const msg = `未能获取 ${url} 的 mainDom 或 __NUXT__ 数据。`;
       console.error(msg);
@@ -139,6 +140,7 @@ async function scrapeProject(url, options = {}) {
  * @param {string} url 要爬取的完整 URL。
  */
 async function scrapeOrganization(url, options = {}) {
+  const fetchOptions = options.fetchOptions || {};
   console.log(`[Organization] 开始爬取 URL: ${url}`);
   if (!url || !url.includes("/Investors")) {
     const msg = `无效的组织 URL: ${url}`;
@@ -155,7 +157,7 @@ async function scrapeOrganization(url, options = {}) {
 
   let orgData = null;
   try {
-    const { mainDom, nuxtDataJson } = await fetchMainDomAndNuxtData(url);
+    const { mainDom, nuxtDataJson } = await fetchMainDomAndNuxtData(url, fetchOptions);
     if (!mainDom || !nuxtDataJson) {
       const msg = `未能获取 ${url} 的 mainDom 或 __NUXT__ 数据。`;
       console.error(msg);
@@ -214,6 +216,7 @@ async function scrapeOrganization(url, options = {}) {
  * @param {string} url 要爬取的完整 URL。
  */
 async function scrapePerson(url, options = {}) {
+  const fetchOptions = options.fetchOptions || {};
   console.log(`[Person] 开始爬取 URL: ${url}`);
   if (!url || !url.includes("/member")) {
     const msg = `无效的个人 URL: ${url}`;
@@ -230,7 +233,7 @@ async function scrapePerson(url, options = {}) {
 
   let personData = null;
   try {
-    const { mainDom, nuxtDataJson } = await fetchMainDomAndNuxtData(url);
+    const { mainDom, nuxtDataJson } = await fetchMainDomAndNuxtData(url, fetchOptions);
     if (!mainDom || !nuxtDataJson) {
       const msg = `未能获取 ${url} 的 mainDom 或 __NUXT__ 数据。`;
       console.error(msg);
