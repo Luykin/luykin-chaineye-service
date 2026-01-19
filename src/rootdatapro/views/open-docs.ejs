@@ -156,6 +156,43 @@
 
     .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
     .hr { height: 1px; background: var(--line); margin: 14px 0; }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    @media (min-width: 520px) {
+      .pricing-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .pricing-card {
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+    }
+    .price {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      color: rgba(255,255,255,0.95);
+    }
+    .term {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .features-list {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: rgba(255,255,255,0.90);
+    }
+    .features-list li { margin: 6px 0; }
   </style>
 </head>
 <body>
@@ -190,7 +227,21 @@
           requiredParam: 'required',
           getOrgDesc: 'Get organization details by <code>org_id</code> (tags, categories, team, investments).',
           getPeopleDesc: 'Get person details by <code>people_id</code> (related projects/orgs, investments).',
-          footer: 'Examples included: curl / JavaScript / Python / Java (X-API-Key).'
+          footer: 'Examples included: curl / JavaScript / Python / Java (X-API-Key).',
+          pricingTitle: 'Pricing & Rules',
+          monthlyTerm: '/ month',
+          yearlyTerm: '/ year',
+          pricingCredits: 'Includes 30,000 Credits per month.',
+          featuresTitle: 'Features Included',
+          f1: 'Search Projects/VC',
+          f2: 'Query Project & VC',
+          f3: 'Search People',
+          f4: 'Ecosystem/Tag Data',
+          f5: 'Query Investors',
+          f6: 'Query Fundraising Rounds',
+          f7: 'Query people profiles, as well as X Impact, job changes, etc.',
+          f8: '1V1 Tech Support',
+          f9: 'Customized Services'
         },
         zh: {
           title: 'RootDataPro Open API 文档',
@@ -220,7 +271,21 @@
           requiredParam: '必填',
           getOrgDesc: '根据 <code>org_id</code> 获取机构详情（含标签、分类、团队、投融资信息）。',
           getPeopleDesc: '根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。',
-          footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 X-API-Key）。'
+          footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 X-API-Key）。',
+          pricingTitle: '价格与规则',
+          monthlyTerm: '/ 月',
+          yearlyTerm: '/ 年',
+          pricingCredits: '每月包含 30,000 Credits。',
+          featuresTitle: '包含内容',
+          f1: 'Search Projects/VC',
+          f2: 'Query Project / Query VC',
+          f3: 'Search People',
+          f4: 'Ecosystem/Tag Data',
+          f5: 'Query Investors',
+          f6: 'Query Fundraising Rounds',
+          f7: 'Query people profiles（含 X Impact、工作变动等）',
+          f8: '1V1 Tech Support',
+          f9: '定制化服务等'
         }
       };
 
@@ -282,6 +347,21 @@
         setText('t-level2', dict.requiredLevel2V);
         setText('t-required-param', dict.requiredParam);
 
+        setText('t-pricing-title', dict.pricingTitle);
+        setText('t-monthly-term', dict.monthlyTerm);
+        setText('t-yearly-term', dict.yearlyTerm);
+        setText('t-pricing-credits', dict.pricingCredits);
+        setText('t-features-title', dict.featuresTitle);
+        setText('t-feature-search-project-vc', dict.f1);
+        setText('t-feature-query-project-vc', dict.f2);
+        setText('t-feature-search-people', dict.f3);
+        setText('t-feature-ecosystem-tag', dict.f4);
+        setText('t-feature-query-investors', dict.f5);
+        setText('t-feature-query-fundraising', dict.f6);
+        setText('t-feature-query-people-profiles', dict.f7);
+        setText('t-feature-tech-support', dict.f8);
+        setText('t-feature-custom-services', dict.f9);
+
         setText('t-footer', dict.footer);
 
         var enBtn = document.getElementById('lang-en');
@@ -314,6 +394,35 @@
       </div>
 
       <div class="callout">
+        <div><strong id="t-pricing-title">Pricing & Rules</strong></div>
+        <div class="hr"></div>
+        <div class="pricing-grid">
+          <div class="pricing-card">
+            <div class="price">$70</div>
+            <div class="term" id="t-monthly-term">/ month</div>
+          </div>
+          <div class="pricing-card">
+            <div class="price">$750</div>
+            <div class="term" id="t-yearly-term">/ year</div>
+          </div>
+        </div>
+        <div class="muted" style="margin-top:10px;" id="t-pricing-credits">Includes 30,000 Credits per month.</div>
+        <div class="hr"></div>
+        <div style="font-weight: 600; font-size: 14px;" id="t-features-title">Features Included</div>
+        <ul class="features-list">
+          <li id="t-feature-search-project-vc">Search Projects/VC</li>
+          <li id="t-feature-query-project-vc">Query Project & VC</li>
+          <li id="t-feature-search-people">Search People</li>
+          <li id="t-feature-ecosystem-tag">Ecosystem/Tag Data</li>
+          <li id="t-feature-query-investors">Query Investors</li>
+          <li id="t-feature-query-fundraising">Query Fundraising Rounds</li>
+          <li id="t-feature-query-people-profiles">Query people profiles, as well as X Impact, job changes, etc.</li>
+          <li id="t-feature-tech-support">1V1 Tech Support</li>
+          <li id="t-feature-custom-services">Customized Services</li>
+        </ul>
+      </div>
+
+      <div class="callout">
         <div><strong id="t-auth-title">Authentication (Required)</strong></div>
         <div class="muted" style="margin-top:6px;">
           <span id="t-auth-desc1">All endpoints require an <code>APIKey</code> (usage-based billing).</span>
@@ -338,11 +447,11 @@
 
         <div class="hr"></div>
         <div class="muted" id="t-curl">curl (CLI)</div>
-        <pre><code>curl -s 'https://rootdatapro.online/open/quota' \
+        <pre><code>curl -s 'https://rootdatapro.online/quota' \
   -H 'X-API-Key: YOUR_API_KEY'</code></pre>
 
         <div class="muted" style="margin-top:10px;" id="t-js">JavaScript (Browser / Node 18+ fetch)</div>
-        <pre><code>const url = 'https://rootdatapro.online/open/quota';
+        <pre><code>const url = 'https://rootdatapro.online/quota';
 const res = await fetch(url, {
   method: 'GET',
   headers: {
@@ -355,7 +464,7 @@ console.log(data);</code></pre>
         <div class="muted" style="margin-top:10px;" id="t-py">Python (requests)</div>
         <pre><code>import requests
 
-url = 'https://rootdatapro.online/open/quota'
+url = 'https://rootdatapro.online/quota'
 headers = {
     'X-API-Key': 'YOUR_API_KEY',
 }
@@ -373,7 +482,7 @@ public class Demo {
   public static void main(String[] args) throws Exception {
     HttpClient client = HttpClient.newHttpClient();
     HttpRequest request = HttpRequest.newBuilder()
-        .uri(URI.create("https://rootdatapro.online/open/quota"))
+        .uri(URI.create("https://rootdatapro.online/quota"))
         .header("X-API-Key", "YOUR_API_KEY")
         .GET()
         .build();
@@ -385,9 +494,9 @@ public class Demo {
 }</code></pre>
 
         <div class="muted" style="margin-top:8px;" id="t-other-endpoints">You can also replace the URL with other endpoints, e.g.:</div>
-        <pre><code>https://rootdatapro.online/open/get_item?project_id=123
-https://rootdatapro.online/open/get_org?org_id=123
-https://rootdatapro.online/open/get_people?people_id=123</code></pre>
+        <pre><code>https://rootdatapro.online/get_item?project_id=123
+https://rootdatapro.online/get_org?org_id=123
+https://rootdatapro.online/get_people?people_id=123</code></pre>
       </div>
     </div>
 
@@ -395,56 +504,56 @@ https://rootdatapro.online/open/get_people?people_id=123</code></pre>
       <div class="card">
         <div class="row">
           <span class="method">GET</span>
-          <span class="path">/open/quota</span>
+          <span class="path">/quota</span>
         </div>
         <div class="desc" id="t-quota-desc">Check your API key quota, expiry, and status.</div>
         <div class="kv">
           <div class="k" id="t-auth-k">Auth</div><div class="v" id="t-required-v">Required</div>
           <div class="k" id="t-query-k">Query</div><div class="v" id="t-none-v">None</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/open/quota' \
+        <pre><code>curl -s 'https://rootdatapro.online/quota' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
       </div>
 
       <div class="card">
         <div class="row">
           <span class="method">GET</span>
-          <span class="path">/open/get_item?project_id=123</span>
+          <span class="path">/get_item?project_id=123</span>
         </div>
         <div class="desc" id="t-item-desc">Get project details by <code>project_id</code> (tags, ecosystems, team, investments).</div>
         <div class="kv">
           <div class="k" id="t-auth-k-2">Auth</div><div class="v" id="t-level2">Required (level: 2)</div>
           <div class="k" id="t-query-k-2">Query</div><div class="v"><code>project_id</code> (number, <span id="t-required-param">required</span>)</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/open/get_item?project_id=123' \
+        <pre><code>curl -s 'https://rootdatapro.online/get_item?project_id=123' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
       </div>
 
       <div class="card">
         <div class="row">
           <span class="method">GET</span>
-          <span class="path">/open/get_org?org_id=123</span>
+          <span class="path">/get_org?org_id=123</span>
         </div>
         <div class="desc" id="t-org-desc">Get organization details by <code>org_id</code> (tags, categories, team, investments).</div>
         <div class="kv">
           <div class="k" id="t-auth-k-3">Auth</div><div class="v" id="t-level2-2">Required (level: 2)</div>
           <div class="k" id="t-query-k-3">Query</div><div class="v"><code>org_id</code> (number, <span id="t-required-param-2">required</span>)</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/open/get_org?org_id=123' \
+        <pre><code>curl -s 'https://rootdatapro.online/get_org?org_id=123' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
       </div>
 
       <div class="card">
         <div class="row">
           <span class="method">GET</span>
-          <span class="path">/open/get_people?people_id=123</span>
+          <span class="path">/get_people?people_id=123</span>
         </div>
         <div class="desc" id="t-people-desc">Get person details by <code>people_id</code> (related projects/orgs, investments).</div>
         <div class="kv">
           <div class="k" id="t-auth-k-4">Auth</div><div class="v" id="t-level2-3">Required (level: 2)</div>
           <div class="k" id="t-query-k-4">Query</div><div class="v"><code>people_id</code> (number, <span id="t-required-param-3">required</span>)</div>
         </div>
-        <pre><code>curl -s 'https://rootdatapro.online/open/get_people?people_id=123' \
+        <pre><code>curl -s 'https://rootdatapro.online/get_people?people_id=123' \
   -H 'X-API-Key: YOUR_API_KEY' | jq .</code></pre>
       </div>
     </div>
@@ -474,13 +583,8 @@ https://rootdatapro.online/open/get_people?people_id=123</code></pre>
         idsLvl2.forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML = l.innerHTML; });
       }
 
-      var old = window.__openDocsSetLang;
-      if (typeof old === 'function') {
-        window.__openDocsSetLang = function(lang){
-          try { old(lang); } finally { syncRepeats(); }
-        };
-        syncRepeats();
-      }
+      window.__openDocsSyncRepeats = syncRepeats;
+      syncRepeats();
     })();
   </script>
 </body>
