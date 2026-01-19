@@ -229,6 +229,110 @@ router.post("/projects_by_tags", proApiKeyAuth(20), async (req, res) => {
   }
 });
 
+function normalizeXHandleOrUrl(input) {
+  if (!input) return null;
+  let s = String(input).trim();
+  if (!s) return null;
+
+  // If full URL, try to extract handle from x.com/twitter.com
+  try {
+    const u = new URL(s);
+    const host = (u.hostname || "").toLowerCase();
+    if (host.endsWith("x.com") || host.endsWith("twitter.com")) {
+      const parts = (u.pathname || "").split("/").filter(Boolean);
+      if (parts.length >= 1) {
+        const handle = parts[0];
+        if (handle && !["home", "i", "intent", "share"].includes(handle.toLowerCase())) {
+          s = handle;
+        }
+      }
+    }
+  } catch (e) {
+    // not a URL
+  }
+
+  if (s.startsWith("@")) s = s.slice(1);
+  s = s.replace(/^https?:\/\//i, "");
+  s = s.replace(/\s+/g, "");
+  s = s.replace(/[^a-zA-Z0-9_]/g, "");
+  if (!s) return null;
+  return s;
+}
+
+router.get("/find_by_x", proApiKeyAuth(10), async (req, res) => {
+  console.log("[rootdatapro] /open/find_by_x", req.query);
+
+  const raw = req.query?.x || req.query?.url || req.query?.handle;
+  const handle = normalizeXHandleOrUrl(raw);
+  if (!handle) {
+    return res.status(400).json({ success: false, error: "INVALID_X" });
+  }
+
+  try {
+    const like1 = `https://x.com/${handle}`;
+    const like2 = `https://twitter.com/${handle}`;
+
+    const [people, projects, organizations] = await Promise.all([
+      db.Person.findAll({
+        where: {
+          [db.Sequelize.Op.or]: [
+            { X: handle },
+            { X: `@${handle}` },
+            { X: like1 },
+            { X: `${like1}/` },
+            { X: like2 },
+            { X: `${like2}/` },
+            { X: { [db.Sequelize.Op.iLike]: `%${handle}%` } },
+          ],
+        },
+        attributes: ["people_id", "people_name", "head_img", "X"],
+        limit: 10,
+      }),
+      db.Project.findAll({
+        where: {
+          [db.Sequelize.Op.or]: [
+            { X: handle },
+            { X: `@${handle}` },
+            { X: like1 },
+            { X: `${like1}/` },
+            { X: like2 },
+            { X: `${like2}/` },
+            { X: { [db.Sequelize.Op.iLike]: `%${handle}%` } },
+          ],
+        },
+        attributes: ["project_id", "project_name", "logo", "X"],
+        limit: 10,
+      }),
+      db.Organization.findAll({
+        where: {
+          [db.Sequelize.Op.or]: [
+            { X: handle },
+            { X: `@${handle}` },
+            { X: like1 },
+            { X: `${like1}/` },
+            { X: like2 },
+            { X: `${like2}/` },
+            { X: { [db.Sequelize.Op.iLike]: `%${handle}%` } },
+          ],
+        },
+        attributes: ["org_id", "org_name", "logo", "X"],
+        limit: 10,
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      query: { handle, raw: raw || null },
+      people: people.map((r) => r.toJSON()),
+      projects: projects.map((r) => r.toJSON()),
+      organizations: organizations.map((r) => r.toJSON()),
+    });
+  } catch (err) {
+    console.error("[rootdatapro] /open/find_by_x error", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
 router.get("/quota", proApiKeyAuth(0), async (req, res) => {
   console.log("[rootdatapro] /open/quota");
 

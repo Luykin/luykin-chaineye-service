@@ -231,6 +231,7 @@
           getPeopleDesc: 'Get person details by <code>people_id</code> (related projects/orgs, investments).',
           projectsByEcosystemsDesc: 'Obtain project information in bulk based on ecosystem (POST JSON body: <code>ecosystem_ids</code>).',
           projectsByTagsDesc: 'Obtain project information in bulk based on tag (POST JSON body: <code>tag_ids</code>).',
+          findByXDesc: 'Find matching people/projects/organizations by X (Twitter) link or handle (Query: <code>x</code>).',
           footer: 'Examples included: curl / JavaScript / Python / Java (pro-api-key).',
           pricingTitle: 'Pricing & Rules',
           monthlyTerm: '/ month',
@@ -280,6 +281,7 @@
           getPeopleDesc: '根据 <code>people_id</code> 获取人物详情（含关联项目/机构、投融资信息）。',
           projectsByEcosystemsDesc: '基于生态批量获取项目信息（POST JSON 传参：<code>ecosystem_ids</code>）。',
           projectsByTagsDesc: '基于标签批量获取项目信息（POST JSON 传参：<code>tag_ids</code>）。',
+          findByXDesc: '通过 X（推特）链接或账号查询匹配的人物/项目/机构信息（Query：<code>x</code>）。',
           footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 pro-api-key）。',
           pricingTitle: '价格与规则',
           monthlyTerm: '/ 月',
@@ -358,6 +360,7 @@
         setText('t-people-desc', dict.getPeopleDesc);
         setText('t-projects-by-ecosystems-desc', dict.projectsByEcosystemsDesc);
         setText('t-projects-by-tags-desc', dict.projectsByTagsDesc);
+        setText('t-find-by-x-desc', dict.findByXDesc);
         setText('t-level2', dict.requiredLevel2V);
         setText('t-required-param', dict.requiredParam);
 
@@ -653,6 +656,20 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
   -H 'pro-api-key: YOUR_API_KEY' \
   -H 'Content-Type: application/json' \
   -d '{"tag_ids":[10,11,12]}' | jq .</code></pre>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">GET</span>
+          <span class="path">/find_by_x?x=https://x.com/xxx</span>
+        </div>
+        <div class="desc" id="t-find-by-x-desc">Find matching people/projects/organizations by X (Twitter) link or handle (Query: <code>x</code>).</div>
+        <div class="kv">
+          <div class="k">Auth</div><div class="v">Required (cost: 10 Credits)</div>
+          <div class="k">Query</div><div class="v"><code>x</code> (string, required)</div>
+        </div>
+        <pre><code>curl -s 'https://rootdatapro.online/find_by_x?x=https://x.com/elonmusk' \
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
       </div>
 
     </div>
