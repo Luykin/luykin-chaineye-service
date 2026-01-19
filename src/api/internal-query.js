@@ -292,7 +292,9 @@ router.post('/kjawd-query-twitter-bind-addresses', [
 		.withMessage('twitterIds 数组元素必须是非空字符串')
 ], async (req, res) => {
 	try {
-		const twitterIds = Array.isArray(req.body?.twitterIds) ? req.body.twitterIds : [];
+		const twitterIds = Array.isArray(req.body?.twitterIds)
+			? req.body.twitterIds.map((v) => String(v ?? '').trim())
+			: [];
 		if (!Array.isArray(twitterIds) || twitterIds.length === 0) {
 			return res.status(400).json({
 				success: false,
