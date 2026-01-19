@@ -14,7 +14,7 @@ function parseIntParam(v) {
 router.get("/", (req, res) => {
   const requiredHost = "rootdatapro.online";
 
-  const forwardedHost = req.headers?.["X-Forwarded-Host"] || "";
+  const forwardedHost = req.headers?.["x-forwarded-host"] || "";
 
   if (!forwardedHost.includes(requiredHost)) {
     return res.status(404).send("Not Found");
