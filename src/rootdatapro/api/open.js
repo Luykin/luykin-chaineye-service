@@ -6,6 +6,11 @@ const router = express.Router();
 
 const path = require("path");
 
+function parseIntParam(v) {
+  const n = typeof v === "string" ? Number(v) : v;
+  return Number.isFinite(n) ? n : null;
+}
+
 router.get("/", (req, res) => {
   const baseUrl = `${req.protocol}://${req.get("host")}`;
 
@@ -619,7 +624,6 @@ router.get("/get_item", proApiKeyAuth(2), async (req, res) => {
   if (!project_id) {
     return res.status(400).json({ success: false, error: "INVALID_PROJECT_ID" });
   }
-  console.log(`[PERF] /get_item start for project_id: ${project_id}`);
 
   try {
     // 1. 并行执行所有数据库查询
@@ -648,7 +652,6 @@ router.get("/get_item", proApiKeyAuth(2), async (req, res) => {
         order: [["date", "DESC"]],
       }),
     ]);
-    console.log(`[PERF] DB query end for project_id: ${project_id}. Duration: ${Date.now() - dbQueryStartTime}ms`);
 
     // 2. 如果项目不存在，提前返回
     if (!project) {
@@ -658,7 +661,6 @@ router.get("/get_item", proApiKeyAuth(2), async (req, res) => {
 
     // 3. 并行处理获取到的原始数据，附加关联实体信息
     const processingStartTime = Date.now();
-    console.log(`[PERF] Data processing start for project_id: ${project_id}`);
     const [fundingRounds, investmentsMade] = await Promise.all([
       attachInvestorEntities(fundingRoundsRaw),
       attachFundedEntities(investmentsMadeRaw),
