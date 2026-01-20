@@ -345,6 +345,12 @@
       var I18N = {
         en: {
           title: 'RootData API Enhanced Services',
+          llmTitle: 'Vibe Coding: Copy docs for any LLM',
+          llmDesc: 'One-click copy an LLM-ready Markdown of this page.',
+          llmFor: 'For LLMs',
+          llmModels: 'ChatGPT / Claude / Gemini / Others',
+          llmLang: 'Language',
+          llmPreview: 'Preview (first ~120 lines)',
           baseUrlLabel: 'Base URL:',
           authTitle: 'Authentication (Required)',
           authDesc1: 'All endpoints require an <code>APIKey</code>. Use request header: <code>pro-api-key</code>.',
@@ -409,6 +415,12 @@
         },
         zh: {
           title: 'RootData API 增强服务',
+          llmTitle: 'Vibe Coding：一键复制给任意大模型',
+          llmDesc: '复制本页 Markdown，让模型直接学习。',
+          llmFor: '面向大模型',
+          llmModels: 'ChatGPT / Claude / Gemini / 其他',
+          llmLang: '语言',
+          llmPreview: '预览（前约 120 行）',
           baseUrlLabel: 'Base URL：',
           authTitle: '鉴权说明（必须）',
           authDesc1: '所有接口都需要 <code>APIKey</code>。请求头使用：<code>pro-api-key</code>。',
@@ -520,6 +532,13 @@
         setText('t-service-title', dict.serviceTitle);
         setText('t-service-desc', dict.serviceDesc);
         setText('t-other-endpoints', dict.otherEndpoints);
+
+        setText('t-llm-title', dict.llmTitle);
+        setText('t-llm-desc', dict.llmDesc);
+        setText('t-llm-format', dict.llmFor);
+        setText('t-llm-models', dict.llmModels);
+        setText('t-llm-lang', dict.llmLang);
+        setText('t-llm-preview', dict.llmPreview);
 
         setText('t-quota-desc', dict.quotaDesc);
         setText('t-auth-k', dict.authK);
