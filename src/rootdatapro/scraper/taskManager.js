@@ -28,8 +28,10 @@ class CrawlTaskManager {
   }
 
   /**
-   * 构建未爬取任务的队列（从 typemap 中找出 CrawlLog 中没有成功记录的 ID）
-   * 只排除已成功爬取的 ID，失败的任务仍然可以重试
+   * 构建「从未爬取过」任务的队列
+   * 逻辑：从 typemap 中找出在 CrawlLog 表里「完全没有任何记录」的 ID
+   *（既没有 success，也没有 failure）—— 即真正的首爬任务。
+   * 失败过但尚未成功的任务由 _buildRetryQueue 单独处理。
    * @returns {Promise<Object>} 返回 { project: [ids], organization: [ids], person: [ids] }
    */
   async _buildQueueFromDb() {
@@ -58,21 +60,29 @@ class CrawlTaskManager {
           const batch = idsToCheck.slice(i, i + BATCH_SIZE);
           if (batch.length === 0) continue;
 
-          // 查询这批 ID 中哪些已经有成功记录
-          const successRecords = await db.CrawlLog.findAll({
+          // 查询这批 ID 在 CrawlLog 中的所有记录（成功或失败）
+          const records = await db.CrawlLog.findAll({
             where: {
               entity_type: entityType,
               entity_id: batch, // 使用 IN 查询
-              status: 'success',
             },
-            attributes: ['entity_id'],
+            attributes: ['entity_id', 'status'],
             raw: true,
           });
 
-          const successIdsInBatch = new Set(successRecords.map(r => String(r.entity_id)));
+          const anyRecordIds = new Set();
+          const successIdsInBatch = new Set();
 
-          // 找出批次中未成功的 ID
-          const unscrapedInBatch = batch.filter(id => !successIdsInBatch.has(id));
+          for (const r of records) {
+            const eid = String(r.entity_id);
+            anyRecordIds.add(eid);
+            if (r.status === 'success') {
+              successIdsInBatch.add(eid);
+            }
+          }
+
+          // 「从未爬取过」的定义：这批 ID 中，在 CrawlLog 里完全没有任何记录
+          const unscrapedInBatch = batch.filter(id => !anyRecordIds.has(id));
           
           if (unscrapedInBatch.length > 0) {
             unscrapedIds[entityType].push(...unscrapedInBatch);
