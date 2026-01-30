@@ -13,6 +13,7 @@ const REDIS_KEYS = {
   QUEUE_PERSON: "rdt_crawl:queue:3",
   ERROR: "rdt_crawl:error",
   CONSECUTIVE_ERRORS: "rdt_crawl:consecutive_errors",
+  CURRENT_TASKS: "rdt_crawl:current_tasks",
 };
 
 class CrawlTaskManager {
@@ -589,24 +590,29 @@ class CrawlTaskManager {
     // 检测当前执行阶段
     const phase = await this._detectCurrentPhase();
 
-    // 当前正在处理的任务（按 worker）
+    // 当前正在处理的任务（按 worker），从 Redis 中读取，兼容多进程
     const currentTasks = [];
-    if (this.currentTasks && typeof this.currentTasks === 'object') {
-      for (const [workerId, info] of Object.entries(this.currentTasks)) {
-        currentTasks.push({
-          workerId: Number(workerId),
-          id: info.id,
-          type: info.type,
-          typeName: info.typeName,
-          url: info.url,
-          startedAt: info.startedAt,
-        });
+    try {
+      const raw = await redis.hGetAll(REDIS_KEYS.CURRENT_TASKS);
+      if (raw && typeof raw === 'object') {
+        for (const [workerId, json] of Object.entries(raw)) {
+          try {
+            const info = JSON.parse(json);
+            currentTasks.push({
+              workerId: Number(workerId),
+              id: info.id,
+              type: info.type,
+              typeName: info.typeName,
+              url: info.url,
+              startedAt: info.startedAt,
+            });
+          } catch {
+            // 忽略解析失败的记录
+          }
+        }
       }
-    }
-
-    // 如果当前没有正在运行的任务，但之前有最近一次任务记录，则返回最近一次任务，便于前端展示
-    if (currentTasks.length === 0 && this.lastTask) {
-      currentTasks.push(this.lastTask);
+    } catch (e) {
+      console.error("[TaskManager] 读取当前任务信息失败:", e);
     }
 
     return {
@@ -715,8 +721,7 @@ class CrawlTaskManager {
 
       try {
         const typeName = ({ 1: 'Project', 2: 'Organization', 3: 'Person' }[type]) || String(type);
-        if (!this.currentTasks) this.currentTasks = {};
-        this.currentTasks[workerId] = {
+        const taskInfo = {
           workerId,
           id,
           type,
@@ -724,8 +729,8 @@ class CrawlTaskManager {
           url,
           startedAt: new Date().toISOString(),
         };
-        // 记录最近一次任务，避免前端在轮询间隙看到空的 currentTasks
-        this.lastTask = this.currentTasks[workerId];
+        // 写入 Redis，供 /crawl/status 查询当前任务（支持多进程）
+        await redis.hSet(REDIS_KEYS.CURRENT_TASKS, String(workerId), JSON.stringify(taskInfo));
 
         console.log(`[TaskManager] worker ${workerId} 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
         const scrapeFn = { 1: scrapeProject, 2: scrapeOrganization, 3: scrapePerson }[type];
@@ -755,9 +760,7 @@ class CrawlTaskManager {
           console.error(`[TaskManager] 连续失败 ${consecutive} 次，已自动暂停任务。`);
         }
       } finally {
-        if (this.currentTasks && this.currentTasks[workerId]) {
-          delete this.currentTasks[workerId];
-        }
+        // 暂时保留 Redis 中的记录，作为“最近一次任务”展示，不在这里删除
       }
 
       await new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 1200));
