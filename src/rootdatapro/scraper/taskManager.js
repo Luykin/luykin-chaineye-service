@@ -334,6 +334,13 @@ class CrawlTaskManager {
     console.log("[TaskManager] 初始化中...");
     const redis = await this._getRedis();
 
+    // 保护：运行中禁止初始化，避免中途清空队列
+    const currentStatus = await redis.get(REDIS_KEYS.STATUS);
+    if (currentStatus === "running") {
+      console.log("[TaskManager] 当前状态为 running，跳过初始化以避免中断正在执行的任务。");
+      return;
+    }
+
     console.log("[TaskManager] 清理旧的 Redis 队列数据...");
     // 只清理队列相关的键，保留 STATUS、ERROR、CONSECUTIVE_ERRORS（运行时状态）
     const queueKeys = [
@@ -342,16 +349,6 @@ class CrawlTaskManager {
       REDIS_KEYS.QUEUE_PERSON,
     ];
     await redis.del(queueKeys);
-
-    // 检查队列是否已存在
-    const queueExists = await redis.exists(REDIS_KEYS.QUEUE_PROJECT) || 
-                        await redis.exists(REDIS_KEYS.QUEUE_ORG) || 
-                        await redis.exists(REDIS_KEYS.QUEUE_PERSON);
-    
-    if (queueExists && !force) {
-      console.log("[TaskManager] 队列已存在，跳过初始化。如需重置，请使用 force=true");
-      return;
-    }
 
     // 步骤1: 构建未爬取任务的队列
     console.log("[TaskManager] 正在从数据库构建未爬取任务队列...");
