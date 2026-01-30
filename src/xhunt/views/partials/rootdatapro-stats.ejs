@@ -159,6 +159,16 @@
   .status-paused { background-color: rgba(180,83,9,0.9); color: #fffbeb; }
   .status-finished { background-color: rgba(6,78,59,0.9); color: #d1fae5; }
   .status-error { background-color: rgba(153,27,27,0.9); color: #fee2e2; }
+  
+  .rdp-task-phase {
+    font-size: 12px;
+    color: #94a3b8;
+    font-style: italic;
+  }
+  .rdp-task-phase.phase-crawling_new { color: #38bdf8; }
+  .rdp-task-phase.phase-retrying_failures { color: #fbbf24; }
+  .rdp-task-phase.phase-discovering_new_ids { color: #a78bfa; }
+  .rdp-task-phase.phase-finished { color: #34d399; }
 
   .rdp-status-meta { display: flex; align-items: center; gap: 10px; color: #94a3b8; font-size: 12px; }
   .rdp-dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; box-shadow: 0 0 0 3px rgba(71,85,105,0.2); }
@@ -217,7 +227,10 @@
   </div>
 
   <div class="rdp-status-row">
-    <div class="rdp-task-status">当前状态: <span id="rdp-task-status-value" class="rdp-task-status-value status-idle">-</span></div>
+    <div class="rdp-task-status">
+      当前状态: <span id="rdp-task-status-value" class="rdp-task-status-value status-idle">-</span>
+      <span id="rdp-task-phase" class="rdp-task-phase" style="margin-left: 12px; font-size: 12px; color: #94a3b8;"></span>
+    </div>
     <div class="rdp-status-meta">
       <span class="rdp-dot" id="rdp-live-dot"></span>
       <span id="rdp-live-text">未自动刷新</span>
@@ -473,7 +486,7 @@
   async function updateCrawlStatus() {
     try {
         const res = await jsonFetch('/api/rootdatapro/internal/crawl/status');
-        const { status, progress, failedUrlsCount } = res.data;
+        const { status, progress, failedUrlsCount, phase } = res.data;
 
         const failedEl = $('rdp-progress-failed-mini');
         if (failedEl) {
@@ -483,6 +496,23 @@
         const statusEl = $('rdp-task-status-value');
         statusEl.textContent = String(status || '-').toUpperCase();
         statusEl.className = `rdp-task-status-value status-${status}`;
+
+        // 显示当前执行阶段
+        const phaseEl = $('rdp-task-phase');
+        if (phaseEl) {
+          const phaseMap = {
+            'idle': '空闲',
+            'crawling_new': '正在爬取新任务',
+            'retrying_failures': '正在重试失败任务',
+            'discovering_new_ids': '正在增量发现新 ID',
+            'finished': '已完成',
+            'paused': '已暂停',
+            'unknown': '未知状态',
+          };
+          const phaseText = phaseMap[phase] || phase || '';
+          phaseEl.textContent = phaseText ? `(${phaseText})` : '';
+          phaseEl.className = `rdp-task-phase phase-${phase || ''}`;
+        }
 
         const dotEl = $('rdp-live-dot');
         const liveTextEl = $('rdp-live-text');
