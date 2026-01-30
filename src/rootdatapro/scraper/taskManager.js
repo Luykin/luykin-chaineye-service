@@ -28,7 +28,8 @@ class CrawlTaskManager {
   }
 
   /**
-   * 构建未爬取任务的队列（从 typemap 中找出 CrawlLog 中没有记录的 ID）
+   * 构建未爬取任务的队列（从 typemap 中找出 CrawlLog 中没有成功记录的 ID）
+   * 只排除已成功爬取的 ID，失败的任务仍然可以重试
    * @returns {Promise<Object>} 返回 { project: [ids], organization: [ids], person: [ids] }
    */
   async _buildQueueFromDb() {
@@ -42,31 +43,34 @@ class CrawlTaskManager {
         Person: new Set(Array.from(typemapManager._idMapCache.byType[3]).map(id => String(id))),
       };
 
-      // 查询 CrawlLog 中已爬取的所有 entity_id（按 entity_type 分组）
-      const crawledRecords = await db.CrawlLog.findAll({
+      // 只查询 CrawlLog 中已成功爬取的 entity_id（按 entity_type 分组）
+      // 使用一次性查询，避免逐个查询的性能问题
+      const successRecords = await db.CrawlLog.findAll({
+        where: { status: 'success' },
         attributes: ['entity_id', 'entity_type'],
         raw: true,
       });
 
-      const crawledIds = {
+      const successIds = {
         Project: new Set(),
         Organization: new Set(),
         Person: new Set(),
       };
 
-      for (const record of crawledRecords) {
+      for (const record of successRecords) {
         const entityType = record.entity_type;
         const entityId = String(record.entity_id);
-        if (crawledIds[entityType]) {
-          crawledIds[entityType].add(entityId);
+        if (successIds[entityType]) {
+          successIds[entityType].add(entityId);
         }
       }
 
-      // 计算未爬取的 ID（typemap 中有但 CrawlLog 中没有的）
+      // 计算未成功爬取的 ID（typemap 中有但 CrawlLog 中没有成功记录的）
+      // 包括：1. 从未爬取过的 ID  2. 只有失败记录的 ID（可以重试）
       const unscrapedIds = {
-        Project: [...allIds.Project].filter(id => !crawledIds.Project.has(id)),
-        Organization: [...allIds.Organization].filter(id => !crawledIds.Organization.has(id)),
-        Person: [...allIds.Person].filter(id => !crawledIds.Person.has(id)),
+        Project: [...allIds.Project].filter(id => !successIds.Project.has(id)),
+        Organization: [...allIds.Organization].filter(id => !successIds.Organization.has(id)),
+        Person: [...allIds.Person].filter(id => !successIds.Person.has(id)),
       };
 
       return unscrapedIds;
@@ -809,11 +813,13 @@ class CrawlTaskManager {
     const redis = await this._getRedis();
     const queues = [REDIS_KEYS.QUEUE_PROJECT, REDIS_KEYS.QUEUE_ORG, REDIS_KEYS.QUEUE_PERSON];
     
+    // 依次从三个队列中取任务
+    // 注意：队列中的 ID 已经在 _buildQueueFromDb() 中过滤过了（只包含未成功爬取的），
+    // 所以这里不需要再查数据库，直接返回即可
     for (let i = 0; i < queues.length; i++) {
         const type = i + 1;
         const id = await redis.lPop(queues[i]);
         if (id) {
-            // 不再检查 SCRAPED_IDS，因为进度完全基于数据库 CrawlLog
             return { id, type };
         }
     }
