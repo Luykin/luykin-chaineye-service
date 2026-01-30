@@ -230,6 +230,9 @@
     <div class="rdp-task-status">
       当前状态: <span id="rdp-task-status-value" class="rdp-task-status-value status-idle">-</span>
       <span id="rdp-task-phase" class="rdp-task-phase" style="margin-left: 12px; font-size: 12px; color: #94a3b8;"></span>
+      <div style="margin-top: 4px; font-size: 12px; color: #94a3b8;">
+        当前任务: <span id="rdp-current-task">-</span>
+      </div>
     </div>
     <div class="rdp-status-meta">
       <span class="rdp-dot" id="rdp-live-dot"></span>
@@ -486,7 +489,7 @@
   async function updateCrawlStatus() {
     try {
         const res = await jsonFetch('/api/rootdatapro/internal/crawl/status');
-        const { status, progress, failedUrlsCount, phase } = res.data;
+        const { status, progress, failedUrlsCount, phase, currentTasks } = res.data;
 
         const failedEl = $('rdp-progress-failed-mini');
         if (failedEl) {
@@ -521,6 +524,23 @@
         }
 
         updateProgress(progress);
+
+        // 当前正在爬取的任务（只展示第一个 worker 的任务）
+        const currentTaskEl = $('rdp-current-task');
+        if (currentTaskEl) {
+          if (Array.isArray(currentTasks) && currentTasks.length > 0) {
+            const t = currentTasks[0];
+            const typeLabelMap = {
+              Project: '项目',
+              Organization: '机构',
+              Person: '人物',
+            };
+            const typeLabel = typeLabelMap[t.typeName] || t.typeName || t.type;
+            currentTaskEl.textContent = `ID ${t.id}（${typeLabel}，Worker #${t.workerId}）`;
+          } else {
+            currentTaskEl.textContent = '-';
+          }
+        }
 
         const now = new Date();
         if (liveTextEl) {

@@ -36,42 +36,50 @@ class CrawlTaskManager {
     try {
       typemapManager.loadIdMaps();
       
-      // 获取 typemap 中的所有 ID
       const allIds = {
-        Project: new Set(Array.from(typemapManager._idMapCache.byType[1]).map(id => String(id))),
-        Organization: new Set(Array.from(typemapManager._idMapCache.byType[2]).map(id => String(id))),
-        Person: new Set(Array.from(typemapManager._idMapCache.byType[3]).map(id => String(id))),
+        Project: Array.from(typemapManager._idMapCache.byType[1]).map(id => String(id)),
+        Organization: Array.from(typemapManager._idMapCache.byType[2]).map(id => String(id)),
+        Person: Array.from(typemapManager._idMapCache.byType[3]).map(id => String(id)),
       };
 
-      // 只查询 CrawlLog 中已成功爬取的 entity_id（按 entity_type 分组）
-      // 使用一次性查询，避免逐个查询的性能问题
-      const successRecords = await db.CrawlLog.findAll({
-        where: { status: 'success' },
-        attributes: ['entity_id', 'entity_type'],
-        raw: true,
-      });
-
-      const successIds = {
-        Project: new Set(),
-        Organization: new Set(),
-        Person: new Set(),
-      };
-
-      for (const record of successRecords) {
-        const entityType = record.entity_type;
-        const entityId = String(record.entity_id);
-        if (successIds[entityType]) {
-          successIds[entityType].add(entityId);
-        }
-      }
-
-      // 计算未成功爬取的 ID（typemap 中有但 CrawlLog 中没有成功记录的）
-      // 包括：1. 从未爬取过的 ID  2. 只有失败记录的 ID（可以重试）
       const unscrapedIds = {
-        Project: [...allIds.Project].filter(id => !successIds.Project.has(id)),
-        Organization: [...allIds.Organization].filter(id => !successIds.Organization.has(id)),
-        Person: [...allIds.Person].filter(id => !successIds.Person.has(id)),
+        Project: [],
+        Organization: [],
+        Person: [],
       };
+
+      const BATCH_SIZE = 1000; // 每次检查 1000 个 ID
+
+      for (const entityType of ['Project', 'Organization', 'Person']) {
+        const idsToCheck = allIds[entityType];
+        console.log(`[TaskManager] 检查 ${entityType} 类型，总共 ${idsToCheck.length} 个 ID...`);
+
+        for (let i = 0; i < idsToCheck.length; i += BATCH_SIZE) {
+          const batch = idsToCheck.slice(i, i + BATCH_SIZE);
+          if (batch.length === 0) continue;
+
+          // 查询这批 ID 中哪些已经有成功记录
+          const successRecords = await db.CrawlLog.findAll({
+            where: {
+              entity_type: entityType,
+              entity_id: batch, // 使用 IN 查询
+              status: 'success',
+            },
+            attributes: ['entity_id'],
+            raw: true,
+          });
+
+          const successIdsInBatch = new Set(successRecords.map(r => String(r.entity_id)));
+
+          // 找出批次中未成功的 ID
+          const unscrapedInBatch = batch.filter(id => !successIdsInBatch.has(id));
+          
+          if (unscrapedInBatch.length > 0) {
+            unscrapedIds[entityType].push(...unscrapedInBatch);
+          }
+        }
+        console.log(`[TaskManager] 发现 ${unscrapedIds[entityType].length} 个未爬取的 ${entityType} ID`);
+      }
 
       return unscrapedIds;
     } catch (error) {
@@ -218,71 +226,30 @@ class CrawlTaskManager {
    */
   async _buildRetryQueue() {
     try {
-      // 查询 CrawlLog 中所有失败且只失败过一次的记录
-      // 注意：我们需要确保每个失败的任务只重试一次
-      // 可以通过查询失败记录，但排除那些已经有成功记录的相同 entity_id
-      
-      const failureRecords = await db.CrawlLog.findAll({
-        where: { status: 'failure' },
+      // 使用聚合查询直接从数据库找出需要重试的 ID
+      // 条件：失败过 1 次，且从未成功过
+      const { Op, fn, literal } = db.Sequelize;
+
+      const retryRecords = await db.CrawlLog.findAll({
         attributes: ['entity_id', 'entity_type'],
+        group: ['entity_id', 'entity_type'],
+        // 失败次数为 1，且成功次数为 0
+        having: literal(
+          "SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) = 1 " +
+          "AND SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) = 0"
+        ),
         raw: true,
       });
 
-      // 查询所有成功的记录，用于排除
-      const successRecords = await db.CrawlLog.findAll({
-        where: { status: 'success' },
-        attributes: ['entity_id', 'entity_type'],
-        raw: true,
-      });
-
-      const successIds = {
-        Project: new Set(),
-        Organization: new Set(),
-        Person: new Set(),
-      };
-
-      for (const record of successRecords) {
-        const entityType = record.entity_type;
-        const entityId = String(record.entity_id);
-        if (successIds[entityType]) {
-          successIds[entityType].add(entityId);
-        }
-      }
-
-      // 统计每个 entity_id 的失败次数
-      const failureCounts = {
-        Project: new Map(),
-        Organization: new Map(),
-        Person: new Map(),
-      };
-
-      for (const record of failureRecords) {
-        const entityType = record.entity_type;
-        const entityId = String(record.entity_id);
-        
-        // 如果已经有成功记录，跳过
-        if (successIds[entityType] && successIds[entityType].has(entityId)) {
-          continue;
-        }
-
-        const counts = failureCounts[entityType];
-        if (counts) {
-          counts.set(entityId, (counts.get(entityId) || 0) + 1);
-        }
-      }
-
-      // 只选择失败次数为 1 的记录（只重试一次）
       const retryIds = {
         Project: [],
         Organization: [],
         Person: [],
       };
 
-      for (const [entityType, counts] of Object.entries(failureCounts)) {
-        for (const [entityId, count] of counts.entries()) {
-          if (count === 1) {
-            retryIds[entityType].push(entityId);
-          }
+      for (const record of retryRecords) {
+        if (retryIds[record.entity_type]) {
+          retryIds[record.entity_type].push(String(record.entity_id));
         }
       }
 
@@ -300,107 +267,54 @@ class CrawlTaskManager {
   async _getProgressFromDb() {
     try {
       typemapManager.loadIdMaps();
-      
-      // 获取 typemap 中的所有 ID
+      const { fn, col, literal } = db.Sequelize;
+
       const allIds = {
-        Project: Array.from(typemapManager._idMapCache.byType[1]).map(id => String(id)),
-        Organization: Array.from(typemapManager._idMapCache.byType[2]).map(id => String(id)),
-        Person: Array.from(typemapManager._idMapCache.byType[3]).map(id => String(id)),
+        Project: typemapManager._idMapCache.byType[1].size,
+        Organization: typemapManager._idMapCache.byType[2].size,
+        Person: typemapManager._idMapCache.byType[3].size,
       };
 
       const totals = {
-        project: allIds.Project.length,
-        organization: allIds.Organization.length,
-        person: allIds.Person.length,
+        project: allIds.Project,
+        organization: allIds.Organization,
+        person: allIds.Person,
       };
       totals.total = totals.project + totals.organization + totals.person;
 
-      // 查询 CrawlLog 中已爬取的记录（按 entity_type 分组）
-      const crawledRecords = await db.CrawlLog.findAll({
-        attributes: ['entity_id', 'entity_type', 'status'],
+      // 使用聚合查询直接从数据库获取统计信息
+      const stats = await db.CrawlLog.findAll({
+        attributes: [
+          'entity_type',
+          [fn('COUNT', fn('DISTINCT', col('entity_id'))), 'completed'],
+          [fn('COUNT', fn('DISTINCT', literal(`CASE WHEN status = 'success' THEN entity_id END`))), 'success'],
+          [fn('COUNT', fn('DISTINCT', literal(`CASE WHEN status = 'failure' THEN entity_id END`))), 'failure'],
+        ],
+        group: ['entity_type'],
         raw: true,
       });
 
-      // 统计已爬取的数量（无论成功或失败，只要 CrawlLog 中有记录就算）
-      const crawledIds = {
-        Project: new Set(),
-        Organization: new Set(),
-        Person: new Set(),
+      const progress = {
+        project: { total: totals.project, completed: 0, success: 0, failure: 0 },
+        organization: { total: totals.organization, completed: 0, success: 0, failure: 0 },
+        person: { total: totals.person, completed: 0, success: 0, failure: 0 },
       };
 
-      // 统计成功的数量
-      const successIds = {
-        Project: new Set(),
-        Organization: new Set(),
-        Person: new Set(),
-      };
-
-      // 统计失败的数量
-      const failureIds = {
-        Project: new Set(),
-        Organization: new Set(),
-        Person: new Set(),
-      };
-
-      for (const record of crawledRecords) {
-        const entityType = record.entity_type;
-        const entityId = String(record.entity_id);
-        
-        if (crawledIds[entityType]) {
-          crawledIds[entityType].add(entityId);
-          if (record.status === 'success') {
-            successIds[entityType].add(entityId);
-          } else if (record.status === 'failure') {
-            failureIds[entityType].add(entityId);
-          }
+      for (const row of stats) {
+        const typeKey = row.entity_type.toLowerCase();
+        if (progress[typeKey]) {
+          progress[typeKey].completed = parseInt(row.completed, 10) || 0;
+          progress[typeKey].success = parseInt(row.success, 10) || 0;
+          progress[typeKey].failure = parseInt(row.failure, 10) || 0;
         }
       }
 
-      const completed = {
-        project: crawledIds.Project.size,
-        organization: crawledIds.Organization.size,
-        person: crawledIds.Person.size,
-      };
-      completed.total = completed.project + completed.organization + completed.person;
+      progress.total = totals.total;
+      progress.completed = progress.project.completed + progress.organization.completed + progress.person.completed;
+      progress.success = progress.project.success + progress.organization.success + progress.person.success;
+      progress.failure = progress.project.failure + progress.organization.failure + progress.person.failure;
 
-      const success = {
-        project: successIds.Project.size,
-        organization: successIds.Organization.size,
-        person: successIds.Person.size,
-      };
-      success.total = success.project + success.organization + success.person;
-
-      const failure = {
-        project: failureIds.Project.size,
-        organization: failureIds.Organization.size,
-        person: failureIds.Person.size,
-      };
-      failure.total = failure.project + failure.organization + failure.person;
-
-      return {
-        project: {
-          total: totals.project,
-          completed: completed.project,
-          success: success.project,
-          failure: failure.project,
-        },
-        organization: {
-          total: totals.organization,
-          completed: completed.organization,
-          success: success.organization,
-          failure: failure.organization,
-        },
-        person: {
-          total: totals.person,
-          completed: completed.person,
-          success: success.person,
-          failure: failure.person,
-        },
-        total: totals.total,
-        completed: completed.total,
-        success: success.total,
-        failure: failure.total,
-      };
+      return progress;
     } catch (error) {
       console.error("[TaskManager] 获取数据库进度失败:", error);
       // 返回空进度，避免前端报错
@@ -670,11 +584,27 @@ class CrawlTaskManager {
     // 检测当前执行阶段
     const phase = await this._detectCurrentPhase();
 
+    // 当前正在处理的任务（按 worker）
+    const currentTasks = [];
+    if (this.currentTasks && typeof this.currentTasks === 'object') {
+      for (const [workerId, info] of Object.entries(this.currentTasks)) {
+        currentTasks.push({
+          workerId: Number(workerId),
+          id: info.id,
+          type: info.type,
+          typeName: info.typeName,
+          url: info.url,
+          startedAt: info.startedAt,
+        });
+      }
+    }
+
     return {
       status: status || 'uninitialized',
       progress: progress,
       error: error || null,
       phase: phase, // 当前执行阶段
+      currentTasks, // 当前正在处理的任务列表
     };
   }
 
@@ -774,6 +704,17 @@ class CrawlTaskManager {
       const url = this._buildUrl(id, type);
 
       try {
+        const typeName = ({ 1: 'Project', 2: 'Organization', 3: 'Person' }[type]) || String(type);
+        if (!this.currentTasks) this.currentTasks = {};
+        this.currentTasks[workerId] = {
+          workerId,
+          id,
+          type,
+          typeName,
+          url,
+          startedAt: new Date().toISOString(),
+        };
+
         console.log(`[TaskManager] worker ${workerId} 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
         const scrapeFn = { 1: scrapeProject, 2: scrapeOrganization, 3: scrapePerson }[type];
         const userDataDirSuffix = String(workerId + 1).padStart(3, "0");
@@ -800,6 +741,10 @@ class CrawlTaskManager {
             `连续失败 ${consecutive} 个任务，已自动暂停。请检查网络/目标站点/代理/解析逻辑后手动点击启动继续。最后错误：${error.message}`
           );
           console.error(`[TaskManager] 连续失败 ${consecutive} 次，已自动暂停任务。`);
+        }
+      } finally {
+        if (this.currentTasks && this.currentTasks[workerId]) {
+          delete this.currentTasks[workerId];
         }
       }
 
