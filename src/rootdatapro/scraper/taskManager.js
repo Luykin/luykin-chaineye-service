@@ -604,6 +604,11 @@ class CrawlTaskManager {
       }
     }
 
+    // 如果当前没有正在运行的任务，但之前有最近一次任务记录，则返回最近一次任务，便于前端展示
+    if (currentTasks.length === 0 && this.lastTask) {
+      currentTasks.push(this.lastTask);
+    }
+
     return {
       status: status || 'uninitialized',
       progress: progress,
@@ -719,6 +724,8 @@ class CrawlTaskManager {
           url,
           startedAt: new Date().toISOString(),
         };
+        // 记录最近一次任务，避免前端在轮询间隙看到空的 currentTasks
+        this.lastTask = this.currentTasks[workerId];
 
         console.log(`[TaskManager] worker ${workerId} 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
         const scrapeFn = { 1: scrapeProject, 2: scrapeOrganization, 3: scrapePerson }[type];
