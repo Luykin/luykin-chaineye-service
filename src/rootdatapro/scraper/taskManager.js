@@ -330,20 +330,18 @@ class CrawlTaskManager {
     }
   }
 
-  async initialize(force = false) {
+  async initialize() {
     console.log("[TaskManager] 初始化中...");
     const redis = await this._getRedis();
 
-    if (force) {
-        console.log("[TaskManager] 强制重置，正在清理旧的 Redis 队列数据...");
-        // 只清理队列相关的键，保留 STATUS、ERROR、CONSECUTIVE_ERRORS（运行时状态）
-        const queueKeys = [
-          REDIS_KEYS.QUEUE_PROJECT,
-          REDIS_KEYS.QUEUE_ORG,
-          REDIS_KEYS.QUEUE_PERSON,
-        ];
-        await redis.del(queueKeys);
-    }
+    console.log("[TaskManager] 清理旧的 Redis 队列数据...");
+    // 只清理队列相关的键，保留 STATUS、ERROR、CONSECUTIVE_ERRORS（运行时状态）
+    const queueKeys = [
+      REDIS_KEYS.QUEUE_PROJECT,
+      REDIS_KEYS.QUEUE_ORG,
+      REDIS_KEYS.QUEUE_PERSON,
+    ];
+    await redis.del(queueKeys);
 
     // 检查队列是否已存在
     const queueExists = await redis.exists(REDIS_KEYS.QUEUE_PROJECT) || 
