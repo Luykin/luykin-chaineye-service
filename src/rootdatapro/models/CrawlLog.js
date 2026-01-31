@@ -90,7 +90,11 @@ module.exports = (sequelize) => {
         entity_type;
     `;
 
+    console.log('[CrawlLog.countFailedUrls] Executing raw SQL query...');
+    const startTime = Date.now();
     const results = await sequelize.query(query, { type: sequelize.QueryTypes.SELECT });
+    const duration = Date.now() - startTime;
+    console.log(`[CrawlLog.countFailedUrls] Raw SQL query finished in ${duration}ms. Found ${results.length} rows.`);
 
     const counts = { Project: 0, Organization: 0, Person: 0 };
     for (const row of results) {

@@ -194,10 +194,25 @@ router.post("/crawl/pause", (req, res) => {
 });
 
 router.get("/crawl/status", async (req, res) => {
-  const status = await taskManager.getStatus();
-  const failedUrlsCounts = await db.CrawlLog.countFailedUrls();
-  status.failedUrlsCounts = failedUrlsCounts;
-  res.json({ success: true, data: status });
+  try {
+    console.log("[rootdatapro] /crawl/status: Fetching task manager status...");
+    const status = await taskManager.getStatus();
+    
+    console.log("[rootdatapro] /crawl/status: Fetching failed URL counts...");
+    const startTime = Date.now();
+    const failedUrlsCounts = await db.CrawlLog.countFailedUrls();
+    const duration = Date.now() - startTime;
+    console.log(`[rootdatapro] /crawl/status: Fetched failed URL counts in ${duration}ms.`);
+  
+    status.failedUrlsCounts = failedUrlsCounts;
+    res.json({ success: true, data: status });
+  } catch (err) {
+    console.error(`[rootdatapro] /crawl/status: Error fetching status: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
 });
 
 router.post("/crawl/reset", async (req, res) => {
