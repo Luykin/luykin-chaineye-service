@@ -21,6 +21,9 @@
     "db:migrate:pg": "NODE_ENV=production npx sequelize-cli db:migrate --config config/config-pg.json --migrations-path migrations-pg",
     "db:migrate:pg:undo": "NODE_ENV=production npx sequelize-cli db:migrate:undo --config config/config-pg.json --migrations-path migrations-pg",
     "db:migrate:pg:status": "NODE_ENV=production npx sequelize-cli db:migrate:status --config config/config-pg.json --migrations-path migrations-pg",
+    "db:migrate:rootdatapro": "NODE_ENV=production npx sequelize-cli db:migrate --config config/config-rootdatapro.json --migrations-path migrations-rootdatapro",
+    "db:migrate:rootdatapro:undo": "NODE_ENV=production npx sequelize-cli db:migrate:undo --config config/config-rootdatapro.json --migrations-path migrations-rootdatapro",
+    "db:migrate:rootdatapro:status": "NODE_ENV=production npx sequelize-cli db:migrate:status --config config/config-rootdatapro.json --migrations-path migrations-rootdatapro",
     "test-start": "pm2 start dev.ecosystem.config.js --env development",
     "test-restart": "pm2 restart dev.ecosystem.config.js --env development",
     "test-logs": "pm2 logs dev-luykin-chaineye-api"
