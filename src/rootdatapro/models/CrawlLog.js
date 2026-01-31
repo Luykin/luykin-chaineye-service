@@ -77,7 +77,7 @@ module.exports = (sequelize) => {
           entity_type,
           entity_id
         FROM
-          "CrawlLogs"
+          "${CrawlLog.tableName}"
         GROUP BY
           entity_type,
           entity_id
