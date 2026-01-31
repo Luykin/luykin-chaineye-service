@@ -210,7 +210,7 @@ router.post("/projects_by_ecosystems", proApiKeyAuth(20), async (req, res) => {
           as: "Ecosystems",
           through: { attributes: [] },
           where: { ecosystem_id: ids },
-          attributes: ["ecosystem_id", "ecosystem_name"],
+          attributes: [],
           required: true,
         },
       ],
@@ -255,7 +255,7 @@ router.post("/projects_by_tags", proApiKeyAuth(20), async (req, res) => {
           as: "Tags",
           through: { attributes: [] },
           where: { tag_id: ids },
-          attributes: ["tag_id", "tag_name"],
+          attributes: [],
           required: true,
         },
       ],
@@ -763,8 +763,8 @@ router.get("/get_people", proApiKeyAuth(2), async (req, res) => {
       db.Person.findByPk(people_id, {
         attributes: { exclude: ["createdAt", "updatedAt"] },
         include: [
-          { model: db.Project, as: "MemberOfProjects", through: { attributes: ["position"] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
-          { model: db.Organization, as: "MemberOfOrganizations", through: { attributes: ["position"] }, attributes: { exclude: ["createdAt", "updatedAt"] } },
+          { model: db.Project, as: "MemberOfProjects", through: { attributes: ["position"] }, attributes: ["project_id", "project_name", "X"] },
+          { model: db.Organization, as: "MemberOfOrganizations", through: { attributes: ["position"] }, attributes: ["org_id", "org_name", "X"] },
         ],
       }),
       // 1.2 获取人物作为投资方进行的投资
