@@ -56,6 +56,7 @@ module.exports = (sequelize) => {
         { fields: ["entity_id", "entity_type"] },
         { fields: ["status"] },
         { fields: ["crawled_at"] },
+        { fields: ["url", "status"] },
       ],
     }
   );
