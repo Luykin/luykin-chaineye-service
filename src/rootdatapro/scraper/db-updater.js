@@ -182,7 +182,7 @@ async function updateOrganization(orgData) {
           round: inv.round,
           amount: inv.amount,
           date: inv.date,
-          lead: false,
+          lead: inv.isLead,
         });
       }
       await ensureEntities(entitiesToEnsure);
@@ -241,6 +241,7 @@ async function updatePersonAndInvestments(personData) {
           round: investment.round,
           amount: investment.amount,
           date: investment.date,
+          lead: investment.isLead,
         });
       }
       await ensureEntities(entitiesToEnsure);

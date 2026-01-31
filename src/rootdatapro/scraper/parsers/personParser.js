@@ -27,6 +27,7 @@ function parsePersonPage({ mainDom, nuxtDataJson, url }) {
     }
 
     // 从 investRecordList.items 提取详细的投资记录
+    // 确定在person里面 对外投资就是取investRecordList
     const investRecordList = nuxtData?.data?.[0]?.investRecordList?.items || [];
     const investments = investRecordList.map((item) => ({
       item_id: item.itemId,
@@ -37,6 +38,7 @@ function parsePersonPage({ mainDom, nuxtDataJson, url }) {
       round: item.roundsName?.en_value,
       amount: item.facAmountUs,
       date: item.facDate ? new Date(item.facDate) : null,
+      isLead: item.isLt === 1,
     }));
 
     const parsedData = {

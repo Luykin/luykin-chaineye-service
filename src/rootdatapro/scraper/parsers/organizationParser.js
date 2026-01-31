@@ -333,6 +333,7 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
   }
 
   try {
+    // 确定在organization里面 对外投资就是取investRecord
     const investItems =
       nuxtData?.data?.[0]?.investRecord?.items ||
       nuxtData?.data?.[0]?.investRecordList?.items ||
@@ -349,6 +350,7 @@ function parseOrganizationPage({ mainDom, nuxtDataJson, url }) {
             round: item.roundsName?.en_value,
             amount: item.facAmountUs,
             date: item.facDate ? new Date(item.facDate) : null,
+            isLead: item.isLt === 1,
           };
         } catch (e) {
           console.error("[organizationParser] investments 单条解析失败:", e);
