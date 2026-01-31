@@ -70,21 +70,24 @@ module.exports = (sequelize) => {
 
     const query = `
       SELECT
-        "failed_logs"."entity_type",
-        COUNT(DISTINCT "failed_logs"."entity_id") AS "count"
-      FROM
-        "CrawlLogs" AS "failed_logs"
-      LEFT JOIN
-        "CrawlLogs" AS "successful_logs"
-      ON
-        "failed_logs"."entity_id" = "successful_logs"."entity_id"
-        AND "failed_logs"."entity_type" = "successful_logs"."entity_type"
-        AND "successful_logs"."status" = 'success'
-      WHERE
-        "failed_logs"."status" = 'failure'
-        AND "successful_logs"."id" IS NULL
+        entity_type,
+        COUNT(entity_id) AS count
+      FROM (
+        SELECT
+          entity_type,
+          entity_id
+        FROM
+          "CrawlLogs"
+        GROUP BY
+          entity_type,
+          entity_id
+        HAVING
+          COUNT(CASE WHEN status = 'success' THEN 1 END) = 0
+          AND
+          COUNT(CASE WHEN status = 'failure' THEN 1 END) > 0
+      ) AS pure_failures
       GROUP BY
-        "failed_logs"."entity_type";
+        entity_type;
     `;
 
     const results = await sequelize.query(query, { type: sequelize.QueryTypes.SELECT });
