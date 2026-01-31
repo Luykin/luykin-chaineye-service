@@ -67,25 +67,27 @@ module.exports = (sequelize) => {
    */
   CrawlLog.countFailedUrls = async function () {
     const { sequelize } = this;
-    const results = await CrawlLog.findAll({
-      attributes: [
-        'entity_type',
-        [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('url'))), 'count'],
-      ],
-      where: {
-        status: 'failure',
-        [sequelize.Op.and]: sequelize.literal(`
-          NOT EXISTS (
-            SELECT 1
-            FROM "${CrawlLog.tableName}" AS "successful_logs"
-            WHERE "successful_logs"."url" = "CrawlLog"."url"
-            AND "successful_logs"."status" = 'success'
-          )
-        `)
-      },
-      group: ['entity_type'],
-      raw: true,
-    });
+
+    const query = `
+      SELECT
+        "failed_logs"."entity_type",
+        COUNT(DISTINCT "failed_logs"."entity_id") AS "count"
+      FROM
+        "CrawlLogs" AS "failed_logs"
+      LEFT JOIN
+        "CrawlLogs" AS "successful_logs"
+      ON
+        "failed_logs"."entity_id" = "successful_logs"."entity_id"
+        AND "failed_logs"."entity_type" = "successful_logs"."entity_type"
+        AND "successful_logs"."status" = 'success'
+      WHERE
+        "failed_logs"."status" = 'failure'
+        AND "successful_logs"."id" IS NULL
+      GROUP BY
+        "failed_logs"."entity_type";
+    `;
+
+    const results = await sequelize.query(query, { type: sequelize.QueryTypes.SELECT });
 
     const counts = { Project: 0, Organization: 0, Person: 0 };
     for (const row of results) {
