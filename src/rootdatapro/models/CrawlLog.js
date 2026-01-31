@@ -65,11 +65,34 @@ module.exports = (sequelize) => {
    * @returns {Promise<number>}
    */
   CrawlLog.countFailedUrls = async function () {
-    return await CrawlLog.count({
-      where: { status: 'failure' },
-      distinct: true,
-      col: 'url'
+    const { sequelize } = this;
+    const results = await CrawlLog.findAll({
+      attributes: [
+        'entity_type',
+        [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('url'))), 'count'],
+      ],
+      where: {
+        status: 'failure',
+        [sequelize.Op.and]: sequelize.literal(`
+          NOT EXISTS (
+            SELECT 1
+            FROM "${CrawlLog.tableName}" AS "successful_logs"
+            WHERE "successful_logs"."url" = "CrawlLog"."url"
+            AND "successful_logs"."status" = 'success'
+          )
+        `)
+      },
+      group: ['entity_type'],
+      raw: true,
     });
+
+    const counts = { Project: 0, Organization: 0, Person: 0 };
+    for (const row of results) {
+      if (counts.hasOwnProperty(row.entity_type)) {
+        counts[row.entity_type] = parseInt(row.count, 10);
+      }
+    }
+    return counts;
   };
 
   return CrawlLog;

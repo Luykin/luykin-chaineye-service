@@ -256,8 +256,22 @@
 
     <div class="rdp-progress-tile">
       <div class="rdp-progress-head">
-        <p class="rdp-progress-sub-label">失败任务数 (按URL去重)</p>
-        <span id="rdp-progress-failed-mini" class="rdp-progress-mini">0</span>
+        <p class="rdp-progress-sub-label">纯失败任务 (项目)</p>
+        <span id="rdp-failed-project-mini" class="rdp-progress-mini">0</span>
+      </div>
+    </div>
+
+    <div class="rdp-progress-tile">
+      <div class="rdp-progress-head">
+        <p class="rdp-progress-sub-label">纯失败任务 (机构)</p>
+        <span id="rdp-failed-org-mini" class="rdp-progress-mini">0</span>
+      </div>
+    </div>
+
+    <div class="rdp-progress-tile">
+      <div class="rdp-progress-head">
+        <p class="rdp-progress-sub-label">纯失败任务 (人物)</p>
+        <span id="rdp-failed-person-mini" class="rdp-progress-mini">0</span>
       </div>
     </div>
 
@@ -489,11 +503,12 @@
   async function updateCrawlStatus() {
     try {
         const res = await jsonFetch('/api/rootdatapro/internal/crawl/status');
-        const { status, progress, failedUrlsCount, phase, currentTasks } = res.data;
+        const { status, progress, failedUrlsCounts, phase, currentTasks } = res.data;
 
-        const failedEl = $('rdp-progress-failed-mini');
-        if (failedEl) {
-          failedEl.textContent = failedUrlsCount || 0;
+        if (failedUrlsCounts) {
+          $('rdp-failed-project-mini').textContent = failedUrlsCounts.Project || 0;
+          $('rdp-failed-org-mini').textContent = failedUrlsCounts.Organization || 0;
+          $('rdp-failed-person-mini').textContent = failedUrlsCounts.Person || 0;
         }
 
         const statusEl = $('rdp-task-status-value');
