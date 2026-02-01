@@ -328,17 +328,24 @@ class CrawlTaskManager {
    * 获取失败次数 <= 2 的任务（用于每日维护）
    * @returns {Promise<Object>} 返回 { Project: [ids], Organization: [ids], Person: [ids] }
    */
-  async _getRetryableFailures() {
+  async _getRetryableFailures(limitPerType = 300) {
     try {
-      const { literal } = db.Sequelize;
+      const { literal, fn } = db.Sequelize;
+
+      // 先按 entity_type 分组获取候选，再在内存里按类型截断
       const retryRecords = await db.CrawlLog.findAll({
-        attributes: ['entity_id', 'entity_type'],
+        attributes: [
+          'entity_id',
+          'entity_type',
+          [fn('MAX', literal('crawled_at')), 'last_crawled_at'],
+        ],
         group: ['entity_id', 'entity_type'],
         having: literal(
           "SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) <= 2 " +
           "AND SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) > 0 " +
           "AND SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) = 0"
         ),
+        order: [[literal('last_crawled_at'), 'ASC']],
         raw: true,
       });
 
@@ -348,9 +355,13 @@ class CrawlTaskManager {
         Person: [],
       };
 
+      const counts = { Project: 0, Organization: 0, Person: 0 };
+
       for (const record of retryRecords) {
-        if (retryIds[record.entity_type]) {
-          retryIds[record.entity_type].push(String(record.entity_id));
+        const type = record.entity_type;
+        if (retryIds[type] && counts[type] < limitPerType) {
+          retryIds[type].push(String(record.entity_id));
+          counts[type]++;
         }
       }
 
@@ -366,7 +377,7 @@ class CrawlTaskManager {
    * 每种类型每天最多1000条
    * @returns {Promise<Object>} 返回 { Project: [ids], Organization: [ids], Person: [ids] }
    */
-  async _getStaleEntitiesToRecrawl() {
+  async _getStaleEntitiesToRecrawl(limitPerType = 1000) {
     try {
       const { literal, fn, Op } = db.Sequelize;
       const tenDaysAgo = new Date();
@@ -404,11 +415,10 @@ class CrawlTaskManager {
       };
 
       const counts = { Project: 0, Organization: 0, Person: 0 };
-      const MAX_PER_TYPE = 1000;
 
       for (const record of staleRecords) {
         const type = record.entity_type;
-        if (staleIds[type] && counts[type] < MAX_PER_TYPE) {
+        if (staleIds[type] && counts[type] < limitPerType) {
           staleIds[type].push(String(record.entity_id));
           counts[type]++;
         }
@@ -499,7 +509,8 @@ class CrawlTaskManager {
           totalTasks,
           processedTasks: processedTasks + 1, // 当前任务正在处理
           remainingTasks,
-          currentTask: { type: typeName, id }
+          currentTask: { type: typeName, id },
+          updatedAt: new Date().toISOString(),
         }));
 
         console.log(`[TaskManager] maintenance worker 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
@@ -636,7 +647,7 @@ class CrawlTaskManager {
         message: "正在获取失败任务重试列表..." 
       }));
       console.log("[TaskManager] 步骤1: 获取失败任务重试列表...");
-      const retryIds = await this._getRetryableFailures();
+      const retryIds = await this._getRetryableFailures(300);
       report.retryFailures = {
         Project: retryIds.Project.length,
         Organization: retryIds.Organization.length,
@@ -660,7 +671,7 @@ class CrawlTaskManager {
         message: "正在获取旧数据重爬列表..." 
       }));
       console.log("[TaskManager] 步骤3: 获取旧数据重爬列表...");
-      const staleIds = await this._getStaleEntitiesToRecrawl();
+      const staleIds = await this._getStaleEntitiesToRecrawl(1000);
       report.staleRecrawl = {
         Project: staleIds.Project.length,
         Organization: staleIds.Organization.length,
@@ -668,11 +679,23 @@ class CrawlTaskManager {
       };
       console.log(`[TaskManager] 找到旧数据重爬任务: Project=${staleIds.Project.length}, Organization=${staleIds.Organization.length}, Person=${staleIds.Person.length}`);
 
-      // 合并所有任务到队列
+      // 合并所有任务到队列（按 type+id 去重）
+      const uniqMerge = (a, b) => {
+        const s = new Set();
+        const out = [];
+        for (const id of [...a, ...b]) {
+          const key = String(id);
+          if (s.has(key)) continue;
+          s.add(key);
+          out.push(key);
+        }
+        return out;
+      };
+
       const allTaskIds = {
-        Project: [...retryIds.Project, ...staleIds.Project],
-        Organization: [...retryIds.Organization, ...staleIds.Organization],
-        Person: [...retryIds.Person, ...staleIds.Person],
+        Project: uniqMerge(retryIds.Project, staleIds.Project),
+        Organization: uniqMerge(retryIds.Organization, staleIds.Organization),
+        Person: uniqMerge(retryIds.Person, staleIds.Person),
       };
 
       const totalTasks = allTaskIds.Project.length + allTaskIds.Organization.length + allTaskIds.Person.length;
@@ -1148,36 +1171,62 @@ class CrawlTaskManager {
 
     // 解析 maintenance 相关信息
     let maintenance = null;
+
+    // 先解析 stage/report
+    let parsedStage = null;
+    if (maintenanceStageRaw) {
+      try {
+        parsedStage = JSON.parse(maintenanceStageRaw);
+      } catch (e) {
+        console.error("[TaskManager] 解析 maintenance stage 失败:", e);
+      }
+    }
+
+    let parsedReport = null;
+    if (maintenanceReportRaw) {
+      try {
+        parsedReport = JSON.parse(maintenanceReportRaw);
+      } catch (e) {
+        console.error("[TaskManager] 解析 maintenance report 失败:", e);
+      }
+    }
+
+    // 5 分钟心跳超时自愈：status=maintenance_running 但无 currentTasks，且 stage.updatedAt 超过 5 分钟
+    if (status === "maintenance_running") {
+      const hasActive = currentTasks.length > 0;
+      let stale = false;
+      if (parsedStage && parsedStage.updatedAt) {
+        const ts = Date.parse(parsedStage.updatedAt);
+        if (Number.isFinite(ts)) {
+          stale = Date.now() - ts > 5 * 60 * 1000;
+        }
+      }
+
+      if (!hasActive && stale) {
+        console.warn("[TaskManager] maintenance_running detected but stage heartbeat stale (>5m) and no active tasks. Auto-recovering to idle.");
+        try {
+          await redis.set(REDIS_KEYS.STATUS, "idle");
+          await redis.del(REDIS_KEYS.MAINTENANCE_STAGE);
+          status = "idle";
+          parsedStage = null;
+        } catch (e) {
+          console.error("[TaskManager] maintenance auto-recover failed:", e);
+        }
+      }
+    }
+
     if (status === "maintenance_running") {
       maintenance = {
         running: true,
-        stage: null,
+        stage: parsedStage,
         lastReport: null,
       };
-      
-      // 解析当前执行阶段
-      if (maintenanceStageRaw) {
-        try {
-          maintenance.stage = JSON.parse(maintenanceStageRaw);
-        } catch (e) {
-          console.error("[TaskManager] 解析 maintenance stage 失败:", e);
-        }
-      }
     } else {
-      // 不在运行中，返回上次执行报告
       maintenance = {
         running: false,
         stage: null,
-        lastReport: null,
+        lastReport: parsedReport,
       };
-      
-      if (maintenanceReportRaw) {
-        try {
-          maintenance.lastReport = JSON.parse(maintenanceReportRaw);
-        } catch (e) {
-          console.error("[TaskManager] 解析 maintenance report 失败:", e);
-        }
-      }
     }
 
     return {
