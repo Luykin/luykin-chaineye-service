@@ -99,7 +99,28 @@ const XHUNT_VIP = new Set([
   "abyssofgambling",
   "flyiiawei",
   "TTMBbo",
-	"shouyi16"
+	"shouyi16",
+  "dakuan_x",
+  "wuliao_btc",
+  "0xshunshun",
+  "ZhanweiC",
+  "BitKieran",
+  "0xsmall_",
+  "qingerqq2024",
+  "wangchangfu88",
+  "candywantfly1",
+  "HYSFL1",
+  "Web3Veteran1",
+  "weiyu320169",
+  "Siberiaxx1909",
+  "PWenzhen76938",
+  "QF88688",
+  "aiqiang888",
+  "jiroucaigou",
+  "BongePlanet",
+  "Multichannel_",
+  "web3_dadgod",
+  "hisevenih"
 ].map((s) => s.toLowerCase()));
 
 const INTERNAL_TEST_USERS = new Set([
