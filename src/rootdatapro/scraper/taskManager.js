@@ -103,9 +103,11 @@ class CrawlTaskManager {
   /**
    * 增量发现新 ID（从 typemap 最大 ID 开始探测）
    * @param {number} maxConsecutiveFailures 连续失败 N 次后停止（默认 20）
+   * @param {Object} options - { redis: RedisClient, updateStage: boolean } 用于更新执行阶段信息
    * @returns {Promise<Object>} 返回 { project: [newIds], organization: [newIds], person: [newIds], discovered: number }
    */
-  async _discoverNewIds(maxConsecutiveFailures = 5) {
+  async _discoverNewIds(maxConsecutiveFailures = 5, options = {}) {
+    const { redis = null, updateStage = false } = options;
     try {
       typemapManager.loadIdMaps();
       
@@ -146,8 +148,31 @@ class CrawlTaskManager {
         const discoveredForType = [];
 
         console.log(`[TaskManager] 开始增量发现 ${entityType}，从 ID ${currentId} 开始...`);
+        
+        // 更新执行阶段信息
+        if (updateStage && redis) {
+          await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+            step: "discovering", 
+            message: `正在增量发现 ${entityType}，从 ID ${currentId} 开始...`,
+            currentType: entityType,
+            currentId: currentId,
+            consecutiveFailures: 0,
+            discovered: totalDiscovered
+          }));
+        }
 
         while (consecutiveFailures < maxConsecutiveFailures) {
+          // 更新执行阶段信息（实时显示当前尝试的 ID）
+          if (updateStage && redis) {
+            await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+              step: "discovering", 
+              message: `正在尝试 ${entityType} #${currentId} (连续失败 ${consecutiveFailures}/${maxConsecutiveFailures})`,
+              currentType: entityType,
+              currentId: currentId,
+              consecutiveFailures: consecutiveFailures,
+              discovered: totalDiscovered
+            }));
+          }
           try {
             // 构建 URL
             const url = this._buildUrl(currentId, config.type);
@@ -195,6 +220,18 @@ class CrawlTaskManager {
                 consecutiveFailures = 0; // 重置连续失败计数
                 console.log(`[TaskManager] 发现新的 ${entityType} ID: ${currentId}, 名称: ${name}，已入库`);
                 
+                // 更新执行阶段信息（显示成功发现）
+                if (updateStage && redis) {
+                  await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+                    step: "discovering", 
+                    message: `✓ 发现新的 ${entityType} #${currentId}: ${name} (已发现 ${totalDiscovered} 个)`,
+                    currentType: entityType,
+                    currentId: currentId,
+                    consecutiveFailures: 0,
+                    discovered: totalDiscovered
+                  }));
+                }
+                
                 // 将新 ID 添加到 typemap 缓存中
                 typemapManager._idMapCache.byType[config.type].add(String(currentId));
                 if (name) {
@@ -221,6 +258,18 @@ class CrawlTaskManager {
 
         newIds[entityType] = discoveredForType;
         console.log(`[TaskManager] ${entityType} 增量发现完成，发现 ${discoveredForType.length} 个新 ID`);
+        
+        // 更新执行阶段信息（类型完成）
+        if (updateStage && redis) {
+          await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+            step: "discovering", 
+            message: `✓ ${entityType} 增量发现完成，发现 ${discoveredForType.length} 个新 ID (总计 ${totalDiscovered} 个)`,
+            currentType: null,
+            currentId: null,
+            consecutiveFailures: 0,
+            discovered: totalDiscovered
+          }));
+        }
       }
 
       return {
@@ -594,7 +643,7 @@ class CrawlTaskManager {
         message: "正在增量发现新 ID..." 
       }));
       console.log("[TaskManager] 步骤2: 开始增量发现新 ID...");
-      const discoveryResult = await this._discoverNewIds(5);
+      const discoveryResult = await this._discoverNewIds(5, { redis, updateStage: true });
       report.discovered = discoveryResult.discovered || 0;
       console.log(`[TaskManager] 增量发现完成，发现 ${report.discovered} 个新 ID`);
 
