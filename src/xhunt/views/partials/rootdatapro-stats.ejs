@@ -644,7 +644,16 @@
         // 显示当前执行阶段
         if (maintenanceStageEl) {
           if (isMaintenanceRunning && maintenance && maintenance.stage) {
-            maintenanceStageEl.textContent = maintenance.stage.message || '执行中...';
+            const stage = maintenance.stage;
+            let displayText = stage.message || '执行中...';
+            
+            // 如果有进度信息，可以显示更详细的信息
+            if (stage.step === 'processing_queue' && stage.totalTasks && stage.totalTasks > 0) {
+              const progress = ((stage.processedTasks || 0) / stage.totalTasks * 100).toFixed(1);
+              displayText = `${stage.message} (进度: ${progress}%)`;
+            }
+            
+            maintenanceStageEl.textContent = displayText;
             maintenanceStageEl.style.display = 'block';
             maintenanceStageEl.style.color = '#38bdf8';
             maintenanceStageEl.style.fontSize = '12px';

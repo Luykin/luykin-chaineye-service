@@ -474,6 +474,7 @@ class CrawlTaskManager {
         await redis.hSet(REDIS_KEYS.CURRENT_TASKS, String(WORKER_ID), JSON.stringify(taskInfo));
 
         // 更新执行阶段信息（包含当前处理的任务信息）
+        // 注意：任务已经从队列中取出（lPop），所以队列长度已经是剩余任务数
         const queueLengths = await Promise.all([
           redis.lLen(REDIS_KEYS.QUEUE_PROJECT),
           redis.lLen(REDIS_KEYS.QUEUE_ORG),
@@ -481,16 +482,22 @@ class CrawlTaskManager {
         ]);
         const remainingTasks = queueLengths[0] + queueLengths[1] + queueLengths[2];
         const stageInfo = await redis.get(REDIS_KEYS.MAINTENANCE_STAGE);
-        let stageData = { step: "processing_queue", message: "正在处理队列任务...", totalTasks: 0, processedTasks: 0 };
+        let stageData = { step: "processing_queue", message: "正在处理队列任务...", totalTasks: 0, processedTasks: 0, remainingTasks: 0 };
         if (stageInfo) {
           try {
             stageData = JSON.parse(stageInfo);
           } catch {}
         }
+        
+        // 计算已处理的任务数
+        const totalTasks = stageData.totalTasks || (remainingTasks + 1); // 如果 totalTasks 未设置，用剩余任务数+1（当前任务）估算
+        const processedTasks = totalTasks - remainingTasks - 1; // 剩余任务数 + 当前任务 = 总任务数 - 已处理任务数
+        
         await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({
           step: "processing_queue",
-          message: `正在处理: ${typeName} #${id} (剩余 ${remainingTasks} 个任务)`,
-          totalTasks: stageData.totalTasks || 0,
+          message: `正在处理: ${typeName} #${id} (第 ${processedTasks + 1}/${totalTasks} 个任务，剩余 ${remainingTasks} 个)`,
+          totalTasks,
+          processedTasks: processedTasks + 1, // 当前任务正在处理
           remainingTasks,
           currentTask: { type: typeName, id }
         }));
@@ -691,7 +698,8 @@ class CrawlTaskManager {
           step: "processing_queue", 
           message: `正在处理队列任务 (共 ${totalTasks} 个任务)...`,
           totalTasks,
-          processedTasks: 0
+          processedTasks: 0,
+          remainingTasks: totalTasks
         }));
         console.log(`[TaskManager] 启动 maintenance worker 顺序执行队列任务...`);
         await this._maintenanceWorkerLoop();
