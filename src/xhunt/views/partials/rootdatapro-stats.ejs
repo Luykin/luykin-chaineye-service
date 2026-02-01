@@ -226,6 +226,37 @@
     </div>
   </div>
 
+  <!-- 每日维护任务区域 -->
+  <div class="rdp-card" style="margin-top: 24px;">
+    <div class="rdp-topbar">
+      <div class="rdp-header">
+        <h2>每日维护任务</h2>
+        <p>每天 UTC 03:00 自动执行：失败重试、增量发现、旧数据重爬</p>
+      </div>
+      <div class="rdp-task-controls">
+        <button id="rdp-maintenance-run-now" class="rdp-btn">立即执行</button>
+      </div>
+    </div>
+    <div class="rdp-status-row">
+      <div class="rdp-task-status">
+        <div style="margin-bottom: 8px;">
+          下次执行: <span id="rdp-maintenance-countdown" class="rdp-task-status-value" style="font-size: 14px;">计算中...</span>
+        </div>
+        <div style="font-size: 12px; color: #94a3b8;">
+          状态: <span id="rdp-maintenance-status">-</span>
+        </div>
+      </div>
+    </div>
+    <div id="rdp-maintenance-report" style="margin-top: 16px; display: none;">
+      <div class="rdp-progress-tile">
+        <div class="rdp-progress-head">
+          <p class="rdp-progress-sub-label">上次执行报告</p>
+        </div>
+        <pre id="rdp-maintenance-report-content" class="rdp-result-pre" style="max-height: 200px; margin-top: 8px;">{"message": "暂无报告"}</pre>
+      </div>
+    </div>
+  </div>
+
   <div class="rdp-status-row">
     <div class="rdp-task-status">
       当前状态: <span id="rdp-task-status-value" class="rdp-task-status-value status-idle">-</span>
@@ -500,10 +531,42 @@
     updateBar('person', person);
   }
 
+  // 计算到下一个 UTC 03:00 的倒计时
+  function updateMaintenanceCountdown() {
+    const now = new Date();
+    const utcHours = now.getUTCHours();
+    const utcMinutes = now.getUTCMinutes();
+    const utcSeconds = now.getUTCSeconds();
+
+    // 计算到下一个 UTC 03:00 的毫秒数
+    let hoursUntil3am = 3 - utcHours;
+    let minutesUntil3am = -utcMinutes;
+    let secondsUntil3am = -utcSeconds;
+
+    if (secondsUntil3am < 0) {
+      minutesUntil3am--;
+      secondsUntil3am += 60;
+    }
+    if (minutesUntil3am < 0) {
+      hoursUntil3am--;
+      minutesUntil3am += 60;
+    }
+    if (hoursUntil3am < 0) {
+      hoursUntil3am += 24;
+    }
+
+    const countdownEl = $('rdp-maintenance-countdown');
+    if (countdownEl) {
+      countdownEl.textContent = `${hoursUntil3am}小时 ${minutesUntil3am}分 ${secondsUntil3am}秒`;
+    }
+
+    setTimeout(updateMaintenanceCountdown, 1000);
+  }
+
   async function updateCrawlStatus() {
     try {
         const res = await jsonFetch('/api/rootdatapro/internal/crawl/status');
-        const { status, progress, failedUrlsCounts, phase, currentTasks } = res.data;
+        const { status, progress, failedUrlsCounts, phase, currentTasks, maintenance } = res.data;
 
         if (failedUrlsCounts) {
           $('rdp-failed-project-mini').textContent = failedUrlsCounts.Project || 0;
@@ -562,13 +625,46 @@
           liveTextEl.textContent = `上次刷新 ${now.toLocaleTimeString()}`;
         }
 
-        if (status === 'running') {
+        // 更新每日维护任务状态
+        if (maintenance) {
+          const maintenanceStatusEl = $('rdp-maintenance-status');
+          if (maintenanceStatusEl) {
+            if (maintenance.running) {
+              maintenanceStatusEl.textContent = '执行中';
+              maintenanceStatusEl.style.color = '#38bdf8';
+            } else {
+              maintenanceStatusEl.textContent = '空闲';
+              maintenanceStatusEl.style.color = '#94a3b8';
+            }
+          }
+
+          // 禁用/启用手动操作按钮（当 maintenance 运行时）
+          const isMaintenanceRunning = maintenance.running;
+          $('rdp-task-start').disabled = isMaintenanceRunning;
+          $('rdp-task-pause').disabled = isMaintenanceRunning;
+          $('rdp-task-reset').disabled = isMaintenanceRunning;
+          $('rdp-maintenance-run-now').disabled = isMaintenanceRunning;
+
+          // 显示执行报告
+          if (maintenance.lastReport) {
+            const reportEl = $('rdp-maintenance-report');
+            const reportContentEl = $('rdp-maintenance-report-content');
+            if (reportEl && reportContentEl) {
+              reportEl.style.display = 'block';
+              prettyPrint(reportContentEl, maintenance.lastReport);
+            }
+          }
+        }
+
+        if (status === 'running' || status === 'maintenance_running') {
           if (!statusInterval) {
             statusInterval = setInterval(updateCrawlStatus, 8000);
           }
-          $('rdp-task-start').disabled = false;
-          $('rdp-task-start').textContent = '接管/启动';
-          $('rdp-task-pause').disabled = false;
+          if (status === 'running') {
+            $('rdp-task-start').disabled = false;
+            $('rdp-task-start').textContent = '接管/启动';
+            $('rdp-task-pause').disabled = false;
+          }
         } else {
           if (statusInterval) {
             clearInterval(statusInterval);
@@ -698,7 +794,37 @@
     updateCrawlStatus();
   });
 
+  // 立即执行每日维护任务
+  $('rdp-maintenance-run-now').addEventListener('click', async () => {
+    const btn = $('rdp-maintenance-run-now');
+    const originalText = btn.textContent;
+    try {
+      btn.disabled = true;
+      btn.textContent = '执行中...';
+      
+      const result = await jsonFetch('/api/rootdatapro/internal/crawl/maintenance/run_now', {
+        method: 'POST',
+      });
+
+      if (!result.success) {
+        alert(`执行失败: ${result.error || result.message || '未知错误'}`);
+      } else {
+        alert('每日维护任务已开始执行');
+        updateCrawlStatus();
+      }
+    } catch (e) {
+      console.error('执行失败:', e);
+      alert('请求失败: ' + (e.message || String(e)));
+    } finally {
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }, 2000);
+    }
+  });
+
   // Initial status load
   updateCrawlStatus();
+  updateMaintenanceCountdown();
 })();
 </script>

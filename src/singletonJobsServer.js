@@ -360,11 +360,28 @@ async function cleanupOldStats() {
       }
     });
 
+    // RootDataPro 每日维护任务：每天 UTC 03:00
+    const taskManager = require("./rootdatapro/scraper/taskManager");
+    schedule.scheduleJob(
+      { hour: 3, minute: 0, tz: "Etc/UTC" },
+      async () => {
+        try {
+          console.log("[Daily Task] ⏰ 触发每日维护任务（UTC 03:00）");
+          await taskManager.runDailyMaintenanceTask({ trigger: "scheduled" });
+        } catch (e) {
+          console.error("[Daily Task] 执行失败:", e);
+        }
+      }
+    );
+
     console.log(
       "✅ 统计数据定时任务已启动（每5分钟执行一次，处理版本统计和URL统计）"
     );
     console.log(
       "✅ 统计数据清理任务已启动（每天执行一次，清理版本统计和URL统计）"
+    );
+    console.log(
+      "✅ RootDataPro 每日维护任务已启动（每天 UTC 03:00 执行）"
     );
   } catch (err) {
     console.error("单例任务进程启动失败:", err);

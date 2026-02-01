@@ -181,16 +181,22 @@ router.post("/scrape", async (req, res) => {
 
 const taskManager = require("../scraper/taskManager");
 
-router.post("/crawl/start", (req, res) => {
+router.post("/crawl/start", async (req, res) => {
   console.log("[rootdatapro] 收到启动爬虫任务请求");
-  taskManager.start();
-  res.json({ success: true, message: "Crawl task started." });
+  const result = await taskManager.start();
+  if (result && result.success === false) {
+    return res.status(409).json({ success: false, error: result.error });
+  }
+  return res.json({ success: true, message: "Crawl task started." });
 });
 
-router.post("/crawl/pause", (req, res) => {
+router.post("/crawl/pause", async (req, res) => {
   console.log("[rootdatapro] 收到暂停爬虫任务请求");
-  taskManager.pause();
-  res.json({ success: true, message: "Crawl task paused." });
+  const result = await taskManager.pause();
+  if (result && result.success === false) {
+    return res.status(409).json({ success: false, error: result.error });
+  }
+  return res.json({ success: true, message: "Crawl task paused." });
 });
 
 router.get("/crawl/status", async (req, res) => {
@@ -217,8 +223,26 @@ router.get("/crawl/status", async (req, res) => {
 
 router.post("/crawl/reset", async (req, res) => {
     console.log("[rootdatapro] 收到重置爬虫任务请求");
-    await taskManager.initialize();
-    res.json({ success: true, message: "Crawl task reset and re-initialized." });
+    const result = await taskManager.initialize();
+    if (result && result.success === false) {
+      return res.status(409).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, message: "Crawl task reset and re-initialized." });
+});
+
+// 每日维护任务：立即执行
+router.post("/crawl/maintenance/run_now", async (req, res) => {
+  console.log("[rootdatapro] 收到立即执行每日维护任务请求");
+  try {
+    const report = await taskManager.runDailyMaintenanceTask({ trigger: "manual" });
+    if (report && report.success === false) {
+      return res.status(409).json({ success: false, error: report.error, message: report.message });
+    }
+    return res.json({ success: true, report });
+  } catch (error) {
+    console.error("[rootdatapro] 执行每日维护任务失败:", error);
+    return res.status(500).json({ success: false, error: error.message || String(error) });
+  }
 });
 
 module.exports = router;

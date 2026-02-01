@@ -7,13 +7,13 @@ const WORKER_COUNT = Math.max(1, parseInt(process.env.RDT_CRAWL_WORKERS || "1", 
 
 const REDIS_KEYS = {
   STATUS: "rdt_crawl:status",
-  // PROGRESS 和 SCRAPED_IDS 已废弃，进度信息现在从数据库 CrawlLog 表获取
   QUEUE_PROJECT: "rdt_crawl:queue:1",
   QUEUE_ORG: "rdt_crawl:queue:2",
   QUEUE_PERSON: "rdt_crawl:queue:3",
   ERROR: "rdt_crawl:error",
   CONSECUTIVE_ERRORS: "rdt_crawl:consecutive_errors",
   CURRENT_TASKS: "rdt_crawl:current_tasks",
+  MAINTENANCE_REPORT: "rdt_crawl:maintenance_report",
 };
 
 class CrawlTaskManager {
@@ -275,6 +275,365 @@ class CrawlTaskManager {
   }
 
   /**
+   * 获取失败次数 <= 2 的任务（用于每日维护）
+   * @returns {Promise<Object>} 返回 { Project: [ids], Organization: [ids], Person: [ids] }
+   */
+  async _getRetryableFailures() {
+    try {
+      const { literal } = db.Sequelize;
+      const retryRecords = await db.CrawlLog.findAll({
+        attributes: ['entity_id', 'entity_type'],
+        group: ['entity_id', 'entity_type'],
+        having: literal(
+          "SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) <= 2 " +
+          "AND SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) > 0 " +
+          "AND SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) = 0"
+        ),
+        raw: true,
+      });
+
+      const retryIds = {
+        Project: [],
+        Organization: [],
+        Person: [],
+      };
+
+      for (const record of retryRecords) {
+        if (retryIds[record.entity_type]) {
+          retryIds[record.entity_type].push(String(record.entity_id));
+        }
+      }
+
+      return retryIds;
+    } catch (error) {
+      console.error("[TaskManager] 获取可重试失败任务失败:", error);
+      return { Project: [], Organization: [], Person: [] };
+    }
+  }
+
+  /**
+   * 获取需要重爬的旧数据（10天前成功过）
+   * 每种类型每天最多1000条
+   * @returns {Promise<Object>} 返回 { Project: [ids], Organization: [ids], Person: [ids] }
+   */
+  async _getStaleEntitiesToRecrawl() {
+    try {
+      const { literal, fn, Op } = db.Sequelize;
+      const tenDaysAgo = new Date();
+      tenDaysAgo.setUTCDate(tenDaysAgo.getUTCDate() - 10);
+      tenDaysAgo.setUTCHours(0, 0, 0, 0);
+
+      // 使用原始 SQL 查询，更高效
+      const tableName = db.CrawlLog.tableName || 'RootdataCrawlLogs';
+      const query = `
+        SELECT
+          entity_id,
+          entity_type,
+          MAX(CASE WHEN status = 'success' THEN crawled_at END) AS last_success_at
+        FROM
+          "${tableName}"
+        GROUP BY
+          entity_id,
+          entity_type
+        HAVING
+          MAX(CASE WHEN status = 'success' THEN crawled_at END) < :tenDaysAgo
+          AND MAX(CASE WHEN status = 'success' THEN crawled_at END) IS NOT NULL
+        ORDER BY
+          MAX(CASE WHEN status = 'success' THEN crawled_at END) ASC
+      `;
+
+      const staleRecords = await db.CrawlLog.sequelize.query(query, {
+        replacements: { tenDaysAgo: tenDaysAgo.toISOString() },
+        type: db.CrawlLog.sequelize.QueryTypes.SELECT,
+      });
+
+      const staleIds = {
+        Project: [],
+        Organization: [],
+        Person: [],
+      };
+
+      const counts = { Project: 0, Organization: 0, Person: 0 };
+      const MAX_PER_TYPE = 1000;
+
+      for (const record of staleRecords) {
+        const type = record.entity_type;
+        if (staleIds[type] && counts[type] < MAX_PER_TYPE) {
+          staleIds[type].push(String(record.entity_id));
+          counts[type]++;
+        }
+      }
+
+      return staleIds;
+    } catch (error) {
+      console.error("[TaskManager] 获取旧数据重爬任务失败:", error);
+      return { Project: [], Organization: [], Person: [] };
+    }
+  }
+
+  /**
+   * Maintenance 任务的专用 worker 循环
+   * 顺序处理队列，不重建队列，不执行增量发现
+   * @returns {Promise<void>}
+   */
+  async _maintenanceWorkerLoop() {
+    const redis = await this._getRedis();
+    const WORKER_ID = 0; // maintenance 任务使用固定的 worker ID 0
+
+    console.log("[TaskManager] maintenance worker 开始执行队列任务...");
+
+    while (true) {
+      // 检查状态，如果不是 maintenance_running 则退出
+      const status = await redis.get(REDIS_KEYS.STATUS);
+      if (status !== "maintenance_running") {
+        console.log(`[TaskManager] maintenance worker 检测到状态变为 ${status}，退出`);
+        break;
+      }
+
+      // 从队列获取任务
+      const nextTask = await this._getNextTask();
+
+      if (!nextTask) {
+        // 队列为空，检查是否真的完成
+        await new Promise((r) => setTimeout(r, 2000)); // 等待2秒再确认
+        
+        const again = await this._getNextTask();
+        if (!again) {
+          // 队列确实为空，maintenance 任务完成
+          console.log("[TaskManager] maintenance worker 检测到队列已清空，任务完成");
+          break;
+        }
+        // 有新任务，继续处理
+        continue;
+      }
+
+      const { id, type } = nextTask;
+      const url = this._buildUrl(id, type);
+
+      try {
+        const typeName = ({ 1: 'Project', 2: 'Organization', 3: 'Person' }[type]) || String(type);
+        const taskInfo = {
+          workerId: WORKER_ID,
+          id,
+          type,
+          typeName,
+          url,
+          startedAt: new Date().toISOString(),
+        };
+        // 写入 Redis，供 /crawl/status 查询当前任务
+        await redis.hSet(REDIS_KEYS.CURRENT_TASKS, String(WORKER_ID), JSON.stringify(taskInfo));
+
+        console.log(`[TaskManager] maintenance worker 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
+        const scrapeFn = { 1: scrapeProject, 2: scrapeOrganization, 3: scrapePerson }[type];
+        const userDataDirSuffix = "001"; // maintenance 任务使用固定的 userDataDir
+
+        await Promise.race([
+          scrapeFn(url, { updateDb: true, fetchOptions: { userDataDirSuffix } }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("SCRAPE_TIMEOUT")), 2 * 60 * 1000))
+        ]);
+        console.log(`[TaskManager] maintenance worker 爬取成功: [ID: ${id}]`);
+
+        // 重置连续错误计数
+        await redis.set(REDIS_KEYS.CONSECUTIVE_ERRORS, 0);
+      } catch (error) {
+        const errorMessage = `ID ${id} 爬取失败: ${error.message}`;
+        console.error(`[TaskManager] maintenance worker 爬取失败: [ID: ${id}]. 错误: ${error.message}`);
+
+        const consecutive = await redis.incr(REDIS_KEYS.CONSECUTIVE_ERRORS);
+        await redis.set(REDIS_KEYS.ERROR, `${errorMessage}（连续失败 ${consecutive} 次）`);
+
+        // maintenance 任务期间不自动暂停，继续执行
+        if (consecutive >= 10) {
+          console.warn(`[TaskManager] maintenance 任务期间连续失败 ${consecutive} 次，但继续执行（维护任务不自动暂停）`);
+        }
+      } finally {
+        // 清理当前任务的 Redis 记录
+        await redis.hDel(REDIS_KEYS.CURRENT_TASKS, String(WORKER_ID));
+      }
+
+      // 添加延迟，避免请求过快
+      await new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 1200));
+    }
+
+    console.log(`[TaskManager] maintenance worker 运行循环结束`);
+  }
+
+  /**
+   * 等待队列跑完（所有 worker 完成）
+   * @returns {Promise<void>}
+   */
+  async _waitForQueueToComplete() {
+    const redis = await this._getRedis();
+    const maxWaitTime = 24 * 60 * 60 * 1000; // 最多等待24小时
+    const startTime = Date.now();
+    const checkInterval = 5000; // 每5秒检查一次
+
+    while (Date.now() - startTime < maxWaitTime) {
+      const status = await redis.get(REDIS_KEYS.STATUS);
+      
+      // 如果状态不是 maintenance_running，说明任务已完成或被中断
+      if (status !== "maintenance_running") {
+        console.log(`[TaskManager] 队列执行完成，最终状态: ${status}`);
+        return;
+      }
+
+      // 检查队列是否为空
+      const queueLengths = await Promise.all([
+        redis.lLen(REDIS_KEYS.QUEUE_PROJECT),
+        redis.lLen(REDIS_KEYS.QUEUE_ORG),
+        redis.lLen(REDIS_KEYS.QUEUE_PERSON),
+      ]);
+
+      const totalQueueLength = queueLengths[0] + queueLengths[1] + queueLengths[2];
+
+      if (totalQueueLength === 0) {
+        // 队列为空，再等待一段时间确保所有 worker 都完成
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        // 再次确认队列仍为空且没有正在执行的任务
+        const currentTasks = await redis.hGetAll(REDIS_KEYS.CURRENT_TASKS);
+        if (Object.keys(currentTasks).length === 0) {
+          console.log("[TaskManager] 队列已清空，所有任务完成");
+          return;
+        }
+      }
+
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+    }
+
+    console.warn("[TaskManager] 等待队列完成超时（24小时）");
+  }
+
+  /**
+   * 每日维护任务主函数
+   * 1. 失败任务重试（失败次数 <= 2）
+   * 2. 增量发现新 ID
+   * 3. 旧数据重爬（10天前成功过的，每种类型最多1000条）
+   * 4. 跑完所有队列
+   * @param {Object} options - { trigger: 'scheduled' | 'manual' }
+   * @returns {Promise<Object>} 返回执行报告
+   */
+  async runDailyMaintenanceTask(options = {}) {
+    const trigger = options.trigger || 'scheduled';
+    const redis = await this._getRedis();
+    const startTime = Date.now();
+
+    // 串行锁：检查是否已有任务在运行（无论是手动任务还是 maintenance 任务）
+    const currentStatus = await redis.get(REDIS_KEYS.STATUS);
+    if (currentStatus === "maintenance_running") {
+      console.log("[TaskManager] maintenance 任务已在运行中，拒绝重复执行");
+      return { 
+        success: false, 
+        error: "MAINTENANCE_RUNNING",
+        message: "每日维护任务正在执行中，请等待上一轮完成"
+      };
+    }
+    if (currentStatus === "running") {
+      console.log("[TaskManager] 手动任务正在运行中，拒绝执行 maintenance 任务");
+      return { 
+        success: false, 
+        error: "MANUAL_TASK_RUNNING",
+        message: "手动爬取任务正在执行中，请先暂停或等待其完成后再执行每日维护任务"
+      };
+    }
+
+    // 设置状态为 maintenance_running
+    await redis.set(REDIS_KEYS.STATUS, "maintenance_running");
+    console.log(`[TaskManager] 开始执行每日维护任务 (触发方式: ${trigger})`);
+
+    const report = {
+      trigger,
+      startedAt: new Date().toISOString(),
+      retryFailures: { Project: 0, Organization: 0, Person: 0 },
+      discovered: 0,
+      staleRecrawl: { Project: 0, Organization: 0, Person: 0 },
+      error: null,
+    };
+
+    try {
+      // 步骤1: 失败任务重试（失败次数 <= 2）
+      console.log("[TaskManager] 步骤1: 获取失败任务重试列表...");
+      const retryIds = await this._getRetryableFailures();
+      report.retryFailures = {
+        Project: retryIds.Project.length,
+        Organization: retryIds.Organization.length,
+        Person: retryIds.Person.length,
+      };
+      console.log(`[TaskManager] 找到可重试失败任务: Project=${retryIds.Project.length}, Organization=${retryIds.Organization.length}, Person=${retryIds.Person.length}`);
+
+      // 步骤2: 增量发现新 ID
+      console.log("[TaskManager] 步骤2: 开始增量发现新 ID...");
+      const discoveryResult = await this._discoverNewIds(5);
+      report.discovered = discoveryResult.discovered || 0;
+      console.log(`[TaskManager] 增量发现完成，发现 ${report.discovered} 个新 ID`);
+
+      // 步骤3: 获取旧数据重爬列表
+      console.log("[TaskManager] 步骤3: 获取旧数据重爬列表...");
+      const staleIds = await this._getStaleEntitiesToRecrawl();
+      report.staleRecrawl = {
+        Project: staleIds.Project.length,
+        Organization: staleIds.Organization.length,
+        Person: staleIds.Person.length,
+      };
+      console.log(`[TaskManager] 找到旧数据重爬任务: Project=${staleIds.Project.length}, Organization=${staleIds.Organization.length}, Person=${staleIds.Person.length}`);
+
+      // 合并所有任务到队列
+      const allTaskIds = {
+        Project: [...retryIds.Project, ...staleIds.Project],
+        Organization: [...retryIds.Organization, ...staleIds.Organization],
+        Person: [...retryIds.Person, ...staleIds.Person],
+      };
+
+      const totalTasks = allTaskIds.Project.length + allTaskIds.Organization.length + allTaskIds.Person.length;
+      console.log(`[TaskManager] 总共 ${totalTasks} 个任务需要执行`);
+
+      if (totalTasks > 0) {
+        // 清空旧队列
+        await redis.del([REDIS_KEYS.QUEUE_PROJECT, REDIS_KEYS.QUEUE_ORG, REDIS_KEYS.QUEUE_PERSON]);
+
+        // 将任务推入队列
+        if (allTaskIds.Project.length > 0) {
+          await redis.rPush(REDIS_KEYS.QUEUE_PROJECT, allTaskIds.Project);
+        }
+        if (allTaskIds.Organization.length > 0) {
+          await redis.rPush(REDIS_KEYS.QUEUE_ORG, allTaskIds.Organization);
+        }
+        if (allTaskIds.Person.length > 0) {
+          await redis.rPush(REDIS_KEYS.QUEUE_PERSON, allTaskIds.Person);
+        }
+
+        // 启动 maintenance worker 顺序执行队列（不需要多个 worker）
+        console.log(`[TaskManager] 启动 maintenance worker 顺序执行队列任务...`);
+        await this._maintenanceWorkerLoop();
+      } else {
+        console.log("[TaskManager] 没有需要执行的任务");
+      }
+
+      report.completedAt = new Date().toISOString();
+      report.duration = Date.now() - startTime;
+      report.success = true;
+
+      console.log(`[TaskManager] 每日维护任务完成，耗时 ${report.duration}ms`);
+
+    } catch (error) {
+      console.error("[TaskManager] 每日维护任务执行失败:", error);
+      report.error = error.message || String(error);
+      report.success = false;
+      report.completedAt = new Date().toISOString();
+      report.duration = Date.now() - startTime;
+    } finally {
+      // 保存执行报告到 Redis
+      await redis.set(REDIS_KEYS.MAINTENANCE_REPORT, JSON.stringify(report));
+
+      // 恢复状态为 idle
+      await redis.set(REDIS_KEYS.STATUS, "idle");
+      console.log("[TaskManager] 每日维护任务结束，状态已恢复为 idle");
+    }
+
+    return report;
+  }
+
+  /**
    * 从数据库 CrawlLog 表获取进度信息
    * @returns {Promise<Object>} 进度信息对象
    */
@@ -350,9 +709,9 @@ class CrawlTaskManager {
 
     // 保护：运行中禁止初始化，避免中途清空队列
     const currentStatus = await redis.get(REDIS_KEYS.STATUS);
-    if (currentStatus === "running") {
-      console.log("[TaskManager] 当前状态为 running，跳过初始化以避免中断正在执行的任务。");
-      return;
+    if (currentStatus === "running" || currentStatus === "maintenance_running") {
+      console.log(`[TaskManager] 当前状态为 ${currentStatus}，跳过初始化以避免中断正在执行的任务。`);
+      return { success: false, error: currentStatus === "maintenance_running" ? "MAINTENANCE_RUNNING" : "RUNNING" };
     }
 
     console.log("[TaskManager] 清理旧的 Redis 队列数据...");
@@ -444,15 +803,21 @@ class CrawlTaskManager {
     await redis.set(REDIS_KEYS.STATUS, "idle");
 
     console.log(`[TaskManager] 初始化完成。`);
+    return { success: true };
   }
 
   async start() {
     const redis = await this._getRedis();
     const currentStatus = await redis.get(REDIS_KEYS.STATUS);
 
+    if (currentStatus === "maintenance_running") {
+      console.log("[TaskManager] maintenance 任务运行中，拒绝手动启动。");
+      return { success: false, error: "MAINTENANCE_RUNNING" };
+    }
+
     if (currentStatus === "finished") {
       console.log("[TaskManager] 所有任务已完成，如需重新开始请先重置。");
-      return;
+      return { success: false, error: "ALREADY_FINISHED" };
     }
 
     await redis.set(REDIS_KEYS.STATUS, "running");
@@ -466,14 +831,21 @@ class CrawlTaskManager {
         console.error(`[TaskManager] worker ${i} 异常退出:`, e);
       });
     }
+
+    return { success: true };
   }
 
   async pause() {
     const redis = await this._getRedis();
     const currentStatus = await redis.get(REDIS_KEYS.STATUS);
-    if (currentStatus !== "running") return;
+    if (currentStatus === "maintenance_running") {
+      console.log("[TaskManager] maintenance 任务运行中，拒绝手动暂停。");
+      return { success: false, error: "MAINTENANCE_RUNNING" };
+    }
+    if (currentStatus !== "running") return { success: false, error: "NOT_RUNNING" };
     await redis.set(REDIS_KEYS.STATUS, "paused");
     console.log("[TaskManager] 任务暂停。");
+    return { success: true };
   }
 
   /**
@@ -487,6 +859,10 @@ class CrawlTaskManager {
       
       if (!currentStatus || currentStatus === 'uninitialized' || currentStatus === 'idle') {
         return 'idle';
+      }
+      
+      if (currentStatus === 'maintenance_running') {
+        return 'maintenance_running';
       }
       
       if (currentStatus === 'finished') {
@@ -763,7 +1139,8 @@ class CrawlTaskManager {
           console.error(`[TaskManager] 连续失败 ${consecutive} 次，已自动暂停任务。`);
         }
       } finally {
-        // 暂时保留 Redis 中的记录，作为“最近一次任务”展示，不在这里删除
+        // 清理当前任务的 Redis 记录（任务完成后）
+        await redis.hDel(REDIS_KEYS.CURRENT_TASKS, String(workerId));
       }
 
       await new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 1200));
