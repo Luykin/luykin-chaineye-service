@@ -14,6 +14,7 @@ const REDIS_KEYS = {
   CONSECUTIVE_ERRORS: "rdt_crawl:consecutive_errors",
   CURRENT_TASKS: "rdt_crawl:current_tasks",
   MAINTENANCE_REPORT: "rdt_crawl:maintenance_report",
+  MAINTENANCE_STAGE: "rdt_crawl:maintenance_stage", // 当前执行阶段
 };
 
 class CrawlTaskManager {
@@ -423,6 +424,28 @@ class CrawlTaskManager {
         // 写入 Redis，供 /crawl/status 查询当前任务
         await redis.hSet(REDIS_KEYS.CURRENT_TASKS, String(WORKER_ID), JSON.stringify(taskInfo));
 
+        // 更新执行阶段信息（包含当前处理的任务信息）
+        const queueLengths = await Promise.all([
+          redis.lLen(REDIS_KEYS.QUEUE_PROJECT),
+          redis.lLen(REDIS_KEYS.QUEUE_ORG),
+          redis.lLen(REDIS_KEYS.QUEUE_PERSON),
+        ]);
+        const remainingTasks = queueLengths[0] + queueLengths[1] + queueLengths[2];
+        const stageInfo = await redis.get(REDIS_KEYS.MAINTENANCE_STAGE);
+        let stageData = { step: "processing_queue", message: "正在处理队列任务...", totalTasks: 0, processedTasks: 0 };
+        if (stageInfo) {
+          try {
+            stageData = JSON.parse(stageInfo);
+          } catch {}
+        }
+        await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({
+          step: "processing_queue",
+          message: `正在处理: ${typeName} #${id} (剩余 ${remainingTasks} 个任务)`,
+          totalTasks: stageData.totalTasks || 0,
+          remainingTasks,
+          currentTask: { type: typeName, id }
+        }));
+
         console.log(`[TaskManager] maintenance worker 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
         const scrapeFn = { 1: scrapeProject, 2: scrapeOrganization, 3: scrapePerson }[type];
         const userDataDirSuffix = "001"; // maintenance 任务使用固定的 userDataDir
@@ -552,6 +575,10 @@ class CrawlTaskManager {
 
     try {
       // 步骤1: 失败任务重试（失败次数 <= 2）
+      await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+        step: "retry_failures", 
+        message: "正在获取失败任务重试列表..." 
+      }));
       console.log("[TaskManager] 步骤1: 获取失败任务重试列表...");
       const retryIds = await this._getRetryableFailures();
       report.retryFailures = {
@@ -562,12 +589,20 @@ class CrawlTaskManager {
       console.log(`[TaskManager] 找到可重试失败任务: Project=${retryIds.Project.length}, Organization=${retryIds.Organization.length}, Person=${retryIds.Person.length}`);
 
       // 步骤2: 增量发现新 ID
+      await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+        step: "discovering", 
+        message: "正在增量发现新 ID..." 
+      }));
       console.log("[TaskManager] 步骤2: 开始增量发现新 ID...");
       const discoveryResult = await this._discoverNewIds(5);
       report.discovered = discoveryResult.discovered || 0;
       console.log(`[TaskManager] 增量发现完成，发现 ${report.discovered} 个新 ID`);
 
       // 步骤3: 获取旧数据重爬列表
+      await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+        step: "stale_recrawl", 
+        message: "正在获取旧数据重爬列表..." 
+      }));
       console.log("[TaskManager] 步骤3: 获取旧数据重爬列表...");
       const staleIds = await this._getStaleEntitiesToRecrawl();
       report.staleRecrawl = {
@@ -603,9 +638,19 @@ class CrawlTaskManager {
         }
 
         // 启动 maintenance worker 顺序执行队列（不需要多个 worker）
+        await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+          step: "processing_queue", 
+          message: `正在处理队列任务 (共 ${totalTasks} 个任务)...`,
+          totalTasks,
+          processedTasks: 0
+        }));
         console.log(`[TaskManager] 启动 maintenance worker 顺序执行队列任务...`);
         await this._maintenanceWorkerLoop();
       } else {
+        await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+          step: "completed", 
+          message: "没有需要执行的任务" 
+        }));
         console.log("[TaskManager] 没有需要执行的任务");
       }
 
@@ -624,6 +669,9 @@ class CrawlTaskManager {
     } finally {
       // 保存执行报告到 Redis
       await redis.set(REDIS_KEYS.MAINTENANCE_REPORT, JSON.stringify(report));
+
+      // 清除执行阶段信息
+      await redis.del(REDIS_KEYS.MAINTENANCE_STAGE);
 
       // 恢复状态为 idle
       await redis.set(REDIS_KEYS.STATUS, "idle");
@@ -703,9 +751,54 @@ class CrawlTaskManager {
     }
   }
 
+  /**
+   * 检查并恢复异常状态（例如服务器重启导致的状态不一致）
+   * @returns {Promise<void>}
+   */
+  async _recoverAbnormalState() {
+    const redis = await this._getRedis();
+    const currentStatus = await redis.get(REDIS_KEYS.STATUS);
+    
+    // 如果状态是 running 或 maintenance_running，但没有任何 worker 在运行
+    // 说明可能是服务器重启导致的状态不一致
+    if (currentStatus === "running" || currentStatus === "maintenance_running") {
+      const currentTasks = await redis.hGetAll(REDIS_KEYS.CURRENT_TASKS);
+      const hasActiveWorkers = Object.keys(currentTasks).length > 0;
+      
+      if (!hasActiveWorkers) {
+        console.warn(`[TaskManager] 检测到异常状态: ${currentStatus}，但没有活跃的 worker。可能是服务器重启导致的状态不一致，正在恢复...`);
+        
+        // 检查队列是否还有任务
+        const queueLengths = await Promise.all([
+          redis.lLen(REDIS_KEYS.QUEUE_PROJECT),
+          redis.lLen(REDIS_KEYS.QUEUE_ORG),
+          redis.lLen(REDIS_KEYS.QUEUE_PERSON),
+        ]);
+        const totalQueueLength = queueLengths[0] + queueLengths[1] + queueLengths[2];
+        
+        if (totalQueueLength > 0) {
+          console.warn(`[TaskManager] 队列中还有 ${totalQueueLength} 个未完成的任务，这些任务将在下次运行时继续处理。`);
+        }
+        
+        // 如果是 maintenance_running，清除 maintenance stage 信息
+        if (currentStatus === "maintenance_running") {
+          await redis.del(REDIS_KEYS.MAINTENANCE_STAGE);
+          console.warn(`[TaskManager] 清除 maintenance 执行阶段信息。`);
+        }
+        
+        // 恢复状态为 idle
+        await redis.set(REDIS_KEYS.STATUS, "idle");
+        console.log(`[TaskManager] 状态已恢复为 idle。`);
+      }
+    }
+  }
+
   async initialize() {
     console.log("[TaskManager] 初始化中...");
     const redis = await this._getRedis();
+
+    // 首先检查并恢复异常状态（例如服务器重启导致的状态不一致）
+    await this._recoverAbnormalState();
 
     // 保护：运行中禁止初始化，避免中途清空队列
     const currentStatus = await redis.get(REDIS_KEYS.STATUS);
@@ -958,9 +1051,11 @@ class CrawlTaskManager {
 
   async getStatus() {
     const redis = await this._getRedis();
-    const [status, error] = await Promise.all([
+    const [status, error, maintenanceReportRaw, maintenanceStageRaw] = await Promise.all([
         redis.get(REDIS_KEYS.STATUS),
         redis.get(REDIS_KEYS.ERROR),
+        redis.get(REDIS_KEYS.MAINTENANCE_REPORT),
+        redis.get(REDIS_KEYS.MAINTENANCE_STAGE),
     ]);
 
     // 从数据库获取进度信息
@@ -994,12 +1089,47 @@ class CrawlTaskManager {
       console.error("[TaskManager] 读取当前任务信息失败:", e);
     }
 
+    // 解析 maintenance 相关信息
+    let maintenance = null;
+    if (status === "maintenance_running") {
+      maintenance = {
+        running: true,
+        stage: null,
+        lastReport: null,
+      };
+      
+      // 解析当前执行阶段
+      if (maintenanceStageRaw) {
+        try {
+          maintenance.stage = JSON.parse(maintenanceStageRaw);
+        } catch (e) {
+          console.error("[TaskManager] 解析 maintenance stage 失败:", e);
+        }
+      }
+    } else {
+      // 不在运行中，返回上次执行报告
+      maintenance = {
+        running: false,
+        stage: null,
+        lastReport: null,
+      };
+      
+      if (maintenanceReportRaw) {
+        try {
+          maintenance.lastReport = JSON.parse(maintenanceReportRaw);
+        } catch (e) {
+          console.error("[TaskManager] 解析 maintenance report 失败:", e);
+        }
+      }
+    }
+
     return {
       status: status || 'uninitialized',
       progress: progress,
       error: error || null,
       phase: phase, // 当前执行阶段
       currentTasks, // 当前正在处理的任务列表
+      maintenance, // maintenance 任务信息
     };
   }
 

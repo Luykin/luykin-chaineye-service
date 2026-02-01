@@ -245,6 +245,7 @@
         <div style="font-size: 12px; color: #94a3b8;">
           状态: <span id="rdp-maintenance-status">-</span>
         </div>
+        <div id="rdp-maintenance-stage" style="display: none; font-size: 12px; margin-top: 4px; color: #38bdf8;"></div>
       </div>
     </div>
     <div id="rdp-maintenance-report" style="margin-top: 16px; display: none;">
@@ -626,33 +627,52 @@
         }
 
         // 更新每日维护任务状态
-        if (maintenance) {
-          const maintenanceStatusEl = $('rdp-maintenance-status');
-          if (maintenanceStatusEl) {
-            if (maintenance.running) {
-              maintenanceStatusEl.textContent = '执行中';
-              maintenanceStatusEl.style.color = '#38bdf8';
-            } else {
-              maintenanceStatusEl.textContent = '空闲';
-              maintenanceStatusEl.style.color = '#94a3b8';
-            }
+        const maintenanceStatusEl = $('rdp-maintenance-status');
+        const maintenanceStageEl = $('rdp-maintenance-stage');
+        const isMaintenanceRunning = status === 'maintenance_running';
+        
+        if (maintenanceStatusEl) {
+          if (isMaintenanceRunning) {
+            maintenanceStatusEl.textContent = '执行中';
+            maintenanceStatusEl.style.color = '#38bdf8';
+          } else {
+            maintenanceStatusEl.textContent = '空闲';
+            maintenanceStatusEl.style.color = '#94a3b8';
           }
+        }
 
-          // 禁用/启用手动操作按钮（当 maintenance 运行时）
-          const isMaintenanceRunning = maintenance.running;
-          $('rdp-task-start').disabled = isMaintenanceRunning;
-          $('rdp-task-pause').disabled = isMaintenanceRunning;
-          $('rdp-task-reset').disabled = isMaintenanceRunning;
-          $('rdp-maintenance-run-now').disabled = isMaintenanceRunning;
+        // 显示当前执行阶段
+        if (maintenanceStageEl) {
+          if (isMaintenanceRunning && maintenance && maintenance.stage) {
+            maintenanceStageEl.textContent = maintenance.stage.message || '执行中...';
+            maintenanceStageEl.style.display = 'block';
+            maintenanceStageEl.style.color = '#38bdf8';
+            maintenanceStageEl.style.fontSize = '12px';
+            maintenanceStageEl.style.marginTop = '4px';
+          } else {
+            maintenanceStageEl.style.display = 'none';
+          }
+        }
 
-          // 显示执行报告
-          if (maintenance.lastReport) {
-            const reportEl = $('rdp-maintenance-report');
-            const reportContentEl = $('rdp-maintenance-report-content');
-            if (reportEl && reportContentEl) {
-              reportEl.style.display = 'block';
-              prettyPrint(reportContentEl, maintenance.lastReport);
-            }
+        // 禁用/启用手动操作按钮（当 maintenance 运行时）
+        $('rdp-task-start').disabled = isMaintenanceRunning;
+        $('rdp-task-pause').disabled = isMaintenanceRunning;
+        $('rdp-task-reset').disabled = isMaintenanceRunning;
+        $('rdp-maintenance-run-now').disabled = isMaintenanceRunning;
+
+        // 显示执行报告（只在非运行状态时显示上次报告）
+        if (maintenance && !isMaintenanceRunning && maintenance.lastReport) {
+          const reportEl = $('rdp-maintenance-report');
+          const reportContentEl = $('rdp-maintenance-report-content');
+          if (reportEl && reportContentEl) {
+            reportEl.style.display = 'block';
+            prettyPrint(reportContentEl, maintenance.lastReport);
+          }
+        } else if (isMaintenanceRunning) {
+          // 运行中时隐藏报告
+          const reportEl = $('rdp-maintenance-report');
+          if (reportEl) {
+            reportEl.style.display = 'none';
           }
         }
 
