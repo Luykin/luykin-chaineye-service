@@ -646,7 +646,7 @@ class CrawlTaskManager {
         message: "正在获取失败任务重试列表..." 
       }));
       console.log("[TaskManager] 步骤1: 获取失败任务重试列表...");
-      const retryIds = await this._getRetryableFailures(300);
+      const retryIds = await this._getRetryableFailures(2500);
       report.retryFailures = {
         Project: retryIds.Project.length,
         Organization: retryIds.Organization.length,
@@ -670,7 +670,7 @@ class CrawlTaskManager {
         message: "正在获取旧数据重爬列表..." 
       }));
       console.log("[TaskManager] 步骤3: 获取旧数据重爬列表...");
-      const staleIds = await this._getStaleEntitiesToRecrawl(1000);
+      const staleIds = await this._getStaleEntitiesToRecrawl(300);
       report.staleRecrawl = {
         Project: staleIds.Project.length,
         Organization: staleIds.Organization.length,
