@@ -235,6 +235,7 @@
       </div>
       <div class="rdp-task-controls">
         <button id="rdp-maintenance-run-now" class="rdp-btn">立即执行</button>
+        <button id="rdp-maintenance-force-reset" class="rdp-btn rdp-btn-reset" style="background-color: #7f1d1d;">强制复位状态</button>
       </div>
     </div>
     <div class="rdp-status-row">
@@ -843,6 +844,39 @@
       }
     } catch (e) {
       console.error('执行失败:', e);
+      alert('请求失败: ' + (e.message || String(e)));
+    } finally {
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }, 2000);
+    }
+  });
+
+  // 强制重置状态
+  $('rdp-maintenance-force-reset').addEventListener('click', async () => {
+    if (!confirm('确定要强制重置状态吗？\n\n只有在您确信后台没有任务在运行时才应使用此功能，否则可能导致状态不一致。')) {
+      return;
+    }
+
+    const btn = $('rdp-maintenance-force-reset');
+    const originalText = btn.textContent;
+    try {
+      btn.disabled = true;
+      btn.textContent = '重置中...';
+      
+      const result = await jsonFetch('/api/rootdatapro/internal/crawl/force_reset_status', {
+        method: 'POST',
+      });
+
+      if (result.success) {
+        alert('状态已成功重置为 idle');
+        updateCrawlStatus();
+      } else {
+        alert(`重置失败: ${result.error || '未知错误'}`);
+      }
+    } catch (e) {
+      console.error('重置失败:', e);
       alert('请求失败: ' + (e.message || String(e)));
     } finally {
       setTimeout(() => {

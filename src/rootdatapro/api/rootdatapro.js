@@ -245,4 +245,16 @@ router.post("/crawl/maintenance/run_now", async (req, res) => {
   }
 });
 
+// 强制重置状态
+router.post("/crawl/force_reset_status", async (req, res) => {
+  console.log("[rootdatapro] 收到强制重置状态请求");
+  try {
+    const result = await taskManager.forceResetStatus();
+    return res.json(result);
+  } catch (error) {
+    console.error("[rootdatapro] 强制重置状态失败:", error);
+    return res.status(500).json({ success: false, error: error.message || String(error) });
+  }
+});
+
 module.exports = router;

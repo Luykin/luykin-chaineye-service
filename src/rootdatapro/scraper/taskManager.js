@@ -510,7 +510,6 @@ class CrawlTaskManager {
           processedTasks: processedTasks + 1, // 当前任务正在处理
           remainingTasks,
           currentTask: { type: typeName, id },
-          updatedAt: new Date().toISOString(),
         }));
 
         console.log(`[TaskManager] maintenance worker 正在爬取: [Type: ${type}, ID: ${id}] URL: ${url}`);
@@ -1008,6 +1007,15 @@ class CrawlTaskManager {
     return { success: true };
   }
 
+  async forceResetStatus() {
+    const redis = await this._getRedis();
+    console.warn("[TaskManager] 强制重置状态...");
+    await redis.set(REDIS_KEYS.STATUS, "idle");
+    await redis.del(REDIS_KEYS.MAINTENANCE_STAGE);
+    console.warn("[TaskManager] 状态已强制重置为 'idle'");
+    return { success: true };
+  }
+
   async pause() {
     const redis = await this._getRedis();
     const currentStatus = await redis.get(REDIS_KEYS.STATUS);
@@ -1191,29 +1199,7 @@ class CrawlTaskManager {
       }
     }
 
-    // 5 分钟心跳超时自愈：status=maintenance_running 但无 currentTasks，且 stage.updatedAt 超过 5 分钟
-    if (status === "maintenance_running") {
-      const hasActive = currentTasks.length > 0;
-      let stale = false;
-      if (parsedStage && parsedStage.updatedAt) {
-        const ts = Date.parse(parsedStage.updatedAt);
-        if (Number.isFinite(ts)) {
-          stale = Date.now() - ts > 5 * 60 * 1000;
-        }
-      }
 
-      if (!hasActive && stale) {
-        console.warn("[TaskManager] maintenance_running detected but stage heartbeat stale (>5m) and no active tasks. Auto-recovering to idle.");
-        try {
-          await redis.set(REDIS_KEYS.STATUS, "idle");
-          await redis.del(REDIS_KEYS.MAINTENANCE_STAGE);
-          status = "idle";
-          parsedStage = null;
-        } catch (e) {
-          console.error("[TaskManager] maintenance auto-recover failed:", e);
-        }
-      }
-    }
 
     if (status === "maintenance_running") {
       maintenance = {
