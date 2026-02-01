@@ -341,7 +341,7 @@ class CrawlTaskManager {
         ],
         group: ['entity_id', 'entity_type'],
         having: literal(
-          "SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) <= 2 " +
+          "SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) <= 10 " +
           "AND SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) > 0 " +
           "AND SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) = 0"
         ),
@@ -660,7 +660,7 @@ class CrawlTaskManager {
         message: "正在增量发现新 ID..." 
       }));
       console.log("[TaskManager] 步骤2: 开始增量发现新 ID...");
-      const discoveryResult = await this._discoverNewIds(5, { redis, updateStage: true });
+      const discoveryResult = await this._discoverNewIds(2, { redis, updateStage: true });
       report.discovered = discoveryResult.discovered || 0;
       console.log(`[TaskManager] 增量发现完成，发现 ${report.discovered} 个新 ID`);
 
@@ -944,7 +944,7 @@ class CrawlTaskManager {
       } else {
         // 没有重试任务，尝试增量发现
         console.log("[TaskManager] 没有需要重试的任务，开始增量发现新 ID...");
-        const discoveryResult = await this._discoverNewIds(5);
+        const discoveryResult = await this._discoverNewIds(2);
         
         if (discoveryResult.discovered > 0) {
           // 增量发现成功爬取了新 ID 并已入库
