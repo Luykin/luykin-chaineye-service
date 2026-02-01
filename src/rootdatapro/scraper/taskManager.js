@@ -108,17 +108,20 @@ class CrawlTaskManager {
     try {
       typemapManager.loadIdMaps();
       
-      // 获取每种类别的最大 ID
-      const getMaxId = (typeSet) => {
-        if (typeSet.size === 0) return 0;
-        return Math.max(...Array.from(typeSet).map(id => parseInt(id, 10) || 0));
-      };
+      // 从 CrawlLog 表动态获取每种类型的最大 ID
+      console.log('[taskManager] discoverNewIds: Fetching max IDs from CrawlLog...');
+      const [maxProject, maxOrg, maxPerson] = await Promise.all([
+        db.CrawlLog.max('entity_id', { where: { entity_type: 'Project', status: 'success' } }),
+        db.CrawlLog.max('entity_id', { where: { entity_type: 'Organization', status: 'success' } }),
+        db.CrawlLog.max('entity_id', { where: { entity_type: 'Person', status: 'success' } }),
+      ]);
 
       const maxIds = {
-        Project: getMaxId(typemapManager._idMapCache.byType[1]),
-        Organization: getMaxId(typemapManager._idMapCache.byType[2]),
-        Person: getMaxId(typemapManager._idMapCache.byType[3]),
+        Project: parseInt(maxProject, 10) || 0,
+        Organization: parseInt(maxOrg, 10) || 0,
+        Person: parseInt(maxPerson, 10) || 0,
       };
+      console.log('[taskManager] discoverNewIds: Found max IDs:', maxIds);
 
       const newIds = {
         Project: [],
