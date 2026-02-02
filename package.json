@@ -26,7 +26,8 @@
     "db:migrate:rootdatapro:status": "NODE_ENV=production npx sequelize-cli db:migrate:status --config config/config-rootdatapro.json --migrations-path migrations-rootdatapro",
     "test-start": "pm2 start dev.ecosystem.config.js --env development",
     "test-restart": "pm2 restart dev.ecosystem.config.js --env development",
-    "test-logs": "pm2 logs dev-luykin-chaineye-api"
+    "test-logs": "pm2 logs dev-luykin-chaineye-api",
+    "kill-chrome": "pkill -9 -f 'chrome.*headless'"
   },
   "dependencies": {
     "@lem0-packages/puppeteer-page-proxy": "^1.3.3",
