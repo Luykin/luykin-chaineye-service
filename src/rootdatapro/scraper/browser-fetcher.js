@@ -186,6 +186,7 @@ async function fetchMainDomAndNuxtData(url, options = {}) {
       return {
         mainDom: mainElement ? mainElement.outerHTML : null,
         nuxtDataJson,
+        html: document.documentElement.outerHTML,
       };
     });
 

@@ -691,9 +691,9 @@
             statusInterval = setInterval(updateCrawlStatus, 8000);
           }
           if (status === 'running') {
-            $('rdp-task-start').disabled = false;
-            $('rdp-task-start').textContent = '接管/启动';
-            $('rdp-task-pause').disabled = false;
+          $('rdp-task-start').disabled = false;
+          $('rdp-task-start').textContent = '接管/启动';
+          $('rdp-task-pause').disabled = false;
           }
         } else {
           if (statusInterval) {

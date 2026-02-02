@@ -1,6 +1,6 @@
 const { getRedisClient } = require("../../lib/redisClient");
 const typemapManager = require("./typemap/manager");
-const { scrapeProject, scrapeOrganization, scrapePerson } = require("./index");
+const { scrapeProject, scrapeOrganization, scrapePerson, scrapeFundraisingList } = require("./index");
 const db = require("../models");
 
 const WORKER_COUNT = Math.max(1, parseInt(process.env.RDT_CRAWL_WORKERS || "1", 10) || 1);
@@ -28,6 +28,9 @@ class CrawlTaskManager {
     }
     return this.redis;
   }
+
+  // Fundraising 相关逻辑已经下沉到 scraper/index.js + parsers/fundraisingParser.js
+  // 这里不再额外封装，直接在 runDailyMaintenanceTask 中调用 scrapeFundraisingList
 
   /**
    * 构建「从未爬取过」任务的队列
@@ -640,13 +643,63 @@ class CrawlTaskManager {
     };
 
     try {
-      // 步骤1: 失败任务重试（失败次数 <= 2）
+      // 步骤0: 获取并优先执行 Fundraising 页面的高优先级任务
+      await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+        step: "fundraising", 
+        message: "正在抓取 Fundraising 页面获取最新任务..." 
+      }));
+      console.log("[TaskManager] 步骤0: 获取 Fundraising 页面的高优先级任务...");
+      let fundraisingTasks = [];
+      try {
+        const rawTasks = await scrapeFundraisingList();
+        fundraisingTasks = (rawTasks || [])
+          .filter((t) => t && t.id)
+          .map((t) => ({
+            id: String(t.id),
+            type: typeof t.type === "number" ? t.type : 1,
+          }))
+          .slice(0, 300);
+      } catch (e) {
+        console.error("[TaskManager] 获取 Fundraising 任务失败:", e);
+        fundraisingTasks = [];
+      }
+      report.fundraisingTasks = fundraisingTasks.length;
+
+      if (fundraisingTasks.length > 0) {
+        // 清空旧队列，仅推入 Fundraising 任务
+        await redis.del([REDIS_KEYS.QUEUE_PROJECT, REDIS_KEYS.QUEUE_ORG, REDIS_KEYS.QUEUE_PERSON]);
+
+        const projectIds = fundraisingTasks
+          .filter((t) => t.type === 1 && t.id)
+          .map((t) => String(t.id));
+
+        if (projectIds.length > 0) {
+          await redis.rPush(REDIS_KEYS.QUEUE_PROJECT, projectIds);
+        }
+
+        const totalFundraisingTasks = projectIds.length;
+        await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
+          step: "processing_queue", 
+          message: `正在优先处理 Fundraising 队列任务 (共 ${totalFundraisingTasks} 个任务)...`,
+          totalTasks: totalFundraisingTasks,
+          processedTasks: 0,
+          remainingTasks: totalFundraisingTasks,
+          phase: "fundraising",
+        }));
+
+        console.log(`[TaskManager] 启动 maintenance worker 处理 Fundraising 队列任务，共 ${totalFundraisingTasks} 个`);
+        await this._maintenanceWorkerLoop();
+      } else {
+        console.log("[TaskManager] 未从 Fundraising 页面获取到任何任务，跳过 Fundraising 阶段。");
+      }
+
+      // 步骤1: 失败任务重试（失败次数 <= 10，且从未成功过）
       await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
         step: "retry_failures", 
         message: "正在获取失败任务重试列表..." 
       }));
       console.log("[TaskManager] 步骤1: 获取失败任务重试列表...");
-      const retryIds = await this._getRetryableFailures(2500);
+      const retryIds = await this._getRetryableFailures(300);
       report.retryFailures = {
         Project: retryIds.Project.length,
         Organization: retryIds.Organization.length,
@@ -664,13 +717,13 @@ class CrawlTaskManager {
       report.discovered = discoveryResult.discovered || 0;
       console.log(`[TaskManager] 增量发现完成，发现 ${report.discovered} 个新 ID`);
 
-      // 步骤3: 获取旧数据重爬列表
+      // 步骤3: 获取旧数据重爬列表（10 天前成功过的，每种类型最多 1000 条）
       await redis.set(REDIS_KEYS.MAINTENANCE_STAGE, JSON.stringify({ 
         step: "stale_recrawl", 
         message: "正在获取旧数据重爬列表..." 
       }));
       console.log("[TaskManager] 步骤3: 获取旧数据重爬列表...");
-      const staleIds = await this._getStaleEntitiesToRecrawl(300);
+      const staleIds = await this._getStaleEntitiesToRecrawl(1000);
       report.staleRecrawl = {
         Project: staleIds.Project.length,
         Organization: staleIds.Organization.length,

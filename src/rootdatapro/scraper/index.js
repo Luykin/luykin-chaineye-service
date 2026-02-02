@@ -40,6 +40,36 @@ function parseEntityIdFromUrlByK(rawUrl) {
   }
 }
 
+/**
+ * 爬取 Fundraising 列表页面，返回需要优先爬取的任务列表。
+ * 这是每日维护任务中最高优先级的数据入口。
+ * @param {object} options
+ * @param {object} [options.fetchOptions] 传给 fetchMainDomAndNuxtData 的参数
+ * @returns {Promise<Array<{id: string, type: number}>>}
+ */
+async function scrapeFundraisingList(options = {}) {
+  const fetchOptions = options.fetchOptions || { useProxy: true };
+  const url = "https://www.rootdata.com/Fundraising";
+  console.log(`[Fundraising] 开始爬取 Fundraising 列表: ${url}`);
+
+  try {
+    const { html } = await fetchMainDomAndNuxtData(url, fetchOptions);
+    if (!html) {
+      console.error("[Fundraising] 未能获取到 Fundraising 页面的 HTML 内容。");
+      return [];
+    }
+
+    const { parseFundraisingList } = require("./parsers/fundraisingParser");
+    const tasks = parseFundraisingList(html) || [];
+
+    console.log(`[Fundraising] 解析到 ${tasks.length} 个 Fundraising 任务。`);
+    return tasks;
+  } catch (error) {
+    console.error("[Fundraising] 抓取或解析 Fundraising 页面失败:", error);
+    return [];
+  }
+}
+
 async function writeCrawlLog({ entity_id, entity_type, url, status, error_message, new_data_summary }) {
   try {
     ensureRootdataProDbLoaded();
@@ -292,4 +322,5 @@ module.exports = {
   scrapeProject,
   scrapeOrganization,
   scrapePerson,
+  scrapeFundraisingList,
 };
