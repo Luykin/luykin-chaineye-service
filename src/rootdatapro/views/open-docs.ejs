@@ -385,6 +385,7 @@
           queryInvestmentsDesc: 'Query investments by investor/funded/round/date/amount filters. Supports pagination (POST JSON body).',
           batchGetDetailsDesc: 'Batch fetch entity details (Project/Organization/Person).',
           searchDesc: 'Full-text search across Project/Organization/Person (Query: <code>q</code>). Supports pagination (<code>page</code>, <code>page_size</code>).',
+          searchInvestmentByXDesc: 'Given an X (Twitter) handle, locate the matching project / organization / person and return its investment-in / investment-out summary and members.',
           footer: 'Examples included: curl / JavaScript / Python / Java (pro-api-key).',
           featuresTitle: 'Features Included',
           f1: 'Search Projects/VC',
@@ -455,6 +456,7 @@
           queryInvestmentsDesc: '按投资方/被投方/轮次/日期/金额等条件查询投资事件，支持分页（POST JSON）。',
           batchGetDetailsDesc: '批量获取实体详情（Project/Organization/Person）（POST JSON：<code>items</code>）。',
           searchDesc: '按关键词在 Project/Organization/Person 中检索（Query：<code>q</code>），支持分页（<code>page</code>, <code>page_size</code>）。',
+          searchInvestmentByXDesc: '根据 X（推特）账号定位到对应的项目 / 机构 / 人物，并返回其被投/对外投资的汇总信息及成员列表。',
           footer: '调用示例已提供：curl / JavaScript / Python / Java（均使用 pro-api-key）。',
           featuresTitle: '包含内容',
           f1: 'Search Projects/VC',
@@ -555,6 +557,7 @@
         setText('t-query-investments-desc', dict.queryInvestmentsDesc);
         setText('t-batch-get-details-desc', dict.batchGetDetailsDesc);
         setText('t-search-desc', dict.searchDesc);
+        setText('t-search-investment-by-x-desc', dict.searchInvestmentByXDesc);
         setText('t-level2', dict.requiredLevel2V);
         setText('t-required-param', dict.requiredParam);
 
@@ -1193,6 +1196,23 @@ https://rootdatapro.online/get_people?people_id=123</code></pre>
         <details>
           <summary>curl</summary>
           <pre><code>curl -s 'https://rootdatapro.online/find_by_x?handle=elonmusk' \
+  -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <span class="method">GET</span>
+          <span class="path">/search_investment_by_x?handle=elonmusk</span>
+        </div>
+        <div class="desc" id="t-search-investment-by-x-desc">Given an X (Twitter) handle, locate the matching project / organization / person and return its investment-in / investment-out summary and members.</div>
+        <div class="kv">
+          <div class="k">Auth</div><div class="v">Required</div>
+          <div class="k">Query</div><div class="v"><code>handle</code> (string, required)</div>
+        </div>
+        <details>
+          <summary>curl</summary>
+          <pre><code>curl -s 'https://rootdatapro.online/search_investment_by_x?handle=elonmusk' \
   -H 'pro-api-key: YOUR_API_KEY' | jq .</code></pre>
         </details>
       </div>

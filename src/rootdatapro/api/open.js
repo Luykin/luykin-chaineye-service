@@ -149,6 +149,66 @@ async function attachFundedEntities(investments) {
   return result;
 }
 
+/**
+ * 按日期分组投资记录（与 xhunt 接口保持结构兼容）
+ * 使用天数作为分组 key，避免时区差异导致同一天的融资被分到不同组
+ */
+function groupInvestmentsByDateForOpen(investments) {
+  if (!Array.isArray(investments) || investments.length === 0) return {};
+
+  // 先按时间戳排序
+  const sorted = [...investments].sort(
+    (a, b) => (a.date || 0) - (b.date || 0)
+  );
+
+  const groups = [];
+  let currentGroup = null;
+
+  sorted.forEach((inv) => {
+    const timestamp = inv.date;
+    if (!timestamp) return;
+
+    // 如果是第一条记录，或者与当前组的时间差超过 24 小时，创建新组
+    if (
+      !currentGroup ||
+      timestamp - currentGroup.minTimestamp > 24 * 60 * 60 * 1000
+    ) {
+      currentGroup = {
+        round: inv.round || null,
+        amount: inv.amount ?? null,
+        valuation: null,
+        formattedAmount: inv.formattedAmount ?? inv.amount ?? null,
+        formattedValuation: null,
+        investors: [],
+        minTimestamp: timestamp,
+        maxTimestamp: timestamp,
+      };
+      groups.push(currentGroup);
+    } else {
+      currentGroup.maxTimestamp = Math.max(
+        currentGroup.maxTimestamp,
+        timestamp
+      );
+    }
+
+    if (inv.investorSummary) {
+      currentGroup.investors.push({
+        lead: !!inv.lead,
+        projectName: inv.investorSummary.name || null,
+        projectLink: inv.investorSummary.link || null,
+        socialLinks: inv.investorSummary.socialLinks || null,
+        logo: inv.investorSummary.avatar || null,
+      });
+    }
+  });
+
+  // 转换为以时间戳为 key 的对象格式
+  return groups.reduce((acc, group) => {
+    acc[group.minTimestamp] = group;
+    return acc;
+  }, {});
+}
+
 router.get("/ecosystem_map", proApiKeyAuth(50), async (req, res) => {
   console.log("[rootdatapro] /open/ecosystem_map");
 
@@ -534,7 +594,6 @@ router.get("/find_by_x", proApiKeyAuth(2), async (req, res) => {
   try {
     const handleLower = handle.toLowerCase();
     const like1 = `https://x.com/${handleLower}`;
-    const like2 = `https://twitter.com/${handleLower}`;
 
     const [people, projects, organizations] = await Promise.all([
       db.Person.findAll({
@@ -542,9 +601,7 @@ router.get("/find_by_x", proApiKeyAuth(2), async (req, res) => {
           X: {
             [db.Sequelize.Op.or]: [
               { [db.Sequelize.Op.iLike]: like1 },
-              { [db.Sequelize.Op.iLike]: `${like1}/` },
-              { [db.Sequelize.Op.iLike]: like2 },
-              { [db.Sequelize.Op.iLike]: `${like2}/` },
+              { [db.Sequelize.Op.iLike]: `${like1}/` }
             ],
           },
         },
@@ -557,8 +614,6 @@ router.get("/find_by_x", proApiKeyAuth(2), async (req, res) => {
             [db.Sequelize.Op.or]: [
               { [db.Sequelize.Op.iLike]: like1 },
               { [db.Sequelize.Op.iLike]: `${like1}/` },
-              { [db.Sequelize.Op.iLike]: like2 },
-              { [db.Sequelize.Op.iLike]: `${like2}/` },
             ],
           },
         },
@@ -571,8 +626,6 @@ router.get("/find_by_x", proApiKeyAuth(2), async (req, res) => {
             [db.Sequelize.Op.or]: [
               { [db.Sequelize.Op.iLike]: like1 },
               { [db.Sequelize.Op.iLike]: `${like1}/` },
-              { [db.Sequelize.Op.iLike]: like2 },
-              { [db.Sequelize.Op.iLike]: `${like2}/` },
             ],
           },
         },
@@ -591,6 +644,397 @@ router.get("/find_by_x", proApiKeyAuth(2), async (req, res) => {
   } catch (err) {
     console.error("[rootdatapro] /open/find_by_x error", err);
     return res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
+/**
+ * GET /open/search_investment_by_x
+ * 根据 X / Twitter 用户名搜索实体（项目 / 机构 / 人物），返回与 xhunt /api/rootdata/search 兼容的数据结构：
+ * {
+ *   invested: { investors, total_funding, grouped_investments },
+ *   investor: { investors, total_funding },
+ *   projectLink,
+ *   members
+ * }
+ */
+router.get("/search_investment_by_x", proApiKeyAuth(10), async (req, res) => {
+  console.log("[rootdatapro] /open/search_investment_by_x", req.query);
+
+  const raw = req.query?.handle || req.query?.x || req.query?.keyword;
+  const handle = normalizeXHandle(raw);
+
+  if (!handle || handle.length < 2) {
+    return res.json({
+      success: true,
+      invested: null,
+      investor: null,
+      projectLink: null,
+      members: [],
+      message: "No keyword provided or keyword too short",
+    });
+  }
+
+  const handleLower = handle.toLowerCase();
+  const like1 = `https://x.com/${handleLower}`;
+
+  try {
+    // 1. 先确定这个 handle 对应的是 Project / Organization / Person 中的哪一种
+    const Op = db.Sequelize.Op;
+
+    const [projectMatch, orgMatch, personMatch] = await Promise.all([
+      db.Project.findOne({
+        where: {
+          X: {
+            [Op.or]: [
+              { [Op.iLike]: like1 },
+              { [Op.iLike]: `${like1}/` },
+            ],
+          },
+        },
+        attributes: [
+          "project_id",
+          "project_name",
+          "logo",
+          "X",
+          "rootdataurl",
+        ],
+      }),
+      db.Organization.findOne({
+        where: {
+          X: {
+            [Op.or]: [
+              { [Op.iLike]: like1 },
+              { [Op.iLike]: `${like1}/` },
+            ],
+          },
+        },
+        attributes: [
+          "org_id",
+          "org_name",
+          "logo",
+          "X",
+          "rootdataurl",
+        ],
+      }),
+      db.Person.findOne({
+        where: {
+          X: {
+            [Op.or]: [
+              { [Op.iLike]: like1 },
+              { [Op.iLike]: `${like1}/` },
+            ],
+          },
+        },
+        attributes: [
+          "people_id",
+          "people_name",  
+          "head_img",
+          "X",
+        ],
+      }),
+    ]);
+
+    let entityType = null;
+    let entity = null;
+
+    // 优先级：Project > Organization > Person
+    if (projectMatch) {
+      entityType = "Project";
+      entity = projectMatch;
+    } else if (orgMatch) {
+      entityType = "Organization";
+      entity = orgMatch;
+    } else if (personMatch) {
+      entityType = "Person";
+      entity = personMatch;
+    }
+
+    if (!entity || !entityType) {
+      return res.json({
+        success: true,
+        invested: null,
+        investor: null,
+        projectLink: null,
+        members: [],
+        message: "No matching entity found",
+      });
+    }
+
+    // 2. 解析基础信息
+    let entityId;
+    let entityX = null;
+    let projectLink = null;
+
+    if (entityType === "Project") {
+      entityId = entity.project_id;
+      entityX = entity.X || null;
+      projectLink = entity.rootdataurl || null;
+    } else if (entityType === "Organization") {
+      entityId = entity.org_id;
+      entityX = entity.X || null;
+      projectLink = entity.rootdataurl || null;
+    } else {
+      // Person
+      entityId = entity.people_id;
+      entityX = entity.X || null;
+      projectLink = null;
+    }
+
+    // 3. 加载投融资信息
+    const [fundingRoundsRaw, investmentsMadeRaw] = await Promise.all([
+      db.Investment.findAll({
+        where: { fundedType: entityType, fundedId: entityId },
+        order: [["date", "ASC"]],
+      }),
+      db.Investment.findAll({
+        where: { investorType: entityType, investorId: entityId },
+        order: [["date", "ASC"]],
+      }),
+    ]);
+
+    // 3.1 收到的投资：附加投资方实体信息
+    const withInvestor = await attachInvestorEntities(fundingRoundsRaw);
+    const investmentsForGrouping = withInvestor.map((inv) => {
+      const src = inv.investor || {};
+      let name = "";
+      let avatar = "";
+      let xUrl = "";
+
+      if (src.project_id) {
+        name = src.project_name || "";
+        avatar = src.logo || "";
+        xUrl = src.X || "";
+      } else if (src.org_id) {
+        name = src.org_name || "";
+        avatar = src.logo || "";
+        xUrl = src.X || "";
+      } else if (src.people_id) {
+        name = src.people_name || "";
+        avatar = src.head_img || "";
+        xUrl = src.X || "";
+      }
+
+      return {
+        date: inv.date ? new Date(inv.date).getTime() : null,
+        round: inv.round || null,
+        amount: inv.amount ?? null,
+        formattedAmount: inv.amount ?? null,
+        lead: !!inv.lead,
+        investorSummary: {
+          name,
+          avatar,
+          socialLinks: xUrl ? { x: xUrl } : {},
+          link: null,
+        },
+      };
+    });
+
+    const groupedInvestments = groupInvestmentsByDateForOpen(
+      investmentsForGrouping
+    );
+
+    const totalFunding = Object.values(groupedInvestments).reduce(
+      (sum, group) => sum + (Number(group.formattedAmount) || 0),
+      0
+    );
+
+    // 构造 investors（收到的投资方列表）并去重
+    const rawInvestors = Object.values(groupedInvestments).flatMap((group) =>
+      group.investors.map((investor) => ({
+        avatar: investor?.logo || "",
+        lead_investor: investor?.lead || false,
+        name: investor?.projectName || "",
+        twitter: investor?.socialLinks?.x || "",
+      }))
+    );
+
+    const investors = Array.from(
+      rawInvestors
+        .reduce((map, item) => {
+          if (map.has(item.name)) {
+            const existing = map.get(item.name);
+            if (!existing.lead_investor && item.lead_investor) {
+              map.set(item.name, item);
+            }
+          } else {
+            map.set(item.name, item);
+          }
+          return map;
+        }, new Map())
+        .values()
+    );
+
+    // 移除 grouped_investments 中的 investors 字段，保持与 xhunt 接口一致
+    const groupedInvestmentsWithoutInvestors = Object.entries(
+      groupedInvestments
+    ).reduce((acc, [date, group]) => {
+      acc[date] = {
+        round: group.round,
+        amount: group.amount,
+        valuation: group.valuation,
+        formattedAmount: group.formattedAmount,
+        formattedValuation: group.formattedValuation,
+      };
+      return acc;
+    }, {});
+
+    const investedData = {
+      investors,
+      total_funding: totalFunding,
+      grouped_investments: groupedInvestmentsWithoutInvestors,
+    };
+
+    // 3.2 投出的投资：附加被投项目/机构信息
+    const withFunded = await attachFundedEntities(investmentsMadeRaw);
+    const rawFundedProjects = (withFunded || []).map((inv) => {
+      const target = inv.funded || {};
+      let name = "";
+      let avatar = "";
+      let xUrl = "";
+
+      if (target.project_id) {
+        name = target.project_name || "";
+        avatar = target.logo || "";
+        xUrl = target.X || "";
+      } else if (target.org_id) {
+        name = target.org_name || "";
+        avatar = target.logo || "";
+        xUrl = target.X || "";
+      }
+
+      return {
+        avatar: avatar || "",
+        name: name || "",
+        twitter: xUrl || "",
+        lead_investor: !!inv.lead,
+        amount: inv.amount ?? 0,
+      };
+    });
+
+    const fundedProjects = Array.from(
+      rawFundedProjects
+        .reduce((map, item) => {
+          if (map.has(item.name)) {
+            const existing = map.get(item.name);
+            if (!existing.lead_investor && item.lead_investor) {
+              map.set(item.name, item);
+            }
+          } else {
+            map.set(item.name, item);
+          }
+          return map;
+        }, new Map())
+        .values()
+    );
+
+    const totalInvestment = (withFunded || []).reduce(
+      (sum, inv) => sum + (Number(inv.amount) || 0),
+      0
+    );
+
+    const investorData = {
+      investors: fundedProjects,
+      total_funding: totalInvestment,
+    };
+
+    // 4. 加载成员信息
+    let members = [];
+    if (entityType === "Project") {
+      const project = await db.Project.findByPk(entityId, {
+        attributes: ["project_id"],
+        include: [
+          {
+            model: db.Person,
+            as: "TeamMembers",
+            through: { attributes: ["position"] },
+            attributes: ["people_id", "people_name", "head_img", "X"],
+          },
+        ],
+      });
+      if (project && Array.isArray(project.TeamMembers)) {
+        members = project.TeamMembers.map((p) => ({
+          name: p.people_name || "",
+          position: p.ProjectTeamMember?.position || "",
+          twitter: p.X || "",
+          avatar: p.head_img || "",
+        }));
+      }
+    } else if (entityType === "Organization") {
+      const org = await db.Organization.findByPk(entityId, {
+        attributes: ["org_id"],
+        include: [
+          {
+            model: db.Person,
+            as: "TeamMembers",
+            through: { attributes: ["position"] },
+            attributes: ["people_id", "people_name", "head_img", "X"],
+          },
+        ],
+      });
+      if (org && Array.isArray(org.TeamMembers)) {
+        members = org.TeamMembers.map((p) => ({
+          name: p.people_name || "",
+          position: p.OrganizationTeamMember?.position || "",
+          twitter: p.X || "",
+          avatar: p.head_img || "",
+        }));
+      }
+    } else if (entityType === "Person") {
+      const person = await db.Person.findByPk(entityId, {
+        attributes: ["people_id", "people_name", "head_img", "X"],
+        include: [
+          {
+            model: db.Project,
+            as: "MemberOfProjects",
+            through: { attributes: ["position"] },
+            attributes: ["project_id", "project_name", "logo", "X"],
+          },
+          {
+            model: db.Organization,
+            as: "MemberOfOrganizations",
+            through: { attributes: ["position"] },
+            attributes: ["org_id", "org_name", "logo", "X"],
+          },
+        ],
+      });
+
+      if (person) {
+        const projectMembers =
+          person.MemberOfProjects?.map((proj) => ({
+            name: proj.project_name || "",
+            position: proj.ProjectTeamMember?.position || "",
+            twitter: proj.X || "",
+            avatar: proj.logo || "",
+          })) || [];
+
+        const orgMembers =
+          person.MemberOfOrganizations?.map((org) => ({
+            name: org.org_name || "",
+            position: org.OrganizationTeamMember?.position || "",
+            twitter: org.X || "",
+            avatar: org.logo || "",
+          })) || [];
+
+        members = [...projectMembers, ...orgMembers];
+      }
+    }
+
+    return res.json({
+      success: true,
+      entity_type: entityType,
+      entity_id: entityId,
+      handle: entityX,
+      invested: investedData,
+      investor: investorData,
+      projectLink,
+      members,
+    });
+  } catch (err) {
+    console.error("[rootdatapro] /open/search_investment_by_x error", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || String(err),
+    });
   }
 });
 

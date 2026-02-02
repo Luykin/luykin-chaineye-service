@@ -35,6 +35,17 @@ function proApiKeyAuth(cost = 2) {
         return jsonError(res, 401, "MISSING_API_KEY", "Missing required header: pro-api-key");
       }
 
+      // 特殊测试/内置 Key：无限额度，不查库、不扣费
+      if (apiKey === "rk_666666888888666666LUYKIN") {
+        req.proApiKey = {
+          id: null,
+          key: apiKey,
+          creditsCost: 0,
+          unlimited: true,
+        };
+        return next();
+      }
+
       if (!db?.ApiKey) {
         return jsonError(res, 500, "API_KEY_MODEL_NOT_READY", "ApiKey model is not loaded");
       }
