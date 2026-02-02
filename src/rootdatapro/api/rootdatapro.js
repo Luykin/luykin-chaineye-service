@@ -230,18 +230,40 @@ router.post("/crawl/reset", async (req, res) => {
     return res.json({ success: true, message: "Crawl task reset and re-initialized." });
 });
 
-// 每日维护任务：立即执行
+// 每日维护任务：立即执行（触发后在后台异步运行，不阻塞 HTTP 请求）
 router.post("/crawl/maintenance/run_now", async (req, res) => {
   console.log("[rootdatapro] 收到立即执行每日维护任务请求");
   try {
-    const report = await taskManager.runDailyMaintenanceTask({ trigger: "manual" });
-    if (report && report.success === false) {
-      return res.status(409).json({ success: false, error: report.error, message: report.message });
+    // 先检查当前状态，避免并发触发
+    const status = await taskManager.getStatus();
+    if (status.status === "maintenance_running") {
+      return res.status(409).json({
+        success: false,
+        error: "MAINTENANCE_RUNNING",
+        message: "每日维护任务正在执行中，请等待上一轮完成",
+      });
     }
-    return res.json({ success: true, report });
+    if (status.status === "running") {
+      return res.status(409).json({
+        success: false,
+        error: "MANUAL_TASK_RUNNING",
+        message: "手动爬取任务正在执行中，请先暂停或等待其完成后再执行每日维护任务",
+      });
+    }
+
+    // 后台异步执行，不 await，避免接口超时
+    taskManager
+      .runDailyMaintenanceTask({ trigger: "manual" })
+      .catch((error) => {
+        console.error("[rootdatapro] 后台执行每日维护任务失败:", error);
+      });
+
+    return res.json({ success: true, started: true });
   } catch (error) {
     console.error("[rootdatapro] 执行每日维护任务失败:", error);
-    return res.status(500).json({ success: false, error: error.message || String(error) });
+    return res
+      .status(500)
+      .json({ success: false, error: error.message || String(error) });
   }
 });
 
