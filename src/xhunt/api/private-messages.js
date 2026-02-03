@@ -154,7 +154,8 @@ router.get("/", authenticateToken, async (req, res) => {
  *   // - "kol_tip_auto_refund"（KOL打赏奖励未领取自动退回）
  *   // - "kol_tip_refund_received"（KOL收到退回的奖励）
  *   type: string,
- *   userIdList: string[],
+ *   // 传入 X（Twitter）侧的用户 ID 列表，对应 XHuntUser.twitterId 字段
+ *   twitterIdList: string[],
  * }
  * displayAt 统一取当前时间；
  * campaignId 统一为：type + 当天日期（yyyyMMdd）
@@ -163,7 +164,7 @@ router.get("/", authenticateToken, async (req, res) => {
 router.post("/send-batch-by-type", async (req, res) => {
   try {
     const senderId = "6666666d-cc11-8888-8888-034d3e9a8888";
-    const { type, userIdList } = req.body || {};
+    const { type, twitterIdList } = req.body || {};
 
     // 支持的英文类型枚举（value 即为前端需要传的 type 值）
     const ALLOWED_TYPES = new Set([
@@ -191,13 +192,13 @@ router.post("/send-batch-by-type", async (req, res) => {
     }
 
     if (
-      !Array.isArray(userIdList) ||
-      userIdList.length === 0 ||
-      !userIdList.every((id) => typeof id === "string")
+      !Array.isArray(twitterIdList) ||
+      twitterIdList.length === 0 ||
+      !twitterIdList.every((id) => typeof id === "string")
     ) {
       return res.status(400).json({
         success: false,
-        error: "userIdList 必须是非空字符串数组",
+        error: "twitterIdList 必须是非空字符串数组",
       });
     }
 
@@ -249,12 +250,9 @@ router.post("/send-batch-by-type", async (req, res) => {
             title: "You received a KOL tip reward",
             content:
               "亲爱的创作者，\n\n" +
-              "你刚刚 **收到一笔来自用户的 KOL 打赏奖励**！🎁\n\n" +
-              "这代表你的内容已经获得了真实用户的认可与支持：\n" +
-              "• 🌟 高质量内容正在被更多人看到\n" +
-              "• 💬 你的观点和分析正影响着社区\n" +
-              "• 🤝 你与支持者之间建立了更紧密的连接\n\n" +
-              "请在插件或相关页面中查看详细奖励记录和收益情况。\n\n" +
+              "你刚刚 **收到一笔 KOL 打赏奖励**。🎁\n\n" +
+              "你可以前往打赏页查看本次奖励的具体金额和来源详情：\n" +
+              '<a href="#rewardPage">前往打赏页查看详情</a>\n\n' +
               "感谢你持续为社区贡献价值内容！",
           };
         case "kol_tip_auto_refund":
@@ -262,13 +260,9 @@ router.post("/send-batch-by-type", async (req, res) => {
             title: "Your KOL tip reward was auto-refunded",
             content:
               "你好，\n\n" +
-              "你之前发起的一笔 **KOL 打赏奖励已自动退回** 。\n\n" +
-              "通常会在以下情况发生自动退回：\n" +
-              "• ⏰ 创作者在限定时间内未完成领取或绑定\n" +
-              "• ⚠️ 创作者账号状态异常，暂无法正常收款\n\n" +
-              "本次退回的奖励已经回到你的账户，你可以：\n" +
-              "• 选择再次支持相同创作者（在其状态恢复后）\n" +
-              "• 或者支持其他你认可的优质创作者\n\n" +
+              "你之前发起的一笔 **KOL 打赏奖励已自动退回** ，相关金额已回到你的账户。\n\n" +
+              "你可以在打赏页中查看本次退回的详细记录：\n" +
+              '<a href="#rewardPage">前往打赏页查看详情</a>\n\n' +
               "感谢你对创作者生态的支持！",
           };
         case "kol_tip_refund_received":
@@ -276,12 +270,10 @@ router.post("/send-batch-by-type", async (req, res) => {
             title: "You received a refunded KOL reward",
             content:
               "你好，\n\n" +
-              "你已 **收到一笔退回的 KOL 奖励** 。\n\n" +
-              "这通常意味着：\n" +
-              "• 💰 之前发起或指向你的奖励发生了状态变更\n" +
-              "• 🔁 由于条件变化，该笔奖励以退款形式回到你的名下\n\n" +
-              "你可以在资产或记录页面中查看本次退款的具体来源和详情。\n\n" +
-              "如果你有任何疑问，欢迎通过支持渠道联系我们，我们会协助你进一步确认。🙏",
+              "你已 **收到一笔退回的 KOL 奖励** ，相关金额已回到你的账户。\n\n" +
+              "你可以在打赏页中查看本次退回奖励的来源和明细：\n" +
+              '<a href="#rewardPage">前往打赏页查看详情</a>\n\n' +
+              "如果你有任何疑问，欢迎通过支持渠道联系我们。🙏",
           };
         default:
           return {
@@ -293,39 +285,60 @@ router.post("/send-batch-by-type", async (req, res) => {
 
     const template = getMessageTemplateByType(type);
 
-    const results = {
-      success: [],
-      errors: [],
-    };
+    // 去重后根据 twitterId 批量查询对应的 XHuntUser（拿到真正的 user.id）
+    const uniqueTwitterIds = Array.from(new Set(twitterIdList));
 
-    for (const userId of userIdList) {
-      try {
-        const message = await XPrivateMessage.create({
-          senderId,
-          receiverId: userId,
-          title: template.title,
-          content: template.content,
-          displayAt: displayAtDate,
-          sentAt: new Date(),
-          isRead: false,
-          campaignId,
-        });
+    const targetUsers = await XHuntUser.findAll({
+      where: {
+        twitterId: uniqueTwitterIds,
+      },
+      attributes: ["id", "twitterId"],
+    });
 
-        results.success.push({
-          receiverId: userId,
-          messageId: message.id,
-        });
-      } catch (err) {
-        console.error("批量发送私信单条失败:", {
-          receiverId: userId,
-          error: err.message,
-        });
-        results.errors.push({
-          receiverId: userId,
-          error: err.message,
-        });
-      }
+    const foundMap = new Map(
+      targetUsers.map((u) => [u.twitterId, { id: u.id, twitterId: u.twitterId }])
+    );
+
+    const notFoundTwitterIds = uniqueTwitterIds.filter(
+      (tid) => !foundMap.has(tid)
+    );
+
+    if (targetUsers.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "未找到任何匹配的用户，请确认 twitterIdList 是否正确",
+        data: {
+          notFoundTwitterIds,
+        },
+      });
     }
+
+    // 构造批量插入的数据
+    const now = new Date();
+    const messagesToCreate = targetUsers.map((user) => ({
+      senderId,
+      receiverId: user.id,
+      title: template.title,
+      content: template.content,
+      displayAt: displayAtDate,
+      sentAt: now,
+      isRead: false,
+      campaignId,
+    }));
+
+    // 批量创建私信记录
+    const createdMessages = await XPrivateMessage.bulkCreate(messagesToCreate, {
+      returning: true,
+    });
+
+    const results = {
+      success: createdMessages.map((msg, index) => ({
+        receiverId: msg.receiverId,
+        messageId: msg.id,
+        twitterId: targetUsers[index]?.twitterId,
+      })),
+      notFoundTwitterIds,
+    };
 
     return res.status(200).json({
       success: true,
