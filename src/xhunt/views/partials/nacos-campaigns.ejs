@@ -56,200 +56,222 @@
         </div>
       </div>
 
-      <div class="field-row">
-        <div class="field">
-          <label>version</label>
-          <input id="campaigns-version" type="number" min="1" step="1" />
-        </div>
-        <div class="field">
-          <label>enabled</label>
-          <label class="switch">
-            <input id="campaigns-enabled" type="checkbox" />
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="field">
-          <label>testingPhase</label>
-          <label class="switch">
-            <input id="campaigns-testingPhase" type="checkbox" />
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="field">
-          <label>showExtraComponents</label>
-          <label class="switch">
-            <input id="campaigns-showExtraComponents" type="checkbox" />
-            <span class="slider"></span>
-          </label>
+      <div id="campaigns-editor-empty" class="editor-empty">
+        <div class="empty-title">请选择左侧一条活动</div>
+        <div class="empty-desc">
+          从左侧列表点击任一活动即可开始编辑；你也可以点击上方
+          <strong>「新增活动」</strong> 来创建新的 Earn 活动。
         </div>
       </div>
 
-      <div class="field-row">
-        <div class="field">
-          <label>id（唯一）</label>
-          <input id="campaigns-id" type="text" placeholder="例如：bybit-hunter" />
-        </div>
-        <div class="field">
-          <label>campaignKey</label>
-          <input id="campaigns-campaignKey" type="text" placeholder="例如：bybit" />
-        </div>
-        <div class="field">
-          <label>hotTweetsKey</label>
-          <input id="campaigns-hotTweetsKey" type="text" placeholder="例如：bybit" />
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">展示名称（DisplayName）</div>
-        <div class="field-row">
+      <div id="campaigns-editor-body" style="display: none">
+        <div class="field-row field-row-toggle">
           <div class="field">
-            <label>中文</label>
-            <input id="campaigns-displayName-zh" type="text" />
+            <label>活动启用（enabled）</label>
+            <label class="switch">
+              <input id="campaigns-enabled" type="checkbox" />
+              <span class="slider"></span>
+            </label>
           </div>
           <div class="field">
-            <label>English</label>
-            <input id="campaigns-displayName-en" type="text" />
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">报名窗口（Enrollment Window）</div>
-        <div class="field-row">
-          <div class="field">
-            <label>startAt（本地时间）</label>
-            <input id="campaigns-startAt" type="datetime-local" />
+            <label>测试期（testingPhase）</label>
+            <label class="switch">
+              <input id="campaigns-testingPhase" type="checkbox" />
+              <span class="slider"></span>
+            </label>
           </div>
           <div class="field">
-            <label>endAt（本地时间）</label>
-            <input id="campaigns-endAt" type="datetime-local" />
-          </div>
-        </div>
-        <div class="muted" style="margin-top: 6px">
-          保存时会转换为 UTC ISO 字符串（例如 <code>2025-12-10T00:00:00Z</code>）。
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">文案（Copy）</div>
-        <div class="field-row">
-          <div class="field">
-            <label>emoji</label>
-            <input id="campaigns-copy-emoji" type="text" placeholder="例如：🎉" />
-          </div>
-          <div class="field">
-            <label>ctaText（zh）</label>
-            <input id="campaigns-copy-ctaText-zh" type="text" />
-          </div>
-          <div class="field">
-            <label>ctaText（en）</label>
-            <input id="campaigns-copy-ctaText-en" type="text" />
+            <label>显示扩展组件（showExtraComponents）</label>
+            <label class="switch">
+              <input id="campaigns-showExtraComponents" type="checkbox" />
+              <span class="slider"></span>
+            </label>
           </div>
         </div>
 
         <div class="field-row">
           <div class="field">
-            <label>title（zh）</label>
-            <input id="campaigns-copy-title-zh" type="text" />
+            <label>id（唯一）</label>
+            <input id="campaigns-id" type="text" placeholder="例如：bybit-hunter" />
           </div>
           <div class="field">
-            <label>title（en）</label>
-            <input id="campaigns-copy-title-en" type="text" />
+            <label>campaignKey</label>
+            <input id="campaigns-campaignKey" type="text" placeholder="例如：bybit" />
+          </div>
+          <div class="field">
+            <label>hotTweetsKey</label>
+            <input
+              id="campaigns-hotTweetsKey"
+              type="text"
+              placeholder="例如：bybit"
+            />
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label>shortTitle（zh）</label>
-            <input id="campaigns-copy-shortTitle-zh" type="text" />
-          </div>
-          <div class="field">
-            <label>shortTitle（en）</label>
-            <input id="campaigns-copy-shortTitle-en" type="text" />
-          </div>
-        </div>
-
-        <div class="field-row">
-          <div class="field">
-            <label>goToOfficialText（zh）</label>
-            <input id="campaigns-copy-goToOfficialText-zh" type="text" />
-          </div>
-          <div class="field">
-            <label>goToOfficialText（en）</label>
-            <input id="campaigns-copy-goToOfficialText-en" type="text" />
+        <div class="section">
+          <div class="section-title">展示名称（DisplayName）</div>
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>中文</label>
+              <input id="campaigns-displayName-zh" type="text" />
+            </div>
+            <div class="field">
+              <label>English</label>
+              <input id="campaigns-displayName-en" type="text" />
+            </div>
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label>viewGuideText（zh）</label>
-            <input id="campaigns-copy-viewGuideText-zh" type="text" />
+        <div class="section">
+          <div class="section-title">报名窗口（Enrollment Window）</div>
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>startAt（本地时间）</label>
+              <input id="campaigns-startAt" type="datetime-local" />
+            </div>
+            <div class="field">
+              <label>endAt（本地时间）</label>
+              <input id="campaigns-endAt" type="datetime-local" />
+            </div>
           </div>
-          <div class="field">
-            <label>viewGuideText（en）</label>
-            <input id="campaigns-copy-viewGuideText-en" type="text" />
+          <div class="muted" style="margin-top: 6px">
+            保存时会转换为 UTC ISO 字符串（例如 <code>2025-12-10T00:00:00Z</code>）。
           </div>
         </div>
-      </div>
 
-      <div class="section">
-        <div class="section-title">链接（Links）</div>
-        <div class="field-row">
-          <div class="field">
-            <label>guideUrl</label>
-            <input id="campaigns-links-guideUrl" type="text" placeholder="https://..." />
+        <div class="section">
+          <div class="section-title">文案（Copy）</div>
+          <div class="field-row field-row-3">
+            <div class="field">
+              <label>emoji</label>
+              <input id="campaigns-copy-emoji" type="text" placeholder="例如：🎉" />
+            </div>
+            <div class="field">
+              <label>ctaText（zh）</label>
+              <input id="campaigns-copy-ctaText-zh" type="text" />
+            </div>
+            <div class="field">
+              <label>ctaText（en）</label>
+              <input id="campaigns-copy-ctaText-en" type="text" />
+            </div>
           </div>
-          <div class="field">
-            <label>activeUrl</label>
-            <input id="campaigns-links-activeUrl" type="text" placeholder="https://..." />
+
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>title（zh）</label>
+              <input id="campaigns-copy-title-zh" type="text" />
+            </div>
+            <div class="field">
+              <label>title（en）</label>
+              <input id="campaigns-copy-title-en" type="text" />
+            </div>
+          </div>
+
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>shortTitle（zh）</label>
+              <input id="campaigns-copy-shortTitle-zh" type="text" />
+            </div>
+            <div class="field">
+              <label>shortTitle（en）</label>
+              <input id="campaigns-copy-shortTitle-en" type="text" />
+            </div>
+          </div>
+
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>goToOfficialText（zh）</label>
+              <input id="campaigns-copy-goToOfficialText-zh" type="text" />
+            </div>
+            <div class="field">
+              <label>goToOfficialText（en）</label>
+              <input id="campaigns-copy-goToOfficialText-en" type="text" />
+            </div>
+          </div>
+
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>viewGuideText（zh）</label>
+              <input id="campaigns-copy-viewGuideText-zh" type="text" />
+            </div>
+            <div class="field">
+              <label>viewGuideText（en）</label>
+              <input id="campaigns-copy-viewGuideText-en" type="text" />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="section">
-        <div class="section-title">名单（每行一个）</div>
-        <div class="field-row">
-          <div class="field">
-            <label>testList</label>
-            <textarea id="campaigns-testList" rows="3" placeholder="luoyukun4"></textarea>
+        <div class="section">
+          <div class="section-title">链接（Links）</div>
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>guideUrl</label>
+              <input
+                id="campaigns-links-guideUrl"
+                type="text"
+                placeholder="https://..."
+              />
+            </div>
+            <div class="field">
+              <label>activeUrl</label>
+              <input
+                id="campaigns-links-activeUrl"
+                type="text"
+                placeholder="https://..."
+              />
+            </div>
           </div>
-          <div class="field">
-            <label>targetUserIds</label>
-            <textarea
-              id="campaigns-targetUserIds"
-              rows="3"
-              placeholder="bybit_web3&#10;Bybit__Alpha"
-            ></textarea>
+        </div>
+
+        <div class="section">
+          <div class="section-title">名单（每行一个）</div>
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>testList</label>
+              <textarea
+                id="campaigns-testList"
+                rows="3"
+                placeholder="luoyukun4"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label>targetUserIds</label>
+              <textarea
+                id="campaigns-targetUserIds"
+                rows="3"
+                placeholder="bybit_web3&#10;Bybit__Alpha"
+              ></textarea>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="section">
-        <div class="section-title">
-          Logos
-          <button class="btn" id="campaigns-logos-add" type="button" disabled>
-            ➕ 添加 Logo
-          </button>
+        <div class="section">
+          <div class="section-title">
+            Logos
+            <button class="btn" id="campaigns-logos-add" type="button" disabled>
+              ➕ 添加 Logo
+            </button>
+          </div>
+          <div class="repeaters" id="campaigns-logos"></div>
         </div>
-        <div class="repeaters" id="campaigns-logos"></div>
-      </div>
 
-      <div class="section">
-        <div class="section-title">
-          Tasks
-          <button class="btn" id="campaigns-tasks-add" type="button" disabled>
-            ➕ 添加 Task
-          </button>
+        <div class="section">
+          <div class="section-title">
+            Tasks
+            <button class="btn" id="campaigns-tasks-add" type="button" disabled>
+              ➕ 添加 Task
+            </button>
+          </div>
+          <div class="repeaters" id="campaigns-tasks"></div>
         </div>
-        <div class="repeaters" id="campaigns-tasks"></div>
-      </div>
 
-      <div class="preview">
-        <div class="preview-header">
-          <strong>预览</strong>
-          <span class="muted">（用于快速确认核心信息）</span>
+        <div class="preview">
+          <div class="preview-header">
+            <strong>预览</strong>
+            <span class="muted">（用于快速确认核心信息）</span>
+          </div>
+          <div class="preview-box" id="campaigns-preview"></div>
         </div>
-        <div class="preview-box" id="campaigns-preview"></div>
       </div>
     </div>
   </div>
@@ -428,6 +450,25 @@
     flex-wrap: wrap;
   }
 
+  .editor-empty {
+    margin-top: 16px;
+    padding: 28px 18px;
+    text-align: center;
+    border-radius: 12px;
+    border: 1px dashed #e5e7eb;
+    background: #f9fafb;
+  }
+  .editor-empty .empty-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 6px;
+  }
+  .editor-empty .empty-desc {
+    font-size: 13px;
+    color: #6b7280;
+  }
+
   .field-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -436,6 +477,15 @@
   }
   .field-row .field:nth-child(4) {
     grid-column: span 1;
+  }
+  .field-row-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .field-row-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .field-row-toggle {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   @media (max-width: 1200px) {
     .field-row {
@@ -1203,6 +1253,14 @@
       });
       $("campaigns-logos").innerHTML = "";
       $("campaigns-tasks").innerHTML = "";
+
+      const body = $("campaigns-editor-body");
+      const empty = $("campaigns-editor-empty");
+      if (body && empty) {
+        body.style.display = "none";
+        empty.style.display = "block";
+      }
+
       renderPreview();
     }
 
@@ -1243,6 +1301,13 @@
       if (!Array.isArray(c.tasks)) c.tasks = [];
 
       setControlsEnabled(true);
+
+      const body = $("campaigns-editor-body");
+      const empty = $("campaigns-editor-empty");
+      if (body && empty) {
+        body.style.display = "block";
+        empty.style.display = "none";
+      }
 
       $("campaigns-editor-hint").textContent = `正在编辑：${c.id || "(未设置 id)"}`;
       $("campaigns-enabled").checked = !!c.enabled;
@@ -1387,11 +1452,6 @@
         });
       });
 
-      $("campaigns-version").addEventListener("input", () => {
-        config.version = safeNumber($("campaigns-version").value, 3);
-        dirty = true;
-        $("campaigns-publish").disabled = false;
-      });
     }
 
     function addLogo() {
@@ -1529,7 +1589,8 @@
         id: nowId,
         campaignKey: "",
         enabled: false,
-        testList: [],
+        // 默认先只开放给内部测试号
+        testList: ["luoyukun4"],
         testingPhase: false,
         enrollmentWindow: { startAt: "", endAt: "" },
         displayName: { zh: "", en: "" },
@@ -1537,10 +1598,11 @@
         copy: {
           title: { zh: "", en: "" },
           shortTitle: { zh: "", en: "" },
-          emoji: "",
-          ctaText: { zh: "", en: "" },
-          goToOfficialText: { zh: "", en: "" },
-          viewGuideText: { zh: "", en: "" },
+          // 从现有活动中抽取的默认文案
+          emoji: "🎉",
+          ctaText: { zh: "立即参与", en: "Join Now" },
+          goToOfficialText: { zh: "前往官方", en: "Go to Official" },
+          viewGuideText: { zh: "查看官方指南", en: "View Official Guide" },
         },
         tasks: [],
         links: { guideUrl: "", activeUrl: "" },
@@ -1597,7 +1659,6 @@
         throw new Error("Nacos content 不是合法 JSON，请检查当前配置内容");
       }
       config = normalizeConfig(parsed);
-      $("campaigns-version").value = String(config.version || 3);
       dirty = false;
       $("campaigns-publish").disabled = true;
       currentIndex = -1;
@@ -1673,7 +1734,6 @@
       }
 
       config = normalizeConfig(parsed);
-      $("campaigns-version").value = String(config.version || 3);
       dirty = true;
       $("campaigns-publish").disabled = false;
       hideJsonModal();
@@ -1689,7 +1749,6 @@
       inited = true;
 
       // init base
-      $("campaigns-version").value = String(config.version || 3);
       $("campaigns-publish").disabled = true;
       setControlsEnabled(false);
       setEditorInputsEnabled(false);
