@@ -258,13 +258,11 @@ router.post("/send-batch-by-type", async (req, res) => {
           };
         case "kol_tip_auto_refund":
           return {
-            title: "你的 KOL 打赏奖励已自动退回",
+            title: "一笔待领取的 KOL 打赏奖励已失效",
             content:
               "你好，\n\n" +
-              "你之前发起的一笔 **KOL 打赏奖励已自动退回** ，相关金额已回到你的账户。\n\n" +
-              "你可以在打赏页中查看本次退回的详细记录：\n" +
-              '<a href="#rewardPage">前往打赏页查看详情</a>\n\n' +
-              "感谢你对创作者生态的支持！",
+              "之前有一笔正在等待你领取的 **KOL 打赏奖励**，由于你长时间未领取，系统已将这笔奖励 **自动退回给发起打赏的用户**。\n\n" +
+              "感谢你对创作者生态的贡献！",
           };
         case "kol_tip_refund_received":
           return {
