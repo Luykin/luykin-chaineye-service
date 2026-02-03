@@ -127,6 +127,56 @@
         </div>
 
         <div class="section">
+          <div class="section-title">奖励配置</div>
+          <div class="field-row field-row-3">
+            <div class="field">
+              <label>奖励金额（U）</label>
+              <input
+                id="campaigns-rewardAmount"
+                type="number"
+                min="1"
+                max="99999999"
+                placeholder="1-99999999"
+              />
+            </div>
+            <div class="field">
+              <label>人数</label>
+              <input
+                id="campaigns-rewardParticipantCount"
+                type="number"
+                min="10"
+                max="1000"
+                placeholder="10-1000"
+              />
+            </div>
+            <div class="field">
+              <label>分配机制</label>
+              <select id="campaigns-rewardDistributionType">
+                <option value="">请选择</option>
+                <option value="equal">平分</option>
+                <option value="mindshare">mindshare分</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">门槛</div>
+          <div class="field-row">
+            <div class="field">
+              <label>门槛</label>
+              <select id="campaigns-threshold">
+                <option value="">请选择</option>
+                <option value="50k">50k</option>
+                <option value="100k">100k</option>
+                <option value="200k">200k</option>
+                <option value="200k+creator">200k+creator</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
           <div class="section-title">文案（Copy）</div>
           <div class="field-row field-row-3">
             <div class="field">
@@ -910,6 +960,10 @@
         "campaigns-displayName-en",
         "campaigns-startAt",
         "campaigns-endAt",
+        "campaigns-rewardAmount",
+        "campaigns-rewardParticipantCount",
+        "campaigns-rewardDistributionType",
+        "campaigns-threshold",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
         "campaigns-copy-ctaText-en",
@@ -1159,6 +1213,10 @@
         "campaigns-displayName-en",
         "campaigns-startAt",
         "campaigns-endAt",
+        "campaigns-rewardAmount",
+        "campaigns-rewardParticipantCount",
+        "campaigns-rewardDistributionType",
+        "campaigns-threshold",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
         "campaigns-copy-ctaText-en",
@@ -1247,6 +1305,18 @@
       $("campaigns-startAt").value = toDatetimeLocal(c.enrollmentWindow.startAt);
       $("campaigns-endAt").value = toDatetimeLocal(c.enrollmentWindow.endAt);
 
+      // 奖励配置
+      $("campaigns-rewardAmount").value = c.rewardAmount || "";
+      $("campaigns-rewardParticipantCount").value = c.rewardParticipantCount || "";
+      $("campaigns-rewardDistributionType").value = c.rewardDistributionType || "";
+
+      // 门槛（如果 includeCreator 为 true，则显示 "200k+creator"）
+      if (c.includeCreator === true && c.threshold === "200k") {
+        $("campaigns-threshold").value = "200k+creator";
+      } else {
+        $("campaigns-threshold").value = c.threshold || "";
+      }
+
       $("campaigns-copy-emoji").value = c.copy.emoji || "";
       $("campaigns-copy-ctaText-zh").value = c.copy.ctaText.zh || "";
       $("campaigns-copy-ctaText-en").value = c.copy.ctaText.en || "";
@@ -1294,6 +1364,46 @@
       c.enrollmentWindow = c.enrollmentWindow || {};
       c.enrollmentWindow.startAt = fromDatetimeLocalToIsoZ($("campaigns-startAt").value);
       c.enrollmentWindow.endAt = fromDatetimeLocalToIsoZ($("campaigns-endAt").value);
+
+      // 奖励配置（如果为空则删除字段，保持老数据兼容）
+      const rewardAmountVal = $("campaigns-rewardAmount").value.trim();
+      if (rewardAmountVal) {
+        c.rewardAmount = parseInt(rewardAmountVal, 10);
+      } else {
+        delete c.rewardAmount;
+      }
+
+      const rewardParticipantCountVal = $("campaigns-rewardParticipantCount").value.trim();
+      if (rewardParticipantCountVal) {
+        c.rewardParticipantCount = parseInt(rewardParticipantCountVal, 10);
+      } else {
+        delete c.rewardParticipantCount;
+      }
+
+      const rewardDistributionTypeVal = $("campaigns-rewardDistributionType").value.trim();
+      if (rewardDistributionTypeVal) {
+        c.rewardDistributionType = rewardDistributionTypeVal;
+      } else {
+        delete c.rewardDistributionType;
+      }
+
+      // 门槛（如果选择了 "200k+creator"，则 threshold 设为 "200k"，includeCreator 设为 true；否则设为 false）
+      const thresholdVal = $("campaigns-threshold").value.trim();
+      if (thresholdVal) {
+        if (thresholdVal === "200k+creator") {
+          c.threshold = "200k";
+          c.includeCreator = true;
+        } else {
+          c.threshold = thresholdVal;
+          // 如果 threshold 是 "200k" 但不是 +creator，则 includeCreator 设为 false
+          // 如果 threshold 不是 "200k"，则 includeCreator 也设为 false
+          c.includeCreator = false;
+        }
+      } else {
+        // 如果 threshold 为空（老数据），删除这两个字段
+        delete c.threshold;
+        delete c.includeCreator;
+      }
 
       c.copy = c.copy || {};
       c.copy.emoji = $("campaigns-copy-emoji").value;
@@ -1346,6 +1456,10 @@
         "campaigns-displayName-en",
         "campaigns-startAt",
         "campaigns-endAt",
+        "campaigns-rewardAmount",
+        "campaigns-rewardParticipantCount",
+        "campaigns-rewardDistributionType",
+        "campaigns-threshold",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
         "campaigns-copy-ctaText-en",
@@ -1530,6 +1644,12 @@
         showExtraComponents: true,
         targetUserIds: [],
         hotTweetsKey: "",
+        // 新增活动必填字段（新活动必须填写，老数据兼容）
+        rewardAmount: undefined,
+        rewardParticipantCount: undefined,
+        rewardDistributionType: undefined,
+        threshold: undefined,
+        includeCreator: false,
       };
       config.campaigns.unshift(c);
       dirty = true;
@@ -1681,6 +1801,75 @@
             (!c.links.activeUrl || !c.links.activeUrl.trim()))
         ) {
           errors.push(`${prefix}: links 的 guideUrl 或 activeUrl 至少需要填写一个`);
+        }
+
+        // 新活动必填：奖励配置和门槛（如果活动中有这些字段的定义，则必须填写）
+        // 判断是否为新活动：如果 rewardAmount、rewardParticipantCount、rewardDistributionType、threshold、includeCreator 中任意一个在对象中存在，则认为是新活动
+        const hasNewFields =
+          "rewardAmount" in c ||
+          "rewardParticipantCount" in c ||
+          "rewardDistributionType" in c ||
+          "threshold" in c ||
+          "includeCreator" in c;
+
+        if (hasNewFields) {
+          // 奖励金额（1-99999999）
+          if (
+            c.rewardAmount === undefined ||
+            c.rewardAmount === null ||
+            (typeof c.rewardAmount === "string" && c.rewardAmount.trim() === "") ||
+            isNaN(Number(c.rewardAmount)) ||
+            Number(c.rewardAmount) < 1 ||
+            Number(c.rewardAmount) > 99999999
+          ) {
+            errors.push(`${prefix}: rewardAmount（奖励金额）必须填写，范围：1-99999999 U`);
+          }
+
+          // 人数（10-1000）
+          if (
+            c.rewardParticipantCount === undefined ||
+            c.rewardParticipantCount === null ||
+            (typeof c.rewardParticipantCount === "string" &&
+              c.rewardParticipantCount.trim() === "") ||
+            isNaN(Number(c.rewardParticipantCount)) ||
+            Number(c.rewardParticipantCount) < 10 ||
+            Number(c.rewardParticipantCount) > 1000
+          ) {
+            errors.push(`${prefix}: rewardParticipantCount（人数）必须填写，范围：10-1000 人`);
+          }
+
+          // 分配机制
+          if (
+            c.rewardDistributionType === undefined ||
+            c.rewardDistributionType === null ||
+            (typeof c.rewardDistributionType === "string" &&
+              c.rewardDistributionType.trim() === "") ||
+            !["equal", "mindshare"].includes(String(c.rewardDistributionType))
+          ) {
+            errors.push(`${prefix}: rewardDistributionType（分配机制）必须选择：平分 或 mindshare分`);
+          }
+
+          // 门槛（threshold 只能是 "50k", "100k", "200k"，如果选择 "200k+creator" 则 threshold 为 "200k" 且 includeCreator 为 true）
+          if (
+            c.threshold === undefined ||
+            c.threshold === null ||
+            (typeof c.threshold === "string" && c.threshold.trim() === "") ||
+            !["50k", "100k", "200k"].includes(String(c.threshold))
+          ) {
+            errors.push(
+              `${prefix}: threshold（门槛）必须选择：50k / 100k / 200k / 200k+creator`
+            );
+          }
+          // includeCreator 必须是布尔值
+          if (c.includeCreator !== undefined && typeof c.includeCreator !== "boolean") {
+            errors.push(`${prefix}: includeCreator 必须是布尔值（true/false）`);
+          }
+          // 如果 threshold 不是 "200k"，则 includeCreator 应该为 false
+          if (c.threshold !== "200k" && c.includeCreator === true) {
+            errors.push(
+              `${prefix}: includeCreator 只能在 threshold 为 "200k" 时设置为 true`
+            );
+          }
         }
 
         // 必填：tasks（至少一个任务）
