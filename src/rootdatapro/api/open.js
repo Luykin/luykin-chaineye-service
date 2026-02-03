@@ -665,11 +665,8 @@ router.get("/search_investment_by_x", proApiKeyAuth(10), async (req, res) => {
 
   if (!handle || handle.length < 2) {
     return res.json({
-      success: true,
       invested: null,
       investor: null,
-      projectLink: null,
-      members: [],
       message: "No keyword provided or keyword too short",
     });
   }
@@ -751,11 +748,8 @@ router.get("/search_investment_by_x", proApiKeyAuth(10), async (req, res) => {
 
     if (!entity || !entityType) {
       return res.json({
-        success: true,
         invested: null,
         investor: null,
-        projectLink: null,
-        members: [],
         message: "No matching entity found",
       });
     }
@@ -1020,10 +1014,6 @@ router.get("/search_investment_by_x", proApiKeyAuth(10), async (req, res) => {
     }
 
     return res.json({
-      success: true,
-      entity_type: entityType,
-      entity_id: entityId,
-      handle: entityX,
       invested: investedData,
       investor: investorData,
       projectLink,
@@ -1032,8 +1022,8 @@ router.get("/search_investment_by_x", proApiKeyAuth(10), async (req, res) => {
   } catch (err) {
     console.error("[rootdatapro] /open/search_investment_by_x error", err);
     return res.status(500).json({
-      success: false,
-      error: err.message || String(err),
+      error: "Failed to search project",
+      message: err.message || "Unknown error",
     });
   }
 });
