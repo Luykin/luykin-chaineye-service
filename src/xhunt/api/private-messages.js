@@ -2,6 +2,7 @@ const express = require("express");
 const { authenticateToken } = require("../middleware/auth");
 const { XPrivateMessage, XHuntUser } = require("../../models/postgres-start");
 const { Op } = require("sequelize");
+const { getRedisClient } = require("../../lib/redisClient");
 
 const router = express.Router();
 
@@ -313,9 +314,57 @@ router.post("/send-batch-by-type", async (req, res) => {
       });
     }
 
-    // 构造批量插入的数据
+    /**
+     * 限流规则：
+     * - 同一用户 + 同一种 type，在 10 分钟（600 秒）内只允许触发一次
+     * - 通过 Redis 记录一个带过期时间的 key，格式：
+     *   xhunt:pm:send_limit:{type}:{userId}
+     * - 如果 Redis 不可用，则降级为不做限流（保持原有行为）
+     */
+    const TEN_MINUTES = 10 * 60;
+    let effectiveTargetUsers = targetUsers;
+    let rateLimitedTwitterIds = [];
+
+    try {
+      const redisClient = await getRedisClient();
+      const allowedUsers = [];
+
+      for (const user of targetUsers) {
+        const key = `xhunt:pm:send_limit:${type}:${user.id}`;
+        // 只有在 10 分钟窗口内首次成功 SET NX 的用户才允许发送
+        const setResult = await redisClient.set(key, "1", {
+          EX: TEN_MINUTES,
+          NX: true,
+        });
+
+        if (setResult === "OK") {
+          allowedUsers.push(user);
+        } else {
+          rateLimitedTwitterIds.push(user.twitterId);
+        }
+      }
+
+      effectiveTargetUsers = allowedUsers;
+    } catch (redisError) {
+      console.error("批量发送私信 Redis 限流失败，降级为全量发送:", redisError);
+      // 保持 effectiveTargetUsers = targetUsers，不做限流
+    }
+
+    // 如果所有用户都被限流，则直接返回成功结果（但不真正发送）
+    if (effectiveTargetUsers.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          success: [],
+          notFoundTwitterIds,
+          rateLimitedTwitterIds,
+        },
+      });
+    }
+
+    // 构造批量插入的数据（仅对未被限流的用户发送）
     const now = new Date();
-    const messagesToCreate = targetUsers.map((user) => ({
+    const messagesToCreate = effectiveTargetUsers.map((user) => ({
       senderId,
       receiverId: user.id,
       title: template.title,
@@ -327,17 +376,21 @@ router.post("/send-batch-by-type", async (req, res) => {
     }));
 
     // 批量创建私信记录
-    const createdMessages = await XPrivateMessage.bulkCreate(messagesToCreate, {
-      returning: true,
-    });
+    const createdMessages = await XPrivateMessage.bulkCreate(
+      messagesToCreate,
+      {
+        returning: true,
+      }
+    );
 
     const results = {
       success: createdMessages.map((msg, index) => ({
         receiverId: msg.receiverId,
         messageId: msg.id,
-        twitterId: targetUsers[index]?.twitterId,
+        twitterId: effectiveTargetUsers[index]?.twitterId,
       })),
       notFoundTwitterIds,
+      rateLimitedTwitterIds,
     };
 
     return res.status(200).json({
