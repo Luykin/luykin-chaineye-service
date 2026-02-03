@@ -69,21 +69,14 @@
           <div class="field">
             <label>活动启用（enabled）</label>
             <label class="switch">
-              <input id="campaigns-enabled" type="checkbox" />
+              <input id="campaigns-enabled" type="checkbox" disabled />
               <span class="slider"></span>
             </label>
           </div>
           <div class="field">
             <label>测试期（testingPhase）</label>
             <label class="switch">
-              <input id="campaigns-testingPhase" type="checkbox" />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="field">
-            <label>显示扩展组件（showExtraComponents）</label>
-            <label class="switch">
-              <input id="campaigns-showExtraComponents" type="checkbox" />
+              <input id="campaigns-testingPhase" type="checkbox" disabled />
               <span class="slider"></span>
             </label>
           </div>
@@ -929,9 +922,6 @@
 
     function setEditorInputsEnabled(enabled) {
       const ids = [
-        "campaigns-enabled",
-        "campaigns-testingPhase",
-        "campaigns-showExtraComponents",
         "campaigns-id",
         "campaigns-campaignKey",
         "campaigns-hotTweetsKey",
@@ -1223,7 +1213,6 @@
       $("campaigns-editor-hint").textContent = "选择左侧一条活动开始编辑";
       $("campaigns-enabled").checked = false;
       $("campaigns-testingPhase").checked = false;
-      $("campaigns-showExtraComponents").checked = false;
       [
         "campaigns-id",
         "campaigns-campaignKey",
@@ -1312,7 +1301,6 @@
       $("campaigns-editor-hint").textContent = `正在编辑：${c.id || "(未设置 id)"}`;
       $("campaigns-enabled").checked = !!c.enabled;
       $("campaigns-testingPhase").checked = !!c.testingPhase;
-      $("campaigns-showExtraComponents").checked = !!c.showExtraComponents;
 
       $("campaigns-id").value = c.id || "";
       $("campaigns-campaignKey").value = c.campaignKey || "";
@@ -1357,7 +1345,6 @@
 
       c.enabled = !!$("campaigns-enabled").checked;
       c.testingPhase = !!$("campaigns-testingPhase").checked;
-      c.showExtraComponents = !!$("campaigns-showExtraComponents").checked;
 
       c.id = $("campaigns-id").value.trim();
       c.campaignKey = $("campaigns-campaignKey").value.trim();
@@ -1415,9 +1402,6 @@
 
     function bindInputSync() {
       const ids = [
-        "campaigns-enabled",
-        "campaigns-testingPhase",
-        "campaigns-showExtraComponents",
         "campaigns-id",
         "campaigns-campaignKey",
         "campaigns-hotTweetsKey",
@@ -1594,7 +1578,14 @@
         testingPhase: false,
         enrollmentWindow: { startAt: "", endAt: "" },
         displayName: { zh: "", en: "" },
-        logos: [],
+        logos: [
+          {
+            image: "REPLACE_WITH_XHUNT_AVATAR_URL",
+            url: "https://x.com/xhunt_ai",
+            label: "XHunt AI",
+            ringClassName: "ring-blue-400/20 hover:ring-blue-400/50",
+          },
+        ],
         copy: {
           title: { zh: "", en: "" },
           shortTitle: { zh: "", en: "" },
