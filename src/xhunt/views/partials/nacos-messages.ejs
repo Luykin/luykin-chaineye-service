@@ -151,6 +151,33 @@
   </div>
 
   <div class="nacos-msg-toast" id="nacos-msg-toast" style="display: none"></div>
+
+  <!-- HTML 源码编辑模态框 -->
+  <div class="html-modal-overlay" id="nacos-html-modal" style="display: none">
+    <div class="html-modal-panel">
+      <div class="html-modal-header">
+        <h3>编辑 HTML 源码</h3>
+        <button class="close-btn" id="nacos-html-modal-close" type="button">
+          &times;
+        </button>
+      </div>
+      <div class="html-modal-body">
+        <textarea
+          id="nacos-html-source"
+          placeholder="请输入或粘贴 HTML 代码..."
+          spellcheck="false"
+        ></textarea>
+      </div>
+      <div class="html-modal-footer">
+        <button class="btn" id="nacos-html-modal-cancel" type="button">
+          取消
+        </button>
+        <button class="btn primary" id="nacos-html-modal-save" type="button">
+          保存
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- 轻量流行 CDN 富文本：Quill（按需加载，避免影响其他 tab） -->
@@ -405,9 +432,13 @@
   .html-modal-overlay {
     position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
     z-index: 10000;
   }
   .html-modal-panel {
@@ -419,6 +450,18 @@
     display: flex;
     flex-direction: column;
     max-height: 80vh;
+    margin: 20px;
+  }
+  @media (max-width: 768px) {
+    .html-modal-panel {
+      width: 95%;
+      max-height: 90vh;
+      margin: 10px;
+    }
+    #nacos-html-source {
+      min-height: 250px;
+      font-size: 12px;
+    }
   }
   .html-modal-header {
     display: flex;
@@ -434,9 +477,21 @@
   .html-modal-header .close-btn {
     background: none;
     border: none;
-    font-size: 24px;
+    font-size: 28px;
+    line-height: 1;
     cursor: pointer;
     color: #6b7280;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+  }
+  .html-modal-header .close-btn:hover {
+    background: #f3f4f6;
+    color: #111827;
   }
   .html-modal-body {
     padding: 16px;
@@ -446,12 +501,34 @@
   #nacos-html-source {
     width: 100%;
     height: 40vh;
+    min-height: 300px;
     border: 1px solid #d1d5db;
     border-radius: 8px;
-    padding: 10px;
-    font-family: monospace;
-    font-size: 14px;
+    padding: 12px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.5;
     resize: vertical;
+    outline: none;
+    background: #fafafa;
+    color: #111827;
+  }
+  #nacos-html-source:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    background: #fff;
+  }
+  .html-modal-body {
+    position: relative;
+  }
+  .html-modal-body::after {
+    content: "提示：按 ESC 关闭，Ctrl/Cmd + Enter 保存";
+    position: absolute;
+    bottom: 8px;
+    right: 16px;
+    font-size: 11px;
+    color: #9ca3af;
+    pointer-events: none;
   }
   .html-modal-footer {
     padding: 12px 16px;
@@ -540,21 +617,129 @@
       return currentIndex >= 0 && !!items[currentIndex];
     }
 
-    function getEditorHtml() {
-      if (editorMode === "quill" && quill) {
-        return quill.root.innerHTML || "";
+    // HTML 源码编辑模态框
+    function showHtmlModal() {
+      const modal = $("nacos-html-modal");
+      const textarea = $("nacos-html-source");
+      if (!modal || !textarea) return;
+
+      const currentHtml = getEditorHtml();
+      textarea.value = currentHtml;
+      modal.style.display = "flex";
+      // 聚焦到文本域并选中所有内容
+      setTimeout(() => {
+        textarea.focus();
+        textarea.select();
+      }, 100);
+    }
+
+    function hideHtmlModal() {
+      const modal = $("nacos-html-modal");
+      if (modal) {
+        modal.style.display = "none";
       }
-      return $("nacos-msg-content-fallback").innerHTML || "";
+    }
+
+    function saveHtmlFromModal() {
+      const textarea = $("nacos-html-source");
+      if (!textarea) return;
+
+      const newHtml = textarea.value || "";
+      const currentHtml = getEditorHtml();
+
+      if (newHtml !== currentHtml) {
+        // 清理用户输入的黑色颜色
+        const cleaned = removeBlackColors(newHtml);
+        setEditorHtml(cleaned);
+        syncToModel();
+      }
+
+      hideHtmlModal();
+    }
+
+    // 清理 HTML 中的黑色颜色属性（支持暗黑/亮色模式）
+    function removeBlackColors(html) {
+      if (!html || typeof html !== "string") return html;
+      
+      // 创建一个临时 DOM 元素来解析 HTML
+      const temp = document.createElement("div");
+      temp.innerHTML = html;
+      
+      // 黑色颜色的各种表示形式
+      const blackColorPatterns = [
+        /^#000000$/i,
+        /^#000$/i,
+        /^rgb\s*\(\s*0\s*,\s*0\s*,\s*0\s*\)$/i,
+        /^rgba\s*\(\s*0\s*,\s*0\s*,\s*0\s*,\s*[01](?:\.\d+)?\s*\)$/i,
+        /^black$/i,
+      ];
+      
+      function isBlackColor(color) {
+        if (!color) return false;
+        const normalized = color.trim();
+        return blackColorPatterns.some((pattern) => pattern.test(normalized));
+      }
+      
+      // 遍历所有元素，清理黑色 color 样式
+      const allElements = temp.querySelectorAll("*");
+      allElements.forEach((el) => {
+        const style = el.getAttribute("style");
+        if (!style) return;
+        
+        // 解析 style 属性
+        const styles = style.split(";").filter((s) => s.trim());
+        const newStyles = [];
+        
+        styles.forEach((styleRule) => {
+          const match = styleRule.match(/^\s*([^:]+)\s*:\s*(.+)\s*$/);
+          if (!match) {
+            newStyles.push(styleRule);
+            return;
+          }
+          
+          const [, prop, value] = match;
+          const propLower = prop.trim().toLowerCase();
+          
+          // 如果是 color 属性且是黑色，则跳过（不添加）
+          if (propLower === "color" && isBlackColor(value)) {
+            return; // 不添加这个样式
+          }
+          
+          newStyles.push(styleRule);
+        });
+        
+        // 更新 style 属性
+        if (newStyles.length > 0) {
+          el.setAttribute("style", newStyles.join("; "));
+        } else {
+          el.removeAttribute("style");
+        }
+      });
+      
+      return temp.innerHTML;
+    }
+
+    function getEditorHtml() {
+      let html = "";
+      if (editorMode === "quill" && quill) {
+        html = quill.root.innerHTML || "";
+      } else {
+        html = $("nacos-msg-content-fallback").innerHTML || "";
+      }
+      // 清理黑色颜色
+      return removeBlackColors(html);
     }
 
     function setEditorHtml(html) {
       const value = html || "";
+      // 在设置之前清理黑色颜色
+      const cleaned = removeBlackColors(value);
       if (editorMode === "quill" && quill) {
         // Quill 内部更喜欢 delta，但也支持 pasteHTML
-        quill.clipboard.dangerouslyPasteHTML(value);
+        quill.clipboard.dangerouslyPasteHTML(cleaned);
         return;
       }
-      $("nacos-msg-content-fallback").innerHTML = value;
+      $("nacos-msg-content-fallback").innerHTML = cleaned;
     }
 
     function setEditorEnabled(enabled) {
@@ -678,9 +863,8 @@
       if (window.Quill) {
         editorMode = "quill";
 
-        // 1. 定义颜色列表，并加入自定义颜色
+        // 1. 定义颜色列表，并加入自定义颜色（不包含黑色，支持暗黑/亮色模式）
         const quillColors = [
-          "#000000",
           "#e60000",
           "#ff9900",
           "#ffff00",
@@ -731,12 +915,7 @@
           ],
           handlers: {
             html: function () {
-              const currentHtml = getEditorHtml();
-              const newHtml = window.prompt("请编辑 HTML 源码：", currentHtml);
-              if (newHtml !== null && newHtml !== currentHtml) {
-                setEditorHtml(newHtml);
-                syncToModel();
-              }
+              showHtmlModal();
             },
             eyedropper: async function () {
               if (!window.EyeDropper) {
@@ -807,9 +986,12 @@
             const looksLikeHtml = (s) =>
               typeof s === "string" && /<\/?[a-z][\s\S]*>/i.test(s);
 
-            const toInsert =
+            let toInsert =
               html && html.trim() ? html : looksLikeHtml(text) ? text : "";
             if (!toInsert) return; // 交给 Quill 默认处理
+
+            // 清理粘贴内容中的黑色颜色
+            toInsert = removeBlackColors(toInsert);
 
             e.preventDefault();
 
@@ -1068,6 +1250,44 @@
       $("nacos-msg-publish").addEventListener("click", () => {
         publish().catch((e) => toast("发布失败：" + e.message, "error"));
       });
+
+      // HTML 模态框事件绑定
+      const htmlModal = $("nacos-html-modal");
+      const htmlModalClose = $("nacos-html-modal-close");
+      const htmlModalCancel = $("nacos-html-modal-cancel");
+      const htmlModalSave = $("nacos-html-modal-save");
+      const htmlSource = $("nacos-html-source");
+
+      if (htmlModalClose) {
+        htmlModalClose.addEventListener("click", hideHtmlModal);
+      }
+      if (htmlModalCancel) {
+        htmlModalCancel.addEventListener("click", hideHtmlModal);
+      }
+      if (htmlModalSave) {
+        htmlModalSave.addEventListener("click", saveHtmlFromModal);
+      }
+      // 点击遮罩层关闭
+      if (htmlModal) {
+        htmlModal.addEventListener("click", (e) => {
+          if (e.target === htmlModal) {
+            hideHtmlModal();
+          }
+        });
+      }
+      // 按 ESC 键关闭
+      if (htmlSource) {
+        htmlSource.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            hideHtmlModal();
+          }
+          // Ctrl/Cmd + Enter 保存
+          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            e.preventDefault();
+            saveHtmlFromModal();
+          }
+        });
+      }
 
       // first load
       loadFromNacos().catch((e) => toast("加载失败：" + e.message, "error"));
