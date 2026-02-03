@@ -1332,7 +1332,7 @@ router.get("/search", async (req, res) => {
     const INTERNAL_API_KEY = "rk_666666888888666666LUYKIN";
     const PORT = process.env.PORT || 8090;
     const baseUrl = `http://localhost:${PORT}`;
-    const internalApiUrl = `${baseUrl}/open/search_investment_by_x`;
+    const internalApiUrl = `${baseUrl}/api/rootdatapro/open/search_investment_by_x`;
 
     let response;
     try {
