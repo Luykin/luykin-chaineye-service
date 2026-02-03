@@ -26,7 +26,7 @@
       <button class="btn primary" id="campaigns-refresh">🔄 从 Nacos 重新加载</button>
       <button class="btn" id="campaigns-new">➕ 新增活动</button>
       <button class="btn" id="campaigns-duplicate" disabled>🧬 复制活动</button>
-      <button class="btn btn-sm danger" id="campaigns-delete" disabled>🗑️ 删除当前</button>
+      <button class="btn danger" id="campaigns-delete" disabled>🗑️ 删除当前</button>
       <button class="btn success" id="campaigns-publish" disabled>
         🚀 发布到 Nacos
       </button>
@@ -145,17 +145,6 @@
 
           <div class="field-row field-row-2">
             <div class="field">
-              <label>title（zh）</label>
-              <input id="campaigns-copy-title-zh" type="text" />
-            </div>
-            <div class="field">
-              <label>title（en）</label>
-              <input id="campaigns-copy-title-en" type="text" />
-            </div>
-          </div>
-
-          <div class="field-row field-row-2">
-            <div class="field">
               <label>shortTitle（zh）</label>
               <input id="campaigns-copy-shortTitle-zh" type="text" />
             </div>
@@ -250,14 +239,6 @@
             </button>
           </div>
           <div class="repeaters" id="campaigns-tasks"></div>
-        </div>
-
-        <div class="preview">
-          <div class="preview-header">
-            <strong>预览</strong>
-            <span class="muted">（用于快速确认核心信息）</span>
-          </div>
-          <div class="preview-box" id="campaigns-preview"></div>
         </div>
       </div>
     </div>
@@ -594,50 +575,6 @@
     flex-wrap: wrap;
   }
 
-  .preview {
-    margin-top: 14px;
-  }
-  .preview-header {
-    display: flex;
-    gap: 8px;
-    align-items: baseline;
-    margin-bottom: 8px;
-  }
-  .preview-box {
-    border: 1px dashed #d1d5db;
-    border-radius: 8px;
-    padding: 12px;
-    min-height: 120px;
-    background: #fafafa;
-    color: #111827;
-    line-height: 1.55;
-  }
-  .preview-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-  @media (max-width: 900px) {
-    .preview-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-  .preview-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    padding: 10px;
-  }
-  .preview-card .k {
-    color: #6b7280;
-    font-size: 12px;
-  }
-  .preview-card .v {
-    color: #111827;
-    font-weight: 700;
-    margin-top: 2px;
-  }
-
   /* Toggle switch */
   .switch {
     position: relative;
@@ -677,6 +614,23 @@
   }
   .switch input:checked + .slider:before {
     transform: translateX(20px);
+  }
+  /* 禁用状态的开关样式 */
+  .switch input:disabled + .slider {
+    cursor: not-allowed;
+    opacity: 0.6;
+    background-color: #d1d5db;
+  }
+  .switch input:disabled:checked + .slider {
+    background-color: #9ca3af;
+  }
+  .switch input:disabled + .slider:hover {
+    background-color: #d1d5db;
+    cursor: not-allowed;
+  }
+  .switch input:disabled:checked + .slider:hover {
+    background-color: #9ca3af;
+    cursor: not-allowed;
   }
 
   .campaigns-toast {
@@ -959,8 +913,6 @@
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
         "campaigns-copy-ctaText-en",
-        "campaigns-copy-title-zh",
-        "campaigns-copy-title-en",
         "campaigns-copy-shortTitle-zh",
         "campaigns-copy-shortTitle-en",
         "campaigns-copy-goToOfficialText-zh",
@@ -1195,47 +1147,6 @@
           .join("") || `<div class="muted">暂无 tasks，可点击上方“添加 Task”。</div>`;
     }
 
-    function renderPreview() {
-      const c = getCurrentCampaign();
-      const el = $("campaigns-preview");
-      if (!el) return;
-      if (!c) {
-        el.innerHTML =
-          '<div class="muted">选择一条活动后，会在这里展示关键字段的快速预览。</div>';
-        return;
-      }
-
-      const title =
-        c?.displayName?.zh ||
-        c?.displayName?.en ||
-        c?.copy?.title?.zh ||
-        c?.id ||
-        "-";
-      const win = `${c?.enrollmentWindow?.startAt || "-"} → ${
-        c?.enrollmentWindow?.endAt || "-"
-      }`;
-      const tasksCount = Array.isArray(c?.tasks) ? c.tasks.length : 0;
-      const logosCount = Array.isArray(c?.logos) ? c.logos.length : 0;
-      el.innerHTML = `
-        <div class="preview-grid">
-          <div class="preview-card">
-            <div class="k">标题</div>
-            <div class="v">${escapeHtml(title)}</div>
-            <div class="muted" style="margin-top:6px">id: <code>${escapeHtml(
-              c?.id || "-"
-            )}</code> · key: <code>${escapeHtml(
-        c?.campaignKey || "-"
-      )}</code></div>
-          </div>
-          <div class="preview-card">
-            <div class="k">报名窗口</div>
-            <div class="v">${escapeHtml(win)}</div>
-            <div class="muted" style="margin-top:6px">tasks: ${tasksCount} · logos: ${logosCount}</div>
-          </div>
-        </div>
-      `;
-    }
-
     function clearEditor() {
       $("campaigns-editor-hint").textContent = "选择左侧一条活动开始编辑";
       $("campaigns-enabled").checked = false;
@@ -1251,8 +1162,6 @@
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
         "campaigns-copy-ctaText-en",
-        "campaigns-copy-title-zh",
-        "campaigns-copy-title-en",
         "campaigns-copy-shortTitle-zh",
         "campaigns-copy-shortTitle-en",
         "campaigns-copy-goToOfficialText-zh",
@@ -1277,7 +1186,6 @@
         empty.style.display = "block";
       }
 
-      renderPreview();
     }
 
     function selectCampaign(idx) {
@@ -1342,10 +1250,13 @@
       $("campaigns-copy-emoji").value = c.copy.emoji || "";
       $("campaigns-copy-ctaText-zh").value = c.copy.ctaText.zh || "";
       $("campaigns-copy-ctaText-en").value = c.copy.ctaText.en || "";
-      $("campaigns-copy-title-zh").value = c.copy.title.zh || "";
-      $("campaigns-copy-title-en").value = c.copy.title.en || "";
+      // title 字段不显示，自动从 shortTitle 同步
       $("campaigns-copy-shortTitle-zh").value = c.copy.shortTitle.zh || "";
       $("campaigns-copy-shortTitle-en").value = c.copy.shortTitle.en || "";
+      // 确保 title 从 shortTitle 同步
+      if (!c.copy.title) c.copy.title = {};
+      c.copy.title.zh = c.copy.shortTitle.zh || c.copy.title.zh || "";
+      c.copy.title.en = c.copy.shortTitle.en || c.copy.title.en || "";
       $("campaigns-copy-goToOfficialText-zh").value =
         c.copy.goToOfficialText.zh || "";
       $("campaigns-copy-goToOfficialText-en").value =
@@ -1362,7 +1273,6 @@
       $("campaigns-targetUserIds").value = listToLines(c.targetUserIds);
 
       renderRepeaters();
-      renderPreview();
       renderList();
     }
 
@@ -1389,10 +1299,11 @@
       c.copy.emoji = $("campaigns-copy-emoji").value;
       setByPath(c.copy, "ctaText.zh", $("campaigns-copy-ctaText-zh").value);
       setByPath(c.copy, "ctaText.en", $("campaigns-copy-ctaText-en").value);
-      setByPath(c.copy, "title.zh", $("campaigns-copy-title-zh").value);
-      setByPath(c.copy, "title.en", $("campaigns-copy-title-en").value);
+      // title 自动从 shortTitle 同步
       setByPath(c.copy, "shortTitle.zh", $("campaigns-copy-shortTitle-zh").value);
       setByPath(c.copy, "shortTitle.en", $("campaigns-copy-shortTitle-en").value);
+      setByPath(c.copy, "title.zh", $("campaigns-copy-shortTitle-zh").value);
+      setByPath(c.copy, "title.en", $("campaigns-copy-shortTitle-en").value);
       setByPath(
         c.copy,
         "goToOfficialText.zh",
@@ -1423,7 +1334,6 @@
 
       dirty = true;
       $("campaigns-publish").disabled = false;
-      renderPreview();
       renderList();
     }
 
@@ -1439,8 +1349,6 @@
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
         "campaigns-copy-ctaText-en",
-        "campaigns-copy-title-zh",
-        "campaigns-copy-title-en",
         "campaigns-copy-shortTitle-zh",
         "campaigns-copy-shortTitle-en",
         "campaigns-copy-goToOfficialText-zh",
@@ -1478,7 +1386,6 @@
       dirty = true;
       $("campaigns-publish").disabled = false;
       renderRepeaters();
-      renderPreview();
     }
 
     function addTask() {
@@ -1495,7 +1402,6 @@
       dirty = true;
       $("campaigns-publish").disabled = false;
       renderRepeaters();
-      renderPreview();
     }
 
     function moveArrayItem(arr, from, to) {
@@ -1527,7 +1433,6 @@
 
           dirty = true;
           $("campaigns-publish").disabled = false;
-          renderPreview();
           renderList();
         });
 
@@ -1547,7 +1452,6 @@
           fieldSetter(arr[index], field, value);
           dirty = true;
           $("campaigns-publish").disabled = false;
-          renderPreview();
           renderList();
         });
 
@@ -1577,7 +1481,6 @@
           dirty = true;
           $("campaigns-publish").disabled = false;
           renderRepeaters();
-          renderPreview();
           renderList();
         });
       }
@@ -1693,7 +1596,155 @@
       toast("加载完成", "success");
     }
 
+    function validateCampaigns() {
+      const errors = [];
+      const campaigns = Array.isArray(config.campaigns) ? config.campaigns : [];
+
+      if (campaigns.length === 0) {
+        return { valid: false, errors: ["至少需要配置一个活动"] };
+      }
+
+      campaigns.forEach((c, idx) => {
+        const prefix = `活动 #${idx + 1} (id: ${c.id || "未设置"})`;
+
+        // 必填：id
+        if (!c.id || !c.id.trim()) {
+          errors.push(`${prefix}: id 不能为空`);
+        }
+
+        // 必填：campaignKey
+        if (!c.campaignKey || !c.campaignKey.trim()) {
+          errors.push(`${prefix}: campaignKey 不能为空`);
+        }
+
+        // 必填：displayName（至少一个语言）
+        if (
+          (!c.displayName || typeof c.displayName !== "object") ||
+          ((!c.displayName.zh || !c.displayName.zh.trim()) &&
+            (!c.displayName.en || !c.displayName.en.trim()))
+        ) {
+          errors.push(`${prefix}: displayName 至少需要填写中文或英文`);
+        }
+
+        // 必填：enrollmentWindow（startAt 和 endAt）
+        if (
+          !c.enrollmentWindow ||
+          typeof c.enrollmentWindow !== "object" ||
+          !c.enrollmentWindow.startAt ||
+          !c.enrollmentWindow.endAt
+        ) {
+          errors.push(`${prefix}: enrollmentWindow 的 startAt 和 endAt 都必须填写`);
+        }
+
+        // 必填：copy.shortTitle（至少一个语言），title 会自动从 shortTitle 同步
+        if (
+          !c.copy ||
+          typeof c.copy !== "object" ||
+          !c.copy.shortTitle ||
+          typeof c.copy.shortTitle !== "object" ||
+          ((!c.copy.shortTitle.zh || !c.copy.shortTitle.zh.trim()) &&
+            (!c.copy.shortTitle.en || !c.copy.shortTitle.en.trim()))
+        ) {
+          errors.push(`${prefix}: copy.shortTitle 至少需要填写中文或英文（title 会自动同步）`);
+        } else {
+          // 确保 title 从 shortTitle 同步
+          if (!c.copy.title) c.copy.title = {};
+          if (!c.copy.title.zh && c.copy.shortTitle.zh) {
+            c.copy.title.zh = c.copy.shortTitle.zh;
+          }
+          if (!c.copy.title.en && c.copy.shortTitle.en) {
+            c.copy.title.en = c.copy.shortTitle.en;
+          }
+        }
+
+        // 必填：copy.emoji
+        if (!c.copy || !c.copy.emoji || !c.copy.emoji.trim()) {
+          errors.push(`${prefix}: copy.emoji 不能为空`);
+        }
+
+        // 必填：copy.ctaText（至少一个语言）
+        if (
+          !c.copy ||
+          !c.copy.ctaText ||
+          typeof c.copy.ctaText !== "object" ||
+          ((!c.copy.ctaText.zh || !c.copy.ctaText.zh.trim()) &&
+            (!c.copy.ctaText.en || !c.copy.ctaText.en.trim()))
+        ) {
+          errors.push(`${prefix}: copy.ctaText 至少需要填写中文或英文`);
+        }
+
+        // 必填：links（至少 guideUrl 或 activeUrl 有一个）
+        if (
+          !c.links ||
+          typeof c.links !== "object" ||
+          ((!c.links.guideUrl || !c.links.guideUrl.trim()) &&
+            (!c.links.activeUrl || !c.links.activeUrl.trim()))
+        ) {
+          errors.push(`${prefix}: links 的 guideUrl 或 activeUrl 至少需要填写一个`);
+        }
+
+        // 必填：tasks（至少一个任务）
+        if (!Array.isArray(c.tasks) || c.tasks.length === 0) {
+          errors.push(`${prefix}: 至少需要配置一个 task`);
+        } else {
+          // 检查每个 task 的必填字段
+          c.tasks.forEach((task, taskIdx) => {
+            if (!task.id || !task.id.trim()) {
+              errors.push(`${prefix}: task #${taskIdx + 1} 的 id 不能为空`);
+            }
+            if (
+              !task.title ||
+              typeof task.title !== "object" ||
+              ((!task.title.zh || !task.title.zh.trim()) &&
+                (!task.title.en || !task.title.en.trim()))
+            ) {
+              errors.push(`${prefix}: task #${taskIdx + 1} 的 title 至少需要填写中文或英文`);
+            }
+            if (!task.url || !task.url.trim()) {
+              errors.push(`${prefix}: task #${taskIdx + 1} 的 url 不能为空`);
+            }
+          });
+        }
+
+        // 必填：logos（至少一个 logo）
+        if (!Array.isArray(c.logos) || c.logos.length === 0) {
+          errors.push(`${prefix}: 至少需要配置一个 logo`);
+        } else {
+          // 检查每个 logo 的必填字段
+          c.logos.forEach((logo, logoIdx) => {
+            if (!logo.image || !logo.image.trim()) {
+              errors.push(`${prefix}: logo #${logoIdx + 1} 的 image 不能为空`);
+            }
+            if (!logo.url || !logo.url.trim()) {
+              errors.push(`${prefix}: logo #${logoIdx + 1} 的 url 不能为空`);
+            }
+            if (!logo.label || !logo.label.trim()) {
+              errors.push(`${prefix}: logo #${logoIdx + 1} 的 label 不能为空`);
+            }
+          });
+        }
+      });
+
+      return {
+        valid: errors.length === 0,
+        errors,
+      };
+    }
+
     async function publish() {
+      // 先验证所有活动
+      const validation = validateCampaigns();
+      if (!validation.valid) {
+        const errorMsg =
+          "发布失败：以下必填字段未填写完整：\n\n" +
+          validation.errors.join("\n") +
+          "\n\n请完善所有必填字段后再发布。";
+        toast(errorMsg, "error");
+        // 使用 alert 显示完整错误信息（因为 toast 可能显示不全）
+        window.alert(errorMsg);
+        return;
+      }
+
       const content = JSON.stringify(config, null, 2);
       const ok = window.confirm(
         `确认发布到 Nacos？\n\n将覆盖 dataId=${DATA_ID} 的 content（对象整体覆盖）。`
@@ -1714,7 +1765,6 @@
       $("campaigns-publish").disabled = true;
       setControlsEnabled(false);
       setEditorInputsEnabled(false);
-      renderPreview();
 
       bindInputSync();
       bindRepeatersEvents();
