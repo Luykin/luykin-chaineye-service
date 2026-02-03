@@ -15,16 +15,18 @@
     </div>
 
     <div class="right">
-      <input
-        id="campaigns-search"
-        type="text"
-        placeholder="🔎 搜索活动（id / campaignKey / 标题）"
-        style="min-width: 280px"
-      />
+      <div class="campaigns-search">
+        <span class="icon">🔍</span>
+        <input
+          id="campaigns-search"
+          type="text"
+          placeholder="搜索活动（id / campaignKey / 标题）"
+        />
+      </div>
       <button class="btn primary" id="campaigns-refresh">🔄 从 Nacos 重新加载</button>
       <button class="btn" id="campaigns-new">➕ 新增活动</button>
       <button class="btn" id="campaigns-duplicate" disabled>🧬 复制活动</button>
-      <button class="btn danger" id="campaigns-delete" disabled>🗑️ 删除当前</button>
+      <button class="btn btn-sm danger" id="campaigns-delete" disabled>🗑️ 删除当前</button>
       <button class="btn success" id="campaigns-publish" disabled>
         🚀 发布到 Nacos
       </button>
@@ -45,14 +47,6 @@
         <div>
           <strong>编辑</strong>
           <span class="muted" id="campaigns-editor-hint">选择左侧一条活动开始编辑</span>
-        </div>
-        <div class="editor-actions">
-          <button class="btn" id="campaigns-edit-current-json" disabled>
-            &lt;/&gt; 当前活动 JSON
-          </button>
-          <button class="btn" id="campaigns-edit-config-json">
-            &lt;/&gt; 全量配置 JSON
-          </button>
         </div>
       </div>
 
@@ -336,6 +330,40 @@
     gap: 8px;
     flex-wrap: wrap;
     align-items: center;
+  }
+  .btn.btn-sm {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .campaigns-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    min-width: 260px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .campaigns-search .icon {
+    font-size: 14px;
+    color: #9ca3af;
+  }
+  .campaigns-search input {
+    border: none;
+    outline: none;
+    flex: 1;
+    font-size: 13px;
+    padding: 4px 2px;
+    background: transparent;
+  }
+  .campaigns-search input::placeholder {
+    color: #9ca3af;
+  }
+  .campaigns-search:focus-within {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16);
   }
   .muted {
     color: #6b7280;
@@ -914,7 +942,6 @@
     function setControlsEnabled(enabled) {
       $("campaigns-duplicate").disabled = !enabled;
       $("campaigns-delete").disabled = !enabled;
-      $("campaigns-edit-current-json").disabled = !enabled;
       $("campaigns-logos-add").disabled = !enabled;
       $("campaigns-tasks-add").disabled = !enabled;
       setEditorInputsEnabled(enabled);
@@ -1614,6 +1641,9 @@
       if (!c) return;
       const copy = JSON.parse(JSON.stringify(c));
       copy.id = `${c.id || "campaign"}-copy-${Date.now()}`;
+      // 复制出来的活动默认关闭、非测试状态，避免误上线
+      copy.enabled = false;
+      copy.testingPhase = false;
       config.campaigns.splice(currentIndex + 1, 0, copy);
       dirty = true;
       $("campaigns-publish").disabled = false;
@@ -1625,10 +1655,14 @@
     function deleteCampaign() {
       const c = getCurrentCampaign();
       if (!c) return;
-      const ok = window.confirm(
+      const okFirst = window.confirm(
         `确认删除该活动？\n\nid=${c.id || ""}\n\n提示：删除后需要点击“发布到 Nacos”才会生效。`
       );
-      if (!ok) return;
+      if (!okFirst) return;
+      const okSecond = window.confirm(
+        "⚠️ 二次确认：确定要删除该活动吗？\n\n此操作执行后如发布到 Nacos，将无法恢复。"
+      );
+      if (!okSecond) return;
       config.campaigns.splice(currentIndex, 1);
       dirty = true;
       $("campaigns-publish").disabled = false;
@@ -1670,69 +1704,6 @@
       dirty = false;
       $("campaigns-publish").disabled = true;
       toast("发布成功", "success");
-    }
-
-    function showJsonModal(mode) {
-      jsonModalMode = mode;
-      const modal = $("campaigns-json-modal");
-      const textarea = $("campaigns-json-source");
-      const title = $("campaigns-json-modal-title");
-      if (!modal || !textarea || !title) return;
-
-      if (mode === "campaign") {
-        const c = getCurrentCampaign();
-        if (!c) return;
-        title.textContent = "编辑当前活动 JSON";
-        textarea.value = JSON.stringify(c, null, 2);
-      } else {
-        title.textContent = "编辑全量配置 JSON";
-        textarea.value = JSON.stringify(config, null, 2);
-      }
-
-      modal.style.display = "flex";
-      setTimeout(() => {
-        textarea.focus();
-        textarea.select();
-      }, 80);
-    }
-
-    function hideJsonModal() {
-      const modal = $("campaigns-json-modal");
-      if (modal) modal.style.display = "none";
-    }
-
-    function saveJsonFromModal() {
-      const textarea = $("campaigns-json-source");
-      if (!textarea) return;
-      let parsed;
-      try {
-        parsed = JSON.parse(textarea.value || "");
-      } catch (e) {
-        toast("JSON 解析失败，请检查格式", "error");
-        return;
-      }
-
-      if (jsonModalMode === "campaign") {
-        const c = getCurrentCampaign();
-        if (!c) return;
-        config.campaigns[currentIndex] = parsed;
-        dirty = true;
-        $("campaigns-publish").disabled = false;
-        hideJsonModal();
-        selectCampaign(currentIndex);
-        toast("已更新当前活动（未发布）", "success");
-        return;
-      }
-
-      config = normalizeConfig(parsed);
-      dirty = true;
-      $("campaigns-publish").disabled = false;
-      hideJsonModal();
-      currentIndex = -1;
-      setControlsEnabled(false);
-      renderList();
-      clearEditor();
-      toast("已更新全量配置（未发布）", "success");
     }
 
     function init() {
@@ -1779,33 +1750,6 @@
 
       $("campaigns-logos-add").addEventListener("click", addLogo);
       $("campaigns-tasks-add").addEventListener("click", addTask);
-
-      // JSON modal bindings
-      $("campaigns-edit-current-json").addEventListener("click", () =>
-        showJsonModal("campaign")
-      );
-      $("campaigns-edit-config-json").addEventListener("click", () =>
-        showJsonModal("config")
-      );
-      $("campaigns-json-modal-close").addEventListener("click", hideJsonModal);
-      $("campaigns-json-modal-cancel").addEventListener("click", hideJsonModal);
-      $("campaigns-json-modal-save").addEventListener("click", saveJsonFromModal);
-      const modal = $("campaigns-json-modal");
-      const src = $("campaigns-json-source");
-      if (modal) {
-        modal.addEventListener("click", (e) => {
-          if (e.target === modal) hideJsonModal();
-        });
-      }
-      if (src) {
-        src.addEventListener("keydown", (e) => {
-          if (e.key === "Escape") hideJsonModal();
-          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-            e.preventDefault();
-            saveJsonFromModal();
-          }
-        });
-      }
 
       // first load
       loadFromNacos().catch((e) => toast("加载失败：" + e.message, "error"));
