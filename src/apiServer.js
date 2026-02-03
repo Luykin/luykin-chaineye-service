@@ -310,8 +310,6 @@ async function initializeAndStartServer() {
   // 私信接口
   app.use(
     "/api/xhunt/private-messages",
-    fingerprintLimiter,
-    browserOnlyMiddleware,
     xHuntPrivateMessageRoutes
   );
 
