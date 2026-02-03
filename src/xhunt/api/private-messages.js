@@ -221,7 +221,7 @@ router.post("/send-batch-by-type", async (req, res) => {
       switch (messageType) {
         case "creator_verification_success":
           return {
-            title: "Creator verification approved",
+            title: "创作者认证通过",
             content:
               "亲爱的创作者，\n\n" +
               "恭喜你！你的创作者认证 **已通过审核** 。🎉\n\n" +
@@ -233,7 +233,7 @@ router.post("/send-batch-by-type", async (req, res) => {
           };
         case "creator_verification_failed":
           return {
-            title: "Creator verification failed",
+            title: "创作者认证未通过",
             content:
               "亲爱的创作者，\n\n" +
               "很抱歉，此次你的创作者认证 **未能通过审核** 。\n\n" +
@@ -247,7 +247,7 @@ router.post("/send-batch-by-type", async (req, res) => {
           };
         case "kol_tip_received":
           return {
-            title: "You received a KOL tip reward",
+            title: "你收到一笔 KOL 打赏奖励",
             content:
               "亲爱的创作者，\n\n" +
               "你刚刚 **收到一笔 KOL 打赏奖励**。🎁\n\n" +
@@ -257,7 +257,7 @@ router.post("/send-batch-by-type", async (req, res) => {
           };
         case "kol_tip_auto_refund":
           return {
-            title: "Your KOL tip reward was auto-refunded",
+            title: "你的 KOL 打赏奖励已自动退回",
             content:
               "你好，\n\n" +
               "你之前发起的一笔 **KOL 打赏奖励已自动退回** ，相关金额已回到你的账户。\n\n" +
@@ -267,7 +267,7 @@ router.post("/send-batch-by-type", async (req, res) => {
           };
         case "kol_tip_refund_received":
           return {
-            title: "You received a refunded KOL reward",
+            title: "你收到一笔退回的 KOL 奖励",
             content:
               "你好，\n\n" +
               "你已 **收到一笔退回的 KOL 奖励** ，相关金额已回到你的账户。\n\n" +
