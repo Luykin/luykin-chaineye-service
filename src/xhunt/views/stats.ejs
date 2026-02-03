@@ -41,6 +41,9 @@
           <button class="tab-btn" data-tab="version-stats">📈 版本统计</button>
           <button class="tab-btn" data-tab="url-stats">🔗 接口统计</button>
           <button class="tab-btn" data-tab="nacos-messages">📣 公告配置</button>
+          <button class="tab-btn" data-tab="nacos-campaigns">
+            🎯 Earn 活动配置
+          </button>
           <button class="tab-btn" data-tab="feature-flags">⚙️ 功能开关</button>
           <button class="tab-btn" data-tab="perf-monitor">⚡️ 性能监控</button>
           <button class="tab-btn" data-tab="security-violations">
@@ -121,6 +124,11 @@
           <!-- 公告配置（Nacos）Tab -->
           <div class="tab-pane" id="nacos-messages">
             <%- include('partials/nacos-messages') %>
+          </div>
+
+          <!-- Earn 活动配置（Nacos）Tab -->
+          <div class="tab-pane" id="nacos-campaigns">
+            <%- include('partials/nacos-campaigns') %>
           </div>
 
           <!-- 功能开关（Feature Flags）Tab -->

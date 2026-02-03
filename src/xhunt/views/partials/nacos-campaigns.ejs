@@ -1,0 +1,1782 @@
+<div class="campaigns-container">
+  <div class="campaigns-header">
+    <h2>🎯 Earn 活动配置（Nacos）</h2>
+    <p>
+      可视化编辑 Nacos 配置：<code>xhunt_campaigns</code>（结构：<code>{ version, campaigns: [] }</code>）
+    </p>
+  </div>
+
+  <div class="campaigns-toolbar">
+    <div class="left">
+      <span class="muted"
+        >当前 dataId：<code id="campaigns-dataid">xhunt_campaigns</code></span
+      >
+      <span class="muted">group：<code>DEFAULT_GROUP</code></span>
+    </div>
+
+    <div class="right">
+      <input
+        id="campaigns-search"
+        type="text"
+        placeholder="🔎 搜索活动（id / campaignKey / 标题）"
+        style="min-width: 280px"
+      />
+      <button class="btn primary" id="campaigns-refresh">🔄 从 Nacos 重新加载</button>
+      <button class="btn" id="campaigns-new">➕ 新增活动</button>
+      <button class="btn" id="campaigns-duplicate" disabled>🧬 复制活动</button>
+      <button class="btn danger" id="campaigns-delete" disabled>🗑️ 删除当前</button>
+      <button class="btn success" id="campaigns-publish" disabled>
+        🚀 发布到 Nacos
+      </button>
+    </div>
+  </div>
+
+  <div class="campaigns-body">
+    <div class="list">
+      <div class="list-header">
+        <strong>活动列表</strong>
+        <span class="muted" id="campaigns-count">0 个</span>
+      </div>
+      <div class="list-items" id="campaigns-list"></div>
+    </div>
+
+    <div class="editor">
+      <div class="editor-header">
+        <div>
+          <strong>编辑</strong>
+          <span class="muted" id="campaigns-editor-hint">选择左侧一条活动开始编辑</span>
+        </div>
+        <div class="editor-actions">
+          <button class="btn" id="campaigns-edit-current-json" disabled>
+            &lt;/&gt; 当前活动 JSON
+          </button>
+          <button class="btn" id="campaigns-edit-config-json">
+            &lt;/&gt; 全量配置 JSON
+          </button>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>version</label>
+          <input id="campaigns-version" type="number" min="1" step="1" />
+        </div>
+        <div class="field">
+          <label>enabled</label>
+          <label class="switch">
+            <input id="campaigns-enabled" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="field">
+          <label>testingPhase</label>
+          <label class="switch">
+            <input id="campaigns-testingPhase" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="field">
+          <label>showExtraComponents</label>
+          <label class="switch">
+            <input id="campaigns-showExtraComponents" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>id（唯一）</label>
+          <input id="campaigns-id" type="text" placeholder="例如：bybit-hunter" />
+        </div>
+        <div class="field">
+          <label>campaignKey</label>
+          <input id="campaigns-campaignKey" type="text" placeholder="例如：bybit" />
+        </div>
+        <div class="field">
+          <label>hotTweetsKey</label>
+          <input id="campaigns-hotTweetsKey" type="text" placeholder="例如：bybit" />
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">展示名称（DisplayName）</div>
+        <div class="field-row">
+          <div class="field">
+            <label>中文</label>
+            <input id="campaigns-displayName-zh" type="text" />
+          </div>
+          <div class="field">
+            <label>English</label>
+            <input id="campaigns-displayName-en" type="text" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">报名窗口（Enrollment Window）</div>
+        <div class="field-row">
+          <div class="field">
+            <label>startAt（本地时间）</label>
+            <input id="campaigns-startAt" type="datetime-local" />
+          </div>
+          <div class="field">
+            <label>endAt（本地时间）</label>
+            <input id="campaigns-endAt" type="datetime-local" />
+          </div>
+        </div>
+        <div class="muted" style="margin-top: 6px">
+          保存时会转换为 UTC ISO 字符串（例如 <code>2025-12-10T00:00:00Z</code>）。
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">文案（Copy）</div>
+        <div class="field-row">
+          <div class="field">
+            <label>emoji</label>
+            <input id="campaigns-copy-emoji" type="text" placeholder="例如：🎉" />
+          </div>
+          <div class="field">
+            <label>ctaText（zh）</label>
+            <input id="campaigns-copy-ctaText-zh" type="text" />
+          </div>
+          <div class="field">
+            <label>ctaText（en）</label>
+            <input id="campaigns-copy-ctaText-en" type="text" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>title（zh）</label>
+            <input id="campaigns-copy-title-zh" type="text" />
+          </div>
+          <div class="field">
+            <label>title（en）</label>
+            <input id="campaigns-copy-title-en" type="text" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>shortTitle（zh）</label>
+            <input id="campaigns-copy-shortTitle-zh" type="text" />
+          </div>
+          <div class="field">
+            <label>shortTitle（en）</label>
+            <input id="campaigns-copy-shortTitle-en" type="text" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>goToOfficialText（zh）</label>
+            <input id="campaigns-copy-goToOfficialText-zh" type="text" />
+          </div>
+          <div class="field">
+            <label>goToOfficialText（en）</label>
+            <input id="campaigns-copy-goToOfficialText-en" type="text" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>viewGuideText（zh）</label>
+            <input id="campaigns-copy-viewGuideText-zh" type="text" />
+          </div>
+          <div class="field">
+            <label>viewGuideText（en）</label>
+            <input id="campaigns-copy-viewGuideText-en" type="text" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">链接（Links）</div>
+        <div class="field-row">
+          <div class="field">
+            <label>guideUrl</label>
+            <input id="campaigns-links-guideUrl" type="text" placeholder="https://..." />
+          </div>
+          <div class="field">
+            <label>activeUrl</label>
+            <input id="campaigns-links-activeUrl" type="text" placeholder="https://..." />
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">名单（每行一个）</div>
+        <div class="field-row">
+          <div class="field">
+            <label>testList</label>
+            <textarea id="campaigns-testList" rows="3" placeholder="luoyukun4"></textarea>
+          </div>
+          <div class="field">
+            <label>targetUserIds</label>
+            <textarea
+              id="campaigns-targetUserIds"
+              rows="3"
+              placeholder="bybit_web3&#10;Bybit__Alpha"
+            ></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          Logos
+          <button class="btn" id="campaigns-logos-add" type="button" disabled>
+            ➕ 添加 Logo
+          </button>
+        </div>
+        <div class="repeaters" id="campaigns-logos"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          Tasks
+          <button class="btn" id="campaigns-tasks-add" type="button" disabled>
+            ➕ 添加 Task
+          </button>
+        </div>
+        <div class="repeaters" id="campaigns-tasks"></div>
+      </div>
+
+      <div class="preview">
+        <div class="preview-header">
+          <strong>预览</strong>
+          <span class="muted">（用于快速确认核心信息）</span>
+        </div>
+        <div class="preview-box" id="campaigns-preview"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="campaigns-toast" id="campaigns-toast" style="display: none"></div>
+
+  <!-- JSON 源码编辑模态框 -->
+  <div class="json-modal-overlay" id="campaigns-json-modal" style="display: none">
+    <div class="json-modal-panel">
+      <div class="json-modal-header">
+        <h3 id="campaigns-json-modal-title">编辑 JSON</h3>
+        <button class="close-btn" id="campaigns-json-modal-close" type="button">
+          &times;
+        </button>
+      </div>
+      <div class="json-modal-body">
+        <textarea
+          id="campaigns-json-source"
+          placeholder="请输入或粘贴 JSON..."
+          spellcheck="false"
+        ></textarea>
+      </div>
+      <div class="json-modal-footer">
+        <button class="btn" id="campaigns-json-modal-cancel" type="button">
+          取消
+        </button>
+        <button class="btn primary" id="campaigns-json-modal-save" type="button">
+          保存
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .campaigns-container {
+    padding: 20px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  .campaigns-header h2 {
+    margin: 0 0 6px;
+    color: #2c3e50;
+  }
+  .campaigns-header p {
+    margin: 0 0 16px;
+    color: #7f8c8d;
+    font-size: 14px;
+  }
+  .campaigns-toolbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    align-items: center;
+  }
+  .campaigns-toolbar .left {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .campaigns-toolbar .right {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .muted {
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  .campaigns-body {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    .campaigns-body {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .list {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 12px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .list-items {
+    max-height: 740px;
+    overflow: auto;
+  }
+  .item {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+  }
+  .item:hover {
+    background: #f9fafb;
+  }
+  .item.active {
+    background: #eff6ff;
+    border-left: 3px solid #3b82f6;
+  }
+  .item-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: baseline;
+    font-weight: 700;
+    color: #111827;
+    font-size: 14px;
+    margin-bottom: 4px;
+    line-height: 1.2;
+  }
+  .chips {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+    background: #fff;
+  }
+  .chip.on {
+    border-color: #86efac;
+    background: #ecfdf5;
+    color: #065f46;
+  }
+  .chip.testing {
+    border-color: #fde68a;
+    background: #fffbeb;
+    color: #92400e;
+  }
+  .item-meta {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .editor {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .editor-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .field-row .field:nth-child(4) {
+    grid-column: span 1;
+  }
+  @media (max-width: 1200px) {
+    .field-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 700px) {
+    .field-row {
+      grid-template-columns: 1fr;
+    }
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .field label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 13px;
+  }
+  .field input,
+  .field textarea,
+  .field select {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 10px 10px;
+    font-size: 14px;
+    outline: none;
+  }
+  .field textarea {
+    resize: vertical;
+    line-height: 1.5;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, sans-serif;
+  }
+  .field input:focus,
+  .field textarea:focus,
+  .field select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  }
+
+  .section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #f1f5f9;
+  }
+  .section-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: 10px;
+  }
+
+  .repeaters {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .rep-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px;
+    background: #fafafa;
+  }
+  .rep-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .rep-title {
+    font-weight: 800;
+    color: #111827;
+    font-size: 13px;
+  }
+  .rep-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .preview {
+    margin-top: 14px;
+  }
+  .preview-header {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .preview-box {
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 120px;
+    background: #fafafa;
+    color: #111827;
+    line-height: 1.55;
+  }
+  .preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  @media (max-width: 900px) {
+    .preview-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  .preview-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px;
+  }
+  .preview-card .k {
+    color: #6b7280;
+    font-size: 12px;
+  }
+  .preview-card .v {
+    color: #111827;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+
+  /* Toggle switch */
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+  }
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .switch .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #d1d5db;
+    transition: 0.2s;
+    border-radius: 999px;
+  }
+  .switch .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 999px;
+  }
+  .switch input:checked + .slider {
+    background-color: #3b82f6;
+  }
+  .switch input:checked + .slider:before {
+    transform: translateX(20px);
+  }
+
+  .campaigns-toast {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    max-width: 520px;
+    background: #111827;
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    font-size: 13px;
+    z-index: 9999;
+  }
+
+  /* JSON Modal */
+  .json-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+  }
+  .json-modal-panel {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    width: 86%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    max-height: 84vh;
+    margin: 20px;
+  }
+  @media (max-width: 768px) {
+    .json-modal-panel {
+      width: 95%;
+      max-height: 92vh;
+      margin: 10px;
+    }
+    #campaigns-json-source {
+      min-height: 260px;
+      font-size: 12px;
+    }
+  }
+  .json-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .json-modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+  .json-modal-header .close-btn {
+    background: none;
+    border: none;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+  }
+  .json-modal-header .close-btn:hover {
+    background: #f3f4f6;
+    color: #111827;
+  }
+  .json-modal-body {
+    padding: 16px;
+    overflow: auto;
+    flex-grow: 1;
+    position: relative;
+  }
+  #campaigns-json-source {
+    width: 100%;
+    height: 56vh;
+    min-height: 320px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    background: #fafafa;
+    color: #111827;
+  }
+  #campaigns-json-source:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    background: #fff;
+  }
+  .json-modal-body::after {
+    content: "提示：按 ESC 关闭，Ctrl/Cmd + Enter 保存";
+    position: absolute;
+    bottom: 8px;
+    right: 16px;
+    font-size: 11px;
+    color: #9ca3af;
+    pointer-events: none;
+  }
+  .json-modal-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #e5e7eb;
+    text-align: right;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+</style>
+
+<script>
+  (function () {
+    let inited = false;
+    const DATA_ID = "xhunt_campaigns";
+    const GROUP = "DEFAULT_GROUP";
+
+    let config = { version: 3, campaigns: [] };
+    let currentIndex = -1;
+    let dirty = false;
+    let search = "";
+    let jsonModalMode = "config"; // 'config' | 'campaign'
+
+    function $(id) {
+      return document.getElementById(id);
+    }
+
+    function toast(msg, type) {
+      const el = $("campaigns-toast");
+      if (!el) return;
+      el.textContent = msg;
+      el.style.display = "block";
+      el.style.background =
+        type === "error"
+          ? "#991b1b"
+          : type === "success"
+          ? "#065f46"
+          : "#111827";
+      setTimeout(() => {
+        el.style.display = "none";
+      }, 2400);
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement("div");
+      div.textContent = s == null ? "" : String(s);
+      return div.innerHTML;
+    }
+
+    function safeNumber(v, fallback) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    function normalizeConfig(obj) {
+      const out = obj && typeof obj === "object" ? obj : {};
+      if (!Array.isArray(out.campaigns)) out.campaigns = [];
+      out.version = safeNumber(out.version, 3);
+      return out;
+    }
+
+    function splitLinesToList(text) {
+      if (!text) return [];
+      return String(text)
+        .split(/[\n,]/g)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
+    function listToLines(arr) {
+      if (!Array.isArray(arr) || arr.length === 0) return "";
+      return arr.map((s) => String(s)).join("\n");
+    }
+
+    function toDatetimeLocal(isoZ) {
+      if (!isoZ) return "";
+      try {
+        const d = new Date(isoZ);
+        if (isNaN(d.getTime())) return "";
+        const pad = (n) => String(n).padStart(2, "0");
+        const yyyy = d.getFullYear();
+        const mm = pad(d.getMonth() + 1);
+        const dd = pad(d.getDate());
+        const hh = pad(d.getHours());
+        const mi = pad(d.getMinutes());
+        return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function fromDatetimeLocalToIsoZ(localValue) {
+      if (!localValue) return "";
+      try {
+        const d = new Date(localValue);
+        if (isNaN(d.getTime())) return "";
+        return d.toISOString().replace(/\.\d{3}Z$/, "Z");
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function getCurrentCampaign() {
+      return config.campaigns[currentIndex] || null;
+    }
+
+    async function apiGetConfig(dataId) {
+      const resp = await fetch(
+        `/api/xhunt/stats/nacos/config?dataId=${encodeURIComponent(
+          dataId
+        )}&group=${encodeURIComponent(GROUP)}`,
+        {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        }
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (!json.success) throw new Error(json.error || "加载失败");
+      return json.data;
+    }
+
+    async function apiPublishConfig({ dataId, content, group }) {
+      const resp = await fetch(`/api/xhunt/stats/nacos/config`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          dataId,
+          group: group || GROUP,
+          content,
+          type: "json",
+        }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (!json.success) throw new Error(json.error || "发布失败");
+      return json.data;
+    }
+
+    function isEditorEnabled() {
+      return currentIndex >= 0 && !!getCurrentCampaign();
+    }
+
+    function setControlsEnabled(enabled) {
+      $("campaigns-duplicate").disabled = !enabled;
+      $("campaigns-delete").disabled = !enabled;
+      $("campaigns-edit-current-json").disabled = !enabled;
+      $("campaigns-logos-add").disabled = !enabled;
+      $("campaigns-tasks-add").disabled = !enabled;
+      setEditorInputsEnabled(enabled);
+    }
+
+    function setEditorInputsEnabled(enabled) {
+      const ids = [
+        "campaigns-enabled",
+        "campaigns-testingPhase",
+        "campaigns-showExtraComponents",
+        "campaigns-id",
+        "campaigns-campaignKey",
+        "campaigns-hotTweetsKey",
+        "campaigns-displayName-zh",
+        "campaigns-displayName-en",
+        "campaigns-startAt",
+        "campaigns-endAt",
+        "campaigns-copy-emoji",
+        "campaigns-copy-ctaText-zh",
+        "campaigns-copy-ctaText-en",
+        "campaigns-copy-title-zh",
+        "campaigns-copy-title-en",
+        "campaigns-copy-shortTitle-zh",
+        "campaigns-copy-shortTitle-en",
+        "campaigns-copy-goToOfficialText-zh",
+        "campaigns-copy-goToOfficialText-en",
+        "campaigns-copy-viewGuideText-zh",
+        "campaigns-copy-viewGuideText-en",
+        "campaigns-links-guideUrl",
+        "campaigns-links-activeUrl",
+        "campaigns-testList",
+        "campaigns-targetUserIds",
+      ];
+      ids.forEach((id) => {
+        const el = $(id);
+        if (el) el.disabled = !enabled;
+      });
+    }
+
+    function setByPath(obj, path, value) {
+      const parts = String(path).split(".");
+      let cur = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const k = parts[i];
+        if (!cur[k] || typeof cur[k] !== "object") cur[k] = {};
+        cur = cur[k];
+      }
+      cur[parts[parts.length - 1]] = value;
+    }
+
+    function renderList() {
+      const listEl = $("campaigns-list");
+      const countEl = $("campaigns-count");
+      if (!listEl) return;
+
+      const campaigns = Array.isArray(config.campaigns) ? config.campaigns : [];
+      const q = String(search || "").trim().toLowerCase();
+
+      const filtered = campaigns
+        .map((c, idx) => ({ c, idx }))
+        .filter(({ c }) => {
+          if (!q) return true;
+          const hay = [
+            c?.id,
+            c?.campaignKey,
+            c?.displayName?.zh,
+            c?.displayName?.en,
+            c?.copy?.title?.zh,
+            c?.copy?.title?.en,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(q);
+        })
+        .sort((a, b) => {
+          const ea = a.c?.enabled ? 1 : 0;
+          const eb = b.c?.enabled ? 1 : 0;
+          if (ea !== eb) return eb - ea; // enabled first
+          const sa = Date.parse(a.c?.enrollmentWindow?.startAt || "") || 0;
+          const sb = Date.parse(b.c?.enrollmentWindow?.startAt || "") || 0;
+          return sb - sa;
+        });
+
+      listEl.innerHTML =
+        filtered
+          .map(({ c, idx }) => {
+            const active = idx === currentIndex ? "active" : "";
+            const title =
+              c?.displayName?.zh ||
+              c?.displayName?.en ||
+              c?.copy?.title?.zh ||
+              c?.id ||
+              "(未命名)";
+            const startAt = c?.enrollmentWindow?.startAt || "-";
+            const endAt = c?.enrollmentWindow?.endAt || "-";
+            const chips = [
+              c?.enabled ? `<span class="chip on">enabled</span>` : `<span class="chip">disabled</span>`,
+              c?.testingPhase ? `<span class="chip testing">testing</span>` : "",
+            ].filter(Boolean);
+            return `
+              <div class="item ${active}" data-idx="${idx}">
+                <div class="item-title">
+                  <span>${escapeHtml(title)}</span>
+                  <span class="chips">${chips.join("")}</span>
+                </div>
+                <div class="item-meta">
+                  id: <code>${escapeHtml(c?.id || "-")}</code>
+                  · key: <code>${escapeHtml(c?.campaignKey || "-")}</code>
+                </div>
+                <div class="item-meta">
+                  window: ${escapeHtml(startAt)} → ${escapeHtml(endAt)}
+                </div>
+              </div>
+            `;
+          })
+          .join("") ||
+        `<div style="padding:14px;color:#9ca3af;">暂无活动，点击“新增活动”创建</div>`;
+
+      if (countEl) countEl.textContent = `${filtered.length} 个`;
+
+      listEl.querySelectorAll(".item").forEach((node) => {
+        node.addEventListener("click", () => {
+          const idx = Number(node.getAttribute("data-idx"));
+          selectCampaign(idx);
+        });
+      });
+    }
+
+    function renderRepeaters() {
+      const c = getCurrentCampaign();
+      const logosEl = $("campaigns-logos");
+      const tasksEl = $("campaigns-tasks");
+      if (!logosEl || !tasksEl) return;
+
+      const logos = Array.isArray(c?.logos) ? c.logos : [];
+      const tasks = Array.isArray(c?.tasks) ? c.tasks : [];
+
+      logosEl.innerHTML =
+        logos
+          .map((it, i) => {
+            return `
+              <div class="rep-card" data-kind="logos" data-index="${i}">
+                <div class="rep-header">
+                  <div class="rep-title">#${i + 1} Logo</div>
+                  <div class="rep-actions">
+                    <button class="btn" type="button" data-action="up">⬆︎</button>
+                    <button class="btn" type="button" data-action="down">⬇︎</button>
+                    <button class="btn danger" type="button" data-action="remove">删除</button>
+                  </div>
+                </div>
+                <div class="field-row">
+                  <div class="field">
+                    <label>image</label>
+                    <input type="text" data-field="image" value="${escapeHtml(
+                      it?.image || ""
+                    )}" />
+                  </div>
+                  <div class="field">
+                    <label>url</label>
+                    <input type="text" data-field="url" value="${escapeHtml(
+                      it?.url || ""
+                    )}" />
+                  </div>
+                  <div class="field">
+                    <label>label</label>
+                    <input type="text" data-field="label" value="${escapeHtml(
+                      it?.label || ""
+                    )}" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>ringClassName</label>
+                  <input type="text" data-field="ringClassName" value="${escapeHtml(
+                    it?.ringClassName || ""
+                  )}" />
+                </div>
+              </div>
+            `;
+          })
+          .join("") || `<div class="muted">暂无 logos，可点击上方“添加 Logo”。</div>`;
+
+      tasksEl.innerHTML =
+        tasks
+          .map((it, i) => {
+            const type = it?.type || "twitter";
+            const auto = !!it?.autoComplete;
+            return `
+              <div class="rep-card" data-kind="tasks" data-index="${i}">
+                <div class="rep-header">
+                  <div class="rep-title">#${i + 1} Task</div>
+                  <div class="rep-actions">
+                    <button class="btn" type="button" data-action="up">⬆︎</button>
+                    <button class="btn" type="button" data-action="down">⬇︎</button>
+                    <button class="btn danger" type="button" data-action="remove">删除</button>
+                  </div>
+                </div>
+
+                <div class="field-row">
+                  <div class="field">
+                    <label>id</label>
+                    <input type="text" data-field="id" value="${escapeHtml(
+                      it?.id || ""
+                    )}" />
+                  </div>
+                  <div class="field">
+                    <label>type</label>
+                    <select data-field="type">
+                      <option value="twitter" ${
+                        type === "twitter" ? "selected" : ""
+                      }>twitter</option>
+                      <option value="telegram" ${
+                        type === "telegram" ? "selected" : ""
+                      }>telegram</option>
+                      <option value="other" ${
+                        type === "other" ? "selected" : ""
+                      }>other</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>autoComplete</label>
+                    <label class="switch">
+                      <input type="checkbox" data-field="autoComplete" ${
+                        auto ? "checked" : ""
+                      } />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="field-row">
+                  <div class="field">
+                    <label>title.zh</label>
+                    <input type="text" data-field="title.zh" value="${escapeHtml(
+                      it?.title?.zh || ""
+                    )}" />
+                  </div>
+                  <div class="field">
+                    <label>title.en</label>
+                    <input type="text" data-field="title.en" value="${escapeHtml(
+                      it?.title?.en || ""
+                    )}" />
+                  </div>
+                  <div class="field">
+                    <label>url</label>
+                    <input type="text" data-field="url" value="${escapeHtml(
+                      it?.url || ""
+                    )}" />
+                  </div>
+                </div>
+              </div>
+            `;
+          })
+          .join("") || `<div class="muted">暂无 tasks，可点击上方“添加 Task”。</div>`;
+    }
+
+    function renderPreview() {
+      const c = getCurrentCampaign();
+      const el = $("campaigns-preview");
+      if (!el) return;
+      if (!c) {
+        el.innerHTML =
+          '<div class="muted">选择一条活动后，会在这里展示关键字段的快速预览。</div>';
+        return;
+      }
+
+      const title =
+        c?.displayName?.zh ||
+        c?.displayName?.en ||
+        c?.copy?.title?.zh ||
+        c?.id ||
+        "-";
+      const win = `${c?.enrollmentWindow?.startAt || "-"} → ${
+        c?.enrollmentWindow?.endAt || "-"
+      }`;
+      const tasksCount = Array.isArray(c?.tasks) ? c.tasks.length : 0;
+      const logosCount = Array.isArray(c?.logos) ? c.logos.length : 0;
+      el.innerHTML = `
+        <div class="preview-grid">
+          <div class="preview-card">
+            <div class="k">标题</div>
+            <div class="v">${escapeHtml(title)}</div>
+            <div class="muted" style="margin-top:6px">id: <code>${escapeHtml(
+              c?.id || "-"
+            )}</code> · key: <code>${escapeHtml(
+        c?.campaignKey || "-"
+      )}</code></div>
+          </div>
+          <div class="preview-card">
+            <div class="k">报名窗口</div>
+            <div class="v">${escapeHtml(win)}</div>
+            <div class="muted" style="margin-top:6px">tasks: ${tasksCount} · logos: ${logosCount}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function clearEditor() {
+      $("campaigns-editor-hint").textContent = "选择左侧一条活动开始编辑";
+      $("campaigns-enabled").checked = false;
+      $("campaigns-testingPhase").checked = false;
+      $("campaigns-showExtraComponents").checked = false;
+      [
+        "campaigns-id",
+        "campaigns-campaignKey",
+        "campaigns-hotTweetsKey",
+        "campaigns-displayName-zh",
+        "campaigns-displayName-en",
+        "campaigns-startAt",
+        "campaigns-endAt",
+        "campaigns-copy-emoji",
+        "campaigns-copy-ctaText-zh",
+        "campaigns-copy-ctaText-en",
+        "campaigns-copy-title-zh",
+        "campaigns-copy-title-en",
+        "campaigns-copy-shortTitle-zh",
+        "campaigns-copy-shortTitle-en",
+        "campaigns-copy-goToOfficialText-zh",
+        "campaigns-copy-goToOfficialText-en",
+        "campaigns-copy-viewGuideText-zh",
+        "campaigns-copy-viewGuideText-en",
+        "campaigns-links-guideUrl",
+        "campaigns-links-activeUrl",
+        "campaigns-testList",
+        "campaigns-targetUserIds",
+      ].forEach((id) => {
+        const el = $(id);
+        if (el) el.value = "";
+      });
+      $("campaigns-logos").innerHTML = "";
+      $("campaigns-tasks").innerHTML = "";
+      renderPreview();
+    }
+
+    function selectCampaign(idx) {
+      currentIndex = idx;
+      const c = getCurrentCampaign();
+
+      if (!c) {
+        setControlsEnabled(false);
+        clearEditor();
+        renderList();
+        return;
+      }
+
+      // ensure structures
+      if (!c.enrollmentWindow || typeof c.enrollmentWindow !== "object")
+        c.enrollmentWindow = { startAt: "", endAt: "" };
+      if (!c.displayName || typeof c.displayName !== "object")
+        c.displayName = { zh: "", en: "" };
+      if (!c.copy || typeof c.copy !== "object")
+        c.copy = {
+          title: { zh: "", en: "" },
+          shortTitle: { zh: "", en: "" },
+          emoji: "",
+          ctaText: { zh: "", en: "" },
+          goToOfficialText: { zh: "", en: "" },
+          viewGuideText: { zh: "", en: "" },
+        };
+      if (!c.copy.title) c.copy.title = { zh: "", en: "" };
+      if (!c.copy.shortTitle) c.copy.shortTitle = { zh: "", en: "" };
+      if (!c.copy.ctaText) c.copy.ctaText = { zh: "", en: "" };
+      if (!c.copy.goToOfficialText) c.copy.goToOfficialText = { zh: "", en: "" };
+      if (!c.copy.viewGuideText) c.copy.viewGuideText = { zh: "", en: "" };
+      if (!c.links || typeof c.links !== "object") c.links = { guideUrl: "", activeUrl: "" };
+      if (!Array.isArray(c.testList)) c.testList = [];
+      if (!Array.isArray(c.targetUserIds)) c.targetUserIds = [];
+      if (!Array.isArray(c.logos)) c.logos = [];
+      if (!Array.isArray(c.tasks)) c.tasks = [];
+
+      setControlsEnabled(true);
+
+      $("campaigns-editor-hint").textContent = `正在编辑：${c.id || "(未设置 id)"}`;
+      $("campaigns-enabled").checked = !!c.enabled;
+      $("campaigns-testingPhase").checked = !!c.testingPhase;
+      $("campaigns-showExtraComponents").checked = !!c.showExtraComponents;
+
+      $("campaigns-id").value = c.id || "";
+      $("campaigns-campaignKey").value = c.campaignKey || "";
+      $("campaigns-hotTweetsKey").value = c.hotTweetsKey || "";
+
+      $("campaigns-displayName-zh").value = c.displayName.zh || "";
+      $("campaigns-displayName-en").value = c.displayName.en || "";
+
+      $("campaigns-startAt").value = toDatetimeLocal(c.enrollmentWindow.startAt);
+      $("campaigns-endAt").value = toDatetimeLocal(c.enrollmentWindow.endAt);
+
+      $("campaigns-copy-emoji").value = c.copy.emoji || "";
+      $("campaigns-copy-ctaText-zh").value = c.copy.ctaText.zh || "";
+      $("campaigns-copy-ctaText-en").value = c.copy.ctaText.en || "";
+      $("campaigns-copy-title-zh").value = c.copy.title.zh || "";
+      $("campaigns-copy-title-en").value = c.copy.title.en || "";
+      $("campaigns-copy-shortTitle-zh").value = c.copy.shortTitle.zh || "";
+      $("campaigns-copy-shortTitle-en").value = c.copy.shortTitle.en || "";
+      $("campaigns-copy-goToOfficialText-zh").value =
+        c.copy.goToOfficialText.zh || "";
+      $("campaigns-copy-goToOfficialText-en").value =
+        c.copy.goToOfficialText.en || "";
+      $("campaigns-copy-viewGuideText-zh").value =
+        c.copy.viewGuideText.zh || "";
+      $("campaigns-copy-viewGuideText-en").value =
+        c.copy.viewGuideText.en || "";
+
+      $("campaigns-links-guideUrl").value = c.links.guideUrl || "";
+      $("campaigns-links-activeUrl").value = c.links.activeUrl || "";
+
+      $("campaigns-testList").value = listToLines(c.testList);
+      $("campaigns-targetUserIds").value = listToLines(c.targetUserIds);
+
+      renderRepeaters();
+      renderPreview();
+      renderList();
+    }
+
+    function syncCampaignFromInputs() {
+      const c = getCurrentCampaign();
+      if (!c) return;
+
+      c.enabled = !!$("campaigns-enabled").checked;
+      c.testingPhase = !!$("campaigns-testingPhase").checked;
+      c.showExtraComponents = !!$("campaigns-showExtraComponents").checked;
+
+      c.id = $("campaigns-id").value.trim();
+      c.campaignKey = $("campaigns-campaignKey").value.trim();
+      c.hotTweetsKey = $("campaigns-hotTweetsKey").value.trim();
+
+      c.displayName = c.displayName || {};
+      c.displayName.zh = $("campaigns-displayName-zh").value;
+      c.displayName.en = $("campaigns-displayName-en").value;
+
+      c.enrollmentWindow = c.enrollmentWindow || {};
+      c.enrollmentWindow.startAt = fromDatetimeLocalToIsoZ($("campaigns-startAt").value);
+      c.enrollmentWindow.endAt = fromDatetimeLocalToIsoZ($("campaigns-endAt").value);
+
+      c.copy = c.copy || {};
+      c.copy.emoji = $("campaigns-copy-emoji").value;
+      setByPath(c.copy, "ctaText.zh", $("campaigns-copy-ctaText-zh").value);
+      setByPath(c.copy, "ctaText.en", $("campaigns-copy-ctaText-en").value);
+      setByPath(c.copy, "title.zh", $("campaigns-copy-title-zh").value);
+      setByPath(c.copy, "title.en", $("campaigns-copy-title-en").value);
+      setByPath(c.copy, "shortTitle.zh", $("campaigns-copy-shortTitle-zh").value);
+      setByPath(c.copy, "shortTitle.en", $("campaigns-copy-shortTitle-en").value);
+      setByPath(
+        c.copy,
+        "goToOfficialText.zh",
+        $("campaigns-copy-goToOfficialText-zh").value
+      );
+      setByPath(
+        c.copy,
+        "goToOfficialText.en",
+        $("campaigns-copy-goToOfficialText-en").value
+      );
+      setByPath(
+        c.copy,
+        "viewGuideText.zh",
+        $("campaigns-copy-viewGuideText-zh").value
+      );
+      setByPath(
+        c.copy,
+        "viewGuideText.en",
+        $("campaigns-copy-viewGuideText-en").value
+      );
+
+      c.links = c.links || {};
+      c.links.guideUrl = $("campaigns-links-guideUrl").value.trim();
+      c.links.activeUrl = $("campaigns-links-activeUrl").value.trim();
+
+      c.testList = splitLinesToList($("campaigns-testList").value);
+      c.targetUserIds = splitLinesToList($("campaigns-targetUserIds").value);
+
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      renderPreview();
+      renderList();
+    }
+
+    function bindInputSync() {
+      const ids = [
+        "campaigns-enabled",
+        "campaigns-testingPhase",
+        "campaigns-showExtraComponents",
+        "campaigns-id",
+        "campaigns-campaignKey",
+        "campaigns-hotTweetsKey",
+        "campaigns-displayName-zh",
+        "campaigns-displayName-en",
+        "campaigns-startAt",
+        "campaigns-endAt",
+        "campaigns-copy-emoji",
+        "campaigns-copy-ctaText-zh",
+        "campaigns-copy-ctaText-en",
+        "campaigns-copy-title-zh",
+        "campaigns-copy-title-en",
+        "campaigns-copy-shortTitle-zh",
+        "campaigns-copy-shortTitle-en",
+        "campaigns-copy-goToOfficialText-zh",
+        "campaigns-copy-goToOfficialText-en",
+        "campaigns-copy-viewGuideText-zh",
+        "campaigns-copy-viewGuideText-en",
+        "campaigns-links-guideUrl",
+        "campaigns-links-activeUrl",
+        "campaigns-testList",
+        "campaigns-targetUserIds",
+      ];
+
+      ids.forEach((id) => {
+        const el = $(id);
+        if (!el) return;
+        const evt = el.type === "checkbox" ? "change" : "input";
+        el.addEventListener(evt, () => {
+          if (!isEditorEnabled()) return;
+          syncCampaignFromInputs();
+        });
+      });
+
+      $("campaigns-version").addEventListener("input", () => {
+        config.version = safeNumber($("campaigns-version").value, 3);
+        dirty = true;
+        $("campaigns-publish").disabled = false;
+      });
+    }
+
+    function addLogo() {
+      const c = getCurrentCampaign();
+      if (!c) return;
+      c.logos = Array.isArray(c.logos) ? c.logos : [];
+      c.logos.push({
+        image: "",
+        url: "",
+        label: "",
+        ringClassName: "",
+      });
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      renderRepeaters();
+      renderPreview();
+    }
+
+    function addTask() {
+      const c = getCurrentCampaign();
+      if (!c) return;
+      c.tasks = Array.isArray(c.tasks) ? c.tasks : [];
+      c.tasks.push({
+        id: "",
+        title: { zh: "", en: "" },
+        url: "",
+        type: "twitter",
+        autoComplete: false,
+      });
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      renderRepeaters();
+      renderPreview();
+    }
+
+    function moveArrayItem(arr, from, to) {
+      if (!Array.isArray(arr)) return;
+      if (from < 0 || to < 0 || from >= arr.length || to >= arr.length) return;
+      const it = arr.splice(from, 1)[0];
+      arr.splice(to, 0, it);
+    }
+
+    function bindRepeatersEvents() {
+      function onRepInput(containerId, fieldSetter) {
+        const root = $(containerId);
+        if (!root) return;
+        root.addEventListener("input", (e) => {
+          const card = e.target.closest(".rep-card");
+          if (!card) return;
+          const kind = card.getAttribute("data-kind");
+          const index = Number(card.getAttribute("data-index"));
+          const field = e.target.getAttribute("data-field");
+          if (!kind || !field || !Number.isFinite(index)) return;
+
+          const c = getCurrentCampaign();
+          if (!c) return;
+          const arr = kind === "logos" ? c.logos : c.tasks;
+          if (!Array.isArray(arr) || !arr[index]) return;
+
+          const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
+          fieldSetter(arr[index], field, value);
+
+          dirty = true;
+          $("campaigns-publish").disabled = false;
+          renderPreview();
+          renderList();
+        });
+
+        root.addEventListener("change", (e) => {
+          if (e.target.tagName !== "SELECT" && e.target.type !== "checkbox") return;
+          const card = e.target.closest(".rep-card");
+          if (!card) return;
+          const kind = card.getAttribute("data-kind");
+          const index = Number(card.getAttribute("data-index"));
+          const field = e.target.getAttribute("data-field");
+          if (!kind || !field || !Number.isFinite(index)) return;
+          const c = getCurrentCampaign();
+          if (!c) return;
+          const arr = kind === "logos" ? c.logos : c.tasks;
+          if (!Array.isArray(arr) || !arr[index]) return;
+          const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
+          fieldSetter(arr[index], field, value);
+          dirty = true;
+          $("campaigns-publish").disabled = false;
+          renderPreview();
+          renderList();
+        });
+
+        root.addEventListener("click", (e) => {
+          const btn = e.target.closest("button[data-action]");
+          if (!btn) return;
+          const action = btn.getAttribute("data-action");
+          const card = btn.closest(".rep-card");
+          if (!card) return;
+          const kind = card.getAttribute("data-kind");
+          const index = Number(card.getAttribute("data-index"));
+          const c = getCurrentCampaign();
+          if (!c) return;
+          const arr = kind === "logos" ? c.logos : c.tasks;
+          if (!Array.isArray(arr)) return;
+
+          if (action === "remove") {
+            arr.splice(index, 1);
+          } else if (action === "up") {
+            moveArrayItem(arr, index, index - 1);
+          } else if (action === "down") {
+            moveArrayItem(arr, index, index + 1);
+          } else {
+            return;
+          }
+
+          dirty = true;
+          $("campaigns-publish").disabled = false;
+          renderRepeaters();
+          renderPreview();
+          renderList();
+        });
+      }
+
+      onRepInput("campaigns-logos", (obj, field, value) => {
+        obj[field] = value;
+      });
+      onRepInput("campaigns-tasks", (obj, field, value) => {
+        if (field.includes(".")) {
+          setByPath(obj, field, value);
+        } else {
+          obj[field] = value;
+        }
+      });
+    }
+
+    function newCampaign() {
+      const nowId = `new-campaign-${Date.now()}`;
+      const c = {
+        id: nowId,
+        campaignKey: "",
+        enabled: false,
+        testList: [],
+        testingPhase: false,
+        enrollmentWindow: { startAt: "", endAt: "" },
+        displayName: { zh: "", en: "" },
+        logos: [],
+        copy: {
+          title: { zh: "", en: "" },
+          shortTitle: { zh: "", en: "" },
+          emoji: "",
+          ctaText: { zh: "", en: "" },
+          goToOfficialText: { zh: "", en: "" },
+          viewGuideText: { zh: "", en: "" },
+        },
+        tasks: [],
+        links: { guideUrl: "", activeUrl: "" },
+        showExtraComponents: true,
+        targetUserIds: [],
+        hotTweetsKey: "",
+      };
+      config.campaigns.unshift(c);
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      renderList();
+      selectCampaign(0);
+      toast("已新增一条活动（未发布）", "info");
+    }
+
+    function duplicateCampaign() {
+      const c = getCurrentCampaign();
+      if (!c) return;
+      const copy = JSON.parse(JSON.stringify(c));
+      copy.id = `${c.id || "campaign"}-copy-${Date.now()}`;
+      config.campaigns.splice(currentIndex + 1, 0, copy);
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      renderList();
+      selectCampaign(currentIndex + 1);
+      toast("已复制活动（未发布）", "info");
+    }
+
+    function deleteCampaign() {
+      const c = getCurrentCampaign();
+      if (!c) return;
+      const ok = window.confirm(
+        `确认删除该活动？\n\nid=${c.id || ""}\n\n提示：删除后需要点击“发布到 Nacos”才会生效。`
+      );
+      if (!ok) return;
+      config.campaigns.splice(currentIndex, 1);
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      currentIndex = -1;
+      setControlsEnabled(false);
+      clearEditor();
+      renderList();
+      toast("已删除（未发布）", "info");
+    }
+
+    async function loadFromNacos() {
+      $("campaigns-dataid").textContent = DATA_ID;
+      toast("正在从 Nacos 加载...", "info");
+      const data = await apiGetConfig(DATA_ID);
+      let parsed;
+      try {
+        parsed = JSON.parse(data.content || "{}");
+      } catch (e) {
+        throw new Error("Nacos content 不是合法 JSON，请检查当前配置内容");
+      }
+      config = normalizeConfig(parsed);
+      $("campaigns-version").value = String(config.version || 3);
+      dirty = false;
+      $("campaigns-publish").disabled = true;
+      currentIndex = -1;
+      setControlsEnabled(false);
+      renderList();
+      clearEditor();
+      toast("加载完成", "success");
+    }
+
+    async function publish() {
+      const content = JSON.stringify(config, null, 2);
+      const ok = window.confirm(
+        `确认发布到 Nacos？\n\n将覆盖 dataId=${DATA_ID} 的 content（对象整体覆盖）。`
+      );
+      if (!ok) return;
+      toast("正在发布到 Nacos...", "info");
+      await apiPublishConfig({ dataId: DATA_ID, content, group: GROUP });
+      dirty = false;
+      $("campaigns-publish").disabled = true;
+      toast("发布成功", "success");
+    }
+
+    function showJsonModal(mode) {
+      jsonModalMode = mode;
+      const modal = $("campaigns-json-modal");
+      const textarea = $("campaigns-json-source");
+      const title = $("campaigns-json-modal-title");
+      if (!modal || !textarea || !title) return;
+
+      if (mode === "campaign") {
+        const c = getCurrentCampaign();
+        if (!c) return;
+        title.textContent = "编辑当前活动 JSON";
+        textarea.value = JSON.stringify(c, null, 2);
+      } else {
+        title.textContent = "编辑全量配置 JSON";
+        textarea.value = JSON.stringify(config, null, 2);
+      }
+
+      modal.style.display = "flex";
+      setTimeout(() => {
+        textarea.focus();
+        textarea.select();
+      }, 80);
+    }
+
+    function hideJsonModal() {
+      const modal = $("campaigns-json-modal");
+      if (modal) modal.style.display = "none";
+    }
+
+    function saveJsonFromModal() {
+      const textarea = $("campaigns-json-source");
+      if (!textarea) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(textarea.value || "");
+      } catch (e) {
+        toast("JSON 解析失败，请检查格式", "error");
+        return;
+      }
+
+      if (jsonModalMode === "campaign") {
+        const c = getCurrentCampaign();
+        if (!c) return;
+        config.campaigns[currentIndex] = parsed;
+        dirty = true;
+        $("campaigns-publish").disabled = false;
+        hideJsonModal();
+        selectCampaign(currentIndex);
+        toast("已更新当前活动（未发布）", "success");
+        return;
+      }
+
+      config = normalizeConfig(parsed);
+      $("campaigns-version").value = String(config.version || 3);
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      hideJsonModal();
+      currentIndex = -1;
+      setControlsEnabled(false);
+      renderList();
+      clearEditor();
+      toast("已更新全量配置（未发布）", "success");
+    }
+
+    function init() {
+      if (inited) return;
+      inited = true;
+
+      // init base
+      $("campaigns-version").value = String(config.version || 3);
+      $("campaigns-publish").disabled = true;
+      setControlsEnabled(false);
+      setEditorInputsEnabled(false);
+      renderPreview();
+
+      bindInputSync();
+      bindRepeatersEvents();
+
+      $("campaigns-search").addEventListener("input", (e) => {
+        search = e.target.value || "";
+        renderList();
+      });
+
+      $("campaigns-refresh").addEventListener("click", async () => {
+        if (dirty) {
+          const ok = window.confirm(
+            "你当前有未发布的修改，重新加载会丢失这些修改。\n确认重新加载？"
+          );
+          if (!ok) return;
+        }
+        try {
+          await loadFromNacos();
+        } catch (e) {
+          toast("加载失败：" + (e.message || "未知错误"), "error");
+        }
+      });
+
+      $("campaigns-new").addEventListener("click", () => {
+        newCampaign();
+      });
+      $("campaigns-duplicate").addEventListener("click", duplicateCampaign);
+      $("campaigns-delete").addEventListener("click", deleteCampaign);
+
+      $("campaigns-publish").addEventListener("click", () => {
+        publish().catch((e) => toast("发布失败：" + e.message, "error"));
+      });
+
+      $("campaigns-logos-add").addEventListener("click", addLogo);
+      $("campaigns-tasks-add").addEventListener("click", addTask);
+
+      // JSON modal bindings
+      $("campaigns-edit-current-json").addEventListener("click", () =>
+        showJsonModal("campaign")
+      );
+      $("campaigns-edit-config-json").addEventListener("click", () =>
+        showJsonModal("config")
+      );
+      $("campaigns-json-modal-close").addEventListener("click", hideJsonModal);
+      $("campaigns-json-modal-cancel").addEventListener("click", hideJsonModal);
+      $("campaigns-json-modal-save").addEventListener("click", saveJsonFromModal);
+      const modal = $("campaigns-json-modal");
+      const src = $("campaigns-json-source");
+      if (modal) {
+        modal.addEventListener("click", (e) => {
+          if (e.target === modal) hideJsonModal();
+        });
+      }
+      if (src) {
+        src.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") hideJsonModal();
+          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            e.preventDefault();
+            saveJsonFromModal();
+          }
+        });
+      }
+
+      // first load
+      loadFromNacos().catch((e) => toast("加载失败：" + e.message, "error"));
+    }
+
+    function tryInitIfActive() {
+      const pane = document.getElementById("nacos-campaigns");
+      if (pane && pane.classList.contains("active")) {
+        setTimeout(init, 30);
+      }
+    }
+
+    document.addEventListener("click", function (e) {
+      const tabBtn = e.target.closest(".tab-btn");
+      if (tabBtn && tabBtn.getAttribute("data-tab") === "nacos-campaigns") {
+        setTimeout(init, 80);
+      }
+    });
+
+    document.addEventListener("DOMContentLoaded", tryInitIfActive);
+    setTimeout(tryInitIfActive, 300);
+  })();
+</script>
+
