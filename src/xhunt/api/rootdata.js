@@ -1348,7 +1348,7 @@ router.get("/search", async (req, res) => {
 
       response = apiResponse.data;
     } catch (error) {
-      console.error("[rootdata] Internal API call error:", error.message);
+      console.error("[rootdata] Internal API call error:", error.message, internalApiUrl);
       
       // 如果内部接口调用失败，返回错误响应
       if (error.response) {
