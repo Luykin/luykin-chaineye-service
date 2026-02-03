@@ -14,6 +14,16 @@ function parseIntParam(v) {
 const requiredHost = "rootdatapro.online";
 
 router.use((req, res, next) => {
+  // 允许本地调用（localhost 或 127.0.0.1）
+  const hostname = req.hostname || "";
+  const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || !hostname;
+  
+  // 如果没有 hostname（内部调用）或者是 localhost，直接通过
+  if (isLocalhost) {
+    return next();
+  }
+  
+  // 否则检查 x-forwarded-host 头
   const forwardedHost = String(req.headers?.["x-forwarded-host"] || "").toLowerCase();
   if (!forwardedHost.includes(requiredHost)) {
     return res.status(404).send("Not Found");

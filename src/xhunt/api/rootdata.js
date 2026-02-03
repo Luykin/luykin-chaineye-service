@@ -1297,6 +1297,7 @@ async function batchUpdateProjectLogos(avatarMap, Fundraising) {
 /**
  * GET /api/rootdata/search
  * 根据 Twitter 用户名搜索项目信息
+ * 内部调用 /open/search_investment_by_x 接口
  */
 router.get("/search", async (req, res) => {
   try {
@@ -1311,15 +1312,8 @@ router.get("/search", async (req, res) => {
       });
     }
 
-    // const lowerKeyword = String(keyword).toLowerCase();
-
-    // // 应用重命名映射
-    // if (lowerKeyword in RENAME_MAP || keyword in RENAME_MAP) {
-    //   keyword = RENAME_MAP[lowerKeyword] || RENAME_MAP[keyword];
-    // }
-
     const sanitizedKeyword = String(keyword.trim()).toLowerCase();
-    const cacheKey = `rootdata_search_${sanitizedKeyword}_1030_2`;
+    const cacheKey = `rootdata_search_${sanitizedKeyword}_1030_3`;
 
     // 2. 从 Redis 获取缓存
     let cachedData;
@@ -1334,318 +1328,46 @@ router.get("/search", async (req, res) => {
       console.error("Redis Client Error (GET):", error);
     }
 
-    // 3. 获取 Fundraising 模型（从 PostgreSQL）
-    const { Fundraising } = require("../../models/postgres-fundraising");
-    if (!Fundraising) {
-      return res
-        .status(500)
-        .json({ error: "Database model not initialized", requestId: reqId });
-    }
+    // 3. 内部调用 /open/search_investment_by_x 接口
+    const INTERNAL_API_KEY = "rk_666666888888666666LUYKIN";
+    const PORT = process.env.PORT || 8090;
+    const baseUrl = `http://localhost:${PORT}`;
+    const internalApiUrl = `${baseUrl}/open/search_investment_by_x`;
 
-    // 4. 构造查询条件
-    const targetTwitterUrl = `https://x.com/${sanitizedKeyword}`;
-    const targetTwitterUrlWithSlash = `https://x.com/${sanitizedKeyword}/`;
+    let response;
+    try {
+      const apiResponse = await axios.get(internalApiUrl, {
+        params: {
+          handle: sanitizedKeyword,
+        },
+        headers: {
+          "pro-api-key": INTERNAL_API_KEY,
+        },
+        timeout: 30000, // 30秒超时
+      });
 
-    // 5. 优化查询：使用 twitterUrl 字段，速度更快（带索引）
-    const project = await Fundraising.Project.findOne({
-      where: {
-        [Op.or]: [
-          {
-            twitterUrl: {
-              [Op.iLike]: targetTwitterUrl,
-            },
-          },
-          {
-            twitterUrl: {
-              [Op.iLike]: targetTwitterUrlWithSlash,
-            },
-          },
-        ],
-      },
-      order: [["id", "DESC"]],
-      attributes: [
-        "id",
-        "projectName",
-        "projectLink",
-        "socialLinks",
-        "logo",
-        "amount",
-        "twitterUrl",
-        "socialLinks",
-      ],
-      raw: true,
-    });
-
-    if (!project) {
-      const notFoundResponse = {
-        invested: null,
-        investor: null,
-        message: "No matching project found",
-      };
-
-      try {
-        await req.redisClient.setEx(
-          cacheKey,
-          CACHE_TTL_ROOTDATA,
-          JSON.stringify(notFoundResponse)
-        );
-      } catch (error) {
-        console.error("Redis Client Error (SET):", error);
-      }
-
-      res.set("Cache-Control", `public, max-age=${HTTP_CACHE_TTL}`);
-      res.set("X-Cache-Status", "MISS");
-      return res.json(notFoundResponse);
-    }
-
-    // // 6. 异步验证和修正数据（双重验证机制，不影响响应速度）
-    // // 修正完成后会自动清除缓存，确保下次请求能获取最新数据
-    // setImmediate(async () => {
-    //   try {
-    //     // // 第一重：API验证和修正
-    //     // await RootdataDataFixService.verifyAndFixProject(
-    //     //   project,
-    //     //   Fundraising,
-    //     //   req.redisClient,
-    //     //   cacheKey, // 传入搜索缓存key，修正后会清除
-    //     //   "auto_api_fix"
-    //     // );
-
-    //     // 第二重：爬虫更新验证（队列化、节流、去重）
-    //     crawlerQueue.updateCrawl(project, cacheKey);
-    //   } catch (error) {
-    //     console.error("数据修正失败:", error);
-    //   }
-    // });
-
-    // 7. 并行查询关联数据（性能优化）
-    const [investmentsReceived, investmentsGiven] = await Promise.all([
-      Fundraising.InvestmentRelationships.findAll({
-        where: { fundedProjectId: project.id },
-        attributes: [
-          "round",
-          "lead",
-          "amount",
-          "date",
-          "formattedAmount",
-          "investorProjectId",
-        ],
-        include: [
-          {
-            model: Fundraising.Project,
-            as: "investorProject",
-            attributes: ["projectName", "socialLinks", "logo"],
-          },
-        ],
-        raw: true,
-        nest: true,
-      }),
-      Fundraising.InvestmentRelationships.findAll({
-        where: { investorProjectId: project.id },
-        attributes: [
-          "round",
-          "lead",
-          "amount",
-          "date",
-          "formattedAmount",
-          "fundedProjectId",
-        ],
-        include: [
-          {
-            model: Fundraising.Project,
-            as: "fundedProject",
-            attributes: ["projectName", "socialLinks", "logo"],
-          },
-        ],
-        raw: true,
-        nest: true,
-      }),
-    ]);
-
-    // 8. 处理 invested（收到的投资）数据
-    const groupedInvestments = groupInvestmentsByDate(
-      investmentsReceived || []
-    );
-
-    const totalFunding = Object.values(groupedInvestments).reduce(
-      (sum, group) => sum + (group.formattedAmount || 0),
-      0
-    );
-
-    // 构造 investors 数据并去重
-    const rawInvestors = Object.values(groupedInvestments).flatMap((group) =>
-      group.investors.map((investor) => ({
-        avatar: investor?.logo || "",
-        lead_investor: investor?.lead || false,
-        name: investor?.projectName || "",
-        twitter: investor?.socialLinks?.x || "",
-      }))
-    );
-
-    const investors = Array.from(
-      rawInvestors
-        .reduce((map, item) => {
-          if (map.has(item.name)) {
-            const existing = map.get(item.name);
-            if (!existing.lead_investor && item.lead_investor) {
-              map.set(item.name, item);
-            }
-          } else {
-            map.set(item.name, item);
-          }
-          return map;
-        }, new Map())
-        .values()
-    );
-
-    // 移除 grouped_investments 中每一项的 investors 字段
-    const groupedInvestmentsWithoutInvestors = Object.entries(
-      groupedInvestments
-    ).reduce((acc, [date, group]) => {
-      acc[date] = {
-        round: group.round,
-        amount: group.amount,
-        valuation: group.valuation,
-        formattedAmount: group.formattedAmount,
-        formattedValuation: group.formattedValuation,
-      };
-      return acc;
-    }, {});
-
-    const investedData = {
-      investors,
-      total_funding: totalFunding,
-      grouped_investments: groupedInvestmentsWithoutInvestors,
-    };
-
-    // 9. 处理 investor（投出的项目）数据
-    const rawFundedProjects = (investmentsGiven || []).map((investment) => ({
-      avatar: investment.fundedProject?.logo || "",
-      name: investment.fundedProject?.projectName || "",
-      twitter: investment.fundedProject?.socialLinks?.x || "",
-      lead_investor: investment.fundedProject?.lead || false,
-      amount: investment.formattedAmount || 0, // 🔧 修复：添加 amount 字段
-    }));
-
-    const fundedProjects = Array.from(
-      rawFundedProjects
-        .reduce((map, item) => {
-          if (map.has(item.name)) {
-            const existing = map.get(item.name);
-            if (!existing.lead_investor && item.lead_investor) {
-              map.set(item.name, item);
-            }
-          } else {
-            map.set(item.name, item);
-          }
-          return map;
-        }, new Map())
-        .values()
-    );
-
-    // 🔧 修复：正确计算投出的总金额
-    const totalInvestment = (investmentsGiven || []).reduce(
-      (sum, inv) => sum + (inv.formattedAmount || 0),
-      0
-    );
-
-    const investorData = {
-      investors: fundedProjects,
-      total_funding: totalInvestment,
-    };
-
-    // 10. 异步更新头像（优化：统一调度，避免重复）
-    const scheduleAvatarRefresh = (groups) => {
-      const need = new Set();
-      groups.forEach((arr) => {
-        (arr || []).forEach((it) => {
-          if (it && it.twitter) {
-            const u = extractUsername(it.twitter);
-            if (
-              u &&
-              (!it.avatar ||
-                !String(it.avatar).startsWith("https://pbs.twimg.com"))
-            ) {
-              need.add(u);
-            }
-          }
+      response = apiResponse.data;
+    } catch (error) {
+      console.error("[rootdata] Internal API call error:", error.message);
+      
+      // 如果内部接口调用失败，返回错误响应
+      if (error.response) {
+        // 如果内部接口返回了错误响应，直接返回
+        const statusCode = error.response.status || 500;
+        return res.status(statusCode).json({
+          error: "Failed to search project",
+          message: error.response.data?.message || error.message || "Unknown error",
         });
-      });
-      if (need.size === 0) return;
-      setImmediate(async () => {
-        try {
-          const usernames = Array.from(need);
-          const apiURL = `https://data.cryptohunt.ai/fetch/twitter/users?usernames=${usernames.join(
-            ","
-          )}`;
-          const response = await axios.get(apiURL);
-          const userDataArray = response?.data?.data?.data || [];
-          const avatarMap = {};
-          userDataArray.forEach((user) => {
-            if (user?.profile?.username && user?.profile?.profile_image_url) {
-              avatarMap[String(user.profile.username).toLowerCase()] =
-                user.profile.profile_image_url;
-            }
-          });
-          groups.forEach((arr) => {
-            (arr || []).forEach((it) => {
-              if (it && it.twitter) {
-                const k = String(extractUsername(it.twitter)).toLowerCase();
-                if (k && avatarMap[k]) it.avatar = avatarMap[k];
-              }
-            });
-          });
-          await batchUpdateProjectLogos(avatarMap, Fundraising);
-        } catch (error) {
-          console.error("Error fetching/updating avatars:", error);
-        }
-      });
-    };
-
-    // 11. 查询与该项目关联的成员（职位关系）
-    let members = [];
-    try {
-      const positions = await Fundraising.PositionRelationships.findAll({
-        where: { objectProjectId: project.id },
-        attributes: ["position", "subjectProjectId", "objectProjectId"],
-        include: [
-          {
-            model: Fundraising.Project,
-            as: "subjectProject",
-            attributes: ["projectName", "socialLinks", "logo", "twitterUrl"],
-          },
-        ],
-        raw: true,
-        nest: true,
-      });
-
-      members = (positions || []).map((row) => ({
-        name: row.subjectProject?.projectName || "",
-        position: row.position || "",
-        twitter:
-          row.subjectProject?.twitterUrl ||
-          row.subjectProject?.socialLinks?.x ||
-          "",
-        avatar: row.subjectProject?.logo || "",
-      }));
-    } catch (e) {
-      console.warn("[search] 加载职位关系失败:", e.message);
+      } else {
+        // 网络错误或其他错误
+        return res.status(500).json({
+          error: "Failed to search project",
+          message: error.message || "Internal API call failed",
+        });
+      }
     }
 
-    // 异步更新成员/投资者/被投项目头像（统一调度）
-    try {
-      scheduleAvatarRefresh([investors, fundedProjects, members]);
-    } catch (_) {}
-
-    // 12. 组装最终响应
-    const response = {
-      invested: investedData,
-      investor: investorData,
-      projectLink: project?.projectLink,
-      members,
-    };
-
-    // 13. 缓存结果到 Redis 10分钟
+    // 4. 缓存结果到 Redis
     try {
       await req.redisClient.setEx(
         cacheKey,
