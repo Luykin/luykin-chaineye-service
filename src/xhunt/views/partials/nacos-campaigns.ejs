@@ -232,6 +232,9 @@
                 <option value="200k">200k</option>
                 <option value="200k+creator">200k+creator</option>
               </select>
+              <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                硬性条件（不可修改）：报名者必须满足注册时间早于1个月并且分数数量不少于50个
+              </div>
             </div>
           </div>
         </div>
@@ -1595,11 +1598,26 @@
       $("campaigns-rewardParticipantCount").value = c.rewardParticipantCount || "";
       $("campaigns-rewardDistributionType").value = c.rewardDistributionType || "";
 
-      // 门槛（如果 includeCreator 为 true，则显示 "200k+creator"）
-      if (c.includeCreator === true && c.threshold === "200k") {
+      // 门槛（将数字转换为显示格式）
+      if (c.includeCreator === true && c.threshold === 200000) {
         $("campaigns-threshold").value = "200k+creator";
+      } else if (c.threshold !== undefined && c.threshold !== null) {
+        // 将数字转换为显示格式
+        if (c.threshold === 50000) {
+          $("campaigns-threshold").value = "50k";
+        } else if (c.threshold === 100000) {
+          $("campaigns-threshold").value = "100k";
+        } else if (c.threshold === 200000) {
+          $("campaigns-threshold").value = "200k";
+        } else if (typeof c.threshold === "number") {
+          // 如果是其他数字，直接显示（兼容老数据或其他值）
+          $("campaigns-threshold").value = String(c.threshold);
+        } else {
+          // 如果是字符串（兼容老数据），直接显示
+          $("campaigns-threshold").value = c.threshold;
+        }
       } else {
-        $("campaigns-threshold").value = c.threshold || "";
+        $("campaigns-threshold").value = "";
       }
 
       // 早期项目提示（如果有riskConfirmHtml字段且不为null，则勾选）
@@ -1695,16 +1713,25 @@
         delete c.rewardDistributionType;
       }
 
-      // 门槛（如果选择了 "200k+creator"，则 threshold 设为 "200k"，includeCreator 设为 true；否则设为 false）
+      // 门槛（如果选择了 "200k+creator"，则 threshold 设为 200000，includeCreator 设为 true；否则设为 false）
       const thresholdVal = $("campaigns-threshold").value.trim();
       if (thresholdVal) {
         if (thresholdVal === "200k+creator") {
-          c.threshold = "200k";
+          c.threshold = 200000;
           c.includeCreator = true;
         } else {
-          c.threshold = thresholdVal;
-          // 如果 threshold 是 "200k" 但不是 +creator，则 includeCreator 设为 false
-          // 如果 threshold 不是 "200k"，则 includeCreator 也设为 false
+          // 将 "50k", "100k", "200k" 转换为纯数字
+          if (thresholdVal === "50k") {
+            c.threshold = 50000;
+          } else if (thresholdVal === "100k") {
+            c.threshold = 100000;
+          } else if (thresholdVal === "200k") {
+            c.threshold = 200000;
+          } else {
+            // 如果已经是数字，直接使用
+            const numVal = parseInt(thresholdVal, 10);
+            c.threshold = !isNaN(numVal) ? numVal : thresholdVal;
+          }
           c.includeCreator = false;
         }
       } else {
@@ -2282,12 +2309,17 @@
             errors.push(`${prefix}: rewardDistributionType（分配机制）必须选择：平分 或 mindshare分`);
           }
 
-          // 门槛（threshold 只能是 "50k", "100k", "200k"，如果选择 "200k+creator" 则 threshold 为 "200k" 且 includeCreator 为 true）
+          // 门槛（threshold 只能是 50000, 100000, 200000，如果选择 "200k+creator" 则 threshold 为 200000 且 includeCreator 为 true）
+          const validThresholds = [50000, 100000, 200000];
+          // 兼容老数据：也接受字符串格式
+          const thresholdValue = typeof c.threshold === "string" 
+            ? (c.threshold === "50k" ? 50000 : c.threshold === "100k" ? 100000 : c.threshold === "200k" ? 200000 : null)
+            : c.threshold;
           if (
             c.threshold === undefined ||
             c.threshold === null ||
             (typeof c.threshold === "string" && c.threshold.trim() === "") ||
-            !["50k", "100k", "200k"].includes(String(c.threshold))
+            (thresholdValue !== null && !validThresholds.includes(thresholdValue))
           ) {
             errors.push(
               `${prefix}: threshold（门槛）必须选择：50k / 100k / 200k / 200k+creator`
@@ -2297,10 +2329,11 @@
           if (c.includeCreator !== undefined && typeof c.includeCreator !== "boolean") {
             errors.push(`${prefix}: includeCreator 必须是布尔值（true/false）`);
           }
-          // 如果 threshold 不是 "200k"，则 includeCreator 应该为 false
-          if (c.threshold !== "200k" && c.includeCreator === true) {
+          // 如果 threshold 不是 200000，则 includeCreator 应该为 false（兼容老数据：也检查 "200k"）
+          const is200k = thresholdValue === 200000 || c.threshold === "200k";
+          if (!is200k && c.includeCreator === true) {
             errors.push(
-              `${prefix}: includeCreator 只能在 threshold 为 "200k" 时设置为 true`
+              `${prefix}: includeCreator 只能在 threshold 为 200k 时设置为 true`
             );
           }
         }
@@ -2386,9 +2419,83 @@
       showJsonPreviewModal(content);
     }
 
+    // 深度比较两个对象，收集所有变化的键名（用于匹配 JSON 字符串）
+    function getChangedKeys(current, original, changedKeys = new Set()) {
+      if (original === undefined || original === null) {
+        // 如果原始值不存在，收集当前对象的所有键
+        if (typeof current === "object" && current !== null) {
+          if (Array.isArray(current)) {
+            current.forEach((item) => {
+              if (typeof item === "object" && item !== null) {
+                Object.keys(item).forEach((key) => changedKeys.add(key));
+              }
+            });
+          } else {
+            Object.keys(current).forEach((key) => changedKeys.add(key));
+          }
+        }
+        return changedKeys;
+      }
+
+      if (current === undefined || current === null) {
+        return changedKeys;
+      }
+
+      // 如果是基本类型，直接比较值
+      if (typeof current !== "object" || current === null || original === null) {
+        if (current !== original) {
+          // 值变化了，但基本类型没有键，这里不需要处理
+        }
+        return changedKeys;
+      }
+
+      // 如果是数组
+      if (Array.isArray(current) && Array.isArray(original)) {
+        const maxLen = Math.max(current.length, original.length);
+        for (let i = 0; i < maxLen; i++) {
+          if (i >= current.length || i >= original.length) {
+            // 数组长度变化，收集新增/删除项的所有键
+            const item = i < current.length ? current[i] : original[i];
+            if (typeof item === "object" && item !== null) {
+              Object.keys(item).forEach((key) => changedKeys.add(key));
+            }
+          } else {
+            getChangedKeys(current[i], original[i], changedKeys);
+          }
+        }
+        return changedKeys;
+      }
+
+      // 如果是对象，比较所有键
+      const allKeys = new Set([...Object.keys(current), ...Object.keys(original)]);
+      for (const key of allKeys) {
+        if (!(key in current)) {
+          // 键被删除了
+          changedKeys.add(key);
+        } else if (!(key in original)) {
+          // 键是新增的
+          changedKeys.add(key);
+        } else {
+          // 递归比较值
+          const currentVal = current[key];
+          const originalVal = original[key];
+          
+          // 如果值不同，标记这个键
+          if (JSON.stringify(currentVal) !== JSON.stringify(originalVal)) {
+            changedKeys.add(key);
+            // 继续递归比较子对象
+            getChangedKeys(currentVal, originalVal, changedKeys);
+          }
+        }
+      }
+
+      return changedKeys;
+    }
+
+    // 根据变化的键高亮 JSON 字符串中对应的行
     function highlightJsonDiff(currentJson, originalJson) {
       if (!originalJson) {
-        // 如果没有原始配置，直接返回当前 JSON（所有内容都是新增的）
+        // 如果没有原始配置，所有内容都是新增的
         return escapeHtml(currentJson).replace(
           /^(.+)$/gm,
           '<span class="diff-added">$1</span>'
@@ -2396,49 +2503,41 @@
       }
 
       try {
-        // 将原始配置也格式化为相同格式
-        const originalJsonStr = JSON.stringify(originalJson, null, 2);
-        const currentLines = currentJson.split("\n");
-        const originalLines = originalJsonStr.split("\n");
+        // 解析 JSON 对象
+        const currentObj = JSON.parse(currentJson);
+        const originalObj = originalJson;
 
-        // 创建一个 Map 来存储原始配置的行（去除空白后作为 key）
-        const originalLinesMap = new Map();
-        originalLines.forEach((line, index) => {
-          const trimmed = line.trim();
-          if (trimmed) {
-            // 使用行内容和行号作为 key（处理重复行的情况）
-            const key = `${trimmed}_${index}`;
-            if (!originalLinesMap.has(key)) {
-              originalLinesMap.set(key, true);
-            }
-          }
-        });
+        // 获取所有变化的键名
+        const changedKeys = getChangedKeys(currentObj, originalObj);
 
-        // 对比每一行
-        const highlightedLines = currentLines.map((line, index) => {
+        if (changedKeys.size === 0) {
+          // 没有变化，直接返回
+          return escapeHtml(currentJson);
+        }
+
+        // 按行处理，高亮包含变化键的行
+        const lines = currentJson.split("\n");
+        const highlightedLines = lines.map((line) => {
           const trimmed = line.trim();
-          if (!trimmed) {
+          
+          // 跳过空行和纯结构符号
+          if (!trimmed || 
+              trimmed === "{" || 
+              trimmed === "}" || 
+              trimmed === "[" || 
+              trimmed === "]" || 
+              trimmed === ",") {
             return escapeHtml(line);
           }
 
-          // 检查这一行是否在原始配置中存在（考虑上下文）
-          let existsInOriginal = false;
-          const key = `${trimmed}_${index}`;
-          if (originalLinesMap.has(key)) {
-            existsInOriginal = true;
-          } else {
-            // 也检查是否在其他位置存在（可能是移动了位置）
-            for (const [origKey] of originalLinesMap) {
-              if (origKey.startsWith(trimmed + "_")) {
-                existsInOriginal = true;
-                break;
-              }
+          // 检查这一行是否包含任何变化的键
+          for (const key of changedKeys) {
+            // 匹配 JSON 键格式: "key": 或 "key":
+            const keyPattern = new RegExp(`"${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*:`, "i");
+            if (keyPattern.test(line)) {
+              // 找到变化的键，高亮整行
+              return `<span class="diff-added">${escapeHtml(line)}</span>`;
             }
-          }
-
-          // 如果不存在，高亮显示
-          if (!existsInOriginal) {
-            return `<span class="diff-added">${escapeHtml(line)}</span>`;
           }
 
           return escapeHtml(line);
@@ -2446,7 +2545,7 @@
 
         return highlightedLines.join("\n");
       } catch (e) {
-        // 如果解析失败，回退到简单的高亮（所有内容都高亮）
+        // 如果解析失败，回退到简单的高亮
         console.error("JSON diff error:", e);
         return escapeHtml(currentJson).replace(
           /^(.+)$/gm,

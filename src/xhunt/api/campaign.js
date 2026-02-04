@@ -62,6 +62,7 @@ router.post(
         return res.status(400).json({ error: "campaign is required" });
       }
 
+      let found = null;
       try {
         const cfgResp = await axios.get(
           "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_campaigns&group=DEFAULT_GROUP",
@@ -71,7 +72,7 @@ router.post(
         if (!cfg || !Array.isArray(cfg.campaigns)) {
           return res.status(502).json({ error: "Failed to fetch campaigns config: incomplete data" });
         }
-        const found = cfg.campaigns.find(
+        found = cfg.campaigns.find(
           (c) => c && c.campaignKey === normalizedCampaign
         );
         if (!found) {
@@ -101,6 +102,49 @@ router.post(
       const user = await XHuntUser.findByPk(authedUserId);
       if (!user) {
         return res.status(404).json({ error: "对应的用户不存在" });
+      }
+
+      // 检查报名门槛：threshold 和 includeCreator
+      if (found && Number.isInteger(found.threshold)) {
+        try {
+          const twitterId = String(user.twitterId);
+          if (!twitterId || twitterId === "null" || twitterId === "undefined") {
+            return res.status(400).json({ error: "Invalid Twitter ID" });
+          }
+
+          const rankApiUrl = `https://data.cryptohunt.ai/fetch/twitter/rank?user_ids=${twitterId}`;
+          const rankResponse = await axios.get(rankApiUrl, { timeout: 7000 });
+          
+          const rankData = rankResponse && rankResponse.data ? rankResponse.data : null;
+          if (!rankData || !rankData.data || !Array.isArray(rankData.data) || rankData.data.length === 0) {
+            return res.status(502).json({ error: "Failed to fetch user ranking data" });
+          }
+
+          const userRankData = rankData.data[0];
+          const kolRank = Number(userRankData.kolRank);
+          const authCreator = userRankData.auth_creator;
+
+          // 检查 threshold 门槛
+          if (found.threshold !== undefined && typeof found.threshold === "number") {
+            const meetsThreshold = kolRank !== undefined && kolRank !== null && kolRank <= found.threshold;
+            
+            // 如果不满足门槛，检查是否支持创作者
+            if (!meetsThreshold) {
+              const isCreator = found.includeCreator && 
+                                authCreator && 
+                                authCreator.status === 2;
+              
+              if (!isCreator) {
+                return res.status(400).json({ 
+                  error: `Does not meet registration threshold: KOL rank must be less than or equal to ${found.threshold}, current rank is ${kolRank}` 
+                });
+              }
+            }
+          }
+        } catch (rankErr) {
+          console.error("Campaign register threshold check error:", rankErr);
+          return res.status(502).json({ error: "Threshold check request failed, please try again later" });
+        }
       }
 
       if (!evmAddress || typeof evmAddress !== "string" || !evmAddress.trim()) {
