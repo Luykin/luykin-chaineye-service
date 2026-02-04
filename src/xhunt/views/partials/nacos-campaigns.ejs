@@ -76,12 +76,37 @@
           </div>
         </div>
 
-        <div class="field-row">
+        <div class="field-row field-row-2">
           <div class="field">
             <label>投放活动者的推特号</label>
             <input id="campaigns-twitter-handle" type="text" placeholder="例如：bybit" />
             <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
               填写后会自动填充 id、campaignKey、hotTweetsKey。保存后不可修改。
+            </div>
+          </div>
+          <div class="field">
+            <label style="display: flex; align-items: center; gap: 8px;">
+              <span>是否有早期项目提示</span>
+              <span class="risk-preview-trigger" title="悬停查看预览">ℹ️</span>
+            </label>
+            <label class="switch">
+              <input id="campaigns-hasRiskConfirm" type="checkbox" disabled />
+              <span class="slider"></span>
+            </label>
+            <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+              勾选后会在活动页面显示早期项目风险提示
+            </div>
+            <div class="risk-preview-popup" id="risk-preview-popup" style="display: none;">
+              <div class="risk-preview-content">
+                <div style="margin-bottom: 8px; font-weight: 600; font-size: 12px;">中文预览：</div>
+                <div style="margin-bottom: 12px; font-size: 12px; line-height: 1.5;">
+                  <strong>重要提示：</strong>该项目为 Early-stage 项目，信息由项目方提供，请在参与前自行判断。点击继续即表示理解并接受。
+                </div>
+                <div style="margin-bottom: 8px; font-weight: 600; font-size: 12px;">English Preview:</div>
+                <div style="font-size: 12px; line-height: 1.5;">
+                  <strong>Important Notice:</strong> The project is in its early stage. The information is provided by the project team. Please make an informed decision before participating. Proceeding indicates that you understand and accept this.
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -624,6 +649,7 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
+    position: relative;
   }
   .field label {
     font-weight: 500;
@@ -658,6 +684,30 @@
     background: #f9fafb;
     color: #6b7280;
     cursor: not-allowed;
+  }
+
+  .risk-preview-trigger {
+    cursor: help;
+    font-size: 14px;
+    color: #6b7280;
+    transition: color 0.15s;
+  }
+  .risk-preview-trigger:hover {
+    color: #3b82f6;
+  }
+  .risk-preview-popup {
+    position: fixed;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    max-width: 400px;
+    pointer-events: auto;
+  }
+  .risk-preview-content {
+    color: #374151;
   }
 
   .section {
@@ -1162,6 +1212,7 @@
         "campaigns-rewardParticipantCount",
         "campaigns-rewardDistributionType",
         "campaigns-threshold",
+        "campaigns-hasRiskConfirm",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
         "campaigns-copy-ctaText-en",
@@ -1421,6 +1472,7 @@
       $("campaigns-editor-hint").textContent = "选择左侧一条活动开始编辑";
       $("campaigns-enabled").checked = false;
       $("campaigns-testingPhase").checked = false;
+      $("campaigns-hasRiskConfirm").checked = false;
       // id、campaignKey、hotTweetsKey 字段是 disabled 的，不需要清空
       [
         "campaigns-twitter-handle",
@@ -1550,6 +1602,9 @@
         $("campaigns-threshold").value = c.threshold || "";
       }
 
+      // 早期项目提示（如果有riskConfirmHtml字段且不为null，则勾选）
+      $("campaigns-hasRiskConfirm").checked = !!(c.riskConfirmHtml && c.riskConfirmHtml !== null);
+
       $("campaigns-copy-emoji").value = c.copy.emoji || "";
       $("campaigns-copy-ctaText-zh").value = c.copy.ctaText.zh || "";
       $("campaigns-copy-ctaText-en").value = c.copy.ctaText.en || "";
@@ -1658,6 +1713,16 @@
         delete c.includeCreator;
       }
 
+      // 早期项目提示
+      if ($("campaigns-hasRiskConfirm").checked) {
+        c.riskConfirmHtml = {
+          zh: "<p><strong>重要提示：</strong>该项目为 Early-stage 项目，信息由项目方提供，请在参与前自行判断。点击继续即表示理解并接受。</p>",
+          en: "<p><strong>Important Notice:</strong> The project is in its early stage. The information is provided by the project team. Please make an informed decision before participating. Proceeding indicates that you understand and accept this.</p>"
+        };
+      } else {
+        c.riskConfirmHtml = null;
+      }
+
       c.copy = c.copy || {};
       c.copy.emoji = $("campaigns-copy-emoji").value;
       setByPath(c.copy, "ctaText.zh", $("campaigns-copy-ctaText-zh").value);
@@ -1756,6 +1821,15 @@
         twitterHandleEl.addEventListener("input", () => {
           if (!isEditorEnabled()) return;
           updateFieldsFromTwitterHandle();
+          syncCampaignFromInputs();
+        });
+      }
+
+      // 早期项目提示checkbox的特殊处理
+      const hasRiskConfirmEl = $("campaigns-hasRiskConfirm");
+      if (hasRiskConfirmEl) {
+        hasRiskConfirmEl.addEventListener("change", () => {
+          if (!isEditorEnabled()) return;
           syncCampaignFromInputs();
         });
       }
@@ -2453,6 +2527,36 @@
           });
         }
       });
+
+      // 早期项目提示hover预览功能
+      const riskPreviewTrigger = document.querySelector(".risk-preview-trigger");
+      const riskPreviewPopup = $("risk-preview-popup");
+      if (riskPreviewTrigger && riskPreviewPopup) {
+        let hoverTimeout = null;
+        const showPopup = (e) => {
+          if (hoverTimeout) clearTimeout(hoverTimeout);
+          const rect = e.target.getBoundingClientRect();
+          riskPreviewPopup.style.display = "block";
+          riskPreviewPopup.style.left = rect.left + "px";
+          riskPreviewPopup.style.top = (rect.bottom + 8) + "px";
+          // 确保不超出屏幕右边界
+          const popupRect = riskPreviewPopup.getBoundingClientRect();
+          if (popupRect.right > window.innerWidth) {
+            riskPreviewPopup.style.left = (window.innerWidth - popupRect.width - 10) + "px";
+          }
+        };
+        const hidePopup = () => {
+          hoverTimeout = setTimeout(() => {
+            riskPreviewPopup.style.display = "none";
+          }, 100);
+        };
+        riskPreviewTrigger.addEventListener("mouseenter", showPopup);
+        riskPreviewTrigger.addEventListener("mouseleave", hidePopup);
+        riskPreviewPopup.addEventListener("mouseenter", () => {
+          if (hoverTimeout) clearTimeout(hoverTimeout);
+        });
+        riskPreviewPopup.addEventListener("mouseleave", hidePopup);
+      }
 
       $("campaigns-search").addEventListener("input", (e) => {
         search = e.target.value || "";
