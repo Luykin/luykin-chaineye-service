@@ -279,7 +279,7 @@
         </div>
 
         <div class="section">
-          <div class="section-title">名单（每行一个）</div>
+          <div class="section-title">相关名单（每行一个）</div>
           <div class="field-row field-row-2">
             <div class="field">
               <label>内部测试人员名单</label>
@@ -290,7 +290,7 @@
               ></textarea>
             </div>
             <div class="field">
-              <label>在哪些推特号右侧展示本活动</label>
+              <label>📍在哪些推特号右侧展示本活动</label>
               <textarea
                 id="campaigns-targetUserIds"
                 rows="3"
@@ -302,7 +302,7 @@
 
         <div class="section">
           <div class="section-title">
-            活动 logo
+            Ⓜ️活动方 logo
             <button class="btn" id="campaigns-logos-add" type="button" disabled>
               ➕ 添加 Logo
             </button>
@@ -312,7 +312,7 @@
 
         <div class="section">
           <div class="section-title">
-            报名前需完成的任务（Tasks）
+            🎯报名前需完成的任务（Tasks）
             <button class="btn" id="campaigns-tasks-add" type="button" disabled>
               ➕ 添加任务
             </button>
@@ -1281,6 +1281,18 @@
       const logos = Array.isArray(c?.logos) ? c.logos : [];
       const tasks = Array.isArray(c?.tasks) ? c.tasks : [];
 
+      // 为每个 task 自动生成 id（如果没有的话）
+      const campaignKey = c?.campaignKey || "";
+      tasks.forEach((task) => {
+        if (!task.id || !task.id.trim()) {
+          const type = task?.type || "twitter";
+          const url = task?.url || "";
+          if (campaignKey && type && url) {
+            task.id = generateTaskId(campaignKey, type, url);
+          }
+        }
+      });
+
       logosEl.innerHTML =
         logos
           .map((it, i) => {
@@ -1343,10 +1355,13 @@
 
                 <div class="field-row">
                   <div class="field">
-                    <label>id</label>
+                    <label>id（自动生成）</label>
                     <input type="text" data-field="id" value="${escapeHtml(
                       it?.id || ""
-                    )}" />
+                    )}" disabled />
+                    <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                      根据 campaignKey + type + url 自动生成
+                    </div>
                   </div>
                   <div class="field">
                     <label>type</label>
@@ -1680,6 +1695,20 @@
       c.testList = splitLinesToList($("campaigns-testList").value);
       c.targetUserIds = splitLinesToList($("campaigns-targetUserIds").value);
 
+      // 更新所有 task 的 id（如果 campaignKey、type、url 都存在）
+      if (Array.isArray(c.tasks)) {
+        const campaignKey = c.campaignKey || "";
+        c.tasks.forEach((task) => {
+          const type = task?.type || "";
+          const url = task?.url || "";
+          if (campaignKey && type && url) {
+            task.id = generateTaskId(campaignKey, type, url);
+          }
+        });
+        // 重新渲染以更新显示的 id
+        renderRepeaters();
+      }
+
       dirty = true;
       $("campaigns-publish").disabled = false;
       renderList();
@@ -1690,6 +1719,20 @@
       const idEl = $("campaigns-id");
       if (idEl) {
         idEl.value = campaignKey ? `${campaignKey}-hunter` : "";
+      }
+    }
+
+    function generateTaskId(campaignKey, type, url) {
+      if (!campaignKey || !type || !url) return "";
+      try {
+        // 只对 url 进行 base64 编码，取前8位
+        const urlBase64 = btoa(unescape(encodeURIComponent(url)));
+        const urlBase64First8 = urlBase64.substring(0, 8);
+        // 格式：campaignKey-type-base64(url前8位)
+        return `${campaignKey}-${type}-${urlBase64First8}`;
+      } catch (e) {
+        console.error("生成 task id 失败:", e);
+        return "";
       }
     }
 
@@ -1810,6 +1853,19 @@
           const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
           fieldSetter(arr[index], field, value);
 
+          // 如果是 task 的 type 或 url 改变，自动更新 id
+          if (kind === "tasks" && (field === "type" || field === "url")) {
+            const task = arr[index];
+            const campaignKey = c?.campaignKey || "";
+            const type = task?.type || "";
+            const url = task?.url || "";
+            if (campaignKey && type && url) {
+              task.id = generateTaskId(campaignKey, type, url);
+            }
+            // 重新渲染以更新显示的 id
+            renderRepeaters();
+          }
+
           dirty = true;
           $("campaigns-publish").disabled = false;
           renderList();
@@ -1829,6 +1885,20 @@
           if (!Array.isArray(arr) || !arr[index]) return;
           const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
           fieldSetter(arr[index], field, value);
+
+          // 如果是 task 的 type 或 url 改变，自动更新 id
+          if (kind === "tasks" && (field === "type" || field === "url")) {
+            const task = arr[index];
+            const campaignKey = c?.campaignKey || "";
+            const type = task?.type || "";
+            const url = task?.url || "";
+            if (campaignKey && type && url) {
+              task.id = generateTaskId(campaignKey, type, url);
+            }
+            // 重新渲染以更新显示的 id
+            renderRepeaters();
+          }
+
           dirty = true;
           $("campaigns-publish").disabled = false;
           renderList();
@@ -2167,8 +2237,22 @@
         } else {
           // 检查每个 task 的必填字段
           c.tasks.forEach((task, taskIdx) => {
+            // 自动生成 task id（如果还没有的话）
             if (!task.id || !task.id.trim()) {
-              errors.push(`${prefix}: task #${taskIdx + 1} 的 id 不能为空`);
+              const campaignKey = c.campaignKey || "";
+              const type = task?.type || "";
+              const url = task?.url || "";
+              if (campaignKey && type && url) {
+                task.id = generateTaskId(campaignKey, type, url);
+              }
+            }
+            // 如果 id 仍然为空，说明缺少必要字段
+            if (!task.id || !task.id.trim()) {
+              const missing = [];
+              if (!c.campaignKey || !c.campaignKey.trim()) missing.push("campaignKey");
+              if (!task.type || !task.type.trim()) missing.push("type");
+              if (!task.url || !task.url.trim()) missing.push("url");
+              errors.push(`${prefix}: task #${taskIdx + 1} 的 id 无法自动生成，缺少字段：${missing.join("、")}`);
             }
             if (
               !task.title ||
