@@ -78,28 +78,47 @@
 
         <div class="field-row">
           <div class="field">
-            <label>id（唯一）</label>
-            <input id="campaigns-id" type="text" placeholder="例如：bybit-hunter" disabled />
-            <div class="muted" style="margin-top: 4px; font-size: 12px">
-              内部索引使用，无需手动维护（自动生成：campaignKey + '-hunter'）
+            <label>投放活动者的推特号</label>
+            <input id="campaigns-twitter-handle" type="text" placeholder="例如：bybit" />
+            <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+              填写后会自动填充 id、campaignKey、hotTweetsKey。保存后不可修改。
             </div>
           </div>
-          <div class="field">
-            <label>campaignKey</label>
-            <input id="campaigns-campaignKey" type="text" placeholder="例如：bybit" />
-            <div class="muted" style="margin-top: 4px; font-size: 12px">
-              需要后端协商一致，一般也是投放者推特号，用于存储报名数据和排名数据
-            </div>
+        </div>
+
+        <div class="section section-collapsible">
+          <div class="section-title section-title-collapsible">
+            <span>高级配置（id / campaignKey / hotTweetsKey）</span>
+            <span class="section-toggle">▼</span>
           </div>
-          <div class="field">
-            <label>hotTweetsKey</label>
-            <input
-              id="campaigns-hotTweetsKey"
-              type="text"
-              placeholder="例如：bybit"
-            />
-            <div class="muted" style="margin-top: 4px; font-size: 12px">
-              建议填写投放者的推特号，目的是获取热门推文数据 <code>hot?project=hotTweetsKey</code>
+          <div class="section-content" style="display: none;">
+            <div class="field-row">
+              <div class="field">
+                <label>id（唯一）</label>
+                <input id="campaigns-id" type="text" placeholder="例如：bybit-hunter" disabled />
+                <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                  内部索引使用，无需手动维护（自动生成：campaignKey + '-hunter'）
+                </div>
+              </div>
+              <div class="field">
+                <label>campaignKey</label>
+                <input id="campaigns-campaignKey" type="text" placeholder="例如：bybit" disabled />
+                <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                  需要后端协商一致，一般也是投放者推特号，用于存储报名数据和排名数据
+                </div>
+              </div>
+              <div class="field">
+                <label>hotTweetsKey</label>
+                <input
+                  id="campaigns-hotTweetsKey"
+                  type="text"
+                  placeholder="例如：bybit"
+                  disabled
+                />
+                <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                  建议填写投放者的推特号，目的是获取热门推文数据 <code>hot?project=hotTweetsKey</code>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -114,6 +133,16 @@
             <div class="field">
               <label>English</label>
               <input id="campaigns-displayName-en" type="text" />
+            </div>
+          </div>
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>活动短标题（zh）</label>
+              <input id="campaigns-copy-shortTitle-zh" type="text" />
+            </div>
+            <div class="field">
+              <label>shortTitle（en）</label>
+              <input id="campaigns-copy-shortTitle-en" type="text" />
             </div>
           </div>
         </div>
@@ -182,53 +211,47 @@
           </div>
         </div>
 
-        <div class="section">
-          <div class="section-title">报名按钮文案（Copy）</div>
-          <div class="field-row field-row-3">
-            <div class="field">
-              <label>emoji</label>
-              <input id="campaigns-copy-emoji" type="text" placeholder="例如：🎉" />
-            </div>
-            <div class="field">
-              <label>ctaText（zh）</label>
-              <input id="campaigns-copy-ctaText-zh" type="text" />
-            </div>
-            <div class="field">
-              <label>ctaText（en）</label>
-              <input id="campaigns-copy-ctaText-en" type="text" />
-            </div>
+        <div class="section section-collapsible">
+          <div class="section-title section-title-collapsible">
+            <span>报名按钮文案（</span>
+            <span class="section-toggle">▼</span>
           </div>
+          <div class="section-content" style="display: none;">
+            <div class="field-row field-row-3">
+              <div class="field">
+                <label>emoji</label>
+                <input id="campaigns-copy-emoji" type="text" placeholder="例如：🎉" />
+              </div>
+              <div class="field">
+                <label>ctaText（zh）</label>
+                <input id="campaigns-copy-ctaText-zh" type="text" />
+              </div>
+              <div class="field">
+                <label>ctaText（en）</label>
+                <input id="campaigns-copy-ctaText-en" type="text" />
+              </div>
+            </div>
 
-          <div class="field-row field-row-2">
-            <div class="field">
-              <label>活动短标题（zh）</label>
-              <input id="campaigns-copy-shortTitle-zh" type="text" />
+            <div class="field-row field-row-2">
+              <div class="field">
+                <label>去官方按钮文案（zh）</label>
+                <input id="campaigns-copy-goToOfficialText-zh" type="text" />
+              </div>
+              <div class="field">
+                <label>goToOfficialText（en）</label>
+                <input id="campaigns-copy-goToOfficialText-en" type="text" />
+              </div>
             </div>
-            <div class="field">
-              <label>shortTitle（en）</label>
-              <input id="campaigns-copy-shortTitle-en" type="text" />
-            </div>
-          </div>
 
-          <div class="field-row field-row-2">
-            <div class="field">
-              <label>去官方按钮文案（zh）</label>
-              <input id="campaigns-copy-goToOfficialText-zh" type="text" />
-            </div>
-            <div class="field">
-              <label>goToOfficialText（en）</label>
-              <input id="campaigns-copy-goToOfficialText-en" type="text" />
-            </div>
-          </div>
-
-          <div class="field-row field-row-2">
-            <div class="field">
-              <label>查看官方指南按钮文案（zh）</label>
-              <input id="campaigns-copy-viewGuideText-zh" type="text" />
-            </div>
-            <div class="field">
-              <label>viewGuideText（en）</label>
-              <input id="campaigns-copy-viewGuideText-en" type="text" />
+            <div class="field-row field-row-2">
+              <div class="field">
+                <label>查看官方指南按钮文案（zh）</label>
+                <input id="campaigns-copy-viewGuideText-zh" type="text" />
+              </div>
+              <div class="field">
+                <label>viewGuideText（en）</label>
+                <input id="campaigns-copy-viewGuideText-en" type="text" />
+              </div>
             </div>
           </div>
         </div>
@@ -362,59 +385,63 @@
 
 <style>
   .campaigns-container {
-    padding: 20px;
+    padding: 16px;
     max-width: 1600px;
     margin: 0 auto;
   }
   .campaigns-header h2 {
-    margin: 0 0 6px;
-    color: #2c3e50;
+    margin: 0 0 4px;
+    color: #111827;
+    font-size: 20px;
+    font-weight: 700;
   }
   .campaigns-header p {
-    margin: 0 0 16px;
-    color: #7f8c8d;
-    font-size: 14px;
+    margin: 0 0 12px;
+    color: #6b7280;
+    font-size: 13px;
   }
   .campaigns-toolbar {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
-    padding: 12px 14px;
-    background: #f8f9fa;
-    border-radius: 10px;
-    margin-bottom: 14px;
-    align-items: center;
-  }
-  .campaigns-toolbar .left {
-    display: flex;
     gap: 10px;
     flex-wrap: wrap;
+    padding: 10px 12px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 12px;
     align-items: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
-  .campaigns-toolbar .right {
+  .campaigns-toolbar .left {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
     align-items: center;
   }
+  .campaigns-toolbar .right {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
   .btn.btn-sm {
-    padding: 6px 10px;
-    font-size: 13px;
+    padding: 5px 9px;
+    font-size: 12px;
   }
   .campaigns-search {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 10px;
-    border-radius: 999px;
-    background: #ffffff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: #f9fafb;
     border: 1px solid #e5e7eb;
-    min-width: 260px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    min-width: 240px;
+    transition: all 0.15s;
   }
   .campaigns-search .icon {
-    font-size: 14px;
+    font-size: 13px;
     color: #9ca3af;
   }
   .campaigns-search input {
@@ -422,7 +449,7 @@
     outline: none;
     flex: 1;
     font-size: 13px;
-    padding: 4px 2px;
+    padding: 2px 0;
     background: transparent;
   }
   .campaigns-search input::placeholder {
@@ -430,17 +457,18 @@
   }
   .campaigns-search:focus-within {
     border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
   .muted {
     color: #6b7280;
-    font-size: 13px;
+    font-size: 12px;
   }
 
   .campaigns-body {
     display: grid;
-    grid-template-columns: 380px 1fr;
-    gap: 14px;
+    grid-template-columns: 360px 1fr;
+    gap: 12px;
     align-items: start;
   }
   @media (max-width: 1100px) {
@@ -452,25 +480,29 @@
   .list {
     background: #fff;
     border: 1px solid #e5e7eb;
-    border-radius: 10px;
+    border-radius: 8px;
     overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
   .list-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 12px;
-    background: #f9fafb;
+    padding: 10px 12px;
+    background: #fafafa;
     border-bottom: 1px solid #e5e7eb;
+    font-size: 13px;
+    font-weight: 600;
   }
   .list-items {
-    max-height: 740px;
+    max-height: calc(100vh - 280px);
     overflow: auto;
   }
   .item {
-    padding: 10px 12px;
-    border-bottom: 1px solid #f1f5f9;
+    padding: 9px 12px;
+    border-bottom: 1px solid #f3f4f6;
     cursor: pointer;
+    transition: background 0.15s;
   }
   .item:hover {
     background: #f9fafb;
@@ -484,24 +516,25 @@
     justify-content: space-between;
     gap: 8px;
     align-items: baseline;
-    font-weight: 700;
+    font-weight: 600;
     color: #111827;
-    font-size: 14px;
-    margin-bottom: 4px;
-    line-height: 1.2;
+    font-size: 13px;
+    margin-bottom: 3px;
+    line-height: 1.3;
   }
   .chips {
     display: inline-flex;
-    gap: 6px;
+    gap: 4px;
     flex-wrap: wrap;
   }
   .chip {
-    font-size: 11px;
+    font-size: 10px;
     padding: 2px 6px;
-    border-radius: 999px;
+    border-radius: 4px;
     border: 1px solid #e5e7eb;
     color: #374151;
     background: #fff;
+    font-weight: 500;
   }
   .chip.on {
     border-color: #86efac;
@@ -514,15 +547,17 @@
     color: #92400e;
   }
   .item-meta {
-    font-size: 12px;
+    font-size: 11px;
     color: #6b7280;
+    line-height: 1.4;
   }
 
   .editor {
     background: #fff;
     border: 1px solid #e5e7eb;
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
   .editor-header {
     display: flex;
@@ -530,38 +565,38 @@
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
   .editor-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
   }
 
   .editor-empty {
-    margin-top: 16px;
-    padding: 28px 18px;
+    margin-top: 12px;
+    padding: 24px 16px;
     text-align: center;
-    border-radius: 12px;
+    border-radius: 8px;
     border: 1px dashed #e5e7eb;
-    background: #f9fafb;
+    background: #fafafa;
   }
   .editor-empty .empty-title {
-    font-size: 15px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 600;
     color: #111827;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
   .editor-empty .empty-desc {
-    font-size: 13px;
+    font-size: 12px;
     color: #6b7280;
   }
 
   .field-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 10px;
+    gap: 8px;
+    margin-bottom: 8px;
   }
   .field-row .field:nth-child(4) {
     grid-column: span 1;
@@ -588,21 +623,22 @@
   .field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
   .field label {
-    font-weight: 600;
+    font-weight: 500;
     color: #374151;
-    font-size: 13px;
+    font-size: 12px;
   }
   .field input,
   .field textarea,
   .field select {
     border: 1px solid #d1d5db;
-    border-radius: 8px;
-    padding: 10px 10px;
-    font-size: 14px;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 13px;
     outline: none;
+    transition: all 0.15s;
   }
   .field textarea {
     resize: vertical;
@@ -614,32 +650,60 @@
   .field textarea:focus,
   .field select:focus {
     border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  .field input:disabled,
+  .field textarea:disabled,
+  .field select:disabled {
+    background: #f9fafb;
+    color: #6b7280;
+    cursor: not-allowed;
   }
 
   .section {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid #f1f5f9;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #f3f4f6;
   }
   .section-title {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    font-weight: 800;
+    font-weight: 600;
     color: #111827;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .section-collapsible .section-title-collapsible {
+    cursor: pointer;
+    user-select: none;
+    padding: 3px 0;
+    transition: color 0.15s;
+  }
+  .section-collapsible .section-title-collapsible:hover {
+    color: #3b82f6;
+  }
+  .section-toggle {
+    font-size: 11px;
+    color: #6b7280;
+    transition: transform 0.2s;
+  }
+  .section-collapsible.expanded .section-toggle {
+    transform: rotate(180deg);
+  }
+  .section-content {
+    margin-top: 8px;
   }
 
   .repeaters {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
   .rep-card {
     border: 1px solid #e5e7eb;
-    border-radius: 10px;
+    border-radius: 6px;
     padding: 10px;
     background: #fafafa;
   }
@@ -648,16 +712,16 @@
     justify-content: space-between;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
   .rep-title {
-    font-weight: 800;
+    font-weight: 600;
     color: #111827;
-    font-size: 13px;
+    font-size: 12px;
   }
   .rep-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
   }
 
@@ -665,8 +729,8 @@
   .switch {
     position: relative;
     display: inline-block;
-    width: 44px;
-    height: 24px;
+    width: 40px;
+    height: 22px;
   }
   .switch input {
     opacity: 0;
@@ -687,19 +751,20 @@
   .switch .slider:before {
     position: absolute;
     content: "";
-    height: 18px;
-    width: 18px;
+    height: 16px;
+    width: 16px;
     left: 3px;
     bottom: 3px;
     background-color: white;
     transition: 0.2s;
     border-radius: 999px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   }
   .switch input:checked + .slider {
     background-color: #3b82f6;
   }
   .switch input:checked + .slider:before {
-    transform: translateX(20px);
+    transform: translateX(18px);
   }
   /* 禁用状态的开关样式 */
   .switch input:disabled + .slider {
@@ -721,14 +786,14 @@
 
   .campaigns-toast {
     position: fixed;
-    right: 18px;
-    bottom: 18px;
-    max-width: 520px;
+    right: 16px;
+    bottom: 16px;
+    max-width: 480px;
     background: #111827;
     color: #fff;
-    padding: 10px 12px;
-    border-radius: 10px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    padding: 10px 14px;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     font-size: 13px;
     z-index: 9999;
   }
@@ -748,8 +813,8 @@
   }
   .json-preview-modal-panel {
     background: #fff;
-    border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     width: 85%;
     max-width: 900px;
     display: flex;
@@ -768,12 +833,12 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
+    padding: 14px 16px;
     border-bottom: 1px solid #e5e7eb;
   }
   .json-preview-modal-header h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
   }
   .json-preview-modal-header .close-btn {
@@ -796,7 +861,7 @@
     color: #111827;
   }
   .json-preview-modal-body {
-    padding: 16px;
+    padding: 14px;
     overflow: auto;
     flex-grow: 1;
   }
@@ -805,7 +870,7 @@
     padding: 12px;
     background: #f9fafb;
     border: 1px solid #e5e7eb;
-    border-radius: 8px;
+    border-radius: 6px;
     font-family: "Consolas", "Monaco", "Courier New", monospace;
     font-size: 12px;
     line-height: 1.5;
@@ -844,8 +909,8 @@
   }
   .json-modal-panel {
     background: #fff;
-    border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     width: 86%;
     max-width: 900px;
     display: flex;
@@ -868,12 +933,13 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
+    padding: 14px 16px;
     border-bottom: 1px solid #e5e7eb;
   }
   .json-modal-header h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: 15px;
+    font-weight: 600;
   }
   .json-modal-header .close-btn {
     background: none;
@@ -895,7 +961,7 @@
     color: #111827;
   }
   .json-modal-body {
-    padding: 16px;
+    padding: 14px;
     overflow: auto;
     flex-grow: 1;
     position: relative;
@@ -905,7 +971,7 @@
     height: 56vh;
     min-height: 320px;
     border: 1px solid #d1d5db;
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 12px;
     font-family: "Consolas", "Monaco", "Courier New", monospace;
     font-size: 13px;
@@ -914,18 +980,19 @@
     outline: none;
     background: #fafafa;
     color: #111827;
+    transition: all 0.15s;
   }
   #campaigns-json-source:focus {
     border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     background: #fff;
   }
   .json-modal-body::after {
     content: "提示：按 ESC 关闭，Ctrl/Cmd + Enter 保存";
     position: absolute;
     bottom: 8px;
-    right: 16px;
-    font-size: 11px;
+    right: 14px;
+    font-size: 10px;
     color: #9ca3af;
     pointer-events: none;
   }
@@ -1086,8 +1153,7 @@
 
     function setEditorInputsEnabled(enabled) {
       const ids = [
-        "campaigns-campaignKey",
-        "campaigns-hotTweetsKey",
+        "campaigns-twitter-handle",
         "campaigns-displayName-zh",
         "campaigns-displayName-en",
         "campaigns-startAt",
@@ -1304,7 +1370,7 @@
                       } />
                       <span class="slider"></span>
                     </label>
-                    <div class="muted" style="margin-top: 4px; font-size: 12px">
+                    <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
                       不做任何校验，用户点一下链接即可完成任务
                     </div>
                   </div>
@@ -1340,10 +1406,9 @@
       $("campaigns-editor-hint").textContent = "选择左侧一条活动开始编辑";
       $("campaigns-enabled").checked = false;
       $("campaigns-testingPhase").checked = false;
-      // id 字段是 disabled 的，不需要清空
+      // id、campaignKey、hotTweetsKey 字段是 disabled 的，不需要清空
       [
-        "campaigns-campaignKey",
-        "campaigns-hotTweetsKey",
+        "campaigns-twitter-handle",
         "campaigns-displayName-zh",
         "campaigns-displayName-en",
         "campaigns-startAt",
@@ -1430,6 +1495,23 @@
       $("campaigns-enabled").checked = !!c.enabled;
       $("campaigns-testingPhase").checked = !!c.testingPhase;
 
+      // 判断活动是否已保存（有id且id不为空）
+      const isSaved = !!(c.id && c.id.trim());
+      
+      // 设置推特号输入框
+      const twitterHandleEl = $("campaigns-twitter-handle");
+      if (twitterHandleEl) {
+        if (isSaved) {
+          // 已保存的活动：禁用输入框，显示当前的campaignKey
+          twitterHandleEl.value = c.campaignKey || "";
+          twitterHandleEl.disabled = true;
+        } else {
+          // 新活动：启用输入框，显示当前的campaignKey（如果有）
+          twitterHandleEl.value = c.campaignKey || "";
+          twitterHandleEl.disabled = false;
+        }
+      }
+
       $("campaigns-campaignKey").value = c.campaignKey || "";
       // id 自动从 campaignKey 生成（显示用，实际保存时也会自动生成）
       updateIdFromCampaignKey();
@@ -1489,10 +1571,29 @@
       c.enabled = !!$("campaigns-enabled").checked;
       c.testingPhase = !!$("campaigns-testingPhase").checked;
 
-      c.campaignKey = $("campaigns-campaignKey").value.trim();
-      // id 自动从 campaignKey 生成
-      c.id = c.campaignKey ? `${c.campaignKey}-hunter` : "";
-      c.hotTweetsKey = $("campaigns-hotTweetsKey").value.trim();
+      // 从推特号输入框读取值（如果未禁用）
+      const twitterHandleEl = $("campaigns-twitter-handle");
+      if (twitterHandleEl && !twitterHandleEl.disabled) {
+        const twitterHandle = twitterHandleEl.value.trim();
+        if (twitterHandle) {
+          c.campaignKey = twitterHandle;
+          c.hotTweetsKey = twitterHandle;
+          c.id = `${twitterHandle}-hunter`;
+          // 同步更新显示字段
+          $("campaigns-campaignKey").value = twitterHandle;
+          $("campaigns-hotTweetsKey").value = twitterHandle;
+          updateIdFromCampaignKey();
+        } else {
+          c.campaignKey = "";
+          c.hotTweetsKey = "";
+          c.id = "";
+        }
+      } else {
+        // 如果已禁用（已保存的活动），则从原有字段读取（虽然不应该改变）
+        c.campaignKey = $("campaigns-campaignKey").value.trim();
+        c.hotTweetsKey = $("campaigns-hotTweetsKey").value.trim();
+        c.id = c.campaignKey ? `${c.campaignKey}-hunter` : "";
+      }
 
       c.displayName = c.displayName || {};
       c.displayName.zh = $("campaigns-displayName-zh").value;
@@ -1592,10 +1693,31 @@
       }
     }
 
+    function updateFieldsFromTwitterHandle() {
+      const twitterHandle = $("campaigns-twitter-handle").value.trim();
+      if (twitterHandle) {
+        $("campaigns-campaignKey").value = twitterHandle;
+        $("campaigns-hotTweetsKey").value = twitterHandle;
+        updateIdFromCampaignKey();
+      } else {
+        $("campaigns-campaignKey").value = "";
+        $("campaigns-hotTweetsKey").value = "";
+        $("campaigns-id").value = "";
+      }
+    }
+
     function bindInputSync() {
+      // 推特号输入框的特殊处理
+      const twitterHandleEl = $("campaigns-twitter-handle");
+      if (twitterHandleEl) {
+        twitterHandleEl.addEventListener("input", () => {
+          if (!isEditorEnabled()) return;
+          updateFieldsFromTwitterHandle();
+          syncCampaignFromInputs();
+        });
+      }
+
       const ids = [
-        "campaigns-campaignKey",
-        "campaigns-hotTweetsKey",
         "campaigns-displayName-zh",
         "campaigns-displayName-en",
         "campaigns-startAt",
@@ -1625,24 +1747,9 @@
         const evt = el.type === "checkbox" ? "change" : "input";
         el.addEventListener(evt, () => {
           if (!isEditorEnabled()) return;
-          // 如果 campaignKey 变化，先更新 id 显示
-          if (id === "campaigns-campaignKey") {
-            updateIdFromCampaignKey();
-          }
           syncCampaignFromInputs();
         });
       });
-
-      // 单独为 campaignKey 绑定，确保 id 实时更新
-      const campaignKeyEl = $("campaigns-campaignKey");
-      if (campaignKeyEl) {
-        campaignKeyEl.addEventListener("input", () => {
-          if (isEditorEnabled()) {
-            updateIdFromCampaignKey();
-          }
-        });
-      }
-
     }
 
     function addLogo() {
@@ -2243,6 +2350,25 @@
 
       bindInputSync();
       bindRepeatersEvents();
+
+      // 折叠功能（处理所有折叠section）
+      const collapsibleSections = document.querySelectorAll(".section-collapsible");
+      collapsibleSections.forEach((section) => {
+        const title = section.querySelector(".section-title-collapsible");
+        const content = section.querySelector(".section-content");
+        if (title && content) {
+          title.addEventListener("click", () => {
+            const isExpanded = section.classList.contains("expanded");
+            if (isExpanded) {
+              section.classList.remove("expanded");
+              content.style.display = "none";
+            } else {
+              section.classList.add("expanded");
+              content.style.display = "block";
+            }
+          });
+        }
+      });
 
       $("campaigns-search").addEventListener("input", (e) => {
         search = e.target.value || "";
