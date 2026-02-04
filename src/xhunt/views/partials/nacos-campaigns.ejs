@@ -296,6 +296,32 @@
 
   <div class="campaigns-toast" id="campaigns-toast" style="display: none"></div>
 
+  <!-- JSON 预览模态框（发布前预览） -->
+  <div class="json-preview-modal-overlay" id="campaigns-json-preview-modal" style="display: none">
+    <div class="json-preview-modal-panel">
+      <div class="json-preview-modal-header">
+        <h3>预览 JSON 配置</h3>
+        <button class="close-btn" id="campaigns-json-preview-modal-close" type="button">
+          &times;
+        </button>
+      </div>
+      <div class="json-preview-modal-body">
+        <div class="muted" style="margin-bottom: 8px">
+          即将发布到 Nacos 的完整配置（dataId: <code id="campaigns-json-preview-dataid">xhunt_campaigns</code>）
+        </div>
+        <pre id="campaigns-json-preview-content"></pre>
+      </div>
+      <div class="json-preview-modal-footer">
+        <button class="btn" id="campaigns-json-preview-modal-cancel" type="button">
+          取消
+        </button>
+        <button class="btn primary" id="campaigns-json-preview-modal-confirm" type="button">
+          确认发布
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- JSON 源码编辑模态框 -->
   <div class="json-modal-overlay" id="campaigns-json-modal" style="display: none">
     <div class="json-modal-panel">
@@ -695,6 +721,97 @@
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
     font-size: 13px;
     z-index: 9999;
+  }
+
+  /* JSON 预览模态框（发布前预览） */
+  .json-preview-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10001;
+  }
+  .json-preview-modal-panel {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    width: 85%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+    margin: 20px;
+  }
+  @media (max-width: 768px) {
+    .json-preview-modal-panel {
+      width: 95%;
+      max-height: 90vh;
+      margin: 10px;
+    }
+  }
+  .json-preview-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .json-preview-modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .json-preview-modal-header .close-btn {
+    background: none;
+    border: none;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+  }
+  .json-preview-modal-header .close-btn:hover {
+    background: #f3f4f6;
+    color: #111827;
+  }
+  .json-preview-modal-body {
+    padding: 16px;
+    overflow: auto;
+    flex-grow: 1;
+  }
+  .json-preview-modal-body pre {
+    margin: 0;
+    padding: 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow: auto;
+    max-height: 60vh;
+    color: #111827;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .json-preview-modal-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #e5e7eb;
+    text-align: right;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
   }
 
   /* JSON Modal */
@@ -1935,10 +2052,29 @@
       }
 
       const content = JSON.stringify(config, null, 2);
-      const ok = window.confirm(
-        `确认发布到 Nacos？\n\n将覆盖 dataId=${DATA_ID} 的 content（对象整体覆盖）。`
-      );
-      if (!ok) return;
+      // 显示预览模态框
+      showJsonPreviewModal(content);
+    }
+
+    function showJsonPreviewModal(jsonContent) {
+      const modal = $("campaigns-json-preview-modal");
+      const contentEl = $("campaigns-json-preview-content");
+      const dataIdEl = $("campaigns-json-preview-dataid");
+      if (!modal || !contentEl) return;
+
+      if (dataIdEl) dataIdEl.textContent = DATA_ID;
+      contentEl.textContent = jsonContent;
+      modal.style.display = "flex";
+    }
+
+    function hideJsonPreviewModal() {
+      const modal = $("campaigns-json-preview-modal");
+      if (modal) modal.style.display = "none";
+    }
+
+    async function confirmPublish() {
+      hideJsonPreviewModal();
+      const content = JSON.stringify(config, null, 2);
       toast("正在发布到 Nacos...", "info");
       await apiPublishConfig({ dataId: DATA_ID, content, group: GROUP });
       dirty = false;
@@ -1989,6 +2125,38 @@
 
       $("campaigns-logos-add").addEventListener("click", addLogo);
       $("campaigns-tasks-add").addEventListener("click", addTask);
+
+      // JSON 预览模态框事件绑定
+      const previewModal = $("campaigns-json-preview-modal");
+      const previewModalClose = $("campaigns-json-preview-modal-close");
+      const previewModalCancel = $("campaigns-json-preview-modal-cancel");
+      const previewModalConfirm = $("campaigns-json-preview-modal-confirm");
+
+      if (previewModalClose) {
+        previewModalClose.addEventListener("click", hideJsonPreviewModal);
+      }
+      if (previewModalCancel) {
+        previewModalCancel.addEventListener("click", hideJsonPreviewModal);
+      }
+      if (previewModalConfirm) {
+        previewModalConfirm.addEventListener("click", () => {
+          confirmPublish().catch((e) => toast("发布失败：" + e.message, "error"));
+        });
+      }
+      // 点击遮罩层关闭
+      if (previewModal) {
+        previewModal.addEventListener("click", (e) => {
+          if (e.target === previewModal) {
+            hideJsonPreviewModal();
+          }
+        });
+      }
+      // 按 ESC 键关闭
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && previewModal && previewModal.style.display === "flex") {
+          hideJsonPreviewModal();
+        }
+      });
 
       // first load
       loadFromNacos().catch((e) => toast("加载失败：" + e.message, "error"));
