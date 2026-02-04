@@ -79,11 +79,17 @@
         <div class="field-row">
           <div class="field">
             <label>id（唯一）</label>
-            <input id="campaigns-id" type="text" placeholder="例如：bybit-hunter" />
+            <input id="campaigns-id" type="text" placeholder="例如：bybit-hunter" disabled />
+            <div class="muted" style="margin-top: 4px; font-size: 12px">
+              内部索引使用，无需手动维护（自动生成：campaignKey + '-hunter'）
+            </div>
           </div>
           <div class="field">
             <label>campaignKey</label>
             <input id="campaigns-campaignKey" type="text" placeholder="例如：bybit" />
+            <div class="muted" style="margin-top: 4px; font-size: 12px">
+              需要后端协商一致，一般也是投放者推特号，用于存储报名数据和排名数据
+            </div>
           </div>
           <div class="field">
             <label>hotTweetsKey</label>
@@ -92,11 +98,14 @@
               type="text"
               placeholder="例如：bybit"
             />
+            <div class="muted" style="margin-top: 4px; font-size: 12px">
+              建议填写投放者的推特号，目的是获取热门推文数据 <code>hot?project=hotTweetsKey</code>
+            </div>
           </div>
         </div>
 
         <div class="section">
-          <div class="section-title">展示名称（DisplayName）</div>
+          <div class="section-title">活动全称（DisplayName）</div>
           <div class="field-row field-row-2">
             <div class="field">
               <label>中文</label>
@@ -110,19 +119,16 @@
         </div>
 
         <div class="section">
-          <div class="section-title">报名窗口（Enrollment Window）</div>
+          <div class="section-title">活动时间范围（Enrollment Window）</div>
           <div class="field-row field-row-2">
             <div class="field">
-              <label>startAt（本地时间）</label>
+              <label>startAt（活动开始时间）</label>
               <input id="campaigns-startAt" type="datetime-local" />
             </div>
             <div class="field">
-              <label>endAt（本地时间）</label>
+              <label>endAt（活动结束时间）</label>
               <input id="campaigns-endAt" type="datetime-local" />
             </div>
-          </div>
-          <div class="muted" style="margin-top: 6px">
-            保存时会转换为 UTC ISO 字符串（例如 <code>2025-12-10T00:00:00Z</code>）。
           </div>
         </div>
 
@@ -177,7 +183,7 @@
         </div>
 
         <div class="section">
-          <div class="section-title">文案（Copy）</div>
+          <div class="section-title">报名按钮文案（Copy）</div>
           <div class="field-row field-row-3">
             <div class="field">
               <label>emoji</label>
@@ -195,7 +201,7 @@
 
           <div class="field-row field-row-2">
             <div class="field">
-              <label>shortTitle（zh）</label>
+              <label>活动短标题（zh）</label>
               <input id="campaigns-copy-shortTitle-zh" type="text" />
             </div>
             <div class="field">
@@ -206,7 +212,7 @@
 
           <div class="field-row field-row-2">
             <div class="field">
-              <label>goToOfficialText（zh）</label>
+              <label>去官方按钮文案（zh）</label>
               <input id="campaigns-copy-goToOfficialText-zh" type="text" />
             </div>
             <div class="field">
@@ -217,7 +223,7 @@
 
           <div class="field-row field-row-2">
             <div class="field">
-              <label>viewGuideText（zh）</label>
+              <label>查看官方指南按钮文案（zh）</label>
               <input id="campaigns-copy-viewGuideText-zh" type="text" />
             </div>
             <div class="field">
@@ -228,10 +234,10 @@
         </div>
 
         <div class="section">
-          <div class="section-title">链接（Links）</div>
+          <div class="section-title">相关链接（Links）</div>
           <div class="field-row field-row-2">
             <div class="field">
-              <label>guideUrl</label>
+              <label>官方指南链接</label>
               <input
                 id="campaigns-links-guideUrl"
                 type="text"
@@ -239,7 +245,7 @@
               />
             </div>
             <div class="field">
-              <label>activeUrl</label>
+              <label>xhunt.ai官网活动链接</label>
               <input
                 id="campaigns-links-activeUrl"
                 type="text"
@@ -253,7 +259,7 @@
           <div class="section-title">名单（每行一个）</div>
           <div class="field-row field-row-2">
             <div class="field">
-              <label>testList</label>
+              <label>内部测试人员名单</label>
               <textarea
                 id="campaigns-testList"
                 rows="3"
@@ -261,7 +267,7 @@
               ></textarea>
             </div>
             <div class="field">
-              <label>targetUserIds</label>
+              <label>在哪些推特号右侧展示本活动</label>
               <textarea
                 id="campaigns-targetUserIds"
                 rows="3"
@@ -273,7 +279,7 @@
 
         <div class="section">
           <div class="section-title">
-            Logos
+            活动 logo
             <button class="btn" id="campaigns-logos-add" type="button" disabled>
               ➕ 添加 Logo
             </button>
@@ -283,9 +289,9 @@
 
         <div class="section">
           <div class="section-title">
-            Tasks
+            报名前需完成的任务（Tasks）
             <button class="btn" id="campaigns-tasks-add" type="button" disabled>
-              ➕ 添加 Task
+              ➕ 添加任务
             </button>
           </div>
           <div class="repeaters" id="campaigns-tasks"></div>
@@ -1070,7 +1076,6 @@
 
     function setEditorInputsEnabled(enabled) {
       const ids = [
-        "campaigns-id",
         "campaigns-campaignKey",
         "campaigns-hotTweetsKey",
         "campaigns-displayName-zh",
@@ -1322,8 +1327,8 @@
       $("campaigns-editor-hint").textContent = "选择左侧一条活动开始编辑";
       $("campaigns-enabled").checked = false;
       $("campaigns-testingPhase").checked = false;
+      // id 字段是 disabled 的，不需要清空
       [
-        "campaigns-id",
         "campaigns-campaignKey",
         "campaigns-hotTweetsKey",
         "campaigns-displayName-zh",
@@ -1412,8 +1417,9 @@
       $("campaigns-enabled").checked = !!c.enabled;
       $("campaigns-testingPhase").checked = !!c.testingPhase;
 
-      $("campaigns-id").value = c.id || "";
       $("campaigns-campaignKey").value = c.campaignKey || "";
+      // id 自动从 campaignKey 生成（显示用，实际保存时也会自动生成）
+      updateIdFromCampaignKey();
       $("campaigns-hotTweetsKey").value = c.hotTweetsKey || "";
 
       $("campaigns-displayName-zh").value = c.displayName.zh || "";
@@ -1470,8 +1476,9 @@
       c.enabled = !!$("campaigns-enabled").checked;
       c.testingPhase = !!$("campaigns-testingPhase").checked;
 
-      c.id = $("campaigns-id").value.trim();
       c.campaignKey = $("campaigns-campaignKey").value.trim();
+      // id 自动从 campaignKey 生成
+      c.id = c.campaignKey ? `${c.campaignKey}-hunter` : "";
       c.hotTweetsKey = $("campaigns-hotTweetsKey").value.trim();
 
       c.displayName = c.displayName || {};
@@ -1564,9 +1571,16 @@
       renderList();
     }
 
+    function updateIdFromCampaignKey() {
+      const campaignKey = $("campaigns-campaignKey").value.trim();
+      const idEl = $("campaigns-id");
+      if (idEl) {
+        idEl.value = campaignKey ? `${campaignKey}-hunter` : "";
+      }
+    }
+
     function bindInputSync() {
       const ids = [
-        "campaigns-id",
         "campaigns-campaignKey",
         "campaigns-hotTweetsKey",
         "campaigns-displayName-zh",
@@ -1598,9 +1612,23 @@
         const evt = el.type === "checkbox" ? "change" : "input";
         el.addEventListener(evt, () => {
           if (!isEditorEnabled()) return;
+          // 如果 campaignKey 变化，先更新 id 显示
+          if (id === "campaigns-campaignKey") {
+            updateIdFromCampaignKey();
+          }
           syncCampaignFromInputs();
         });
       });
+
+      // 单独为 campaignKey 绑定，确保 id 实时更新
+      const campaignKeyEl = $("campaigns-campaignKey");
+      if (campaignKeyEl) {
+        campaignKeyEl.addEventListener("input", () => {
+          if (isEditorEnabled()) {
+            updateIdFromCampaignKey();
+          }
+        });
+      }
 
     }
 
@@ -1729,9 +1757,19 @@
     }
 
     function newCampaign() {
-      const nowId = `new-campaign-${Date.now()}`;
+      // 如果有未发布的活动，不允许新增
+      if (dirty) {
+        const ok = window.confirm(
+          "你当前有未发布的修改，新增活动会丢失这些修改。\n确认继续新增？"
+        );
+        if (!ok) return;
+        // 如果用户确认，清除 dirty 状态（相当于放弃之前的修改）
+        dirty = false;
+        $("campaigns-publish").disabled = true;
+      }
+
       const c = {
-        id: nowId,
+        id: "", // id 初始为空，等用户填写 campaignKey 后自动生成
         campaignKey: "",
         enabled: false,
         // 默认先只开放给内部测试号
@@ -1773,6 +1811,8 @@
       $("campaigns-publish").disabled = false;
       renderList();
       selectCampaign(0);
+      // 确保 id 显示正确（初始为空，等用户填写 campaignKey 后自动更新）
+      updateIdFromCampaignKey();
       toast("已新增一条活动（未发布）", "info");
     }
 
@@ -1844,14 +1884,16 @@
       campaigns.forEach((c, idx) => {
         const prefix = `活动 #${idx + 1} (id: ${c.id || "未设置"})`;
 
-        // 必填：id
-        if (!c.id || !c.id.trim()) {
-          errors.push(`${prefix}: id 不能为空`);
-        }
-
-        // 必填：campaignKey
+        // 必填：campaignKey（id 会自动从 campaignKey 生成）
         if (!c.campaignKey || !c.campaignKey.trim()) {
           errors.push(`${prefix}: campaignKey 不能为空`);
+        } else {
+          // 如果 campaignKey 存在，确保 id 已自动生成
+          const expectedId = `${c.campaignKey.trim()}-hunter`;
+          if (!c.id || c.id.trim() !== expectedId) {
+            // 自动修正 id
+            c.id = expectedId;
+          }
         }
 
         // 必填：displayName（至少一个语言）
