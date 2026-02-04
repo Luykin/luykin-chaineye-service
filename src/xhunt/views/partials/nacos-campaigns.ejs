@@ -527,7 +527,7 @@
     overflow: auto;
   }
   .item {
-    padding: 7px 12px;
+    padding: 10px 12px;
     border-bottom: 1px solid #f3f4f6;
     cursor: pointer;
     transition: background 0.15s;
@@ -547,7 +547,6 @@
     font-weight: 600;
     color: #111827;
     font-size: 13px;
-    margin-bottom: 3px;
     line-height: 1.3;
   }
   .chips {
@@ -578,6 +577,35 @@
     font-size: 11px;
     color: #6b7280;
     line-height: 1.4;
+  }
+  .item-logos {
+    display: flex;
+    align-items: center;
+    margin-top: 6px;
+    margin-left: -8px;
+  }
+  .item-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: #f3f4f6;
+    object-fit: cover;
+    margin-left: -8px;
+    transition: transform 0.2s, z-index 0.2s;
+    position: relative;
+  }
+  .item-logo:first-child {
+    margin-left: 0;
+  }
+  .item-logo:hover {
+    transform: scale(1.1);
+    z-index: 10;
+  }
+  .item-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .editor {
@@ -1098,6 +1126,12 @@
       return div.innerHTML;
     }
 
+    function getProxiedImageUrl(imageUrl) {
+      if (!imageUrl) return "";
+      // 使用服务器的图片代理
+      return `/api/proxy?url=${encodeURIComponent(imageUrl)}`;
+    }
+
     function safeNumber(v, fallback) {
       const n = Number(v);
       return Number.isFinite(n) ? n : fallback;
@@ -1291,30 +1325,47 @@
               c?.copy?.title?.zh ||
               c?.id ||
               "(未命名)";
-            const startAt = c?.enrollmentWindow?.startAt || "-";
-            const endAt = c?.enrollmentWindow?.endAt || "-";
             const chips = [
               c?.enabled ? `<span class="chip on">enabled</span>` : `<span class="chip">disabled</span>`,
               c?.testingPhase ? `<span class="chip testing">testing</span>` : "",
             ].filter(Boolean);
+            
+            // 渲染 logo 堆叠
+            const logos = Array.isArray(c?.logos) ? c.logos : [];
+            const logosHtml = logos.length > 0
+              ? `<div class="item-logos">
+                  ${logos
+                    .map((logo) => {
+                      const imageUrl = logo?.image || "";
+                      if (!imageUrl) return "";
+                      const proxiedUrl = getProxiedImageUrl(imageUrl);
+                      return `<img 
+                        class="item-logo" 
+                        src="${escapeHtml(proxiedUrl)}" 
+                        alt="${escapeHtml(logo?.label || "")}"
+                        title="${escapeHtml(logo?.label || "")}"
+                        onerror="this.style.display='none'"
+                      />`;
+                    })
+                    .filter(Boolean)
+                    .join("")}
+                </div>`
+              : "";
+            
             return `
               <div class="item ${active}" data-idx="${idx}">
-                <div class="item-title">
-                  <span>${escapeHtml(title)}</span>
-                  <span class="chips">${chips.join("")}</span>
-                </div>
-                <div class="item-meta">
-                  id: <code>${escapeHtml(c?.id || "-")}</code>
-                  · key: <code>${escapeHtml(c?.campaignKey || "-")}</code>
-                </div>
-                <div class="item-meta">
-                  window: ${escapeHtml(startAt)} → ${escapeHtml(endAt)}
+                <div class="item-content">
+                  <div class="item-title">
+                    <span>${escapeHtml(title)}</span>
+                    <span class="chips">${chips.join("")}</span>
+                  </div>
+                  ${logosHtml}
                 </div>
               </div>
             `;
           })
           .join("") ||
-        `<div style="padding:14px;color:#9ca3af;">暂无活动，点击“新增活动”创建</div>`;
+        `<div style="padding:14px;color:#9ca3af;">暂无活动，点击"新增活动"创建</div>`;
 
       if (countEl) countEl.textContent = `${filtered.length} 个`;
 
