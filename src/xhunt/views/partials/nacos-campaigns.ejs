@@ -1334,6 +1334,14 @@
 
       const logos = Array.isArray(c?.logos) ? c.logos : [];
       const tasks = Array.isArray(c?.tasks) ? c.tasks : [];
+      
+      // 确保所有 logo 都有默认的 ringClassName
+      const defaultRingClassName = "ring-blue-400/20 hover:ring-blue-400/50";
+      logos.forEach((logo) => {
+        if (!logo.ringClassName || logo.ringClassName.trim() === "") {
+          logo.ringClassName = defaultRingClassName;
+        }
+      });
 
       // 为每个 task 自动生成 id（如果没有的话）
       const campaignKey = c?.campaignKey || "";
@@ -1362,29 +1370,23 @@
                 </div>
                 <div class="field-row">
                   <div class="field">
-                    <label>image</label>
+                    <label>图片地址（image 必填）</label>
                     <input type="text" data-field="image" value="${escapeHtml(
                       it?.image || ""
                     )}" />
                   </div>
                   <div class="field">
-                    <label>url</label>
+                    <label>跳转到的推特链接（url 必填）</label>
                     <input type="text" data-field="url" value="${escapeHtml(
                       it?.url || ""
                     )}" />
                   </div>
                   <div class="field">
-                    <label>label</label>
+                    <label>展示的推特账号（label 必填）</label>
                     <input type="text" data-field="label" value="${escapeHtml(
                       it?.label || ""
                     )}" />
                   </div>
-                </div>
-                <div class="field">
-                  <label>ringClassName</label>
-                  <input type="text" data-field="ringClassName" value="${escapeHtml(
-                    it?.ringClassName || ""
-                  )}" />
                 </div>
               </div>
             `;
@@ -1447,19 +1449,19 @@
 
                 <div class="field-row">
                   <div class="field">
-                    <label>title.zh</label>
+                    <label>任务标题（title.zh 必填）</label>
                     <input type="text" data-field="title.zh" value="${escapeHtml(
                       it?.title?.zh || ""
                     )}" />
                   </div>
                   <div class="field">
-                    <label>title.en</label>
+                    <label>任务标题（title.en 必填）</label>
                     <input type="text" data-field="title.en" value="${escapeHtml(
                       it?.title?.en || ""
                     )}" />
                   </div>
                   <div class="field">
-                    <label>url</label>
+                    <label>任务跳转的链接（url 必填）</label>
                     <input type="text" data-field="url" value="${escapeHtml(
                       it?.url || ""
                     )}" />
@@ -1551,6 +1553,14 @@
       if (!Array.isArray(c.targetUserIds)) c.targetUserIds = [];
       if (!Array.isArray(c.logos)) c.logos = [];
       if (!Array.isArray(c.tasks)) c.tasks = [];
+      
+      // 确保所有 logo 都有默认的 ringClassName
+      const defaultRingClassName = "ring-blue-400/20 hover:ring-blue-400/50";
+      c.logos.forEach((logo) => {
+        if (!logo.ringClassName || logo.ringClassName.trim() === "") {
+          logo.ringClassName = defaultRingClassName;
+        }
+      });
 
       setControlsEnabled(true);
 
@@ -1904,7 +1914,7 @@
         image: "",
         url: "",
         label: "",
-        ringClassName: "",
+        ringClassName: "ring-blue-400/20 hover:ring-blue-400/50",
       });
       dirty = true;
       $("campaigns-publish").disabled = false;
@@ -2036,7 +2046,12 @@
       }
 
       onRepInput("campaigns-logos", (obj, field, value) => {
-        obj[field] = value;
+        // ringClassName 始终使用默认值，不允许用户修改
+        if (field === "ringClassName") {
+          obj[field] = "ring-blue-400/20 hover:ring-blue-400/50";
+        } else {
+          obj[field] = value;
+        }
       });
       onRepInput("campaigns-tasks", (obj, field, value) => {
         if (field.includes(".")) {
@@ -2593,6 +2608,8 @@
       await apiPublishConfig({ dataId: DATA_ID, content, group: GROUP });
       dirty = false;
       $("campaigns-publish").disabled = true;
+      // 更新 originalConfig 为当前 config，清空变动项
+      originalConfig = JSON.parse(JSON.stringify(config));
       toast("发布成功", "success");
     }
 
