@@ -314,6 +314,10 @@
       <div class="json-preview-modal-body">
         <div class="muted" style="margin-bottom: 8px">
           即将发布到 Nacos 的完整配置（dataId: <code id="campaigns-json-preview-dataid">xhunt_campaigns</code>）
+          <span id="campaigns-json-preview-diff-hint" style="margin-left: 12px; color: #3b82f6; font-weight: 600;"></span>
+        </div>
+        <div style="margin-bottom: 8px; font-size: 12px; color: #6b7280;">
+          <span style="background: #dcfce7; padding: 2px 6px; border-radius: 4px; margin-right: 8px;">绿色</span>表示新增或修改的内容
         </div>
         <pre id="campaigns-json-preview-content"></pre>
       </div>
@@ -811,6 +815,11 @@
     white-space: pre-wrap;
     word-wrap: break-word;
   }
+  .json-preview-modal-body pre .diff-added {
+    background: #dcfce7;
+    padding: 2px 0;
+    border-radius: 2px;
+  }
   .json-preview-modal-footer {
     padding: 12px 16px;
     border-top: 1px solid #e5e7eb;
@@ -937,6 +946,7 @@
     const GROUP = "DEFAULT_GROUP";
 
     let config = { version: 3, campaigns: [] };
+    let originalConfig = null; // 保存从 Nacos 加载的原始配置
     let currentIndex = -1;
     let dirty = false;
     let search = "";
@@ -1294,6 +1304,9 @@
                       } />
                       <span class="slider"></span>
                     </label>
+                    <div class="muted" style="margin-top: 4px; font-size: 12px">
+                      不做任何校验，用户点一下链接即可完成任务
+                    </div>
                   </div>
                 </div>
 
@@ -1794,8 +1807,16 @@
           goToOfficialText: { zh: "前往官方", en: "Go to Official" },
           viewGuideText: { zh: "查看官方指南", en: "View Official Guide" },
         },
-        tasks: [],
-        links: { guideUrl: "", activeUrl: "" },
+        tasks: [
+          {
+            id: "follow-xhunt",
+            title: { zh: "关注 @xhunt_ai", en: "Follow @xhunt_ai" },
+            url: "https://x.com/xhunt_ai",
+            type: "twitter",
+            autoComplete: true,
+          },
+        ],
+        links: { guideUrl: "https://", activeUrl: "https://xhunt.ai/leaderboard" },
         showExtraComponents: true,
         targetUserIds: [],
         hotTweetsKey: "",
@@ -1864,6 +1885,8 @@
         throw new Error("Nacos content 不是合法 JSON，请检查当前配置内容");
       }
       config = normalizeConfig(parsed);
+      // 保存原始配置用于对比
+      originalConfig = JSON.parse(JSON.stringify(config));
       dirty = false;
       $("campaigns-publish").disabled = true;
       currentIndex = -1;
@@ -2098,14 +2121,99 @@
       showJsonPreviewModal(content);
     }
 
+    function highlightJsonDiff(currentJson, originalJson) {
+      if (!originalJson) {
+        // 如果没有原始配置，直接返回当前 JSON（所有内容都是新增的）
+        return escapeHtml(currentJson).replace(
+          /^(.+)$/gm,
+          '<span class="diff-added">$1</span>'
+        );
+      }
+
+      try {
+        // 将原始配置也格式化为相同格式
+        const originalJsonStr = JSON.stringify(originalJson, null, 2);
+        const currentLines = currentJson.split("\n");
+        const originalLines = originalJsonStr.split("\n");
+
+        // 创建一个 Map 来存储原始配置的行（去除空白后作为 key）
+        const originalLinesMap = new Map();
+        originalLines.forEach((line, index) => {
+          const trimmed = line.trim();
+          if (trimmed) {
+            // 使用行内容和行号作为 key（处理重复行的情况）
+            const key = `${trimmed}_${index}`;
+            if (!originalLinesMap.has(key)) {
+              originalLinesMap.set(key, true);
+            }
+          }
+        });
+
+        // 对比每一行
+        const highlightedLines = currentLines.map((line, index) => {
+          const trimmed = line.trim();
+          if (!trimmed) {
+            return escapeHtml(line);
+          }
+
+          // 检查这一行是否在原始配置中存在（考虑上下文）
+          let existsInOriginal = false;
+          const key = `${trimmed}_${index}`;
+          if (originalLinesMap.has(key)) {
+            existsInOriginal = true;
+          } else {
+            // 也检查是否在其他位置存在（可能是移动了位置）
+            for (const [origKey] of originalLinesMap) {
+              if (origKey.startsWith(trimmed + "_")) {
+                existsInOriginal = true;
+                break;
+              }
+            }
+          }
+
+          // 如果不存在，高亮显示
+          if (!existsInOriginal) {
+            return `<span class="diff-added">${escapeHtml(line)}</span>`;
+          }
+
+          return escapeHtml(line);
+        });
+
+        return highlightedLines.join("\n");
+      } catch (e) {
+        // 如果解析失败，回退到简单的高亮（所有内容都高亮）
+        console.error("JSON diff error:", e);
+        return escapeHtml(currentJson).replace(
+          /^(.+)$/gm,
+          '<span class="diff-added">$1</span>'
+        );
+      }
+    }
+
     function showJsonPreviewModal(jsonContent) {
       const modal = $("campaigns-json-preview-modal");
       const contentEl = $("campaigns-json-preview-content");
       const dataIdEl = $("campaigns-json-preview-dataid");
+      const diffHintEl = $("campaigns-json-preview-diff-hint");
       if (!modal || !contentEl) return;
 
       if (dataIdEl) dataIdEl.textContent = DATA_ID;
-      contentEl.textContent = jsonContent;
+
+      // 如果有原始配置，显示差异
+      if (originalConfig) {
+        const highlightedContent = highlightJsonDiff(jsonContent, originalConfig);
+        contentEl.innerHTML = highlightedContent;
+        if (diffHintEl) {
+          diffHintEl.textContent = "（绿色高亮显示本次修改）";
+        }
+      } else {
+        // 如果没有原始配置（首次加载或已发布），显示普通文本
+        contentEl.textContent = jsonContent;
+        if (diffHintEl) {
+          diffHintEl.textContent = "";
+        }
+      }
+
       modal.style.display = "flex";
     }
 
