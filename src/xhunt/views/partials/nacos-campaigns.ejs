@@ -1,35 +1,25 @@
 <div class="campaigns-container">
   <div class="campaigns-header">
-    <h2>🎯 Earn 活动配置（Nacos）</h2>
-    <p>
-      可视化编辑 Nacos 配置：<code>xhunt_campaigns</code>（结构：<code>{ version, campaigns: [] }</code>）
-    </p>
+    <h2>
+      <svg t="1770303309021" class="icon campaigns-header-icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="8832" width="24" height="24"><path d="M511.744 513.1264m-450.816 0a450.816 450.816 0 1 0 901.632 0 450.816 450.816 0 1 0-901.632 0Z" fill="#FF5C64" p-id="8833"></path><path d="M815.9232 430.2336c0-112.9984-87.5008-204.5952-195.3792-204.5952-23.8592 0-46.6944 4.5056-67.84 12.6976 53.7088 45.056 88.1152 114.2784 88.1152 191.9488s-34.4064 146.8416-88.1152 191.9488c7.3728 2.8672 14.9504 5.2224 22.7328 7.168l-26.368 31.0784c-6.656 8.704-1.9968 23.7568 7.3728 23.7568h41.0624v18.8416c0 26.3168 21.1968 55.04 29.3376 63.8976 3.1744 3.4816 5.2736 6.2464 6.6048 8.6528a30.0032 30.0032 0 0 0-25.088 28.9792 30.03904 30.03904 0 0 0 29.3888 30.72h0.8192c11.8272 0 29.8496-5.4784 42.4448-17.7664 9.472-9.2672 14.6432-21.3504 14.6432-34.0992 0-27.3408-14.08-45.7216-24.6272-57.1904-5.9904-6.5024-12.6464-18.8416-13.4144-23.552v-18.432h37.6832c9.3696 0 14.0288-15.0016 7.3728-23.7568l-28.2624-33.536c81.664-24.576 141.5168-103.3216 141.5168-196.7616z" fill="#FFFFFF" p-id="8834"></path><path d="M601.344 430.2336c0-112.9984-87.5008-204.5952-195.3792-204.5952S210.5856 317.2352 210.5856 430.2336c0 96.7168 64.1536 177.7664 150.272 199.0656l-26.368 31.1296c-6.656 8.704-1.9968 23.7568 7.3728 23.7568h41.0624v18.8416c0 26.3168 21.1968 55.04 29.3376 63.8976 3.1744 3.4816 5.2736 6.2464 6.6048 8.6528a30.0032 30.0032 0 0 0-25.088 28.9792 30.03904 30.03904 0 0 0 29.3888 30.72h0.8192c11.8272 0 29.8496-5.4784 42.4448-17.7664 9.472-9.2672 14.6432-21.3504 14.6432-34.0992 0-27.3408-14.08-45.7216-24.6272-57.1904-5.9904-6.5024-12.6464-18.8416-13.4144-23.552v-18.432h37.6832c9.3696 0 14.0288-15.0016 7.3728-23.7568l-28.2624-33.536c81.7152-24.5248 141.5168-103.2704 141.5168-196.7104zM337.5104 372.9408c-1.024 1.0752-24.6272 26.88-7.5264 82.3296a30.08 30.08 0 0 1-28.7232 38.912c-12.8512 0-24.7296-8.2944-28.7232-21.1968-26.2656-85.248 13.1584-132.6592 21.2992-141.312a30.08 30.08 0 0 1 42.496-1.1776 29.97248 29.97248 0 0 1 1.1776 42.4448z" fill="#FFFFFF" p-id="8835"></path></svg>
+       Xhunt Earn 活动配置</h2>
   </div>
 
   <div class="campaigns-toolbar">
-    <div class="left">
-      <span class="muted"
-        >当前 dataId：<code id="campaigns-dataid">xhunt_campaigns</code></span
-      >
-      <span class="muted">group：<code>DEFAULT_GROUP</code></span>
-    </div>
-
     <div class="right">
       <div class="campaigns-search">
-        <span class="icon">🔍</span>
+        <span class="search-icon" aria-hidden="true">🔍</span>
         <input
           id="campaigns-search"
           type="text"
           placeholder="搜索活动（id / campaignKey / 标题）"
         />
       </div>
-      <button class="btn primary" id="campaigns-refresh">🔄 从 Nacos 重新加载</button>
-      <button class="btn" id="campaigns-new">➕ 新增活动</button>
-      <button class="btn" id="campaigns-duplicate" disabled>🧬 复制活动</button>
-      <button class="btn danger" id="campaigns-delete" disabled>🗑️ 删除当前</button>
-      <button class="btn success" id="campaigns-publish" disabled>
-        🚀 发布到 Nacos
-      </button>
+      <button class="btn primary" id="campaigns-refresh"><span class="btn-ico" aria-hidden="true">🔄</span> 重新加载</button>
+      <button class="btn" id="campaigns-new"><span class="btn-ico" aria-hidden="true">➕</span> 新增活动</button>
+      <button class="btn" id="campaigns-duplicate" disabled><span class="btn-ico" aria-hidden="true">🧬</span> 复制活动</button>
+      <button class="btn danger" id="campaigns-delete" disabled><span class="btn-ico" aria-hidden="true">🗑️</span> 删除当前</button>
+      <button class="btn success" id="campaigns-publish" disabled><span class="btn-ico" aria-hidden="true">🚀</span> 发布</button>
     </div>
   </div>
 
@@ -457,6 +447,15 @@
     color: #111827;
     font-size: 20px;
     font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .campaigns-header h2 .campaigns-header-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    vertical-align: middle;
   }
   .campaigns-header p {
     margin: 0 0 10px;
@@ -466,27 +465,56 @@
   .campaigns-toolbar {
     display: flex;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
-    padding: 8px 10px;
+    padding: 5px 10px;
     background: #ffffff;
     border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    margin-bottom: 10px;
+    border-radius: 6px;
+    margin-bottom: 8px;
     align-items: center;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
   .campaigns-toolbar .left {
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .campaigns-toolbar .right {
-    display: flex;
     gap: 6px;
     flex-wrap: wrap;
     align-items: center;
+    font-size: 12px;
+  }
+  .campaigns-toolbar .right {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .campaigns-toolbar .right .btn {
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.3;
+    border-radius: 4px;
+  }
+  .campaigns-toolbar .right .btn .btn-ico {
+    display: inline-block;
+    margin-right: 3px;
+    vertical-align: -0.15em;
+  }
+  .campaigns-toolbar .right .btn.primary .btn-ico,
+  .campaigns-toolbar .right .btn.danger .btn-ico,
+  .campaigns-toolbar .right .btn.success .btn-ico {
+    filter: brightness(0) invert(1);
+  }
+  .campaigns-toolbar .right .btn:disabled .btn-ico {
+    opacity: 0.75;
+  }
+  .campaigns-toolbar .right .btn:not(.primary):not(.danger):not(.success) .btn-ico {
+    opacity: 0.88;
+  }
+  .campaigns-search .search-icon {
+    font-size: 12px;
+    color: #6b7280;
+    opacity: 0.9;
+    line-height: 1;
   }
   .btn.btn-sm {
     padding: 5px 9px;
@@ -495,25 +523,23 @@
   .campaigns-search {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border-radius: 6px;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
     background: #f9fafb;
     border: 1px solid #e5e7eb;
-    min-width: 240px;
+    min-width: 160px;
+    max-width: 200px;
     transition: all 0.15s;
-  }
-  .campaigns-search .icon {
-    font-size: 13px;
-    color: #9ca3af;
   }
   .campaigns-search input {
     border: none;
     outline: none;
     flex: 1;
-    font-size: 13px;
-    padding: 2px 0;
+    font-size: 12px;
+    padding: 0;
     background: transparent;
+    min-width: 0;
   }
   .campaigns-search input::placeholder {
     color: #9ca3af;
@@ -521,7 +547,7 @@
   .campaigns-search:focus-within {
     border-color: #3b82f6;
     background: #ffffff;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
   }
   .muted {
     color: #6b7280;
