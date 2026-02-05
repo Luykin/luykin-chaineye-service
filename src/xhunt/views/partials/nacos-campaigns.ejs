@@ -1248,8 +1248,19 @@
 
     function getProxiedImageUrl(imageUrl) {
       if (!imageUrl) return "";
-      // 使用服务器的图片代理
-      return `/api/proxy?url=${encodeURIComponent(imageUrl)}`;
+      // 检查是否是占位符或无效 URL
+      if (imageUrl.includes("REPLACE_WITH") || imageUrl.trim() === "") {
+        return "";
+      }
+      // 检查是否是有效的 URL
+      try {
+        const url = new URL(imageUrl);
+        // 如果是有效的 URL，直接使用（大多数图片 URL 都是公开可访问的）
+        return imageUrl;
+      } catch (e) {
+        // 如果不是有效的 URL，返回空字符串
+        return "";
+      }
     }
 
     function safeNumber(v, fallback) {
@@ -1466,6 +1477,8 @@
                       const imageUrl = logo?.image || "";
                       if (!imageUrl) return "";
                       const proxiedUrl = getProxiedImageUrl(imageUrl);
+                      // 如果 proxiedUrl 为空，不创建图片标签
+                      if (!proxiedUrl) return "";
                       // 注意：这里不在每次重渲染时重新设置 src，只在首次生成时创建 img
                       return `<img 
                         class="item-logo" 
