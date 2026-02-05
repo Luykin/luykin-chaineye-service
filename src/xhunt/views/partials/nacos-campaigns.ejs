@@ -267,6 +267,7 @@
                 ➕ 添加获奖者
               </button>
             </div>
+            <div class="repeaters-hint">← 左右滑动查看</div>
             <div class="repeaters" id="campaigns-essay-winners"></div>
           </div>
         </div>
@@ -355,6 +356,45 @@
               />
             </div>
           </div>
+          <div class="field-row">
+            <div class="field">
+              <label style="display: flex; align-items: center; gap: 8px;">
+                <span>是否出现「查看官方排行榜」</span>
+              </label>
+              <label class="switch">
+                <input id="campaigns-links-showLeaderboardLink" type="checkbox" disabled />
+                <span class="slider"></span>
+              </label>
+              <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                勾选后活动页会展示查看官方排行榜入口
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">项目介绍</div>
+          <div class="field-row">
+            <div class="field" style="flex: 1;">
+              <label>项目介绍（纯文本）</label>
+              <textarea
+                id="campaigns-projectIntroduction"
+                rows="4"
+                placeholder="一段纯文本介绍本项目/活动..."
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">
+            ✍️ 本次活动的写作相关主题
+            <button class="btn" id="campaigns-writing-themes-add" type="button" disabled>
+              ➕ 添加主题
+            </button>
+          </div>
+          <div class="repeaters-hint">← 左右滑动查看 · 至少保留一个主题</div>
+          <div class="repeaters-horizontal" id="campaigns-writing-themes"></div>
         </div>
 
         <div class="section">
@@ -386,6 +426,7 @@
               ➕ 添加 Logo
             </button>
           </div>
+          <div class="repeaters-hint">← 左右滑动查看 · 每项一卡</div>
           <div class="repeaters" id="campaigns-logos"></div>
         </div>
 
@@ -396,6 +437,7 @@
               ➕ 添加任务
             </button>
           </div>
+          <div class="repeaters-hint">← 左右滑动查看 · 每项一卡</div>
           <div class="repeaters" id="campaigns-tasks"></div>
         </div>
       </div>
@@ -864,14 +906,57 @@
 
   .repeaters {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    flex-direction: row;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    align-items: flex-start;
+    flex-wrap: nowrap;
+    scroll-behavior: smooth;
+  }
+  .repeaters::-webkit-scrollbar {
+    height: 6px;
+  }
+  .repeaters::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+  }
+  .repeaters .rep-card {
+    flex: 0 0 min(380px, 100%);
+    min-width: 320px;
+  }
+  .repeaters-horizontal {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    align-items: flex-start;
+    flex-wrap: nowrap;
+    scroll-behavior: smooth;
+  }
+  .repeaters-horizontal::-webkit-scrollbar {
+    height: 6px;
+  }
+  .repeaters-horizontal::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+  }
+  .repeaters-horizontal .rep-card {
+    flex: 0 0 min(400px, 100%);
+    min-width: 320px;
+  }
+  .repeaters-hint {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-top: 4px;
   }
   .rep-card {
     border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    padding: 8px;
+    border-radius: 8px;
+    padding: 10px 12px;
     background: #fafafa;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
   .rep-header {
     display: flex;
@@ -1362,6 +1447,10 @@
       if (essayWinnersAddBtn) {
         essayWinnersAddBtn.disabled = !enabled;
       }
+      const writingThemesAddBtn = $("campaigns-writing-themes-add");
+      if (writingThemesAddBtn) {
+        writingThemesAddBtn.disabled = !enabled;
+      }
       setEditorInputsEnabled(enabled);
     }
 
@@ -1392,6 +1481,8 @@
         "campaigns-copy-viewGuideText-en",
         "campaigns-links-guideUrl",
         "campaigns-links-activeUrl",
+        "campaigns-links-showLeaderboardLink",
+        "campaigns-projectIntroduction",
         "campaigns-testList",
         "campaigns-targetUserIds",
       ];
@@ -1724,6 +1815,34 @@
             })
             .join("") || `<div class="muted">暂无获奖者，可点击上方"添加获奖者"。</div>`;
       }
+
+      // 写作相关主题（writingThemes：字符串数组，至少一项）
+      const writingThemesEl = $("campaigns-writing-themes");
+      if (writingThemesEl) {
+        const themes = Array.isArray(c?.writingThemes) ? c.writingThemes : [""];
+        writingThemesEl.innerHTML =
+          themes
+            .map((text, i) => {
+              const val = typeof text === "string" ? text : (text?.text != null ? String(text.text) : "");
+              return `
+                <div class="rep-card" data-kind="writing-themes" data-index="${i}">
+                  <div class="rep-header">
+                    <div class="rep-title">主题 #${i + 1}</div>
+                    <div class="rep-actions">
+                      <button class="btn" type="button" data-action="up">⬆︎</button>
+                      <button class="btn" type="button" data-action="down">⬇︎</button>
+                      <button class="btn danger" type="button" data-action="remove">删除</button>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label>主题内容（一段文本）</label>
+                    <textarea data-field="text" rows="3" placeholder="输入本活动的写作主题描述...">${escapeHtml(val)}</textarea>
+                  </div>
+                </div>
+              `;
+            })
+            .join("") || `<div class="rep-card" data-kind="writing-themes" data-index="0"><div class="rep-header"><div class="rep-title">主题 #1</div><div class="rep-actions"><button class="btn danger" type="button" data-action="remove">删除</button></div></div><div class="field"><label>主题内容</label><textarea data-field="text" rows="3" placeholder="输入本活动的写作主题描述..."></textarea></div></div>`;
+      }
     }
 
     function clearEditor() {
@@ -1762,13 +1881,18 @@
         "campaigns-copy-viewGuideText-en",
         "campaigns-links-guideUrl",
         "campaigns-links-activeUrl",
+        "campaigns-projectIntroduction",
         "campaigns-testList",
         "campaigns-targetUserIds",
       ].forEach((id) => {
         const el = $(id);
         if (el) el.value = "";
       });
+      const showLeaderboardEl = $("campaigns-links-showLeaderboardLink");
+      if (showLeaderboardEl) showLeaderboardEl.checked = false;
       $("campaigns-logos").innerHTML = "";
+      const writingThemesEl = $("campaigns-writing-themes");
+      if (writingThemesEl) writingThemesEl.innerHTML = "";
       $("campaigns-tasks").innerHTML = "";
       const essayWinnersEl = $("campaigns-essay-winners");
       if (essayWinnersEl) {
@@ -1814,7 +1938,10 @@
       if (!c.copy.ctaText) c.copy.ctaText = { zh: "", en: "" };
       if (!c.copy.goToOfficialText) c.copy.goToOfficialText = { zh: "", en: "" };
       if (!c.copy.viewGuideText) c.copy.viewGuideText = { zh: "", en: "" };
-      if (!c.links || typeof c.links !== "object") c.links = { guideUrl: "", activeUrl: "" };
+      if (!c.links || typeof c.links !== "object") c.links = { guideUrl: "", activeUrl: "", showLeaderboardLink: false };
+      if (typeof c.projectIntroduction !== "string") c.projectIntroduction = "";
+      if (!Array.isArray(c.writingThemes)) c.writingThemes = c.writingThemes ? [String(c.writingThemes)] : [""];
+      if (c.writingThemes.length === 0) c.writingThemes.push("");
       if (!Array.isArray(c.testList)) c.testList = [];
       if (!Array.isArray(c.targetUserIds)) c.targetUserIds = [];
       if (!Array.isArray(c.logos)) c.logos = [];
@@ -1937,6 +2064,11 @@
 
       $("campaigns-links-guideUrl").value = c.links.guideUrl || "";
       $("campaigns-links-activeUrl").value = c.links.activeUrl || "";
+      const showLeaderboardEl = $("campaigns-links-showLeaderboardLink");
+      if (showLeaderboardEl) showLeaderboardEl.checked = !!(c.links.showLeaderboardLink);
+
+      const projectIntroEl = $("campaigns-projectIntroduction");
+      if (projectIntroEl) projectIntroEl.value = c.projectIntroduction || "";
 
       $("campaigns-testList").value = listToLines(c.testList);
       $("campaigns-targetUserIds").value = listToLines(c.targetUserIds);
@@ -2114,6 +2246,10 @@
       c.links = c.links || {};
       c.links.guideUrl = $("campaigns-links-guideUrl").value.trim();
       c.links.activeUrl = $("campaigns-links-activeUrl").value.trim();
+      c.links.showLeaderboardLink = !!($("campaigns-links-showLeaderboardLink") && $("campaigns-links-showLeaderboardLink").checked);
+
+      const projectIntroEl = $("campaigns-projectIntroduction");
+      c.projectIntroduction = projectIntroEl ? projectIntroEl.value.trim() : "";
 
       c.testList = splitLinesToList($("campaigns-testList").value);
       c.targetUserIds = splitLinesToList($("campaigns-targetUserIds").value);
@@ -2229,6 +2365,8 @@
         "campaigns-copy-viewGuideText-en",
         "campaigns-links-guideUrl",
         "campaigns-links-activeUrl",
+        "campaigns-links-showLeaderboardLink",
+        "campaigns-projectIntroduction",
         "campaigns-testList",
         "campaigns-targetUserIds",
       ];
@@ -2290,6 +2428,17 @@
       renderRepeaters();
     }
 
+    function addWritingTheme() {
+      const c = getCurrentCampaign();
+      if (!c) return;
+      c.writingThemes = Array.isArray(c.writingThemes) ? c.writingThemes : [""];
+      if (c.writingThemes.length === 0) c.writingThemes.push("");
+      c.writingThemes.push("");
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      renderRepeaters();
+    }
+
     function moveArrayItem(arr, from, to) {
       if (!Array.isArray(arr)) return;
       if (from < 0 || to < 0 || from >= arr.length || to >= arr.length) return;
@@ -2318,13 +2467,19 @@
             arr = c.tasks;
           } else if (kind === "essay-winners") {
             arr = c.essayContestWinners;
+          } else if (kind === "writing-themes") {
+            arr = c.writingThemes;
           } else {
             return;
           }
-          if (!Array.isArray(arr) || !arr[index]) return;
+          if (!Array.isArray(arr) || !(index in arr)) return;
 
           const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
-          fieldSetter(arr[index], field, value);
+          if (kind === "writing-themes" && field === "text") {
+            arr[index] = value;
+          } else {
+            fieldSetter(arr[index], field, value);
+          }
 
           // 如果是 task 的 type 或 url 改变，自动更新 id
           if (kind === "tasks" && (field === "type" || field === "url")) {
@@ -2361,12 +2516,18 @@
             arr = c.tasks;
           } else if (kind === "essay-winners") {
             arr = c.essayContestWinners;
+          } else if (kind === "writing-themes") {
+            arr = c.writingThemes;
           } else {
             return;
           }
-          if (!Array.isArray(arr) || !arr[index]) return;
+          if (!Array.isArray(arr) || !(index in arr)) return;
           const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
-          fieldSetter(arr[index], field, value);
+          if (kind === "writing-themes" && field === "text") {
+            arr[index] = value;
+          } else {
+            fieldSetter(arr[index], field, value);
+          }
 
           // 如果是 task 的 type 或 url 改变，自动更新 id
           if (kind === "tasks" && (field === "type" || field === "url")) {
@@ -2403,12 +2564,15 @@
             arr = c.tasks;
           } else if (kind === "essay-winners") {
             arr = c.essayContestWinners;
+          } else if (kind === "writing-themes") {
+            arr = c.writingThemes;
           } else {
             return;
           }
           if (!Array.isArray(arr)) return;
 
           if (action === "remove") {
+            if (kind === "writing-themes" && arr.length <= 1) return;
             arr.splice(index, 1);
           } else if (action === "up") {
             moveArrayItem(arr, index, index - 1);
@@ -2442,6 +2606,10 @@
       });
       onRepInput("campaigns-essay-winners", (obj, field, value) => {
         obj[field] = value;
+      });
+      onRepInput("campaigns-writing-themes", (obj, field, value) => {
+        if (typeof obj !== "string") return;
+        // writing-themes 在分支里已处理 arr[index]=value
       });
     }
 
@@ -2492,7 +2660,9 @@
             autoComplete: true,
           },
         ],
-        links: { guideUrl: "https://", activeUrl: "https://xhunt.ai/leaderboard" },
+        links: { guideUrl: "https://", activeUrl: "https://xhunt.ai/leaderboard", showLeaderboardLink: false },
+        projectIntroduction: "",
+        writingThemes: [""],
         showExtraComponents: true,
         targetUserIds: [],
         hotTweetsKey: "",
@@ -2664,6 +2834,14 @@
             (!c.links.activeUrl || !c.links.activeUrl.trim()))
         ) {
           errors.push(`${prefix}: links 的 guideUrl 或 activeUrl 至少需要填写一个`);
+        }
+
+        // 写作相关主题：至少一个
+        if (
+          !Array.isArray(c.writingThemes) ||
+          c.writingThemes.length === 0
+        ) {
+          errors.push(`${prefix}: 写作相关主题（writingThemes）至少需要添加一个主题`);
         }
 
         // 新活动必填：奖励配置和门槛（如果活动中有这些字段的定义，则必须填写）
@@ -3140,6 +3318,10 @@
       const essayWinnersAddBtn = $("campaigns-essay-winners-add");
       if (essayWinnersAddBtn) {
         essayWinnersAddBtn.addEventListener("click", addEssayContestWinner);
+      }
+      const writingThemesAddBtn = $("campaigns-writing-themes-add");
+      if (writingThemesAddBtn) {
+        writingThemesAddBtn.addEventListener("click", addWritingTheme);
       }
 
       // JSON 预览模态框事件绑定
