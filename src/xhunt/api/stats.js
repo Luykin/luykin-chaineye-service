@@ -1616,14 +1616,14 @@ router.get("/rootdata-quota", adminAuth, async (req, res) => {
 
 /**
  * -------------------- Nacos 配置管理（公告等） --------------------
- * 权限：nacos_config（super 或被授予该权限的 admin）
+ * 权限：nacos_config 或 nacos-messages（super 或被授予其一即可；公告配置用 nacos-messages，Earn 活动用 nacos_config）
  */
 
-// 读取配置（返回 content 字符串）
+// 读取配置（返回 content 字符串）；公告配置 tab 用 nacos-messages，Earn 活动用 nacos_config
 router.get(
   "/nacos/config",
   adminAuth,
-  requirePermission("nacos_config"),
+  requirePermission(["nacos_config", "nacos-messages"]),
   async (req, res) => {
     try {
       const { dataId, group = "DEFAULT_GROUP", tenant } = req.query;
@@ -1668,7 +1668,7 @@ router.get(
 router.post(
   "/nacos/config",
   adminAuth,
-  requirePermission("nacos_config"),
+  requirePermission(["nacos_config", "nacos-messages"]),
   async (req, res) => {
     try {
       const {

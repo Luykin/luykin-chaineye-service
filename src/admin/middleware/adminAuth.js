@@ -95,7 +95,9 @@ function requireRole(required) {
 function requirePermission(perm) {
   return function (req, res, next) {
     const perms = req.adminPermissions || [];
-    if (perms.includes("*") || perms.includes(perm)) return next();
+    if (perms.includes("*")) return next();
+    const allowed = Array.isArray(perm) ? perm.some((p) => perms.includes(p)) : perms.includes(perm);
+    if (allowed) return next();
     return res.status(403).json({ success: false, error: "权限不足", required: perm });
   };
 }

@@ -85,7 +85,7 @@ function initTabs() {
     "server-command": "server:execute",
     "daily-report-email": "daily-report:send",
     "admin-audit-logs": "audit-logs:read",
-    "nacos-messages": "nacos_config",
+    "nacos-messages": "nacos-messages",
     "nacos-campaigns": "nacos_config",
     "feature-flags": "feature_flags_config",
   };
