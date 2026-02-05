@@ -251,6 +251,15 @@
                   placeholder="0"
                 />
               </div>
+              <div class="field">
+                <label>获奖人数</label>
+                <input
+                  id="campaigns-essayContestWinnerCount"
+                  type="number"
+                  min="1"
+                  placeholder="例如：10"
+                />
+              </div>
             </div>
             <div class="section-title" style="margin-top: 10px;">
               🏆 征文大赛最终名单
@@ -1369,6 +1378,7 @@
         "campaigns-rewardUnit",
         "campaigns-enableEssayContest",
         "campaigns-essayContestAmount",
+        "campaigns-essayContestWinnerCount",
         "campaigns-threshold",
         "campaigns-hasRiskConfirm",
         "campaigns-copy-emoji",
@@ -1739,6 +1749,7 @@
         "campaigns-rewardDistributionType",
         "campaigns-rewardUnit",
         "campaigns-essayContestAmount",
+        "campaigns-essayContestWinnerCount",
         "campaigns-threshold",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
@@ -1873,6 +1884,7 @@
         essayFieldsEl.style.display = enableEssayContest ? "block" : "none";
       }
       $("campaigns-essayContestAmount").value = c.essayContestAmount || "";
+      $("campaigns-essayContestWinnerCount").value = c.essayContestWinnerCount || "";
       
       // 确保 essayContestWinners 是数组
       if (!Array.isArray(c.essayContestWinners)) {
@@ -2014,6 +2026,13 @@
           c.essayContestAmount = 0;
         }
         
+        const essayContestWinnerCountVal = $("campaigns-essayContestWinnerCount").value.trim();
+        if (essayContestWinnerCountVal) {
+          c.essayContestWinnerCount = parseInt(essayContestWinnerCountVal, 10);
+        } else {
+          delete c.essayContestWinnerCount;
+        }
+        
         // 征文大赛最终名单（已经是数组格式，直接使用）
         if (!Array.isArray(c.essayContestWinners)) {
           c.essayContestWinners = [];
@@ -2021,6 +2040,7 @@
       } else {
         delete c.enableEssayContest;
         delete c.essayContestAmount;
+        delete c.essayContestWinnerCount;
         delete c.essayContestWinners;
       }
 
@@ -2196,6 +2216,7 @@
         "campaigns-rewardDistributionType",
         "campaigns-rewardUnit",
         "campaigns-essayContestAmount",
+        "campaigns-essayContestWinnerCount",
         "campaigns-threshold",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
@@ -2482,6 +2503,7 @@
         rewardUnit: undefined,
         enableEssayContest: false,
         essayContestAmount: undefined,
+        essayContestWinnerCount: undefined,
         essayContestWinners: undefined,
         threshold: undefined,
         includeCreator: false,
