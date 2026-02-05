@@ -170,6 +170,29 @@
               <input id="campaigns-copy-shortTitle-en" type="text" />
             </div>
           </div>
+          <div class="section-block">
+            <div class="section-title-inline">项目介绍</div>
+            <div class="field-row">
+              <div class="field" style="flex: 1;">
+                <label>项目介绍（纯文本）</label>
+                <textarea
+                  id="campaigns-projectIntroduction"
+                  rows="3"
+                  placeholder="一段纯文本介绍本项目/活动..."
+                ></textarea>
+              </div>
+            </div>
+          </div>
+          <div class="section-block">
+            <div class="section-title-inline">
+              ✍️ 写作相关主题
+              <button class="btn btn-sm" id="campaigns-writing-themes-add" type="button" disabled>
+                ➕ 添加主题
+              </button>
+            </div>
+            <div class="repeaters-hint">← 左右滑动 · 至少保留一个主题</div>
+            <div class="repeaters-horizontal" id="campaigns-writing-themes"></div>
+          </div>
         </div>
 
         <div class="section">
@@ -261,13 +284,13 @@
                 />
               </div>
             </div>
-            <div class="section-title" style="margin-top: 10px;">
+            <div class="section-title" style="margin-top: 8px;">
               🏆 征文大赛最终名单
-              <button class="btn" id="campaigns-essay-winners-add" type="button" disabled>
+              <button class="btn btn-sm" id="campaigns-essay-winners-add" type="button" disabled>
                 ➕ 添加获奖者
               </button>
             </div>
-            <div class="repeaters-hint">← 左右滑动查看</div>
+            <div class="repeaters-hint">← 左右滑动</div>
             <div class="repeaters" id="campaigns-essay-winners"></div>
           </div>
         </div>
@@ -373,31 +396,6 @@
         </div>
 
         <div class="section">
-          <div class="section-title">项目介绍</div>
-          <div class="field-row">
-            <div class="field" style="flex: 1;">
-              <label>项目介绍（纯文本）</label>
-              <textarea
-                id="campaigns-projectIntroduction"
-                rows="4"
-                placeholder="一段纯文本介绍本项目/活动..."
-              ></textarea>
-            </div>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-title">
-            ✍️ 本次活动的写作相关主题
-            <button class="btn" id="campaigns-writing-themes-add" type="button" disabled>
-              ➕ 添加主题
-            </button>
-          </div>
-          <div class="repeaters-hint">← 左右滑动查看 · 至少保留一个主题</div>
-          <div class="repeaters-horizontal" id="campaigns-writing-themes"></div>
-        </div>
-
-        <div class="section">
           <div class="section-title">相关名单（每行一个）</div>
           <div class="field-row field-row-2">
             <div class="field">
@@ -422,22 +420,22 @@
         <div class="section">
           <div class="section-title">
             Ⓜ️活动方 logo
-            <button class="btn" id="campaigns-logos-add" type="button" disabled>
+            <button class="btn btn-sm" id="campaigns-logos-add" type="button" disabled>
               ➕ 添加 Logo
             </button>
           </div>
-          <div class="repeaters-hint">← 左右滑动查看 · 每项一卡</div>
+          <div class="repeaters-hint">← 左右滑动</div>
           <div class="repeaters" id="campaigns-logos"></div>
         </div>
 
         <div class="section">
           <div class="section-title">
             🎯报名前需完成的任务（Tasks）
-            <button class="btn" id="campaigns-tasks-add" type="button" disabled>
+            <button class="btn btn-sm" id="campaigns-tasks-add" type="button" disabled>
               ➕ 添加任务
             </button>
           </div>
-          <div class="repeaters-hint">← 左右滑动查看 · 每项一卡</div>
+          <div class="repeaters-hint">← 左右滑动</div>
           <div class="repeaters" id="campaigns-tasks"></div>
         </div>
       </div>
@@ -903,6 +901,21 @@
   .section-content {
     margin-top: 6px;
   }
+  .section-block {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #f3f4f6;
+  }
+  .section-title-inline {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
 
   .repeaters {
     display: flex;
@@ -922,8 +935,8 @@
     border-radius: 3px;
   }
   .repeaters .rep-card {
-    flex: 0 0 min(380px, 100%);
-    min-width: 320px;
+    flex: 0 0 42%;
+    min-width: 260px;
   }
   .repeaters-horizontal {
     display: flex;
@@ -943,8 +956,8 @@
     border-radius: 3px;
   }
   .repeaters-horizontal .rep-card {
-    flex: 0 0 min(400px, 100%);
-    min-width: 320px;
+    flex: 0 0 42%;
+    min-width: 260px;
   }
   .repeaters-hint {
     font-size: 11px;
@@ -957,6 +970,12 @@
     padding: 10px 12px;
     background: #fafafa;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+  .rep-card .rep-actions .btn {
+    padding: 3px 6px;
+    font-size: 11px;
+    min-height: auto;
+    line-height: 1.2;
   }
   .rep-header {
     display: flex;
@@ -972,7 +991,7 @@
   }
   .rep-actions {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     flex-wrap: wrap;
   }
 
@@ -1658,8 +1677,8 @@
                 <div class="rep-header">
                   <div class="rep-title">#${i + 1} Logo</div>
                   <div class="rep-actions">
-                    <button class="btn" type="button" data-action="up">⬆︎</button>
-                    <button class="btn" type="button" data-action="down">⬇︎</button>
+                    <button class="btn" type="button" data-action="up">←</button>
+                    <button class="btn" type="button" data-action="down">→</button>
                     <button class="btn danger" type="button" data-action="remove">删除</button>
                   </div>
                 </div>
@@ -1698,8 +1717,8 @@
                 <div class="rep-header">
                   <div class="rep-title">#${i + 1} Task</div>
                   <div class="rep-actions">
-                    <button class="btn" type="button" data-action="up">⬆︎</button>
-                    <button class="btn" type="button" data-action="down">⬇︎</button>
+                    <button class="btn" type="button" data-action="up">←</button>
+                    <button class="btn" type="button" data-action="down">→</button>
                     <button class="btn danger" type="button" data-action="remove">删除</button>
                   </div>
                 </div>
@@ -1777,8 +1796,8 @@
                   <div class="rep-header">
                     <div class="rep-title">#${i + 1} 获奖者</div>
                     <div class="rep-actions">
-                      <button class="btn" type="button" data-action="up">⬆︎</button>
-                      <button class="btn" type="button" data-action="down">⬇︎</button>
+                      <button class="btn" type="button" data-action="up">←</button>
+                      <button class="btn" type="button" data-action="down">→</button>
                       <button class="btn danger" type="button" data-action="remove">删除</button>
                     </div>
                   </div>
@@ -1829,8 +1848,8 @@
                   <div class="rep-header">
                     <div class="rep-title">主题 #${i + 1}</div>
                     <div class="rep-actions">
-                      <button class="btn" type="button" data-action="up">⬆︎</button>
-                      <button class="btn" type="button" data-action="down">⬇︎</button>
+                      <button class="btn" type="button" data-action="up">←</button>
+                      <button class="btn" type="button" data-action="down">→</button>
                       <button class="btn danger" type="button" data-action="remove">删除</button>
                     </div>
                   </div>
