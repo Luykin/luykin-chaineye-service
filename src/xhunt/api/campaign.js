@@ -60,10 +60,10 @@ router.post(
 
       const normalizedCampaign = normalizeCampaign(campaign);
       if (!normalizedCampaign) {
-        console.log(LOG, "reject: campaign missing or invalid", { campaign: !!campaign });
+        console.log(LOG, "reject: campaign missing or invalid");
         return res.status(400).json({ error: "campaign is required" });
       }
-      console.log(LOG, "start", { campaign: normalizedCampaign, hasEvmAddress: !!(evmAddress && String(evmAddress).trim()) });
+      console.log(LOG, "start", { campaign: normalizedCampaign });
 
       let found = null;
       try {
@@ -73,14 +73,14 @@ router.post(
         );
         const cfg = cfgResp && cfgResp.data ? cfgResp.data : null;
         if (!cfg || !Array.isArray(cfg.campaigns)) {
-          console.log(LOG, "reject: nacos config incomplete", { hasCfg: !!cfg, campaignsLen: cfg && cfg.campaigns ? cfg.campaigns.length : 0 });
+          console.log(LOG, "reject: nacos config incomplete");
           return res.status(502).json({ error: "Failed to fetch campaigns config: incomplete data" });
         }
         found = cfg.campaigns.find(
           (c) => c && c.campaignKey === normalizedCampaign
         );
         if (!found) {
-          console.log(LOG, "reject: campaign not found in config", { campaign: normalizedCampaign });
+          console.log(LOG, "reject: campaign not found", { campaign: normalizedCampaign });
           return res.status(400).json({ error: "Invalid campaign identifier" });
         }
         if (!found.enabled) {
@@ -91,14 +91,13 @@ router.post(
         const startAt = found.enrollmentWindow && found.enrollmentWindow.startAt ? new Date(found.enrollmentWindow.startAt) : null;
         const endAt = found.enrollmentWindow && found.enrollmentWindow.endAt ? new Date(found.enrollmentWindow.endAt) : null;
         if (!startAt || !endAt || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
-          console.log(LOG, "reject: invalid enrollment window", { startAt: !!startAt, endAt: !!endAt });
+          console.log(LOG, "reject: invalid enrollment window");
           return res.status(502).json({ error: "Invalid enrollment window in config" });
         }
         if (now < startAt || now > endAt) {
-          console.log(LOG, "reject: outside enrollment window", { now: now.toISOString(), startAt: startAt.toISOString(), endAt: endAt.toISOString() });
+          console.log(LOG, "reject: outside enrollment window");
           return res.status(400).json({ error: "Not within the enrollment window" });
         }
-        console.log(LOG, "config ok", { campaign: normalizedCampaign, id: found.id });
       } catch (cfgErr) {
         console.error(LOG, "fetch campaigns config error:", cfgErr.message || cfgErr);
         return res.status(502).json({ error: "Campaign configuration service unavailable" });
@@ -106,7 +105,7 @@ router.post(
 
       const authedUserId = req.user && req.user.id;
       if (!authedUserId) {
-        console.log(LOG, "reject: no auth user id");
+        console.log(LOG, "reject: no auth");
         return res.status(401).json({ error: "未登录或 token 无效" });
       }
       const user = await XHuntUser.findByPk(authedUserId);
@@ -131,14 +130,13 @@ router.post(
           const cooldownKey = `campaign:${normalizedCampaign}:register:cd:${user.id}`;
           const ttl = await req.redisClient.ttl(cooldownKey);
           if (typeof ttl === "number" && ttl > 0) {
-            console.log(LOG, "reject: cooldown", { userId: user.id, ttl });
+            console.log(LOG, "reject: cooldown", { userId: user.id });
             return res.status(429).json({
               error: `Too frequent requests, please try again in ${ttl}s`,
             });
           }
           await req.redisClient.setEx(cooldownKey, 10, "1");
         } catch (cdErr) {
-          console.warn(LOG, "cooldown redis warn:", cdErr.message || cdErr);
         }
       }
 
@@ -147,20 +145,20 @@ router.post(
         try {
           const twitterId = String(user.twitterId);
           if (!twitterId || twitterId === "null" || twitterId === "undefined") {
-            console.log(LOG, "reject: invalid twitter id", { userId: user.id });
+            console.log(LOG, "reject: invalid twitter id");
             return res.status(400).json({ error: "Invalid Twitter ID" });
           }
 
           const rankApiUrl = `https://data.cryptohunt.ai/fetch/twitter/rank?user_ids=${twitterId}`;
           const rankResponse = await axios.get(rankApiUrl, { timeout: 7000 });
 
-          const rankData = rankResponse && rankResponse.data ? rankResponse.data : null;
-          if (!rankData || !rankData.data || !Array.isArray(rankData.data) || rankData.data.length === 0) {
-            console.log(LOG, "reject: rank api empty or invalid", { status: rankResponse?.status, data: rankResponse?.data, userId: user.id, twitterId });
+          const rankData = rankResponse?.data;
+          const list = rankData?.data?.data;
+          if (!Array.isArray(list) || list.length === 0) {
             return res.status(502).json({ error: "Failed to fetch user ranking data" });
           }
 
-          const userRankData = rankData.data[0];
+          const userRankData = list[0];
           const kolRank = Number(userRankData.kolRank);
           const authCreator = userRankData.auth_creator;
 
@@ -175,12 +173,11 @@ router.post(
                 authCreator.status === 2;
 
               if (!isCreator) {
-                console.log(LOG, "reject: threshold not met", { userId: user.id, kolRank, threshold: found.threshold, isCreator: !!isCreator });
+                console.log(LOG, "reject: threshold not met", { userId: user.id, kolRank, threshold: found.threshold });
                 return res.status(400).json({
                   error: `Does not meet registration threshold: KOL rank must be less than or equal to ${found.threshold}, current rank is ${kolRank}`
                 });
               }
-              console.log(LOG, "threshold bypassed via creator", { userId: user.id, kolRank, threshold: found.threshold });
             }
           }
         } catch (rankErr) {
@@ -196,7 +193,7 @@ router.post(
         },
       });
       if (existingEVM) {
-        console.log(LOG, "reject: evm already used", { campaign: normalizedCampaign, evmSuffix: trimmedAddress.slice(-6) });
+        console.log(LOG, "reject: evm already used", { campaign: normalizedCampaign });
         return res
           .status(409)
           .json({ error: "This EVM address is already in use" });
@@ -206,7 +203,6 @@ router.post(
       const userHandle = (user.username || "").toLowerCase();
       const isSpecialUser = SPECIAL_ALLOWED_USERNAMES.has(userHandle);
       if (isSpecialUser) {
-        console.log(LOG, "special user, skip profile check", { userId: user.id, username: user.username });
       }
 
       // if (typeof invitedByCode === "string" && invitedByCode.trim()) {
@@ -236,7 +232,6 @@ router.post(
           const apiUrl =
             "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid";
           const payload = { user_id: String(user.twitterId) };
-          console.log(LOG, "profile check request", { userId: user.id, twitterId: user.twitterId });
           const response = await axios.post(apiUrl, payload, { timeout: 7000 });
 
           const data = response && response.data ? response.data : null;
@@ -245,7 +240,7 @@ router.post(
             !data.created_at ||
             typeof data.followers_count !== "number"
           ) {
-            console.log(LOG, "reject: profile data incomplete", { userId: user.id, hasData: !!data, hasCreatedAt: !!(data && data.created_at), hasFollowers: !!(data && typeof data.followers_count === "number") });
+            console.log(LOG, "reject: profile data incomplete");
             return res
               .status(502)
               .json({ error: "外部数据校验失败：返回数据不完整" });
@@ -253,7 +248,7 @@ router.post(
 
           const createdAt = new Date(data.created_at);
           if (Number.isNaN(createdAt.getTime())) {
-            console.log(LOG, "reject: profile created_at invalid", { userId: user.id, created_at: data.created_at });
+            console.log(LOG, "reject: profile created_at invalid");
             return res
               .status(502)
               .json({ error: "外部数据校验失败：创建时间无效" });
@@ -264,19 +259,18 @@ router.post(
           oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
           if (createdAt > oneMonthAgo) {
-            console.log(LOG, "reject: account too new", { userId: user.id, createdAt: createdAt.toISOString(), oneMonthAgo: oneMonthAgo.toISOString() });
+            console.log(LOG, "reject: account too new");
             return res
               .status(400)
               .json({ error: "不满足条件：账号注册需早于1个月" });
           }
 
           if (data.followers_count < 50) {
-            console.log(LOG, "reject: followers < 50", { userId: user.id, followers_count: data.followers_count });
+            console.log(LOG, "reject: followers < 50");
             return res
               .status(400)
               .json({ error: "不满足条件：粉丝数量需不少于50" });
           }
-          console.log(LOG, "profile check ok", { userId: user.id, followers_count: data.followers_count });
         } catch (apiErr) {
           console.error(LOG, "profile check error:", apiErr.message || apiErr);
           return res.status(502).json({ error: "外部数据校验请求失败" });
@@ -290,7 +284,7 @@ router.post(
         },
       });
       if (existed) {
-        console.log(LOG, "reject: already registered", { userId: user.id, campaign: normalizedCampaign });
+        console.log(LOG, "reject: already registered", { userId: user.id });
         return res.status(409).json({ error: "您已报名，无需重复提交" });
       }
 
@@ -310,7 +304,6 @@ router.post(
         ? String(req.headers["x-window-location-href"])
         : null;
 
-      console.log(LOG, "creating registration", { userId: user.id, campaign: normalizedCampaign, evmSuffix: trimmedAddress.slice(-6) });
       const record = await CampaignRegistration.create({
         campaign: normalizedCampaign,
         xHuntUserId: user.id,
@@ -348,7 +341,7 @@ router.post(
       }
 
       const { xHuntUserId: _omit, ...safeRecord } = record.toJSON();
-      console.log(LOG, "success", { userId: user.id, campaign: normalizedCampaign, registrationId: record.id });
+      console.log(LOG, "success", { userId: user.id, campaign: normalizedCampaign });
       return res.json({
         success: true,
         inviteCode: user.inviteCode || null,
