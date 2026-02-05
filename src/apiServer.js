@@ -315,7 +315,15 @@ async function initializeAndStartServer() {
 
   // Mantle 活动接口 内部有安全中间件
   app.use("/api/xhunt/mantle", xHuntMantleRoutes);
-  // 通用活动报名接口
+  // 通用活动报名接口：在进入路由前就写好 CORS 头，确保 4xx/5xx 响应也有（全局 cors 已配，但 502 若由前置代理返回则不会经过 Express，前端会报跨域；这里保证由本机返回的响应一定带头）
+  app.use("/api/xhunt/campaigns", (req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    }
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    next();
+  });
   app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
 
   // 未注册用户登记接口
