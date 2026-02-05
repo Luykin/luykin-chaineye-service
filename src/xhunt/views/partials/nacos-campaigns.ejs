@@ -1444,6 +1444,11 @@
         writingThemesAddBtn.disabled = !enabled;
       }
       setEditorInputsEnabled(enabled);
+      var canToggleEnabledPhase = enabled && (typeof window.__adminEmail === "string" && window.__adminEmail === "luo530366891@gmail.com");
+      var enabledEl = $("campaigns-enabled");
+      var testingPhaseEl = $("campaigns-testingPhase");
+      if (enabledEl) enabledEl.disabled = !canToggleEnabledPhase;
+      if (testingPhaseEl) testingPhaseEl.disabled = !canToggleEnabledPhase;
     }
 
     function setEditorInputsEnabled(enabled) {
@@ -2394,6 +2399,15 @@
         if (!el) return;
         const evt = el.type === "checkbox" ? "change" : "input";
         el.addEventListener(evt, () => {
+          if (!isEditorEnabled()) return;
+          syncCampaignFromInputs();
+        });
+      });
+
+      ["campaigns-enabled", "campaigns-testingPhase"].forEach((id) => {
+        const el = $(id);
+        if (!el) return;
+        el.addEventListener("change", () => {
           if (!isEditorEnabled()) return;
           syncCampaignFromInputs();
         });

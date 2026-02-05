@@ -278,6 +278,8 @@ router.get("/", adminAuth, async (req, res) => {
       req.user?.role || ""
     )};window.__isSuperAdmin=${JSON.stringify(
       req.user?.role === "super"
+    )};window.__adminEmail=${JSON.stringify(
+      req.user?.username || ""
     )};</script>`;
     const finalHtml = renderedHtml.replace(
       "</body>",
