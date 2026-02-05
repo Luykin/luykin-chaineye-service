@@ -148,8 +148,8 @@
           </div>
         </div>
 
-        <div class="section">
-          <div class="section-title">活动全称（DisplayName）</div>
+        <div class="section section-compact">
+          <div class="section-title">活动信息（名称 · 介绍 · 主题）</div>
           <div class="field-row field-row-2">
             <div class="field">
               <label>中文</label>
@@ -171,13 +171,22 @@
             </div>
           </div>
           <div class="section-block">
-            <div class="field-row">
-              <div class="field" style="flex: 1;">
-                <label>项目介绍（纯文本）</label>
+            <div class="section-title-inline">项目介绍</div>
+            <div class="field-row field-row-2">
+              <div class="field">
+                <label>项目介绍（中文）</label>
                 <textarea
-                  id="campaigns-projectIntroduction"
+                  id="campaigns-projectIntroduction-zh"
                   rows="3"
                   placeholder="一段纯文本介绍本项目/活动..."
+                ></textarea>
+              </div>
+              <div class="field">
+                <label>项目介绍（English）</label>
+                <textarea
+                  id="campaigns-projectIntroduction-en"
+                  rows="3"
+                  placeholder="Plain text introduction..."
                 ></textarea>
               </div>
             </div>
@@ -194,140 +203,138 @@
           </div>
         </div>
 
-        <div class="section">
-          <div class="section-title">活动时间范围（Enrollment Window）</div>
-          <div class="field-row field-row-2">
-            <div class="field">
-              <label>startAt（活动开始时间）</label>
-              <input id="campaigns-startAt" type="datetime-local" />
-            </div>
-            <div class="field">
-              <label>endAt（活动结束时间）</label>
-              <input id="campaigns-endAt" type="datetime-local" />
-            </div>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-title">奖励配置</div>
-          <div class="field-row field-row-3">
-            <div class="field">
-              <label>奖励金额 (这里写：除开征文大赛的奖励金额，总金额-征文大赛金额)</label>
-              <input
-                id="campaigns-rewardAmount"
-                type="number"
-                min="1"
-                max="99999999"
-                placeholder="1-99999999"
-              />
-            </div>
-            <div class="field">
-              <label>人数</label>
-              <input
-                id="campaigns-rewardParticipantCount"
-                type="number"
-                min="10"
-                max="1000"
-                placeholder="10-1000"
-              />
-            </div>
-            <div class="field">
-              <label>分配机制</label>
-              <select id="campaigns-rewardDistributionType">
-                <option value="">请选择</option>
-                <option value="equal">平分</option>
-                <option value="mindshare">mindshare分</option>
-              </select>
-            </div>
-          </div>
-          <div class="field-row field-row-2">
-            <div class="field">
-              <label>奖励金额展示单位</label>
-              <input
-                id="campaigns-rewardUnit"
-                type="text"
-                placeholder="例如：U、USDT、USD"
-              />
-              <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-                适用于所有奖励的展示单位
-              </div>
-            </div>
-            <div class="field">
-              <label style="display: flex; align-items: center; gap: 8px;">
-                <span>是否开启征文大赛</span>
-              </label>
-              <label class="switch">
-                <input id="campaigns-enableEssayContest" type="checkbox" disabled />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-          <div id="essay-contest-fields" style="display: none;">
+        <div class="section section-compact">
+          <div class="section-title">时间 · 奖励 · 门槛</div>
+          <div class="section-sub">
+            <div class="section-title-sm">活动时间</div>
             <div class="field-row field-row-2">
               <div class="field">
-                <label>征文大赛金额</label>
-                <input
-                  id="campaigns-essayContestAmount"
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                />
+                <label>startAt</label>
+                <input id="campaigns-startAt" type="datetime-local" />
               </div>
               <div class="field">
-                <label>获奖人数</label>
-                <input
-                  id="campaigns-essayContestWinnerCount"
-                  type="number"
-                  min="1"
-                  placeholder="例如：10"
-                />
+                <label>endAt</label>
+                <input id="campaigns-endAt" type="datetime-local" />
               </div>
             </div>
-            <div class="section section-collapsible" style="margin-top: 8px;">
-              <div class="section-title section-title-collapsible">
-                <span>🏆 征文大赛最终名单</span>
-                <button class="btn btn-sm" id="campaigns-essay-winners-add" type="button" disabled>
-                  ➕ 添加获奖者
-                </button>
-                <span class="section-toggle">▼</span>
+          </div>
+          <div class="section-sub">
+            <div class="section-title-sm">奖励配置</div>
+            <div class="field-row field-row-3">
+              <div class="field">
+                <label>奖励金额（总金额-征文）</label>
+                <input id="campaigns-rewardAmount" type="number" min="1" max="99999999" placeholder="1-99999999" />
               </div>
-              <div class="section-content" style="display: none;">
-                <div class="repeaters-hint">← 左右滑动</div>
-                <div class="repeaters" id="campaigns-essay-winners"></div>
+              <div class="field">
+                <label>人数</label>
+                <input id="campaigns-rewardParticipantCount" type="number" min="10" max="1000" placeholder="10-1000" />
+              </div>
+              <div class="field">
+                <label>分配机制</label>
+                <select id="campaigns-rewardDistributionType">
+                  <option value="">请选择</option>
+                  <option value="equal">平分</option>
+                  <option value="mindshare">mindshare分</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row field-row-2">
+              <div class="field">
+                <label>奖励单位</label>
+                <input id="campaigns-rewardUnit" type="text" placeholder="U、USDT、USD" />
+              </div>
+              <div class="field">
+                <label style="display: flex; align-items: center; gap: 8px;">是否开启征文大赛</label>
+                <label class="switch">
+                  <input id="campaigns-enableEssayContest" type="checkbox" disabled />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+            <div id="essay-contest-fields" style="display: none;">
+              <div class="field-row field-row-2">
+                <div class="field">
+                  <label>征文大赛金额</label>
+                  <input id="campaigns-essayContestAmount" type="number" min="0" placeholder="0" />
+                </div>
+                <div class="field">
+                  <label>获奖人数</label>
+                  <input id="campaigns-essayContestWinnerCount" type="number" min="1" placeholder="10" />
+                </div>
+              </div>
+              <div class="section section-collapsible" style="margin-top: 6px;">
+                <div class="section-title section-title-collapsible">
+                  <span>🏆 征文大赛最终名单</span>
+                  <button class="btn btn-sm" id="campaigns-essay-winners-add" type="button" disabled>➕ 添加获奖者</button>
+                  <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content" style="display: none;">
+                  <div class="repeaters-hint">← 左右滑动</div>
+                  <div class="repeaters" id="campaigns-essay-winners"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="section-sub">
+            <div class="section-title-sm">报名门槛</div>
+            <div class="field-row">
+              <div class="field">
+                <select id="campaigns-threshold">
+                  <option value="">请选择</option>
+                  <option value="50k">50k</option>
+                  <option value="100k">100k</option>
+                  <option value="200k">200k</option>
+                  <option value="200k+creator">200k+creator</option>
+                </select>
+                <div class="muted" style="margin-top: 3px; font-size: 11px;">硬性条件：注册早于1个月且分数≥50</div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="section">
-          <div class="section-title">门槛</div>
-          <div class="field-row">
-            <div class="field">
-              <label>门槛</label>
-              <select id="campaigns-threshold">
-                <option value="">请选择</option>
-                <option value="50k">50k</option>
-                <option value="100k">100k</option>
-                <option value="200k">200k</option>
-                <option value="200k+creator">200k+creator</option>
-              </select>
-              <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-                硬性条件（不可修改）：报名者必须满足注册时间早于1个月并且分数数量不少于50个
+        <div class="section section-compact">
+          <div class="section-title">链接 · 名单 · 报名文案</div>
+          <div class="section-sub">
+            <div class="section-title-sm">相关链接</div>
+            <div class="field-row field-row-2">
+              <div class="field">
+                <label>官方指南链接</label>
+                <input id="campaigns-links-guideUrl" type="text" placeholder="https://..." />
+              </div>
+              <div class="field">
+                <label>活动页面链接</label>
+                <input id="campaigns-links-activeUrl" type="text" placeholder="https://..." />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label style="display: flex; align-items: center; gap: 8px;">插件榜单底部显示「查看官方排行榜」</label>
+                <label class="switch">
+                  <input id="campaigns-links-showLeaderboardLink" type="checkbox" disabled />
+                  <span class="slider"></span>
+                </label>
               </div>
             </div>
           </div>
-        </div>
-
-        <div class="section section-collapsible">
-          <div class="section-title section-title-collapsible">
-            <span>报名按钮文案（通常不改）</span>
-            <span class="section-toggle">▼</span>
+          <div class="section-sub">
+            <div class="section-title-sm">相关名单（每行一个）</div>
+            <div class="field-row field-row-2">
+              <div class="field">
+                <label>内部测试人员</label>
+                <textarea id="campaigns-testList" rows="2" placeholder="luoyukun4"></textarea>
+              </div>
+              <div class="field">
+                <label>在哪些推特号右侧展示本活动</label>
+                <textarea id="campaigns-targetUserIds" rows="2" placeholder="bybit_web3&#10;Bybit__Alpha"></textarea>
+              </div>
+            </div>
           </div>
-          <div class="section-content" style="display: none;">
+          <div class="section-sub">
+            <div class="section-title-sm">报名按钮文案（通常不改）</div>
             <div class="field-row field-row-3">
               <div class="field">
                 <label>emoji</label>
-                <input id="campaigns-copy-emoji" type="text" placeholder="例如：🎉" />
+                <input id="campaigns-copy-emoji" type="text" placeholder="🎉" />
               </div>
               <div class="field">
                 <label>ctaText（zh）</label>
@@ -338,109 +345,39 @@
                 <input id="campaigns-copy-ctaText-en" type="text" />
               </div>
             </div>
-
             <div class="field-row field-row-2">
               <div class="field">
-                <label>去官方按钮文案（zh）</label>
-                <input id="campaigns-copy-goToOfficialText-zh" type="text" />
+                <label>去官方（zh/en）</label>
+                <input id="campaigns-copy-goToOfficialText-zh" type="text" placeholder="zh" style="margin-bottom:4px" />
+                <input id="campaigns-copy-goToOfficialText-en" type="text" placeholder="en" />
               </div>
               <div class="field">
-                <label>goToOfficialText（en）</label>
-                <input id="campaigns-copy-goToOfficialText-en" type="text" />
-              </div>
-            </div>
-
-            <div class="field-row field-row-2">
-              <div class="field">
-                <label>查看官方指南按钮文案（zh）</label>
-                <input id="campaigns-copy-viewGuideText-zh" type="text" />
-              </div>
-              <div class="field">
-                <label>viewGuideText（en）</label>
-                <input id="campaigns-copy-viewGuideText-en" type="text" />
+                <label>查看指南（zh/en）</label>
+                <input id="campaigns-copy-viewGuideText-zh" type="text" placeholder="zh" style="margin-bottom:4px" />
+                <input id="campaigns-copy-viewGuideText-en" type="text" placeholder="en" />
               </div>
             </div>
           </div>
         </div>
 
-        <div class="section">
-          <div class="section-title">相关链接（Links）</div>
-          <div class="field-row field-row-2">
-            <div class="field">
-              <label>A官方指南链接( 可以是推特介绍活动链接，也可以是其他)</label>
-              <input
-                id="campaigns-links-guideUrl"
-                type="text"
-                placeholder="https://..."
-              />
+        <div class="section section-compact">
+          <div class="section-title">Logo · 任务</div>
+          <div class="section-sub">
+            <div class="section-title-sm">
+              Ⓜ️ 活动方 logo
+              <button class="btn btn-sm" id="campaigns-logos-add" type="button" disabled>➕ 添加</button>
             </div>
-            <div class="field">
-              <label>B活动页面（可以是官网活动链接，也可以是推特介绍活动链接）</label>
-              <input
-                id="campaigns-links-activeUrl"
-                type="text"
-                placeholder="https://..."
-              />
+            <div class="repeaters-hint">← 左右滑动</div>
+            <div class="repeaters" id="campaigns-logos"></div>
+          </div>
+          <div class="section-sub">
+            <div class="section-title-sm">
+              🎯 报名前需完成的任务
+              <button class="btn btn-sm" id="campaigns-tasks-add" type="button" disabled>➕ 添加任务</button>
             </div>
+            <div class="repeaters-hint">← 左右滑动</div>
+            <div class="repeaters" id="campaigns-tasks"></div>
           </div>
-          <div class="field-row">
-            <div class="field">
-              <label style="display: flex; align-items: center; gap: 8px;">
-                <span>插件榜单底部是否出现「查看官方排行榜」(跳转到 B活动页面)</span>
-              </label>
-              <label class="switch">
-                <input id="campaigns-links-showLeaderboardLink" type="checkbox" disabled />
-                <span class="slider"></span>
-              </label>
-              <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-                勾选后活动页会展示查看官方排行榜入口
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-title">相关名单（每行一个）</div>
-          <div class="field-row field-row-2">
-            <div class="field">
-              <label>内部测试人员名单</label>
-              <textarea
-                id="campaigns-testList"
-                rows="3"
-                placeholder="luoyukun4"
-              ></textarea>
-            </div>
-            <div class="field">
-              <label>📍在哪些推特号右侧展示本活动</label>
-              <textarea
-                id="campaigns-targetUserIds"
-                rows="3"
-                placeholder="bybit_web3&#10;Bybit__Alpha"
-              ></textarea>
-            </div>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-title">
-            Ⓜ️活动方 logo
-            <button class="btn btn-sm" id="campaigns-logos-add" type="button" disabled>
-              ➕ 添加 Logo
-            </button>
-          </div>
-          <div class="repeaters-hint">← 左右滑动</div>
-          <div class="repeaters" id="campaigns-logos"></div>
-        </div>
-
-        <div class="section">
-          <div class="section-title">
-            🎯报名前需完成的任务（Tasks）
-            <button class="btn btn-sm" id="campaigns-tasks-add" type="button" disabled>
-              ➕ 添加任务
-            </button>
-          </div>
-          <div class="repeaters-hint">← 左右滑动</div>
-          <div class="repeaters" id="campaigns-tasks"></div>
         </div>
       </div>
     </div>
@@ -875,6 +812,23 @@
     padding-top: 8px;
     border-top: 1px solid #f3f4f6;
   }
+  .section-compact {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+  .section-compact .field-row {
+    margin-bottom: 4px;
+  }
+  .section-sub {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #f3f4f6;
+  }
+  .section-sub:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
   .section-title {
     display: flex;
     justify-content: space-between;
@@ -884,6 +838,16 @@
     color: #111827;
     margin-bottom: 6px;
     font-size: 13px;
+  }
+  .section-title-sm {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    margin-bottom: 4px;
+    color: #374151;
+    font-weight: 600;
   }
   .section-collapsible .section-title-collapsible {
     cursor: pointer;
@@ -1505,7 +1469,8 @@
         "campaigns-links-guideUrl",
         "campaigns-links-activeUrl",
         "campaigns-links-showLeaderboardLink",
-        "campaigns-projectIntroduction",
+        "campaigns-projectIntroduction-zh",
+        "campaigns-projectIntroduction-en",
         "campaigns-testList",
         "campaigns-targetUserIds",
       ];
@@ -1836,14 +1801,16 @@
             .join("") || `<div class="muted">暂无获奖者，可点击上方"添加获奖者"。</div>`;
       }
 
-      // 写作相关主题（writingThemes：字符串数组，至少一项）
+      // 写作相关主题（writingThemes：{ zh, en }[]，至少一项）
       const writingThemesEl = $("campaigns-writing-themes");
       if (writingThemesEl) {
-        const themes = Array.isArray(c?.writingThemes) ? c.writingThemes : [""];
+        const themes = Array.isArray(c?.writingThemes) ? c.writingThemes : [{ zh: "", en: "" }];
         writingThemesEl.innerHTML =
           themes
-            .map((text, i) => {
-              const val = typeof text === "string" ? text : (text?.text != null ? String(text.text) : "");
+            .map((item, i) => {
+              const obj = item && typeof item === "object" ? item : { zh: typeof item === "string" ? item : "", en: "" };
+              const zh = obj.zh != null ? String(obj.zh) : "";
+              const en = obj.en != null ? String(obj.en) : "";
               return `
                 <div class="rep-card" data-kind="writing-themes" data-index="${i}">
                   <div class="rep-header">
@@ -1854,14 +1821,20 @@
                       <button class="btn danger" type="button" data-action="remove">删除</button>
                     </div>
                   </div>
-                  <div class="field">
-                    <label>主题内容（一段文本）</label>
-                    <textarea data-field="text" rows="3" placeholder="输入本活动的写作主题描述...">${escapeHtml(val)}</textarea>
+                  <div class="field-row field-row-2">
+                    <div class="field">
+                      <label>主题内容（中文）</label>
+                      <textarea data-field="zh" rows="3" placeholder="输入本活动的写作主题描述...">${escapeHtml(zh)}</textarea>
+                    </div>
+                    <div class="field">
+                      <label>主题内容（English）</label>
+                      <textarea data-field="en" rows="3" placeholder="Writing theme description...">${escapeHtml(en)}</textarea>
+                    </div>
                   </div>
                 </div>
               `;
             })
-            .join("") || `<div class="rep-card" data-kind="writing-themes" data-index="0"><div class="rep-header"><div class="rep-title">主题 #1</div><div class="rep-actions"><button class="btn danger" type="button" data-action="remove">删除</button></div></div><div class="field"><label>主题内容</label><textarea data-field="text" rows="3" placeholder="输入本活动的写作主题描述..."></textarea></div></div>`;
+            .join("") || `<div class="rep-card" data-kind="writing-themes" data-index="0"><div class="rep-header"><div class="rep-title">主题 #1</div><div class="rep-actions"><button class="btn danger" type="button" data-action="remove">删除</button></div></div><div class="field-row field-row-2"><div class="field"><label>主题内容（中文）</label><textarea data-field="zh" rows="3" placeholder="输入本活动的写作主题描述..."></textarea></div><div class="field"><label>主题内容（English）</label><textarea data-field="en" rows="3" placeholder="Writing theme description..."></textarea></div></div></div>`;
       }
     }
 
@@ -1901,7 +1874,8 @@
         "campaigns-copy-viewGuideText-en",
         "campaigns-links-guideUrl",
         "campaigns-links-activeUrl",
-        "campaigns-projectIntroduction",
+        "campaigns-projectIntroduction-zh",
+        "campaigns-projectIntroduction-en",
         "campaigns-testList",
         "campaigns-targetUserIds",
       ].forEach((id) => {
@@ -1959,9 +1933,21 @@
       if (!c.copy.goToOfficialText) c.copy.goToOfficialText = { zh: "", en: "" };
       if (!c.copy.viewGuideText) c.copy.viewGuideText = { zh: "", en: "" };
       if (!c.links || typeof c.links !== "object") c.links = { guideUrl: "", activeUrl: "", showLeaderboardLink: false };
-      if (typeof c.projectIntroduction !== "string") c.projectIntroduction = "";
-      if (!Array.isArray(c.writingThemes)) c.writingThemes = c.writingThemes ? [String(c.writingThemes)] : [""];
-      if (c.writingThemes.length === 0) c.writingThemes.push("");
+      if (!c.projectIntroduction || typeof c.projectIntroduction !== "object") {
+        const legacy = typeof c.projectIntroduction === "string" ? c.projectIntroduction : "";
+        c.projectIntroduction = { zh: legacy, en: "" };
+      }
+      if (!c.projectIntroduction.zh && c.projectIntroduction.zh !== "") c.projectIntroduction.zh = "";
+      if (!c.projectIntroduction.en && c.projectIntroduction.en !== "") c.projectIntroduction.en = "";
+      if (!Array.isArray(c.writingThemes)) {
+        c.writingThemes = typeof c.writingThemes === "string" ? [{ zh: c.writingThemes, en: "" }] : [{ zh: "", en: "" }];
+      }
+      c.writingThemes = c.writingThemes.map((it) => {
+        if (it && typeof it === "object" && ("zh" in it || "en" in it))
+          return { zh: it.zh != null ? String(it.zh) : "", en: it.en != null ? String(it.en) : "" };
+        return { zh: typeof it === "string" ? it : "", en: "" };
+      });
+      if (c.writingThemes.length === 0) c.writingThemes.push({ zh: "", en: "" });
       if (!Array.isArray(c.testList)) c.testList = [];
       if (!Array.isArray(c.targetUserIds)) c.targetUserIds = [];
       if (!Array.isArray(c.logos)) c.logos = [];
@@ -2087,8 +2073,10 @@
       const showLeaderboardEl = $("campaigns-links-showLeaderboardLink");
       if (showLeaderboardEl) showLeaderboardEl.checked = !!(c.links.showLeaderboardLink);
 
-      const projectIntroEl = $("campaigns-projectIntroduction");
-      if (projectIntroEl) projectIntroEl.value = c.projectIntroduction || "";
+      const projectIntroZh = $("campaigns-projectIntroduction-zh");
+      const projectIntroEn = $("campaigns-projectIntroduction-en");
+      if (projectIntroZh) projectIntroZh.value = (c.projectIntroduction && c.projectIntroduction.zh) || "";
+      if (projectIntroEn) projectIntroEn.value = (c.projectIntroduction && c.projectIntroduction.en) || "";
 
       $("campaigns-testList").value = listToLines(c.testList);
       $("campaigns-targetUserIds").value = listToLines(c.targetUserIds);
@@ -2268,8 +2256,12 @@
       c.links.activeUrl = $("campaigns-links-activeUrl").value.trim();
       c.links.showLeaderboardLink = !!($("campaigns-links-showLeaderboardLink") && $("campaigns-links-showLeaderboardLink").checked);
 
-      const projectIntroEl = $("campaigns-projectIntroduction");
-      c.projectIntroduction = projectIntroEl ? projectIntroEl.value.trim() : "";
+      const projectIntroZh = $("campaigns-projectIntroduction-zh");
+      const projectIntroEn = $("campaigns-projectIntroduction-en");
+      c.projectIntroduction = {
+        zh: projectIntroZh ? projectIntroZh.value.trim() : "",
+        en: projectIntroEn ? projectIntroEn.value.trim() : "",
+      };
 
       c.testList = splitLinesToList($("campaigns-testList").value);
       c.targetUserIds = splitLinesToList($("campaigns-targetUserIds").value);
@@ -2386,7 +2378,8 @@
         "campaigns-links-guideUrl",
         "campaigns-links-activeUrl",
         "campaigns-links-showLeaderboardLink",
-        "campaigns-projectIntroduction",
+        "campaigns-projectIntroduction-zh",
+        "campaigns-projectIntroduction-en",
         "campaigns-testList",
         "campaigns-targetUserIds",
       ];
@@ -2451,9 +2444,9 @@
     function addWritingTheme() {
       const c = getCurrentCampaign();
       if (!c) return;
-      c.writingThemes = Array.isArray(c.writingThemes) ? c.writingThemes : [""];
-      if (c.writingThemes.length === 0) c.writingThemes.push("");
-      c.writingThemes.push("");
+      c.writingThemes = Array.isArray(c.writingThemes) ? c.writingThemes : [{ zh: "", en: "" }];
+      if (c.writingThemes.length === 0) c.writingThemes.push({ zh: "", en: "" });
+      c.writingThemes.push({ zh: "", en: "" });
       dirty = true;
       $("campaigns-publish").disabled = false;
       renderRepeaters();
@@ -2495,8 +2488,9 @@
           if (!Array.isArray(arr) || !(index in arr)) return;
 
           const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
-          if (kind === "writing-themes" && field === "text") {
-            arr[index] = value;
+          if (kind === "writing-themes" && (field === "zh" || field === "en")) {
+            if (!arr[index] || typeof arr[index] !== "object") arr[index] = { zh: "", en: "" };
+            arr[index][field] = value;
           } else {
             fieldSetter(arr[index], field, value);
           }
@@ -2543,8 +2537,9 @@
           }
           if (!Array.isArray(arr) || !(index in arr)) return;
           const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
-          if (kind === "writing-themes" && field === "text") {
-            arr[index] = value;
+          if (kind === "writing-themes" && (field === "zh" || field === "en")) {
+            if (!arr[index] || typeof arr[index] !== "object") arr[index] = { zh: "", en: "" };
+            arr[index][field] = value;
           } else {
             fieldSetter(arr[index], field, value);
           }
@@ -2681,8 +2676,8 @@
           },
         ],
         links: { guideUrl: "https://", activeUrl: "https://xhunt.ai/leaderboard", showLeaderboardLink: false },
-        projectIntroduction: "",
-        writingThemes: [""],
+        projectIntroduction: { zh: "", en: "" },
+        writingThemes: [{ zh: "", en: "" }],
         showExtraComponents: true,
         targetUserIds: [],
         hotTweetsKey: "",
