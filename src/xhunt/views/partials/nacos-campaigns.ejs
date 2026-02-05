@@ -78,7 +78,7 @@
 
         <div class="field-row field-row-2">
           <div class="field">
-            <label>投放活动者的推特号</label>
+            <label>投放活动者的推特号（多次活动的增加数字，例如mantle, mantle2, mantle3）</label>
             <input id="campaigns-twitter-handle" type="text" placeholder="例如：bybit" />
             <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
               填写后会自动填充 id、campaignKey、hotTweetsKey。保存后不可修改。
@@ -105,43 +105,6 @@
                 <div style="margin-bottom: 8px; font-weight: 600; font-size: 12px;">English Preview:</div>
                 <div style="font-size: 12px; line-height: 1.5;">
                   <strong>Important Notice:</strong> The project is in its early stage. The information is provided by the project team. Please make an informed decision before participating. Proceeding indicates that you understand and accept this.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="section section-collapsible">
-          <div class="section-title section-title-collapsible">
-            <span>高级配置（id / campaignKey / hotTweetsKey）</span>
-            <span class="section-toggle">▼</span>
-          </div>
-          <div class="section-content" style="display: none;">
-            <div class="field-row">
-              <div class="field">
-                <label>id（唯一）</label>
-                <input id="campaigns-id" type="text" placeholder="例如：bybit-hunter" disabled />
-                <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-                  内部索引使用，无需手动维护（自动生成：campaignKey + '-hunter'）
-                </div>
-              </div>
-              <div class="field">
-                <label>campaignKey</label>
-                <input id="campaigns-campaignKey" type="text" placeholder="例如：bybit" disabled />
-                <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-                  需要后端协商一致，一般也是投放者推特号，用于存储报名数据和排名数据
-                </div>
-              </div>
-              <div class="field">
-                <label>hotTweetsKey</label>
-                <input
-                  id="campaigns-hotTweetsKey"
-                  type="text"
-                  placeholder="例如：bybit"
-                  disabled
-                />
-                <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-                  建议填写投放者的推特号，目的是获取热门推文数据 <code>hot?project=hotTweetsKey</code>
                 </div>
               </div>
             </div>
@@ -329,32 +292,37 @@
               </div>
             </div>
           </div>
-          <div class="section-sub">
-            <div class="section-title-sm">报名按钮文案（通常不改）</div>
-            <div class="field-row field-row-3">
-              <div class="field">
-                <label>emoji</label>
-                <input id="campaigns-copy-emoji" type="text" placeholder="🎉" />
-              </div>
-              <div class="field">
-                <label>ctaText（zh）</label>
-                <input id="campaigns-copy-ctaText-zh" type="text" />
-              </div>
-              <div class="field">
-                <label>ctaText（en）</label>
-                <input id="campaigns-copy-ctaText-en" type="text" />
-              </div>
+          <div class="section section-collapsible" style="margin-top: 6px;">
+            <div class="section-title section-title-collapsible">
+              <span>报名按钮文案（通常不改）</span>
+              <span class="section-toggle">▼</span>
             </div>
-            <div class="field-row field-row-2">
-              <div class="field">
-                <label>去官方（zh/en）</label>
-                <input id="campaigns-copy-goToOfficialText-zh" type="text" placeholder="zh" style="margin-bottom:4px" />
-                <input id="campaigns-copy-goToOfficialText-en" type="text" placeholder="en" />
+            <div class="section-content" style="display: none;">
+              <div class="field-row field-row-3">
+                <div class="field">
+                  <label>emoji</label>
+                  <input id="campaigns-copy-emoji" type="text" placeholder="🎉" />
+                </div>
+                <div class="field">
+                  <label>ctaText（zh）</label>
+                  <input id="campaigns-copy-ctaText-zh" type="text" />
+                </div>
+                <div class="field">
+                  <label>ctaText（en）</label>
+                  <input id="campaigns-copy-ctaText-en" type="text" />
+                </div>
               </div>
-              <div class="field">
-                <label>查看指南（zh/en）</label>
-                <input id="campaigns-copy-viewGuideText-zh" type="text" placeholder="zh" style="margin-bottom:4px" />
-                <input id="campaigns-copy-viewGuideText-en" type="text" placeholder="en" />
+              <div class="field-row field-row-2">
+                <div class="field">
+                  <label>去官方（zh/en）</label>
+                  <input id="campaigns-copy-goToOfficialText-zh" type="text" placeholder="zh" style="margin-bottom:4px" />
+                  <input id="campaigns-copy-goToOfficialText-en" type="text" placeholder="en" />
+                </div>
+                <div class="field">
+                  <label>查看指南（zh/en）</label>
+                  <input id="campaigns-copy-viewGuideText-zh" type="text" placeholder="zh" style="margin-bottom:4px" />
+                  <input id="campaigns-copy-viewGuideText-en" type="text" placeholder="en" />
+                </div>
               </div>
             </div>
           </div>
@@ -377,6 +345,43 @@
             </div>
             <div class="repeaters-hint">← 左右滑动</div>
             <div class="repeaters" id="campaigns-tasks"></div>
+          </div>
+        </div>
+
+        <div class="section section-collapsible">
+          <div class="section-title section-title-collapsible">
+            <span>高级配置（id / campaignKey / hotTweetsKey）</span>
+            <span class="section-toggle">▼</span>
+          </div>
+          <div class="section-content" style="display: none;">
+            <div class="field-row">
+              <div class="field">
+                <label>id（唯一）</label>
+                <input id="campaigns-id" type="text" placeholder="例如：bybit-hunter" disabled />
+                <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                  内部索引使用，无需手动维护（自动生成：campaignKey + '-hunter'）
+                </div>
+              </div>
+              <div class="field">
+                <label>campaignKey</label>
+                <input id="campaigns-campaignKey" type="text" placeholder="例如：bybit" disabled />
+                <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                  需要后端协商一致，一般也是投放者推特号，用于存储报名数据和排名数据
+                </div>
+              </div>
+              <div class="field">
+                <label>hotTweetsKey</label>
+                <input
+                  id="campaigns-hotTweetsKey"
+                  type="text"
+                  placeholder="例如：bybit"
+                  disabled
+                />
+                <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                  建议填写投放者的推特号，目的是获取热门推文数据 <code>hot?project=hotTweetsKey</code>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1659,13 +1664,13 @@
                     )}" />
                   </div>
                   <div class="field">
-                    <label>跳转到的推特链接（url 必填）</label>
+                    <label>推特链接（url 必填）</label>
                     <input type="text" data-field="url" value="${escapeHtml(
                       it?.url || ""
                     )}" />
                   </div>
                   <div class="field">
-                    <label>展示的推特账号（label 必填）</label>
+                    <label>推特账号（label 必填）</label>
                     <input type="text" data-field="label" value="${escapeHtml(
                       it?.label || ""
                     )}" />
