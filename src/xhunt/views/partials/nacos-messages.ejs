@@ -178,6 +178,29 @@
       </div>
     </div>
   </div>
+
+  <!-- JSON 发布前预览模态框 -->
+  <div class="msg-json-preview-modal-overlay" id="nacos-msg-json-preview-modal" style="display: none">
+    <div class="msg-json-preview-modal-panel">
+      <div class="msg-json-preview-modal-header">
+        <h3>预览 JSON 配置</h3>
+        <button class="close-btn" id="nacos-msg-json-preview-modal-close" type="button">&times;</button>
+      </div>
+      <div class="msg-json-preview-modal-body">
+        <p class="msg-json-preview-legend">
+          即将发布到 Nacos（dataId: <code id="nacos-msg-json-preview-dataid">-</code>）
+          <span id="nacos-msg-json-preview-diff-hint" style="margin-left: 8px; color: #3b82f6; font-weight: 600;"></span>
+          <span class="legend-removed">删除</span> |
+          <span class="legend-added">新增</span>
+        </p>
+        <pre id="nacos-msg-json-preview-content"></pre>
+      </div>
+      <div class="msg-json-preview-modal-footer">
+        <button class="btn" id="nacos-msg-json-preview-modal-cancel" type="button">取消</button>
+        <button class="btn primary" id="nacos-msg-json-preview-modal-confirm" type="button">确认发布</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- 轻量流行 CDN 富文本：Quill（按需加载，避免影响其他 tab） -->
@@ -552,8 +575,118 @@
     font-size: 13px;
     z-index: 9999;
   }
+
+  /* JSON 发布前预览模态框 */
+  .msg-json-preview-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10001;
+  }
+  .msg-json-preview-modal-panel {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 1000px;
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+    margin: 20px;
+  }
+  .msg-json-preview-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .msg-json-preview-modal-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .msg-json-preview-modal-header .close-btn {
+    background: none;
+    border: none;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+  }
+  .msg-json-preview-modal-header .close-btn:hover {
+    background: #f3f4f6;
+    color: #111827;
+  }
+  .msg-json-preview-modal-body {
+    padding: 14px;
+    overflow: hidden;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .msg-json-preview-modal-body .msg-json-preview-legend {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 0 0 10px;
+    flex-shrink: 0;
+  }
+  .msg-json-preview-modal-body .legend-added {
+    color: #166534;
+    font-weight: 600;
+  }
+  .msg-json-preview-modal-body .legend-removed {
+    color: #991b1b;
+    font-weight: 600;
+  }
+  .msg-json-preview-modal-body pre {
+    margin: 0;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 8px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.35;
+    overflow: auto;
+    flex: 1;
+    min-height: 0;
+    color: #111827;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .msg-json-preview-modal-body pre span.added {
+    color: #166534;
+    background: #dcfce7;
+  }
+  .msg-json-preview-modal-body pre span.removed {
+    color: #991b1b;
+    background: #fee2e2;
+    text-decoration: line-through;
+  }
+  .msg-json-preview-modal-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
 </style>
 
+<script src="/static/js/diff.min.js"></script>
 <script>
   (function () {
     // 仅在 tab 被点击后再初始化
@@ -567,6 +700,7 @@
     let currentLang = "zh";
     let currentIndex = -1;
     let items = []; // 当前语言的公告数组
+    let originalItems = null; // 从 Nacos 加载的原始数据，用于发布前 diff
     let dirty = false;
 
     // editor impl
@@ -1110,6 +1244,7 @@
       }
 
       items = parsed;
+      originalItems = JSON.parse(JSON.stringify(parsed));
       dirty = false;
       currentIndex = -1;
       renderList();
@@ -1182,20 +1317,77 @@
       }
     }
 
+    function showJsonPreviewModal(jsonContent) {
+      const modal = $("nacos-msg-json-preview-modal");
+      const contentEl = $("nacos-msg-json-preview-content");
+      const dataIdEl = $("nacos-msg-json-preview-dataid");
+      const diffHintEl = $("nacos-msg-json-preview-diff-hint");
+      if (!modal || !contentEl) return;
+
+      const did = DATA_IDS[currentLang];
+      if (dataIdEl) dataIdEl.textContent = did;
+
+      let currentObj;
+      try {
+        currentObj = JSON.parse(jsonContent);
+      } catch (e) {
+        contentEl.textContent = jsonContent;
+        if (diffHintEl) diffHintEl.textContent = "（JSON 解析失败，显示原文）";
+        modal.style.display = "flex";
+        return;
+      }
+
+      const originalObj = Array.isArray(originalItems) ? originalItems : [];
+      const diff =
+        typeof Diff !== "undefined" && Diff.diffJson
+          ? Diff.diffJson(originalObj, currentObj)
+          : null;
+
+      if (diff && diff.length > 0) {
+        const fragment = document.createDocumentFragment();
+        diff.forEach((part) => {
+          const span = document.createElement("span");
+          span.className = part.added ? "added" : part.removed ? "removed" : "";
+          span.appendChild(document.createTextNode(part.value));
+          fragment.appendChild(span);
+        });
+        contentEl.innerHTML = "";
+        contentEl.appendChild(fragment);
+      } else {
+        contentEl.textContent = jsonContent;
+      }
+
+      if (diffHintEl) {
+        if (originalItems && originalItems.length > 0) {
+          diffHintEl.textContent = "（与当前 Nacos 对比）";
+        } else {
+          diffHintEl.textContent = "（首次发布，无原始配置）";
+        }
+      }
+
+      modal.style.display = "flex";
+    }
+
+    function hideJsonPreviewModal() {
+      const modal = $("nacos-msg-json-preview-modal");
+      if (modal) modal.style.display = "none";
+    }
+
     async function publish() {
       const did = DATA_IDS[currentLang];
       const content = JSON.stringify(items, null, 2);
-      const ok = window.confirm(
-        `确认发布到 Nacos？\n\n将覆盖 dataId=${did} 的 content（数组整体覆盖）。`
-      );
-      if (!ok) return;
+      showJsonPreviewModal(content);
+    }
 
+    async function confirmPublish() {
+      hideJsonPreviewModal();
+      const did = DATA_IDS[currentLang];
+      const content = JSON.stringify(items, null, 2);
       toast("正在发布到 Nacos...", "info");
       await apiPublishConfig({ dataId: did, content, group: "DEFAULT_GROUP" });
       dirty = false;
+      originalItems = JSON.parse(JSON.stringify(items));
       toast("发布成功", "success");
-
-      // 发布后退出编辑模式（避免误改）
       currentIndex = -1;
       renderList();
       selectItem(-1);
@@ -1249,6 +1441,27 @@
       $("nacos-msg-delete").addEventListener("click", deleteCurrent);
       $("nacos-msg-publish").addEventListener("click", () => {
         publish().catch((e) => toast("发布失败：" + e.message, "error"));
+      });
+
+      // JSON 发布前预览模态框事件
+      const jsonPreviewModal = $("nacos-msg-json-preview-modal");
+      const jsonPreviewClose = $("nacos-msg-json-preview-modal-close");
+      const jsonPreviewCancel = $("nacos-msg-json-preview-modal-cancel");
+      const jsonPreviewConfirm = $("nacos-msg-json-preview-modal-confirm");
+      if (jsonPreviewClose) jsonPreviewClose.addEventListener("click", hideJsonPreviewModal);
+      if (jsonPreviewCancel) jsonPreviewCancel.addEventListener("click", hideJsonPreviewModal);
+      if (jsonPreviewConfirm) jsonPreviewConfirm.addEventListener("click", () => {
+        confirmPublish().catch((e) => toast("发布失败：" + e.message, "error"));
+      });
+      if (jsonPreviewModal) {
+        jsonPreviewModal.addEventListener("click", (e) => {
+          if (e.target === jsonPreviewModal) hideJsonPreviewModal();
+        });
+      }
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && jsonPreviewModal && jsonPreviewModal.style.display === "flex") {
+          hideJsonPreviewModal();
+        }
       });
 
       // HTML 模态框事件绑定
