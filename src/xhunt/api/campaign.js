@@ -156,7 +156,7 @@ router.post(
 
           const rankData = rankResponse && rankResponse.data ? rankResponse.data : null;
           if (!rankData || !rankData.data || !Array.isArray(rankData.data) || rankData.data.length === 0) {
-            console.log(LOG, "reject: rank api empty or invalid", JSON.stringify(rankResponse), { userId: user.id, twitterId });
+            console.log(LOG, "reject: rank api empty or invalid", { status: rankResponse?.status, data: rankResponse?.data, userId: user.id, twitterId });
             return res.status(502).json({ error: "Failed to fetch user ranking data" });
           }
 
