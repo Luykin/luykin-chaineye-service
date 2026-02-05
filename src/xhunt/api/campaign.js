@@ -54,7 +54,7 @@ router.post(
   securityMiddleware,
   async (req, res) => {
     try {
-      const { campaign, invitedByCode, evmAddress, registrationUrl } =
+      const { campaign, evmAddress, registrationUrl } =
         req.body || {};
 
       const normalizedCampaign = normalizeCampaign(campaign);
@@ -187,27 +187,27 @@ router.post(
       const userHandle = (user.username || "").toLowerCase();
       const isSpecialUser = SPECIAL_ALLOWED_USERNAMES.has(userHandle);
 
-      if (typeof invitedByCode === "string" && invitedByCode.trim()) {
-        const code = invitedByCode.trim();
-        if (code.toLowerCase() === SPECIAL_INVITE_CODE.toLowerCase()) {
-          if (!isSpecialUser) {
-            return res
-              .status(403)
-              .json({ error: "You are not a specially invited user" });
-          }
-        } else {
-          inviter = await XHuntUser.findOne({
-            where: { inviteCode: code },
-          });
-          if (!inviter) {
-            return res.status(400).json({ error: "Invalid invite code" });
-          }
-          // 不能使用自己的邀请码
-          if (inviter.id === user.id) {
-            return res.status(400).json({ error: "Cannot use your own invite code" });
-          }
-        }
-      }
+      // if (typeof invitedByCode === "string" && invitedByCode.trim()) {
+      //   const code = invitedByCode.trim();
+      //   if (code.toLowerCase() === SPECIAL_INVITE_CODE.toLowerCase()) {
+      //     if (!isSpecialUser) {
+      //       return res
+      //         .status(403)
+      //         .json({ error: "You are not a specially invited user" });
+      //     }
+      //   } else {
+      //     inviter = await XHuntUser.findOne({
+      //       where: { inviteCode: code },
+      //     });
+      //     if (!inviter) {
+      //       return res.status(400).json({ error: "Invalid invite code" });
+      //     }
+      //     // 不能使用自己的邀请码
+      //     if (inviter.id === user.id) {
+      //       return res.status(400).json({ error: "Cannot use your own invite code" });
+      //     }
+      //   }
+      // }
 
       if (!isSpecialUser) {
         try {
@@ -287,7 +287,8 @@ router.post(
         username: user.username,
         displayName: user.displayName,
         avatar: user.avatar,
-        invitedByCode: typeof invitedByCode === "string" ? invitedByCode : null,
+        // invitedByCode: typeof invitedByCode === "string" ? invitedByCode : null,
+        invitedByCode: null,
         invitedByUserId: inviter ? inviter.id : null,
         invitedByTwitterId: inviter ? inviter.twitterId : null,
         invitedByUsername: inviter ? inviter.username : null,
