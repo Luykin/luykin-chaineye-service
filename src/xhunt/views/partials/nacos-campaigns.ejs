@@ -61,14 +61,14 @@
       <div id="campaigns-editor-body" style="display: none">
         <div class="field-row field-row-toggle">
           <div class="field">
-            <label>活动启用（enabled）</label>
+            <label>是否展示（enabled）</label>
             <label class="switch">
               <input id="campaigns-enabled" type="checkbox" disabled />
               <span class="slider"></span>
             </label>
           </div>
           <div class="field">
-            <label>测试期（testingPhase）</label>
+            <label>是否是测试期（testingPhase）（仅内部测试号可见）</label>
             <label class="switch">
               <input id="campaigns-testingPhase" type="checkbox" disabled />
               <span class="slider"></span>
@@ -261,17 +261,17 @@
             <div class="section-title-sm">相关链接</div>
             <div class="field-row field-row-2">
               <div class="field">
-                <label>官方指南链接</label>
+                <label>A.推特活动指南链接</label>
                 <input id="campaigns-links-guideUrl" type="text" placeholder="https://..." />
               </div>
               <div class="field">
-                <label>活动页面链接</label>
+                <label>B.官网活动页面链接</label>
                 <input id="campaigns-links-activeUrl" type="text" placeholder="https://..." />
               </div>
             </div>
             <div class="field-row">
               <div class="field">
-                <label style="display: flex; align-items: center; gap: 8px;">插件榜单底部显示「查看官方排行榜」</label>
+                <label style="display: flex; align-items: center; gap: 8px;">插件榜单底部显示「查看官方排行榜」（跳转到 B.官网活动页面链接）</label>
                 <label class="switch">
                   <input id="campaigns-links-showLeaderboardLink" type="checkbox" disabled />
                   <span class="slider"></span>
@@ -283,11 +283,11 @@
             <div class="section-title-sm">相关名单（每行一个）</div>
             <div class="field-row field-row-2">
               <div class="field">
-                <label>内部测试人员</label>
+                <label>内部测试人员（测试阶段可见的人）</label>
                 <textarea id="campaigns-testList" rows="2" placeholder="luoyukun4"></textarea>
               </div>
               <div class="field">
-                <label>在哪些推特号右侧展示本活动</label>
+                <label>‼️在插件里面哪些推特号右侧展示本活动</label>
                 <textarea id="campaigns-targetUserIds" rows="2" placeholder="bybit_web3&#10;Bybit__Alpha"></textarea>
               </div>
             </div>
