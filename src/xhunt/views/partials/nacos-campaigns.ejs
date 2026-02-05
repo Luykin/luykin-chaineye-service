@@ -134,7 +134,6 @@
             </div>
           </div>
           <div class="section-block">
-            <div class="section-title-inline">项目介绍</div>
             <div class="field-row field-row-2">
               <div class="field">
                 <label>项目介绍（中文）</label>
@@ -161,7 +160,7 @@
                 ➕ 添加主题
               </button>
             </div>
-            <div class="repeaters-hint">← 左右滑动 · 至少保留一个主题</div>
+            <!-- <div class="repeaters-hint">← 左右滑动 · 至少保留一个主题</div> -->
             <div class="repeaters-horizontal" id="campaigns-writing-themes"></div>
           </div>
         </div>
@@ -232,7 +231,7 @@
                   <span class="section-toggle">▼</span>
                 </div>
                 <div class="section-content" style="display: none;">
-                  <div class="repeaters-hint">← 左右滑动</div>
+                  <!-- <div class="repeaters-hint">← 左右滑动</div> -->
                   <div class="repeaters" id="campaigns-essay-winners"></div>
                 </div>
               </div>
@@ -335,7 +334,7 @@
               Ⓜ️ 活动方 logo
               <button class="btn btn-sm" id="campaigns-logos-add" type="button" disabled>➕ 添加</button>
             </div>
-            <div class="repeaters-hint">← 左右滑动</div>
+            <!-- <div class="repeaters-hint">← 左右滑动</div> -->
             <div class="repeaters" id="campaigns-logos"></div>
           </div>
           <div class="section-sub">
@@ -343,7 +342,7 @@
               🎯 报名前需完成的任务
               <button class="btn btn-sm" id="campaigns-tasks-add" type="button" disabled>➕ 添加任务</button>
             </div>
-            <div class="repeaters-hint">← 左右滑动</div>
+            <!-- <div class="repeaters-hint">← 左右滑动</div> -->
             <div class="repeaters" id="campaigns-tasks"></div>
           </div>
         </div>
@@ -400,24 +399,13 @@
         </button>
       </div>
       <div class="json-preview-modal-body">
-        <div class="muted" style="margin-bottom: 8px">
-          即将发布到 Nacos 的完整配置（dataId: <code id="campaigns-json-preview-dataid">xhunt_campaigns</code>）
-          <span id="campaigns-json-preview-diff-hint" style="margin-left: 12px; color: #3b82f6; font-weight: 600;"></span>
-        </div>
-        <div style="margin-bottom: 8px; font-size: 12px; color: #6b7280; display: flex; gap: 12px;">
-          <span style="background: #fee2e2; padding: 2px 6px; border-radius: 4px;">红色</span>表示删除的内容
-          <span style="background: #dcfce7; padding: 2px 6px; border-radius: 4px;">绿色</span>表示新增的内容
-        </div>
-        <div class="json-diff-container">
-          <div class="json-diff-side">
-            <div class="json-diff-header">原始配置</div>
-            <pre id="campaigns-json-preview-original"></pre>
-          </div>
-          <div class="json-diff-side">
-            <div class="json-diff-header">修改后配置</div>
-            <pre id="campaigns-json-preview-content"></pre>
-          </div>
-        </div>
+        <p class="json-preview-legend">
+          即将发布到 Nacos（dataId: <code id="campaigns-json-preview-dataid">xhunt_campaigns</code>）
+          <span id="campaigns-json-preview-diff-hint" style="margin-left: 8px; color: #3b82f6; font-weight: 600;"></span>
+          <span class="legend-removed">删除</span> |
+          <span class="legend-added">新增</span>
+        </p>
+        <pre id="campaigns-json-preview-content"></pre>
       </div>
       <div class="json-preview-modal-footer">
         <button class="btn" id="campaigns-json-preview-modal-cancel" type="button">
@@ -1111,66 +1099,43 @@
     flex-direction: column;
     min-height: 0;
   }
-  .json-diff-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    background: #e5e7eb;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    overflow: hidden;
-    flex: 1;
-    min-height: 0;
-    max-height: 100%;
-  }
-  .json-diff-side {
-    background: #fff;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    min-width: 0;
-    min-height: 0;
-  }
-  .json-diff-header {
-    padding: 8px 12px;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
-    font-size: 12px;
-    font-weight: 600;
-    color: #374151;
+  .json-preview-modal-body .json-preview-legend {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 0 0 10px;
     flex-shrink: 0;
+  }
+  .json-preview-modal-body .legend-added {
+    color: #166534;
+    font-weight: 600;
+  }
+  .json-preview-modal-body .legend-removed {
+    color: #991b1b;
+    font-weight: 600;
   }
   .json-preview-modal-body pre {
     margin: 0;
     padding: 12px;
-    background: #fff;
+    background: #f9fafb;
+    border-radius: 8px;
     font-family: "Consolas", "Monaco", "Courier New", monospace;
     font-size: 12px;
-    line-height: 1.5;
+    line-height: 1.35;
     overflow: auto;
     flex: 1;
-    color: #111827;
-    white-space: pre;
-    word-wrap: normal;
     min-height: 0;
-    max-height: 100%;
-  }
-  .json-preview-modal-body pre .diff-line {
-    display: block;
-    padding: 0 4px;
-    margin: 0 -4px;
-  }
-  .json-preview-modal-body pre .diff-removed {
-    background: #fee2e2;
-    color: #991b1b;
-  }
-  .json-preview-modal-body pre .diff-added {
-    background: #dcfce7;
-    color: #065f46;
-  }
-  .json-preview-modal-body pre .diff-context {
-    background: #fff;
     color: #111827;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .json-preview-modal-body pre span.added {
+    color: #166534;
+    background: #dcfce7;
+  }
+  .json-preview-modal-body pre span.removed {
+    color: #991b1b;
+    background: #fee2e2;
+    text-decoration: line-through;
   }
   .json-preview-modal-footer {
     padding: 12px 16px;
@@ -1293,6 +1258,7 @@
   }
 </style>
 
+<script src="/static/js/diff.min.js"></script>
 <script>
   (function () {
     let inited = false;
@@ -1663,19 +1629,19 @@
                 </div>
                 <div class="field-row">
                   <div class="field">
-                    <label>图片地址（image 必填）</label>
+                    <label>图片（必填）</label>
                     <input type="text" data-field="image" value="${escapeHtml(
                       it?.image || ""
                     )}" />
                   </div>
                   <div class="field">
-                    <label>推特链接（url 必填）</label>
+                    <label>推特链接（必填）</label>
                     <input type="text" data-field="url" value="${escapeHtml(
                       it?.url || ""
                     )}" />
                   </div>
                   <div class="field">
-                    <label>推特账号（label 必填）</label>
+                    <label>推特账号（必填）</label>
                     <input type="text" data-field="label" value="${escapeHtml(
                       it?.label || ""
                     )}" />
@@ -3034,208 +3000,51 @@
       showJsonPreviewModal(content);
     }
 
-    // 简单的行级 diff 算法（类似 GitHub diff）
-    function computeLineDiff(originalLines, currentLines) {
-      const result = [];
-      
-      let origIdx = 0;
-      let currIdx = 0;
-      
-      // 先尝试匹配相同的行
-      while (origIdx < originalLines.length && currIdx < currentLines.length) {
-        const origLine = originalLines[origIdx];
-        const currLine = currentLines[currIdx];
-        
-        // 如果两行相同（忽略尾随空格）
-        if (origLine.trim() === currLine.trim()) {
-          result.push({
-            type: 'context',
-            original: origLine,
-            current: currLine
-          });
-          origIdx++;
-          currIdx++;
-        } else {
-          // 尝试在当前行之后查找匹配的原始行
-          let foundMatch = false;
-          let searchLimit = Math.min(10, currentLines.length - currIdx);
-          
-          for (let i = 1; i < searchLimit; i++) {
-            if (currIdx + i < currentLines.length && 
-                originalLines[origIdx].trim() === currentLines[currIdx + i].trim()) {
-              // 找到了匹配，中间的都是新增
-              for (let j = 0; j < i; j++) {
-                result.push({
-                  type: 'added',
-                  original: null,
-                  current: currentLines[currIdx + j]
-                });
-              }
-              currIdx += i;
-              foundMatch = true;
-              break;
-            }
-          }
-          
-          // 尝试在原始行之后查找匹配的当前行
-          if (!foundMatch) {
-            searchLimit = Math.min(10, originalLines.length - origIdx);
-            for (let i = 1; i < searchLimit; i++) {
-              if (origIdx + i < originalLines.length && 
-                  originalLines[origIdx + i].trim() === currentLines[currIdx].trim()) {
-                // 找到了匹配，中间的都是删除
-                for (let j = 0; j < i; j++) {
-                  result.push({
-                    type: 'removed',
-                    original: originalLines[origIdx + j],
-                    current: null
-                  });
-                }
-                origIdx += i;
-                foundMatch = true;
-                break;
-              }
-            }
-          }
-          
-          // 如果没找到匹配，视为修改
-          if (!foundMatch) {
-            result.push({
-              type: 'removed',
-              original: origLine,
-              current: null
-            });
-            result.push({
-              type: 'added',
-              original: null,
-              current: currLine
-            });
-            origIdx++;
-            currIdx++;
-          }
-        }
-      }
-      
-      // 处理剩余的行
-      while (origIdx < originalLines.length) {
-        result.push({
-          type: 'removed',
-          original: originalLines[origIdx],
-          current: null
-        });
-        origIdx++;
-      }
-      
-      while (currIdx < currentLines.length) {
-        result.push({
-          type: 'added',
-          original: null,
-          current: currentLines[currIdx]
-        });
-        currIdx++;
-      }
-      
-      return result;
-    }
-
-    // 渲染左右对比的 diff
-    function renderJsonDiff(currentJson, originalJson) {
-      if (!originalJson) {
-        // 如果没有原始配置，只显示当前配置（全部为新增）
-        const currentLines = currentJson.split('\n');
-        const currentHtml = currentLines.map((line, idx) => {
-          return `<span class="diff-line diff-added">${escapeHtml(line || ' ')}</span>`;
-        }).join('\n');
-        
-        return {
-          original: '<span class="diff-line diff-context">（无原始配置）</span>',
-          current: currentHtml
-        };
-      }
-
-      try {
-        const originalLines = originalJson.split('\n');
-        const currentLines = currentJson.split('\n');
-        
-        const diff = computeLineDiff(originalLines, currentLines);
-        
-        const originalHtml = diff.map(item => {
-          if (item.type === 'removed' || item.type === 'context') {
-            const className = item.type === 'removed' ? 'diff-removed' : 'diff-context';
-            return `<span class="diff-line ${className}">${escapeHtml(item.original || ' ')}</span>`;
-          }
-          return `<span class="diff-line diff-context"> </span>`;
-        }).join('\n');
-        
-        const currentHtml = diff.map(item => {
-          if (item.type === 'added' || item.type === 'context') {
-            const className = item.type === 'added' ? 'diff-added' : 'diff-context';
-            return `<span class="diff-line ${className}">${escapeHtml(item.current || ' ')}</span>`;
-          }
-          return `<span class="diff-line diff-context"> </span>`;
-        }).join('\n');
-        
-        return {
-          original: originalHtml,
-          current: currentHtml
-        };
-      } catch (e) {
-        console.error("JSON diff error:", e);
-        return {
-          original: escapeHtml(originalJson || '（解析失败）'),
-          current: escapeHtml(currentJson)
-        };
-      }
-    }
-
     function showJsonPreviewModal(jsonContent) {
       const modal = $("campaigns-json-preview-modal");
       const contentEl = $("campaigns-json-preview-content");
-      const originalEl = $("campaigns-json-preview-original");
       const dataIdEl = $("campaigns-json-preview-dataid");
       const diffHintEl = $("campaigns-json-preview-diff-hint");
-      if (!modal || !contentEl || !originalEl) return;
+      if (!modal || !contentEl) return;
 
       if (dataIdEl) dataIdEl.textContent = DATA_ID;
 
-      // 生成原始配置的 JSON 字符串
-      const originalJson = originalConfig 
-        ? JSON.stringify(originalConfig, null, 2)
+      let currentObj;
+      try {
+        currentObj = JSON.parse(jsonContent);
+      } catch (e) {
+        contentEl.textContent = jsonContent;
+        if (diffHintEl) diffHintEl.textContent = "（JSON 解析失败，显示原文）";
+        modal.style.display = "flex";
+        return;
+      }
+
+      const originalObj = originalConfig || {};
+      const diff = typeof Diff !== "undefined" && Diff.diffJson
+        ? Diff.diffJson(originalObj, currentObj)
         : null;
 
-      // 渲染左右对比
-      const diff = renderJsonDiff(jsonContent, originalJson);
-      originalEl.innerHTML = diff.original;
-      contentEl.innerHTML = diff.current;
-      
+      if (diff && diff.length > 0) {
+        const fragment = document.createDocumentFragment();
+        diff.forEach((part) => {
+          const span = document.createElement("span");
+          span.className = part.added ? "added" : part.removed ? "removed" : "";
+          span.appendChild(document.createTextNode(part.value));
+          fragment.appendChild(span);
+        });
+        contentEl.innerHTML = "";
+        contentEl.appendChild(fragment);
+      } else {
+        contentEl.textContent = jsonContent;
+      }
+
       if (diffHintEl) {
         if (originalConfig) {
-          diffHintEl.textContent = "（左右对比显示变更）";
+          diffHintEl.textContent = "（与当前 Nacos 对比）";
         } else {
           diffHintEl.textContent = "（首次发布，无原始配置）";
         }
       }
-
-      // 添加同步滚动（使用一次性绑定，避免重复绑定）
-      let isScrolling = false;
-      const syncScroll = (source, target) => {
-        if (isScrolling) return;
-        isScrolling = true;
-        target.scrollTop = source.scrollTop;
-        setTimeout(() => { isScrolling = false; }, 10);
-      };
-      
-      // 移除旧的监听器（如果存在）
-      const originalScrollHandler = originalEl._scrollHandler;
-      const contentScrollHandler = contentEl._scrollHandler;
-      if (originalScrollHandler) originalEl.removeEventListener('scroll', originalScrollHandler);
-      if (contentScrollHandler) contentEl.removeEventListener('scroll', contentScrollHandler);
-      
-      // 添加新的监听器并保存引用
-      originalEl._scrollHandler = () => syncScroll(originalEl, contentEl);
-      contentEl._scrollHandler = () => syncScroll(contentEl, originalEl);
-      originalEl.addEventListener('scroll', originalEl._scrollHandler);
-      contentEl.addEventListener('scroll', contentEl._scrollHandler);
 
       modal.style.display = "flex";
     }
