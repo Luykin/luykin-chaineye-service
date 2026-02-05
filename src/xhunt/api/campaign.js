@@ -53,14 +53,17 @@ router.post(
   authenticateToken,
   securityMiddleware,
   async (req, res) => {
+    const LOG = "[CampaignRegister]";
     try {
       const { campaign, evmAddress, registrationUrl } =
         req.body || {};
 
       const normalizedCampaign = normalizeCampaign(campaign);
       if (!normalizedCampaign) {
+        console.log(LOG, "reject: campaign missing or invalid", { campaign: !!campaign });
         return res.status(400).json({ error: "campaign is required" });
       }
+      console.log(LOG, "start", { campaign: normalizedCampaign, hasEvmAddress: !!(evmAddress && String(evmAddress).trim()) });
 
       let found = null;
       try {
@@ -70,46 +73,56 @@ router.post(
         );
         const cfg = cfgResp && cfgResp.data ? cfgResp.data : null;
         if (!cfg || !Array.isArray(cfg.campaigns)) {
+          console.log(LOG, "reject: nacos config incomplete", { hasCfg: !!cfg, campaignsLen: cfg && cfg.campaigns ? cfg.campaigns.length : 0 });
           return res.status(502).json({ error: "Failed to fetch campaigns config: incomplete data" });
         }
         found = cfg.campaigns.find(
           (c) => c && c.campaignKey === normalizedCampaign
         );
         if (!found) {
+          console.log(LOG, "reject: campaign not found in config", { campaign: normalizedCampaign });
           return res.status(400).json({ error: "Invalid campaign identifier" });
         }
         if (!found.enabled) {
+          console.log(LOG, "reject: campaign not enabled", { campaign: normalizedCampaign });
           return res.status(400).json({ error: "Campaign is not enabled" });
         }
         const now = new Date();
         const startAt = found.enrollmentWindow && found.enrollmentWindow.startAt ? new Date(found.enrollmentWindow.startAt) : null;
         const endAt = found.enrollmentWindow && found.enrollmentWindow.endAt ? new Date(found.enrollmentWindow.endAt) : null;
         if (!startAt || !endAt || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+          console.log(LOG, "reject: invalid enrollment window", { startAt: !!startAt, endAt: !!endAt });
           return res.status(502).json({ error: "Invalid enrollment window in config" });
         }
         if (now < startAt || now > endAt) {
+          console.log(LOG, "reject: outside enrollment window", { now: now.toISOString(), startAt: startAt.toISOString(), endAt: endAt.toISOString() });
           return res.status(400).json({ error: "Not within the enrollment window" });
         }
+        console.log(LOG, "config ok", { campaign: normalizedCampaign, id: found.id });
       } catch (cfgErr) {
-        console.error("Fetch campaigns config error:", cfgErr);
+        console.error(LOG, "fetch campaigns config error:", cfgErr.message || cfgErr);
         return res.status(502).json({ error: "Campaign configuration service unavailable" });
       }
 
       const authedUserId = req.user && req.user.id;
       if (!authedUserId) {
+        console.log(LOG, "reject: no auth user id");
         return res.status(401).json({ error: "未登录或 token 无效" });
       }
       const user = await XHuntUser.findByPk(authedUserId);
       if (!user) {
+        console.log(LOG, "reject: user not found", { userId: authedUserId });
         return res.status(404).json({ error: "对应的用户不存在" });
       }
 
       if (!evmAddress || typeof evmAddress !== "string" || !evmAddress.trim()) {
+        console.log(LOG, "reject: evm address missing");
         return res.status(400).json({ error: "EVM address is required" });
       }
       const trimmedAddress = evmAddress.trim();
       const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
       if (!evmAddressRegex.test(trimmedAddress)) {
+        console.log(LOG, "reject: invalid evm format", { len: trimmedAddress.length });
         return res.status(400).json({ error: "Invalid EVM address format" });
       }
 
@@ -118,13 +131,14 @@ router.post(
           const cooldownKey = `campaign:${normalizedCampaign}:register:cd:${user.id}`;
           const ttl = await req.redisClient.ttl(cooldownKey);
           if (typeof ttl === "number" && ttl > 0) {
+            console.log(LOG, "reject: cooldown", { userId: user.id, ttl });
             return res.status(429).json({
               error: `Too frequent requests, please try again in ${ttl}s`,
             });
           }
           await req.redisClient.setEx(cooldownKey, 10, "1");
         } catch (cdErr) {
-          console.warn("Campaign register cooldown warn:", cdErr);
+          console.warn(LOG, "cooldown redis warn:", cdErr.message || cdErr);
         }
       }
 
@@ -133,6 +147,7 @@ router.post(
         try {
           const twitterId = String(user.twitterId);
           if (!twitterId || twitterId === "null" || twitterId === "undefined") {
+            console.log(LOG, "reject: invalid twitter id", { userId: user.id });
             return res.status(400).json({ error: "Invalid Twitter ID" });
           }
 
@@ -141,6 +156,7 @@ router.post(
 
           const rankData = rankResponse && rankResponse.data ? rankResponse.data : null;
           if (!rankData || !rankData.data || !Array.isArray(rankData.data) || rankData.data.length === 0) {
+            console.log(LOG, "reject: rank api empty or invalid", { userId: user.id, twitterId });
             return res.status(502).json({ error: "Failed to fetch user ranking data" });
           }
 
@@ -159,14 +175,16 @@ router.post(
                 authCreator.status === 2;
 
               if (!isCreator) {
+                console.log(LOG, "reject: threshold not met", { userId: user.id, kolRank, threshold: found.threshold, isCreator: !!isCreator });
                 return res.status(400).json({
                   error: `Does not meet registration threshold: KOL rank must be less than or equal to ${found.threshold}, current rank is ${kolRank}`
                 });
               }
+              console.log(LOG, "threshold bypassed via creator", { userId: user.id, kolRank, threshold: found.threshold });
             }
           }
         } catch (rankErr) {
-          console.error("Campaign register threshold check error:", rankErr);
+          console.error(LOG, "threshold check error:", rankErr.message || rankErr);
           return res.status(502).json({ error: "Threshold check request failed, please try again later" });
         }
       }
@@ -178,6 +196,7 @@ router.post(
         },
       });
       if (existingEVM) {
+        console.log(LOG, "reject: evm already used", { campaign: normalizedCampaign, evmSuffix: trimmedAddress.slice(-6) });
         return res
           .status(409)
           .json({ error: "This EVM address is already in use" });
@@ -186,6 +205,9 @@ router.post(
       let inviter = null;
       const userHandle = (user.username || "").toLowerCase();
       const isSpecialUser = SPECIAL_ALLOWED_USERNAMES.has(userHandle);
+      if (isSpecialUser) {
+        console.log(LOG, "special user, skip profile check", { userId: user.id, username: user.username });
+      }
 
       // if (typeof invitedByCode === "string" && invitedByCode.trim()) {
       //   const code = invitedByCode.trim();
@@ -214,6 +236,7 @@ router.post(
           const apiUrl =
             "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid";
           const payload = { user_id: String(user.twitterId) };
+          console.log(LOG, "profile check request", { userId: user.id, twitterId: user.twitterId });
           const response = await axios.post(apiUrl, payload, { timeout: 7000 });
 
           const data = response && response.data ? response.data : null;
@@ -222,6 +245,7 @@ router.post(
             !data.created_at ||
             typeof data.followers_count !== "number"
           ) {
+            console.log(LOG, "reject: profile data incomplete", { userId: user.id, hasData: !!data, hasCreatedAt: !!(data && data.created_at), hasFollowers: !!(data && typeof data.followers_count === "number") });
             return res
               .status(502)
               .json({ error: "外部数据校验失败：返回数据不完整" });
@@ -229,6 +253,7 @@ router.post(
 
           const createdAt = new Date(data.created_at);
           if (Number.isNaN(createdAt.getTime())) {
+            console.log(LOG, "reject: profile created_at invalid", { userId: user.id, created_at: data.created_at });
             return res
               .status(502)
               .json({ error: "外部数据校验失败：创建时间无效" });
@@ -239,18 +264,21 @@ router.post(
           oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
           if (createdAt > oneMonthAgo) {
+            console.log(LOG, "reject: account too new", { userId: user.id, createdAt: createdAt.toISOString(), oneMonthAgo: oneMonthAgo.toISOString() });
             return res
               .status(400)
               .json({ error: "不满足条件：账号注册需早于1个月" });
           }
 
           if (data.followers_count < 50) {
+            console.log(LOG, "reject: followers < 50", { userId: user.id, followers_count: data.followers_count });
             return res
               .status(400)
               .json({ error: "不满足条件：粉丝数量需不少于50" });
           }
+          console.log(LOG, "profile check ok", { userId: user.id, followers_count: data.followers_count });
         } catch (apiErr) {
-          console.error("Campaign register profile check error:", apiErr);
+          console.error(LOG, "profile check error:", apiErr.message || apiErr);
           return res.status(502).json({ error: "外部数据校验请求失败" });
         }
       }
@@ -262,6 +290,7 @@ router.post(
         },
       });
       if (existed) {
+        console.log(LOG, "reject: already registered", { userId: user.id, campaign: normalizedCampaign });
         return res.status(409).json({ error: "您已报名，无需重复提交" });
       }
 
@@ -270,6 +299,7 @@ router.post(
         try {
           uniqueCode = await ensureUniqueInviteCode();
         } catch (e) {
+          console.error(LOG, "invite code gen error:", e.message || e);
           return res.status(500).json({ error: "邀请码生成失败" });
         }
         user.inviteCode = uniqueCode;
@@ -280,6 +310,7 @@ router.post(
         ? String(req.headers["x-window-location-href"])
         : null;
 
+      console.log(LOG, "creating registration", { userId: user.id, campaign: normalizedCampaign, evmSuffix: trimmedAddress.slice(-6) });
       const record = await CampaignRegistration.create({
         campaign: normalizedCampaign,
         xHuntUserId: user.id,
@@ -317,13 +348,14 @@ router.post(
       }
 
       const { xHuntUserId: _omit, ...safeRecord } = record.toJSON();
+      console.log(LOG, "success", { userId: user.id, campaign: normalizedCampaign, registrationId: record.id });
       return res.json({
         success: true,
         inviteCode: user.inviteCode || null,
         registration: safeRecord,
       });
     } catch (err) {
-      console.error("Campaign register error:", err);
+      console.error(LOG, "error:", err.message || err);
       return res.status(500).json({ error: "服务器内部错误（campaign register）" });
     }
   }
