@@ -6,6 +6,10 @@
   </div>
 
   <div class="campaigns-toolbar">
+    <div class="left">
+      <span class="muted">当前 dataId：<code id="campaigns-dataid">xhunt_campaigns</code></span>
+      <span class="muted">group：<code>DEFAULT_GROUP</code></span>
+    </div>
     <div class="right">
       <div class="campaigns-search">
         <span class="search-icon" aria-hidden="true">🔍</span>
@@ -15,7 +19,7 @@
           placeholder="搜索活动（id / campaignKey / 标题）"
         />
       </div>
-      <button class="btn primary" id="campaigns-refresh"><span class="btn-ico" aria-hidden="true">🔄</span> 重新加载</button>
+      <button class="btn primary" id="campaigns-refresh"><span class="btn-ico" aria-hidden="true"></span> ⌛重新加载</button>
       <button class="btn" id="campaigns-new"><span class="btn-ico" aria-hidden="true">➕</span> 新增活动</button>
       <button class="btn" id="campaigns-duplicate" disabled><span class="btn-ico" aria-hidden="true">🧬</span> 复制活动</button>
       <button class="btn danger" id="campaigns-delete" disabled><span class="btn-ico" aria-hidden="true">🗑️</span> 删除当前</button>
