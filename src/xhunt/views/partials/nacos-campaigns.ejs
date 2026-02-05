@@ -218,6 +218,48 @@
               </select>
             </div>
           </div>
+          <div class="field-row field-row-2">
+            <div class="field">
+              <label>奖励金额展示单位</label>
+              <input
+                id="campaigns-rewardUnit"
+                type="text"
+                placeholder="例如：U、USDT、USD"
+              />
+              <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+                适用于所有奖励的展示单位
+              </div>
+            </div>
+            <div class="field">
+              <label style="display: flex; align-items: center; gap: 8px;">
+                <span>是否开启征文大赛</span>
+              </label>
+              <label class="switch">
+                <input id="campaigns-enableEssayContest" type="checkbox" disabled />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+          <div id="essay-contest-fields" style="display: none;">
+            <div class="field-row field-row-2">
+              <div class="field">
+                <label>征文大赛金额</label>
+                <input
+                  id="campaigns-essayContestAmount"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div class="section-title" style="margin-top: 10px;">
+              🏆 征文大赛最终名单
+              <button class="btn" id="campaigns-essay-winners-add" type="button" disabled>
+                ➕ 添加获奖者
+              </button>
+            </div>
+            <div class="repeaters" id="campaigns-essay-winners"></div>
+          </div>
         </div>
 
         <div class="section">
@@ -1313,6 +1355,10 @@
       $("campaigns-delete").disabled = !enabled;
       $("campaigns-logos-add").disabled = !enabled;
       $("campaigns-tasks-add").disabled = !enabled;
+      const essayWinnersAddBtn = $("campaigns-essay-winners-add");
+      if (essayWinnersAddBtn) {
+        essayWinnersAddBtn.disabled = !enabled;
+      }
       setEditorInputsEnabled(enabled);
     }
 
@@ -1326,6 +1372,9 @@
         "campaigns-rewardAmount",
         "campaigns-rewardParticipantCount",
         "campaigns-rewardDistributionType",
+        "campaigns-rewardUnit",
+        "campaigns-enableEssayContest",
+        "campaigns-essayContestAmount",
         "campaigns-threshold",
         "campaigns-hasRiskConfirm",
         "campaigns-copy-emoji",
@@ -1417,13 +1466,13 @@
                       const imageUrl = logo?.image || "";
                       if (!imageUrl) return "";
                       const proxiedUrl = getProxiedImageUrl(imageUrl);
+                      // 注意：这里不在每次重渲染时重新设置 src，只在首次生成时创建 img
                       return `<img 
                         class="item-logo" 
                         src="${escapeHtml(proxiedUrl)}" 
                         alt="${escapeHtml(logo?.label || "")}"
                         title="${escapeHtml(logo?.label || "")}"
                         onerror="this.classList.add('error'); this.remove();"
-                        onload="this.classList.remove('error');"
                       />`;
                     })
                     .filter(Boolean)
@@ -1437,7 +1486,7 @@
                   ${logosHtml}
                   <div class="item-title-wrapper">
                     <div class="item-title">
-                      <span>${escapeHtml(title)}</span>
+                      <span class="item-title-text">${escapeHtml(title)}</span>
                       <span class="chips">${chips.join("")}</span>
                     </div>
                   </div>
@@ -1457,41 +1506,58 @@
         });
       });
 
-      // 处理图片加载失败的情况
-      listEl.querySelectorAll(".item-logo").forEach((img) => {
-        // 如果图片已经有错误标记，直接移除
-        if (img.classList.contains("error")) {
-          img.remove();
-          return;
-        }
-        
-        // 添加错误处理
-        img.addEventListener("error", function() {
-          this.classList.add("error");
-          this.remove();
-        });
-        
-        // 如果图片已经加载失败（src 无效），立即移除
-        if (!img.complete || img.naturalHeight === 0) {
-          // 延迟检查，给图片一些时间加载
-          setTimeout(() => {
-            if (img.naturalHeight === 0 || !img.complete) {
-              img.classList.add("error");
-              img.remove();
-            }
-          }, 100);
+    }
+
+    /**
+     * 只更新当前活动在左侧列表中的标题和状态，不动头像 DOM，
+     * 避免在编辑右侧表单时重复触发头像重新加载。
+     */
+    function updateListItemForCampaign(c, idx) {
+      const listEl = $("campaigns-list");
+      if (!listEl || !c || typeof idx !== "number" || idx < 0) return;
+      const item = listEl.querySelector(`.item[data-idx="${idx}"]`);
+      if (!item) return;
+
+      // 更新 active 状态
+      listEl.querySelectorAll(".item").forEach((node) => {
+        if (Number(node.getAttribute("data-idx")) === idx) {
+          node.classList.add("active");
+        } else {
+          node.classList.remove("active");
         }
       });
+
+      const title =
+        (c.displayName && (c.displayName.zh || c.displayName.en)) ||
+        (c.copy && c.copy.title && (c.copy.title.zh || c.copy.title.en)) ||
+        c.id ||
+        "(未命名)";
+
+      const titleSpan = item.querySelector(".item-title-text");
+      if (titleSpan) {
+        titleSpan.textContent = title;
+      }
+
+      const chipsContainer = item.querySelector(".chips");
+      if (chipsContainer) {
+        const chips = [
+          c.enabled ? `<span class="chip on">enabled</span>` : `<span class="chip">disabled</span>`,
+          c.testingPhase ? `<span class="chip testing">testing</span>` : "",
+        ].filter(Boolean);
+        chipsContainer.innerHTML = chips.join("");
+      }
     }
 
     function renderRepeaters() {
       const c = getCurrentCampaign();
       const logosEl = $("campaigns-logos");
       const tasksEl = $("campaigns-tasks");
+      const winnersEl = $("campaigns-essay-winners");
       if (!logosEl || !tasksEl) return;
 
       const logos = Array.isArray(c?.logos) ? c.logos : [];
       const tasks = Array.isArray(c?.tasks) ? c.tasks : [];
+      const winners = Array.isArray(c?.essayContestWinners) ? c.essayContestWinners : [];
       
       // 确保所有 logo 都有默认的 ringClassName
       const defaultRingClassName = "ring-blue-400/20 hover:ring-blue-400/50";
@@ -1628,7 +1694,56 @@
               </div>
             `;
           })
-          .join("") || `<div class="muted">暂无 tasks，可点击上方“添加 Task”。</div>`;
+          .join("") || `<div class="muted">暂无 tasks，可点击上方"添加 Task"。</div>`;
+
+      // 渲染征文大赛获奖者（仅在开启征文大赛时显示）
+      if (winnersEl) {
+        winnersEl.innerHTML =
+          winners
+            .map((it, i) => {
+              return `
+                <div class="rep-card" data-kind="essay-winners" data-index="${i}">
+                  <div class="rep-header">
+                    <div class="rep-title">#${i + 1} 获奖者</div>
+                    <div class="rep-actions">
+                      <button class="btn" type="button" data-action="up">⬆︎</button>
+                      <button class="btn" type="button" data-action="down">⬇︎</button>
+                      <button class="btn danger" type="button" data-action="remove">删除</button>
+                    </div>
+                  </div>
+                  <div class="field-row field-row-2">
+                    <div class="field">
+                      <label>姓名（name）</label>
+                      <input type="text" data-field="name" value="${escapeHtml(
+                        it?.name || ""
+                      )}" />
+                    </div>
+                    <div class="field">
+                      <label>推特账号（handler）</label>
+                      <input type="text" data-field="handler" value="${escapeHtml(
+                        it?.handler || ""
+                      )}" />
+                    </div>
+                  </div>
+                  <div class="field-row field-row-2">
+                    <div class="field">
+                      <label>头像地址（avatar）</label>
+                      <input type="text" data-field="avatar" value="${escapeHtml(
+                        it?.avatar || ""
+                      )}" placeholder="https://..." />
+                    </div>
+                    <div class="field">
+                      <label>奖励金额（reward）</label>
+                      <input type="text" data-field="reward" value="${escapeHtml(
+                        it?.reward || ""
+                      )}" placeholder="例如：1000" />
+                    </div>
+                  </div>
+                </div>
+              `;
+            })
+            .join("") || `<div class="muted">暂无获奖者，可点击上方"添加获奖者"。</div>`;
+      }
     }
 
     function clearEditor() {
@@ -1636,6 +1751,12 @@
       $("campaigns-enabled").checked = false;
       $("campaigns-testingPhase").checked = false;
       $("campaigns-hasRiskConfirm").checked = false;
+      $("campaigns-enableEssayContest").checked = false;
+      // 隐藏征文大赛字段区域
+      const essayFieldsEl = document.getElementById("essay-contest-fields");
+      if (essayFieldsEl) {
+        essayFieldsEl.style.display = "none";
+      }
       // id、campaignKey、hotTweetsKey 字段是 disabled 的，不需要清空
       [
         "campaigns-twitter-handle",
@@ -1646,6 +1767,8 @@
         "campaigns-rewardAmount",
         "campaigns-rewardParticipantCount",
         "campaigns-rewardDistributionType",
+        "campaigns-rewardUnit",
+        "campaigns-essayContestAmount",
         "campaigns-threshold",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
@@ -1666,6 +1789,10 @@
       });
       $("campaigns-logos").innerHTML = "";
       $("campaigns-tasks").innerHTML = "";
+      const essayWinnersEl = $("campaigns-essay-winners");
+      if (essayWinnersEl) {
+        essayWinnersEl.innerHTML = "";
+      }
 
       const body = $("campaigns-editor-body");
       const empty = $("campaigns-editor-empty");
@@ -1711,6 +1838,7 @@
       if (!Array.isArray(c.targetUserIds)) c.targetUserIds = [];
       if (!Array.isArray(c.logos)) c.logos = [];
       if (!Array.isArray(c.tasks)) c.tasks = [];
+      if (!Array.isArray(c.essayContestWinners)) c.essayContestWinners = [];
       
       // 确保所有 logo 都有默认的 ringClassName
       const defaultRingClassName = "ring-blue-400/20 hover:ring-blue-400/50";
@@ -1765,6 +1893,21 @@
       $("campaigns-rewardAmount").value = c.rewardAmount || "";
       $("campaigns-rewardParticipantCount").value = c.rewardParticipantCount || "";
       $("campaigns-rewardDistributionType").value = c.rewardDistributionType || "";
+      $("campaigns-rewardUnit").value = c.rewardUnit || "";
+      
+      // 征文大赛配置
+      const enableEssayContest = !!c.enableEssayContest;
+      $("campaigns-enableEssayContest").checked = enableEssayContest;
+      const essayFieldsEl = document.getElementById("essay-contest-fields");
+      if (essayFieldsEl) {
+        essayFieldsEl.style.display = enableEssayContest ? "block" : "none";
+      }
+      $("campaigns-essayContestAmount").value = c.essayContestAmount || "";
+      
+      // 确保 essayContestWinners 是数组
+      if (!Array.isArray(c.essayContestWinners)) {
+        c.essayContestWinners = [];
+      }
 
       // 门槛（将数字转换为显示格式）
       if (c.includeCreator === true && c.threshold === 200000) {
@@ -1881,6 +2024,36 @@
         delete c.rewardDistributionType;
       }
 
+      // 奖励金额展示单位
+      const rewardUnitVal = $("campaigns-rewardUnit").value.trim();
+      if (rewardUnitVal) {
+        c.rewardUnit = rewardUnitVal;
+      } else {
+        delete c.rewardUnit;
+      }
+
+      // 征文大赛配置
+      const enableEssayContest = $("campaigns-enableEssayContest").checked;
+      if (enableEssayContest) {
+        c.enableEssayContest = true;
+        
+        const essayContestAmountVal = $("campaigns-essayContestAmount").value.trim();
+        if (essayContestAmountVal) {
+          c.essayContestAmount = parseInt(essayContestAmountVal, 10);
+        } else {
+          c.essayContestAmount = 0;
+        }
+        
+        // 征文大赛最终名单（已经是数组格式，直接使用）
+        if (!Array.isArray(c.essayContestWinners)) {
+          c.essayContestWinners = [];
+        }
+      } else {
+        delete c.enableEssayContest;
+        delete c.essayContestAmount;
+        delete c.essayContestWinners;
+      }
+
       // 门槛（如果选择了 "200k+creator"，则 threshold 设为 200000，includeCreator 设为 true；否则设为 false）
       const thresholdVal = $("campaigns-threshold").value.trim();
       if (thresholdVal) {
@@ -1971,7 +2144,8 @@
 
       dirty = true;
       $("campaigns-publish").disabled = false;
-      renderList();
+      // 避免频繁重建整个列表导致头像重复加载，只增量更新当前条目
+      updateListItemForCampaign(c, currentIndex);
     }
 
     function updateIdFromCampaignKey() {
@@ -2029,6 +2203,19 @@
         });
       }
 
+      // 征文大赛开关的特殊处理
+      const enableEssayContestEl = $("campaigns-enableEssayContest");
+      if (enableEssayContestEl) {
+        enableEssayContestEl.addEventListener("change", () => {
+          if (!isEditorEnabled()) return;
+          const essayFieldsEl = document.getElementById("essay-contest-fields");
+          if (essayFieldsEl) {
+            essayFieldsEl.style.display = enableEssayContestEl.checked ? "block" : "none";
+          }
+          syncCampaignFromInputs();
+        });
+      }
+
       const ids = [
         "campaigns-displayName-zh",
         "campaigns-displayName-en",
@@ -2037,6 +2224,8 @@
         "campaigns-rewardAmount",
         "campaigns-rewardParticipantCount",
         "campaigns-rewardDistributionType",
+        "campaigns-rewardUnit",
+        "campaigns-essayContestAmount",
         "campaigns-threshold",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
@@ -2095,6 +2284,21 @@
       renderRepeaters();
     }
 
+    function addEssayContestWinner() {
+      const c = getCurrentCampaign();
+      if (!c) return;
+      c.essayContestWinners = Array.isArray(c.essayContestWinners) ? c.essayContestWinners : [];
+      c.essayContestWinners.push({
+        name: "",
+        handler: "",
+        avatar: "",
+        reward: "",
+      });
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      renderRepeaters();
+    }
+
     function moveArrayItem(arr, from, to) {
       if (!Array.isArray(arr)) return;
       if (from < 0 || to < 0 || from >= arr.length || to >= arr.length) return;
@@ -2116,7 +2320,16 @@
 
           const c = getCurrentCampaign();
           if (!c) return;
-          const arr = kind === "logos" ? c.logos : c.tasks;
+          let arr;
+          if (kind === "logos") {
+            arr = c.logos;
+          } else if (kind === "tasks") {
+            arr = c.tasks;
+          } else if (kind === "essay-winners") {
+            arr = c.essayContestWinners;
+          } else {
+            return;
+          }
           if (!Array.isArray(arr) || !arr[index]) return;
 
           const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
@@ -2150,7 +2363,16 @@
           if (!kind || !field || !Number.isFinite(index)) return;
           const c = getCurrentCampaign();
           if (!c) return;
-          const arr = kind === "logos" ? c.logos : c.tasks;
+          let arr;
+          if (kind === "logos") {
+            arr = c.logos;
+          } else if (kind === "tasks") {
+            arr = c.tasks;
+          } else if (kind === "essay-winners") {
+            arr = c.essayContestWinners;
+          } else {
+            return;
+          }
           if (!Array.isArray(arr) || !arr[index]) return;
           const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
           fieldSetter(arr[index], field, value);
@@ -2183,7 +2405,16 @@
           const index = Number(card.getAttribute("data-index"));
           const c = getCurrentCampaign();
           if (!c) return;
-          const arr = kind === "logos" ? c.logos : c.tasks;
+          let arr;
+          if (kind === "logos") {
+            arr = c.logos;
+          } else if (kind === "tasks") {
+            arr = c.tasks;
+          } else if (kind === "essay-winners") {
+            arr = c.essayContestWinners;
+          } else {
+            return;
+          }
           if (!Array.isArray(arr)) return;
 
           if (action === "remove") {
@@ -2217,6 +2448,9 @@
         } else {
           obj[field] = value;
         }
+      });
+      onRepInput("campaigns-essay-winners", (obj, field, value) => {
+        obj[field] = value;
       });
     }
 
@@ -2275,6 +2509,10 @@
         rewardAmount: undefined,
         rewardParticipantCount: undefined,
         rewardDistributionType: undefined,
+        rewardUnit: undefined,
+        enableEssayContest: false,
+        essayContestAmount: undefined,
+        essayContestWinners: undefined,
         threshold: undefined,
         includeCreator: false,
       };
@@ -2907,6 +3145,10 @@
 
       $("campaigns-logos-add").addEventListener("click", addLogo);
       $("campaigns-tasks-add").addEventListener("click", addTask);
+      const essayWinnersAddBtn = $("campaigns-essay-winners-add");
+      if (essayWinnersAddBtn) {
+        essayWinnersAddBtn.addEventListener("click", addEssayContestWinner);
+      }
 
       // JSON 预览模态框事件绑定
       const previewModal = $("campaigns-json-preview-modal");
