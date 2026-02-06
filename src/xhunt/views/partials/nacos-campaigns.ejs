@@ -1491,6 +1491,7 @@
           group: group || GROUP,
           content,
           type: "json",
+          source: "nacos-campaigns",
         }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

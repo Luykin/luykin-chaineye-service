@@ -1216,6 +1216,7 @@
           group: group || "DEFAULT_GROUP",
           content,
           type: "json",
+          source: "nacos-messages",
         }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

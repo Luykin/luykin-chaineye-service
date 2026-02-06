@@ -1672,6 +1672,9 @@ router.post(
   adminAuth,
   requirePermission(["nacos_config", "nacos-messages"]),
   async (req, res) => {
+    const auditAction = (req.body && req.body.source)
+      ? `${req.body.source}-publish`
+      : "nacos-config-publish";
     try {
       const {
         dataId,
@@ -1716,6 +1719,11 @@ router.post(
       });
 
       if (resp.status !== 200) {
+        await logAdminAction(req, {
+          action: auditAction,
+          success: false,
+          message: `发布失败 status=${resp.status} dataId=${dataId}`,
+        });
         return res.status(resp.status).json({
           success: false,
           error: "发布 Nacos 配置失败",
@@ -1727,6 +1735,11 @@ router.post(
       // Nacos 返回通常是 'true'
       const ok = resp.data === true || resp.data === "true";
       if (!ok) {
+        await logAdminAction(req, {
+          action: auditAction,
+          success: false,
+          message: `Nacos 未返回 true dataId=${dataId}`,
+        });
         return res.status(500).json({
           success: false,
           error: "发布失败（Nacos 未返回 true）",
@@ -1734,12 +1747,22 @@ router.post(
         });
       }
 
+      await logAdminAction(req, {
+        action: auditAction,
+        success: true,
+        message: `dataId=${dataId} group=${group}`,
+      });
       res.json({
         success: true,
         data: { dataId, group, tenant: tenant || null, published: true },
       });
     } catch (e) {
       console.error("[nacos_config] publish error:", e);
+      await logAdminAction(req, {
+        action: auditAction,
+        success: false,
+        message: e.message || "发布失败",
+      });
       res.status(500).json({ success: false, error: e.message || "发布失败" });
     }
   }
