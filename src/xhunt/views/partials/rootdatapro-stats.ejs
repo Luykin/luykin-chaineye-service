@@ -1295,8 +1295,17 @@
     }
   });
 
-  // Initial status load
-  updateCrawlStatus();
-  updateMaintenanceCountdown();
+  // 仅当切换到 RootdataPro tab 时加载状态并开始轮询；离开该 tab 时停止轮询
+  document.addEventListener('stats-tab-activated', function (e) {
+    if (e.detail && e.detail.tabId === 'rootdatapro-console') {
+      updateCrawlStatus();
+      updateMaintenanceCountdown();
+    } else {
+      if (statusInterval) {
+        clearInterval(statusInterval);
+        statusInterval = null;
+      }
+    }
+  });
 })();
 </script>
