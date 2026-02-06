@@ -267,8 +267,12 @@
     // 刷新功能
     refreshButton.addEventListener("click", loadOnlineUsers);
 
-    // 页面加载时自动加载数据
-    loadOnlineUsers();
+    // 仅在切换到「在线用户」tab 时加载数据
+    document.addEventListener("stats-tab-activated", function (e) {
+      if (e.detail && e.detail.tabId === "online-users") {
+        loadOnlineUsers();
+      }
+    });
 
     async function loadOnlineUsers(page = 1) {
       // 显示加载状态

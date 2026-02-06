@@ -210,8 +210,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // 搜索功能
     searchInput.addEventListener('input', filterDauData);
     
-    // 页面加载时自动加载今天的数据
-    loadDauDetails();
+    // 仅在切换到「日活详情」tab 时加载数据
+    document.addEventListener('stats-tab-activated', function(e) {
+      if (e.detail && e.detail.tabId === 'dau-details') {
+        loadDauDetails();
+      }
+    });
     
     async function loadDauDetails() {
         const selectedDate = dateSelector.value;

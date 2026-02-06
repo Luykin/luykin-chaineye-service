@@ -259,9 +259,15 @@
         }
       });
     }
+  });
 
-    // 初始加载数据
-    loadDailyCohorts();
+  // 仅在切换到「用户留存」tab 时加载数据
+  document.addEventListener("stats-tab-activated", function (e) {
+    if (e.detail && e.detail.tabId === "cohorts") {
+      if (validateDateRange(document.getElementById("start-date").value, document.getElementById("end-date").value)) {
+        loadDailyCohorts();
+      }
+    }
   });
 
   // 验证日期跨度（最大3个月 = 90天）

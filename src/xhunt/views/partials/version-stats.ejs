@@ -257,16 +257,11 @@
 
     // 初始化图表
     initChart();
-
-    // 延迟加载数据（等待Chart.js加载完成）
-    setTimeout(loadVersionStats, 500);
   });
 
-  // 监听 tab 切换事件
-  document.addEventListener('click', function(e) {
-    const tabBtn = e.target.closest('.tab-btn');
-    if (tabBtn && tabBtn.getAttribute('data-tab') === 'version-stats') {
-      // 延迟一点加载，确保 tab 已经切换完成
+  // 仅在切换到该 tab 时加载数据
+  document.addEventListener('stats-tab-activated', function(e) {
+    if (e.detail && e.detail.tabId === 'version-stats') {
       setTimeout(loadVersionStats, 100);
     }
   });

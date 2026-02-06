@@ -1743,7 +1743,10 @@
   }
 
   // --- Main Entry Point ---
-  // This logic correctly handles both cases: tab is already active on load, or tab is clicked later.
-  // Always initialize the panel since this partial is loaded.
-  initFeatureFlagPanel();
+  // 仅当用户切换到「功能开关」tab 时再加载（延迟加载，减少首屏请求）
+  document.addEventListener("stats-tab-activated", function (e) {
+    if (e.detail && e.detail.tabId === "feature-flags") {
+      initFeatureFlagPanel();
+    }
+  });
 </script>

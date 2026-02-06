@@ -155,6 +155,16 @@ function initTabs() {
           loadBackupStatus();
         }
       }
+
+      // 延迟加载：切换到对应 tab 后再加载数据（减少首屏请求）
+      if (tabId === "rootdata" && typeof loadRootdataQuota === "function") {
+        loadRootdataQuota();
+      }
+      setTimeout(function () {
+        document.dispatchEvent(
+          new CustomEvent("stats-tab-activated", { detail: { tabId } })
+        );
+      }, 0);
     }
   }
 
@@ -745,10 +755,7 @@ function bindRootdataEvents() {
     }
   });
 
-  // 延迟加载配额信息
-  setTimeout(() => {
-    loadRootdataQuota();
-  }, 500);
+  // rootdata-quota 改为切换到 rootdata tab 时再加载（见 activateTab）
 }
 
 // 当前分页状态
