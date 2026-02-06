@@ -3240,7 +3240,8 @@
       });
 
       const LIST_COLLAPSED_KEY = "nacos-campaigns-list-collapsed";
-      const bodyEl = root.querySelector(".campaigns-body");
+      const campaignsRoot = $("nacos-campaigns") || document.body;
+      const bodyEl = campaignsRoot.querySelector(".campaigns-body");
       const listToggleBtn = $("campaigns-list-toggle");
       function applyListCollapsed(collapsed) {
         if (!bodyEl) return;
@@ -3259,12 +3260,14 @@
         }
         try { localStorage.setItem(LIST_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch (_) {}
       }
-      const savedCollapsed = typeof localStorage !== "undefined" && localStorage.getItem(LIST_COLLAPSED_KEY) === "1";
-      applyListCollapsed(savedCollapsed);
-      listToggleBtn.addEventListener("click", () => {
-        const collapsed = bodyEl.classList.toggle("list-collapsed");
-        applyListCollapsed(collapsed);
-      });
+      if (bodyEl && listToggleBtn) {
+        const savedCollapsed = typeof localStorage !== "undefined" && localStorage.getItem(LIST_COLLAPSED_KEY) === "1";
+        applyListCollapsed(savedCollapsed);
+        listToggleBtn.addEventListener("click", () => {
+          const collapsed = bodyEl.classList.toggle("list-collapsed");
+          applyListCollapsed(collapsed);
+        });
+      }
 
       $("campaigns-refresh").addEventListener("click", async () => {
         if (dirty) {
