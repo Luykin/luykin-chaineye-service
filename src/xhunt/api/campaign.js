@@ -45,6 +45,38 @@ function normalizeCampaign(raw) {
   return raw.trim();
 }
 
+const INITIALIZE_CAMPAIGN_URL =
+  "https://data.cryptohunt.ai/pro/api/initialize_campaign";
+const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400; // 1 天
+
+/**
+ * 报名成功后通知 data.cryptohunt.ai 初始化 campaign；Redis 缓存 1 天内不重复调用。
+ * 不阻塞主流程，仅 fire-and-forget。
+ */
+async function notifyInitializeCampaign(redisClient, campaign) {
+  if (!campaign || !redisClient) return;
+  const cacheKey = `campaign:initialize_campaign:${campaign}`;
+  try {
+    const cached = await redisClient.get(cacheKey);
+    if (cached) return;
+  } catch (_) {}
+  try {
+    const resp = await axios.post(
+      INITIALIZE_CAMPAIGN_URL,
+      { campaign },
+      { timeout: 10000 }
+    );
+    const ok = resp.data && resp.data.status === true;
+    if (ok) {
+      try {
+        await redisClient.setEx(cacheKey, INITIALIZE_CAMPAIGN_CACHE_TTL, "1");
+      } catch (_) {}
+    }
+  } catch (e) {
+    throw e;
+  }
+}
+
 // 1) 通用活动报名
 router.post(
   "/register",
@@ -338,6 +370,17 @@ router.post(
         } catch (redisDelErr) {
           console.warn("Redis DEL campaign invite count warn:", redisDelErr);
         }
+      }
+
+      if (req.redisClient) {
+        notifyInitializeCampaign(req.redisClient, normalizedCampaign).catch(
+          (e) =>
+            console.warn(
+              LOG,
+              "initialize_campaign notify warn:",
+              e.message || e
+            )
+        );
       }
 
       const { xHuntUserId: _omit, ...safeRecord } = record.toJSON();
