@@ -30,8 +30,13 @@
   <div class="campaigns-body">
     <div class="list">
       <div class="list-header">
-        <strong>活动列表</strong>
-        <span class="muted" id="campaigns-count">0 个</span>
+        <button type="button" class="list-toggle" id="campaigns-list-toggle" title="收起列表" aria-label="收起列表">
+          <span class="list-toggle-icon">◀</span>
+        </button>
+        <div class="list-header-text">
+          <strong>活动列表</strong>
+          <span class="muted" id="campaigns-count">0 个</span>
+        </div>
       </div>
       <div class="list-items" id="campaigns-list"></div>
     </div>
@@ -109,11 +114,11 @@
           <div class="section-title">活动信息（名称 · 介绍 · 主题）</div>
           <div class="field-row field-row-2">
             <div class="field">
-              <label>中文</label>
+              <label>活动标题(中文)</label>
               <input id="campaigns-displayName-zh" type="text" />
             </div>
             <div class="field">
-              <label>English</label>
+              <label>活动标题(English)</label>
               <input id="campaigns-displayName-en" type="text" />
             </div>
           </div>
@@ -445,6 +450,8 @@
     padding: 14px;
     max-width: 1600px;
     margin: 0 auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
   .campaigns-header h2 {
     margin: 0 0 3px;
@@ -563,10 +570,47 @@
     grid-template-columns: 360px 1fr;
     gap: 10px;
     align-items: start;
+    min-width: 0;
+  }
+  .campaigns-body .editor {
+    min-width: 0;
+    overflow-x: auto;
+  }
+  .campaigns-body.list-collapsed {
+    grid-template-columns: 44px 1fr;
+  }
+  .campaigns-body.list-collapsed .list .list-items {
+    display: none;
+  }
+  .campaigns-body.list-collapsed .list .list-header-text {
+    display: none;
+  }
+  .campaigns-body.list-collapsed .list .list-header {
+    justify-content: center;
+    padding: 8px 6px;
+  }
+  .campaigns-body.list-collapsed .list-toggle {
+    margin: 0;
+  }
+  .campaigns-body.list-collapsed .list-toggle .list-toggle-icon {
+    transform: rotate(180deg);
   }
   @media (max-width: 1100px) {
     .campaigns-body {
       grid-template-columns: 1fr;
+    }
+    .campaigns-body.list-collapsed {
+      grid-template-columns: 1fr;
+    }
+    .campaigns-body.list-collapsed .list .list-header-text,
+    .campaigns-body.list-collapsed .list .list-items {
+      display: block;
+    }
+    .campaigns-body.list-collapsed .list .list-header {
+      justify-content: space-between;
+    }
+    .campaigns-body.list-collapsed .list-toggle .list-toggle-icon {
+      transform: none;
     }
   }
 
@@ -586,6 +630,39 @@
     border-bottom: 1px solid #e5e7eb;
     font-size: 13px;
     font-weight: 600;
+    gap: 8px;
+  }
+  .list-toggle {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    transition: background 0.15s, color 0.15s;
+    margin-right: 4px;
+  }
+  .list-toggle:hover {
+    background: #f3f4f6;
+    color: #111827;
+  }
+  .list-toggle .list-toggle-icon {
+    display: inline-block;
+    transition: transform 0.2s;
+    font-size: 12px;
+  }
+  .list-header-text {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-width: 0;
   }
   .list-items {
     max-height: calc(100vh - 280px);
@@ -1747,7 +1824,7 @@
                     )}" />
                   </div>
                   <div class="field">
-                    <label>任务跳转的链接（url 必填）</label>
+                    <label>任务链接（url 必填）</label>
                     <input type="text" data-field="url" value="${escapeHtml(
                       it?.url || ""
                     )}" />
@@ -3160,6 +3237,33 @@
       $("campaigns-search").addEventListener("input", (e) => {
         search = e.target.value || "";
         renderList();
+      });
+
+      const LIST_COLLAPSED_KEY = "nacos-campaigns-list-collapsed";
+      const bodyEl = root.querySelector(".campaigns-body");
+      const listToggleBtn = $("campaigns-list-toggle");
+      function applyListCollapsed(collapsed) {
+        if (!bodyEl) return;
+        if (collapsed) {
+          bodyEl.classList.add("list-collapsed");
+          if (listToggleBtn) {
+            listToggleBtn.title = "展开列表";
+            listToggleBtn.setAttribute("aria-label", "展开列表");
+          }
+        } else {
+          bodyEl.classList.remove("list-collapsed");
+          if (listToggleBtn) {
+            listToggleBtn.title = "收起列表";
+            listToggleBtn.setAttribute("aria-label", "收起列表");
+          }
+        }
+        try { localStorage.setItem(LIST_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch (_) {}
+      }
+      const savedCollapsed = typeof localStorage !== "undefined" && localStorage.getItem(LIST_COLLAPSED_KEY) === "1";
+      applyListCollapsed(savedCollapsed);
+      listToggleBtn.addEventListener("click", () => {
+        const collapsed = bodyEl.classList.toggle("list-collapsed");
+        applyListCollapsed(collapsed);
       });
 
       $("campaigns-refresh").addEventListener("click", async () => {
