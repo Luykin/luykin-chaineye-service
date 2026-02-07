@@ -157,6 +157,8 @@ router.get("/", authenticateToken, async (req, res) => {
  *   type: string,
  *   // 传入 X（Twitter）侧的用户 ID 列表，对应 XHuntUser.twitterId 字段
  *   twitterIdList: string[],
+ *   // 可选。幂等键：传入时限流 key 会带上该值且 TTL 为 24 小时，同一 (type+用户+idempotencyKey) 只发送一次
+ *   idempotencyKey?: string,
  * }
  * displayAt 统一取当前时间；
  * campaignId 统一为：type + 当天日期（yyyyMMdd）
@@ -165,7 +167,7 @@ router.get("/", authenticateToken, async (req, res) => {
 router.post("/send-batch-by-type", async (req, res) => {
   try {
     const senderId = "6666666d-cc11-8888-8888-034d3e9a8888";
-    const { type, twitterIdList } = req.body || {};
+    const { type, twitterIdList, idempotencyKey } = req.body || {};
 
     // 支持的英文类型枚举（value 即为前端需要传的 type 值）
     const ALLOWED_TYPES = new Set([
@@ -312,26 +314,32 @@ router.post("/send-batch-by-type", async (req, res) => {
       });
     }
 
+    const trimmedIdempotencyKey =
+      typeof idempotencyKey === "string" && idempotencyKey.trim().length > 0
+        ? idempotencyKey.trim()
+        : null;
+
     /**
-     * 限流规则：
-     * - 同一用户 + 同一种 type，在 10 分钟（600 秒）内只允许触发一次
-     * - 通过 Redis 记录一个带过期时间的 key，格式：
-     *   xhunt:pm:send_limit:{type}:{userId}
-     * - 如果 Redis 不可用，则降级为不做限流（保持原有行为）
+     * 限流 / 幂等：同一用户 + 同一种 type 在窗口内只允许触发一次（SET NX）
+     * - 未传 idempotencyKey：key = xhunt:pm:send_limit:{type}:{userId}，TTL 2 分钟
+     * - 传了 idempotencyKey：key = xhunt:pm:send_limit:{type}:{userId}:{idempotencyKey}，TTL 24 小时（幂等）
      */
-    const TEN_MINUTES = 10 * 60;
+    const TEN_MINUTES = 2 * 60;
+    const IDEMPOTENCY_TTL = 24 * 60 * 60;
     let effectiveTargetUsers = targetUsers;
     let rateLimitedTwitterIds = [];
 
     try {
       const redisClient = await getRedisClient();
       const allowedUsers = [];
+      const ttl = trimmedIdempotencyKey ? IDEMPOTENCY_TTL : TEN_MINUTES;
 
       for (const user of targetUsers) {
-        const key = `xhunt:pm:send_limit:${type}:${user.id}`;
-        // 只有在 10 分钟窗口内首次成功 SET NX 的用户才允许发送
+        const key = trimmedIdempotencyKey
+          ? `xhunt:pm:send_limit:${type}:${user.id}:${trimmedIdempotencyKey}`
+          : `xhunt:pm:send_limit:${type}:${user.id}`;
         const setResult = await redisClient.set(key, "1", {
-          EX: TEN_MINUTES,
+          EX: ttl,
           NX: true,
         });
 
@@ -345,7 +353,6 @@ router.post("/send-batch-by-type", async (req, res) => {
       effectiveTargetUsers = allowedUsers;
     } catch (redisError) {
       console.error("批量发送私信 Redis 限流失败，降级为全量发送:", redisError);
-      // 保持 effectiveTargetUsers = targetUsers，不做限流
     }
 
     // 如果所有用户都被限流，则直接返回成功结果（但不真正发送）
