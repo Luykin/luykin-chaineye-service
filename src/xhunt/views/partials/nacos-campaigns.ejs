@@ -2383,9 +2383,9 @@
       try {
         // 只对 url 进行 base64 编码，取前8位
         const urlBase64 = btoa(unescape(encodeURIComponent(url)));
-        const urlBase64First8 = urlBase64.substring(0, 8);
-        // 格式：campaignKey-type-base64(url前8位)
-        return `${campaignKey}-${type}-${urlBase64First8}`;
+        // 前6位和后6位拼接，避免重复
+        const finalUrlBase64 = urlBase64.substring(0, 6) + "-" + urlBase64.substring(urlBase64.length - 6);
+        return `${campaignKey}-${type}-${finalUrlBase64}`;
       } catch (e) {
         console.error("生成 task id 失败:", e);
         return "";
