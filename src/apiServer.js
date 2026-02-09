@@ -258,6 +258,13 @@ async function initializeAndStartServer() {
     })
   );
 
+  app.use(
+    "/api/xhunt/stats/nacos/config",
+    express.json({
+      limit: "500kb", // Nacos配置管理接口允许更大的请求体
+    })
+  );
+
   // 🆕 添加静态文件服务支持
   app.use("/static", express.static(path.join(__dirname, "../public/static")));
 
