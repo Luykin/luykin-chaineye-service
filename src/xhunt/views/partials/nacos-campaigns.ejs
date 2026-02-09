@@ -2847,7 +2847,8 @@
       const c = getCurrentCampaign();
       if (!c) return;
       const copy = JSON.parse(JSON.stringify(c));
-      copy.id = `${c.id || "campaign"}-copy-${Date.now()}`;
+      // 清空 id，使复制出的活动被视为「未保存」，投放者推特号可编辑（可改为 mantle2 等）
+      copy.id = "";
       // 复制出来的活动默认关闭、非测试状态，避免误上线
       copy.enabled = false;
       copy.testingPhase = false;
