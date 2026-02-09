@@ -169,6 +169,10 @@ router.post("/send-batch-by-type", async (req, res) => {
     const senderId = "6666666d-cc11-8888-8888-034d3e9a8888";
     const { type, twitterIdList, idempotencyKey } = req.body || {};
 
+    const LOG_TAG = "[PM send-batch]";
+    const logCtx = () => ({ type, twitterIdList: Array.isArray(twitterIdList) ? twitterIdList : [] });
+    console.log(LOG_TAG, "1/5 收到请求", logCtx());
+
     // 支持的英文类型枚举（value 即为前端需要传的 type 值）
     const ALLOWED_TYPES = new Set([
       "creator_verification_success", // 创作者认证成功
@@ -305,6 +309,7 @@ router.post("/send-batch-by-type", async (req, res) => {
     );
 
     if (targetUsers.length === 0) {
+      console.log(LOG_TAG, "2/5 未匹配到任何用户", { ...logCtx(), notFoundTwitterIds });
       return res.status(404).json({
         success: false,
         error: "未找到任何匹配的用户，请确认 twitterIdList 是否正确",
@@ -313,6 +318,7 @@ router.post("/send-batch-by-type", async (req, res) => {
         },
       });
     }
+    console.log(LOG_TAG, "2/5 用户匹配完成", { ...logCtx(), foundCount: targetUsers.length, notFoundCount: notFoundTwitterIds.length, notFoundTwitterIds });
 
     const trimmedIdempotencyKey =
       typeof idempotencyKey === "string" && idempotencyKey.trim().length > 0
@@ -354,6 +360,7 @@ router.post("/send-batch-by-type", async (req, res) => {
     } catch (redisError) {
       console.error("批量发送私信 Redis 限流失败，降级为全量发送:", redisError);
     }
+    console.log(LOG_TAG, "3/5 限流结果", { ...logCtx(), toSendCount: effectiveTargetUsers.length, rateLimitedCount: rateLimitedTwitterIds.length, rateLimitedTwitterIds });
 
     // 如果所有用户都被限流，则直接返回成功结果（但不真正发送）
     if (effectiveTargetUsers.length === 0) {
@@ -369,6 +376,7 @@ router.post("/send-batch-by-type", async (req, res) => {
 
     // 构造批量插入的数据（仅对未被限流的用户发送）
     const now = new Date();
+    console.log(LOG_TAG, "4/5 开始构造待发送", { ...logCtx(), effectiveCount: effectiveTargetUsers.length });
     const messagesToCreate = effectiveTargetUsers.map((user) => ({
       senderId,
       receiverId: user.id,
@@ -398,12 +406,13 @@ router.post("/send-batch-by-type", async (req, res) => {
       rateLimitedTwitterIds,
     };
 
+    console.log(LOG_TAG, "5/5 发送完成", { ...logCtx(), createdCount: createdMessages.length, successCount: results.success.length, rateLimitedCount: results.rateLimitedTwitterIds.length });
     return res.status(200).json({
       success: true,
       data: results,
     });
   } catch (error) {
-    console.error("批量发送私信失败:", error);
+    console.error("[PM send-batch] 批量发送私信失败", { type: req.body?.type, twitterIdList: req.body?.twitterIdList }, error);
     return res.status(500).json({
       success: false,
       error: "服务器内部错误",
