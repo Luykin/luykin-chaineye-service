@@ -2860,25 +2860,37 @@
       toast("已复制活动（未发布）", "info");
     }
 
-    function deleteCampaign() {
+    async function deleteCampaign() {
       const c = getCurrentCampaign();
       if (!c) return;
       const okFirst = window.confirm(
-        `确认删除该活动？\n\nid=${c.id || ""}\n\n提示：删除后需要点击“发布到 Nacos”才会生效。`
+        `确认删除该活动？\n\nid=${c.id || ""}\n\n提示：删除后将立即发布到 Nacos 生效。`
       );
       if (!okFirst) return;
       const okSecond = window.confirm(
-        "⚠️ 二次确认：确定要删除该活动吗？\n\n此操作执行后如发布到 Nacos，将无法恢复。"
+        "⚠️ 二次确认：确定要删除该活动吗？\n\n此操作将立即发布到 Nacos，无法恢复。"
       );
       if (!okSecond) return;
       config.campaigns.splice(currentIndex, 1);
-      dirty = true;
-      $("campaigns-publish").disabled = false;
       currentIndex = -1;
       setControlsEnabled(false);
       clearEditor();
       renderList();
-      toast("已删除（未发布）", "info");
+
+      try {
+        toast("正在删除并发布到 Nacos...", "info");
+        const content = JSON.stringify(config, null, 2);
+        await apiPublishConfig({ dataId: DATA_ID, content, group: GROUP });
+        dirty = false;
+        originalConfig = JSON.parse(JSON.stringify(config));
+        $("campaigns-publish").disabled = true;
+        toast("删除已生效（已发布）", "success");
+      } catch (e) {
+        console.error("deleteCampaign publish error:", e);
+        dirty = true;
+        $("campaigns-publish").disabled = false;
+        toast("删除未能发布：" + (e.message || "未知错误") + "（可点击「发布」重试）", "error");
+      }
     }
 
     async function loadFromNacos() {
