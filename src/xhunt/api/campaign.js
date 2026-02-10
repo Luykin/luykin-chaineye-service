@@ -503,7 +503,6 @@ router.get(
           .json({ registered: false, totalRegistrations, invitedCount: 0 });
       }
 
-      let invitedCount = 0;
       const record = await CampaignRegistration.findOne({
         where: { campaign: normalizedCampaign, xHuntUserId: userId },
         order: [["createdAt", "DESC"]],
@@ -520,7 +519,7 @@ router.get(
       if (!record) {
         return res.status(200).json({
           registered: false,
-          invitedCount,
+          invitedCount: 0,
           totalRegistrations,
         });
       }
@@ -568,50 +567,10 @@ router.get(
         }
       }
 
-      const cacheKey = `campaign:${normalizedCampaign}:invites:count:${userId}`;
-      let cachedCount = null;
-      if (req.redisClient) {
-        try {
-          const raw = await req.redisClient.get(cacheKey);
-          if (raw !== null && raw !== undefined) {
-            cachedCount = parseInt(raw, 10);
-            if (!Number.isNaN(cachedCount)) {
-              invitedCount = cachedCount;
-            }
-          }
-        } catch (redisGetErr) {
-          console.error("Campaign redis GET invite count error:", redisGetErr);
-        }
-      }
-
-      if (cachedCount === null) {
-        try {
-          invitedCount = await CampaignRegistration.count({
-            where: {
-              campaign: normalizedCampaign,
-              invitedByUserId: userId,
-            },
-          });
-          if (req.redisClient) {
-            try {
-              await req.redisClient.setEx(
-                cacheKey,
-                600,
-                String(invitedCount)
-              );
-            } catch (redisSetErr) {
-              console.error("Campaign redis SET invite count error:", redisSetErr);
-            }
-          }
-        } catch (countErr) {
-          console.error("Campaign invite count query error:", countErr);
-        }
-      }
-
-      res.set("Cache-Control", "private, max-age=40");
+      res.set("Cache-Control", "private, max-age=80");
       return res.status(200).json({
         registered: true,
-        invitedCount,
+        invitedCount: 0,
         totalRegistrations,
         registration: record,
         hunterData,
