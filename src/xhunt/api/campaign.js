@@ -20,7 +20,7 @@ const { isVersionGreaterOrEqual } = require("../utils/version");
 
 const router = express.Router();
 
-const MIN_EXTENSION_VERSION = "2.0.9";
+const MIN_EXTENSION_VERSION = "0.2.09";
 
 function generateInviteCode(length = 10) {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -101,8 +101,8 @@ router.post(
         const isZh = (req.query.x_language || "").toLowerCase() === "zh";
         return res.status(400).json({
           error: isZh
-            ? "请升级插件到 2.0.9 及以上版本再试"
-            : "Please upgrade the extension to version 2.0.9 or above and try again",
+            ? "请升级插件到 0.2.09 及以上版本再试"
+            : "Please upgrade the extension to version 0.2.09 or above and try again",
         });
       }
 
