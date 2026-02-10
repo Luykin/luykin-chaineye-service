@@ -16,8 +16,11 @@ const {
 } = require("../../models/postgres-start");
 const { XHUNT_VIP } = require("../constants/xhuntVip");
 const { parseUtcDateParam } = require("../utils/date");
+const { isVersionGreaterOrEqual } = require("../utils/version");
 
 const router = express.Router();
+
+const MIN_EXTENSION_VERSION = "2.0.9";
 
 function generateInviteCode(length = 10) {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -85,10 +88,23 @@ router.post(
   authenticateToken,
   securityMiddleware,
   async (req, res) => {
-    const LOG = "[CampaignRegister]";
     try {
+      const authedUserId = req.user && req.user.id;
       const { campaign, evmAddress, registrationUrl } =
         req.body || {};
+
+      const LOG = `[CampaignRegister] user_id=${authedUserId} campaign=${campaign} evmAddress=${evmAddress}`;
+
+      const extVersion = req.headers["x-extension-version"];
+      if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
+        console.log(LOG, "reject: extension version too low", { version: extVersion });
+        const isZh = (req.query.x_language || "").toLowerCase() === "zh";
+        return res.status(400).json({
+          error: isZh
+            ? "请升级插件到 2.0.9 及以上版本再试"
+            : "Please upgrade the extension to version 2.0.9 or above and try again",
+        });
+      }
 
       const normalizedCampaign = normalizeCampaign(campaign);
       if (!normalizedCampaign) {
@@ -135,7 +151,6 @@ router.post(
         return res.status(502).json({ error: "Campaign configuration service unavailable" });
       }
 
-      const authedUserId = req.user && req.user.id;
       if (!authedUserId) {
         console.log(LOG, "reject: no auth");
         return res.status(401).json({ error: "未登录或 token 无效" });
