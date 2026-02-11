@@ -142,7 +142,10 @@ router.post(
           console.log(LOG, "reject: invalid enrollment window");
           return res.status(502).json({ error: "Invalid enrollment window in config" });
         }
-        if (now < startAt || now > endAt) {
+        // 允许在正式开始时间前 1 小时即可报名
+        const oneHourMs = 60 * 60 * 1000;
+        const startAtWithGrace = new Date(startAt.getTime() - oneHourMs);
+        if (now < startAtWithGrace || now > endAt) {
           console.log(LOG, "reject: outside enrollment window");
           return res.status(400).json({ error: "Not within the enrollment window" });
         }
