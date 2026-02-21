@@ -389,7 +389,7 @@
 
     // 更新目标账号信息
     document.getElementById("reviews-target-avatar").src =
-      targetAccount.avatar || "/static/images/default-avatar.png";
+      getProxiedImageUrl(targetAccount.avatar) || "/static/images/default-avatar.png";
     document.getElementById("reviews-target-displayname").textContent =
       targetAccount.displayName || targetAccount.handle;
     document.getElementById("reviews-target-handle").textContent =
@@ -421,7 +421,7 @@
       row.innerHTML = `
         <td style="padding: 12px;">
           <div class="reviews-reviewer-info">
-            <img src="${escapeHtmlReviews(review.reviewer.avatar || "/static/images/default-avatar.png")}"
+            <img src="${escapeHtmlReviews(getProxiedImageUrl(review.reviewer.avatar) || "/static/images/default-avatar.png")}"
                  alt="" class="reviews-reviewer-avatar">
             <div class="reviews-reviewer-details">
               <div class="reviews-reviewer-name">${escapeHtmlReviews(review.reviewer.displayName || "未知用户")}</div>
