@@ -339,184 +339,178 @@
 </style>
 
 <script>
-  (function () {
-    // 搜索评论
-    window.searchReviews = function () {
-      const handleInput = document.getElementById("reviews-handle-input");
-      const handle = handleInput.value.trim();
+  // 搜索评论
+  function searchReviews() {
+    const handleInput = document.getElementById("reviews-handle-input");
+    const handle = handleInput.value.trim();
 
-      if (!handle) {
-        alert("请输入被评论人 Handle");
-        return;
-      }
-
-      // 显示加载状态
-      document.getElementById("reviews-loading").style.display = "block";
-      document.getElementById("reviews-content").style.display = "none";
-      document.getElementById("reviews-empty").style.display = "none";
-      document.getElementById("reviews-error").style.display = "none";
-
-      // 发送请求
-      fetch(`/api/admin/reviews?handle=${encodeURIComponent(handle)}`)
-        .then((response) => {
-          if (!response.ok) {
-            return response.json().then((data) => {
-              throw new Error(data.error || `HTTP ${response.status}`);
-            });
-          }
-          return response.json();
-        })
-        .then((data) => {
-          document.getElementById("reviews-loading").style.display = "none";
-
-          if (data.success && data.data.reviews.length > 0) {
-            displayReviews(data.data);
-            document.getElementById("reviews-content").style.display = "block";
-          } else {
-            document.getElementById("reviews-empty").style.display = "block";
-          }
-        })
-        .catch((error) => {
-          console.error("[reviews-management] 搜索失败:", error);
-          document.getElementById("reviews-loading").style.display = "none";
-          document.getElementById("reviews-error-message").textContent =
-            error.message || "请稍后重试";
-          document.getElementById("reviews-error").style.display = "block";
-        });
-    };
-
-    // 显示评论列表
-    function displayReviews(data) {
-      const {
-        targetAccount,
-        reviews,
-        total,
-      } = data;
-
-      // 更新目标账号信息
-      document.getElementById("reviews-target-avatar").src =
-        targetAccount.avatar || "/static/images/default-avatar.png";
-      document.getElementById("reviews-target-displayname").textContent =
-        targetAccount.displayName || targetAccount.handle;
-      document.getElementById("reviews-target-handle").textContent =
-        "@" + targetAccount.handle;
-      document.getElementById("reviews-total-count").textContent = total;
-
-      // 渲染表格
-      const tbody = document.getElementById("reviews-table-body");
-      tbody.innerHTML = "";
-
-      reviews.forEach((review) => {
-        const row = document.createElement("tr");
-        row.style.borderBottom = "1px solid #f3f4f6";
-        row.dataset.reviewId = review.id;
-
-        // 评分颜色
-        let ratingClass = "reviews-rating-low";
-        if (review.rating >= 4) ratingClass = "reviews-rating-high";
-        else if (review.rating >= 2.5) ratingClass = "reviews-rating-medium";
-
-        // 标签 HTML
-        const tagsHtml =
-          review.tags && review.tags.length > 0
-            ? review.tags
-                .map((tag) => `<span class="reviews-tag">${escapeHtml(tag)}</span>`)
-                .join("")
-            : '<span style="color: #9ca3af; font-size: 12px;">无标签</span>';
-
-        row.innerHTML = `
-          <td style="padding: 12px;">
-            <div class="reviews-reviewer-info">
-              <img src="${escapeHtml(review.reviewer.avatar || "/static/images/default-avatar.png")}"
-                   alt="" class="reviews-reviewer-avatar">
-              <div class="reviews-reviewer-details">
-                <div class="reviews-reviewer-name">${escapeHtml(review.reviewer.displayName || "未知用户")}</div>
-                <div class="reviews-reviewer-username">@${escapeHtml(review.reviewer.username || "unknown")}</div>
-              </div>
-            </div>
-          </td>
-          <td style="padding: 12px; text-align: center;">
-            <span class="reviews-rating ${ratingClass}">${review.rating.toFixed(1)}</span>
-          </td>
-          <td style="padding: 12px;">
-            <div class="reviews-tags">${tagsHtml}</div>
-          </td>
-          <td style="padding: 12px;">
-            <div class="reviews-comment">${escapeHtml(review.comment || "无评论内容")}</div>
-          </td>
-          <td style="padding: 12px;">
-            <div class="reviews-time">${escapeHtml(review.createdAt)}</div>
-          </td>
-          <td style="padding: 12px; text-align: center;">
-            <button class="reviews-delete-btn" onclick="deleteReview('${review.id}', this)">
-              删除
-            </button>
-          </td>
-        `;
-
-        tbody.appendChild(row);
-      });
+    if (!handle) {
+      alert("请输入被评论人 Handle");
+      return;
     }
 
-    // 删除评论
-    window.deleteReview = function (reviewId, btnElement) {
-      const confirmed = confirm(
-        "确定要删除这条评论吗？\n\n删除后：\n- 评论将归属于虚拟账号\n- 被评论人将不再看到这条评论\n- 此操作不可恢复"
-      );
+    // 显示加载状态
+    document.getElementById("reviews-loading").style.display = "block";
+    document.getElementById("reviews-content").style.display = "none";
+    document.getElementById("reviews-empty").style.display = "none";
+    document.getElementById("reviews-error").style.display = "none";
 
-      if (!confirmed) return;
-
-      // 禁用按钮
-      btnElement.disabled = true;
-      btnElement.textContent = "删除中...";
-
-      fetch("/api/admin/reviews/delete", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ reviewId }),
+    // 发送请求
+    fetch(`/api/admin/reviews?handle=${encodeURIComponent(handle)}`)
+      .then((response) => {
+        if (!response.ok) {
+          return response.json().then((data) => {
+            throw new Error(data.error || `HTTP ${response.status}`);
+          });
+        }
+        return response.json();
       })
-        .then((response) => {
-          if (!response.ok) {
-            return response.json().then((data) => {
-              throw new Error(data.error || `HTTP ${response.status}`);
-            });
-          }
-          return response.json();
-        })
-        .then((data) => {
-          if (data.success) {
-            // 标记行为已删除
-            const row = btnElement.closest("tr");
-            row.classList.add("reviews-row-deleted");
-            btnElement.textContent = "已删除";
-            btnElement.disabled = true;
+      .then((data) => {
+        document.getElementById("reviews-loading").style.display = "none";
 
-            // 更新计数
-            const countEl = document.getElementById("reviews-total-count");
-            const currentCount = parseInt(countEl.textContent, 10);
-            countEl.textContent = Math.max(0, currentCount - 1);
+        if (data.success && data.data.reviews.length > 0) {
+          displayReviewsList(data.data);
+          document.getElementById("reviews-content").style.display = "block";
+        } else {
+          document.getElementById("reviews-empty").style.display = "block";
+        }
+      })
+      .catch((error) => {
+        console.error("[reviews-management] 搜索失败:", error);
+        document.getElementById("reviews-loading").style.display = "none";
+        document.getElementById("reviews-error-message").textContent =
+          error.message || "请稍后重试";
+        document.getElementById("reviews-error").style.display = "block";
+      });
+  }
 
-            alert("评论已删除");
-          } else {
-            throw new Error(data.error || "删除失败");
-          }
-        })
-        .catch((error) => {
-          console.error("[reviews-management] 删除失败:", error);
-          alert("删除失败: " + error.message);
-          btnElement.disabled = false;
-          btnElement.textContent = "删除";
-        });
-    };
+  // 显示评论列表
+  function displayReviewsList(data) {
+    const { targetAccount, reviews, total } = data;
 
-    // HTML 转义
-    function escapeHtml(text) {
-      if (!text) return "";
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
-    }
-  })();
+    // 更新目标账号信息
+    document.getElementById("reviews-target-avatar").src =
+      targetAccount.avatar || "/static/images/default-avatar.png";
+    document.getElementById("reviews-target-displayname").textContent =
+      targetAccount.displayName || targetAccount.handle;
+    document.getElementById("reviews-target-handle").textContent =
+      "@" + targetAccount.handle;
+    document.getElementById("reviews-total-count").textContent = total;
+
+    // 渲染表格
+    const tbody = document.getElementById("reviews-table-body");
+    tbody.innerHTML = "";
+
+    reviews.forEach((review) => {
+      const row = document.createElement("tr");
+      row.style.borderBottom = "1px solid #f3f4f6";
+      row.dataset.reviewId = review.id;
+
+      // 评分颜色
+      let ratingClass = "reviews-rating-low";
+      if (review.rating >= 4) ratingClass = "reviews-rating-high";
+      else if (review.rating >= 2.5) ratingClass = "reviews-rating-medium";
+
+      // 标签 HTML
+      const tagsHtml =
+        review.tags && review.tags.length > 0
+          ? review.tags
+              .map((tag) => `<span class="reviews-tag">${escapeHtmlReviews(tag)}</span>`)
+              .join("")
+          : '<span style="color: #9ca3af; font-size: 12px;">无标签</span>';
+
+      row.innerHTML = `
+        <td style="padding: 12px;">
+          <div class="reviews-reviewer-info">
+            <img src="${escapeHtmlReviews(review.reviewer.avatar || "/static/images/default-avatar.png")}"
+                 alt="" class="reviews-reviewer-avatar">
+            <div class="reviews-reviewer-details">
+              <div class="reviews-reviewer-name">${escapeHtmlReviews(review.reviewer.displayName || "未知用户")}</div>
+              <div class="reviews-reviewer-username">@${escapeHtmlReviews(review.reviewer.username || "unknown")}</div>
+            </div>
+          </div>
+        </td>
+        <td style="padding: 12px; text-align: center;">
+          <span class="reviews-rating ${ratingClass}">${review.rating.toFixed(1)}</span>
+        </td>
+        <td style="padding: 12px;">
+          <div class="reviews-tags">${tagsHtml}</div>
+        </td>
+        <td style="padding: 12px;">
+          <div class="reviews-comment">${escapeHtmlReviews(review.comment || "无评论内容")}</div>
+        </td>
+        <td style="padding: 12px;">
+          <div class="reviews-time">${escapeHtmlReviews(review.createdAt)}</div>
+        </td>
+        <td style="padding: 12px; text-align: center;">
+          <button class="reviews-delete-btn" onclick="deleteReviewItem('${review.id}', this)">
+            删除
+          </button>
+        </td>
+      `;
+
+      tbody.appendChild(row);
+    });
+  }
+
+  // 删除评论
+  function deleteReviewItem(reviewId, btnElement) {
+    const confirmed = confirm(
+      "确定要删除这条评论吗？\n\n删除后：\n- 评论将归属于虚拟账号\n- 被评论人将不再看到这条评论\n- 此操作不可恢复"
+    );
+
+    if (!confirmed) return;
+
+    // 禁用按钮
+    btnElement.disabled = true;
+    btnElement.textContent = "删除中...";
+
+    fetch("/api/admin/reviews/delete", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ reviewId }),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          return response.json().then((data) => {
+            throw new Error(data.error || `HTTP ${response.status}`);
+          });
+        }
+        return response.json();
+      })
+      .then((data) => {
+        if (data.success) {
+          // 标记行为已删除
+          const row = btnElement.closest("tr");
+          row.classList.add("reviews-row-deleted");
+          btnElement.textContent = "已删除";
+          btnElement.disabled = true;
+
+          // 更新计数
+          const countEl = document.getElementById("reviews-total-count");
+          const currentCount = parseInt(countEl.textContent, 10);
+          countEl.textContent = Math.max(0, currentCount - 1);
+
+          alert("评论已删除");
+        } else {
+          throw new Error(data.error || "删除失败");
+        }
+      })
+      .catch((error) => {
+        console.error("[reviews-management] 删除失败:", error);
+        alert("删除失败: " + error.message);
+        btnElement.disabled = false;
+        btnElement.textContent = "删除";
+      });
+  }
+
+  // HTML 转义
+  function escapeHtmlReviews(text) {
+    if (!text) return "";
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
 </script>

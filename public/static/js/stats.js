@@ -79,6 +79,7 @@ function initTabs() {
     "security-violations": "security-violations",
     messages: "messages",
     "data-export": "export:users",
+    "reviews-management": "reviews-management",
     "pro-management": "pro-management",
     "perf-monitor": "perf-monitor",
     backup: "backup:operate",
