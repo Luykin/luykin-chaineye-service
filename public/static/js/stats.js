@@ -51,6 +51,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // 绑定 数据库备份 事件
     bindBackupEvents();
 
+    // 绑定评论管理事件
+    bindReviewsManagementEvents();
+
     console.log("✅ 所有初始化完成");
   } catch (error) {
     console.error("❌ 初始化过程中出错:", error);
@@ -1226,6 +1229,26 @@ function bindBackupEvents() {
     backupTabBtn.addEventListener("click", () => {
       // 切到 tab 时加载一次
       setTimeout(() => loadBackupStatus(), 0);
+    });
+  }
+}
+
+/** 绑定评论管理事件 */
+function bindReviewsManagementEvents() {
+  const searchBtn = document.getElementById("reviews-search-btn");
+  const handleInput = document.getElementById("reviews-handle-input");
+
+  if (searchBtn) {
+    searchBtn.addEventListener("click", function () {
+      searchReviews();
+    });
+  }
+
+  if (handleInput) {
+    handleInput.addEventListener("keypress", function (e) {
+      if (e.key === "Enter") {
+        searchReviews();
+      }
     });
   }
 }
