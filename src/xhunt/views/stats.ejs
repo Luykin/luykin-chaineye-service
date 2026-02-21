@@ -51,9 +51,7 @@
           </button>
           <button class="tab-btn" data-tab="messages">💬 发送私信</button>
           <button class="tab-btn" data-tab="data-export">📤 数据导出</button>
-          <% if (typeof user !== 'undefined' && user && (user.role === 'super' || (Array.isArray(user.permissions) && user.permissions.includes('reviews-management')))) { %>
           <button class="tab-btn" data-tab="reviews-management">🗑️ 评论管理</button>
-          <% } %>
           <button class="tab-btn" data-tab="pro-management">
             👑 Pro用户管理
           </button>
@@ -160,11 +158,13 @@
           </div>
 
           <!-- 评论管理 Tab -->
-          <% if (typeof user !== 'undefined' && user && (user.role === 'super' || (Array.isArray(user.permissions) && user.permissions.includes('reviews-management')))) { %>
           <div class="tab-pane" id="reviews-management">
+            <% if (typeof user !== 'undefined' && user && (user.role === 'super' || (Array.isArray(user.permissions) && user.permissions.includes('reviews-management')))) { %>
             <%- include('partials/reviews-management') %>
+            <% } else { %>
+            <div style="padding: 12px; color: #6b7280">无权限查看该内容</div>
+            <% } %>
           </div>
-          <% } %>
 
           <!-- Pro 用户管理 Tab -->
           <div class="tab-pane" id="pro-management">
