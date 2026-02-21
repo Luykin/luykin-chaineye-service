@@ -1,0 +1,522 @@
+<!-- 评论管理 -->
+<div class="section">
+  <h2 class="section-title">🗑️ 评论管理</h2>
+  <p style="color: #6b7280; margin-bottom: 20px; font-size: 14px">
+    通过被评论人的 Twitter Handle 搜索评论，支持软删除（删除后评论将归属于虚拟账号）
+  </p>
+
+  <!-- 搜索区域 -->
+  <div class="search-box" style="margin-bottom: 30px">
+    <div style="display: flex; gap: 12px; align-items: center">
+      <input
+        type="text"
+        id="reviews-handle-input"
+        placeholder="输入被评论人 Handle（如: elonmusk）"
+        style="
+          flex: 1;
+          padding: 10px 14px;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          font-size: 14px;
+          background: white;
+          min-width: 250px;
+        "
+        onkeypress="if(event.key==='Enter') searchReviews()"
+      />
+      <button
+        id="reviews-search-btn"
+        onclick="searchReviews()"
+        style="
+          padding: 10px 20px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background-color 0.2s;
+          white-space: nowrap;
+        "
+        onmouseover="this.style.backgroundColor='#2563eb'"
+        onmouseout="this.style.backgroundColor='#3b82f6'"
+      >
+        <span class="btn-icon">🔍</span>搜索评论
+      </button>
+    </div>
+  </div>
+
+  <!-- 加载状态 -->
+  <div
+    id="reviews-loading"
+    style="display: none; text-align: center; padding: 30px; color: #6b7280"
+  >
+    <div
+      style="
+        display: inline-block;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+      "
+    >
+      ⏳
+    </div>
+    正在搜索评论...
+  </div>
+
+  <!-- 搜索结果 -->
+  <div id="reviews-content" style="display: none">
+    <!-- 账号信息 -->
+    <div
+      id="reviews-target-info"
+      style="
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      "
+    >
+      <img
+        id="reviews-target-avatar"
+        src=""
+        alt="avatar"
+        style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover"
+      />
+      <div>
+        <div
+          id="reviews-target-displayname"
+          style="font-weight: 600; font-size: 16px; color: #1f2937"
+        ></div>
+        <div
+          id="reviews-target-handle"
+          style="font-size: 14px; color: #6b7280"
+        ></div>
+      </div>
+      <div style="margin-left: auto; text-align: right">
+        <div style="font-size: 12px; color: #6b7280">收到评论数</div>
+        <div
+          id="reviews-total-count"
+          style="font-size: 24px; font-weight: 700; color: #3b82f6"
+        ></div>
+      </div>
+    </div>
+
+    <!-- 评论列表表格 -->
+    <div class="table-container" style="overflow-x: auto">
+      <table
+        style="
+          width: 100%;
+          border-collapse: collapse;
+          background: white;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          min-width: 800px;
+        "
+      >
+        <thead style="background: #f9fafb">
+          <tr>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 18%;
+              "
+            >
+              评论人
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: center;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 8%;
+              "
+            >
+              评分
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 20%;
+              "
+            >
+              标签
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 34%;
+              "
+            >
+              评论内容
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 12%;
+              "
+            >
+              评论时间
+            </th>
+            <th
+              style="
+                padding: 12px;
+                text-align: center;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                width: 8%;
+              "
+            >
+              操作
+            </th>
+          </tr>
+        </thead>
+        <tbody id="reviews-table-body">
+          <!-- 动态内容 -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 空状态 -->
+  <div
+    id="reviews-empty"
+    style="display: none; text-align: center; padding: 50px 20px; color: #6b7280"
+  >
+    <div style="font-size: 64px; margin-bottom: 16px">📝</div>
+    <h3 style="margin-bottom: 8px; color: #374151">未找到评论</h3>
+    <p>该账号暂无收到的评论，或账号不存在</p>
+  </div>
+
+  <!-- 错误提示 -->
+  <div
+    id="reviews-error"
+    style="display: none; text-align: center; padding: 40px 20px; color: #dc2626"
+  >
+    <div style="font-size: 48px; margin-bottom: 16px">⚠️</div>
+    <h3 style="margin-bottom: 8px;">搜索失败</h3>
+    <p id="reviews-error-message">请稍后重试</p>
+  </div>
+</div>
+
+<style>
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .reviews-reviewer-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .reviews-reviewer-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .reviews-reviewer-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+  }
+
+  .reviews-reviewer-name {
+    font-weight: 600;
+    color: #374151;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .reviews-reviewer-username {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .reviews-rating {
+    font-weight: 700;
+    font-size: 16px;
+  }
+
+  .reviews-rating-high {
+    color: #10b981;
+  }
+
+  .reviews-rating-medium {
+    color: #f59e0b;
+  }
+
+  .reviews-rating-low {
+    color: #ef4444;
+  }
+
+  .reviews-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .reviews-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #f3f4f6;
+    border-radius: 12px;
+    font-size: 12px;
+    color: #4b5563;
+    border: 1px solid #e5e7eb;
+  }
+
+  .reviews-comment {
+    font-size: 14px;
+    color: #374151;
+    line-height: 1.5;
+    word-wrap: break-word;
+    max-width: 400px;
+  }
+
+  .reviews-time {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .reviews-delete-btn {
+    padding: 6px 12px;
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .reviews-delete-btn:hover {
+    background: #dc2626;
+  }
+
+  .reviews-delete-btn:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+  }
+
+  .reviews-row-deleted {
+    opacity: 0.5;
+    background: #f3f4f6 !important;
+  }
+
+  .reviews-row-deleted td {
+    text-decoration: line-through;
+    color: #9ca3af;
+  }
+</style>
+
+<script>
+  (function () {
+    // 搜索评论
+    window.searchReviews = function () {
+      const handleInput = document.getElementById("reviews-handle-input");
+      const handle = handleInput.value.trim();
+
+      if (!handle) {
+        alert("请输入被评论人 Handle");
+        return;
+      }
+
+      // 显示加载状态
+      document.getElementById("reviews-loading").style.display = "block";
+      document.getElementById("reviews-content").style.display = "none";
+      document.getElementById("reviews-empty").style.display = "none";
+      document.getElementById("reviews-error").style.display = "none";
+
+      // 发送请求
+      fetch(`/api/admin/reviews?handle=${encodeURIComponent(handle)}`)
+        .then((response) => {
+          if (!response.ok) {
+            return response.json().then((data) => {
+              throw new Error(data.error || `HTTP ${response.status}`);
+            });
+          }
+          return response.json();
+        })
+        .then((data) => {
+          document.getElementById("reviews-loading").style.display = "none";
+
+          if (data.success && data.data.reviews.length > 0) {
+            displayReviews(data.data);
+            document.getElementById("reviews-content").style.display = "block";
+          } else {
+            document.getElementById("reviews-empty").style.display = "block";
+          }
+        })
+        .catch((error) => {
+          console.error("[reviews-management] 搜索失败:", error);
+          document.getElementById("reviews-loading").style.display = "none";
+          document.getElementById("reviews-error-message").textContent =
+            error.message || "请稍后重试";
+          document.getElementById("reviews-error").style.display = "block";
+        });
+    };
+
+    // 显示评论列表
+    function displayReviews(data) {
+      const {
+        targetAccount,
+        reviews,
+        total,
+      } = data;
+
+      // 更新目标账号信息
+      document.getElementById("reviews-target-avatar").src =
+        targetAccount.avatar || "/static/images/default-avatar.png";
+      document.getElementById("reviews-target-displayname").textContent =
+        targetAccount.displayName || targetAccount.handle;
+      document.getElementById("reviews-target-handle").textContent =
+        "@" + targetAccount.handle;
+      document.getElementById("reviews-total-count").textContent = total;
+
+      // 渲染表格
+      const tbody = document.getElementById("reviews-table-body");
+      tbody.innerHTML = "";
+
+      reviews.forEach((review) => {
+        const row = document.createElement("tr");
+        row.style.borderBottom = "1px solid #f3f4f6";
+        row.dataset.reviewId = review.id;
+
+        // 评分颜色
+        let ratingClass = "reviews-rating-low";
+        if (review.rating >= 4) ratingClass = "reviews-rating-high";
+        else if (review.rating >= 2.5) ratingClass = "reviews-rating-medium";
+
+        // 标签 HTML
+        const tagsHtml =
+          review.tags && review.tags.length > 0
+            ? review.tags
+                .map((tag) => `<span class="reviews-tag">${escapeHtml(tag)}</span>`)
+                .join("")
+            : '<span style="color: #9ca3af; font-size: 12px;">无标签</span>';
+
+        row.innerHTML = `
+          <td style="padding: 12px;">
+            <div class="reviews-reviewer-info">
+              <img src="${escapeHtml(review.reviewer.avatar || "/static/images/default-avatar.png")}"
+                   alt="" class="reviews-reviewer-avatar">
+              <div class="reviews-reviewer-details">
+                <div class="reviews-reviewer-name">${escapeHtml(review.reviewer.displayName || "未知用户")}</div>
+                <div class="reviews-reviewer-username">@${escapeHtml(review.reviewer.username || "unknown")}</div>
+              </div>
+            </div>
+          </td>
+          <td style="padding: 12px; text-align: center;">
+            <span class="reviews-rating ${ratingClass}">${review.rating.toFixed(1)}</span>
+          </td>
+          <td style="padding: 12px;">
+            <div class="reviews-tags">${tagsHtml}</div>
+          </td>
+          <td style="padding: 12px;">
+            <div class="reviews-comment">${escapeHtml(review.comment || "无评论内容")}</div>
+          </td>
+          <td style="padding: 12px;">
+            <div class="reviews-time">${escapeHtml(review.createdAt)}</div>
+          </td>
+          <td style="padding: 12px; text-align: center;">
+            <button class="reviews-delete-btn" onclick="deleteReview('${review.id}', this)">
+              删除
+            </button>
+          </td>
+        `;
+
+        tbody.appendChild(row);
+      });
+    }
+
+    // 删除评论
+    window.deleteReview = function (reviewId, btnElement) {
+      const confirmed = confirm(
+        "确定要删除这条评论吗？\n\n删除后：\n- 评论将归属于虚拟账号\n- 被评论人将不再看到这条评论\n- 此操作不可恢复"
+      );
+
+      if (!confirmed) return;
+
+      // 禁用按钮
+      btnElement.disabled = true;
+      btnElement.textContent = "删除中...";
+
+      fetch("/api/admin/reviews/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reviewId }),
+      })
+        .then((response) => {
+          if (!response.ok) {
+            return response.json().then((data) => {
+              throw new Error(data.error || `HTTP ${response.status}`);
+            });
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (data.success) {
+            // 标记行为已删除
+            const row = btnElement.closest("tr");
+            row.classList.add("reviews-row-deleted");
+            btnElement.textContent = "已删除";
+            btnElement.disabled = true;
+
+            // 更新计数
+            const countEl = document.getElementById("reviews-total-count");
+            const currentCount = parseInt(countEl.textContent, 10);
+            countEl.textContent = Math.max(0, currentCount - 1);
+
+            alert("评论已删除");
+          } else {
+            throw new Error(data.error || "删除失败");
+          }
+        })
+        .catch((error) => {
+          console.error("[reviews-management] 删除失败:", error);
+          alert("删除失败: " + error.message);
+          btnElement.disabled = false;
+          btnElement.textContent = "删除";
+        });
+    };
+
+    // HTML 转义
+    function escapeHtml(text) {
+      if (!text) return "";
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  })();
+</script>
