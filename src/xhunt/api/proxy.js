@@ -51,12 +51,35 @@ const ensureCorsHeaders = (req, res, allowMethods = "GET, POST, PUT, PATCH, DELE
 // 代理请求处理函数
 async function proxyRequest(req, res, targetUrl) {
   try {
+    // 需要保留的 header 列表（忽略大小写，支持部分匹配）
+    const HEADERS_TO_PRESERVE = [
+      // 认证相关
+      "admin",
+      "apikey",
+      "api-key",
+      "authorization",
+      "x-api-key",
+    ];
+
     // 构建请求选项
+    const headers = {
+      "Content-Type": "application/json",
+    };
+
+    // 保留原始请求头中匹配的字段（忽略大小写）
+    for (const [key, value] of Object.entries(req.headers || {})) {
+      const lowerKey = key.toLowerCase();
+      const shouldPreserve = HEADERS_TO_PRESERVE.some((pattern) =>
+        lowerKey.includes(pattern.toLowerCase())
+      );
+      if (shouldPreserve) {
+        headers[key] = value;
+      }
+    }
+
     const options = {
       method: req.method,
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
     };
 
     // 如果有请求体，添加到选项中
