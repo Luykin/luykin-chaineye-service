@@ -69,6 +69,10 @@
               <span class="user-count"></span>
             </summary>
             <div id="ff-test-testers" class="tag-input-container large"></div>
+            <div class="quick-add-btns">
+              <button class="btn quick-add-btn" data-target="test" data-list="vip">+ XHUNT_VIP 名单</button>
+              <button class="btn quick-add-btn" data-target="test" data-list="internal">+ INTERNAL_TEST_USERS 名单</button>
+            </div>
           </details>
         </div>
       </div>
@@ -96,6 +100,10 @@
               id="ff-canary-canaries"
               class="tag-input-container large"
             ></div>
+            <div class="quick-add-btns">
+              <button class="btn quick-add-btn" data-target="canary" data-list="vip">+ XHUNT_VIP 名单</button>
+              <button class="btn quick-add-btn" data-target="canary" data-list="internal">+ INTERNAL_TEST_USERS 名单</button>
+            </div>
           </details>
         </div>
       </div>
@@ -435,6 +443,27 @@
   .ff-collapsible-list .tag-input-container {
     margin-top: 8px;
   }
+  .quick-add-btns {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .quick-add-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: #f3f4f6;
+    color: #374151;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .quick-add-btn:hover {
+    background: #e5e7eb;
+    border-color: #9ca3af;
+  }
 
   /* Reference Card */
   .ff-reference-card {
@@ -589,6 +618,39 @@
   let configData = {};
   let originalConfigData = {}; // For diffing
   let dirty = false;
+
+  // 预定义的批量用户名单
+  const XHUNT_VIP_LIST = [
+    "LuykinAI", "kotaweb3", "Sea_Bitcoin", "FloriaT96249", "alpha_gege",
+    "DeFiTeddy2020", "maid_crypto", "Paris13Jeanne", "momochenming", "Rita88",
+    "vvickym2", "web3annie", "charles48011843", "bocaibocai_", "0x_xifeng",
+    "Meta8Mate", "zohanlin", "qqzsss", "0xAllen888", "NeohexWu",
+    "ScarlettWeb3", "AirdropAlchemis", "timbrobro", "blockTVBee", "0xMoon6626",
+    "captain_kent", "0xborder", "DRbitcoin36", "bclaobai", "love_doge123",
+    "0xcryptoHowe", "Monica_xiaoM", "aiSunny224737", "Cyrus_G3", "0xJuliechen",
+    "chaozuoye", "unaiyang", "VireGeek", "Ru7Longcrypto", "EleveResearch",
+    "0xjasonli", "dabiaoge", "KuiGas", "tmel0211", "Rocky_Bitcoin",
+    "Bitwux", "fishkiller", "Alvin0617", "0xBeyondLee", "CryptoPainter",
+    "0xTodd", "luyaoyuan", "CandyDAO_leaf", "Web3Feng", "jason_chen998",
+    "Wuhuoqiu", "BroLeon", "Guomin184935", "jessezheng", "cuegod001",
+    "XYiduo", "zdxg119", "bcointrader", "CryptoPomeloCat", "meta7sol",
+    "GameFI_EZ", "Baili1018", "qklxsqf", "crypto_pumpman", "Crypto_He",
+    "yueya_eth", "wang_xiaolou", "xingpt", "wenxue600", "Airdrop_Guard",
+    "Jay21871836", "egyptk6", "Joensmoon", "MEJ50749", "guiguziben",
+    "xingxingjun8888", "taowang1", "btcpiggy", "liushezhang", "WWTLitee",
+    "Web3SisterA", "amelia_xuu", "S_memek", "nftsiy", "gcsbtc",
+    "cheuk_baby", "abyssofgambling", "flyiiawei", "TTMBbo", "shouyi16",
+    "dakuan_x", "wuliao_btc", "0xshunshun", "ZhanweiC", "BitKieran",
+    "0xsmall_", "qingerqq2024", "wangchangfu88", "candywantfly1", "HYSFL1",
+    "Web3Veteran1", "weiyu320169", "Siberiaxx1909", "PWenzhen76938", "QF88688",
+    "aiqiang888", "jiroucaigou", "BongePlanet", "Multichannel_", "web3_dadgod",
+    "hisevenih"
+  ];
+
+  const INTERNAL_TEST_USERS_LIST = [
+    "defiteddy2020", "biteye_sister", "alpha_gege", "cuegod001",
+    "xhuntcn", "web3sistera", "s_memek", "luoyukun4", "shouyi16"
+  ];
 
   let FEATURE_KEYS = {
     settings: "设置",
@@ -1725,6 +1787,34 @@
     });
 
     // Load the main config now that translations are ready and event listeners are set up.
+
+    // Quick add buttons event delegation
+    document.querySelectorAll('.quick-add-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const target = e.target.dataset.target; // 'test' or 'canary'
+        const listType = e.target.dataset.list; // 'vip' or 'internal'
+        const listToAdd = listType === 'vip' ? XHUNT_VIP_LIST : INTERNAL_TEST_USERS_LIST;
+        const listName = listType === 'vip' ? 'XHUNT_VIP' : 'INTERNAL_TEST_USERS';
+
+        if (target === 'test') {
+          const currentTesters = configData.testConfig?.testers || [];
+          const newTesters = [...new Set([...currentTesters, ...listToAdd])];
+          if (!configData.testConfig) configData.testConfig = { features: [], testers: [] };
+          configData.testConfig.testers = newTesters;
+          dirty = true;
+          renderTestConfig();
+          toast(`已添加 ${listName} 名单 (${listToAdd.length} 人) 到 Testers`, 'success');
+        } else if (target === 'canary') {
+          const currentCanaries = configData.canaryConfig?.canaries || [];
+          const newCanaries = [...new Set([...currentCanaries, ...listToAdd])];
+          if (!configData.canaryConfig) configData.canaryConfig = { features: [], canaries: [] };
+          configData.canaryConfig.canaries = newCanaries;
+          dirty = true;
+          renderCanaryConfig();
+          toast(`已添加 ${listName} 名单 (${listToAdd.length} 人) 到 Canaries`, 'success');
+        }
+      });
+    });
   }
 
   async function initFeatureFlagPanel() {
