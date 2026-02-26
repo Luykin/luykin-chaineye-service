@@ -450,19 +450,28 @@
     flex-wrap: wrap;
   }
   .quick-add-btn {
-    padding: 6px 12px;
-    border-radius: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
     border: 1px solid #d1d5db;
-    background: #f3f4f6;
-    color: #374151;
-    font-size: 12px;
+    background: linear-gradient(to bottom, #ffffff, #f9fafb);
+    color: #4b5563;
+    font-size: 11px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    white-space: nowrap;
   }
   .quick-add-btn:hover {
-    background: #e5e7eb;
+    background: linear-gradient(to bottom, #f9fafb, #f3f4f6);
     border-color: #9ca3af;
+    color: #374151;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+  }
+  .quick-add-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 1px rgba(0,0,0,0.04);
   }
 
   /* Reference Card */
@@ -1549,6 +1558,7 @@
   function createFlexibleRuleCard(key, users) {
     const card = document.createElement("div");
     card.className = "flexible-rule-card";
+    card.dataset.featureKey = key;
     card.innerHTML = `
             <button class="delete-rule-btn" title="Delete this rule">×</button>
             <div class="ff-field">
@@ -1561,6 +1571,10 @@
             <div class="ff-field">
                 <label>User Handles</label>
                 <div class="tag-input-container"></div>
+                <div class="quick-add-btns">
+                  <button class="btn quick-add-btn" data-target="flexible" data-feature="${key}" data-list="vip">+ VIP 名单</button>
+                  <button class="btn quick-add-btn" data-target="flexible" data-feature="${key}" data-list="internal">+ 内测名单</button>
+                </div>
             </div>
         `;
     const tagInputContainer = card.querySelector(".tag-input-container");
@@ -1789,31 +1803,41 @@
     // Load the main config now that translations are ready and event listeners are set up.
 
     // Quick add buttons event delegation
-    document.querySelectorAll('.quick-add-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const target = e.target.dataset.target; // 'test' or 'canary'
-        const listType = e.target.dataset.list; // 'vip' or 'internal'
-        const listToAdd = listType === 'vip' ? XHUNT_VIP_LIST : INTERNAL_TEST_USERS_LIST;
-        const listName = listType === 'vip' ? 'XHUNT_VIP' : 'INTERNAL_TEST_USERS';
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.quick-add-btn');
+      if (!btn) return;
+      
+      const target = btn.dataset.target; // 'test', 'canary', or 'flexible'
+      const listType = btn.dataset.list; // 'vip' or 'internal'
+      const featureKey = btn.dataset.feature; // for flexible target
+      const listToAdd = listType === 'vip' ? XHUNT_VIP_LIST : INTERNAL_TEST_USERS_LIST;
+      const listName = listType === 'vip' ? 'VIP' : '内测';
 
-        if (target === 'test') {
-          const currentTesters = configData.testConfig?.testers || [];
-          const newTesters = [...new Set([...currentTesters, ...listToAdd])];
-          if (!configData.testConfig) configData.testConfig = { features: [], testers: [] };
-          configData.testConfig.testers = newTesters;
-          dirty = true;
-          renderTestConfig();
-          toast(`已添加 ${listName} 名单 (${listToAdd.length} 人) 到 Testers`, 'success');
-        } else if (target === 'canary') {
-          const currentCanaries = configData.canaryConfig?.canaries || [];
-          const newCanaries = [...new Set([...currentCanaries, ...listToAdd])];
-          if (!configData.canaryConfig) configData.canaryConfig = { features: [], canaries: [] };
-          configData.canaryConfig.canaries = newCanaries;
-          dirty = true;
-          renderCanaryConfig();
-          toast(`已添加 ${listName} 名单 (${listToAdd.length} 人) 到 Canaries`, 'success');
-        }
-      });
+      if (target === 'test') {
+        const currentTesters = configData.testConfig?.testers || [];
+        const newTesters = [...new Set([...currentTesters, ...listToAdd])];
+        if (!configData.testConfig) configData.testConfig = { features: [], testers: [] };
+        configData.testConfig.testers = newTesters;
+        dirty = true;
+        renderTestConfig();
+        toast(`已添加 ${listName} 名单 (${listToAdd.length} 人) 到 Testers`, 'success');
+      } else if (target === 'canary') {
+        const currentCanaries = configData.canaryConfig?.canaries || [];
+        const newCanaries = [...new Set([...currentCanaries, ...listToAdd])];
+        if (!configData.canaryConfig) configData.canaryConfig = { features: [], canaries: [] };
+        configData.canaryConfig.canaries = newCanaries;
+        dirty = true;
+        renderCanaryConfig();
+        toast(`已添加 ${listName} 名单 (${listToAdd.length} 人) 到 Canaries`, 'success');
+      } else if (target === 'flexible' && featureKey) {
+        const currentUsers = configData.flexibleTesting?.[featureKey] || [];
+        const newUsers = [...new Set([...currentUsers, ...listToAdd])];
+        if (!configData.flexibleTesting) configData.flexibleTesting = {};
+        configData.flexibleTesting[featureKey] = newUsers;
+        dirty = true;
+        renderFlexibleTesting();
+        toast(`已添加 ${listName} 名单 (${listToAdd.length} 人) 到 ${featureKey}`, 'success');
+      }
     });
   }
 
