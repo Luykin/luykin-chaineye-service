@@ -177,7 +177,8 @@ async function initializeAndStartServer() {
       "x-user-id",
       "x-window-location-href",
       "x-admin",
-      "admin"
+      "admin",
+      "Admin"
     ],
     credentials: true,
   };
