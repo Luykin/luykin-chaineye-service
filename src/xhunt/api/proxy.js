@@ -8,6 +8,8 @@ const { aiContentRateLimit } = require("../middleware/aiContentRateLimit");
 const { checkProStatus } = require("../middleware/pro-status");
 const { applyProDataFiltering } = require("../utils/pro-data-filtering");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { XHuntUser, DailyActiveUser } = require("../../models/postgres-start");
+const { Sequelize } = require("sequelize");
 
 const router = express.Router();
 
@@ -21,6 +23,143 @@ const URL_MAPPINGS = {
 
 // 默认目标服务器
 const DEFAULT_TARGET = "kota";
+
+// 积分赠送 API 配置
+const ADD_CREDITS_API_URL = "https://data.cryptohunt.ai/pro/admin/user/addCredits";
+
+/**
+ * 计算用户应赠送的积分
+ * @param {string} username - 用户用户名（twitter username）
+ * @returns {Promise<number>} - 计算后的积分
+ */
+async function calculateGiftCredits(username) {
+  try {
+    // 1. 基础额度
+    const baseCredits = 200;
+
+    // 2. 查询用户过去30天登录天数
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const activeDaysCount = await DailyActiveUser.count({
+      where: {
+        userId: username,
+        date: {
+          [Sequelize.Op.gte]: thirtyDaysAgo.toISOString().split('T')[0],
+        },
+      },
+    });
+
+    // 登录奖励：每天50，上限800
+    const loginBonus = Math.min(activeDaysCount * 50, 800);
+
+    // 3. 查询用户排名
+    const user = await XHuntUser.findOne({
+      where: { username },
+      attributes: ['kolRank20W'],
+    });
+
+    const kolRank = user?.kolRank20W;
+
+    // 排名奖励（三档互斥，取最高档）
+    let rankBonus = 0;
+    if (kolRank && kolRank <= 10000) {
+      rankBonus = 1000; // 前1万
+    } else if (kolRank && kolRank <= 50000) {
+      rankBonus = 600;  // 前5万
+    } else if (kolRank && kolRank <= 100000) {
+      rankBonus = 200;  // 前10万
+    }
+
+    // 总积分 = 基础 + 登录奖励 + 排名奖励
+    const totalCredits = baseCredits + loginBonus + rankBonus;
+
+    console.log(`[GiftCredits] User: ${username}, Base: ${baseCredits}, LoginDays: ${activeDaysCount}, LoginBonus: ${loginBonus}, Rank: ${kolRank || 'N/A'}, RankBonus: ${rankBonus}, Total: ${totalCredits}`);
+
+    return totalCredits;
+  } catch (error) {
+    console.error(`[GiftCredits] Error calculating credits for ${username}:`, error);
+    // 出错时返回基础额度
+    return 200;
+  }
+}
+
+/**
+ * 调用积分赠送接口
+ * @param {Object} params - 参数对象
+ * @param {string} params.address - 用户钱包地址
+ * @param {string} params.tx - 交易标识（x-user-id + x-request-id）
+ * @param {number} params.credits - 积分数量
+ */
+async function callAddCreditsApi({ address, tx, credits }) {
+  try {
+    const response = await fetch(ADD_CREDITS_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "admin": "cuegod_shuai",
+      },
+      body: JSON.stringify({
+        address,
+        tx,
+        credits,
+        operation: "gift",
+      }),
+    });
+
+    // 仅状态码 200 视为成功
+    if (response.status !== 200) {
+      const errorText = await response.text();
+      console.error(`[GiftCredits] API error: ${response.status} ${response.statusText}`, errorText);
+      return false;
+    }
+
+    console.log(`[GiftCredits] Successfully added ${credits} credits to ${address}`);
+    return true;
+  } catch (error) {
+    console.error(`[GiftCredits] API call failed:`, error);
+    return false;
+  }
+}
+
+/**
+ * 处理用户创建后的积分赠送
+ * 当请求是 POST /pro/admin/user/create 且成功时，自动计算并赠送积分
+ * 注意：此操作会同步等待积分赠送完成后再返回，但赠送失败不会影响原请求
+ * 
+ * @param {Object} req - Express 请求对象
+ * @param {string} targetUrl - 目标服务器 URL
+ * @param {boolean} isSuccess - 原请求是否成功（2xx）
+ */
+async function handleUserCreateGiftCredits(req, targetUrl, isSuccess) {
+  // 仅处理成功的 POST /pro/admin/user/create 请求
+  const isUserCreateEndpoint = targetUrl.includes("/pro/admin/user/create");
+  const isPostMethod = req.method === "POST";
+  
+  if (!isSuccess || !isUserCreateEndpoint || !isPostMethod) {
+    return;
+  }
+
+  try {
+    const address = req.body?.address;
+    const userId = req.headers["x-user-id"] || "";
+    const requestId = req.headers["x-request-id"] || "";
+    const username = userId;
+    
+    if (!address || !username) {
+      console.log("[GiftCredits] Skip: missing address or username");
+      return;
+    }
+
+    // 同步计算并赠送积分（等待完成后再返回）
+    const credits = await calculateGiftCredits(username);
+    const tx = `${userId}${requestId}`;
+    await callAddCreditsApi({ address, tx, credits });
+  } catch (giftError) {
+    // 积分赠送失败不应影响原请求，仅记录错误
+    console.error("[GiftCredits] Error in gift credits flow:", giftError);
+  }
+}
 
 // 确保所有响应都包含 CORS 头（无论状态码是多少）
 const ensureCorsHeaders = (req, res, allowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS") => {
@@ -209,6 +348,9 @@ async function proxyRequest(req, res, targetUrl) {
 
     // 设置浏览器缓存策略
     setBrowserCacheHeaders(res, req.method);
+
+    // 处理用户创建后的积分赠送（同步等待完成）
+    await handleUserCreateGiftCredits(req, targetUrl, isSuccess);
 
     if (isJson) {
       // JSON 响应：解析并返回
