@@ -248,21 +248,21 @@ async function initializeAndStartServer() {
   app.use(helmet.noSniff());
 
   // 🆕 针对不同路由设置不同的请求体大小限制
-  // 普通接口：20KB 限制
-  app.use(express.json({ limit: "20kb" }));
+  // 普通接口：200KB 限制
+  app.use(express.json({ limit: "200kb" }));
 
   // 🆕 为上报接口设置更大的限制（但仍然合理）
   app.use(
     "/api/xhunt/report",
     express.json({
-      limit: "100kb", // 上报接口允许更大的请求体
+      limit: "1000kb", // 上报接口允许更大的请求体
     })
   );
 
   app.use(
     "/api/xhunt/stats/nacos/config",
     express.json({
-      limit: "500kb", // Nacos配置管理接口允许更大的请求体
+      limit: "2000kb", // Nacos配置管理接口允许更大的请求体
     })
   );
 
