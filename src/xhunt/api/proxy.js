@@ -55,10 +55,6 @@ async function proxyRequest(req, res, targetUrl) {
     const HEADERS_TO_PRESERVE = [
       // 认证相关
       "admin",
-      "apikey",
-      "api-key",
-      "authorization",
-      "x-api-key",
     ];
 
     // 构建请求选项
