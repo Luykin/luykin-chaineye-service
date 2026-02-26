@@ -176,6 +176,8 @@ async function initializeAndStartServer() {
       "x-extension-version",
       "x-user-id",
       "x-window-location-href",
+      "x-admin",
+      "admin"
     ],
     credentials: true,
   };
