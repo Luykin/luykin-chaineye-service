@@ -120,7 +120,16 @@ const XHUNT_VIP = new Set([
   "BongePlanet",
   "Multichannel_",
   "web3_dadgod",
-  "hisevenih"
+  "hisevenih",
+  "btcmiko",
+  "anchornode",
+  "0xXiaoXiong",
+  "xx03199",
+  "artistkatty_",
+  "JiuHuangBuHuang",
+  "AntBTC",
+  "sparkwang9",
+  "JIBAIWeb3"
 ].map((s) => s.toLowerCase()));
 
 const INTERNAL_TEST_USERS = new Set([
