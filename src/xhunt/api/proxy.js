@@ -10,6 +10,7 @@ const { applyProDataFiltering } = require("../utils/pro-data-filtering");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const { XHuntUser, DailyActiveUser } = require("../../models/postgres-start");
 const { Sequelize } = require("sequelize");
+const { getRedisClient } = require("../../lib/redisClient");
 
 const router = express.Router();
 
@@ -123,9 +124,53 @@ async function callAddCreditsApi({ address, tx, credits }) {
 }
 
 /**
+ * 获取用户积分赠送的 Redis Key
+ * @param {string} userId - 用户ID（Twitter用户名）
+ * @returns {string} - Redis Key
+ */
+function getGiftCreditsKey(userId) {
+  return `gift:credits:user:${userId}`;
+}
+
+/**
+ * 检查用户是否已赠送过积分（使用Redis SET NX实现幂等性）
+ * 以userId为维度，一旦赠送过，无论换什么EVM地址都不再赠送
+ * 
+ * @param {string} userId - 用户ID
+ * @returns {Promise<boolean>} - true表示已赠送过（应跳过），false表示未赠送过
+ */
+async function checkAndMarkGiftCredits(userId) {
+  const redisKey = getGiftCreditsKey(userId);
+  const redisClient = await getRedisClient();
+  
+  // 使用 SET NX（Only set the key if it does not already exist）
+  // 返回 'OK' 表示设置成功（之前不存在），返回 null 表示已存在
+  const result = await redisClient.set(redisKey, "1", {
+    NX: true, // Only if Not eXists
+  });
+  
+  // result === 'OK' 表示这是第一次设置，未赠送过
+  // result === null 表示key已存在，已赠送过
+  const alreadyGifted = result === null;
+  
+  if (alreadyGifted) {
+    console.log(`[GiftCredits] Skip: user ${userId} has already received gift credits`);
+  } else {
+    console.log(`[GiftCredits] Mark: user ${userId} marked as gifted (permanent)`);
+  }
+  
+  return alreadyGifted;
+}
+
+/**
  * 处理用户创建后的积分赠送
  * 当请求是 POST /pro/admin/user/create 且成功时，自动计算并赠送积分
  * 注意：此操作会同步等待积分赠送完成后再返回，但赠送失败不会影响原请求
+ * 
+ * 防重逻辑：
+ * 1. 以 userId（Twitter用户名）为维度做终身防重
+ * 2. 一旦某个用户赠送过，无论换什么EVM地址都不再赠送
+ * 3. 使用Redis SET NX原子操作实现幂等性，Key永久存储
  * 
  * @param {Object} req - Express 请求对象
  * @param {string} targetUrl - 目标服务器 URL
@@ -151,12 +196,21 @@ async function handleUserCreateGiftCredits(req, targetUrl, isSuccess) {
       return;
     }
 
+    // 防重检查：检查该用户是否已赠送过（终身仅一次）
+    const alreadyGifted = await checkAndMarkGiftCredits(username);
+    if (alreadyGifted) {
+      return;
+    }
+
     // 同步计算并赠送积分（等待完成后再返回）
     const credits = await calculateGiftCredits(username);
     const tx = `${userId}${requestId}`;
     await callAddCreditsApi({ address, tx, credits });
+    
+    console.log(`[GiftCredits] Success: user ${username} received ${credits} credits to ${address}`);
   } catch (giftError) {
-    // 积分赠送失败不应影响原请求，仅记录错误
+    // 积分赠送失败不应影响原请求，但需要考虑是否清除标记以便下次重试
+    // 这里选择保留标记，避免重复赠送的风险，可手动处理失败情况
     console.error("[GiftCredits] Error in gift credits flow:", giftError);
   }
 }
