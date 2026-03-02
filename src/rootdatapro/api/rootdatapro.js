@@ -131,50 +131,14 @@ async function scrapeAndFetchSummary({ url, entityType }) {
   return { entityType: null, entityId: null, entity: null };
 }
 
-// 通用抓取入口
+// 通用抓取入口 - 已禁用
 router.post("/scrape", async (req, res) => {
-  console.log(`[rootdatapro] 收到抓取请求:`, req.body);
-  try {
-    const url = req.body?.url;
-
-    if (!isValidRootdataUrl(url)) {
-      console.log(`[rootdatapro] URL 校验失败: ${url}`);
-      return res.status(400).json({
-        success: false,
-        error: "INVALID_URL",
-        message: "url 必须是 rootdata.com 的 Projects/detail、Investors/detail 或 member 链接",
-      });
-    }
-
-    const entityType = detectEntityTypeFromUrl(url);
-    console.log(`[rootdatapro] 识别实体类型: ${entityType}`);
-    if (!entityType) {
-      return res.status(400).json({
-        success: false,
-        error: "UNSUPPORTED_URL",
-        message: "不支持的 RootData 链接类型",
-      });
-    }
-
-    const summary = await scrapeAndFetchSummary({ url, entityType });
-    console.log(`[rootdatapro] 抓取与查询摘要完成`, summary);
-
-    return res.json({
-      success: true,
-      url,
-      entityType: summary.entityType,
-      entityId: summary.entityId,
-      entity: summary.entity,
-    });
-  } catch (err) {
-    console.error(`[rootdatapro] 抓取请求失败: ${err.message}`);
-    const msg = err?.message || String(err);
-    const code = msg === "SCRAPE_TIMEOUT" ? 504 : 500;
-    return res.status(code).json({
-      success: false,
-      error: msg,
-    });
-  }
+  console.log(`[rootdatapro] 收到抓取请求（已禁用）:`, req.body);
+  return res.status(503).json({
+    success: false,
+    error: "SERVICE_DISABLED",
+    message: "爬虫功能已禁用",
+  });
 });
 
 // --- Crawl Task Management API ---
@@ -182,21 +146,21 @@ router.post("/scrape", async (req, res) => {
 const taskManager = require("../scraper/taskManager");
 
 router.post("/crawl/start", async (req, res) => {
-  console.log("[rootdatapro] 收到启动爬虫任务请求");
-  const result = await taskManager.start();
-  if (result && result.success === false) {
-    return res.status(409).json({ success: false, error: result.error });
-  }
-  return res.json({ success: true, message: "Crawl task started." });
+  console.log("[rootdatapro] 收到启动爬虫任务请求（已禁用）");
+  return res.status(503).json({
+    success: false,
+    error: "SERVICE_DISABLED",
+    message: "爬虫功能已禁用",
+  });
 });
 
 router.post("/crawl/pause", async (req, res) => {
-  console.log("[rootdatapro] 收到暂停爬虫任务请求");
-  const result = await taskManager.pause();
-  if (result && result.success === false) {
-    return res.status(409).json({ success: false, error: result.error });
-  }
-  return res.json({ success: true, message: "Crawl task paused." });
+  console.log("[rootdatapro] 收到暂停爬虫任务请求（已禁用）");
+  return res.status(503).json({
+    success: false,
+    error: "SERVICE_DISABLED",
+    message: "爬虫功能已禁用",
+  });
 });
 
 router.get("/crawl/status", async (req, res) => {
@@ -222,61 +186,32 @@ router.get("/crawl/status", async (req, res) => {
 });
 
 router.post("/crawl/reset", async (req, res) => {
-    console.log("[rootdatapro] 收到重置爬虫任务请求");
-    const result = await taskManager.initialize();
-    if (result && result.success === false) {
-      return res.status(409).json({ success: false, error: result.error });
-    }
-    return res.json({ success: true, message: "Crawl task reset and re-initialized." });
+  console.log("[rootdatapro] 收到重置爬虫任务请求（已禁用）");
+  return res.status(503).json({
+    success: false,
+    error: "SERVICE_DISABLED",
+    message: "爬虫功能已禁用",
+  });
 });
 
-// 每日维护任务：立即执行（触发后在后台异步运行，不阻塞 HTTP 请求）
+// 每日维护任务：立即执行 - 已禁用
 router.post("/crawl/maintenance/run_now", async (req, res) => {
-  console.log("[rootdatapro] 收到立即执行每日维护任务请求");
-  try {
-    // 先检查当前状态，避免并发触发
-    const status = await taskManager.getStatus();
-    if (status.status === "maintenance_running") {
-      return res.status(409).json({
-        success: false,
-        error: "MAINTENANCE_RUNNING",
-        message: "每日维护任务正在执行中，请等待上一轮完成",
-      });
-    }
-    if (status.status === "running") {
-      return res.status(409).json({
-        success: false,
-        error: "MANUAL_TASK_RUNNING",
-        message: "手动爬取任务正在执行中，请先暂停或等待其完成后再执行每日维护任务",
-      });
-    }
-
-    // 后台异步执行，不 await，避免接口超时
-    taskManager
-      .runDailyMaintenanceTask({ trigger: "manual" })
-      .catch((error) => {
-        console.error("[rootdatapro] 后台执行每日维护任务失败:", error);
-      });
-
-    return res.json({ success: true, started: true });
-  } catch (error) {
-    console.error("[rootdatapro] 执行每日维护任务失败:", error);
-    return res
-      .status(500)
-      .json({ success: false, error: error.message || String(error) });
-  }
+  console.log("[rootdatapro] 收到立即执行每日维护任务请求（已禁用）");
+  return res.status(503).json({
+    success: false,
+    error: "SERVICE_DISABLED",
+    message: "爬虫功能已禁用",
+  });
 });
 
-// 强制重置状态
+// 强制重置状态 - 已禁用
 router.post("/crawl/force_reset_status", async (req, res) => {
-  console.log("[rootdatapro] 收到强制重置状态请求");
-  try {
-    const result = await taskManager.forceResetStatus();
-    return res.json(result);
-  } catch (error) {
-    console.error("[rootdatapro] 强制重置状态失败:", error);
-    return res.status(500).json({ success: false, error: error.message || String(error) });
-  }
+  console.log("[rootdatapro] 收到强制重置状态请求（已禁用）");
+  return res.status(503).json({
+    success: false,
+    error: "SERVICE_DISABLED",
+    message: "爬虫功能已禁用",
+  });
 });
 
 module.exports = router;

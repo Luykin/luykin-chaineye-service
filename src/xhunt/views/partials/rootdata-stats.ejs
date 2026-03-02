@@ -160,13 +160,13 @@
     </div>
   </div>
 
-  <!-- 🚀 手动触发爬虫 -->
+  <!-- 🚀 手动触发爬虫（已禁用） -->
   <div
     class="section"
     id="rootdata-manual-crawl-section"
-    style="margin-top: 30px"
+    style="margin-top: 30px; opacity: 0.5; pointer-events: none;"
   >
-    <h2 class="section-title">🚀 手动触发爬虫</h2>
+    <h2 class="section-title">🚀 手动触发爬虫（已禁用）</h2>
     <div class="stat-card" style="max-width: 900px; margin: 0 auto">
       <div style="margin-bottom: 15px">
         <label
@@ -182,13 +182,15 @@
         <input
           type="text"
           id="rootdata-manual-url"
-          placeholder="https://www.rootdata.com/Investors/detail/YZi%20Labs?k=MjI5"
+          placeholder="爬虫功能已禁用"
+          disabled
           style="
             width: 100%;
             padding: 10px;
             border: 1px solid #d1d5db;
             border-radius: 6px;
             font-size: 14px;
+            background: #f3f4f6;
           "
         />
       </div>
@@ -196,82 +198,44 @@
       <div style="display: flex; gap: 10px; margin-bottom: 15px">
         <button
           id="rootdata-manual-crawl-btn"
+          disabled
           style="
             flex: 1;
             padding: 10px 20px;
-            background: #3b82f6;
+            background: #9ca3af;
             color: white;
             border: none;
             border-radius: 6px;
-            cursor: pointer;
+            cursor: not-allowed;
             font-size: 14px;
             font-weight: 600;
           "
         >
-          🕷️ 开始爬取
+          🚫 已禁用
         </button>
       </div>
-
-      <!-- 爬取状态 -->
-      <div
-        id="rootdata-crawl-status"
-        style="
-          display: none;
-          padding: 15px;
-          background: #f3f4f6;
-          border-radius: 6px;
-          margin-top: 15px;
-        "
-      >
-        <div style="color: #374151; font-weight: 600; margin-bottom: 8px">
-          爬取状态：<span id="rootdata-crawl-status-text">准备中...</span>
-        </div>
-        <div
-          style="color: #6b7280; font-size: 13px"
-          id="rootdata-crawl-message"
-        ></div>
-        <div id="rootdata-crawl-reqid-wrap" style="display:none;margin-top:8px;color:#6b7280;font-size:13px;">
-          请求ID：<code id="rootdata-crawl-reqid-text" style="color:#374151;background:#eef2ff;padding:2px 6px;border-radius:4px"></code>
-        </div>
-      </div>
-
-      <!-- 爬取结果 -->
-      <div
-        id="rootdata-crawl-result"
-        style="display: none; margin-top: 15px"
-      ></div>
     </div>
   </div>
-
-  <!-- 🔧 强制 API 更新数据（调用 /api/rootdata/force-verify） -->
-  <div class="section" id="rootdata-force-verify-section" style="margin-top: 30px">
-    <h2 class="section-title">🔧 强制api更新数据</h2>
+  <!-- 🔧 强制 API 更新数据（已禁用） -->
+  <div class="section" id="rootdata-force-verify-section" style="margin-top: 30px; opacity: 0.5; pointer-events: none;">
+    <h2 class="section-title">🔧 强制api更新数据（已禁用）</h2>
     <div class="stat-card" style="max-width: 900px; margin: 0 auto">
       <div style="margin-bottom: 15px">
         <label style="display:block;font-weight:600;color:#374151;margin-bottom:8px;">输入 Keyword / Twitter 链接 / RootData 链接：</label>
         <input
           type="text"
           id="rootdata-force-input"
-          placeholder="如：yzilabs 或 https://x.com/yzilabs 或 https://www.rootdata.com/Investors/detail/YZi%20Labs?k=MjI5 或 https://www.rootdata.com/member/Robert%20Chen?k=MTg1NDM%3D"
-          style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;"
+          placeholder="爬虫功能已禁用"
+          disabled
+          style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#f3f4f6;"
         />
       </div>
       <div style="display:flex;gap:10px;">
-        <button id="rootdata-force-btn" style="flex:1;padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;">⚡ 强制更新</button>
+        <button id="rootdata-force-btn" disabled style="flex:1;padding:10px 20px;background:#9ca3af;color:#fff;border:none;border-radius:6px;cursor:not-allowed;font-size:14px;font-weight:600;">🚫 已禁用</button>
       </div>
       <div id="rootdata-force-status" style="display:none;margin-top:12px;padding:12px;background:#f3f4f6;border-radius:6px;color:#374151;font-size:14px"></div>
-      <div id="rootdata-force-reqid-wrap" style="display:none;margin-top:8px;color:#6b7280;font-size:13px;">
-        本次请求ID：<code id="rootdata-force-reqid-text" style="color:#374151;background:#eef2ff;padding:2px 6px;border-radius:4px"></code>
-      </div>
     </div>
   </div>
-
-  <!-- 📊 按天查询新增数据 -->
-  <div
-    class="section"
-    id="rootdata-daily-stats-section"
-    style="margin-top: 30px"
-  >
     <h2 class="section-title">📊 按天新增数据统计</h2>
 
     <!-- 日期选择器 -->
@@ -497,89 +461,18 @@
       if (wrap) wrap.style.display = 'none';
     }
 
-    // --- 强制 API 更新 ---
+    // --- 强制 API 更新（已禁用） ---
     const forceBtn = document.getElementById('rootdata-force-btn');
     const forceInput = document.getElementById('rootdata-force-input');
     const forceStatusEl = document.getElementById('rootdata-force-status');
-    let forceBusy = false;
-
-    function setForceStatus(text, ok) {
-      forceStatusEl.style.display = 'block';
-      forceStatusEl.style.background = ok ? '#ecfdf5' : '#fef2f2';
-      forceStatusEl.style.color = ok ? '#065f46' : '#991b1b';
-      forceStatusEl.textContent = text;
-    }
-
-    function buildForceParams(v) {
-      const params = new URLSearchParams();
-      if (/rootdata\.com\//i.test(v)) {
-        if (!/\/Projects\/detail\//i.test(v) && !/\/Investors\/detail\//i.test(v) && !/\/member\//i.test(v)) {
-          return { error: 'RootData 链接格式不正确，应包含 /Projects/detail 或 /Investors/detail 或 /member' };
-        }
-        if (!/[?&]k=/.test(v)) return { error: 'RootData 链接缺少 k= 参数' };
-        params.set('projectLink', v);
-        return { params };
-      }
-      if (/^https?:\/\/x\.com\//i.test(v)) {
-        if (!/^https?:\/\/x\.com\/[^/]+\/?$/i.test(v)) return { error: 'Twitter 链接应为 https://x.com/<handle>' };
-        params.set('twitterUrl', v);
-        return { params };
-      }
-      if (v.length < 2) return { error: '关键词长度至少为 2 个字符' };
-      params.set('keyword', v.toLowerCase());
-      return { params };
-    }
-
-    async function submitForceUpdate() {
-      if (forceBusy) return;
-      const v = (forceInput.value || '').trim();
-      if (!v) return setForceStatus('请输入内容', false);
-
-      const { params, error } = buildForceParams(v);
-      if (error) return setForceStatus(error, false);
-
-      const url = '/api/rootdata/force-verify';
-      try {
-        forceBusy = true;
-        forceBtn.disabled = true;
-        const oldText = forceBtn.textContent;
-        forceBtn.textContent = '处理中...';
-        
-        const reqId = generateUUID();
-        setForceStatus(`请求中...`, true);
-        showReqId('rootdata-force-reqid-wrap', 'rootdata-force-reqid-text', reqId);
-
-        const resp = await fetch(url + '?' + params.toString(), {
-          method: 'GET',
-          headers: { 'x-request-id': reqId },
-          credentials: 'include'
-        });
-        const data = await resp.json().catch(() => ({}));
-        const echoedReqId = data?.requestId || reqId;
-        showReqId('rootdata-force-reqid-wrap', 'rootdata-force-reqid-text', echoedReqId);
-
-        if (resp.ok) {
-          setForceStatus('已触发成功：' + (data?.message || 'OK'), true);
-        } else {
-          setForceStatus('触发失败：' + (data?.message || resp.statusText), false);
-        }
-
-        forceBtn.textContent = oldText;
-        forceBtn.disabled = false;
-        forceBusy = false;
-      } catch (e) {
-        setForceStatus('请求异常：' + (e?.message || e), false);
-        forceBtn.disabled = false;
-        forceBusy = false;
-      }
-    }
-
+    
+    // 爬虫功能已禁用，点击按钮显示提示
     forceBtn && forceBtn.addEventListener('click', () => {
-      let debounceTimer = null;
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(submitForceUpdate, 400);
+      forceStatusEl.style.display = 'block';
+      forceStatusEl.style.background = '#fef2f2';
+      forceStatusEl.style.color = '#991b1b';
+      forceStatusEl.textContent = '🚫 爬虫功能已禁用';
     });
-
     // --- 其他功能的脚本可以放在这里 ---
 
   })();

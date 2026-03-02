@@ -623,131 +623,122 @@
 </style>
 
 <div class="rdp-card">
-  <div class="rdp-topbar">
+  <!-- 爬虫功能已禁用提示 -->
+  <div style="
+    background: linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(220,38,38,0.1) 100%);
+    border: 2px solid rgba(239,68,68,0.3);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    text-align: center;
+  ">
+    <div style="font-size: 48px; margin-bottom: 12px;">🚫</div>
+    <h2 style="
+      margin: 0 0 8px 0;
+      font-size: 20px;
+      font-weight: 700;
+      color: #fca5a5;
+    ">爬虫功能已禁用</h2>
+    <p style="
+      margin: 0;
+      font-size: 14px;
+      color: #fca5a5;
+      opacity: 0.8;
+    ">RootDataPro 批量爬取任务和定时维护任务已停止运行</p>
+  </div>
+
+  <div class="rdp-topbar" style="opacity: 0.5; pointer-events: none;">
     <div class="rdp-header">
       <h2>批量爬取任务</h2>
-      <p>启动、暂停和监控所有 typemap 中实体的爬取进度。</p>
+      <p>启动、暂停和监控所有 typemap 中实体的爬取进度。（已禁用）</p>
     </div>
     <div class="rdp-task-controls">
-      <button id="rdp-task-start" class="rdp-btn rdp-btn-start">启动</button>
-      <button id="rdp-task-pause" class="rdp-btn rdp-btn-pause">暂停</button>
-      <button id="rdp-task-reset" class="rdp-btn rdp-btn-reset">重置</button>
+      <button id="rdp-task-start" class="rdp-btn rdp-btn-start" disabled>启动</button>
+      <button id="rdp-task-pause" class="rdp-btn rdp-btn-pause" disabled>暂停</button>
+      <button id="rdp-task-reset" class="rdp-btn rdp-btn-reset" disabled>重置</button>
     </div>
   </div>
 
-  <!-- 每日维护任务区域 -->
-  <div class="rdp-card" style="margin-top: 24px;">
+  <!-- 每日维护任务区域（已禁用） -->
+  <div class="rdp-card" style="margin-top: 24px; opacity: 0.5; pointer-events: none;">
     <div class="rdp-topbar">
       <div class="rdp-header">
         <h2>每日维护任务</h2>
-        <p>每天 UTC 03:00 自动执行：失败重试、增量发现、旧数据重爬</p>
+        <p>每天 UTC 03:00 自动执行：失败重试、增量发现、旧数据重爬（已禁用）</p>
       </div>
       <div class="rdp-task-controls">
-        <button id="rdp-maintenance-run-now" class="rdp-btn">立即执行</button>
-        <button id="rdp-maintenance-force-reset" class="rdp-btn rdp-btn-reset" style="background-color: #7f1d1d;">强制复位状态</button>
+        <button id="rdp-maintenance-run-now" class="rdp-btn" disabled>立即执行</button>
+        <button id="rdp-maintenance-force-reset" class="rdp-btn rdp-btn-reset" style="background-color: #7f1d1d;" disabled>强制复位状态</button>
       </div>
     </div>
     <div class="rdp-status-row">
       <div class="rdp-task-status">
         <div style="margin-bottom: 8px;">
-          下次执行: <span id="rdp-maintenance-countdown" class="rdp-task-status-value" style="font-size: 14px;">计算中...</span>
+          下次执行: <span class="rdp-task-status-value" style="font-size: 14px;">已禁用</span>
         </div>
         <div style="font-size: 12px; color: #94a3b8;">
-          状态: <span id="rdp-maintenance-status">-</span>
+          状态: <span>已禁用</span>
         </div>
-        <div id="rdp-maintenance-stage" style="display: none; font-size: 12px; margin-top: 4px; color: #38bdf8;"></div>
-      </div>
-    </div>
-    <div id="rdp-maintenance-report" style="margin-top: 16px; display: none;">
-      <div class="rdp-progress-tile">
-        <div class="rdp-progress-head">
-          <p class="rdp-progress-sub-label">上次执行报告</p>
-        </div>
-        <pre id="rdp-maintenance-report-content" class="rdp-result-pre" style="max-height: 200px; margin-top: 8px;">{"message": "暂无报告"}</pre>
       </div>
     </div>
   </div>
 
-  <div class="rdp-status-row">
+  <!-- 爬虫状态（已禁用） -->
+  <div class="rdp-status-row" style="opacity: 0.5; pointer-events: none;">
     <div class="rdp-task-status">
-      当前状态: <span id="rdp-task-status-value" class="rdp-task-status-value status-idle">-</span>
-      <span id="rdp-task-phase" class="rdp-task-phase" style="margin-left: 12px; font-size: 12px; color: #94a3b8;"></span>
+      当前状态: <span class="rdp-task-status-value status-idle">DISABLED</span>
       <div style="margin-top: 4px; font-size: 12px; color: #94a3b8;">
-        当前任务: <span id="rdp-current-task">-</span>
+        当前任务: -
       </div>
     </div>
     <div class="rdp-status-meta">
-      <span class="rdp-dot" id="rdp-live-dot"></span>
-      <span id="rdp-live-text">未自动刷新</span>
-      <button id="rdp-refresh-now" class="rdp-btn rdp-btn-ghost" type="button">立即刷新</button>
+      <span class="rdp-dot idle"></span>
+      <span>爬虫已禁用</span>
     </div>
   </div>
 
-  <!-- Task Management Section -->
-
-  <div class="rdp-progress-container">
+  <!-- 进度区域（已禁用） -->
+  <div class="rdp-progress-container" style="opacity: 0.5; pointer-events: none;">
     <div class="rdp-progress-tile">
       <div class="rdp-progress-head">
-        <p class="rdp-progress-sub-label">总进度</p>
-        <span id="rdp-progress-total-mini" class="rdp-progress-mini">0 / 0 (0%)</span>
+        <p class="rdp-progress-sub-label">总进度（已禁用）</p>
+        <span class="rdp-progress-mini">- / - (-%)</span>
       </div>
       <div class="rdp-progress-bar-bg" aria-label="total-progress">
-        <div id="rdp-progress-total-fill" class="rdp-progress-bar-fill"></div>
-      </div>
-    </div>
-
-    <div class="rdp-progress-tile">
-      <div class="rdp-progress-head">
-        <p class="rdp-progress-sub-label">纯失败任务 (项目)</p>
-        <span id="rdp-failed-project-mini" class="rdp-progress-mini">0</span>
-      </div>
-    </div>
-
-    <div class="rdp-progress-tile">
-      <div class="rdp-progress-head">
-        <p class="rdp-progress-sub-label">纯失败任务 (机构)</p>
-        <span id="rdp-failed-org-mini" class="rdp-progress-mini">0</span>
-      </div>
-    </div>
-
-    <div class="rdp-progress-tile">
-      <div class="rdp-progress-head">
-        <p class="rdp-progress-sub-label">纯失败任务 (人物)</p>
-        <span id="rdp-failed-person-mini" class="rdp-progress-mini">0</span>
+        <div class="rdp-progress-bar-fill" style="width: 0%"></div>
       </div>
     </div>
 
     <div class="rdp-progress-tile">
       <div class="rdp-progress-head">
         <p class="rdp-progress-sub-label">项目 (Projects)</p>
-        <span id="rdp-progress-project-mini" class="rdp-progress-mini">0 / 0 (0%)</span>
+        <span class="rdp-progress-mini">- / - (-%)</span>
       </div>
       <div class="rdp-progress-bar-bg" aria-label="project-progress">
-        <div id="rdp-progress-project-fill" class="rdp-progress-bar-fill" style="background-color: #34d399;"></div>
+        <div class="rdp-progress-bar-fill" style="background-color: #34d399; width: 0%"></div>
       </div>
     </div>
 
     <div class="rdp-progress-tile">
       <div class="rdp-progress-head">
         <p class="rdp-progress-sub-label">机构 (Organizations)</p>
-        <span id="rdp-progress-org-mini" class="rdp-progress-mini">0 / 0 (0%)</span>
+        <span class="rdp-progress-mini">- / - (-%)</span>
       </div>
       <div class="rdp-progress-bar-bg" aria-label="org-progress">
-        <div id="rdp-progress-org-fill" class="rdp-progress-bar-fill" style="background-color: #fbbf24;"></div>
+        <div class="rdp-progress-bar-fill" style="background-color: #fbbf24; width: 0%"></div>
       </div>
     </div>
 
     <div class="rdp-progress-tile">
       <div class="rdp-progress-head">
         <p class="rdp-progress-sub-label">人物 (People)</p>
-        <span id="rdp-progress-person-mini" class="rdp-progress-mini">0 / 0 (0%)</span>
+        <span class="rdp-progress-mini">- / - (-%)</span>
       </div>
       <div class="rdp-progress-bar-bg" aria-label="person-progress">
-        <div id="rdp-progress-person-fill" class="rdp-progress-bar-fill" style="background-color: #60a5fa;"></div>
+        <div class="rdp-progress-bar-fill" style="background-color: #60a5fa; width: 0%"></div>
       </div>
     </div>
   </div>
-
   <hr style="margin: 32px 0; border-color: #334155;" />
 
   <!-- DB Query By ID Section -->
@@ -803,34 +794,18 @@
 
   <hr style="margin: 32px 0; border-color: #334155;" />
 
-  <!-- Manual Scrape Section -->
-  <div class="rdp-header">
-    <h2>手动单次抓取</h2>
-    <p>触发单个 URL 抓取并立即查看结果。</p>
+  <!-- Manual Scrape Section（已禁用） -->
+  <div class="rdp-header" style="opacity: 0.5; pointer-events: none;">
+    <h2>手动单次抓取（已禁用）</h2>
+    <p>触发单个 URL 抓取并立即查看结果。（已禁用）</p>
   </div>
-  <div class="rdp-form-group">
+  <div class="rdp-form-group" style="opacity: 0.5; pointer-events: none;">
     <div class="rdp-input-wrapper">
       <label for="rdp-scrape-url" class="rdp-label">RootData URL</label>
-      <input id="rdp-scrape-url" type="text" placeholder="粘贴 Projects/Investors/member 链接" class="rdp-input" />
+      <input id="rdp-scrape-url" type="text" placeholder="爬虫功能已禁用" class="rdp-input" disabled />
     </div>
-    <button id="rdp-scrape-btn" class="rdp-btn">触发抓取</button>
+    <button id="rdp-scrape-btn" class="rdp-btn" disabled>触发抓取</button>
   </div>
-  <div id="rdp-scrape-reqid" class="rdp-reqid-display" style="display: none;"></div>
-  <pre id="rdp-scrape-result" class="rdp-result-pre">{"message": "等待操作..."}</pre>
-
-  <hr style="margin: 32px 0; border-color: #334155;" />
-
-  <div class="rdp-header">
-    <h2>待办 / 后续规划</h2>
-    <p>记录 RootDataPro 相关的后续迭代方向（暂不实现）。</p>
-  </div>
-  <div class="rdp-plans">
-    <div class="rdp-plan">
-      <p class="rdp-plan-title">
-        <span>失败任务重爬</span>
-        <span class="rdp-plan-badge">From <code>CrawlLog</code></span>
-      </p>
-      <div class="rdp-plan-body">
         <div><strong>目标</strong>：收集 <code>src/rootdatapro/models/CrawlLog.js</code> 中 <code>status=failure</code> 的所有 <code>entity_id</code>，按 <code>entity_type</code> 分组后重新入队爬取。</div>
         <ul>
           <li><strong>去重</strong>：避免与当前队列、<code>SCRAPED_IDS</code>、以及已入库成功的记录重复。</li>
