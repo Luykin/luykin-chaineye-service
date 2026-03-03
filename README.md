@@ -1,255 +1,193 @@
-# 数据爬虫系统
+# Enterprise Admin
 
-### 安装必要的系统依赖
+数据爬虫与 API 服务系统，提供多模块业务支持与数据采集能力。
 
-在 Ubuntu 或 Debian 系统上，运行以下命令以确保安装 Puppeteer 所需的依赖库：
+## 系统架构
 
-```bash
-sudo apt update
-sudo apt install -y \
-  libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libx11-xcb1 \
-  libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 \
-  libgtk-3-0 libxshmfence1 libpango-1.0-0 libpangoft2-1.0-0 \
-  libcairo2 fonts-liberation libgdk-pixbuf2.0-0
-sudo apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxrandr2 libgbm1 libasound2 libxshmfence1 libxdamage1 libpango-1.0-0 libx11-xcb1
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        PM2 进程管理                          │
+├──────────────┬──────────────┬──────────────┬────────────────┤
+│  API Server  │Crawler Server│  Bot Server  │ Singleton Jobs │
+│   端口:8090  │   (爬虫服务)  │  (TG机器人)  │   (定时任务)   │
+└──────┬───────┴──────┬───────┴──────┬───────┴────────────────┘
+       │              │              │
+       └──────────────┴──────────────┘
+                      │
+       ┌──────────────┼──────────────┐
+       ▼              ▼              ▼
+┌────────────┐ ┌───────────┐ ┌───────────┐
+│ PostgreSQL │ │   Redis   │ │  SQLite   │
+│  (主业务)   │ │ (缓存/队列)│ │ (轻量存储) │
+└────────────┘ └───────────┘ └───────────┘
 ```
 
-日志清除
+## 核心模块
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| **XHunt** | `src/xhunt/` | 浏览器插件后端服务，支持 Twitter OAuth、钱包签名、用户点评、私信 |
+| **RootDataPro** | `src/rootdatapro/` | RootData 数据爬虫与 API，独立数据库 |
+| **Admin** | `src/admin/` | 管理后台服务 |
+| **Fundraising** | `src/routes/fundraising.js` | 融资数据管理 |
+| **CryptoHunt TG** | `src/routes/cryptohunt-tg.js` | Telegram 机器人 |
+
+## 技术栈
+
+- **运行时**: Node.js
+- **框架**: Express.js
+- **数据库**: PostgreSQL 16.x (主库) + SQLite (辅助)
+- **ORM**: Sequelize 6.x
+- **缓存**: Redis 4.x
+- **爬虫**: Puppeteer 24.x + Stealth 插件
+- **认证**: JWT + Twitter OAuth 2.0 + WebAuthn
+- **进程管理**: PM2
+
+## 快速开始
 
 ```bash
-# 安装 pm2-logrotate 模块
-pm2 install pm2-logrotate
+# 安装依赖
+yarn install
 
-# 设置日志最大文件大小为 10M，超出时自动轮转
-pm2 set pm2-logrotate:max_size 10M
+# 开发模式启动 API 服务
+yarn dev
 
-# 设置日志的保存天数为 7 天
-pm2 set pm2-logrotate:retain 7
+# 生产环境启动全部服务
+yarn start
 
-# 设置轮转时间间隔 (每天)
-pm2 set pm2-logrotate:rotateInterval '0 0 * * *'
+# 仅启动 API 服务
+yarn start-api
 ```
 
-不上传 database.sqlite
+## 数据库迁移
 
 ```bash
-# 停止追踪 database.sqlite
-git rm --cached database.sqlite
-#提交停止追踪 database.sqlite 的操作，并推送到远程仓库。
-# 在远程服务器的仓库根目录执行
-git update-index --assume-unchanged database.sqlite
+# PostgreSQL 迁移
+yarn db:migrate:pg
+
+# RootDataPro 迁移
+yarn db:migrate:rootdatapro
+
+# 查看迁移状态
+yarn db:migrate:pg:status
 ```
 
-# Redis 安装指南
-
-## 在 Mac 上安装 Redis
-
-### 1. 如何安装
-
-在 macOS 上可以使用 Homebrew 来安装 Redis。如果您还没有安装 Homebrew，可以通过以下命令进行安装：
+## 环境变量
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# 数据库
+PG_HOST=localhost
+PG_PORT=5432
+PG_DATABASE=cryptohunt
+PG_USERNAME=postgres
+PG_PASSWORD=xxx
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# JWT
+JWT_SECRET=your-secret
+
+# Twitter OAuth
+TWITTER_CLIENT_ID=xxx
+TWITTER_CLIENT_SECRET=xxx
 ```
 
-安装 Homebrew 后，运行以下命令来安装 Redis：
+## 目录结构
 
-```bash
-brew install redis
+```
+src/
+├── xhunt/              # XHunt 浏览器插件服务
+│   ├── api/            # API 路由
+│   ├── middleware/     # 认证/安全中间件
+│   ├── models/         # 数据模型
+│   └── services/       # 业务服务
+├── rootdatapro/        # RootData 爬虫服务
+│   ├── api/            # 内部管理 API
+│   ├── models/         # 独立数据模型
+│   └── scraper/        # 爬虫核心
+├── admin/              # 管理后台
+├── lib/                # 公共库
+│   └── perf-monitor/   # 接口性能监控
+├── models/             # 主库模型
+└── *.js                # 服务入口
 ```
 
-### 2. 启动服务
+## 性能监控
 
-如果你想直接运行 Redis，可以使用以下命令启动 Redis 服务器：
+基于 Redis 的高性能请求性能监控方案，零侵入业务代码。
 
-```bash
-redis-server
+### 架构
+
+```
+API Server (生产者)                    Singleton Jobs (消费者)
+┌─────────────────┐                   ┌─────────────────┐
+│  Middleware采集  │ ──事件缓冲(LPUSH)──>│   Processor     │
+│  (res.on finish) │   perf:events:queue │   (批量消费)     │
+└─────────────────┘                   └────────┬────────┘
+                                              │
+                                              ▼
+                              ┌───────────────┼───────────────┐
+                              ▼               ▼               ▼
+                         ┌─────────┐    ┌──────────┐    ┌──────────┐
+                         │ Metrics │    │  Traces  │    │ Details  │
+                         │ (Hash)  │    │  (ZSET)  │    │  (Hash)  │
+                         │  聚合指标 │    │  散点索引 │    │  详细记录 │
+                         └─────────┘    └──────────┘    └──────────┘
+                              │                              │
+                              └──────────────┬───────────────┘
+                                             ▼
+                                    Admin Dashboard
+                                    (ECharts 可视化)
 ```
 
-如果你想将 Redis 作为后台服务运行，可以使用以下命令：
+### 采集规则
 
-```bash
-brew services start redis
+| 类型 | 采样条件 | 保留时长 |
+|------|----------|----------|
+| **基础事件** | 全量采集 | 48h |
+| **慢请求** | 耗时 > 500ms | 48h |
+| **错误请求** | status >= 400 | 48h |
+| **随机采样** | 1% 正常快速请求 | 48h |
+
+### 管理后台
+
+- **路径**: `/admin/stats` → 切换到「⚡️ 性能监控」Tab
+- **权限**: 需 `perf-monitor` 权限
+- **功能**: 
+  - 散点图展示请求耗时分布（颜色区分状态码）
+  - RPS / AvgDuration 实时折线图
+  - 点击散点查看完整请求详情
+  - 支持 1/2/4/8/24/48 小时时间范围
+
+### Redis Key 说明
+
+```
+perf:events:queue         # 原始事件队列 (List)
+perf:metrics:<ts>         # 分钟级聚合统计 (Hash)
+perf:trace:index:<hour>   # 散点图索引 (ZSET)
+perf:trace:detail:<id>    # 请求详情 (Hash, TTL=48h)
 ```
 
-### 3. 设置开机自启动
+### 配置
 
-将 Redis 配置为开机自启：
+```javascript
+// apiServer.js
+const { middleware: perfMiddleware, apiRouter: perfApiRouter } = initPerfMonitor({
+  redisClient,
+  flushThreshold: 100,      // 缓冲 100 条批量写入
+  flushIntervalMs: 5000,    // 最长 5s 刷盘
+  trace: {
+    sampleRate: 0.01,       // 1% 采样率
+    slowThresholdMs: 500,   // 慢请求阈值
+    retentionHours: 48,     // 数据保留 48h
+  },
+});
+app.use(perfMiddleware);
+app.use("/api/stats/perf", perfApiRouter);
 
-```bash
-brew services start redis
-```
-
-### 4. 查看端口，检查是否安装成功
-
-使用以下命令检查 Redis 是否正在运行：
-
-```bash
-redis-cli ping
-```
-
-如果返回 `PONG`，说明 Redis 已成功安装并运行在默认端口 6379。
-
-## 在 Debian/Ubuntu 上安装 Redis
-
-### 1. 如何安装
-
-首先更新包管理器，然后安装 Redis：
-
-```bash
-sudo apt update
-sudo apt install redis-server -y
-```
-
-### 2. 启动服务
-
-启动 Redis 并确保服务正在运行：
-
-```bash
-sudo systemctl start redis-server
-```
-
-### 3. 设置开机自启动
-
-配置 Redis 服务为开机自启动：
-
-```bash
-sudo systemctl enable redis-server
-```
-
-### 4. 查看端口，检查是否安装成功
-
-运行以下命令检查 Redis 是否正常运行：
-
-```bash
-redis-cli ping
-```
-
-如果返回 `PONG`，表示 Redis 已成功安装并正在端口 6379 上运行。
-
-## 注意事项
-
-- **生产环境安全**：建议为 Redis 设置密码并限制网络访问，以提高安全性。
-- **Docker 安装**：如果在 Docker 中安装 Redis，请确保正确配置端口映射和网络设置。
-
-### 1. 设置 Redis 密码
-
-Redis 默认不需要密码即可连接，您可以通过编辑 Redis 配置文件（通常位于 `/etc/redis/redis.conf` 或 `/usr/local/etc/redis.conf`）来启用密码保护。
-
-- 打开 Redis 配置文件：
-
-```bash
-sudo nano /etc/redis/redis.conf
-```
-
-- 找到以下行，并取消注释（去掉前面的 `#`），然后设置您的密码：
-
-```bash
-conf requirepass yourpassword
-```
-
-将 `yourpassword` 替换为您希望设置的密码。
-
-- 保存并退出，然后重启 Redis 服务以应用更改：
-
-```bash
-sudo systemctl restart redis-server
-```
-
-- 验证：在客户端连接时输入密码。
-
-```bash
-redis-cli
-AUTH yourpassword
-```
-
-如果返回 `OK`，表示密码配置成功。
-
-### 2. 限制 Redis 的网络访问
-
-默认情况下，Redis 监听 127.0.0.1 本地接口，仅允许本地连接。如果您希望限制外部访问，确保 Redis 只监听 localhost（127.0.0.1）。
-
-- 在配置文件中找到以下行，并确保设置为 127.0.0.1：
-
-```bash
-conf bind 127.0.0.1
-```
-
-- 确保未注释 `protected-mode` 行，保持 `yes` 状态，这会自动阻止外部 IP 访问：
-
-```bash
-conf protected-mode yes
-```
-
-- 保存并重启服务：
-
-```bash
-sudo systemctl restart redis-server
-```
-
-### 3. 使用防火墙进一步限制网络访问（可选）
-
-如需更严格的访问控制，可以使用防火墙（如 ufw）来限制 Redis 的端口（默认 6379）访问。
-
-- 允许本地访问（默认情况下是开放的）：
-
-```bash
-sudo ufw allow from 127.0.0.1 to any port 6379
-```
-
-- 禁止外部访问：
-
-```bash
-sudo ufw deny 6379
-```
-
-这样配置后，Redis 将仅允许来自本地主机的连接并拒绝外部网络访问。
-
-重复推特链接处理：
--- 查找所有重复的 x 链接（出现次数 > 1）
-SELECT
-json_extract(socialLinks, '$.x') AS twitter_url,
-COUNT(_) AS count
-FROM Projects
-WHERE twitter_url IS NOT NULL
-GROUP BY twitter_url
-HAVING COUNT(_) > 1;
-
--- 1. 找到每个 Twitter 链接对应的最新项目（id 最大）
-WITH LatestProjects AS (
-SELECT
-id,
-json_extract(socialLinks, '$.x') AS twitter_url,
-ROW_NUMBER() OVER (PARTITION BY json_extract(socialLinks, '$.x') ORDER BY id DESC) AS rn
-FROM Projects
-)
--- 2. 更新重复项目（将 x 置空）
-UPDATE Projects
-SET socialLinks = json_set(socialLinks, '$.x', NULL)
-WHERE id IN (
-SELECT id FROM LatestProjects WHERE rn > 1
-);
-
-查询某个项目：
-sqlite3 path/to/your/database.sqlite
-
--- 启用列显示和标题（美化输出）
-.headers on
-.mode columns
-
--- 查询 socialLinks.x 包含 "ArciumHQ" 的项目
-SELECT
-id,
-projectName,
-round,
-amount,
-valuation,
-json_extract(socialLinks, '$.x') AS x_link,
-json_extract(socialLinks, '$.twitter') AS twitter_link,
-json_extract(socialLinks, '$.linkedin') AS linkedin_link
-FROM Projects
-WHERE json_extract(socialLinks, '$.x') LIKE '%ArciumHQ%';
-
-```bash
-test1-1
+// singletonJobsServer.js (消费者)
+const { processor: perfProcessor } = initPerfMonitor({ redisClient });
+setInterval(() => perfProcessor.run().catch(console.error), 2000);
 ```
