@@ -117,6 +117,19 @@
           </div>
         </div>
 
+        <div class="field-row field-row-toggle" style="margin-top: 8px;">
+          <div class="field">
+            <label>是否展示付费推广政策</label>
+            <label class="switch">
+              <input id="campaigns-showSponsoredPolicy" type="checkbox" disabled />
+              <span class="slider"></span>
+            </label>
+            <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
+              勾选后会在活动页面显示「付费内容 · 推广政策」提示
+            </div>
+          </div>
+        </div>
+
         <div class="section section-compact">
           <div class="section-title">活动信息（名称 · 介绍 · 主题）</div>
           <div class="field-row field-row-2">
@@ -1554,6 +1567,7 @@
         "campaigns-essayContestWinnerCount",
         "campaigns-threshold",
         "campaigns-hasRiskConfirm",
+        "campaigns-showSponsoredPolicy",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
         "campaigns-copy-ctaText-en",
@@ -1947,6 +1961,7 @@
       $("campaigns-enabled").checked = false;
       $("campaigns-testingPhase").checked = false;
       $("campaigns-hasRiskConfirm").checked = false;
+      $("campaigns-showSponsoredPolicy").checked = false;
       $("campaigns-enableEssayContest").checked = false;
       // 隐藏征文大赛字段区域
       const essayFieldsEl = document.getElementById("essay-contest-fields");
@@ -2157,6 +2172,7 @@
 
       // 早期项目提示（如果有riskConfirmHtml字段且不为null，则勾选）
       $("campaigns-hasRiskConfirm").checked = !!(c.riskConfirmHtml && c.riskConfirmHtml !== null);
+      $("campaigns-showSponsoredPolicy").checked = c.showSponsoredPolicy !== false;
 
       $("campaigns-copy-emoji").value = c.copy.emoji || "";
       $("campaigns-copy-ctaText-zh").value = c.copy.ctaText.zh || "";
@@ -2333,6 +2349,9 @@
       } else {
         c.riskConfirmHtml = null;
       }
+
+      // 付费推广政策提示
+      c.showSponsoredPolicy = $("campaigns-showSponsoredPolicy").checked;
 
       c.copy = c.copy || {};
       c.copy.emoji = $("campaigns-copy-emoji").value;
@@ -2832,6 +2851,7 @@
         essayContestWinners: undefined,
         threshold: undefined,
         includeCreator: false,
+        showSponsoredPolicy: true,
       };
       config.campaigns.unshift(c);
       dirty = true;
