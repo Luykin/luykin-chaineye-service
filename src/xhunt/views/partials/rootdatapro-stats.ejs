@@ -806,19 +806,25 @@
     </div>
     <button id="rdp-scrape-btn" class="rdp-btn" disabled>触发抓取</button>
   </div>
-        <div><strong>目标</strong>：收集 <code>src/rootdatapro/models/CrawlLog.js</code> 中 <code>status=failure</code> 的所有 <code>entity_id</code>，按 <code>entity_type</code> 分组后重新入队爬取。</div>
-        <ul>
-          <li><strong>去重</strong>：避免与当前队列、<code>SCRAPED_IDS</code>、以及已入库成功的记录重复。</li>
-          <li><strong>可控重试</strong>：支持限制重试次数、按时间范围筛选失败记录（例如只重跑最近 24h 失败）。</li>
-          <li><strong>追踪</strong>：重爬写入新的 CrawlLog 记录，便于统计“失败→成功”的转化。</li>
-        </ul>
-      </div>
-    </div>
 
-    <div class="rdp-plan">
-      <p class="rdp-plan-title">
-        <span>typemap 增量更新（试探式补全）</span>
-        <span class="rdp-plan-badge">Daily Discovery</span>
+  <div class="rdp-plan">
+    <p class="rdp-plan-title">
+      <span>失败任务重试（失败→成功闭环）</span>
+      <span class="rdp-plan-badge">Retry</span>
+    </p>
+    <div class="rdp-plan-body">
+      <div><strong>目标</strong>：收集 <code>src/rootdatapro/models/CrawlLog.js</code> 中 <code>status=failure</code> 的所有 <code>entity_id</code>，按 <code>entity_type</code> 分组后重新入队爬取。</div>
+      <ul>
+        <li><strong>去重</strong>：避免与当前队列、<code>SCRAPED_IDS</code>、以及已入库成功的记录重复。</li>
+        <li><strong>可控重试</strong>：支持限制重试次数、按时间范围筛选失败记录（例如只重跑最近 24h 失败）。</li>
+        <li><strong>追踪</strong>：重爬写入新的 CrawlLog 记录，便于统计"失败→成功"的转化。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="rdp-plan">
+    <p class="rdp-plan-title">
+      <span>typemap 增量更新（试探式补全）</span>
       </p>
       <div class="rdp-plan-body">
         <div><strong>背景</strong>：<code>src/rootdatapro/scraper/typemap</code> 仅覆盖到 <code>2026-01-10</code> 之前的数据；之后的新 ID 需要自动发现。</div>

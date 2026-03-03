@@ -2172,7 +2172,7 @@
 
       // 早期项目提示（如果有riskConfirmHtml字段且不为null，则勾选）
       $("campaigns-hasRiskConfirm").checked = !!(c.riskConfirmHtml && c.riskConfirmHtml !== null);
-      $("campaigns-showSponsoredPolicy").checked = c.showSponsoredPolicy !== false;
+      $("campaigns-showSponsoredPolicy").checked = c.showSponsoredPolicy === true;
 
       $("campaigns-copy-emoji").value = c.copy.emoji || "";
       $("campaigns-copy-ctaText-zh").value = c.copy.ctaText.zh || "";
