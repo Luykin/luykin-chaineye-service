@@ -34,7 +34,6 @@ const xHuntCampaignRoutes = require("./xhunt/api/campaign");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const rootdataProRoutes = require("./rootdatapro/api/rootdatapro");
-const rootdataProOpenRoutes = require("./rootdatapro/api/open");
 
 const adminRoutes = require("./admin/api/admin");
 const adminReviewsRoutes = require("./admin/api/reviews");
@@ -344,9 +343,6 @@ async function initializeAndStartServer() {
 
   // RootdataPro: 触发爬虫并入库
   app.use("/api/rootdatapro/internal", adminAuth, rootdataProRoutes);
-
-  // RootdataPro: open 查询接口
-  app.use("/api/rootdatapro/open", rootdataProOpenRoutes);
 
   // 管理后台（登录、会话、管理员基础配置）
   app.use("/admin", adminRoutes);

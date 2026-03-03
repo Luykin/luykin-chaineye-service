@@ -1,10 +1,35 @@
 const express = require("express");
 const db = require("../models");
-const apiKeyRoutes = require("./apikey");
 
 const router = express.Router();
 
-router.use(apiKeyRoutes);
+// 内部按 ID 查询（供管理后台调试爬虫数据）
+router.get("/query_by_id", async (req, res) => {
+  try {
+    const type = String(req.query.type || "").trim();
+    const rawId = String(req.query.id || "").trim();
+    const id = rawId ? parseInt(rawId, 10) : NaN;
+    if (!type || !Number.isFinite(id)) {
+      return res.status(400).json({ success: false, error: "需要 type 和 id 参数" });
+    }
+    if (type === "Project") {
+      const row = await db.Project.findByPk(id);
+      return res.json({ success: true, data: row });
+    }
+    if (type === "Organization") {
+      const row = await db.Organization.findByPk(id);
+      return res.json({ success: true, data: row });
+    }
+    if (type === "Person") {
+      const row = await db.Person.findByPk(id);
+      return res.json({ success: true, data: row });
+    }
+    return res.status(400).json({ success: false, error: "type 需为 Project/Organization/Person" });
+  } catch (err) {
+    console.error("[rootdatapro] /internal/query_by_id error", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 function isValidRootdataUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== "string") return false;

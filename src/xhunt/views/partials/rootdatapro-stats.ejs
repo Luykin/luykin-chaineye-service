@@ -766,34 +766,6 @@
 
   <hr style="margin: 32px 0; border-color: #334155;" />
 
-  <div class="rdp-topbar" style="margin-top: 4px;">
-    <div class="rdp-header">
-      <h2>Open API Key</h2>
-      <p>一键创建 pro-api-key（初始额度 100），用于访问 /api/rootdatapro/open/*。</p>
-    </div>
-    <div class="rdp-task-controls">
-      <button id="rdp-apikey-create" class="rdp-btn">创建 API Key</button>
-    </div>
-  </div>
-  <div id="rdp-apikey-reqid" class="rdp-reqid-display" style="display: none;"></div>
-  <pre id="rdp-apikey-result" class="rdp-result-pre">{"message": "等待创建..."}</pre>
-
-  <div class="rdp-form-group" style="margin-top: 16px;">
-    <div class="rdp-input-wrapper">
-      <label for="rdp-apikey-topup-key" class="rdp-label">API Key</label>
-      <input id="rdp-apikey-topup-key" type="text" placeholder="输入要充值的 key" class="rdp-input" />
-    </div>
-    <div class="rdp-input-wrapper" style="flex: 0.4; min-width: 160px;">
-      <label for="rdp-apikey-topup-amount" class="rdp-label">充值额度 (Credits)</label>
-      <input id="rdp-apikey-topup-amount" type="number" min="1" step="1" value="100" class="rdp-input" />
-    </div>
-    <button id="rdp-apikey-topup" class="rdp-btn">充值</button>
-  </div>
-  <div id="rdp-apikey-topup-reqid" class="rdp-reqid-display" style="display: none;"></div>
-  <pre id="rdp-apikey-topup-result" class="rdp-result-pre">{"message": "等待充值..."}</pre>
-
-  <hr style="margin: 32px 0; border-color: #334155;" />
-
   <!-- Manual Scrape Section（已禁用） -->
   <div class="rdp-header" style="opacity: 0.5; pointer-events: none;">
     <h2>手动单次抓取（已禁用）</h2>
@@ -1141,29 +1113,8 @@
       if (!rawId || !Number.isFinite(idNum)) {
         throw new Error('请输入有效的数字 ID');
       }
-
-      const proApiKey = "rk_d480491638fc914a8ae53c161ac4e2a9c36be02b5b349ce2";
-
-      const commonHeaders = {
-        'pro-api-key': proApiKey,
-      };
-
-      if (type === 'Project') {
-        const url = `/api/rootdatapro/open/get_item?project_id=${encodeURIComponent(String(idNum))}`;
-        return jsonFetch(url, { headers: commonHeaders }, reqId);
-      }
-
-      if (type === 'Organization') {
-        const url = `/api/rootdatapro/open/get_org?org_id=${encodeURIComponent(String(idNum))}`;
-        return jsonFetch(url, { headers: commonHeaders }, reqId);
-      }
-
-      if (type === 'Person') {
-        const url = `/api/rootdatapro/open/get_people?people_id=${encodeURIComponent(String(idNum))}`;
-        return jsonFetch(url, { headers: commonHeaders }, reqId);
-      }
-
-      throw new Error('不支持的类型');
+      const url = `/api/rootdatapro/internal/query_by_id?type=${encodeURIComponent(type)}&id=${encodeURIComponent(String(idNum))}`;
+      return jsonFetch(url, {}, reqId);
     });
   });
 
@@ -1172,32 +1123,6 @@
       e.preventDefault();
       $('rdp-id-query-btn').click();
     }
-  });
-
-  $('rdp-apikey-create').addEventListener('click', () => {
-    handleApiCall($('rdp-apikey-create'), $('rdp-apikey-result'), $('rdp-apikey-reqid'), async (reqId) => {
-      const remark = prompt('备注（可选）', '');
-      return jsonFetch('/api/rootdatapro/internal/apikey/create', {
-        method: 'POST',
-        body: JSON.stringify({ remark: remark || null }),
-      }, reqId);
-    });
-  });
-
-  $('rdp-apikey-topup').addEventListener('click', () => {
-    handleApiCall($('rdp-apikey-topup'), $('rdp-apikey-topup-result'), $('rdp-apikey-topup-reqid'), async (reqId) => {
-      const key = String($('rdp-apikey-topup-key').value || '').trim();
-      const amountRaw = $('rdp-apikey-topup-amount').value;
-      const amount = Number(amountRaw);
-
-      if (!key) throw new Error('请输入要充值的 API Key');
-      if (!Number.isFinite(amount) || amount <= 0) throw new Error('请输入正确的充值额度');
-
-      return jsonFetch('/api/rootdatapro/internal/apikey/topup', {
-        method: 'POST',
-        body: JSON.stringify({ key, amount }),
-      }, reqId);
-    });
   });
 
   // Manual scrape
