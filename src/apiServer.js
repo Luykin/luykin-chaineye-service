@@ -24,6 +24,7 @@ const proxyRoutes = require("./routes/proxy");
 const newsRoutes = require("./routes/ex-news");
 const generalRoutes = require("./routes/general");
 const xHuntAuthRoutes = require("./xhunt/api/auth");
+const xHuntWebAuthRoutes = require("./xhunt/api/web-auth");
 const xHuntProxyRoutes = require("./xhunt/api/proxy");
 const xHuntReviewsRoutes = require("./xhunt/api/reviews");
 const xHuntNotesRoutes = require("./xhunt/api/notes");
@@ -285,6 +286,9 @@ async function initializeAndStartServer() {
     securityMiddleware,
     xHuntAuthRoutes
   );
+
+  // XHunt Web 用户认证接口（周边网站登录）
+  app.use("/api/xhunt/web/auth", xHuntWebAuthRoutes);
 
   app.use(
     "/api/xhunt/proxy",

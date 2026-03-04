@@ -20,6 +20,8 @@ const UnregisteredUserRegistrationModel = require("../xhunt/models/UnregisteredU
 const XhuntAdminManagerModel = require("../xhunt/models/XhuntAdminManager");
 const XhuntAdminAuditLogModel = require("../xhunt/models/XhuntAdminAuditLog");
 const XhuntAdminWebAuthnCredentialModel = require("../xhunt/models/XhuntAdminWebAuthnCredential");
+const XHuntWebUserModel = require("../xhunt/models/XHuntWebUser");
+const XHuntWebUserTokenModel = require("../xhunt/models/XHuntWebUserToken");
 
 const pgDialect = process.env.PG_DIALECT || "postgres";
 const pgHost = process.env.PG_HOST;
@@ -80,6 +82,8 @@ const UnregisteredUserRegistration = UnregisteredUserRegistrationModel(pgInstanc
 const XhuntAdminManager = XhuntAdminManagerModel(pgInstance);
 const XhuntAdminAuditLog = XhuntAdminAuditLogModel(pgInstance);
 const XhuntAdminWebAuthnCredential = XhuntAdminWebAuthnCredentialModel(pgInstance);
+const XHuntWebUser = XHuntWebUserModel(pgInstance);
+const XHuntWebUserToken = XHuntWebUserTokenModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -229,6 +233,17 @@ XhuntAdminWebAuthnCredential.belongsTo(XhuntAdminManager, {
   as: "admin",
 });
 
+// XHuntWebUser 与 XHuntWebUserToken 关系
+XHuntWebUser.hasMany(XHuntWebUserToken, {
+  foreignKey: "userId",
+  as: "tokens",
+});
+
+XHuntWebUserToken.belongsTo(XHuntWebUser, {
+  foreignKey: "userId",
+  as: "user",
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 async function setupPostgres() {
@@ -274,4 +289,8 @@ module.exports = {
   XhuntAdminManager,
   XhuntAdminAuditLog,
   XhuntAdminWebAuthnCredential,
+
+  // XHunt Web 用户数据表
+  XHuntWebUser,
+  XHuntWebUserToken,
 };
