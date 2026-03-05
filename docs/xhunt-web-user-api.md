@@ -37,9 +37,11 @@ Content-Type: application/json
 ```json
 {
   "code": "授权码",
-  "state": "状态码",
-  "siteSource": "https://xhunt.ai"
+  "state": "状态码"
 }
+```
+
+> **注意**：`siteSource` 不再需要前端传递，后端会从授权时存储的 state 缓存中自动获取。
 ```
 
 **响应：**

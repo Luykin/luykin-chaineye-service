@@ -82,21 +82,12 @@ router.post(
   [
     body("code").isString().trim().notEmpty(),
     body("state").isString().trim().notEmpty(),
-    body("siteSource").isString().trim().notEmpty(),
     validateRequest,
   ],
   async (req, res) => {
-    const { code, state, siteSource } = req.body;
+    const { code, state } = req.body;
 
     try {
-      // 验证站点来源
-      if (!isValidSiteSource(siteSource)) {
-        return res.status(400).json({
-          error: "INVALID_SITE_SOURCE",
-          message: "无效的站点来源",
-        });
-      }
-
       // Step 1: 验证 state 并获取存储的数据
       const cacheKey = `twitter_web_oauth_state:${state}`;
       let cachedData;
@@ -119,15 +110,7 @@ router.post(
         console.warn("无法删除 Redis 中的 state:", redisDelError);
       }
 
-      // Step 3: 校验 siteSource 一致性
-      if (cachedData.siteSource !== siteSource) {
-        return res.status(400).json({
-          error: "SITE_SOURCE_MISMATCH",
-          message: "站点来源与授权时传入的不一致",
-          expectedSite: cachedData.siteSource,
-          receivedSite: siteSource,
-        });
-      }
+      const siteSource = cachedData.siteSource;
 
       // Step 4: 获取 Twitter Tokens
       const { accessToken, refreshToken, expiresIn } = await getTwitterTokens(

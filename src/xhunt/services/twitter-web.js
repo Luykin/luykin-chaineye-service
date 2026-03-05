@@ -1,4 +1,5 @@
 const { TwitterApi } = require("twitter-api-v2");
+const crypto = require("crypto");
 
 // Web 用户专用的 Twitter OAuth 配置
 const WEB_CLIENT_ID = process.env.XHUNT_WEB_TWITTER_CLIENT_ID;
@@ -22,33 +23,60 @@ const client = new TwitterApi({
 });
 
 /**
+ * 生成包含 siteSource 的复合 state
+ * 格式: base64({random}:{siteSource})
+ * @param {string} siteSource - 站点来源
+ * @returns {string} 复合 state
+ */
+function encodeCompositeState(siteSource) {
+  const randomPart = crypto.randomBytes(16).toString("hex");
+  const data = JSON.stringify({
+    r: randomPart, // random
+    s: siteSource, // siteSource
+  });
+  return Buffer.from(data).toString("base64url");
+}
+
+/**
+ * 解析复合 state，提取 siteSource
+ * @param {string} compositeState - 复合 state
+ * @returns {Object|null} {random, siteSource} 或 null（解析失败）
+ */
+function decodeCompositeState(compositeState) {
+  try {
+    const data = Buffer.from(compositeState, "base64url").toString("utf8");
+    const parsed = JSON.parse(data);
+    return {
+      random: parsed.r,
+      siteSource: parsed.s,
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
  * 生成 Twitter 授权 URL
  * @param {Function} stateStoreFn - 存储 state 和 codeVerifier 的回调函数
- * @param {Object} extraParams - 要添加到授权 URL 的额外查询参数
+ * @param {string} siteSource - 站点来源（会编码到 state 中）
  * @returns {Promise<string>} 授权 URL
  */
-async function generateTwitterAuthUrl(stateStoreFn, extraParams = {}) {
-  const { url, state, codeVerifier } = await client.generateOAuth2AuthLink(
+async function generateTwitterAuthUrl(stateStoreFn, siteSource) {
+  // 生成复合 state，包含 siteSource
+  const compositeState = encodeCompositeState(siteSource);
+  
+  // 使用复合 state 生成授权链接
+  const { url, codeVerifier } = await client.generateOAuth2AuthLink(
     CALLBACK_URL,
     {
       scope: ["tweet.read", "users.read", "offline.access"],
+      state: compositeState,
     }
   );
 
-  // 将 state 存入 session（通过回调函数）
+  // 将 state 和 codeVerifier 存入 session（通过回调函数）
   if (typeof stateStoreFn === "function") {
-    await stateStoreFn(state, codeVerifier);
-  }
-
-  // 如果有额外参数，添加到 URL 上
-  if (extraParams && Object.keys(extraParams).length > 0) {
-    const urlObj = new URL(url);
-    Object.entries(extraParams).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        urlObj.searchParams.set(key, String(value));
-      }
-    });
-    return urlObj.toString();
+    await stateStoreFn(compositeState, codeVerifier);
   }
 
   return url;
@@ -107,4 +135,5 @@ module.exports = {
   getTwitterTokens,
   getTwitterUserInfo,
   refreshTwitterToken,
+  decodeCompositeState,
 };

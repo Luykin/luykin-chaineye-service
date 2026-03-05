@@ -48,7 +48,7 @@ XHunt Web User 是 XHunt 插件的**周边网站用户系统**。用户通过 Tw
 │     │ <────────────────────────────────────────────────│          │
 │     │                                     │              │          │
 │     │  5. POST /twitter/callback         │              │          │
-│     │     { code, state, siteSource }    │              │          │
+│     │     { code, state }                │              │          │
 │     │ ─────────────────────────────────>│              │          │
 │     │                                     │              │          │
 │     │  6. 返回 { token, user }           │              │          │
@@ -126,8 +126,7 @@ POST /api/xhunt/web/auth/twitter/callback
 ```json
 {
   "code": "V0dheWJMZ19wX3VCRHJi...",
-  "state": "emhhbmdzYW4...",
-  "siteSource": "https://xhunt.ai/vote2026"
+  "state": "emhhbmdzYW4..."
 }
 ```
 
@@ -135,7 +134,8 @@ POST /api/xhunt/web/auth/twitter/callback
 |------|------|------|------|
 | code | string | 是 | Twitter 返回的授权码 |
 | state | string | 是 | Twitter 返回的状态码（与请求时一致） |
-| siteSource | string | 是 | 必须与请求授权URL时一致 |
+
+> **注意**：`siteSource` 不再需要前端传递，后端会从 state 对应的缓存数据中自动获取。
 
 **请求头**：
 ```
@@ -176,14 +176,6 @@ Content-Type: application/json
 
 **错误响应**：
 ```json
-// 400 - 站点不匹配
-{
-  "error": "SITE_SOURCE_MISMATCH",
-  "message": "站点来源与授权时传入的不一致",
-  "expectedSite": "airdrop",
-  "receivedSite": "activity"
-}
-
 // 400 - 无效或过期的 state
 {
   "error": "无效或过期的 state"
@@ -201,8 +193,7 @@ curl -X POST https://api.xhunt.ai/api/xhunt/web/auth/twitter/callback \
   -H "Content-Type: application/json" \
   -d '{
     "code": "V0dheWJMZ19wX3VCRHJi...",
-    "state": "emhhbmdzYW4...",
-    "siteSource": "https://xhunt.ai/vote2026"
+    "state": "emhhbmdzYW4..."
   }'
 ```
 
@@ -342,7 +333,7 @@ async function handleCallback() {
   const res = await fetch(`${API_BASE}/api/xhunt/web/auth/twitter/callback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, state, siteSource: SITE_SOURCE })
+    body: JSON.stringify({ code, state })
   });
   
   const data = await res.json();
