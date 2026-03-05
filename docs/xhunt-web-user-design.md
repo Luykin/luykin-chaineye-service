@@ -28,7 +28,7 @@ XHunt 插件目前有一套完整的用户体系（XHuntUser），用户通过 T
 |--------|------|------|------|
 | id | UUID | 是 | 主键，默认 UUIDV4 |
 | twitterId | STRING | 是 | Twitter 用户 ID |
-| siteSource | STRING | 是 | 站点来源标识（如 'airdrop', 'activity', 'data'） |
+| siteSource | STRING | 是 | 站点来源标识（如 'https://xhunt.ai'） |
 | username | STRING | 是 | Twitter 用户名（@handle） |
 | displayName | STRING | 否 | Twitter 显示名称 |
 | avatar | STRING | 否 | 头像 URL |
@@ -79,10 +79,8 @@ XHunt 插件目前有一套完整的用户体系（XHuntUser），用户通过 T
 
 | siteSource | 说明 | 示例场景 |
 |------------|------|----------|
-| `airdrop` | 空投活动站点 | 空投领取页面 |
-| `activity` | 通用活动站点 | 营销活动页面 |
-| `data` | 数据展示站点 | 数据分析平台 |
-| `referral` | 邀请返利站点 | 邀请好友系统 |
+| `https://xhunt.ai` | XHunt 主站 | 主网站登录 |
+| `https://xhunt.ai/vote2026` | 投票活动页面 | 2026投票活动 |
 
 ### 3.2 站点隔离原则
 
@@ -137,14 +135,14 @@ Twitter账号: @alice
 **请求参数：**
 ```json
 {
-  "siteSource": "airdrop"
+  "siteSource": "https://xhunt.ai"
 }
 ```
 
 **参数说明：**
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| siteSource | string | 是 | 站点来源标识，如 'airdrop', 'activity' |
+| siteSource | string | 是 | 站点来源标识，如 'https://xhunt.ai' |
 
 **验证规则：**
 - siteSource 必须是允许的站点标识（白名单校验）
@@ -179,7 +177,7 @@ Twitter OAuth 回调处理，完成登录
 {
   "code": "授权码",
   "state": "状态码",
-  "siteSource": "airdrop"
+  "siteSource": "https://xhunt.ai"
 }
 ```
 
@@ -206,7 +204,7 @@ Twitter OAuth 回调处理，完成登录
 {
   "userId": "uuid",
   "tokenId": "token_uuid",
-  "siteSource": "airdrop",
+  "siteSource": "https://xhunt.ai",
   "iat": 1646400000,
   "exp": 1648992000
 }
@@ -219,7 +217,7 @@ Twitter OAuth 回调处理，完成登录
   "user": {
     "id": "uuid",
     "twitterId": "123456789",
-    "siteSource": "airdrop",
+    "siteSource": "https://xhunt.ai",
     "username": "twitter_handle",
     "displayName": "Display Name",
     "avatar": "https://...",
@@ -269,7 +267,7 @@ Twitter OAuth 回调处理，完成登录
 {
   "id": "uuid",
   "twitterId": "123456789",
-  "siteSource": "airdrop",
+  "siteSource": "https://xhunt.ai",
   "username": "twitter_handle",
   "displayName": "Display Name",
   "avatar": "https://...",
@@ -301,7 +299,7 @@ Twitter OAuth 回调处理，完成登录
 **请求参数（Body）：**
 ```json
 {
-  "siteSource": "airdrop"
+  "siteSource": "https://xhunt.ai"
 }
 ```
 
@@ -330,7 +328,7 @@ XHUNT_WEB_TWITTER_CLIENT_SECRET=your_web_app_client_secret
 XHUNT_WEB_TWITTER_CALLBACK_URL=https://your-domain.com/auth/callback
 
 # 允许的站点来源白名单（逗号分隔）
-XHUNT_WEB_ALLOWED_SITES=airdrop,activity,data,referral
+XHUNT_WEB_ALLOWED_SITES=https://xhunt.ai,https://xhunt.ai/vote2026
 
 # JWT 配置（可与现有 XHunt 共用或独立）
 # 如果希望 Web User 和插件用户 Token 不互通，使用不同的 SECRET

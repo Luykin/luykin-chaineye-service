@@ -19,10 +19,8 @@ XHunt Web User 是 XHunt 插件的**周边网站用户系统**。用户通过 Tw
 ### 1.3 站点白名单
 
 环境变量 `XHUNT_WEB_ALLOWED_SITES` 配置允许的站点：
-- `airdrop` - 空投活动站点
-- `activity` - 通用活动站点  
-- `data` - 数据展示站点
-- `referral` - 邀请返利站点
+- `https://xhunt.ai`
+- `https://xhunt.ai/vote2026`
 
 ---
 
@@ -77,7 +75,7 @@ POST /api/xhunt/web/auth/twitter/url
 **请求参数**：
 ```json
 {
-  "siteSource": "airdrop"
+  "siteSource": "https://xhunt.ai"
 }
 ```
 
@@ -103,7 +101,7 @@ Content-Type: application/json
 {
   "error": "INVALID_SITE_SOURCE",
   "message": "无效的站点来源",
-  "allowedSites": ["airdrop", "activity", "data", "referral"]
+  "allowedSites": ["https://xhunt.ai", "https://xhunt.ai/vote2026"]
 }
 ```
 
@@ -111,7 +109,7 @@ Content-Type: application/json
 ```bash
 curl -X POST https://api.xhunt.ai/api/xhunt/web/auth/twitter/url \
   -H "Content-Type: application/json" \
-  -d '{"siteSource": "airdrop"}'
+  -d '{"siteSource": "https://xhunt.ai/vote2026"}'
 ```
 
 ---
@@ -129,7 +127,7 @@ POST /api/xhunt/web/auth/twitter/callback
 {
   "code": "V0dheWJMZ19wX3VCRHJi...",
   "state": "emhhbmdzYW4...",
-  "siteSource": "airdrop"
+  "siteSource": "https://xhunt.ai/vote2026"
 }
 ```
 
@@ -204,7 +202,7 @@ curl -X POST https://api.xhunt.ai/api/xhunt/web/auth/twitter/callback \
   -d '{
     "code": "V0dheWJMZ19wX3VCRHJi...",
     "state": "emhhbmdzYW4...",
-    "siteSource": "airdrop"
+    "siteSource": "https://xhunt.ai/vote2026"
   }'
 ```
 
@@ -270,7 +268,7 @@ Authorization: Bearer {jwt_token}
 
 **完整 curl 示例**：
 ```bash
-curl -X GET "https://api.xhunt.ai/api/xhunt/web/auth/me?siteSource=airdrop" \
+curl -X GET "https://api.xhunt.ai/api/xhunt/web/auth/me?siteSource=https://xhunt.ai" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -309,7 +307,7 @@ Authorization: Bearer {jwt_token}
 curl -X POST https://api.xhunt.ai/api/xhunt/web/auth/logout \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -d '{"siteSource": "airdrop"}'
+  -d '{"siteSource": "https://xhunt.ai"}'
 ```
 
 ---
@@ -319,7 +317,7 @@ curl -X POST https://api.xhunt.ai/api/xhunt/web/auth/logout \
 ```javascript
 // ==================== 配置 ====================
 const API_BASE = 'https://api.xhunt.ai';
-const SITE_SOURCE = 'airdrop'; // 你的站点标识
+const SITE_SOURCE = 'https://xhunt.ai/vote2026'; // 你的站点标识
 
 // ==================== 步骤1：获取授权URL ====================
 async function getAuthUrl() {
@@ -424,10 +422,10 @@ async function xhuntApi(endpoint, options = {}) {
 |--------|-----------|------|----------|
 | `INVALID_SITE_SOURCE` | 400 | 无效的站点标识 | 检查 siteSource 是否在白名单中 |
 | `SITE_SOURCE_MISMATCH` | 400 | 站点与授权时不一致 | 确保 callback 时 siteSource 与 url 请求时一致 |
+| `TOKEN_SITE_MISMATCH` | 403 | Token 不属于当前站点 | 检查请求的 siteSource 参数是否正确 |
 | `TOKEN_REQUIRED` | 401 | 未提供 Token | 在请求头添加 Authorization: Bearer {token} |
 | `TOKEN_INVALID` | 419 | Token 无效或已撤销 | 清除本地 Token，重新登录 |
 | `TOKEN_EXPIRED` | 419 | Token 已过期 | 清除本地 Token，重新登录 |
-| `TOKEN_SITE_MISMATCH` | 403 | Token 不属于当前站点 | 检查请求的 siteSource 参数是否正确 |
 
 ---
 
@@ -459,7 +457,7 @@ XHUNT_WEB_TWITTER_CLIENT_SECRET=your_web_app_client_secret
 XHUNT_WEB_TWITTER_CALLBACK_URL=https://your-domain.com/auth/callback
 
 # 允许的站点白名单
-XHUNT_WEB_ALLOWED_SITES=airdrop,activity,data,referral
+XHUNT_WEB_ALLOWED_SITES=https://xhunt.ai,https://xhunt.ai/vote2026
 ```
 
 ---
@@ -495,5 +493,5 @@ XHUNT_WEB_ALLOWED_SITES=airdrop,activity,data,referral
 ---
 
 **文档版本**: 1.0  
-**最后更新**: 2026-03-04  
+**最后更新**: 2026-03-05  
 **API 基础路径**: `/api/xhunt/web/auth`

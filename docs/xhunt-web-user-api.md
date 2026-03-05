@@ -12,7 +12,7 @@ Content-Type: application/json
 **请求参数：**
 ```json
 {
-  "siteSource": "airdrop"
+  "siteSource": "https://xhunt.ai"
 }
 ```
 
@@ -20,7 +20,7 @@ Content-Type: application/json
 ```json
 {
   "url": "https://twitter.com/i/oauth2/authorize?...",
-  "siteSource": "airdrop"
+  "siteSource": "https://xhunt.ai"
 }
 ```
 
@@ -38,7 +38,7 @@ Content-Type: application/json
 {
   "code": "授权码",
   "state": "状态码",
-  "siteSource": "airdrop"
+  "siteSource": "https://xhunt.ai"
 }
 ```
 
@@ -49,7 +49,7 @@ Content-Type: application/json
   "user": {
     "id": "uuid",
     "twitterId": "123456789",
-    "siteSource": "airdrop",
+    "siteSource": "https://xhunt.ai",
     "username": "twitter_handle",
     "displayName": "Display Name",
     "avatar": "https://...",
@@ -68,7 +68,7 @@ Content-Type: application/json
 ### 3. 获取当前用户信息
 
 ```http
-GET /api/xhunt/web/auth/me?siteSource=airdrop
+GET /api/xhunt/web/auth/me?siteSource=https://xhunt.ai
 Authorization: Bearer {jwt_token}
 ```
 
@@ -77,7 +77,7 @@ Authorization: Bearer {jwt_token}
 {
   "id": "uuid",
   "twitterId": "123456789",
-  "siteSource": "airdrop",
+  "siteSource": "https://xhunt.ai",
   "username": "twitter_handle",
   "displayName": "Display Name",
   "avatar": "https://...",
@@ -104,7 +104,7 @@ Authorization: Bearer {jwt_token}
 **请求参数：**
 ```json
 {
-  "siteSource": "airdrop"
+  "siteSource": "https://xhunt.ai"
 }
 ```
 
@@ -121,10 +121,8 @@ Authorization: Bearer {jwt_token}
 
 | 标识 | 说明 |
 |------|------|
-| `airdrop` | 空投活动站点 |
-| `activity` | 通用活动站点 |
-| `data` | 数据展示站点 |
-| `referral` | 邀请返利站点 |
+| `https://xhunt.ai` | XHunt 主站 |
+| `https://xhunt.ai/vote2026` | 投票活动页面 |
 
 ---
 
@@ -140,29 +138,3 @@ Authorization: Bearer {jwt_token}
 | `TOKEN_EXPIRED` | Token 已过期 |
 
 ---
-
-## 环境变量配置
-
-```bash
-# XHunt Web 用户（周边网站登录）配置
-XHUNT_WEB_TWITTER_CLIENT_ID=your_web_app_client_id
-XHUNT_WEB_TWITTER_CLIENT_SECRET=your_web_app_client_secret
-XHUNT_WEB_TWITTER_CALLBACK_URL=https://your-domain.com/auth/callback
-XHUNT_WEB_ALLOWED_SITES=airdrop,activity,data,referral
-```
-
----
-
-## 数据库迁移
-
-执行迁移创建新表：
-
-```bash
-npx sequelize-cli db:migrate
-```
-
-或使用 yarn：
-
-```bash
-yarn db:migrate:pg
-```
