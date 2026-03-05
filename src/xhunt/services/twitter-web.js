@@ -24,9 +24,10 @@ const client = new TwitterApi({
 /**
  * 生成 Twitter 授权 URL
  * @param {Function} stateStoreFn - 存储 state 和 codeVerifier 的回调函数
+ * @param {Object} extraParams - 要添加到授权 URL 的额外查询参数
  * @returns {Promise<string>} 授权 URL
  */
-async function generateTwitterAuthUrl(stateStoreFn) {
+async function generateTwitterAuthUrl(stateStoreFn, extraParams = {}) {
   const { url, state, codeVerifier } = await client.generateOAuth2AuthLink(
     CALLBACK_URL,
     {
@@ -37,6 +38,17 @@ async function generateTwitterAuthUrl(stateStoreFn) {
   // 将 state 存入 session（通过回调函数）
   if (typeof stateStoreFn === "function") {
     await stateStoreFn(state, codeVerifier);
+  }
+
+  // 如果有额外参数，添加到 URL 上
+  if (extraParams && Object.keys(extraParams).length > 0) {
+    const urlObj = new URL(url);
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        urlObj.searchParams.set(key, String(value));
+      }
+    });
+    return urlObj.toString();
   }
 
   return url;

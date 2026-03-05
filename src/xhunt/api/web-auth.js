@@ -47,7 +47,7 @@ router.post(
         });
       }
 
-      // 生成授权 URL，将 siteSource 存入 state
+      // 生成授权 URL，将 siteSource 存入 state 并添加到 URL 参数
       const authUrl = await generateTwitterAuthUrl(
         async (state, codeVerifier) => {
           const cacheKey = `twitter_web_oauth_state:${state}`;
@@ -58,7 +58,8 @@ router.post(
           });
           // 8 分钟过期
           await req.redisClient.setEx(cacheKey, 480, value);
-        }
+        },
+        { siteSource: encodeURIComponent(siteSource) }
       );
 
       res.json({
