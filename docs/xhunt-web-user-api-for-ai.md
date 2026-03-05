@@ -67,7 +67,7 @@ XHunt Web User 是 XHunt 插件的**周边网站用户系统**。用户通过 Tw
 ### 3.1 获取 Twitter 授权 URL
 
 ```
-POST /api/xhunt/web/auth/twitter/url
+POST https://kb.xhunt.ai/api/xhunt/web/auth/twitter/url
 ```
 
 **用途**：获取 Twitter OAuth 授权页面的 URL
@@ -75,7 +75,7 @@ POST /api/xhunt/web/auth/twitter/url
 **请求参数**：
 ```json
 {
-  "siteSource": "https://xhunt.ai"
+  "siteSource": "https://xhunt.ai/vote2026"
 }
 ```
 
@@ -117,7 +117,7 @@ curl -X POST https://api.xhunt.ai/api/xhunt/web/auth/twitter/url \
 ### 3.2 Twitter 登录回调
 
 ```
-POST /api/xhunt/web/auth/twitter/callback
+POST https://kb.xhunt.ai/api/xhunt/web/auth/twitter/callback
 ```
 
 **用途**：用户授权后，用 Twitter 返回的 code 完成登录
