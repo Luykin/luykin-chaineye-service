@@ -407,12 +407,53 @@ async function xhuntApi(endpoint, options = {}) {
 
 ---
 
-## 5. 错误码速查表
+## 5. Twitter OAuth 回调处理
+
+### 5.1 流程说明
+
+1. 用户授权后，Twitter 重定向到 `/xcallback?code=xxx&state=xxx`
+2. `/xcallback` 页面调用 `/twitter/callback` 完成登录
+3. 登录成功后跳回 `siteSource?user=xxx`（user 是 base64 编码的用户信息）
+
+### 5.2 目标页面解码用户信息
+
+```tsx
+// 从 URL 获取并解码用户信息
+const searchParams = new URLSearchParams(window.location.search);
+const encodedUser = searchParams.get("user");
+
+if (encodedUser) {
+  const user = JSON.parse(decodeURIComponent(atob(encodedUser)));
+  console.log(user);
+  // {
+  //   id: "xxx",
+  //   twitterId: "1455055533140893696",
+  //   username: "LuykinAI",
+  //   displayName: "Luykin🐶",
+  //   avatar: "https://pbs.twimg.com/...",
+  //   xhuntUserId: "xxx",
+  //   xhuntKolRank: null,
+  //   classification: null,
+  //   isLinkedToXHunt: true,
+  //   isNewUser: true
+  // }
+  
+  // 保存到 localStorage
+  localStorage.setItem("xhunt_user", JSON.stringify(user));
+  
+  // 清理 URL
+  searchParams.delete("user");
+  window.history.replaceState({}, '', `${window.location.pathname}?${searchParams}`);
+}
+```
+
+---
+
+## 6. 错误码速查表
 
 | 错误码 | HTTP状态码 | 含义 | 处理方式 |
 |--------|-----------|------|----------|
 | `INVALID_SITE_SOURCE` | 400 | 无效的站点标识 | 检查 siteSource 是否在白名单中 |
-| `SITE_SOURCE_MISMATCH` | 400 | 站点与授权时不一致 | 确保 callback 时 siteSource 与 url 请求时一致 |
 | `TOKEN_SITE_MISMATCH` | 403 | Token 不属于当前站点 | 检查请求的 siteSource 参数是否正确 |
 | `TOKEN_REQUIRED` | 401 | 未提供 Token | 在请求头添加 Authorization: Bearer {token} |
 | `TOKEN_INVALID` | 419 | Token 无效或已撤销 | 清除本地 Token，重新登录 |
@@ -420,7 +461,7 @@ async function xhuntApi(endpoint, options = {}) {
 
 ---
 
-## 6. 常见问题（FAQ）
+## 7. 常见问题（FAQ）
 
 ### Q1: 为什么同一 Twitter 账号在不同站点要重新登录？
 **A**: 这是设计特性。站点隔离确保每个站点的用户数据独立，同一 Twitter 账号在 `airdrop` 和 `activity` 是两个独立用户。
