@@ -196,16 +196,7 @@ async function handleUserCreateGiftCredits(req, targetUrl, isSuccess) {
       return;
     }
 
-    // 防重检查：检查该用户是否已赠送过（终身仅一次）
-    const alreadyGifted = await checkAndMarkGiftCredits(username);
-    if (alreadyGifted) {
-      return;
-    }
-
-    // 同步计算并赠送积分（等待完成后再返回）
-    const credits = await calculateGiftCredits(username);
-    const tx = `${userId}${requestId}`;
-
+    // 1. 先尝试绑定地址（无论是否已赠送过积分，新地址都应该绑定）
     // 如果用户没有绑定地址，就把申请的地址绑定给这个用户
     // 但如果该地址已被其他用户绑定，则不能绑定
     try {
@@ -215,7 +206,7 @@ async function handleUserCreateGiftCredits(req, targetUrl, isSuccess) {
         const addresses = Array.isArray(user.evmAddresses) ? user.evmAddresses : [];
         const normalizedAddresses = addresses.map(a => String(a || '').trim().toLowerCase());
         
-        if (!normalizedAddresses.includes(normalizedAddress)) {
+        if (addresses.length < 3 && !normalizedAddresses.includes(normalizedAddress)) {
           // 检查该地址是否已被其他用户绑定
           const conflicts = await XHuntUser.sequelize.query(
             `
@@ -249,6 +240,17 @@ async function handleUserCreateGiftCredits(req, targetUrl, isSuccess) {
       // 绑定失败不影响积分赠送，只记录日志
       console.error('[GiftCredits] Error binding address:', bindError.message);
     }
+
+    // 2. 防重检查：检查该用户是否已赠送过（终身仅一次）
+    const alreadyGifted = await checkAndMarkGiftCredits(username);
+    if (alreadyGifted) {
+      console.log(`[GiftCredits] Skip: user ${username} has already received gift credits, but address binding processed`);
+      return;
+    }
+
+    // 3. 同步计算并赠送积分（等待完成后再返回）
+    const credits = await calculateGiftCredits(username);
+    const tx = `${userId}${requestId}`;
 
     await callAddCreditsApi({ address, tx, credits });
     
