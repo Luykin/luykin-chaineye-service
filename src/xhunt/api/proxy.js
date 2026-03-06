@@ -203,7 +203,7 @@ async function handleUserCreateGiftCredits(req, targetUrl, isSuccess) {
       const user = await XHuntUser.findOne({ where: { username } });
       if (user) {
         const normalizedAddress = address.toLowerCase().trim();
-        const addresses = Array.isArray(user.evmAddresses) ? user.evmAddresses : [];
+        const addresses = Array.isArray(user.evmAddresses) ? [...user.evmAddresses] : [];
         const normalizedAddresses = addresses.map(a => String(a || '').trim().toLowerCase());
         
         if (addresses.length < 3 && !normalizedAddresses.includes(normalizedAddress)) {
