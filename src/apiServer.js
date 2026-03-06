@@ -34,6 +34,7 @@ const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntCampaignRoutes = require("./xhunt/api/campaign");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
+const xHuntGhostFollowingRoutes = require("./xhunt/api/ghost-following");
 const rootdataProRoutes = require("./rootdatapro/api/rootdatapro");
 
 const adminRoutes = require("./admin/api/admin");
@@ -341,6 +342,9 @@ async function initializeAndStartServer() {
   // 新增统计路由 - 无需安全中间件，方便内部监控。管理后台使用，有basicAuth前端认证机制
   app.use("/api/xhunt/stats", xHuntStatsRoutes);
   app.use("/api/stats/perf", adminAuth, perfApiRouter);
+
+  // Ghost Following 额度管理接口 - 分析关注列表活跃度
+  app.use("/api/xhunt/ghost-following", xHuntGhostFollowingRoutes);
 
   // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
   app.use("/api/rootdata", xHuntRootdataRoutes);
