@@ -205,6 +205,51 @@ async function handleUserCreateGiftCredits(req, targetUrl, isSuccess) {
     // 同步计算并赠送积分（等待完成后再返回）
     const credits = await calculateGiftCredits(username);
     const tx = `${userId}${requestId}`;
+
+    // 如果用户没有绑定地址，就把申请的地址绑定给这个用户
+    // 但如果该地址已被其他用户绑定，则不能绑定
+    try {
+      const user = await XHuntUser.findOne({ where: { username } });
+      if (user) {
+        const normalizedAddress = address.toLowerCase().trim();
+        const addresses = Array.isArray(user.evmAddresses) ? user.evmAddresses : [];
+        const normalizedAddresses = addresses.map(a => String(a || '').trim().toLowerCase());
+        
+        if (!normalizedAddresses.includes(normalizedAddress)) {
+          // 检查该地址是否已被其他用户绑定
+          const conflicts = await XHuntUser.sequelize.query(
+            `
+            SELECT u.id, u.username
+            FROM "XHuntUsers" u
+            WHERE u.id != :userId
+              AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements_text(COALESCE(u."evmAddresses"::jsonb, '[]'::jsonb)) AS a(elem)
+                WHERE LOWER(a.elem) = :address
+              )
+            LIMIT 1
+            `,
+            {
+              replacements: { userId: user.id, address: normalizedAddress },
+              type: Sequelize.QueryTypes.SELECT,
+            }
+          );
+
+          if (conflicts.length === 0) {
+            // 地址未被其他用户绑定，可以绑定
+            addresses.push(address);
+            await user.update({ evmAddresses: addresses });
+            console.log(`[GiftCredits] Bound address ${address} to user ${username}`);
+          } else {
+            console.log(`[GiftCredits] Address ${address} already bound to other user: ${conflicts[0].username}, skip binding`);
+          }
+        }
+      }
+    } catch (bindError) {
+      // 绑定失败不影响积分赠送，只记录日志
+      console.error('[GiftCredits] Error binding address:', bindError.message);
+    }
+
     await callAddCreditsApi({ address, tx, credits });
     
     console.log(`[GiftCredits] Success: user ${username} received ${credits} credits to ${address}`);
