@@ -974,15 +974,18 @@ async function verifyEmptyUserWithSecondApi(user_id) {
     }
   } catch (apiError) {
     console.error("[ghost-following] Second API verification failed:", apiError.message);
-    return {
-      id: null,
-      create_time: null,
-      html: null,
-      twitter_user_id: user_id,
-      message: "No tweets found for this user (verification error)",
-      verified: false,
-      error: apiError.message,
-    };
+    
+    // 外部API返回什么状态码就抛出什么状态码
+    if (apiError.response) {
+      const error = new Error(apiError.response.data?.message || apiError.message);
+      error.statusCode = apiError.response.status;
+      throw error;
+    }
+    
+    // 其他错误返回500
+    const error = new Error(apiError.message);
+    error.statusCode = 500;
+    throw error;
   }
 }
 
