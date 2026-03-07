@@ -656,14 +656,20 @@ async function verifyEmptyUserWithSecondApi(user_id) {
     );
 
     if (response.data && Array.isArray(response.data.tweets)) {
-      const tweets = response.data.tweets;
+      let tweets = response.data.tweets;
       
       if (tweets.length > 0) {
-        // 第二个接口返回有推文，取第一条
-        const tweet = tweets[0];
-        // 优先使用 time_parsed (ISO 8601 格式)，与第一个接口保持一致
-        // 备选 created_at (Twitter 格式: "Fri May 24 03:53:14 +0000 2024")
-        const createTime = tweet.time_parsed || tweet.created_at || null;
+        // 按 created_at 时间排序（最新的排在最前面），然后取最新的一条
+        // 注意：第一条可能是用户置顶的推文，不一定是时间最新的
+        tweets.sort((a, b) => {
+          const timeA = new Date(a.created_at || a.time_parsed || 0).getTime();
+          const timeB = new Date(b.created_at || b.time_parsed || 0).getTime();
+          return timeB - timeA; // 降序，最新的在前
+        });
+        
+        const tweet = tweets[0]; // 取时间最新的一条
+        // 优先使用 created_at (Twitter 原始格式)，备选 time_parsed
+        const createTime = tweet.created_at || tweet.time_parsed || null;
         return {
           id: tweet.id,
           create_time: createTime,
