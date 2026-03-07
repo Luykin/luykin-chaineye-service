@@ -73,7 +73,6 @@ Authorization: Bearer <your_jwt_token>
 {
   "success": true,
   "data": {
-    "isPro": true,
     "isVip": false,
     "analyze": {
       "status": "active",
