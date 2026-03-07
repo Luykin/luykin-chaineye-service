@@ -17,7 +17,7 @@ const QUOTA_CONFIG = {
 
 // Following 接口配额配置（独立）
 const FOLLOWING_QUOTA_CONFIG = {
-  monthlyLimit: 100,
+  monthlyLimit: 150,
   periodDays: 30,
 };
 
