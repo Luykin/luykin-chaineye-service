@@ -537,11 +537,8 @@ router.post(
         circuitBreaker.recordFailure();
         
         // 第一个接口失败，尝试第二个接口
+        // 如果第二个接口也失败，会抛出带状态码的错误，透传给外层处理
         analysisResult = await verifyEmptyUserWithSecondApi(user_id);
-        // 如果第二个接口也失败（verified=false），返回 500
-        if (!analysisResult.verified) {
-          throw new Error("Both APIs failed: " + (analysisResult.error || apiError.message));
-        }
       }
 
       // 计算过期时间
@@ -564,9 +561,14 @@ router.post(
       });
     } catch (error) {
       console.error("[ghost-following] Analyze error:", error);
-      return res.status(500).json({
+      // 如果有状态码（来自外部API），透传；否则返回500
+      const statusCode = error.statusCode || 500;
+      return res.status(statusCode).json({
         success: false,
-        error: { code: "INTERNAL_ERROR", message: "Analysis failed" },
+        error: { 
+          code: statusCode === 500 ? "INTERNAL_ERROR" : "EXTERNAL_API_ERROR", 
+          message: error.message || "Analysis failed" 
+        },
       });
     }
   }
