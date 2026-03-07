@@ -4,6 +4,7 @@ const axios = require("axios");
 const { validateRequest } = require("../middleware/validate-request");
 const { authenticateToken } = require("../middleware/auth");
 const { checkProStatusRequired } = require("../middleware/pro-status");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 
 const router = express.Router();
 
@@ -157,7 +158,7 @@ router.post(
   async (req, res) => {
     try {
       const userId = req.user.id;
-      const isVip = req.isPro;
+      const isVip = isXHuntVipHandle(req.user?.username);
       const { user_id } = req.body;
       const redisClient = req.redisClient || global.__xhuntRedis;
 
@@ -297,15 +298,15 @@ router.post(
 
 /**
  * GET /api/xhunt/ghost-following/quota
- * 查询额度接口
+ * 查询额度接口（返回 analyze 和 following 两套额度）
  */
 router.get(
   "/quota",
   [authenticateToken, checkProStatusRequired],
   async (req, res) => {
     try {
-      const userId = req.user.id;
-      const isVip = req.isPro;
+      const userId = req.user.id;// Pro 状态（用于权限检查）
+      const isVip = isXHuntVipHandle(req.user?.username);  // VIP 状态（用于额度计算）
       const redisClient = req.redisClient || global.__xhuntRedis;
 
       if (!redisClient) {
@@ -316,8 +317,11 @@ router.get(
         });
       }
 
+      // ====== Analyze 额度 ======
       const quotaInfo = await getUserQuota(redisClient, userId);
       const totalQuota = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
+
+      let analyzeData;
 
       // 无额度记录
       if (!quotaInfo.exists) {
@@ -326,49 +330,37 @@ router.get(
           ? calculateWaitTime(quotaInfo.lastAppliedAt)
           : { waitDays: 0, nextApplyAt: null };
 
-        return res.json({
-          success: true,
-          data: {
-            status: quotaInfo.lastAppliedAt ? "cooldown" : "none",
-            quota: {
-              total: 0,
-              remaining: 0,
-              used: 0,
-            },
-            appliedAt: null,
-            expiresAt: null,
-            nextApplyAt: canApply ? null : waitInfo.nextApplyAt,
-            waitDays: canApply ? 0 : waitInfo.waitDays,
-            canApplyNow: canApply,
-            isVip,
-          },
-        });
-      }
-
-      // 有额度记录
-      const used = quotaInfo.total - quotaInfo.remaining;
-      const expiresAt =
-        quotaInfo.appliedAt + QUOTA_CONFIG.periodDays * 24 * 60 * 60 * 1000;
-      const hasRemaining = quotaInfo.remaining > 0;
-      const isExpired = Date.now() > expiresAt;
-
-      // 确定状态
-      let status;
-      if (isExpired) {
-        status = "expired";
-      } else if (hasRemaining) {
-        status = "active";
+        analyzeData = {
+          status: quotaInfo.lastAppliedAt ? "cooldown" : "none",
+          quota: { total: 0, remaining: 0, used: 0 },
+          appliedAt: null,
+          expiresAt: null,
+          nextApplyAt: canApply ? null : waitInfo.nextApplyAt,
+          waitDays: canApply ? 0 : waitInfo.waitDays,
+          canApplyNow: canApply,
+          expiresInDays: 0,
+        };
       } else {
-        status = "exhausted";
-      }
+        // 有额度记录
+        const used = quotaInfo.total - quotaInfo.remaining;
+        const expiresAt =
+          quotaInfo.appliedAt + QUOTA_CONFIG.periodDays * 24 * 60 * 60 * 1000;
+        const hasRemaining = quotaInfo.remaining > 0;
+        const isExpired = Date.now() > expiresAt;
 
-      // 是否可以申请新额度
-      const canApply = canApplyNewQuota(quotaInfo.appliedAt);
-      const waitInfo = calculateWaitTime(quotaInfo.appliedAt);
+        let status;
+        if (isExpired) {
+          status = "expired";
+        } else if (hasRemaining) {
+          status = "active";
+        } else {
+          status = "exhausted";
+        }
 
-      return res.json({
-        success: true,
-        data: {
+        const canApply = canApplyNewQuota(quotaInfo.appliedAt);
+        const waitInfo = calculateWaitTime(quotaInfo.appliedAt);
+
+        analyzeData = {
           status,
           quota: {
             total: quotaInfo.total,
@@ -380,11 +372,66 @@ router.get(
           nextApplyAt: canApply ? null : waitInfo.nextApplyAt,
           waitDays: canApply ? 0 : waitInfo.waitDays,
           canApplyNow: canApply,
-          isVip,
           expiresInDays: Math.max(
             0,
             Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000))
           ),
+        };
+      }
+
+      // ====== Following 额度 ======
+      let followingQuotaInfo = await getUserFollowingQuota(redisClient, userId);
+
+      // 如果额度不存在或已过期，初始化额度信息（不实际创建，只是显示预估）
+      let followingData;
+      if (!followingQuotaInfo || Date.now() > followingQuotaInfo.resetAt) {
+        const now = Date.now();
+        const ttlMs = FOLLOWING_QUOTA_CONFIG.periodDays * 24 * 60 * 60 * 1000;
+        const resetAt = followingQuotaInfo?.resetAt 
+          ? followingQuotaInfo.resetAt + ttlMs 
+          : now + ttlMs;
+
+        followingData = {
+          status: followingQuotaInfo ? "expired" : "none",
+          quota: { total: FOLLOWING_QUOTA_CONFIG.monthlyLimit, remaining: FOLLOWING_QUOTA_CONFIG.monthlyLimit, used: 0 },
+          resetAt,
+          expiresInDays: FOLLOWING_QUOTA_CONFIG.periodDays,
+        };
+      } else {
+        const used = followingQuotaInfo.total - followingQuotaInfo.remaining;
+        const hasRemaining = followingQuotaInfo.remaining > 0;
+        const isExpired = Date.now() > followingQuotaInfo.resetAt;
+
+        let status;
+        if (isExpired) {
+          status = "expired";
+        } else if (hasRemaining) {
+          status = "active";
+        } else {
+          status = "exhausted";
+        }
+
+        followingData = {
+          status,
+          quota: {
+            total: followingQuotaInfo.total,
+            remaining: followingQuotaInfo.remaining,
+            used,
+          },
+          resetAt: followingQuotaInfo.resetAt,
+          expiresInDays: Math.max(
+            0,
+            Math.ceil((followingQuotaInfo.resetAt - Date.now()) / (24 * 60 * 60 * 1000))
+          ),
+        };
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          isVip,
+          analyze: analyzeData,
+          following: followingData,
         },
       });
     } catch (error) {
