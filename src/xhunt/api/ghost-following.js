@@ -26,6 +26,194 @@ const REDIS_KEY_PREFIX = "xhunt:ghost";
 // Following 额度独立的 Key 前缀
 const FOLLOWING_REDIS_KEY_PREFIX = "xhunt:ghost:following";
 
+// ======== 熔断器配置 ========
+const CIRCUIT_BREAKER_CONFIG = {
+  failureThreshold: 20,        // 连续失败 5 次触发熔断
+  timeout: 30000,             // 熔断 30 秒后尝试恢复
+  successThreshold: 2,        // 半开状态下成功 2 次恢复
+};
+
+// 熔断器状态存储（内存级，服务重启后重置）
+const circuitBreakers = new Map();
+
+/**
+ * 熔断器类
+ */
+class CircuitBreaker {
+  constructor(name, config) {
+    this.name = name;
+    this.config = config;
+    this.state = 'CLOSED';      // CLOSED:正常, OPEN:熔断, HALF_OPEN:半开
+    this.failureCount = 0;
+    this.successCount = 0;
+    this.lastFailureTime = null;
+    this.nextAttemptTime = null;
+  }
+
+  /**
+   * 检查是否允许请求通过
+   */
+  canExecute() {
+    if (this.state === 'CLOSED') {
+      return { allowed: true };
+    }
+
+    if (this.state === 'OPEN') {
+      const now = Date.now();
+      if (now >= this.nextAttemptTime) {
+        // 熔断时间到，进入半开状态
+        this.state = 'HALF_OPEN';
+        this.successCount = 0;
+        console.log(`[CircuitBreaker:${this.name}] State changed: OPEN -> HALF_OPEN`);
+        return { allowed: true };
+      }
+      const remainingMs = this.nextAttemptTime - now;
+      return { 
+        allowed: false, 
+        reason: `Circuit breaker is OPEN. Retry after ${Math.ceil(remainingMs / 1000)}s` 
+      };
+    }
+
+    // HALF_OPEN: 允许少量请求通过测试
+    return { allowed: true, isTest: true };
+  }
+
+  /**
+   * 记录成功
+   */
+  recordSuccess() {
+    this.failureCount = 0;
+
+    if (this.state === 'HALF_OPEN') {
+      this.successCount++;
+      if (this.successCount >= this.config.successThreshold) {
+        this.state = 'CLOSED';
+        this.successCount = 0;
+        console.log(`[CircuitBreaker:${this.name}] State changed: HALF_OPEN -> CLOSED`);
+      }
+    }
+  }
+
+  /**
+   * 记录失败
+   */
+  recordFailure() {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+
+    if (this.state === 'HALF_OPEN') {
+      // 半开状态下失败，立即熔断
+      this.trip();
+    } else if (this.state === 'CLOSED' && this.failureCount >= this.config.failureThreshold) {
+      // 达到失败阈值，触发熔断
+      this.trip();
+    }
+  }
+
+  /**
+   * 触发熔断
+   */
+  trip() {
+    this.state = 'OPEN';
+    this.nextAttemptTime = Date.now() + this.config.timeout;
+    console.error(`[CircuitBreaker:${this.name}] State changed: CLOSED -> OPEN. Will retry after ${this.config.timeout}ms`);
+  }
+
+  /**
+   * 获取当前状态
+   */
+  getState() {
+    return {
+      name: this.name,
+      state: this.state,
+      failureCount: this.failureCount,
+      successCount: this.successCount,
+    };
+  }
+}
+
+/**
+ * 获取或创建熔断器
+ */
+function getCircuitBreaker(name) {
+  if (!circuitBreakers.has(name)) {
+    circuitBreakers.set(name, new CircuitBreaker(name, CIRCUIT_BREAKER_CONFIG));
+  }
+  return circuitBreakers.get(name);
+}
+
+// ======== 额度原子扣除 Lua 脚本 ========
+// KEYS[1]: quotaKey
+// ARGV[1]: 当前时间戳
+// ARGV[2]: VIP额度
+// ARGV[3]: 普通额度
+// ARGV[4]: 额度有效期(秒)
+const ATOMIC_DEDUCT_QUOTA_LUA = `
+local quotaKey = KEYS[1]
+local historyKey = KEYS[2]
+local now = tonumber(ARGV[1])
+local vipQuota = tonumber(ARGV[2])
+local normalQuota = tonumber(ARGV[3])
+local ttl = tonumber(ARGV[4])
+
+-- 获取当前额度
+local quota = redis.call('hGetAll', quotaKey)
+local remaining = nil
+local total = nil
+local appliedAt = nil
+
+-- 解析额度数据
+for i = 1, #quota, 2 do
+  if quota[i] == 'remaining' then
+    remaining = tonumber(quota[i + 1])
+  elseif quota[i] == 'total' then
+    total = tonumber(quota[i + 1])
+  elseif quota[i] == 'appliedAt' then
+    appliedAt = tonumber(quota[i + 1])
+  end
+end
+
+-- 如果没有额度或剩余<=0，需要检查是否可以自动申请
+if remaining == nil or remaining <= 0 then
+  -- 获取上次申请时间
+  local lastApplied = redis.call('hGet', historyKey, 'lastAppliedAt')
+  local lastAppliedAt = lastApplied and tonumber(lastApplied) or nil
+  
+  local periodMs = ttl * 1000  -- 转毫秒
+  
+  -- 检查是否可以申请新额度
+  local canApply = true
+  if lastAppliedAt then
+    if now - lastAppliedAt < periodMs then
+      canApply = false
+    end
+  end
+  
+  if canApply then
+    -- 自动申请新额度
+    total = vipQuota
+    remaining = vipQuota - 1  -- 扣除1次
+    appliedAt = now
+    
+    -- 写入新额度
+    redis.call('hSet', quotaKey, 'total', tostring(total))
+    redis.call('hSet', quotaKey, 'remaining', tostring(remaining))
+    redis.call('hSet', quotaKey, 'appliedAt', tostring(appliedAt))
+    redis.call('expire', quotaKey, ttl)
+    redis.call('hSet', historyKey, 'lastAppliedAt', tostring(now))
+    
+    return {remaining, total, appliedAt, 1}  -- 最后1表示是新额度
+  else
+    -- 不能申请新额度，返回错误
+    return {-1, total or 0, lastAppliedAt or 0, 0}  -- -1表示额度不足
+  end
+else
+  -- 有额度，直接扣除
+  remaining = redis.call('hIncrBy', quotaKey, 'remaining', -1)
+  return {remaining, total, appliedAt, 0}  -- 最后0表示不是新额度
+end
+`;
+
 /**
  * 获取额度 Redis Key
  */
@@ -101,12 +289,52 @@ async function createQuota(redisClient, userId, isVip) {
 }
 
 /**
- * 扣除额度
+ * 扣除额度（原子化操作）
+ * 使用 Lua 脚本保证「检查 + 扣除 + 自动申请」的原子性
+ * @returns {Object} { success, remaining, total, appliedAt, isNewQuota, error }
  */
-async function deductQuota(redisClient, userId) {
+async function atomicDeductQuota(redisClient, userId, isVip) {
   const quotaKey = getQuotaKey(userId);
-  const newRemaining = await redisClient.hIncrBy(quotaKey, "remaining", -1);
-  return newRemaining;
+  const historyKey = getHistoryKey(userId);
+  
+  const totalQuota = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
+  const now = Date.now();
+  const ttlSeconds = QUOTA_CONFIG.periodDays * 24 * 60 * 60;
+  
+  try {
+    // 使用 Lua 脚本原子化执行
+    const result = await redisClient.eval(ATOMIC_DEDUCT_QUOTA_LUA, {
+      keys: [quotaKey, historyKey],
+      arguments: [
+        now.toString(),
+        totalQuota.toString(),
+        QUOTA_CONFIG.normal.toString(),
+        ttlSeconds.toString(),
+      ],
+    });
+    
+    const [remaining, total, appliedAt, isNewQuotaFlag] = result;
+    
+    if (remaining === -1) {
+      // 额度不足且无法申请
+      return {
+        success: false,
+        error: 'QUOTA_COOLDOWN',
+        lastAppliedAt: appliedAt,
+      };
+    }
+    
+    return {
+      success: true,
+      remaining,
+      total,
+      appliedAt,
+      isNewQuota: isNewQuotaFlag === 1,
+    };
+  } catch (error) {
+    console.error('[ghost-following] Atomic deduct quota error:', error);
+    throw error;
+  }
 }
 
 /**
@@ -137,6 +365,31 @@ function calculateWaitTime(lastAppliedAt) {
     nextApplyAt,
   };
 }
+
+// /**
+//  * 用户级速率限制检查
+//  * @param {string} userId - 用户ID
+//  * @param {object} redisClient - Redis客户端
+//  * @returns {object} { allowed, remainingSeconds? }
+//  */
+// async function checkUserRateLimit(userId, redisClient) {
+//   const key = `${REDIS_KEY_PREFIX}:ratelimit:${userId}`;
+//   const maxRequests = 10;        // 10次
+//   const windowSeconds = 60;      // 每60秒
+  
+//   const current = await redisClient.incr(key);
+//   if (current === 1) {
+//     // 第一次请求，设置过期时间
+//     await redisClient.expire(key, windowSeconds);
+//   }
+  
+//   if (current > maxRequests) {
+//     const ttl = await redisClient.ttl(key);
+//     return { allowed: false, remainingSeconds: ttl };
+//   }
+  
+//   return { allowed: true, remaining: maxRequests - current };
+// }
 
 /**
  * POST /api/xhunt/ghost-following/analyze
@@ -170,54 +423,66 @@ router.post(
         });
       }
 
-      // 1. 获取当前额度信息
-      const quotaInfo = await getUserQuota(redisClient, userId);
+      // // 1. 用户级速率限制检查
+      // const rateLimit = await checkUserRateLimit(userId, redisClient);
+      // if (!rateLimit.allowed) {
+      //   return res.status(429).json({
+      //     success: false,
+      //     error: {
+      //       code: "RATE_LIMIT_EXCEEDED",
+      //       message: `请求过于频繁，请 ${rateLimit.remainingSeconds} 秒后再试`,
+      //       retryAfter: rateLimit.remainingSeconds,
+      //     },
+      //   });
+      // }
 
-      let currentQuota;
-      let isNewQuota = false;
-
-      // 2. 判断是否需要自动申请额度
-      if (!quotaInfo.exists || quotaInfo.remaining <= 0) {
-        // 检查是否可以申请新额度
-        if (!canApplyNewQuota(quotaInfo.lastAppliedAt)) {
-          // 30天内已申请过且额度用完，进入冷却期
-          const { waitDays, waitHours, nextApplyAt } = calculateWaitTime(
-            quotaInfo.lastAppliedAt
-          );
-          const total = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
-
-          return res.status(403).json({
-            success: false,
-            error: {
-              code: "QUOTA_COOLDOWN",
-              message: "本月额度已用完",
-              data: {
-                total,
-                used: total,
-                nextApplyAt,
-                waitDays,
-                waitHours,
-              },
+      // 2. 原子化扣除额度（检查 + 扣除 + 自动申请）
+      const quotaResult = await atomicDeductQuota(redisClient, userId, isVip);
+      
+      if (!quotaResult.success) {
+        // 额度不足且无法申请新额度
+        const { waitDays, waitHours, nextApplyAt } = calculateWaitTime(
+          quotaResult.lastAppliedAt
+        );
+        const total = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
+        
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: "QUOTA_COOLDOWN",
+            message: "本月额度已用完",
+            data: {
+              total,
+              used: total,
+              nextApplyAt,
+              waitDays,
+              waitHours,
             },
-          });
-        }
-
-        // 自动申请新额度
-        currentQuota = await createQuota(redisClient, userId, isVip);
-        isNewQuota = true;
-      } else {
-        currentQuota = {
-          total: quotaInfo.total,
-          remaining: quotaInfo.remaining,
-          appliedAt: quotaInfo.appliedAt,
-        };
+          },
+        });
       }
+      
+      const { remaining: newRemaining, total, appliedAt, isNewQuota } = quotaResult;
+      const currentQuota = { total, remaining: quotaResult.remaining, appliedAt };
 
-      // 3. 扣除额度
-      const newRemaining = await deductQuota(redisClient, userId);
-
-      // 4. 调用外部 API 获取推文数据
+      // 4. 调用外部 API 获取推文数据（带熔断器保护）
       let analysisResult;
+      const circuitBreaker = getCircuitBreaker('ghost-following-api');
+      
+      // 检查熔断器状态
+      const cbCheck = circuitBreaker.canExecute();
+      if (!cbCheck.allowed) {
+        console.warn(`[ghost-following] Circuit breaker rejected request: ${cbCheck.reason}`);
+        return res.status(503).json({
+          success: false,
+          error: {
+            code: "SERVICE_UNAVAILABLE",
+            message: "服务暂时不可用，请稍后重试",
+            retryAfter: Math.ceil(CIRCUIT_BREAKER_CONFIG.timeout / 1000),
+          },
+        });
+      }
+      
       try {
         const apiUrl = `https://data.cryptohunt.ai/fetch/twitter/tweets?user_id=${user_id}&limit=1&offset=0`;
         const response = await axios.get(apiUrl, {
@@ -226,6 +491,9 @@ router.post(
             Accept: "application/json",
           },
         });
+
+        // API 调用成功，记录成功
+        circuitBreaker.recordSuccess();
 
         if (response.data && response.data.code === 200 && response.data.data) {
           const tweets = response.data.data.data || [];
@@ -254,6 +522,8 @@ router.post(
             analysisResult = await verifyEmptyUserWithSecondApi(user_id);
           }
         } else {
+          // API 返回异常格式，视为失败
+          circuitBreaker.recordFailure();
           analysisResult = {
             id: null,
             create_time: null,
@@ -264,6 +534,8 @@ router.post(
         }
       } catch (apiError) {
         console.error("[ghost-following] First API request failed:", apiError.message);
+        circuitBreaker.recordFailure();
+        
         // 第一个接口失败，尝试第二个接口
         analysisResult = await verifyEmptyUserWithSecondApi(user_id);
         // 如果第二个接口也失败（verified=false），返回 500
