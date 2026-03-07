@@ -14,8 +14,16 @@ const QUOTA_CONFIG = {
   periodDays: 30,
 };
 
+// Following 接口配额配置（独立）
+const FOLLOWING_QUOTA_CONFIG = {
+  monthlyLimit: 100,
+  periodDays: 30,
+};
+
 // Redis Key 前缀
 const REDIS_KEY_PREFIX = "xhunt:ghost";
+// Following 额度独立的 Key 前缀
+const FOLLOWING_REDIS_KEY_PREFIX = "xhunt:ghost:following";
 
 /**
  * 获取额度 Redis Key
@@ -384,6 +392,176 @@ router.get(
       return res.status(500).json({
         success: false,
         error: { code: "INTERNAL_ERROR", message: "Failed to get quota" },
+      });
+    }
+  }
+);
+
+/**
+ * 获取 Following 额度 Redis Key
+ */
+function getFollowingQuotaKey(userId) {
+  return `${FOLLOWING_REDIS_KEY_PREFIX}:${userId}:quota`;
+}
+
+/**
+ * 获取用户 Following 额度信息
+ */
+async function getUserFollowingQuota(redisClient, userId) {
+  const quotaKey = getFollowingQuotaKey(userId);
+  const quotaData = await redisClient.hGetAll(quotaKey);
+
+  if (!quotaData || Object.keys(quotaData).length === 0) {
+    return null;
+  }
+
+  return {
+    total: parseInt(quotaData.total) || 0,
+    remaining: parseInt(quotaData.remaining) || 0,
+    resetAt: parseInt(quotaData.resetAt) || 0,
+  };
+}
+
+/**
+ * 创建/重置 Following 额度
+ */
+async function createFollowingQuota(redisClient, userId) {
+  const quotaKey = getFollowingQuotaKey(userId);
+  const total = FOLLOWING_QUOTA_CONFIG.monthlyLimit;
+  const now = Date.now();
+  const ttlSeconds = FOLLOWING_QUOTA_CONFIG.periodDays * 24 * 60 * 60;
+  const resetAt = now + ttlSeconds * 1000;
+
+  const quotaData = {
+    total: total.toString(),
+    remaining: total.toString(),
+    resetAt: resetAt.toString(),
+  };
+
+  await redisClient.hSet(quotaKey, quotaData);
+  await redisClient.expire(quotaKey, ttlSeconds);
+
+  return {
+    total,
+    remaining: total,
+    resetAt,
+  };
+}
+
+/**
+ * POST /api/xhunt/ghost-following/following
+ * 获取用户关注列表（调用 data.cryptohunt.ai/external/crawler 接口）
+ * 每月限额 100 次，与 analyze 额度独立
+ */
+router.post(
+  "/following",
+  [
+    authenticateToken,
+    checkProStatusRequired,
+    body("user_id")
+      .trim()
+      .notEmpty()
+      .withMessage("user_id is required")
+      .isNumeric()
+      .withMessage("user_id must be a numeric string"),
+    body("cursor").optional().isString().withMessage("cursor must be a string"),
+    validateRequest,
+  ],
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { user_id, cursor = "" } = req.body;
+      const redisClient = req.redisClient || global.__xhuntRedis;
+
+      if (!redisClient) {
+        console.error("[ghost-following] Redis client not available");
+        return res.status(500).json({
+          success: false,
+          error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
+        });
+      }
+
+      // 1. 检查 Following 额度
+      let quotaInfo = await getUserFollowingQuota(redisClient, userId);
+
+      // 如果额度不存在或已过期，创建新额度
+      if (!quotaInfo || Date.now() > quotaInfo.resetAt) {
+        quotaInfo = await createFollowingQuota(redisClient, userId);
+      }
+
+      // 检查剩余额度
+      if (quotaInfo.remaining <= 0) {
+        const waitMs = quotaInfo.resetAt - Date.now();
+        const waitDays = Math.ceil(waitMs / (24 * 60 * 60 * 1000));
+
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: "FOLLOWING_QUOTA_EXHAUSTED",
+            message: "本月关注列表查询额度已用完",
+            data: {
+              total: FOLLOWING_QUOTA_CONFIG.monthlyLimit,
+              used: FOLLOWING_QUOTA_CONFIG.monthlyLimit,
+              remaining: 0,
+              resetAt: quotaInfo.resetAt,
+              waitDays: Math.max(0, waitDays),
+            },
+          },
+        });
+      }
+
+      // 2. 扣除额度
+      const quotaKey = getFollowingQuotaKey(userId);
+      const newRemaining = await redisClient.hIncrBy(quotaKey, "remaining", -1);
+
+      // 3. 调用外部 API
+      const apiUrl = "https://data.cryptohunt.ai/external/crawler";
+      const response = await axios.post(
+        apiUrl,
+        {
+          endpoint: "following",
+          user_id: user_id,
+          cursor: cursor,
+        },
+        {
+          timeout: 30000, // 30秒超时
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      // 4. 返回结果（包含额度信息）
+      return res.json({
+        success: true,
+        data: {
+          quota: {
+            total: quotaInfo.total,
+            remaining: Math.max(0, newRemaining),
+            used: quotaInfo.total - Math.max(0, newRemaining),
+            resetAt: quotaInfo.resetAt,
+          },
+          result: response.data,
+        },
+      });
+    } catch (error) {
+      console.error("[ghost-following] Following API error:", error.message);
+      
+      // 如果是外部 API 返回的错误，透传状态码和错误信息
+      if (error.response) {
+        const { status, data } = error.response;
+        return res.status(status).json({
+          success: false,
+          error: {
+            code: data?.code || "EXTERNAL_API_ERROR",
+            message: data?.message || "External API request failed",
+          },
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        error: { code: "INTERNAL_ERROR", message: "Failed to fetch following list" },
       });
     }
   }
