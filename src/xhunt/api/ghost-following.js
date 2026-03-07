@@ -239,14 +239,8 @@ router.post(
               twitter_user_id: tweet.twitter_user_id,
             };
           } else {
-            // 用户没有推文
-            analysisResult = {
-              id: null,
-              create_time: null,
-              html: null,
-              twitter_user_id: user_id,
-              message: "No tweets found for this user",
-            };
+            // 第一个接口返回空，调用第二个接口进行二次确认
+            analysisResult = await verifyEmptyUserWithSecondApi(user_id);
           }
         } else {
           analysisResult = {
@@ -614,5 +608,94 @@ router.post(
     }
   }
 );
+
+/**
+ * 当第一个接口返回空时，调用第二个接口进行二次确认
+ * @param {string} user_id - Twitter 用户 ID
+ * @returns {Object} - 分析结果
+ */
+async function verifyEmptyUserWithSecondApi(user_id) {
+  try {
+    // const apiKey = process.env.PRO_CRYPTOHUNT_API_KEY;
+    // if (!apiKey) {
+    //   console.error("[ghost-following] PRO_CRYPTOHUNT_API_KEY not configured");
+    //   return {
+    //     id: null,
+    //     create_time: null,
+    //     html: null,
+    //     twitter_user_id: user_id,
+    //     message: "No tweets found for this user (verification unavailable)",
+    //     verified: false,
+    //   };
+    // }
+
+    const response = await axios.post(
+      "https://pro.cryptohunt.ai/tweet/user_tweets",
+      {
+        user_id: user_id,
+        // cursor: "",
+      },
+      {
+        timeout: 15000, // 15秒超时
+        headers: {
+          "X-API-KEY": "e51eeac9-c1d6-4cf7-9746-e19efa9bcb6a",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.data && Array.isArray(response.data.tweets)) {
+      const tweets = response.data.tweets;
+      
+      if (tweets.length > 0) {
+        // 第二个接口返回有推文，取第一条
+        const tweet = tweets[0];
+        // 优先使用 time_parsed (ISO 8601 格式)，与第一个接口保持一致
+        // 备选 created_at (Twitter 格式: "Fri May 24 03:53:14 +0000 2024")
+        const createTime = tweet.time_parsed || tweet.created_at || null;
+        return {
+          id: tweet.id,
+          create_time: createTime,
+          html: tweet.html || null,
+          twitter_user_id: tweet.user_id || user_id,
+          verified: true,
+          source: "pro_api",
+        };
+      } else {
+        // 第二个接口也确认没有推文
+        return {
+          id: null,
+          create_time: null,
+          html: null,
+          twitter_user_id: user_id,
+          message: "No tweets found for this user (verified)",
+          verified: true,
+          source: "pro_api",
+        };
+      }
+    } else {
+      // 第二个接口返回异常格式
+      return {
+        id: null,
+        create_time: null,
+        html: null,
+        twitter_user_id: user_id,
+        message: "No tweets found for this user (verification failed)",
+        verified: false,
+      };
+    }
+  } catch (apiError) {
+    console.error("[ghost-following] Second API verification failed:", apiError.message);
+    return {
+      id: null,
+      create_time: null,
+      html: null,
+      twitter_user_id: user_id,
+      message: "No tweets found for this user (verification error)",
+      verified: false,
+      error: apiError.message,
+    };
+  }
+}
 
 module.exports = router;
