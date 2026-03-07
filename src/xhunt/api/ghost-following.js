@@ -4,7 +4,7 @@ const axios = require("axios");
 const { validateRequest } = require("../middleware/validate-request");
 const { authenticateToken } = require("../middleware/auth");
 const { checkProStatusRequired } = require("../middleware/pro-status");
-const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const {  isXHuntVipHandle } = require("../constants/xhuntVip");
 
 const router = express.Router();
 
