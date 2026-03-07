@@ -232,12 +232,23 @@ router.post(
           
           if (tweets.length > 0) {
             const tweet = tweets[0];
-            analysisResult = {
-              id: tweet.id,
-              create_time: tweet.create_time,
-              html: tweet.info?.html || null,
-              twitter_user_id: tweet.twitter_user_id,
-            };
+            const tweetTime = new Date(tweet.create_time).getTime();
+            const now = Date.now();
+            const days28Ms = 28 * 24 * 60 * 60 * 1000;
+            
+            // 如果推文是 28 天前的旧数据，调用第二个接口确认
+            if (now - tweetTime > days28Ms) {
+              console.log(`[ghost-following] Tweet ${tweet.id} is older than 28 days, verifying with second API`);
+              analysisResult = await verifyEmptyUserWithSecondApi(user_id);
+            } else {
+              // 数据正常，直接使用
+              analysisResult = {
+                id: tweet.id,
+                create_time: tweet.create_time,
+                html: tweet.info?.html || null,
+                twitter_user_id: tweet.twitter_user_id,
+              };
+            }
           } else {
             // 第一个接口返回空，调用第二个接口进行二次确认
             analysisResult = await verifyEmptyUserWithSecondApi(user_id);
