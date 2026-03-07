@@ -263,14 +263,13 @@ router.post(
           };
         }
       } catch (apiError) {
-        console.error("[ghost-following] API request failed:", apiError.message);
-        analysisResult = {
-          id: null,
-          create_time: null,
-          html: null,
-          twitter_user_id: user_id,
-          message: "Failed to fetch tweets: " + (apiError.message || "Unknown error"),
-        };
+        console.error("[ghost-following] First API request failed:", apiError.message);
+        // 第一个接口失败，尝试第二个接口
+        analysisResult = await verifyEmptyUserWithSecondApi(user_id);
+        // 如果第二个接口也失败（verified=false），返回 500
+        if (!analysisResult.verified) {
+          throw new Error("Both APIs failed: " + (analysisResult.error || apiError.message));
+        }
       }
 
       // 计算过期时间
