@@ -900,19 +900,6 @@ router.post(
  */
 async function verifyEmptyUserWithSecondApi(user_id) {
   try {
-    // const apiKey = process.env.PRO_CRYPTOHUNT_API_KEY;
-    // if (!apiKey) {
-    //   console.error("[ghost-following] PRO_CRYPTOHUNT_API_KEY not configured");
-    //   return {
-    //     id: null,
-    //     create_time: null,
-    //     html: null,
-    //     twitter_user_id: user_id,
-    //     message: "No tweets found for this user (verification unavailable)",
-    //     verified: false,
-    //   };
-    // }
-
     const response = await axios.post(
       "http://172.31.0.2:3001/tweet/user_tweets",
       {
@@ -952,16 +939,8 @@ async function verifyEmptyUserWithSecondApi(user_id) {
           source: "pro_api",
         };
       } else {
-        // 第二个接口也确认没有推文
-        return {
-          id: null,
-          create_time: null,
-          html: null,
-          twitter_user_id: user_id,
-          message: "No tweets found for this user (verified)",
-          verified: true,
-          source: "pro_api",
-        };
+        // 第二个接口也确认没有推文，调用第三个接口检查是否锁推
+        return await checkUserProtectedStatus(user_id);
       }
     } else {
       // 第二个接口返回异常格式
@@ -988,6 +967,89 @@ async function verifyEmptyUserWithSecondApi(user_id) {
     const error = new Error(apiError.message);
     error.statusCode = 500;
     throw error;
+  }
+}
+
+/**
+ * 检查用户是否锁推（当第二个接口返回空时调用）
+ * @param {string} user_id - Twitter 用户 ID
+ * @param {string} apiKey - API Key
+ * @returns {Object} - 用户状态信息
+ */
+async function checkUserProtectedStatus(user_id, apiKey) {
+  try {
+    const response = await axios.post(
+      "http://172.31.0.2:3001/user/profile_by_userid",
+      {
+        user_id: user_id,
+      },
+      {
+        timeout: 10000, // 10秒超时
+        headers: {
+          "X-API-KEY": "e51eeac9-c1d6-4cf7-9746-e19efa9bcb6a",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.data) {
+      const profile = response.data;
+      const isProtected = profile.protected === true;
+      
+      return {
+        id: null,
+        create_time: null,
+        html: null,
+        twitter_user_id: user_id,
+        protected: isProtected,
+        message: isProtected 
+          ? "User account is protected (private)" 
+          : "No tweets found for this user (verified)",
+        verified: true,
+        source: "pro_api",
+        profile: {
+          id: profile.id,
+          name: profile.name,
+          username: profile.username,
+          description: profile.description,
+          protected: profile.protected,
+          followers_count: profile.followers_count,
+          following_count: profile.following_count,
+          tweets_count: profile.tweets_count,
+          is_blue_verified: profile.is_blue_verified,
+          verified: profile.verified,
+          created_at: profile.created_at,
+          profile_image_url: profile.profile_image_url,
+          profile_banner_url: profile.profile_banner_url,
+        },
+      };
+    } else {
+      // 第三个接口返回异常， fallback 到默认空结果
+      return {
+        id: null,
+        create_time: null,
+        html: null,
+        twitter_user_id: user_id,
+        protected: null,
+        message: "No tweets found for this user (profile check failed)",
+        verified: true,
+        source: "pro_api",
+      };
+    }
+  } catch (error) {
+    console.error("[ghost-following] Third API (profile check) failed:", error.message);
+    
+    // 第三个接口失败，透传 API 错误
+    if (error.response) {
+      const err = new Error(error.response.data?.message || error.message);
+      err.statusCode = error.response.status;
+      throw err;
+    }
+    
+    // 其他错误抛出 500
+    const err = new Error(error.message);
+    err.statusCode = 500;
+    throw err;
   }
 }
 
