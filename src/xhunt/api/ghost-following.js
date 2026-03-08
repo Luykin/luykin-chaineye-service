@@ -914,7 +914,7 @@ async function verifyEmptyUserWithSecondApi(user_id) {
     // }
 
     const response = await axios.post(
-      "https://pro.cryptohunt.ai/tweet/user_tweets",
+      "http://172.31.0.2:3001/tweet/user_tweets",
       {
         user_id: user_id,
         // cursor: "",
