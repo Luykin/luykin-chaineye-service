@@ -22,9 +22,15 @@ const FOLLOWING_QUOTA_CONFIG = {
 };
 
 // Redis Key 前缀
-const REDIS_KEY_PREFIX = "xhunt:ghost";
+const REDIS_KEY_PREFIX = "xhunt:ghost:new";
 // Following 额度独立的 Key 前缀
-const FOLLOWING_REDIS_KEY_PREFIX = "xhunt:ghost:following";
+const FOLLOWING_REDIS_KEY_PREFIX = "xhunt:ghost:following:new";
+
+// ======== CryptoHunt Pro API 配置 ========
+const PRO_API_CONFIG = {
+  baseUrl: process.env.PRO_API_BASE_URL || "http://172.31.0.2:3001",
+  apiKey: process.env.PRO_API_KEY || "e51eeac9-c1d6-4cf7-9746-e19efa9bcb6a",
+};
 
 // ======== 熔断器配置 ========
 const CIRCUIT_BREAKER_CONFIG = {
@@ -344,38 +350,6 @@ async function getUserQuota(redisClient, userId) {
 }
 
 /**
- * 创建新额度
- */
-async function createQuota(redisClient, userId, isVip) {
-  const quotaKey = getQuotaKey(userId);
-  const historyKey = getHistoryKey(userId);
-
-  const total = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
-  const now = Date.now();
-  const ttlSeconds = QUOTA_CONFIG.periodDays * 24 * 60 * 60;
-
-  const quotaData = {
-    total: total.toString(),
-    remaining: total.toString(),
-    appliedAt: now.toString(),
-  };
-
-  // 使用 Pipeline 执行多个命令
-  const pipeline = redisClient.multi();
-  pipeline.hSet(quotaKey, quotaData);
-  pipeline.expire(quotaKey, ttlSeconds);
-  pipeline.hSet(historyKey, "lastAppliedAt", now.toString());
-
-  await pipeline.exec();
-
-  return {
-    total,
-    remaining: total,
-    appliedAt: now,
-  };
-}
-
-/**
  * 扣除额度（原子化操作）
  * 使用 Lua 脚本保证「检查 + 扣除 + 自动申请」的原子性
  * @returns {Object} { success, remaining, total, appliedAt, isNewQuota, error }
@@ -453,31 +427,6 @@ function calculateWaitTime(lastAppliedAt) {
   };
 }
 
-// /**
-//  * 用户级速率限制检查
-//  * @param {string} userId - 用户ID
-//  * @param {object} redisClient - Redis客户端
-//  * @returns {object} { allowed, remainingSeconds? }
-//  */
-// async function checkUserRateLimit(userId, redisClient) {
-//   const key = `${REDIS_KEY_PREFIX}:ratelimit:${userId}`;
-//   const maxRequests = 10;        // 10次
-//   const windowSeconds = 60;      // 每60秒
-  
-//   const current = await redisClient.incr(key);
-//   if (current === 1) {
-//     // 第一次请求，设置过期时间
-//     await redisClient.expire(key, windowSeconds);
-//   }
-  
-//   if (current > maxRequests) {
-//     const ttl = await redisClient.ttl(key);
-//     return { allowed: false, remainingSeconds: ttl };
-//   }
-  
-//   return { allowed: true, remaining: maxRequests - current };
-// }
-
 /**
  * POST /api/xhunt/ghost-following/analyze
  * 消费额度接口（自动申请 + 分析）
@@ -494,35 +443,26 @@ router.post(
       .withMessage("user_id is required")
       .isNumeric()
       .withMessage("user_id must be a numeric string"),
+    body("handle")
+      .trim()
+      .notEmpty()
+      .withMessage("handle is required"),
     validateRequest,
   ],
   async (req, res) => {
     try {
       const userId = req.user.id;
       const isVip = isXHuntVipHandle(req.user?.username);
-      const { user_id } = req.body;
+      const { user_id, handle } = req.body;
       const redisClient = req.redisClient || global.__xhuntRedis;
 
       if (!redisClient) {
-        console.error("[ghost-following] Redis client not available");
+        console.error(`analyze return ${user_id} Redis client not available`);
         return res.status(500).json({
           success: false,
           error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
         });
       }
-
-      // // 1. 用户级速率限制检查
-      // const rateLimit = await checkUserRateLimit(userId, redisClient);
-      // if (!rateLimit.allowed) {
-      //   return res.status(429).json({
-      //     success: false,
-      //     error: {
-      //       code: "RATE_LIMIT_EXCEEDED",
-      //       message: `请求过于频繁，请 ${rateLimit.remainingSeconds} 秒后再试`,
-      //       retryAfter: rateLimit.remainingSeconds,
-      //     },
-      //   });
-      // }
 
       // 2. 原子化扣除额度（检查 + 扣除 + 自动申请）
       const quotaResult = await atomicDeductQuota(redisClient, userId, isVip);
@@ -534,6 +474,7 @@ router.post(
         );
         const total = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
         
+        console.log(`analyze return ${user_id} QUOTA_COOLDOWN`);
         return res.status(403).json({
           success: false,
           error: {
@@ -560,7 +501,7 @@ router.post(
       // 检查熔断器状态
       const cbCheck = circuitBreaker.canExecute();
       if (!cbCheck.allowed) {
-        console.warn(`[ghost-following] Circuit breaker rejected request: ${cbCheck.reason}`);
+        console.warn(`analyze return ${user_id} Circuit breaker rejected: ${cbCheck.reason}`);
         return res.status(503).json({
           success: false,
           error: {
@@ -572,21 +513,32 @@ router.post(
       }
       
       try {
-        const apiUrl = `https://data.cryptohunt.ai/fetch/twitter/tweets?user_id=${user_id}&limit=1&offset=0`;
-        const response = await axios.get(apiUrl, {
-          timeout: 10000, // 10秒超时
-          headers: {
-            Accept: "application/json",
+        // 调用 /tweet/kol_tweets 获取推文（使用前端传入的 handle）
+        const response = await axios.post(
+          `${PRO_API_CONFIG.baseUrl}/tweet/kol_tweets`,
+          {
+            handle: handle,
+            offset: 0,
+            verbose: false,
           },
-        });
+          {
+            timeout: 10000,
+            headers: {
+              "X-API-KEY": PRO_API_CONFIG.apiKey,
+              "Content-Type": "application/json",
+            },
+          }
+        );
 
         // API 调用成功，记录成功
         circuitBreaker.recordSuccess();
 
-        if (response.data && response.data.code === 200 && response.data.data) {
-          const tweets = response.data.data.data || [];
+        // 新接口返回格式: 直接是数组 [...]
+        if (Array.isArray(response.data)) {
+          const tweets = response.data;
           
           if (tweets.length > 0) {
+            // 取最新的一条推文
             const tweet = tweets[0];
             const tweetTime = new Date(tweet.create_time).getTime();
             const now = Date.now();
@@ -594,19 +546,21 @@ router.post(
             
             // 如果推文是 28 天前的旧数据，调用第二个接口确认
             if (now - tweetTime > days28Ms) {
-              console.log(`[ghost-following] Tweet ${tweet.id} is older than 28 days, verifying with second API`);
+              console.log(`analyze return ${user_id} Tweet ${tweet.id} is older than 28 days, verifying with second API`);
               analysisResult = await verifyEmptyUserWithSecondApi(user_id);
             } else {
               // 数据正常，直接使用
               analysisResult = {
                 id: tweet.id,
-                create_time: tweet.create_time,
+                create_time: tweet.create_time || null,
                 html: tweet.info?.html || null,
-                twitter_user_id: tweet.twitter_user_id,
+                twitter_user_id: tweet.twitter_user_id || user_id,
               };
             }
           } else {
-            // 第一个接口返回空，调用第二个接口进行二次确认
+            // KOL tweets 返回空，调用第二个接口进行二次确认
+            // 可能是因为用户不是被追踪的 KOL
+            console.log(`analyze return ${user_id} KOL tweets empty, using second API`);
             analysisResult = await verifyEmptyUserWithSecondApi(user_id);
           }
         } else {
@@ -621,7 +575,7 @@ router.post(
           };
         }
       } catch (apiError) {
-        console.error("[ghost-following] First API request failed:", apiError.message);
+        console.error(`analyze return ${user_id} First API request failed:`, apiError.message);
         circuitBreaker.recordFailure();
         
         // 第一个接口失败，尝试第二个接口
@@ -633,6 +587,7 @@ router.post(
       const expiresAt = currentQuota.appliedAt + QUOTA_CONFIG.periodDays * 24 * 60 * 60 * 1000;
       const expiresInDays = Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000));
 
+      console.log(`analyze return ${user_id} SUCCESS`);
       return res.json({
         success: true,
         data: {
@@ -648,7 +603,7 @@ router.post(
         },
       });
     } catch (error) {
-      console.error("[ghost-following] Analyze error:", error);
+      console.error(`analyze return ${user_id} ERROR:`, error);
       // 如果有状态码（来自外部API），透传；否则返回500
       const statusCode = error.statusCode || 500;
       return res.status(statusCode).json({
@@ -863,8 +818,8 @@ async function createFollowingQuota(redisClient, userId) {
 
 /**
  * POST /api/xhunt/ghost-following/following
- * 获取用户关注列表（调用 data.cryptohunt.ai/external/crawler 接口）
- * 每月限额 100 次，与 analyze 额度独立
+ * 获取用户关注列表（调用 /social/following 接口）
+ * 每月限额 150 次，与 analyze 额度独立
  */
 router.post(
   "/following",
@@ -927,20 +882,18 @@ router.post(
       const quotaKey = getFollowingQuotaKey(userId);
       const newRemaining = await redisClient.hIncrBy(quotaKey, "remaining", -1);
 
-      // 3. 调用外部 API
-      const apiUrl = "https://data.cryptohunt.ai/external/crawler";
+      // 3. 调用外部 API (/social/following)
       const response = await axios.post(
-        apiUrl,
+        `${PRO_API_CONFIG.baseUrl}/social/following`,
         {
-          endpoint: "following",
           user_id: user_id,
-          cursor: cursor,
+          cursor: cursor || "",
         },
         {
           timeout: 30000, // 30秒超时
           headers: {
+            "X-API-KEY": PRO_API_CONFIG.apiKey,
             "Content-Type": "application/json",
-            "apikey": "f02b860a-3ae8-4fee-b36e-210a6a965c98"
           },
         }
       );
@@ -989,7 +942,7 @@ router.post(
 async function verifyEmptyUserWithSecondApi(user_id) {
   try {
     const response = await axios.post(
-      "http://172.31.0.2:3001/tweet/user_tweets",
+      `${PRO_API_CONFIG.baseUrl}/tweet/user_tweets`,
       {
         user_id: user_id,
         // cursor: "",
@@ -997,7 +950,7 @@ async function verifyEmptyUserWithSecondApi(user_id) {
       {
         timeout: 15000, // 15秒超时
         headers: {
-          "X-API-KEY": "e51eeac9-c1d6-4cf7-9746-e19efa9bcb6a",
+          "X-API-KEY": PRO_API_CONFIG.apiKey,
           "Content-Type": "application/json",
         },
       }
@@ -1017,7 +970,8 @@ async function verifyEmptyUserWithSecondApi(user_id) {
         
         const tweet = tweets[0]; // 取时间最新的一条
         // 优先使用 created_at (Twitter 原始格式)，备选 time_parsed
-        const createTime = tweet.created_at || tweet.time_parsed || null;
+        const createTime = tweet.created_at || null;
+        console.log(`analyze return ${user_id} Second API found tweets`);
         return {
           id: tweet.id,
           create_time: createTime,
@@ -1028,10 +982,12 @@ async function verifyEmptyUserWithSecondApi(user_id) {
         };
       } else {
         // 第二个接口也确认没有推文，调用第三个接口检查是否锁推
+        console.log(`analyze return ${user_id} Second API empty, checking protected status`);
         return await checkUserProtectedStatus(user_id);
       }
     } else {
       // 第二个接口返回异常格式
+      console.log(`analyze return ${user_id} Second API invalid response`);
       return {
         id: null,
         create_time: null,
@@ -1042,7 +998,7 @@ async function verifyEmptyUserWithSecondApi(user_id) {
       };
     }
   } catch (apiError) {
-    console.error("[ghost-following] Second API verification failed:", apiError.message);
+    console.error(`analyze return ${user_id} Second API verification failed:`, apiError.message);
     
     // 外部API返回什么状态码就抛出什么状态码
     if (apiError.response) {
@@ -1064,17 +1020,17 @@ async function verifyEmptyUserWithSecondApi(user_id) {
  * @param {string} apiKey - API Key
  * @returns {Object} - 用户状态信息
  */
-async function checkUserProtectedStatus(user_id, apiKey) {
+async function checkUserProtectedStatus(user_id) {
   try {
     const response = await axios.post(
-      "http://172.31.0.2:3001/user/profile_by_userid",
+      `${PRO_API_CONFIG.baseUrl}/user/profile_by_userid`,
       {
         user_id: user_id,
       },
       {
         timeout: 10000, // 10秒超时
         headers: {
-          "X-API-KEY": "e51eeac9-c1d6-4cf7-9746-e19efa9bcb6a",
+          "X-API-KEY": PRO_API_CONFIG.apiKey,
           "Content-Type": "application/json",
         },
       }
@@ -1084,6 +1040,7 @@ async function checkUserProtectedStatus(user_id, apiKey) {
       const profile = response.data;
       const isProtected = profile.protected === true;
       
+      console.log(`analyze return ${user_id} Third API profile check success, protected=${isProtected}`);
       return {
         id: null,
         create_time: null,
@@ -1113,6 +1070,7 @@ async function checkUserProtectedStatus(user_id, apiKey) {
       };
     } else {
       // 第三个接口返回异常， fallback 到默认空结果
+      console.log(`analyze return ${user_id} Third API profile check invalid response`);
       return {
         id: null,
         create_time: null,
@@ -1125,7 +1083,7 @@ async function checkUserProtectedStatus(user_id, apiKey) {
       };
     }
   } catch (error) {
-    console.error("[ghost-following] Third API (profile check) failed:", error.message);
+    console.error(`analyze return ${user_id} Third API (profile check) failed:`, error.message);
     
     // 第三个接口失败，透传 API 错误
     if (error.response) {
