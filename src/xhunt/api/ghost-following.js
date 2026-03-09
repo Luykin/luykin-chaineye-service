@@ -150,7 +150,7 @@ function getCircuitBreaker(name) {
 
 // ======== 并发用户限制配置 ========
 const CONCURRENT_LIMIT_CONFIG = {
-  maxConcurrentUsers: 10,       // 最大并发用户数
+  maxConcurrentUsers: 8,       // 最大并发用户数8人
   userActivityTTL: 60,          // 用户活跃状态保持时间（秒）
   redisKeyPrefix: "xhunt:ghost:concurrent",  // Redis key前缀
 };
@@ -564,15 +564,8 @@ router.post(
             analysisResult = await verifyEmptyUserWithSecondApi(user_id);
           }
         } else {
-          // API 返回异常格式，视为失败
-          circuitBreaker.recordFailure();
-          analysisResult = {
-            id: null,
-            create_time: null,
-            html: null,
-            twitter_user_id: user_id,
-            message: "Failed to fetch tweets",
-          };
+          console.log(`analyze return ${user_id} KOL tweets invalid response`);
+          analysisResult = await verifyEmptyUserWithSecondApi(user_id);
         }
       } catch (apiError) {
         console.error(`analyze return ${user_id} First API request failed:`, apiError.message);
