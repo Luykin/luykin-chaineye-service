@@ -142,6 +142,93 @@ function getCircuitBreaker(name) {
   return circuitBreakers.get(name);
 }
 
+// ======== 并发用户限制配置 ========
+const CONCURRENT_LIMIT_CONFIG = {
+  maxConcurrentUsers: 10,       // 最大并发用户数
+  userActivityTTL: 60,          // 用户活跃状态保持时间（秒）
+  redisKeyPrefix: "xhunt:ghost:concurrent",  // Redis key前缀
+};
+
+/**
+ * 并发用户限制中间件
+ * 基于Redis实现，60秒内有请求视为"在用"，每次请求重置倒计时
+ */
+async function concurrentUserLimit(req, res, next) {
+  const redisClient = req.redisClient || global.__xhuntRedis;
+  
+  if (!redisClient) {
+    console.error("[concurrent-limit] Redis client not available");
+    // Redis不可用时放行，不阻塞业务
+    return next();
+  }
+
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      // 未登录用户不限制（理论上不会走到这里，因为有authenticateToken前置）
+      return next();
+    }
+
+    const { maxConcurrentUsers, userActivityTTL, redisKeyPrefix } = CONCURRENT_LIMIT_CONFIG;
+    const userKey = `${redisKeyPrefix}:user:${userId}`;
+
+    // 1. 检查该用户是否已经在活跃列表中
+    const userExists = await redisClient.exists(userKey);
+
+    if (userExists) {
+      // 用户已在活跃列表中，刷新TTL（重置60秒倒计时）
+      await redisClient.expire(userKey, userActivityTTL);
+      console.log(`[concurrent-limit] User ${userId} refreshed activity, TTL reset to ${userActivityTTL}s`);
+      return next();
+    }
+
+    // 2. 用户不在活跃列表中，需要检查当前活跃用户数
+    const pattern = `${redisKeyPrefix}:user:*`;
+    let activeCount = 0;
+    let cursor = 0;
+    
+    do {
+      const result = await redisClient.scan(cursor, { MATCH: pattern, COUNT: 100 });
+      cursor = result.cursor;
+      // 过滤掉即将过期的key（TTL <= 0 表示已过期）
+      for (const key of result.keys) {
+        const ttl = await redisClient.ttl(key);
+        if (ttl > 0) {
+          activeCount++;
+        }
+      }
+    } while (cursor !== 0);
+
+    if (activeCount >= maxConcurrentUsers) {
+      // 已达上限，返回特殊错误码
+      console.log(`[concurrent-limit] User ${userId} rejected, max concurrent users (${maxConcurrentUsers}) reached`);
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: "CONCURRENT_LIMIT_EXCEEDED",
+          message: "当前使用人数过多，请稍后再试",
+          data: {
+            maxConcurrentUsers,
+            currentActiveUsers: activeCount,
+            retryAfter: userActivityTTL, // 建议客户端60秒后重试
+          },
+        },
+      });
+    }
+
+    // 3. 未满员，加入活跃列表
+    await redisClient.set(userKey, Date.now().toString(), { EX: userActivityTTL });
+    
+    console.log(`[concurrent-limit] User ${userId} added to active list, count: ${activeCount + 1}/${maxConcurrentUsers}`);
+
+    next();
+  } catch (error) {
+    console.error("[concurrent-limit] Error:", error);
+    // 中间件出错时不阻塞请求，记录日志后放行
+    next();
+  }
+}
+
 // ======== 额度原子扣除 Lua 脚本 ========
 // KEYS[1]: quotaKey
 // ARGV[1]: 当前时间戳
@@ -400,6 +487,7 @@ router.post(
   [
     authenticateToken,
     checkProStatusRequired,
+    concurrentUserLimit,
     body("user_id")
       .trim()
       .notEmpty()
