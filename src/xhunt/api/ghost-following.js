@@ -981,14 +981,9 @@ async function verifyEmptyUserWithSecondApi(user_id) {
     } else {
       // 第二个接口返回异常格式
       console.log(`analyze return ${user_id} Second API invalid response`);
-      return {
-        id: null,
-        create_time: null,
-        html: null,
-        twitter_user_id: user_id,
-        message: "No tweets found for this user (verification failed)",
-        verified: false,
-      };
+      const error = new Error("Second API invalid response format");
+      error.statusCode = 500;
+      throw error;
     }
   } catch (apiError) {
     console.error(`analyze return ${user_id} Second API verification failed:`, apiError.message);
@@ -1062,18 +1057,11 @@ async function checkUserProtectedStatus(user_id) {
         },
       };
     } else {
-      // 第三个接口返回异常， fallback 到默认空结果
+      // 第三个接口返回异常
       console.log(`analyze return ${user_id} Third API profile check invalid response`);
-      return {
-        id: null,
-        create_time: null,
-        html: null,
-        twitter_user_id: user_id,
-        protected: null,
-        message: "No tweets found for this user (profile check failed)",
-        verified: true,
-        source: "pro_api",
-      };
+      const error = new Error("Third API profile check invalid response format");
+      error.statusCode = 500;
+      throw error;
     }
   } catch (error) {
     console.error(`analyze return ${user_id} Third API (profile check) failed:`, error.message);
