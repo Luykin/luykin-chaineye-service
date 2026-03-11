@@ -9,7 +9,7 @@ const {
   checkGiftCreditsStatus,
   markGiftCreditsAsGifted,
 } = require("../services/giftCreditsService");
-const { XHuntUser } = require("../models/postgres-start");
+const { XHuntUser } = require("../../models/postgres-start");
 
 const router = express.Router();
 
