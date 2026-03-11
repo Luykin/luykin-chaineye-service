@@ -29,7 +29,7 @@ const FOLLOWING_REDIS_KEY_PREFIX = "xhunt:ghost:following:new";
 // ======== CryptoHunt Pro API 配置 ========
 const PRO_API_CONFIG = {
   baseUrl: process.env.PRO_API_BASE_URL || "http://172.31.0.2:3001",
-  apiKey: process.env.PRO_API_KEY || "e51eeac9-c1d6-4cf7-9746-e19efa9bcb6a",
+  apiKey: process.env.PRO_API_KEY || "bd1cbd94-20e5-42a2-96cd-e4313ea2154d",
 };
 
 // ======== 熔断器配置 ========
