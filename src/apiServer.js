@@ -35,6 +35,7 @@ const xHuntCampaignRoutes = require("./xhunt/api/campaign");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const xHuntGhostFollowingRoutes = require("./xhunt/api/ghost-following");
+const xHuntProApiCreditsRoutes = require("./xhunt/api/pro-api-credits");
 const rootdataProRoutes = require("./rootdatapro/api/rootdatapro");
 
 const adminRoutes = require("./admin/api/admin");
@@ -345,6 +346,9 @@ async function initializeAndStartServer() {
 
   // Ghost Following 额度管理接口 - 分析关注列表活跃度
   app.use("/api/xhunt/ghost-following", xHuntGhostFollowingRoutes);
+
+  // Pro API Credits 接口 - 积分领取和查询（封装目标服务）
+  app.use("/api/xhunt/pro-api", xHuntProApiCreditsRoutes);
 
   // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
   app.use("/api/rootdata", xHuntRootdataRoutes);
