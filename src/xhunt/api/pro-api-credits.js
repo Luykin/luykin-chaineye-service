@@ -9,6 +9,7 @@ const {
   checkGiftCreditsStatus,
   markGiftCreditsAsGifted,
 } = require("../services/giftCreditsService");
+const { XHuntUser } = require("../models/postgres-start");
 
 const router = express.Router();
 
@@ -209,6 +210,11 @@ router.post(
  * GET /api/xhunt/pro-api/credits-user/:address
  * 查询用户积分信息
  *
+ * 老用户兼容处理：
+ * - 如果 alreadyGifted === true 且 keyUsed === 'username'（旧用户标记）
+ * - 优先用当前 XHuntUser 绑定的 evmAddresses 查询外部信息
+ * - 如果查到，返回绑定地址的信息；查不到再回退查 normalizedAddress
+ *
  * 返回：
  * - exists: 用户是否存在于 Pro API
  * - alreadyGifted: 是否已被赠送过积分（我们的系统记录）
@@ -231,45 +237,87 @@ router.get(
       }
 
       const normalizedAddress = address.toLowerCase().trim();
+      const currentUsername = req.user?.username?.toLowerCase().trim();
+      const twitterId = req.user?.twitterId;
 
-      // 1. 查询外部 Pro API 用户信息
-      const { exists, data: proUserData } = await queryProUser(normalizedAddress);
+      // 1. 先检查是否已赠送过积分（用于老用户兼容判断）
+      const { alreadyGifted, keyUsed } = await checkGiftCreditsStatus({
+        twitterId,
+        username: req.user?.username,
+      });
 
-      if (!exists) {
+      let proUserData = null;
+      let queryAddress = normalizedAddress;
+      let foundFromBoundAddress = false;
+
+      // 2. 老用户兼容处理：如果 alreadyGifted 且是用 username 标记的
+      if (alreadyGifted && keyUsed === 'username' && twitterId) {
+        // 获取当前用户绑定的 evmAddresses（使用 twitterId 查询）
+        const user = await XHuntUser.findOne({
+          where: { twitterId },
+          attributes: ['evmAddresses'],
+        });
+
+        const boundAddresses = user?.evmAddresses || [];
+        
+        // 遍历绑定的地址，优先查询第一个有效的外部信息
+        if (boundAddresses.length > 0) {
+          for (const boundAddr of boundAddresses) {
+            const addr = String(boundAddr || '').trim().toLowerCase();
+            if (!addr) continue;
+            
+            const result = await queryProUser(addr);
+            if (result.exists) {
+              proUserData = result.data;
+              queryAddress = addr;
+              foundFromBoundAddress = true;
+              console.log(`[CreditsUser] 老用户兼容: ${currentUsername} 使用绑定地址 ${addr} 查询到信息`);
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. 如果没从绑定地址查到，查传入的 normalizedAddress
+      if (!proUserData) {
+        const result = await queryProUser(normalizedAddress);
+        if (result.exists) {
+          proUserData = result.data;
+        }
+      }
+
+      // 4. 用户不存在于 Pro API
+      if (!proUserData) {
         return res.json({
           success: true,
           data: {
             address: normalizedAddress,
             exists: false,
             alreadyGifted: false,
+            keyUsed: null,
             balance: null,
             proUserData: null,
+            foundFromBoundAddress: false,
           },
         });
       }
 
-      // 2. 检查是否已赠送过积分（优先使用 twitterId，兼容 username）
-      const currentUsername = req.user?.username?.toLowerCase().trim();
-      const twitterId = req.user?.twitterId;
-      
-      const { alreadyGifted } = await checkGiftCreditsStatus({
-        twitterId,
-        username: req.user?.username,
-      });
-
-      // 3. 提取余额（Pro API 返回的是 credits 字段，字符串类型）
+      // 5. 提取余额（Pro API 返回的是 credits 字段，字符串类型）
       const balance = proUserData.credits ? parseFloat(proUserData.credits) : null;
 
       return res.json({
         success: true,
         data: {
           address: normalizedAddress,
+          queryAddress,  // 实际查询到的地址（老用户可能是绑定的地址）
           exists: true,
           username: currentUsername,
           twitterId,
           alreadyGifted,
+          keyUsed,
           balance,
           proUserData,
+          foundFromBoundAddress,
         },
       });
     } catch (error) {
