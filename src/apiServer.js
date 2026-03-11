@@ -7,6 +7,79 @@ require("dotenv").config({
   path: `${process.env.NODE_ENV === "development" ? ".env-dev" : ".env-pro"}`,
 });
 console.log(process.env.NODE_ENV, "process.env.NODE_ENV运行环境");
+
+// ============================================
+// 启动时模块预加载检查 - 防止运行时路径错误导致崩溃
+// ============================================
+const MODULES_TO_PRELOAD = [
+  // 模型层
+  './models/sqlite-start',
+  './models/postgres-start',
+  './models/postgres-fundraising',
+  
+  // XHunt API 路由
+  './xhunt/api/auth',
+  './xhunt/api/web-auth',
+  './xhunt/api/proxy',
+  './xhunt/api/reviews',
+  './xhunt/api/notes',
+  './xhunt/api/report',
+  './xhunt/api/stats',
+  './xhunt/api/mantle',
+  './xhunt/api/campaign',
+  './xhunt/api/private-messages',
+  './xhunt/api/rootdata',
+  './xhunt/api/ghost-following',
+  './xhunt/api/pro-api-credits',
+  './xhunt/api/sse',
+  './xhunt/api/user-entry',
+  
+  // Admin API
+  './admin/api/admin',
+  './admin/api/reviews',
+  
+  // 其他路由
+  './routes/fundraising',
+  './routes/cryptohunt-tg',
+  './routes/proxy',
+  './routes/ex-news',
+  './routes/general',
+  './api/internal-query',
+  
+  // RootDataPro
+  './rootdatapro/api/rootdatapro',
+  
+  // 中间件
+  './xhunt/middleware/security',
+  './xhunt/middleware/auth',
+  './admin/middleware/adminAuth',
+  
+  // 工具模块
+  './lib/redisClient',
+  './lib/perf-monitor',
+  './xhunt/utils/request-id',
+];
+
+console.log('[Preload] 开始预加载关键模块...');
+const preloadErrors = [];
+for (const mod of MODULES_TO_PRELOAD) {
+  try {
+    require(mod);
+    // console.log(`[Preload] ✓ ${mod}`);  // 成功时静默，避免日志太乱
+  } catch (err) {
+    console.error(`[Preload] ✗ ${mod} 加载失败:`, err.message);
+    preloadErrors.push({ module: mod, error: err.message });
+  }
+}
+
+if (preloadErrors.length > 0) {
+  console.error('[Preload] 致命错误: 以下模块加载失败，应用无法启动:');
+  preloadErrors.forEach(e => console.error(`  - ${e.module}: ${e.error}`));
+  process.exit(1);  // 启动失败，别让带病运行
+}
+console.log(`[Preload] ✓ 所有 ${MODULES_TO_PRELOAD.length} 个模块预加载成功`);
+// ============================================
+
 const express = require("express");
 const helmet = require("helmet");
 const path = require("path");
