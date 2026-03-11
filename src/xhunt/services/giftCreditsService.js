@@ -63,6 +63,72 @@ async function calculateGiftCredits(username) {
 }
 
 /**
+ * 根据 twitterId 计算用户应赠送的积分
+ * @param {string} twitterId - Twitter用户ID
+ * @returns {Promise<number>} - 计算后的积分
+ */
+async function calculateGiftCreditsByTwitterId(twitterId) {
+  try {
+    // 1. 基础额度
+    const baseCredits = 200;
+
+    // 2. 先通过 twitterId 找到用户，获取 username 和 kolRank20W
+    const user = await XHuntUser.findOne({
+      where: { twitterId },
+      attributes: ['username', 'kolRank20W'],
+    });
+
+    if (!user) {
+      console.log(`[GiftCredits] User not found for twitterId: ${twitterId}, returning base credits`);
+      return baseCredits;
+    }
+
+    const username = user.username;
+    const kolRank = user?.kolRank20W;
+
+    // 3. 查询用户过去30天登录天数（通过 username）
+    let activeDaysCount = 0;
+    if (username) {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      activeDaysCount = await DailyActiveUser.count({
+        where: {
+          userId: username,
+          date: {
+            [Sequelize.Op.gte]: thirtyDaysAgo.toISOString().split('T')[0],
+          },
+        },
+      });
+    }
+
+    // 登录奖励：每天50，上限800
+    const loginBonus = Math.min(activeDaysCount * 50, 800);
+
+    // 4. 排名奖励（三档互斥，取最高档）
+    let rankBonus = 0;
+    if (kolRank && kolRank <= 10000) {
+      rankBonus = 1000; // 前1万
+    } else if (kolRank && kolRank <= 50000) {
+      rankBonus = 600;  // 前5万
+    } else if (kolRank && kolRank <= 100000) {
+      rankBonus = 200;  // 前10万
+    }
+
+    // 总积分 = 基础 + 登录奖励 + 排名奖励
+    const totalCredits = baseCredits + loginBonus + rankBonus;
+
+    console.log(`[GiftCredits] TwitterId: ${twitterId}, Username: ${username || 'N/A'}, Base: ${baseCredits}, LoginDays: ${activeDaysCount}, LoginBonus: ${loginBonus}, Rank: ${kolRank || 'N/A'}, RankBonus: ${rankBonus}, Total: ${totalCredits}`);
+
+    return totalCredits;
+  } catch (error) {
+    console.error(`[GiftCredits] Error calculating credits for twitterId ${twitterId}:`, error);
+    // 出错时返回基础额度
+    return 200;
+  }
+}
+
+/**
  * 调用积分赠送接口
  * @param {Object} params - 参数对象
  * @param {string} params.address - 用户钱包地址
@@ -304,6 +370,7 @@ async function handleUserCreateGiftCredits(req, targetUrl, isSuccess) {
 
 module.exports = {
   calculateGiftCredits,
+  calculateGiftCreditsByTwitterId,
   callAddCreditsApi,
   getGiftCreditsKey,
   getGiftCreditsKeyByTwitterId,

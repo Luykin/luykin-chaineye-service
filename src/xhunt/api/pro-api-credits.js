@@ -4,7 +4,7 @@ const {
   authenticateToken,
 } = require("../middleware/auth");
 const {
-  calculateGiftCredits,
+  calculateGiftCreditsByTwitterId,
   callAddCreditsApi,
   checkGiftCreditsStatus,
   markGiftCreditsAsGifted,
@@ -164,8 +164,8 @@ router.post(
       // 标记为已赠送（使用 twitterId，更稳定）
       await markGiftCreditsAsGifted(twitterId);
 
-      // 4. 计算并赠送积分
-      const credits = await calculateGiftCredits(normalizedUsername);
+      // 4. 计算并赠送积分（使用 twitterId 查询登录天数）
+      const credits = await calculateGiftCreditsByTwitterId(twitterId);
       const tx = `${normalizedUsername}_${Date.now()}`;
 
       const addSuccess = await callAddCreditsApi({
