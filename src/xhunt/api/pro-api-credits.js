@@ -87,10 +87,10 @@ async function createProUser(address, username) {
 /**
  * POST /api/xhunt/pro-api/credits-claim
  * 领取积分接口
- * 
+ *
  * 请求体：
  * - address: 用户钱包地址（必填）
- * 
+ *
  * 逻辑：
  * 1. 查询外部 Pro API 用户是否存在
  * 2. 如果不存在，先创建账户（使用当前登录用户的 username）
@@ -148,7 +148,7 @@ router.post(
       const twitterId = req.user?.twitterId;
       const { alreadyGifted } = await checkGiftCreditsStatus({
         twitterId,
-        username: normalizedUsername,
+        username: username,
       });
       
       if (alreadyGifted) {
@@ -208,7 +208,7 @@ router.post(
 /**
  * GET /api/xhunt/pro-api/credits-user/:address
  * 查询用户积分信息
- * 
+ *
  * 返回：
  * - exists: 用户是否存在于 Pro API
  * - alreadyGifted: 是否已被赠送过积分（我们的系统记录）
@@ -254,7 +254,7 @@ router.get(
       
       const { alreadyGifted } = await checkGiftCreditsStatus({
         twitterId,
-        username: currentUsername,
+        username: req.user?.username,
       });
 
       // 3. 提取余额（Pro API 返回的是 credits 字段，字符串类型）
