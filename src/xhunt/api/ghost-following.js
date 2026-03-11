@@ -266,15 +266,23 @@ for i = 1, #quota, 2 do
   end
 end
 
--- 如果没有额度或剩余<=0，需要检查是否可以自动申请
-if remaining == nil or remaining <= 0 then
-  -- 获取上次申请时间
-  local lastApplied = redis.call('hGet', historyKey, 'lastAppliedAt')
-  local lastAppliedAt = lastApplied and tonumber(lastApplied) or nil
-  
-  local periodMs = ttl * 1000  -- 转毫秒
-  
-  -- 检查是否可以申请新额度
+-- 获取上次申请时间
+local lastApplied = redis.call('hGet', historyKey, 'lastAppliedAt')
+local lastAppliedAt = lastApplied and tonumber(lastApplied) or nil
+
+local periodMs = ttl * 1000  -- 转毫秒
+
+-- 检查是否过期（超过30天）
+local isExpired = false
+if appliedAt then
+  if now - appliedAt >= periodMs then
+    isExpired = true
+  end
+end
+
+-- 如果没有额度 或 剩余<=0 或 已过期，都触发申请新额度逻辑
+if remaining == nil or remaining <= 0 or isExpired then
+  -- 检查是否可以申请新额度（需要满足30天冷却期）
   local canApply = true
   if lastAppliedAt then
     if now - lastAppliedAt < periodMs then
@@ -301,7 +309,7 @@ if remaining == nil or remaining <= 0 then
     return {-1, total or 0, lastAppliedAt or 0, 0}  -- -1表示额度不足
   end
 else
-  -- 有额度，直接扣除
+  -- 有额度且未过期，直接扣除
   remaining = redis.call('hIncrBy', quotaKey, 'remaining', -1)
   return {remaining, total, appliedAt, 0}  -- 最后0表示不是新额度
 end
@@ -632,7 +640,7 @@ router.get(
       }
 
       // ====== Analyze 额度 ======
-      const quotaInfo = await getUserQuota(redisClient, userId);
+      let quotaInfo = await getUserQuota(redisClient, userId);
       const totalQuota = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
 
       let analyzeData;
@@ -655,71 +663,126 @@ router.get(
           expiresInDays: 0,
         };
       } else {
-        // 有额度记录
-        const used = quotaInfo.total - quotaInfo.remaining;
-        const expiresAt =
-          quotaInfo.appliedAt + QUOTA_CONFIG.periodDays * 24 * 60 * 60 * 1000;
-        const hasRemaining = quotaInfo.remaining > 0;
+        // 有额度记录，先检查是否过期（超过30天）
+        const expiresAt = quotaInfo.appliedAt + QUOTA_CONFIG.periodDays * 24 * 60 * 60 * 1000;
         const isExpired = Date.now() > expiresAt;
-
-        let status;
+        
         if (isExpired) {
-          status = "expired";
-        } else if (hasRemaining) {
-          status = "active";
+          // 额度已过期，自动创建新额度
+          const canApply = canApplyNewQuota(quotaInfo.appliedAt);
+          
+          if (canApply) {
+            // 可以申请新额度，自动重置
+            const now = Date.now();
+            const ttlSeconds = QUOTA_CONFIG.periodDays * 24 * 60 * 60;
+            const quotaKey = getQuotaKey(userId);
+            const historyKey = getHistoryKey(userId);
+            
+            const newQuotaData = {
+              total: totalQuota.toString(),
+              remaining: totalQuota.toString(),
+              appliedAt: now.toString(),
+            };
+            
+            await redisClient.hSet(quotaKey, newQuotaData);
+            await redisClient.expire(quotaKey, ttlSeconds);
+            await redisClient.hSet(historyKey, "lastAppliedAt", now.toString());
+            
+            // 使用新额度数据
+            quotaInfo = {
+              exists: true,
+              total: totalQuota,
+              remaining: totalQuota,
+              appliedAt: now,
+              lastAppliedAt: now,
+            };
+            
+            const newExpiresAt = now + ttlSeconds * 1000;
+            
+            analyzeData = {
+              status: "active",
+              quota: { total: totalQuota, remaining: totalQuota, used: 0 },
+              appliedAt: now,
+              expiresAt: newExpiresAt,
+              nextApplyAt: null,
+              waitDays: 0,
+              canApplyNow: false,
+              expiresInDays: QUOTA_CONFIG.periodDays,
+            };
+          } else {
+            // 不能申请新额度（30天冷却期未到），返回等待状态
+            const waitInfo = calculateWaitTime(quotaInfo.appliedAt);
+            analyzeData = {
+              status: "cooldown",
+              quota: { total: 0, remaining: 0, used: 0 },
+              appliedAt: null,
+              expiresAt: null,
+              nextApplyAt: waitInfo.nextApplyAt,
+              waitDays: waitInfo.waitDays,
+              canApplyNow: false,
+              expiresInDays: 0,
+            };
+          }
         } else {
-          status = "exhausted";
+          // 未过期，正常返回
+          const used = quotaInfo.total - quotaInfo.remaining;
+          const hasRemaining = quotaInfo.remaining > 0;
+
+          let status;
+          if (hasRemaining) {
+            status = "active";
+          } else {
+            status = "exhausted";
+          }
+
+          const canApply = canApplyNewQuota(quotaInfo.appliedAt);
+          const waitInfo = calculateWaitTime(quotaInfo.appliedAt);
+
+          analyzeData = {
+            status,
+            quota: {
+              total: quotaInfo.total,
+              remaining: quotaInfo.remaining,
+              used,
+            },
+            appliedAt: quotaInfo.appliedAt,
+            expiresAt,
+            nextApplyAt: canApply ? null : waitInfo.nextApplyAt,
+            waitDays: canApply ? 0 : waitInfo.waitDays,
+            canApplyNow: canApply,
+            expiresInDays: Math.max(
+              0,
+              Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000))
+            ),
+          };
         }
-
-        const canApply = canApplyNewQuota(quotaInfo.appliedAt);
-        const waitInfo = calculateWaitTime(quotaInfo.appliedAt);
-
-        analyzeData = {
-          status,
-          quota: {
-            total: quotaInfo.total,
-            remaining: quotaInfo.remaining,
-            used,
-          },
-          appliedAt: quotaInfo.appliedAt,
-          expiresAt,
-          nextApplyAt: canApply ? null : waitInfo.nextApplyAt,
-          waitDays: canApply ? 0 : waitInfo.waitDays,
-          canApplyNow: canApply,
-          expiresInDays: Math.max(
-            0,
-            Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000))
-          ),
-        };
       }
 
       // ====== Following 额度 ======
       let followingQuotaInfo = await getUserFollowingQuota(redisClient, userId);
 
-      // 如果额度不存在或已过期，初始化额度信息（不实际创建，只是显示预估）
+      // 如果额度不存在或已过期，自动创建新额度
       let followingData;
       if (!followingQuotaInfo || Date.now() > followingQuotaInfo.resetAt) {
-        const now = Date.now();
-        const ttlMs = FOLLOWING_QUOTA_CONFIG.periodDays * 24 * 60 * 60 * 1000;
-        const resetAt = followingQuotaInfo?.resetAt 
-          ? followingQuotaInfo.resetAt + ttlMs 
-          : now + ttlMs;
-
+        // 自动创建新额度
+        followingQuotaInfo = await createFollowingQuota(redisClient, userId);
+        
         followingData = {
-          status: followingQuotaInfo ? "expired" : "none",
-          quota: { total: FOLLOWING_QUOTA_CONFIG.monthlyLimit, remaining: FOLLOWING_QUOTA_CONFIG.monthlyLimit, used: 0 },
-          resetAt,
+          status: "active",
+          quota: { 
+            total: FOLLOWING_QUOTA_CONFIG.monthlyLimit, 
+            remaining: FOLLOWING_QUOTA_CONFIG.monthlyLimit, 
+            used: 0 
+          },
+          resetAt: followingQuotaInfo.resetAt,
           expiresInDays: FOLLOWING_QUOTA_CONFIG.periodDays,
         };
       } else {
         const used = followingQuotaInfo.total - followingQuotaInfo.remaining;
         const hasRemaining = followingQuotaInfo.remaining > 0;
-        const isExpired = Date.now() > followingQuotaInfo.resetAt;
 
         let status;
-        if (isExpired) {
-          status = "expired";
-        } else if (hasRemaining) {
+        if (hasRemaining) {
           status = "active";
         } else {
           status = "exhausted";
