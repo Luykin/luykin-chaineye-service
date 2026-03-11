@@ -1,15 +1,14 @@
 const express = require("express");
 const { securityMiddleware } = require("../middleware/security");
 const {
-  authenticateTokenOptional,
+  authenticateToken,
 } = require("../middleware/auth");
 const {
   calculateGiftCredits,
   callAddCreditsApi,
-  checkAndMarkGiftCredits,
-  getGiftCreditsKey,
+  checkGiftCreditsStatus,
+  markGiftCreditsAsGifted,
 } = require("../services/giftCreditsService");
-const { getRedisClient } = require("../../lib/redisClient");
 
 const router = express.Router();
 
@@ -91,26 +90,33 @@ async function createProUser(address, username) {
  * 
  * 请求体：
  * - address: 用户钱包地址（必填）
- * - username: Twitter用户名（必填）
  * 
  * 逻辑：
  * 1. 查询外部 Pro API 用户是否存在
- * 2. 如果不存在，先创建账户
+ * 2. 如果不存在，先创建账户（使用当前登录用户的 username）
  * 3. 如果未赠送过积分，则赠送（防重）
  */
 router.post(
   "/credits-claim",
-  authenticateTokenOptional,
+  authenticateToken,
   securityMiddleware,
   async (req, res) => {
     try {
-      const { address, username } = req.body || {};
+      const { address } = req.body || {};
+      const username = req.user?.username;
 
       // 参数校验
-      if (!address || !username) {
+      if (!address) {
         return res.status(400).json({
           success: false,
-          message: "Missing required fields: address and username",
+          message: "Missing required field: address",
+        });
+      }
+
+      if (!username) {
+        return res.status(401).json({
+          success: false,
+          message: "Authentication required",
         });
       }
 
@@ -138,8 +144,12 @@ router.post(
         console.log(`[CreditsClaim] Pro user ${normalizedAddress} created successfully`);
       }
 
-      // 3. 检查是否已赠送过积分（使用 username 作为维度）
-      const alreadyGifted = await checkAndMarkGiftCredits(normalizedUsername);
+      // 3. 检查是否已赠送过积分（优先使用 twitterId，兼容 username）
+      const twitterId = req.user?.twitterId;
+      const { alreadyGifted } = await checkGiftCreditsStatus({
+        twitterId,
+        username: normalizedUsername,
+      });
       
       if (alreadyGifted) {
         return res.json({
@@ -150,6 +160,9 @@ router.post(
           alreadyGifted: true,
         });
       }
+      
+      // 标记为已赠送（使用 twitterId，更稳定）
+      await markGiftCreditsAsGifted(twitterId);
 
       // 4. 计算并赠送积分
       const credits = await calculateGiftCredits(normalizedUsername);
@@ -204,7 +217,7 @@ router.post(
  */
 router.get(
   "/credits-user/:address",
-  authenticateTokenOptional,
+  authenticateToken,
   securityMiddleware,
   async (req, res) => {
     try {
@@ -235,20 +248,14 @@ router.get(
         });
       }
 
-      // 2. 检查是否已赠送过积分（使用 username 作为维度）
-      // 如果 Pro API 返回的 username 是 "None" 或其他值，都用它作为维度
-      const usernameFromPro = proUserData.username && proUserData.username !== "None" 
-        ? proUserData.username.toLowerCase().trim() 
-        : null;
-
-      let alreadyGifted = false;
+      // 2. 检查是否已赠送过积分（优先使用 twitterId，兼容 username）
+      const currentUsername = req.user?.username?.toLowerCase().trim();
+      const twitterId = req.user?.twitterId;
       
-      if (usernameFromPro) {
-        const redisKey = getGiftCreditsKey(usernameFromPro);
-        const redisClient = await getRedisClient();
-        const giftedFlag = await redisClient.get(redisKey);
-        alreadyGifted = !!giftedFlag;
-      }
+      const { alreadyGifted } = await checkGiftCreditsStatus({
+        twitterId,
+        username: currentUsername,
+      });
 
       // 3. 提取余额（Pro API 返回的是 credits 字段，字符串类型）
       const balance = proUserData.credits ? parseFloat(proUserData.credits) : null;
@@ -258,7 +265,8 @@ router.get(
         data: {
           address: normalizedAddress,
           exists: true,
-          username: usernameFromPro,
+          username: currentUsername,
+          twitterId,
           alreadyGifted,
           balance,
           proUserData,

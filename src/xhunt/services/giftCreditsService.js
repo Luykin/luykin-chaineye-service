@@ -102,11 +102,20 @@ async function callAddCreditsApi({ address, tx, credits }) {
 
 /**
  * 获取用户积分赠送的 Redis Key
- * @param {string} userId - 用户ID（Twitter用户名）
+ * @param {string} userId - 用户ID（Twitter用户名或twitterId）
  * @returns {string} - Redis Key
  */
 function getGiftCreditsKey(userId) {
   return `gift:credits:user:${userId}`;
+}
+
+/**
+ * 获取用户积分赠送的 Redis Key（使用 twitterId，新的推荐方式）
+ * @param {string} twitterId - Twitter用户ID
+ * @returns {string} - Redis Key
+ */
+function getGiftCreditsKeyByTwitterId(twitterId) {
+  return `gift:credits:twitter:${twitterId}`;
 }
 
 /**
@@ -137,6 +146,60 @@ async function checkAndMarkGiftCredits(userId) {
   }
   
   return alreadyGifted;
+}
+
+/**
+ * 检查用户是否已赠送过积分（兼容旧数据，优先使用twitterId）
+ * 以 twitterId 为维度做终身防重，同时兼容检查旧数据（username）
+ * 
+ * @param {Object} params - 参数对象
+ * @param {string} params.twitterId - Twitter用户ID（优先使用）
+ * @param {string} params.username - Twitter用户名（兼容旧数据）
+ * @returns {Promise<{alreadyGifted: boolean, keyUsed: string|null}>} - alreadyGifted: true表示已赠送过，keyUsed: 使用的key类型
+ */
+async function checkGiftCreditsStatus({ twitterId, username }) {
+  const redisClient = await getRedisClient();
+  
+  // 1. 优先检查 twitterId（新方式）
+  if (twitterId) {
+    const twitterKey = getGiftCreditsKeyByTwitterId(twitterId);
+    const twitterFlag = await redisClient.get(twitterKey);
+    if (twitterFlag) {
+      console.log(`[GiftCredits] Skip: twitterId ${twitterId} has already received gift credits`);
+      return { alreadyGifted: true, keyUsed: 'twitterId' };
+    }
+  }
+  
+  // 2. 兼容检查 username（旧方式）
+  if (username) {
+    const usernameKey = getGiftCreditsKey(username);
+    const usernameFlag = await redisClient.get(usernameKey);
+    if (usernameFlag) {
+      console.log(`[GiftCredits] Skip: username ${username} has already received gift credits (legacy)`);
+      return { alreadyGifted: true, keyUsed: 'username' };
+    }
+  }
+  
+  return { alreadyGifted: false, keyUsed: null };
+}
+
+/**
+ * 标记用户已赠送积分（使用 twitterId 作为维度）
+ * 
+ * @param {string} twitterId - Twitter用户ID
+ * @returns {Promise<void>}
+ */
+async function markGiftCreditsAsGifted(twitterId) {
+  if (!twitterId) {
+    console.error('[GiftCredits] Error: twitterId is required to mark gift credits');
+    return;
+  }
+  
+  const redisKey = getGiftCreditsKeyByTwitterId(twitterId);
+  const redisClient = await getRedisClient();
+  
+  await redisClient.set(redisKey, "1");
+  console.log(`[GiftCredits] Mark: twitterId ${twitterId} marked as gifted (permanent)`);
 }
 
 /**
@@ -243,6 +306,9 @@ module.exports = {
   calculateGiftCredits,
   callAddCreditsApi,
   getGiftCreditsKey,
+  getGiftCreditsKeyByTwitterId,
   checkAndMarkGiftCredits,
+  checkGiftCreditsStatus,
+  markGiftCreditsAsGifted,
   handleUserCreateGiftCredits,
 };
