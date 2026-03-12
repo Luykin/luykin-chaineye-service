@@ -2320,9 +2320,9 @@ label input[type="checkbox"] {
     position: fixed;
     top: 0;
     left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 100;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3125,4 +3125,25 @@ label input[type="checkbox"] {
   font-size: 0.75rem;
   color: #92400e;
   margin-bottom: 8px;
+}
+
+/* ---------- 历史记录优化样式 ---------- */
+.history-item-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.history-item-key {
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.history-item-key:hover {
+    color: #2563eb;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }

@@ -483,7 +483,7 @@ function showRedisEditModal() {
     typeHint.style.display = isString ? "none" : "block";
   }
 
-  document.getElementById("redis-edit-modal").style.display = "block";
+  document.getElementById("redis-edit-modal").style.display = "flex";
 }
 
 /**
@@ -554,7 +554,7 @@ function showRedisDeleteModal() {
   if (!redisCurrentKey) return;
 
   document.getElementById("redis-delete-key").textContent = redisCurrentKey;
-  document.getElementById("redis-delete-modal").style.display = "block";
+  document.getElementById("redis-delete-modal").style.display = "flex";
 }
 
 /**
@@ -645,9 +645,12 @@ function renderRedisHistory() {
   container.innerHTML = history
     .map(
       (key) => `
-    <div class="history-item" onclick="document.getElementById('redis-key-input').value='${escapeHtml(key)}';handleRedisQuery('${escapeHtml(key)}')">
-      <span class="history-item-key" title="${escapeHtml(key)}">${escapeHtml(key)}</span>
-      <button class="btn-text" onclick="event.stopPropagation();removeRedisHistory('${escapeHtml(key)}')">删除</button>
+    <div class="history-item">
+      <span class="history-item-key" title="点击复制" onclick="copyToClipboard('${escapeHtml(key)}')">${escapeHtml(key)}</span>
+      <div class="history-item-actions">
+        <button class="btn-text" onclick="document.getElementById('redis-key-input').value='${escapeHtml(key)}';handleRedisQuery('${escapeHtml(key)}')">查询</button>
+        <button class="btn-text" onclick="removeRedisHistory('${escapeHtml(key)}')">删除</button>
+      </div>
     </div>
   `
     )
@@ -705,6 +708,29 @@ function formatNumber(num) {
 /**
  * 格式化数字为紧凑形式 (1.2K, 3.5M, 2.1B)
  */
+/**
+ * 复制文本到剪贴板
+ */
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    // 显示提示
+    const toast = document.createElement('div');
+    toast.textContent = '已复制: ' + text.substring(0, 30) + (text.length > 30 ? '...' : '');
+    toast.style.cssText = 'position:fixed;right:20px;bottom:80px;background:#111827;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;animation:fadeIn 0.2s ease;';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2000);
+  } catch (err) {
+    // 降级方案
+    const input = document.createElement('textarea');
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+  }
+}
+
 function formatCompactNumber(num) {
   if (!num || num === 0) return "0";
   const absNum = Math.abs(num);
