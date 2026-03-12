@@ -138,6 +138,11 @@ function initTabs() {
 
       // 触发 Tab 特定的初始化
       handleTabInit(tabId);
+
+      // 触发 stats-tab-activated 事件（供各页面加载数据）
+      document.dispatchEvent(new CustomEvent('stats-tab-activated', { 
+        detail: { tabId: tabId } 
+      }));
     });
   });
 
