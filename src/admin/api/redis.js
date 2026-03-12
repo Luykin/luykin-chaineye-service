@@ -239,34 +239,67 @@ router.post("/update", adminAuth, requireRole("super"), express.json(), async (r
       oldValue = null;
     }
 
-    // 根据类型设置新值
-    if (targetType === 'hash' && typeof value === 'object' && value !== null) {
-      // Hash 类型 - 使用 HSET
-      const hashEntries = Object.entries(value).flat();
-      if (hashEntries.length > 0) {
-        await redis.hSet(key, hashEntries);
+    // 确保 value 是对象/数组（如果不是，尝试解析 JSON）
+    let parsedValue = value;
+    if (typeof value === 'string' && (targetType === 'hash' || targetType === 'list' || targetType === 'set' || targetType === 'zset')) {
+      try {
+        parsedValue = JSON.parse(value);
+      } catch (e) {
+        return res.status(400).json({ success: false, error: `${targetType} 类型需要有效的 JSON 格式` });
       }
-    } else if (targetType === 'list' && Array.isArray(value)) {
+    }
+
+    // 根据类型设置新值
+    if (targetType === 'hash') {
+      // Hash 类型 - 使用 HSET，先删除旧值确保类型正确
+      if (currentType !== 'hash' && currentType !== 'none') {
+        await redis.del(key);
+      }
+      if (typeof parsedValue === 'object' && parsedValue !== null && !Array.isArray(parsedValue)) {
+        const hashEntries = Object.entries(parsedValue).flat();
+        if (hashEntries.length > 0) {
+          await redis.hSet(key, hashEntries);
+        } else {
+          // 空对象，创建一个空的 hash
+          await redis.hSet(key, '__placeholder__', '');
+          await redis.hDel(key, '__placeholder__');
+        }
+      } else {
+        return res.status(400).json({ success: false, error: 'Hash 类型需要 JSON 对象格式' });
+      }
+    } else if (targetType === 'list') {
       // List 类型 - 删除旧值后重新添加
       await redis.del(key);
-      if (value.length > 0) {
-        await redis.rPush(key, value);
+      if (Array.isArray(parsedValue)) {
+        if (parsedValue.length > 0) {
+          await redis.rPush(key, parsedValue.map(String));
+        }
+      } else {
+        return res.status(400).json({ success: false, error: 'List 类型需要 JSON 数组格式' });
       }
-    } else if (targetType === 'set' && Array.isArray(value)) {
+    } else if (targetType === 'set') {
       // Set 类型 - 删除旧值后重新添加
       await redis.del(key);
-      if (value.length > 0) {
-        await redis.sAdd(key, value);
+      if (Array.isArray(parsedValue)) {
+        if (parsedValue.length > 0) {
+          await redis.sAdd(key, parsedValue.map(String));
+        }
+      } else {
+        return res.status(400).json({ success: false, error: 'Set 类型需要 JSON 数组格式' });
       }
-    } else if (targetType === 'zset' && Array.isArray(value)) {
+    } else if (targetType === 'zset') {
       // ZSet 类型 - 删除旧值后重新添加
       await redis.del(key);
-      if (value.length > 0) {
-        const zsetEntries = value.map(item => ({
-          score: item.score || 0,
-          value: String(item.value || item)
-        }));
-        await redis.zAdd(key, zsetEntries);
+      if (Array.isArray(parsedValue)) {
+        if (parsedValue.length > 0) {
+          const zsetEntries = parsedValue.map(item => ({
+            score: item.score || 0,
+            value: String(item.value || item)
+          }));
+          await redis.zAdd(key, zsetEntries);
+        }
+      } else {
+        return res.status(400).json({ success: false, error: 'ZSet 类型需要 JSON 数组格式' });
       }
     } else {
       // String 类型或其他 - 使用 SET

@@ -338,30 +338,67 @@ function getHistoryKey(userId) {
 
 /**
  * 获取用户额度信息
+ * 兼容 hash 和 string 类型（JSON 格式）
  */
 async function getUserQuota(redisClient, userId) {
   const quotaKey = getQuotaKey(userId);
   const historyKey = getHistoryKey(userId);
 
-  const [quotaData, lastAppliedAt] = await Promise.all([
-    redisClient.hGetAll(quotaKey),
-    redisClient.hGet(historyKey, "lastAppliedAt"),
-  ]);
+  try {
+    // 先检查 key 类型
+    const keyType = await redisClient.type(quotaKey);
+    
+    let quotaData = {};
+    
+    if (keyType === 'hash') {
+      // Hash 类型 - 使用 hGetAll
+      quotaData = await redisClient.hGetAll(quotaKey);
+    } else if (keyType === 'string') {
+      // String 类型 - 尝试解析 JSON
+      const strValue = await redisClient.get(quotaKey);
+      if (strValue) {
+        try {
+          quotaData = JSON.parse(strValue);
+        } catch (e) {
+          // 不是有效的 JSON，视为无额度
+          console.warn(`[ghost-following] Quota key ${quotaKey} has invalid JSON: ${strValue.substring(0, 100)}`);
+          quotaData = {};
+        }
+      }
+    } else if (keyType === 'none') {
+      // Key 不存在
+      quotaData = {};
+    } else {
+      // 其他类型，记录警告
+      console.warn(`[ghost-following] Quota key ${quotaKey} has unexpected type: ${keyType}`);
+      quotaData = {};
+    }
 
-  if (!quotaData || Object.keys(quotaData).length === 0) {
+    const lastAppliedAt = await redisClient.hGet(historyKey, "lastAppliedAt");
+
+    if (!quotaData || Object.keys(quotaData).length === 0) {
+      return {
+        exists: false,
+        lastAppliedAt: lastAppliedAt ? parseInt(lastAppliedAt) : null,
+      };
+    }
+
     return {
-      exists: false,
+      exists: true,
+      total: parseInt(quotaData.total) || 0,
+      remaining: parseInt(quotaData.remaining) || 0,
+      appliedAt: parseInt(quotaData.appliedAt) || 0,
       lastAppliedAt: lastAppliedAt ? parseInt(lastAppliedAt) : null,
     };
+  } catch (error) {
+    console.error(`[ghost-following] Error getting quota for user ${userId}:`, error);
+    // 返回空额度而不是抛出错误，避免整个接口挂掉
+    return {
+      exists: false,
+      lastAppliedAt: null,
+      error: error.message,
+    };
   }
-
-  return {
-    exists: true,
-    total: parseInt(quotaData.total) || 0,
-    remaining: parseInt(quotaData.remaining) || 0,
-    appliedAt: parseInt(quotaData.appliedAt) || 0,
-    lastAppliedAt: lastAppliedAt ? parseInt(lastAppliedAt) : null,
-  };
 }
 
 /**
@@ -378,6 +415,13 @@ async function atomicDeductQuota(redisClient, userId, isVip) {
   const ttlSeconds = QUOTA_CONFIG.periodDays * 24 * 60 * 60;
   
   try {
+    // 先检查 key 类型，如果不是 hash 类型，删除它（让 Lua 脚本重新创建）
+    const keyType = await redisClient.type(quotaKey);
+    if (keyType !== 'hash' && keyType !== 'none') {
+      console.warn(`[ghost-following] Quota key ${quotaKey} is not hash (type: ${keyType}), deleting it`);
+      await redisClient.del(quotaKey);
+    }
+    
     // 使用 Lua 脚本原子化执行
     const result = await redisClient.eval(ATOMIC_DEDUCT_QUOTA_LUA, {
       keys: [quotaKey, historyKey],
