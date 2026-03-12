@@ -517,7 +517,7 @@ router.post(
       const cbCheck = circuitBreaker.canExecute();
       if (!cbCheck.allowed) {
         console.warn(`analyze return ${user_id} Circuit breaker rejected: ${cbCheck.reason}`);
-        return res.status(503).json({
+        return res.status(200).json({
           success: false,
           error: {
             code: "SERVICE_UNAVAILABLE",
@@ -640,7 +640,7 @@ router.get(
 
       if (!redisClient) {
         console.error("[ghost-following] Redis client not available");
-        return res.status(500).json({
+        return res.status(200).json({
           success: false,
           error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
         });
@@ -820,7 +820,7 @@ router.get(
       });
     } catch (error) {
       console.error("[ghost-following] Get quota error:", error);
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         error: { code: "INTERNAL_ERROR", message: "Failed to get quota" },
       });
@@ -906,7 +906,7 @@ router.post(
 
       if (!redisClient) {
         console.error("[ghost-following] Redis client not available");
-        return res.status(500).json({
+        return res.status(200).json({
           success: false,
           error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
         });
@@ -925,7 +925,7 @@ router.post(
         const waitMs = quotaInfo.resetAt - Date.now();
         const waitDays = Math.ceil(waitMs / (24 * 60 * 60 * 1000));
 
-        return res.status(403).json({
+        return res.status(200).json({
           success: false,
           error: {
             code: "FOLLOWING_QUOTA_EXHAUSTED",
