@@ -37,12 +37,9 @@
         
         <!-- 固定按钮 -->
         <button class="sidebar-pin" id="sidebarPin" title="固定侧边栏 (Ctrl+B)">
-          <svg class="pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2v8"/>
-            <path d="m5 5 3.5 3.5"/>
-            <path d="m19 5-3.5 3.5"/>
-            <path d="M12 10v8"/>
-            <path d="M8 22h8"/>
+          <svg class="pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="17" x2="12" y2="22"/>
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z"/>
           </svg>
         </button>
       </div>
@@ -377,17 +374,20 @@
         
         // 读取保存的固定状态
         let isPinned = localStorage.getItem(STORAGE_KEY) === 'true';
+        let hoverTimeout = null;
         
         function updateState() {
-          if (isPinned) {
-            sidebar.classList.remove('collapsed');
-            pinBtn.classList.add('pinned');
-            pinBtn.title = '取消固定 (Ctrl+B)';
-          } else {
-            sidebar.classList.add('collapsed');
-            pinBtn.classList.remove('pinned');
-            pinBtn.title = '固定侧边栏 (Ctrl+B)';
-          }
+          requestAnimationFrame(() => {
+            if (isPinned) {
+              sidebar.classList.remove('collapsed');
+              pinBtn.classList.add('pinned');
+              pinBtn.title = '取消固定 (Ctrl+B)';
+            } else {
+              sidebar.classList.add('collapsed');
+              pinBtn.classList.remove('pinned');
+              pinBtn.title = '固定侧边栏 (Ctrl+B)';
+            }
+          });
         }
         
         // 初始化状态
@@ -412,13 +412,17 @@
         if (window.innerWidth > 768) {
           sidebar.addEventListener('mouseenter', function() {
             if (!isPinned) {
+              clearTimeout(hoverTimeout);
               sidebar.classList.remove('collapsed');
             }
           });
           
           sidebar.addEventListener('mouseleave', function() {
             if (!isPinned) {
-              sidebar.classList.add('collapsed');
+              // 延迟折叠，避免快速移动时闪烁
+              hoverTimeout = setTimeout(() => {
+                sidebar.classList.add('collapsed');
+              }, 100);
             }
           });
         }

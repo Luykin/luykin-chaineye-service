@@ -26,7 +26,10 @@ body {
     bottom: 0;
     z-index: 100;
     overflow: hidden;
-    transition: width 0.25s ease;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: width;
+    transform: translateZ(0);
+    backface-visibility: hidden;
 }
 
 /* 侧边栏折叠状态 */
@@ -39,38 +42,44 @@ body {
     position: absolute;
     top: 16px;
     right: 12px;
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: transparent;
-    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #94a3b8;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
     z-index: 10;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .sidebar-pin:hover {
-    background: #f1f5f9;
+    background: #f8fafc;
+    border-color: #cbd5e1;
     color: #64748b;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
 }
 
 .sidebar-pin.pinned {
     color: #3b82f6;
     background: #eff6ff;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 .sidebar-pin.pinned:hover {
     background: #dbeafe;
+    border-color: #2563eb;
 }
 
 .sidebar-pin svg {
     width: 16px;
     height: 16px;
-    transition: transform 0.2s ease;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-pin.pinned svg {
@@ -104,7 +113,8 @@ body {
     color: #1e293b;
     letter-spacing: -0.02em;
     white-space: nowrap;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    transform: translateX(0);
 }
 
 .brand-subtitle {
@@ -115,7 +125,7 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: nowrap;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.25s ease;
 }
 
 /* 折叠状态隐藏文字 */
@@ -123,6 +133,10 @@ body {
 .sidebar.collapsed .brand-subtitle {
     opacity: 0;
     pointer-events: none;
+}
+
+.sidebar.collapsed .brand-text {
+    transform: translateX(-10px);
 }
 
 /* 侧边栏导航 */
@@ -154,11 +168,12 @@ body {
     font-weight: 500;
     color: #64748b;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     text-align: left;
     white-space: nowrap;
     border-radius: 0;
     border-left: 3px solid transparent;
+    will-change: background-color, color, padding;
 }
 
 .sidebar-nav .tab-btn:hover {
@@ -189,17 +204,22 @@ body {
     width: 18px;
     height: 18px;
     flex-shrink: 0;
+    transition: width 0.3s ease, height 0.3s ease;
 }
 
 .sidebar-nav .tab-btn.active .nav-icon-svg {
     color: #3b82f6;
 }
 
+.nav-text {
+    transition: opacity 0.25s ease;
+}
+
 .nav-divider {
     height: 1px;
     background: #e2e8f0;
     margin: 8px 16px;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.25s ease;
 }
 
 /* 折叠状态导航 */
@@ -233,7 +253,8 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    transition: margin-left 0.25s ease;
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: margin-left;
 }
 
 .sidebar.collapsed ~ .main-content {
