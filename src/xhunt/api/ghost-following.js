@@ -490,10 +490,10 @@ router.post(
         const total = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
         
         console.log(`analyze return ${user_id} QUOTA_COOLDOWN`);
-        return res.status(403).json({
+        return res.status(200).json({
           success: false,
           error: {
-            code: "QUOTA_COOLDOWN",
+            code: "CONCURRENT_LIMIT_EXCEEDED",
             message: "本月额度已用完",
             data: {
               total,
@@ -501,6 +501,7 @@ router.post(
               nextApplyAt,
               waitDays,
               waitHours,
+              retryAfter: 60000,
             },
           },
         });
@@ -520,9 +521,15 @@ router.post(
         return res.status(200).json({
           success: false,
           error: {
-            code: "SERVICE_UNAVAILABLE",
+            code: "CONCURRENT_LIMIT_EXCEEDED",
             message: "服务暂时不可用，请稍后重试",
             retryAfter: Math.ceil(CIRCUIT_BREAKER_CONFIG.timeout / 1000),
+            data: {
+              nextApplyAt: Math.ceil(CIRCUIT_BREAKER_CONFIG.timeout / 1000),
+              waitDays: 0,
+              waitHours: 0,
+              retryAfter:Math.ceil(CIRCUIT_BREAKER_CONFIG.timeout / 1000),
+            },
           },
         });
       }
@@ -640,7 +647,7 @@ router.get(
 
       if (!redisClient) {
         console.error("[ghost-following] Redis client not available");
-        return res.status(200).json({
+        return res.status(500).json({
           success: false,
           error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
         });
@@ -820,7 +827,7 @@ router.get(
       });
     } catch (error) {
       console.error("[ghost-following] Get quota error:", error);
-      return res.status(200).json({
+      return res.status(500).json({
         success: false,
         error: { code: "INTERNAL_ERROR", message: "Failed to get quota" },
       });
@@ -906,7 +913,7 @@ router.post(
 
       if (!redisClient) {
         console.error("[ghost-following] Redis client not available");
-        return res.status(200).json({
+        return res.status(500).json({
           success: false,
           error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
         });
@@ -925,7 +932,7 @@ router.post(
         const waitMs = quotaInfo.resetAt - Date.now();
         const waitDays = Math.ceil(waitMs / (24 * 60 * 60 * 1000));
 
-        return res.status(200).json({
+        return res.status(500).json({
           success: false,
           error: {
             code: "FOLLOWING_QUOTA_EXHAUSTED",
