@@ -190,7 +190,7 @@ function bindRedisManagementEvents() {
   // 查询按钮
   const queryBtn = document.getElementById("redis-query-btn");
   if (queryBtn) {
-    queryBtn.addEventListener("click", handleRedisQuery);
+    queryBtn.addEventListener("click", () => handleRedisQuery());
   }
 
   // 回车键查询
