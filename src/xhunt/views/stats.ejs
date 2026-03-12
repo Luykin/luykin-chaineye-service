@@ -35,11 +35,14 @@
         </div>
         <div class="brand-subtitle">管理后台</div>
         
-        <!-- 折叠按钮 -->
-        <button class="sidebar-toggle" id="sidebarToggle" title="收起侧边栏 (Ctrl+B)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="m11 17-5-5 5-5"/>
-            <path d="m18 17-5-5 5-5"/>
+        <!-- 固定按钮 -->
+        <button class="sidebar-pin" id="sidebarPin" title="固定侧边栏 (Ctrl+B)">
+          <svg class="pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v8"/>
+            <path d="m5 5 3.5 3.5"/>
+            <path d="m19 5-3.5 3.5"/>
+            <path d="M12 10v8"/>
+            <path d="M8 22h8"/>
           </svg>
         </button>
       </div>
@@ -140,30 +143,26 @@
           <span class="nav-text">操作记录</span>
         </button>
         <% } %>
+        
+        <!-- 快捷入口 -->
+        <div class="nav-divider"></div>
+        <a href="#" class="tab-btn quick-link" id="quick-supabase" target="_blank">
+          <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
+          <span class="nav-text">Supabase</span>
+        </a>
+        <a href="https://chrome.google.com/webstore/devconsole/9d25eceb-fe8d-401a-a54e-08499569b9a3" target="_blank" class="tab-btn quick-link">
+          <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+          <span class="nav-text">Chrome 控制台</span>
+        </a>
+        <a href="https://docs.google.com/document/d/1W4URRutiCIxtYy8oLgEp8wy9yAzRDbNpIbNeXB2oors/edit?tab=t.0" target="_blank" class="tab-btn quick-link">
+          <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+          <span class="nav-text">需求文档</span>
+        </a>
+        <a href="https://kb.cryptohunt.ai/nacos/" target="_blank" class="tab-btn quick-link">
+          <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>
+          <span class="nav-text">Nacos 配置</span>
+        </a>
       </nav>
-      
-      <!-- 快捷入口 - 侧边栏底部 -->
-      <div class="quick-links-sidebar">
-        <div class="quick-links-sidebar-title">快捷入口</div>
-        <div class="quick-links-list">
-          <a href="#" class="quick-link-item" id="quick-supabase">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
-            <span>Supabase</span>
-          </a>
-          <a href="https://chrome.google.com/webstore/devconsole/9d25eceb-fe8d-401a-a54e-08499569b9a3" target="_blank" class="quick-link-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
-            <span>Chrome 控制台</span>
-          </a>
-          <a href="https://docs.google.com/document/d/1W4URRutiCIxtYy8oLgEp8wy9yAzRDbNpIbNeXB2oors/edit?tab=t.0" target="_blank" class="quick-link-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-            <span>需求文档</span>
-          </a>
-          <a href="https://kb.cryptohunt.ai/nacos/" target="_blank" class="quick-link-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>
-            <span>Nacos 配置</span>
-          </a>
-        </div>
-      </div>
       
       <script>
         // Supabase 快捷入口
@@ -370,35 +369,64 @@
         setInterval(updateTime, 1000);
       })();
       
-      // 侧边栏折叠功能
+      // 侧边栏固定功能
       (function() {
         const sidebar = document.getElementById('sidebar');
-        const toggle = document.getElementById('sidebarToggle');
-        const STORAGE_KEY = 'sidebar-collapsed';
+        const pinBtn = document.getElementById('sidebarPin');
+        const STORAGE_KEY = 'sidebar-pinned';
         
-        // 读取保存的状态
-        const isCollapsed = localStorage.getItem(STORAGE_KEY) === 'true';
-        if (isCollapsed) {
-          sidebar.classList.add('collapsed');
+        // 读取保存的固定状态
+        let isPinned = localStorage.getItem(STORAGE_KEY) === 'true';
+        
+        function updateState() {
+          if (isPinned) {
+            sidebar.classList.remove('collapsed');
+            pinBtn.classList.add('pinned');
+            pinBtn.title = '取消固定 (Ctrl+B)';
+          } else {
+            sidebar.classList.add('collapsed');
+            pinBtn.classList.remove('pinned');
+            pinBtn.title = '固定侧边栏 (Ctrl+B)';
+          }
         }
         
-        // 切换折叠
-        toggle.addEventListener('click', function() {
-          sidebar.classList.toggle('collapsed');
-          localStorage.setItem(STORAGE_KEY, sidebar.classList.contains('collapsed'));
+        // 初始化状态
+        updateState();
+        
+        // 点击固定按钮
+        pinBtn.addEventListener('click', function() {
+          isPinned = !isPinned;
+          localStorage.setItem(STORAGE_KEY, isPinned);
+          updateState();
         });
         
         // 快捷键 Ctrl+B
         document.addEventListener('keydown', function(e) {
           if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
             e.preventDefault();
-            toggle.click();
+            pinBtn.click();
           }
         });
         
-        // 移动端自动折叠
+        // 桌面端 hover 展开（仅未固定时）
+        if (window.innerWidth > 768) {
+          sidebar.addEventListener('mouseenter', function() {
+            if (!isPinned) {
+              sidebar.classList.remove('collapsed');
+            }
+          });
+          
+          sidebar.addEventListener('mouseleave', function() {
+            if (!isPinned) {
+              sidebar.classList.add('collapsed');
+            }
+          });
+        }
+        
+        // 移动端始终折叠
         if (window.innerWidth <= 768) {
           sidebar.classList.add('collapsed');
+          pinBtn.style.display = 'none';
         }
       })();
     </script>
