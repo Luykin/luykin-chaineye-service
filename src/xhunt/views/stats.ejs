@@ -375,32 +375,49 @@
         const pinBtn = document.getElementById('sidebarPin');
         const STORAGE_KEY = 'sidebar-pinned';
         
-        // 读取保存的固定状态
+        // 读取保存的固定状态（默认 false = 不固定）
         let isPinned = localStorage.getItem(STORAGE_KEY) === 'true';
         let hoverTimeout = null;
+        let isHovering = false;
         
-        function updateState() {
+        function setCollapsed(collapsed) {
           requestAnimationFrame(() => {
-            if (isPinned) {
-              sidebar.classList.remove('collapsed');
-              pinBtn.classList.add('pinned');
-              pinBtn.title = '取消固定 (Ctrl+B)';
-            } else {
+            if (collapsed) {
               sidebar.classList.add('collapsed');
-              pinBtn.classList.remove('pinned');
-              pinBtn.title = '固定侧边栏 (Ctrl+B)';
+            } else {
+              sidebar.classList.remove('collapsed');
             }
           });
         }
         
-        // 初始化状态
-        updateState();
+        function updatePinButton() {
+          if (isPinned) {
+            pinBtn.classList.add('pinned');
+            pinBtn.title = '取消固定 (Ctrl+B)';
+          } else {
+            pinBtn.classList.remove('pinned');
+            pinBtn.title = '固定侧边栏 (Ctrl+B)';
+          }
+        }
+        
+        // 初始化：固定时展开，未固定时默认展开（由鼠标控制）
+        if (isPinned) {
+          setCollapsed(false);  // 固定时始终展开
+        } else {
+          setCollapsed(false);  // 默认展开，鼠标移出后折叠
+        }
+        updatePinButton();
         
         // 点击固定按钮
         pinBtn.addEventListener('click', function() {
           isPinned = !isPinned;
           localStorage.setItem(STORAGE_KEY, isPinned);
-          updateState();
+          updatePinButton();
+          
+          if (isPinned) {
+            setCollapsed(false);  // 固定时展开
+          }
+          // 取消固定时保持当前状态，由鼠标控制
         });
         
         // 快捷键 Ctrl+B
@@ -411,27 +428,24 @@
           }
         });
         
-        // 桌面端 hover 展开（仅未固定时）
+        // 桌面端 hover 控制（仅未固定时）
         if (window.innerWidth > 768) {
           sidebar.addEventListener('mouseenter', function() {
+            isHovering = true;
+            clearTimeout(hoverTimeout);
             if (!isPinned) {
-              clearTimeout(hoverTimeout);
-              sidebar.classList.remove('collapsed');
+              setCollapsed(false);  // 悬停时展开
             }
           });
           
           sidebar.addEventListener('mouseleave', function() {
+            isHovering = false;
             if (!isPinned) {
               hoverTimeout = setTimeout(() => {
-                sidebar.classList.add('collapsed');
-              }, 150);
-            }
-          });
-          
-          // 点击页面其他地方折叠（未固定时）
-          document.addEventListener('click', function(e) {
-            if (!isPinned && !sidebar.contains(e.target)) {
-              sidebar.classList.add('collapsed');
+                if (!isHovering) {
+                  setCollapsed(true);  // 离开时折叠
+                }
+              }, 200);
             }
           });
         }

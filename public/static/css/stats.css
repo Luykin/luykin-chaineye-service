@@ -28,33 +28,15 @@ body {
     overflow: hidden;
     transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s ease;
     will-change: transform;
-    transform: translateX(0);
-    transform: translateZ(0);
+    transform: translate3d(0, 0, 0);
     backface-visibility: hidden;
     box-shadow: 4px 0 24px rgba(0,0,0,0.08);
 }
 
-/* 折叠状态 - 悬浮在左侧 */
+/* 折叠状态 - 悬浮在左侧，保持宽度用 transform 移动 */
 .sidebar.collapsed {
-    width: 240px;
-    transform: translateX(-176px);
+    transform: translate3d(-176px, 0, 0);
     box-shadow: 4px 0 20px rgba(0,0,0,0.06);
-}
-
-/* 折叠时显示一小条可悬停区域 */
-.sidebar.collapsed::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 8px;
-    bottom: 0;
-    cursor: pointer;
-}
-
-/* 侧边栏折叠状态 */
-.sidebar.collapsed {
-    width: 64px;
 }
 
 /* 固定按钮 */
