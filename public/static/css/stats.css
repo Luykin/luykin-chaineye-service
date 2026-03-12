@@ -4,11 +4,238 @@
     box-sizing: border-box;
 }
 
+/* ========== 侧边栏布局 ========== */
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f1f5f9;
     min-height: 100vh;
+    display: flex;
+    padding: 0;
+}
+
+/* 侧边栏 */
+.sidebar {
+    width: 240px;
+    background: #fff;
+    border-right: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+    overflow: hidden;
+}
+
+.sidebar-header {
+    padding: 24px 20px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.brand-icon {
+    width: 32px;
+    height: 32px;
+    color: #3b82f6;
+}
+
+.brand-text {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: -0.02em;
+}
+
+.brand-subtitle {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 4px;
+    margin-left: 44px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* 侧边栏导航 */
+.sidebar-nav {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 0;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 2px;
+}
+
+.sidebar-nav .tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+    white-space: nowrap;
+    border-radius: 0;
+    border-left: 3px solid transparent;
+}
+
+.sidebar-nav .tab-btn:hover {
+    background: #f8fafc;
+    color: #334155;
+}
+
+.sidebar-nav .tab-btn.active {
+    background: #eff6ff;
+    color: #3b82f6;
+    border-left-color: #3b82f6;
+}
+
+.sidebar-nav .tab-btn.no-perm {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.nav-icon {
+    font-size: 1rem;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* SVG 图标样式 */
+.nav-icon-svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.sidebar-nav .tab-btn.active .nav-icon-svg {
+    color: #3b82f6;
+}
+
+.nav-divider {
+    height: 1px;
+    background: #e2e8f0;
+    margin: 12px 20px;
+}
+
+/* 主内容区 */
+.main-content {
+    flex: 1;
+    margin-left: 240px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* 顶部栏 */
+.top-header {
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.page-time {
+    font-size: 0.8rem;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+
+.header-right .auth-info {
+    margin: 0;
+    background: transparent;
+    backdrop-filter: none;
+    color: #1e293b;
+    padding: 0;
+}
+
+/* 快捷链接区 */
+.quick-links-section {
+    padding: 20px 24px 0;
+}
+
+.quick-links-section .quick-links {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
     padding: 20px;
+    border-radius: 12px;
+    margin: 0;
+    backdrop-filter: blur(10px);
+}
+
+/* 内容区 */
+.content-wrapper {
+    flex: 1;
+    padding: 20px 24px;
+}
+
+/* Tab内容 - 移除旧样式 */
+.tab-container {
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+}
+
+.tab-nav {
+    display: none;
+}
+
+.tab-content {
+    padding: 0;
+}
+
+/* 页脚 */
+.main-footer {
+    padding: 20px 24px;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* ========== 旧布局兼容 ========== */
+.container {
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+.header {
+    display: none;
 }
 
 .container {
@@ -44,6 +271,15 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+/* 侧边栏布局中的 auth-info */
+.header-right .auth-info {
+    background: transparent;
+    color: #1e293b;
+    padding: 0;
+    margin: 0;
+    backdrop-filter: none;
 }
 
 .logout-btn {
@@ -106,6 +342,12 @@ body {
     align-items: center;
     gap: 10px;
     font-weight: 500;
+}
+
+.link-item svg {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
 }
 
 .link-item a:hover {
@@ -443,6 +685,92 @@ body {
 }
 
 @media (max-width: 768px) {
+    /* 侧边栏移动端适配 */
+    .sidebar {
+        width: 100%;
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        border-right: none;
+        border-top: 1px solid #e2e8f0;
+        flex-direction: row;
+        z-index: 1000;
+    }
+    
+    .sidebar-header {
+        display: none;
+    }
+    
+    .sidebar-nav {
+        display: flex;
+        overflow-x: auto;
+        padding: 0;
+        gap: 0;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .sidebar-nav::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .sidebar-nav .tab-btn {
+        flex-direction: column;
+        padding: 8px 12px;
+        min-width: 60px;
+        border-left: none;
+        border-top: 3px solid transparent;
+        gap: 4px;
+    }
+    
+    .sidebar-nav .tab-btn.active {
+        border-left-color: transparent;
+        border-top-color: #3b82f6;
+    }
+    
+    .nav-icon {
+        font-size: 1.25rem;
+    }
+    
+    .nav-text {
+        font-size: 0.7rem;
+    }
+    
+    .nav-divider {
+        display: none;
+    }
+    
+    .main-content {
+        margin-left: 0;
+        margin-bottom: 60px;
+    }
+    
+    .top-header {
+        padding: 12px 16px;
+    }
+    
+    .page-title {
+        font-size: 1.1rem;
+    }
+    
+    .page-time {
+        display: none;
+    }
+    
+    .quick-links-section {
+        padding: 16px 16px 0;
+    }
+    
+    .content-wrapper {
+        padding: 16px;
+    }
+    
+    .main-footer {
+        padding: 16px;
+    }
+
     .stats-grid {
         grid-template-columns: 1fr;
     }
