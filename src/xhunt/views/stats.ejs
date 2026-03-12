@@ -47,102 +47,27 @@
         </button>
       </div>
       
-      <nav class="sidebar-nav">
-        <button class="tab-btn active" data-tab="overview">
-          <svg class="nav-icon-svg"><use href="#icon-layout-dashboard"/></svg>
-          <span class="nav-text">数据概览</span>
-        </button>
-        <button class="tab-btn" data-tab="dau-details">
-          <svg class="nav-icon-svg"><use href="#icon-users"/></svg>
-          <span class="nav-text">日活详情</span>
-        </button>
-        <button class="tab-btn" data-tab="online-users">
-          <svg class="nav-icon-svg"><use href="#icon-activity"/></svg>
-          <span class="nav-text">在线用户</span>
-        </button>
-        <button class="tab-btn" data-tab="cohorts">
-          <svg class="nav-icon-svg"><use href="#icon-trending-up"/></svg>
-          <span class="nav-text">用户留存</span>
-        </button>
-        <button class="tab-btn" data-tab="rootdata">
-          <svg class="nav-icon-svg"><use href="#icon-database"/></svg>
-          <span class="nav-text">Rootdata</span>
-        </button>
-        <button class="tab-btn" data-tab="notes">
-          <svg class="nav-icon-svg"><use href="#icon-file-text"/></svg>
-          <span class="nav-text">备注查看</span>
-        </button>
-        <button class="tab-btn" data-tab="log-search">
-          <svg class="nav-icon-svg"><use href="#icon-search"/></svg>
-          <span class="nav-text">日志搜索</span>
-        </button>
-        <button class="tab-btn" data-tab="device-monitor">
-          <svg class="nav-icon-svg"><use href="#icon-monitor"/></svg>
-          <span class="nav-text">设备监控</span>
-        </button>
-        <button class="tab-btn" data-tab="version-stats">
-          <svg class="nav-icon-svg"><use href="#icon-package"/></svg>
-          <span class="nav-text">版本统计</span>
-        </button>
-        <button class="tab-btn" data-tab="url-stats">
-          <svg class="nav-icon-svg"><use href="#icon-link"/></svg>
-          <span class="nav-text">接口统计</span>
-        </button>
-        <button class="tab-btn" data-tab="nacos-messages">
-          <svg class="nav-icon-svg"><use href="#icon-megaphone"/></svg>
-          <span class="nav-text">公告配置</span>
-        </button>
-        <button class="tab-btn" data-tab="nacos-campaigns">
-          <svg class="nav-icon-svg"><use href="#icon-target"/></svg>
-          <span class="nav-text">Earn活动</span>
-        </button>
-        <button class="tab-btn" data-tab="feature-flags">
-          <svg class="nav-icon-svg"><use href="#icon-toggle"/></svg>
-          <span class="nav-text">功能开关</span>
-        </button>
-        <button class="tab-btn" data-tab="perf-monitor">
-          <svg class="nav-icon-svg"><use href="#icon-zap"/></svg>
-          <span class="nav-text">性能监控</span>
-        </button>
-        <button class="tab-btn" data-tab="security-violations">
-          <svg class="nav-icon-svg"><use href="#icon-shield"/></svg>
-          <span class="nav-text">安全拦截</span>
-        </button>
-        <button class="tab-btn" data-tab="messages">
-          <svg class="nav-icon-svg"><use href="#icon-message"/></svg>
-          <span class="nav-text">发送私信</span>
-        </button>
-        <button class="tab-btn" data-tab="data-export">
-          <svg class="nav-icon-svg"><use href="#icon-download"/></svg>
-          <span class="nav-text">数据导出</span>
-        </button>
-        <button class="tab-btn" data-tab="reviews-management">
-          <svg class="nav-icon-svg"><use href="#icon-message-circle"/></svg>
-          <span class="nav-text">评论管理</span>
-        </button>
-        <button class="tab-btn" data-tab="pro-management">
-          <svg class="nav-icon-svg"><use href="#icon-crown"/></svg>
-          <span class="nav-text">Pro用户</span>
-        </button>
-        <button class="tab-btn" data-tab="backup">
-          <svg class="nav-icon-svg"><use href="#icon-save"/></svg>
-          <span class="nav-text">数据备份</span>
-        </button>
-        <button class="tab-btn" data-tab="server-command">
-          <svg class="nav-icon-svg"><use href="#icon-server"/></svg>
-          <span class="nav-text">服务器</span>
-        </button>
-        <% if (typeof user !== 'undefined' && user && user.role === 'super') { %>
-        <div class="nav-divider"></div>
-        <button class="tab-btn" data-tab="admin-users">
-          <svg class="nav-icon-svg"><use href="#icon-user"/></svg>
-          <span class="nav-text">管理员列表</span>
-        </button>
-        <button class="tab-btn" data-tab="admin-audit-logs">
-          <svg class="nav-icon-svg"><use href="#icon-clipboard"/></svg>
-          <span class="nav-text">操作记录</span>
-        </button>
-        <% } %>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <!-- 有权限的功能将显示在这里 -->
+        <div id="nav-permitted-section"></div>
+        
+        <!-- 无权限功能折叠区域 -->
+        <div id="nav-no-perm-section" style="display: none;">
+          <div class="nav-divider"></div>
+          <button class="tab-btn nav-collapse-btn" id="nav-collapse-toggle">
+            <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+            <span class="nav-text">无权限功能</span>
+            <span class="nav-collapse-count" id="nav-no-perm-count">(0)</span>
+          </button>
+          <div class="nav-collapse-content" id="nav-no-perm-content">
+            <!-- 无权限的功能将显示在这里 -->
+          </div>
+        </div>
+        
+        <!-- 快捷入口 -->
+        <div class="nav-divider nav-shortcuts-divider"></div>
         
         <!-- 快捷入口 -->
         <div class="nav-divider"></div>
@@ -324,6 +249,10 @@
           </div>
 
           <% if (typeof user !== 'undefined' && user && user.role === 'super') { %>
+          <!-- Redis 管理 Tab -->
+          <div class="tab-pane" id="redis-management">
+            <%- include('partials/redis-management') %>
+          </div>
           <!-- 管理员列表 Tab -->
           <div class="tab-pane" id="admin-users">
             <%- include('partials/admin-users') %>
@@ -455,6 +384,44 @@
           pinBtn.style.display = 'none';
         }
       })();
+    </script>
+    
+    <!-- 侧边栏 Tab 配置 -->
+    <script>
+      // 定义所有 Tab 的配置
+      window.sidebarTabsConfig = [
+        { id: 'overview', icon: '#icon-layout-dashboard', text: '数据概览', perm: null },
+        { id: 'dau-details', icon: '#icon-users', text: '日活详情', perm: 'dau-details' },
+        { id: 'online-users', icon: '#icon-activity', text: '在线用户', perm: 'online-users' },
+        { id: 'cohorts', icon: '#icon-trending-up', text: '用户留存', perm: 'cohorts' },
+        { id: 'rootdata', icon: '#icon-database', text: 'Rootdata', perm: 'rootdata' },
+        { id: 'notes', icon: '#icon-file-text', text: '备注查看', perm: 'notes' },
+        { id: 'log-search', icon: '#icon-search', text: '日志搜索', perm: 'log-search:read' },
+        { id: 'device-monitor', icon: '#icon-monitor', text: '设备监控', perm: 'device-status:read' },
+        { id: 'version-stats', icon: '#icon-package', text: '版本统计', perm: 'version-stats' },
+        { id: 'url-stats', icon: '#icon-link', text: '接口统计', perm: 'url-stats' },
+        { id: 'nacos-messages', icon: '#icon-megaphone', text: '公告配置', perm: 'nacos-messages' },
+        { id: 'nacos-campaigns', icon: '#icon-target', text: 'Earn活动', perm: 'nacos_config' },
+        { id: 'feature-flags', icon: '#icon-toggle', text: '功能开关', perm: 'feature_flags_config' },
+        { id: 'perf-monitor', icon: '#icon-zap', text: '性能监控', perm: 'perf-monitor' },
+        { id: 'security-violations', icon: '#icon-shield', text: '安全拦截', perm: 'security-violations' },
+        { id: 'messages', icon: '#icon-message', text: '发送私信', perm: 'messages' },
+        { id: 'data-export', icon: '#icon-download', text: '数据导出', perm: 'export:users' },
+        { id: 'reviews-management', icon: '#icon-message-circle', text: '评论管理', perm: 'reviews-management' },
+        { id: 'pro-management', icon: '#icon-crown', text: 'Pro用户', perm: 'pro-management' },
+        { id: 'backup', icon: '#icon-save', text: '数据备份', perm: 'backup:operate' },
+        { id: 'server-command', icon: '#icon-server', text: '服务器', perm: 'server:execute' },
+        { id: 'daily-report-email', icon: '#icon-mail', text: '日报邮件', perm: 'daily-report:send' },
+        <% if (typeof user !== 'undefined' && user && user.role === 'super') { %>
+        { id: 'redis-management', icon: '#icon-database', text: 'Redis管理', perm: 'redis-management' },
+        { id: 'admin-users', icon: '#icon-user', text: '管理员列表', perm: 'admin-users' },
+        { id: 'admin-audit-logs', icon: '#icon-clipboard', text: '操作记录', perm: 'audit-logs:read' },
+        <% } %>
+      ];
+      
+      // 用户权限列表（由后端注入）
+      window.adminPermissions = <%- JSON.stringify(typeof user !== 'undefined' && user ? (user.permissions || []) : []) %>;
+      window.adminRole = <%- JSON.stringify(typeof user !== 'undefined' && user ? user.role : 'admin') %>;
     </script>
   </body>
 </html>

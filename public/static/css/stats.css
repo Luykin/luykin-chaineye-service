@@ -203,6 +203,64 @@ body {
 .sidebar-nav .tab-btn.no-perm {
     opacity: 0.5;
     cursor: not-allowed;
+    position: relative;
+}
+
+.sidebar-nav .tab-btn.no-perm:hover {
+    background: #fee2e2;
+    border-left-color: #ef4444;
+}
+
+.no-perm-badge {
+    font-size: 10px;
+    color: #ef4444;
+    background: #fee2e2;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: auto;
+    font-weight: 500;
+}
+
+/* 折叠按钮样式 */
+.nav-collapse-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.nav-collapse-btn .nav-icon-svg {
+    transition: transform 0.3s ease;
+}
+
+.nav-collapse-btn.collapsed .nav-icon-svg {
+    transform: rotate(-90deg);
+}
+
+.nav-collapse-count {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-left: auto;
+    font-weight: 500;
+}
+
+/* 折叠内容区域 */
+.nav-collapse-content {
+    max-height: 500px;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    opacity: 1;
+}
+
+.nav-collapse-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+}
+
+.nav-collapse-content .tab-btn {
+    padding-left: 44px;
+    font-size: 13px;
 }
 
 .nav-icon {

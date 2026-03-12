@@ -620,4 +620,8 @@ router.get("/logo", async (req, res) => {
   }
 });
 
+// ========== Redis 管理路由 ==========
+const redisRoutes = require("./redis");
+router.use("/system/redis", redisRoutes);
+
 module.exports = router;
