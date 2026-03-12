@@ -170,35 +170,54 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Tooltip 功能
   var tooltip = document.getElementById('audit-tooltip');
+  var tooltipVisible = false;
   
   function showTooltip(e) {
     var fullMessage = this.getAttribute('data-full-message');
     if (!fullMessage) return;
     tooltip.textContent = fullMessage;
     tooltip.style.display = 'block';
-    tooltip.style.opacity = '1';
-    moveTooltip(e);
+    tooltipVisible = true;
+    
+    // 延迟一帧确保 tooltip 已渲染，再计算位置
+    requestAnimationFrame(function() {
+      if (!tooltipVisible) return;
+      moveTooltip(e);
+      tooltip.style.opacity = '1';
+    });
   }
   
   function hideTooltip() {
+    tooltipVisible = false;
     tooltip.style.opacity = '0';
     setTimeout(function() {
-      tooltip.style.display = 'none';
+      if (!tooltipVisible) {
+        tooltip.style.display = 'none';
+      }
     }, 200);
   }
   
   function moveTooltip(e) {
-    var x = e.clientX + 15;
-    var y = e.clientY + 15;
+    var x = e.clientX + 12;
+    var y = e.clientY + 12;
     
-    // 防止超出视口
+    // 获取 tooltip 尺寸（使用 scrollWidth/Height 避免未渲染完成的问题）
     var rect = tooltip.getBoundingClientRect();
-    if (x + rect.width > window.innerWidth) {
-      x = e.clientX - rect.width - 10;
+    var tipWidth = rect.width || tooltip.scrollWidth || 300;
+    var tipHeight = rect.height || tooltip.scrollHeight || 100;
+    
+    // 防止超出右边界
+    if (x + tipWidth > window.innerWidth - 10) {
+      x = e.clientX - tipWidth - 12;
     }
-    if (y + rect.height > window.innerHeight) {
-      y = e.clientY - rect.height - 10;
+    // 防止超出下边界
+    if (y + tipHeight > window.innerHeight - 10) {
+      y = e.clientY - tipHeight - 12;
     }
+    // 防止超出左边界
+    if (x < 10) x = 10;
+    // 防止超出上边界
+    if (y < 10) y = 10;
     
     tooltip.style.left = x + 'px';
     tooltip.style.top = y + 'px';
