@@ -129,7 +129,10 @@ const XHUNT_VIP = new Set([
   "JiuHuangBuHuang",
   "AntBTC",
   "sparkwang9",
-  "JIBAIWeb3"
+  "JIBAIWeb3",
+  "UFoust13797",
+  "lianyanshe",
+  "spark888"
 ].map((s) => s.toLowerCase()));
 
 const INTERNAL_TEST_USERS = new Set([
