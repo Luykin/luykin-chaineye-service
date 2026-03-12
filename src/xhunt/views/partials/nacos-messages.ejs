@@ -435,7 +435,7 @@
 
   async function loadConfig() {
     try {
-      const resp = await fetch(`/admin/system/nacos/config?dataId=${DATA_IDS[currentLang]}&group=DEFAULT_GROUP`);
+      const resp = await fetch(`/api/xhunt/stats/nacos/config?dataId=${DATA_IDS[currentLang]}&group=DEFAULT_GROUP`);
       const result = await resp.json();
       if (result.success && result.data) {
         originalItems = JSON.parse(result.data.content || "[]");
@@ -498,7 +498,7 @@
 
   async function doPublish() {
     try {
-      const resp = await fetch(`/admin/system/nacos/config?dataId=${DATA_IDS[currentLang]}&group=DEFAULT_GROUP`, {
+      const resp = await fetch(`/api/xhunt/stats/nacos/config?dataId=${DATA_IDS[currentLang]}&group=DEFAULT_GROUP`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: JSON.stringify(items) })
