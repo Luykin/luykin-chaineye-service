@@ -37,12 +37,8 @@
         
         <!-- 固定按钮 -->
         <button class="sidebar-pin" id="sidebarPin" title="固定侧边栏 (Ctrl+B)">
-          <svg class="pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2v8"/>
-            <path d="m5 5 3.5 3.5"/>
-            <path d="m19 5-3.5 3.5"/>
-            <path d="M12 10v8"/>
-            <path d="M8 22h8"/>
+          <svg class="pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <use href="#icon-pin"/>
           </svg>
         </button>
       </div>
@@ -320,12 +316,17 @@
         }
         
         function updatePinButton() {
+          const pinIcon = pinBtn.querySelector('use');
           if (isPinned) {
             pinBtn.classList.add('pinned');
+            sidebar.classList.add('pinned');
             pinBtn.title = '取消固定 (Ctrl+B)';
+            if (pinIcon) pinIcon.setAttribute('href', '#icon-pin-off');
           } else {
             pinBtn.classList.remove('pinned');
+            sidebar.classList.remove('pinned');
             pinBtn.title = '固定侧边栏 (Ctrl+B)';
+            if (pinIcon) pinIcon.setAttribute('href', '#icon-pin');
           }
         }
         

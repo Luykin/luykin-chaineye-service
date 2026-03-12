@@ -310,6 +310,12 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 侧边栏固定时，主内容区右移 */
+.sidebar.pinned ~ .main-content {
+    margin-left: 240px;
 }
 
 /* 顶部栏 */
@@ -979,7 +985,7 @@ body {
     }
     
     .main-content {
-        margin-left: 0;
+        margin-left: 0 !important;
         margin-bottom: 60px;
     }
     

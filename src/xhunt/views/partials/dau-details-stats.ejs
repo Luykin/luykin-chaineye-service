@@ -65,10 +65,10 @@
         </div>
 
         <!-- 无数据提示 -->
-        <div id="dau-no-data" class="no-data">
-            <div class="no-data-icon">No Data</div>
-            <h3 class="no-data-title">暂无数据</h3>
-            <p class="no-data-desc">所选日期没有日活数据，请选择其他日期</p>
+        <div id="dau-no-data" class="empty-state">
+            <div class="empty-icon">-</div>
+            <h3>暂无数据</h3>
+            <p>所选日期没有日活数据，请选择其他日期</p>
         </div>
     </div>
 </div>
@@ -285,32 +285,30 @@
     font-size: 13px;
 }
 
-/* 无数据提示 */
-.no-data {
+/* 空状态 */
+.empty-state {
     display: none;
     text-align: center;
     padding: 48px 20px;
     color: #6b7280;
 }
 
-.no-data-icon {
+.empty-icon {
+    font-size: 32px;
+    color: #d1d5db;
+    margin-bottom: 12px;
+    line-height: 1;
+}
+
+.empty-state h3 {
     font-size: 14px;
     font-weight: 500;
-    color: #d1d5db;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 12px;
-}
-
-.no-data-title {
-    font-size: 16px;
-    font-weight: 600;
     color: #374151;
-    margin-bottom: 6px;
+    margin: 0 0 4px 0;
 }
 
-.no-data-desc {
-    font-size: 14px;
+.empty-state p {
+    font-size: 13px;
     margin: 0;
 }
 </style>

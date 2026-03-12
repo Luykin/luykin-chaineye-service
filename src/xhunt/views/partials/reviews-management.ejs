@@ -1,189 +1,51 @@
 <!-- 评论管理 -->
 <div class="section">
-  <h2 class="section-title">🗑️ 评论管理</h2>
-  <p style="color: #6b7280; margin-bottom: 20px; font-size: 14px">
-    通过被评论人的 Twitter Handle 搜索评论，支持软删除（删除后评论将归属于虚拟账号）
-  </p>
+  <h2 class="section-title">评论管理</h2>
+  <p class="section-desc">通过被评论人的 Twitter Handle 搜索评论，支持软删除</p>
 
   <!-- 搜索区域 -->
-  <div class="search-box" style="margin-bottom: 30px">
-    <div style="display: flex; gap: 12px; align-items: center">
-      <input
-        type="text"
-        id="reviews-handle-input"
-        placeholder="输入被评论人 Handle（如: elonmusk）"
-        style="
-          flex: 1;
-          padding: 10px 14px;
-          border: 1px solid #d1d5db;
-          border-radius: 8px;
-          font-size: 14px;
-          background: white;
-          min-width: 250px;
-        "
-        onkeypress="if(event.key==='Enter') searchReviews()"
-      />
-      <button
-        id="reviews-search-btn"
-        style="
-          padding: 10px 20px;
-          background: #3b82f6;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background-color 0.2s;
-          white-space: nowrap;
-        "
-        onmouseover="this.style.backgroundColor='#2563eb'"
-        onmouseout="this.style.backgroundColor='#3b82f6'"
-      >
-        <span class="btn-icon">🔍</span>搜索评论
-      </button>
-    </div>
+  <div class="search-box">
+    <input
+      type="text"
+      id="reviews-handle-input"
+      placeholder="输入被评论人 Handle（如: elonmusk）"
+      onkeypress="if(event.key==='Enter') searchReviews()"
+    />
+    <button id="reviews-search-btn" class="btn-primary">搜索</button>
   </div>
 
   <!-- 加载状态 -->
-  <div
-    id="reviews-loading"
-    style="display: none; text-align: center; padding: 30px; color: #6b7280"
-  >
-    <div
-      style="
-        display: inline-block;
-        animation: spin 1s linear infinite;
-        margin-right: 8px;
-      "
-    >
-      ⏳
-    </div>
-    正在搜索评论...
+  <div id="reviews-loading" class="loading-state">
+    <div class="spinner"></div>
+    <span>正在搜索...</span>
   </div>
 
   <!-- 搜索结果 -->
   <div id="reviews-content" style="display: none">
     <!-- 账号信息 -->
-    <div
-      id="reviews-target-info"
-      style="
-        background: #f0f9ff;
-        border: 1px solid #bae6fd;
-        border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 20px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      "
-    >
-      <img
-        id="reviews-target-avatar"
-        src=""
-        alt="avatar"
-        style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover"
-      />
-      <div>
-        <div
-          id="reviews-target-displayname"
-          style="font-weight: 600; font-size: 16px; color: #1f2937"
-        ></div>
-        <div
-          id="reviews-target-handle"
-          style="font-size: 14px; color: #6b7280"
-        ></div>
+    <div id="reviews-target-info" class="target-info">
+      <img id="reviews-target-avatar" src="" alt="avatar" />
+      <div class="target-meta">
+        <div id="reviews-target-displayname" class="target-name"></div>
+        <div id="reviews-target-handle" class="target-handle"></div>
       </div>
-      <div style="margin-left: auto; text-align: right">
-        <div style="font-size: 12px; color: #6b7280">收到评论数</div>
-        <div
-          id="reviews-total-count"
-          style="font-size: 24px; font-weight: 700; color: #3b82f6"
-        ></div>
+      <div class="target-count">
+        <div class="count-label">收到评论</div>
+        <div id="reviews-total-count" class="count-value"></div>
       </div>
     </div>
 
     <!-- 评论列表表格 -->
-    <div class="table-container" style="overflow-x: auto">
-      <table
-        style="
-          width: 100%;
-          border-collapse: collapse;
-          background: white;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          min-width: 800px;
-        "
-      >
-        <thead style="background: #f9fafb">
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
           <tr>
-            <th
-              style="
-                padding: 12px;
-                text-align: left;
-                border-bottom: 1px solid #e5e7eb;
-                font-weight: 600;
-                width: 18%;
-              "
-            >
-              评论人
-            </th>
-            <th
-              style="
-                padding: 12px;
-                text-align: center;
-                border-bottom: 1px solid #e5e7eb;
-                font-weight: 600;
-                width: 8%;
-              "
-            >
-              评分
-            </th>
-            <th
-              style="
-                padding: 12px;
-                text-align: left;
-                border-bottom: 1px solid #e5e7eb;
-                font-weight: 600;
-                width: 20%;
-              "
-            >
-              标签
-            </th>
-            <th
-              style="
-                padding: 12px;
-                text-align: left;
-                border-bottom: 1px solid #e5e7eb;
-                font-weight: 600;
-                width: 34%;
-              "
-            >
-              评论内容
-            </th>
-            <th
-              style="
-                padding: 12px;
-                text-align: left;
-                border-bottom: 1px solid #e5e7eb;
-                font-weight: 600;
-                width: 12%;
-              "
-            >
-              评论时间
-            </th>
-            <th
-              style="
-                padding: 12px;
-                text-align: center;
-                border-bottom: 1px solid #e5e7eb;
-                font-weight: 600;
-                width: 8%;
-              "
-            >
-              操作
-            </th>
+            <th class="col-reviewer">评论人</th>
+            <th class="col-rating">评分</th>
+            <th class="col-tags">标签</th>
+            <th class="col-content">评论内容</th>
+            <th class="col-time">时间</th>
+            <th class="col-action">操作</th>
           </tr>
         </thead>
         <tbody id="reviews-table-body">
@@ -194,36 +56,209 @@
   </div>
 
   <!-- 空状态 -->
-  <div
-    id="reviews-empty"
-    style="display: none; text-align: center; padding: 50px 20px; color: #6b7280"
-  >
-    <div style="font-size: 64px; margin-bottom: 16px">📝</div>
-    <h3 style="margin-bottom: 8px; color: #374151">未找到评论</h3>
+  <div id="reviews-empty" class="empty-state">
+    <div class="empty-icon">-</div>
+    <h3>未找到评论</h3>
     <p>该账号暂无收到的评论，或账号不存在</p>
   </div>
 
   <!-- 错误提示 -->
-  <div
-    id="reviews-error"
-    style="display: none; text-align: center; padding: 40px 20px; color: #dc2626"
-  >
-    <div style="font-size: 48px; margin-bottom: 16px">⚠️</div>
-    <h3 style="margin-bottom: 8px;">搜索失败</h3>
+  <div id="reviews-error" class="error-state">
+    <div class="error-icon">!</div>
+    <h3>搜索失败</h3>
     <p id="reviews-error-message">请稍后重试</p>
   </div>
 </div>
 
 <style>
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
+  /* 搜索区域 */
+  .section-desc {
+    color: #6b7280;
+    margin-bottom: 20px;
+    font-size: 14px;
   }
 
+  .search-box {
+    margin-bottom: 24px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .search-box input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    min-width: 250px;
+  }
+
+  .search-box input:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+
+  .btn-primary {
+    padding: 10px 20px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-primary:hover {
+    background: #2563eb;
+  }
+
+  /* 加载状态 */
+  .loading-state {
+    display: none;
+    text-align: center;
+    padding: 30px;
+    color: #6b7280;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e5e7eb;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* 目标账号信息 */
+  .target-info {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .target-info img {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .target-meta {
+    flex: 1;
+  }
+
+  .target-name {
+    font-weight: 600;
+    font-size: 16px;
+    color: #1f2937;
+  }
+
+  .target-handle {
+    font-size: 14px;
+    color: #6b7280;
+  }
+
+  .target-count {
+    text-align: right;
+  }
+
+  .count-label {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .count-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #3b82f6;
+  }
+
+  /* 表格 */
+  .table-container {
+    overflow-x: auto;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    min-width: 800px;
+    font-size: 14px;
+  }
+
+  .data-table thead {
+    background: #f9fafb;
+  }
+
+  .data-table th {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 600;
+    color: #374151;
+    font-size: 13px;
+  }
+
+  .data-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+
+  .data-table th.col-reviewer { width: 18%; }
+  .data-table th.col-rating { width: 8%; text-align: center; }
+  .data-table th.col-tags { width: 20%; }
+  .data-table th.col-content { width: 38%; }
+  .data-table th.col-time { width: 12%; }
+  .data-table th.col-action { width: 8%; text-align: center; }
+
+  /* 空状态和错误状态 */
+  .empty-state,
+  .error-state {
+    display: none;
+    text-align: center;
+    padding: 50px 20px;
+    color: #6b7280;
+  }
+
+  .error-state {
+    color: #dc2626;
+  }
+
+  .empty-icon,
+  .error-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    color: #d1d5db;
+  }
+
+  .error-icon {
+    color: #dc2626;
+  }
+
+  .empty-state h3,
+  .error-state h3 {
+    margin-bottom: 8px;
+    color: #374151;
+    font-size: 16px;
+  }
+
+  /* 评论人信息 */
   .reviews-reviewer-info {
     display: flex;
     align-items: center;
@@ -338,6 +373,14 @@
 </style>
 
 <script>
+  // 绑定搜索按钮点击事件
+  document.addEventListener('DOMContentLoaded', function() {
+    const searchBtn = document.getElementById('reviews-search-btn');
+    if (searchBtn) {
+      searchBtn.addEventListener('click', searchReviews);
+    }
+  });
+
   // 搜索评论
   function searchReviews() {
     const handleInput = document.getElementById("reviews-handle-input");
