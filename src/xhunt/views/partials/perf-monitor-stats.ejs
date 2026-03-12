@@ -2,66 +2,111 @@
   .perf-monitor-container {
     width: 100%;
   }
+
+  /* 头部区域 */
+  .perf-section-header {
+    margin-bottom: 20px;
+  }
+
+  .perf-section-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 8px 0;
+  }
+
+  .perf-section-desc {
+    color: #64748b;
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
+  /* 控制栏 */
   .perf-controls {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
     align-items: flex-end;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
+    padding: 16px;
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
   }
   .perf-controls .field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
   .perf-controls label {
     font-size: 12px;
     color: #6b7280;
+    font-weight: 500;
   }
   .perf-controls select,
   .perf-controls input {
     height: 34px;
     padding: 6px 10px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
     outline: none;
     font-size: 13px;
     background: #fff;
     min-width: 180px;
+    color: #374151;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .perf-controls select:focus,
+  .perf-controls input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
   }
   .perf-controls input {
-    min-width: 260px;
+    min-width: 200px;
   }
   .perf-controls button {
     height: 34px;
-    padding: 0 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    background: #111827;
+    padding: 0 14px;
+    border: 1px solid #2563eb;
+    border-radius: 6px;
+    background: #3b82f6;
     color: #fff;
     cursor: pointer;
     font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .perf-controls button:hover {
+    background: #2563eb;
   }
   .perf-controls button.secondary {
     background: #fff;
-    color: #111827;
+    border-color: #d1d5db;
+    color: #374151;
+  }
+  .perf-controls button.secondary:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
   }
   .perf-controls .badge {
     height: 34px;
     display: inline-flex;
     align-items: center;
-    padding: 0 10px;
-    border-radius: 999px;
+    padding: 0 12px;
+    border-radius: 6px;
     background: #f3f4f6;
     border: 1px solid #e5e7eb;
     font-size: 12px;
-    color: #111827;
+    font-weight: 500;
+    color: #374151;
   }
+
+  /* KPI 统计卡片 - 使用简洁的白色风格 */
   .perf-kpis {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-    margin: 12px 0 14px;
+    gap: 16px;
+    margin: 16px 0 20px;
   }
   @media (max-width: 1100px) {
     .perf-kpis {
@@ -75,106 +120,126 @@
   }
 
   .kpi-card {
-    border: 1px solid rgba(229, 231, 235, 0.9);
-    border-radius: 14px;
-    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-    padding: 12px;
-    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 20px;
     position: relative;
-    overflow: hidden;
   }
   .kpi-card::before {
-    content: "";
+    content: '';
     position: absolute;
-    inset: 0;
-    background: radial-gradient(
-      120px 90px at 20% 0%,
-      rgba(59, 130, 246, 0.1),
-      transparent 60%
-    );
-    pointer-events: none;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #e2e8f0;
+    border-radius: 3px 3px 0 0;
   }
+  .kpi-card:nth-child(1)::before { background: #3b82f6; }
+  .kpi-card:nth-child(2)::before { background: #10b981; }
+  .kpi-card:nth-child(3)::before { background: #f59e0b; }
+  .kpi-card:nth-child(4)::before { background: #8b5cf6; }
+  
   .kpi-label {
-    font-size: 12px;
-    color: #6b7280;
-    letter-spacing: 0.2px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 8px;
   }
   .kpi-value {
-    margin-top: 8px;
-    font-size: 22px;
-    font-weight: 800;
-    color: #111827;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1e293b;
     line-height: 1.2;
   }
 
+  /* 图表布局 */
   .perf-layout {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 14px;
+    gap: 16px;
   }
+  
+  /* 图表卡片 */
   .perf-card {
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
     background: #fff;
-    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 16px;
   }
+  
   .perf-card-title {
-    font-weight: 700;
-    font-size: 14px;
-    margin-bottom: 10px;
-    color: #111827;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f3f4f6;
   }
+  
   .chart-container {
     width: 100%;
     height: 520px;
   }
+  
+  /* 帮助说明 */
   .perf-help {
-    margin-top: 12px;
     color: #6b7280;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.6;
+  }
+  .perf-help div {
+    margin-bottom: 8px;
+  }
+  .perf-help div:last-child {
+    margin-bottom: 0;
   }
   .perf-help code {
     background: #f3f4f6;
     padding: 2px 6px;
-    border-radius: 6px;
-    color: #111827;
+    border-radius: 4px;
+    color: #374151;
+    font-size: 12px;
   }
 
-  /* Styles for log search results */
+  /* 日志搜索结果样式 */
   #log-search-section button {
     height: 34px;
-    padding: 0 12px;
+    padding: 0 14px;
     border: 1px solid #d1d5db;
-    border-radius: 8px;
+    border-radius: 6px;
     background: #fff;
-    color: #111827;
+    color: #374151;
     cursor: pointer;
     font-size: 13px;
-    transition: background-color 0.2s ease;
+    font-weight: 500;
+    transition: background 0.15s;
   }
   #log-search-section button:hover {
-    background-color: #f3f4f6;
+    background: #f3f4f6;
   }
   .log-context-line {
     margin: 2px 0;
     padding: 2px 0;
-    white-space: pre-wrap; /* Allow wrapping */
-    word-break: break-all; /* Break long words */
+    white-space: pre-wrap;
+    word-break: break-all;
   }
   .log-line-number {
-    color: #6c757d;
+    color: #9ca3af;
     margin-right: 10px;
     user-select: none;
+    font-family: 'SF Mono', ui-monospace, monospace;
   }
   .log-highlight {
-    background: #fff3cd;
+    background: #fef3c7;
     padding: 1px 3px;
     border-radius: 3px;
     font-weight: 600;
-    color: #111827;
+    color: #92400e;
   }
-  /* Styles for latency ranking table */
+
+  /* 延迟排行榜表格 */
   .latency-table {
     width: 100%;
     border-collapse: collapse;
@@ -182,25 +247,27 @@
   }
   .latency-table th,
   .latency-table td {
-    padding: 8px 12px;
+    padding: 10px 12px;
     text-align: left;
     border-bottom: 1px solid #e5e7eb;
   }
   .latency-table th {
     background-color: #f9fafb;
     font-weight: 600;
+    color: #374151;
+    font-size: 12px;
   }
   .latency-table tbody tr:hover {
-    background-color: #f3f4f6;
+    background-color: #f9fafb;
     cursor: pointer;
   }
   .latency-table th:nth-child(n + 2),
   .latency-table td:nth-child(n + 2) {
     text-align: right;
-    font-family: monospace;
+    font-family: 'SF Mono', ui-monospace, monospace;
   }
 
-  /* Modal styles */
+  /* Modal 样式 */
   .modal {
     display: none;
     position: fixed;
@@ -213,21 +280,32 @@
   }
   .modal-content {
     background: #fff;
-    border-radius: 12px;
+    border-radius: 8px;
     margin: 8vh auto;
-    padding: 16px;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+    padding: 20px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.2);
     position: relative;
-    max-height: 85vh; /* 限制最大高度 */
-    overflow-y: auto; /* 内容超长时可滚动 */
+    max-height: 85vh;
+    overflow-y: auto;
   }
   .modal .close-button {
     position: absolute;
-    right: 14px;
-    top: 10px;
+    right: 16px;
+    top: 14px;
     font-size: 20px;
     cursor: pointer;
-    color: #6b7280;
+    color: #9ca3af;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .modal .close-button:hover {
+    background: #f3f4f6;
+    color: #374151;
   }
   #url-stats-modal-content p {
     font-size: 14px;
@@ -244,6 +322,13 @@
 <script src="/static/js/echarts.min.js"></script>
 
 <div class="perf-monitor-container">
+  <!-- 头部区域 -->
+  <div class="perf-section-header">
+    <h2 class="perf-section-title">性能监控</h2>
+    <p class="perf-section-desc">实时追踪 API 性能指标、请求分布与接口延迟分析</p>
+  </div>
+
+  <!-- 控制栏 -->
   <div class="perf-controls">
     <div class="field">
       <label for="start-time-picker">开始时间</label>
@@ -291,7 +376,7 @@
       <button id="clear-filters-btn" class="secondary">清除</button>
     </div>
 
-    <div class="field" style="flex: 1; min-width: 260px">
+    <div class="field" style="flex: 1; min-width: 200px">
       <label for="search-request-id">按 requestId 查询详情</label>
       <input
         id="search-request-id"
@@ -311,6 +396,7 @@
     </div>
   </div>
 
+  <!-- KPI 统计卡片 -->
   <div class="perf-kpis" id="perf-kpis">
     <div class="kpi-card">
       <div class="kpi-label">请求数</div>
@@ -330,27 +416,30 @@
     </div>
   </div>
 
+  <!-- 图表区域 -->
   <div class="perf-layout">
     <div class="perf-card">
       <div class="perf-card-title">请求耗时分布（散点图）（采样后）</div>
       <div id="scatter-chart-container" class="chart-container"></div>
 
-      <div style="margin-top: 10px">
+      <div style="margin-top: 12px">
         <details id="error-scatter-details">
-          <summary style="cursor: pointer; color: #374151; font-size: 13px">
+          <summary style="cursor: pointer; color: #374151; font-size: 13px; font-weight: 500">
             <span>500+ 错误请求分布（全量，点击展开后加载）</span>
             <button
               type="button"
               id="errors-scatter-refresh-btn"
               style="
                 margin-left: 10px;
-                padding: 2px 8px;
-                border: 1px solid #e5e7eb;
-                border-radius: 999px;
+                padding: 4px 10px;
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
                 background: #fff;
-                color: #111827;
+                color: #374151;
                 font-size: 12px;
+                font-weight: 500;
                 cursor: pointer;
+                transition: background 0.15s;
               "
               title="刷新 500+ 错误点"
             >
@@ -360,7 +449,7 @@
           <div
             id="errors-scatter-chart-container"
             class="chart-container"
-            style="height: 360px; margin-top: 10px"
+            style="height: 360px; margin-top: 12px"
           ></div>
           <div style="margin-top: 8px; color: #6b7280; font-size: 12px">
             说明：该图不受时间范围筛选影响，展示 Redis 已保留窗口内所有
@@ -418,16 +507,16 @@
           <b>队列积压</b>：<code>perf:events:queue</code>
           当前长度。持续升高表示后台消费速度不足。
         </div>
-        <div style="margin-top: 8px">
+        <div>
           <b>颜色规则</b>：深红 (5xx)；#144e33 (4xx)；浅红 (&gt;6s)；橙色
           (3-6s)；浅绿 (500ms-3s)；绿色 (&lt;=500ms)。详见图表颜色图例。
         </div>
-        <div style="margin-top: 8px">
+        <div>
           <b>为什么搜索可能有延迟？</b> requestId
-          的详情写入是“采集→队列→单例处理器消费→落库”的异步流程，通常会有 1~5
+          的详情写入是"采集→队列→单例处理器消费→落库"的异步流程，通常会有 1~5
           秒延迟（队列积压时可能更久）。
         </div>
-        <div style="margin-top: 8px">
+        <div>
           <b>采样规则</b>： 对于较快请求 (500ms内)的，散点图里面只返回
           0.08%，其余全量返回（包含所有错误情况）。且较快请求部分无详情采集。
         </div>
@@ -435,6 +524,7 @@
     </div>
   </div>
 
+  <!-- 详情 Modal -->
   <div
     id="trace-detail-modal"
     class="modal"
@@ -453,12 +543,12 @@
       class="modal-content"
       style="
         background: #fff;
-        border-radius: 12px;
+        border-radius: 8px;
         max-width: 880px;
         width: calc(100% - 48px);
         margin: 8vh auto;
-        padding: 16px 16px;
-        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+        padding: 20px;
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.2);
         position: relative;
         max-height: 84vh;
         overflow: auto;
@@ -468,26 +558,36 @@
         class="close-button"
         style="
           position: absolute;
-          right: 14px;
-          top: 10px;
+          right: 16px;
+          top: 14px;
           font-size: 20px;
           cursor: pointer;
-          color: #6b7280;
+          color: #9ca3af;
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 6px;
+          transition: background 0.15s, color 0.15s;
         "
+        onmouseover="this.style.background='#f3f4f6';this.style.color='#374151';"
+        onmouseout="this.style.background='transparent';this.style.color='#9ca3af';"
         >&times;</span
       >
-      <h3 style="margin: 0 0 10px; font-size: 16px">请求追踪详情</h3>
+      <h3 style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #111827">请求追踪详情</h3>
       <pre
         id="trace-detail-content"
         style="
           max-height: 60vh;
           overflow: auto;
-          background: #0b1220;
-          color: #e5e7eb;
-          padding: 12px;
-          border-radius: 10px;
+          background: #1e293b;
+          color: #e2e8f0;
+          padding: 16px;
+          border-radius: 6px;
           font-size: 12px;
-          line-height: 1.45;
+          line-height: 1.5;
+          font-family: 'SF Mono', ui-monospace, monospace;
         "
       ></pre>
 
@@ -496,9 +596,9 @@
         id="security-scan-section"
         style="
           display: none;
-          margin-top: 14px;
+          margin-top: 16px;
           border-top: 1px solid #e5e7eb;
-          padding-top: 12px;
+          padding-top: 16px;
         "
       >
         <div
@@ -511,7 +611,7 @@
           "
         >
           <h4
-            style="font-size: 14px; font-weight: 700; margin: 0; color: #111827"
+            style="font-size: 14px; font-weight: 600; margin: 0; color: #111827"
           >
             🛡️ Security Scan
           </h4>
@@ -526,8 +626,8 @@
             display: flex;
             gap: 10px;
             align-items: center;
-            margin-top: 10px;
-            margin-bottom: 10px;
+            margin-top: 12px;
+            margin-bottom: 12px;
           "
         >
           <input
@@ -536,22 +636,31 @@
             placeholder="IP (editable)"
             style="
               flex: 1;
-              padding: 8px 10px;
+              padding: 8px 12px;
               border: 1px solid #d1d5db;
-              border-radius: 8px;
+              border-radius: 6px;
               font-size: 13px;
+              outline: none;
+              transition: border-color 0.15s, box-shadow 0.15s;
             "
+            onfocus="this.style.borderColor='#3b82f6';this.style.boxShadow='0 0 0 3px rgba(59, 130, 246, 0.08)';"
+            onblur="this.style.borderColor='#d1d5db';this.style.boxShadow='none';"
           />
           <button
             id="security-scan-btn"
             style="
-              padding: 8px 14px;
-              border-radius: 8px;
-              border: 1px solid #d1d5db;
-              background: #fff;
+              padding: 8px 16px;
+              border-radius: 6px;
+              border: 1px solid #2563eb;
+              background: #3b82f6;
+              color: #fff;
               cursor: pointer;
               font-size: 13px;
+              font-weight: 500;
+              transition: background 0.15s;
             "
+            onmouseover="this.style.background='#2563eb';"
+            onmouseout="this.style.background='#3b82f6';"
           >
             Scan
           </button>
@@ -565,8 +674,8 @@
             overflow-y: auto;
             background: #f9fafb;
             border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 10px;
+            border-radius: 6px;
+            padding: 12px;
             line-height: 1.5;
           "
         >
@@ -577,13 +686,13 @@
       <div
         class="status-code-help"
         style="
-          margin-top: 12px;
+          margin-top: 16px;
           font-size: 12px;
           max-height: 170px;
           overflow-y: auto;
           border: 1px solid #e5e7eb;
-          border-radius: 8px;
-          padding: 8px;
+          border-radius: 6px;
+          padding: 12px;
           background: #f9fafb;
         "
       >
@@ -732,7 +841,7 @@
         </details>
       </div>
 
-      <div id="log-search-section" style="display: none; margin-top: 12px">
+      <div id="log-search-section" style="display: none; margin-top: 16px">
         <button id="search-logs-btn" style="margin-bottom: 8px">
           🔍 搜索相关日志
         </button>
@@ -741,13 +850,14 @@
           style="
             max-height: 40vh;
             overflow: auto;
-            background: #f3f4f6;
-            padding: 12px;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 6px;
+            font-family: 'SF Mono', ui-monospace, monospace;
             font-size: 12px;
             line-height: 1.5;
-            color: #111827;
+            color: #374151;
+            border: 1px solid #e5e7eb;
           "
         >
           <!-- Log results will be injected here -->
@@ -759,7 +869,7 @@
   <div id="url-stats-modal" class="modal">
     <div class="modal-content" style="max-width: 600px">
       <span class="close-button">&times;</span>
-      <h3 id="url-stats-modal-title" style="margin: 0 0 10px; font-size: 16px">
+      <h3 id="url-stats-modal-title" style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #111827">
         接口请求详情
       </h3>
       <div id="url-stats-modal-content"></div>
@@ -903,8 +1013,8 @@
         const queueLength = data.queueLength || 0;
         badge.textContent = `队列积压: ${queueLength}`;
         if (queueLength > 10000) badge.style.color = "#ef4444";
-        else if (queueLength > 1000) badge.style.color = "#f97316";
-        else badge.style.color = "#16a34a";
+        else if (queueLength > 1000) badge.style.color = "#f59e0b";
+        else badge.style.color = "#10b981";
       } catch (e) {
         badge.textContent = "队列积压: 错误";
         badge.style.color = "#ef4444";
@@ -1152,7 +1262,7 @@
     function renderSecurityScanResult(records, scannedIp) {
       const ip = escapeHtml(scannedIp || "");
       if (!records || records.length === 0) {
-        return `<div style="color:#065f46; font-weight:800;">No risk found.</div>`;
+        return `<div style="color:#065f46; font-weight:600;">No risk found.</div>`;
       }
 
       const items = records
@@ -1162,12 +1272,12 @@
           const path = escapeHtml((r.requestPath || "-").slice(0, 120));
           const detail = escapeHtml((r.errorDetail || "-").slice(0, 160));
           return `
-            <div style="padding:8px 10px; border-bottom:1px solid #e5e7eb;">
+            <div style="padding:10px 12px; border-bottom:1px solid #e5e7eb;">
               <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-                <div style="font-weight:700; color:#111827;">${reason}</div>
-                <div style="color:#6b7280;">${t}</div>
+                <div style="font-weight:600; color:#111827;">${reason}</div>
+                <div style="color:#6b7280; font-size:11px;">${t}</div>
               </div>
-              <div style="margin-top:4px; color:#111827; font-family:monospace; font-size:12px;">${path}</div>
+              <div style="margin-top:4px; color:#374151; font-family:monospace; font-size:12px;">${path}</div>
               <div style="margin-top:4px; color:#6b7280;">${detail}</div>
             </div>
           `;
@@ -1175,11 +1285,11 @@
         .join("");
 
       return `
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
-          <div style="color:#b91c1c; font-weight:800;">Risk detected</div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+          <div style="color:#dc2626; font-weight:600;">Risk detected</div>
           <div style="color:#6b7280; font-size:12px;">ip=${ip} · showing ${records.length}</div>
         </div>
-        <div style="border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; background:#fff;">
+        <div style="border:1px solid #e5e7eb; border-radius:6px; overflow:hidden; background:#fff;">
           ${items}
         </div>
       `;
@@ -1215,7 +1325,7 @@
           visible: true,
           ip: "",
           statusText: "",
-          html: `<div style="color:#92400e; font-weight:700;">Please input an IP.</div>`,
+          html: `<div style="color:#92400e; font-weight:600;">Please input an IP.</div>`,
           loading: false,
         });
         return;
@@ -1255,7 +1365,7 @@
           visible: true,
           ip: trimmed,
           statusText: "",
-          html: `<div style="color:#991b1b; font-weight:700;">Scan failed: ${escapeHtml(
+          html: `<div style="color:#dc2626; font-weight:600;">Scan failed: ${escapeHtml(
             e.message || "unknown"
           )}</div>`,
           loading: false,
@@ -1319,7 +1429,7 @@
             visible: true,
             ip: ipFromTrace,
             statusText: "",
-            html: `<div style="color:#6b7280; font-weight:700;">Not scanned yet. Click "Scan" to check.</div>`,
+            html: `<div style="color:#6b7280; font-weight:600;">Not scanned yet. Click "Scan" to check.</div>`,
             loading: false,
           });
         }
@@ -1436,7 +1546,7 @@
               name: "Server Errors (5xx)",
               type: "effectScatter",
               symbolSize: 12,
-              color: "#b91c1c",
+              color: "#dc2626",
               data: errorData5xx,
               z: 10,
             },
@@ -1530,7 +1640,7 @@
     }
 
     function showError(chartInstance, message) {
-      chartInstance.hideLoading();
+      chartChart.hideLoading();
       chartInstance.setOption(
         {
           title: {
@@ -1673,7 +1783,7 @@
     function calculateAndRenderLatencyRanking(data) {
       if (!data || data.length === 0) {
         latencyRankingBody.innerHTML =
-          '<tr><td colspan="5" style="text-align: center;">暂无数据</td></tr>';
+          '<tr><td colspan="5" style="text-align: center; color: #9ca3af; padding: 24px;">暂无数据</td></tr>';
         return;
       }
 
@@ -1764,7 +1874,7 @@
         const data = await response.json();
 
         if (!data.success) {
-          logResultsContainer.innerHTML = `<p style="color: #ef4444;">搜索失败: ${
+          logResultsContainer.innerHTML = `<p style="color: #dc2626;">搜索失败: ${
             data.error || "未知错误"
           }</p>`;
           return;
@@ -1778,8 +1888,9 @@
         logResultsContainer.innerHTML = "";
         data.data.results.forEach((result) => {
           const fileTitle = document.createElement("div");
-          fileTitle.style.fontWeight = "bold";
-          fileTitle.style.marginTop = "8px";
+          fileTitle.style.fontWeight = "600";
+          fileTitle.style.marginTop = "10px";
+          fileTitle.style.color = "#374151";
           fileTitle.textContent = `📄 ${result.file}`;
           logResultsContainer.appendChild(fileTitle);
 
@@ -1793,7 +1904,7 @@
         });
       } catch (err) {
         console.error(err);
-        logResultsContainer.innerHTML = `<p style="color: #ef4444;">日志搜索失败: ${err.message}</p>`;
+        logResultsContainer.innerHTML = `<p style="color: #dc2626;">日志搜索失败: ${err.message}</p>`;
       }
     }
 

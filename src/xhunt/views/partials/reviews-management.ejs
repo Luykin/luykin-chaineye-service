@@ -566,6 +566,15 @@
     return div.innerHTML;
   }
 
+  // 图片代理（解决跨域问题）
+  function getProxiedImageUrl(url) {
+    if (!url) return null;
+    // 如果是相对路径或已代理的URL，直接返回
+    if (url.startsWith('/') || url.includes('wsrv.nl')) return url;
+    // 使用 wsrv.nl 代理
+    return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=100&h=100&fit=cover`;
+  }
+
   // 将函数挂载到全局，供 stats.js 调用
   window.searchReviews = searchReviews;
 </script>

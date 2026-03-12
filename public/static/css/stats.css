@@ -313,7 +313,11 @@ body {
     transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 侧边栏固定时，主内容区右移 */
+/* 侧边栏固定时，主内容区右移，隐藏右边框 */
+.sidebar.pinned {
+    border-right: none;
+    box-shadow: none;
+}
 .sidebar.pinned ~ .main-content {
     margin-left: 240px;
 }
