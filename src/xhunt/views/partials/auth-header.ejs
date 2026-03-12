@@ -1,12 +1,12 @@
 <div class="user-menu">
   <!-- 用户信息卡片 -->
   <div class="user-info">
-    <div class="user-avatar">
-      <%= typeof user !== 'undefined' && user ? user.name.charAt(0).toUpperCase() : 'A' %>
-    </div>
-    <div class="user-details">
-      <span class="user-name"><%= typeof user !== 'undefined' && user ? user.name : 'Admin' %></span>
-      <span class="user-role">超级管理员</span>
+    <div class="user-email">
+      <svg class="email-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="5" width="20" height="14" rx="3"/>
+        <path d="m2 8 9.5 6.5a2 2 0 0 0 2.5 0L22 8"/>
+      </svg>
+      <span class="email-text"><%= typeof user !== 'undefined' && user ? user.name : 'Admin' %></span>
     </div>
     <svg class="dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="m6 9 6 6 6-6"/>
@@ -68,48 +68,40 @@
     border-color: #cbd5e1;
   }
   
-  /* 用户头像 */
-  .user-avatar {
-    width: 36px;
-    height: 36px;
-    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-    border-radius: 10px;
+  /* 邮箱展示 */
+  .user-email {
     display: flex;
     align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 15px;
-    font-weight: 600;
+    gap: 8px;
+    padding: 0 4px;
+  }
+  
+  .email-icon {
+    width: 16px;
+    height: 16px;
+    color: #64748b;
     flex-shrink: 0;
   }
   
-  /* 用户详情 */
-  .user-details {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  
-  .user-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #1e293b;
-    line-height: 1.2;
-  }
-  
-  .user-role {
-    font-size: 11px;
-    color: #64748b;
+  .email-text {
+    font-size: 13px;
     font-weight: 500;
+    color: #334155;
+    letter-spacing: 0.01em;
+  }
+  
+  .user-info:hover .email-icon,
+  .user-info:hover .email-text {
+    color: #1e293b;
   }
   
   /* 下拉箭头 */
   .dropdown-chevron {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     color: #94a3b8;
-    margin-left: 4px;
-    margin-right: 4px;
+    margin-left: 2px;
+    margin-right: 2px;
     transition: transform 0.2s ease;
   }
   
@@ -217,12 +209,15 @@
   
   /* 移动端适配 */
   @media (max-width: 768px) {
-    .user-details {
-      display: none;
+    .email-text {
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     
     .user-info {
-      padding: 4px;
+      padding: 4px 8px;
     }
   }
 </style>

@@ -1,27 +1,14 @@
 <div class="footer-status-bar">
   <div class="status-group">
     <div class="status-item">
-      <svg class="status-icon status-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-        <polyline points="22 4 12 14.01 9 11.01"/>
-      </svg>
       <span class="status-label">数据实时更新</span>
     </div>
     <div class="status-divider"></div>
     <div class="status-item">
-      <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <polyline points="12 6 12 12 16 14"/>
-      </svg>
       <span class="status-label">最后更新: <%= formatDateTime() %></span>
     </div>
     <div class="status-divider"></div>
     <div class="status-item">
-      <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
-        <path d="M2 12h20"/>
-      </svg>
       <span class="status-label">UTC+8 北京时间</span>
     </div>
   </div>
@@ -52,16 +39,6 @@
     display: flex;
     align-items: center;
     gap: 6px;
-  }
-  
-  .status-icon {
-    width: 14px;
-    height: 14px;
-    color: #94a3b8;
-  }
-  
-  .status-icon.status-success {
-    color: #22c55e;
   }
   
   .status-label {
