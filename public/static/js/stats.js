@@ -644,17 +644,41 @@ function renderRedisHistory() {
 
   container.innerHTML = history
     .map(
-      (key) => `
-    <div class="history-item">
-      <span class="history-item-key" title="点击复制" onclick="copyToClipboard('${escapeHtml(key)}')">${escapeHtml(key)}</span>
+      (key, index) => `
+    <div class="history-item" data-key="${escapeHtml(key)}" data-index="${index}">
+      <span class="history-item-key" title="点击复制">${escapeHtml(key)}</span>
       <div class="history-item-actions">
-        <button class="btn-text" onclick="document.getElementById('redis-key-input').value='${escapeHtml(key)}';handleRedisQuery('${escapeHtml(key)}')">查询</button>
-        <button class="btn-text" onclick="removeRedisHistory('${escapeHtml(key)}')">删除</button>
+        <button class="btn-text btn-query" data-key="${escapeHtml(key)}">查询</button>
+        <button class="btn-text btn-delete" data-key="${escapeHtml(key)}">删除</button>
       </div>
     </div>
   `
     )
     .join("");
+
+  // 使用事件委托绑定点击事件
+  container.querySelectorAll('.history-item').forEach(item => {
+    const key = item.getAttribute('data-key');
+    const keySpan = item.querySelector('.history-item-key');
+    const queryBtn = item.querySelector('.btn-query');
+    const deleteBtn = item.querySelector('.btn-delete');
+    
+    // 点击 Key 复制
+    keySpan.addEventListener('click', () => {
+      copyToClipboard(key);
+    });
+    
+    // 查询按钮
+    queryBtn.addEventListener('click', () => {
+      document.getElementById('redis-key-input').value = key;
+      handleRedisQuery(key);
+    });
+    
+    // 删除按钮
+    deleteBtn.addEventListener('click', () => {
+      removeRedisHistory(key);
+    });
+  });
 }
 
 /**

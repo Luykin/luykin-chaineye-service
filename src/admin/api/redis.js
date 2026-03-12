@@ -196,12 +196,12 @@ router.get("/keys", adminAuth, requireRole("super"), async (req, res) => {
 });
 
 /**
- * 修改 String 类型的值
+ * 修改 Redis 值（支持 string, hash, list, set, zset 类型）
  * POST /api/admin/system/redis/update
  */
 router.post("/update", adminAuth, requireRole("super"), express.json(), async (req, res) => {
   try {
-    const { key, value, ttl } = req.body;
+    const { key, value, ttl, type: reqType } = req.body;
     if (!key || typeof key !== "string") {
       return res.status(400).json({ success: false, error: "缺少 key 参数" });
     }
@@ -211,35 +211,91 @@ router.post("/update", adminAuth, requireRole("super"), express.json(), async (r
 
     const redis = await getRedisClient();
 
-    // 检查 Key 类型
-    const type = await redis.type(key);
-    if (type !== "string" && type !== "none") {
-      return res.status(400).json({
-        success: false,
-        error: `只能修改 string 类型的值，当前类型为 ${type}`,
-      });
-    }
+    // 获取当前 Key 类型
+    const currentType = await redis.type(key);
+    const targetType = reqType || currentType || 'string';
 
     // 获取旧值用于审计日志
-    const oldValue = type === "string" ? await redis.get(key) : null;
+    let oldValue = null;
+    try {
+      switch (currentType) {
+        case 'string':
+          oldValue = await redis.get(key);
+          break;
+        case 'hash':
+          oldValue = await redis.hGetAll(key);
+          break;
+        case 'list':
+          oldValue = await redis.lRange(key, 0, -1);
+          break;
+        case 'set':
+          oldValue = await redis.sMembers(key);
+          break;
+        case 'zset':
+          oldValue = await redis.zRangeWithScores(key, 0, -1);
+          break;
+      }
+    } catch (e) {
+      oldValue = null;
+    }
 
-    // 设置新值
-    const valueStr = String(value);
-    if (ttl !== undefined && ttl !== null) {
-      const ttlNum = parseInt(ttl, 10);
-      if (ttlNum > 0) {
-        await redis.set(key, valueStr, { EX: ttlNum });
-      } else if (ttlNum === -1) {
-        await redis.set(key, valueStr);
-      } else {
-        return res.status(400).json({ success: false, error: "TTL 必须大于 0 或等于 -1" });
+    // 根据类型设置新值
+    if (targetType === 'hash' && typeof value === 'object' && value !== null) {
+      // Hash 类型 - 使用 HSET
+      const hashEntries = Object.entries(value).flat();
+      if (hashEntries.length > 0) {
+        await redis.hSet(key, hashEntries);
+      }
+    } else if (targetType === 'list' && Array.isArray(value)) {
+      // List 类型 - 删除旧值后重新添加
+      await redis.del(key);
+      if (value.length > 0) {
+        await redis.rPush(key, value);
+      }
+    } else if (targetType === 'set' && Array.isArray(value)) {
+      // Set 类型 - 删除旧值后重新添加
+      await redis.del(key);
+      if (value.length > 0) {
+        await redis.sAdd(key, value);
+      }
+    } else if (targetType === 'zset' && Array.isArray(value)) {
+      // ZSet 类型 - 删除旧值后重新添加
+      await redis.del(key);
+      if (value.length > 0) {
+        const zsetEntries = value.map(item => ({
+          score: item.score || 0,
+          value: String(item.value || item)
+        }));
+        await redis.zAdd(key, zsetEntries);
       }
     } else {
-      await redis.set(key, valueStr);
+      // String 类型或其他 - 使用 SET
+      const valueStr = String(value);
+      if (ttl !== undefined && ttl !== null) {
+        const ttlNum = parseInt(ttl, 10);
+        if (ttlNum > 0) {
+          await redis.set(key, valueStr, { EX: ttlNum });
+        } else if (ttlNum === -1) {
+          await redis.set(key, valueStr);
+        } else {
+          return res.status(400).json({ success: false, error: "TTL 必须大于 0 或等于 -1" });
+        }
+      } else {
+        await redis.set(key, valueStr);
+      }
+    }
+
+    // 设置 TTL（如果指定且不是 string 类型）
+    if (ttl !== undefined && ttl !== null && targetType !== 'string') {
+      const ttlNum = parseInt(ttl, 10);
+      if (ttlNum > 0) {
+        await redis.expire(key, ttlNum);
+      }
     }
 
     // 记录审计日志
     try {
+      const newValueStr = typeof value === 'object' ? JSON.stringify(value).substring(0, 500) : String(value).substring(0, 500);
       await XhuntAdminAuditLog.create({
         adminId: req.adminUser.id,
         email: req.adminUser.email,
@@ -251,8 +307,9 @@ router.post("/update", adminAuth, requireRole("super"), express.json(), async (r
         success: true,
         message: JSON.stringify({
           key,
-          oldValue: oldValue ? oldValue.substring(0, 500) : null,
-          newValue: valueStr.substring(0, 500),
+          type: targetType,
+          oldValue: typeof oldValue === 'string' ? oldValue.substring(0, 500) : JSON.stringify(oldValue).substring(0, 500),
+          newValue: newValueStr,
           ttl: ttl || null,
         }),
       });

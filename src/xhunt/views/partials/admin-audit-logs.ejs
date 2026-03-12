@@ -1,88 +1,215 @@
-<div class="export-card">
-  <div class="export-header">
-    <h3>🧾 管理员操作记录</h3>
-    <div class="export-actions" style="display:flex;gap:8px;align-items:center;">
-      <input id="audit-email" type="text" placeholder="按邮箱筛选" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;width:180px;" />
-      <input id="audit-action" type="text" placeholder="按动作筛选" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;width:180px;" />
-      <button id="audit-refresh" class="btn primary">查询</button>
+<!-- 管理员操作记录 -->
+<div class="audit-section">
+  <!-- 头部 -->
+  <div class="audit-header">
+    <div class="audit-title">
+      <h2>操作记录</h2>
+      <p>管理员操作审计日志</p>
+    </div>
+    <div class="audit-filters">
+      <div class="filter-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+        <input id="audit-email" type="text" placeholder="按邮箱筛选" />
+      </div>
+      <div class="filter-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <input id="audit-action" type="text" placeholder="按动作筛选" />
+      </div>
+      <button id="audit-refresh" class="audit-btn audit-btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.3-4.3"/>
+        </svg>
+        查询
+      </button>
     </div>
   </div>
-  <div class="export-result" style="margin-top:12px;">
-    <div style="overflow:auto;max-height:520px;">
-      <table class="simple-table">
-        <thead>
-          <tr>
-            <th>时间</th>
-            <th>邮箱</th>
-            <th>动作</th>
-            <th>方法</th>
-            <th>路径</th>
-            <th>成功</th>
-            <th>信息</th>
-            <th>IP</th>
-          </tr>
-        </thead>
-        <tbody id="audit-tbody">
-          <tr><td colspan="8" style="padding:12px;text-align:center;color:#6b7280;">加载中...</td></tr>
-        </tbody>
-      </table>
-    </div>
+
+  <!-- 表格 -->
+  <div class="audit-table-wrapper">
+    <table class="audit-table">
+      <thead>
+        <tr>
+          <th class="col-time">时间</th>
+          <th class="col-email">邮箱</th>
+          <th class="col-action">动作</th>
+          <th class="col-method">方法</th>
+          <th class="col-route">路径</th>
+          <th class="col-status">状态</th>
+          <th class="col-message">信息</th>
+          <th class="col-ip">IP</th>
+        </tr>
+      </thead>
+      <tbody id="audit-tbody">
+        <tr class="empty-row">
+          <td colspan="8">加载中...</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
-  <div style="margin-top:12px;display:flex;justify-content:center;align-items:center;gap:12px;">
-    <button id="audit-prev" class="btn">上一页</button>
-    <span id="audit-page" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;font-size:14px;font-weight:600;color:#374151;">1</span>
-    <button id="audit-next" class="btn">下一页</button>
+
+  <!-- 分页 -->
+  <div class="audit-pagination">
+    <button id="audit-prev" class="audit-btn audit-btn-secondary" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="m15 18-6-6 6-6"/>
+      </svg>
+      上一页
+    </button>
+    <span class="page-indicator" id="audit-page">1</span>
+    <button id="audit-next" class="audit-btn audit-btn-secondary">
+      下一页
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="m9 18 6-6-6-6"/>
+      </svg>
+    </button>
   </div>
 </div>
+
+<!-- Tooltip 容器 -->
+<div id="audit-tooltip" class="audit-tooltip"></div>
 
 <script>
 (function(){
   var page = 1;
   var limit = 50;
-  function fmt(ts){ try { return new Date(ts).toLocaleString('zh-CN', { hour12: false }); } catch(e){ return ts; } }
+  
+  function fmt(ts) { 
+    try { 
+      return new Date(ts).toLocaleString('zh-CN', { hour12: false }); 
+    } catch(e) { 
+      return ts; 
+    } 
+  }
+  
+  function escapeHtml(text) {
+    if (!text) return '';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+  
+  function truncate(str, len) {
+    if (!str || str.length <= len) return str;
+    return str.substring(0, len) + '...';
+  }
+
   function load(){
     var email = document.getElementById('audit-email').value.trim();
     var action = document.getElementById('audit-action').value.trim();
     var qs = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (email) qs.set('email', email);
     if (action) qs.set('action', action);
+    
     fetch('/api/xhunt/stats/admin-audit/logs?' + qs.toString(), { credentials: 'include' })
       .then(function(r){ return r.json(); })
       .then(function(resp){
         var tb = document.getElementById('audit-tbody');
         tb.innerHTML = '';
+        
         if (!resp.success || !Array.isArray(resp.data) || resp.data.length === 0){
-          tb.innerHTML = '<tr><td colspan="8" style="padding:12px;text-align:center;color:#6b7280;">暂无数据</td></tr>';
-          document.getElementById('audit-page').textContent = String(page);
+          tb.innerHTML = '<tr class="empty-row"><td colspan="8">暂无数据</td></tr>';
+          updatePagination(0);
           return;
         }
+        
         resp.data.forEach(function(row){
           var tr = document.createElement('tr');
+          var messageShort = truncate(row.message, 40);
+          var routeShort = truncate(row.route, 35);
+          
           tr.innerHTML = [
-            '<td style="white-space:nowrap;">' + fmt(row.createdAt) + '</td>',
-            '<td>' + (row.email || '') + '</td>',
-            '<td><span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:500;">' + (row.action || '') + '</span></td>',
-            '<td><span style="background:#f3f4f6;color:#374151;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:500;">' + (row.method || '') + '</span></td>',
-            '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(row.route||'')+'">' + (row.route || '') + '</td>',
-            '<td style="text-align:center;">' + (row.success ? '<span style="color:#16a34a;font-weight:600;">✅</span>' : '<span style="color:#dc2626;font-weight:600;">❌</span>') + '</td>',
-            '<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(row.message||'')+'">' + (row.message || '') + '</td>',
-            '<td style="font-family:monospace;font-size:12px;color:#6b7280;">' + (row.ip || '') + '</td>'
+            '<td class="col-time">' + fmt(row.createdAt) + '</td>',
+            '<td class="col-email" title="' + escapeHtml(row.email || '') + '">' + escapeHtml(row.email || '') + '</td>',
+            '<td class="col-action"><span class="badge badge-action">' + escapeHtml(row.action || '') + '</span></td>',
+            '<td class="col-method"><span class="badge badge-method">' + escapeHtml(row.method || '') + '</span></td>',
+            '<td class="col-route" title="' + escapeHtml(row.route || '') + '">' + escapeHtml(routeShort || '') + '</td>',
+            '<td class="col-status">' + (row.success ? '<span class="status-success">成功</span>' : '<span class="status-fail">失败</span>') + '</td>',
+            '<td class="col-message" data-full-message="' + escapeHtml(row.message || '') + '">' + escapeHtml(messageShort || '') + '</td>',
+            '<td class="col-ip">' + escapeHtml(row.ip || '') + '</td>'
           ].join('');
+          
+          // 信息列添加 hover 事件
+          var msgCell = tr.querySelector('.col-message');
+          if (msgCell && row.message && row.message.length > 40) {
+            msgCell.addEventListener('mouseenter', showTooltip);
+            msgCell.addEventListener('mouseleave', hideTooltip);
+            msgCell.addEventListener('mousemove', moveTooltip);
+          }
+          
           tb.appendChild(tr);
         });
-        document.getElementById('audit-page').textContent = String(page);
+        
+        updatePagination(resp.data.length);
       })
       .catch(function(err){
         console.error('[admin-audit-logs] 加载失败:', err);
         var tb = document.getElementById('audit-tbody');
-        tb.innerHTML = '<tr><td colspan="8" style="padding:12px;text-align:center;color:#dc2626;">加载失败: ' + (err.message || '未知错误') + '</td></tr>';
+        tb.innerHTML = '<tr class="empty-row error"><td colspan="8">加载失败: ' + escapeHtml(err.message || '未知错误') + '</td></tr>';
       });
   }
+  
+  function updatePagination(dataCount) {
+    document.getElementById('audit-page').textContent = String(page);
+    document.getElementById('audit-prev').disabled = page <= 1;
+    document.getElementById('audit-next').disabled = dataCount < limit;
+  }
+  
+  // Tooltip 功能
+  var tooltip = document.getElementById('audit-tooltip');
+  
+  function showTooltip(e) {
+    var fullMessage = this.getAttribute('data-full-message');
+    if (!fullMessage) return;
+    tooltip.textContent = fullMessage;
+    tooltip.style.display = 'block';
+    tooltip.style.opacity = '1';
+    moveTooltip(e);
+  }
+  
+  function hideTooltip() {
+    tooltip.style.opacity = '0';
+    setTimeout(function() {
+      tooltip.style.display = 'none';
+    }, 200);
+  }
+  
+  function moveTooltip(e) {
+    var x = e.clientX + 15;
+    var y = e.clientY + 15;
+    
+    // 防止超出视口
+    var rect = tooltip.getBoundingClientRect();
+    if (x + rect.width > window.innerWidth) {
+      x = e.clientX - rect.width - 10;
+    }
+    if (y + rect.height > window.innerHeight) {
+      y = e.clientY - rect.height - 10;
+    }
+    
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+  }
+
+  // 事件绑定
   document.getElementById('audit-refresh').addEventListener('click', function(){ page = 1; load(); });
   document.getElementById('audit-email').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
   document.getElementById('audit-action').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
-  document.getElementById('audit-prev').addEventListener('click', function(){ if (page>1){ page--; load(); } });
-  document.getElementById('audit-next').addEventListener('click', function(){ page++; load(); });
+  document.getElementById('audit-prev').addEventListener('click', function(){ if (page > 1){ page--; load(); } });
+  document.getElementById('audit-next').addEventListener('click', function(){ page++; load(); } });
+  
   // 初次加载
   load();
 })();
