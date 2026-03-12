@@ -1,29 +1,27 @@
 <div class="campaigns-container">
   <div class="campaigns-header">
-    <h2>
-      <svg t="1770303309021" class="icon campaigns-header-icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="8832" width="24" height="24"><path d="M511.744 513.1264m-450.816 0a450.816 450.816 0 1 0 901.632 0 450.816 450.816 0 1 0-901.632 0Z" fill="#FF5C64" p-id="8833"></path><path d="M815.9232 430.2336c0-112.9984-87.5008-204.5952-195.3792-204.5952-23.8592 0-46.6944 4.5056-67.84 12.6976 53.7088 45.056 88.1152 114.2784 88.1152 191.9488s-34.4064 146.8416-88.1152 191.9488c7.3728 2.8672 14.9504 5.2224 22.7328 7.168l-26.368 31.0784c-6.656 8.704-1.9968 23.7568 7.3728 23.7568h41.0624v18.8416c0 26.3168 21.1968 55.04 29.3376 63.8976 3.1744 3.4816 5.2736 6.2464 6.6048 8.6528a30.0032 30.0032 0 0 0-25.088 28.9792 30.03904 30.03904 0 0 0 29.3888 30.72h0.8192c11.8272 0 29.8496-5.4784 42.4448-17.7664 9.472-9.2672 14.6432-21.3504 14.6432-34.0992 0-27.3408-14.08-45.7216-24.6272-57.1904-5.9904-6.5024-12.6464-18.8416-13.4144-23.552v-18.432h37.6832c9.3696 0 14.0288-15.0016 7.3728-23.7568l-28.2624-33.536c81.664-24.576 141.5168-103.3216 141.5168-196.7616z" fill="#FFFFFF" p-id="8834"></path><path d="M601.344 430.2336c0-112.9984-87.5008-204.5952-195.3792-204.5952S210.5856 317.2352 210.5856 430.2336c0 96.7168 64.1536 177.7664 150.272 199.0656l-26.368 31.1296c-6.656 8.704-1.9968 23.7568 7.3728 23.7568h41.0624v18.8416c0 26.3168 21.1968 55.04 29.3376 63.8976 3.1744 3.4816 5.2736 6.2464 6.6048 8.6528a30.0032 30.0032 0 0 0-25.088 28.9792 30.03904 30.03904 0 0 0 29.3888 30.72h0.8192c11.8272 0 29.8496-5.4784 42.4448-17.7664 9.472-9.2672 14.6432-21.3504 14.6432-34.0992 0-27.3408-14.08-45.7216-24.6272-57.1904-5.9904-6.5024-12.6464-18.8416-13.4144-23.552v-18.432h37.6832c9.3696 0 14.0288-15.0016 7.3728-23.7568l-28.2624-33.536c81.7152-24.5248 141.5168-103.2704 141.5168-196.7104zM337.5104 372.9408c-1.024 1.0752-24.6272 26.88-7.5264 82.3296a30.08 30.08 0 0 1-28.7232 38.912c-12.8512 0-24.7296-8.2944-28.7232-21.1968-26.2656-85.248 13.1584-132.6592 21.2992-141.312a30.08 30.08 0 0 1 42.496-1.1776 29.97248 29.97248 0 0 1 1.1776 42.4448z" fill="#FFFFFF" p-id="8835"></path></svg>
-       Xhunt Earn 活动配置</h2>
+    <h2>Xhunt Earn 活动配置</h2>
   </div>
 
   <div class="campaigns-toolbar">
     <div class="left">
-      <span class="muted">当前 dataId：<code id="campaigns-dataid">xhunt_campaigns</code></span>
-      <span class="muted">group：<code>DEFAULT_GROUP</code></span>
+      <span class="muted">dataId: <code id="campaigns-dataid">xhunt_campaigns</code></span>
+      <span class="muted">group: <code>DEFAULT_GROUP</code></span>
     </div>
     <div class="right">
       <div class="campaigns-search">
-        <span class="search-icon" aria-hidden="true">🔍</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
         <input
           id="campaigns-search"
           type="text"
-          placeholder="搜索活动（id / campaignKey / 标题）"
+          placeholder="搜索活动..."
         />
       </div>
-      <button class="btn primary" id="campaigns-refresh"><span class="btn-ico" aria-hidden="true">⌛</span>重新加载</button>
-      <button class="btn" id="campaigns-new"><span class="btn-ico" aria-hidden="true">➕</span>新增活动</button>
-      <button class="btn" id="campaigns-duplicate" disabled><span class="btn-ico" aria-hidden="true">🧬</span>复制活动</button>
-      <button class="btn danger" id="campaigns-delete" disabled><span class="btn-ico" aria-hidden="true">🗑️</span>删除当前</button>
-      <button class="btn success" id="campaigns-publish" disabled><span class="btn-ico" aria-hidden="true">🚀</span> 发布</button>
+      <button class="btn primary" id="campaigns-refresh">刷新</button>
+      <button class="btn" id="campaigns-new">新增</button>
+      <button class="btn" id="campaigns-duplicate" disabled>复制</button>
+      <button class="btn danger" id="campaigns-delete" disabled>删除</button>
+      <button class="btn success" id="campaigns-publish" disabled>发布</button>
     </div>
   </div>
 
@@ -31,11 +29,11 @@
     <div class="list">
       <div class="list-header">
         <button type="button" class="list-toggle" id="campaigns-list-toggle" title="收起列表" aria-label="收起列表">
-          <span class="list-toggle-icon">◀</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <div class="list-header-text">
-          <strong>活动列表</strong>
-          <span class="muted" id="campaigns-count">0 个</span>
+          <span>活动列表</span>
+          <span class="muted" id="campaigns-count">0</span>
         </div>
       </div>
       <div class="list-items" id="campaigns-list"></div>
@@ -44,30 +42,29 @@
     <div class="editor">
       <div class="editor-header">
         <div>
-          <strong>编辑</strong>
-          <span class="muted" id="campaigns-editor-hint">选择左侧一条活动开始编辑</span>
+          <span>编辑活动</span>
+          <span class="muted" id="campaigns-editor-hint">选择左侧活动开始编辑</span>
         </div>
       </div>
 
       <div id="campaigns-editor-empty" class="editor-empty">
-        <div class="empty-title">请选择左侧一条活动</div>
+        <div class="empty-title">请选择一个活动</div>
         <div class="empty-desc">
-          从左侧列表点击任一活动即可开始编辑；你也可以点击上方
-          <strong>「新增活动」</strong> 来创建新的 Earn 活动。
+          从左侧列表选择活动进行编辑，或点击「新增」创建活动
         </div>
       </div>
 
       <div id="campaigns-editor-body" style="display: none">
         <div class="field-row field-row-toggle">
-          <div class="field">
-            <label>是否展示（enabled）</label>
+          <div class="field field-inline">
+            <label class="switch-label">展示活动</label>
             <label class="switch">
               <input id="campaigns-enabled" type="checkbox" disabled />
               <span class="slider"></span>
             </label>
           </div>
-          <div class="field">
-            <label>是否是测试期（testingPhase）（仅内部测试号可见）</label>
+          <div class="field field-inline">
+            <label class="switch-label">测试模式（仅内部可见）</label>
             <label class="switch">
               <input id="campaigns-testingPhase" type="checkbox" disabled />
               <span class="slider"></span>
@@ -77,31 +74,25 @@
 
         <div class="field-row field-row-3">
           <div class="field">
-            <label>投放者推特号（例如mantle, mantle2）</label>
-            <input id="campaigns-twitter-handle" type="text" placeholder="例如：bybit" />
-            <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-              填写后会自动填充 id、campaignKey、hotTweetsKey。保存后不可修改。
-            </div>
+            <label>投放者推特号</label>
+            <input id="campaigns-twitter-handle" type="text" placeholder="例如：mantle" />
+            <div class="field-hint">填写后自动填充 id、campaignKey、hotTweetsKey，保存后不可修改</div>
           </div>
           <div class="field">
             <label>排序权重</label>
-            <input id="campaigns-sortWeight" type="number" min="0" max="10000" step="1" placeholder="0" style="width:100%;" />
-            <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-              0～10000，数值越大列表越靠前
-            </div>
+            <input id="campaigns-sortWeight" type="number" min="0" max="10000" step="1" placeholder="0" />
+            <div class="field-hint">0-10000，数值越大越靠前</div>
           </div>
-          <div class="field">
-            <label style="display: flex; align-items: center; gap: 8px;">
-              <span>是否有早期项目提示</span>
-              <span class="risk-preview-trigger" title="悬停查看预览">ℹ️</span>
+          <div class="field field-inline">
+            <label class="switch-label">
+              <span>早期项目风险提示</span>
+              <span class="risk-preview-trigger" title="查看预览">ℹ️</span>
             </label>
             <label class="switch">
               <input id="campaigns-hasRiskConfirm" type="checkbox" disabled />
               <span class="slider"></span>
             </label>
-            <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-              勾选后会在活动页面显示早期项目风险提示
-            </div>
+            <div class="field-hint">在活动页面显示早期项目风险提示</div>
             <div class="risk-preview-popup" id="risk-preview-popup" style="display: none;">
               <div class="risk-preview-content">
                 <div style="margin-bottom: 8px; font-weight: 600; font-size: 12px;">中文预览：</div>
@@ -117,38 +108,36 @@
           </div>
         </div>
 
-        <div class="field-row field-row-toggle" style="margin-top: 8px;">
-          <div class="field">
-            <label>是否展示付费推广政策</label>
+        <div class="field-row field-row-toggle">
+          <div class="field field-inline">
+            <label class="switch-label">显示付费推广政策</label>
             <label class="switch">
               <input id="campaigns-showSponsoredPolicy" type="checkbox" disabled />
               <span class="slider"></span>
             </label>
-            <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-              勾选后会在活动页面报名按钮上放显示「付费推广政策」提示
-            </div>
+            <div class="field-hint">在报名按钮上方显示「付费推广政策」提示</div>
           </div>
         </div>
 
         <div class="section section-compact">
-          <div class="section-title">活动信息（名称 · 介绍 · 主题）</div>
+          <div class="section-title">活动信息</div>
           <div class="field-row field-row-2">
             <div class="field">
-              <label>活动标题(中文)</label>
+              <label>标题（中文）</label>
               <input id="campaigns-displayName-zh" type="text" />
             </div>
             <div class="field">
-              <label>活动标题(English)</label>
+              <label>标题（English）</label>
               <input id="campaigns-displayName-en" type="text" />
             </div>
           </div>
           <div class="field-row field-row-2">
             <div class="field">
-              <label>活动短标题（zh）</label>
+              <label>短标题（中文）</label>
               <input id="campaigns-copy-shortTitle-zh" type="text" />
             </div>
             <div class="field">
-              <label>shortTitle（en）</label>
+              <label>短标题（English）</label>
               <input id="campaigns-copy-shortTitle-en" type="text" />
             </div>
           </div>
@@ -158,15 +147,15 @@
                 <label>项目介绍（中文）</label>
                 <textarea
                   id="campaigns-projectIntroduction-zh"
-                  rows="3"
-                  placeholder="一段纯文本介绍本项目/活动..."
+                  rows="2"
+                  placeholder="纯文本介绍..."
                 ></textarea>
               </div>
               <div class="field">
                 <label>项目介绍（English）</label>
                 <textarea
                   id="campaigns-projectIntroduction-en"
-                  rows="3"
+                  rows="2"
                   placeholder="Plain text introduction..."
                 ></textarea>
               </div>
@@ -174,9 +163,9 @@
           </div>
           <div class="section-block">
             <div class="section-title-inline">
-              ✍️ 写作相关主题
+              <span>写作主题</span>
               <button class="btn btn-sm" id="campaigns-writing-themes-add" type="button" disabled>
-                ➕ 添加主题
+                +添加
               </button>
             </div>
             <!-- <div class="repeaters-hint">← 左右滑动 · 至少保留一个主题</div> -->
@@ -185,25 +174,23 @@
         </div>
 
         <div class="section section-compact">
-          <div class="section-title">时间 · 奖励 · 门槛</div>
+          <div class="section-title">时间、奖励与门槛</div>
           <div class="section-sub">
-            <div class="section-title-sm">活动时间</div>
             <div class="field-row field-row-2">
               <div class="field">
-                <label>startAt</label>
+                <label>开始时间</label>
                 <input id="campaigns-startAt" type="datetime-local" />
               </div>
               <div class="field">
-                <label>endAt</label>
+                <label>结束时间</label>
                 <input id="campaigns-endAt" type="datetime-local" />
               </div>
             </div>
           </div>
           <div class="section-sub">
-            <div class="section-title-sm">奖励配置</div>
             <div class="field-row field-row-3">
               <div class="field">
-                <label>奖励金额（总金额-征文）</label>
+                <label>奖励金额</label>
                 <input id="campaigns-rewardAmount" type="number" min="1" max="99999999" placeholder="1-99999999" />
               </div>
               <div class="field">
@@ -215,17 +202,17 @@
                 <select id="campaigns-rewardDistributionType">
                   <option value="">请选择</option>
                   <option value="equal">平分</option>
-                  <option value="mindshare">mindshare分</option>
+                  <option value="mindshare">mindshare</option>
                 </select>
               </div>
             </div>
             <div class="field-row field-row-2">
               <div class="field">
                 <label>奖励单位</label>
-                <input id="campaigns-rewardUnit" type="text" placeholder="U、USDT、USD" />
+                <input id="campaigns-rewardUnit" type="text" placeholder="USDT" />
               </div>
-              <div class="field">
-                <label style="display: flex; align-items: center; gap: 8px;">是否开启征文大赛</label>
+              <div class="field field-inline">
+                <label class="switch-label">开启征文大赛</label>
                 <label class="switch">
                   <input id="campaigns-enableEssayContest" type="checkbox" disabled />
                   <span class="slider"></span>
@@ -245,8 +232,8 @@
               </div>
               <div class="section section-collapsible" style="margin-top: 6px;">
                 <div class="section-title section-title-collapsible">
-                  <span>🏆 征文大赛最终名单</span>
-                  <button class="btn btn-sm" id="campaigns-essay-winners-add" type="button" disabled>➕ 添加获奖者</button>
+                  <span>征文大赛获奖名单</span>
+                  <button class="btn btn-sm" id="campaigns-essay-winners-add" type="button" disabled>+添加</button>
                   <span class="section-toggle">▼</span>
                 </div>
                 <div class="section-content" style="display: none;">
@@ -350,16 +337,16 @@
           <div class="section-title">Logo · 任务</div>
           <div class="section-sub">
             <div class="section-title-sm">
-              Ⓜ️ 活动方 logo
-              <button class="btn btn-sm" id="campaigns-logos-add" type="button" disabled>➕ 添加</button>
+              活动方 logo
+              <button class="btn btn-sm" id="campaigns-logos-add" type="button" disabled>+添加</button>
             </div>
             <!-- <div class="repeaters-hint">← 左右滑动</div> -->
             <div class="repeaters" id="campaigns-logos"></div>
           </div>
           <div class="section-sub">
             <div class="section-title-sm">
-              🎯 报名前需完成的任务
-              <button class="btn btn-sm" id="campaigns-tasks-add" type="button" disabled>➕ 添加任务</button>
+              报名前需完成的任务
+              <button class="btn btn-sm" id="campaigns-tasks-add" type="button" disabled>+添加</button>
             </div>
             <!-- <div class="repeaters-hint">← 左右滑动</div> -->
             <div class="repeaters" id="campaigns-tasks"></div>
@@ -467,101 +454,69 @@
 
 <style>
   .campaigns-container {
-    padding: 14px;
+    padding: 16px;
     max-width: 1600px;
     margin: 0 auto;
     overflow-x: hidden;
     box-sizing: border-box;
   }
   .campaigns-header h2 {
-    margin: 0 0 3px;
-    color: #111827;
-    font-size: 20px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .campaigns-header h2 .campaigns-header-icon {
-    width: 24px;
-    height: 24px;
-    flex-shrink: 0;
-    vertical-align: middle;
-  }
-  .campaigns-header p {
-    margin: 0 0 10px;
-    color: #6b7280;
-    font-size: 13px;
+    margin: 0 0 12px;
+    color: #1f2937;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
   .campaigns-toolbar {
     display: flex;
     justify-content: space-between;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
-    padding: 5px 10px;
-    background: #ffffff;
+    padding: 8px 12px;
+    background: #fafafa;
     border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    margin-bottom: 8px;
+    border-radius: 4px;
+    margin-bottom: 12px;
     align-items: center;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
   .campaigns-toolbar .left {
     display: flex;
-    gap: 6px;
+    gap: 12px;
     flex-wrap: wrap;
     align-items: center;
     font-size: 12px;
   }
   .campaigns-toolbar .right {
     display: flex;
-    gap: 4px;
+    gap: 6px;
     flex-wrap: wrap;
     align-items: center;
   }
   .campaigns-toolbar .right .btn {
-    padding: 6px 11px;
-    font-size: 13px;
-    line-height: 1.35;
-    border-radius: 5px;
-  }
-  .campaigns-toolbar .right .btn .btn-ico {
-    display: inline-block;
-    margin-right: 3px;
-    vertical-align: -0.15em;
-  }
-  .campaigns-toolbar .right .btn.primary .btn-ico,
-  .campaigns-toolbar .right .btn.danger .btn-ico,
-  .campaigns-toolbar .right .btn.success .btn-ico {
-    filter: brightness(0) invert(1);
-  }
-  .campaigns-toolbar .right .btn:disabled .btn-ico {
-    opacity: 0.75;
-  }
-  .campaigns-toolbar .right .btn:not(.primary):not(.danger):not(.success) .btn-ico {
-    opacity: 0.88;
-  }
-  .campaigns-search .search-icon {
+    padding: 5px 10px;
     font-size: 12px;
-    color: #6b7280;
-    opacity: 0.9;
-    line-height: 1;
+    line-height: 1.4;
+    border-radius: 4px;
   }
   .btn.btn-sm {
-    padding: 5px 9px;
-    font-size: 12px;
+    padding: 4px 8px;
+    font-size: 11px;
   }
   .campaigns-search {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     padding: 4px 8px;
     border-radius: 4px;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    min-width: 160px;
-    max-width: 200px;
-    transition: all 0.15s;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    min-width: 140px;
+    max-width: 180px;
+    transition: border-color 0.15s;
+  }
+  .campaigns-search svg {
+    color: #9ca3af;
+    flex-shrink: 0;
   }
   .campaigns-search input {
     border: none;
@@ -577,8 +532,6 @@
   }
   .campaigns-search:focus-within {
     border-color: #3b82f6;
-    background: #ffffff;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
   }
   .muted {
     color: #6b7280;
@@ -587,8 +540,8 @@
 
   .campaigns-body {
     display: grid;
-    grid-template-columns: 360px 1fr;
-    gap: 10px;
+    grid-template-columns: 320px 1fr;
+    gap: 12px;
     align-items: start;
     min-width: 0;
   }
@@ -597,7 +550,7 @@
     overflow-x: auto;
   }
   .campaigns-body.list-collapsed {
-    grid-template-columns: 44px 1fr;
+    grid-template-columns: 40px 1fr;
   }
   .campaigns-body.list-collapsed .list .list-items {
     display: none;
@@ -612,7 +565,7 @@
   .campaigns-body.list-collapsed .list-toggle {
     margin: 0;
   }
-  .campaigns-body.list-collapsed .list-toggle .list-toggle-icon {
+  .campaigns-body.list-collapsed .list-toggle svg {
     transform: rotate(180deg);
   }
   @media (max-width: 1100px) {
@@ -629,7 +582,7 @@
     .campaigns-body.list-collapsed .list .list-header {
       justify-content: space-between;
     }
-    .campaigns-body.list-collapsed .list-toggle .list-toggle-icon {
+    .campaigns-body.list-collapsed .list-toggle svg {
       transform: none;
     }
   }
@@ -637,45 +590,42 @@
   .list {
     background: #fff;
     border: 1px solid #e5e7eb;
-    border-radius: 8px;
+    border-radius: 4px;
     overflow: hidden;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
   .list-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 12px;
-    background: #fafafa;
+    padding: 8px 10px;
+    background: #f9fafb;
     border-bottom: 1px solid #e5e7eb;
-    font-size: 13px;
-    font-weight: 600;
-    gap: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    gap: 6px;
   }
   .list-toggle {
     flex-shrink: 0;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
     background: #fff;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: #6b7280;
-    transition: background 0.15s, color 0.15s;
-    margin-right: 4px;
+    transition: all 0.15s;
   }
   .list-toggle:hover {
     background: #f3f4f6;
-    color: #111827;
+    color: #374151;
+    border-color: #9ca3af;
   }
-  .list-toggle .list-toggle-icon {
-    display: inline-block;
+  .list-toggle svg {
     transition: transform 0.2s;
-    font-size: 12px;
   }
   .list-header-text {
     flex: 1;
@@ -685,21 +635,21 @@
     min-width: 0;
   }
   .list-items {
-    max-height: calc(100vh - 280px);
+    max-height: calc(100vh - 260px);
     overflow: auto;
   }
   .item {
     padding: 10px 12px;
     border-bottom: 1px solid #f3f4f6;
     cursor: pointer;
-    transition: 0.15s;
+    transition: background 0.15s;
   }
   .item:hover {
     background: #f9fafb;
   }
   .item.active {
-    background: #eff6ff;
-    border-left: 3px solid #3b82f6;
+    background: #f0f9ff;
+    border-left: 2px solid #3b82f6;
   }
   .chips {
     display: inline-flex;
@@ -802,9 +752,8 @@
   .editor {
     background: #fff;
     border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 10px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    border-radius: 4px;
+    padding: 12px;
   }
   .editor-header {
     display: flex;
@@ -812,7 +761,9 @@
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-    margin-bottom: 6px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f3f4f6;
   }
   .editor-actions {
     display: flex;
@@ -821,18 +772,17 @@
   }
 
   .editor-empty {
-    margin-top: 10px;
-    padding: 20px 14px;
+    padding: 40px 20px;
     text-align: center;
-    border-radius: 8px;
-    border: 1px dashed #e5e7eb;
+    border-radius: 4px;
+    border: 1px dashed #d1d5db;
     background: #fafafa;
   }
   .editor-empty .empty-title {
     font-size: 14px;
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 4px;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 6px;
   }
   .editor-empty .empty-desc {
     font-size: 12px;
@@ -842,8 +792,8 @@
   .field-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: 12px;
+    margin-bottom: 12px;
   }
   .field-row .field:nth-child(4) {
     grid-column: span 1;
@@ -870,48 +820,67 @@
   .field {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     position: relative;
+  }
+  .field.field-inline {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .field.field-inline .field-hint {
+    width: 100%;
   }
   .field label {
     font-weight: 500;
-    color: #374151;
+    color: #4b5563;
     font-size: 12px;
+  }
+  .field label.switch-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
   }
   .field input,
   .field textarea,
   .field select {
     border: 1px solid #d1d5db;
-    border-radius: 6px;
-    padding: 6px 9px;
+    border-radius: 4px;
+    padding: 5px 8px;
     font-size: 13px;
     outline: none;
-    transition: all 0.15s;
+    transition: border-color 0.15s;
   }
   .field textarea {
     resize: vertical;
     line-height: 1.5;
-    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-      "Segoe UI", Roboto, sans-serif;
+    font-family: inherit;
   }
   .field input:focus,
   .field textarea:focus,
   .field select:focus {
     border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
   .field input:disabled,
   .field textarea:disabled,
   .field select:disabled {
-    background: #f9fafb;
+    background: #f3f4f6;
     color: #6b7280;
     cursor: not-allowed;
+  }
+  .field-hint {
+    font-size: 11px;
+    color: #9ca3af;
+    line-height: 1.4;
+    margin-top: 2px;
   }
 
   .risk-preview-trigger {
     cursor: help;
-    font-size: 14px;
-    color: #6b7280;
+    font-size: 12px;
+    color: #9ca3af;
     transition: color 0.15s;
   }
   .risk-preview-trigger:hover {
@@ -921,9 +890,9 @@
     position: fixed;
     background: #ffffff;
     border: 1px solid #e5e7eb;
-    border-radius: 8px;
+    border-radius: 4px;
     padding: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     z-index: 10000;
     max-width: 400px;
     pointer-events: auto;
@@ -933,20 +902,23 @@
   }
 
   .section {
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px solid #f3f4f6;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
   }
   .section-compact {
-    margin-top: 6px;
-    padding-top: 6px;
+    margin-top: 12px;
+    padding-top: 12px;
   }
   .section-compact .field-row {
-    margin-bottom: 4px;
+    margin-bottom: 12px;
+  }
+  .section-compact .field-row:last-child {
+    margin-bottom: 0;
   }
   .section-sub {
-    margin-top: 6px;
-    padding-top: 6px;
+    margin-top: 12px;
+    padding-top: 12px;
     border-top: 1px solid #f3f4f6;
   }
   .section-sub:first-child {
@@ -959,9 +931,9 @@
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 6px;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 12px;
     font-size: 13px;
   }
   .section-title-sm {
@@ -970,14 +942,14 @@
     align-items: center;
     gap: 8px;
     font-size: 12px;
-    margin-bottom: 4px;
-    color: #374151;
-    font-weight: 600;
+    margin-bottom: 8px;
+    color: #4b5563;
+    font-weight: 500;
   }
   .section-collapsible .section-title-collapsible {
     cursor: pointer;
     user-select: none;
-    padding: 3px 0;
+    padding: 4px 0;
     transition: color 0.15s;
   }
   .section-collapsible .section-title-collapsible:hover {
@@ -985,18 +957,18 @@
   }
   .section-toggle {
     font-size: 11px;
-    color: #6b7280;
+    color: #9ca3af;
     transition: transform 0.2s;
   }
   .section-collapsible.expanded .section-toggle {
     transform: rotate(180deg);
   }
   .section-content {
-    margin-top: 6px;
+    margin-top: 8px;
   }
   .section-block {
-    margin-top: 6px;
-    padding-top: 6px;
+    margin-top: 12px;
+    padding-top: 12px;
     border-top: 1px solid #f3f4f6;
   }
   .section-title-inline {
@@ -1004,9 +976,9 @@
     justify-content: space-between;
     align-items: center;
     gap: 8px;
-    font-weight: 600;
-    color: #374151;
-    margin-bottom: 4px;
+    font-weight: 500;
+    color: #4b5563;
+    margin-bottom: 8px;
     font-size: 12px;
   }
 
@@ -1059,10 +1031,9 @@
   }
   .rep-card {
     border: 1px solid #e5e7eb;
-    border-radius: 8px;
+    border-radius: 4px;
     padding: 10px 12px;
     background: #fafafa;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
   .rep-card .rep-actions .btn {
     padding: 3px 6px;
@@ -1092,8 +1063,9 @@
   .switch {
     position: relative;
     display: inline-block;
-    width: 40px;
-    height: 22px;
+    width: 36px;
+    height: 20px;
+    flex-shrink: 0;
   }
   .switch input {
     opacity: 0;
@@ -1108,55 +1080,40 @@
     right: 0;
     bottom: 0;
     background-color: #d1d5db;
-    transition: 0.2s;
-    border-radius: 999px;
+    transition: 0.15s;
+    border-radius: 20px;
   }
   .switch .slider:before {
     position: absolute;
     content: "";
-    height: 16px;
-    width: 16px;
+    height: 14px;
+    width: 14px;
     left: 3px;
     bottom: 3px;
     background-color: white;
-    transition: 0.2s;
-    border-radius: 999px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    transition: 0.15s;
+    border-radius: 50%;
   }
   .switch input:checked + .slider {
     background-color: #3b82f6;
   }
   .switch input:checked + .slider:before {
-    transform: translateX(18px);
+    transform: translateX(16px);
   }
-  /* 禁用状态的开关样式 */
   .switch input:disabled + .slider {
     cursor: not-allowed;
-    opacity: 0.6;
-    background-color: #d1d5db;
-  }
-  .switch input:disabled:checked + .slider {
-    background-color: #9ca3af;
-  }
-  .switch input:disabled + .slider:hover {
-    background-color: #d1d5db;
-    cursor: not-allowed;
-  }
-  .switch input:disabled:checked + .slider:hover {
-    background-color: #9ca3af;
-    cursor: not-allowed;
+    opacity: 0.5;
   }
 
   .campaigns-toast {
     position: fixed;
     right: 16px;
     bottom: 16px;
-    max-width: 480px;
-    background: #111827;
+    max-width: 400px;
+    background: #1f2937;
     color: #fff;
     padding: 10px 14px;
-    border-radius: 8px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
     font-size: 13px;
     z-index: 9999;
   }
@@ -1176,8 +1133,8 @@
   }
   .json-preview-modal-panel {
     background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
     width: 90%;
     max-width: 1400px;
     display: flex;
@@ -1249,14 +1206,14 @@
     margin: 0;
     padding: 12px;
     background: #f9fafb;
-    border-radius: 8px;
+    border-radius: 4px;
     font-family: "Consolas", "Monaco", "Courier New", monospace;
     font-size: 12px;
-    line-height: 1.35;
+    line-height: 1.4;
     overflow: auto;
     flex: 1;
     min-height: 0;
-    color: #111827;
+    color: #1f2937;
     white-space: pre-wrap;
     word-break: break-all;
   }
@@ -1293,8 +1250,8 @@
   }
   .json-modal-panel {
     background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
     width: 86%;
     max-width: 900px;
     display: flex;
@@ -1355,7 +1312,7 @@
     height: 56vh;
     min-height: 320px;
     border: 1px solid #d1d5db;
-    border-radius: 6px;
+    border-radius: 4px;
     padding: 12px;
     font-family: "Consolas", "Monaco", "Courier New", monospace;
     font-size: 13px;
@@ -1363,12 +1320,11 @@
     resize: vertical;
     outline: none;
     background: #fafafa;
-    color: #111827;
-    transition: all 0.15s;
+    color: #1f2937;
+    transition: border-color 0.15s;
   }
   #campaigns-json-source:focus {
     border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     background: #fff;
   }
   .json-modal-body::after {
@@ -2888,7 +2844,7 @@
       );
       if (!okFirst) return;
       const okSecond = window.confirm(
-        "⚠️ 二次确认：确定要删除该活动吗？\n\n此操作将立即发布到 Nacos，无法恢复。"
+        "确定删除该活动？\n\n此操作将立即发布到 Nacos，无法恢复。"
       );
       if (!okSecond) return;
       config.campaigns.splice(currentIndex, 1);

@@ -1,213 +1,329 @@
-<div class="export-card">
-  <div
-    class="export-header"
-    style="display: flex; align-items: center; justify-content: space-between"
-  >
-    <h3 style="margin: 0">👤 管理员列表与权限配置</h3>
+<div class="admin-users-card">
+  <div class="admin-users-header">
+    <h3 class="admin-users-title">管理员列表</h3>
   </div>
+
   <!-- 新增管理员（默认折叠） -->
-  <div class="stat-card" style="margin-top: 12px">
-    <div
-      style="
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 8px;
-      "
-    >
-      <div style="font-weight: 600; font-size: 14px">新增管理员</div>
-      <button id="ca-toggle" class="btn">展开</button>
+  <div class="admin-section">
+    <div class="section-toggle">
+      <span class="section-label">新增管理员</span>
+      <button id="ca-toggle" class="btn btn-sm">展开</button>
     </div>
-    <div id="ca-body" style="display: none">
-      <div
-        style="
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          gap: 12px;
-        "
-      >
-        <div>
+    <div id="ca-body" class="section-body" style="display: none">
+      <div class="form-grid">
+        <div class="form-item">
           <label for="ca-email">邮箱</label>
-          <input
-            id="ca-email"
-            type="email"
-            placeholder="you@example.com"
-            autocomplete="off"
-            style="
-              width: 100%;
-              padding: 10px 12px;
-              border: 1px solid #e5e7eb;
-              border-radius: 10px;
-              background: #fff;
-              outline: none;
-              transition: box-shadow 0.15s, border-color 0.15s;
-            "
-            onfocus="this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.15)'; this.style.borderColor='#93c5fd'"
-            onblur="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb'"
-          />
+          <input id="ca-email" type="email" placeholder="you@example.com" autocomplete="off" />
         </div>
-        <div>
+        <div class="form-item">
           <label for="ca-password">初始密码（≥8位）</label>
-          <input
-            id="ca-password"
-            type="password"
-            placeholder="至少8位"
-            autocomplete="new-password"
-            style="
-              width: 100%;
-              padding: 10px 12px;
-              border: 1px solid #e5e7eb;
-              border-radius: 10px;
-              background: #fff;
-              outline: none;
-              transition: box-shadow 0.15s, border-color 0.15s;
-            "
-            onfocus="this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.15)'; this.style.borderColor='#93c5fd'"
-            onblur="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb'"
-          />
+          <input id="ca-password" type="password" placeholder="至少8位" autocomplete="new-password" />
         </div>
-        <div>
+        <div class="form-item">
           <label for="ca-role">角色</label>
-          <select
-            id="ca-role"
-            style="
-              width: 100%;
-              padding: 10px 12px;
-              border: 1px solid #e5e7eb;
-              border-radius: 10px;
-              background: #fff;
-              outline: none;
-              transition: box-shadow 0.15s, border-color 0.15s;
-              appearance: none;
-              background-image: linear-gradient(
-                  45deg,
-                  transparent 50%,
-                  #6b7280 50%
-                ),
-                linear-gradient(135deg, #6b7280 50%, transparent 50%),
-                linear-gradient(to right, #e5e7eb, #e5e7eb);
-              background-position: calc(100% - 20px) calc(1em + 2px),
-                calc(100% - 15px) calc(1em + 2px), calc(100% - 2.5em) 0.5em;
-              background-size: 5px 5px, 5px 5px, 1px 2em;
-              background-repeat: no-repeat;
-            "
-            onfocus="this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.15)'; this.style.borderColor='#93c5fd'"
-            onblur="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb'"
-          >
+          <select id="ca-role">
             <option value="admin">admin</option>
             <option value="super">super</option>
           </select>
         </div>
-        <div>
+        <div class="form-item">
           <label for="ca-daily-report">接收日报</label>
-          <div
-            style="display: flex; align-items: center; gap: 8px; padding: 6px 0"
-          >
-            <label
-              style="
-                position: relative;
-                display: inline-block;
-                width: 46px;
-                height: 26px;
-              "
-            >
-              <input
-                id="ca-daily-report"
-                type="checkbox"
-                style="display: none"
-              />
-              <span
-                id="ca-daily-report-ui"
-                style="
-                  position: absolute;
-                  cursor: pointer;
-                  top: 0;
-                  left: 0;
-                  right: 0;
-                  bottom: 0;
-                  background: #e5e7eb;
-                  border-radius: 999px;
-                  transition: 0.2s;
-                "
-              ></span>
-              <span
-                id="ca-daily-report-knob"
-                style="
-                  position: absolute;
-                  left: 3px;
-                  top: 3px;
-                  width: 20px;
-                  height: 20px;
-                  background: #fff;
-                  border-radius: 999px;
-                  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-                  transition: 0.2s;
-                "
-              ></span>
+          <div class="switch-wrap">
+            <label class="switch">
+              <input id="ca-daily-report" type="checkbox" />
+              <span class="switch-slider"></span>
             </label>
-            <span style="font-size: 12px; color: #6b7280"
-              >默认关闭，可在列表中随时切换</span
-            >
+            <span class="switch-hint">默认关闭</span>
           </div>
         </div>
       </div>
-      <div style="margin-top: 12px">
-        <div style="margin-bottom: 8px; color: #6b7280; font-size: 13px">
-          权限选择（可多选） ·
-          <span style="color: #9ca3af"
-            >标注：[Tab] 页面权限 / [API] 接口操作</span
-          >
+      <div class="perm-section">
+        <div class="perm-hint">权限选择（可多选） · <span class="perm-muted">[Tab] 页面权限 / [API] 接口操作</span></div>
+        <div id="ca-preset" class="perm-presets">
+          <button id="ca-preset-all" class="btn btn-sm">全部权限</button>
+          <button id="ca-preset-basic" class="btn btn-sm">基础权限</button>
+          <button id="ca-preset-clear" class="btn btn-sm">清空</button>
         </div>
-        <div
-          id="ca-preset"
-          style="margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap"
-        >
-          <button id="ca-preset-all" class="btn">全部权限</button>
-          <button id="ca-preset-basic" class="btn">基础权限</button>
-          <button id="ca-preset-clear" class="btn">清空</button>
-        </div>
-        <div
-          id="ca-perm-grid"
-          style="
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 12px;
-          "
-        ></div>
+        <div id="ca-perm-grid" class="perm-grid"></div>
       </div>
-      <div style="margin-top: 12px; display: flex; gap: 8px">
-        <button id="ca-submit" class="btn primary">创建</button>
+      <div class="form-actions">
+        <button id="ca-submit" class="btn btn-primary btn-sm">创建</button>
       </div>
     </div>
   </div>
-  <div class="export-result" style="margin-top: 12px">
-    <table class="simple-table">
+
+  <!-- 管理员列表 -->
+  <div class="admin-table-wrap">
+    <table class="admin-table">
       <thead>
         <tr>
-          <th style="width: 60px">ID</th>
+          <th class="col-id">ID</th>
           <th>邮箱</th>
-          <th style="width: 120px">角色</th>
-          <th style="width: 120px">状态</th>
-          <th style="width: 120px">生物识别</th>
-          <th style="width: 140px">接收日报</th>
+          <th class="col-role">角色</th>
+          <th class="col-status">状态</th>
+          <th class="col-bio">生物识别</th>
+          <th class="col-report">接收日报</th>
           <th>权限</th>
-          <th style="width: 160px">操作</th>
+          <th class="col-actions">操作</th>
         </tr>
       </thead>
       <tbody id="dr-tbody"></tbody>
     </table>
   </div>
-  <div
-    id="dr-status"
-    style="
-      margin-top: 12px;
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      display: none;
-    "
-  ></div>
+  <div id="dr-status" class="status-msg"></div>
 </div>
+
+<style>
+  .admin-users-card {
+    padding: 16px;
+  }
+  .admin-users-header {
+    margin-bottom: 16px;
+  }
+  .admin-users-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+  }
+  .admin-section {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  .section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .section-label {
+    font-weight: 500;
+    font-size: 14px;
+    color: #374151;
+  }
+  .section-body {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .form-item label {
+    display: block;
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 4px;
+  }
+  .form-item input,
+  .form-item select {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 13px;
+    box-sizing: border-box;
+  }
+  .form-item input:focus,
+  .form-item select:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+  .switch-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+  }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+  }
+  .switch input {
+    display: none;
+  }
+  .switch-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #d1d5db;
+    border-radius: 22px;
+    transition: 0.2s;
+  }
+  .switch-slider:before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.2s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  .switch input:checked + .switch-slider {
+    background: #10b981;
+  }
+  .switch input:checked + .switch-slider:before {
+    transform: translateX(18px);
+  }
+  .switch-hint {
+    font-size: 12px;
+    color: #9ca3af;
+  }
+  .perm-section {
+    margin-top: 12px;
+  }
+  .perm-hint {
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #6b7280;
+  }
+  .perm-muted {
+    color: #9ca3af;
+  }
+  .perm-presets {
+    margin-bottom: 10px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .perm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+  }
+  .form-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+  }
+  .admin-table-wrap {
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .admin-table th,
+  .admin-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .admin-table th {
+    background: #f9fafb;
+    font-weight: 500;
+    color: #6b7280;
+    font-size: 12px;
+  }
+  .admin-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .admin-table tbody tr:hover {
+    background: #f9fafb;
+  }
+  .col-id { width: 50px; }
+  .col-role { width: 90px; }
+  .col-status { width: 90px; }
+  .col-bio { width: 90px; }
+  .col-report { width: 100px; }
+  .col-actions { width: 100px; }
+  .status-msg {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    display: none;
+  }
+  .status-msg.success {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+  .status-msg.error {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+  .btn {
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    color: #374151;
+  }
+  .btn:hover {
+    background: #f3f4f6;
+  }
+  .btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .btn-primary {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+  }
+  .btn-primary:hover {
+    background: #2563eb;
+  }
+  .perm-editor-row td {
+    background: #f9fafb;
+    padding: 12px;
+  }
+  .perm-group {
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px 12px;
+    background: #fff;
+  }
+  .perm-group-header {
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #111827;
+    font-size: 13px;
+  }
+  .perm-group-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .perm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    background: #f9fafb;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .perm-chip input {
+    margin: 0;
+  }
+  .perm-chip.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
 
 <script>
   (async function () {
@@ -224,26 +340,17 @@
 
     // 接收日报（创建表单）开关 UI 同步
     const caDrCb = document.getElementById("ca-daily-report");
-    const caDrUI = document.getElementById("ca-daily-report-ui");
-    const caDrKnob = document.getElementById("ca-daily-report-knob");
     function updateDailyReportToggleUI(checked) {
-      if (!caDrUI || !caDrKnob) return;
-      caDrUI.style.background = checked ? "#34d399" : "#e5e7eb";
-      caDrKnob.style.transform = checked ? "translateX(20px)" : "translateX(0)";
+      // 纯 CSS 实现，无需 JS 控制样式
     }
     if (caDrCb) {
-      updateDailyReportToggleUI(!!caDrCb.checked);
-      caDrCb.addEventListener("change", () =>
-        updateDailyReportToggleUI(!!caDrCb.checked)
-      );
+      caDrCb.addEventListener("change", () => {});
     }
 
     function setStatus(msg, ok = true) {
       statusEl.textContent = msg;
       statusEl.style.display = "block";
-      statusEl.style.background = ok ? "#d1fae5" : "#fee2e2";
-      statusEl.style.color = ok ? "#065f46" : "#991b1b";
-      statusEl.style.border = `1px solid ${ok ? "#a7f3d0" : "#fecaca"}`;
+      statusEl.className = "status-msg " + (ok ? "success" : "error");
       if (ok) {
         setTimeout(() => {
           statusEl.style.display = "none";
@@ -411,7 +518,7 @@
 
         groups.push({ key: tabKey, label: tabMeta?.label || tabKey, items });
       });
-      // 其余未归属的 API 放在“全局/其他”
+      // 其余未归属的 API 放在"全局/其他"
       const others = ALL_PERMISSIONS.filter(
         (p) => !tabs.includes(p) && !used.has(p)
       );
@@ -420,42 +527,25 @@
       return groups;
     }
 
-    function sectionHeader(text) {
-      const h = document.createElement("div");
-      h.textContent = text;
-      h.style.fontWeight = "600";
-      h.style.margin = "4px 0 8px";
-      h.style.color = "#111827";
-      return h;
-    }
-
     function renderGroup(container, g, selectedSet, checksArr) {
       const card = document.createElement("div");
-      card.style.border = "1px solid #e5e7eb";
-      card.style.borderRadius = "10px";
-      card.style.padding = "10px 12px";
-      card.style.background = "#fff";
-      card.appendChild(sectionHeader(`[${g.label}]`));
+      card.className = "perm-group";
+      const header = document.createElement("div");
+      header.className = "perm-group-header";
+      header.textContent = `[${g.label}]`;
+      card.appendChild(header);
       const row = document.createElement("div");
-      row.style.display = "flex";
-      row.style.flexWrap = "wrap";
-      row.style.gap = "8px";
+      row.className = "perm-group-items";
       g.items.forEach((p) => {
         const chip = document.createElement("label");
-        chip.style.display = "inline-flex";
-        chip.style.alignItems = "center";
-        chip.style.gap = "6px";
-        chip.style.padding = "6px 10px";
-        chip.style.border = "1px solid #e5e7eb";
-        chip.style.borderRadius = "999px";
-        chip.style.background = "#f9fafb";
+        chip.className = "perm-chip";
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.value = p;
         cb.checked = selectedSet.has(p);
         if (!isSuper && RESTRICTED.has(p)) {
           cb.disabled = true;
-          chip.style.opacity = "0.6";
+          chip.classList.add("disabled");
         }
         cb.addEventListener("change", () => {
           if (cb.checked) {
@@ -568,7 +658,6 @@
         const drCb = document.getElementById("ca-daily-report");
         if (drCb) {
           drCb.checked = false;
-          updateDailyReportToggleUI(false);
         }
         caSelected = new Set();
         caSync();
@@ -581,7 +670,7 @@
 
     async function loadList() {
       tbody.innerHTML =
-        '<tr><td colspan="8" style="padding:12px;text-align:center;color:#6b7280;">加载中...</td></tr>';
+        '<tr><td colspan="8" style="padding:10px;text-align:center;color:#6b7280;">加载中...</td></tr>';
       try {
         const res = await fetch("/admin/users", { credentials: "include" });
         const data = await res.json();
@@ -591,7 +680,7 @@
         const list = data.data || [];
         if (list.length === 0) {
           tbody.innerHTML =
-            '<tr><td colspan="8" style="padding:12px;text-align:center;color:#6b7280;">暂无管理员</td></tr>';
+            '<tr><td colspan="8" style="padding:10px;text-align:center;color:#6b7280;">暂无管理员</td></tr>';
           return;
         }
         tbody.innerHTML = "";
@@ -601,7 +690,7 @@
           <td>${item.id}</td>
           <td>${item.email}</td>
           <td>${item.role}</td>
-          <td>${item.isActive && item.canLogin ? "✅ 可登录" : "❌ 禁用"}</td>
+          <td>${item.isActive && item.canLogin ? "可登录" : "禁用"}</td>
           <td>${Number(item.webauthnCount || 0)}</td>`;
           tbody.appendChild(tr);
 
@@ -621,8 +710,8 @@
           // 操作区
           const tdActions = document.createElement("td");
           const editBtn = document.createElement("button");
-          editBtn.textContent = "编辑权限";
-          editBtn.className = "btn";
+          editBtn.textContent = "编辑";
+          editBtn.className = "btn btn-sm";
           editBtn.addEventListener("click", () => openEditor(item, tr, tdPerm));
           tdActions.appendChild(editBtn);
           tr.appendChild(tdActions);
@@ -630,7 +719,7 @@
       } catch (e) {
         console.error("[admin-users] 加载失败:", e);
         tbody.innerHTML =
-          '<tr><td colspan="7" style="padding:12px;text-align:center;color:#dc2626;">加载失败: ' +
+          '<tr><td colspan="8" style="padding:10px;text-align:center;color:#dc2626;">加载失败: ' +
           (e.message || "未知错误") +
           "</td></tr>";
       }
@@ -670,10 +759,6 @@
       row.className = "perm-editor-row";
       const td = document.createElement("td");
       td.colSpan = 8;
-      td.style.background = "#f9fafb";
-      td.style.padding = "14px";
-      td.style.border = "1px solid #e5e7eb";
-      td.style.borderRadius = "8px";
 
       // 当前权限
       const current = new Set(
@@ -682,19 +767,16 @@
 
       // 预设按钮
       const presetBar = document.createElement("div");
-      presetBar.style.marginBottom = "10px";
-      presetBar.style.display = "flex";
-      presetBar.style.gap = "8px";
-      presetBar.style.flexWrap = "wrap";
+      presetBar.className = "perm-presets";
       const btnAll = document.createElement("button");
-      btnAll.className = "btn";
+      btnAll.className = "btn btn-sm";
       btnAll.textContent = "全部权限";
       btnAll.addEventListener("click", () => {
         selected = new Set(PRESETS.ALL);
         syncChecks();
       });
       const btnBasic = document.createElement("button");
-      btnBasic.className = "btn";
+      btnBasic.className = "btn btn-sm";
       btnBasic.textContent = "基础权限";
       btnBasic.addEventListener("click", () => {
         selected = new Set(PRESETS.BASIC);
@@ -706,9 +788,7 @@
       // 权限复选区
       let selected = new Set(current);
       const grid = document.createElement("div");
-      grid.style.display = "grid";
-      grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(320px, 1fr))";
-      grid.style.gap = "12px";
+      grid.className = "perm-grid";
 
       const checks = [];
       const groups = buildGroups();
@@ -722,14 +802,12 @@
 
       // 保存/取消
       const actions = document.createElement("div");
-      actions.style.marginTop = "12px";
-      actions.style.display = "flex";
-      actions.style.gap = "8px";
+      actions.className = "form-actions";
       const saveBtn = document.createElement("button");
-      saveBtn.className = "btn primary";
+      saveBtn.className = "btn btn-primary btn-sm";
       saveBtn.textContent = "保存";
       const cancelBtn = document.createElement("button");
-      cancelBtn.className = "btn";
+      cancelBtn.className = "btn btn-sm";
       cancelBtn.textContent = "取消";
       cancelBtn.addEventListener("click", () => row.remove());
       saveBtn.addEventListener("click", async () => {

@@ -1,103 +1,55 @@
 <!-- 日活详情统计 -->
 <div class="stats-section">
     <div class="section">
-        <h2 class="section-title">📱 日活用户详情</h2>
-        <p style="color: #6b7280; margin-bottom: 20px; font-size: 14px;">
-            查看指定日期的所有活跃用户详情，包含设备指纹和用户ID信息
-        </p>
+        <h2 class="section-title">日活用户详情</h2>
+        <p class="section-desc">查看指定日期的活跃用户详情</p>
 
         <!-- 日期选择器 -->
-        <div style="margin-bottom: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
-            <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-                <label for="dau-date-selector" style="font-weight: 600; color: #374151;">选择日期：</label>
-                <input 
-                    type="date" 
-                    id="dau-date-selector" 
-                    style="
-                        padding: 8px 12px;
-                        border: 1px solid #d1d5db;
-                        border-radius: 6px;
-                        font-size: 14px;
-                        background: white;
-                    "
-                >
-                <button 
-                    id="load-dau-details" 
-                    style="
-                        padding: 8px 16px;
-                        background: #3b82f6;
-                        color: white;
-                        border: none;
-                        border-radius: 6px;
-                        cursor: pointer;
-                        font-size: 14px;
-                        font-weight: 500;
-                    "
-                    onmouseover="this.style.background='#2563eb'"
-                    onmouseout="this.style.background='#3b82f6'"
-                >
-                    加载数据
-                </button>
-                <span id="dau-loading" style="display: none; color: #6b7280;">
-                    <span style="display: inline-block; width: 16px; height: 16px; border: 2px solid #3b82f6; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></span>
-                    加载中...
-                </span>
-            </div>
+        <div class="date-selector">
+            <label for="dau-date-selector">选择日期</label>
+            <input type="date" id="dau-date-selector">
+            <button id="load-dau-details" class="btn-primary">加载数据</button>
+            <span id="dau-loading" class="loading-indicator">
+                <span class="spinner"></span>
+                加载中...
+            </span>
         </div>
 
         <!-- 统计信息 -->
-        <div id="dau-summary" style="display: none; margin-bottom: 30px;">
-            <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+        <div id="dau-summary" class="summary-section">
+            <div class="stats-grid stats-grid-3">
                 <div class="stat-card">
                     <div class="stat-title" id="dau-date-title">今日日活</div>
-                    <div class="stat-value" id="dau-total-count">0</div>
+                    <div class="stat-value stat-value-lg" id="dau-total-count">0</div>
                     <div class="stat-subtitle">总活跃记录数</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">今日去重日活</div>
-                    <div class="stat-value" id="dau-unique-users">0</div>
+                    <div class="stat-value stat-value-lg" id="dau-unique-users">0</div>
                     <div class="stat-subtitle">唯一活跃用户数</div>
                 </div>
-                <!-- <div class="stat-card">
-                    <div class="stat-title">有效用户ID</div>
-                    <div class="stat-value" id="dau-valid-users">0</div>
-                    <div class="stat-subtitle">有用户ID的记录数</div>
-                </div> -->
                 <div class="stat-card">
                     <div class="stat-title">未知用户</div>
-                    <div class="stat-value" id="dau-unknown-users">0</div>
+                    <div class="stat-value stat-value-lg" id="dau-unknown-users">0</div>
                     <div class="stat-subtitle">无用户ID的记录数</div>
                 </div>
             </div>
         </div>
 
         <!-- 用户列表 -->
-        <div id="dau-details-container" style="display: none;">
-            <div style="margin-bottom: 20px; display: flex; justify-content: between; align-items: center;">
-                <h3 style="font-size: 1.3rem; color: #374151; margin: 0;">用户列表</h3>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input 
-                        type="text" 
-                        id="dau-search" 
-                        placeholder="搜索用户ID..." 
-                        style="
-                            padding: 6px 12px;
-                            border: 1px solid #d1d5db;
-                            border-radius: 4px;
-                            font-size: 14px;
-                            width: 200px;
-                        "
-                    >
-                </div>
+        <div id="dau-details-container" class="details-container">
+            <div class="list-header">
+                <h3 class="list-title">用户列表</h3>
+                <input type="text" id="dau-search" class="search-input" placeholder="搜索用户ID...">
             </div>
 
             <div class="table-container">
-                <table id="dau-details-table" style="width: 100%; border-collapse: collapse; background: white;">
-                    <thead style="background: #f9fafb;">
+                <table id="dau-details-table" class="data-table compact">
+                    <thead>
                         <tr>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">序号</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用户ID</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">设备指纹</th>
+                            <th class="col-narrow">序号</th>
+                            <th>用户ID</th>
+                            <th>设备指纹</th>
                         </tr>
                     </thead>
                     <tbody id="dau-details-tbody">
@@ -107,32 +59,209 @@
             </div>
 
             <!-- 分页信息 -->
-            <div id="dau-pagination" style="margin-top: 20px; text-align: center; color: #6b7280; font-size: 14px;">
+            <div id="dau-pagination" class="pagination-info">
                 <!-- 分页信息将通过JavaScript动态填充 -->
             </div>
         </div>
 
         <!-- 无数据提示 -->
-        <div id="dau-no-data" style="display: none; text-align: center; padding: 60px 20px; color: #6b7280;">
-            <div style="font-size: 48px; margin-bottom: 20px;">📱</div>
-            <h3 style="margin-bottom: 10px; color: #374151;">暂无数据</h3>
-            <p>所选日期没有日活数据，请选择其他日期</p>
+        <div id="dau-no-data" class="no-data">
+            <div class="no-data-icon">No Data</div>
+            <h3 class="no-data-title">暂无数据</h3>
+            <p class="no-data-desc">所选日期没有日活数据，请选择其他日期</p>
         </div>
     </div>
 </div>
 
 <style>
+/* 区域描述 */
+.section-desc {
+    color: #6b7280;
+    margin-bottom: 20px;
+    font-size: 14px;
+}
+
+/* 日期选择器 */
+.date-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.date-selector label {
+    font-weight: 500;
+    color: #374151;
+    font-size: 14px;
+}
+
+.date-selector input[type="date"] {
+    padding: 6px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 14px;
+    background: white;
+}
+
+.btn-primary {
+    padding: 6px 14px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* 加载指示器 */
+.loading-indicator {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #3b82f6;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    to { transform: rotate(360deg); }
 }
 
-.dau-user-row:hover {
-    background-color: #f3f4f6;
+/* 摘要区域 */
+.summary-section {
+    display: none;
+    margin-bottom: 24px;
 }
 
-.dau-user-id {
+/* 统计网格 */
+.stats-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 768px) {
+    .stats-grid-3 {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 统计卡片 - 静态无动画 */
+.stat-card {
+    background: white;
+    padding: 16px;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e7eb;
+}
+
+.stat-value-lg {
+    font-size: 28px;
     font-weight: 600;
+    color: #111827;
+    margin: 8px 0;
+}
+
+.stat-subtitle {
+    font-size: 12px;
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+/* 详情容器 */
+.details-container {
+    display: none;
+}
+
+/* 列表头部 */
+.list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.list-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+    margin: 0;
+}
+
+/* 搜索输入 */
+.search-input {
+    padding: 5px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 13px;
+    width: 180px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+}
+
+/* 数据表格 - 紧凑样式 */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 13px;
+}
+
+.data-table.compact thead {
+    background: #f9fafb;
+}
+
+.data-table.compact th {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 600;
+    color: #374151;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.data-table.compact td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f3f4f6;
+    color: #4b5563;
+}
+
+.data-table.compact tbody tr:hover {
+    background-color: #f9fafb;
+}
+
+.col-narrow {
+    width: 60px;
+}
+
+/* 用户相关样式 */
+.dau-user-id {
+    font-weight: 500;
     color: #374151;
 }
 
@@ -142,35 +271,47 @@
 }
 
 .dau-fingerprint-full {
-    font-family: monospace;
+    font-family: ui-monospace, SFMono-Regular, monospace;
     color: #6b7280;
-    font-size: 12px;
+    font-size: 11px;
     word-break: break-all;
 }
 
-.stat-subtitle {
-    font-size: 12px;
-    color: #9ca3af;
-    margin-top: 4px;
-    font-weight: 400;
+/* 分页信息 */
+.pagination-info {
+    margin-top: 16px;
+    text-align: center;
+    color: #6b7280;
+    font-size: 13px;
 }
 
-.stats-grid {
-    gap: 20px;
+/* 无数据提示 */
+.no-data {
+    display: none;
+    text-align: center;
+    padding: 48px 20px;
+    color: #6b7280;
 }
 
-.stat-card {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e5e7eb;
-    transition: all 0.2s ease;
+.no-data-icon {
+    font-size: 14px;
+    font-weight: 500;
+    color: #d1d5db;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
 }
 
-.stat-card:hover {
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transform: translateY(-2px);
+.no-data-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 6px;
+}
+
+.no-data-desc {
+    font-size: 14px;
+    margin: 0;
 }
 </style>
 
@@ -225,7 +366,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // 显示加载状态
-        loadingSpan.style.display = 'inline';
+        loadingSpan.style.display = 'inline-flex';
         loadButton.disabled = true;
         
         try {
@@ -285,7 +426,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         document.getElementById('dau-total-count').textContent = totalCount.toLocaleString();
         document.getElementById('dau-unique-users').textContent = uniqueUsersCount.toLocaleString();
-        // document.getElementById('dau-valid-users').textContent = validUsers.toLocaleString();
         document.getElementById('dau-unknown-users').textContent = unknownUsers.toLocaleString();
     }
     
@@ -313,7 +453,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (filteredDauData.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="3" style="text-align: center; padding: 40px; color: #6b7280;">
+                    <td colspan="3" style="text-align: center; padding: 32px; color: #6b7280;">
                         没有找到匹配的数据
                     </td>
                 </tr>
@@ -325,16 +465,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // 填充表格数据
         filteredDauData.forEach((item, index) => {
             const row = document.createElement('tr');
-            row.className = 'dau-user-row';
             
             const isUnknown = item.userId === '未知';
             
             row.innerHTML = `
-                <td style="padding: 12px; color: #374151;">${index + 1}</td>
-                <td style="padding: 12px;">
+                <td>${index + 1}</td>
+                <td>
                     <span class="dau-user-id ${isUnknown ? 'dau-unknown-user' : ''}">${item.userId}</span>
                 </td>
-                <td style="padding: 12px;">
+                <td>
                     <span class="dau-fingerprint-full" title="${item.fingerprint}">${item.fingerprint}</span>
                 </td>
             `;
@@ -345,7 +484,5 @@ document.addEventListener('DOMContentLoaded', function() {
         // 更新分页信息
         paginationDiv.innerHTML = `共 ${filteredDauData.length} 条记录`;
     }
-    
-
 });
 </script>

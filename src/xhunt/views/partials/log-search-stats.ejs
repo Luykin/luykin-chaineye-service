@@ -1,17 +1,17 @@
 <div class="log-search-container">
   <div class="search-header">
-    <h2>🔍 日志管理</h2>
-    <p>日志搜索和错误日志查看</p>
+    <h2>日志管理</h2>
+    <p>搜索和查看系统日志</p>
   </div>
 
   <!-- 子Tab导航 -->
   <div class="sub-tab-container">
     <div class="sub-tab-nav">
       <button class="sub-tab-btn active" data-sub-tab="search">
-        🔍 日志搜索
+        日志搜索
       </button>
       <button class="sub-tab-btn" data-sub-tab="error-logs">
-        ❌ 最新错误日志
+        错误日志
       </button>
     </div>
 
@@ -22,18 +22,18 @@
         <!-- 搜索表单 -->
         <div class="search-form">
           <div class="form-group">
-            <label for="searchQuery">搜索关键词：</label>
+            <label for="searchQuery">关键词</label>
             <input
               type="text"
               id="searchQuery"
-              placeholder="输入要搜索的关键词..."
+              placeholder="输入搜索关键词..."
               class="search-input"
             />
           </div>
 
           <div class="form-row">
             <div class="form-group">
-              <label for="contextLines">上下文行数：</label>
+              <label for="contextLines">上下文</label>
               <select id="contextLines" class="form-select">
                 <option value="1">1 行</option>
                 <option value="3" selected>3 行</option>
@@ -44,7 +44,7 @@
             </div>
 
             <div class="form-group">
-              <label for="resultLimit">结果限制：</label>
+              <label for="resultLimit">结果限制</label>
               <select id="resultLimit" class="form-select">
                 <option value="5" selected>5 条</option>
                 <option value="10">10 条</option>
@@ -54,12 +54,10 @@
               </select>
             </div>
 
-            <div class="form-group">
+            <div class="form-group form-group-btn">
               <button id="searchBtn" class="search-btn">
-                <span class="btn-text">🔍 搜索</span>
-                <span class="btn-loading" style="display: none"
-                  >⏳ 搜索中...</span
-                >
+                <span class="btn-text">搜索</span>
+                <span class="btn-loading" style="display: none">搜索中...</span>
               </button>
             </div>
           </div>
@@ -68,12 +66,12 @@
         <!-- 搜索结果统计 -->
         <div id="searchStats" class="search-stats" style="display: none">
           <div class="stats-info">
-            <span id="totalMatches">0</span> 个匹配结果，搜索了
-            <span id="searchedFiles">0</span> 个日志文件
+            <span id="totalMatches">0</span> 个匹配，搜索了
+            <span id="searchedFiles">0</span> 个文件
           </div>
           <div id="fileInfo" class="file-info" style="display: none">
             <div class="file-list">
-              <h4>📁 搜索的日志文件：</h4>
+              <h4>搜索的日志文件</h4>
               <div id="fileList" class="file-list-items"></div>
             </div>
           </div>
@@ -87,12 +85,12 @@
         <!-- 无结果提示 -->
         <div id="noResults" class="no-results" style="display: none">
           <div class="no-results-content">
-            <h3>😔 没有找到匹配的结果</h3>
-            <p>请尝试：</p>
+            <h3>未找到匹配结果</h3>
+            <p>建议：</p>
             <ul>
-              <li>检查关键词拼写是否正确</li>
+              <li>检查关键词拼写</li>
               <li>尝试使用更简单的关键词</li>
-              <li>检查日志文件是否存在</li>
+              <li>确认日志文件存在</li>
             </ul>
           </div>
         </div>
@@ -100,9 +98,9 @@
         <!-- 错误提示 -->
         <div id="searchError" class="search-error" style="display: none">
           <div class="error-content">
-            <h3>❌ 搜索失败</h3>
+            <h3>搜索失败</h3>
             <p id="errorMessage">发生了未知错误</p>
-            <button id="retryBtn" class="retry-btn">🔄 重试</button>
+            <button id="retryBtn" class="retry-btn">重试</button>
           </div>
         </div>
       </div>
@@ -110,15 +108,15 @@
       <!-- 最新错误日志 Tab -->
       <div class="sub-tab-pane" id="error-logs-tab">
         <div class="error-logs-header">
-          <h3>❌ 最新API错误日志</h3>
-          <p>点击按钮查看最新的API错误日志</p>
+          <h3>API 错误日志</h3>
+          <p>查看最新的 API 错误记录</p>
         </div>
 
         <!-- 错误日志控制 -->
         <div class="error-logs-controls">
           <div class="form-row">
             <div class="form-group">
-              <label for="errorLogLines">显示行数：</label>
+              <label for="errorLogLines">显示行数</label>
               <select id="errorLogLines" class="form-select">
                 <option value="1000" selected>1000 行</option>
                 <option value="5000">5000 行</option>
@@ -126,12 +124,10 @@
               </select>
             </div>
 
-            <div class="form-group">
+            <div class="form-group form-group-btn">
               <button id="loadErrorLogsBtn" class="search-btn">
-                <span class="btn-text">🔄 刷新查看最新日志</span>
-                <span class="btn-loading" style="display: none"
-                  >⏳ 加载中...</span
-                >
+                <span class="btn-text">刷新日志</span>
+                <span class="btn-loading" style="display: none">加载中...</span>
               </button>
             </div>
           </div>
@@ -140,7 +136,7 @@
         <!-- 错误日志统计 -->
         <div id="errorLogsStats" class="search-stats" style="display: none">
           <div class="stats-info">
-            加载了 <span id="totalErrorLines">0</span> 行错误日志，来自
+            共 <span id="totalErrorLines">0</span> 行，来自
             <span id="errorLogFiles">0</span> 个文件
           </div>
         </div>
@@ -157,10 +153,10 @@
         <!-- 无错误日志提示 -->
         <div id="noErrorLogs" class="no-results" style="display: none">
           <div class="no-results-content">
-            <h3>📭 没有找到错误日志</h3>
-            <p>可能的原因：</p>
+            <h3>暂无错误日志</h3>
+            <p>可能原因：</p>
             <ul>
-              <li>API服务运行正常，没有产生错误日志</li>
+              <li>API 服务运行正常，无错误产生</li>
               <li>错误日志文件不存在或无法访问</li>
             </ul>
           </div>
@@ -169,9 +165,9 @@
         <!-- 错误日志加载失败提示 -->
         <div id="errorLogsError" class="search-error" style="display: none">
           <div class="error-content">
-            <h3>❌ 加载错误日志失败</h3>
+            <h3>加载错误日志失败</h3>
             <p id="errorLogsErrorMessage">发生了未知错误</p>
-            <button id="retryErrorLogsBtn" class="retry-btn">🔄 重试</button>
+            <button id="retryErrorLogsBtn" class="retry-btn">重试</button>
           </div>
         </div>
       </div>
@@ -180,59 +176,61 @@
 
   <style>
     .log-search-container {
-      padding: 20px;
+      padding: 16px;
       max-width: 1200px;
       margin: 0 auto;
     }
 
     .search-header {
-      margin-bottom: 30px;
-      text-align: center;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e0e0e0;
     }
 
     .search-header h2 {
-      color: #2c3e50;
-      margin-bottom: 10px;
+      color: #333;
+      margin: 0 0 4px 0;
+      font-size: 20px;
+      font-weight: 600;
     }
 
     .search-header p {
-      color: #7f8c8d;
-      font-size: 14px;
+      color: #666;
+      font-size: 13px;
+      margin: 0;
     }
 
     /* 子Tab样式 */
     .sub-tab-container {
-      margin-bottom: 30px;
+      margin-bottom: 20px;
     }
 
     .sub-tab-nav {
       display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-      border-bottom: 2px solid #ecf0f1;
+      gap: 4px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #e0e0e0;
     }
 
     .sub-tab-btn {
       background: none;
       border: none;
-      padding: 12px 20px;
-      font-size: 16px;
-      font-weight: 600;
-      color: #7f8c8d;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
       cursor: pointer;
-      border-bottom: 3px solid transparent;
-      transition: all 0.3s ease;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
     }
 
     .sub-tab-btn:hover {
-      color: #3498db;
-      background-color: #f8f9fa;
+      color: #1890ff;
     }
 
     .sub-tab-btn.active {
-      color: #3498db;
-      border-bottom-color: #3498db;
-      background-color: #f8f9fa;
+      color: #1890ff;
+      border-bottom-color: #1890ff;
     }
 
     .sub-tab-pane {
@@ -245,198 +243,206 @@
 
     /* 错误日志样式 */
     .error-logs-header {
-      margin-bottom: 25px;
-      text-align: center;
+      margin-bottom: 16px;
     }
 
     .error-logs-header h3 {
-      color: #e74c3c;
-      margin-bottom: 10px;
-    }
-
-    .error-logs-header p {
-      color: #7f8c8d;
-      font-size: 14px;
-    }
-
-    .error-logs-controls {
-      background: #f8f9fa;
-      padding: 20px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    }
-
-    .error-logs-content {
-      background: #f8f9fa;
-      border-radius: 8px;
-      padding: 15px;
-      font-family: "Courier New", monospace;
-      font-size: 13px;
-      line-height: 1.6;
-      overflow-x: auto;
-      max-height: 600px;
-      overflow-y: auto;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    }
-
-    .error-log-item {
-      margin: 2px 0;
-      padding: 2px 0;
-    }
-
-    .error-log-line-number {
-      color: #6c757d;
-      margin-right: 10px;
-      user-select: none;
+      color: #333;
+      margin: 0 0 4px 0;
+      font-size: 16px;
       font-weight: 600;
     }
 
+    .error-logs-header p {
+      color: #666;
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .error-logs-controls {
+      background: #fafafa;
+      padding: 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      border: 1px solid #e8e8e8;
+    }
+
+    .error-logs-content {
+      background: #fafafa;
+      border-radius: 4px;
+      padding: 12px;
+      font-family: "SF Mono", Monaco, "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 500px;
+      overflow-y: auto;
+      border: 1px solid #e8e8e8;
+    }
+
+    .error-log-item {
+      margin: 1px 0;
+      padding: 1px 0;
+    }
+
+    .error-log-line-number {
+      color: #999;
+      margin-right: 8px;
+      user-select: none;
+      font-weight: 500;
+    }
+
     .error-log-content {
-      color: #2c3e50;
+      color: #333;
     }
 
     .search-form {
-      background: #f8f9fa;
-      padding: 25px;
-      border-radius: 10px;
-      margin-bottom: 30px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      background: #fafafa;
+      padding: 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      border: 1px solid #e8e8e8;
     }
 
     .form-group {
-      margin-bottom: 20px;
+      margin-bottom: 12px;
     }
 
     .form-row {
       display: flex;
-      gap: 20px;
-      align-items: end;
+      gap: 12px;
+      align-items: flex-end;
       flex-wrap: wrap;
+    }
+
+    .form-row .form-group {
+      margin-bottom: 0;
     }
 
     .form-group label {
       display: block;
-      margin-bottom: 8px;
-      font-weight: 600;
-      color: #2c3e50;
+      margin-bottom: 4px;
+      font-weight: 500;
+      color: #333;
+      font-size: 13px;
     }
 
     .search-input {
       width: 100%;
-      padding: 12px 15px;
-      border: 2px solid #e1e8ed;
-      border-radius: 8px;
-      font-size: 16px;
-      transition: border-color 0.3s ease;
+      padding: 8px 12px;
+      border: 1px solid #d9d9d9;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: border-color 0.2s ease;
+      box-sizing: border-box;
     }
 
     .search-input:focus {
       outline: none;
-      border-color: #3498db;
-      box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+      border-color: #1890ff;
     }
 
     .form-select {
-      padding: 10px 12px;
-      border: 2px solid #e1e8ed;
-      border-radius: 8px;
-      font-size: 14px;
+      padding: 8px 10px;
+      border: 1px solid #d9d9d9;
+      border-radius: 4px;
+      font-size: 13px;
       background: white;
-      min-width: 120px;
+      min-width: 100px;
+    }
+
+    .form-group-btn {
+      margin-left: auto;
     }
 
     .search-btn {
-      background: linear-gradient(135deg, #3498db, #2980b9);
+      background: #1890ff;
       color: white;
       border: none;
-      padding: 12px 25px;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 600;
+      padding: 8px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
       cursor: pointer;
-      transition: all 0.3s ease;
-      min-width: 120px;
+      transition: background-color 0.2s ease;
+      min-width: 100px;
     }
 
     .search-btn:hover {
-      background: linear-gradient(135deg, #2980b9, #1f5f8b);
-      transform: translateY(-2px);
-      box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+      background: #40a9ff;
     }
 
     .search-btn:disabled {
-      background: #bdc3c7;
+      background: #bfbfbf;
       cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
     }
 
     .search-stats {
-      background: #e8f5e8;
-      border: 1px solid #27ae60;
-      border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 20px;
-      text-align: center;
+      background: #f6ffed;
+      border: 1px solid #b7eb8f;
+      border-radius: 4px;
+      padding: 10px 12px;
+      margin-bottom: 16px;
     }
 
     .stats-info {
-      color: #27ae60;
-      font-weight: 600;
+      color: #52c41a;
+      font-weight: 500;
+      font-size: 13px;
     }
 
     .file-info {
-      margin-top: 15px;
-      padding-top: 15px;
-      border-top: 1px solid #bdc3c7;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e8e8e8;
     }
 
     .file-list h4 {
-      color: #2c3e50;
-      margin-bottom: 10px;
-      font-size: 14px;
+      color: #333;
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      font-weight: 500;
     }
 
     .file-list-items {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 6px;
     }
 
     .file-item {
-      background: #ecf0f1;
-      padding: 4px 8px;
-      border-radius: 4px;
+      background: #f0f0f0;
+      padding: 3px 8px;
+      border-radius: 3px;
       font-size: 12px;
-      color: #2c3e50;
-      border: 1px solid #bdc3c7;
+      color: #333;
+      border: 1px solid #d9d9d9;
     }
 
     .file-item .file-name {
-      font-weight: 600;
+      font-weight: 500;
     }
 
     .file-item .file-size {
-      color: #7f8c8d;
-      margin-left: 5px;
+      color: #666;
+      margin-left: 4px;
     }
 
     .search-results {
       background: white;
-      border-radius: 10px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      border-radius: 4px;
+      border: 1px solid #e8e8e8;
       overflow: hidden;
     }
 
     .result-item {
-      border-bottom: 1px solid #ecf0f1;
-      padding: 20px;
-      transition: background-color 0.2s ease;
+      border-bottom: 1px solid #f0f0f0;
+      padding: 16px;
+      transition: background-color 0.15s ease;
     }
 
     .result-item:hover {
-      background-color: #f8f9fa;
+      background-color: #fafafa;
     }
 
     .result-item:last-child {
@@ -447,94 +453,112 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 15px;
+      margin-bottom: 12px;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 8px;
     }
 
     .result-file {
       font-weight: 600;
-      color: #2c3e50;
-      font-size: 16px;
+      color: #333;
+      font-size: 14px;
     }
 
     .result-line {
-      color: #7f8c8d;
-      font-size: 14px;
-      background: #ecf0f1;
-      padding: 4px 8px;
-      border-radius: 4px;
+      color: #666;
+      font-size: 12px;
+      background: #f0f0f0;
+      padding: 2px 8px;
+      border-radius: 3px;
     }
 
     .context-lines {
-      background: #f8f9fa;
-      border-radius: 8px;
-      padding: 15px;
-      font-family: "Courier New", monospace;
-      font-size: 13px;
-      line-height: 1.6;
+      background: #fafafa;
+      border-radius: 4px;
+      padding: 12px;
+      font-family: "SF Mono", Monaco, "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.5;
       overflow-x: auto;
+      border: 1px solid #f0f0f0;
     }
 
     .context-line {
-      margin: 2px 0;
-      padding: 2px 0;
+      margin: 1px 0;
+      padding: 1px 0;
     }
 
     .context-line.match-line {
-      background: #fff3cd;
-      border-left: 4px solid #ffc107;
-      padding-left: 10px;
-      font-weight: 600;
+      background: #fffbe6;
+      border-left: 3px solid #faad14;
+      padding-left: 8px;
+      font-weight: 500;
     }
 
     .context-line .line-number {
-      color: #6c757d;
-      margin-right: 10px;
+      color: #999;
+      margin-right: 8px;
       user-select: none;
     }
 
     .highlight {
       background: #ffeb3b;
-      padding: 2px 4px;
-      border-radius: 3px;
-      font-weight: 600;
+      padding: 1px 2px;
+      border-radius: 2px;
+      font-weight: 500;
     }
 
     .no-results,
     .search-error {
       text-align: center;
-      padding: 60px 20px;
+      padding: 40px 20px;
       background: white;
-      border-radius: 10px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      border-radius: 4px;
+      border: 1px solid #e8e8e8;
     }
 
     .no-results h3,
     .search-error h3 {
-      color: #7f8c8d;
-      margin-bottom: 15px;
+      color: #333;
+      margin: 0 0 8px 0;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .no-results p,
+    .search-error p {
+      color: #666;
+      margin: 0 0 8px 0;
+      font-size: 13px;
     }
 
     .no-results ul {
       text-align: left;
       display: inline-block;
-      color: #6c757d;
+      color: #666;
+      font-size: 13px;
+      margin: 8px 0 0 0;
+      padding-left: 20px;
+    }
+
+    .no-results li {
+      margin: 4px 0;
     }
 
     .retry-btn {
-      background: #e74c3c;
+      background: #ff4d4f;
       color: white;
       border: none;
-      padding: 10px 20px;
-      border-radius: 6px;
+      padding: 6px 16px;
+      border-radius: 4px;
       cursor: pointer;
-      margin-top: 15px;
-      transition: background-color 0.3s ease;
+      margin-top: 12px;
+      font-size: 13px;
+      transition: background-color 0.2s ease;
     }
 
     .retry-btn:hover {
-      background: #c0392b;
+      background: #ff7875;
     }
 
     @media (max-width: 768px) {
@@ -543,8 +567,12 @@
         align-items: stretch;
       }
 
-      .form-group {
-        margin-bottom: 15px;
+      .form-row .form-group {
+        margin-bottom: 12px;
+      }
+
+      .form-group-btn {
+        margin-left: 0;
       }
 
       .result-header {
@@ -674,7 +702,7 @@
 
           resultItem.innerHTML = `
         <div class="result-header">
-          <div class="result-file">📄 ${result.file}</div>
+          <div class="result-file">${result.file}</div>
           <div class="result-line">第 ${result.lineNumber} 行</div>
         </div>
         <div class="context-lines">
