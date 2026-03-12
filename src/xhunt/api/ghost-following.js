@@ -210,7 +210,7 @@ async function concurrentUserLimit(req, res, next) {
       console.log(`[concurrent-limit] User ${userId} rejected, max concurrent users (${maxConcurrentUsers}) reached`);
       const now = Date.now();
       const nextApplyAt = now + userActivityTTL * 1000; // retryAfter 秒后重试
-      return res.status(429).json({
+      return res.status(200).json({
         success: false,
         error: {
           code: "CONCURRENT_LIMIT_EXCEEDED",
