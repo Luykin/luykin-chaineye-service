@@ -498,10 +498,14 @@
 
   async function doPublish() {
     try {
-      const resp = await fetch(`/api/xhunt/stats/nacos/config?dataId=${DATA_IDS[currentLang]}&group=DEFAULT_GROUP`, {
+      const resp = await fetch(`/api/xhunt/stats/nacos/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: JSON.stringify(items) })
+        body: JSON.stringify({ 
+          dataId: DATA_IDS[currentLang],
+          group: "DEFAULT_GROUP",
+          content: JSON.stringify(items)
+        })
       });
       const result = await resp.json();
       if (result.success) {

@@ -415,8 +415,13 @@ function displayRedisResult(data) {
   // 敏感 Key 警告
   warningBadge.style.display = data.isSensitive ? "flex" : "none";
 
-  // 只有 string 类型可以编辑
-  editBtn.style.display = data.type === "string" ? "inline-flex" : "none";
+  // 所有类型都可以编辑，但非 string 类型需要谨慎
+  editBtn.style.display = "inline-flex";
+  if (data.type !== "string") {
+    editBtn.title = `注意：${data.type} 类型数据以 JSON 格式编辑，请谨慎操作`;
+  } else {
+    editBtn.title = "";
+  }
 
   // 显示结果，隐藏空状态
   resultArea.style.display = "flex";
@@ -450,11 +455,33 @@ function resetRedisQuery() {
 function showRedisEditModal() {
   if (!redisCurrentData) return;
 
+  const isString = redisCurrentData.type === "string";
+  const valueEl = document.getElementById("redis-edit-value");
+  
   document.getElementById("redis-edit-key").textContent = redisCurrentData.key;
-  document.getElementById("redis-edit-value").value = redisCurrentData.value || "";
+  
+  // String 类型直接显示文本，其他类型显示 JSON
+  if (isString) {
+    valueEl.value = redisCurrentData.value || "";
+  } else {
+    // 非 String 类型以 JSON 格式显示，便于编辑
+    try {
+      valueEl.value = JSON.stringify(redisCurrentData.parsedValue || redisCurrentData.value, null, 2);
+    } catch (e) {
+      valueEl.value = redisCurrentData.value || "";
+    }
+  }
+  
   document.getElementById("redis-edit-ttl").value = "";
   document.getElementById("redis-edit-current-ttl").textContent =
     redisCurrentData.ttl !== null ? formatDuration(redisCurrentData.ttl) : "永不过期";
+  
+  // 添加类型提示
+  const typeHint = document.getElementById("redis-edit-type-hint");
+  if (typeHint) {
+    typeHint.textContent = isString ? "" : `类型: ${redisCurrentData.type}（JSON 格式）`;
+    typeHint.style.display = isString ? "none" : "block";
+  }
 
   document.getElementById("redis-edit-modal").style.display = "block";
 }
@@ -470,17 +497,38 @@ function hideRedisEditModal() {
  * 更新 Redis Value
  */
 async function handleRedisUpdate() {
-  if (!redisCurrentKey) return;
+  if (!redisCurrentKey || !redisCurrentData) return;
 
-  const value = document.getElementById("redis-edit-value").value;
+  const valueInput = document.getElementById("redis-edit-value").value;
   const ttlInput = document.getElementById("redis-edit-ttl").value;
   const ttl = ttlInput ? parseInt(ttlInput, 10) : null;
+  
+  const isString = redisCurrentData.type === "string";
+  
+  // 构造请求体
+  const body = { 
+    key: redisCurrentKey, 
+    type: redisCurrentData.type,
+    ttl 
+  };
+  
+  // String 类型直接传 value，其他类型尝试解析 JSON
+  if (isString) {
+    body.value = valueInput;
+  } else {
+    try {
+      body.value = JSON.parse(valueInput);
+    } catch (e) {
+      alert(`JSON 格式错误: ${e.message}`);
+      return;
+    }
+  }
 
   try {
     const response = await fetch("/admin/system/redis/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: redisCurrentKey, value, ttl }),
+      body: JSON.stringify(body),
     });
 
     const result = await response.json();

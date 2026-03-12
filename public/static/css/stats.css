@@ -3115,3 +3115,14 @@ label input[type="checkbox"] {
     font-size: 0.9375rem;
     line-height: 1.6;
 }
+
+/* ---------- 编辑对话框类型提示 ---------- */
+.type-hint {
+  padding: 6px 10px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #92400e;
+  margin-bottom: 8px;
+}
