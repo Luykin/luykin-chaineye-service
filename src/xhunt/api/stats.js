@@ -20,6 +20,22 @@ const { XhuntAdminAuditLog } = require("../../models/postgres-start");
 
 const router = express.Router();
 
+// 获取文件修改时间作为版本号（用于静态资源缓存控制）
+function getFileMtimeVersion(filePath) {
+  try {
+    const stat = fsSync.statSync(filePath);
+    return stat.mtime.getTime().toString(36); // 使用 36 进制缩短长度
+  } catch (e) {
+    return Date.now().toString(36);
+  }
+}
+
+// 静态资源版本号（启动时计算，文件修改后自动更新）
+const staticVersions = {
+  css: getFileMtimeVersion(path.join(__dirname, '../../public/static/css/stats.css')),
+  js: getFileMtimeVersion(path.join(__dirname, '../../public/static/js/stats.js')),
+};
+
 // -------------------- Nacos Config Admin (with auth) --------------------
 const NACOS_BASE_URL = process.env.NACOS_BASE_URL || "http://127.0.0.1:8848";
 const NACOS_USERNAME = process.env.NACOS_USERNAME || "nacos";
@@ -263,6 +279,7 @@ router.get("/", adminAuth, async (req, res) => {
           formatNumber,
           formatDateTime,
           user: req.user, // 传递用户信息
+          staticVersions, // 静态资源版本号
         },
         (err, html) => {
           if (err) reject(err);

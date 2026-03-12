@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('audit-email').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
     document.getElementById('audit-action').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
     document.getElementById('audit-prev').addEventListener('click', function(){ if (page > 1){ page--; load(); } });
-    document.getElementById('audit-next').addEventListener('click', function(){ page++; load(); } });
+    document.getElementById('audit-next').addEventListener('click', function(){ page++; load(); });
   }
   
   // 初始化函数
