@@ -10,20 +10,24 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Crimson+Pro:wght@500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-primary: #0a0b0f;
-      --bg-secondary: #11131a;
-      --bg-tertiary: #1a1d26;
-      --border-subtle: rgba(255,255,255,0.06);
-      --border-focus: rgba(245,158,11,0.5);
-      --text-primary: #f8fafc;
-      --text-secondary: #94a3b8;
-      --text-muted: #64748b;
-      --accent: #f59e0b;
-      --accent-hover: #fbbf24;
-      --accent-glow: rgba(245,158,11,0.15);
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --border-subtle: #e2e8f0;
+      --border-focus: #3b82f6;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-glow: rgba(59, 130, 246, 0.15);
       --error: #ef4444;
-      --error-bg: rgba(239,68,68,0.08);
+      --error-bg: rgba(239, 68, 68, 0.06);
       --success: #22c55e;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
     }
 
     * {
@@ -34,7 +38,7 @@
 
     body {
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg-primary);
+      background: linear-gradient(180deg, #f0f9ff 0%, #f8fafc 50%, #f1f5f9 100%);
       color: var(--text-primary);
       min-height: 100vh;
       display: flex;
@@ -44,49 +48,49 @@
       position: relative;
     }
 
-    /* Animated background gradient */
+    /* 柔和的背景装饰 */
     .ambient-glow {
       position: fixed;
-      width: 600px;
-      height: 600px;
       border-radius: 50%;
-      filter: blur(120px);
-      opacity: 0.15;
+      filter: blur(80px);
+      opacity: 0.4;
       pointer-events: none;
-      animation: float 20s ease-in-out infinite;
     }
 
     .ambient-glow-1 {
-      background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, #bfdbfe 0%, transparent 70%);
       top: -200px;
       right: -100px;
-      animation-delay: 0s;
     }
 
     .ambient-glow-2 {
-      background: radial-gradient(circle, #6366f1 0%, transparent 70%);
-      bottom: -200px;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, #ddd6fe 0%, transparent 70%);
+      bottom: -150px;
       left: -100px;
-      animation-delay: -10s;
     }
 
-    @keyframes float {
-      0%, 100% { transform: translate(0, 0) scale(1); }
-      25% { transform: translate(50px, -30px) scale(1.1); }
-      50% { transform: translate(-30px, 50px) scale(0.95); }
-      75% { transform: translate(-50px, -20px) scale(1.05); }
+    .ambient-glow-3 {
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, #bbf7d0 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0.2;
     }
 
-    /* Grid pattern overlay */
-    .grid-pattern {
+    /* 点阵装饰 */
+    .dots-pattern {
       position: fixed;
       inset: 0;
-      background-image: 
-        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-      background-size: 60px 60px;
+      background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+      background-size: 24px 24px;
+      opacity: 0.3;
       pointer-events: none;
-      mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
     }
 
     .login-container {
@@ -100,61 +104,54 @@
     .login-card {
       background: var(--bg-secondary);
       border: 1px solid var(--border-subtle);
-      border-radius: 24px;
+      border-radius: 20px;
       padding: 48px 40px;
-      box-shadow: 
-        0 0 0 1px rgba(255,255,255,0.02) inset,
-        0 40px 80px -20px rgba(0,0,0,0.5),
-        0 20px 40px -10px rgba(0,0,0,0.3);
+      box-shadow: var(--shadow-xl);
       position: relative;
       overflow: hidden;
     }
 
+    /* 顶部渐变条 */
     .login-card::before {
       content: '';
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(245,158,11,0.3), transparent);
+      height: 4px;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4);
     }
 
     .brand {
       text-align: center;
-      margin-bottom: 40px;
+      margin-bottom: 36px;
     }
 
     .brand-logo {
-      width: 56px;
-      height: 56px;
-      background: linear-gradient(135deg, var(--accent) 0%, #d97706 100%);
+      width: 64px;
+      height: 64px;
       border-radius: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       margin: 0 auto 20px;
-      box-shadow: 
-        0 0 0 1px rgba(255,255,255,0.1) inset,
-        0 8px 32px rgba(245,158,11,0.3);
       position: relative;
+    }
+
+    .brand-logo img {
+      width: 100%;
+      height: 100%;
+      border-radius: 16px;
+      object-fit: cover;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
     }
 
     .brand-logo::after {
       content: '';
       position: absolute;
       inset: -2px;
-      background: linear-gradient(135deg, var(--accent), transparent, var(--accent));
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
       border-radius: 18px;
       z-index: -1;
-      opacity: 0.5;
+      opacity: 0.3;
       filter: blur(8px);
-    }
-
-    .brand-logo svg {
-      width: 28px;
-      height: 28px;
-      color: white;
     }
 
     .brand-title {
@@ -162,7 +159,8 @@
       font-size: 28px;
       font-weight: 600;
       letter-spacing: -0.02em;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+      color: var(--text-primary);
     }
 
     .brand-subtitle {
@@ -178,10 +176,8 @@
 
     .form-label {
       display: block;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
       color: var(--text-secondary);
       margin-bottom: 8px;
     }
@@ -192,7 +188,7 @@
 
     .form-input {
       width: 100%;
-      padding: 14px 16px;
+      padding: 14px 16px 14px 44px;
       background: var(--bg-tertiary);
       border: 1px solid var(--border-subtle);
       border-radius: 12px;
@@ -209,19 +205,19 @@
     }
 
     .form-input:hover {
-      border-color: rgba(255,255,255,0.12);
-      background: color-mix(in oklch, var(--bg-tertiary) 95%, white);
+      border-color: #cbd5e1;
+      background: #f8fafc;
     }
 
     .form-input:focus {
       border-color: var(--accent);
       background: var(--bg-secondary);
-      box-shadow: 0 0 0 3px var(--accent-glow);
+      box-shadow: 0 0 0 4px var(--accent-glow);
     }
 
     .input-icon {
       position: absolute;
-      right: 14px;
+      left: 14px;
       top: 50%;
       transform: translateY(-50%);
       color: var(--text-muted);
@@ -229,15 +225,15 @@
       transition: color 0.2s ease;
     }
 
-    .form-input:focus + .input-icon {
+    .form-input:focus ~ .input-icon {
       color: var(--accent);
     }
 
     .submit-btn {
       width: 100%;
-      padding: 16px 24px;
+      padding: 14px 24px;
       margin-top: 8px;
-      background: linear-gradient(135deg, var(--accent) 0%, #d97706 100%);
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
       border: none;
       border-radius: 12px;
       font-family: inherit;
@@ -248,9 +244,7 @@
       position: relative;
       overflow: hidden;
       transition: all 0.3s ease;
-      box-shadow: 
-        0 0 0 1px rgba(255,255,255,0.1) inset,
-        0 4px 20px rgba(245,158,11,0.3);
+      box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
     }
 
     .submit-btn::before {
@@ -264,9 +258,7 @@
 
     .submit-btn:hover:not(:disabled) {
       transform: translateY(-1px);
-      box-shadow: 
-        0 0 0 1px rgba(255,255,255,0.15) inset,
-        0 8px 30px rgba(245,158,11,0.4);
+      box-shadow: 0 6px 20px rgba(59, 130, 246, 0.45);
     }
 
     .submit-btn:hover:not(:disabled)::before {
@@ -280,7 +272,6 @@
     .submit-btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
-      filter: grayscale(0.3);
     }
 
     .submit-btn.loading .btn-text {
@@ -322,7 +313,7 @@
       margin-top: 16px;
       padding: 12px 16px;
       background: var(--error-bg);
-      border: 1px solid rgba(239,68,68,0.2);
+      border: 1px solid rgba(239, 68, 68, 0.15);
       border-radius: 10px;
       font-size: 13px;
       color: var(--error);
@@ -346,7 +337,7 @@
     }
 
     .footer {
-      margin-top: 32px;
+      margin-top: 28px;
       text-align: center;
       color: var(--text-muted);
       font-size: 12px;
@@ -357,22 +348,22 @@
       color: var(--text-secondary);
     }
 
-    /* Security badge */
+    /* 安全徽章 */
     .security-badge {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      margin-top: 20px;
+      margin-top: 24px;
       padding: 10px 16px;
-      background: rgba(34,197,94,0.08);
-      border: 1px solid rgba(34,197,94,0.15);
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
       border-radius: 20px;
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--success);
+      color: #16a34a;
     }
 
     .security-badge svg {
@@ -380,30 +371,49 @@
       height: 14px;
     }
 
-    /* Responsive */
+    /* 功能标签 */
+    .features {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .feature-item svg {
+      width: 14px;
+      height: 14px;
+      color: var(--accent);
+    }
+
+    /* 响应式 */
     @media (max-width: 480px) {
       .login-card {
-        padding: 36px 24px;
-        border-radius: 20px;
+        padding: 32px 24px;
+        border-radius: 16px;
       }
 
       .brand-title {
         font-size: 24px;
       }
 
-      .ambient-glow {
-        width: 400px;
-        height: 400px;
-        filter: blur(80px);
+      .features {
+        flex-wrap: wrap;
+        gap: 12px;
       }
     }
 
-    /* Reduced motion */
+    /* 减少动画 */
     @media (prefers-reduced-motion: reduce) {
-      .ambient-glow {
-        animation: none;
-      }
-      
       .submit-btn::before {
         display: none;
       }
@@ -413,17 +423,14 @@
 <body>
   <div class="ambient-glow ambient-glow-1"></div>
   <div class="ambient-glow ambient-glow-2"></div>
-  <div class="grid-pattern"></div>
+  <div class="ambient-glow ambient-glow-3"></div>
+  <div class="dots-pattern"></div>
 
   <div class="login-container">
     <div class="login-card">
       <div class="brand">
         <div class="brand-logo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5"/>
-            <path d="M2 12l10 5 10-5"/>
-          </svg>
+          <img src="https://oaewcvliegq6wyvp.public.blob.vercel-storage.com/xhunt_new.jpg" alt="XHunt Logo" />
         </div>
         <h1 class="brand-title">XHunt Admin</h1>
         <p class="brand-subtitle">管理后台登录</p>
@@ -433,6 +440,10 @@
         <div class="form-group">
           <label class="form-label" for="email">邮箱地址</label>
           <div class="input-wrapper">
+            <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="5" width="20" height="14" rx="2"/>
+              <path d="m2 5 10 7 10-7"/>
+            </svg>
             <input 
               id="email" 
               class="form-input" 
@@ -441,28 +452,24 @@
               autocomplete="username"
               required
             />
-            <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="5" width="20" height="14" rx="2"/>
-              <path d="m2 5 10 7 10-7"/>
-            </svg>
           </div>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="password">登录密码</label>
           <div class="input-wrapper">
-            <input 
-              id="password" 
-              class="form-input" 
-              type="password" 
-              placeholder="••••••••" 
-              autocomplete="current-password"
-              required
-            />
             <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
+            <input 
+              id="password" 
+              class="form-input" 
+              type="password" 
+              placeholder="请输入密码" 
+              autocomplete="current-password"
+              required
+            />
           </div>
         </div>
 
@@ -488,6 +495,29 @@
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
         WebAuthn 安全验证
+      </div>
+
+      <div class="features">
+        <div class="feature-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+          安全加密
+        </div>
+        <div class="feature-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          生物识别
+        </div>
+        <div class="feature-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          极速访问
+        </div>
       </div>
     </div>
 

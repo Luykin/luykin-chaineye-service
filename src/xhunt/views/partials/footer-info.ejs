@@ -1,4 +1,111 @@
-<div class="refresh-info">
-    <p>🔄 数据每次访问时实时更新 | ⏰ 最后更新: <%= formatDateTime() %></p>
-    <p style="margin-top: 8px; font-size: 14px;">🕐 所有统计数据均按中国时区（UTC+8）计算</p>
+<div class="footer-status-bar">
+  <div class="status-group">
+    <div class="status-item">
+      <svg class="status-icon status-syncing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+        <path d="M3 3v5h5"/>
+        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+        <path d="M16 16h5v5"/>
+      </svg>
+      <span class="status-label">数据实时更新</span>
+    </div>
+    <div class="status-divider"></div>
+    <div class="status-item">
+      <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      <span class="status-label">最后更新: <%= formatDateTime() %></span>
+    </div>
+    <div class="status-divider"></div>
+    <div class="status-item">
+      <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+        <path d="M2 12h20"/>
+      </svg>
+      <span class="status-label">UTC+8 北京时间</span>
+    </div>
+  </div>
+  <div class="footer-meta">
+    <span class="meta-text">XHunt Admin v1.0</span>
+  </div>
 </div>
+
+<style>
+  .footer-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    font-size: 12px;
+    color: #64748b;
+  }
+  
+  .status-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .status-icon {
+    width: 14px;
+    height: 14px;
+    color: #94a3b8;
+  }
+  
+  .status-icon.status-syncing {
+    animation: spin 2s linear infinite;
+  }
+  
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  
+  .status-label {
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  
+  .status-divider {
+    width: 4px;
+    height: 4px;
+    background: #cbd5e1;
+    border-radius: 50%;
+  }
+  
+  .footer-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  
+  .meta-text {
+    color: #94a3b8;
+    font-weight: 500;
+  }
+  
+  /* 移动端适配 */
+  @media (max-width: 768px) {
+    .footer-status-bar {
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 16px;
+      text-align: center;
+    }
+    
+    .status-group {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+  }
+</style>

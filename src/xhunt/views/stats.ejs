@@ -9,14 +9,13 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='grad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%233b82f6;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%2310b981;stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='20' fill='url(%23grad)'/%3E%3Cpath d='M25,70 L25,55 L35,55 L35,70 M40,70 L40,45 L50,45 L50,70 M55,70 L55,35 L65,35 L65,70 M70,70 L70,25 L80,25 L80,70' fill='white' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='30' cy='50' r='3' fill='%23fbbf24'/%3E%3Ccircle cx='45' cy='40' r='3' fill='%23fbbf24'/%3E%3Ccircle cx='60' cy='30' r='3' fill='%23fbbf24'/%3E%3Ccircle cx='75' cy='20' r='3' fill='%23fbbf24'/%3E%3Cpath d='M30,50 L45,40 L60,30 L75,20' stroke='%23fbbf24' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="/static/css/stats.css?v=1" />
+    <link rel="stylesheet" href="/static/css/stats.css" />
     <style>
       /* 侧边栏图标样式 */
       .nav-icon-svg {
         width: 18px;
         height: 18px;
         flex-shrink: 0;
-        stroke-width: 2;
       }
       .sidebar-nav .tab-btn {
         gap: 12px;
@@ -28,17 +27,21 @@
     <%- include('partials/icons') %>
     
     <!-- 侧边栏 -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="brand">
-          <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5"/>
-            <path d="M2 12l10 5 10-5"/>
-          </svg>
+          <img class="brand-icon" src="https://oaewcvliegq6wyvp.public.blob.vercel-storage.com/xhunt_new.jpg" alt="XHunt Logo" />
           <span class="brand-text">XHunt</span>
         </div>
         <div class="brand-subtitle">管理后台</div>
+        
+        <!-- 折叠按钮 -->
+        <button class="sidebar-toggle" id="sidebarToggle" title="收起侧边栏 (Ctrl+B)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="m11 17-5-5 5-5"/>
+            <path d="m18 17-5-5 5-5"/>
+          </svg>
+        </button>
       </div>
       
       <nav class="sidebar-nav">
@@ -138,6 +141,46 @@
         </button>
         <% } %>
       </nav>
+      
+      <!-- 快捷入口 - 侧边栏底部 -->
+      <div class="quick-links-sidebar">
+        <div class="quick-links-sidebar-title">快捷入口</div>
+        <div class="quick-links-list">
+          <a href="#" class="quick-link-item" id="quick-supabase">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
+            <span>Supabase</span>
+          </a>
+          <a href="https://chrome.google.com/webstore/devconsole/9d25eceb-fe8d-401a-a54e-08499569b9a3" target="_blank" class="quick-link-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+            <span>Chrome 控制台</span>
+          </a>
+          <a href="https://docs.google.com/document/d/1W4URRutiCIxtYy8oLgEp8wy9yAzRDbNpIbNeXB2oors/edit?tab=t.0" target="_blank" class="quick-link-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+            <span>需求文档</span>
+          </a>
+          <a href="https://kb.cryptohunt.ai/nacos/" target="_blank" class="quick-link-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>
+            <span>Nacos 配置</span>
+          </a>
+        </div>
+      </div>
+      
+      <script>
+        // Supabase 快捷入口
+        document.getElementById('quick-supabase')?.addEventListener('click', async function(ev){
+          ev.preventDefault();
+          try{
+            const r = await fetch('/admin/supabase/link-token', { method:'POST', headers:{ 'Accept':'application/json' } });
+            const j = await r.json();
+            if(r.status === 403 && j && j.error === '需要先录入生物识别'){
+              alert('请先在"账号安全"中录入生物识别（指纹/面容），再使用 Supabase 入口。');
+              return;
+            }
+            if(!j.success || !j.url){ throw new Error(j.error || '生成票据失败'); }
+            window.open(j.url, '_blank', 'noopener');
+          }catch(ex){ alert('打开失败：' + (ex.message || ex)); }
+        });
+      </script>
     </aside>
 
     <!-- 主内容区 -->
@@ -145,18 +188,27 @@
       <!-- 顶部栏 -->
       <header class="top-header">
         <div class="header-left">
-          <h1 class="page-title">数据统计面板</h1>
-          <span class="page-time"><%= formatDateTime() %></span>
+          <div class="page-title-wrapper">
+            <h1 class="page-title">数据统计面板</h1>
+            <div class="live-indicator">
+              <span class="live-dot"></span>
+              <span class="live-text">实时监控中</span>
+            </div>
+          </div>
+        </div>
+        <div class="header-center">
+          <div class="current-time">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span id="headerTime"><%= formatDateTime() %></span>
+          </div>
         </div>
         <div class="header-right">
           <%- include('partials/auth-header', { formatDateTime }) %>
         </div>
       </header>
-
-      <!-- 快捷链接 -->
-      <section class="quick-links-section">
-        <%- include('partials/quick-links') %>
-      </section>
 
       <!-- 页面内容 -->
       <div class="content-wrapper">
@@ -297,5 +349,58 @@
     </main>
 
     <script src="/static/js/stats.js?v=<%= new Date().getTime() %>"></script>
+    <script>
+      // 头部实时时间更新
+      (function() {
+        const timeEl = document.getElementById('headerTime');
+        if (!timeEl) return;
+        
+        function updateTime() {
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const day = String(now.getDate()).padStart(2, '0');
+          const hours = String(now.getHours()).padStart(2, '0');
+          const minutes = String(now.getMinutes()).padStart(2, '0');
+          const seconds = String(now.getSeconds()).padStart(2, '0');
+          timeEl.textContent = `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+        }
+        
+        updateTime();
+        setInterval(updateTime, 1000);
+      })();
+      
+      // 侧边栏折叠功能
+      (function() {
+        const sidebar = document.getElementById('sidebar');
+        const toggle = document.getElementById('sidebarToggle');
+        const STORAGE_KEY = 'sidebar-collapsed';
+        
+        // 读取保存的状态
+        const isCollapsed = localStorage.getItem(STORAGE_KEY) === 'true';
+        if (isCollapsed) {
+          sidebar.classList.add('collapsed');
+        }
+        
+        // 切换折叠
+        toggle.addEventListener('click', function() {
+          sidebar.classList.toggle('collapsed');
+          localStorage.setItem(STORAGE_KEY, sidebar.classList.contains('collapsed'));
+        });
+        
+        // 快捷键 Ctrl+B
+        document.addEventListener('keydown', function(e) {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+            e.preventDefault();
+            toggle.click();
+          }
+        });
+        
+        // 移动端自动折叠
+        if (window.innerWidth <= 768) {
+          sidebar.classList.add('collapsed');
+        }
+      })();
+    </script>
   </body>
 </html>
