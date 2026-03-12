@@ -79,9 +79,10 @@
 <div id="audit-tooltip" class="audit-tooltip"></div>
 
 <script>
-(function(){
+document.addEventListener('DOMContentLoaded', function() {
   var page = 1;
   var limit = 50;
+  var isInitialized = false;
   
   function fmt(ts) { 
     try { 
@@ -203,14 +204,33 @@
     tooltip.style.top = y + 'px';
   }
 
-  // 事件绑定
-  document.getElementById('audit-refresh').addEventListener('click', function(){ page = 1; load(); });
-  document.getElementById('audit-email').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
-  document.getElementById('audit-action').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
-  document.getElementById('audit-prev').addEventListener('click', function(){ if (page > 1){ page--; load(); } });
-  document.getElementById('audit-next').addEventListener('click', function(){ page++; load(); } });
+  function bindEvents() {
+    document.getElementById('audit-refresh').addEventListener('click', function(){ page = 1; load(); });
+    document.getElementById('audit-email').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
+    document.getElementById('audit-action').addEventListener('keypress', function(e){ if(e.key === 'Enter'){ page = 1; load(); } });
+    document.getElementById('audit-prev').addEventListener('click', function(){ if (page > 1){ page--; load(); } });
+    document.getElementById('audit-next').addEventListener('click', function(){ page++; load(); } });
+  }
   
-  // 初次加载
-  load();
-})();
+  // 初始化函数
+  function init() {
+    if (isInitialized) return;
+    bindEvents();
+    load();
+    isInitialized = true;
+  }
+  
+  // 监听 Tab 激活事件
+  document.addEventListener('stats-tab-activated', function(e) {
+    if (e.detail && e.detail.tabId === 'admin-audit-logs') {
+      init();
+    }
+  });
+  
+  // 检查当前是否已经激活（刷新页面时）
+  var auditTab = document.querySelector('.tab-btn[data-tab="admin-audit-logs"]');
+  if (auditTab && auditTab.classList.contains('active')) {
+    init();
+  }
+});
 </script>

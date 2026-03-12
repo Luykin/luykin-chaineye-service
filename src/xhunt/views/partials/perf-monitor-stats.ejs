@@ -769,15 +769,15 @@
 
 <script>
   document.addEventListener("DOMContentLoaded", () => {
-    const perfMonitorTab = document.querySelector(
-      '.tab-btn[data-tab="perf-monitor"]'
-    );
-    if (!perfMonitorTab) return;
-
     let scatterChart, metricsChart, errorsScatterChart;
     let isInitialized = false;
     let queueTimer = null;
     let rawTraceData = []; // Cache for the original trace data
+    
+    // 延迟获取 Tab 元素（因为 Tab 是动态渲染的）
+    function getPerfMonitorTab() {
+      return document.querySelector('.tab-btn[data-tab="perf-monitor"]');
+    }
 
     const filterByUserIdInput = document.getElementById("filter-by-userid");
     const filterByPathInput = document.getElementById("filter-by-path");
@@ -1916,27 +1916,30 @@
       queueTimer = setInterval(fetchQueueStatus, 30000);
     }
 
-    // 方式1: MutationObserver 监听 class 变化
-    const observer = new MutationObserver(() => {
-      if (perfMonitorTab.classList.contains("active") && !isInitialized) {
-        initializeCharts();
-      }
-    });
-    observer.observe(perfMonitorTab, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    // 方式2: 监听 stats-tab-activated 事件（更可靠）
+    // 方式1: 监听 stats-tab-activated 事件（最可靠）
     document.addEventListener("stats-tab-activated", function(e) {
       if (e.detail && e.detail.tabId === "perf-monitor" && !isInitialized) {
         initializeCharts();
       }
     });
 
-    // 如果当前已经激活，直接初始化
-    if (perfMonitorTab.classList.contains("active") && !isInitialized) {
-      initializeCharts();
+    // 方式2: MutationObserver 监听 class 变化（备用）
+    const perfMonitorTab = getPerfMonitorTab();
+    if (perfMonitorTab) {
+      const observer = new MutationObserver(() => {
+        if (perfMonitorTab.classList.contains("active") && !isInitialized) {
+          initializeCharts();
+        }
+      });
+      observer.observe(perfMonitorTab, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+
+      // 如果当前已经激活，直接初始化
+      if (perfMonitorTab.classList.contains("active") && !isInitialized) {
+        initializeCharts();
+      }
     }
   });
 </script>

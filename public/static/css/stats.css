@@ -1064,6 +1064,29 @@ body {
     .sidebar.collapsed:hover {
         width: 100% !important;
     }
+    
+    /* 移动端隐藏快捷链接和分隔线 */
+    .sidebar-nav .tab-btn.quick-link,
+    .sidebar-nav .nav-shortcuts-divider,
+    .sidebar-nav .nav-divider:not(:first-child) {
+        display: none !important;
+    }
+    
+    /* 移动端只显示 nav-permitted-section 中的 Tab */
+    .sidebar-nav {
+        justify-content: flex-start;
+    }
+    
+    /* 确保有权限的 Tab 可以横向滚动 */
+    #nav-permitted-section {
+        display: flex;
+        flex-direction: row;
+    }
+    
+    /* 折叠区域在移动端隐藏 */
+    #nav-no-perm-section {
+        display: none !important;
+    }
 }
 
 /* 快捷链接折叠状态 */
