@@ -1916,6 +1916,7 @@
       queueTimer = setInterval(fetchQueueStatus, 30000);
     }
 
+    // 方式1: MutationObserver 监听 class 变化
     const observer = new MutationObserver(() => {
       if (perfMonitorTab.classList.contains("active") && !isInitialized) {
         initializeCharts();
@@ -1926,6 +1927,14 @@
       attributeFilter: ["class"],
     });
 
+    // 方式2: 监听 stats-tab-activated 事件（更可靠）
+    document.addEventListener("stats-tab-activated", function(e) {
+      if (e.detail && e.detail.tabId === "perf-monitor" && !isInitialized) {
+        initializeCharts();
+      }
+    });
+
+    // 如果当前已经激活，直接初始化
     if (perfMonitorTab.classList.contains("active") && !isInitialized) {
       initializeCharts();
     }
