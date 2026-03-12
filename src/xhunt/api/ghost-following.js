@@ -561,7 +561,7 @@ router.post(
               analysisResult = {
                 id: tweet.id,
                 create_time: tweet.create_time || null,
-                html: tweet.info?.html || null,
+                html: String(tweet.info?.html).slice(0, 20) || 'tweet html',
                 twitter_user_id: tweet.twitter_user_id || user_id,
               };
             }
@@ -1031,7 +1031,7 @@ async function verifyEmptyUserWithSecondApi(user_id) {
         return {
           id: tweet.id,
           create_time: createTime,
-          html: tweet.html || null,
+          html: String(tweet.html).slice(0, 20) || 'tweet html',
           twitter_user_id: tweet.user_id || user_id,
           verified: true,
           source: "pro_api",
