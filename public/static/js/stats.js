@@ -282,7 +282,10 @@ async function loadRedisInfo() {
       const data = result.data;
       document.getElementById("redis-version").textContent = data.version || "-";
       document.getElementById("redis-mode").textContent = data.mode || "-";
-      document.getElementById("redis-keys").textContent = formatNumber(data.totalKeys);
+      const keysEl = document.getElementById("redis-keys");
+      const keysFormatted = formatCompactNumber(data.totalKeys);
+      keysEl.textContent = keysFormatted;
+      keysEl.title = formatNumber(data.totalKeys) + " keys";
       document.getElementById("redis-memory").textContent = data.usedMemory || "-";
       document.getElementById("redis-clients").textContent = data.connectedClients || "-";
 
@@ -363,7 +366,7 @@ function displayRedisKeysList(keys) {
   const tbody = document.getElementById("redis-keys-tbody");
 
   if (!keys || keys.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="2" style="text-align: center;">未找到匹配的 Key</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; padding: 16px; color: #9ca3af;">未找到匹配的 Key</td></tr>';
     listContainer.style.display = "block";
     return;
   }
@@ -372,9 +375,9 @@ function displayRedisKeysList(keys) {
     .map(
       (key) => `
     <tr>
-      <td style="font-family: monospace; font-size: 12px;">${escapeHtml(key)}</td>
-      <td>
-        <button class="btn btn-sm btn-secondary" onclick="handleRedisQuery('${escapeHtml(key)}')">查询</button>
+      <td>${escapeHtml(key)}</td>
+      <td class="col-action">
+        <button class="redis-btn redis-btn-secondary" style="height: 28px; padding: 0 10px; font-size: 0.75rem;" onclick="handleRedisQuery('${escapeHtml(key)}')">查询</button>
       </td>
     </tr>
   `
@@ -389,12 +392,13 @@ function displayRedisKeysList(keys) {
  */
 function displayRedisResult(data) {
   const resultArea = document.getElementById("redis-result-area");
+  const emptyState = document.getElementById("redis-empty-state");
   const warningBadge = document.getElementById("redis-warning-badge");
   const editBtn = document.getElementById("redis-edit-btn");
 
   // 填充基本信息
   document.getElementById("redis-result-key").textContent = data.key;
-  document.getElementById("redis-result-type").textContent = data.type;
+  document.getElementById("redis-result-type").innerHTML = `<span class="badge badge-type">${data.type}</span>`;
   document.getElementById("redis-result-ttl").textContent =
     data.ttl !== null ? formatDuration(data.ttl) : "永不过期";
   document.getElementById("redis-result-size").textContent = formatBytes(data.size);
@@ -406,15 +410,17 @@ function displayRedisResult(data) {
 
   // 显示 JSON 标签
   const jsonBadge = document.getElementById("redis-value-type-badge");
-  jsonBadge.style.display = data.isJson ? "inline" : "none";
+  jsonBadge.style.display = data.isJson ? "inline-flex" : "none";
 
   // 敏感 Key 警告
-  warningBadge.style.display = data.isSensitive ? "block" : "none";
+  warningBadge.style.display = data.isSensitive ? "flex" : "none";
 
   // 只有 string 类型可以编辑
   editBtn.style.display = data.type === "string" ? "inline-flex" : "none";
 
-  resultArea.style.display = "block";
+  // 显示结果，隐藏空状态
+  resultArea.style.display = "flex";
+  if (emptyState) emptyState.style.display = "none";
 }
 
 /**
@@ -422,7 +428,9 @@ function displayRedisResult(data) {
  */
 function hideRedisResult() {
   const resultArea = document.getElementById("redis-result-area");
+  const emptyState = document.getElementById("redis-empty-state");
   resultArea.style.display = "none";
+  if (emptyState) emptyState.style.display = "flex";
   redisCurrentKey = null;
   redisCurrentData = null;
 }
@@ -582,20 +590,16 @@ function renderRedisHistory() {
   const history = JSON.parse(localStorage.getItem(REDIS_HISTORY_KEY) || "[]");
 
   if (history.length === 0) {
-    container.innerHTML = '<p class="text-muted" style="text-align: center; padding: 20px;">暂无查询记录</p>';
+    container.innerHTML = '<span class="empty-text">暂无记录</span>';
     return;
   }
 
   container.innerHTML = history
     .map(
       (key) => `
-    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border-color);">
-      <span style="font-family: monospace; font-size: 13px; word-break: break-all; cursor: pointer; color: var(--primary-color);" 
-            onclick="document.getElementById('redis-key-input').value='${escapeHtml(key)}';handleRedisQuery('${escapeHtml(key)}')">
-        ${escapeHtml(key)}
-      </span>
-      <button class="btn btn-text" style="font-size: 12px; color: var(--text-muted);" 
-              onclick="removeRedisHistory('${escapeHtml(key)}')">删除</button>
+    <div class="history-item" onclick="document.getElementById('redis-key-input').value='${escapeHtml(key)}';handleRedisQuery('${escapeHtml(key)}')">
+      <span class="history-item-key" title="${escapeHtml(key)}">${escapeHtml(key)}</span>
+      <button class="btn-text" onclick="event.stopPropagation();removeRedisHistory('${escapeHtml(key)}')">删除</button>
     </div>
   `
     )
@@ -648,6 +652,18 @@ function formatDuration(seconds) {
  */
 function formatNumber(num) {
   return num?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") || "0";
+}
+
+/**
+ * 格式化数字为紧凑形式 (1.2K, 3.5M, 2.1B)
+ */
+function formatCompactNumber(num) {
+  if (!num || num === 0) return "0";
+  const absNum = Math.abs(num);
+  if (absNum < 1000) return num.toString();
+  if (absNum < 1000000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "K";
+  if (absNum < 1000000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+  return (num / 1000000000).toFixed(1).replace(/\.0$/, "") + "B";
 }
 
 /**

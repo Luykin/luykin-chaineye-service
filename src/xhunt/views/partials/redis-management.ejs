@@ -1,23 +1,14 @@
 <!-- Redis 数据管理 -->
-<div class="stats-section">
+<div class="redis-section">
   
-  <!-- 页面头部 -->
-  <div class="section-header">
-    <div class="section-title-wrapper">
-      <div class="section-icon icon-red">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <ellipse cx="12" cy="5" rx="9" ry="3"/>
-          <path d="M3 5V19A9 3 0 0 0 21 19V5"/>
-          <path d="M3 12A9 3 0 0 0 21 12"/>
-        </svg>
-      </div>
-      <div>
-        <h2 class="section-title">Redis 数据管理</h2>
-        <p class="section-desc" style="margin: 0;">查询、修改和删除 Redis 缓存数据</p>
-      </div>
+  <!-- 头部 -->
+  <div class="redis-header">
+    <div class="redis-header-title">
+      <h2>Redis 数据管理</h2>
+      <p>查询、修改和删除 Redis 缓存数据</p>
     </div>
-    <button id="redis-refresh-info" class="btn btn-secondary">
-      <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <button id="redis-refresh-info" class="redis-btn redis-btn-secondary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
         <path d="M3 3v5h5"/>
         <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
@@ -27,330 +18,254 @@
     </button>
   </div>
 
-  <!-- Redis 服务器信息卡片 -->
-  <div class="stats-grid redis-info-grid" id="redis-info-cards">
-    <div class="stat-card stat-card-redis">
-      <div class="stat-card-icon icon-redis-version">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2v20M2 12h20"/>
-        </svg>
-      </div>
-      <div class="stat-card-content">
-        <div class="stat-title">Redis 版本</div>
-        <div class="stat-value" id="redis-version">-</div>
-      </div>
+  <!-- 服务器信息 -->
+  <div class="redis-info-bar" id="redis-info-cards">
+    <div class="info-item">
+      <span class="info-label">版本</span>
+      <span class="info-value" id="redis-version">-</span>
     </div>
-
-    <div class="stat-card stat-card-redis">
-      <div class="stat-card-icon icon-redis-mode">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-          <line x1="8" y1="21" x2="16" y2="21"/>
-          <line x1="12" y1="17" x2="12" y2="21"/>
-        </svg>
-      </div>
-      <div class="stat-card-content">
-        <div class="stat-title">运行模式</div>
-        <div class="stat-value" id="redis-mode">-</div>
-      </div>
+    <div class="info-divider"></div>
+    <div class="info-item">
+      <span class="info-label">模式</span>
+      <span class="info-value" id="redis-mode">-</span>
     </div>
-
-    <div class="stat-card stat-card-redis">
-      <div class="stat-card-icon icon-redis-keys">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 0 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-        </svg>
-      </div>
-      <div class="stat-card-content">
-        <div class="stat-title">总 Key 数</div>
-        <div class="stat-value" id="redis-keys">-</div>
-      </div>
+    <div class="info-divider"></div>
+    <div class="info-item info-item-large">
+      <span class="info-label">总 Keys</span>
+      <span class="info-value info-value-mono" id="redis-keys" title="-">-</span>
     </div>
-
-    <div class="stat-card stat-card-redis">
-      <div class="stat-card-icon icon-redis-memory">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M2 12h20M2 12a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2M2 12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2M6 12v6m4-6v6m4-6v6m4-6v6"/>
-        </svg>
-      </div>
-      <div class="stat-card-content">
-        <div class="stat-title">内存使用</div>
-        <div class="stat-value" id="redis-memory">-</div>
-      </div>
+    <div class="info-divider"></div>
+    <div class="info-item">
+      <span class="info-label">内存</span>
+      <span class="info-value" id="redis-memory">-</span>
     </div>
-
-    <div class="stat-card stat-card-redis">
-      <div class="stat-card-icon icon-redis-clients">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
-      </div>
-      <div class="stat-card-content">
-        <div class="stat-title">连接数</div>
-        <div class="stat-value" id="redis-clients">-</div>
-      </div>
+    <div class="info-divider"></div>
+    <div class="info-item">
+      <span class="info-label">连接</span>
+      <span class="info-value" id="redis-clients">-</span>
     </div>
-
-    <div class="stat-card stat-card-redis">
-      <div class="stat-card-icon icon-redis-hitrate">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-          <polyline points="22 4 12 14.01 9 11.01"/>
-        </svg>
-      </div>
-      <div class="stat-card-content">
-        <div class="stat-title">命中率</div>
-        <div class="stat-value" id="redis-hitrate">-</div>
-      </div>
+    <div class="info-divider"></div>
+    <div class="info-item">
+      <span class="info-label">命中率</span>
+      <span class="info-value" id="redis-hitrate">-</span>
     </div>
   </div>
 
-  <!-- Key 查询区域 -->
-  <div class="section-card">
-    <div class="section-card-header">
-      <div class="section-icon icon-search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="m21 21-4.3-4.3"/>
-        </svg>
-      </div>
-      <h3 class="section-card-title">Key 查询</h3>
-    </div>
-    
-    <div class="redis-search-form">
-      <div class="search-row">
-        <input 
-          type="text" 
-          id="redis-key-input" 
-          class="form-control" 
-          placeholder="输入 Redis Key，如: user:session:xxx" 
-        />
-        <button id="redis-query-btn" class="btn btn-primary">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="m21 21-4.3-4.3"/>
-          </svg>
-          查询
-        </button>
-        <button id="redis-reset-btn" class="btn btn-secondary">重置</button>
+  <!-- 主操作区 -->
+  <div class="redis-main">
+    <!-- 左侧：查询 -->
+    <div class="redis-panel redis-panel-query">
+      <div class="panel-header">
+        <h3>查询 Key</h3>
       </div>
       
-      <!-- 扫描 Keys -->
-      <div class="scan-section">
-        <div class="scan-row">
+      <div class="query-form">
+        <div class="input-group">
           <input 
             type="text" 
-            id="redis-pattern-input" 
-            class="form-control form-control-sm" 
-            placeholder="输入匹配模式，如: user:*" 
+            id="redis-key-input" 
+            class="redis-input" 
+            placeholder="输入 Key，如: user:session:xxx" 
           />
-          <button id="redis-scan-btn" class="btn btn-secondary btn-sm">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 7V4h3"/>
-              <path d="M4 17v3h3"/>
-              <path d="M20 7V4h-3"/>
-              <path d="M20 17v3h-3"/>
-              <path d="M9 9h6v6H9z"/>
+          <button id="redis-query-btn" class="redis-btn redis-btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.3-4.3"/>
             </svg>
-            扫描 Keys
+            查询
           </button>
-          <span class="text-hint">最多返回 100 个</span>
         </div>
-        <div id="redis-keys-list" class="keys-list-container" style="display: none;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Key</th>
-                <th style="width: 80px;">操作</th>
-              </tr>
-            </thead>
-            <tbody id="redis-keys-tbody">
-            </tbody>
-          </table>
+        
+        <div class="scan-section">
+          <div class="input-group input-group-sm">
+            <input 
+              type="text" 
+              id="redis-pattern-input" 
+              class="redis-input redis-input-sm" 
+              placeholder="扫描模式，如: user:*" 
+            />
+            <button id="redis-scan-btn" class="redis-btn redis-btn-secondary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 7V4h3"/>
+                <path d="M4 17v3h3"/>
+                <path d="M20 7V4h-3"/>
+                <path d="M20 17v3h-3"/>
+                <path d="M9 9h6v6H9z"/>
+              </svg>
+              扫描
+            </button>
+          </div>
+          <span class="input-hint">最多返回 100 个匹配项</span>
+        </div>
+      </div>
+
+      <!-- Keys 列表 -->
+      <div id="redis-keys-list" class="keys-list" style="display: none;">
+        <table class="redis-table redis-table-compact">
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th class="col-action">操作</th>
+            </tr>
+          </thead>
+          <tbody id="redis-keys-tbody">
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 最近查询 -->
+      <div class="history-section">
+        <div class="section-subheader">
+          <span>最近查询</span>
+          <button id="redis-clear-history" class="btn-text">清空</button>
+        </div>
+        <div id="redis-history-list" class="history-list">
+          <span class="empty-text">暂无记录</span>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- 查询结果区域 -->
-  <div id="redis-result-area" class="section-card" style="display: none;">
-    <div class="section-card-header">
-      <div class="section-icon icon-result">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-          <polyline points="10 9 9 9 8 9"/>
-        </svg>
+    <!-- 右侧：结果 -->
+    <div class="redis-panel redis-panel-result" id="redis-result-area" style="display: none;">
+      <div class="panel-header">
+        <h3>查询结果</h3>
+        <div id="redis-warning-badge" class="badge badge-warning" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          敏感 Key
+        </div>
       </div>
-      <h3 class="section-card-title">查询结果</h3>
-      <div id="redis-warning-badge" class="warning-badge" style="display: none;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-          <line x1="12" y1="9" x2="12" y2="13"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-        敏感 Key，请谨慎操作
+
+      <!-- Key 元信息 -->
+      <div class="meta-grid">
+        <div class="meta-item">
+          <span class="meta-label">Key</span>
+          <span id="redis-result-key" class="meta-value meta-value-mono"></span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">类型</span>
+          <span id="redis-result-type" class="meta-value">
+            <span class="badge badge-type">-</span>
+          </span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">TTL</span>
+          <span id="redis-result-ttl" class="meta-value">-</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">大小</span>
+          <span id="redis-result-size" class="meta-value">-</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">元素数</span>
+          <span id="redis-result-length" class="meta-value">-</span>
+        </div>
       </div>
-    </div>
-    
-    <div class="key-info-grid">
-      <div class="info-item">
-        <span class="info-label">Key</span>
-        <span id="redis-result-key" class="info-value info-value-mono"></span>
+
+      <!-- Value -->
+      <div class="value-section">
+        <div class="value-header">
+          <span class="value-label">Value</span>
+          <span id="redis-value-type-badge" class="badge badge-json" style="display: none;">JSON</span>
+        </div>
+        <textarea 
+          id="redis-result-value" 
+          class="redis-textarea" 
+          rows="12" 
+          readonly
+        ></textarea>
       </div>
-      <div class="info-item">
-        <span class="info-label">类型</span>
-        <span id="redis-result-type" class="info-value">
-          <span class="badge badge-type">-</span>
-        </span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">TTL</span>
-        <span id="redis-result-ttl" class="info-value">-</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">大小</span>
-        <span id="redis-result-size" class="info-value">-</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">元素数</span>
-        <span id="redis-result-length" class="info-value">-</span>
+
+      <!-- 操作按钮 -->
+      <div class="panel-actions" id="redis-actions">
+        <button id="redis-edit-btn" class="redis-btn redis-btn-primary" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          编辑
+        </button>
+        <button id="redis-copy-btn" class="redis-btn redis-btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+          </svg>
+          复制
+        </button>
+        <button id="redis-delete-btn" class="redis-btn redis-btn-danger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 6h18"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+          删除
+        </button>
       </div>
     </div>
 
-    <div class="value-section">
-      <div class="value-header">
-        <span class="info-label">Value</span>
-        <span id="redis-value-type-badge" class="badge badge-json" style="display: none;">JSON</span>
+    <!-- 空状态 -->
+    <div class="redis-panel redis-panel-empty" id="redis-empty-state">
+      <div class="empty-state-content">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/>
+          <path d="M3 5V19A9 3 0 0 0 21 19V5"/>
+          <path d="M3 12A9 3 0 0 0 21 12"/>
+        </svg>
+        <p>在左侧查询或扫描 Key</p>
+        <span>输入 Key 名称或模式来查看数据</span>
       </div>
-      <textarea 
-        id="redis-result-value" 
-        class="form-control value-textarea" 
-        rows="10" 
-        readonly
-      ></textarea>
-    </div>
-
-    <div class="action-buttons" id="redis-actions">
-      <button id="redis-edit-btn" class="btn btn-primary" style="display: none;">
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
-        编辑值
-      </button>
-      <button id="redis-delete-btn" class="btn btn-danger">
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 6h18"/>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
-          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-        </svg>
-        删除 Key
-      </button>
-      <button id="redis-copy-btn" class="btn btn-secondary">
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-        </svg>
-        复制 Value
-      </button>
-    </div>
-  </div>
-
-  <!-- 最近查询历史 -->
-  <div class="section-card section-card-history">
-    <div class="section-card-header">
-      <div class="section-icon icon-history">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="1 4 1 10 7 10"/>
-          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-        </svg>
-      </div>
-      <h3 class="section-card-title">最近查询</h3>
-      <button id="redis-clear-history" class="btn btn-text btn-sm">清空历史</button>
-    </div>
-    <div id="redis-history-list" class="history-list">
-      <p class="empty-state-text">暂无查询记录</p>
     </div>
   </div>
 </div>
 
 <!-- 编辑对话框 -->
-<div id="redis-edit-modal" class="modal" style="display: none;">
-  <div class="modal-overlay"></div>
-  <div class="modal-content modal-content-lg">
+<div id="redis-edit-modal" class="redis-modal" style="display: none;">
+  <div class="modal-backdrop"></div>
+  <div class="modal-container">
     <div class="modal-header">
-      <div class="modal-title-wrapper">
-        <div class="modal-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-        </div>
-        <h3 class="modal-title">编辑 Redis Value</h3>
-      </div>
+      <h3>编辑 Value</h3>
       <button class="modal-close" id="redis-edit-modal-close">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">Key</label>
+      <div class="form-row">
+        <label>Key</label>
         <div id="redis-edit-key" class="form-static"></div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Value</label>
-        <textarea 
-          id="redis-edit-value" 
-          class="form-control value-textarea" 
-          rows="8"
-        ></textarea>
+      <div class="form-row">
+        <label>Value</label>
+        <textarea id="redis-edit-value" class="redis-textarea" rows="8"></textarea>
       </div>
-      <div class="form-group">
-        <label class="form-label">TTL (秒，可选)</label>
-        <input 
-          type="number" 
-          id="redis-edit-ttl" 
-          class="form-control" 
-          placeholder="留空保持原 TTL，-1 表示永不过期"
-        />
+      <div class="form-row">
+        <label>TTL (秒，可选)</label>
+        <input type="number" id="redis-edit-ttl" class="redis-input" placeholder="留空保持原 TTL，-1 表示永不过期" />
         <span class="form-hint">当前 TTL: <span id="redis-edit-current-ttl">-</span></span>
       </div>
     </div>
     <div class="modal-footer">
-      <button id="redis-edit-cancel" class="btn btn-secondary">取消</button>
-      <button id="redis-edit-save" class="btn btn-primary">确认保存</button>
+      <button id="redis-edit-cancel" class="redis-btn redis-btn-secondary">取消</button>
+      <button id="redis-edit-save" class="redis-btn redis-btn-primary">保存</button>
     </div>
   </div>
 </div>
 
 <!-- 删除确认对话框 -->
-<div id="redis-delete-modal" class="modal" style="display: none;">
-  <div class="modal-overlay"></div>
-  <div class="modal-content modal-content-sm">
+<div id="redis-delete-modal" class="redis-modal" style="display: none;">
+  <div class="modal-backdrop"></div>
+  <div class="modal-container modal-container-sm">
     <div class="modal-header">
-      <div class="modal-title-wrapper">
-        <div class="modal-icon modal-icon-danger">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-        </div>
-        <h3 class="modal-title">确认删除</h3>
-      </div>
+      <h3>确认删除</h3>
       <button class="modal-close" id="redis-delete-modal-close">&times;</button>
     </div>
     <div class="modal-body">
-      <p class="delete-warning">此操作不可恢复，请确认是否删除以下 Key：</p>
-      <div id="redis-delete-key" class="delete-key-display"></div>
+      <p class="text-danger">此操作不可恢复，请确认是否删除：</p>
+      <div id="redis-delete-key" class="delete-key-box"></div>
     </div>
     <div class="modal-footer">
-      <button id="redis-delete-cancel" class="btn btn-secondary">取消</button>
-      <button id="redis-delete-confirm" class="btn btn-danger">确认删除</button>
+      <button id="redis-delete-cancel" class="redis-btn redis-btn-secondary">取消</button>
+      <button id="redis-delete-confirm" class="redis-btn redis-btn-danger">确认删除</button>
     </div>
   </div>
 </div>
