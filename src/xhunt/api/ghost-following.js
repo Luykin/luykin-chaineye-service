@@ -208,12 +208,19 @@ async function concurrentUserLimit(req, res, next) {
     if (activeCount >= maxConcurrentUsers) {
       // 已达上限，返回特殊错误码
       console.log(`[concurrent-limit] User ${userId} rejected, max concurrent users (${maxConcurrentUsers}) reached`);
+      const now = Date.now();
+      const nextApplyAt = now + userActivityTTL * 1000; // retryAfter 秒后重试
       return res.status(429).json({
         success: false,
         error: {
           code: "CONCURRENT_LIMIT_EXCEEDED",
           message: "当前使用人数过多，请稍后再试",
           data: {
+            total: maxConcurrentUsers,
+            used: activeCount,
+            nextApplyAt: nextApplyAt,
+            waitDays: 0,
+            waitHours: 0,
             maxConcurrentUsers,
             currentActiveUsers: activeCount,
             retryAfter: userActivityTTL, // 建议客户端60秒后重试
