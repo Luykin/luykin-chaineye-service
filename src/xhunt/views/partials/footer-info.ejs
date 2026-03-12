@@ -1,11 +1,9 @@
 <div class="footer-status-bar">
   <div class="status-group">
     <div class="status-item">
-      <svg class="status-icon status-syncing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-        <path d="M3 3v5h5"/>
-        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-        <path d="M16 16h5v5"/>
+      <svg class="status-icon status-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
       </svg>
       <span class="status-label">数据实时更新</span>
     </div>
@@ -62,13 +60,8 @@
     color: #94a3b8;
   }
   
-  .status-icon.status-syncing {
-    animation: spin 2s linear infinite;
-  }
-  
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+  .status-icon.status-success {
+    color: #22c55e;
   }
   
   .status-label {

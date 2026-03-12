@@ -601,4 +601,23 @@ router.get("/supabase/verify-link", async (req, res) => {
   }
 });
 
+// Logo 代理
+router.get("/logo", async (req, res) => {
+  try {
+    const logoUrl = "https://oaewcvliegq6wyvp.public.blob.vercel-storage.com/xhunt_new.jpg";
+    const response = await fetch(logoUrl);
+    if (!response.ok) {
+      return res.status(502).json({ success: false, error: "Failed to fetch logo" });
+    }
+    const buffer = await response.arrayBuffer();
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    res.set("Content-Type", contentType);
+    res.set("Cache-Control", "public, max-age=86400");
+    res.send(Buffer.from(buffer));
+  } catch (e) {
+    console.error("[logo proxy] error:", e?.message);
+    res.status(500).json({ success: false, error: "Logo proxy failed" });
+  }
+});
+
 module.exports = router;
