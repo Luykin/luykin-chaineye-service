@@ -276,12 +276,20 @@ router.post("/update", adminAuth, requireRole("super"), express.json(), async (r
         if (ttlNum > 0) {
           await redis.set(key, valueStr, { EX: ttlNum });
         } else if (ttlNum === -1) {
+          // -1 表示移除 TTL（永不过期）
           await redis.set(key, valueStr);
         } else {
           return res.status(400).json({ success: false, error: "TTL 必须大于 0 或等于 -1" });
         }
       } else {
+        // TTL 为空，保持原有 TTL 不变
+        // 先获取当前 TTL
+        const currentTtl = await redis.ttl(key);
         await redis.set(key, valueStr);
+        // 如果之前有 TTL 且未过期，恢复它
+        if (currentTtl > 0) {
+          await redis.expire(key, currentTtl);
+        }
       }
     }
 

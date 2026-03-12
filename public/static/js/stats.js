@@ -472,9 +472,19 @@ function showRedisEditModal() {
     }
   }
   
-  document.getElementById("redis-edit-ttl").value = "";
+  // 预填当前 TTL（秒），如果是永不过期则留空
+  const currentTtlSeconds = redisCurrentData.ttl;
+  if (currentTtlSeconds > 0) {
+    document.getElementById("redis-edit-ttl").value = currentTtlSeconds;
+  } else {
+    document.getElementById("redis-edit-ttl").value = "";
+  }
   document.getElementById("redis-edit-current-ttl").textContent =
-    redisCurrentData.ttl !== null ? formatDuration(redisCurrentData.ttl) : "永不过期";
+    currentTtlSeconds !== null && currentTtlSeconds > 0 ? formatDuration(currentTtlSeconds) : "永不过期"; 
+  
+  // 保存当前 TTL 到 data 属性，用于提交时判断
+  document.getElementById("redis-edit-ttl").dataset.currentTtl = currentTtlSeconds || ""; 
+  document.getElementById("redis-edit-ttl").placeholder = "留空保持原 TTL，-1 表示永不过期";
   
   // 添加类型提示
   const typeHint = document.getElementById("redis-edit-type-hint");
@@ -644,41 +654,35 @@ function renderRedisHistory() {
 
   container.innerHTML = history
     .map(
-      (key, index) => `
-    <div class="history-item" data-key="${escapeHtml(key)}" data-index="${index}">
-      <span class="history-item-key" title="点击复制">${escapeHtml(key)}</span>
+      (key) => `
+    <div class="history-item">
+      <span class="history-item-key" data-action="copy" data-key="${escapeHtml(key)}" title="点击复制">${escapeHtml(key)}</span>
       <div class="history-item-actions">
-        <button class="btn-text btn-query" data-key="${escapeHtml(key)}">查询</button>
-        <button class="btn-text btn-delete" data-key="${escapeHtml(key)}">删除</button>
+        <button class="btn-text" data-action="query" data-key="${escapeHtml(key)}">查询</button>
+        <button class="btn-text" data-action="delete" data-key="${escapeHtml(key)}">删除</button>
       </div>
     </div>
   `
     )
     .join("");
 
-  // 使用事件委托绑定点击事件
-  container.querySelectorAll('.history-item').forEach(item => {
-    const key = item.getAttribute('data-key');
-    const keySpan = item.querySelector('.history-item-key');
-    const queryBtn = item.querySelector('.btn-query');
-    const deleteBtn = item.querySelector('.btn-delete');
+  // 事件委托 - 绑定在容器上
+  container.onclick = function(e) {
+    const target = e.target;
+    const key = target.getAttribute('data-key');
+    if (!key) return;
     
-    // 点击 Key 复制
-    keySpan.addEventListener('click', () => {
+    const action = target.getAttribute('data-action');
+    
+    if (action === 'copy') {
       copyToClipboard(key);
-    });
-    
-    // 查询按钮
-    queryBtn.addEventListener('click', () => {
+    } else if (action === 'query') {
       document.getElementById('redis-key-input').value = key;
       handleRedisQuery(key);
-    });
-    
-    // 删除按钮
-    deleteBtn.addEventListener('click', () => {
+    } else if (action === 'delete') {
       removeRedisHistory(key);
-    });
-  });
+    }
+  };
 }
 
 /**
