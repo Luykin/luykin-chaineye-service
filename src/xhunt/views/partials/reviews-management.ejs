@@ -11,7 +11,7 @@
       placeholder="输入被评论人 Handle（如: elonmusk）"
       onkeypress="if(event.key==='Enter') searchReviews()"
     />
-    <button id="reviews-search-btn" class="btn-primary">搜索</button>
+    <button id="reviews-search-btn" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;">搜索</button>
   </div>
 
   <!-- 加载状态 -->
@@ -24,7 +24,6 @@
   <div id="reviews-content" style="display: none">
     <!-- 账号信息 -->
     <div id="reviews-target-info" class="target-info">
-      <img id="reviews-target-avatar" src="" alt="avatar" />
       <div class="target-meta">
         <div id="reviews-target-displayname" class="target-name"></div>
         <div id="reviews-target-handle" class="target-handle"></div>
@@ -98,22 +97,6 @@
   .search-box input:focus {
     outline: none;
     border-color: #3b82f6;
-  }
-
-  .btn-primary {
-    padding: 10px 20px;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .btn-primary:hover {
-    background: #2563eb;
   }
 
   /* 加载状态 */
@@ -262,15 +245,6 @@
   .reviews-reviewer-info {
     display: flex;
     align-items: center;
-    gap: 10px;
-  }
-
-  .reviews-reviewer-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
   }
 
   .reviews-reviewer-details {
@@ -431,8 +405,6 @@
     const { targetAccount, reviews, total } = data;
 
     // 更新目标账号信息
-    document.getElementById("reviews-target-avatar").src =
-      getProxiedImageUrl(targetAccount.avatar) || "/static/images/default-avatar.png";
     document.getElementById("reviews-target-displayname").textContent =
       targetAccount.displayName || targetAccount.handle;
     document.getElementById("reviews-target-handle").textContent =
@@ -464,8 +436,6 @@
       row.innerHTML = `
         <td style="padding: 12px;">
           <div class="reviews-reviewer-info">
-            <img src="${escapeHtmlReviews(getProxiedImageUrl(review.reviewer.avatar) || "/static/images/default-avatar.png")}"
-                 alt="" class="reviews-reviewer-avatar">
             <div class="reviews-reviewer-details">
               <div class="reviews-reviewer-name">${escapeHtmlReviews(review.reviewer.displayName || "未知用户")}</div>
               <div class="reviews-reviewer-username">@${escapeHtmlReviews(review.reviewer.username || "unknown")}</div>
@@ -564,15 +534,6 @@
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
-  }
-
-  // 图片代理（解决跨域问题）
-  function getProxiedImageUrl(url) {
-    if (!url) return null;
-    // 如果是相对路径或已代理的URL，直接返回
-    if (url.startsWith('/') || url.includes('wsrv.nl')) return url;
-    // 使用 wsrv.nl 代理
-    return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=100&h=100&fit=cover`;
   }
 
   // 将函数挂载到全局，供 stats.js 调用
