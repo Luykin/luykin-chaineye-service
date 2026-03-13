@@ -218,6 +218,13 @@
                   <span class="slider"></span>
                 </label>
               </div>
+              <div class="field field-inline">
+                <label class="switch-label">开启POW榜单</label>
+                <label class="switch">
+                  <input id="campaigns-enablePowLeaderboard" type="checkbox" disabled />
+                  <span class="slider"></span>
+                </label>
+              </div>
             </div>
             <div id="essay-contest-fields" style="display: none;">
               <div class="field-row field-row-2">
@@ -1587,6 +1594,11 @@
         "campaigns-enableEssayContest",
         "campaigns-essayContestAmount",
         "campaigns-essayContestWinnerCount",
+        "campaigns-enablePowLeaderboard",
+        "campaigns-powAmount",
+        "campaigns-powWinnerCount",
+        "campaigns-powDistributionType",
+        "campaigns-powUnit",
         "campaigns-threshold",
         "campaigns-hasRiskConfirm",
         "campaigns-showSponsoredPolicy",
@@ -1985,10 +1997,16 @@
       $("campaigns-hasRiskConfirm").checked = false;
       $("campaigns-showSponsoredPolicy").checked = false;
       $("campaigns-enableEssayContest").checked = false;
+      $("campaigns-enablePowLeaderboard").checked = false;
       // 隐藏征文大赛字段区域
       const essayFieldsEl = document.getElementById("essay-contest-fields");
       if (essayFieldsEl) {
         essayFieldsEl.style.display = "none";
+      }
+      // 隐藏POW榜单字段区域
+      const powFieldsEl = document.getElementById("pow-leaderboard-fields");
+      if (powFieldsEl) {
+        powFieldsEl.style.display = "none";
       }
       // id、campaignKey、hotTweetsKey 字段是 disabled 的，不需要清空
       [
@@ -2004,6 +2022,10 @@
         "campaigns-rewardUnit",
         "campaigns-essayContestAmount",
         "campaigns-essayContestWinnerCount",
+        "campaigns-powAmount",
+        "campaigns-powWinnerCount",
+        "campaigns-powDistributionType",
+        "campaigns-powUnit",
         "campaigns-threshold",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
@@ -2170,6 +2192,18 @@
         c.essayContestWinners = [];
       }
 
+      // POW榜单配置
+      const enablePowLeaderboard = !!c.enablePowLeaderboard;
+      $("campaigns-enablePowLeaderboard").checked = enablePowLeaderboard;
+      const powFieldsEl = document.getElementById("pow-leaderboard-fields");
+      if (powFieldsEl) {
+        powFieldsEl.style.display = enablePowLeaderboard ? "block" : "none";
+      }
+      $("campaigns-powAmount").value = c.powAmount || "";
+      $("campaigns-powWinnerCount").value = c.powWinnerCount || "";
+      $("campaigns-powDistributionType").value = c.powDistributionType || "";
+      $("campaigns-powUnit").value = c.powUnit || "";
+
       // 门槛（将数字转换为显示格式）
       if (c.includeCreator === true && c.threshold === 200000) {
         $("campaigns-threshold").value = "200k+creator";
@@ -2333,6 +2367,46 @@
         delete c.essayContestAmount;
         delete c.essayContestWinnerCount;
         delete c.essayContestWinners;
+      }
+
+      // POW榜单配置
+      const enablePowLeaderboard = $("campaigns-enablePowLeaderboard").checked;
+      if (enablePowLeaderboard) {
+        c.enablePowLeaderboard = true;
+        
+        const powAmountVal = $("campaigns-powAmount").value.trim();
+        if (powAmountVal) {
+          c.powAmount = parseInt(powAmountVal, 10);
+        } else {
+          c.powAmount = 0;
+        }
+        
+        const powWinnerCountVal = $("campaigns-powWinnerCount").value.trim();
+        if (powWinnerCountVal) {
+          c.powWinnerCount = parseInt(powWinnerCountVal, 10);
+        } else {
+          delete c.powWinnerCount;
+        }
+        
+        const powDistributionTypeVal = $("campaigns-powDistributionType").value.trim();
+        if (powDistributionTypeVal) {
+          c.powDistributionType = powDistributionTypeVal;
+        } else {
+          delete c.powDistributionType;
+        }
+        
+        const powUnitVal = $("campaigns-powUnit").value.trim();
+        if (powUnitVal) {
+          c.powUnit = powUnitVal;
+        } else {
+          delete c.powUnit;
+        }
+      } else {
+        delete c.enablePowLeaderboard;
+        delete c.powAmount;
+        delete c.powWinnerCount;
+        delete c.powDistributionType;
+        delete c.powUnit;
       }
 
       // 门槛（如果选择了 "200k+creator"，则 threshold 设为 200000，includeCreator 设为 true；否则设为 false）
@@ -2524,6 +2598,19 @@
         });
       }
 
+      // POW榜单开关的特殊处理
+      const enablePowLeaderboardEl = $("campaigns-enablePowLeaderboard");
+      if (enablePowLeaderboardEl) {
+        enablePowLeaderboardEl.addEventListener("change", () => {
+          if (!isEditorEnabled()) return;
+          const powFieldsEl = document.getElementById("pow-leaderboard-fields");
+          if (powFieldsEl) {
+            powFieldsEl.style.display = enablePowLeaderboardEl.checked ? "block" : "none";
+          }
+          syncCampaignFromInputs();
+        });
+      }
+
       const ids = [
         "campaigns-sortWeight",
         "campaigns-displayName-zh",
@@ -2536,6 +2623,10 @@
         "campaigns-rewardUnit",
         "campaigns-essayContestAmount",
         "campaigns-essayContestWinnerCount",
+        "campaigns-powAmount",
+        "campaigns-powWinnerCount",
+        "campaigns-powDistributionType",
+        "campaigns-powUnit",
         "campaigns-threshold",
         "campaigns-copy-emoji",
         "campaigns-copy-ctaText-zh",
@@ -2871,6 +2962,11 @@
         essayContestAmount: undefined,
         essayContestWinnerCount: undefined,
         essayContestWinners: undefined,
+        enablePowLeaderboard: false,
+        powAmount: undefined,
+        powWinnerCount: undefined,
+        powDistributionType: undefined,
+        powUnit: undefined,
         threshold: undefined,
         includeCreator: false,
         showSponsoredPolicy: true,
