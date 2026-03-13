@@ -175,7 +175,10 @@
 
         <div class="section section-compact">
           <div class="section-title">时间、奖励与门槛</div>
+          
+          <!-- 第一层：活动时间 -->
           <div class="section-sub">
+            <div class="section-title-sm">⏰ 活动时间</div>
             <div class="field-row field-row-2">
               <div class="field">
                 <label>开始时间</label>
@@ -187,7 +190,13 @@
               </div>
             </div>
           </div>
-          <div class="section-sub">
+          
+          <!-- 第二层：POI 基础奖励 -->
+          <div class="section-sub reward-tier reward-tier-primary">
+            <div class="reward-tier-header">
+              <span class="reward-tier-title">🎯 POI 基础奖励</span>
+              <span class="reward-tier-badge">核心</span>
+            </div>
             <div class="field-row field-row-3">
               <div class="field">
                 <label>奖励金额</label>
@@ -211,77 +220,98 @@
                 <label>奖励单位</label>
                 <input id="campaigns-rewardUnit" type="text" placeholder="USDT" />
               </div>
-              <div class="field field-inline">
-                <label class="switch-label">开启征文大赛</label>
-                <label class="switch">
-                  <input id="campaigns-enableEssayContest" type="checkbox" disabled />
-                  <span class="slider"></span>
-                </label>
+            </div>
+          </div>
+          
+          <!-- 第三层：POW 榜单（开关控制） -->
+          <div class="section-sub reward-tier reward-tier-optional">
+            <div class="reward-tier-header">
+              <div class="reward-tier-title-wrapper">
+                <span class="reward-tier-title">⛏️ POW 榜单</span>
+                <span class="reward-tier-desc">按工作量证明排名发奖</span>
               </div>
-              <div class="field field-inline">
-                <label class="switch-label">开启POW榜单</label>
+              <div class="field field-inline" style="margin: 0;">
+                <label class="switch-label">开启</label>
                 <label class="switch">
                   <input id="campaigns-enablePowLeaderboard" type="checkbox" disabled />
                   <span class="slider"></span>
                 </label>
               </div>
             </div>
+            <div id="pow-leaderboard-fields" style="display: none;">
+              <div class="reward-tier-content">
+                <div class="field-row field-row-3">
+                  <div class="field">
+                    <label>POW奖励金额</label>
+                    <input id="campaigns-powAmount" type="number" min="0" placeholder="0" />
+                  </div>
+                  <div class="field">
+                    <label>POW获奖人数</label>
+                    <input id="campaigns-powWinnerCount" type="number" min="1" placeholder="10" />
+                  </div>
+                  <div class="field">
+                    <label>POW分配机制</label>
+                    <select id="campaigns-powDistributionType">
+                      <option value="">请选择</option>
+                      <option value="equal">平分</option>
+                      <option value="mindshare">mindshare</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field-row field-row-2">
+                  <div class="field">
+                    <label>POW奖励单位</label>
+                    <input id="campaigns-powUnit" type="text" placeholder="USDT" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 第四层：征文大赛（开关控制） -->
+          <div class="section-sub reward-tier reward-tier-optional">
+            <div class="reward-tier-header">
+              <div class="reward-tier-title-wrapper">
+                <span class="reward-tier-title">✍️ 征文大赛</span>
+                <span class="reward-tier-desc">高质量内容创作奖励</span>
+              </div>
+              <div class="field field-inline" style="margin: 0;">
+                <label class="switch-label">开启</label>
+                <label class="switch">
+                  <input id="campaigns-enableEssayContest" type="checkbox" disabled />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
             <div id="essay-contest-fields" style="display: none;">
-              <div class="field-row field-row-2">
-                <div class="field">
-                  <label>征文大赛金额</label>
-                  <input id="campaigns-essayContestAmount" type="number" min="0" placeholder="0" />
+              <div class="reward-tier-content">
+                <div class="field-row field-row-2">
+                  <div class="field">
+                    <label>征文大赛金额</label>
+                    <input id="campaigns-essayContestAmount" type="number" min="0" placeholder="0" />
+                  </div>
+                  <div class="field">
+                    <label>获奖人数</label>
+                    <input id="campaigns-essayContestWinnerCount" type="number" min="1" placeholder="10" />
+                  </div>
                 </div>
-                <div class="field">
-                  <label>获奖人数</label>
-                  <input id="campaigns-essayContestWinnerCount" type="number" min="1" placeholder="10" />
-                </div>
-              </div>
-              <div class="section section-collapsible" style="margin-top: 6px;">
-                <div class="section-title section-title-collapsible">
-                  <span>征文大赛获奖名单</span>
-                  <button class="btn btn-sm" id="campaigns-essay-winners-add" type="button" disabled>+添加</button>
-                  <span class="section-toggle">▼</span>
-                </div>
-                <div class="section-content" style="display: none;">
-                  <!-- <div class="repeaters-hint">← 左右滑动</div> -->
-                  <div class="repeaters" id="campaigns-essay-winners"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- POW榜单配置 -->
-          <div id="pow-leaderboard-fields" style="display: none;">
-            <div class="section-sub">
-              <div class="section-title-sm">POW榜单配置</div>
-              <div class="field-row field-row-3">
-                <div class="field">
-                  <label>POW奖励金额</label>
-                  <input id="campaigns-powAmount" type="number" min="0" placeholder="0" />
-                </div>
-                <div class="field">
-                  <label>POW获奖人数</label>
-                  <input id="campaigns-powWinnerCount" type="number" min="1" placeholder="10" />
-                </div>
-                <div class="field">
-                  <label>POW分配机制</label>
-                  <select id="campaigns-powDistributionType">
-                    <option value="">请选择</option>
-                    <option value="equal">平分</option>
-                    <option value="mindshare">mindshare</option>
-                  </select>
-                </div>
-              </div>
-              <div class="field-row field-row-2">
-                <div class="field">
-                  <label>POW奖励单位</label>
-                  <input id="campaigns-powUnit" type="text" placeholder="USDT" />
+                <div class="section section-collapsible" style="margin-top: 6px;">
+                  <div class="section-title section-title-collapsible">
+                    <span>征文大赛获奖名单</span>
+                    <button class="btn btn-sm" id="campaigns-essay-winners-add" type="button" disabled>+添加</button>
+                    <span class="section-toggle">▼</span>
+                  </div>
+                  <div class="section-content" style="display: none;">
+                    <div class="repeaters" id="campaigns-essay-winners"></div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+          
+          <!-- 第五层：报名门槛 -->
           <div class="section-sub">
-            <div class="section-title-sm">报名门槛</div>
+            <div class="section-title-sm">🚪 报名门槛</div>
             <div class="field-row">
               <div class="field">
                 <select id="campaigns-threshold">
@@ -1043,6 +1073,67 @@
     margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid #f3f4f6;
+  }
+
+  /* 奖励层级视觉设计 */
+  .reward-tier {
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 12px;
+  }
+  .reward-tier-primary {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+  }
+  .reward-tier-optional {
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .reward-tier-optional:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .reward-tier-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed #e5e7eb;
+  }
+  .reward-tier-primary .reward-tier-header {
+    border-bottom-color: #bae6fd;
+  }
+  .reward-tier-title-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .reward-tier-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: #1f2937;
+  }
+  .reward-tier-primary .reward-tier-title {
+    color: #0369a1;
+  }
+  .reward-tier-desc {
+    font-size: 11px;
+    color: #6b7280;
+  }
+  .reward-tier-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #0ea5e9;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .reward-tier-content {
+    padding-top: 4px;
   }
   .section-title-inline {
     display: flex;
