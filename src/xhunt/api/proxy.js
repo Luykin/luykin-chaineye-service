@@ -504,14 +504,14 @@ router.all(
   securityMiddleware,
   aiContentRateLimit,
   async (req, res) => {
-    try {
-      const ret = isRequestXHuntVip(req);
-      if (!ret) {
-        // 非 内部用户 返回空数据
-        ensureCorsHeaders(req, res);
-        return res.status(200).json({ data: [], isVip: false });
-      }
-    } catch (_) {}
+    // try {
+    //   const ret = isRequestXHuntVip(req);
+    //   if (!ret) {
+    //     // 非 内部用户 返回空数据
+    //     ensureCorsHeaders(req, res);
+    //     return res.status(200).json({ data: [], isVip: false });
+    //   }
+    // } catch (_) {}
 
     const targetUrl = getTargetUrl(req);
     await proxyRequest(req, res, targetUrl);
