@@ -106,6 +106,15 @@ router.post(
             : "Please upgrade the extension to version 0.2.09 or above and try again",
         });
       }
+      if(campaign === 'realgo' && !isVersionGreaterOrEqual(extVersion, "0.2.18")) {
+        console.log(LOG, "reject: extension version too low", { version: extVersion });
+        const isZh = (req.query.x_language || "").toLowerCase() === "zh";
+        return res.status(400).json({
+          error: isZh
+            ? "请升级插件到 0.2.18 及以上版本再试"
+            : "Please upgrade the extension to version 0.2.18 or above and try again",
+        });
+      }
 
       const normalizedCampaign = normalizeCampaign(campaign);
       if (!normalizedCampaign) {
