@@ -290,7 +290,7 @@
             </div>
             <div id="essay-contest-fields" style="display: none;">
               <div class="reward-tier-content">
-                <div class="field-row field-row-2">
+                <div class="field-row field-row-3">
                   <div class="field">
                     <label>征文大赛金额</label>
                     <input id="campaigns-essayContestAmount" type="number" min="0" placeholder="0" />
@@ -298,6 +298,10 @@
                   <div class="field">
                     <label>获奖人数</label>
                     <input id="campaigns-essayContestWinnerCount" type="number" min="1" placeholder="10" />
+                  </div>
+                  <div class="field">
+                    <label>奖励单位（选填）</label>
+                    <input id="campaigns-essayContestUnit" type="text" placeholder="USDT" />
                   </div>
                 </div>
                 <div class="section section-collapsible" style="margin-top: 6px;">
@@ -1796,6 +1800,7 @@
         "campaigns-enableEssayContest",
         "campaigns-essayContestAmount",
         "campaigns-essayContestWinnerCount",
+        "campaigns-essayContestUnit",
         "campaigns-enablePowLeaderboard",
         "campaigns-powAmount",
         "campaigns-powWinnerCount",
@@ -2224,6 +2229,7 @@
         "campaigns-rewardUnit",
         "campaigns-essayContestAmount",
         "campaigns-essayContestWinnerCount",
+        "campaigns-essayContestUnit",
         "campaigns-powAmount",
         "campaigns-powWinnerCount",
         "campaigns-powDistributionType",
@@ -2388,6 +2394,7 @@
       }
       $("campaigns-essayContestAmount").value = c.essayContestAmount || "";
       $("campaigns-essayContestWinnerCount").value = c.essayContestWinnerCount || "";
+      $("campaigns-essayContestUnit").value = c.essayContestUnit || "";
       
       // 确保 essayContestWinners 是数组
       if (!Array.isArray(c.essayContestWinners)) {
@@ -2560,6 +2567,14 @@
           delete c.essayContestWinnerCount;
         }
         
+        // 征文大赛奖励单位（选填）
+        const essayContestUnitVal = $("campaigns-essayContestUnit").value.trim();
+        if (essayContestUnitVal) {
+          c.essayContestUnit = essayContestUnitVal;
+        } else {
+          delete c.essayContestUnit;
+        }
+        
         // 征文大赛最终名单（已经是数组格式，直接使用）
         if (!Array.isArray(c.essayContestWinners)) {
           c.essayContestWinners = [];
@@ -2568,6 +2583,7 @@
         delete c.enableEssayContest;
         delete c.essayContestAmount;
         delete c.essayContestWinnerCount;
+        delete c.essayContestUnit;
         delete c.essayContestWinners;
       }
 
@@ -3163,6 +3179,7 @@
         enableEssayContest: false,
         essayContestAmount: undefined,
         essayContestWinnerCount: undefined,
+        essayContestUnit: undefined,
         essayContestWinners: undefined,
         enablePowLeaderboard: false,
         powAmount: undefined,
