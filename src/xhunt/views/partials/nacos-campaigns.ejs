@@ -1314,6 +1314,142 @@
     padding: 10px 12px;
     background: #fafafa;
   }
+  
+  /* Task Card Styles */
+  .task-card {
+    padding: 12px 14px;
+    background: #fff;
+  }
+  
+  .task-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 12px 16px;
+    margin-top: 12px;
+  }
+  
+  .task-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .task-field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #4b5563;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .task-label-note {
+    font-size: 10px;
+    font-weight: 400;
+    color: #9ca3af;
+    font-style: italic;
+  }
+  
+  .task-field-id {
+    grid-column: span 1;
+  }
+  
+  .task-field-type {
+    grid-column: span 1;
+  }
+  
+  .task-field-autocomplete {
+    grid-column: span 1;
+  }
+  
+  .task-field-autocomplete.is-disabled {
+    opacity: 0.6;
+  }
+  
+  .task-field-title {
+    grid-column: span 1;
+  }
+  
+  .task-field-url {
+    grid-column: span 2;
+  }
+  
+  .task-input,
+  .task-select {
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background: #fff;
+  }
+  
+  .task-input:focus,
+  .task-select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  }
+  
+  .task-input:disabled,
+  .task-input.is-readonly {
+    background: #f3f4f6;
+    color: #6b7280;
+    cursor: not-allowed;
+  }
+  
+  .task-input-id {
+    background: #f9fafb !important;
+    color: #6b7280;
+    font-family: "SF Mono", "Monaco", "Consolas", monospace;
+    font-size: 12px;
+  }
+  
+  .task-select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 26px;
+  }
+  
+  .task-autocomplete-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 32px;
+  }
+  
+  .task-autocomplete-hint {
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 400;
+  }
+  
+  /* Responsive: stack on narrow screens */
+  @media (max-width: 700px) {
+    .task-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .task-field-url {
+      grid-column: span 2;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .task-grid {
+      grid-template-columns: 1fr;
+    }
+    .task-field-id,
+    .task-field-type,
+    .task-field-autocomplete,
+    .task-field-title,
+    .task-field-url {
+      grid-column: span 1;
+    }
+  }
+  
   .rep-card .rep-actions .btn {
     padding: 3px 6px;
     font-size: 11px;
@@ -1990,7 +2126,8 @@
       tasks.forEach((task) => {
         if (!task.id || !task.id.trim()) {
           const type = task?.type || "twitter";
-          const url = task?.url || "";
+          // 对于 custom 类型，强制使用 https:// 作为 url
+          const url = type === "custom" ? "https://" : (task?.url || "");
           if (campaignKey && type && url) {
             task.id = generateTaskId(campaignKey, type, url);
           }
@@ -2044,7 +2181,7 @@
             const url = isCustom ? "https://" : (it?.url || "");
             const auto = isCustom ? false : !!it?.autoComplete;
             return `
-              <div class="rep-card" data-kind="tasks" data-index="${i}">
+              <div class="rep-card task-card" data-kind="tasks" data-index="${i}">
                 <div class="rep-header">
                   <div class="rep-title">#${i + 1} Task</div>
                   <div class="rep-actions">
@@ -2054,16 +2191,18 @@
                   </div>
                 </div>
 
-                <div class="field-row">
-                  <div class="field">
-                    <label>id（自动生成）</label>
+                <div class="task-grid">
+                  <!-- 第一行：ID + Type -->
+                  <div class="task-field task-field-id">
+                    <label>ID <span class="task-label-note">自动生成</span></label>
                     <input type="text" data-field="id" value="${escapeHtml(
                       it?.id || ""
-                    )}" disabled />
+                    )}" disabled class="task-input-id" />
                   </div>
-                  <div class="field">
-                    <label>type</label>
-                    <select data-field="type" class="task-type-select">
+                  
+                  <div class="task-field task-field-type">
+                    <label>Type</label>
+                    <select data-field="type" class="task-type-select task-select">
                       <option value="twitter" ${
                         type === "twitter" ? "selected" : ""
                       }>twitter</option>
@@ -2078,38 +2217,42 @@
                       }>backend-custom</option>
                     </select>
                   </div>
-                  <div class="field">
-                    <label>autoComplete</label>
-                    <label class="switch" style="${isCustom ? 'opacity:0.5;' : ''}">
-                      <input type="checkbox" data-field="autoComplete" ${
-                        auto ? "checked" : ""
-                      } class="task-autocomplete-checkbox" ${isCustom ? 'disabled' : ''} />
-                      <span class="slider"></span>
-                    </label>
-                    <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
-                      不做任何校验，用户点一下链接即可完成任务
+
+                  <!-- 第二行：AutoComplete 开关 -->
+                  <div class="task-field task-field-autocomplete ${isCustom ? 'is-disabled' : ''}">
+                    <label>Auto Complete</label>
+                    <div class="task-autocomplete-wrapper">
+                      <label class="switch">
+                        <input type="checkbox" data-field="autoComplete" ${
+                          auto ? "checked" : ""
+                        } class="task-autocomplete-checkbox" ${isCustom ? 'disabled' : ''} />
+                        <span class="slider"></span>
+                      </label>
+                      <span class="task-autocomplete-hint">点击链接即完成任务</span>
                     </div>
                   </div>
-                </div>
 
-                <div class="field-row task-title-row">
-                  <div class="field">
+                  <!-- 第三行：标题 -->
+                  <div class="task-field task-field-title">
                     <label>任务标题（中文）</label>
                     <input type="text" data-field="title.zh" value="${escapeHtml(
                       it?.title?.zh || ""
-                    )}" />
+                    )}" class="task-input" placeholder="输入中文标题..." />
                   </div>
-                  <div class="field">
+                  
+                  <div class="task-field task-field-title">
                     <label>任务标题（English）</label>
                     <input type="text" data-field="title.en" value="${escapeHtml(
                       it?.title?.en || ""
-                    )}" />
+                    )}" class="task-input" placeholder="Enter English title..." />
                   </div>
-                  <div class="field">
-                    <label>任务跳转链接</label>
+
+                  <!-- 第四行：链接 -->
+                  <div class="task-field task-field-url">
+                    <label>跳转链接</label>
                     <input type="text" data-field="url" value="${escapeHtml(
                       url
-                    )}" class="task-url-input" ${isCustom ? 'readonly' : ''} style="${isCustom ? 'background-color:#f3f4f6;' : ''}"/>
+                    )}" class="task-url-input task-input ${isCustom ? 'is-readonly' : ''}" ${isCustom ? 'readonly' : ''} placeholder="https://..." />
                   </div>
                 </div>
               </div>
@@ -2210,17 +2353,21 @@
             const isCustom = typeSelect.value === 'custom';
             const urlInput = card.querySelector('.task-url-input');
             const autoCompleteCheckbox = card.querySelector('.task-autocomplete-checkbox');
+            const autoCompleteField = card.querySelector('.task-field-autocomplete');
             
             if (urlInput && isCustom) {
               urlInput.value = "https://";
               urlInput.readOnly = true;
-              urlInput.style.backgroundColor = "#f3f4f6";
+              urlInput.classList.add('is-readonly');
             }
             
             if (autoCompleteCheckbox && isCustom) {
               autoCompleteCheckbox.disabled = true;
               autoCompleteCheckbox.checked = false;
-              autoCompleteCheckbox.parentElement.style.opacity = "0.5";
+            }
+            
+            if (autoCompleteField && isCustom) {
+              autoCompleteField.classList.add('is-disabled');
             }
           }
         });
@@ -2980,34 +3127,6 @@
     }
 
     function bindRepeatersEvents() {
-      // 更新任务控件的 custom 类型状态
-      function updateTaskCustomState(card, type) {
-        const isCustom = type === "custom";
-        const urlInput = card.querySelector('.task-url-input');
-        const autoCompleteCheckbox = card.querySelector('.task-autocomplete-checkbox');
-        
-        if (urlInput) {
-          if (isCustom) {
-            urlInput.value = "https://";
-            urlInput.readOnly = true;
-            urlInput.style.backgroundColor = "#f3f4f6";
-          } else {
-            urlInput.readOnly = false;
-            urlInput.style.backgroundColor = "";
-          }
-        }
-        
-        if (autoCompleteCheckbox) {
-          autoCompleteCheckbox.disabled = isCustom;
-          if (isCustom) {
-            autoCompleteCheckbox.checked = false;
-            autoCompleteCheckbox.parentElement.style.opacity = "0.5";
-          } else {
-            autoCompleteCheckbox.parentElement.style.opacity = "";
-          }
-        }
-      }
-
       function onRepInput(containerId, fieldSetter) {
         const root = $(containerId);
         if (!root) return;
@@ -3035,7 +3154,14 @@
           }
           if (!Array.isArray(arr) || !(index in arr)) return;
 
-          const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
+          let value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
+          
+          // 处理 custom 类型切换
+          if (kind === "tasks" && field === "type" && value === "custom") {
+            arr[index].url = "https://";
+            arr[index].autoComplete = false;
+          }
+          
           if (kind === "writing-themes" && (field === "zh" || field === "en")) {
             if (!arr[index] || typeof arr[index] !== "object") arr[index] = { zh: "", en: "" };
             arr[index][field] = value;
@@ -3048,7 +3174,7 @@
             const task = arr[index];
             const campaignKey = c?.campaignKey || "";
             const type = task?.type || "";
-            const url = task?.url || "";
+            const url = type === "custom" ? "https://" : (task?.url || "");
             if (campaignKey && type && url) {
               task.id = generateTaskId(campaignKey, type, url);
             }
@@ -3105,7 +3231,7 @@
             const task = arr[index];
             const campaignKey = c?.campaignKey || "";
             const type = task?.type || "";
-            const url = task?.url || "";
+            const url = type === "custom" ? "https://" : (task?.url || "");
             if (campaignKey && type && url) {
               task.id = generateTaskId(campaignKey, type, url);
             }
