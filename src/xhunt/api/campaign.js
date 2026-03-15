@@ -1,6 +1,7 @@
 const express = require("express");
 const axios = require("axios");
 const { Op } = require("sequelize");
+const crypto = require("crypto");
 const {
   fingerprintLimiter,
   browserOnlyMiddleware,
@@ -581,6 +582,202 @@ router.get(
     } catch (err) {
       console.error("Campaign me query error:", err);
       return res.status(500).json({ error: "服务器内部错误（campaign me）" });
+    }
+  }
+);
+
+// ============================================
+// 自定义支持任务（Custom Task）接口
+// ============================================
+
+/**
+ * 根据 campaign 生成第三方跳转链接
+ * TODO: 根据 campaign 实现具体的第三方 API 调用
+ */
+async function generateExternalLink(campaign, taskId, user) {
+  // realgo 活动实现
+  if (campaign === 'realgo') {
+    const timestamp = Date.now();
+    const message = `${user.twitterId}:${timestamp}`;
+    const secretKey = 'JvApDef2C2Vkg9VRAM+jcjPXaCYFw6xyZnmIiaUxVUs=';
+    
+    // 生成 HMACSHA256 签名
+    const signature = crypto
+      .createHmac('sha256', secretKey)
+      .update(message)
+      .digest('base64');
+    
+    // 构建跳转链接
+    const link = `https://testofficial.realgo.game/reg?code=XHUNT&xHuntToken=${encodeURIComponent(message)}&xHuntSignature=${encodeURIComponent(signature)}`;
+    
+    return {
+      link,
+      expiresAt: new Date(timestamp + 10 * 60 * 1000).toISOString(), // 10分钟有效期
+    };
+  }
+  
+  throw new Error(`Campaign ${campaign} custom task provider not implemented`);
+}
+
+/**
+ * 根据 campaign 查询第三方任务完成状态
+ * TODO: 根据 campaign 实现具体的第三方 API 调用
+ */
+async function queryExternalStatus(campaign, taskId, user) {
+  // realgo 活动 - 调用 XHuntStats 接口查询用户是否注册
+  if (campaign === 'realgo') {
+    try {
+      const response = await axios.get(
+        'https://testreal.myreal.io/api/v1/PartnerService/XHuntStats',
+        { timeout: 10000 }
+      );
+      
+      const statsList = response.data;
+      if (!Array.isArray(statsList)) {
+        throw new Error('Invalid response format from realgo API');
+      }
+      
+      // 查找用户的 twitterId 是否在列表中
+      const userStat = statsList.find(
+        (item) => String(item.twitterId).toLocaleLowerCase() === String(user.twitterId).toLocaleLowerCase()
+      );
+      
+      if (userStat) {
+        return {
+          completed: true,
+          completedAt: null, // realgo API 不返回完成时间
+          metadata: {
+            userId: userStat.userId,
+            isKol: userStat.isKol,
+            hasPurchasedHarvester: userStat.hasPurchasedHarvester,
+            loyaltyPoints: userStat.loyaltyPoints,
+          },
+        };
+      }
+      
+      // 用户不在列表中，返回未完成
+      return {
+        completed: false,
+        completedAt: null,
+        metadata: {},
+      };
+    } catch (err) {
+      console.error('[RealgoStatus] API error:', err.message);
+      throw new Error('Failed to query realgo status');
+    }
+  }
+  
+  throw new Error(`Campaign ${campaign} custom task provider not implemented`);
+}
+
+// 1) 获取自定义任务的第三方跳转链接
+router.post(
+  "/custom-task/link",
+  browserOnlyMiddleware,
+  authenticateToken,
+  securityMiddleware,
+  async (req, res) => {
+    try {
+      const userId = req.user && req.user.id;
+      const { campaign, taskId } = req.body || {};
+      
+      const LOG = `[CustomTaskLink] user_id=${userId} campaign=${campaign} taskId=${taskId}`;
+      
+      // 参数校验
+      if (!campaign || typeof campaign !== "string") {
+        return res.status(400).json({ error: "campaign is required" });
+      }
+      if (!taskId || typeof taskId !== "string") {
+        return res.status(400).json({ error: "taskId is required" });
+      }
+      
+      // 获取用户信息
+      const user = await XHuntUser.findByPk(userId);
+      if (!user) {
+        console.log(LOG, "reject: user not found");
+        return res.status(404).json({ error: "User not found" });
+      }
+    
+      // 调用第三方接口生成链接
+      try {
+        const result = await generateExternalLink(campaign, taskId, user);
+        console.log(LOG, "success");
+        return res.json({
+          success: true,
+          link: result.link,
+          expiresAt: result.expiresAt,
+        });
+      } catch (externalErr) {
+        console.error(LOG, "external provider error:", externalErr.message);
+        return res.status(503).json({
+          error: "External service unavailable",
+          message: externalErr.message,
+        });
+      }
+    } catch (err) {
+      console.error("[CustomTaskLink] error:", err.message || err);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// 2) 查询自定义任务的完成状态
+router.get(
+  "/custom-task/status",
+  browserOnlyMiddleware,
+  authenticateTokenOptional,
+  securityMiddleware,
+  async (req, res) => {
+    try {
+      const userId = req.user && req.user.id;
+      const campaign = req.query.campaign;
+      const taskId = req.query.taskId;
+      
+      const LOG = `[CustomTaskStatus] user_id=${userId} campaign=${campaign} taskId=${taskId}`;
+      
+      // 参数校验
+      if (!campaign || typeof campaign !== "string") {
+        return res.status(400).json({ error: "campaign is required" });
+      }
+      if (!taskId || typeof taskId !== "string") {
+        return res.status(400).json({ error: "taskId is required" });
+      }
+      
+      // 未登录用户返回未登录状态
+      if (!userId) {
+        return res.status(200).json({
+          success: true,
+          completed: false,
+        });
+      }
+      
+      // 获取用户信息
+      const user = await XHuntUser.findByPk(userId);
+      if (!user) {
+        console.log(LOG, "reject: user not found");
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // 调用第三方接口查询状态
+      try {
+        const result = await queryExternalStatus(campaign, taskId, user);
+        console.log(LOG, "success, completed:", result.completed);
+        return res.json({
+          success: true,
+          completed: result.completed,
+          completedAt: result.completedAt || null,
+          metadata: result.metadata || {},
+        });
+      } catch (externalErr) {
+        console.error(LOG, "external provider error:", externalErr.message);
+        return res.status(503).json({
+          error: "External service unavailable",
+          message: externalErr.message,
+        });
+      }
+    } catch (err) {
+      console.error("[CustomTaskStatus] error:", err.message || err);
+      return res.status(500).json({ error: "Internal server error" });
     }
   }
 );

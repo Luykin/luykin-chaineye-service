@@ -2060,7 +2060,7 @@
                   </div>
                   <div class="field">
                     <label>type</label>
-                    <select data-field="type">
+                    <select data-field="type" class="task-type-select">
                       <option value="twitter" ${
                         type === "twitter" ? "selected" : ""
                       }>twitter</option>
@@ -2070,6 +2070,9 @@
                       <option value="other" ${
                         type === "other" ? "selected" : ""
                       }>other</option>
+                      <option value="custom" ${
+                        type === "custom" ? "selected" : ""
+                      }>自定义支持</option>
                     </select>
                   </div>
                   <div class="field">
@@ -2077,7 +2080,7 @@
                     <label class="switch">
                       <input type="checkbox" data-field="autoComplete" ${
                         auto ? "checked" : ""
-                      } />
+                      } class="task-autocomplete-checkbox" />
                       <span class="slider"></span>
                     </label>
                     <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
@@ -2086,7 +2089,7 @@
                   </div>
                 </div>
 
-                <div class="field-row">
+                <div class="field-row task-title-row">
                   <div class="field">
                     <label>任务标题（中文）</label>
                     <input type="text" data-field="title.zh" value="${escapeHtml(
@@ -2103,7 +2106,7 @@
                     <label>任务跳转链接</label>
                     <input type="text" data-field="url" value="${escapeHtml(
                       it?.url || ""
-                    )}" />
+                    )}" class="task-url-input" />
                   </div>
                 </div>
               </div>
@@ -2950,6 +2953,34 @@
     }
 
     function bindRepeatersEvents() {
+      // 更新任务控件的 custom 类型状态
+      function updateTaskCustomState(card, type) {
+        const isCustom = type === "custom";
+        const urlInput = card.querySelector('.task-url-input');
+        const autoCompleteCheckbox = card.querySelector('.task-autocomplete-checkbox');
+        
+        if (urlInput) {
+          if (isCustom) {
+            urlInput.value = "https://";
+            urlInput.readOnly = true;
+            urlInput.style.backgroundColor = "#f3f4f6";
+          } else {
+            urlInput.readOnly = false;
+            urlInput.style.backgroundColor = "";
+          }
+        }
+        
+        if (autoCompleteCheckbox) {
+          autoCompleteCheckbox.disabled = isCustom;
+          if (isCustom) {
+            autoCompleteCheckbox.checked = false;
+            autoCompleteCheckbox.parentElement.style.opacity = "0.5";
+          } else {
+            autoCompleteCheckbox.parentElement.style.opacity = "";
+          }
+        }
+      }
+
       function onRepInput(containerId, fieldSetter) {
         const root = $(containerId);
         if (!root) return;
@@ -3011,6 +3042,25 @@
           const index = Number(card.getAttribute("data-index"));
           const field = e.target.getAttribute("data-field");
           if (!kind || !field || !Number.isFinite(index)) return;
+
+          // 处理 custom 类型切换
+          if (kind === "tasks" && field === "type") {
+            const type = e.target.value;
+            updateTaskCustomState(card, type);
+            
+            // 同步更新数据模型
+            const c = getCurrentCampaign();
+            if (c && Array.isArray(c.tasks) && c.tasks[index]) {
+              c.tasks[index].type = type;
+              if (type === "custom") {
+                c.tasks[index].url = "https://";
+                c.tasks[index].autoComplete = false;
+              }
+              dirty = true;
+              $("campaigns-publish").disabled = false;
+              renderList();
+            }
+          }
           const c = getCurrentCampaign();
           if (!c) return;
           let arr;
@@ -3116,6 +3166,17 @@
         if (typeof obj !== "string") return;
         // writing-themes 在分支里已处理 arr[index]=value
       });
+
+      // 初始化所有任务卡片的 custom 类型状态
+      const tasksRoot = $("campaigns-tasks");
+      if (tasksRoot) {
+        tasksRoot.querySelectorAll(".rep-card[data-kind='tasks']").forEach((card) => {
+          const typeSelect = card.querySelector(".task-type-select");
+          if (typeSelect) {
+            updateTaskCustomState(card, typeSelect.value);
+          }
+        });
+      }
     }
 
     function newCampaign() {
