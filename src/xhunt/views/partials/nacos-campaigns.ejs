@@ -2039,7 +2039,10 @@
         tasks
           .map((it, i) => {
             const type = it?.type || "twitter";
-            const auto = !!it?.autoComplete;
+            // 如果是 custom 类型，强制设置 url 和 autoComplete
+            const isCustom = type === "custom";
+            const url = isCustom ? "https://" : (it?.url || "");
+            const auto = isCustom ? false : !!it?.autoComplete;
             return `
               <div class="rep-card" data-kind="tasks" data-index="${i}">
                 <div class="rep-header">
@@ -2072,15 +2075,15 @@
                       }>other</option>
                       <option value="custom" ${
                         type === "custom" ? "selected" : ""
-                      }>自定义支持</option>
+                      }>backend-custom</option>
                     </select>
                   </div>
                   <div class="field">
                     <label>autoComplete</label>
-                    <label class="switch">
+                    <label class="switch" style="${isCustom ? 'opacity:0.5;' : ''}">
                       <input type="checkbox" data-field="autoComplete" ${
                         auto ? "checked" : ""
-                      } class="task-autocomplete-checkbox" />
+                      } class="task-autocomplete-checkbox" ${isCustom ? 'disabled' : ''} />
                       <span class="slider"></span>
                     </label>
                     <div class="muted" style="margin-top: 3px; font-size: 11px; line-height: 1.4">
@@ -2105,8 +2108,8 @@
                   <div class="field">
                     <label>任务跳转链接</label>
                     <input type="text" data-field="url" value="${escapeHtml(
-                      it?.url || ""
-                    )}" class="task-url-input" />
+                      url
+                    )}" class="task-url-input" ${isCustom ? 'readonly' : ''} style="${isCustom ? 'background-color:#f3f4f6;' : ''}"/>
                   </div>
                 </div>
               </div>
@@ -2197,6 +2200,30 @@
               `;
             })
             .join("") || `<div class="rep-card" data-kind="writing-themes" data-index="0"><div class="rep-header"><div class="rep-title">主题 #1</div><div class="rep-actions"><button class="btn danger" type="button" data-action="remove">删除</button></div></div><div class="field-row field-row-2"><div class="field"><label>主题内容（中文）</label><textarea data-field="zh" rows="3" placeholder="输入本活动的写作主题描述..."></textarea></div><div class="field"><label>主题内容（English）</label><textarea data-field="en" rows="3" placeholder="Writing theme description..."></textarea></div></div></div>`;
+      }
+
+      // 初始化所有任务卡片的 custom 类型状态
+      if (tasksEl) {
+        tasksEl.querySelectorAll(".rep-card[data-kind='tasks']").forEach((card) => {
+          const typeSelect = card.querySelector('.task-type-select');
+          if (typeSelect) {
+            const isCustom = typeSelect.value === 'custom';
+            const urlInput = card.querySelector('.task-url-input');
+            const autoCompleteCheckbox = card.querySelector('.task-autocomplete-checkbox');
+            
+            if (urlInput && isCustom) {
+              urlInput.value = "https://";
+              urlInput.readOnly = true;
+              urlInput.style.backgroundColor = "#f3f4f6";
+            }
+            
+            if (autoCompleteCheckbox && isCustom) {
+              autoCompleteCheckbox.disabled = true;
+              autoCompleteCheckbox.checked = false;
+              autoCompleteCheckbox.parentElement.style.opacity = "0.5";
+            }
+          }
+        });
       }
     }
 
@@ -3043,24 +3070,6 @@
           const field = e.target.getAttribute("data-field");
           if (!kind || !field || !Number.isFinite(index)) return;
 
-          // 处理 custom 类型切换
-          if (kind === "tasks" && field === "type") {
-            const type = e.target.value;
-            updateTaskCustomState(card, type);
-            
-            // 同步更新数据模型
-            const c = getCurrentCampaign();
-            if (c && Array.isArray(c.tasks) && c.tasks[index]) {
-              c.tasks[index].type = type;
-              if (type === "custom") {
-                c.tasks[index].url = "https://";
-                c.tasks[index].autoComplete = false;
-              }
-              dirty = true;
-              $("campaigns-publish").disabled = false;
-              renderList();
-            }
-          }
           const c = getCurrentCampaign();
           if (!c) return;
           let arr;
@@ -3076,7 +3085,14 @@
             return;
           }
           if (!Array.isArray(arr) || !(index in arr)) return;
-          const value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
+          let value = e.target.type === "checkbox" ? !!e.target.checked : e.target.value;
+          
+          // 处理 custom 类型切换
+          if (kind === "tasks" && field === "type" && value === "custom") {
+            arr[index].url = "https://";
+            arr[index].autoComplete = false;
+          }
+          
           if (kind === "writing-themes" && (field === "zh" || field === "en")) {
             if (!arr[index] || typeof arr[index] !== "object") arr[index] = { zh: "", en: "" };
             arr[index][field] = value;
@@ -3093,7 +3109,7 @@
             if (campaignKey && type && url) {
               task.id = generateTaskId(campaignKey, type, url);
             }
-            // 重新渲染以更新显示的 id
+            // 重新渲染以更新显示的 id 和 UI 状态
             renderRepeaters();
           }
 
@@ -3166,17 +3182,6 @@
         if (typeof obj !== "string") return;
         // writing-themes 在分支里已处理 arr[index]=value
       });
-
-      // 初始化所有任务卡片的 custom 类型状态
-      const tasksRoot = $("campaigns-tasks");
-      if (tasksRoot) {
-        tasksRoot.querySelectorAll(".rep-card[data-kind='tasks']").forEach((card) => {
-          const typeSelect = card.querySelector(".task-type-select");
-          if (typeSelect) {
-            updateTaskCustomState(card, typeSelect.value);
-          }
-        });
-      }
     }
 
     function newCampaign() {
