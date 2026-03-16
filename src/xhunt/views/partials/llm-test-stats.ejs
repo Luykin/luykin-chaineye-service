@@ -1,5 +1,28 @@
 <!-- LLM 测试工具 -->
 <div class="llm-test-container" id="llm-test-container">
+  <!-- 历史记录区域 -->
+  <div class="panel history-panel">
+    <div class="panel-header">
+      <h3 class="panel-title">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0 1 18 0z"/>
+        </svg>
+        历史记录
+        <span class="hint">(最近6条，点击填充)</span>
+      </h3>
+      <button class="btn-clear-history" onclick="clearLlmHistory()" title="清空历史">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+      </button>
+    </div>
+    <div class="panel-body">
+      <div id="llm-history-list" class="history-list">
+        <div class="history-empty">暂无历史记录</div>
+      </div>
+    </div>
+  </div>
+
   <!-- 输入区域 -->
   <div class="panel">
     <div class="panel-header">
@@ -303,6 +326,109 @@
   .llm-test-container {
     width: 100%;
     max-width: 100%;
+  }
+
+  /* 历史记录面板 */
+  .llm-test-container .history-panel {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  }
+
+  .llm-test-container .history-panel .panel-header {
+    background: linear-gradient(180deg, #e2e8f0 0%, #f1f5f9 100%);
+  }
+
+  .llm-test-container .btn-clear-history {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .llm-test-container .btn-clear-history:hover {
+    background: #ef4444;
+    color: #fff;
+  }
+
+  .llm-test-container .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .llm-test-container .history-empty {
+    text-align: center;
+    color: var(--text-muted, #9ca3af);
+    font-size: 13px;
+    padding: 20px;
+  }
+
+  .llm-test-container .history-item {
+    background: #fff;
+    border: 1px solid var(--border-subtle, #e5e7eb);
+    border-radius: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .llm-test-container .history-item:hover {
+    border-color: var(--accent, #3b82f6);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+    transform: translateY(-1px);
+  }
+
+  .llm-test-container .history-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent, #3b82f6);
+    border-radius: 8px 0 0 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .llm-test-container .history-item:hover::before {
+    opacity: 1;
+  }
+
+  .llm-test-container .history-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .llm-test-container .history-model {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent, #3b82f6);
+    background: rgba(59, 130, 246, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .llm-test-container .history-time {
+    font-size: 11px;
+    color: var(--text-muted, #9ca3af);
+  }
+
+  .llm-test-container .history-prompt {
+    font-size: 13px;
+    color: var(--text-primary, #374151);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .llm-test-container .panel {
@@ -881,6 +1007,26 @@ if (typeof resetLlmTest !== 'function') {
     if (jsonSchema) jsonSchema.value = '';
     if (resultPanel) resultPanel.style.display = 'none';
     if (metaRequestId) metaRequestId.style.display = 'none';
+  };
+}
+
+// 后备历史记录函数
+if (typeof renderLlmHistory !== 'function') {
+  window.renderLlmHistory = function() {
+    const container = document.getElementById('llm-history-list');
+    if (container) {
+      container.innerHTML = '<div class="history-empty">加载中...</div>';
+    }
+  };
+}
+if (typeof clearLlmHistory !== 'function') {
+  window.clearLlmHistory = function() {
+    alert('请刷新页面后重试');
+  };
+}
+if (typeof loadLlmHistory !== 'function') {
+  window.loadLlmHistory = function() {
+    alert('请刷新页面后重试');
   };
 }
 

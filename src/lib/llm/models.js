@@ -24,7 +24,8 @@ function getCacheKey(model, temperature, streaming) {
  * @param {number} options.temperature - 温度
  * @param {boolean} options.streaming - 是否流式
  * @param {number} options.maxTokens - 最大 token 数
- * @param {string} options.responseFormat - 响应格式 ('json_object' | 'text')
+ * @param {string} options.responseFormat - 响应格式 ('json_object' | 'json_schema' | 'text')
+ * @param {Object} options.jsonSchema - JSON Schema 对象（当 responseFormat='json_schema' 时使用）
  * @returns {ChatOpenAI}
  */
 function getChatModel(options = {}) {
@@ -34,12 +35,35 @@ function getChatModel(options = {}) {
     streaming = false,
     maxTokens,
     responseFormat,
+    jsonSchema,
   } = options;
 
   const apiKey = config.apiKey;
   
   if (!apiKey) {
     throw new Error('LLM_API_KEY is not configured');
+  }
+
+  // 构建额外参数
+  let extraBody = {};
+  
+  if (responseFormat === 'json_object') {
+    // OpenAI/Gemini 格式：仅强制返回 JSON
+    extraBody = {
+      response_format: { type: 'json_object' }
+    };
+  } else if (responseFormat === 'json_schema' && jsonSchema) {
+    // LiteLLM/LM Studio 格式：带 Schema 约束
+    // 参考: https://docs.litellm.ai/docs/providers/lm_studio
+    extraBody = {
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: jsonSchema.name || 'structured_output',
+          schema: jsonSchema.schema || jsonSchema
+        }
+      }
+    };
   }
 
   // 构建配置
@@ -51,12 +75,7 @@ function getChatModel(options = {}) {
     openAIApiKey: apiKey,
     configuration: {
       baseURL: config.baseURL,
-      // 添加 response_format 到额外的 body 参数
-      ...(responseFormat === 'json_object' && {
-        extraBody: {
-          response_format: { type: 'json_object' }
-        }
-      })
+      ...(Object.keys(extraBody).length > 0 && { extraBody })
     },
     timeout: config.timeout,
     maxRetries: config.maxRetries,

@@ -1251,6 +1251,9 @@ function bindLlmTestEvents() {
       }
     });
   }
+  
+  // 初始化渲染历史记录
+  renderLlmHistory();
 }
 
 /**
@@ -1446,6 +1449,17 @@ async function runLlmTest() {
         metaRequestId.style.display = 'inline';
       }
     }
+    
+    // 保存到历史记录（无论成功失败都保存配置）
+    const jsonSchemaText = document.getElementById('llm-json-schema')?.value.trim();
+    addToLlmHistory({
+      prompt,
+      systemPrompt: systemPrompt || '',
+      model,
+      temperature,
+      outputFormat,
+      jsonSchema: jsonSchemaText || null
+    });
 
   } catch (error) {
     console.error('[LLM Test] Error:', error);
@@ -1518,6 +1532,176 @@ window.runLlmTest = runLlmTest;
 window.resetLlmTest = resetLlmTest;
 window.toggleSchemaDocs = toggleSchemaDocs;
 window.bindLlmTestEvents = bindLlmTestEvents;
+
+// ========== LLM 测试历史记录功能 ==========
+
+const LLM_HISTORY_KEY = 'llm_test_history';
+const MAX_LLM_HISTORY = 6;
+
+/**
+ * 获取 LLM 测试历史记录
+ */
+function getLlmHistory() {
+  try {
+    const data = localStorage.getItem(LLM_HISTORY_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('[LLM History] Get failed:', e);
+    return [];
+  }
+}
+
+/**
+ * 保存 LLM 测试历史记录
+ */
+function saveLlmHistory(history) {
+  try {
+    localStorage.setItem(LLM_HISTORY_KEY, JSON.stringify(history.slice(0, MAX_LLM_HISTORY)));
+  } catch (e) {
+    console.error('[LLM History] Save failed:', e);
+  }
+}
+
+/**
+ * 添加记录到历史
+ */
+function addToLlmHistory(record) {
+  let history = getLlmHistory();
+  
+  // 检查是否和最近一条完全相同
+  if (history.length > 0) {
+    const last = history[0];
+    const isSame = last.prompt === record.prompt &&
+                   last.model === record.model &&
+                   last.systemPrompt === record.systemPrompt &&
+                   last.outputFormat === record.outputFormat;
+    if (isSame) return; // 相同则不添加
+  }
+  
+  // 添加到开头
+  history.unshift({
+    ...record,
+    timestamp: Date.now()
+  });
+  
+  saveLlmHistory(history);
+  renderLlmHistory();
+}
+
+/**
+ * 渲染历史记录列表
+ */
+function renderLlmHistory() {
+  const container = document.getElementById('llm-history-list');
+  if (!container) return;
+  
+  const history = getLlmHistory();
+  
+  if (history.length === 0) {
+    container.innerHTML = '<div class="history-empty">暂无历史记录</div>';
+    return;
+  }
+  
+  container.innerHTML = history.map((item, index) => {
+    const time = new Date(item.timestamp).toLocaleString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const promptPreview = item.prompt.substring(0, 30) + (item.prompt.length > 30 ? '...' : '');
+    return `
+      <div class="history-item" onclick="loadLlmHistory(${index})" title="点击填充配置">
+        <div class="history-meta">
+          <span class="history-model">${item.model}</span>
+          <span class="history-time">${time}</span>
+        </div>
+        <div class="history-prompt">${escapeHtml(promptPreview)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * 加载历史记录到表单
+ */
+function loadLlmHistory(index) {
+  const history = getLlmHistory();
+  if (!history[index]) return;
+  
+  const item = history[index];
+  
+  // 填充表单
+  const promptEl = document.getElementById('llm-prompt');
+  const systemPromptEl = document.getElementById('llm-system-prompt');
+  const modelEl = document.getElementById('llm-model');
+  const temperatureEl = document.getElementById('llm-temperature');
+  const tempValueEl = document.getElementById('llm-temp-value');
+  const tempHintEl = document.getElementById('llm-temp-hint');
+  const outputFormat = item.outputFormat || 'text';
+  
+  if (promptEl) promptEl.value = item.prompt || '';
+  if (systemPromptEl) systemPromptEl.value = item.systemPrompt || '';
+  if (modelEl) modelEl.value = item.model || 'gemini-3-flash-preview';
+  if (temperatureEl) {
+    temperatureEl.value = item.temperature || 0.7;
+    if (tempValueEl) tempValueEl.textContent = item.temperature || 0.7;
+    if (tempHintEl) {
+      const temp = parseFloat(item.temperature || 0.7);
+      if (temp <= 0.3) tempHintEl.textContent = temp + ' - 精确';
+      else if (temp <= 0.7) tempHintEl.textContent = temp + ' - 平衡';
+      else tempHintEl.textContent = temp + ' - 创意';
+    }
+  }
+  
+  // 设置输出格式
+  const formatRadio = document.querySelector(`input[name="llm-output-format"][value="${outputFormat}"]`);
+  if (formatRadio) formatRadio.checked = true;
+  
+  // 显示/隐藏 Schema 区域
+  const schemaSection = document.getElementById('llm-schema-section');
+  if (schemaSection) {
+    schemaSection.style.display = outputFormat === 'json' ? 'block' : 'none';
+  }
+  
+  // 填充 JSON Schema
+  const jsonSchemaEl = document.getElementById('llm-json-schema');
+  if (jsonSchemaEl && item.jsonSchema) {
+    jsonSchemaEl.value = typeof item.jsonSchema === 'string' 
+      ? item.jsonSchema 
+      : JSON.stringify(item.jsonSchema, null, 2);
+  }
+  
+  // 滚动到顶部
+  const container = document.getElementById('llm-test-container');
+  if (container) container.scrollIntoView({ behavior: 'smooth' });
+}
+
+/**
+ * 清空历史记录
+ */
+function clearLlmHistory() {
+  if (!confirm('确定要清空所有历史记录吗？')) return;
+  localStorage.removeItem(LLM_HISTORY_KEY);
+  renderLlmHistory();
+}
+
+/**
+ * HTML 转义
+ */
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// 导出到全局
+window.getLlmHistory = getLlmHistory;
+window.saveLlmHistory = saveLlmHistory;
+window.loadLlmHistory = loadLlmHistory;
+window.renderLlmHistory = renderLlmHistory;
+window.clearLlmHistory = clearLlmHistory;
 
 // ========== 最近访问 Tab 功能 ==========
 

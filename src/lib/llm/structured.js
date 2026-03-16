@@ -90,23 +90,15 @@ async function structuredChat(message, schema, options = {}) {
   } = options;
 
   return withRetry(async () => {
-    const llm = getChatModel({ 
-      model: modelName, 
-      temperature,
-      streaming: false,
-      responseFormat: 'json_object'  // 强制返回 JSON 格式
-    });
-    
     // 转换 schema
     let zodSchema;
-    let jsonSchema;
+    let jsonSchemaObj;
     
     if (schema._def) {
-      // 是 Zod Schema，转换为 JSON Schema 用于提示
+      // 是 Zod Schema，转换为 JSON Schema
       zodSchema = schema;
-      // 简化：从 Zod 提取字段信息
       const shape = schema._def.shape?.() || {};
-      jsonSchema = {
+      jsonSchemaObj = {
         type: 'object',
         properties: Object.fromEntries(
           Object.entries(shape).map(([k, v]) => {
@@ -125,42 +117,45 @@ async function structuredChat(message, schema, options = {}) {
       };
     } else {
       // 是普通 JSON Schema
-      jsonSchema = schema;
+      jsonSchemaObj = schema;
       zodSchema = jsonSchemaToZod(schema);
     }
     
+    // 使用 LiteLLM 的 json_schema 格式
+    // 参考: https://docs.litellm.ai/docs/providers/lm_studio
+    const llm = getChatModel({ 
+      model: modelName, 
+      temperature,
+      streaming: false,
+      responseFormat: 'json_schema',
+      jsonSchema: {
+        name: 'structured_output',
+        schema: jsonSchemaObj
+      }
+    });
+    
     try {
-      // 构建提示词
-      const jsonPrompt = `${message}
-
-请返回以下格式的 JSON：
-${JSON.stringify(schemaToJsonExample(jsonSchema), null, 2)}`;
-
       // 构建消息
       const messages = [];
       if (systemPrompt) {
-        messages.push(new SystemMessage(systemPrompt + '\n\n你必须以 JSON 格式输出，不要包含 markdown 代码块标记之外的其他文字。'));
-      } else {
-        messages.push(new SystemMessage('你必须以 JSON 格式输出，不要包含 markdown 代码块标记之外的其他文字。'));
+        messages.push(new SystemMessage(systemPrompt));
       }
-      messages.push(new HumanMessage(jsonPrompt));
+      messages.push(new HumanMessage(message));
       
-      // 调用模型
+      // 调用模型（返回的已经是结构化 JSON）
       const response = await llm.invoke(messages);
       const content = response.content;
       
-      // 解析 JSON
+      // LiteLLM 应该已经返回结构化 JSON，直接解析
       let result;
       try {
-        // 尝试直接解析
         result = JSON.parse(content);
       } catch (e) {
-        // 尝试从 markdown 代码块中提取
+        // 如果解析失败，尝试提取
         const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
         if (jsonMatch) {
           result = JSON.parse(jsonMatch[1].trim());
         } else {
-          // 尝试找到第一个 { 和最后一个 }
           const jsonStart = content.indexOf('{');
           const jsonEnd = content.lastIndexOf('}');
           if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
