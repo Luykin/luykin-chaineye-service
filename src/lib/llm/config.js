@@ -27,9 +27,18 @@ const DEFAULT_CONFIG = {
  */
 function getApiKey() {
   const key = process.env.LLM_API_KEY;
+  
+  console.log('[LLM Config] Reading LLM_API_KEY...');
+  console.log('[LLM Config] NODE_ENV:', process.env.NODE_ENV);
+  console.log('[LLM Config] Key exists:', !!key);
+  console.log('[LLM Config] Key length:', key ? key.length : 0);
+  console.log('[LLM Config] Key prefix:', key ? key.substring(0, 10) + '...' : 'N/A');
+  
   if (!key) {
-    console.warn('[LLM] Warning: LLM_API_KEY not set in environment variables');
+    console.warn('[LLM Config] Warning: LLM_API_KEY not set in environment variables');
+    console.log('[LLM Config] Available env vars:', Object.keys(process.env).filter(k => k.includes('API') || k.includes('KEY')).join(', '));
   }
+  
   return key;
 }
 

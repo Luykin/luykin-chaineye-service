@@ -172,7 +172,10 @@ async function structuredChat(message, schema, options = {}) {
   } = options;
 
   const apiKey = config.apiKey;
+  console.log('[LLM structuredChat] apiKey retrieved:', !!apiKey);
+  
   if (!apiKey) {
+    console.error('[LLM structuredChat] ERROR: LLM_API_KEY is not configured');
     throw new Error('LLM_API_KEY is not configured');
   }
 
