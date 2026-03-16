@@ -1,63 +1,101 @@
 /**
- * 结构化输出对话 - 使用 OpenAI API 原生 json_schema 格式
+ * 结构化输出对话 - 使用 LangChain withStructuredOutput
  */
 
-const axios = require('axios');
+const { ChatOpenAI } = require('@langchain/openai');
 const { z } = require('zod');
 const config = require('./config');
 const { withRetry, LLMSchemaError } = require('./utils/errors');
 
+// 模型实例缓存
+let modelCache = null;
+let lastModel = null;
+
 /**
- * 将普通 JSON Schema 转换为 OpenAI JSON Schema 格式
- * 支持嵌套对象和数组
+ * 获取或创建 ChatOpenAI 实例
  */
-function jsonSchemaToOpenAI(jsonSchema, name = 'output') {
-  // 深拷贝并添加 additionalProperties: false
-  const processedSchema = processSchema(jsonSchema);
+function getChatModel(modelName) {
+  // 如果模型变了，清除缓存
+  if (modelCache && lastModel !== modelName) {
+    modelCache = null;
+  }
   
-  return {
-    name,
-    description: jsonSchema.description || 'Structured output',
-    schema: processedSchema
-  };
+  if (!modelCache) {
+    const apiKey = config.apiKey;
+    if (!apiKey) {
+      throw new Error('LLM_API_KEY is not configured');
+    }
+    
+    modelCache = new ChatOpenAI({
+      modelName: modelName || config.defaultModel,
+      temperature: 0,
+      openAIApiKey: apiKey,
+      configuration: { 
+        baseURL: config.baseURL,
+        defaultHeaders: {
+          'Authorization': `Bearer ${apiKey}`
+        }
+      },
+      timeout: config.timeout,
+      maxRetries: config.maxRetries,
+    });
+    
+    lastModel = modelName;
+    console.log('[LLM structuredChat] Created new ChatOpenAI instance for model:', modelName || config.defaultModel);
+  }
+  
+  return modelCache;
 }
 
 /**
- * 递归处理 Schema，添加 additionalProperties: false
+ * 将 JSON Schema 转换为 Zod Schema（简化版）
  */
-function processSchema(schema) {
-  if (!schema || typeof schema !== 'object') {
-    return schema;
+function jsonSchemaToZod(jsonSchema) {
+  if (!jsonSchema || typeof jsonSchema !== 'object') {
+    return z.any();
+  }
+
+  // 处理对象类型
+  if (jsonSchema.type === 'object' && jsonSchema.properties) {
+    const shape = {};
+    const requiredFields = jsonSchema.required || [];
+    
+    for (const [key, propSchema] of Object.entries(jsonSchema.properties)) {
+      const isRequired = requiredFields.includes(key);
+      shape[key] = jsonSchemaToZod(propSchema);
+      if (!isRequired) {
+        shape[key] = shape[key].optional();
+      }
+    }
+    
+    return z.object(shape);
   }
   
   // 处理数组类型
-  if (schema.type === 'array' && schema.items) {
-    return {
-      ...schema,
-      items: processSchema(schema.items)
-    };
+  if (jsonSchema.type === 'array' && jsonSchema.items) {
+    return z.array(jsonSchemaToZod(jsonSchema.items));
   }
   
-  // 处理对象类型
-  if (schema.type === 'object' && schema.properties) {
-    const processedProperties = {};
-    for (const [key, value] of Object.entries(schema.properties)) {
-      processedProperties[key] = processSchema(value);
-    }
-    
-    return {
-      ...schema,
-      properties: processedProperties,
-      additionalProperties: false
-    };
+  // 基础类型
+  switch (jsonSchema.type) {
+    case 'string':
+      if (jsonSchema.enum) {
+        return z.enum(jsonSchema.enum);
+      }
+      return z.string();
+    case 'number':
+      return z.number();
+    case 'integer':
+      return z.number().int();
+    case 'boolean':
+      return z.boolean();
+    default:
+      return z.any();
   }
-  
-  // 其他类型直接返回
-  return schema;
 }
 
 /**
- * 将 Zod Schema 转换为 OpenAI JSON Schema 格式
+ * 将 Zod Schema 转换为 JSON Schema（用于 LangChain）
  */
 function zodToJsonSchema(zodSchema, name = 'output') {
   const def = zodSchema._def;
@@ -67,7 +105,7 @@ function zodToJsonSchema(zodSchema, name = 'output') {
     const required = [];
     
     for (const [key, value] of Object.entries(def.shape())) {
-      properties[key] = zodTypeToOpenApiSchema(value);
+      properties[key] = zodTypeToJsonSchema(value);
       if (!value.isOptional()) {
         required.push(key);
       }
@@ -76,6 +114,7 @@ function zodToJsonSchema(zodSchema, name = 'output') {
     return {
       name,
       description: zodSchema.description || 'Structured output',
+      strict: true,
       schema: {
         type: 'object',
         properties,
@@ -89,10 +128,11 @@ function zodToJsonSchema(zodSchema, name = 'output') {
   return {
     name,
     description: zodSchema.description || 'Structured output',
+    strict: true,
     schema: {
       type: 'object',
       properties: {
-        value: zodTypeToOpenApiSchema(zodSchema)
+        value: zodTypeToJsonSchema(zodSchema)
       },
       required: ['value'],
       additionalProperties: false
@@ -100,7 +140,7 @@ function zodToJsonSchema(zodSchema, name = 'output') {
   };
 }
 
-function zodTypeToOpenApiSchema(type) {
+function zodTypeToJsonSchema(type) {
   const def = type._def;
   
   switch (def.typeName) {
@@ -135,11 +175,9 @@ function zodTypeToOpenApiSchema(type) {
     case 'ZodArray': {
       const result = {
         type: 'array',
-        items: zodTypeToOpenApiSchema(def.type)
+        items: zodTypeToJsonSchema(def.type)
       };
       if (def.description) result.description = def.description;
-      if (def.minLength !== undefined) result.minItems = def.minLength;
-      if (def.maxLength !== undefined) result.maxItems = def.maxLength;
       return result;
     }
     case 'ZodEnum': {
@@ -147,11 +185,10 @@ function zodTypeToOpenApiSchema(type) {
       if (def.description) result.description = def.description;
       return result;
     }
-    case 'ZodOptional': {
-      return zodTypeToOpenApiSchema(def.innerType);
-    }
+    case 'ZodOptional':
+      return zodTypeToJsonSchema(def.innerType);
     case 'ZodNullable': {
-      const inner = zodTypeToOpenApiSchema(def.innerType);
+      const inner = zodTypeToJsonSchema(def.innerType);
       return { ...inner, nullable: true };
     }
     case 'ZodObject': {
@@ -159,7 +196,7 @@ function zodTypeToOpenApiSchema(type) {
       const required = [];
       
       for (const [key, value] of Object.entries(def.shape())) {
-        properties[key] = zodTypeToOpenApiSchema(value);
+        properties[key] = zodTypeToJsonSchema(value);
         if (!value.isOptional()) {
           required.push(key);
         }
@@ -178,166 +215,113 @@ function zodTypeToOpenApiSchema(type) {
 }
 
 /**
- * 结构化对话
+ * 结构化对话 - 使用 LangChain withStructuredOutput
  */
 async function structuredChat(message, schema, options = {}) {
   const {
-    model = config.defaultModel,
+    model: modelName,
     temperature = 0,
     name = 'structured_output',
     systemPrompt,
   } = options;
 
-  const apiKey = config.apiKey;
-  console.log('[LLM structuredChat] apiKey retrieved:', !!apiKey);
-  
-  if (!apiKey) {
-    console.error('[LLM structuredChat] ERROR: LLM_API_KEY is not configured');
-    throw new Error('LLM_API_KEY is not configured');
-  }
-
   return withRetry(async () => {
+    // 获取模型实例
+    const llm = getChatModel(modelName);
+    
     // 转换 schema
     let jsonSchema;
+    let zodSchema;
+    
     if (schema._def) {
+      // 是 Zod Schema
       jsonSchema = zodToJsonSchema(schema, name);
+      zodSchema = schema;
     } else {
-      jsonSchema = jsonSchemaToOpenAI(schema, name);
+      // 是普通 JSON Schema
+      jsonSchema = {
+        name,
+        description: schema.description || 'Structured output',
+        strict: true,
+        schema: schema
+      };
+      zodSchema = jsonSchemaToZod(schema);
     }
     
-    console.log('[LLM structuredChat] Converted schema:', JSON.stringify(jsonSchema.schema, null, 2).substring(0, 500));
-    
-    // 构建消息
-    const messages = [];
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
-    }
-    messages.push({ role: 'user', content: message });
+    console.log('[LLM structuredChat] Using LangChain withStructuredOutput');
+    console.log('[LLM structuredChat] Schema:', JSON.stringify(jsonSchema, null, 2).substring(0, 500));
     
     try {
-      console.log('[LLM structuredChat] Sending request to:', config.baseURL);
-      console.log('[LLM structuredChat] Using model:', model);
+      // 使用 withStructuredOutput 绑定 schema
+      // 注：OpenAI 兼容模型会自动使用 json_schema 模式
+      const structuredLlm = llm.withStructuredOutput(jsonSchema, {
+        name: name,
+        strict: true
+      });
       
-      const response = await axios.post(
-        `${config.baseURL}chat/completions`,
-        {
-          model,
-          messages,
-          temperature,
-          response_format: {
-            type: 'json_schema',
-            json_schema: jsonSchema
-          }
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: config.timeout
-        }
-      );
-      
-      const content = response.data?.choices?.[0]?.message?.content;
-      console.log('[LLM structuredChat] Raw response:', content?.substring(0, 200));
-      
-      if (!content) {
-        throw new Error('Empty response from model');
+      // 构建消息
+      const messages = [];
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
       }
+      messages.push({ role: 'user', content: message });
       
-      // 解析结果（处理可能的双重 JSON 编码）
-      let parsed = content;
+      // 调用模型
+      const result = await structuredLlm.invoke(messages);
       
-      // 如果 content 是字符串，尝试解析
-      if (typeof content === 'string') {
+      console.log('[LLM structuredChat] Result:', JSON.stringify(result).substring(0, 200));
+      
+      // 使用 Zod 验证（如果提供了 Zod Schema）
+      if (schema._def && zodSchema.parse) {
         try {
-          parsed = JSON.parse(content);
-        } catch (e) {
-          console.error('[LLM structuredChat] JSON parse error:', e.message);
-          console.error('[LLM structuredChat] Content:', content);
-          throw new LLMSchemaError(new Error(`Invalid JSON: ${e.message}`));
-        }
-      }
-      
-      // 如果解析后还是字符串（双重编码），再解析一次
-      if (typeof parsed === 'string') {
-        try {
-          parsed = JSON.parse(parsed);
-        } catch (e) {
-          // 忽略，可能本来就是字符串类型
-        }
-      }
-      
-      // 处理 LiteLLM 包装格式：{value: "[...]"}
-      if (typeof parsed === 'object' && parsed !== null && parsed.value && typeof parsed.value === 'string') {
-        try {
-          const inner = JSON.parse(parsed.value);
-          // 如果是数组，取第一个元素
-          if (Array.isArray(inner) && inner.length > 0) {
-            parsed = inner[0];
-          } else {
-            parsed = inner;
-          }
-        } catch (e) {
-          // 解析失败，保持原样
-        }
-      }
-      
-      console.log('[LLM structuredChat] Parsed type:', typeof parsed);
-      console.log('[LLM structuredChat] Parsed preview:', JSON.stringify(parsed).substring(0, 200));
-      
-      // 如果有 Zod Schema，进行验证
-      if (schema._def && schema.parse) {
-        try {
-          return schema.parse(parsed);
+          return zodSchema.parse(result);
         } catch (zodError) {
           console.error('[LLM structuredChat] Zod validation error:', zodError);
-          
-          // Zod 错误在 issues 数组中
-          const issues = zodError.issues || [];
-          
-          // 格式化错误信息
-          const missingFields = issues
-            .filter(e => e.message?.includes('Required') || e.message?.includes('expected') || e.code === 'invalid_type')
-            .map(e => e.path?.join('.') || 'unknown')
-            .filter(Boolean);
-          
-          if (missingFields.length > 0) {
-            // 检查是否是字段名不匹配问题
-            const returnedFields = Object.keys(parsed || {});
-            const availableFields = returnedFields.length > 0 ? `模型返回的字段: ${returnedFields.join(', ')}` : '模型返回为空或格式错误';
-            
-            const errorMsg = `Schema 验证失败：缺少字段: ${missingFields.join(', ')}。\n\n${availableFields}\n\n可能原因：\n1. Schema 字段名与系统提示中的字段名不一致\n2. 模型不支持复杂的嵌套 Schema\n3. Schema 太复杂，尝试简化\n\n建议：\n1. 检查 Schema 字段名是否与系统提示一致\n2. 简化 Schema，减少嵌套层级\n3. 使用更明确的字段名（如 clarityScore 而不是 clarity）`;
-            throw new LLMSchemaError(new Error(errorMsg));
-          }
-          
-          // 其他验证错误
-          const errorMessages = issues.map(e => `${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
-          throw new LLMSchemaError(new Error(`Schema 验证失败:\n${errorMessages}`));
+          throw formatZodError(zodError, result);
         }
       }
       
-      return parsed;
+      return result;
       
     } catch (error) {
-      console.error('[LLM structuredChat] Request failed:', error.message);
-      if (error.response) {
-        console.error('[LLM structuredChat] Response status:', error.response.status);
-        console.error('[LLM structuredChat] Response data:', JSON.stringify(error.response.data, null, 2));
+      console.error('[LLM structuredChat] Error:', error.message);
+      
+      // 处理 LangChain 错误
+      if (error.message?.includes('strict mode')) {
+        throw new LLMSchemaError(new Error(
+          '模型不支持严格 Schema 模式，请尝试简化 Schema 或更换模型'
+        ));
       }
       
-      if (error.response?.data?.error) {
-        throw new Error(`API Error: ${error.response.data.error.message || error.response.data.error}`);
-      }
-      if (error.name === 'ZodError' || error instanceof LLMSchemaError) {
-        throw error;
-      }
-      if (error instanceof SyntaxError) {
-        throw new LLMSchemaError(new Error(`Invalid JSON: ${error.message}`));
-      }
       throw error;
     }
   });
+}
+
+/**
+ * 格式化 Zod 错误
+ */
+function formatZodError(zodError, parsed) {
+  const issues = zodError.issues || [];
+  
+  const missingFields = issues
+    .filter(e => e.message?.includes('Required') || e.message?.includes('expected') || e.code === 'invalid_type')
+    .map(e => e.path?.join('.') || 'unknown')
+    .filter(Boolean);
+  
+  if (missingFields.length > 0) {
+    const returnedFields = Object.keys(parsed || {});
+    const availableFields = returnedFields.length > 0 
+      ? `模型返回的字段: ${returnedFields.join(', ')}` 
+      : '模型返回为空或格式错误';
+    
+    const errorMsg = `Schema 验证失败：缺少字段: ${missingFields.join(', ')}。\n\n${availableFields}\n\n可能原因：\n1. Schema 字段名与系统提示中的字段名不一致\n2. 模型不支持严格的 Schema 约束\n3. 尝试使用更简单的 Schema`;
+    
+    return new LLMSchemaError(new Error(errorMsg));
+  }
+  
+  const errorMessages = issues.map(e => `${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  return new LLMSchemaError(new Error(`Schema 验证失败:\n${errorMessages}`));
 }
 
 module.exports = {
