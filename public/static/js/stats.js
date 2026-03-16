@@ -1369,10 +1369,20 @@ async function runLlmTest() {
   const requestId = 'llm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   console.log('[LLM Test] RequestId:', requestId);
 
+  // 显示 requestId 在界面上
+  const requestIdEl = document.getElementById('llm-meta-request-id');
+  if (requestIdEl) {
+    requestIdEl.textContent = requestId;
+    requestIdEl.style.display = 'inline';
+  }
+
   try {
     const response = await fetch('/api/admin/llm-test', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-request-id': requestId,
+      },
       body: JSON.stringify({
         prompt,
         model,
@@ -1380,7 +1390,6 @@ async function runLlmTest() {
         outputFormat,
         jsonSchema,
         systemPrompt: systemPrompt || undefined,
-        requestId,
       }),
     });
 
@@ -1426,11 +1435,16 @@ async function runLlmTest() {
     const metaModel = document.getElementById('llm-meta-model');
     const metaTemp = document.getElementById('llm-meta-temp');
     const metaDuration = document.getElementById('llm-meta-duration');
+    const metaRequestId = document.getElementById('llm-meta-request-id');
     
     if (result.meta) {
       if (metaModel) metaModel.textContent = result.meta.model;
       if (metaTemp) metaTemp.textContent = 'T=' + result.meta.temperature;
       if (metaDuration) metaDuration.textContent = result.meta.duration;
+      if (metaRequestId && result.meta.requestId) {
+        metaRequestId.textContent = result.meta.requestId;
+        metaRequestId.style.display = 'inline';
+      }
     }
 
   } catch (error) {
@@ -1471,6 +1485,7 @@ function resetLlmTest() {
   const schemaSection = document.getElementById('llm-schema-section');
   const jsonSchema = document.getElementById('llm-json-schema');
   const resultPanel = document.getElementById('llm-result-panel');
+  const metaRequestId = document.getElementById('llm-meta-request-id');
   
   if (prompt) prompt.value = '';
   if (systemPrompt) systemPrompt.value = '';
@@ -1481,6 +1496,7 @@ function resetLlmTest() {
   if (textRadio) textRadio.checked = true;
   if (schemaSection) schemaSection.style.display = 'none';
   if (jsonSchema) jsonSchema.value = '';
+  if (metaRequestId) metaRequestId.style.display = 'none';
   if (resultPanel) resultPanel.style.display = 'none';
 }
 

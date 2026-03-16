@@ -158,8 +158,10 @@ router.post('/', adminAuth, express.json(), async (req, res) => {
       outputFormat = 'text',
       jsonSchema,
       systemPrompt,
-      requestId,
     } = req.body;
+    
+    // 从 header 获取 requestId
+    const requestId = req.headers['x-request-id'] || null;
 
     // 参数校验
     if (!prompt || typeof prompt !== 'string') {
@@ -191,10 +193,14 @@ router.post('/', adminAuth, express.json(), async (req, res) => {
     let result;
     let error = null;
 
+    console.log(`[LLM Test] [${requestId || 'N/A'}] Starting LLM call... Model: ${model}, OutputFormat: ${outputFormat}`);
+
     try {
       if (outputFormat === 'json' && jsonSchema) {
         // 结构化输出模式
+        console.log(`[LLM Test] [${requestId || 'N/A'}] Parsing JSON schema...`);
         const parsedSchema = parseJsonSchema(jsonSchema);
+        console.log(`[LLM Test] [${requestId || 'N/A'}] Schema parsed, calling structuredChat...`);
         
         result = await structuredChat(prompt, parsedSchema, {
           model,
@@ -202,26 +208,29 @@ router.post('/', adminAuth, express.json(), async (req, res) => {
           systemPrompt: systemPrompt || undefined,
           name: 'admin_test',
         });
+        console.log(`[LLM Test] [${requestId || 'N/A'}] structuredChat completed`);
       } else {
         // 文本输出模式
+        console.log(`[LLM Test] [${requestId || 'N/A'}] Calling chat...`);
         result = await chat(prompt, {
           model,
           temperature: temp,
           systemPrompt: systemPrompt || undefined,
         });
+        console.log(`[LLM Test] [${requestId || 'N/A'}] chat completed`);
       }
     } catch (err) {
       error = {
         message: err.message,
         type: err.name || 'Error',
       };
-      console.error('[LLM Test] Error:', err);
+      console.error(`[LLM Test] [${requestId || 'N/A'}] Error during LLM call:`, err);
     }
 
     const duration = Date.now() - startTime;
 
     // 记录测试日志
-    console.log(`[LLM Test] RequestId: ${requestId || 'N/A'}, User: ${req.admin?.email || 'unknown'}, Model: ${model}, Duration: ${duration}ms, Success: ${!error}`);
+    console.log(`[LLM Test] [${requestId || 'N/A'}] Completed. User: ${req.admin?.email || 'unknown'}, Model: ${model}, Duration: ${duration}ms, Success: ${!error}`);
 
     res.json({
       success: !error,

@@ -35,10 +35,8 @@ function getChatModel(options = {}) {
   } = options;
 
   const apiKey = config.apiKey;
-  console.log('[LLM getChatModel] apiKey retrieved:', !!apiKey);
   
   if (!apiKey) {
-    console.error('[LLM getChatModel] ERROR: LLM_API_KEY is not configured');
     throw new Error('LLM_API_KEY is not configured');
   }
 

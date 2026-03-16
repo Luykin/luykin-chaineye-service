@@ -172,6 +172,7 @@
         <span id="llm-meta-model">-</span>
         <span id="llm-meta-temp">-</span>
         <span id="llm-meta-duration">-</span>
+        <span id="llm-meta-request-id" class="request-id-tag" style="display:none;">-</span>
       </div>
     </div>
     <div class="panel-body">
@@ -868,6 +869,7 @@ if (typeof resetLlmTest !== 'function') {
     const schemaSection = document.getElementById('llm-schema-section');
     const jsonSchema = document.getElementById('llm-json-schema');
     const resultPanel = document.getElementById('llm-result-panel');
+    const metaRequestId = document.getElementById('llm-meta-request-id');
     
     if (prompt) prompt.value = '';
     if (systemPrompt) systemPrompt.value = '';
@@ -878,6 +880,7 @@ if (typeof resetLlmTest !== 'function') {
     if (schemaSection) schemaSection.style.display = 'none';
     if (jsonSchema) jsonSchema.value = '';
     if (resultPanel) resultPanel.style.display = 'none';
+    if (metaRequestId) metaRequestId.style.display = 'none';
   };
 }
 
