@@ -769,17 +769,6 @@ router.get(
         console.log(LOG, "reject: user not found");
         return res.status(404).json({ error: "User not found" });
       }
-
-      if(String(user.twitterId) === "1455055533140893696") {
-        return res.json({
-          success: true,
-          completed: true,
-          completedAt: null,
-          metadata: {
-            test: "true"
-          },
-        })
-      }
       
       // 调用第三方接口查询状态
       try {
