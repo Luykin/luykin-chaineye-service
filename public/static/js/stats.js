@@ -1252,6 +1252,20 @@ function bindLlmTestEvents() {
     });
   }
   
+  // 历史记录点击事件委托
+  const historyList = document.getElementById('llm-history-list');
+  if (historyList) {
+    historyList.addEventListener('click', function(e) {
+      const item = e.target.closest('.history-item');
+      if (item) {
+        const index = parseInt(item.dataset.index);
+        if (!isNaN(index)) {
+          loadLlmHistory(index);
+        }
+      }
+    });
+  }
+  
   // 初始化渲染历史记录
   renderLlmHistory();
 }
@@ -1611,9 +1625,9 @@ function renderLlmHistory() {
     });
     const promptPreview = item.prompt.substring(0, 30) + (item.prompt.length > 30 ? '...' : '');
     return `
-      <div class="history-item" onclick="loadLlmHistory(${index})" title="点击填充配置">
+      <div class="history-item" data-index="${index}" title="点击填充配置">
         <div class="history-meta">
-          <span class="history-model">${item.model}</span>
+          <span class="history-model">${escapeHtml(item.model)}</span>
           <span class="history-time">${time}</span>
         </div>
         <div class="history-prompt">${escapeHtml(promptPreview)}</div>
@@ -1702,6 +1716,7 @@ window.saveLlmHistory = saveLlmHistory;
 window.loadLlmHistory = loadLlmHistory;
 window.renderLlmHistory = renderLlmHistory;
 window.clearLlmHistory = clearLlmHistory;
+window.escapeHtml = escapeHtml;
 
 // ========== 最近访问 Tab 功能 ==========
 
