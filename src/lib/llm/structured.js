@@ -2,50 +2,9 @@
  * 结构化输出对话 - 使用 LangChain withStructuredOutput
  */
 
-const { ChatOpenAI } = require('@langchain/openai');
 const { z } = require('zod');
-const config = require('./config');
+const { getChatModel } = require('./models');
 const { withRetry, LLMSchemaError } = require('./utils/errors');
-
-// 模型实例缓存
-let modelCache = null;
-let lastModel = null;
-
-/**
- * 获取或创建 ChatOpenAI 实例
- */
-function getChatModel(modelName) {
-  // 如果模型变了，清除缓存
-  if (modelCache && lastModel !== modelName) {
-    modelCache = null;
-  }
-  
-  if (!modelCache) {
-    const apiKey = config.apiKey;
-    if (!apiKey) {
-      throw new Error('LLM_API_KEY is not configured');
-    }
-    
-    modelCache = new ChatOpenAI({
-      modelName: modelName || config.defaultModel,
-      temperature: 0,
-      openAIApiKey: apiKey,
-      configuration: { 
-        baseURL: config.baseURL,
-        defaultHeaders: {
-          'Authorization': `Bearer ${apiKey}`
-        }
-      },
-      timeout: config.timeout,
-      maxRetries: config.maxRetries,
-    });
-    
-    lastModel = modelName;
-    console.log('[LLM structuredChat] Created new ChatOpenAI instance for model:', modelName || config.defaultModel);
-  }
-  
-  return modelCache;
-}
 
 /**
  * 将 JSON Schema 转换为 Zod Schema（简化版）
@@ -226,8 +185,12 @@ async function structuredChat(message, schema, options = {}) {
   } = options;
 
   return withRetry(async () => {
-    // 获取模型实例
-    const llm = getChatModel(modelName);
+    // 获取模型实例（复用 models.js 的缓存）
+    const llm = getChatModel({ 
+      model: modelName, 
+      temperature,
+      streaming: false 
+    });
     
     // 转换 schema
     let jsonSchema;
