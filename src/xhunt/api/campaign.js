@@ -606,7 +606,7 @@ router.get(
 async function generateExternalLink(campaign, taskId, user) {
   // realgo 活动实现
   if (campaign === 'realgo') {
-    const timestamp = new Date().toISOString(); // UTC 时间
+    const timestamp = Math.floor(Date.now() / 1000); // Unix 时间戳（秒）
     const rawToken = `${user.twitterId}:${timestamp}`;
     const secretKey = 'JvApDef2C2Vkg9VRAM+jcjPXaCYFw6xyZnmIiaUxVUs=';
     console.log('[generateExternalLink]', rawToken, `rawToken ${taskId} ${user.id}`)
@@ -620,7 +620,7 @@ async function generateExternalLink(campaign, taskId, user) {
       .update(rawToken)
       .digest('base64');
 
-    console.log('[generateExternalLink]', signature, `rawToken ${taskId} ${user.id}`)
+    // console.log('[generateExternalLink]', signature, `rawToken ${taskId} ${user.id}`)
     
     // 构建跳转链接
     const link = `https://testofficial.realgo.game/reg?code=XHUNT&xHuntToken=${encodeURIComponent(xHuntToken)}&xHuntSignature=${encodeURIComponent(signature)}`;
