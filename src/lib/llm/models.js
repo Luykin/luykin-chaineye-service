@@ -34,7 +34,8 @@ function getChatModel(options = {}) {
     maxTokens,
   } = options;
 
-  if (!config.apiKey) {
+  const apiKey = config.apiKey;
+  if (!apiKey) {
     throw new Error('LLM_API_KEY is not configured');
   }
 
@@ -57,7 +58,7 @@ function getChatModel(options = {}) {
     temperature,
     streaming,
     maxTokens,
-    openAIApiKey: config.apiKey,
+    openAIApiKey: apiKey,
     configuration: {
       baseURL: config.baseURL,
     },

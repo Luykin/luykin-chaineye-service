@@ -9,33 +9,40 @@ const { withRetry, LLMSchemaError } = require('./utils/errors');
 
 /**
  * 将 Zod Schema 转换为 OpenAI JSON Schema 格式
+ * 支持：ZodObject、ZodArray、ZodString、ZodNumber、ZodBoolean、ZodEnum、ZodOptional、ZodNullable
  */
 function zodToJsonSchema(zodSchema, name = 'output') {
   const def = zodSchema._def;
   
-  if (def.typeName !== 'ZodObject') {
-    throw new Error('Only ZodObject schemas are supported');
-  }
-  
-  const properties = {};
-  const required = [];
-  
-  for (const [key, value] of Object.entries(def.shape())) {
-    properties[key] = zodTypeToOpenApiSchema(value);
-    if (!value.isOptional()) {
-      required.push(key);
+  // 处理各种类型
+  if (def.typeName === 'ZodObject') {
+    const properties = {};
+    const required = [];
+    
+    for (const [key, value] of Object.entries(def.shape())) {
+      properties[key] = zodTypeToOpenApiSchema(value);
+      if (!value.isOptional()) {
+        required.push(key);
+      }
     }
+    
+    return {
+      name,
+      description: zodSchema.description || 'Structured output',
+      schema: {
+        type: 'object',
+        properties,
+        required,
+        additionalProperties: false
+      }
+    };
   }
   
+  // 如果不是 object，包装成 object
   return {
     name,
     description: zodSchema.description || 'Structured output',
-    schema: {
-      type: 'object',
-      properties,
-      required,
-      additionalProperties: false
-    }
+    schema: zodTypeToOpenApiSchema(zodSchema)
   };
 }
 
@@ -45,6 +52,7 @@ function zodTypeToOpenApiSchema(type) {
   switch (def.typeName) {
     case 'ZodString': {
       const result = { type: 'string' };
+      if (def.description) result.description = def.description;
       if (def.checks) {
         for (const check of def.checks) {
           if (check.kind === 'min') result.minLength = check.value;
@@ -53,8 +61,10 @@ function zodTypeToOpenApiSchema(type) {
       }
       return result;
     }
-    case 'ZodNumber': {
-      const result = { type: 'number' };
+    case 'ZodNumber':
+    case 'ZodInt': {
+      const result = { type: def.typeName === 'ZodInt' ? 'integer' : 'number' };
+      if (def.description) result.description = def.description;
       if (def.checks) {
         for (const check of def.checks) {
           if (check.kind === 'min') result.minimum = check.value;
@@ -63,25 +73,95 @@ function zodTypeToOpenApiSchema(type) {
       }
       return result;
     }
-    case 'ZodBoolean':
-      return { type: 'boolean' };
+    case 'ZodBoolean': {
+      const result = { type: 'boolean' };
+      if (def.description) result.description = def.description;
+      return result;
+    }
     case 'ZodArray': {
-      return {
+      const result = {
         type: 'array',
         items: zodTypeToOpenApiSchema(def.type)
       };
+      if (def.description) result.description = def.description;
+      if (def.minLength !== undefined) result.minItems = def.minLength;
+      if (def.maxLength !== undefined) result.maxItems = def.maxLength;
+      return result;
     }
-    case 'ZodEnum':
-      return { type: 'string', enum: def.values };
-    case 'ZodOptional':
-      return zodTypeToOpenApiSchema(def.innerType);
+    case 'ZodEnum': {
+      const result = { type: 'string', enum: def.values };
+      if (def.description) result.description = def.description;
+      return result;
+    }
+    case 'ZodOptional': {
+      const inner = zodTypeToOpenApiSchema(def.innerType);
+      // 标记为可选属性，但不改变类型
+      return inner;
+    }
+    case 'ZodNullable': {
+      const inner = zodTypeToOpenApiSchema(def.innerType);
+      return { ...inner, nullable: true };
+    }
+    case 'ZodObject': {
+      // 递归处理嵌套对象
+      const properties = {};
+      const required = [];
+      
+      for (const [key, value] of Object.entries(def.shape())) {
+        properties[key] = zodTypeToOpenApiSchema(value);
+        if (!value.isOptional()) {
+          required.push(key);
+        }
+      }
+      
+      return {
+        type: 'object',
+        properties,
+        required,
+        additionalProperties: false
+      };
+    }
     default:
+      // 对于未知类型，返回字符串
       return { type: 'string' };
   }
 }
 
 /**
+ * 将普通 JSON Schema 转换为 OpenAI 格式
+ */
+function jsonSchemaToOpenAI(jsonSchema, name = 'output') {
+  if (jsonSchema.type === 'object' && jsonSchema.properties) {
+    return {
+      name,
+      description: jsonSchema.description || 'Structured output',
+      schema: {
+        ...jsonSchema,
+        additionalProperties: false
+      }
+    };
+  }
+  
+  // 如果不是 object，包装成 object
+  return {
+    name,
+    description: 'Structured output',
+    schema: {
+      type: 'object',
+      properties: {
+        value: jsonSchema
+      },
+      required: ['value'],
+      additionalProperties: false
+    }
+  };
+}
+
+/**
  * 结构化对话
+ * @param {string} message - 用户消息
+ * @param {z.ZodSchema|Object} schema - Zod Schema 或普通 JSON Schema
+ * @param {Object} options - 选项
  */
 async function structuredChat(message, schema, options = {}) {
   const {
@@ -91,13 +171,21 @@ async function structuredChat(message, schema, options = {}) {
     systemPrompt,
   } = options;
 
-  if (!config.apiKey) {
+  const apiKey = config.apiKey;
+  if (!apiKey) {
     throw new Error('LLM_API_KEY is not configured');
   }
 
   return withRetry(async () => {
-    // 转换 schema
-    const jsonSchema = zodToJsonSchema(schema, name);
+    // 转换 schema（支持 Zod 和普通 JSON Schema）
+    let jsonSchema;
+    if (schema._def) {
+      // 是 Zod Schema
+      jsonSchema = zodToJsonSchema(schema, name);
+    } else {
+      // 是普通 JSON Schema
+      jsonSchema = jsonSchemaToOpenAI(schema, name);
+    }
     
     // 构建消息
     const messages = [];
@@ -126,7 +214,7 @@ async function structuredChat(message, schema, options = {}) {
         },
         {
           headers: {
-            'Authorization': `Bearer ${config.apiKey}`,
+            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
           },
           timeout: config.timeout
@@ -138,9 +226,16 @@ async function structuredChat(message, schema, options = {}) {
         throw new Error('Empty response from model');
       }
       
-      // 解析并验证
+      // 解析结果
       const parsed = JSON.parse(content);
-      return schema.parse(parsed);
+      
+      // 如果有 Zod Schema，进行验证
+      if (schema._def && schema.parse) {
+        return schema.parse(parsed);
+      }
+      
+      // 否则直接返回
+      return parsed;
       
     } catch (error) {
       if (error.response?.data?.error) {
