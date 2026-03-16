@@ -44,26 +44,33 @@ function getChatModel(options = {}) {
     throw new Error('LLM_API_KEY is not configured');
   }
 
-  // 构建额外参数
+  // 构建额外参数（用于 LiteLLM json_schema）
   let extraBody = {};
+  let modelKwargs = {};
   
   if (responseFormat === 'json_object') {
     // OpenAI/Gemini 格式：仅强制返回 JSON
-    extraBody = {
+    modelKwargs = {
       response_format: { type: 'json_object' }
     };
   } else if (responseFormat === 'json_schema' && jsonSchema) {
     // LiteLLM/LM Studio 格式：带 Schema 约束
     // 参考: https://docs.litellm.ai/docs/providers/lm_studio
-    extraBody = {
+    modelKwargs = {
       response_format: {
         type: 'json_schema',
         json_schema: {
           name: jsonSchema.name || 'structured_output',
+          strict: true,
           schema: jsonSchema.schema || jsonSchema
         }
       }
     };
+  }
+
+  // 调试：打印请求参数
+  if (Object.keys(modelKwargs).length > 0) {
+    console.log('[LLM getChatModel] modelKwargs:', JSON.stringify(modelKwargs, null, 2));
   }
 
   // 构建配置
@@ -73,9 +80,9 @@ function getChatModel(options = {}) {
     streaming,
     maxTokens,
     openAIApiKey: apiKey,
+    modelKwargs: Object.keys(modelKwargs).length > 0 ? modelKwargs : undefined,
     configuration: {
       baseURL: config.baseURL,
-      ...(Object.keys(extraBody).length > 0 && { extraBody })
     },
     timeout: config.timeout,
     maxRetries: config.maxRetries,
