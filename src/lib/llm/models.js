@@ -24,6 +24,7 @@ function getCacheKey(model, temperature, streaming) {
  * @param {number} options.temperature - 温度
  * @param {boolean} options.streaming - 是否流式
  * @param {number} options.maxTokens - 最大 token 数
+ * @param {string} options.responseFormat - 响应格式 ('json_object' | 'text')
  * @returns {ChatOpenAI}
  */
 function getChatModel(options = {}) {
@@ -32,6 +33,7 @@ function getChatModel(options = {}) {
     temperature = config.temperature,
     streaming = false,
     maxTokens,
+    responseFormat,
   } = options;
 
   const apiKey = config.apiKey;
@@ -40,8 +42,8 @@ function getChatModel(options = {}) {
     throw new Error('LLM_API_KEY is not configured');
   }
 
-  // 每次创建新实例，避免并发问题
-  const llm = new ChatOpenAI({
+  // 构建配置
+  const modelConfig = {
     modelName: model,
     temperature,
     streaming,
@@ -49,10 +51,19 @@ function getChatModel(options = {}) {
     openAIApiKey: apiKey,
     configuration: {
       baseURL: config.baseURL,
+      // 添加 response_format 到额外的 body 参数
+      ...(responseFormat === 'json_object' && {
+        extraBody: {
+          response_format: { type: 'json_object' }
+        }
+      })
     },
     timeout: config.timeout,
     maxRetries: config.maxRetries,
-  });
+  };
+
+  // 每次创建新实例，避免并发问题
+  const llm = new ChatOpenAI(modelConfig);
 
   return llm;
 }

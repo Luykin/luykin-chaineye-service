@@ -216,6 +216,7 @@ router.post('/', adminAuth, express.json(), async (req, res) => {
           model,
           temperature: temp,
           systemPrompt: systemPrompt || undefined,
+          responseFormat: 'json_object',
         });
         console.log(`[LLM Test] [${requestId || 'N/A'}] chat completed`);
       }

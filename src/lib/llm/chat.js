@@ -36,6 +36,7 @@ function convertHistory(history = []) {
  * @param {string} options.systemPrompt - 系统提示
  * @param {Array} options.history - 历史消息 [{role, content}]
  * @param {number} options.maxTokens - 最大 token 数
+ * @param {string} options.responseFormat - 响应格式 ('json_object' | 'text')
  * @returns {Promise<string>} 回复文本
  */
 async function chat(message, options = {}) {
@@ -45,10 +46,11 @@ async function chat(message, options = {}) {
     systemPrompt,
     history = [],
     maxTokens,
+    responseFormat,
   } = options;
 
   return withRetry(async () => {
-    const llm = getChatModel({ model, temperature, maxTokens });
+    const llm = getChatModel({ model, temperature, maxTokens, responseFormat });
     
     // 构建消息列表
     const messages = [];

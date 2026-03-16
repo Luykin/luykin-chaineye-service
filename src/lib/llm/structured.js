@@ -1,10 +1,11 @@
 /**
- * 结构化输出对话 - 使用 LangChain withStructuredOutput
+ * 结构化输出对话 - 兼容 LiteLLM/Gemini 实现
  */
 
 const { z } = require('zod');
 const { getChatModel } = require('./models');
 const { withRetry, LLMSchemaError } = require('./utils/errors');
+const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 
 /**
  * 将 JSON Schema 转换为 Zod Schema（简化版）
@@ -54,182 +55,124 @@ function jsonSchemaToZod(jsonSchema) {
 }
 
 /**
- * 将 Zod Schema 转换为 JSON Schema（用于 LangChain）
+ * 将 Schema 转换为 JSON 字符串作为提示词的一部分
  */
-function zodToJsonSchema(zodSchema, name = 'output') {
-  const def = zodSchema._def;
+function schemaToJsonExample(schema) {
+  const example = {};
   
-  if (def.typeName === 'ZodObject') {
-    const properties = {};
-    const required = [];
-    
-    for (const [key, value] of Object.entries(def.shape())) {
-      properties[key] = zodTypeToJsonSchema(value);
-      if (!value.isOptional()) {
-        required.push(key);
+  if (schema.type === 'object' && schema.properties) {
+    for (const [key, prop] of Object.entries(schema.properties)) {
+      if (prop.type === 'string') {
+        example[key] = prop.enum ? prop.enum[0] : 'string_value';
+      } else if (prop.type === 'number' || prop.type === 'integer') {
+        example[key] = 0;
+      } else if (prop.type === 'boolean') {
+        example[key] = true;
+      } else if (prop.type === 'array') {
+        example[key] = [];
+      } else if (prop.type === 'object') {
+        example[key] = {};
       }
     }
-    
-    return {
-      name,
-      description: zodSchema.description || 'Structured output',
-      strict: true,
-      schema: {
-        type: 'object',
-        properties,
-        required,
-        additionalProperties: false
-      }
-    };
   }
   
-  // 如果不是 object，包装成 object
-  return {
-    name,
-    description: zodSchema.description || 'Structured output',
-    strict: true,
-    schema: {
-      type: 'object',
-      properties: {
-        value: zodTypeToJsonSchema(zodSchema)
-      },
-      required: ['value'],
-      additionalProperties: false
-    }
-  };
-}
-
-function zodTypeToJsonSchema(type) {
-  const def = type._def;
-  
-  switch (def.typeName) {
-    case 'ZodString': {
-      const result = { type: 'string' };
-      if (def.description) result.description = def.description;
-      if (def.checks) {
-        for (const check of def.checks) {
-          if (check.kind === 'min') result.minLength = check.value;
-          if (check.kind === 'max') result.maxLength = check.value;
-        }
-      }
-      return result;
-    }
-    case 'ZodNumber':
-    case 'ZodInt': {
-      const result = { type: def.typeName === 'ZodInt' ? 'integer' : 'number' };
-      if (def.description) result.description = def.description;
-      if (def.checks) {
-        for (const check of def.checks) {
-          if (check.kind === 'min') result.minimum = check.value;
-          if (check.kind === 'max') result.maximum = check.value;
-        }
-      }
-      return result;
-    }
-    case 'ZodBoolean': {
-      const result = { type: 'boolean' };
-      if (def.description) result.description = def.description;
-      return result;
-    }
-    case 'ZodArray': {
-      const result = {
-        type: 'array',
-        items: zodTypeToJsonSchema(def.type)
-      };
-      if (def.description) result.description = def.description;
-      return result;
-    }
-    case 'ZodEnum': {
-      const result = { type: 'string', enum: def.values };
-      if (def.description) result.description = def.description;
-      return result;
-    }
-    case 'ZodOptional':
-      return zodTypeToJsonSchema(def.innerType);
-    case 'ZodNullable': {
-      const inner = zodTypeToJsonSchema(def.innerType);
-      return { ...inner, nullable: true };
-    }
-    case 'ZodObject': {
-      const properties = {};
-      const required = [];
-      
-      for (const [key, value] of Object.entries(def.shape())) {
-        properties[key] = zodTypeToJsonSchema(value);
-        if (!value.isOptional()) {
-          required.push(key);
-        }
-      }
-      
-      return {
-        type: 'object',
-        properties,
-        required,
-        additionalProperties: false
-      };
-    }
-    default:
-      return { type: 'string' };
-  }
+  return JSON.stringify(example, null, 2);
 }
 
 /**
- * 结构化对话 - 使用 LangChain withStructuredOutput
+ * 结构化对话 - 使用普通 Chat + JSON 解析（兼容所有模型）
  */
 async function structuredChat(message, schema, options = {}) {
   const {
     model: modelName,
     temperature = 0,
-    name = 'structured_output',
     systemPrompt,
   } = options;
 
   return withRetry(async () => {
-    // 获取模型实例（复用 models.js 的缓存）
     const llm = getChatModel({ 
       model: modelName, 
       temperature,
-      streaming: false 
+      streaming: false,
+      responseFormat: 'json_object'  // 强制返回 JSON 格式
     });
     
     // 转换 schema
-    let jsonSchema;
     let zodSchema;
+    let jsonSchema;
     
     if (schema._def) {
-      // 是 Zod Schema
-      jsonSchema = zodToJsonSchema(schema, name);
+      // 是 Zod Schema，转换为 JSON Schema 用于提示
       zodSchema = schema;
+      // 简化：从 Zod 提取字段信息
+      const shape = schema._def.shape?.() || {};
+      jsonSchema = {
+        type: 'object',
+        properties: Object.fromEntries(
+          Object.entries(shape).map(([k, v]) => {
+            const isOptional = v.isOptional?.() || false;
+            const innerType = isOptional ? v._def.innerType : v;
+            let type = 'string';
+            if (innerType._def?.typeName === 'ZodNumber') type = 'number';
+            if (innerType._def?.typeName === 'ZodBoolean') type = 'boolean';
+            if (innerType._def?.typeName === 'ZodArray') type = 'array';
+            return [k, { type, description: innerType.description }];
+          })
+        ),
+        required: Object.entries(shape)
+          .filter(([k, v]) => !v.isOptional?.())
+          .map(([k]) => k)
+      };
     } else {
       // 是普通 JSON Schema
-      jsonSchema = {
-        name,
-        description: schema.description || 'Structured output',
-        strict: true,
-        schema: schema
-      };
+      jsonSchema = schema;
       zodSchema = jsonSchemaToZod(schema);
     }
     
     try {
-      // 使用 withStructuredOutput 绑定 schema
-      const structuredLlm = llm.withStructuredOutput(jsonSchema, {
-        name: name,
-        strict: true
-      });
-      
+      // 构建提示词
+      const jsonPrompt = `${message}
+
+请返回以下格式的 JSON：
+${JSON.stringify(schemaToJsonExample(jsonSchema), null, 2)}`;
+
       // 构建消息
       const messages = [];
       if (systemPrompt) {
-        messages.push({ role: 'system', content: systemPrompt });
+        messages.push(new SystemMessage(systemPrompt + '\n\n你必须以 JSON 格式输出，不要包含 markdown 代码块标记之外的其他文字。'));
+      } else {
+        messages.push(new SystemMessage('你必须以 JSON 格式输出，不要包含 markdown 代码块标记之外的其他文字。'));
       }
-      messages.push({ role: 'user', content: message });
+      messages.push(new HumanMessage(jsonPrompt));
       
       // 调用模型
-      const result = await structuredLlm.invoke(messages);
+      const response = await llm.invoke(messages);
+      const content = response.content;
       
-      // 使用 Zod 验证（如果提供了 Zod Schema）
-      if (schema._def && zodSchema.parse) {
+      // 解析 JSON
+      let result;
+      try {
+        // 尝试直接解析
+        result = JSON.parse(content);
+      } catch (e) {
+        // 尝试从 markdown 代码块中提取
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          result = JSON.parse(jsonMatch[1].trim());
+        } else {
+          // 尝试找到第一个 { 和最后一个 }
+          const jsonStart = content.indexOf('{');
+          const jsonEnd = content.lastIndexOf('}');
+          if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+            result = JSON.parse(content.substring(jsonStart, jsonEnd + 1));
+          } else {
+            throw new Error('无法从响应中提取 JSON');
+          }
+        }
+      }
+      
+      // 使用 Zod 验证
+      if (zodSchema && zodSchema.parse) {
         try {
           return zodSchema.parse(result);
         } catch (zodError) {
@@ -241,12 +184,11 @@ async function structuredChat(message, schema, options = {}) {
       return result;
       
     } catch (error) {
-      console.error('[LLM structuredChat] Error:', error.message, error.stack);
+      console.error('[LLM structuredChat] Error:', error.message);
       
-      // 处理 LangChain 错误
-      if (error.message?.includes('strict mode')) {
+      if (error.message?.includes('JSON') || error.message?.includes('json')) {
         throw new LLMSchemaError(new Error(
-          '模型不支持严格 Schema 模式，请尝试简化 Schema 或更换模型'
+          `JSON 解析失败: ${error.message}。请尝试简化 Schema 或更换模型。`
         ));
       }
       
