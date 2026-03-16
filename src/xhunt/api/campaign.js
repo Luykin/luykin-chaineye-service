@@ -614,11 +614,11 @@ async function generateExternalLink(campaign, taskId, user) {
     // Token Base64 编码
     const xHuntToken = Buffer.from(rawToken).toString('base64');
     
-    // 生成 HMACSHA256 签名（基于原始 token 字符串）
+    // 生成 HMACSHA256 签名（基于 Base64 编码后的 token）
     const signature = crypto
       .createHmac('sha256', secretKey)
       .update(xHuntToken)
-      .digest('base64');
+      .digest('hex');
 
     // console.log('[generateExternalLink]', signature, `rawToken ${taskId} ${user.id}`)
     
