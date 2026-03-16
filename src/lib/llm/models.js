@@ -18,7 +18,7 @@ function getCacheKey(model, temperature, streaming) {
 }
 
 /**
- * 获取或创建 ChatOpenAI 实例（带缓存）
+ * 创建新的 ChatOpenAI 实例（不缓存，避免并发问题）
  * @param {Object} options - 可选配置
  * @param {string} options.model - 模型名称
  * @param {number} options.temperature - 温度
@@ -40,20 +40,7 @@ function getChatModel(options = {}) {
     throw new Error('LLM_API_KEY is not configured');
   }
 
-  // 生成缓存 key（maxTokens 不参与缓存，因为很少变且不影响连接）
-  const cacheKey = getCacheKey(model, temperature, streaming);
-
-  // 检查缓存
-  if (modelCache.has(cacheKey)) {
-    const cached = modelCache.get(cacheKey);
-    // 如果 maxTokens 不同，需要重新设置
-    if (maxTokens && maxTokens !== cached.maxTokens) {
-      cached.maxTokens = maxTokens;
-    }
-    return cached;
-  }
-
-  // 创建新实例
+  // 每次创建新实例，避免并发问题
   const llm = new ChatOpenAI({
     modelName: model,
     temperature,
@@ -66,10 +53,6 @@ function getChatModel(options = {}) {
     timeout: config.timeout,
     maxRetries: config.maxRetries,
   });
-
-  // 存入缓存
-  modelCache.set(cacheKey, llm);
-  console.log(`[LLM] Created new model instance: ${cacheKey}`);
 
   return llm;
 }

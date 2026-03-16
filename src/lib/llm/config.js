@@ -15,8 +15,8 @@ const DEFAULT_CONFIG = {
   // 默认温度（0.3 = 保守稳定，适合数据分析类任务）
   temperature: 0.3,
   
-  // 请求超时（毫秒）
-  timeout: 60000,
+  // 请求超时（毫秒）- 延长到 120 秒，避免 LLM 服务慢时超时
+  timeout: 120000,
   
   // 失败重试次数
   maxRetries: 3,

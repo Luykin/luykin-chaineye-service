@@ -211,12 +211,8 @@ async function structuredChat(message, schema, options = {}) {
       zodSchema = jsonSchemaToZod(schema);
     }
     
-    console.log('[LLM structuredChat] Using LangChain withStructuredOutput');
-    console.log('[LLM structuredChat] Schema:', JSON.stringify(jsonSchema, null, 2).substring(0, 500));
-    
     try {
       // 使用 withStructuredOutput 绑定 schema
-      // 注：OpenAI 兼容模型会自动使用 json_schema 模式
       const structuredLlm = llm.withStructuredOutput(jsonSchema, {
         name: name,
         strict: true
@@ -232,8 +228,6 @@ async function structuredChat(message, schema, options = {}) {
       // 调用模型
       const result = await structuredLlm.invoke(messages);
       
-      console.log('[LLM structuredChat] Result:', JSON.stringify(result).substring(0, 200));
-      
       // 使用 Zod 验证（如果提供了 Zod Schema）
       if (schema._def && zodSchema.parse) {
         try {
@@ -247,7 +241,7 @@ async function structuredChat(message, schema, options = {}) {
       return result;
       
     } catch (error) {
-      console.error('[LLM structuredChat] Error:', error.message);
+      console.error('[LLM structuredChat] Error:', error.message, error.stack);
       
       // 处理 LangChain 错误
       if (error.message?.includes('strict mode')) {
