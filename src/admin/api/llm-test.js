@@ -158,6 +158,7 @@ router.post('/', adminAuth, express.json(), async (req, res) => {
       outputFormat = 'text',
       jsonSchema,
       systemPrompt,
+      requestId,
     } = req.body;
 
     // 参数校验
@@ -220,7 +221,7 @@ router.post('/', adminAuth, express.json(), async (req, res) => {
     const duration = Date.now() - startTime;
 
     // 记录测试日志
-    console.log(`[LLM Test] User: ${req.admin?.email || 'unknown'}, Model: ${model}, Duration: ${duration}ms, Success: ${!error}`);
+    console.log(`[LLM Test] RequestId: ${requestId || 'N/A'}, User: ${req.admin?.email || 'unknown'}, Model: ${model}, Duration: ${duration}ms, Success: ${!error}`);
 
     res.json({
       success: !error,
@@ -232,6 +233,7 @@ router.post('/', adminAuth, express.json(), async (req, res) => {
         outputFormat,
         duration: `${duration}ms`,
         timestamp: new Date().toISOString(),
+        requestId: requestId || null,
       },
     });
 

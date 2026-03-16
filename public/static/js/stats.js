@@ -1365,6 +1365,10 @@ async function runLlmTest() {
   if (resultPanelEl) resultPanelEl.style.display = 'none';
   if (testBtn) testBtn.disabled = true;
 
+  // 生成 requestId 用于排查
+  const requestId = 'llm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  console.log('[LLM Test] RequestId:', requestId);
+
   try {
     const response = await fetch('/api/admin/llm-test', {
       method: 'POST',
@@ -1376,6 +1380,7 @@ async function runLlmTest() {
         outputFormat,
         jsonSchema,
         systemPrompt: systemPrompt || undefined,
+        requestId,
       }),
     });
 
