@@ -617,7 +617,7 @@ async function generateExternalLink(campaign, taskId, user) {
     // 生成 HMACSHA256 签名（基于原始 token 字符串）
     const signature = crypto
       .createHmac('sha256', secretKey)
-      .update(rawToken)
+      .update(xHuntToken)
       .digest('base64');
 
     // console.log('[generateExternalLink]', signature, `rawToken ${taskId} ${user.id}`)
