@@ -276,11 +276,15 @@ async function structuredChat(message, schema, options = {}) {
         try {
           return schema.parse(parsed);
         } catch (zodError) {
-          console.error('[LLM structuredChat] Zod validation error:', zodError.errors);
+          console.error('[LLM structuredChat] Zod validation error:', zodError);
+          
+          // Zod 错误在 issues 数组中
+          const issues = zodError.issues || [];
+          
           // 格式化错误信息
-          const missingFields = zodError.errors
-            .filter(e => e.message.includes('Required') || e.message.includes('expected'))
-            .map(e => e.path.join('.'))
+          const missingFields = issues
+            .filter(e => e.message?.includes('Required') || e.message?.includes('expected') || e.code === 'invalid_type')
+            .map(e => e.path?.join('.') || 'unknown')
             .filter(Boolean);
           
           if (missingFields.length > 0) {
@@ -288,7 +292,9 @@ async function structuredChat(message, schema, options = {}) {
             throw new LLMSchemaError(new Error(errorMsg));
           }
           
-          throw new LLMSchemaError(zodError);
+          // 其他验证错误
+          const errorMessages = issues.map(e => `${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+          throw new LLMSchemaError(new Error(`Schema 验证失败:\n${errorMessages}`));
         }
       }
       
