@@ -68,8 +68,7 @@ async function structuredChat(message, schema, options = {}) {
   const { model: modelName, temperature = 0, systemPrompt } = options;
 
   return withRetry(async () => {
-    // 用户传递的是普通 JSON Schema，直接使用
-    // 不需要转换为 Zod，LiteLLM 会处理
+    // schema 应该是普通 JSON Schema（来自用户输入）
     const jsonSchemaObj = schema;
 
     // 使用 LiteLLM 的 json_schema 格式

@@ -61,7 +61,6 @@ function getChatModel(options = {}) {
         type: 'json_schema',
         json_schema: {
           name: jsonSchema.name || 'structured_output',
-          strict: true,
           schema: jsonSchema.schema || jsonSchema
         }
       }

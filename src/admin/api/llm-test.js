@@ -197,16 +197,13 @@ router.post('/', adminAuth, express.json(), async (req, res) => {
 
     try {
       if (outputFormat === 'json' && jsonSchema) {
-        // 结构化输出模式
-        console.log(`[LLM Test] [${requestId || 'N/A'}] Parsing JSON schema...`);
-        const parsedSchema = parseJsonSchema(jsonSchema);
-        console.log(`[LLM Test] [${requestId || 'N/A'}] Schema parsed, calling structuredChat...`);
+        // 结构化输出模式 - 直接传递原始 JSON Schema
+        console.log(`[LLM Test] [${requestId || 'N/A'}] Calling structuredChat with JSON Schema...`);
         
-        result = await structuredChat(prompt, parsedSchema, {
+        result = await structuredChat(prompt, jsonSchema, {
           model,
           temperature: temp,
           systemPrompt: systemPrompt || undefined,
-          name: 'admin_test',
         });
         console.log(`[LLM Test] [${requestId || 'N/A'}] structuredChat completed`);
       } else {
