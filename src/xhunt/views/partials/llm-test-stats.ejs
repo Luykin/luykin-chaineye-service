@@ -1,0 +1,709 @@
+<!-- LLM 测试工具 -->
+<div class="llm-test-container">
+  <!-- 输入区域 -->
+  <div class="panel">
+    <div class="panel-header">
+      <h3 class="panel-title">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        输入配置
+      </h3>
+    </div>
+    <div class="panel-body">
+      <!-- Prompt -->
+      <div class="form-group">
+        <label class="form-label">提示词 <span class="hint">*</span></label>
+        <textarea 
+          id="llm-prompt" 
+          class="form-textarea" 
+          rows="4"
+          placeholder="请输入你想让 AI 执行的任务...&#10;&#10;例如：&#10;分析以下项目信息，提取关键字段：&#10;项目名称：Uniswap&#10;描述：Uniswap 是以太坊上最大的去中心化交易所..."
+        ></textarea>
+      </div>
+
+      <!-- System Prompt -->
+      <div class="form-group">
+        <label class="form-label">系统提示词 <span class="hint">可选</span></label>
+        <input 
+          type="text" 
+          id="llm-system-prompt" 
+          class="form-input" 
+          placeholder="例如：你是一个专业的区块链项目分析师"
+        >
+      </div>
+
+      <!-- Model & Temperature -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">模型</label>
+          <select id="llm-model" class="form-select">
+            <option value="gemini-3-flash-preview" selected>Gemini 3 Flash Preview（默认）</option>
+            <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="v0/Kimi-K2.5">Kimi K2.5</option>
+            <option value="v0/gpt-5-mini">GPT-5 Mini</option>
+            <option value="v0/deepseek-v3.2">DeepSeek V3.2</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">温度 <span class="hint" id="llm-temp-hint">0.7 - 对话</span></label>
+          <div class="slider-wrap">
+            <input type="range" id="llm-temperature" class="slider" min="0" max="2" step="0.1" value="0.7">
+            <span class="slider-value" id="llm-temp-value">0.7</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Output Format -->
+      <div class="form-group">
+        <label class="form-label">输出格式</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" name="llm-output-format" value="text" checked>
+            <span>文本</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="llm-output-format" value="json">
+            <span>JSON (结构化)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- JSON Schema Editor -->
+      <div id="llm-schema-section" class="schema-section" style="display: none;">
+        <div class="form-group">
+          <label class="form-label">JSON Schema</label>
+          <div class="schema-help">
+            支持: <code>string</code> <code>number</code> <code>boolean</code> <code>array</code> <code>object</code> <code>enum</code>
+            | 属性: <code>description</code> <code>min/max</code> <code>required</code>
+          </div>
+          <textarea 
+            id="llm-json-schema" 
+            class="form-textarea code" 
+            rows="10"
+            placeholder='{
+  "type": "object",
+  "properties": {
+    "sentiment": {
+      "type": "string",
+      "enum": ["positive", "negative", "neutral"],
+      "description": "情感倾向"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "置信度"
+    }
+  },
+  "required": ["sentiment", "confidence"]
+}'
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="form-actions">
+        <button class="btn btn-primary" id="llm-test-btn" onclick="runLlmTest()">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          运行测试
+        </button>
+        <button class="btn btn-secondary" onclick="resetLlmTest()">重置</button>
+      </div>
+
+      <!-- Tips -->
+      <div class="tips-box">
+        <div class="tips-title">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          温度使用建议
+        </div>
+        <ul class="tips-list">
+          <li><strong>0 - 0.3</strong>：数据分析、字段提取（结果稳定）</li>
+          <li><strong>0.4 - 0.7</strong>：通用问答、项目评估（平衡）</li>
+          <li><strong>0.8 - 1.2</strong>：创意写作、头脑风暴（随机性高）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading-state" id="llm-loading" style="display: none;">
+    <div class="spinner"></div>
+    <p>正在调用模型，请稍候...</p>
+  </div>
+
+  <!-- Result -->
+  <div class="panel result-panel" id="llm-result-panel" style="display: none;">
+    <div class="panel-header">
+      <h3 class="panel-title">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        输出结果
+        <span class="badge" id="llm-result-badge"></span>
+      </h3>
+      <div class="panel-meta">
+        <span id="llm-meta-model">-</span>
+        <span id="llm-meta-temp">-</span>
+        <span id="llm-meta-duration">-</span>
+      </div>
+    </div>
+    <div class="panel-body">
+      <pre class="result-code" id="llm-result-content"></pre>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* LLM 测试工具样式 */
+  .llm-test-container {
+    max-width: 900px;
+  }
+
+  .panel {
+    background: var(--bg-secondary, #fff);
+    border: 1px solid var(--border-subtle, #e5e7eb);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
+  }
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+    background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+    border-radius: 12px 12px 0 0;
+  }
+
+  .panel-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary, #111827);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .panel-title .icon {
+    width: 18px;
+    height: 18px;
+    color: var(--accent, #3b82f6);
+  }
+
+  .panel-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted, #9ca3af);
+  }
+
+  .panel-meta span {
+    background: var(--bg-tertiary, #f3f4f6);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+
+  .panel-body {
+    padding: 20px;
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  .form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary, #374151);
+    margin-bottom: 6px;
+  }
+
+  .form-label .hint {
+    font-weight: 400;
+    color: var(--text-muted, #9ca3af);
+  }
+
+  .form-input,
+  .form-select,
+  .form-textarea {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--text-primary, #374151);
+    background: var(--bg-tertiary, #f9fafb);
+    border: 1px solid var(--border-subtle, #e5e7eb);
+    border-radius: 8px;
+    transition: all 0.2s;
+  }
+
+  .form-input:focus,
+  .form-select:focus,
+  .form-textarea:focus {
+    outline: none;
+    background: #fff;
+    border-color: var(--accent, #3b82f6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  .form-textarea {
+    resize: vertical;
+    line-height: 1.6;
+  }
+
+  .form-textarea.code {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 12px;
+  }
+
+  .form-select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 36px;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+  }
+
+  @media (max-width: 640px) {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Slider */
+  .slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .slider {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 6px;
+    background: var(--bg-tertiary, #e5e7eb);
+    border-radius: 3px;
+    outline: none;
+  }
+
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent, #3b82f6);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  .slider-value {
+    min-width: 36px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent, #3b82f6);
+    background: rgba(59, 130, 246, 0.1);
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+
+  /* Radio */
+  .radio-group {
+    display: flex;
+    gap: 12px;
+  }
+
+  .radio-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--bg-tertiary, #f3f4f6);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary, #6b7280);
+  }
+
+  .radio-label:hover {
+    background: #fff;
+    border-color: var(--border-subtle, #e5e7eb);
+  }
+
+  .radio-label input {
+    display: none;
+  }
+
+  .radio-label:has(input:checked) {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: var(--accent, #3b82f6);
+    color: var(--accent, #3b82f6);
+  }
+
+  /* Schema Help */
+  .schema-help {
+    background: linear-gradient(135deg, #eff6ff 0%, #f0f7ff 100%);
+    border-left: 3px solid var(--accent, #3b82f6);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+    color: var(--text-secondary, #6b7280);
+  }
+
+  .schema-help code {
+    background: rgba(59, 130, 246, 0.1);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--accent, #3b82f6);
+  }
+
+  /* Buttons */
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle, #e5e7eb);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn .icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .btn-primary {
+    background: var(--accent, #3b82f6);
+    color: #fff;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: var(--bg-tertiary, #f3f4f6);
+    color: var(--text-secondary, #6b7280);
+    border: 1px solid var(--border-subtle, #e5e7eb);
+  }
+
+  .btn-secondary:hover {
+    background: #e5e7eb;
+  }
+
+  /* Tips */
+  .tips-box {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-top: 20px;
+  }
+
+  .tips-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #92400e;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .tips-title .icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .tips-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+    color: #78350f;
+    line-height: 1.8;
+  }
+
+  .tips-list li {
+    margin-bottom: 2px;
+  }
+
+  .tips-list strong {
+    color: #92400e;
+  }
+
+  /* Loading */
+  .loading-state {
+    text-align: center;
+    padding: 40px;
+    background: var(--bg-secondary, #fff);
+    border: 1px solid var(--border-subtle, #e5e7eb);
+    border-radius: 12px;
+  }
+
+  .loading-state .spinner {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto 12px;
+    border: 3px solid var(--bg-tertiary, #f3f4f6);
+    border-top-color: var(--accent, #3b82f6);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .loading-state p {
+    color: var(--text-secondary, #6b7280);
+    font-size: 13px;
+  }
+
+  /* Result Panel */
+  .result-panel {
+    border-left: 4px solid var(--success, #22c55e);
+  }
+
+  .result-panel.error {
+    border-left-color: var(--error, #ef4444);
+  }
+
+  .badge {
+    display: inline-flex;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+
+  .badge.success {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+  }
+
+  .badge.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+  }
+
+  .result-code {
+    background: var(--bg-tertiary, #f9fafb);
+    border: 1px solid var(--border-subtle, #e5e7eb);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 400px;
+    overflow: auto;
+    margin: 0;
+    color: var(--text-primary, #374151);
+  }
+
+  .result-code.error {
+    background: rgba(239, 68, 68, 0.05);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: #dc2626;
+  }
+
+  .result-code.success {
+    background: rgba(34, 197, 94, 0.05);
+    border-color: rgba(34, 197, 94, 0.2);
+  }
+</style>
+
+<script>
+(function() {
+  // Temperature slider
+  const tempSlider = document.getElementById('llm-temperature');
+  const tempValue = document.getElementById('llm-temp-value');
+  const tempHint = document.getElementById('llm-temp-hint');
+  
+  function updateTempHint(val) {
+    const v = parseFloat(val);
+    if (v <= 0.3) tempHint.textContent = `${v} - 分析/提取（稳定）`;
+    else if (v <= 0.7) tempHint.textContent = `${v} - 通用问答（平衡）`;
+    else tempHint.textContent = `${v} - 创意写作（随机）`;
+  }
+  
+  tempSlider.addEventListener('input', (e) => {
+    tempValue.textContent = e.target.value;
+    updateTempHint(e.target.value);
+  });
+
+  // Output format toggle
+  const formatRadios = document.querySelectorAll('input[name="llm-output-format"]');
+  const schemaSection = document.getElementById('llm-schema-section');
+  formatRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      schemaSection.style.display = e.target.value === 'json' ? 'block' : 'none';
+    });
+  });
+
+  // Expose functions to global scope
+  // 绑定到 LLM Test Tab 激活事件
+  document.addEventListener('stats-tab-activated', function(e) {
+    if (e.detail && e.detail.tabId === 'llm-test') {
+      // Tab 被激活时的初始化（如果需要）
+      console.log('[LLM Test] Tab activated');
+    }
+  });
+
+  window.runLlmTest = async function() {
+    const prompt = document.getElementById('llm-prompt').value.trim();
+    const systemPrompt = document.getElementById('llm-system-prompt').value.trim();
+    const model = document.getElementById('llm-model').value;
+    const temperature = parseFloat(document.getElementById('llm-temperature').value);
+    const outputFormat = document.querySelector('input[name="llm-output-format"]:checked').value;
+    
+    if (!prompt) {
+      alert('请输入提示词');
+      return;
+    }
+
+    let jsonSchema = null;
+    if (outputFormat === 'json') {
+      const schemaText = document.getElementById('llm-json-schema').value.trim();
+      if (!schemaText) {
+        alert('请输入 JSON Schema');
+        return;
+      }
+      try {
+        jsonSchema = JSON.parse(schemaText);
+      } catch (e) {
+        alert('JSON Schema 格式错误: ' + e.message);
+        return;
+      }
+    }
+
+    // Show loading
+    document.getElementById('llm-loading').style.display = 'block';
+    document.getElementById('llm-result-panel').style.display = 'none';
+    document.getElementById('llm-test-btn').disabled = true;
+
+    try {
+      const response = await fetch('/api/admin/llm-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          model,
+          temperature,
+          outputFormat,
+          jsonSchema,
+          systemPrompt: systemPrompt || undefined,
+        }),
+      });
+
+      const result = await response.json();
+
+      // Hide loading
+      document.getElementById('llm-loading').style.display = 'none';
+      document.getElementById('llm-test-btn').disabled = false;
+
+      // Show result
+      const resultPanel = document.getElementById('llm-result-panel');
+      const resultContent = document.getElementById('llm-result-content');
+      const resultBadge = document.getElementById('llm-result-badge');
+      
+      resultPanel.style.display = 'block';
+      resultPanel.classList.remove('error');
+
+      if (result.success) {
+        resultBadge.className = 'badge success';
+        resultBadge.textContent = '成功';
+        resultContent.className = 'result-code success';
+        resultContent.textContent = typeof result.data === 'object' 
+          ? JSON.stringify(result.data, null, 2)
+          : result.data;
+      } else {
+        resultPanel.classList.add('error');
+        resultBadge.className = 'badge error';
+        resultBadge.textContent = '失败';
+        resultContent.className = 'result-code error';
+        resultContent.textContent = result.error?.message || result.error || '未知错误';
+      }
+
+      // Update meta
+      if (result.meta) {
+        document.getElementById('llm-meta-model').textContent = result.meta.model;
+        document.getElementById('llm-meta-temp').textContent = 'T=' + result.meta.temperature;
+        document.getElementById('llm-meta-duration').textContent = result.meta.duration;
+      }
+
+    } catch (error) {
+      document.getElementById('llm-loading').style.display = 'none';
+      document.getElementById('llm-test-btn').disabled = false;
+      
+      const resultPanel = document.getElementById('llm-result-panel');
+      resultPanel.style.display = 'block';
+      resultPanel.classList.add('error');
+      
+      document.getElementById('llm-result-badge').className = 'badge error';
+      document.getElementById('llm-result-badge').textContent = '错误';
+      document.getElementById('llm-result-content').className = 'result-code error';
+      document.getElementById('llm-result-content').textContent = '请求失败: ' + error.message;
+    }
+  };
+
+  window.resetLlmTest = function() {
+    document.getElementById('llm-prompt').value = '';
+    document.getElementById('llm-system-prompt').value = '';
+    document.getElementById('llm-model').selectedIndex = 0;
+    document.getElementById('llm-temperature').value = 0.7;
+    tempValue.textContent = '0.7';
+    updateTempHint(0.7);
+    document.querySelector('input[name="llm-output-format"][value="text"]').checked = true;
+    schemaSection.style.display = 'none';
+    document.getElementById('llm-json-schema').value = '';
+    document.getElementById('llm-result-panel').style.display = 'none';
+  };
+})();
+</script>

@@ -249,6 +249,11 @@
           <div class="tab-pane" id="redis-management">
             <%- include('partials/redis-management') %>
           </div>
+
+          <!-- LLM 测试 Tab -->
+          <div class="tab-pane" id="llm-test">
+            <%- include('partials/llm-test-stats') %>
+          </div>
           <!-- 管理员列表 Tab -->
           <div class="tab-pane" id="admin-users">
             <%- include('partials/admin-users') %>
@@ -421,6 +426,7 @@
         { id: 'server-command', icon: '#icon-server', text: '终端命令', perm: 'server:execute' },
         <% if (typeof user !== 'undefined' && user && user.role === 'super') { %>
         { id: 'redis-management', icon: '#icon-database', text: 'Redis管理', perm: 'redis-management' },
+        { id: 'llm-test', icon: '#icon-cpu', text: 'LLM测试', perm: 'llm-test' },
         { id: 'admin-users', icon: '#icon-user', text: '管理员列表', perm: 'admin-users' },
         { id: 'admin-audit-logs', icon: '#icon-clipboard', text: '操作记录', perm: 'audit-logs:read' },
         <% } %>

@@ -113,6 +113,7 @@ const rootdataProRoutes = require("./rootdatapro/api/rootdatapro");
 
 const adminRoutes = require("./admin/api/admin");
 const adminReviewsRoutes = require("./admin/api/reviews");
+const adminLlmTestRoutes = require("./admin/api/llm-test");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
 const internalQueryRoutes = require("./api/internal-query");
@@ -434,6 +435,9 @@ async function initializeAndStartServer() {
 
   // 管理后台 - 评论管理
   app.use("/api/admin/reviews", adminAuth, adminReviewsRoutes);
+
+  // 管理后台 - LLM 测试工具 API
+  app.use("/api/admin/llm-test", adminAuth, adminLlmTestRoutes);
 
   // 内部查询API - 使用随机字符前缀，无需安全中间件
   const INTERNAL_QUERY_EXPIRATION = new Date("2027-02-20T00:00:00Z");

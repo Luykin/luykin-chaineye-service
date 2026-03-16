@@ -598,13 +598,69 @@ async function withRetry(fn, maxRetries = 3) {
 - 向量数据库
 - Retrieval Chain
 
-## 12. 安装
+## 12. 管理后台 LLM 测试工具
+
+提供了一个 Web 界面用于测试和调试 LLM 调用。
+
+### 12.1 访问地址
+
+登录管理后台后访问：`/admin/llm-test`
+
+### 12.2 功能
+
+- **提示词输入**：输入要测试的 prompt
+- **系统提示词**：可选，设定 AI 角色
+- **模型选择**：支持 6 种模型
+  - Gemini 3 Flash Preview（默认）
+  - Gemini 3 Pro Preview
+  - Gemini 2.5 Flash
+  - Kimi K2.5
+  - GPT-5 Mini
+  - DeepSeek V3.2
+- **温度调节**：0-2 滑块控制
+- **输出格式**：文本 或 JSON（结构化）
+- **JSON Schema 编辑器**：当选择 JSON 格式时，可自定义输出结构
+
+### 12.3 JSON Schema 示例
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sentiment": {
+      "type": "string",
+      "enum": ["positive", "negative", "neutral"],
+      "description": "情感倾向"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "置信度"
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "关键词"
+    }
+  },
+  "required": ["sentiment", "confidence"]
+}
+```
+
+### 12.4 实现文件
+
+- API：`src/admin/api/llm-test.js`
+- 页面：`src/xhunt/views/partials/llm-test-stats.ejs`（集成在管理后台 stats 页面）
+- 路由：`/api/admin/llm-test` (已挂载在 `apiServer.js`)
+
+## 13. 安装
 
 ```bash
 yarn add langchain @langchain/openai zod
 ```
 
-## 13. 环境变量
+## 14. 环境变量
 
 ```bash
 # .env-dev

@@ -99,6 +99,7 @@ function initTabs() {
     "nacos-campaigns": "nacos_config",
     "feature-flags": "feature_flags_config",
     "redis-management": "redis-management",
+    "llm-test": "llm-test",
   };
 
   function hasPermissionForTab(tab) {
@@ -1059,6 +1060,7 @@ function renderSidebarTabs() {
     'nacos-campaigns': 'nacos_config',
     'feature-flags': 'feature_flags_config',
     'redis-management': 'redis-management',
+    'llm-test': 'llm-test',
     'admin-users': 'admin-users',
   };
   
