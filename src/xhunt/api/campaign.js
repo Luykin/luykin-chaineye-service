@@ -606,22 +606,25 @@ router.get(
 async function generateExternalLink(campaign, taskId, user) {
   // realgo 活动实现
   if (campaign === 'realgo') {
-    const timestamp = Date.now();
-    const message = `${user.twitterId}:${timestamp}`;
+    const timestamp = new Date().toISOString(); // UTC 时间
+    const rawToken = `${user.twitterId}:${timestamp}`;
     const secretKey = 'JvApDef2C2Vkg9VRAM+jcjPXaCYFw6xyZnmIiaUxVUs=';
     
-    // 生成 HMACSHA256 签名
+    // Token Base64 编码
+    const xHuntToken = Buffer.from(rawToken).toString('base64');
+    
+    // 生成 HMACSHA256 签名（基于原始 token 字符串）
     const signature = crypto
       .createHmac('sha256', secretKey)
-      .update(message)
+      .update(rawToken)
       .digest('base64');
     
     // 构建跳转链接
-    const link = `https://testofficial.realgo.game/reg?code=XHUNT&xHuntToken=${encodeURIComponent(message)}&xHuntSignature=${encodeURIComponent(signature)}`;
+    const link = `https://testofficial.realgo.game/reg?code=XHUNT&xHuntToken=${encodeURIComponent(xHuntToken)}&xHuntSignature=${encodeURIComponent(signature)}`;
     
     return {
       link,
-      expiresAt: new Date(timestamp + 10 * 60 * 1000).toISOString(), // 10分钟有效期
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5分钟有效期
     };
   }
   
