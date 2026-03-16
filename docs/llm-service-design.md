@@ -24,11 +24,11 @@ LLM_API_KEY=your_api_key_here
 ### 3.2 代码默认配置
 
 ```javascript
-// src/services/llm/config.js
+// src/lib/llm/config.js
 const DEFAULT_CONFIG = {
   baseURL: 'https://aaii.xclaw.info/v1/',
   defaultModel: 'gemini-3-flash-preview',
-  temperature: 0.7,
+  temperature: 0.3,  // 对话类建议 0.7
   timeout: 60000,
   maxRetries: 3,
 };
@@ -73,7 +73,7 @@ await chat('总结', { maxTokens: 200 });
 **推荐：** 直接用 `chat()` / `structuredChat()`，不传 `history`
 
 ```javascript
-const { structuredChat } = require('../services/llm');
+const { structuredChat } = require('../lib/llm');
 
 // 每次独立调用，无状态
 const result = await structuredChat(
@@ -111,7 +111,7 @@ app.post('/api/chat', async (req, res) => {
 **方案 2：LangChain Memory（复杂场景）**
 
 ```javascript
-const { chatWithMemory } = require('../services/llm');
+const { chatWithMemory } = require('../lib/llm');
 
 // 用 sessionId 区分不同用户的对话
 const reply = await chatWithMemory(message, {
@@ -202,7 +202,7 @@ const summary = await chat(
 ## 5. 架构设计
 
 ```
-src/services/llm/
+src/lib/llm/
 ├── index.js              # 主入口，导出便捷方法
 ├── config.js             # 默认配置
 ├── models.js             # LangChain ChatModel 初始化
@@ -231,7 +231,7 @@ src/services/llm/
 ### 6.1 第1层：便捷方法（现在主要用这个）
 
 ```javascript
-const { chat, structuredChat, streamChat } = require('../services/llm');
+const { chat, structuredChat, streamChat } = require('../lib/llm');
 
 // 普通对话
 const result = await chat('你好');
@@ -247,19 +247,55 @@ for await (const chunk of streamChat('讲个故事')) {
 }
 ```
 
-### 6.2 第2层：Chain 组合（中等复杂度）
+### 6.2 第2层：基础实例（复杂场景，直接用 LangChain）
+
+当便捷方法不够用，需要自定义 Chain、PromptTemplate、Agent 时，使用 `getChatModel()` 获取预配置的 LLM 实例。
 
 ```javascript
-const { createAnalysisChain } = require('../services/llm/chains');
-const { projectAnalysisTemplate } = require('../services/llm/prompts');
+const { getChatModel } = require('../lib/llm');
+const { ChatPromptTemplate } = require('@langchain/core/prompts');
+const { RunnableSequence } = require('@langchain/core/runnables');
 
-const chain = createAnalysisChain({
-  prompt: projectAnalysisTemplate,
-  schema: ProjectAnalysisSchema,
-  model: 'gpt-4o'  // 可选
+// 1. 获取预配置的 ChatOpenAI 实例
+const llm = getChatModel({ 
+  model: 'gpt-4o',        // 可选
+  temperature: 0.3        // 可选
 });
 
-const result = await chain.invoke({ projectDescription: '...' });
+// 2. 然后自由使用 LangChain 的所有能力
+const prompt = ChatPromptTemplate.fromMessages([
+  ['system', '你是专业的区块链分析师'],
+  ['human', '分析这个项目：\n{input}']
+]);
+
+const chain = RunnableSequence.from([
+  prompt,
+  llm,
+  (result) => result.content.toUpperCase()  // 自定义后处理
+]);
+
+const result = await chain.invoke({ 
+  input: projectDescription 
+});
+```
+
+**和便捷方法的区别：**
+
+| 方式 | 代码量 | 灵活性 | 适用场景 |
+|------|--------|--------|----------|
+| `chat()` | 极少 | 低 | 简单对话 |
+| `getChatModel() + LangChain` | 中等 | **高** | 复杂 pipeline |
+
+**其他导出方法：**
+
+```javascript
+const { getChatModel, clearModelCache, getCacheStats } = require('../lib/llm');
+
+// 清空模型缓存（配置变更时）
+clearModelCache();
+
+// 查看缓存状态
+console.log(getCacheStats());  // { size: 3, keys: ['model1_temp1_0', ...] }
 ```
 
 ### 6.3 第3层：Agent 系统（后续复杂场景）
@@ -282,7 +318,7 @@ const result = await agent.invoke('分析这个项目并计算估值');
 #### `chat(message, options)`
 
 ```javascript
-const { chat } = require('../services/llm');
+const { chat } = require('../lib/llm');
 
 // 最简单的调用
 const text = await chat('你好');
@@ -290,7 +326,7 @@ const text = await chat('你好');
 // 完整参数
 const text = await chat('你好', {
   model: 'gpt-4o',           // 可选，默认 gemini-3-flash-preview
-  temperature: 0.5,          // 可选
+  temperature: 0.7,          // 可选，默认 0.3，对话建议 0.7
   systemPrompt: '你是专家',   // 可选
   history: [                 // 可选，历史消息
     { role: 'user', content: '之前的问题' },
@@ -299,10 +335,19 @@ const text = await chat('你好', {
 });
 ```
 
+**temperature（温度）建议：**
+
+| 场景 | 推荐温度 | 说明 |
+|------|---------|------|
+| 数据分析、提取字段 | 0 - 0.3 | 确定性强，结果稳定 |
+| 项目评估、分类 | 0.3 - 0.5 | 默认就是这个范围 |
+| 聊天对话 | 0.7 - 1.0 | 更有温度，不机械 |
+| 创意写作 | 1.0 - 1.5 | 天马行空，但可能跑偏 |
+
 #### `structuredChat(message, schema, options)`
 
 ```javascript
-const { structuredChat } = require('../services/llm');
+const { structuredChat } = require('../lib/llm');
 const { z } = require('zod');
 
 // 定义 Schema
@@ -330,7 +375,7 @@ console.log(result.sentiment);  // 'positive'
 #### `streamChat(message, options)`
 
 ```javascript
-const { streamChat } = require('../services/llm');
+const { streamChat } = require('../lib/llm');
 
 // Express SSE 示例
 app.post('/api/chat', async (req, res) => {
@@ -351,7 +396,7 @@ app.post('/api/chat', async (req, res) => {
 ### 7.2 Prompt 模板
 
 ```javascript
-// src/services/llm/prompts/templates/analysis.js
+// src/lib/llm/prompts/templates/analysis.js
 const { ChatPromptTemplate } = require('@langchain/core/prompts');
 
 // 简单模板
@@ -398,53 +443,25 @@ const result = await projectChain.invoke({
 });
 ```
 
-## 8. 预定义 Schema
+## 8. 使用示例
 
-```javascript
-// src/services/llm/prompts/schemas/index.js
-const { z } = require('zod');
+Schema 定义在使用的地方，更灵活。
 
-const ProjectAnalysisSchema = z.object({
-  projectName: z.string().describe('项目名称'),
-  category: z.enum(['DeFi', 'NFT', 'GameFi', 'Infra', 'L1/L2', 'Social', 'Other']),
-  riskLevel: z.enum(['low', 'medium', 'high']).describe('风险评估'),
-  keyInvestors: z.array(z.string()).describe('主要投资机构'),
-  summary: z.string().max(200).describe('项目简介'),
-  tags: z.array(z.string()).max(5).describe('标签'),
-  potentialScore: z.number().min(1).max(10).describe('潜力评分')
-});
-
-const TweetAnalysisSchema = z.object({
-  sentiment: z.enum(['positive', 'negative', 'neutral', 'mixed']),
-  intent: z.enum(['informative', 'promotional', 'fud', 'shill', 'question', 'neutral']),
-  mentionedTokens: z.array(z.string()).describe('提到的代币'),
-  keyPoints: z.array(z.string()).max(3).describe('关键观点'),
-  influence: z.enum(['high', 'medium', 'low']).describe('影响力评估')
-});
-
-const SentimentAnalysisSchema = z.object({
-  score: z.number().min(-1).max(1).describe('情感分数，-1负面到1正面'),
-  label: z.enum(['bullish', 'bearish', 'neutral']),
-  reasoning: z.string().max(150).describe('判断理由')
-});
-
-module.exports = {
-  ProjectAnalysisSchema,
-  TweetAnalysisSchema,
-  SentimentAnalysisSchema
-};
-```
-
-## 9. 使用示例
-
-### 9.1 API Route 中使用
+### 8.1 API Route 中使用
 
 ```javascript
 // src/routes/llm.js
 const express = require('express');
 const router = express.Router();
-const { structuredChat } = require('../services/llm');
-const { ProjectAnalysisSchema } = require('../services/llm/prompts/schemas');
+const { structuredChat, z } = require('../lib/llm');
+
+// 在使用的地方定义 Schema
+const ProjectAnalysisSchema = z.object({
+  projectName: z.string(),
+  category: z.enum(['DeFi', 'NFT', 'GameFi', 'Infra', 'Other']),
+  riskLevel: z.enum(['low', 'medium', 'high']),
+  summary: z.string().max(200),
+});
 
 router.post('/analyze-project', async (req, res) => {
   try {
@@ -465,12 +482,17 @@ router.post('/analyze-project', async (req, res) => {
 module.exports = router;
 ```
 
-### 9.2 Service 中使用
+### 8.2 Service 中使用
 
 ```javascript
 // src/services/tweetAnalysisService.js
-const { structuredChat, chat } = require('./llm');
-const { TweetAnalysisSchema } = require('./llm/prompts/schemas');
+const { structuredChat, chat, z } = require('../lib/llm');
+
+// 在 Service 内部定义 Schema
+const TweetAnalysisSchema = z.object({
+  sentiment: z.enum(['positive', 'negative', 'neutral']),
+  confidence: z.number().min(0).max(1),
+});
 
 class TweetAnalysisService {
   async analyze(tweetText) {
@@ -491,10 +513,10 @@ class TweetAnalysisService {
 module.exports = new TweetAnalysisService();
 ```
 
-## 10. 错误处理
+## 9. 错误处理
 
 ```javascript
-// src/services/llm/utils/errors.js
+// src/lib/llm/utils/errors.js
 
 class LLMError extends Error {
   constructor(message, type, retryable = false) {
@@ -535,7 +557,7 @@ async function withRetry(fn, maxRetries = 3) {
 }
 ```
 
-## 11. 日志 & 监控
+## 10. 日志 & 监控
 
 ```javascript
 // 每次调用自动记录
@@ -553,7 +575,7 @@ async function withRetry(fn, maxRetries = 3) {
 }
 ```
 
-## 12. 演进路线
+## 11. 演进路线
 
 ### Phase 1: 基础调用（现在）
 - ✅ 便捷方法：`chat`, `structuredChat`, `streamChat`
@@ -576,13 +598,13 @@ async function withRetry(fn, maxRetries = 3) {
 - 向量数据库
 - Retrieval Chain
 
-## 13. 安装
+## 12. 安装
 
 ```bash
 yarn add langchain @langchain/openai zod
 ```
 
-## 14. 环境变量
+## 13. 环境变量
 
 ```bash
 # .env-dev
