@@ -25,11 +25,11 @@
       .recent-tabs-bar {
         display: none;
         align-items: center;
-        gap: 8px;
-        padding: 8px 20px;
+        gap: 6px;
+        padding: 4px 16px;
         background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
         border-bottom: 1px solid #e2e8f0;
-        min-height: 44px;
+        min-height: 32px;
       }
 
       .recent-tabs-bar.visible {
@@ -39,21 +39,21 @@
       .recent-tabs-label {
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 12px;
+        gap: 4px;
+        font-size: 11px;
         font-weight: 500;
         color: #64748b;
         white-space: nowrap;
-        padding: 4px 8px;
+        padding: 2px 6px;
         background: #fff;
-        border-radius: 6px;
+        border-radius: 4px;
         border: 1px solid #e2e8f0;
       }
 
       .recent-tabs-list {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         flex: 1;
         overflow-x: auto;
         scrollbar-width: none;
@@ -66,31 +66,31 @@
       .recent-tab-item {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 6px 12px;
+        gap: 4px;
+        padding: 3px 8px;
         background: #fff;
         border: 1px solid #e2e8f0;
-        border-radius: 20px;
-        font-size: 13px;
+        border-radius: 12px;
+        font-size: 11px;
         color: #475569;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.15s ease;
         white-space: nowrap;
         user-select: none;
+        height: 22px;
       }
 
       .recent-tab-item:hover {
         background: #f1f5f9;
         border-color: #cbd5e1;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
       }
 
       .recent-tab-item.active {
         background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
         border-color: #3b82f6;
         color: #fff;
-        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+        box-shadow: 0 1px 4px rgba(59, 130, 246, 0.2);
       }
 
       .recent-tab-item.active .recent-tab-close {
@@ -103,9 +103,10 @@
       }
 
       .recent-tab-icon {
-        width: 14px;
-        height: 14px;
+        width: 11px;
+        height: 11px;
         opacity: 0.7;
+        flex-shrink: 0;
       }
 
       .recent-tab-item.active .recent-tab-icon {
@@ -114,19 +115,21 @@
 
       .recent-tab-name {
         font-weight: 500;
+        line-height: 1;
       }
 
       .recent-tab-close {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 16px;
-        height: 16px;
+        width: 13px;
+        height: 13px;
         margin-left: 2px;
         border-radius: 50%;
         color: #94a3b8;
-        transition: all 0.15s ease;
+        transition: all 0.1s ease;
         cursor: pointer;
+        flex-shrink: 0;
       }
 
       .recent-tab-close:hover {
@@ -136,14 +139,14 @@
 
       /* 空状态 */
       .recent-tabs-empty {
-        font-size: 12px;
+        font-size: 11px;
         color: #94a3b8;
         font-style: italic;
       }
 
       @media (max-width: 768px) {
         .recent-tabs-bar {
-          padding: 8px 12px;
+          padding: 4px 10px;
         }
         .recent-tabs-label {
           display: none;

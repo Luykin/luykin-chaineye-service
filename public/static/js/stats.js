@@ -1617,12 +1617,12 @@ function renderRecentTabs() {
   container.innerHTML = recent.map(tab => {
     const isActive = tab.id === currentTab;
     return `
-      <div class="recent-tab-item ${isActive ? 'active' : ''}" data-tab-id="${tab.id}" onclick="switchToRecentTab('${tab.id}')">
+      <div class="recent-tab-item ${isActive ? 'active' : ''}" data-tab-id="${tab.id}">
         <svg class="recent-tab-icon" viewBox="0 0 24 24" fill="none" stroke="${isActive ? '#fff' : tab.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="${tab.icon}"/>
         </svg>
         <span class="recent-tab-name">${tab.name}</span>
-        <span class="recent-tab-close" onclick="event.stopPropagation(); removeRecentTab('${tab.id}')">
+        <span class="recent-tab-close" data-close-tab="${tab.id}">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/>
             <line x1="6" y1="6" x2="18" y2="18"/>
@@ -1638,15 +1638,91 @@ function renderRecentTabs() {
  */
 function switchToRecentTab(tabId) {
   const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
-  if (btn) {
-    btn.click();
+  if (!btn) {
+    console.warn('[RecentTabs] Tab button not found:', tabId);
+    return;
   }
+  
+  // 模拟完整的 tab 切换流程
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  const tabPanes = document.querySelectorAll(".tab-pane");
+  
+  // 权限检查
+  const perms = Array.isArray(window.adminPermissions) ? window.adminPermissions : [];
+  const tabPermMap = {
+    "dau-details": "dau-details", "online-users": "online-users", "cohorts": "cohorts",
+    "rootdata": "rootdata", "notes": "notes", "log-search": "log-search:read",
+    "device-monitor": "device-status:read", "version-stats": "version-stats",
+    "url-stats": "url-stats", "security-violations": "security-violations",
+    "messages": "messages", "data-export": "export:users",
+    "reviews-management": "reviews-management", "pro-management": "pro-management",
+    "perf-monitor": "perf-monitor", "backup": "backup:operate",
+    "server-command": "server:execute", "daily-report-email": "daily-report:send",
+    "admin-audit-logs": "audit-logs:read", "nacos-messages": "nacos-messages",
+    "nacos-campaigns": "nacos_config", "feature-flags": "feature_flags_config",
+    "redis-management": "redis-management", "llm-test": "llm-test",
+  };
+  
+  const need = tabPermMap[tabId];
+  if (need && !perms.includes("*") && !perms.includes(need)) {
+    alert("您没有权限访问此功能");
+    return;
+  }
+  
+  // 移除所有 active 状态
+  tabBtns.forEach((b) => b.classList.remove("active"));
+  tabPanes.forEach((p) => p.classList.remove("active"));
+  
+  // 添加当前 active 状态
+  btn.classList.add("active");
+  const targetPane = document.getElementById(tabId);
+  if (targetPane) {
+    targetPane.classList.add("active");
+  }
+  
+  // 保存当前选中的 tab
+  sessionStorage.setItem("activeTab", tabId);
+  
+  // 触发 Tab 特定的初始化
+  handleTabInit(tabId);
+  
+  // 触发事件
+  document.dispatchEvent(new CustomEvent('stats-tab-activated', { 
+    detail: { tabId: tabId } 
+  }));
+  
+  // 添加到最近访问（移到前面）
+  addToRecentTabs(tabId);
 }
 
 /**
  * 初始化最近访问 tab 栏
  */
 function initRecentTabs() {
+  const container = document.getElementById('recentTabsList');
+  if (!container) return;
+  
+  // 使用事件委托绑定点击事件
+  container.addEventListener('click', function(e) {
+    const tabItem = e.target.closest('.recent-tab-item');
+    if (!tabItem) return;
+    
+    const tabId = tabItem.getAttribute('data-tab-id');
+    if (!tabId) return;
+    
+    // 检查是否点击了关闭按钮
+    const closeBtn = e.target.closest('.recent-tab-close');
+    if (closeBtn) {
+      e.stopPropagation();
+      removeRecentTab(tabId);
+      return;
+    }
+    
+    // 切换 tab
+    switchToRecentTab(tabId);
+  });
+  
+  // 初始渲染
   renderRecentTabs();
   
   // 监听 tab 切换事件，更新 active 状态
@@ -1657,6 +1733,6 @@ function initRecentTabs() {
   });
 }
 
-// 暴露到全局
-window.removeRecentTab = removeRecentTab;
+// 暴露到全局（供事件委托使用）
 window.switchToRecentTab = switchToRecentTab;
+window.removeRecentTab = removeRecentTab;
