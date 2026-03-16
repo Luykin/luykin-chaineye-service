@@ -199,6 +199,10 @@ async function structuredChat(message, schema, options = {}) {
     
     try {
       // 直接调用 API
+      console.log('[LLM structuredChat] Sending request to:', config.baseURL);
+      console.log('[LLM structuredChat] Using model:', model);
+      console.log('[LLM structuredChat] API Key in header:', apiKey ? apiKey.substring(0, 15) + '...' : 'EMPTY');
+      
       const response = await axios.post(
         `${config.baseURL}chat/completions`,
         {
@@ -241,6 +245,12 @@ async function structuredChat(message, schema, options = {}) {
       return parsed;
       
     } catch (error) {
+      console.error('[LLM structuredChat] Request failed:', error.message);
+      if (error.response) {
+        console.error('[LLM structuredChat] Response status:', error.response.status);
+        console.error('[LLM structuredChat] Response data:', JSON.stringify(error.response.data, null, 2));
+      }
+      
       if (error.response?.data?.error) {
         throw new Error(`API Error: ${error.response.data.error.message || error.response.data.error}`);
       }
