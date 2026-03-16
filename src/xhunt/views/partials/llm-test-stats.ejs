@@ -801,178 +801,18 @@
 </style>
 
 <script>
-// LLM 测试工具全局函数和事件处理
-// 注意：使用事件委托，因为 tab 内容是动态切换的
+// LLM 测试工具的 JavaScript 函数在 stats.js 中定义
+// - bindLlmTestEvents(): 绑定事件
+// - runLlmTest(): 运行测试
+// - resetLlmTest(): 重置表单
+// - toggleSchemaDocs(): 切换文档折叠
 
-// 更新温度提示
-function updateTempHint(val) {
-  const tempHint = document.getElementById('llm-temp-hint');
-  if (!tempHint) return;
-  const v = parseFloat(val);
-  if (v <= 0.3) tempHint.textContent = `${v} - 分析/提取（稳定）`;
-  else if (v <= 0.7) tempHint.textContent = `${v} - 通用问答（平衡）`;
-  else tempHint.textContent = `${v} - 创意写作（随机）`;
-}
-
-// 初始化 LLM Test 事件
-function initLlmTestEvents() {
-  // 温度滑块
-  const tempSlider = document.getElementById('llm-temperature');
-  const tempValue = document.getElementById('llm-temp-value');
-  
-  if (tempSlider && !tempSlider._initialized) {
-    tempSlider._initialized = true;
-    tempSlider.addEventListener('input', (e) => {
-      if (tempValue) tempValue.textContent = e.target.value;
-      updateTempHint(e.target.value);
-    });
-  }
-}
-
-// 事件委托 - 监听整个文档的 change 事件
-document.addEventListener('change', function(e) {
-  // 输出格式切换
-  if (e.target.name === 'llm-output-format') {
-    const schemaSection = document.getElementById('llm-schema-section');
-    if (schemaSection) {
-      schemaSection.style.display = e.target.value === 'json' ? 'block' : 'none';
-    }
-  }
-});
-
-// Tab 激活时初始化
+// 确保在 Tab 切换时重新绑定事件
 document.addEventListener('stats-tab-activated', function(e) {
   if (e.detail && e.detail.tabId === 'llm-test') {
-    initLlmTestEvents();
-    console.log('[LLM Test] Tab activated, events initialized');
+    if (typeof bindLlmTestEvents === 'function') {
+      bindLlmTestEvents();
+    }
   }
 });
-
-// 运行测试
-async function runLlmTest() {
-    const prompt = document.getElementById('llm-prompt').value.trim();
-    const systemPrompt = document.getElementById('llm-system-prompt').value.trim();
-    const model = document.getElementById('llm-model').value;
-    const temperature = parseFloat(document.getElementById('llm-temperature').value);
-    const outputFormat = document.querySelector('input[name="llm-output-format"]:checked').value;
-    
-    if (!prompt) {
-      alert('请输入提示词');
-      return;
-    }
-
-    let jsonSchema = null;
-    if (outputFormat === 'json') {
-      const schemaText = document.getElementById('llm-json-schema').value.trim();
-      if (!schemaText) {
-        alert('请输入 JSON Schema');
-        return;
-      }
-      try {
-        jsonSchema = JSON.parse(schemaText);
-      } catch (e) {
-        alert('JSON Schema 格式错误: ' + e.message);
-        return;
-      }
-    }
-
-    // Show loading
-    document.getElementById('llm-loading').style.display = 'block';
-    document.getElementById('llm-result-panel').style.display = 'none';
-    document.getElementById('llm-test-btn').disabled = true;
-
-    try {
-      const response = await fetch('/api/admin/llm-test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          model,
-          temperature,
-          outputFormat,
-          jsonSchema,
-          systemPrompt: systemPrompt || undefined,
-        }),
-      });
-
-      const result = await response.json();
-
-      // Hide loading
-      document.getElementById('llm-loading').style.display = 'none';
-      document.getElementById('llm-test-btn').disabled = false;
-
-      // Show result
-      const resultPanel = document.getElementById('llm-result-panel');
-      const resultContent = document.getElementById('llm-result-content');
-      const resultBadge = document.getElementById('llm-result-badge');
-      
-      resultPanel.style.display = 'block';
-      resultPanel.classList.remove('error');
-
-      if (result.success) {
-        resultBadge.className = 'badge success';
-        resultBadge.textContent = '成功';
-        resultContent.className = 'result-code success';
-        resultContent.textContent = typeof result.data === 'object' 
-          ? JSON.stringify(result.data, null, 2)
-          : result.data;
-      } else {
-        resultPanel.classList.add('error');
-        resultBadge.className = 'badge error';
-        resultBadge.textContent = '失败';
-        resultContent.className = 'result-code error';
-        resultContent.textContent = result.error?.message || result.error || '未知错误';
-      }
-
-      // Update meta
-      if (result.meta) {
-        document.getElementById('llm-meta-model').textContent = result.meta.model;
-        document.getElementById('llm-meta-temp').textContent = 'T=' + result.meta.temperature;
-        document.getElementById('llm-meta-duration').textContent = result.meta.duration;
-      }
-
-    } catch (error) {
-      document.getElementById('llm-loading').style.display = 'none';
-      document.getElementById('llm-test-btn').disabled = false;
-      
-      const resultPanel = document.getElementById('llm-result-panel');
-      resultPanel.style.display = 'block';
-      resultPanel.classList.add('error');
-      
-      document.getElementById('llm-result-badge').className = 'badge error';
-      document.getElementById('llm-result-badge').textContent = '错误';
-      document.getElementById('llm-result-content').className = 'result-code error';
-      document.getElementById('llm-result-content').textContent = '请求失败: ' + error.message;
-    }
-  };
-
-  window.resetLlmTest = function() {
-    document.getElementById('llm-prompt').value = '';
-    document.getElementById('llm-system-prompt').value = '';
-    document.getElementById('llm-model').selectedIndex = 0;
-    document.getElementById('llm-temperature').value = 0.7;
-    const tempValue = document.getElementById('llm-temp-value');
-    if (tempValue) tempValue.textContent = '0.7';
-    updateTempHint(0.7);
-    const textRadio = document.querySelector('input[name="llm-output-format"][value="text"]');
-    if (textRadio) textRadio.checked = true;
-    const schemaSection = document.getElementById('llm-schema-section');
-    if (schemaSection) schemaSection.style.display = 'none';
-    const jsonSchema = document.getElementById('llm-json-schema');
-    if (jsonSchema) jsonSchema.value = '';
-    const resultPanel = document.getElementById('llm-result-panel');
-    if (resultPanel) resultPanel.style.display = 'none';
-  };
-})();
-
-// 切换 Schema 文档折叠
-function toggleSchemaDocs() {
-  const content = document.getElementById('schema-docs-content');
-  const toggle = document.getElementById('schema-docs-toggle');
-  if (content && toggle) {
-    const isHidden = content.style.display === 'none';
-    content.style.display = isHidden ? 'block' : 'none';
-    toggle.textContent = isHidden ? '▲' : '▼';
-  }
-}
 </script>

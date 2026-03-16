@@ -60,6 +60,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // 绑定 Redis 管理事件
     bindRedisManagementEvents();
 
+    // 绑定 LLM 测试事件
+    bindLlmTestEvents();
+
     console.log("✅ 所有初始化完成");
   } catch (error) {
     console.error("❌ 初始化过程中出错:", error);
@@ -1191,4 +1194,222 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+/**
+ * 绑定 LLM 测试工具事件
+ */
+function bindLlmTestEvents() {
+  // 温度滑块
+  const tempSlider = document.getElementById('llm-temperature');
+  const tempValue = document.getElementById('llm-temp-value');
+  const tempHint = document.getElementById('llm-temp-hint');
+  
+  if (tempSlider) {
+    tempSlider.addEventListener('input', function() {
+      const val = this.value;
+      if (tempValue) tempValue.textContent = val;
+      if (tempHint) {
+        const v = parseFloat(val);
+        if (v <= 0.3) tempHint.textContent = `${v} - 分析/提取（稳定）`;
+        else if (v <= 0.7) tempHint.textContent = `${v} - 通用问答（平衡）`;
+        else tempHint.textContent = `${v} - 创意写作（随机）`;
+      }
+    });
+  }
+  
+  // 输出格式切换
+  const formatRadios = document.querySelectorAll('input[name="llm-output-format"]');
+  formatRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+      const schemaSection = document.getElementById('llm-schema-section');
+      if (schemaSection) {
+        schemaSection.style.display = this.value === 'json' ? 'block' : 'none';
+      }
+    });
+  });
+  
+  // 运行测试按钮
+  const testBtn = document.getElementById('llm-test-btn');
+  if (testBtn) {
+    testBtn.addEventListener('click', runLlmTest);
+  }
+  
+  // 回车提交（在提示词输入框中）
+  const promptInput = document.getElementById('llm-prompt');
+  if (promptInput) {
+    promptInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        runLlmTest();
+      }
+    });
+  }
+}
+
+/**
+ * 运行 LLM 测试
+ */
+async function runLlmTest() {
+  const prompt = document.getElementById('llm-prompt')?.value.trim();
+  const systemPrompt = document.getElementById('llm-system-prompt')?.value.trim();
+  const model = document.getElementById('llm-model')?.value;
+  const temperature = parseFloat(document.getElementById('llm-temperature')?.value || 0.7);
+  const outputFormatRadio = document.querySelector('input[name="llm-output-format"]:checked');
+  const outputFormat = outputFormatRadio ? outputFormatRadio.value : 'text';
+  
+  if (!prompt) {
+    alert('请输入提示词');
+    return;
+  }
+
+  let jsonSchema = null;
+  if (outputFormat === 'json') {
+    const schemaText = document.getElementById('llm-json-schema')?.value.trim();
+    if (!schemaText) {
+      alert('请输入 JSON Schema');
+      return;
+    }
+    try {
+      jsonSchema = JSON.parse(schemaText);
+    } catch (e) {
+      alert('JSON Schema 格式错误: ' + e.message);
+      return;
+    }
+  }
+
+  // 显示加载
+  const loadingEl = document.getElementById('llm-loading');
+  const resultPanelEl = document.getElementById('llm-result-panel');
+  const testBtn = document.getElementById('llm-test-btn');
+  
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (resultPanelEl) resultPanelEl.style.display = 'none';
+  if (testBtn) testBtn.disabled = true;
+
+  try {
+    const response = await fetch('/api/admin/llm-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        model,
+        temperature,
+        outputFormat,
+        jsonSchema,
+        systemPrompt: systemPrompt || undefined,
+      }),
+    });
+
+    const result = await response.json();
+
+    // 隐藏加载
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (testBtn) testBtn.disabled = false;
+
+    // 显示结果
+    const resultContent = document.getElementById('llm-result-content');
+    const resultBadge = document.getElementById('llm-result-badge');
+    
+    if (resultPanelEl) {
+      resultPanelEl.style.display = 'block';
+      resultPanelEl.classList.remove('error');
+    }
+
+    if (result.success) {
+      if (resultBadge) {
+        resultBadge.className = 'badge success';
+        resultBadge.textContent = '成功';
+      }
+      if (resultContent) {
+        resultContent.className = 'result-code success';
+        resultContent.textContent = typeof result.data === 'object' 
+          ? JSON.stringify(result.data, null, 2)
+          : result.data;
+      }
+    } else {
+      if (resultPanelEl) resultPanelEl.classList.add('error');
+      if (resultBadge) {
+        resultBadge.className = 'badge error';
+        resultBadge.textContent = '失败';
+      }
+      if (resultContent) {
+        resultContent.className = 'result-code error';
+        resultContent.textContent = result.error?.message || result.error || '未知错误';
+      }
+    }
+
+    // 更新元信息
+    const metaModel = document.getElementById('llm-meta-model');
+    const metaTemp = document.getElementById('llm-meta-temp');
+    const metaDuration = document.getElementById('llm-meta-duration');
+    
+    if (result.meta) {
+      if (metaModel) metaModel.textContent = result.meta.model;
+      if (metaTemp) metaTemp.textContent = 'T=' + result.meta.temperature;
+      if (metaDuration) metaDuration.textContent = result.meta.duration;
+    }
+
+  } catch (error) {
+    console.error('[LLM Test] Error:', error);
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (testBtn) testBtn.disabled = false;
+    
+    if (resultPanelEl) {
+      resultPanelEl.style.display = 'block';
+      resultPanelEl.classList.add('error');
+    }
+    
+    const resultBadge = document.getElementById('llm-result-badge');
+    const resultContent = document.getElementById('llm-result-content');
+    
+    if (resultBadge) {
+      resultBadge.className = 'badge error';
+      resultBadge.textContent = '错误';
+    }
+    if (resultContent) {
+      resultContent.className = 'result-code error';
+      resultContent.textContent = '请求失败: ' + error.message;
+    }
+  }
+}
+
+/**
+ * 重置 LLM 测试表单
+ */
+function resetLlmTest() {
+  const prompt = document.getElementById('llm-prompt');
+  const systemPrompt = document.getElementById('llm-system-prompt');
+  const model = document.getElementById('llm-model');
+  const temperature = document.getElementById('llm-temperature');
+  const tempValue = document.getElementById('llm-temp-value');
+  const tempHint = document.getElementById('llm-temp-hint');
+  const textRadio = document.querySelector('input[name="llm-output-format"][value="text"]');
+  const schemaSection = document.getElementById('llm-schema-section');
+  const jsonSchema = document.getElementById('llm-json-schema');
+  const resultPanel = document.getElementById('llm-result-panel');
+  
+  if (prompt) prompt.value = '';
+  if (systemPrompt) systemPrompt.value = '';
+  if (model) model.selectedIndex = 0;
+  if (temperature) temperature.value = 0.7;
+  if (tempValue) tempValue.textContent = '0.7';
+  if (tempHint) tempHint.textContent = '0.7 - 对话';
+  if (textRadio) textRadio.checked = true;
+  if (schemaSection) schemaSection.style.display = 'none';
+  if (jsonSchema) jsonSchema.value = '';
+  if (resultPanel) resultPanel.style.display = 'none';
+}
+
+/**
+ * 切换 Schema 文档折叠
+ */
+function toggleSchemaDocs() {
+  const content = document.getElementById('schema-docs-content');
+  const toggle = document.getElementById('schema-docs-toggle');
+  if (content && toggle) {
+    const isHidden = content.style.display === 'none';
+    content.style.display = isHidden ? 'block' : 'none';
+    toggle.textContent = isHidden ? '▲' : '▼';
+  }
 }
