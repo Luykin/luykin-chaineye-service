@@ -88,8 +88,14 @@ async function structuredChat(message, schema, options = {}) {
     try {
       // 构建消息
       const messages = [];
+      
+      // 默认系统提示：要求直接返回 JSON，不要 markdown
+      const defaultSystemPrompt = "重要：直接返回纯 JSON，不要 markdown 代码块，不要 ```json 标记。";
+      
       if (systemPrompt) {
-        messages.push(new SystemMessage(systemPrompt));
+        messages.push(new SystemMessage(systemPrompt + "\n\n" + defaultSystemPrompt));
+      } else {
+        messages.push(new SystemMessage(defaultSystemPrompt));
       }
       messages.push(new HumanMessage(message));
 
