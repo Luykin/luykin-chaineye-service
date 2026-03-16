@@ -1413,3 +1413,9 @@ function toggleSchemaDocs() {
     toggle.textContent = isHidden ? '▲' : '▼';
   }
 }
+
+// 确保函数在全局作用域可用（兼容旧版浏览器）
+window.runLlmTest = runLlmTest;
+window.resetLlmTest = resetLlmTest;
+window.toggleSchemaDocs = toggleSchemaDocs;
+window.bindLlmTestEvents = bindLlmTestEvents;

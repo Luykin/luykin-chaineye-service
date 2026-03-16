@@ -807,6 +807,43 @@
 // - resetLlmTest(): 重置表单
 // - toggleSchemaDocs(): 切换文档折叠
 
+// 后备函数定义（如果 stats.js 尚未加载或出错）
+if (typeof toggleSchemaDocs !== 'function') {
+  window.toggleSchemaDocs = function() {
+    const content = document.getElementById('schema-docs-content');
+    const toggle = document.getElementById('schema-docs-toggle');
+    if (content && toggle) {
+      const isHidden = content.style.display === 'none';
+      content.style.display = isHidden ? 'block' : 'none';
+      toggle.textContent = isHidden ? '▲' : '▼';
+    }
+  };
+}
+
+if (typeof resetLlmTest !== 'function') {
+  window.resetLlmTest = function() {
+    const prompt = document.getElementById('llm-prompt');
+    const systemPrompt = document.getElementById('llm-system-prompt');
+    const model = document.getElementById('llm-model');
+    const temperature = document.getElementById('llm-temperature');
+    const tempValue = document.getElementById('llm-temp-value');
+    const textRadio = document.querySelector('input[name="llm-output-format"][value="text"]');
+    const schemaSection = document.getElementById('llm-schema-section');
+    const jsonSchema = document.getElementById('llm-json-schema');
+    const resultPanel = document.getElementById('llm-result-panel');
+    
+    if (prompt) prompt.value = '';
+    if (systemPrompt) systemPrompt.value = '';
+    if (model) model.selectedIndex = 0;
+    if (temperature) temperature.value = 0.7;
+    if (tempValue) tempValue.textContent = '0.7';
+    if (textRadio) textRadio.checked = true;
+    if (schemaSection) schemaSection.style.display = 'none';
+    if (jsonSchema) jsonSchema.value = '';
+    if (resultPanel) resultPanel.style.display = 'none';
+  };
+}
+
 // 确保在 Tab 切换时重新绑定事件
 document.addEventListener('stats-tab-activated', function(e) {
   if (e.detail && e.detail.tabId === 'llm-test') {
