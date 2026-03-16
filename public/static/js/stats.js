@@ -1250,6 +1250,49 @@ function bindLlmTestEvents() {
 /**
  * 运行 LLM 测试
  */
+// 前端校验 JSON Schema
+function validateJsonSchema(schema, path = '') {
+  const errors = [];
+  
+  if (!schema || typeof schema !== 'object') {
+    errors.push(`${path}: Schema 必须是对象`);
+    return errors;
+  }
+  
+  if (!schema.type) {
+    errors.push(`${path}: 缺少 type 字段`);
+  }
+  
+  if (schema.type === 'object') {
+    if (!schema.properties || Object.keys(schema.properties).length === 0) {
+      errors.push(`${path}: object 类型必须有 properties`);
+    } else {
+      for (const [key, value] of Object.entries(schema.properties)) {
+        const propPath = path ? `${path}.${key}` : key;
+        errors.push(...validateJsonSchema(value, propPath));
+      }
+    }
+    
+    if (schema.required && Array.isArray(schema.required)) {
+      for (const field of schema.required) {
+        if (!schema.properties[field]) {
+          errors.push(`${path}: required 字段 "${field}" 不在 properties 中`);
+        }
+      }
+    }
+  }
+  
+  if (schema.type === 'array') {
+    if (!schema.items) {
+      errors.push(`${path}: array 类型必须有 items`);
+    } else {
+      errors.push(...validateJsonSchema(schema.items, `${path}.items`));
+    }
+  }
+  
+  return errors;
+}
+
 async function runLlmTest() {
   const prompt = document.getElementById('llm-prompt')?.value.trim();
   const systemPrompt = document.getElementById('llm-system-prompt')?.value.trim();
@@ -1275,6 +1318,35 @@ async function runLlmTest() {
     } catch (e) {
       alert('JSON Schema 格式错误: ' + e.message);
       return;
+    }
+    
+    // 前端校验
+    const validationErrors = validateJsonSchema(jsonSchema);
+    if (validationErrors.length > 0) {
+      alert('Schema 校验失败:\n' + validationErrors.join('\n'));
+      return;
+    }
+    
+    // 计算 Schema 复杂度
+    function countFields(obj, count = 0) {
+      if (typeof obj !== 'object' || obj === null) return count;
+      if (obj.properties) {
+        count += Object.keys(obj.properties).length;
+        for (const prop of Object.values(obj.properties)) {
+          count = countFields(prop, count);
+        }
+      }
+      if (obj.items) {
+        count = countFields(obj.items, count);
+      }
+      return count;
+    }
+    
+    const fieldCount = countFields(jsonSchema);
+    const requiredCount = jsonSchema.required?.length || 0;
+    
+    if (fieldCount > 20 || requiredCount > 10) {
+      console.warn(`Schema 较复杂: ${fieldCount} 个字段, ${requiredCount} 个 required。部分模型可能无法完整输出。`);
     }
   }
 

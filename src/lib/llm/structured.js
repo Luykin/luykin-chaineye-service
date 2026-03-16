@@ -277,6 +277,17 @@ async function structuredChat(message, schema, options = {}) {
           return schema.parse(parsed);
         } catch (zodError) {
           console.error('[LLM structuredChat] Zod validation error:', zodError.errors);
+          // 格式化错误信息
+          const missingFields = zodError.errors
+            .filter(e => e.message.includes('Required') || e.message.includes('expected'))
+            .map(e => e.path.join('.'))
+            .filter(Boolean);
+          
+          if (missingFields.length > 0) {
+            const errorMsg = `模型返回不完整，缺少字段: ${missingFields.join(', ')}。\n\n可能原因：\n1. 模型不支持复杂的嵌套 Schema\n2. 提示词太长，模型输出被截断\n3. Schema 太复杂，尝试简化\n\n建议：使用更简单的 Schema 或减少 required 字段`;
+            throw new LLMSchemaError(new Error(errorMsg));
+          }
+          
           throw new LLMSchemaError(zodError);
         }
       }
