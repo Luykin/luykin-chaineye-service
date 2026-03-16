@@ -165,7 +165,8 @@
 <style>
   /* LLM 测试工具样式 */
   .llm-test-container {
-    max-width: 900px;
+    width: 100%;
+    max-width: 100%;
   }
 
   .panel {
@@ -284,9 +285,41 @@
     gap: 16px;
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 768px) {
     .form-row {
       grid-template-columns: 1fr;
+    }
+    
+    .radio-group {
+      flex-direction: column;
+    }
+    
+    .radio-label {
+      width: 100%;
+    }
+    
+    .panel-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    
+    .panel-meta {
+      width: 100%;
+    }
+    
+    .result-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    
+    .form-actions {
+      flex-direction: column;
+    }
+    
+    .btn {
+      width: 100%;
+      justify-content: center;
     }
   }
 
@@ -578,14 +611,17 @@
     updateTempHint(e.target.value);
   });
 
-  // Output format toggle
-  const formatRadios = document.querySelectorAll('input[name="llm-output-format"]');
+  // Output format toggle - 使用事件委托避免 tab 切换后事件丢失
+  const llmTestContainer = document.querySelector('.llm-test-container');
   const schemaSection = document.getElementById('llm-schema-section');
-  formatRadios.forEach(radio => {
-    radio.addEventListener('change', (e) => {
-      schemaSection.style.display = e.target.value === 'json' ? 'block' : 'none';
+  
+  if (llmTestContainer) {
+    llmTestContainer.addEventListener('change', function(e) {
+      if (e.target.name === 'llm-output-format') {
+        schemaSection.style.display = e.target.value === 'json' ? 'block' : 'none';
+      }
     });
-  });
+  }
 
   // Expose functions to global scope
   // 绑定到 LLM Test Tab 激活事件
@@ -698,12 +734,15 @@
     document.getElementById('llm-system-prompt').value = '';
     document.getElementById('llm-model').selectedIndex = 0;
     document.getElementById('llm-temperature').value = 0.7;
-    tempValue.textContent = '0.7';
+    if (tempValue) tempValue.textContent = '0.7';
     updateTempHint(0.7);
-    document.querySelector('input[name="llm-output-format"][value="text"]').checked = true;
-    schemaSection.style.display = 'none';
-    document.getElementById('llm-json-schema').value = '';
-    document.getElementById('llm-result-panel').style.display = 'none';
+    const textRadio = document.querySelector('input[name="llm-output-format"][value="text"]');
+    if (textRadio) textRadio.checked = true;
+    if (schemaSection) schemaSection.style.display = 'none';
+    const jsonSchema = document.getElementById('llm-json-schema');
+    if (jsonSchema) jsonSchema.value = '';
+    const resultPanel = document.getElementById('llm-result-panel');
+    if (resultPanel) resultPanel.style.display = 'none';
   };
 })();
 </script>
