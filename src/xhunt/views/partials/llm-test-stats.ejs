@@ -25,12 +25,13 @@
       <!-- System Prompt -->
       <div class="form-group">
         <label class="form-label">系统提示词 <span class="hint">可选</span></label>
-        <input 
-          type="text" 
+        <textarea 
           id="llm-system-prompt" 
-          class="form-input" 
-          placeholder="例如：你是一个专业的区块链项目分析师"
-        >
+          class="form-textarea" 
+          rows="2"
+          placeholder="例如：你是一个专业的区块链项目分析师。请分析以下内容，并按要求的 JSON 格式返回结果。"
+        ></textarea>
+        <div class="input-hint">系统提示词用于设定 AI 的角色和输出要求，使用 JSON 输出时请说明字段要求</div>
       </div>
 
       <!-- Model & Temperature -->
@@ -76,6 +77,7 @@
         <div class="form-group">
           <label class="form-label">JSON Schema</label>
           <div class="schema-help">
+            <strong>关键提醒：</strong>Schema 字段名必须与<strong>系统提示</strong>中要求的字段名完全一致<br>
             支持: <code>string</code> <code>number</code> <code>boolean</code> <code>array</code> <code>object</code> <code>enum</code>
             | 属性: <code>description</code> <code>min/max</code> <code>required</code>
           </div>
@@ -101,6 +103,22 @@
   "required": ["sentiment", "confidence"]
 }'
           ></textarea>
+        </div>
+        <div class="schema-warning-box">
+          <div class="schema-warning-title">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            Schema 字段名对齐提醒
+          </div>
+          <ul class="schema-warning-list">
+            <li><strong>字段名必须一致：</strong>Schema 中的 <code>properties</code> 键名必须与系统提示中要求的字段名完全匹配（包括大小写）</li>
+            <li><strong>推荐扁平结构：</strong>避免深层嵌套对象，使用 <code>clarityScore</code> 而不是 <code>clarity.score</code></li>
+            <li><strong>简化 Required：</strong>减少 <code>required</code> 字段数量，或使用 <code>default</code> 降低验证失败概率</li>
+            <li><strong>模型差异：</strong><code>gemini-3-flash-preview</code> 更适合简单结构，复杂 JSON 建议使用 <code>gemini-3-pro-preview</code></li>
+          </ul>
         </div>
       </div>
 
@@ -532,6 +550,12 @@
     color: var(--accent, #3b82f6);
   }
 
+  .llm-test-container .input-hint {
+    font-size: 11px;
+    color: var(--text-muted, #9ca3af);
+    margin-top: 4px;
+  }
+
   /* Buttons */
   .llm-test-container .form-actions {
     display: flex;
@@ -706,6 +730,50 @@
   .result-code.success {
     background: rgba(34, 197, 94, 0.05);
     border-color: rgba(34, 197, 94, 0.2);
+  }
+
+  /* Schema Warning Box */
+  .schema-warning-box {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+
+  .schema-warning-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #991b1b;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .schema-warning-title .icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .schema-warning-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+    color: #7f1d1d;
+    line-height: 1.8;
+  }
+
+  .schema-warning-list li {
+    margin-bottom: 4px;
+  }
+
+  .schema-warning-list code {
+    background: rgba(153, 27, 27, 0.1);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 11px;
   }
 
   /* Schema Docs Panel */

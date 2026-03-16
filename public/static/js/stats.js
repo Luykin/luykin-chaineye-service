@@ -147,8 +147,14 @@ function initTabs() {
       document.dispatchEvent(new CustomEvent('stats-tab-activated', { 
         detail: { tabId: tabId } 
       }));
+
+      // 添加到最近访问
+      addToRecentTabs(tabId);
     });
   });
+
+  // 初始化最近访问 Tab 栏
+  initRecentTabs();
 
   // 恢复上次选中的 tab
   const savedTab = sessionStorage.getItem("activeTab");
@@ -1491,3 +1497,166 @@ window.runLlmTest = runLlmTest;
 window.resetLlmTest = resetLlmTest;
 window.toggleSchemaDocs = toggleSchemaDocs;
 window.bindLlmTestEvents = bindLlmTestEvents;
+
+// ========== 最近访问 Tab 功能 ==========
+
+const RECENT_TABS_KEY = 'xhunt_recent_tabs';
+const MAX_RECENT_TABS = 4;
+
+// Tab ID 到名称和图标的映射
+const TAB_META_MAP = {
+  'overview': { name: '数据概览', icon: 'M3 3v18h18', color: '#3b82f6' },
+  'dau-details': { name: '日活详情', icon: 'M3 3v18h18 M7 16v-6l4 6V8l4 6V8l4 6', color: '#10b981' },
+  'online-users': { name: '在线用户', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z', color: '#8b5cf6' },
+  'cohorts': { name: '用户留存', icon: 'M3 3v18h18 M7 12l4-4 4 4 4-4', color: '#f59e0b' },
+  'rootdata': { name: 'RootData', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5', color: '#ec4899' },
+  'notes': { name: '每日笔记', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', color: '#06b6d4' },
+  'log-search': { name: '日志搜索', icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0 1 14 0z', color: '#64748b' },
+  'device-monitor': { name: '设备监控', icon: 'M9 17H7v-2h2v2zm0-4H7v-2h2v2zm0-4H7V7h2v2zm4 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z', color: '#84cc16' },
+  'version-stats': { name: '版本统计', icon: 'M12 2L2 7l10 5 10-5-10-5z', color: '#6366f1' },
+  'url-stats': { name: 'URL 统计', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71', color: '#14b8a6' },
+  'security-violations': { name: '安全违规', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', color: '#ef4444' },
+  'messages': { name: '私信管理', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', color: '#3b82f6' },
+  'data-export': { name: '数据导出', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5M12 15V3', color: '#8b5cf6' },
+  'reviews-management': { name: '点评管理', icon: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z', color: '#f59e0b' },
+  'pro-management': { name: 'Pro 管理', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z', color: '#10b981' },
+  'perf-monitor': { name: '性能监控', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', color: '#ec4899' },
+  'backup': { name: '备份管理', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12', color: '#06b6d4' },
+  'server-command': { name: '服务器命令', icon: 'M4 17l6-6-6-6M12 19h8', color: '#f97316' },
+  'daily-report-email': { name: '日报邮件', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', color: '#6366f1' },
+  'admin-audit-logs': { name: '操作记录', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0 1 18 0z', color: '#64748b' },
+  'nacos-messages': { name: 'Nacos 消息', icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z', color: '#3b82f6' },
+  'nacos-campaigns': { name: 'Nacos 活动', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10', color: '#10b981' },
+  'feature-flags': { name: '功能开关', icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3', color: '#f59e0b' },
+  'redis-management': { name: 'Redis', icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4', color: '#ef4444' },
+  'llm-test': { name: 'LLM 测试', icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', color: '#8b5cf6' },
+};
+
+/**
+ * 获取最近访问的 tabs
+ */
+function getRecentTabs() {
+  try {
+    const data = localStorage.getItem(RECENT_TABS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * 保存最近访问的 tabs
+ */
+function saveRecentTabs(tabs) {
+  try {
+    localStorage.setItem(RECENT_TABS_KEY, JSON.stringify(tabs.slice(0, MAX_RECENT_TABS)));
+  } catch (e) {
+    console.error('[RecentTabs] Save failed:', e);
+  }
+}
+
+/**
+ * 添加 tab 到最近访问
+ */
+function addToRecentTabs(tabId) {
+  const meta = TAB_META_MAP[tabId];
+  if (!meta) return; // 未知的 tab 不记录
+
+  let recent = getRecentTabs();
+  
+  // 移除已存在的相同 tab
+  recent = recent.filter(t => t.id !== tabId);
+  
+  // 添加到开头
+  recent.unshift({
+    id: tabId,
+    name: meta.name,
+    icon: meta.icon,
+    color: meta.color,
+    timestamp: Date.now()
+  });
+  
+  // 限制数量
+  if (recent.length > MAX_RECENT_TABS) {
+    recent = recent.slice(0, MAX_RECENT_TABS);
+  }
+  
+  saveRecentTabs(recent);
+  renderRecentTabs();
+}
+
+/**
+ * 从最近访问中移除
+ */
+function removeRecentTab(tabId) {
+  let recent = getRecentTabs();
+  recent = recent.filter(t => t.id !== tabId);
+  saveRecentTabs(recent);
+  renderRecentTabs();
+}
+
+/**
+ * 渲染最近访问 tab 栏
+ */
+function renderRecentTabs() {
+  const container = document.getElementById('recentTabsList');
+  const bar = document.getElementById('recentTabsBar');
+  if (!container || !bar) return;
+
+  const recent = getRecentTabs();
+  const currentTab = sessionStorage.getItem('activeTab') || 'overview';
+
+  if (recent.length === 0) {
+    container.innerHTML = '<span class="recent-tabs-empty">点击左侧菜单开始使用</span>';
+    bar.classList.remove('visible');
+    return;
+  }
+
+  bar.classList.add('visible');
+  
+  container.innerHTML = recent.map(tab => {
+    const isActive = tab.id === currentTab;
+    return `
+      <div class="recent-tab-item ${isActive ? 'active' : ''}" data-tab-id="${tab.id}" onclick="switchToRecentTab('${tab.id}')">
+        <svg class="recent-tab-icon" viewBox="0 0 24 24" fill="none" stroke="${isActive ? '#fff' : tab.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="${tab.icon}"/>
+        </svg>
+        <span class="recent-tab-name">${tab.name}</span>
+        <span class="recent-tab-close" onclick="event.stopPropagation(); removeRecentTab('${tab.id}')">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </span>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * 切换到最近访问的 tab
+ */
+function switchToRecentTab(tabId) {
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+  if (btn) {
+    btn.click();
+  }
+}
+
+/**
+ * 初始化最近访问 tab 栏
+ */
+function initRecentTabs() {
+  renderRecentTabs();
+  
+  // 监听 tab 切换事件，更新 active 状态
+  document.addEventListener('stats-tab-activated', function(e) {
+    if (e.detail && e.detail.tabId) {
+      renderRecentTabs();
+    }
+  });
+}
+
+// 暴露到全局
+window.removeRecentTab = removeRecentTab;
+window.switchToRecentTab = switchToRecentTab;

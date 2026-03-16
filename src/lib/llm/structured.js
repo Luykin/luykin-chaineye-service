@@ -268,6 +268,21 @@ async function structuredChat(message, schema, options = {}) {
         }
       }
       
+      // 处理 LiteLLM 包装格式：{value: "[...]"}
+      if (typeof parsed === 'object' && parsed !== null && parsed.value && typeof parsed.value === 'string') {
+        try {
+          const inner = JSON.parse(parsed.value);
+          // 如果是数组，取第一个元素
+          if (Array.isArray(inner) && inner.length > 0) {
+            parsed = inner[0];
+          } else {
+            parsed = inner;
+          }
+        } catch (e) {
+          // 解析失败，保持原样
+        }
+      }
+      
       console.log('[LLM structuredChat] Parsed type:', typeof parsed);
       console.log('[LLM structuredChat] Parsed preview:', JSON.stringify(parsed).substring(0, 200));
       
@@ -288,7 +303,11 @@ async function structuredChat(message, schema, options = {}) {
             .filter(Boolean);
           
           if (missingFields.length > 0) {
-            const errorMsg = `模型返回不完整，缺少字段: ${missingFields.join(', ')}。\n\n可能原因：\n1. 模型不支持复杂的嵌套 Schema\n2. 提示词太长，模型输出被截断\n3. Schema 太复杂，尝试简化\n\n建议：使用更简单的 Schema 或减少 required 字段`;
+            // 检查是否是字段名不匹配问题
+            const returnedFields = Object.keys(parsed || {});
+            const availableFields = returnedFields.length > 0 ? `模型返回的字段: ${returnedFields.join(', ')}` : '模型返回为空或格式错误';
+            
+            const errorMsg = `Schema 验证失败：缺少字段: ${missingFields.join(', ')}。\n\n${availableFields}\n\n可能原因：\n1. Schema 字段名与系统提示中的字段名不一致\n2. 模型不支持复杂的嵌套 Schema\n3. Schema 太复杂，尝试简化\n\n建议：\n1. 检查 Schema 字段名是否与系统提示一致\n2. 简化 Schema，减少嵌套层级\n3. 使用更明确的字段名（如 clarityScore 而不是 clarity）`;
             throw new LLMSchemaError(new Error(errorMsg));
           }
           
