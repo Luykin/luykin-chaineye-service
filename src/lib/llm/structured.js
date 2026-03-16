@@ -8,13 +8,60 @@ const config = require('./config');
 const { withRetry, LLMSchemaError } = require('./utils/errors');
 
 /**
+ * 将普通 JSON Schema 转换为 OpenAI JSON Schema 格式
+ * 支持嵌套对象和数组
+ */
+function jsonSchemaToOpenAI(jsonSchema, name = 'output') {
+  // 深拷贝并添加 additionalProperties: false
+  const processedSchema = processSchema(jsonSchema);
+  
+  return {
+    name,
+    description: jsonSchema.description || 'Structured output',
+    schema: processedSchema
+  };
+}
+
+/**
+ * 递归处理 Schema，添加 additionalProperties: false
+ */
+function processSchema(schema) {
+  if (!schema || typeof schema !== 'object') {
+    return schema;
+  }
+  
+  // 处理数组类型
+  if (schema.type === 'array' && schema.items) {
+    return {
+      ...schema,
+      items: processSchema(schema.items)
+    };
+  }
+  
+  // 处理对象类型
+  if (schema.type === 'object' && schema.properties) {
+    const processedProperties = {};
+    for (const [key, value] of Object.entries(schema.properties)) {
+      processedProperties[key] = processSchema(value);
+    }
+    
+    return {
+      ...schema,
+      properties: processedProperties,
+      additionalProperties: false
+    };
+  }
+  
+  // 其他类型直接返回
+  return schema;
+}
+
+/**
  * 将 Zod Schema 转换为 OpenAI JSON Schema 格式
- * 支持：ZodObject、ZodArray、ZodString、ZodNumber、ZodBoolean、ZodEnum、ZodOptional、ZodNullable
  */
 function zodToJsonSchema(zodSchema, name = 'output') {
   const def = zodSchema._def;
   
-  // 处理各种类型
   if (def.typeName === 'ZodObject') {
     const properties = {};
     const required = [];
@@ -42,7 +89,14 @@ function zodToJsonSchema(zodSchema, name = 'output') {
   return {
     name,
     description: zodSchema.description || 'Structured output',
-    schema: zodTypeToOpenApiSchema(zodSchema)
+    schema: {
+      type: 'object',
+      properties: {
+        value: zodTypeToOpenApiSchema(zodSchema)
+      },
+      required: ['value'],
+      additionalProperties: false
+    }
   };
 }
 
@@ -94,16 +148,13 @@ function zodTypeToOpenApiSchema(type) {
       return result;
     }
     case 'ZodOptional': {
-      const inner = zodTypeToOpenApiSchema(def.innerType);
-      // 标记为可选属性，但不改变类型
-      return inner;
+      return zodTypeToOpenApiSchema(def.innerType);
     }
     case 'ZodNullable': {
       const inner = zodTypeToOpenApiSchema(def.innerType);
       return { ...inner, nullable: true };
     }
     case 'ZodObject': {
-      // 递归处理嵌套对象
       const properties = {};
       const required = [];
       
@@ -122,46 +173,12 @@ function zodTypeToOpenApiSchema(type) {
       };
     }
     default:
-      // 对于未知类型，返回字符串
       return { type: 'string' };
   }
 }
 
 /**
- * 将普通 JSON Schema 转换为 OpenAI 格式
- */
-function jsonSchemaToOpenAI(jsonSchema, name = 'output') {
-  if (jsonSchema.type === 'object' && jsonSchema.properties) {
-    return {
-      name,
-      description: jsonSchema.description || 'Structured output',
-      schema: {
-        ...jsonSchema,
-        additionalProperties: false
-      }
-    };
-  }
-  
-  // 如果不是 object，包装成 object
-  return {
-    name,
-    description: 'Structured output',
-    schema: {
-      type: 'object',
-      properties: {
-        value: jsonSchema
-      },
-      required: ['value'],
-      additionalProperties: false
-    }
-  };
-}
-
-/**
  * 结构化对话
- * @param {string} message - 用户消息
- * @param {z.ZodSchema|Object} schema - Zod Schema 或普通 JSON Schema
- * @param {Object} options - 选项
  */
 async function structuredChat(message, schema, options = {}) {
   const {
@@ -180,15 +197,15 @@ async function structuredChat(message, schema, options = {}) {
   }
 
   return withRetry(async () => {
-    // 转换 schema（支持 Zod 和普通 JSON Schema）
+    // 转换 schema
     let jsonSchema;
     if (schema._def) {
-      // 是 Zod Schema
       jsonSchema = zodToJsonSchema(schema, name);
     } else {
-      // 是普通 JSON Schema
       jsonSchema = jsonSchemaToOpenAI(schema, name);
     }
+    
+    console.log('[LLM structuredChat] Converted schema:', JSON.stringify(jsonSchema.schema, null, 2).substring(0, 500));
     
     // 构建消息
     const messages = [];
@@ -198,10 +215,8 @@ async function structuredChat(message, schema, options = {}) {
     messages.push({ role: 'user', content: message });
     
     try {
-      // 直接调用 API
       console.log('[LLM structuredChat] Sending request to:', config.baseURL);
       console.log('[LLM structuredChat] Using model:', model);
-      console.log('[LLM structuredChat] API Key in header:', apiKey ? apiKey.substring(0, 15) + '...' : 'EMPTY');
       
       const response = await axios.post(
         `${config.baseURL}chat/completions`,
@@ -211,12 +226,7 @@ async function structuredChat(message, schema, options = {}) {
           temperature,
           response_format: {
             type: 'json_schema',
-            json_schema: {
-              name: jsonSchema.name,
-              description: jsonSchema.description,
-              schema: jsonSchema.schema,
-              strict: true
-            }
+            json_schema: jsonSchema
           }
         },
         {
@@ -229,19 +239,48 @@ async function structuredChat(message, schema, options = {}) {
       );
       
       const content = response.data?.choices?.[0]?.message?.content;
+      console.log('[LLM structuredChat] Raw response:', content?.substring(0, 200));
+      
       if (!content) {
         throw new Error('Empty response from model');
       }
       
-      // 解析结果
-      const parsed = JSON.parse(content);
+      // 解析结果（处理可能的双重 JSON 编码）
+      let parsed = content;
+      
+      // 如果 content 是字符串，尝试解析
+      if (typeof content === 'string') {
+        try {
+          parsed = JSON.parse(content);
+        } catch (e) {
+          console.error('[LLM structuredChat] JSON parse error:', e.message);
+          console.error('[LLM structuredChat] Content:', content);
+          throw new LLMSchemaError(new Error(`Invalid JSON: ${e.message}`));
+        }
+      }
+      
+      // 如果解析后还是字符串（双重编码），再解析一次
+      if (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch (e) {
+          // 忽略，可能本来就是字符串类型
+        }
+      }
+      
+      console.log('[LLM structuredChat] Parsed type:', typeof parsed);
+      console.log('[LLM structuredChat] Parsed preview:', JSON.stringify(parsed).substring(0, 200));
       
       // 如果有 Zod Schema，进行验证
       if (schema._def && schema.parse) {
-        return schema.parse(parsed);
+        try {
+          return schema.parse(parsed);
+        } catch (zodError) {
+          console.error('[LLM structuredChat] Zod validation error:', zodError.errors);
+          throw new LLMSchemaError(zodError);
+        }
       }
       
-      // 否则直接返回
       return parsed;
       
     } catch (error) {
@@ -254,8 +293,8 @@ async function structuredChat(message, schema, options = {}) {
       if (error.response?.data?.error) {
         throw new Error(`API Error: ${error.response.data.error.message || error.response.data.error}`);
       }
-      if (error.name === 'ZodError') {
-        throw new LLMSchemaError(error);
+      if (error.name === 'ZodError' || error instanceof LLMSchemaError) {
+        throw error;
       }
       if (error instanceof SyntaxError) {
         throw new LLMSchemaError(new Error(`Invalid JSON: ${error.message}`));
