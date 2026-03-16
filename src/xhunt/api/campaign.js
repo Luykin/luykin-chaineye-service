@@ -609,6 +609,7 @@ async function generateExternalLink(campaign, taskId, user) {
     const timestamp = new Date().toISOString(); // UTC 时间
     const rawToken = `${user.twitterId}:${timestamp}`;
     const secretKey = 'JvApDef2C2Vkg9VRAM+jcjPXaCYFw6xyZnmIiaUxVUs=';
+    console.log('[generateExternalLink]', rawToken, `rawToken ${taskId} ${user.id}`)
     
     // Token Base64 编码
     const xHuntToken = Buffer.from(rawToken).toString('base64');
@@ -618,10 +619,13 @@ async function generateExternalLink(campaign, taskId, user) {
       .createHmac('sha256', secretKey)
       .update(rawToken)
       .digest('base64');
+
+    console.log('[generateExternalLink]', signature, `rawToken ${taskId} ${user.id}`)
     
     // 构建跳转链接
     const link = `https://testofficial.realgo.game/reg?code=XHUNT&xHuntToken=${encodeURIComponent(xHuntToken)}&xHuntSignature=${encodeURIComponent(signature)}`;
     
+    console.log('[generateExternalLink]', link, `rawToken ${taskId} ${user.id}`)
     return {
       link,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5分钟有效期
