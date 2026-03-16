@@ -64,6 +64,48 @@ function parseJsonResponse(content) {
   return content;
 }
 
+/**
+ * 简单的 JSON Schema 校验
+ * 仅校验第一层 required 字段是否存在
+ */
+function validateJsonSchema(data, schema, path = '') {
+  const errors = [];
+  
+  if (!schema || typeof schema !== 'object') {
+    return errors;
+  }
+  
+  // 如果是对象类型，校验 required 字段
+  if (schema.type === 'object' && schema.properties) {
+    const required = schema.required || [];
+    
+    for (const field of required) {
+      if (!(field in data)) {
+        errors.push(`${path ? path + '.' : ''}${field}: 必填字段缺失`);
+      }
+    }
+    
+    // 递归校验子对象
+    for (const [key, value] of Object.entries(data)) {
+      const propSchema = schema.properties[key];
+      if (propSchema && typeof value === 'object' && value !== null) {
+        const subErrors = validateJsonSchema(value, propSchema, `${path ? path + '.' : ''}${key}`);
+        errors.push(...subErrors);
+      }
+    }
+  }
+  
+  // 如果是数组类型，校验 items
+  if (schema.type === 'array' && schema.items && Array.isArray(data)) {
+    data.forEach((item, index) => {
+      const subErrors = validateJsonSchema(item, schema.items, `${path}[${index}]`);
+      errors.push(...subErrors);
+    });
+  }
+  
+  return errors;
+}
+
 async function structuredChat(message, schema, options = {}) {
   const { model: modelName, temperature = 0, systemPrompt } = options;
 
@@ -104,6 +146,19 @@ async function structuredChat(message, schema, options = {}) {
       
       // 尝试解析 JSON，处理多种格式
       let result = parseJsonResponse(content);
+      
+      // 校验是否为对象
+      if (typeof result !== 'object' || result === null || Array.isArray(result)) {
+        throw new Error('返回结果不是有效的 JSON 对象');
+      }
+      
+      // 简单校验 JSON Schema
+      const validationErrors = validateJsonSchema(result, jsonSchemaObj);
+      if (validationErrors.length > 0) {
+        console.log('[LLM structuredChat] Schema validation failed:', validationErrors);
+        throw new Error('返回结果不符合 JSON Schema 格式要求，请稍后重试');
+      }
+      
       return result;
     } catch (error) {
       console.error("[LLM structuredChat] Error:", error.message);
