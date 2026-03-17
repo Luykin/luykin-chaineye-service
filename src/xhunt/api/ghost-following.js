@@ -70,7 +70,7 @@ class CircuitBreaker {
         // 熔断时间到，进入半开状态
         this.state = 'HALF_OPEN';
         this.successCount = 0;
-        console.log(`[CircuitBreaker:${this.name}] State changed: OPEN -> HALF_OPEN`);
+        // 熔断器状态变化: OPEN -> HALF_OPEN
         return { allowed: true };
       }
       const remainingMs = this.nextAttemptTime - now;
@@ -95,7 +95,7 @@ class CircuitBreaker {
       if (this.successCount >= this.config.successThreshold) {
         this.state = 'CLOSED';
         this.successCount = 0;
-        console.log(`[CircuitBreaker:${this.name}] State changed: HALF_OPEN -> CLOSED`);
+        // 熔断器状态变化: HALF_OPEN -> CLOSED
       }
     }
   }
@@ -122,7 +122,7 @@ class CircuitBreaker {
   trip() {
     this.state = 'OPEN';
     this.nextAttemptTime = Date.now() + this.config.timeout;
-    console.error(`[CircuitBreaker:${this.name}] State changed: CLOSED -> OPEN. Will retry after ${this.config.timeout}ms`);
+    // 熔断器触发: CLOSED -> OPEN
   }
 
   /**
@@ -184,7 +184,6 @@ async function concurrentUserLimit(req, res, next) {
     if (userExists) {
       // 用户已在活跃列表中，刷新TTL（重置60秒倒计时）
       await redisClient.expire(userKey, userActivityTTL);
-      console.log(`[concurrent-limit] User ${userId} refreshed activity, TTL reset to ${userActivityTTL}s`);
       return next();
     }
 
@@ -207,7 +206,6 @@ async function concurrentUserLimit(req, res, next) {
 
     if (activeCount >= maxConcurrentUsers) {
       // 已达上限，返回特殊错误码
-      console.log(`[concurrent-limit] User ${userId} rejected, max concurrent users (${maxConcurrentUsers}) reached`);
       const now = Date.now();
       const nextApplyAt = now + userActivityTTL * 1000; // retryAfter 秒后重试
       return res.status(200).json({
@@ -232,12 +230,9 @@ async function concurrentUserLimit(req, res, next) {
     // 3. 未满员，加入活跃列表
     await redisClient.set(userKey, Date.now().toString(), { EX: userActivityTTL });
     
-    console.log(`[concurrent-limit] User ${userId} added to active list, count: ${activeCount + 1}/${maxConcurrentUsers}`);
-
     next();
   } catch (error) {
-    console.error("[concurrent-limit] Error:", error);
-    // 中间件出错时不阻塞请求，记录日志后放行
+    // 中间件出错时不阻塞请求，放行
     next();
   }
 }
@@ -360,8 +355,6 @@ async function getUserQuota(redisClient, userId) {
         try {
           quotaData = JSON.parse(strValue);
         } catch (e) {
-          // 不是有效的 JSON，视为无额度
-          console.warn(`[ghost-following] Quota key ${quotaKey} has invalid JSON: ${strValue.substring(0, 100)}`);
           quotaData = {};
         }
       }
@@ -369,8 +362,6 @@ async function getUserQuota(redisClient, userId) {
       // Key 不存在
       quotaData = {};
     } else {
-      // 其他类型，记录警告
-      console.warn(`[ghost-following] Quota key ${quotaKey} has unexpected type: ${keyType}`);
       quotaData = {};
     }
 
@@ -391,7 +382,6 @@ async function getUserQuota(redisClient, userId) {
       lastAppliedAt: lastAppliedAt ? parseInt(lastAppliedAt) : null,
     };
   } catch (error) {
-    console.error(`[ghost-following] Error getting quota for user ${userId}:`, error);
     // 返回空额度而不是抛出错误，避免整个接口挂掉
     return {
       exists: false,
@@ -418,7 +408,6 @@ async function atomicDeductQuota(redisClient, userId, isVip) {
     // 先检查 key 类型，如果不是 hash 类型，删除它（让 Lua 脚本重新创建）
     const keyType = await redisClient.type(quotaKey);
     if (keyType !== 'hash' && keyType !== 'none') {
-      console.warn(`[ghost-following] Quota key ${quotaKey} is not hash (type: ${keyType}), deleting it`);
       await redisClient.del(quotaKey);
     }
     
@@ -452,7 +441,6 @@ async function atomicDeductQuota(redisClient, userId, isVip) {
       isNewQuota: isNewQuotaFlag === 1,
     };
   } catch (error) {
-    console.error('[ghost-following] Atomic deduct quota error:', error);
     throw error;
   }
 }
@@ -516,7 +504,6 @@ router.post(
       const redisClient = req.redisClient || global.__xhuntRedis;
 
       if (!redisClient) {
-        console.error(`analyze return ${user_id} Redis client not available`);
         return res.status(500).json({
           success: false,
           error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
@@ -533,7 +520,6 @@ router.post(
         );
         const total = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
         
-        console.log(`analyze return ${user_id} QUOTA_COOLDOWN`);
         return res.status(200).json({
           success: false,
           error: {
@@ -561,7 +547,6 @@ router.post(
       // 检查熔断器状态
       const cbCheck = circuitBreaker.canExecute();
       if (!cbCheck.allowed) {
-        console.warn(`analyze return ${user_id} Circuit breaker rejected: ${cbCheck.reason}`);
         return res.status(200).json({
           success: false,
           error: {
@@ -612,7 +597,6 @@ router.post(
             
             // 如果推文是 28 天前的旧数据，调用第二个接口确认
             if (now - tweetTime > days28Ms) {
-              console.log(`analyze return ${user_id} Tweet ${tweet.id} is older than 28 days, verifying with second API`);
               analysisResult = await verifyEmptyUserWithSecondApi(user_id);
             } else {
               // 数据正常，直接使用
@@ -625,16 +609,12 @@ router.post(
             }
           } else {
             // KOL tweets 返回空，调用第二个接口进行二次确认
-            // 可能是因为用户不是被追踪的 KOL
-            console.log(`analyze return ${user_id} KOL tweets empty, using second API`);
             analysisResult = await verifyEmptyUserWithSecondApi(user_id);
           }
         } else {
-          console.log(`analyze return ${user_id} KOL tweets invalid response`);
           analysisResult = await verifyEmptyUserWithSecondApi(user_id);
         }
       } catch (apiError) {
-        console.error(`analyze return ${user_id} First API request failed:`, apiError.message);
         circuitBreaker.recordFailure();
         
         // 第一个接口失败，尝试第二个接口
@@ -646,7 +626,6 @@ router.post(
       const expiresAt = currentQuota.appliedAt + QUOTA_CONFIG.periodDays * 24 * 60 * 60 * 1000;
       const expiresInDays = Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000));
 
-      console.log(`analyze return ${user_id} SUCCESS`);
       return res.json({
         success: true,
         data: {
@@ -662,7 +641,6 @@ router.post(
         },
       });
     } catch (error) {
-      console.error(`analyze return ${user_id} ERROR:`, error);
       // 如果有状态码（来自外部API），透传；否则返回500
       const statusCode = error.statusCode || 500;
       return res.status(statusCode).json({
@@ -690,7 +668,6 @@ router.get(
       const redisClient = req.redisClient || global.__xhuntRedis;
 
       if (!redisClient) {
-        console.error("[ghost-following] Redis client not available");
         return res.status(500).json({
           success: false,
           error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
@@ -870,7 +847,6 @@ router.get(
         },
       });
     } catch (error) {
-      console.error("[ghost-following] Get quota error:", error);
       return res.status(500).json({
         success: false,
         error: { code: "INTERNAL_ERROR", message: "Failed to get quota" },
@@ -1026,8 +1002,6 @@ router.post(
         },
       });
     } catch (error) {
-      console.error("[ghost-following] Following API error:", error.message);
-      
       // 如果是外部 API 返回的错误，透传状态码和错误信息
       if (error.response) {
         const { status, data } = error.response;
@@ -1085,7 +1059,6 @@ async function verifyEmptyUserWithSecondApi(user_id) {
         const tweet = sortedTweets[0]; // 取时间最新的一条
         // 优先使用 created_at (Twitter 原始格式)
         const createTime = tweet.created_at || null;
-        console.log(`analyze return ${user_id} Second API found tweets, ${String(tweet.html).slice(0, 20)} ${tweet.created_at}`);
         return {
           id: tweet.id,
           create_time: createTime,
@@ -1096,18 +1069,15 @@ async function verifyEmptyUserWithSecondApi(user_id) {
         };
       } else {
         // 第二个接口也确认没有推文，调用第三个接口检查是否锁推
-        console.log(`analyze return ${user_id} Second API empty, checking protected status`);
         return await checkUserProtectedStatus(user_id);
       }
     } else {
       // 第二个接口返回异常格式
-      console.log(`analyze return ${user_id} Second API invalid response`);
       const error = new Error("Second API invalid response format");
       error.statusCode = 500;
       throw error;
     }
   } catch (apiError) {
-    console.error(`analyze return ${user_id} Second API verification failed:`, apiError.message);
     
     // 外部API返回什么状态码就抛出什么状态码
     if (apiError.response) {
@@ -1149,7 +1119,6 @@ async function checkUserProtectedStatus(user_id) {
       const profile = response.data;
       const isProtected = profile.protected === true;
       
-      console.log(`analyze return ${user_id} Third API profile check success, protected=${isProtected}`);
       return {
         id: null,
         create_time: null,
@@ -1179,13 +1148,11 @@ async function checkUserProtectedStatus(user_id) {
       };
     } else {
       // 第三个接口返回异常
-      console.log(`analyze return ${user_id} Third API profile check invalid response`);
       const error = new Error("Third API profile check invalid response format");
       error.statusCode = 500;
       throw error;
     }
   } catch (error) {
-    console.error(`analyze return ${user_id} Third API (profile check) failed:`, error.message);
     
     // 第三个接口失败，透传 API 错误
     if (error.response) {
