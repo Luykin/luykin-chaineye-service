@@ -406,12 +406,12 @@ ${quotedContent}
 `;
   }
 
-  if (mediaDescription && mediaDescription.trim()) {
-    prompt += `
-**媒体描述**:
-${mediaDescription}
-`;
-  }
+//   if (mediaDescription && mediaDescription.trim()) {
+//     prompt += `
+// **媒体描述**:
+// ${mediaDescription}
+// `;
+//   }
 
   return prompt;
 }
