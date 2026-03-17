@@ -623,7 +623,7 @@ async function generateExternalLink(campaign, taskId, user) {
     // console.log('[generateExternalLink]', signature, `rawToken ${taskId} ${user.id}`)
     
     // 构建跳转链接
-    const link = `https://testofficial.realgo.game/reg?code=XHUNT&xHuntToken=${encodeURIComponent(xHuntToken)}&xHuntSignature=${encodeURIComponent(signature)}`;
+    const link = `https://app.realgo.game/reg?code=XHUNT&xHuntToken=${encodeURIComponent(xHuntToken)}&xHuntSignature=${encodeURIComponent(signature)}`;
     
     console.log('[generateExternalLink]', link, `rawToken ${taskId} ${user.id}`)
     return {
@@ -644,7 +644,7 @@ async function queryExternalStatus(campaign, taskId, user) {
   if (campaign === 'realgo') {
     try {
       const response = await axios.get(
-        'https://testreal.myreal.io/api/v1/PartnerService/XHuntStats',
+        'https://api.myreal.io/api/v1/PartnerService/XHuntStats',
         { timeout: 10000 }
       );
       
