@@ -33,6 +33,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/pro-api-credits',
   './xhunt/api/sse',
   './xhunt/api/user-entry',
+  './xhunt/api/ai-detect',
   
   // Admin API
   './admin/api/admin',
@@ -116,6 +117,7 @@ const adminReviewsRoutes = require("./admin/api/reviews");
 const adminLlmTestRoutes = require("./admin/api/llm-test");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
+const xHuntAIDetectRoutes = require("./xhunt/api/ai-detect");
 const internalQueryRoutes = require("./api/internal-query");
 const { initPerfMonitor } = require("./lib/perf-monitor"); // 性能监控模块
 const {
@@ -426,6 +428,15 @@ async function initializeAndStartServer() {
 
   // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
   app.use("/api/rootdata", xHuntRootdataRoutes);
+
+  // AI 探测功能接口 - 推文内容分析和评分
+  app.use(
+    "/api/xhunt/ai",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntAIDetectRoutes
+  );
 
   // RootdataPro: 触发爬虫并入库
   app.use("/api/rootdatapro/internal", adminAuth, rootdataProRoutes);
