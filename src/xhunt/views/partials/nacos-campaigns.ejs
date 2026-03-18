@@ -410,7 +410,7 @@
         </div>
 
         <div class="section section-compact">
-          <div class="section-title">Logo · 任务</div>
+          <div class="section-title">Logo · 任务 · Tags</div>
           <div class="section-sub">
             <div class="section-title-sm">
               活动方 logo
@@ -426,6 +426,17 @@
             </div>
             <!-- <div class="repeaters-hint">← 左右滑动</div> -->
             <div class="repeaters" id="campaigns-tasks"></div>
+          </div>
+          <div class="section-sub">
+            <div class="section-title-sm">
+              活动 Tags（可选）
+              <button class="btn btn-sm" id="campaigns-tags-add" type="button" disabled>+添加</button>
+            </div>
+            <div class="tag-notice">
+              <span class="tag-notice-icon">ℹ️</span>
+              <span class="tag-notice-text">如果配置了自定义 Tag，前端本身会自动生成的【按贡献】【征文大赛】【TOP200】都将被替换</span>
+            </div>
+            <div class="repeaters" id="campaigns-tags"></div>
           </div>
         </div>
 
@@ -1456,6 +1467,166 @@
     min-height: auto;
     line-height: 1.2;
   }
+
+  /* Tag Card Styles */
+  .tag-card {
+    padding: 12px 14px;
+    background: #fff;
+    border-left: 3px solid #3b82f6;
+  }
+  .tag-card.tag-green {
+    border-left-color: #22c55e;
+    background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+  }
+  .tag-card.tag-purple {
+    border-left-color: #a855f7;
+    background: linear-gradient(135deg, #faf5ff 0%, #ffffff 100%);
+  }
+  .tag-card.tag-yellow {
+    border-left-color: #eab308;
+    background: linear-gradient(135deg, #fefce8 0%, #ffffff 100%);
+  }
+  .tag-card.tag-blue {
+    border-left-color: #3b82f6;
+    background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  }
+  .tag-card.tag-gray {
+    border-left-color: #6b7280;
+    background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
+  }
+  .tag-card.tag-gold {
+    border-left-color: #f59e0b;
+    background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%);
+  }
+  .tag-card.tag-red {
+    border-left-color: #ef4444;
+    background: linear-gradient(135deg, #fef2f2 0%, #ffffff 100%);
+  }
+  .tag-card.tag-pink {
+    border-left-color: #ec4899;
+    background: linear-gradient(135deg, #fdf2f8 0%, #ffffff 100%);
+  }
+  .tag-card.tag-cyan {
+    border-left-color: #06b6d4;
+    background: linear-gradient(135deg, #ecfeff 0%, #ffffff 100%);
+  }
+  .tag-card.tag-orange {
+    border-left-color: #f97316;
+    background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+  }
+  
+  .tag-preview {
+    margin: 10px 0;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.7);
+    border-radius: 6px;
+    border: 1px dashed #d1d5db;
+  }
+  .tag-preview-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 500;
+    background: #f3f4f6;
+    color: #374151;
+  }
+  .tag-green .tag-preview-badge {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .tag-purple .tag-preview-badge {
+    background: #f3e8ff;
+    color: #7e22ce;
+  }
+  .tag-yellow .tag-preview-badge {
+    background: #fef9c3;
+    color: #a16207;
+  }
+  .tag-blue .tag-preview-badge {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+  .tag-gray .tag-preview-badge {
+    background: #e5e7eb;
+    color: #374151;
+  }
+  .tag-gold .tag-preview-badge {
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .tag-red .tag-preview-badge {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+  .tag-pink .tag-preview-badge {
+    background: #fce7f3;
+    color: #be185d;
+  }
+  .tag-cyan .tag-preview-badge {
+    background: #cffafe;
+    color: #0e7490;
+  }
+  .tag-orange .tag-preview-badge {
+    background: #ffedd5;
+    color: #9a3412;
+  }
+  .tag-preview-icon {
+    font-size: 11px;
+    opacity: 0.8;
+  }
+  .tag-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .tag-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .tag-field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #4b5563;
+  }
+  .tag-field-full {
+    grid-column: span 2;
+  }
+  
+  /* Tag 提示信息样式 */
+  .tag-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #92400e;
+  }
+  .tag-notice-icon {
+    flex-shrink: 0;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .tag-notice-text {
+    flex: 1;
+  }
+  
+  @media (max-width: 700px) {
+    .tag-fields {
+      grid-template-columns: 1fr;
+    }
+    .tag-field-full {
+      grid-column: span 1;
+    }
+  }
   .rep-header {
     display: flex;
     justify-content: space-between;
@@ -1905,6 +2076,10 @@
       $("campaigns-delete").disabled = !enabled;
       $("campaigns-logos-add").disabled = !enabled;
       $("campaigns-tasks-add").disabled = !enabled;
+      const tagsAddBtn = $("campaigns-tags-add");
+      if (tagsAddBtn) {
+        tagsAddBtn.disabled = !enabled;
+      }
       const essayWinnersAddBtn = $("campaigns-essay-winners-add");
       if (essayWinnersAddBtn) {
         essayWinnersAddBtn.disabled = !enabled;
@@ -2107,11 +2282,13 @@
       const logosEl = $("campaigns-logos");
       const tasksEl = $("campaigns-tasks");
       const winnersEl = $("campaigns-essay-winners");
+      const tagsEl = $("campaigns-tags");
       if (!logosEl || !tasksEl) return;
 
       const logos = Array.isArray(c?.logos) ? c.logos : [];
       const tasks = Array.isArray(c?.tasks) ? c.tasks : [];
       const winners = Array.isArray(c?.essayContestWinners) ? c.essayContestWinners : [];
+      const tags = Array.isArray(c?.tags) ? c.tags : [];
       
       // 确保所有 logo 都有默认的 ringClassName
       const defaultRingClassName = "ring-blue-400/20 hover:ring-blue-400/50";
@@ -2131,6 +2308,16 @@
           if (campaignKey && type && url) {
             task.id = generateTaskId(campaignKey, type, url);
           }
+        }
+      });
+
+      // 确保所有 tag 都有默认值
+      tags.forEach((tag) => {
+        if (!tag.colorScheme || !tag.colorScheme.trim()) {
+          tag.colorScheme = "blue";
+        }
+        if (!tag.icon || !tag.icon.trim()) {
+          tag.icon = "Tag";
         }
       });
 
@@ -2345,6 +2532,72 @@
             .join("") || `<div class="rep-card" data-kind="writing-themes" data-index="0"><div class="rep-header"><div class="rep-title">主题 #1</div><div class="rep-actions"><button class="btn danger" type="button" data-action="remove">删除</button></div></div><div class="field-row field-row-2"><div class="field"><label>主题内容（中文）</label><textarea data-field="zh" rows="3" placeholder="输入本活动的写作主题描述..."></textarea></div><div class="field"><label>主题内容（English）</label><textarea data-field="en" rows="3" placeholder="Writing theme description..."></textarea></div></div></div>`;
       }
 
+      // 渲染 Tags
+      if (tagsEl) {
+        const colorSchemeOptions = TAG_COLOR_SCHEMES.map(
+          (cs) => `<option value="${escapeHtml(cs.value)}" ${cs.value === 'blue' ? 'selected' : ''}>${escapeHtml(cs.label)}</option>`
+        ).join('');
+        const iconOptions = LUCIDE_ICONS.map(
+          (icon) => `<option value="${escapeHtml(icon.value)}">${escapeHtml(icon.label)}</option>`
+        ).join('');
+        
+        tagsEl.innerHTML =
+          tags
+            .map((it, i) => {
+              const colorScheme = it?.colorScheme || 'blue';
+              const icon = it?.icon || 'Tag';
+              const label = it?.label || '';
+              const hoverTips = it?.hoverTips || '';
+              const colorSchemeClass = TAG_COLOR_SCHEMES.find(cs => cs.value === colorScheme)?.className || 'tag-blue';
+              
+              return `
+              <div class="rep-card tag-card ${escapeHtml(colorSchemeClass)}" data-kind="tags" data-index="${i}">
+                <div class="rep-header">
+                  <div class="rep-title">Tag #${i + 1}</div>
+                  <div class="rep-actions">
+                    <button class="btn" type="button" data-action="up">↑</button>
+                    <button class="btn" type="button" data-action="down">↓</button>
+                    <button class="btn danger" type="button" data-action="remove">删除</button>
+                  </div>
+                </div>
+                <div class="tag-preview">
+                  <span class="tag-preview-badge">
+                    <span class="tag-preview-icon">${escapeHtml(icon)}</span>
+                    <span class="tag-preview-label">${escapeHtml(label) || '未命名'}</span>
+                  </span>
+                </div>
+                <div class="tag-fields">
+                  <div class="tag-field">
+                    <label>颜色系</label>
+                    <select data-field="colorScheme" class="task-select">
+                      ${TAG_COLOR_SCHEMES.map(cs => `
+                        <option value="${escapeHtml(cs.value)}" ${cs.value === colorScheme ? 'selected' : ''}>${escapeHtml(cs.label)}</option>
+                      `).join('')}
+                    </select>
+                  </div>
+                  <div class="tag-field">
+                    <label>图标</label>
+                    <select data-field="icon" class="task-select">
+                      ${LUCIDE_ICONS.map(ic => `
+                        <option value="${escapeHtml(ic.value)}" ${ic.value === icon ? 'selected' : ''}>${escapeHtml(ic.label)}</option>
+                      `).join('')}
+                    </select>
+                  </div>
+                  <div class="tag-field tag-field-full">
+                    <label>标签文本</label>
+                    <input type="text" data-field="label" value="${escapeHtml(label)}" class="task-input" placeholder="输入标签显示文本..." />
+                  </div>
+                  <div class="tag-field tag-field-full">
+                    <label>Hover 提示（支持 HTML）</label>
+                    <textarea data-field="hoverTips" rows="2" class="task-input" placeholder="输入悬停提示内容，支持 HTML...">${escapeHtml(hoverTips)}</textarea>
+                  </div>
+                </div>
+              </div>
+            `;
+            })
+            .join("") || `<div class="muted">暂无 tags，可点击上方"添加"</div>`;
+      }
+
       // 初始化所有任务卡片的 custom 类型状态
       if (tasksEl) {
         tasksEl.querySelectorAll(".rep-card[data-kind='tasks']").forEach((card) => {
@@ -2441,6 +2694,10 @@
       if (essayWinnersEl) {
         essayWinnersEl.innerHTML = "";
       }
+      const tagsEl = $("campaigns-tags");
+      if (tagsEl) {
+        tagsEl.innerHTML = "";
+      }
 
       const body = $("campaigns-editor-body");
       const empty = $("campaigns-editor-empty");
@@ -2502,7 +2759,7 @@
       if (!Array.isArray(c.logos)) c.logos = [];
       if (!Array.isArray(c.tasks)) c.tasks = [];
       if (!Array.isArray(c.essayContestWinners)) c.essayContestWinners = [];
-      
+      // tags 是可选字段，保留原值（undefined 表示未配置）
       // 确保所有 logo 都有默认的 ringClassName
       const defaultRingClassName = "ring-blue-400/20 hover:ring-blue-400/50";
       c.logos.forEach((logo) => {
@@ -2903,6 +3160,11 @@
         renderRepeaters();
       }
 
+      // tags 是可选字段：如果为空数组或未配置，删除该字段以减少 JSON 大小
+      if (!c.tags || (Array.isArray(c.tags) && c.tags.length === 0)) {
+        delete c.tags;
+      }
+
       dirty = true;
       $("campaigns-publish").disabled = false;
       // 避免频繁重建整个列表导致头像重复加载，只增量更新当前条目
@@ -3006,6 +3268,54 @@
         });
       }
 
+      // Tag 颜色系定义
+      const TAG_COLOR_SCHEMES = [
+        { value: "green", label: "绿色", className: "tag-green" },
+        { value: "purple", label: "紫色", className: "tag-purple" },
+        { value: "yellow", label: "黄色", className: "tag-yellow" },
+        { value: "blue", label: "蓝色", className: "tag-blue" },
+        { value: "gray", label: "灰色", className: "tag-gray" },
+        { value: "gold", label: "金色", className: "tag-gold" },
+        { value: "red", label: "红色", className: "tag-red" },
+        { value: "pink", label: "粉色", className: "tag-pink" },
+        { value: "cyan", label: "青色", className: "tag-cyan" },
+        { value: "orange", label: "橙色", className: "tag-orange" },
+      ];
+
+      // Lucide Icons 可选列表（常用图标）
+      const LUCIDE_ICONS = [
+        { value: "FileText", label: "FileText 📄" },
+        { value: "Gift", label: "Gift 🎁" },
+        { value: "Trophy", label: "Trophy 🏆" },
+        { value: "Users", label: "Users 👥" },
+        { value: "Star", label: "Star ⭐" },
+        { value: "Heart", label: "Heart ❤️" },
+        { value: "Zap", label: "Zap ⚡" },
+        { value: "Rocket", label: "Rocket 🚀" },
+        { value: "Award", label: "Award 🏅" },
+        { value: "Medal", label: "Medal 🥇" },
+        { value: "Crown", label: "Crown 👑" },
+        { value: "Sparkles", label: "Sparkles ✨" },
+        { value: "Flame", label: "Flame 🔥" },
+        { value: "Target", label: "Target 🎯" },
+        { value: "TrendingUp", label: "TrendingUp 📈" },
+        { value: "Coins", label: "Coins 🪙" },
+        { value: "Wallet", label: "Wallet 👛" },
+        { value: "Shield", label: "Shield 🛡️" },
+        { value: "CheckCircle", label: "CheckCircle ✅" },
+        { value: "Info", label: "Info ℹ️" },
+        { value: "Bell", label: "Bell 🔔" },
+        { value: "Clock", label: "Clock ⏰" },
+        { value: "Calendar", label: "Calendar 📅" },
+        { value: "Tag", label: "Tag 🏷️" },
+        { value: "Bookmark", label: "Bookmark 🔖" },
+        { value: "Flag", label: "Flag 🚩" },
+        { value: "MapPin", label: "MapPin 📍" },
+        { value: "Globe", label: "Globe 🌐" },
+        { value: "Link", label: "Link 🔗" },
+        { value: "Share2", label: "Share2 🔄" },
+      ];
+
       const ids = [
         "campaigns-sortWeight",
         "campaigns-displayName-zh",
@@ -3108,6 +3418,21 @@
       renderRepeaters();
     }
 
+    function addTag() {
+      const c = getCurrentCampaign();
+      if (!c) return;
+      c.tags = Array.isArray(c.tags) ? c.tags : [];
+      c.tags.push({
+        colorScheme: "blue",
+        icon: "Tag",
+        label: "",
+        hoverTips: "",
+      });
+      dirty = true;
+      $("campaigns-publish").disabled = false;
+      renderRepeaters();
+    }
+
     function addWritingTheme() {
       const c = getCurrentCampaign();
       if (!c) return;
@@ -3149,6 +3474,8 @@
             arr = c.essayContestWinners;
           } else if (kind === "writing-themes") {
             arr = c.writingThemes;
+          } else if (kind === "tags") {
+            arr = c.tags;
           } else {
             return;
           }
@@ -3263,6 +3590,8 @@
             arr = c.essayContestWinners;
           } else if (kind === "writing-themes") {
             arr = c.writingThemes;
+          } else if (kind === "tags") {
+            arr = c.tags;
           } else {
             return;
           }
@@ -3271,6 +3600,10 @@
           if (action === "remove") {
             if (kind === "writing-themes" && arr.length <= 1) return;
             arr.splice(index, 1);
+            // 如果是 tags 且删除后为空，删除整个 tags 字段
+            if (kind === "tags" && c.tags && c.tags.length === 0) {
+              delete c.tags;
+            }
           } else if (action === "up") {
             moveArrayItem(arr, index, index - 1);
           } else if (action === "down") {
@@ -3307,6 +3640,13 @@
       onRepInput("campaigns-writing-themes", (obj, field, value) => {
         if (typeof obj !== "string") return;
         // writing-themes 在分支里已处理 arr[index]=value
+      });
+      onRepInput("campaigns-tags", (obj, field, value) => {
+        obj[field] = value;
+        // 更新时实时刷新预览
+        if (field === "colorScheme" || field === "icon" || field === "label") {
+          renderRepeaters();
+        }
       });
     }
 
@@ -3916,6 +4256,10 @@
       const writingThemesAddBtn = $("campaigns-writing-themes-add");
       if (writingThemesAddBtn) {
         writingThemesAddBtn.addEventListener("click", addWritingTheme);
+      }
+      const tagsAddBtn = $("campaigns-tags-add");
+      if (tagsAddBtn) {
+        tagsAddBtn.addEventListener("click", addTag);
       }
 
       // JSON 预览模态框事件绑定
