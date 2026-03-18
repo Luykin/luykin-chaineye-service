@@ -2595,7 +2595,9 @@
               const colorScheme = it?.colorScheme || 'blue';
               const icon = it?.icon || 'Tag';
               const label = it?.label || '';
+              const label_en = it?.label_en || '';
               const hoverTips = it?.hoverTips || '';
+              const hoverTips_en = it?.hoverTips_en || '';
               const colorSchemeClass = TAG_COLOR_SCHEMES.find(cs => cs.value === colorScheme)?.className || 'tag-blue';
               
               return `
@@ -2632,12 +2634,20 @@
                     </select>
                   </div>
                   <div class="tag-field tag-field-full">
-                    <label>标签文本</label>
-                    <input type="text" data-field="label" value="${escapeHtml(label)}" class="task-input" placeholder="输入标签显示文本..." />
+                    <label>标签文本（中文）</label>
+                    <input type="text" data-field="label" value="${escapeHtml(label)}" class="task-input" placeholder="输入中文标签显示文本..." />
                   </div>
                   <div class="tag-field tag-field-full">
-                    <label>Hover 提示（支持 HTML）</label>
-                    <textarea data-field="hoverTips" rows="2" class="task-input" placeholder="输入悬停提示内容，支持 HTML...">${escapeHtml(hoverTips)}</textarea>
+                    <label>标签文本（English）</label>
+                    <input type="text" data-field="label_en" value="${escapeHtml(label_en)}" class="task-input" placeholder="Enter English label..." />
+                  </div>
+                  <div class="tag-field tag-field-full">
+                    <label>Hover 提示（中文，支持 HTML）</label>
+                    <textarea data-field="hoverTips" rows="2" class="task-input" placeholder="输入中文悬停提示内容，支持 HTML...">${escapeHtml(hoverTips)}</textarea>
+                  </div>
+                  <div class="tag-field tag-field-full">
+                    <label>Hover 提示（English，支持 HTML）</label>
+                    <textarea data-field="hoverTips_en" rows="2" class="task-input" placeholder="Enter English hover tips, HTML supported...">${escapeHtml(hoverTips_en)}</textarea>
                   </div>
                 </div>
               </div>
@@ -3426,7 +3436,9 @@
         colorScheme: "blue",
         icon: "Tag",
         label: "",
+        label_en: "",
         hoverTips: "",
+        hoverTips_en: "",
       });
       dirty = true;
       $("campaigns-publish").disabled = false;
@@ -3644,7 +3656,7 @@
       onRepInput("campaigns-tags", (obj, field, value) => {
         obj[field] = value;
         // 更新时实时刷新预览
-        if (field === "colorScheme" || field === "icon" || field === "label") {
+        if (field === "colorScheme" || field === "icon" || field === "label" || field === "label_en") {
           renderRepeaters();
         }
       });
