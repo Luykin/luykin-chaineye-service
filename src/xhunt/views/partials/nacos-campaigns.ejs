@@ -1946,6 +1946,54 @@
     let search = "";
     let jsonModalMode = "config"; // 'config' | 'campaign'
 
+    // Tag 颜色系定义（全局常量，供各函数使用）
+    const TAG_COLOR_SCHEMES = [
+      { value: "green", label: "绿色", className: "tag-green" },
+      { value: "purple", label: "紫色", className: "tag-purple" },
+      { value: "yellow", label: "黄色", className: "tag-yellow" },
+      { value: "blue", label: "蓝色", className: "tag-blue" },
+      { value: "gray", label: "灰色", className: "tag-gray" },
+      { value: "gold", label: "金色", className: "tag-gold" },
+      { value: "red", label: "红色", className: "tag-red" },
+      { value: "pink", label: "粉色", className: "tag-pink" },
+      { value: "cyan", label: "青色", className: "tag-cyan" },
+      { value: "orange", label: "橙色", className: "tag-orange" },
+    ];
+
+    // Lucide Icons 可选列表（常用图标）
+    const LUCIDE_ICONS = [
+      { value: "FileText", label: "FileText 📄" },
+      { value: "Gift", label: "Gift 🎁" },
+      { value: "Trophy", label: "Trophy 🏆" },
+      { value: "Users", label: "Users 👥" },
+      { value: "Star", label: "Star ⭐" },
+      { value: "Heart", label: "Heart ❤️" },
+      { value: "Zap", label: "Zap ⚡" },
+      { value: "Rocket", label: "Rocket 🚀" },
+      { value: "Award", label: "Award 🏅" },
+      { value: "Medal", label: "Medal 🥇" },
+      { value: "Crown", label: "Crown 👑" },
+      { value: "Sparkles", label: "Sparkles ✨" },
+      { value: "Flame", label: "Flame 🔥" },
+      { value: "Target", label: "Target 🎯" },
+      { value: "TrendingUp", label: "TrendingUp 📈" },
+      { value: "Coins", label: "Coins 🪙" },
+      { value: "Wallet", label: "Wallet 👛" },
+      { value: "Shield", label: "Shield 🛡️" },
+      { value: "CheckCircle", label: "CheckCircle ✅" },
+      { value: "Info", label: "Info ℹ️" },
+      { value: "Bell", label: "Bell 🔔" },
+      { value: "Clock", label: "Clock ⏰" },
+      { value: "Calendar", label: "Calendar 📅" },
+      { value: "Tag", label: "Tag 🏷️" },
+      { value: "Bookmark", label: "Bookmark 🔖" },
+      { value: "Flag", label: "Flag 🚩" },
+      { value: "MapPin", label: "MapPin 📍" },
+      { value: "Globe", label: "Globe 🌐" },
+      { value: "Link", label: "Link 🔗" },
+      { value: "Share2", label: "Share2 🔄" },
+    ];
+
     function $(id) {
       return document.getElementById(id);
     }
@@ -3267,54 +3315,6 @@
           syncCampaignFromInputs();
         });
       }
-
-      // Tag 颜色系定义
-      const TAG_COLOR_SCHEMES = [
-        { value: "green", label: "绿色", className: "tag-green" },
-        { value: "purple", label: "紫色", className: "tag-purple" },
-        { value: "yellow", label: "黄色", className: "tag-yellow" },
-        { value: "blue", label: "蓝色", className: "tag-blue" },
-        { value: "gray", label: "灰色", className: "tag-gray" },
-        { value: "gold", label: "金色", className: "tag-gold" },
-        { value: "red", label: "红色", className: "tag-red" },
-        { value: "pink", label: "粉色", className: "tag-pink" },
-        { value: "cyan", label: "青色", className: "tag-cyan" },
-        { value: "orange", label: "橙色", className: "tag-orange" },
-      ];
-
-      // Lucide Icons 可选列表（常用图标）
-      const LUCIDE_ICONS = [
-        { value: "FileText", label: "FileText 📄" },
-        { value: "Gift", label: "Gift 🎁" },
-        { value: "Trophy", label: "Trophy 🏆" },
-        { value: "Users", label: "Users 👥" },
-        { value: "Star", label: "Star ⭐" },
-        { value: "Heart", label: "Heart ❤️" },
-        { value: "Zap", label: "Zap ⚡" },
-        { value: "Rocket", label: "Rocket 🚀" },
-        { value: "Award", label: "Award 🏅" },
-        { value: "Medal", label: "Medal 🥇" },
-        { value: "Crown", label: "Crown 👑" },
-        { value: "Sparkles", label: "Sparkles ✨" },
-        { value: "Flame", label: "Flame 🔥" },
-        { value: "Target", label: "Target 🎯" },
-        { value: "TrendingUp", label: "TrendingUp 📈" },
-        { value: "Coins", label: "Coins 🪙" },
-        { value: "Wallet", label: "Wallet 👛" },
-        { value: "Shield", label: "Shield 🛡️" },
-        { value: "CheckCircle", label: "CheckCircle ✅" },
-        { value: "Info", label: "Info ℹ️" },
-        { value: "Bell", label: "Bell 🔔" },
-        { value: "Clock", label: "Clock ⏰" },
-        { value: "Calendar", label: "Calendar 📅" },
-        { value: "Tag", label: "Tag 🏷️" },
-        { value: "Bookmark", label: "Bookmark 🔖" },
-        { value: "Flag", label: "Flag 🚩" },
-        { value: "MapPin", label: "MapPin 📍" },
-        { value: "Globe", label: "Globe 🌐" },
-        { value: "Link", label: "Link 🔗" },
-        { value: "Share2", label: "Share2 🔄" },
-      ];
 
       const ids = [
         "campaigns-sortWeight",
