@@ -88,7 +88,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
             </svg>
-            <span><strong>主题适配提示：</strong>文字颜色会<strong>自动继承</strong>白天/黑夜模式，请勿手动设置黑色。如需高亮可用编辑器颜色按钮选亮色，但主体内容请保持默认。</span>
+            <span><strong>⚠️ 重要提示：</strong>粘贴内容后，请先<strong>全选(Ctrl+A)</strong>然后点击工具栏的 <strong>🧹 清除样式</strong> 按钮，确保文字颜色继承自主题，如需特殊高亮语句清楚颜色后单独再设置颜色。发布后请在白天/黑夜模式下都检查一下显示效果。</span>
           </div>
           
           <!-- Quill 编辑器 -->
@@ -381,10 +381,11 @@
         "#a10000", "#b26b00", "#b2b200", "#006100", "#0047b2", "#6b24b2"
       ];
       
-      // 自定义HTML和吸色按钮
+      // 自定义按钮图标
       const customIcons = {
-        html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>',
-        eyedropper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="M20.2 3.8l-2.5 2.5-1.4-1.4 2.5-2.5 1.4 1.4zM4 16l-1 5 5-1 9.5-9.5-4-4L4 16z"/></svg>'
+        html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>',
+        eyedropper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M20.2 3.8l-2.5 2.5-1.4-1.4 2.5-2.5 1.4 1.4zM4 16l-1 5 5-1 9.5-9.5-4-4L4 16z"/></svg>',
+        clean: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
       };
       
       const toolbarOptions = {
@@ -393,7 +394,7 @@
           [{ color: quillColors }, { background: quillColors }],  // 文字色 + 背景色
           ["bold", "italic", "underline"],  // 格式
           ["link"],  // 链接
-          ["clean"],  // 清除格式
+          ["clean"],  // 清除格式（重要！）
           ["html", "eyedropper"]  // 自定义按钮
         ],
         handlers: {
@@ -417,8 +418,9 @@
         }
       });
       
-      // 设置自定义按钮图标
+      // 设置所有按钮的图标和 tooltip
       setTimeout(() => {
+        // 自定义按钮图标
         const htmlBtn = document.querySelector(".ql-html");
         if (htmlBtn) { 
           htmlBtn.innerHTML = customIcons.html; 
@@ -430,7 +432,31 @@
           eyeBtn.title = "屏幕拾色"; 
         }
         
-        // 设置字号下拉中文
+        // 标准按钮 tooltip
+        const boldBtn = document.querySelector(".ql-bold");
+        if (boldBtn) boldBtn.title = "加粗 (Ctrl+B)";
+        
+        const italicBtn = document.querySelector(".ql-italic");
+        if (italicBtn) italicBtn.title = "斜体 (Ctrl+I)";
+        
+        const underlineBtn = document.querySelector(".ql-underline");
+        if (underlineBtn) underlineBtn.title = "下划线 (Ctrl+U)";
+        
+        const linkBtn = document.querySelector(".ql-link");
+        if (linkBtn) linkBtn.title = "插入链接 (Ctrl+K)";
+        
+        const cleanBtn = document.querySelector(".ql-clean");
+        if (cleanBtn) { 
+          cleanBtn.innerHTML = "🧹 清除样式";
+          cleanBtn.title = "选中内容后点此清除颜色和格式，确保继承主题颜色"; 
+        }
+        
+        // 字号下拉中文 + tooltip
+        const sizePicker = document.querySelector(".ql-size");
+        if (sizePicker) {
+          const label = sizePicker.querySelector(".ql-picker-label");
+          if (label) label.title = "字号大小";
+        }
         document.querySelectorAll(".ql-size .ql-picker-label").forEach(el => {
           const val = el.dataset.value || "";
           el.setAttribute("data-label", sizeClasses[val] || "正常");
@@ -440,11 +466,18 @@
           el.textContent = sizeClasses[val] || "正常";
         });
         
-        // 设置颜色选择器的标题
-        const colorLabel = document.querySelector(".ql-color .ql-picker-label");
-        if (colorLabel) colorLabel.title = "文字颜色";
-        const bgLabel = document.querySelector(".ql-background .ql-picker-label");
-        if (bgLabel) bgLabel.title = "背景颜色";
+        // 颜色选择器的标题
+        const colorPicker = document.querySelector(".ql-color");
+        if (colorPicker) {
+          const label = colorPicker.querySelector(".ql-picker-label");
+          if (label) label.title = "文字颜色 - 建议尽量用默认，如需高亮可选亮色";
+        }
+        
+        const bgPicker = document.querySelector(".ql-background");
+        if (bgPicker) {
+          const label = bgPicker.querySelector(".ql-picker-label");
+          if (label) label.title = "背景高亮";
+        }
       }, 100);
       
       quill.on("text-change", () => syncToModel());
@@ -697,16 +730,27 @@
 }
 
 /* 工具按钮悬停效果 */
-.ql-snow .ql-toolbar button:hover,
+.ql-snow .ql-toolbar button {
+  transition: all 0.15s ease;
+  border-radius: 4px;
+  margin: 0 1px;
+}
+
+.ql-snow .ql-toolbar button:hover {
+  color: #2563eb;
+  background-color: rgba(59, 130, 246, 0.1);
+  transform: scale(1.08);
+}
+
 .ql-snow .ql-toolbar button.ql-active {
-  color: #3b82f6;
-  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+  background-color: rgba(59, 130, 246, 0.15);
 }
 
 /* 自定义按钮（HTML源码、拾色器） */
 .ql-snow .ql-toolbar button.ql-html,
 .ql-snow .ql-toolbar button.ql-eyedropper {
-  width: 32px;
+  width: 28px;
   height: 24px;
   display: inline-flex;
   align-items: center;
@@ -716,48 +760,35 @@
 .ql-snow .ql-toolbar button.ql-html svg,
 .ql-snow .ql-toolbar button.ql-eyedropper svg {
   stroke: currentColor;
+  fill: none;
 }
 
-/* 下拉菜单样式 */
-.ql-snow .ql-picker-options {
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  border: 1px solid #e5e7eb;
-  padding: 6px;
+/* 清除样式按钮 - 改成文字 */
+.ql-snow .ql-toolbar button.ql-clean {
+  width: auto;
+  min-width: 70px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: 4px;
+  margin-left: 8px;
 }
 
-/* 颜色面板 */
-.ql-snow .ql-color-picker .ql-picker-options {
-  width: 196px;
-  padding: 8px;
+.ql-snow .ql-toolbar button.ql-clean:hover {
+  background: rgba(220, 38, 38, 0.15);
+  color: #b91c1c;
 }
 
-.ql-snow .ql-color-picker .ql-picker-item {
-  width: 18px;
-  height: 18px;
-  margin: 2px;
-  border-radius: 2px;
+/* picker hover */
+.ql-snow .ql-picker:hover {
+  color: #2563eb;
 }
 
-/* 暗色模式适配 */
-@media (prefers-color-scheme: dark) {
-  .ql-toolbar.ql-snow {
-    background: #1f2937;
-    border-color: #374151;
-  }
-  .ql-container.ql-snow {
-    border-color: #374151;
-    background: #111827;
-  }
-  .ql-snow .ql-picker-options {
-    background: #1f2937;
-    border-color: #374151;
-  }
-  .ql-snow .ql-picker-label {
-    color: #e5e7eb;
-  }
-  .ql-editor {
-    color: #e5e7eb;
-  }
+.ql-snow .ql-picker-label:hover {
+  color: #2563eb;
 }
 </style>
