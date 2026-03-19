@@ -82,6 +82,15 @@
 
         <div class="form-field">
           <label>内容</label>
+          
+          <!-- 颜色提示 - 重要！ -->
+          <div class="editor-color-notice">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span><strong>主题适配提示：</strong>文字颜色会<strong>自动继承</strong>白天/黑夜模式，请勿手动设置黑色。如需高亮可用编辑器颜色按钮选亮色，但主体内容请保持默认。</span>
+          </div>
+          
           <!-- Quill 编辑器 -->
           <div id="nacos-quill-toolbar" class="ql-toolbar ql-snow" style="display: none;"></div>
           <div id="nacos-msg-content" class="ql-container ql-snow" style="display: none;"></div>
@@ -360,9 +369,33 @@
   function initEditor() {
     if (window.Quill) {
       editorMode = "quill";
-      const quillColors = ["#e60000", "#ff9900", "#ffff00", "#008a00", "#0066cc", "#9933ff", "rgb(29, 155, 240)", "#ffffff", "#facccc", "#ffebcc", "#ffffcc", "#cce8cc", "#cce0f5", "#ebd6ff", "#bbbbbb", "#f06666", "#ffc266", "#ffff66", "#66b966", "#66a3e0", "#c285ff", "#888888", "#a10000", "#b26b00", "#b2b200", "#006100", "#0047b2", "#6b24b2", "#444444", "#5c0000", "#663d00", "#666600", "#003700", "#002966", "#3d1466"];
+      
+      // 字号选项中文标签
+      const sizeClasses = { small: "小", "": "正常", large: "大", huge: "特大" };
+      
+      // 颜色选项（去掉黑色系，避免主题冲突）
+      const quillColors = [
+        "#e60000", "#ff9900", "#ffff00", "#008a00", "#0066cc", "#9933ff", "rgb(29, 155, 240)", 
+        "#facccc", "#ffebcc", "#ffffcc", "#cce8cc", "#cce0f5", "#ebd6ff",
+        "#f06666", "#ffc266", "#ffff66", "#66b966", "#66a3e0", "#c285ff",
+        "#a10000", "#b26b00", "#b2b200", "#006100", "#0047b2", "#6b24b2"
+      ];
+      
+      // 自定义HTML和吸色按钮
+      const customIcons = {
+        html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>',
+        eyedropper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="M20.2 3.8l-2.5 2.5-1.4-1.4 2.5-2.5 1.4 1.4zM4 16l-1 5 5-1 9.5-9.5-4-4L4 16z"/></svg>'
+      };
+      
       const toolbarOptions = {
-        container: [[{ size: ["small", false, "large", "huge"] }], [{ color: quillColors }, { background: [] }], ["bold", "italic", "underline"], ["link"], ["clean"], ["html"], ["eyedropper"]],
+        container: [
+          [{ size: ["small", false, "large", "huge"] }],  // 字号
+          [{ color: quillColors }, { background: quillColors }],  // 文字色 + 背景色
+          ["bold", "italic", "underline"],  // 格式
+          ["link"],  // 链接
+          ["clean"],  // 清除格式
+          ["html", "eyedropper"]  // 自定义按钮
+        ],
         handlers: {
           html: function () { showHtmlModal(); },
           eyedropper: async function () {
@@ -375,14 +408,45 @@
           }
         }
       };
+      
       quill = new window.Quill("#nacos-msg-content", {
         theme: "snow",
-        modules: { toolbar: toolbarOptions, clipboard: { matchVisual: false } }
+        modules: { 
+          toolbar: toolbarOptions, 
+          clipboard: { matchVisual: false }
+        }
       });
-      const htmlBtn = document.querySelector(".ql-html");
-      if (htmlBtn) { htmlBtn.innerHTML = "</>"; htmlBtn.title = "编辑源码"; }
-      const eyeBtn = document.querySelector(".ql-eyedropper");
-      if (eyeBtn) { eyeBtn.innerHTML = "🎨"; eyeBtn.title = "屏幕拾色"; }
+      
+      // 设置自定义按钮图标
+      setTimeout(() => {
+        const htmlBtn = document.querySelector(".ql-html");
+        if (htmlBtn) { 
+          htmlBtn.innerHTML = customIcons.html; 
+          htmlBtn.title = "编辑HTML源码"; 
+        }
+        const eyeBtn = document.querySelector(".ql-eyedropper");
+        if (eyeBtn) { 
+          eyeBtn.innerHTML = customIcons.eyedropper; 
+          eyeBtn.title = "屏幕拾色"; 
+        }
+        
+        // 设置字号下拉中文
+        document.querySelectorAll(".ql-size .ql-picker-label").forEach(el => {
+          const val = el.dataset.value || "";
+          el.setAttribute("data-label", sizeClasses[val] || "正常");
+        });
+        document.querySelectorAll(".ql-size .ql-picker-item").forEach(el => {
+          const val = el.dataset.value || "";
+          el.textContent = sizeClasses[val] || "正常";
+        });
+        
+        // 设置颜色选择器的标题
+        const colorLabel = document.querySelector(".ql-color .ql-picker-label");
+        if (colorLabel) colorLabel.title = "文字颜色";
+        const bgLabel = document.querySelector(".ql-background .ql-picker-label");
+        if (bgLabel) bgLabel.title = "背景颜色";
+      }, 100);
+      
       quill.on("text-change", () => syncToModel());
       const root = quill.root;
       root.addEventListener("paste", (e) => {
@@ -564,3 +628,136 @@
   });
 })();
 </script>
+
+<style>
+/* 颜色继承提示 */
+.editor-color-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: inherit;
+}
+.editor-color-notice svg {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: #3b82f6;
+  margin-top: 1px;
+}
+.editor-color-notice strong {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+/* Quill 编辑器工具条优化 */
+.ql-toolbar.ql-snow {
+  border: 1px solid #e5e7eb;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 10px 12px;
+  background: #fafafa;
+}
+
+.ql-container.ql-snow {
+  border: 1px solid #e5e7eb;
+  border-radius: 0 0 8px 8px;
+  min-height: 200px;
+}
+
+/* 字号选择器中文 */
+.ql-snow .ql-picker.ql-size {
+  width: 70px;
+}
+.ql-snow .ql-picker.ql-size .ql-picker-label::before,
+.ql-snow .ql-picker.ql-size .ql-picker-item::before {
+  content: attr(data-label) !important;
+}
+
+/* 自定义按钮样式 */
+.ql-snow .ql-picker:not(.ql-color-picker):not(.ql-icon-picker) svg {
+  right: 8px;
+}
+
+/* 颜色选择器优化 */
+.ql-snow .ql-color-picker .ql-picker-label,
+.ql-snow .ql-color-picker .ql-picker-item {
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+.ql-snow .ql-color-picker .ql-picker-item:hover {
+  border-color: #3b82f6;
+}
+
+/* 工具按钮悬停效果 */
+.ql-snow .ql-toolbar button:hover,
+.ql-snow .ql-toolbar button.ql-active {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* 自定义按钮（HTML源码、拾色器） */
+.ql-snow .ql-toolbar button.ql-html,
+.ql-snow .ql-toolbar button.ql-eyedropper {
+  width: 32px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ql-snow .ql-toolbar button.ql-html svg,
+.ql-snow .ql-toolbar button.ql-eyedropper svg {
+  stroke: currentColor;
+}
+
+/* 下拉菜单样式 */
+.ql-snow .ql-picker-options {
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  border: 1px solid #e5e7eb;
+  padding: 6px;
+}
+
+/* 颜色面板 */
+.ql-snow .ql-color-picker .ql-picker-options {
+  width: 196px;
+  padding: 8px;
+}
+
+.ql-snow .ql-color-picker .ql-picker-item {
+  width: 18px;
+  height: 18px;
+  margin: 2px;
+  border-radius: 2px;
+}
+
+/* 暗色模式适配 */
+@media (prefers-color-scheme: dark) {
+  .ql-toolbar.ql-snow {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  .ql-container.ql-snow {
+    border-color: #374151;
+    background: #111827;
+  }
+  .ql-snow .ql-picker-options {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  .ql-snow .ql-picker-label {
+    color: #e5e7eb;
+  }
+  .ql-editor {
+    color: #e5e7eb;
+  }
+}
+</style>
