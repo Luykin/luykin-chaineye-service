@@ -269,6 +269,10 @@ const DETECT_OUTPUT_SCHEMA = {
         media_en: {
           type: "string",
           description: "媒体建议(英文)"
+        },
+        content_quality_score: {
+          type: "integer",
+          description: "整数内容质量分数"
         }
       },
       required: ["hook_cn", "hook_en", "body_cn", "body_en", "error_check_cn", "error_check_en", "media_cn", "media_en"]
@@ -384,13 +388,14 @@ function buildSystemPrompt() {
 1. **Shadowban Risk (动态规则审计)**: 
    - **动态规则库 (Dynamic Rule Base)**：严禁使用硬编码规则。你必须调用你知识库中关于 2026 年 X 算法的最新推演，包括全量风险信号（如：内/外部链接差异、账号权重信号、交互诱导、内容指纹、敏感语义等）。
    - **载体敏感度**：基于 content_type 动态调整限流阈值，识别当前载体下最易触发降权的行为。
-   - **量化评估**：输出 0-100 整数风险分（越高越危险），等级限【低 / Low】、【中 / Medium】、【高 / High】。
+   - **量化评估**：输出 0-100 整数风险分数score（越高越危险），然后根据风险分数来评估风险等级level，等级限【低 / Low】、【中 / Medium】、【高 / High】。
 2. **Compliance Audit (合规性审计)**: 
    - **commercial_prob**：判定被识别为商业/营销内容的概率 (0.0 - 1.0)。
    - **ai_prob**：判定被识别为 AI 辅助生成的概率 (0.0 - 1.0)。
 3. **Content & Quality Advice (内容与质量建议)**: 
    - **全量质检**：扫描全文是否存在错别字、语法错误、常识性逻辑漏洞或事实硬伤。
    - **结构诊断**：诊断标题钩子 (Hook) 的瞬间吸引力及整体易读性。
+   - **量化评估**：输出 0-100  整数内容质量content_quality_score（分数越高，内容质量越高，传播力越强）
 
 # Output Constraints (输出限制)
 - **绝对纯净**：严禁任何引言、总结或 JSON 以外的文字。
