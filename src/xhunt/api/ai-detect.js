@@ -293,6 +293,12 @@ function getNextDayResetTime(beijingTime) {
   return tomorrow.getTime();
 }
 
+// 无限调用白名单用户ID
+const UNLIMITED_USERS = [
+  "b37295e8-01d7-4e81-9ed1-e71f2d7e9788",
+  "6b0ebc13-d012-42d8-b088-034d3e9ab9df"
+];
+
 // 检查频率限制
 async function checkRateLimit(req, res) {
   const xUserId = String(req.headers["x-user-id"]).toLocaleLowerCase();
@@ -307,6 +313,9 @@ async function checkRateLimit(req, res) {
 
   // 判断是否是VIP
   const isVip = isXHuntVipHandle(xUserId);
+  
+  // 检查是否是无限调用用户
+  const isUnlimited = req.user && req.user.id && UNLIMITED_USERS.includes(req.user.id);
 
   // 获取用户标识
   let userKey;
@@ -335,7 +344,7 @@ async function checkRateLimit(req, res) {
   const currentCount = (await req.redisClient.get(dailyKey)) || 0;
   const maxCalls = isVip ? 10 : 3; // VIP 10次，普通用户3次
 
-  if (parseInt(currentCount) >= maxCalls) {
+  if (!isUnlimited && parseInt(currentCount) >= maxCalls) {
     return {
       allowed: false,
       error: {
