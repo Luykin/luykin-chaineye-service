@@ -7,7 +7,7 @@ const {
 const { aiContentRateLimit } = require("../middleware/aiContentRateLimit");
 const { checkProStatus } = require("../middleware/pro-status");
 const { applyProDataFiltering } = require("../utils/pro-data-filtering");
-const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { isRequestInternalTestUser } = require("../constants/xhuntVip");
 const { handleUserCreateGiftCredits } = require("../services/giftCreditsService");
 
 const router = express.Router();
@@ -504,14 +504,14 @@ router.all(
   securityMiddleware,
   aiContentRateLimit,
   async (req, res) => {
-    // try {
-    //   const ret = isRequestXHuntVip(req);
-    //   if (!ret) {
-    //     // 非 内部用户 返回空数据
-    //     ensureCorsHeaders(req, res);
-    //     return res.status(200).json({ data: [], isVip: false });
-    //   }
-    // } catch (_) {}
+    try {
+      const ret = isRequestInternalTestUser(req);
+      if (!ret) {
+        // 非 内部用户 返回空数据
+        ensureCorsHeaders(req, res);
+        return res.status(200).json({ data: [], isVip: false });
+      }
+    } catch (_) {}
 
     const targetUrl = getTargetUrl(req);
     await proxyRequest(req, res, targetUrl);
