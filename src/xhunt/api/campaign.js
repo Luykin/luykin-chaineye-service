@@ -457,12 +457,26 @@ router.get("/registrations", async (req, res) => {
     }
 
     const offset = (page - 1) * pageSize;
-    const result = await CampaignRegistration.findAndCountAll({
+
+    // 优化：拆分 count 和 find，避免 COUNT 时 JOIN 产生子查询
+    const total = await CampaignRegistration.count({ where });
+
+    // 如果总数为 0，直接返回空结果
+    if (total === 0) {
+      return res.json({
+        total: 0,
+        page,
+        pageSize,
+        rows: [],
+      });
+    }
+
+    const rows = await CampaignRegistration.findAll({
       where,
       limit: pageSize,
       offset,
-      order: [["createdAt", "DESC"]],
-      distinct: true,
+      // 优化：使用 registeredAt 排序（已有索引），代替 createdAt
+      order: [["registeredAt", "DESC"]],
       attributes: { exclude: ["xHuntUserId"] },
       include: [
         {
@@ -474,10 +488,10 @@ router.get("/registrations", async (req, res) => {
     });
 
     return res.json({
-      total: result.count,
+      total,
       page,
       pageSize,
-      rows: result.rows,
+      rows,
     });
   } catch (err) {
     console.error("Campaign registrations query error:", err);
