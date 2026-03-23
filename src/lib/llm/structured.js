@@ -143,7 +143,8 @@ async function structuredChat(message, schema, options = {}) {
       // 调用模型（返回的已经是结构化 JSON）
       const response = await llm.invoke(messages);
       const content = response.content;
-      
+    
+      console.log(JSON.stringify(content), '======111调用模型返回结果111======')
       // 尝试解析 JSON，处理多种格式
       let result = parseJsonResponse(content);
       
