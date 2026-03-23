@@ -131,7 +131,7 @@ async function structuredChat(message, schema, options = {}) {
       const messages = [];
       
       // 默认系统提示：要求直接返回 JSON，不要 markdown
-      const defaultSystemPrompt = "重要：直接返回纯 JSON，不要 markdown 代码块，不要 ```json 标记。";
+      const defaultSystemPrompt = "重要：直接返回纯 JSON，不要 markdown 代码块，不要 ```json 标记,并且严格按照JSON Schema定义返回，请勿擅自额外包其他格式。";
       
       if (systemPrompt) {
         messages.push(new SystemMessage(systemPrompt + "\n\n" + defaultSystemPrompt));
