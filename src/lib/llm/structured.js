@@ -18,6 +18,16 @@ function parseJsonResponse(content) {
     return content;
   }
   
+  // 处理数组消息格式 [{"type":"text","text":"..."}]
+  // 有些模型直接返回数组对象而不是字符串
+  if (Array.isArray(content) && content.length > 0) {
+    const textItem = content.find(item => item && item.type === 'text' && item.text);
+    if (textItem) {
+      // 递归解析 text 字段
+      return parseJsonResponse(textItem.text);
+    }
+  }
+  
   // 如果已经是对象（但不是数组），直接返回
   if (typeof content !== 'string') {
     return content;
@@ -42,7 +52,7 @@ function parseJsonResponse(content) {
     }
   }
   
-  // 尝试 3：处理数组消息格式 [{"type":"text","text":"..."}]
+  // 尝试 3：处理字符串形式的数组消息格式 '[{"type":"text","text":"..."}]'
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
     try {
       const arr = JSON.parse(trimmed);
@@ -56,16 +66,6 @@ function parseJsonResponse(content) {
       }
     } catch (e) {
       // 不是合法的数组 JSON，继续尝试其他方式
-    }
-  }
-
-    // 处理数组消息格式 [{"type":"text","text":"..."}]
-  // 有些模型直接返回数组对象而不是字符串
-  if (Array.isArray(content) && content.length > 0) {
-    const textItem = content.find(item => item && item.type === 'text' && item.text);
-    if (textItem) {
-      // 递归解析 text 字段
-      return parseJsonResponse(textItem.text);
     }
   }
   
