@@ -11,10 +11,15 @@ const { HumanMessage, SystemMessage } = require("@langchain/core/messages");
 
 /**
  * 解析 LLM 返回的 JSON 响应
- * 处理多种格式：直接 JSON、markdown 代码块包裹等
+ * 处理多种格式：直接 JSON、markdown 代码块包裹、数组消息格式等
  */
 function parseJsonResponse(content) {
-  if (!content || typeof content !== 'string') {
+  if (!content) {
+    return content;
+  }
+  
+  // 如果已经是对象（但不是数组），直接返回
+  if (typeof content !== 'string') {
     return content;
   }
   
@@ -37,7 +42,34 @@ function parseJsonResponse(content) {
     }
   }
   
-  // 尝试 3：找到第一个 { 和最后一个 }
+  // 尝试 3：处理数组消息格式 [{"type":"text","text":"..."}]
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr) && arr.length > 0) {
+        // 查找 type=text 的元素
+        const textItem = arr.find(item => item && item.type === 'text' && item.text);
+        if (textItem) {
+          // 递归解析 text 字段中的 JSON
+          return parseJsonResponse(textItem.text);
+        }
+      }
+    } catch (e) {
+      // 不是合法的数组 JSON，继续尝试其他方式
+    }
+  }
+
+    // 处理数组消息格式 [{"type":"text","text":"..."}]
+  // 有些模型直接返回数组对象而不是字符串
+  if (Array.isArray(content) && content.length > 0) {
+    const textItem = content.find(item => item && item.type === 'text' && item.text);
+    if (textItem) {
+      // 递归解析 text 字段
+      return parseJsonResponse(textItem.text);
+    }
+  }
+  
+  // 尝试 4：找到第一个 { 和最后一个 }
   const jsonStart = trimmed.indexOf('{');
   const jsonEnd = trimmed.lastIndexOf('}');
   if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
@@ -48,7 +80,7 @@ function parseJsonResponse(content) {
     }
   }
   
-  // 尝试 4：找到第一个 [ 和最后一个 ]
+  // 尝试 5：找到第一个 [ 和最后一个 ]
   const arrStart = trimmed.indexOf('[');
   const arrEnd = trimmed.lastIndexOf(']');
   if (arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart) {
