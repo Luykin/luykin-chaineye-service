@@ -119,6 +119,7 @@
 
       <div id="rootdata-manual-result" class="rd-mini-success" style="display: none">
         <div id="rootdata-manual-result-summary"></div>
+        <div id="rootdata-manual-reqid" class="rd-reqid-display"></div>
         <div id="rootdata-manual-result-detail" class="rd-crawl-result"></div>
       </div>
 
@@ -579,6 +580,19 @@
     font-size: 12px;
   }
 
+  /* ===== Request ID 显示 ===== */
+  .rd-reqid-display {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #0369a1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    word-break: break-all;
+  }
+
   /* ===== 爬虫结果详情 ===== */
   .rd-crawl-result {
     margin-top: 10px;
@@ -892,6 +906,7 @@
   const manualStatus = document.getElementById('rootdata-manual-status');
   const manualResult = document.getElementById('rootdata-manual-result');
   const manualResultSummary = document.getElementById('rootdata-manual-result-summary');
+  const manualReqId = document.getElementById('rootdata-manual-reqid');
   const manualResultDetail = document.getElementById('rootdata-manual-result-detail');
   const manualError = document.getElementById('rootdata-manual-error');
   const manualErrorMessage = document.getElementById('rootdata-manual-error-message');
@@ -899,6 +914,7 @@
   manualBtn?.addEventListener('click', async function() {
     const url = manualUrl.value.trim();
     const force = manualForce?.checked || false;
+    const reqId = 'mc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     
     if (!url) { alert('请输入 URL'); return; }
     if (!url.includes('rootdata.com')) { alert('请输入有效的 RootData 链接'); return; }
@@ -915,7 +931,10 @@
     try {
       const resp = await fetch('/api/rootdata/manual-crawl', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-request-id': reqId
+        },
         body: JSON.stringify({ url, force })
       });
       const data = await resp.json();
@@ -928,6 +947,7 @@
         const asInvestee = data.data?.asInvestee || [];
         
         manualResultSummary.innerHTML = `<strong>${project.projectName || ''}</strong> (${data.data?.duration || '-'}秒)`;
+        manualReqId.textContent = `Request ID: ${reqId}`;
         
         let detailHtml = '<div class="rd-crawl-result">';
         
@@ -983,12 +1003,12 @@
         manualResultDetail.innerHTML = detailHtml;
       } else {
         manualError.style.display = 'block';
-        manualErrorMessage.textContent = data.error || data.message || '抓取失败';
+        manualErrorMessage.innerHTML = `${data.error || data.message || '抓取失败'}<br><span style="font-size:11px;color:#6b7280;margin-top:4px;display:block;">Request ID: ${reqId}</span>`;
       }
     } catch (err) {
       manualStatus.style.display = 'none';
       manualError.style.display = 'block';
-      manualErrorMessage.textContent = err.message || '请求失败';
+      manualErrorMessage.innerHTML = `${err.message || '请求失败'}<br><span style="font-size:11px;color:#6b7280;margin-top:4px;display:block;">Request ID: ${reqId}</span>`;
     } finally {
       manualBtn.disabled = false;
     }

@@ -2020,6 +2020,7 @@ router.delete(
 router.post("/manual-crawl", async (req, res) => {
   const startTime = Date.now();
   const { url, force } = req.body;
+  const requestId = req.headers['x-request-id'] || `mc-${Date.now()}`;
   console.log(`🚀 [手动爬虫] 开始执行: ${url}, force=${force}`);
 
   try {
@@ -2138,6 +2139,7 @@ router.post("/manual-crawl", async (req, res) => {
       res.json({
         success: true,
         message: "爬取成功",
+        requestId,
         data: {
           duration,
           project: {
@@ -2181,6 +2183,7 @@ router.post("/manual-crawl", async (req, res) => {
     res.status(500).json({
       error: "Failed to crawl project",
       message: error.message || "Unknown error",
+      requestId,
     });
   }
 });
