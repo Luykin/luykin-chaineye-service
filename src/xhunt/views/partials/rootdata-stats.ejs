@@ -6,305 +6,178 @@
     <p class="rd-header-desc">API 配额监控与每日新增数据查询</p>
   </div>
 
-  <!-- API 配额卡片 -->
-  <div class="rd-card" id="rootdata-quota-section">
-    <div class="rd-card-header">
-      <div class="rd-card-title">
-        <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-        </svg>
-        API 配额状态
-      </div>
-      <span class="rd-badge" id="rootdata-level">-</span>
-    </div>
-
-    <div class="rd-quota-main">
-      <div class="rd-quota-numbers">
-        <div class="rd-quota-remaining" id="rootdata-remaining">-</div>
-        <div class="rd-quota-total">剩余 / <span id="rootdata-total">-</span> 总额</div>
-      </div>
-      <div class="rd-quota-percent" id="rootdata-usage-percent">-</div>
-    </div>
-
-    <!-- 进度条 -->
-    <div class="rd-progress-wrap">
-      <div class="rd-progress-bar" id="rootdata-progress-bar" style="width: 0%"></div>
-    </div>
-
-    <!-- 详细信息网格 -->
-    <div class="rd-info-grid">
-      <div class="rd-info-item">
-        <span class="rd-info-label">已使用</span>
-        <span class="rd-info-value" id="rootdata-used">-</span>
-      </div>
-      <div class="rd-info-item">
-        <span class="rd-info-label">周期开始</span>
-        <span class="rd-info-value" id="rootdata-period-start">-</span>
-      </div>
-      <div class="rd-info-item">
-        <span class="rd-info-label">周期结束</span>
-        <span class="rd-info-value" id="rootdata-period-end">-</span>
-      </div>
-      <div class="rd-info-item">
-        <span class="rd-info-label">状态</span>
-        <span class="rd-info-value rd-status-ok" id="rootdata-status">正常</span>
-      </div>
-    </div>
-
-    <!-- 加载状态 -->
-    <div id="rootdata-loading" class="rd-loading" style="display: none">
-      <div class="rd-spinner"></div>
-      <span>正在加载配额信息...</span>
-      <div id="rootdata-quota-reqid-wrap" class="rd-reqid" style="display:none">
-        请求ID：<code id="rootdata-quota-reqid-text"></code>
-      </div>
-    </div>
-
-    <!-- 错误提示 -->
-    <div id="rootdata-error" class="rd-error" style="display: none">
-      <div class="rd-error-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        加载失败
-      </div>
-      <div class="rd-error-message" id="rootdata-error-message"></div>
-    </div>
-
-    <!-- 刷新按钮 -->
-    <div class="rd-card-actions">
-      <button class="rd-btn rd-btn-primary" id="rootdata-quota-refresh-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-          <path d="M3 3v5h5"/>
-          <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-          <path d="M16 21h5v-5"/>
-        </svg>
-        刷新配额
-      </button>
-    </div>
-  </div>
-
-  <!-- 强制 API 更新数据 -->
-  <div class="rd-card" id="rootdata-force-verify-section">
-    <div class="rd-card-header">
-      <div class="rd-card-title">
-        <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-        </svg>
-        强制 API 更新数据
-      </div>
-    </div>
-
-    <div class="rd-form-row">
-      <input 
-        type="text" 
-        id="rootdata-force-input" 
-        class="rd-input rd-input-lg" 
-        placeholder="输入 Keyword / Twitter 链接 / RootData 链接"
-      />
-      <button class="rd-btn rd-btn-primary" id="rootdata-force-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-          <path d="M3 3v5h5"/>
-          <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-          <path d="M16 21h5v-5"/>
-        </svg>
-        强制更新
-      </button>
-    </div>
-    <div class="rd-field-hint">先清除缓存，再通过 Rootdata API 重新验证并修复项目数据</div>
-
-    <!-- 状态显示 -->
-    <div id="rootdata-force-status" class="rd-status-wrap" style="display: none;">
-      <div class="rd-spinner rd-spinner-sm"></div>
-      <span id="rootdata-force-status-text">正在处理...</span>
-    </div>
-
-    <!-- 结果展示 -->
-    <div id="rootdata-force-result" class="rd-result-wrap" style="display: none;">
-      <div class="rd-result-content" id="rootdata-force-result-content"></div>
-    </div>
-
-    <!-- 错误提示 -->
-    <div id="rootdata-force-error" class="rd-error" style="display: none; margin-top: 12px;">
-      <div class="rd-error-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        更新失败
-      </div>
-      <div class="rd-error-message" id="rootdata-force-error-message"></div>
-    </div>
-  </div>
-
-  <!-- 手动触发爬虫 -->
-  <div class="rd-card" id="rootdata-manual-crawl-section">
-    <div class="rd-card-header">
-      <div class="rd-card-title">
-        <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
-        手动触发爬虫
-      </div>
-    </div>
-
-    <div class="rd-form-row">
-      <input 
-        type="text" 
-        id="rootdata-manual-url" 
-        class="rd-input rd-input-lg" 
-        placeholder="输入 RootData 项目详情页 URL"
-      />
-      <button class="rd-btn rd-btn-primary" id="rootdata-manual-crawl-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-          <path d="M3 3v5h5"/>
-          <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-          <path d="M16 21h5v-5"/>
-        </svg>
-        开始抓取
-      </button>
-    </div>
-    <div class="rd-field-hint">支持：Projects/detail、Investors/detail、member 页面链接</div>
-
-    <!-- 状态显示 -->
-    <div id="rootdata-manual-status" class="rd-status-wrap" style="display: none;">
-      <div class="rd-spinner rd-spinner-sm"></div>
-      <span id="rootdata-manual-status-text">正在抓取，预计需要 1-3 分钟...</span>
-    </div>
-
-    <!-- 结果展示 -->
-    <div id="rootdata-manual-result" class="rd-result-wrap" style="display: none;">
-      <div class="rd-result-content" id="rootdata-manual-result-content"></div>
-    </div>
-
-    <!-- 错误提示 -->
-    <div id="rootdata-manual-error" class="rd-error" style="display: none; margin-top: 12px;">
-      <div class="rd-error-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        抓取失败
-      </div>
-      <div class="rd-error-message" id="rootdata-manual-error-message"></div>
-    </div>
-  </div>
-
-  <!-- 每日新增数据查询 -->
-  <div class="rd-card" id="rootdata-daily-section">
-    <div class="rd-card-header">
-      <div class="rd-card-title">
-        <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-          <line x1="16" y1="2" x2="16" y2="6"/>
-          <line x1="8" y1="2" x2="8" y2="6"/>
-          <line x1="3" y1="10" x2="21" y2="10"/>
-        </svg>
-        按天新增数据统计
-      </div>
-    </div>
-
-    <!-- 查询工具栏 -->
-    <div class="rd-toolbar">
-      <div class="rd-toolbar-left">
-        <label class="rd-date-label">选择日期：</label>
-        <input type="date" id="rootdata-date-picker" class="rd-input" />
-      </div>
-      <div class="rd-toolbar-right">
-        <button class="rd-btn rd-btn-primary" id="rootdata-query-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="m21 21-4.3-4.3"/>
+  <!-- 第一行：API 配额 + 强制更新 -->
+  <div class="rd-row rd-row-2">
+    <!-- API 配额卡片 -->
+    <div class="rd-card" id="rootdata-quota-section">
+      <div class="rd-card-header">
+        <div class="rd-card-title">
+          <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
           </svg>
-          查询
-        </button>
-      </div>
-    </div>
-
-    <!-- 加载状态 -->
-    <div id="rootdata-daily-loading" class="rd-loading" style="display: none">
-      <div class="rd-spinner"></div>
-      <span>正在加载数据...</span>
-      <div id="rootdata-daily-reqid-wrap" class="rd-reqid" style="display:none">
-        请求ID：<code id="rootdata-daily-reqid-text"></code>
-      </div>
-    </div>
-
-    <!-- 错误提示 -->
-    <div id="rootdata-daily-error" class="rd-error" style="display: none">
-      <div class="rd-error-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        加载失败
-      </div>
-      <div class="rd-error-message" id="rootdata-daily-error-message"></div>
-    </div>
-
-    <!-- 统计概览 -->
-    <div id="rootdata-daily-summary" class="rd-stats-grid" style="display: none">
-      <div class="rd-stat-card">
-        <div class="rd-stat-label">新增项目数</div>
-        <div class="rd-stat-value" id="rootdata-new-projects-count">0</div>
-      </div>
-      <div class="rd-stat-card">
-        <div class="rd-stat-label">新增投资关系数</div>
-        <div class="rd-stat-value" id="rootdata-new-relationships-count">0</div>
-      </div>
-      <div class="rd-stat-card">
-        <div class="rd-stat-label">查询日期</div>
-        <div class="rd-stat-value rd-stat-value-sm" id="rootdata-query-date">-</div>
-      </div>
-    </div>
-
-    <!-- Tab 切换 -->
-    <div id="rootdata-daily-tabs" style="display: none">
-      <div class="rd-tabs">
-        <button class="rd-tab active" data-rootdata-tab="projects">
+          API 配额
+          <span class="rd-badge" id="rootdata-level">-</span>
+        </div>
+        <button class="rd-btn-icon" id="rootdata-quota-refresh-btn" title="刷新">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-            <line x1="12" y1="22.08" x2="12" y2="12"/>
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+            <path d="M16 21h5v-5"/>
           </svg>
-          新增项目
-        </button>
-        <button class="rd-tab" data-rootdata-tab="relationships">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-          </svg>
-          新增投资关系
         </button>
       </div>
 
-      <!-- 项目列表 -->
-      <div id="rootdata-projects-list" class="rd-tab-content">
-        <div id="rootdata-projects-table" class="rd-table-wrap">
-          <!-- 表格将通过 JS 动态填充 -->
+      <div class="rd-quota-main">
+        <div class="rd-quota-numbers">
+          <div class="rd-quota-remaining" id="rootdata-remaining">-</div>
+          <div class="rd-quota-total">剩余 / <span id="rootdata-total">-</span></div>
+        </div>
+        <div class="rd-quota-percent" id="rootdata-usage-percent">-</div>
+      </div>
+
+      <div class="rd-progress-wrap">
+        <div class="rd-progress-bar" id="rootdata-progress-bar" style="width: 0%"></div>
+      </div>
+
+      <div class="rd-info-row">
+        <span class="rd-info-label">已用：<span id="rootdata-used">-</span></span>
+        <span class="rd-info-label">周期：<span id="rootdata-period-start">-</span> 至 <span id="rootdata-period-end">-</span></span>
+        <span class="rd-status-badge" id="rootdata-status">正常</span>
+      </div>
+
+      <div id="rootdata-loading" class="rd-mini-loading" style="display: none">
+        <div class="rd-spinner-sm"></div>
+        <span>加载中...</span>
+      </div>
+
+      <div id="rootdata-error" class="rd-mini-error" style="display: none">
+        <span id="rootdata-error-message"></span>
+      </div>
+    </div>
+
+    <!-- 强制 API 更新 -->
+    <div class="rd-card" id="rootdata-force-verify-section">
+      <div class="rd-card-header">
+        <div class="rd-card-title">
+          <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          强制 API 更新
         </div>
       </div>
 
-      <!-- 投资关系列表 -->
-      <div id="rootdata-relationships-list" class="rd-tab-content" style="display: none">
-        <div id="rootdata-relationships-table" class="rd-table-wrap">
-          <!-- 表格将通过 JS 动态填充 -->
+      <div class="rd-compact-form">
+        <input type="text" id="rootdata-force-input" class="rd-input" placeholder="Keyword / Twitter / RootData 链接" />
+        <button class="rd-btn rd-btn-primary rd-btn-sm" id="rootdata-force-btn">更新</button>
+      </div>
+      <div class="rd-field-hint">清除缓存后通过 Rootdata API 重新验证修复数据</div>
+
+      <div id="rootdata-force-status" class="rd-mini-loading" style="display: none">
+        <div class="rd-spinner-sm"></div>
+        <span>处理中...</span>
+      </div>
+
+      <div id="rootdata-force-result" class="rd-mini-success" style="display: none">
+        <span id="rootdata-force-result-text"></span>
+      </div>
+
+      <div id="rootdata-force-error" class="rd-mini-error" style="display: none">
+        <span id="rootdata-force-error-message"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 第二行：手动爬虫 + 每日统计 -->
+  <div class="rd-row rd-row-2">
+    <!-- 手动触发爬虫 -->
+    <div class="rd-card" id="rootdata-manual-crawl-section">
+      <div class="rd-card-header">
+        <div class="rd-card-title">
+          <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          手动触发爬虫
         </div>
+      </div>
+
+      <div class="rd-compact-form">
+        <input type="text" id="rootdata-manual-url" class="rd-input" placeholder="RootData 项目/机构/成员 URL" />
+        <button class="rd-btn rd-btn-primary rd-btn-sm" id="rootdata-manual-crawl-btn">抓取</button>
+      </div>
+      <div class="rd-field-hint">支持 Projects/detail、Investors/detail、member 页面</div>
+
+      <div id="rootdata-manual-status" class="rd-mini-loading" style="display: none">
+        <div class="rd-spinner-sm"></div>
+        <span>抓取中（1-3分钟）...</span>
+      </div>
+
+      <div id="rootdata-manual-result" class="rd-mini-success" style="display: none">
+        <span id="rootdata-manual-result-text"></span>
+      </div>
+
+      <div id="rootdata-manual-error" class="rd-mini-error" style="display: none">
+        <span id="rootdata-manual-error-message"></span>
       </div>
     </div>
 
-    <!-- 空状态 -->
-    <div id="rootdata-daily-empty" class="rd-empty" style="display: none">
-      <div class="rd-empty-icon">📭</div>
-      <div class="rd-empty-title">该日期暂无新增数据</div>
+    <!-- 每日新增数据查询 -->
+    <div class="rd-card" id="rootdata-daily-section">
+      <div class="rd-card-header">
+        <div class="rd-card-title">
+          <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          每日新增数据
+        </div>
+      </div>
+
+      <div class="rd-compact-form">
+        <input type="date" id="rootdata-date-picker" class="rd-input rd-input-date" />
+        <button class="rd-btn rd-btn-primary rd-btn-sm" id="rootdata-query-btn">查询</button>
+      </div>
+
+      <!-- 统计概览 -->
+      <div id="rootdata-daily-summary" class="rd-mini-stats" style="display: none">
+        <div class="rd-mini-stat">
+          <span class="rd-mini-stat-value" id="rootdata-new-projects-count">0</span>
+          <span class="rd-mini-stat-label">新增项目</span>
+        </div>
+        <div class="rd-mini-stat">
+          <span class="rd-mini-stat-value" id="rootdata-new-relationships-count">0</span>
+          <span class="rd-mini-stat-label">新增关系</span>
+        </div>
+      </div>
+
+      <!-- Tab 切换 -->
+      <div id="rootdata-daily-tabs" style="display: none">
+        <div class="rd-tabs rd-tabs-sm">
+          <button class="rd-tab active" data-rootdata-tab="projects">项目</button>
+          <button class="rd-tab" data-rootdata-tab="relationships">关系</button>
+        </div>
+
+        <div id="rootdata-projects-list" class="rd-tab-content">
+          <div id="rootdata-projects-table" class="rd-table-wrap rd-table-sm"></div>
+        </div>
+
+        <div id="rootdata-relationships-list" class="rd-tab-content" style="display: none">
+          <div id="rootdata-relationships-table" class="rd-table-wrap rd-table-sm"></div>
+        </div>
+      </div>
+
+      <div id="rootdata-daily-empty" class="rd-mini-empty" style="display: none">该日期暂无数据</div>
+
+      <div id="rootdata-daily-loading" class="rd-mini-loading" style="display: none">
+        <div class="rd-spinner-sm"></div>
+        <span>加载中...</span>
+      </div>
+
+      <div id="rootdata-daily-error" class="rd-mini-error" style="display: none">
+        <span id="rootdata-daily-error-message"></span>
+      </div>
     </div>
   </div>
 </div>
@@ -313,26 +186,40 @@
   /* ===== 容器 ===== */
   .rd-container {
     padding: 16px;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
     box-sizing: border-box;
   }
 
   /* ===== 头部 ===== */
   .rd-header {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
   }
   .rd-header h2 {
-    margin: 0 0 6px;
+    margin: 0 0 4px;
     color: #1f2937;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
-    letter-spacing: -0.01em;
   }
   .rd-header-desc {
     margin: 0;
     color: #6b7280;
-    font-size: 13px;
+    font-size: 12px;
+  }
+
+  /* ===== 行布局 ===== */
+  .rd-row {
+    display: grid;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .rd-row-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (max-width: 1024px) {
+    .rd-row-2 {
+      grid-template-columns: 1fr;
+    }
   }
 
   /* ===== 卡片 ===== */
@@ -340,47 +227,37 @@
     background: #fff;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 16px;
+    padding: 16px;
   }
   .rd-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #f3f4f6;
+    margin-bottom: 12px;
   }
   .rd-card-title {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 15px;
+    gap: 8px;
+    font-size: 14px;
     font-weight: 600;
     color: #374151;
   }
   .rd-icon {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     color: #3b82f6;
   }
   .rd-badge {
     display: inline-flex;
     align-items: center;
-    padding: 4px 12px;
+    padding: 2px 8px;
     background: #eff6ff;
     color: #1d4ed8;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
-    border-radius: 20px;
+    border-radius: 12px;
     border: 1px solid #dbeafe;
-  }
-  .rd-card-actions {
-    display: flex;
-    justify-content: center;
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid #f3f4f6;
   }
 
   /* ===== 配额显示 ===== */
@@ -388,24 +265,25 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 10px;
   }
   .rd-quota-numbers {
-    text-align: left;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
   }
   .rd-quota-remaining {
-    font-size: 36px;
+    font-size: 28px;
     font-weight: 700;
     color: #10b981;
-    line-height: 1.2;
+    line-height: 1;
   }
   .rd-quota-total {
-    font-size: 13px;
+    font-size: 12px;
     color: #6b7280;
-    margin-top: 4px;
   }
   .rd-quota-percent {
-    font-size: 24px;
+    font-size: 18px;
     font-weight: 600;
     color: #374151;
   }
@@ -413,95 +291,75 @@
   /* ===== 进度条 ===== */
   .rd-progress-wrap {
     width: 100%;
-    height: 10px;
+    height: 6px;
     background: #e5e7eb;
-    border-radius: 5px;
+    border-radius: 3px;
     overflow: hidden;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
   }
   .rd-progress-bar {
     height: 100%;
     background: linear-gradient(90deg, #10b981, #3b82f6);
-    border-radius: 5px;
+    border-radius: 3px;
     transition: width 0.5s ease;
   }
 
-  /* ===== 信息网格 ===== */
-  .rd-info-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-  }
-  .rd-info-item {
+  /* ===== 信息行 ===== */
+  .rd-info-row {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: #6b7280;
+    flex-wrap: wrap;
   }
   .rd-info-label {
-    font-size: 12px;
     color: #9ca3af;
   }
-  .rd-info-value {
-    font-size: 14px;
-    font-weight: 600;
-    color: #374151;
-  }
-  .rd-status-ok {
-    color: #059669;
-  }
-
-  @media (max-width: 768px) {
-    .rd-info-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    .rd-quota-remaining {
-      font-size: 28px;
-    }
-  }
-
-  /* ===== 工具栏 ===== */
-  .rd-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: #fafafa;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-  }
-  .rd-toolbar-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .rd-toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .rd-date-label {
-    font-size: 13px;
-    color: #374151;
+  .rd-status-badge {
+    padding: 2px 8px;
+    background: #d1fae5;
+    color: #065f46;
+    font-size: 11px;
     font-weight: 500;
+    border-radius: 4px;
+    margin-left: auto;
+  }
+  .rd-status-badge.warning {
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .rd-status-badge.danger {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  /* ===== 紧凑表单 ===== */
+  .rd-compact-form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .rd-compact-form .rd-input {
+    flex: 1;
+    min-width: 0;
   }
 
   /* ===== 输入框 ===== */
   .rd-input {
-    padding: 8px 12px;
+    padding: 6px 10px;
     border: 1px solid #d1d5db;
     border-radius: 6px;
     font-size: 13px;
     outline: none;
     transition: border-color 0.15s, box-shadow 0.15s;
-    background: #fff;
   }
   .rd-input:focus {
     border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  }
+  .rd-input-date {
+    max-width: 130px;
   }
 
   /* ===== 按钮 ===== */
@@ -509,9 +367,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 8px 16px;
-    font-size: 13px;
+    gap: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
     font-weight: 500;
     border-radius: 6px;
     border: 1px solid #d1d5db;
@@ -519,18 +377,14 @@
     color: #374151;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
   }
   .rd-btn:hover:not(:disabled) {
     background: #f3f4f6;
-    border-color: #9ca3af;
   }
   .rd-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-  .rd-btn svg {
-    width: 16px;
-    height: 16px;
   }
   .rd-btn-primary {
     background: #3b82f6;
@@ -539,70 +393,82 @@
   }
   .rd-btn-primary:hover:not(:disabled) {
     background: #2563eb;
-    border-color: #1d4ed8;
   }
-  .rd-btn-secondary {
+  .rd-btn-sm {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .rd-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #6b7280;
+    transition: all 0.15s;
+  }
+  .rd-btn-icon:hover {
     background: #f3f4f6;
-    border-color: #d1d5db;
     color: #374151;
   }
-  .rd-btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
+  .rd-btn-icon svg {
+    width: 14px;
+    height: 14px;
   }
 
-  /* ===== 统计网格 ===== */
-  .rd-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
+  /* ===== 提示文字 ===== */
+  .rd-field-hint {
+    font-size: 11px;
+    color: #9ca3af;
   }
-  .rd-stat-card {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 16px;
-    text-align: center;
+
+  /* ===== 小型统计 ===== */
+  .rd-mini-stats {
+    display: flex;
+    gap: 24px;
+    margin: 12px 0;
+    padding: 10px 0;
+    border-top: 1px solid #f3f4f6;
+    border-bottom: 1px solid #f3f4f6;
   }
-  .rd-stat-label {
-    font-size: 12px;
-    color: #64748b;
-    margin-bottom: 8px;
+  .rd-mini-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
   }
-  .rd-stat-value {
-    font-size: 28px;
+  .rd-mini-stat-value {
+    font-size: 20px;
     font-weight: 700;
-    color: #1e293b;
+    color: #1f2937;
   }
-  .rd-stat-value-sm {
-    font-size: 16px;
-    padding-top: 6px;
-  }
-
-  @media (max-width: 768px) {
-    .rd-stats-grid {
-      grid-template-columns: 1fr;
-    }
+  .rd-mini-stat-label {
+    font-size: 12px;
+    color: #6b7280;
   }
 
   /* ===== Tab 切换 ===== */
   .rd-tabs {
     display: flex;
     gap: 4px;
-    margin-bottom: 16px;
-    border-bottom: 2px solid #e5e7eb;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .rd-tabs-sm {
+    margin-bottom: 8px;
   }
   .rd-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
+    padding: 6px 12px;
     background: none;
     border: none;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     color: #6b7280;
     transition: all 0.15s ease;
@@ -614,34 +480,36 @@
     color: #3b82f6;
     border-bottom-color: #3b82f6;
   }
-  .rd-tab svg {
-    width: 16px;
-    height: 16px;
-  }
 
   /* ===== 表格 ===== */
   .rd-table-wrap {
     background: #fff;
     border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    overflow: hidden;
+    border-radius: 6px;
+    overflow: auto;
+    max-height: 200px;
+  }
+  .rd-table-sm {
+    max-height: 150px;
   }
   .rd-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 12px;
   }
   .rd-table th {
     background: #f9fafb;
-    padding: 12px 16px;
+    padding: 8px 10px;
     text-align: left;
     font-weight: 600;
     color: #374151;
     border-bottom: 1px solid #e5e7eb;
     white-space: nowrap;
+    position: sticky;
+    top: 0;
   }
   .rd-table td {
-    padding: 12px 16px;
+    padding: 8px 10px;
     border-bottom: 1px solid #f3f4f6;
     color: #4b5563;
   }
@@ -652,21 +520,48 @@
     border-bottom: none;
   }
 
-  /* ===== 加载状态 ===== */
-  .rd-loading {
+  /* ===== 状态提示 ===== */
+  .rd-mini-loading {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 40px;
-    color: #6b7280;
-    font-size: 14px;
-    gap: 12px;
+    gap: 8px;
+    padding: 10px;
+    background: #f8fafc;
+    border-radius: 6px;
+    margin-top: 10px;
+    color: #475569;
+    font-size: 12px;
   }
-  .rd-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid #e5e7eb;
+  .rd-mini-success {
+    padding: 10px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 6px;
+    margin-top: 10px;
+    color: #166534;
+    font-size: 12px;
+  }
+  .rd-mini-error {
+    padding: 10px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    margin-top: 10px;
+    color: #991b1b;
+    font-size: 12px;
+  }
+  .rd-mini-empty {
+    text-align: center;
+    padding: 20px;
+    color: #9ca3af;
+    font-size: 12px;
+  }
+
+  /* ===== Spinner ===== */
+  .rd-spinner-sm {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #e5e7eb;
     border-top-color: #3b82f6;
     border-radius: 50%;
     animation: rd-spin 1s linear infinite;
@@ -674,189 +569,19 @@
   @keyframes rd-spin {
     to { transform: rotate(360deg); }
   }
-  .rd-reqid {
-    margin-top: 8px;
-    font-size: 12px;
-    color: #9ca3af;
-  }
-  .rd-reqid code {
-    color: #374151;
-    background: #f3f4f6;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  }
 
-  /* ===== 错误提示 ===== */
-  .rd-error {
-    padding: 16px;
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: 8px;
-    margin-top: 16px;
-  }
-  .rd-error-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #dc2626;
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 6px;
-  }
-  .rd-error-title svg {
-    width: 18px;
-    height: 18px;
-  }
-  .rd-error-message {
-    color: #991b1b;
-    font-size: 13px;
-    padding-left: 26px;
-  }
-
-  /* ===== 空状态 ===== */
-  .rd-empty {
-    text-align: center;
-    padding: 60px 20px;
-    color: #9ca3af;
-  }
-  .rd-empty-icon {
-    font-size: 48px;
-    margin-bottom: 12px;
-  }
-  .rd-empty-title {
-    font-size: 15px;
-  }
-
-  /* ===== 链接样式 ===== */
+  /* ===== 链接 ===== */
   .rd-link {
     color: #3b82f6;
     text-decoration: none;
-    font-weight: 500;
   }
   .rd-link:hover {
     text-decoration: underline;
-  }
-
-  /* ===== 分页 ===== */
-  .rd-pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    padding: 16px;
-    border-top: 1px solid #e5e7eb;
-  }
-  .rd-page-btn {
-    padding: 6px 12px;
-    font-size: 13px;
-    border: 1px solid #d1d5db;
-    background: #fff;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .rd-page-btn:hover:not(:disabled) {
-    background: #f3f4f6;
-    border-color: #9ca3af;
-  }
-  .rd-page-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  .rd-page-btn.active {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    color: #fff;
-  }
-  .rd-page-info {
-    font-size: 13px;
-    color: #6b7280;
-  }
-
-  /* ===== 表单行 ===== */
-  .rd-form-row {
-    display: flex;
-    gap: 12px;
-    align-items: stretch;
-    margin-bottom: 8px;
-  }
-  .rd-form-row .rd-input {
-    flex: 1;
-  }
-  .rd-input-lg {
-    padding: 10px 14px;
-    font-size: 14px;
-  }
-  .rd-field-hint {
-    font-size: 12px;
-    color: #9ca3af;
-    margin-top: 6px;
-  }
-
-  /* ===== 状态显示 ===== */
-  .rd-status-wrap {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 16px;
-    background: #f8fafc;
-    border-radius: 8px;
-    margin-top: 16px;
-    color: #475569;
-    font-size: 14px;
-  }
-  .rd-spinner-sm {
-    width: 18px;
-    height: 18px;
-    border-width: 2px;
-  }
-
-  /* ===== 结果展示 ===== */
-  .rd-result-wrap {
-    margin-top: 16px;
-    padding: 16px;
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    border-radius: 8px;
-  }
-  .rd-result-success {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    color: #166534;
-  }
-  .rd-result-success svg {
-    width: 24px;
-    height: 24px;
-    flex-shrink: 0;
-    color: #22c55e;
-  }
-  .rd-result-title {
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 4px;
-  }
-  .rd-result-detail {
-    font-size: 13px;
-    color: #15803d;
-    margin-top: 2px;
-    word-break: break-all;
-  }
-
-  @media (max-width: 640px) {
-    .rd-form-row {
-      flex-direction: column;
-    }
-    .rd-form-row .rd-btn {
-      width: 100%;
-    }
   }
 </style>
 
 <script>
 (function(){
-  // --- 通用函数 ---
   function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       const r = (Math.random() * 16) | 0;
@@ -865,33 +590,16 @@
     });
   }
 
-  function showReqId(wrapId, textId, reqId) {
-    const wrap = document.getElementById(wrapId);
-    const text = document.getElementById(textId);
-    if (wrap && text) {
-      text.textContent = reqId;
-      wrap.style.display = 'block';
-    }
-  }
-
-  function hideReqId(wrapId) {
-    const wrap = document.getElementById(wrapId);
-    if (wrap) wrap.style.display = 'none';
-  }
-
   // --- 配额加载 ---
   async function loadQuota() {
     const loadingEl = document.getElementById('rootdata-loading');
     const errorEl = document.getElementById('rootdata-error');
-    const reqId = generateUUID();
 
     loadingEl.style.display = 'flex';
     errorEl.style.display = 'none';
-    hideReqId('rootdata-quota-reqid-wrap');
-    showReqId('rootdata-quota-reqid-wrap', 'rootdata-quota-reqid-text', reqId);
 
     try {
-      const resp = await fetch('/api/xhunt/rootdata/quota?requestId=' + reqId);
+      const resp = await fetch('/api/xhunt/stats/rootdata-quota');
       const data = await resp.json();
 
       if (data.success) {
@@ -906,19 +614,22 @@
         document.getElementById('rootdata-period-start').textContent = periodStart || '-';
         document.getElementById('rootdata-period-end').textContent = periodEnd || '-';
 
-        // 更新进度条
         const progressBar = document.getElementById('rootdata-progress-bar');
         progressBar.style.width = percent + '%';
 
-        // 根据使用率调整颜色
+        const statusEl = document.getElementById('rootdata-status');
         if (percent >= 90) {
           progressBar.style.background = 'linear-gradient(90deg, #ef4444, #dc2626)';
-          document.getElementById('rootdata-status').textContent = '警告';
-          document.getElementById('rootdata-status').className = 'rd-info-value rd-status-warning';
+          statusEl.textContent = '警告';
+          statusEl.className = 'rd-status-badge danger';
         } else if (percent >= 70) {
           progressBar.style.background = 'linear-gradient(90deg, #f59e0b, #d97706)';
-          document.getElementById('rootdata-status').textContent = '注意';
-          document.getElementById('rootdata-status').className = 'rd-info-value rd-status-caution';
+          statusEl.textContent = '注意';
+          statusEl.className = 'rd-status-badge warning';
+        } else {
+          progressBar.style.background = 'linear-gradient(90deg, #10b981, #3b82f6)';
+          statusEl.textContent = '正常';
+          statusEl.className = 'rd-status-badge';
         }
       } else {
         throw new Error(data.error || '加载失败');
@@ -935,12 +646,8 @@
   document.querySelectorAll('.rd-tab').forEach(tab => {
     tab.addEventListener('click', function() {
       const targetTab = this.dataset.rootdataTab;
-
-      // 切换 Tab 按钮状态
       document.querySelectorAll('.rd-tab').forEach(t => t.classList.remove('active'));
       this.classList.add('active');
-
-      // 切换内容显示
       document.querySelectorAll('.rd-tab-content').forEach(content => {
         content.style.display = 'none';
       });
@@ -950,31 +657,23 @@
 
   // --- 日期查询 ---
   document.getElementById('rootdata-query-btn')?.addEventListener('click', async function() {
-    const datePicker = document.getElementById('rootdata-date-picker');
-    const date = datePicker.value;
-
-    if (!date) {
-      alert('请选择日期');
-      return;
-    }
+    const date = document.getElementById('rootdata-date-picker').value;
+    if (!date) { alert('请选择日期'); return; }
 
     const loadingEl = document.getElementById('rootdata-daily-loading');
     const errorEl = document.getElementById('rootdata-daily-error');
     const summaryEl = document.getElementById('rootdata-daily-summary');
     const tabsEl = document.getElementById('rootdata-daily-tabs');
     const emptyEl = document.getElementById('rootdata-daily-empty');
-    const reqId = generateUUID();
 
     loadingEl.style.display = 'flex';
     errorEl.style.display = 'none';
     summaryEl.style.display = 'none';
     tabsEl.style.display = 'none';
     emptyEl.style.display = 'none';
-    hideReqId('rootdata-daily-reqid-wrap');
-    showReqId('rootdata-daily-reqid-wrap', 'rootdata-daily-reqid-text', reqId);
 
     try {
-      const resp = await fetch('/api/xhunt/rootdata/daily-stats?date=' + date + '&requestId=' + reqId);
+      const resp = await fetch('/api/xhunt/stats/rootdata-daily?date=' + date);
       const data = await resp.json();
 
       if (data.success) {
@@ -982,20 +681,16 @@
 
         document.getElementById('rootdata-new-projects-count').textContent = projects.length;
         document.getElementById('rootdata-new-relationships-count').textContent = relationships.length;
-        document.getElementById('rootdata-query-date').textContent = date;
 
-        // 渲染项目表格
         renderProjectsTable(projects);
-        // 渲染投资关系表格
         renderRelationshipsTable(relationships);
 
-        summaryEl.style.display = 'grid';
+        summaryEl.style.display = 'flex';
 
         if (projects.length === 0 && relationships.length === 0) {
           emptyEl.style.display = 'block';
         } else {
           tabsEl.style.display = 'block';
-          // 默认显示项目列表
           document.querySelector('.rd-tab[data-rootdata-tab="projects"]')?.click();
         }
       } else {
@@ -1009,119 +704,70 @@
     }
   });
 
-  // 渲染项目表格
   function renderProjectsTable(projects) {
     const tableEl = document.getElementById('rootdata-projects-table');
     if (!projects || projects.length === 0) {
-      tableEl.innerHTML = '<div class="rd-empty"><div class="rd-empty-icon">📦</div><div class="rd-empty-title">暂无新增项目</div></div>';
+      tableEl.innerHTML = '<div class="rd-mini-empty">暂无新增项目</div>';
       return;
     }
-
     const rows = projects.map(p => `
       <tr>
         <td>${p.id || '-'}</td>
-        <td><a href="https://www.rootdata.com/zh/Projects/detail/${p.id}" target="_blank" class="rd-link">${p.name || '-'}</a></td>
-        <td>${p.category || '-'}</td>
-        <td>${p.createdAt || '-'}</td>
+        <td><a href="${p.projectLink || '#'}" target="_blank" class="rd-link">${p.projectName || '-'}</a></td>
+        <td>${p.isInitial ? '初始' : '普通'}</td>
+        <td>${p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '-'}</td>
       </tr>
     `).join('');
-
     tableEl.innerHTML = `
       <table class="rd-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>项目名称</th>
-            <th>类别</th>
-            <th>创建时间</th>
-          </tr>
-        </thead>
+        <thead><tr><th>ID</th><th>名称</th><th>类型</th><th>日期</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>
-    `;
+      </table>`;
   }
 
-  // 渲染投资关系表格
   function renderRelationshipsTable(relationships) {
     const tableEl = document.getElementById('rootdata-relationships-table');
     if (!relationships || relationships.length === 0) {
-      tableEl.innerHTML = '<div class="rd-empty"><div class="rd-empty-icon">🔗</div><div class="rd-empty-title">暂无新增投资关系</div></div>';
+      tableEl.innerHTML = '<div class="rd-mini-empty">暂无新增关系</div>';
       return;
     }
-
     const rows = relationships.map(r => `
       <tr>
         <td>${r.id || '-'}</td>
-        <td>${r.investorName || '-'}</td>
-        <td>${r.fundedName || '-'}</td>
+        <td>${r.investorProject?.projectName || '-'}</td>
+        <td>${r.fundedProject?.projectName || '-'}</td>
         <td>${r.round || '-'}</td>
-        <td>${r.createdAt || '-'}</td>
       </tr>
     `).join('');
-
     tableEl.innerHTML = `
       <table class="rd-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>投资方</th>
-            <th>被投资方</th>
-            <th>轮次</th>
-            <th>创建时间</th>
-          </tr>
-        </thead>
+        <thead><tr><th>ID</th><th>投资方</th><th>被投资方</th><th>轮次</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>
-    `;
+      </table>`;
   }
-
-  // 初始化
-  document.getElementById('rootdata-quota-refresh-btn')?.addEventListener('click', loadQuota);
-
-  // 设置默认日期为今天
-  const datePicker = document.getElementById('rootdata-date-picker');
-  if (datePicker) {
-    const today = new Date().toISOString().split('T')[0];
-    datePicker.value = today;
-  }
-
-  // Tab 激活时加载配额
-  document.addEventListener('stats-tab-activated', function(e) {
-    if (e.detail && e.detail.tabId === 'rootdata') {
-      loadQuota();
-    }
-  });
 
   // --- 强制 API 更新 ---
   const forceBtn = document.getElementById('rootdata-force-btn');
   const forceInput = document.getElementById('rootdata-force-input');
   const forceStatus = document.getElementById('rootdata-force-status');
-  const forceStatusText = document.getElementById('rootdata-force-status-text');
   const forceResult = document.getElementById('rootdata-force-result');
-  const forceResultContent = document.getElementById('rootdata-force-result-content');
+  const forceResultText = document.getElementById('rootdata-force-result-text');
   const forceError = document.getElementById('rootdata-force-error');
   const forceErrorMessage = document.getElementById('rootdata-force-error-message');
 
   forceBtn?.addEventListener('click', async function() {
     const input = forceInput.value.trim();
-    if (!input) {
-      alert('请输入 Keyword / Twitter 链接 / RootData 链接');
-      return;
-    }
+    if (!input) { alert('请输入内容'); return; }
 
-    // 解析参数
     let queryParam = '';
-    if (input.includes('rootdata.com') || input.includes('x.com') || input.includes('twitter.com')) {
-      if (input.includes('rootdata.com')) {
-        queryParam = 'projectLink=' + encodeURIComponent(input);
-      } else {
-        queryParam = 'twitterUrl=' + encodeURIComponent(input);
-      }
+    if (input.includes('rootdata.com')) {
+      queryParam = 'projectLink=' + encodeURIComponent(input);
+    } else if (input.includes('x.com') || input.includes('twitter.com')) {
+      queryParam = 'twitterUrl=' + encodeURIComponent(input);
     } else {
       queryParam = 'keyword=' + encodeURIComponent(input);
     }
 
-    // 显示加载状态
     forceStatus.style.display = 'flex';
     forceResult.style.display = 'none';
     forceError.style.display = 'none';
@@ -1130,24 +776,11 @@
     try {
       const resp = await fetch('/api/xhunt/rootdata/force-verify?' + queryParam);
       const data = await resp.json();
-
       forceStatus.style.display = 'none';
 
       if (data.success) {
         forceResult.style.display = 'block';
-        forceResultContent.innerHTML = `
-          <div class="rd-result-success">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-            <div>
-              <div class="rd-result-title">更新成功</div>
-              <div class="rd-result-detail">项目ID: ${data.projectId || '-'}</div>
-              <div class="rd-result-detail">链接: ${data.projectLink || '-'}</div>
-            </div>
-          </div>
-        `;
+        forceResultText.textContent = `更新成功！项目ID: ${data.projectId}`;
       } else {
         forceError.style.display = 'block';
         forceErrorMessage.textContent = data.message || '更新失败';
@@ -1165,24 +798,16 @@
   const manualBtn = document.getElementById('rootdata-manual-crawl-btn');
   const manualUrl = document.getElementById('rootdata-manual-url');
   const manualStatus = document.getElementById('rootdata-manual-status');
-  const manualStatusText = document.getElementById('rootdata-manual-status-text');
   const manualResult = document.getElementById('rootdata-manual-result');
-  const manualResultContent = document.getElementById('rootdata-manual-result-content');
+  const manualResultText = document.getElementById('rootdata-manual-result-text');
   const manualError = document.getElementById('rootdata-manual-error');
   const manualErrorMessage = document.getElementById('rootdata-manual-error-message');
 
   manualBtn?.addEventListener('click', async function() {
     const url = manualUrl.value.trim();
-    if (!url) {
-      alert('请输入 RootData URL');
-      return;
-    }
-    if (!url.includes('rootdata.com')) {
-      alert('请输入有效的 RootData 链接');
-      return;
-    }
+    if (!url) { alert('请输入 URL'); return; }
+    if (!url.includes('rootdata.com')) { alert('请输入有效的 RootData 链接'); return; }
 
-    // 显示加载状态
     manualStatus.style.display = 'flex';
     manualResult.style.display = 'none';
     manualError.style.display = 'none';
@@ -1195,26 +820,11 @@
         body: JSON.stringify({ url })
       });
       const data = await resp.json();
-
       manualStatus.style.display = 'none';
 
       if (data.success) {
         manualResult.style.display = 'block';
-        const project = data.data?.project || {};
-        manualResultContent.innerHTML = `
-          <div class="rd-result-success">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-            <div>
-              <div class="rd-result-title">抓取成功 (${data.data?.duration || '-'}秒)</div>
-              <div class="rd-result-detail">项目: ${project.projectName || '-'}</div>
-              <div class="rd-result-detail">投资了 ${data.data?.stats?.asInvestorCount || 0} 个项目</div>
-              <div class="rd-result-detail">被 ${data.data?.stats?.asInvesteeCount || 0} 个投资者投资</div>
-            </div>
-          </div>
-        `;
+        manualResultText.textContent = `抓取成功！${data.data?.project?.projectName || ''} (${data.data?.duration || '-'}秒)`;
       } else {
         manualError.style.display = 'block';
         manualErrorMessage.textContent = data.error || data.message || '抓取失败';
@@ -1225,6 +835,20 @@
       manualErrorMessage.textContent = err.message || '请求失败';
     } finally {
       manualBtn.disabled = false;
+    }
+  });
+
+  // 初始化
+  document.getElementById('rootdata-quota-refresh-btn')?.addEventListener('click', loadQuota);
+
+  const datePicker = document.getElementById('rootdata-date-picker');
+  if (datePicker) {
+    datePicker.value = new Date().toISOString().split('T')[0];
+  }
+
+  document.addEventListener('stats-tab-activated', function(e) {
+    if (e.detail && e.detail.tabId === 'rootdata') {
+      loadQuota();
     }
   });
 })();
