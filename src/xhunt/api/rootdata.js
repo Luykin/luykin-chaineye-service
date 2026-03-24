@@ -2037,9 +2037,27 @@ router.post("/manual-crawl", async (req, res) => {
       where: { projectLink: url },
     });
 
-    // 如果强制重新爬取，先删除旧数据和关联关系
-    if (force && project) {
-      console.log(`🗑️ [手动爬虫] 强制模式：删除项目 ${project.projectName} (ID=${project.id}) 及关联数据`);
+    // 如果项目不存在，创建新项目
+    if (!project) {
+      const match = url.match(/\/detail\/([^?]+)/);
+      const projectName = match
+        ? decodeURIComponent(match[1])
+        : "Unknown Project";
+
+      project = await Fundraising.Project.create({
+        projectName,
+        projectLink: url,
+        isInitial: url.includes("/Projects/detail"),
+        detailFailuresNumber: 0,
+        detailFetchedAt: null,
+        updateProgram: "manual_crawler",
+      });
+      console.log(`📦 [手动爬虫] 创建项目: ${projectName}`);
+    }
+
+    // 如果强制重新爬取，先清空关联关系（保留项目本身）
+    if (force) {
+      console.log(`🗑️ [手动爬虫] 强制模式：清空项目 ${project.projectName} (ID=${project.id}) 的关联数据`);
       
       // 删除作为投资方的关系
       const deletedAsInvestor = await Fundraising.InvestmentRelationships.destroy({
@@ -2061,29 +2079,13 @@ router.post("/manual-crawl", async (req, res) => {
         },
       });
       
-      // 删除项目本身
-      await project.destroy();
-      
-      console.log(`✅ [手动爬虫] 已删除: 投资方关系${deletedAsInvestor}条, 被投资方关系${deletedAsInvestee}条, 职位关系${deletedPositions}条`);
-      project = null;
-    }
-
-    // 2. 创建新项目（如果不存在或被删除了）
-    if (!project) {
-      const match = url.match(/\/detail\/([^?]+)/);
-      const projectName = match
-        ? decodeURIComponent(match[1])
-        : "Unknown Project";
-
-      project = await Fundraising.Project.create({
-        projectName,
-        projectLink: url,
-        isInitial: url.includes("/Projects/detail"),
-        detailFailuresNumber: 0,
+      // 重置项目详情抓取状态
+      await project.update({
         detailFetchedAt: null,
-        updateProgram: force ? "manual_crawler_force" : "manual_crawler",
+        detailFailuresNumber: 0,
       });
-      console.log(`📦 [手动爬虫] ${force ? '强制重新' : ''}创建项目: ${projectName}`);
+      
+      console.log(`✅ [手动爬虫] 已清空: 投资方关系${deletedAsInvestor}条, 被投资方关系${deletedAsInvestee}条, 职位关系${deletedPositions}条`);
     }
 
     // 2. 执行爬取
