@@ -105,7 +105,12 @@
         <input type="text" id="rootdata-manual-url" class="rd-input" placeholder="RootData 项目/机构/成员 URL" />
         <button class="rd-btn rd-btn-primary rd-btn-sm" id="rootdata-manual-crawl-btn">抓取</button>
       </div>
-      <div class="rd-field-hint">支持 Projects/detail、Investors/detail、member 页面</div>
+      <div class="rd-checkbox-wrap">
+        <label class="rd-checkbox-label">
+          <input type="checkbox" id="rootdata-manual-force" />
+          <span>强制重新爬取（先删除旧数据和投资关系）</span>
+        </label>
+      </div>
 
       <div id="rootdata-manual-status" class="rd-mini-loading" style="display: none">
         <div class="rd-spinner-sm"></div>
@@ -113,7 +118,8 @@
       </div>
 
       <div id="rootdata-manual-result" class="rd-mini-success" style="display: none">
-        <span id="rootdata-manual-result-text"></span>
+        <div id="rootdata-manual-result-summary"></div>
+        <div id="rootdata-manual-result-detail" class="rd-crawl-result"></div>
       </div>
 
       <div id="rootdata-manual-error" class="rd-mini-error" style="display: none">
@@ -427,6 +433,28 @@
     color: #9ca3af;
   }
 
+  /* ===== 勾选框 ===== */
+  .rd-checkbox-wrap {
+    margin-top: 8px;
+  }
+  .rd-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #374151;
+    cursor: pointer;
+  }
+  .rd-checkbox-label input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: #3b82f6;
+    cursor: pointer;
+  }
+  .rd-checkbox-label span {
+    color: #6b7280;
+  }
+
   /* ===== 小型统计 ===== */
   .rd-mini-stats {
     display: flex;
@@ -549,6 +577,69 @@
     margin-top: 10px;
     color: #991b1b;
     font-size: 12px;
+  }
+
+  /* ===== 爬虫结果详情 ===== */
+  .rd-crawl-result {
+    margin-top: 10px;
+  }
+  .rd-crawl-section {
+    margin-bottom: 10px;
+  }
+  .rd-crawl-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .rd-crawl-section-title svg {
+    width: 14px;
+    height: 14px;
+  }
+  .rd-crawl-count {
+    color: #6b7280;
+    font-weight: normal;
+  }
+  .rd-crawl-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rd-crawl-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #fff;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .rd-crawl-item img {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .rd-crawl-item-name {
+    flex: 1;
+    color: #1f2937;
+  }
+  .rd-crawl-item-round {
+    padding: 2px 6px;
+    background: #e0e7ff;
+    color: #4338ca;
+    font-size: 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .rd-crawl-empty {
+    padding: 8px;
+    color: #9ca3af;
+    font-size: 12px;
+    font-style: italic;
   }
   .rd-mini-empty {
     text-align: center;
@@ -797,16 +888,24 @@
   // --- 手动触发爬虫 ---
   const manualBtn = document.getElementById('rootdata-manual-crawl-btn');
   const manualUrl = document.getElementById('rootdata-manual-url');
+  const manualForce = document.getElementById('rootdata-manual-force');
   const manualStatus = document.getElementById('rootdata-manual-status');
   const manualResult = document.getElementById('rootdata-manual-result');
-  const manualResultText = document.getElementById('rootdata-manual-result-text');
+  const manualResultSummary = document.getElementById('rootdata-manual-result-summary');
+  const manualResultDetail = document.getElementById('rootdata-manual-result-detail');
   const manualError = document.getElementById('rootdata-manual-error');
   const manualErrorMessage = document.getElementById('rootdata-manual-error-message');
 
   manualBtn?.addEventListener('click', async function() {
     const url = manualUrl.value.trim();
+    const force = manualForce?.checked || false;
+    
     if (!url) { alert('请输入 URL'); return; }
     if (!url.includes('rootdata.com')) { alert('请输入有效的 RootData 链接'); return; }
+    
+    if (force && !confirm('确定要强制重新爬取吗？这将删除该项目的所有旧数据和投资关系！')) {
+      return;
+    }
 
     manualStatus.style.display = 'flex';
     manualResult.style.display = 'none';
@@ -817,14 +916,71 @@
       const resp = await fetch('/api/rootdata/manual-crawl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url, force })
       });
       const data = await resp.json();
       manualStatus.style.display = 'none';
 
       if (data.success) {
         manualResult.style.display = 'block';
-        manualResultText.textContent = `抓取成功！${data.data?.project?.projectName || ''} (${data.data?.duration || '-'}秒)`;
+        const project = data.data?.project || {};
+        const asInvestor = data.data?.asInvestor || [];
+        const asInvestee = data.data?.asInvestee || [];
+        
+        manualResultSummary.innerHTML = `<strong>${project.projectName || ''}</strong> (${data.data?.duration || '-'}秒)`;
+        
+        let detailHtml = '<div class="rd-crawl-result">';
+        
+        // 投资的项目
+        detailHtml += '<div class="rd-crawl-section">';
+        detailHtml += '<div class="rd-crawl-section-title">';
+        detailHtml += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l9.2-9.2M17 8V2H7v20h10v-6"/></svg>';
+        detailHtml += `投资的项目 <span class="rd-crawl-count">(${asInvestor.length})</span>`;
+        detailHtml += '</div>';
+        if (asInvestor.length > 0) {
+          detailHtml += '<div class="rd-crawl-list">';
+          asInvestor.slice(0, 5).forEach(item => {
+            detailHtml += '<div class="rd-crawl-item">';
+            detailHtml += `<img src="${item.project?.logo || '/admin/logo'}" onerror="this.src='/admin/logo'" />`;
+            detailHtml += `<span class="rd-crawl-item-name">${item.project?.projectName || '-'}</span>`;
+            if (item.round) detailHtml += `<span class="rd-crawl-item-round">${item.round}</span>`;
+            detailHtml += '</div>';
+          });
+          if (asInvestor.length > 5) {
+            detailHtml += `<div class="rd-crawl-empty">还有 ${asInvestor.length - 5} 个...</div>`;
+          }
+          detailHtml += '</div>';
+        } else {
+          detailHtml += '<div class="rd-crawl-empty">暂无投资记录</div>';
+        }
+        detailHtml += '</div>';
+        
+        // 被谁投资
+        detailHtml += '<div class="rd-crawl-section">';
+        detailHtml += '<div class="rd-crawl-section-title">';
+        detailHtml += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 7l-9.2 9.2M7 16v6h10V4H7v6"/></svg>';
+        detailHtml += `被投资机构 <span class="rd-crawl-count">(${asInvestee.length})</span>`;
+        detailHtml += '</div>';
+        if (asInvestee.length > 0) {
+          detailHtml += '<div class="rd-crawl-list">';
+          asInvestee.slice(0, 5).forEach(item => {
+            detailHtml += '<div class="rd-crawl-item">';
+            detailHtml += `<img src="${item.investor?.logo || '/admin/logo'}" onerror="this.src='/admin/logo'" />`;
+            detailHtml += `<span class="rd-crawl-item-name">${item.investor?.projectName || '-'}</span>`;
+            if (item.round) detailHtml += `<span class="rd-crawl-item-round">${item.round}</span>`;
+            detailHtml += '</div>';
+          });
+          if (asInvestee.length > 5) {
+            detailHtml += `<div class="rd-crawl-empty">还有 ${asInvestee.length - 5} 个...</div>`;
+          }
+          detailHtml += '</div>';
+        } else {
+          detailHtml += '<div class="rd-crawl-empty">暂无融资记录</div>';
+        }
+        detailHtml += '</div>';
+        
+        detailHtml += '</div>';
+        manualResultDetail.innerHTML = detailHtml;
       } else {
         manualError.style.display = 'block';
         manualErrorMessage.textContent = data.error || data.message || '抓取失败';

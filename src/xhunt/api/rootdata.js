@@ -2019,11 +2019,10 @@ router.delete(
  */
 router.post("/manual-crawl", async (req, res) => {
   const startTime = Date.now();
-  console.log(`🚀 [手动爬虫] 开始执行: ${req.body.url}`);
+  const { url, force } = req.body;
+  console.log(`🚀 [手动爬虫] 开始执行: ${url}, force=${force}`);
 
   try {
-    const { url } = req.body;
-
     if (!url || !url.includes("rootdata.com")) {
       return res.status(400).json({ error: "Invalid RootData URL" });
     }
@@ -2033,11 +2032,43 @@ router.post("/manual-crawl", async (req, res) => {
       return res.status(500).json({ error: "Database model not initialized" });
     }
 
-    // 1. 查找或创建项目
+    // 1. 查找项目
     let project = await Fundraising.Project.findOne({
       where: { projectLink: url },
     });
 
+    // 如果强制重新爬取，先删除旧数据和关联关系
+    if (force && project) {
+      console.log(`🗑️ [手动爬虫] 强制模式：删除项目 ${project.projectName} (ID=${project.id}) 及关联数据`);
+      
+      // 删除作为投资方的关系
+      const deletedAsInvestor = await Fundraising.InvestmentRelationships.destroy({
+        where: { investorProjectId: project.id },
+      });
+      
+      // 删除作为被投资方的关系
+      const deletedAsInvestee = await Fundraising.InvestmentRelationships.destroy({
+        where: { fundedProjectId: project.id },
+      });
+      
+      // 删除职位关系
+      const deletedPositions = await Fundraising.PositionRelationships.destroy({
+        where: {
+          [Op.or]: [
+            { subjectProjectId: project.id },
+            { objectProjectId: project.id },
+          ],
+        },
+      });
+      
+      // 删除项目本身
+      await project.destroy();
+      
+      console.log(`✅ [手动爬虫] 已删除: 投资方关系${deletedAsInvestor}条, 被投资方关系${deletedAsInvestee}条, 职位关系${deletedPositions}条`);
+      project = null;
+    }
+
+    // 2. 创建新项目（如果不存在或被删除了）
     if (!project) {
       const match = url.match(/\/detail\/([^?]+)/);
       const projectName = match
@@ -2047,12 +2078,12 @@ router.post("/manual-crawl", async (req, res) => {
       project = await Fundraising.Project.create({
         projectName,
         projectLink: url,
-        isInitial: url.includes("/Projects/detail"), // ✅ 包含详情页链接则为初始项目
+        isInitial: url.includes("/Projects/detail"),
         detailFailuresNumber: 0,
         detailFetchedAt: null,
-        updateProgram: "manual_crawler",
+        updateProgram: force ? "manual_crawler_force" : "manual_crawler",
       });
-      console.log(`📦 [手动爬虫] 创建项目: ${projectName}`);
+      console.log(`📦 [手动爬虫] ${force ? '强制重新' : ''}创建项目: ${projectName}`);
     }
 
     // 2. 执行爬取
@@ -2106,6 +2137,7 @@ router.post("/manual-crawl", async (req, res) => {
         success: true,
         message: "爬取成功",
         data: {
+          duration,
           project: {
             id: updatedProject.id,
             projectName: updatedProject.projectName,
