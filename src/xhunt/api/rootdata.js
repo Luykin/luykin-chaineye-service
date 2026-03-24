@@ -1195,17 +1195,13 @@ const groupInvestmentsByDate = (investmentsReceived) => {
   sorted.forEach((investment) => {
     const timestamp = investment.date;
 
-    // 跳过日期为 null 或 undefined 的记录
-    if (!timestamp) {
-      return;
-    }
+    // 如果时间存在，按时间分组；如果时间不存在，按 round+amount 分组
+    const groupKey = timestamp || `${investment.round}-${investment.formattedAmount}`;
 
-    // 如果是第一条记录，或者与当前组的时间差超过24小时，创建新组
-    if (
-      !currentGroup ||
-      timestamp - currentGroup.minTimestamp > 24 * 60 * 60 * 1000
-    ) {
+    // 如果是第一条记录，或者与当前组的 key 不同，创建新组
+    if (!currentGroup || currentGroup.key !== groupKey) {
       currentGroup = {
+        key: groupKey,
         round: investment.round,
         amount: investment.amount,
         valuation: investment.valuation,
@@ -1217,26 +1213,34 @@ const groupInvestmentsByDate = (investmentsReceived) => {
       };
       groups.push(currentGroup);
     } else {
-      // 更新当前组的最大时间戳
-      currentGroup.maxTimestamp = Math.max(
-        currentGroup.maxTimestamp,
-        timestamp
-      );
+      // 更新时间戳范围
+      if (timestamp) {
+        currentGroup.maxTimestamp = Math.max(
+          currentGroup.maxTimestamp,
+          timestamp
+        );
+      }
     }
 
-    currentGroup.investors.push({
-      lead: investment.lead,
-      projectName: investment.investorProject?.projectName,
-      projectLink: investment.investorProject?.projectLink,
-      socialLinks: investment.investorProject?.socialLinks,
-      logo: investment.investorProject?.logo,
-    });
+    // 添加投资者（去重）
+    const existingIndex = currentGroup.investors.findIndex(
+      (i) => i.projectName === investment.investorProject?.projectName
+    );
+    if (existingIndex === -1) {
+      currentGroup.investors.push({
+        lead: investment.lead,
+        projectName: investment.investorProject?.projectName,
+        projectLink: investment.investorProject?.projectLink,
+        socialLinks: investment.investorProject?.socialLinks,
+        logo: investment.investorProject?.logo,
+      });
+    }
   });
 
-  // 转换为以时间戳为key的对象格式（保持原有API兼容性）
-  return groups.reduce((acc, group, index) => {
-    // 使用组的最小时间戳作为key
-    acc[group.minTimestamp] = group;
+  // 转换为以时间戳或 round-amount 为key的对象格式
+  return groups.reduce((acc, group) => {
+    const key = group.minTimestamp || group.key;
+    acc[key] = group;
     return acc;
   }, {});
 };
@@ -1642,6 +1646,7 @@ router.get("/search", async (req, res) => {
       invested: investedData,
       investor: investorData,
       projectLink: project?.projectLink,
+      projectId: project?.id,
       members,
     };
 

@@ -1865,15 +1865,33 @@ class FundraisingCrawler extends BaseCrawler {
           transaction,
         });
 
+        // 使用 mergeInvestorData 已解析的 timestamp，如果没有则尝试解析 date
+        // 即使解析失败，也生成一个稳定的时间戳（基于日期字符串的哈希），确保分组正确
+        let timestamp = inv.timestamp || null;
+        if (!timestamp && inv.date) {
+          try {
+            const parsedDate = new Date(inv.date);
+            if (!isNaN(parsedDate.getTime())) {
+              timestamp = parsedDate.getTime();
+            } else {
+              // 解析失败，使用字符串哈希作为稳定时间戳
+              timestamp = stringToHashTimestamp(inv.date);
+            }
+          } catch (e) {
+            // 解析异常，使用字符串哈希作为稳定时间戳
+            timestamp = stringToHashTimestamp(inv.date);
+          }
+        }
+
         investorRecords.push({
           investorProjectId: investorProject.id,
           fundedProjectId: project.id,
-          round: inv.round || "--", // 使用 '--' 而不是 null，避免重复数据
+          round: inv.round || "--",
           amount: inv.amount || null,
           formattedAmount: inv.formattedAmount || null,
           valuation: inv.valuation || null,
           formattedValuation: inv.formattedValuation || null,
-          date: inv.timestamp || null,
+          date: timestamp,
           lead: !!inv.lead,
           updateProgram: program,
         });
@@ -2058,6 +2076,27 @@ function parseAmount(valueStr) {
   // 解析数值（支持负数和科学计数法）
   const value = parseFloat(valueStr);
   return Number.isFinite(value) ? value * multiplier : null;
+}
+
+/**
+ * 将字符串转换为稳定的时间戳（哈希值）
+ * 相同的字符串总是返回相同的时间戳，用于无法解析的日期
+ * 返回的时间戳范围在 2000-01-01 到 2020-01-01 之间，避免与真实日期冲突
+ */
+function stringToHashTimestamp(str) {
+  if (!str) return null;
+  
+  // 简单的字符串哈希算法（djb2）
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i); // hash * 33 + c
+  }
+  
+  // 取正数并限制范围在 946684800000 (2000-01-01) 到 1577836800000 (2020-01-01) 之间
+  const baseTime = new Date('2000-01-01').getTime(); // 946684800000
+  const range = new Date('2020-01-01').getTime() - baseTime; // 631152000000
+  
+  return baseTime + (Math.abs(hash) % range);
 }
 
 function parseDate(dateStr) {
