@@ -147,7 +147,7 @@ const INTERNAL_TEST_USERS = new Set([
 	"shouyi16",
   "TTMBbo",
   "LuykinAI"
-]);
+].map((s) => s.toLowerCase()));
 
 
 function isXHuntVipHandle(handle) {
