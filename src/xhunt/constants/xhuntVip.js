@@ -145,7 +145,8 @@ const INTERNAL_TEST_USERS = new Set([
   "s_memek",
   "luoyukun4",
 	"shouyi16",
-  "TTMBbo"
+  "TTMBbo",
+  "LuykinAI"
 ]);
 
 
