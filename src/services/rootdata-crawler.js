@@ -520,7 +520,7 @@ class FundraisingCrawler extends BaseCrawler {
       state.error = null;
       await state.save();
       // Only crawl first 3 pages for quick updates
-      for (let page = 1; page <= 1; page++) {
+      for (let page = 1; page <= 5; page++) {
         const data = await this.crawlPage(page);
         const existingProject = await Fundraising.Project.findAll({
           // attributes: ['projectLink', 'isInitial', 'projectName'],
