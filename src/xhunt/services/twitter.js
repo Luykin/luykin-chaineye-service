@@ -39,11 +39,41 @@ async function getTwitterTokens(code, codeVerifier) {
 
 // 获取 Twitter 用户信息
 async function getTwitterUserInfo(accessToken) {
-	const userClient = new TwitterApi(accessToken);
-	const { data: user } = await userClient.v2.me({
-		'user.fields': ['id', 'name', 'username', 'profile_image_url', 'created_at']
-	});
-	return user;
+	console.log(`[getTwitterUserInfo] 开始请求, accessToken=${accessToken?.slice(0, 20)}...`);
+	
+	try {
+		const userClient = new TwitterApi(accessToken);
+		const { data: user } = await userClient.v2.me({
+			'user.fields': ['id', 'name', 'username', 'profile_image_url', 'created_at']
+		});
+		console.log(`[getTwitterUserInfo] 请求成功, user=${JSON.stringify(user)}`);
+		return user;
+	} catch (error) {
+		console.error(`[getTwitterUserInfo] 请求失败:`, {
+			message: error.message,
+			code: error.code,
+			httpStatus: error.httpStatus,
+			type: error.type,
+			// 打印响应数据，帮助判断是CF拦截还是Twitter错误
+			data: error.data,
+			// 如果是 Twitter API 错误
+			errors: error.errors,
+			// 如果是 axios/http 错误
+			responseStatus: error.response?.status,
+			responseStatusText: error.response?.statusText,
+			responseHeaders: error.response?.headers,
+			responseBody: error.response?.data ? JSON.stringify(error.response.data).slice(0, 500) : undefined,
+			// 原始错误
+			originalError: error.originalError?.message,
+		});
+		
+		// 判断是否被CF拦截（返回HTML而不是JSON）
+		if (error.data && typeof error.data === 'string' && error.data.includes('<!DOCTYPE')) {
+			console.error(`[getTwitterUserInfo] ⚠️ 检测到CF拦截，返回HTML而不是JSON`);
+		}
+		
+		throw error;
+	}
 }
 
 function getPointsByRank(rank) {

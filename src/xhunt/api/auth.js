@@ -291,18 +291,6 @@ router.post(
         console.error("初始化用户排名最终请求失败:", finalError.message);
       }
 
-      if (created) {
-        // req.dataDog.increment("user.registrations", 1, [
-        //   `source:twitter`,
-        //   `classification:${user.classification || "unknown"}`,
-        // ]);
-      } else {
-        // req.dataDog.increment("user.logins", 1, [
-        //   `source:twitter`,
-        //   `classification:${user.classification || "unknown"}`,
-        // ]);
-      }
-
       // Step 7: 清除旧 token
       await XHuntUserToken.destroy({ where: { userId: user.id } });
 
