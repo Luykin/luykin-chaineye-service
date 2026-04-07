@@ -202,15 +202,18 @@ router.post(
       }
 
       // Step 3: 获取 Twitter Tokens
-      const { accessToken, refreshToken } = await getTwitterTokens(
-        code,
-        cachedData
-      );
+      console.log(`[TwitterCallback] Step 3: 开始获取 Twitter Tokens`);
+      console.log(`[TwitterCallback] code=${code?.slice(0, 10)}..., codeVerifier=${cachedData?.slice(0, 10)}...`);
+      const { accessToken, refreshToken } = await getTwitterTokens(code, cachedData);
+      console.log(`[TwitterCallback] Step 3: Tokens 获取成功`);
 
       // Step 4: 获取 Twitter 用户信息
+      console.log(`[TwitterCallback] Step 4: 开始获取 Twitter 用户信息`);
       const twitterUser = await getTwitterUserInfo(accessToken);
+      console.log(`[TwitterCallback] Step 4: 用户信息获取成功, id=${twitterUser.id}, username=${twitterUser.username}`);
 
       // Step 5: 创建或更新用户信息
+      console.log(`[TwitterCallback] Step 5: 开始创建/更新用户, twitterId=${twitterUser.id}`);
       const [user, created] = await XHuntUser.findOrCreate({
         where: { twitterId: twitterUser.id },
         defaults: {
@@ -219,6 +222,7 @@ router.post(
           avatar: twitterUser.profile_image_url,
         },
       });
+      console.log(`[TwitterCallback] Step 5: 用户${created ? '创建' : '更新'}成功, userId=${user.id}`);
 
       // 如果用户已存在，更新可能变化的信息
       if (!created) {
