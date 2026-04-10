@@ -78,6 +78,7 @@ async function checkRateLimit(req, isVip) {
   } else {
     return {
       allowed: false,
+      total: RATE_LIMIT_CONFIG.FREE_USER_DAILY_LIMIT,
       error: {
         code: 401,
         message: "无法识别用户身份，请刷新页面后重试",
@@ -105,6 +106,7 @@ async function checkRateLimit(req, isVip) {
   if (currentCount >= maxCalls) {
     return {
       allowed: false,
+      total: maxCalls,
       error: {
         code: 429,
         message: `今日已使用 ${currentCount}/${maxCalls} 次，请明天再试`,
