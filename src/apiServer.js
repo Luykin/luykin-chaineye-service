@@ -34,6 +34,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/sse',
   './xhunt/api/user-entry',
   './xhunt/api/ai-detect',
+  './xhunt/api/kol-chat',
   
   // Admin API
   './admin/api/admin',
@@ -118,6 +119,7 @@ const adminLlmTestRoutes = require("./admin/api/llm-test");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
 const xHuntAIDetectRoutes = require("./xhunt/api/ai-detect");
+const xHuntKolChatRoutes = require("./xhunt/api/kol-chat");
 const internalQueryRoutes = require("./api/internal-query");
 const { initPerfMonitor } = require("./lib/perf-monitor"); // 性能监控模块
 const {
@@ -436,6 +438,15 @@ async function initializeAndStartServer() {
     browserOnlyMiddleware,
     securityMiddleware,
     xHuntAIDetectRoutes
+  );
+
+  // KOL Chat 代理接口 - KOL AI 分身聊天
+  app.use(
+    "/api/xhunt/kol-chat",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntKolChatRoutes
   );
 
   // RootdataPro: 触发爬虫并入库
