@@ -150,6 +150,10 @@ router.get("/list", [authenticateToken], async (req, res) => {
       timeout: 10000, // 10秒超时
     });
 
+    // 设置浏览器缓存 30 分钟
+    res.setHeader("Cache-Control", "public, max-age=1800");
+    res.setHeader("Expires", new Date(Date.now() + 1800 * 1000).toUTCString());
+
     // 透传后端响应
     res.json(response.data);
   } catch (error) {
