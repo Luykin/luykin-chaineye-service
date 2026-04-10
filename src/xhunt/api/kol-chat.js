@@ -146,7 +146,7 @@ async function checkRateLimit(req, isVip) {
  *   ]
  * }
  */
-router.get("/list", [authenticateToken], async (req, res) => {
+router.get("/list", async (req, res) => {
   try {
     const response = await axios.get(`${KOL_CHAT_BASE_URL}/kol/list`, {
       timeout: 10000, // 10秒超时
