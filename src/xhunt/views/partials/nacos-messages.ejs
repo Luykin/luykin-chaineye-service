@@ -81,6 +81,15 @@
         </div>
 
         <div class="form-field">
+          <label>类型</label>
+          <select id="nacos-msg-type" class="nacos-input" disabled>
+            <option value="all">全部</option>
+            <option value="web3">Web3</option>
+            <option value="ai">AI</option>
+          </select>
+        </div>
+
+        <div class="form-field">
           <label>内容</label>
           
           <!-- 颜色提示 - 重要！ -->
@@ -311,6 +320,7 @@
 
   function setControlsEnabled(enabled) {
     $("nacos-msg-title").disabled = !enabled;
+    $("nacos-msg-type").disabled = !enabled;
     $("nacos-msg-delete").disabled = !enabled;
     $("nacos-msg-publish").disabled = !enabled;
     setEditorEnabled(enabled);
@@ -319,7 +329,7 @@
   function syncToModel() {
     if (!isEditorEnabled()) return;
     const html = getEditorHtml();
-    items[currentIndex] = { ...items[currentIndex], title: $("nacos-msg-title").value, content: html };
+    items[currentIndex] = { ...items[currentIndex], title: $("nacos-msg-title").value, type: $("nacos-msg-type").value || "all", content: html };
     $("nacos-msg-preview").innerHTML = html || "";
     dirty = true;
     renderList();
@@ -360,6 +370,7 @@
     }
     setControlsEnabled(true);
     $("nacos-msg-title").value = it.title || "";
+    $("nacos-msg-type").value = it.type || "all";
     setEditorHtml(it.content || "");
     $("nacos-msg-preview").innerHTML = it.content || "";
     $("nacos-msg-editor-hint").textContent = `正在编辑: ${it.created || ""}`;
@@ -549,7 +560,7 @@
   }
 
   function newItem() {
-    const newItem = { created: Date.now(), title: "", content: DEFAULT_FOOTER_HTML };
+    const newItem = { created: Date.now(), title: "", type: "all", content: DEFAULT_FOOTER_HTML };
     items.unshift(newItem);
     dirty = true;
     renderList();
@@ -630,6 +641,7 @@
     $("nacos-msg-delete").addEventListener("click", deleteCurrent);
     $("nacos-msg-publish").addEventListener("click", showPublishPreview);
     $("nacos-msg-title").addEventListener("input", syncToModel);
+    $("nacos-msg-type").addEventListener("change", syncToModel);
     // HTML modal
     $("nacos-html-modal-close").addEventListener("click", hideHtmlModal);
     $("nacos-html-modal-cancel").addEventListener("click", hideHtmlModal);
@@ -790,5 +802,27 @@
 
 .ql-snow .ql-picker-label:hover {
   color: #2563eb;
+}
+
+/* 消息类型标签 */
+.msg-type-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 8px;
+}
+.msg-type-tag.type-all {
+  color: #4b5563;
+  background: rgba(75, 85, 99, 0.12);
+}
+.msg-type-tag.type-web3 {
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.12);
+}
+.msg-type-tag.type-ai {
+  color: #059669;
+  background: rgba(5, 150, 105, 0.12);
 }
 </style>
