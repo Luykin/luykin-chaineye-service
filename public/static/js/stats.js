@@ -1656,7 +1656,7 @@ function loadLlmHistory(index) {
   
   if (promptEl) promptEl.value = item.prompt || '';
   if (systemPromptEl) systemPromptEl.value = item.systemPrompt || '';
-  if (modelEl) modelEl.value = item.model || 'gemini-3-flash-preview';
+  if (modelEl) modelEl.value = item.model || 'gemini-3.1-flash-lite-preview';
   if (temperatureEl) {
     temperatureEl.value = item.temperature || 0.7;
     if (tempValueEl) tempValueEl.textContent = item.temperature || 0.7;

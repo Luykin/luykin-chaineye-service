@@ -17,7 +17,7 @@ const router = express.Router();
 
 // 可用模型列表
 const AVAILABLE_MODELS = [
-  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview（默认）', default: true },
+  { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash lite Preview（默认）', default: true },
   { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { value: 'v0/Kimi-K2.5', label: 'Kimi K2.5' },
@@ -153,7 +153,7 @@ router.post('/', adminAuth, express.json(), async (req, res) => {
   try {
     const {
       prompt,
-      model = 'gemini-3-flash-preview',
+      model = 'gemini-3.1-flash-lite-preview',
       temperature = 0.7,
       outputFormat = 'text',
       jsonSchema,

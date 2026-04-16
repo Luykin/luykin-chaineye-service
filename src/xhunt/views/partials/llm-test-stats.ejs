@@ -62,7 +62,7 @@
         <div class="form-group">
           <label class="form-label">模型</label>
           <select id="llm-model" class="form-select">
-            <option value="gemini-3-flash-preview" selected>Gemini 3 Flash Preview（默认）</option>
+            <option value="gemini-3.1-flash-lite-preview" selected>Gemini 3 Flash Preview（默认）</option>
             <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
             <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
             <option value="v0/Kimi-K2.5">Kimi K2.5</option>
@@ -140,7 +140,7 @@
             <li><strong>字段名必须一致：</strong>Schema 中的 <code>properties</code> 键名必须与系统提示中要求的字段名完全匹配（包括大小写）</li>
             <li><strong>推荐扁平结构：</strong>避免深层嵌套对象，使用 <code>clarityScore</code> 而不是 <code>clarity.score</code></li>
             <li><strong>简化 Required：</strong>减少 <code>required</code> 字段数量，或使用 <code>default</code> 降低验证失败概率</li>
-            <li><strong>模型差异：</strong><code>gemini-3-flash-preview</code> 更适合简单结构，复杂 JSON 建议使用 <code>gemini-3-pro-preview</code></li>
+            <li><strong>模型差异：</strong><code>gemini-3.1-flash-lite-preview</code> 更适合简单结构，复杂 JSON 建议使用 <code>gemini-3-pro-preview</code></li>
           </ul>
         </div>
       </div>

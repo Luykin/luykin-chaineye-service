@@ -10,7 +10,7 @@ const DEFAULT_CONFIG = {
   baseURL: 'https://aaii.xclaw.info/v1/',
   
   // 默认模型
-  defaultModel: 'gemini-3-flash-preview',
+  defaultModel: 'gemini-3.1-flash-lite-preview',
   
   // 默认温度（0.3 = 保守稳定，适合数据分析类任务）
   temperature: 0.3,

@@ -27,7 +27,7 @@ LLM_API_KEY=your_api_key_here
 // src/lib/llm/config.js
 const DEFAULT_CONFIG = {
   baseURL: 'https://aaii.xclaw.info/v1/',
-  defaultModel: 'gemini-3-flash-preview',
+  defaultModel: 'gemini-3.1-flash-lite-preview',
   temperature: 0.3,  // 对话类建议 0.7
   timeout: 60000,
   maxRetries: 3,
@@ -325,7 +325,7 @@ const text = await chat('你好');
 
 // 完整参数
 const text = await chat('你好', {
-  model: 'gpt-4o',           // 可选，默认 gemini-3-flash-preview
+  model: 'gpt-4o',           // 可选，默认 gemini-3.1-flash-lite-preview
   temperature: 0.7,          // 可选，默认 0.3，对话建议 0.7
   systemPrompt: '你是专家',   // 可选
   history: [                 // 可选，历史消息
@@ -499,7 +499,7 @@ class TweetAnalysisService {
     return await structuredChat(
       tweetText,
       TweetAnalysisSchema,
-      { model: 'gemini-3-flash-preview' }
+      { model: 'gemini-3.1-flash-lite-preview' }
     );
   }
   
@@ -564,7 +564,7 @@ async function withRetry(fn, maxRetries = 3) {
 {
   "type": "llm_call",
   "timestamp": "2026-03-16T14:00:00Z",
-  "model": "gemini-3-flash-preview",
+  "model": "gemini-3.1-flash-lite-preview",
   "method": "structuredChat",  // chat / structuredChat / streamChat
   "schema_name": "tweet_analysis",
   "duration_ms": 1250,
