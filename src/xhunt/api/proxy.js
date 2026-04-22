@@ -18,6 +18,7 @@ const URL_MAPPINGS = {
   kb: "http://127.0.0.1:8087",
   kota_temporary: "http://172.31.0.8:16531",
   k8s_kota: "https://data.cryptohunt.ai",
+  github_moo: "https://github-daily.moo.kim",
 };
 
 // 默认目标服务器
