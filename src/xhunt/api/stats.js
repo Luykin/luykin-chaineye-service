@@ -3798,9 +3798,11 @@ router.post("/vip-lists", adminAuth, requirePermission("vip-management"), expres
   try {
     const { listType, usernames } = req.body || {};
     if (!listType || (listType !== "vip" && listType !== "internal_test")) {
+      await logAdminAction(req, { action: "vip-list-batch-replace", success: false, message: "listType 无效" });
       return res.status(400).json({ success: false, error: "listType 必须是 vip 或 internal_test" });
     }
     if (!Array.isArray(usernames)) {
+      await logAdminAction(req, { action: "vip-list-batch-replace", success: false, message: "usernames 不是数组" });
       return res.status(400).json({ success: false, error: "usernames 必须是字符串数组" });
     }
 
@@ -3840,9 +3842,11 @@ router.post("/vip-lists", adminAuth, requirePermission("vip-management"), expres
     await loadVipLists();
     notifyRefresh().catch(() => {});
 
+    await logAdminAction(req, { action: "vip-list-batch-replace", success: true, message: `${listType} 共 ${normalized.length} 人` });
     res.json({ success: true, message: `已更新 ${listType} 名单，共 ${normalized.length} 人` });
   } catch (error) {
     console.error("[vip-lists] 批量更新失败:", error);
+    await logAdminAction(req, { action: "vip-list-batch-replace", success: false, message: error.message });
     res.status(500).json({ success: false, error: "更新失败", message: error.message });
   }
 });
@@ -3855,15 +3859,18 @@ router.post("/vip-lists/add", adminAuth, requirePermission("vip-management"), ex
   try {
     const { listType, username } = req.body || {};
     if (!listType || (listType !== "vip" && listType !== "internal_test")) {
+      await logAdminAction(req, { action: "vip-list-add", success: false, message: "listType 无效" });
       return res.status(400).json({ success: false, error: "listType 必须是 vip 或 internal_test" });
     }
     if (!username || typeof username !== "string") {
+      await logAdminAction(req, { action: "vip-list-add", success: false, message: "username 为空" });
       return res.status(400).json({ success: false, error: "username 不能为空" });
     }
 
     const { XhuntVipTestUser } = require("../../models/postgres-start");
     const name = username.toLowerCase().trim();
     if (!name) {
+      await logAdminAction(req, { action: "vip-list-add", success: false, message: "username 为空" });
       return res.status(400).json({ success: false, error: "username 不能为空" });
     }
 
@@ -3873,15 +3880,18 @@ router.post("/vip-lists/add", adminAuth, requirePermission("vip-management"), ex
     });
 
     if (!created) {
+      await logAdminAction(req, { action: "vip-list-add", success: false, message: `${name} 已存在` });
       return res.status(409).json({ success: false, error: "该用户已在名单中" });
     }
 
     await loadVipLists();
     notifyRefresh().catch(() => {});
 
+    await logAdminAction(req, { action: "vip-list-add", success: true, message: `${listType}: ${record.username}` });
     res.json({ success: true, data: { id: record.id, username: record.username, listType: record.listType } });
   } catch (error) {
     console.error("[vip-lists/add] 添加失败:", error);
+    await logAdminAction(req, { action: "vip-list-add", success: false, message: error.message });
     res.status(500).json({ success: false, error: "添加失败", message: error.message });
   }
 });
@@ -3894,22 +3904,27 @@ router.delete("/vip-lists/:id", adminAuth, requirePermission("vip-management"), 
   try {
     const id = parseInt(req.params.id, 10);
     if (!id) {
+      await logAdminAction(req, { action: "vip-list-delete", success: false, message: "id 无效" });
       return res.status(400).json({ success: false, error: "id 无效" });
     }
 
     const { XhuntVipTestUser } = require("../../models/postgres-start");
     const record = await XhuntVipTestUser.findByPk(id);
     if (!record) {
+      await logAdminAction(req, { action: "vip-list-delete", success: false, message: `id=${id} 不存在` });
       return res.status(404).json({ success: false, error: "记录不存在" });
     }
 
+    const info = `${record.listType}: ${record.username}`;
     await record.destroy();
     await loadVipLists();
     notifyRefresh().catch(() => {});
 
+    await logAdminAction(req, { action: "vip-list-delete", success: true, message: info });
     res.json({ success: true, message: "删除成功" });
   } catch (error) {
     console.error("[vip-lists] 删除失败:", error);
+    await logAdminAction(req, { action: "vip-list-delete", success: false, message: error.message });
     res.status(500).json({ success: false, error: "删除失败", message: error.message });
   }
 });
