@@ -20,6 +20,7 @@ const UnregisteredUserRegistrationModel = require("../xhunt/models/UnregisteredU
 const XhuntAdminManagerModel = require("../xhunt/models/XhuntAdminManager");
 const XhuntAdminAuditLogModel = require("../xhunt/models/XhuntAdminAuditLog");
 const XhuntAdminWebAuthnCredentialModel = require("../xhunt/models/XhuntAdminWebAuthnCredential");
+const XhuntVipTestUserModel = require("../xhunt/models/XhuntVipTestUser");
 const XHuntWebUserModel = require("../xhunt/models/XHuntWebUser");
 const XHuntWebUserTokenModel = require("../xhunt/models/XHuntWebUserToken");
 
@@ -82,6 +83,7 @@ const UnregisteredUserRegistration = UnregisteredUserRegistrationModel(pgInstanc
 const XhuntAdminManager = XhuntAdminManagerModel(pgInstance);
 const XhuntAdminAuditLog = XhuntAdminAuditLogModel(pgInstance);
 const XhuntAdminWebAuthnCredential = XhuntAdminWebAuthnCredentialModel(pgInstance);
+const XhuntVipTestUser = XhuntVipTestUserModel(pgInstance);
 const XHuntWebUser = XHuntWebUserModel(pgInstance);
 const XHuntWebUserToken = XHuntWebUserTokenModel(pgInstance);
 
@@ -289,6 +291,7 @@ module.exports = {
   XhuntAdminManager,
   XhuntAdminAuditLog,
   XhuntAdminWebAuthnCredential,
+  XhuntVipTestUser,
 
   // XHunt Web 用户数据表
   XHuntWebUser,

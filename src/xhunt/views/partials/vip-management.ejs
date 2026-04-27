@@ -1,0 +1,404 @@
+<div class="vip-management-container">
+  <style>
+    .vip-management-container {
+      padding: 16px;
+    }
+    .vip-management-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .vip-management-header h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+    .vip-management-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 768px) {
+      .vip-management-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .vip-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .vip-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .vip-card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #374151;
+    }
+    .vip-card-count {
+      font-size: 12px;
+      color: #6b7280;
+      background: #f3f4f6;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+    .vip-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .vip-input-row input {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .vip-input-row input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .vip-btn {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .vip-btn-primary {
+      background: #3b82f6;
+      color: #fff;
+    }
+    .vip-btn-primary:hover {
+      background: #2563eb;
+    }
+    .vip-btn-danger {
+      background: #ef4444;
+      color: #fff;
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    .vip-btn-danger:hover {
+      background: #dc2626;
+    }
+    .vip-btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+      border: 1px solid #d1d5db;
+    }
+    .vip-btn-secondary:hover {
+      background: #e5e7eb;
+    }
+    .vip-list {
+      max-height: 520px;
+      overflow-y: auto;
+      border: 1px solid #f3f4f6;
+      border-radius: 6px;
+      padding: 8px;
+    }
+    .vip-list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #374151;
+    }
+    .vip-list-item:nth-child(odd) {
+      background: #f9fafb;
+    }
+    .vip-list-item:hover {
+      background: #f3f4f6;
+    }
+    .vip-empty {
+      text-align: center;
+      color: #9ca3af;
+      font-size: 13px;
+      padding: 20px;
+    }
+    .vip-batch-area {
+      margin-top: 10px;
+    }
+    .vip-batch-area textarea {
+      width: 100%;
+      min-height: 80px;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .vip-batch-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      justify-content: flex-end;
+    }
+    .vip-toast {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #fff;
+      z-index: 9999;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: all 0.2s ease;
+    }
+    .vip-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .vip-toast.success {
+      background: #10b981;
+    }
+    .vip-toast.error {
+      background: #ef4444;
+    }
+  </style>
+
+  <div class="vip-management-header">
+    <h2>VIP / 内测名单管理</h2>
+  </div>
+
+  <div class="vip-management-grid">
+    <!-- VIP 名单 -->
+    <div class="vip-card">
+      <div class="vip-card-header">
+        <span class="vip-card-title">VIP 名单</span>
+        <span class="vip-card-count" id="vipCount">0 人</span>
+      </div>
+      <div class="vip-input-row">
+        <input type="text" id="vipInput" placeholder="输入用户名，回车添加" />
+        <button class="vip-btn vip-btn-primary" onclick="addUser('vip')">添加</button>
+      </div>
+      <div class="vip-list" id="vipList">
+        <div class="vip-empty">加载中...</div>
+      </div>
+      <div class="vip-batch-area">
+        <textarea id="vipBatchInput" placeholder="批量粘贴：支持换行或逗号分隔"></textarea>
+        <div class="vip-batch-actions">
+          <button class="vip-btn vip-btn-secondary" onclick="replaceBatch('vip')">批量替换</button>
+          <button class="vip-btn vip-btn-secondary" onclick="appendBatch('vip')">批量追加</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 内测名单 -->
+    <div class="vip-card">
+      <div class="vip-card-header">
+        <span class="vip-card-title">内测名单</span>
+        <span class="vip-card-count" id="internalCount">0 人</span>
+      </div>
+      <div class="vip-input-row">
+        <input type="text" id="internalInput" placeholder="输入用户名，回车添加" />
+        <button class="vip-btn vip-btn-primary" onclick="addUser('internal_test')">添加</button>
+      </div>
+      <div class="vip-list" id="internalList">
+        <div class="vip-empty">加载中...</div>
+      </div>
+      <div class="vip-batch-area">
+        <textarea id="internalBatchInput" placeholder="批量粘贴：支持换行或逗号分隔"></textarea>
+        <div class="vip-batch-actions">
+          <button class="vip-btn vip-btn-secondary" onclick="replaceBatch('internal_test')">批量替换</button>
+          <button class="vip-btn vip-btn-secondary" onclick="appendBatch('internal_test')">批量追加</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="vip-toast" id="vipToast"></div>
+</div>
+
+<script>
+  (function () {
+    let vipData = [];
+    let internalData = [];
+
+    function showToast(message, type) {
+      const toast = document.getElementById('vipToast');
+      toast.textContent = message;
+      toast.className = 'vip-toast ' + (type || 'success');
+      requestAnimationFrame(() => toast.classList.add('show'));
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    async function fetchLists() {
+      try {
+        const resp = await fetch('/api/xhunt/stats/vip-lists', { credentials: 'include' });
+        const json = await resp.json();
+        if (!json.success) throw new Error(json.error || '获取失败');
+        vipData = json.data.vip || [];
+        internalData = json.data.internalTest || [];
+        render();
+      } catch (e) {
+        showToast('获取名单失败: ' + e.message, 'error');
+      }
+    }
+
+    function render() {
+      const vipList = document.getElementById('vipList');
+      const internalList = document.getElementById('internalList');
+      document.getElementById('vipCount').textContent = vipData.length + ' 人';
+      document.getElementById('internalCount').textContent = internalData.length + ' 人';
+
+      if (vipData.length === 0) {
+        vipList.innerHTML = '<div class="vip-empty">暂无 VIP 用户</div>';
+      } else {
+        vipList.innerHTML = vipData
+          .map(
+            (u) =>
+              `<div class="vip-list-item">
+                <span>${escapeHtml(u.username)}</span>
+                <button class="vip-btn vip-btn-danger" onclick="removeUser(${u.id}, 'vip')">删除</button>
+              </div>`
+          )
+          .join('');
+      }
+
+      if (internalData.length === 0) {
+        internalList.innerHTML = '<div class="vip-empty">暂无内测用户</div>';
+      } else {
+        internalList.innerHTML = internalData
+          .map(
+            (u) =>
+              `<div class="vip-list-item">
+                <span>${escapeHtml(u.username)}</span>
+                <button class="vip-btn vip-btn-danger" onclick="removeUser(${u.id}, 'internal_test')">删除</button>
+              </div>`
+          )
+          .join('');
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    window.addUser = async function (listType) {
+      const inputId = listType === 'vip' ? 'vipInput' : 'internalInput';
+      const input = document.getElementById(inputId);
+      const username = input.value.trim();
+      if (!username) return;
+
+      try {
+        const resp = await fetch('/api/xhunt/stats/vip-lists/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ listType, username }),
+        });
+        const json = await resp.json();
+        if (!json.success) {
+          showToast(json.error || '添加失败', 'error');
+          return;
+        }
+        input.value = '';
+        showToast('添加成功');
+        await fetchLists();
+      } catch (e) {
+        showToast('添加失败: ' + e.message, 'error');
+      }
+    };
+
+    window.removeUser = async function (id, listType) {
+      if (!confirm('确定删除该用户？')) return;
+      try {
+        const resp = await fetch('/api/xhunt/stats/vip-lists/' + id, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        const json = await resp.json();
+        if (!json.success) {
+          showToast(json.error || '删除失败', 'error');
+          return;
+        }
+        showToast('删除成功');
+        await fetchLists();
+      } catch (e) {
+        showToast('删除失败: ' + e.message, 'error');
+      }
+    };
+
+    function parseBatch(textareaId) {
+      const text = document.getElementById(textareaId).value;
+      return text
+        .split(/[\n,，\s]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => s.length > 0);
+    }
+
+    async function doBatch(listType, mode) {
+      const textareaId = listType === 'vip' ? 'vipBatchInput' : 'internalBatchInput';
+      const names = parseBatch(textareaId);
+      if (names.length === 0) {
+        showToast('请输入至少一个用户名', 'error');
+        return;
+      }
+
+      let finalNames = names;
+      if (mode === 'append') {
+        const current = listType === 'vip' ? vipData : internalData;
+        finalNames = [...new Set([...current.map((u) => u.username), ...names])];
+      }
+
+      try {
+        const resp = await fetch('/api/xhunt/stats/vip-lists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ listType, usernames: finalNames }),
+        });
+        const json = await resp.json();
+        if (!json.success) {
+          showToast(json.error || '操作失败', 'error');
+          return;
+        }
+        document.getElementById(textareaId).value = '';
+        showToast(mode === 'replace' ? '批量替换成功' : '批量追加成功');
+        await fetchLists();
+      } catch (e) {
+        showToast('操作失败: ' + e.message, 'error');
+      }
+    }
+
+    window.replaceBatch = function (listType) {
+      doBatch(listType, 'replace');
+    };
+    window.appendBatch = function (listType) {
+      doBatch(listType, 'append');
+    };
+
+    // 回车快捷添加
+    document.getElementById('vipInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addUser('vip');
+    });
+    document.getElementById('internalInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addUser('internal_test');
+    });
+
+    // 懒加载：仅当切换到该 tab 时才请求数据
+    document.addEventListener('stats-tab-activated', function (e) {
+      if (e.detail && e.detail.tabId === 'vip-management') {
+        fetchLists();
+      }
+    });
+  })();
+</script>

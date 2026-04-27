@@ -3759,4 +3759,159 @@ router.get("/admin-audit/logs", adminAuth, async (req, res) => {
   }
 });
 
+// ===================== VIP / 内测名单管理 =====================
+
+const { loadVipLists, notifyRefresh } = require("../constants/xhuntVip");
+
+/**
+ * GET /vip-lists
+ * 获取 VIP 和内测用户名单
+ */
+router.get("/vip-lists", adminAuth, async (req, res) => {
+  try {
+    const { XhuntVipTestUser } = require("../../models/postgres-start");
+    const rows = await XhuntVipTestUser.findAll({
+      order: [
+        ["listType", "ASC"],
+        ["username", "ASC"],
+      ],
+      raw: true,
+    });
+
+    const vip = rows.filter((r) => r.listType === "vip").map((r) => ({ id: r.id, username: r.username }));
+    const internalTest = rows
+      .filter((r) => r.listType === "internal_test")
+      .map((r) => ({ id: r.id, username: r.username }));
+
+    res.json({ success: true, data: { vip, internalTest } });
+  } catch (error) {
+    console.error("[vip-lists] 查询失败:", error);
+    res.status(500).json({ success: false, error: "查询失败", message: error.message });
+  }
+});
+
+/**
+ * POST /vip-lists
+ * 批量全量替换某个名单（json 数组）
+ */
+router.post("/vip-lists", adminAuth, requirePermission("vip-management"), express.json(), async (req, res) => {
+  try {
+    const { listType, usernames } = req.body || {};
+    if (!listType || (listType !== "vip" && listType !== "internal_test")) {
+      return res.status(400).json({ success: false, error: "listType 必须是 vip 或 internal_test" });
+    }
+    if (!Array.isArray(usernames)) {
+      return res.status(400).json({ success: false, error: "usernames 必须是字符串数组" });
+    }
+
+    const { XhuntVipTestUser } = require("../../models/postgres-start");
+    const { Op } = require("sequelize");
+
+    const normalized = usernames
+      .map((s) => String(s || "").toLowerCase().trim())
+      .filter((s) => s.length > 0);
+
+    // 在事务中执行：先删除该类型的全部，再批量插入
+    const transaction = await require("../../models/postgres-start").pgInstance.transaction();
+    try {
+      await XhuntVipTestUser.destroy({
+        where: { listType },
+        transaction,
+      });
+
+      if (normalized.length > 0) {
+        const uniqueNames = [...new Set(normalized)];
+        const records = uniqueNames.map((username) => ({
+          username,
+          listType,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+        await XhuntVipTestUser.bulkCreate(records, { transaction });
+      }
+
+      await transaction.commit();
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+
+    // 刷新内存缓存并通知其他 worker
+    await loadVipLists();
+    notifyRefresh().catch(() => {});
+
+    res.json({ success: true, message: `已更新 ${listType} 名单，共 ${normalized.length} 人` });
+  } catch (error) {
+    console.error("[vip-lists] 批量更新失败:", error);
+    res.status(500).json({ success: false, error: "更新失败", message: error.message });
+  }
+});
+
+/**
+ * POST /vip-lists/add
+ * 添加单个用户名
+ */
+router.post("/vip-lists/add", adminAuth, requirePermission("vip-management"), express.json(), async (req, res) => {
+  try {
+    const { listType, username } = req.body || {};
+    if (!listType || (listType !== "vip" && listType !== "internal_test")) {
+      return res.status(400).json({ success: false, error: "listType 必须是 vip 或 internal_test" });
+    }
+    if (!username || typeof username !== "string") {
+      return res.status(400).json({ success: false, error: "username 不能为空" });
+    }
+
+    const { XhuntVipTestUser } = require("../../models/postgres-start");
+    const name = username.toLowerCase().trim();
+    if (!name) {
+      return res.status(400).json({ success: false, error: "username 不能为空" });
+    }
+
+    const [record, created] = await XhuntVipTestUser.findOrCreate({
+      where: { username: name, listType },
+      defaults: { username: name, listType },
+    });
+
+    if (!created) {
+      return res.status(409).json({ success: false, error: "该用户已在名单中" });
+    }
+
+    await loadVipLists();
+    notifyRefresh().catch(() => {});
+
+    res.json({ success: true, data: { id: record.id, username: record.username, listType: record.listType } });
+  } catch (error) {
+    console.error("[vip-lists/add] 添加失败:", error);
+    res.status(500).json({ success: false, error: "添加失败", message: error.message });
+  }
+});
+
+/**
+ * DELETE /vip-lists/:id
+ * 删除某条记录
+ */
+router.delete("/vip-lists/:id", adminAuth, requirePermission("vip-management"), async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) {
+      return res.status(400).json({ success: false, error: "id 无效" });
+    }
+
+    const { XhuntVipTestUser } = require("../../models/postgres-start");
+    const record = await XhuntVipTestUser.findByPk(id);
+    if (!record) {
+      return res.status(404).json({ success: false, error: "记录不存在" });
+    }
+
+    await record.destroy();
+    await loadVipLists();
+    notifyRefresh().catch(() => {});
+
+    res.json({ success: true, message: "删除成功" });
+  } catch (error) {
+    console.error("[vip-lists] 删除失败:", error);
+    res.status(500).json({ success: false, error: "删除失败", message: error.message });
+  }
+});
+
 module.exports = router;

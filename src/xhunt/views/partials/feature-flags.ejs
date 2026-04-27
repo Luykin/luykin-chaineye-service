@@ -619,39 +619,22 @@
   let originalConfigData = {}; // For diffing
   let dirty = false;
 
-  // 预定义的批量用户名单
-  const XHUNT_VIP_LIST = [
-    "LuykinAI", "kotaweb3", "Sea_Bitcoin", "FloriaT96249", "alpha_gege",
-    "DeFiTeddy2020", "maid_crypto", "Paris13Jeanne", "momochenming", "Rita88",
-    "vvickym2", "web3annie", "charles48011843", "bocaibocai_", "0x_xifeng",
-    "Meta8Mate", "zohanlin", "qqzsss", "0xAllen888", "NeohexWu",
-    "ScarlettWeb3", "AirdropAlchemis", "timbrobro", "blockTVBee", "0xMoon6626",
-    "captain_kent", "0xborder", "DRbitcoin36", "bclaobai", "love_doge123",
-    "0xcryptoHowe", "Monica_xiaoM", "aiSunny224737", "Cyrus_G3", "0xJuliechen",
-    "chaozuoye", "unaiyang", "VireGeek", "Ru7Longcrypto", "EleveResearch",
-    "0xjasonli", "dabiaoge", "KuiGas", "tmel0211", "Rocky_Bitcoin",
-    "Bitwux", "fishkiller", "Alvin0617", "0xBeyondLee", "CryptoPainter",
-    "0xTodd", "luyaoyuan", "CandyDAO_leaf", "Web3Feng", "jason_chen998",
-    "Wuhuoqiu", "BroLeon", "Guomin184935", "jessezheng", "cuegod001",
-    "XYiduo", "zdxg119", "bcointrader", "CryptoPomeloCat", "meta7sol",
-    "GameFI_EZ", "Baili1018", "qklxsqf", "crypto_pumpman", "Crypto_He",
-    "yueya_eth", "wang_xiaolou", "xingpt", "wenxue600", "Airdrop_Guard",
-    "Jay21871836", "egyptk6", "Joensmoon", "MEJ50749", "guiguziben",
-    "xingxingjun8888", "taowang1", "btcpiggy", "liushezhang", "WWTLitee",
-    "Web3SisterA", "amelia_xuu", "S_memek", "nftsiy", "gcsbtc",
-    "cheuk_baby", "abyssofgambling", "flyiiawei", "TTMBbo", "shouyi16",
-    "dakuan_x", "wuliao_btc", "0xshunshun", "ZhanweiC", "BitKieran",
-    "0xsmall_", "qingerqq2024", "wangchangfu88", "candywantfly1", "HYSFL1",
-    "Web3Veteran1", "weiyu320169", "Siberiaxx1909", "PWenzhen76938", "QF88688",
-    "aiqiang888", "jiroucaigou", "BongePlanet", "Multichannel_", "web3_dadgod",
-    "hisevenih", "btcmiko", "anchornode", "0xXiaoXiong", "xx03199",
-    "artistkatty_", "JiuHuangBuHuang", "AntBTC", "sparkwang9", "JIBAIWeb3"
-  ];
+  // 批量用户名单（从接口动态加载）
+  let XHUNT_VIP_LIST = [];
+  let INTERNAL_TEST_USERS_LIST = [];
 
-  const INTERNAL_TEST_USERS_LIST = [
-    "defiteddy2020", "biteye_sister", "alpha_gege", "cuegod001",
-    "xhuntcn", "web3sistera", "s_memek", "luoyukun4", "shouyi16"
-  ];
+  async function loadVipListsForFeatureFlags() {
+    try {
+      const resp = await fetch("/api/xhunt/stats/vip-lists", { credentials: "include" });
+      const json = await resp.json();
+      if (json.success && json.data) {
+        XHUNT_VIP_LIST = (json.data.vip || []).map((u) => u.username);
+        INTERNAL_TEST_USERS_LIST = (json.data.internalTest || []).map((u) => u.username);
+      }
+    } catch (e) {
+      console.warn("[feature-flags] 加载 VIP 名单失败:", e.message);
+    }
+  }
 
   let FEATURE_KEYS = {
     settings: "设置",
@@ -1840,6 +1823,7 @@
     // 1. Load all necessary data first.
     await loadTranslations();
     await loadConfig();
+    await loadVipListsForFeatureFlags();
 
     // 2. Bind all DOM events.
     bindDomEvents();

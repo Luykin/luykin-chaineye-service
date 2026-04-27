@@ -534,6 +534,19 @@ async function initializeAndStartServer() {
   await setupPostgresFundraising(); // 初始xhunt里面老版本化融资业务 PostgreSQL（src/models/postgres-fundraising.js：Fundraising 相关表与关系）
   await setupRootdataProPostgres(); // 初始化新的 RootDataPro PostgreSQL（src/rootdatapro/models：database=rootdatapro，rootdatapro 专用表与关系）
 
+  // 加载 VIP / 内测用户名单到内存（依赖 PostgreSQL 已连接）
+  try {
+    const { loadVipLists, startRefreshSubscriber } = require("./xhunt/constants/xhuntVip");
+    await loadVipLists();
+    // 启动 Redis Pub/Sub 订阅，实时同步其他 worker 的修改
+    startRefreshSubscriber().catch((e) => {
+      console.error("[API Server] ❌ 启动 VIP 实时同步失败:", e.message);
+    });
+  } catch (e) {
+    console.error("[API Server] ❌ 加载 VIP 名单失败:", e.message);
+    console.error("[API Server] 提示: 如果表不存在，请先执行 yarn db:migrate:pg 和 node scripts/seed-vip-lists.js");
+  }
+
   // 启动服务器
   app.listen(PORT, () => console.log(`API 服务器运行在端口 ${PORT}`));
 }

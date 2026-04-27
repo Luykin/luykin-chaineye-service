@@ -1,165 +1,133 @@
-// XHunt VIP usernames (handles)
-// Exported as a Set for efficient membership checks
+// XHunt VIP / Internal Test Users
+// 数据从数据库 xhunt_vip_test_users 加载到内存 Set，供同步查询使用
+// 启动后由 apiServer.js 调用 loadVipLists() 进行初始化
+//
+// 多 worker 同步机制：
+// 1. 每个 worker 启动时从数据库加载全量名单
+// 2. 任一 worker 修改名单后，通过 Redis Pub/Sub 广播通知所有 worker 刷新
+// 3. 若 Redis Pub/Sub 不可用，保留 60 秒定时兜底刷新
 
-const XHUNT_VIP = new Set([
-  "LuykinAI",
-  "kotaweb3",
-  "Sea_Bitcoin",
-  "FloriaT96249",
-  "alpha_gege",
-  "DeFiTeddy2020",
-  "maid_crypto",
-  "Paris13Jeanne",
-  "momochenming",
-  "Rita88",
-  "vvickym2",
-  "web3annie",
-  "charles48011843",
-  "bocaibocai_",
-  "0x_xifeng",
-  "Meta8Mate",
-  "zohanlin",
-  "qqzsss",
-  "0xAllen888",
-  "NeohexWu",
-  "ScarlettWeb3",
-  "AirdropAlchemis",
-  "timbrobro",
-  "blockTVBee",
-  "0xMoon6626",
-  "captain_kent",
-  "0xborder",
-  "DRbitcoin36",
-  "bclaobai",
-  "love_doge123",
-  "0xcryptoHowe",
-  "Monica_xiaoM",
-  "aiSunny224737",
-  "Cyrus_G3",
-  "0xJuliechen",
-  "chaozuoye",
-  "unaiyang",
-  "VireGeek",
-  "Ru7Longcrypto",
-  "EleveResearch",
-  "0xjasonli",
-  "dabiaoge",
-  "KuiGas",
-  "tmel0211",
-  "Rocky_Bitcoin",
-  "Bitwux",
-  "fishkiller",
-  "Alvin0617",
-  "0xBeyondLee",
-  "CryptoPainter",
-  "0xTodd",
-  "luyaoyuan",
-  "CandyDAO_leaf",
-  "Web3Feng",
-  "jason_chen998",
-  "Wuhuoqiu",
-  "BroLeon",
-  "Guomin184935",
-  "jessezheng",
-  "cuegod001",
-  "XYiduo",
-  "zdxg119",
-  "bcointrader",
-  "CryptoPomeloCat",
-  "meta7sol",
-  "GameFI_EZ",
-  "Baili1018",
-  "qklxsqf",
-  "crypto_pumpman",
-  "Crypto_He",
-  "yueya_eth",
-  "wang_xiaolou",
-  "xingpt",
-  "wenxue600",
-  "Airdrop_Guard",
-  "Jay21871836",
-  "egyptk6",
-  "Joensmoon",
-  "MEJ50749",
-  "guiguziben",
-  "xingxingjun8888",
-  "taowang1",
-  "btcpiggy",
-  "liushezhang",
-  "WWTLitee",
-  "Web3SisterA",
-  "amelia_xuu",
-  "S_memek",
-  "dabiaoge",
-  "nftsiy",
-  "gcsbtc",
-  "cheuk_baby",
-  "egyptk6",
-  "0xborder",
-  "abyssofgambling",
-  "flyiiawei",
-  "TTMBbo",
-	"shouyi16",
-  "dakuan_x",
-  "wuliao_btc",
-  "0xshunshun",
-  "ZhanweiC",
-  "BitKieran",
-  "0xsmall_",
-  "qingerqq2024",
-  "wangchangfu88",
-  "candywantfly1",
-  "HYSFL1",
-  "Web3Veteran1",
-  "weiyu320169",
-  "Siberiaxx1909",
-  "PWenzhen76938",
-  "QF88688",
-  "aiqiang888",
-  "jiroucaigou",
-  "BongePlanet",
-  "Multichannel_",
-  "web3_dadgod",
-  "hisevenih",
-  "btcmiko",
-  "anchornode",
-  "0xXiaoXiong",
-  "xx03199",
-  "artistkatty_",
-  "JiuHuangBuHuang",
-  "AntBTC",
-  "sparkwang9",
-  "JIBAIWeb3",
-  "UFoust13797",
-  "lianyanshe",
-  "spark888",
-  "imwudi666",
-  "prospixels"
-].map((s) => s.toLowerCase()));
+const { XhuntVipTestUser } = require("../../models/postgres-start");
+const { getRedisClient } = require("../../lib/redisClient");
 
-const INTERNAL_TEST_USERS = new Set([
-  "defiteddy2020",
-  "biteye_sister",
-  "alpha_gege",
-  "cuegod001",
-  "xhuntcn",
-  "web3sistera",
-  "s_memek",
-  "luoyukun4",
-	"shouyi16",
-  "TTMBbo",
-  "LuykinAI"
-].map((s) => s.toLowerCase()));
+const XHUNT_VIP = new Set();
+const INTERNAL_TEST_USERS = new Set();
 
+let loaded = false;
+let subscriberClient = null;
+let fallbackTimer = null;
+const FALLBACK_INTERVAL_MS = 60_000;
+const REFRESH_CHANNEL = "xhunt:vip:refresh";
+
+async function loadVipLists() {
+  try {
+    const rows = await XhuntVipTestUser.findAll({
+      attributes: ["username", "listType"],
+      raw: true,
+    });
+
+    XHUNT_VIP.clear();
+    INTERNAL_TEST_USERS.clear();
+
+    for (const row of rows) {
+      const name = String(row.username || "").toLowerCase().trim();
+      if (!name) continue;
+      if (row.listType === "vip") {
+        XHUNT_VIP.add(name);
+      } else if (row.listType === "internal_test") {
+        INTERNAL_TEST_USERS.add(name);
+      }
+    }
+
+    loaded = true;
+    console.log(
+      `[xhuntVip] 名单加载完成: VIP=${XHUNT_VIP.size}, 内测=${INTERNAL_TEST_USERS.size}`
+    );
+  } catch (err) {
+    console.error("[xhuntVip] 加载名单失败:", err.message);
+    throw err;
+  }
+}
+
+/**
+ * 启动 Redis Pub/Sub 订阅，实时接收刷新通知
+ */
+async function startRefreshSubscriber() {
+  if (subscriberClient) return; // 防止重复启动
+  try {
+    const redis = await getRedisClient();
+    if (!redis) {
+      console.warn("[xhuntVip] Redis 不可用，跳过 Pub/Sub 订阅");
+      startFallbackTimer();
+      return;
+    }
+
+    // 使用 duplicate 创建独立的 subscriber 连接
+    subscriberClient = redis.duplicate();
+
+    // 断线重连后自动重新订阅
+    subscriberClient.on("connect", async () => {
+      try {
+        await subscriberClient.subscribe(REFRESH_CHANNEL, (message) => {
+          loadVipLists().catch((err) => {
+            console.error("[xhuntVip] Pub/Sub 触发刷新失败:", err.message);
+          });
+        });
+        console.log("[xhuntVip] Redis Pub/Sub 订阅成功，频道:", REFRESH_CHANNEL);
+      } catch (err) {
+        console.error("[xhuntVip] 重新订阅失败:", err.message);
+      }
+    });
+
+    subscriberClient.on("error", (err) => {
+      console.error("[xhuntVip] Subscriber 连接错误:", err.message);
+    });
+
+    await subscriberClient.connect();
+
+    // Pub/Sub 成功后，取消兜底定时器（如果存在）
+    if (fallbackTimer) {
+      clearInterval(fallbackTimer);
+      fallbackTimer = null;
+    }
+  } catch (err) {
+    console.error("[xhuntVip] Pub/Sub 启动失败:", err.message);
+    startFallbackTimer();
+  }
+}
+
+/**
+ * 通知所有 worker 刷新名单（由执行写操作的 worker 调用）
+ */
+async function notifyRefresh() {
+  try {
+    const redis = await getRedisClient();
+    if (!redis) return;
+    await redis.publish(REFRESH_CHANNEL, "refresh");
+  } catch (err) {
+    console.error("[xhuntVip] Pub/Sub 通知失败:", err.message);
+  }
+}
+
+function startFallbackTimer() {
+  if (fallbackTimer) return;
+  fallbackTimer = setInterval(() => {
+    loadVipLists().catch((err) => {
+      console.error("[xhuntVip] 兜底定时刷新失败:", err.message);
+    });
+  }, FALLBACK_INTERVAL_MS);
+  if (fallbackTimer.unref) fallbackTimer.unref();
+  console.log("[xhuntVip] 已启动兜底定时刷新，间隔:", FALLBACK_INTERVAL_MS, "ms");
+}
 
 function isXHuntVipHandle(handle) {
   if (!handle || typeof handle !== "string") return false;
-  return XHUNT_VIP.has(handle.toLowerCase());
+  return XHUNT_VIP.has(handle.toLowerCase().trim());
 }
 
 function isInternalTestUserHandle(handle) {
   if (!handle || typeof handle !== "string") return false;
-  return INTERNAL_TEST_USERS.has(handle.toLowerCase());
+  return INTERNAL_TEST_USERS.has(handle.toLowerCase().trim());
 }
 
 function isRequestXHuntVip(req) {
@@ -182,4 +150,14 @@ function isRequestInternalTestUser(req) {
   }
 }
 
-module.exports = { XHUNT_VIP, isXHuntVipHandle, isRequestXHuntVip, INTERNAL_TEST_USERS, isInternalTestUserHandle, isRequestInternalTestUser };
+module.exports = {
+  XHUNT_VIP,
+  INTERNAL_TEST_USERS,
+  isXHuntVipHandle,
+  isRequestXHuntVip,
+  isInternalTestUserHandle,
+  isRequestInternalTestUser,
+  loadVipLists,
+  startRefreshSubscriber,
+  notifyRefresh,
+};

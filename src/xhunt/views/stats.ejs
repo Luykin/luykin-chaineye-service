@@ -393,6 +393,15 @@
             <%- include('partials/pro-management-stats') %>
           </div>
 
+          <!-- VIP 管理 Tab -->
+          <div class="tab-pane" id="vip-management">
+            <% if (typeof user !== 'undefined' && user && (user.role === 'super' || (Array.isArray(user.permissions) && user.permissions.includes('vip-management')))) { %>
+            <%- include('partials/vip-management') %>
+            <% } else { %>
+            <div style="padding: 12px; color: #6b7280">无权限查看该内容</div>
+            <% } %>
+          </div>
+
           <!-- 数据库备份 Tab -->
           <div class="tab-pane" id="backup">
             <%- include('partials/backup-stats') %>
@@ -581,6 +590,7 @@
         { id: 'data-export', icon: '#icon-download', text: '数据导出', perm: 'export:users' },
         { id: 'reviews-management', icon: '#icon-message-circle', text: '评论管理', perm: 'reviews-management' },
         { id: 'pro-management', icon: '#icon-crown', text: 'Pro用户', perm: 'pro-management' },
+        { id: 'vip-management', icon: '#icon-star', text: 'VIP管理', perm: 'vip-management' },
         { id: 'backup', icon: '#icon-save', text: '数据备份', perm: 'backup:operate' },
         { id: 'server-command', icon: '#icon-server', text: '终端命令', perm: 'server:execute' },
         <% if (typeof user !== 'undefined' && user && user.role === 'super') { %>

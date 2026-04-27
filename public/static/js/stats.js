@@ -1060,6 +1060,7 @@ function renderSidebarTabs() {
     'data-export': 'export:users',
     'reviews-management': 'reviews-management',
     'pro-management': 'pro-management',
+    'vip-management': 'vip-management',
     'perf-monitor': 'perf-monitor',
     'backup': 'backup:operate',
     'server-command': 'server:execute',
