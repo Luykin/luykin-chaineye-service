@@ -133,7 +133,8 @@ const XHUNT_VIP = new Set([
   "UFoust13797",
   "lianyanshe",
   "spark888",
-  "imwudi666"
+  "imwudi666",
+  "prospixels"
 ].map((s) => s.toLowerCase()));
 
 const INTERNAL_TEST_USERS = new Set([
