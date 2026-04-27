@@ -170,6 +170,45 @@
     .vip-toast.error {
       background: #ef4444;
     }
+    .vip-sync-section {
+      margin-top: 20px;
+      padding: 16px;
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+    }
+    .vip-sync-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 8px;
+    }
+    .vip-sync-desc {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+    .vip-sync-btn {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .vip-sync-btn:hover {
+      opacity: 0.9;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    }
+    .vip-sync-btn:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
   </style>
 
   <div class="vip-management-header">
@@ -220,6 +259,16 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- 同步到功能开关 -->
+  <div class="vip-sync-section">
+    <div class="vip-sync-title">同步到功能开关</div>
+    <div class="vip-sync-desc">
+      将当前 VIP 名单追加到【金丝雀】分组，将内测用户追加到【测试组】。<br/>
+      操作仅增加用户，不会删除功能开关中已有的用户。
+    </div>
+    <button class="vip-sync-btn" id="vipSyncBtn" onclick="syncToFeatureFlags()">一键同步到功能开关</button>
   </div>
 
   <div class="vip-toast" id="vipToast"></div>
@@ -393,6 +442,77 @@
     document.getElementById('internalInput').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') addUser('internal_test');
     });
+
+    // 同步到功能开关
+    window.syncToFeatureFlags = async function () {
+      const btn = document.getElementById('vipSyncBtn');
+      if (btn.disabled) return;
+
+      const vipNames = vipData.map((u) => u.username);
+      const internalNames = internalData.map((u) => u.username);
+
+      if (vipNames.length === 0 && internalNames.length === 0) {
+        showToast('当前名单为空，无需同步', 'error');
+        return;
+      }
+
+      if (!confirm(
+        `确认同步？\n• VIP 名单 (${vipNames.length} 人) → 金丝雀分组\n• 内测名单 (${internalNames.length} 人) → 测试组`
+      )) return;
+
+      btn.disabled = true;
+      btn.textContent = '同步中...';
+
+      try {
+        // 1. 读取当前 Nacos 配置
+        const readResp = await fetch('/api/xhunt/stats/feature-flags', { credentials: 'include' });
+        const readJson = await readResp.json();
+        if (!readJson.success) {
+          throw new Error(readJson.error || '读取功能开关配置失败');
+        }
+
+        let config = {};
+        try {
+          config = JSON.parse(readJson.data.content || '{}');
+        } catch (e) {
+          throw new Error('功能开关配置 JSON 解析失败');
+        }
+
+        // 2. 追加 VIP → canaries，内测 → testers
+        if (!config.canaryConfig) config.canaryConfig = { features: [], canaries: [] };
+        if (!config.testConfig) config.testConfig = { features: [], testers: [] };
+
+        const currentCanaries = config.canaryConfig.canaries || [];
+        const currentTesters = config.testConfig.testers || [];
+
+        const newCanaries = [...new Set([...currentCanaries, ...vipNames])];
+        const newTesters = [...new Set([...currentTesters, ...internalNames])];
+
+        config.canaryConfig.canaries = newCanaries;
+        config.testConfig.testers = newTesters;
+
+        // 3. 写回 Nacos
+        const writeResp = await fetch('/api/xhunt/stats/feature-flags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ content: JSON.stringify(config, null, 2) }),
+        });
+        const writeJson = await writeResp.json();
+        if (!writeJson.success) {
+          throw new Error(writeJson.error || '保存功能开关配置失败');
+        }
+
+        showToast(
+          `同步成功：金丝雀 +${newCanaries.length - currentCanaries.length} 人，测试组 +${newTesters.length - currentTesters.length} 人`
+        );
+      } catch (e) {
+        showToast('同步失败: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '一键同步到功能开关';
+      }
+    };
 
     // 懒加载：仅当切换到该 tab 时才请求数据
     document.addEventListener('stats-tab-activated', function (e) {
