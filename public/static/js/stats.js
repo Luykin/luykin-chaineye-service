@@ -100,6 +100,7 @@ function initTabs() {
     "admin-audit-logs": "audit-logs:read",
     "nacos-messages": "nacos-messages",
     "nacos-campaigns": "nacos_config",
+    "nacos-tags": "nacos_config",
     "feature-flags": "feature_flags_config",
     "redis-management": "redis-management",
     "llm-test": "llm-test",

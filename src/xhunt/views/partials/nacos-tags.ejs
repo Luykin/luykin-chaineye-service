@@ -1,0 +1,555 @@
+<!-- 内置标签配置（Nacos） -->
+<div class="tags-container">
+  <div class="tags-header">
+    <h2>内置标签配置</h2>
+    <p class="tags-subtitle">可视化编辑 Nacos 配置：xhunt_built_in_tag / xhunt_built_in_tag_en</p>
+  </div>
+
+  <div class="tags-toolbar">
+    <div class="toolbar-left">
+      <div class="lang-tabs">
+        <button class="lang-tab active" id="tags-lang-zh" data-lang="zh">中文</button>
+        <button class="lang-tab" id="tags-lang-en" data-lang="en">English</button>
+      </div>
+      <span class="muted">dataId: <code id="tags-dataid">xhunt_built_in_tag</code></span>
+      <span class="muted">group: <code>DEFAULT_GROUP</code></span>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn" id="tags-refresh">刷新</button>
+      <button class="btn" id="tags-new">新增 Handle</button>
+      <button class="btn danger" id="tags-delete" disabled>删除</button>
+      <button class="btn success" id="tags-publish" disabled>发布</button>
+    </div>
+  </div>
+
+  <div class="tags-body">
+    <!-- 左侧列表 -->
+    <div class="tags-panel tags-panel-list">
+      <div class="panel-header">
+        <div class="list-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="tags-search" placeholder="搜索 handle..." />
+        </div>
+        <span class="count-badge" id="tags-count">0</span>
+      </div>
+      <div class="list-items" id="tags-list">
+        <div class="empty-state">暂无数据，点击「新增 Handle」创建</div>
+      </div>
+    </div>
+
+    <!-- 右侧编辑器 -->
+    <div class="tags-panel tags-panel-editor">
+      <div class="panel-header">
+        <span>编辑标签</span>
+        <span class="editor-hint" id="tags-editor-hint">选择左侧 handle 开始编辑</span>
+      </div>
+      <div id="tags-editor-empty" class="editor-empty">
+        <div class="empty-title">请选择一个 Handle</div>
+        <div class="empty-desc">从左侧列表选择，或点击「新增 Handle」创建</div>
+      </div>
+      <div id="tags-editor-body" style="display: none;">
+        <div class="field-row">
+          <div class="field">
+            <label>Handle（推特账号，不带 @）</label>
+            <input type="text" id="tags-handle" placeholder="例如：anishagnihotri" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>标签列表</label>
+            <div class="tags-list-editor" id="tags-list-editor">
+              <!-- 动态渲染标签输入行 -->
+            </div>
+            <button class="btn btn-sm" id="tags-add-tag" type="button">+ 添加标签</button>
+          </div>
+        </div>
+        <div class="preview-section">
+          <div class="preview-header">JSON 预览</div>
+          <pre class="preview-pre" id="tags-preview"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tags-toast" id="tags-toast" style="display: none;"></div>
+</div>
+
+<!-- JSON 发布预览模态框 -->
+<div class="json-preview-modal-overlay" id="tags-json-modal" style="display: none;">
+  <div class="json-preview-modal-panel">
+    <div class="json-preview-modal-header">
+      <h3>预览 JSON 配置</h3>
+      <button class="close-btn" id="tags-json-modal-close" type="button">&times;</button>
+    </div>
+    <div class="json-preview-modal-body">
+      <p class="json-preview-legend">
+        即将发布到 Nacos（dataId: <code id="tags-json-modal-dataid">-</code>）
+        <span id="tags-json-modal-diff" style="margin-left: 8px; color: #3b82f6; font-weight: 600;"></span>
+        <span class="legend-removed">删除</span> | <span class="legend-added">新增</span>
+      </p>
+      <pre id="tags-json-modal-content"></pre>
+    </div>
+    <div class="json-preview-modal-footer">
+      <button class="btn" id="tags-json-modal-cancel" type="button">取消</button>
+      <button class="btn primary" id="tags-json-modal-confirm" type="button">确认发布</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.tags-container { padding: 16px; max-width: 1400px; margin: 0 auto; }
+.tags-header h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; color: #1f2937; }
+.tags-subtitle { margin: 0 0 12px; font-size: 13px; color: #6b7280; }
+.tags-toolbar {
+  display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; background: #fafafa; border: 1px solid #e5e7eb;
+  border-radius: 4px; margin-bottom: 12px; align-items: center;
+}
+.toolbar-left { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.toolbar-right { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.toolbar-right .btn {
+  padding: 5px 10px; font-size: 12px; line-height: 1.4; border-radius: 4px;
+  border: 1px solid #d1d5db; background: #fff; color: #374151; cursor: pointer;
+}
+.toolbar-right .btn:hover:not(:disabled) { background: #f3f4f6; }
+.toolbar-right .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.toolbar-right .btn.success { background: #10b981; border-color: #059669; color: #fff; }
+.toolbar-right .btn.success:hover { background: #059669; }
+.toolbar-right .btn.danger { background: #ef4444; border-color: #dc2626; color: #fff; }
+.toolbar-right .btn.danger:hover { background: #dc2626; }
+.btn.btn-sm { padding: 4px 8px; font-size: 11px; }
+
+.lang-tabs { display: flex; gap: 4px; }
+.lang-tab {
+  padding: 4px 10px; font-size: 12px; border: 1px solid #d1d5db;
+  background: #fff; color: #374151; border-radius: 4px; cursor: pointer;
+}
+.lang-tab.active { background: #3b82f6; border-color: #2563eb; color: #fff; }
+.muted { color: #6b7280; font-size: 12px; }
+
+.tags-body { display: grid; grid-template-columns: 300px 1fr; gap: 12px; align-items: start; }
+@media (max-width: 900px) { .tags-body { grid-template-columns: 1fr; } }
+
+.tags-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+.panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 10px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
+  font-size: 12px; font-weight: 500; gap: 8px;
+}
+.list-search {
+  display: flex; align-items: center; gap: 6px; flex: 1;
+  padding: 4px 8px; border-radius: 4px; background: #fff; border: 1px solid #d1d5db;
+}
+.list-search svg { color: #9ca3af; flex-shrink: 0; }
+.list-search input { border: none; outline: none; flex: 1; font-size: 12px; padding: 0; background: transparent; min-width: 0; }
+.count-badge { color: #6b7280; font-size: 12px; flex-shrink: 0; }
+.list-items { max-height: calc(100vh - 280px); overflow: auto; }
+.empty-state { padding: 20px; text-align: center; color: #9ca3af; font-size: 13px; }
+
+.item {
+  padding: 10px 12px; border-bottom: 1px solid #f3f4f6; cursor: pointer;
+  transition: background 0.15s; display: flex; align-items: center; gap: 8px;
+}
+.item:hover { background: #f9fafb; }
+.item.active { background: #f0f9ff; border-left: 2px solid #3b82f6; }
+.item-handle { font-weight: 600; font-size: 13px; color: #111827; word-break: break-all; }
+.item-tags { font-size: 11px; color: #6b7280; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-tag-count {
+  font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #e0f2fe;
+  color: #0369a1; font-weight: 600; flex-shrink: 0;
+}
+
+.tags-panel-editor { min-width: 0; }
+.editor-empty {
+  padding: 40px 20px; text-align: center; border: 1px dashed #d1d5db;
+  background: #fafafa; border-radius: 4px; margin: 12px;
+}
+.editor-empty .empty-title { font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px; }
+.editor-empty .empty-desc { font-size: 12px; color: #6b7280; }
+
+#tags-editor-body { padding: 12px; }
+.field-row { margin-bottom: 14px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-weight: 500; color: #4b5563; font-size: 12px; }
+.field input {
+  border: 1px solid #d1d5db; border-radius: 4px; padding: 6px 8px;
+  font-size: 13px; outline: none; transition: border-color 0.15s;
+}
+.field input:focus { border-color: #3b82f6; }
+
+.tags-list-editor { display: flex; flex-direction: column; gap: 6px; }
+.tag-input-row {
+  display: flex; align-items: center; gap: 6px;
+}
+.tag-input-row input {
+  flex: 1; border: 1px solid #d1d5db; border-radius: 4px;
+  padding: 5px 8px; font-size: 13px; outline: none; transition: border-color 0.15s;
+}
+.tag-input-row input:focus { border-color: #3b82f6; }
+.tag-input-row .btn {
+  padding: 4px 8px; font-size: 11px; border-radius: 4px;
+  border: 1px solid #d1d5db; background: #fff; color: #ef4444; cursor: pointer;
+}
+.tag-input-row .btn:hover { background: #fef2f2; border-color: #ef4444; }
+
+.preview-section { margin-top: 16px; }
+.preview-header { font-size: 12px; font-weight: 500; color: #374151; margin-bottom: 6px; }
+.preview-pre {
+  margin: 0; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb;
+  border-radius: 4px; font-family: "Consolas","Monaco","Courier New",monospace;
+  font-size: 12px; line-height: 1.5; overflow: auto; max-height: 300px;
+  white-space: pre-wrap; word-break: break-all; color: #1f2937;
+}
+
+.tags-toast {
+  position: fixed; right: 16px; bottom: 16px; max-width: 400px;
+  background: #1f2937; color: #fff; padding: 10px 14px; border-radius: 4px;
+  font-size: 13px; z-index: 9999;
+}
+
+/* JSON preview modal */
+.json-preview-modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.5); z-index: 10001;
+}
+.json-preview-modal-panel {
+  background: #fff; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  width: 90%; max-width: 900px; display: flex; flex-direction: column;
+  max-height: 85vh; margin: 20px;
+}
+.json-preview-modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; border-bottom: 1px solid #e5e7eb;
+}
+.json-preview-modal-header h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.close-btn { background: none; border: none; font-size: 28px; line-height: 1; cursor: pointer; color: #6b7280; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+.close-btn:hover { background: #f3f4f6; color: #111827; }
+.json-preview-modal-body { padding: 14px; overflow: hidden; flex-grow: 1; display: flex; flex-direction: column; min-height: 0; }
+.json-preview-legend { font-size: 13px; color: #6b7280; margin: 0 0 10px; flex-shrink: 0; }
+.legend-added { color: #166534; font-weight: 600; }
+.legend-removed { color: #991b1b; font-weight: 600; }
+.json-preview-modal-body pre { margin: 0; padding: 12px; background: #f9fafb; border-radius: 4px; font-family: "Consolas","Monaco","Courier New",monospace; font-size: 12px; line-height: 1.4; overflow: auto; flex: 1; min-height: 0; color: #1f2937; white-space: pre-wrap; word-break: break-all; }
+.json-preview-modal-body pre span.added { color: #166534; background: #dcfce7; }
+.json-preview-modal-body pre span.removed { color: #991b1b; background: #fee2e2; text-decoration: line-through; }
+.json-preview-modal-footer { padding: 12px 16px; border-top: 1px solid #e5e7eb; text-align: right; display: flex; gap: 8px; justify-content: flex-end; }
+</style>
+
+<script src="/static/js/diff.min.js"></script>
+<script>
+(function () {
+  let inited = false;
+  const DATA_IDS = { zh: "xhunt_built_in_tag", en: "xhunt_built_in_tag_en" };
+  const GROUP = "DEFAULT_GROUP";
+
+  let currentLang = "zh";
+  let currentHandle = null; // string | null
+  let config = {}; // { handle: [tag1, tag2] }
+  let originalConfig = null;
+  let dirty = false;
+  let search = "";
+
+  function $(id) { return document.getElementById(id); }
+
+  function toast(msg, type) {
+    const el = $("tags-toast");
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = "block";
+    el.style.background = type === "error" ? "#991b1b" : type === "success" ? "#065f46" : "#111827";
+    setTimeout(() => { el.style.display = "none"; }, 2400);
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement("div");
+    div.textContent = s == null ? "" : String(s);
+    return div.innerHTML;
+  }
+
+  async function apiGetConfig(dataId) {
+    const resp = await fetch(`/api/xhunt/stats/nacos/config?dataId=${encodeURIComponent(dataId)}&group=${encodeURIComponent(GROUP)}`, {
+      credentials: "include", headers: { Accept: "application/json" },
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || "加载失败");
+    return json.data;
+  }
+
+  async function apiPublishConfig({ dataId, content }) {
+    const resp = await fetch(`/api/xhunt/stats/nacos/config`, {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ dataId, group: GROUP, content, type: "json", source: "nacos-tags" }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || "发布失败");
+    return json.data;
+  }
+
+  function getSortedEntries() {
+    const entries = Object.entries(config);
+    const q = String(search || "").trim().toLowerCase();
+    const filtered = q ? entries.filter(([handle]) => handle.toLowerCase().includes(q)) : entries;
+    return filtered.sort((a, b) => a[0].localeCompare(b[0]));
+  }
+
+  function renderList() {
+    const listEl = $("tags-list");
+    const countEl = $("tags-count");
+    if (!listEl) return;
+    const entries = getSortedEntries();
+    listEl.innerHTML = entries.map(([handle, tags]) => {
+      const active = handle === currentHandle ? "active" : "";
+      const tagList = Array.isArray(tags) ? tags : [];
+      const tagPreview = tagList.slice(0, 3).join("、") + (tagList.length > 3 ? ` ...` : "");
+      return `
+        <div class="item ${active}" data-handle="${escapeHtml(handle)}">
+          <span class="item-tag-count">${tagList.length}</span>
+          <div style="min-width:0;">
+            <div class="item-handle">${escapeHtml(handle)}</div>
+            <div class="item-tags">${escapeHtml(tagPreview || "无标签")}</div>
+          </div>
+        </div>
+      `;
+    }).join("") || `<div class="empty-state">暂无数据，点击「新增 Handle」创建</div>`;
+    if (countEl) countEl.textContent = String(entries.length);
+    listEl.querySelectorAll(".item").forEach(node => {
+      node.addEventListener("click", () => {
+        selectHandle(node.getAttribute("data-handle"));
+      });
+    });
+  }
+
+  function renderTagInputs() {
+    const container = $("tags-list-editor");
+    if (!container) return;
+    const tags = Array.isArray(config[currentHandle]) ? config[currentHandle] : [];
+    container.innerHTML = tags.map((tag, idx) => `
+      <div class="tag-input-row" data-idx="${idx}">
+        <input type="text" value="${escapeHtml(tag)}" placeholder="输入标签内容..." />
+        <button class="btn" type="button" data-action="remove">删除</button>
+      </div>
+    `).join("");
+    container.querySelectorAll('.tag-input-row input').forEach(input => {
+      input.addEventListener('input', syncToModel);
+    });
+    container.querySelectorAll('.tag-input-row button[data-action="remove"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const row = e.target.closest('.tag-input-row');
+        const idx = Number(row.getAttribute('data-idx'));
+        if (Array.isArray(config[currentHandle])) {
+          config[currentHandle].splice(idx, 1);
+          dirty = true;
+          renderTagInputs();
+          renderPreview();
+          renderList();
+        }
+      });
+    });
+  }
+
+  function renderPreview() {
+    const pre = $("tags-preview");
+    if (!pre) return;
+    if (!currentHandle) { pre.textContent = ""; return; }
+    const payload = {};
+    if (config[currentHandle]) payload[currentHandle] = config[currentHandle];
+    pre.textContent = JSON.stringify(payload, null, 2);
+  }
+
+  function syncToModel() {
+    if (!currentHandle) return;
+    const rows = $("tags-list-editor").querySelectorAll('.tag-input-row');
+    const tags = [];
+    rows.forEach(row => {
+      const val = row.querySelector('input').value.trim();
+      if (val) tags.push(val);
+    });
+    // 如果 handle 改了
+    const newHandle = $("tags-handle").value.trim();
+    if (newHandle && newHandle !== currentHandle) {
+      const oldTags = config[currentHandle];
+      delete config[currentHandle];
+      config[newHandle] = tags;
+      currentHandle = newHandle;
+    } else {
+      config[currentHandle] = tags;
+    }
+    dirty = true;
+    renderPreview();
+    renderList();
+  }
+
+  function selectHandle(handle) {
+    currentHandle = handle;
+    const exists = handle && Object.prototype.hasOwnProperty.call(config, handle);
+    const emptyEl = $("tags-editor-empty");
+    const bodyEl = $("tags-editor-body");
+    if (!exists) {
+      if (emptyEl) emptyEl.style.display = "block";
+      if (bodyEl) bodyEl.style.display = "none";
+      $("tags-delete").disabled = true;
+      $("tags-publish").disabled = !dirty;
+      $("tags-editor-hint").textContent = "选择左侧 handle 开始编辑";
+      renderList();
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = "none";
+    if (bodyEl) bodyEl.style.display = "block";
+    $("tags-handle").value = handle;
+    $("tags-delete").disabled = false;
+    $("tags-publish").disabled = !dirty;
+    $("tags-editor-hint").textContent = `正在编辑: ${handle}`;
+    renderTagInputs();
+    renderPreview();
+    renderList();
+  }
+
+  function switchLang(lang) {
+    currentLang = lang;
+    currentHandle = null;
+    config = {};
+    originalConfig = null;
+    dirty = false;
+    search = "";
+    $("tags-dataid").textContent = DATA_IDS[lang];
+    $("tags-lang-zh").classList.toggle("active", lang === "zh");
+    $("tags-lang-en").classList.toggle("active", lang === "en");
+    $("tags-search").value = "";
+    selectHandle(null);
+    loadConfig();
+  }
+
+  async function loadConfig() {
+    try {
+      const data = await apiGetConfig(DATA_IDS[currentLang]);
+      if (data && data.content) {
+        const parsed = JSON.parse(data.content);
+        config = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+        originalConfig = JSON.parse(JSON.stringify(config));
+      } else {
+        config = {}; originalConfig = {};
+      }
+      dirty = false;
+      renderList();
+      $("tags-publish").disabled = true;
+    } catch (e) {
+      toast("加载配置失败: " + (e.message || ""), "error");
+      config = {}; originalConfig = {};
+      renderList();
+    }
+  }
+
+  function newHandle() {
+    let idx = 1;
+    let newHandle = `_new_handle_${idx}`;
+    while (Object.prototype.hasOwnProperty.call(config, newHandle)) {
+      idx++;
+      newHandle = `_new_handle_${idx}`;
+    }
+    config[newHandle] = [];
+    dirty = true;
+    renderList();
+    selectHandle(newHandle);
+    // 高亮输入框
+    setTimeout(() => { $("tags-handle").focus(); $("tags-handle").select(); }, 50);
+  }
+
+  function deleteCurrent() {
+    if (!currentHandle || !Object.prototype.hasOwnProperty.call(config, currentHandle)) return;
+    if (!confirm(`确定删除 handle "${currentHandle}"？`)) return;
+    delete config[currentHandle];
+    dirty = true;
+    const nextEntries = getSortedEntries();
+    const nextHandle = nextEntries.length > 0 ? nextEntries[0][0] : null;
+    selectHandle(nextHandle);
+    toast("已删除，记得点击发布", "success");
+  }
+
+  function showPublishPreview() {
+    const modal = $("tags-json-modal");
+    const pre = $("tags-json-modal-content");
+    const dataidEl = $("tags-json-modal-dataid");
+    const diffEl = $("tags-json-modal-diff");
+    if (!modal || !pre) return;
+    dataidEl.textContent = DATA_IDS[currentLang];
+    const newJson = JSON.stringify(config, null, 2);
+    const oldJson = JSON.stringify(originalConfig || {}, null, 2);
+    if (oldJson === newJson) {
+      diffEl.textContent = "（无变更）";
+      pre.textContent = newJson;
+    } else {
+      const oldKeys = Object.keys(originalConfig || {});
+      const newKeys = Object.keys(config);
+      const added = newKeys.filter(k => !oldKeys.includes(k)).length;
+      const removed = oldKeys.filter(k => !newKeys.includes(k)).length;
+      const parts = [];
+      if (added) parts.push(`+${added} handle`);
+      if (removed) parts.push(`-${removed} handle`);
+      diffEl.textContent = parts.length ? `（${parts.join("，")}）` : "（有变更）";
+      const diffHtml = Diff.createPatch("config.json", oldJson, newJson, "原始", "新");
+      const lines = diffHtml.split("\n").slice(4);
+      const formatted = lines.map(line => {
+        if (line.startsWith("+")) return `<span class="added">${escapeHtml(line)}</span>`;
+        if (line.startsWith("-")) return `<span class="removed">${escapeHtml(line)}</span>`;
+        return escapeHtml(line);
+      }).join("\n");
+      pre.innerHTML = formatted;
+    }
+    modal.style.display = "flex";
+  }
+
+  async function doPublish() {
+    try {
+      await apiPublishConfig({ dataId: DATA_IDS[currentLang], content: JSON.stringify(config) });
+      originalConfig = JSON.parse(JSON.stringify(config));
+      dirty = false;
+      toast("发布成功", "success");
+      $("tags-json-modal").style.display = "none";
+      $("tags-publish").disabled = true;
+    } catch (e) {
+      toast("发布失败: " + (e.message || ""), "error");
+    }
+  }
+
+  function init() {
+    if (inited) return;
+    inited = true;
+    loadConfig();
+
+    $("tags-lang-zh").addEventListener("click", () => switchLang("zh"));
+    $("tags-lang-en").addEventListener("click", () => switchLang("en"));
+    $("tags-refresh").addEventListener("click", loadConfig);
+    $("tags-new").addEventListener("click", newHandle);
+    $("tags-delete").addEventListener("click", deleteCurrent);
+    $("tags-publish").addEventListener("click", showPublishPreview);
+    $("tags-handle").addEventListener("input", syncToModel);
+    $("tags-add-tag").addEventListener("click", () => {
+      if (!currentHandle) return;
+      if (!Array.isArray(config[currentHandle])) config[currentHandle] = [];
+      config[currentHandle].push("");
+      dirty = true;
+      renderTagInputs();
+      renderPreview();
+      renderList();
+      // focus 最后一个
+      const inputs = $("tags-list-editor").querySelectorAll('input');
+      if (inputs.length) { setTimeout(() => { inputs[inputs.length - 1].focus(); }, 50); }
+    });
+    $("tags-search").addEventListener("input", (e) => {
+      search = e.target.value;
+      renderList();
+    });
+    // modal
+    $("tags-json-modal-close").addEventListener("click", () => { $("tags-json-modal").style.display = "none"; });
+    $("tags-json-modal-cancel").addEventListener("click", () => { $("tags-json-modal").style.display = "none"; });
+    $("tags-json-modal-confirm").addEventListener("click", doPublish);
+  }
+
+  document.addEventListener("stats-tab-activated", function (e) {
+    if (e.detail && e.detail.tabId === "nacos-tags") init();
+  });
+})();
+</script>

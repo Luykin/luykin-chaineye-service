@@ -354,6 +354,11 @@
             <%- include('partials/nacos-campaigns') %>
           </div>
 
+          <!-- 内置标签配置 Tab -->
+          <div class="tab-pane" id="nacos-tags">
+            <%- include('partials/nacos-tags') %>
+          </div>
+
           <!-- 功能开关 Tab -->
           <div class="tab-pane" id="feature-flags">
             <%- include('partials/feature-flags') %>
@@ -583,6 +588,7 @@
         { id: 'url-stats', icon: '#icon-link', text: '接口统计', perm: 'url-stats' },
         { id: 'nacos-messages', icon: '#icon-megaphone', text: '公告配置', perm: 'nacos-messages' },
         { id: 'nacos-campaigns', icon: '#icon-target', text: 'Earn活动', perm: 'nacos_config' },
+        { id: 'nacos-tags', icon: '#icon-tag', text: '内置标签', perm: 'nacos_config' },
         { id: 'feature-flags', icon: '#icon-toggle', text: '功能开关', perm: 'feature_flags_config' },
         { id: 'perf-monitor', icon: '#icon-zap', text: '性能监控', perm: 'perf-monitor' },
         { id: 'security-violations', icon: '#icon-shield', text: '安全拦截', perm: 'security-violations' },
