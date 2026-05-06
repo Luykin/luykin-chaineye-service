@@ -1642,7 +1642,7 @@ router.get("/rootdata-quota", adminAuth, async (req, res) => {
 router.get(
   "/nacos/config",
   adminAuth,
-  requirePermission(["nacos_config", "nacos-messages"]),
+  requirePermission(["nacos_config", "nacos-messages", "nacos-tags"]),
   async (req, res) => {
     try {
       const { dataId, group = "DEFAULT_GROUP", tenant } = req.query;
@@ -1687,7 +1687,7 @@ router.get(
 router.post(
   "/nacos/config",
   adminAuth,
-  requirePermission(["nacos_config", "nacos-messages"]),
+  requirePermission(["nacos_config", "nacos-messages", "nacos-tags"]),
   async (req, res) => {
     const auditAction = (req.body && req.body.source)
       ? `${req.body.source}-publish`
