@@ -1051,6 +1051,7 @@ function renderSidebarTabs() {
     'online-users': 'online-users',
     'cohorts': 'cohorts',
     'rootdata': 'rootdata',
+    'binance-square': 'binance-square',
     'notes': 'notes',
     'log-search': 'log-search:read',
     'device-monitor': 'device-status:read',

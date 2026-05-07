@@ -914,6 +914,42 @@ router.get("/crawl/status", async (req, res) => {
   }
 });
 
+/**
+ * GET /crawl/logs
+ * 查询爬取日志列表（支持分页和筛选）
+ */
+router.get("/crawl/logs", async (req, res) => {
+  try {
+    const {
+      taskType,
+      status,
+      page = 1,
+      pageSize = 20,
+    } = req.query;
+
+    const where = {};
+    if (taskType) where.taskType = taskType;
+    if (status) where.status = status;
+
+    const { count, rows } = await db.BinanceSquareCrawlLog.findAndCountAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      limit: parseInt(pageSize, 10),
+      offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
+    });
+
+    res.json(success({
+      total: count,
+      page: parseInt(page, 10),
+      pageSize: parseInt(pageSize, 10),
+      data: rows,
+    }));
+  } catch (error) {
+    console.error("[crawl/logs] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
 // ==================== 配置管理（动态调控） ====================
 
 /**

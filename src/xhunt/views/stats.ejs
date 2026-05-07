@@ -319,6 +319,11 @@
             <%- include('partials/rootdata-stats') %>
           </div>
 
+          <!-- 币安广场 Tab -->
+          <div class="tab-pane" id="binance-square">
+            <%- include('partials/binance-square-stats') %>
+          </div>
+
           <!-- 备注查看 Tab -->
           <div class="tab-pane" id="notes">
             <%- include('partials/notes-stats') %>
@@ -581,6 +586,7 @@
         { id: 'online-users', icon: '#icon-activity', text: '在线用户', perm: 'online-users' },
         { id: 'cohorts', icon: '#icon-trending-up', text: '用户留存', perm: 'cohorts' },
         { id: 'rootdata', icon: '#icon-database', text: 'Rootdata', perm: 'rootdata' },
+        { id: 'binance-square', icon: '#icon-square', text: '币安广场', perm: 'binance-square' },
         { id: 'notes', icon: '#icon-file-text', text: '备注查看', perm: 'notes' },
         { id: 'log-search', icon: '#icon-search', text: '日志搜索', perm: 'log-search:read' },
         { id: 'device-monitor', icon: '#icon-monitor', text: '设备监控', perm: 'device-status:read' },

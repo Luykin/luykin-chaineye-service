@@ -1,0 +1,1250 @@
+<!-- 币安广场管理后台 -->
+<div class="section" id="binance-square-section">
+  <h2 class="section-title">币安广场爬虫管理</h2>
+  <p class="section-desc">种子用户关注同步 → Top50目标计算 → 帖子定时抓取 → 镜像对比分析</p>
+
+  <!-- 初始化提示（数据库未就绪时显示） -->
+  <div id="bs-init-alert" class="bs-alert bs-alert-warning" style="display:none;">
+    <div class="bs-alert-icon">⚠️</div>
+    <div class="bs-alert-content">
+      <strong>数据库未初始化</strong>
+      <p>币安广场数据表尚未创建，请先运行迁移：<code>yarn db:migrate:pg</code></p>
+    </div>
+  </div>
+
+  <!-- 统计卡片 -->
+  <div class="bs-stats-grid" id="bs-stats-grid">
+    <div class="bs-stat-card">
+      <div class="bs-stat-icon">🌱</div>
+      <div class="bs-stat-value" id="bs-stat-seeds">-</div>
+      <div class="bs-stat-label">种子用户</div>
+    </div>
+    <div class="bs-stat-card">
+      <div class="bs-stat-icon">🎯</div>
+      <div class="bs-stat-value" id="bs-stat-targets">-</div>
+      <div class="bs-stat-label">目标用户</div>
+    </div>
+    <div class="bs-stat-card">
+      <div class="bs-stat-icon">📝</div>
+      <div class="bs-stat-value" id="bs-stat-posts">-</div>
+      <div class="bs-stat-label">帖子总数</div>
+    </div>
+    <div class="bs-stat-card">
+      <div class="bs-stat-icon">📸</div>
+      <div class="bs-stat-value" id="bs-stat-snapshots">-</div>
+      <div class="bs-stat-label">镜像记录</div>
+    </div>
+    <div class="bs-stat-card">
+      <div class="bs-stat-icon">⏰</div>
+      <div class="bs-stat-value" id="bs-stat-last-crawl">-</div>
+      <div class="bs-stat-label">上次抓取</div>
+    </div>
+    <div class="bs-stat-card">
+      <div class="bs-stat-icon">⚙️</div>
+      <div class="bs-stat-value" id="bs-stat-scheduler">-</div>
+      <div class="bs-stat-label">调度器状态</div>
+    </div>
+  </div>
+
+  <!-- 操作按钮区 -->
+  <div class="bs-actions-bar">
+    <button class="bs-btn bs-btn-primary" id="bs-btn-sync" onclick="bsSyncFollowing()">
+      <span>🔄</span> 同步关注列表
+    </button>
+    <button class="bs-btn bs-btn-primary" id="bs-btn-calc" onclick="bsCalculateTargets()">
+      <span>🎯</span> 计算 Top50
+    </button>
+    <button class="bs-btn bs-btn-primary" id="bs-btn-crawl" onclick="bsCrawlPosts()">
+      <span>🕷️</span> 抓取帖子
+    </button>
+    <button class="bs-btn bs-btn-success" id="bs-btn-start" onclick="bsStartScheduler()">
+      <span>▶️</span> 启动调度器
+    </button>
+    <button class="bs-btn bs-btn-danger" id="bs-btn-pause" onclick="bsPauseScheduler()">
+      <span>⏸️</span> 暂停调度器
+    </button>
+    <button class="bs-btn bs-btn-refresh" onclick="bsRefreshAll()">
+      <span>🔄</span> 刷新数据
+    </button>
+  </div>
+
+  <!-- 全局操作状态 -->
+  <div id="bs-action-status" class="bs-action-status" style="display:none;"></div>
+
+  <!-- 子面板导航 -->
+  <div class="bs-sub-tabs">
+    <button class="bs-sub-tab active" data-subtab="overview" onclick="bsSwitchSubTab('overview')">总览</button>
+    <button class="bs-sub-tab" data-subtab="seeds" onclick="bsSwitchSubTab('seeds')">种子用户</button>
+    <button class="bs-sub-tab" data-subtab="targets" onclick="bsSwitchSubTab('targets')">目标用户</button>
+    <button class="bs-sub-tab" data-subtab="posts" onclick="bsSwitchSubTab('posts')">帖子列表</button>
+    <button class="bs-sub-tab" data-subtab="logs" onclick="bsSwitchSubTab('logs')">抓取日志</button>
+  </div>
+
+  <!-- ========== 总览面板 ========== -->
+  <div class="bs-sub-panel active" id="bs-panel-overview">
+    <div class="bs-panel-title">爬虫运行概览</div>
+    <div id="bs-overview-loading" class="loading-state">
+      <div class="spinner"></div>
+      <span>加载概览数据...</span>
+    </div>
+    <div id="bs-overview-content" style="display:none;">
+      <div class="bs-overview-grid">
+        <div class="bs-overview-card">
+          <h4>📊 配置参数</h4>
+          <div class="bs-config-list" id="bs-config-list"></div>
+        </div>
+        <div class="bs-overview-card">
+          <h4>📈 最近抓取统计</h4>
+          <div class="bs-recent-stats" id="bs-recent-stats"></div>
+        </div>
+        <div class="bs-overview-card">
+          <h4>📝 最近日志</h4>
+          <div class="bs-recent-logs" id="bs-recent-logs"></div>
+        </div>
+      </div>
+    </div>
+    <div id="bs-overview-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">📭</div>
+      <h3>暂无数据</h3>
+      <p>请先添加种子用户并同步关注列表</p>
+    </div>
+  </div>
+
+  <!-- ========== 种子用户面板 ========== -->
+  <div class="bs-sub-panel" id="bs-panel-seeds">
+    <div class="bs-panel-title">种子用户管理</div>
+    <div class="bs-seed-add-row">
+      <input type="text" id="bs-seed-username" placeholder="用户名（如 CZ）" />
+      <input type="text" id="bs-seed-display" placeholder="显示名称（可选）" />
+      <button class="bs-btn bs-btn-primary" onclick="bsAddSeed()">添加</button>
+    </div>
+    <div id="bs-seeds-loading" class="loading-state">
+      <div class="spinner"></div>
+      <span>加载种子用户...</span>
+    </div>
+    <div id="bs-seeds-content" style="display:none;">
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>用户名</th>
+              <th>显示名</th>
+              <th>关注数</th>
+              <th>最后同步</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="bs-seeds-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="bs-seeds-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">🌱</div>
+      <h3>暂无种子用户</h3>
+      <p>请先调用「初始化种子用户」或手动添加</p>
+      <button class="bs-btn bs-btn-primary" onclick="bsInitSeeds()">初始化默认种子用户</button>
+    </div>
+  </div>
+
+  <!-- ========== 目标用户面板 ========== -->
+  <div class="bs-sub-panel" id="bs-panel-targets">
+    <div class="bs-panel-title">Top 50 目标用户</div>
+    <div id="bs-targets-loading" class="loading-state">
+      <div class="spinner"></div>
+      <span>加载目标用户...</span>
+    </div>
+    <div id="bs-targets-content" style="display:none;">
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>排名</th>
+              <th>用户名</th>
+              <th>被关注次数</th>
+              <th>关注者（种子）</th>
+            </tr>
+          </thead>
+          <tbody id="bs-targets-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="bs-targets-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">🎯</div>
+      <h3>尚未计算目标用户</h3>
+      <p>请先同步关注列表，然后点击「计算 Top50」</p>
+    </div>
+  </div>
+
+  <!-- ========== 帖子列表面板 ========== -->
+  <div class="bs-sub-panel" id="bs-panel-posts">
+    <div class="bs-panel-title">帖子列表</div>
+    <div class="bs-posts-filter">
+      <select id="bs-posts-filter-type" onchange="bsLoadPosts()">
+        <option value="">全部类型</option>
+        <option value="article">文章</option>
+        <option value="quote">引用</option>
+        <option value="reply">回复</option>
+      </select>
+      <input type="text" id="bs-posts-filter-user" placeholder="筛选用户名" onkeypress="if(event.key==='Enter') bsLoadPosts()" />
+      <button class="bs-btn bs-btn-refresh" onclick="bsLoadPosts()">筛选</button>
+    </div>
+    <div id="bs-posts-loading" class="loading-state">
+      <div class="spinner"></div>
+      <span>加载帖子列表...</span>
+    </div>
+    <div id="bs-posts-content" style="display:none;">
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>类型</th>
+              <th>用户名</th>
+              <th>标题</th>
+              <th>点赞</th>
+              <th>评论</th>
+              <th>分享</th>
+              <th>浏览</th>
+              <th>发布时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="bs-posts-table-body"></tbody>
+        </table>
+      </div>
+      <div class="bs-pagination" id="bs-posts-pagination"></div>
+    </div>
+    <div id="bs-posts-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">📝</div>
+      <h3>暂无帖子数据</h3>
+      <p>请先计算 Top50 目标用户，然后抓取帖子</p>
+    </div>
+  </div>
+
+  <!-- ========== 日志面板 ========== -->
+  <div class="bs-sub-panel" id="bs-panel-logs">
+    <div class="bs-panel-title">抓取日志</div>
+    <div class="bs-logs-filter">
+      <select id="bs-logs-filter-type" onchange="bsLoadLogs()">
+        <option value="">全部类型</option>
+        <option value="following">关注同步</option>
+        <option value="post">帖子抓取</option>
+        <option value="target_calculate">Top50计算</option>
+      </select>
+      <select id="bs-logs-filter-status" onchange="bsLoadLogs()">
+        <option value="">全部状态</option>
+        <option value="success">成功</option>
+        <option value="failed">失败</option>
+        <option value="partial">部分成功</option>
+      </select>
+      <button class="bs-btn bs-btn-refresh" onclick="bsLoadLogs()">刷新</button>
+    </div>
+    <div id="bs-logs-loading" class="loading-state">
+      <div class="spinner"></div>
+      <span>加载日志...</span>
+    </div>
+    <div id="bs-logs-content" style="display:none;">
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>任务类型</th>
+              <th>状态</th>
+              <th>目标</th>
+              <th>数量</th>
+              <th>耗时</th>
+              <th>镜像批次</th>
+            </tr>
+          </thead>
+          <tbody id="bs-logs-table-body"></tbody>
+        </table>
+      </div>
+      <div class="bs-pagination" id="bs-logs-pagination"></div>
+    </div>
+    <div id="bs-logs-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">📋</div>
+      <h3>暂无日志</h3>
+      <p>执行一次抓取任务后日志将显示在这里</p>
+    </div>
+  </div>
+</div>
+
+<style>
+/* ===== 币安广场管理后台样式 ===== */
+#binance-square-section {
+  padding: 0;
+}
+
+/* 统计卡片 */
+.bs-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.bs-stat-card {
+  background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+.bs-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.bs-stat-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+.bs-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+.bs-stat-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* 操作按钮区 */
+.bs-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+.bs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.bs-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.bs-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.bs-btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #fff;
+  border-color: #2563eb;
+}
+.bs-btn-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border-color: #059669;
+}
+.bs-btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #fff;
+  border-color: #dc2626;
+}
+.bs-btn-refresh {
+  background: #fff;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+.bs-btn-refresh:hover {
+  background: #f1f5f9;
+}
+
+/* 操作状态提示 */
+.bs-action-status {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  animation: bsFadeIn 0.3s ease;
+}
+.bs-action-status.success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+.bs-action-status.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+.bs-action-status.info {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+@keyframes bsFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 初始化警告 */
+.bs-alert {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  border: 1px solid;
+}
+.bs-alert-warning {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+.bs-alert-icon { font-size: 20px; flex-shrink: 0; }
+.bs-alert-content p { margin: 4px 0 0; font-size: 13px; }
+.bs-alert-content code {
+  background: #fef3c7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+/* 子面板导航 */
+.bs-sub-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 0;
+}
+.bs-sub-tab {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.bs-sub-tab:hover {
+  color: #3b82f6;
+  background: #f1f5f9;
+  border-radius: 6px 6px 0 0;
+}
+.bs-sub-tab.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  background: #eff6ff;
+  border-radius: 6px 6px 0 0;
+}
+
+/* 子面板 */
+.bs-sub-panel { display: none; }
+.bs-sub-panel.active { display: block; }
+.bs-panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* 总览面板 */
+.bs-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+.bs-overview-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+}
+.bs-overview-card h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #475569;
+}
+.bs-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bs-config-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.bs-config-item:last-child { border-bottom: none; }
+.bs-config-key { color: #64748b; }
+.bs-config-val { font-weight: 500; color: #1e293b; }
+
+.bs-recent-stats, .bs-recent-logs {
+  font-size: 13px;
+}
+.bs-recent-log-item {
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.bs-recent-log-item:last-child { border-bottom: none; }
+.bs-log-time { color: #94a3b8; font-size: 12px; }
+.bs-log-type {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.bs-log-type-following { background: #dbeafe; color: #1e40af; }
+.bs-log-type-post { background: #dcfce7; color: #166534; }
+.bs-log-type-target { background: #fef3c7; color: #92400e; }
+.bs-log-status-success { color: #16a34a; }
+.bs-log-status-failed { color: #dc2626; }
+.bs-log-status-partial { color: #d97706; }
+
+/* 种子用户添加 */
+.bs-seed-add-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.bs-seed-add-row input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  min-width: 160px;
+}
+.bs-seed-add-row input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* 筛选区 */
+.bs-posts-filter, .bs-logs-filter {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.bs-posts-filter select, .bs-logs-filter select,
+.bs-posts-filter input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+}
+.bs-posts-filter select:focus, .bs-logs-filter select:focus,
+.bs-posts-filter input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* 表格操作按钮 */
+.bs-table-actions {
+  display: flex;
+  gap: 6px;
+}
+.bs-table-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid;
+  background: #fff;
+  transition: all 0.1s ease;
+}
+.bs-table-btn-sync {
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+.bs-table-btn-sync:hover { background: #eff6ff; }
+.bs-table-btn-remove {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+.bs-table-btn-remove:hover { background: #fef2f2; }
+.bs-table-btn-view {
+  color: #059669;
+  border-color: #a7f3d0;
+}
+.bs-table-btn-view:hover { background: #f0fdf4; }
+
+/* 分页 */
+.bs-pagination {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+.bs-page-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.1s ease;
+}
+.bs-page-btn:hover { background: #f1f5f9; }
+.bs-page-btn.active {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+.bs-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .bs-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .bs-overview-grid { grid-template-columns: 1fr; }
+  .bs-actions-bar { justify-content: center; }
+  .bs-sub-tabs { overflow-x: auto; }
+}
+</style>
+
+<script>
+(function() {
+  'use strict';
+
+  // ========== 全局状态 ==========
+  const API_BASE = '/api/admin/binance-square';
+  let bsDbReady = true;
+  let bsPostsPage = 1;
+  let bsLogsPage = 1;
+  let bsPostsTotal = 0;
+  let bsLogsTotal = 0;
+  const BS_PAGE_SIZE = 20;
+
+  // ========== 初始化 ==========
+  document.addEventListener('DOMContentLoaded', function() {
+    // 等待 stats.js 的 tab 切换系统就绪后再加载
+    const checkTab = setInterval(() => {
+      if (document.getElementById('binance-square')?.classList.contains('active')) {
+        clearInterval(checkTab);
+        bsRefreshAll();
+      }
+    }, 200);
+    // 兜底：3秒后无论如何都加载一次
+    setTimeout(() => { clearInterval(checkTab); bsRefreshAll(); }, 3000);
+  });
+
+  // 监听 Tab 切换事件（stats.js 切换时会改变 class）
+  const bsObserver = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      if (mutation.target.id === 'binance-square' && mutation.target.classList.contains('active')) {
+        bsRefreshAll();
+      }
+    });
+  });
+  const bsTabPane = document.getElementById('binance-square');
+  if (bsTabPane) {
+    bsObserver.observe(bsTabPane, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  // ========== 工具函数 ==========
+  function bsApi(method, path, body) {
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    };
+    if (body) opts.body = JSON.stringify(body);
+    return fetch(API_BASE + path, opts).then(async r => {
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const err = new Error(data.error || data.message || `HTTP ${r.status}`);
+        err.status = r.status;
+        err.data = data;
+        throw err;
+      }
+      return data;
+    });
+  }
+
+  function bsShowStatus(msg, type) {
+    const el = document.getElementById('bs-action-status');
+    el.textContent = msg;
+    el.className = 'bs-action-status ' + (type || 'info');
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
+  }
+
+  function bsFormatNum(n) {
+    if (n === null || n === undefined) return '-';
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return String(n);
+  }
+
+  function bsFormatDate(d) {
+    if (!d) return '-';
+    const date = new Date(d);
+    if (isNaN(date)) return '-';
+    return `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+  }
+
+  function bsTimeAgo(d) {
+    if (!d) return '-';
+    const diff = Date.now() - new Date(d).getTime();
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+    return Math.floor(diff / 86400000) + '天前';
+  }
+
+  function bsSetLoading(id, loading) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = loading ? 'flex' : 'none';
+  }
+
+  function bsSetVisible(id, visible) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible ? 'block' : 'none';
+  }
+
+  // ========== 子 Tab 切换 ==========
+  window.bsSwitchSubTab = function(tab) {
+    document.querySelectorAll('.bs-sub-tab').forEach(t => t.classList.toggle('active', t.dataset.subtab === tab));
+    document.querySelectorAll('.bs-sub-panel').forEach(p => p.classList.toggle('active', p.id === 'bs-panel-' + tab));
+    // 加载对应面板数据
+    if (tab === 'seeds') bsLoadSeeds();
+    else if (tab === 'targets') bsLoadTargets();
+    else if (tab === 'posts') bsLoadPosts();
+    else if (tab === 'logs') bsLoadLogs();
+    else if (tab === 'overview') bsLoadOverview();
+  };
+
+  // ========== 刷新全部 ==========
+  window.bsRefreshAll = function() {
+    if (!bsDbReady) return;
+    bsLoadStats();
+    bsLoadSchedulerStatus();
+    // 根据当前子面板加载对应数据
+    const activeTab = document.querySelector('.bs-sub-tab.active');
+    if (activeTab) {
+      bsSwitchSubTab(activeTab.dataset.subtab);
+    } else {
+      bsLoadOverview();
+    }
+  };
+
+  // ========== 加载统计卡片 ==========
+  async function bsLoadStats() {
+    try {
+      // 并行获取各表统计
+      const [seedsRes, targetsRes, postsRes, snapshotsRes, lastCrawlRes] = await Promise.all([
+        bsApi('GET', '/seed/list').catch(e => ({ success: false, data: [] })),
+        bsApi('GET', '/target/list').catch(e => ({ success: false, data: [] })),
+        bsApi('GET', '/posts?page=1&pageSize=1').catch(e => ({ success: false, total: 0 })),
+        bsApi('GET', '/posts?page=1&pageSize=1').catch(e => ({ success: false, total: 0 })),
+        bsApi('GET', '/crawl/status').catch(e => ({ success: false }))
+      ]);
+
+      const seedCount = seedsRes.success ? (seedsRes.data?.length || 0) : 0;
+      const targetCount = targetsRes.success ? (targetsRes.data?.length || 0) : 0;
+      const postTotal = postsRes.success ? (postsRes.total || 0) : 0;
+      // 镜像数量需要从 API 获取，目前帖子API返回 total
+      const snapshotTotal = postTotal; // 简化为帖子数，后续可加专门统计接口
+
+      document.getElementById('bs-stat-seeds').textContent = seedCount;
+      document.getElementById('bs-stat-targets').textContent = targetCount;
+      document.getElementById('bs-stat-posts').textContent = bsFormatNum(postTotal);
+      document.getElementById('bs-stat-snapshots').textContent = bsFormatNum(snapshotTotal);
+
+      // 获取最后抓取时间
+      try {
+        const logsRes = await bsApi('GET', '/crawl/logs?page=1&pageSize=1');
+        const lastLog = logsRes.success && logsRes.data?.length ? logsRes.data[0] : null;
+        document.getElementById('bs-stat-last-crawl').textContent = lastLog ? bsTimeAgo(lastLog.createdAt) : '-';
+      } catch (e) {
+        document.getElementById('bs-stat-last-crawl').textContent = '-';
+      }
+    } catch (e) {
+      if (e.status === 503 || e.message?.includes('Table') || e.message?.includes('relation') || e.message?.includes('does not exist')) {
+        bsHandleDbNotReady();
+      }
+    }
+  }
+
+  // ========== 调度器状态 ==========
+  async function bsLoadSchedulerStatus() {
+    try {
+      const res = await bsApi('GET', '/crawl/status');
+      const status = res.success ? res.data : null;
+      const el = document.getElementById('bs-stat-scheduler');
+      if (status && status.isRunning) {
+        el.textContent = '运行中';
+        el.style.color = '#16a34a';
+      } else {
+        el.textContent = '已停止';
+        el.style.color = '#dc2626';
+      }
+    } catch (e) {
+      document.getElementById('bs-stat-scheduler').textContent = '未知';
+    }
+  }
+
+  // ========== 数据库未初始化处理 ==========
+  function bsHandleDbNotReady() {
+    bsDbReady = false;
+    document.getElementById('bs-init-alert').style.display = 'flex';
+    document.getElementById('bs-stats-grid').style.opacity = '0.5';
+    document.querySelector('.bs-actions-bar').style.display = 'none';
+    document.querySelector('.bs-sub-tabs').style.display = 'none';
+    document.querySelectorAll('.bs-sub-panel').forEach(p => p.style.display = 'none');
+  }
+
+  // ========== 总览面板 ==========
+  async function bsLoadOverview() {
+    bsSetLoading('bs-overview-loading', true);
+    bsSetVisible('bs-overview-content', false);
+    bsSetVisible('bs-overview-empty', false);
+
+    try {
+      // 并行获取配置、日志、统计
+      const [configRes, logsRes, seedsRes] = await Promise.all([
+        bsApi('GET', '/config').catch(() => ({ success: false, data: [] })),
+        bsApi('GET', '/crawl/logs?page=1&pageSize=5').catch(() => ({ success: false, data: [] })),
+        bsApi('GET', '/seed/list').catch(() => ({ success: false, data: [] }))
+      ]);
+
+      // 配置列表
+      const configList = document.getElementById('bs-config-list');
+      if (configRes.success && configRes.data?.length) {
+        configList.innerHTML = configRes.data.map(c => `
+          <div class="bs-config-item">
+            <span class="bs-config-key">${c.configKey}</span>
+            <span class="bs-config-val">${c.configValue}${c.minValue ? ` (${c.minValue}~${c.maxValue})` : ''}</span>
+          </div>
+        `).join('');
+      } else {
+        configList.innerHTML = '<div style="color:#94a3b8;font-size:13px;">暂无配置数据</div>';
+      }
+
+      // 最近统计
+      const recentStats = document.getElementById('bs-recent-stats');
+      const seedCount = seedsRes.success ? (seedsRes.data?.length || 0) : 0;
+      recentStats.innerHTML = `
+        <div class="bs-config-item"><span class="bs-config-key">活跃种子用户</span><span class="bs-config-val">${seedCount} 人</span></div>
+        <div class="bs-config-item"><span class="bs-config-key">帖子抓取间隔</span><span class="bs-config-val">${configRes.data?.find(c => c.configKey === 'post_crawl_interval_hours')?.configValue || '2'} 小时</span></div>
+        <div class="bs-config-item"><span class="bs-config-key">镜像保留天数</span><span class="bs-config-val">${configRes.data?.find(c => c.configKey === 'snapshot_retention_days')?.configValue || '3'} 天</span></div>
+      `;
+
+      // 最近日志
+      const recentLogs = document.getElementById('bs-recent-logs');
+      if (logsRes.success && logsRes.data?.length) {
+        recentLogs.innerHTML = logsRes.data.map(log => {
+          const typeClass = log.taskType === 'following' ? 'bs-log-type-following' : log.taskType === 'post' ? 'bs-log-type-post' : 'bs-log-type-target';
+          const statusClass = log.status === 'success' ? 'bs-log-status-success' : log.status === 'failed' ? 'bs-log-status-failed' : 'bs-log-status-partial';
+          return `
+            <div class="bs-recent-log-item">
+              <div>
+                <span class="bs-log-type ${typeClass}">${log.taskType}</span>
+                <span class="${statusClass}" style="margin-left:6px;">${log.status}</span>
+                ${log.itemsCount !== null ? `<span style="margin-left:6px;color:#64748b;">${log.itemsCount}条</span>` : ''}
+              </div>
+              <div class="bs-log-time">${bsTimeAgo(log.createdAt)}</div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        recentLogs.innerHTML = '<div style="color:#94a3b8;font-size:13px;">暂无日志记录</div>';
+      }
+
+      bsSetLoading('bs-overview-loading', false);
+      bsSetVisible('bs-overview-content', true);
+    } catch (e) {
+      bsSetLoading('bs-overview-loading', false);
+      bsSetVisible('bs-overview-empty', true);
+    }
+  }
+
+  // ========== 种子用户面板 ==========
+  async function bsLoadSeeds() {
+    bsSetLoading('bs-seeds-loading', true);
+    bsSetVisible('bs-seeds-content', false);
+    bsSetVisible('bs-seeds-empty', false);
+
+    try {
+      const res = await bsApi('GET', '/seed/list');
+      const seeds = res.success ? (res.data || []) : [];
+      const tbody = document.getElementById('bs-seeds-table-body');
+
+      if (!seeds.length) {
+        bsSetLoading('bs-seeds-loading', false);
+        bsSetVisible('bs-seeds-empty', true);
+        return;
+      }
+
+      tbody.innerHTML = seeds.map(s => `
+        <tr>
+          <td><strong>${s.username}</strong></td>
+          <td>${s.displayName || '-'}</td>
+          <td>${bsFormatNum(s.totalFollowingCount)}</td>
+          <td>${bsTimeAgo(s.lastCrawledAt)}</td>
+          <td><span style="color:${s.isActive !== false ? '#16a34a' : '#dc2626'}">${s.isActive !== false ? '✅ 活跃' : '⏸️ 停用'}</span></td>
+          <td>
+            <div class="bs-table-actions">
+              <button class="bs-table-btn bs-table-btn-sync" onclick="bsSyncOneSeed('${s.username}')">同步</button>
+              <button class="bs-table-btn bs-table-btn-remove" onclick="bsRemoveSeed('${s.username}')">移除</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+
+      bsSetLoading('bs-seeds-loading', false);
+      bsSetVisible('bs-seeds-content', true);
+    } catch (e) {
+      bsSetLoading('bs-seeds-loading', false);
+      bsSetVisible('bs-seeds-empty', true);
+    }
+  }
+
+  // ========== 目标用户面板 ==========
+  async function bsLoadTargets() {
+    bsSetLoading('bs-targets-loading', true);
+    bsSetVisible('bs-targets-content', false);
+    bsSetVisible('bs-targets-empty', false);
+
+    try {
+      const res = await bsApi('GET', '/target/list');
+      const targets = res.success ? (res.data || []) : [];
+      const tbody = document.getElementById('bs-targets-table-body');
+
+      if (!targets.length) {
+        bsSetLoading('bs-targets-loading', false);
+        bsSetVisible('bs-targets-empty', true);
+        return;
+      }
+
+      tbody.innerHTML = targets.map((t, i) => `
+        <tr>
+          <td><span style="font-weight:700;color:${i < 3 ? '#f59e0b' : '#64748b'}">#${t.rank}</span></td>
+          <td><strong>${t.username}</strong></td>
+          <td>${t.followerCount} 个种子关注</td>
+          <td>${t.seedFollowers ? t.seedFollowers.map(s => s.username || s).join(', ') : '-'}</td>
+        </tr>
+      `).join('');
+
+      bsSetLoading('bs-targets-loading', false);
+      bsSetVisible('bs-targets-content', true);
+    } catch (e) {
+      bsSetLoading('bs-targets-loading', false);
+      bsSetVisible('bs-targets-empty', true);
+    }
+  }
+
+  // ========== 帖子列表面板 ==========
+  window.bsLoadPosts = async function(page) {
+    page = page || bsPostsPage;
+    bsPostsPage = page;
+    bsSetLoading('bs-posts-loading', true);
+    bsSetVisible('bs-posts-content', false);
+    bsSetVisible('bs-posts-empty', false);
+
+    try {
+      const type = document.getElementById('bs-posts-filter-type')?.value || '';
+      const user = document.getElementById('bs-posts-filter-user')?.value || '';
+      let url = `/posts?page=${page}&pageSize=${BS_PAGE_SIZE}`;
+      if (type) url += `&postType=${type}`;
+      if (user) url += `&username=${encodeURIComponent(user)}`;
+
+      const res = await bsApi('GET', url);
+      const posts = res.success ? (res.data || []) : [];
+      const total = res.success ? (res.total || 0) : 0;
+      bsPostsTotal = total;
+      const tbody = document.getElementById('bs-posts-table-body');
+
+      if (!posts.length) {
+        bsSetLoading('bs-posts-loading', false);
+        bsSetVisible('bs-posts-empty', true);
+        return;
+      }
+
+      tbody.innerHTML = posts.map(p => `
+        <tr>
+          <td><span class="bs-log-type ${p.postType === 'article' ? 'bs-log-type-post' : p.postType === 'reply' ? 'bs-log-type-following' : 'bs-log-type-target'}">${p.postType}</span></td>
+          <td>${p.username}</td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.title || ''}">${p.title || '(无标题)'}</td>
+          <td>${bsFormatNum(p.likeCount)}</td>
+          <td>${bsFormatNum(p.commentCount)}</td>
+          <td>${bsFormatNum(p.shareCount)}</td>
+          <td>${bsFormatNum(p.viewCount)}</td>
+          <td>${bsFormatDate(p.publishedAt)}</td>
+          <td>
+            <button class="bs-table-btn bs-table-btn-view" onclick="bsViewPostSnapshots('${p.postId}')">镜像</button>
+          </td>
+        </tr>
+      `).join('');
+
+      // 分页
+      const totalPages = Math.ceil(total / BS_PAGE_SIZE);
+      bsRenderPagination('bs-posts-pagination', totalPages, page, bsLoadPosts);
+
+      bsSetLoading('bs-posts-loading', false);
+      bsSetVisible('bs-posts-content', true);
+    } catch (e) {
+      bsSetLoading('bs-posts-loading', false);
+      bsSetVisible('bs-posts-empty', true);
+    }
+  };
+
+  // ========== 日志面板 ==========
+  window.bsLoadLogs = async function(page) {
+    page = page || bsLogsPage;
+    bsLogsPage = page;
+    bsSetLoading('bs-logs-loading', true);
+    bsSetVisible('bs-logs-content', false);
+    bsSetVisible('bs-logs-empty', false);
+
+    try {
+      const type = document.getElementById('bs-logs-filter-type')?.value || '';
+      const status = document.getElementById('bs-logs-filter-status')?.value || '';
+      let url = `/crawl/logs?page=${page}&pageSize=${BS_PAGE_SIZE}`;
+      if (type) url += `&taskType=${type}`;
+      if (status) url += `&status=${status}`;
+
+      const res = await bsApi('GET', url);
+      const logs = res.success ? (res.data || []) : [];
+      const total = res.success ? (res.total || 0) : 0;
+      bsLogsTotal = total;
+      const tbody = document.getElementById('bs-logs-table-body');
+
+      if (!logs.length) {
+        bsSetLoading('bs-logs-loading', false);
+        bsSetVisible('bs-logs-empty', true);
+        return;
+      }
+
+      tbody.innerHTML = logs.map(log => {
+        const statusClass = log.status === 'success' ? 'bs-log-status-success' : log.status === 'failed' ? 'bs-log-status-failed' : 'bs-log-status-partial';
+        return `
+          <tr>
+            <td>${bsFormatDate(log.createdAt)}</td>
+            <td><span class="bs-log-type ${log.taskType === 'following' ? 'bs-log-type-following' : log.taskType === 'post' ? 'bs-log-type-post' : 'bs-log-type-target'}">${log.taskType}</span></td>
+            <td class="${statusClass}">${log.status}</td>
+            <td>${log.targetId || '-'}</td>
+            <td>${log.itemsCount !== null ? log.itemsCount : '-'}</td>
+            <td>${log.durationMs ? (log.durationMs / 1000).toFixed(1) + 's' : '-'}</td>
+            <td>${log.snapshotId || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      // 分页
+      const totalPages = Math.ceil(total / BS_PAGE_SIZE);
+      bsRenderPagination('bs-logs-pagination', totalPages, page, bsLoadLogs);
+
+      bsSetLoading('bs-logs-loading', false);
+      bsSetVisible('bs-logs-content', true);
+    } catch (e) {
+      bsSetLoading('bs-logs-loading', false);
+      bsSetVisible('bs-logs-empty', true);
+    }
+  };
+
+  // ========== 分页渲染 ==========
+  function bsRenderPagination(containerId, totalPages, currentPage, callback) {
+    const container = document.getElementById(containerId);
+    if (!container || totalPages <= 1) {
+      if (container) container.innerHTML = '';
+      return;
+    }
+    let html = '';
+    // 上一页
+    html += `<button class="bs-page-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="window.${callback.name}(${currentPage - 1})">上一页</button>`;
+    // 页码
+    const maxButtons = 7;
+    let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+    let end = Math.min(totalPages, start + maxButtons - 1);
+    if (end - start < maxButtons - 1) start = Math.max(1, end - maxButtons + 1);
+    if (start > 1) html += `<button class="bs-page-btn" onclick="window.${callback.name}(1)">1</button>${start > 2 ? '<span style="padding:6px 4px;color:#94a3b8;">...</span>' : ''}`;
+    for (let i = start; i <= end; i++) {
+      html += `<button class="bs-page-btn ${i === currentPage ? 'active' : ''}" onclick="window.${callback.name}(${i})">${i}</button>`;
+    }
+    if (end < totalPages) html += `${end < totalPages - 1 ? '<span style="padding:6px 4px;color:#94a3b8;">...</span>' : ''}<button class="bs-page-btn" onclick="window.${callback.name}(${totalPages})">${totalPages}</button>`;
+    // 下一页
+    html += `<button class="bs-page-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="window.${callback.name}(${currentPage + 1})">下一页</button>`;
+    container.innerHTML = html;
+  }
+
+  // ========== 操作按钮 ==========
+  window.bsSyncFollowing = async function() {
+    const btn = document.getElementById('bs-btn-sync');
+    btn.disabled = true;
+    bsShowStatus('正在同步关注列表，请稍候...', 'info');
+    try {
+      const res = await bsApi('POST', '/following/sync');
+      bsShowStatus(`同步完成：${res.data?.newUsers || 0} 个新用户, ${res.data?.newRelations || 0} 条关系`, 'success');
+      bsRefreshAll();
+    } catch (e) {
+      bsShowStatus('同步失败：' + (e.message || '未知错误'), 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  window.bsCalculateTargets = async function() {
+    const btn = document.getElementById('bs-btn-calc');
+    btn.disabled = true;
+    bsShowStatus('正在计算 Top50 目标用户...', 'info');
+    try {
+      const res = await bsApi('POST', '/target/calculate');
+      bsShowStatus(`计算完成：共 ${res.data?.top50?.length || 0} 个目标用户`, 'success');
+      bsRefreshAll();
+    } catch (e) {
+      bsShowStatus('计算失败：' + (e.message || '未知错误'), 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  window.bsCrawlPosts = async function() {
+    const btn = document.getElementById('bs-btn-crawl');
+    btn.disabled = true;
+    bsShowStatus('正在抓取帖子，这可能需要几分钟...', 'info');
+    try {
+      const res = await bsApi('POST', '/crawl/posts');
+      bsShowStatus(`抓取完成：${res.data?.totalPostsAll || 0} 主帖, ${res.data?.totalPostsReply || 0} 回复`, 'success');
+      bsRefreshAll();
+    } catch (e) {
+      bsShowStatus('抓取失败：' + (e.message || '未知错误'), 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  window.bsStartScheduler = async function() {
+    const btn = document.getElementById('bs-btn-start');
+    btn.disabled = true;
+    try {
+      const res = await bsApi('POST', '/crawl/start');
+      bsShowStatus('调度器已启动', 'success');
+      bsLoadSchedulerStatus();
+    } catch (e) {
+      bsShowStatus('启动失败：' + (e.message || '未知错误'), 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  window.bsPauseScheduler = async function() {
+    const btn = document.getElementById('bs-btn-pause');
+    btn.disabled = true;
+    try {
+      const res = await bsApi('POST', '/crawl/pause');
+      bsShowStatus('调度器已暂停', 'success');
+      bsLoadSchedulerStatus();
+    } catch (e) {
+      bsShowStatus('暂停失败：' + (e.message || '未知错误'), 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  window.bsInitSeeds = async function() {
+    const defaultSeeds = [
+      { username: "CZ", displayName: "CZ" },
+      { username: "heyi", displayName: "heyi" },
+      { username: "richardteng", displayName: "richardteng" },
+      { username: "justinsun", displayName: "justinsun" },
+      { username: "zhuyidan", displayName: "zhuyidan" },
+      { username: "jack", displayName: "jack" },
+      { username: "shock", displayName: "shock" },
+      { username: "ember", displayName: "ember" },
+      { username: "TheCryptoLark", displayName: "TheCryptoLark" },
+      { username: "aiaptx", displayName: "aiaptx" },
+      { username: "killthewolf", displayName: "killthewolf" },
+      { username: "thankucrypto", displayName: "thankucrypto" },
+      { username: "korm_brc20", displayName: "korm_brc20" },
+      { username: "bitwing", displayName: "bitwing" },
+      { username: "btc7873", displayName: "btc7873" },
+      { username: "square-creator-294f8fe75", displayName: "square-creator-294f8fe75" },
+      { username: "seven_78977", displayName: "seven_78977" },
+      { username: "cc27107", displayName: "cc27107" },
+      { username: "cnaapp", displayName: "cnaapp" },
+      { username: "square-mlh", displayName: "square-mlh" },
+      { username: "meta8mate", displayName: "meta8mate" },
+      { username: "pumpman", displayName: "pumpman" },
+      { username: "btcpiggy", displayName: "btcpiggy" },
+      { username: "yanchibit", displayName: "yanchibit" },
+      { username: "lianyanshe", displayName: "lianyanshe" }
+    ];
+    try {
+      const res = await bsApi('POST', '/seed/init', { seeds: defaultSeeds });
+      bsShowStatus(`已初始化 ${defaultSeeds.length} 个种子用户`, 'success');
+      bsLoadSeeds();
+      bsLoadStats();
+    } catch (e) {
+      bsShowStatus('初始化失败：' + (e.message || '未知错误'), 'error');
+    }
+  };
+
+  window.bsAddSeed = async function() {
+    const username = document.getElementById('bs-seed-username')?.value?.trim();
+    const displayName = document.getElementById('bs-seed-display')?.value?.trim();
+    if (!username) {
+      bsShowStatus('请输入用户名', 'error');
+      return;
+    }
+    try {
+      await bsApi('POST', '/seed/add', { username, displayName: displayName || username });
+      bsShowStatus(`已添加种子用户 ${username}`, 'success');
+      document.getElementById('bs-seed-username').value = '';
+      document.getElementById('bs-seed-display').value = '';
+      bsLoadSeeds();
+      bsLoadStats();
+    } catch (e) {
+      bsShowStatus('添加失败：' + (e.message || '未知错误'), 'error');
+    }
+  };
+
+  window.bsRemoveSeed = async function(username) {
+    if (!confirm(`确定移除种子用户 ${username}？`)) return;
+    try {
+      await bsApi('POST', '/seed/remove', { username });
+      bsShowStatus(`已移除 ${username}`, 'success');
+      bsLoadSeeds();
+      bsLoadStats();
+    } catch (e) {
+      bsShowStatus('移除失败：' + (e.message || '未知错误'), 'error');
+    }
+  };
+
+  window.bsSyncOneSeed = async function(username) {
+    try {
+      bsShowStatus(`正在同步 ${username} 的关注列表...`, 'info');
+      const res = await bsApi('POST', `/following/sync/${username}`);
+      bsShowStatus(`${username} 同步完成`, 'success');
+      bsLoadSeeds();
+    } catch (e) {
+      bsShowStatus('同步失败：' + (e.message || '未知错误'), 'error');
+    }
+  };
+
+  window.bsViewPostSnapshots = async function(postId) {
+    alert('帖子镜像查看功能开发中\npostId: ' + postId);
+  };
+})();
+</script>
