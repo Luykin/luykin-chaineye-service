@@ -272,7 +272,6 @@ async function syncSingleUserFollowing(targetUsername) {
           "verificationType",
           "verificationDescription",
           "totalFollowerCount",
-          "totalFollowingCount",
           "totalPostCount",
           "totalLikeCount",
           "totalShareCount",
