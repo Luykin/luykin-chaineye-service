@@ -1,0 +1,201 @@
+/**
+ * 币安广场任务管理器
+ * 封装爬虫业务逻辑，供调度器和API路由调用
+ */
+
+const apiClient = require("./api-client");
+const postParser = require("./parsers/postParser");
+
+class BinanceSquareTaskManager {
+  constructor(db) {
+    this.db = db;
+  }
+
+  /**
+   * 生成镜像批次ID
+   */
+  _generateSnapshotId() {
+    const now = new Date();
+    return (
+      String(now.getFullYear()) +
+      String(now.getMonth() + 1).padStart(2, "0") +
+      String(now.getDate()).padStart(2, "0") +
+      String(now.getHours()).padStart(2, "0") +
+      String(now.getMinutes()).padStart(2, "0") +
+      String(now.getSeconds()).padStart(2, "0")
+    );
+  }
+
+  /**
+   * 计算镜像差异
+   */
+  _computeSnapshotDiff(current, prev) {
+    if (!prev) return null;
+
+    const diff = {};
+    const fields = [
+      { key: "title", type: "text" },
+      { key: "content", type: "text" },
+      { key: "contentText", type: "text" },
+      { key: "likeCount", type: "number" },
+      { key: "shareCount", type: "number" },
+      { key: "commentCount", type: "number" },
+      { key: "viewCount", type: "number" },
+      { key: "isDeleted", type: "boolean" },
+    ];
+
+    for (const { key, type } of fields) {
+      const oldVal = prev[key];
+      const newVal = current[key];
+
+      if (oldVal !== newVal) {
+        diff[key] = { old: oldVal, new: newVal };
+        if (type === "number") {
+          diff[key].delta = (newVal || 0) - (oldVal || 0);
+        }
+      }
+    }
+
+    return Object.keys(diff).length > 0 ? diff : null;
+  }
+
+  /**
+   * 执行帖子抓取任务
+   * @returns {Promise<Object>} 抓取结果统计
+   */
+  async runPostCrawl() {
+    const startTime = Date.now();
+    const snapshotId = this._generateSnapshotId();
+    const snapshotTime = new Date();
+    const { Op } = require("sequelize");
+
+    // 获取目标用户
+    const targetUsers = await this.db.BinanceSquareUser.findAll({
+      where: { isTargetUser: true },
+      attributes: ["username", "squareUid"],
+    });
+
+    if (targetUsers.length === 0) {
+      throw new Error("没有目标用户，请先计算Top50");
+    }
+
+    console.log(`[taskManager] 开始抓取 ${targetUsers.length} 个目标用户的帖子`);
+
+    let totalPostsAll = 0;
+    let totalPostsReply = 0;
+    let totalSnapshots = 0;
+    let failedUsers = [];
+
+    for (const user of targetUsers) {
+      if (!user.squareUid) {
+        console.warn(`[taskManager] ${user.username} 缺少squareUid，跳过`);
+        continue;
+      }
+
+      try {
+        // 抓取主帖和回复
+        const [allResult, replyResult] = await Promise.all([
+          apiClient.fetchUserPosts(user.squareUid, "ALL", 7),
+          apiClient.fetchUserPosts(user.squareUid, "REPLY", 7),
+        ]);
+
+        const allPosts = postParser.parsePostContents(allResult.contents);
+        const replyPosts = postParser.parsePostContents(replyResult.contents);
+
+        totalPostsAll += allPosts.length;
+        totalPostsReply += replyPosts.length;
+
+        // 合并并写入
+        const allParsed = allPosts.map((p) => ({ ...p, username: user.username }));
+        const replyParsed = replyPosts.map((p) => ({ ...p, username: user.username }));
+        const combined = [...allParsed, ...replyParsed];
+
+        // upsert Posts
+        for (const post of combined) {
+          await this.db.BinanceSquarePost.upsert({
+            ...post,
+            lastSnapshotId: snapshotId,
+          });
+        }
+
+        // 生成镜像
+        for (const post of combined) {
+          const prevSnapshot = await this.db.BinanceSquarePostSnapshot.findOne({
+            where: { postId: post.postId },
+            order: [["snapshotTime", "DESC"]],
+          });
+
+          const diff = this._computeSnapshotDiff(post, prevSnapshot);
+
+          await this.db.BinanceSquarePostSnapshot.create({
+            postId: post.postId,
+            snapshotId,
+            snapshotTime,
+            ...post,
+            diffFromPrev: diff,
+          });
+
+          totalSnapshots++;
+        }
+
+        // 更新lastCrawledAt
+        await this.db.BinanceSquareUser.update(
+          { lastCrawledAt: new Date() },
+          { where: { username: user.username } }
+        );
+      } catch (error) {
+        console.error(`[taskManager] ${user.username} 抓取失败:`, error.message);
+        failedUsers.push({ username: user.username, error: error.message });
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    const overallStatus = failedUsers.length > 0 ? "partial" : "success";
+
+    // 记录CrawlLog
+    await this.db.BinanceSquareCrawlLog.create({
+      taskType: "post",
+      status: overallStatus,
+      filterType: "ALL",
+      itemsCount: totalPostsAll + totalPostsReply,
+      snapshotId,
+      durationMs,
+    });
+
+    return {
+      snapshotId,
+      targetUsers: targetUsers.length,
+      totalPostsAll,
+      totalPostsReply,
+      totalSnapshots,
+      failedUsers: failedUsers.length,
+      failedDetails: failedUsers,
+      durationMs,
+      status: overallStatus,
+    };
+  }
+
+  /**
+   * 执行数据清理任务
+   * @param {number} retentionDays - 保留天数
+   */
+  async cleanupOldSnapshots(retentionDays = 3) {
+    const { Op } = require("sequelize");
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+    console.log(`[taskManager] 清理${retentionDays}天前的数据`);
+
+    const deletedSnapshots = await this.db.BinanceSquarePostSnapshot.destroy({
+      where: { snapshotTime: { [Op.lt]: cutoffDate } },
+    });
+
+    const deletedLogs = await this.db.BinanceSquareCrawlLog.destroy({
+      where: { createdAt: { [Op.lt]: cutoffDate } },
+    });
+
+    return { deletedSnapshots, deletedLogs };
+  }
+}
+
+module.exports = { BinanceSquareTaskManager };

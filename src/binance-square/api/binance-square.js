@@ -561,6 +561,19 @@ router.get("/target/list", async (req, res) => {
 // ==================== 帖子抓取与镜像管理 ====================
 
 const postParser = require("../scraper/parsers/postParser");
+const { BinanceSquareScheduler } = require("../services/scheduler");
+const { BinanceSquareTaskManager } = require("../scraper/taskManager");
+
+// 调度器实例（单例）
+let scheduler = null;
+
+function getScheduler() {
+  if (!scheduler) {
+    const taskManager = new BinanceSquareTaskManager(db);
+    scheduler = new BinanceSquareScheduler(db, taskManager);
+  }
+  return scheduler;
+}
 
 /**
  * 生成镜像批次ID
@@ -849,6 +862,121 @@ router.get("/posts/snapshot-compare", async (req, res) => {
     }));
   } catch (error) {
     console.error("[posts/snapshot-compare] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+// ==================== 调度器管理 ====================
+
+/**
+ * POST /crawl/start
+ * 启动定时爬虫任务
+ */
+router.post("/crawl/start", async (req, res) => {
+  try {
+    const sched = getScheduler();
+    await sched.start();
+    const status = await sched.getStatus();
+    res.json(success(status));
+  } catch (error) {
+    console.error("[crawl/start] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * POST /crawl/pause
+ * 暂停定时爬虫任务
+ */
+router.post("/crawl/pause", async (req, res) => {
+  try {
+    const sched = getScheduler();
+    sched.stop();
+    res.json(success({ isRunning: false, message: "调度器已暂停" }));
+  } catch (error) {
+    console.error("[crawl/pause] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /crawl/status
+ * 获取爬虫运行状态
+ */
+router.get("/crawl/status", async (req, res) => {
+  try {
+    const sched = getScheduler();
+    const status = await sched.getStatus();
+    res.json(success(status));
+  } catch (error) {
+    console.error("[crawl/status] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+// ==================== 配置管理（动态调控） ====================
+
+/**
+ * GET /config
+ * 获取爬虫配置列表
+ */
+router.get("/config", async (req, res) => {
+  try {
+    const configs = await db.BinanceSquareConfig.findAll({
+      order: [["configKey", "ASC"]],
+    });
+    res.json(success(configs));
+  } catch (error) {
+    console.error("[config/list] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * POST /config
+ * 更新爬虫配置（管理后台动态调控）
+ */
+router.post("/config", async (req, res) => {
+  try {
+    const { configKey, configValue } = req.body;
+
+    if (!configKey || configValue === undefined) {
+      return res.status(400).json(fail("configKey和configValue必填"));
+    }
+
+    // 查找配置
+    const config = await db.BinanceSquareConfig.findOne({
+      where: { configKey },
+    });
+
+    if (!config) {
+      return res.status(404).json(fail("配置项不存在"));
+    }
+
+    // 校验范围
+    if (config.minValue !== null && parseFloat(configValue) < parseFloat(config.minValue)) {
+      return res.status(400).json(fail(`configValue不能小于${config.minValue}`));
+    }
+    if (config.maxValue !== null && parseFloat(configValue) > parseFloat(config.maxValue)) {
+      return res.status(400).json(fail(`configValue不能大于${config.maxValue}`));
+    }
+
+    // 更新配置
+    await db.BinanceSquareConfig.update(
+      {
+        configValue: String(configValue),
+        updatedBy: req.adminUser?.email || req.user?.username || "unknown",
+      },
+      { where: { configKey } }
+    );
+
+    // 清除调度器缓存（下次任务读取新配置）
+    const sched = getScheduler();
+    sched.configService?.clearCache(configKey);
+
+    res.json(success({ configKey, configValue, updated: true }));
+  } catch (error) {
+    console.error("[config/update] error:", error);
     res.status(500).json(fail(error.message));
   }
 });

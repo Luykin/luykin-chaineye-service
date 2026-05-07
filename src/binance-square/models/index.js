@@ -3,7 +3,7 @@ const path = require("path");
 
 /**
  * 初始化币安广场模型
- * @param {Sequelize} sequelize —— 复用 rootdatapro 的 sequelize 实例
+ * @param {Sequelize} sequelize —— 主业务 PostgreSQL 实例
  * @returns {Object} db —— 包含所有模型的对象
  */
 function initModels(sequelize) {

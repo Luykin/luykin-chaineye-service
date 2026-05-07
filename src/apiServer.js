@@ -40,6 +40,9 @@ const MODULES_TO_PRELOAD = [
   './admin/api/admin',
   './admin/api/reviews',
   
+  // 币安广场
+  './binance-square/api/binance-square',
+  
   // 其他路由
   './routes/fundraising',
   './routes/cryptohunt-tg',
@@ -116,6 +119,7 @@ const rootdataProRoutes = require("./rootdatapro/api/rootdatapro");
 const adminRoutes = require("./admin/api/admin");
 const adminReviewsRoutes = require("./admin/api/reviews");
 const adminLlmTestRoutes = require("./admin/api/llm-test");
+const binanceSquareRoutes = require("./binance-square/api/binance-square");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
 const xHuntAIDetectRoutes = require("./xhunt/api/ai-detect");
@@ -461,6 +465,9 @@ async function initializeAndStartServer() {
   // 管理后台 - LLM 测试工具 API
   app.use("/api/admin/llm-test", adminAuth, adminLlmTestRoutes);
 
+  // 管理后台 - 币安广场
+  app.use("/api/admin/binance-square", adminAuth, binanceSquareRoutes.router);
+
   // 内部查询API - 使用随机字符前缀，无需安全中间件
   const INTERNAL_QUERY_EXPIRATION = new Date("2027-02-20T00:00:00Z");
   app.use(
@@ -533,6 +540,15 @@ async function initializeAndStartServer() {
   await setupPostgres(); // 初始化主 PostgreSQL（src/models/postgres-start.js：cryptohunt + xhunt 相关业务表）
   await setupPostgresFundraising(); // 初始xhunt里面老版本化融资业务 PostgreSQL（src/models/postgres-fundraising.js：Fundraising 相关表与关系）
   await setupRootdataProPostgres(); // 初始化新的 RootDataPro PostgreSQL（src/rootdatapro/models：database=rootdatapro，rootdatapro 专用表与关系）
+
+  // 初始化币安广场模型（使用主业务 PostgreSQL 实例 pgInstance）
+  try {
+    const { pgInstance } = require("./models/postgres-start");
+    binanceSquareRoutes.initRoutes(pgInstance);
+    console.log("[API Server] 币安广场模型初始化完成");
+  } catch (e) {
+    console.error("[API Server] ❌ 币安广场模型初始化失败:", e.message);
+  }
 
   // 加载 VIP / 内测用户名单到内存（依赖 PostgreSQL 已连接）
   try {
