@@ -3,11 +3,16 @@ const { Op } = require("sequelize");
 
 // 模型将在路由挂载时注入（通过initRoutes函数）
 let db = null;
+let taskManager = null;
 
 function initRoutes(sequelize) {
   // 延迟加载模型（确保sequelize实例已就绪）
   const initModels = require("../models");
   db = initModels(sequelize);
+
+  // 初始化任务管理器（供手动触发和调度器共用）
+  const { BinanceSquareTaskManager } = require("../scraper/taskManager");
+  taskManager = new BinanceSquareTaskManager(db);
 }
 
 const router = express.Router();
@@ -668,125 +673,14 @@ function computeSnapshotDiff(current, prev) {
  * 手动触发：抓取目标用户的帖子（ALL + REPLY）
  */
 router.post("/crawl/posts", async (req, res) => {
-  const startTime = Date.now();
-  const snapshotId = generateSnapshotId();
-  const snapshotTime = new Date();
-
   try {
-    // 1. 获取目标用户
-    const targetUsers = await db.BinanceSquareUser.findAll({
-      where: { isTargetUser: true },
-      attributes: ["username", "squareUid"],
-    });
-
-    if (targetUsers.length === 0) {
-      return res.status(400).json(fail("没有目标用户，请先计算Top50"));
+    if (!taskManager) {
+      return res.status(500).json(fail("任务管理器未初始化"));
     }
 
-    console.log(`[crawl/posts] 开始抓取 ${targetUsers.length} 个目标用户的帖子`);
+    const result = await taskManager.runPostCrawl();
 
-    let totalPostsAll = 0;
-    let totalPostsReply = 0;
-    let totalSnapshots = 0;
-    let failedUsers = [];
-
-    // 2. 逐个抓取目标用户
-    for (const user of targetUsers) {
-      if (!user.squareUid) {
-        console.warn(`[crawl/posts] ${user.username} 缺少squareUid，跳过`);
-        continue;
-      }
-
-      try {
-        // 2.1 抓取主帖（ALL）
-        const allResult = await apiClient.fetchUserPosts(user.squareUid, "ALL", 7);
-        const allPosts = postParser.parsePostContents(allResult.contents);
-        totalPostsAll += allPosts.length;
-
-        // 2.2 抓取回复（REPLY）
-        const replyResult = await apiClient.fetchUserPosts(user.squareUid, "REPLY", 7);
-        const replyPosts = postParser.parsePostContents(replyResult.contents);
-        totalPostsReply += replyPosts.length;
-
-        // 2.3 合并并写入数据库
-        const allPostsWithFilter = allPosts.map((p) => ({ ...p, username: user.username }));
-        const replyPostsWithFilter = replyPosts.map((p) => ({ ...p, username: user.username }));
-        const allParsed = [...allPostsWithFilter, ...replyPostsWithFilter];
-
-        // upsert Posts
-        for (const post of allParsed) {
-          await db.BinanceSquarePost.upsert({
-            ...post,
-            lastSnapshotId: snapshotId,
-          });
-        }
-
-        // 2.4 生成镜像 + 计算diff
-        for (const post of allParsed) {
-          // 查找上一个镜像
-          const prevSnapshot = await db.BinanceSquarePostSnapshot.findOne({
-            where: { postId: post.postId },
-            order: [["snapshotTime", "DESC"]],
-          });
-
-          // 计算diff
-          const diff = computeSnapshotDiff(post, prevSnapshot);
-
-          // 创建新镜像
-          await db.BinanceSquarePostSnapshot.create({
-            postId: post.postId,
-            snapshotId,
-            snapshotTime,
-            title: post.title,
-            content: post.content,
-            contentText: post.contentText,
-            mediaUrls: post.mediaUrls,
-            likeCount: post.likeCount,
-            shareCount: post.shareCount,
-            commentCount: post.commentCount,
-            viewCount: post.viewCount,
-            isDeleted: post.isDeleted,
-            diffFromPrev: diff,
-          });
-
-          totalSnapshots++;
-        }
-
-        // 2.5 更新用户lastCrawledAt
-        await db.BinanceSquareUser.update(
-          { lastCrawledAt: new Date() },
-          { where: { username: user.username } }
-        );
-      } catch (error) {
-        console.error(`[crawl/posts] ${user.username} 抓取失败:`, error.message);
-        failedUsers.push({ username: user.username, error: error.message });
-      }
-    }
-
-    // 3. 记录CrawlLog（ALL）
-    const durationMs = Date.now() - startTime;
-    const overallStatus = failedUsers.length > 0 ? "partial" : "success";
-
-    await db.BinanceSquareCrawlLog.create({
-      taskType: "post",
-      status: overallStatus,
-      filterType: "ALL",
-      itemsCount: totalPostsAll + totalPostsReply,
-      snapshotId,
-      durationMs,
-    });
-
-    res.json(success({
-      snapshotId,
-      targetUsers: targetUsers.length,
-      totalPostsAll,
-      totalPostsReply,
-      totalSnapshots,
-      failedUsers: failedUsers.length,
-      failedDetails: failedUsers,
-      durationMs,
-      status: overallStatus,
-    }));
+    res.json(success(result));
   } catch (error) {
     console.error("[crawl/posts] error:", error);
     res.status(500).json(fail(error.message));
@@ -832,6 +726,60 @@ router.get("/posts", async (req, res) => {
     }));
   } catch (error) {
     console.error("[posts/list] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /crawl/progress
+ * 查询当前/最近一次帖子抓取任务的实时进度
+ */
+router.get("/crawl/progress", async (req, res) => {
+  try {
+    const { getRedisClient } = require("../../lib/redisClient");
+    const redis = await getRedisClient();
+
+    // 扫描所有帖子抓取进度 key
+    const keys = await redis.keys("binance_square:task:progress:post:*");
+
+    if (keys.length === 0) {
+      return res.json(success({ running: false, message: "当前没有正在执行或近期的抓取任务" }));
+    }
+
+    // 按 updatedAt 倒序，取最新的一条
+    const progressList = [];
+    for (const key of keys) {
+      const data = await redis.get(key);
+      if (data) {
+        const parsed = JSON.parse(data);
+        progressList.push(parsed);
+      }
+    }
+
+    progressList.sort((a, b) => new Date(b.updatedAt || b.startedAt) - new Date(a.updatedAt || a.startedAt));
+
+    const latest = progressList[0];
+
+    res.json(success({
+      running: latest.status === "running",
+      taskType: latest.taskType,
+      snapshotId: latest.snapshotId,
+      totalUsers: latest.totalUsers,
+      processedUsers: latest.processedUsers,
+      successUsers: latest.successUsers,
+      failedUsers: latest.failedUsers,
+      errorRate: latest.errorRate,
+      errors: latest.errors || [],
+      totalPostsAll: latest.totalPostsAll,
+      totalPostsReply: latest.totalPostsReply,
+      totalSnapshots: latest.totalSnapshots,
+      startedAt: latest.startedAt,
+      completedAt: latest.completedAt || null,
+      durationMs: latest.durationMs || null,
+      status: latest.status,
+    }));
+  } catch (error) {
+    console.error("[crawl/progress] error:", error);
     res.status(500).json(fail(error.message));
   }
 });

@@ -43,6 +43,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(64),
         comment: "关联镜像批次ID —— 非帖子任务为空",
       },
+      failedDetails: {
+        type: DataTypes.JSON,
+        comment: "失败详情 —— [{username, error, time}]",
+      },
     },
     {
       tableName: "BinanceSquareCrawlLogs",

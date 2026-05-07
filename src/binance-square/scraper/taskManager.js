@@ -5,10 +5,34 @@
 
 const apiClient = require("./api-client");
 const postParser = require("./parsers/postParser");
+const { getRedisClient } = require("../../lib/redisClient");
 
 class BinanceSquareTaskManager {
   constructor(db) {
     this.db = db;
+  }
+
+  /**
+   * 获取 Redis 进度 key
+   */
+  _getProgressKey(snapshotId) {
+    return `binance_square:task:progress:post:${snapshotId}`;
+  }
+
+  /**
+   * 写入/更新 Redis 实时进度
+   */
+  async _updateProgress(snapshotId, update) {
+    try {
+      const redis = await getRedisClient();
+      const key = this._getProgressKey(snapshotId);
+      const existing = await redis.get(key);
+      const current = existing ? JSON.parse(existing) : {};
+      const merged = { ...current, ...update, updatedAt: new Date().toISOString() };
+      await redis.set(key, JSON.stringify(merged), "EX", 7200); // 2小时过期
+    } catch (e) {
+      console.warn("[taskManager] Redis进度更新失败:", e.message);
+    }
   }
 
   /**
@@ -86,9 +110,33 @@ class BinanceSquareTaskManager {
     let totalSnapshots = 0;
     let failedUsers = [];
 
+    // 初始化 Redis 实时进度
+    await this._updateProgress(snapshotId, {
+      taskType: "post",
+      snapshotId,
+      totalUsers: targetUsers.length,
+      processedUsers: 0,
+      successUsers: 0,
+      failedUsers: 0,
+      errorRate: "0.00%",
+      errors: [],
+      totalPostsAll: 0,
+      totalPostsReply: 0,
+      totalSnapshots: 0,
+      startedAt: new Date().toISOString(),
+      status: "running",
+    });
+
     for (const user of targetUsers) {
       if (!user.squareUid) {
         console.warn(`[taskManager] ${user.username} 缺少squareUid，跳过`);
+        failedUsers.push({ username: user.username, error: "缺少squareUid", time: new Date().toISOString() });
+        await this._updateProgress(snapshotId, {
+          processedUsers: failedUsers.length + (targetUsers.length - failedUsers.length - (targetUsers.length - user.index)),
+          failedUsers: failedUsers.length,
+          errors: failedUsers,
+          errorRate: ((failedUsers.length / targetUsers.length) * 100).toFixed(2) + "%",
+        });
         continue;
       }
 
@@ -145,14 +193,28 @@ class BinanceSquareTaskManager {
         );
       } catch (error) {
         console.error(`[taskManager] ${user.username} 抓取失败:`, error.message);
-        failedUsers.push({ username: user.username, error: error.message });
+        failedUsers.push({ username: user.username, error: error.message, time: new Date().toISOString() });
       }
+
+      // 更新 Redis 实时进度（每个用户处理完后）
+      const processedCount = targetUsers.indexOf(user) + 1;
+      const successCount = processedCount - failedUsers.length;
+      await this._updateProgress(snapshotId, {
+        processedUsers: processedCount,
+        successUsers: successCount,
+        failedUsers: failedUsers.length,
+        errorRate: ((failedUsers.length / processedCount) * 100).toFixed(2) + "%",
+        errors: failedUsers,
+        totalPostsAll,
+        totalPostsReply,
+        totalSnapshots,
+      });
     }
 
     const durationMs = Date.now() - startTime;
     const overallStatus = failedUsers.length > 0 ? "partial" : "success";
 
-    // 记录CrawlLog
+    // 记录CrawlLog（包含失败详情）
     await this.db.BinanceSquareCrawlLog.create({
       taskType: "post",
       status: overallStatus,
@@ -160,6 +222,22 @@ class BinanceSquareTaskManager {
       itemsCount: totalPostsAll + totalPostsReply,
       snapshotId,
       durationMs,
+      failedDetails: failedUsers.length > 0 ? failedUsers : null,
+    });
+
+    // 最终进度更新
+    await this._updateProgress(snapshotId, {
+      processedUsers: targetUsers.length,
+      successUsers: targetUsers.length - failedUsers.length,
+      failedUsers: failedUsers.length,
+      errorRate: ((failedUsers.length / targetUsers.length) * 100).toFixed(2) + "%",
+      errors: failedUsers,
+      totalPostsAll,
+      totalPostsReply,
+      totalSnapshots,
+      durationMs,
+      completedAt: new Date().toISOString(),
+      status: overallStatus,
     });
 
     return {

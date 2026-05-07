@@ -185,6 +185,26 @@
   <!-- ========== 帖子列表面板 ========== -->
   <div class="bs-sub-panel" id="bs-panel-posts">
     <div class="bs-panel-title">帖子列表</div>
+    <!-- 实时抓取进度 -->
+    <div id="bs-crawl-progress" class="bs-crawl-progress" style="display:none;">
+      <div class="bs-progress-header">
+        <span class="bs-progress-status" id="bs-progress-status">正在抓取...</span>
+        <span class="bs-progress-stats" id="bs-progress-stats">0/0</span>
+      </div>
+      <div class="bs-progress-bar-bg">
+        <div class="bs-progress-bar-fill" id="bs-progress-bar-fill" style="width:0%;"></div>
+      </div>
+      <div class="bs-progress-detail">
+        <span id="bs-progress-success">成功: 0</span>
+        <span id="bs-progress-failed" style="color:#ef4444;">失败: 0</span>
+        <span id="bs-progress-error-rate">出错率: 0%</span>
+        <span id="bs-progress-posts">帖子: 0</span>
+      </div>
+      <div id="bs-progress-errors" class="bs-progress-errors" style="display:none;">
+        <div class="bs-progress-errors-title">失败详情:</div>
+        <ul id="bs-progress-errors-list"></ul>
+      </div>
+    </div>
     <div class="bs-posts-filter">
       <select id="bs-posts-filter-type">
         <option value="">全部类型</option>
@@ -276,6 +296,27 @@
       </div>
       <h3>暂无日志</h3>
       <p>执行一次抓取任务后日志将显示在这里</p>
+    </div>
+  </div>
+
+  <!-- 镜像查看弹窗 -->
+  <div id="bs-snapshot-modal" class="bs-modal" style="display:none;">
+    <div class="bs-modal-overlay"></div>
+    <div class="bs-modal-content">
+      <div class="bs-modal-header">
+        <h3>帖子镜像历史</h3>
+        <button class="bs-modal-close" id="bs-modal-close">&times;</button>
+      </div>
+      <div class="bs-modal-body">
+        <div id="bs-snapshot-loading" class="loading-state">
+          <div class="spinner"></div>
+          <span>加载镜像历史...</span>
+        </div>
+        <div id="bs-snapshot-empty" class="empty-state" style="display:none;">
+          <p>该帖子暂无镜像记录</p>
+        </div>
+        <div id="bs-snapshot-list" style="display:none;"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -469,6 +510,73 @@
 /* 子面板 */
 .bs-sub-panel { display: none; }
 .bs-sub-panel.active { display: block; }
+
+/* 实时抓取进度 */
+.bs-crawl-progress {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.bs-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.bs-progress-status {
+  color: #2563eb;
+}
+.bs-progress-stats {
+  color: #64748b;
+}
+.bs-progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.bs-progress-bar-fill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.bs-progress-bar-fill.is-error {
+  background: #dc2626;
+}
+.bs-progress-detail {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #64748b;
+}
+.bs-progress-errors {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+.bs-progress-errors-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  margin-bottom: 6px;
+}
+.bs-progress-errors ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: #64748b;
+}
+.bs-progress-errors li {
+  margin-bottom: 3px;
+}
+
 .bs-panel-title {
   font-size: 16px;
   font-weight: 600;
@@ -655,12 +763,127 @@
   color: #6b7280;
 }
 
+/* 镜像弹窗 */
+.bs-modal {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bs-modal-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+}
+.bs-modal-content {
+  position: relative;
+  background: #fff;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 720px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.bs-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.bs-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.bs-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #64748b;
+  cursor: pointer;
+  line-height: 1;
+}
+.bs-modal-close:hover { color: #0f172a; }
+.bs-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* 镜像卡片 */
+.bs-snapshot-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: #f8fafc;
+}
+.bs-snapshot-card:last-child { margin-bottom: 0; }
+.bs-snapshot-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+.bs-snapshot-time .bs-snapshot-batch {
+  font-weight: 400;
+  color: #94a3b8;
+  margin-left: 8px;
+  font-size: 12px;
+}
+.bs-snapshot-metrics {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 8px;
+}
+.bs-snapshot-metrics span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.bs-snapshot-diff {
+  font-size: 12px;
+  padding: 8px 10px;
+  background: #fff;
+  border-radius: 6px;
+  border-left: 3px solid #3b82f6;
+}
+.bs-snapshot-diff-title {
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+.bs-snapshot-diff-item {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 2px;
+  color: #64748b;
+}
+.bs-snapshot-diff-item .diff-up { color: #16a34a; }
+.bs-snapshot-diff-item .diff-down { color: #dc2626; }
+.bs-snapshot-no-diff {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
 /* 响应式 */
 @media (max-width: 768px) {
   .bs-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .bs-overview-grid { grid-template-columns: 1fr; }
   .bs-actions-bar { justify-content: center; }
   .bs-sub-tabs { overflow-x: auto; }
+  .bs-modal-content { width: 95%; max-height: 90vh; }
 }
 </style>
 
@@ -707,6 +930,12 @@
     document.getElementById('bs-logs-filter-type')?.addEventListener('change', () => bsLoadLogs());
     document.getElementById('bs-logs-filter-status')?.addEventListener('change', () => bsLoadLogs());
     document.getElementById('bs-btn-refresh-logs')?.addEventListener('click', () => bsLoadLogs());
+
+    // === 镜像弹窗关闭 ===
+    document.getElementById('bs-modal-close')?.addEventListener('click', bsCloseSnapshotModal);
+    document.getElementById('bs-snapshot-modal')?.addEventListener('click', function(e) {
+      if (e.target.classList.contains('bs-modal-overlay')) bsCloseSnapshotModal();
+    });
 
     // === 表格事件委托 ===
     // 种子用户表格
@@ -757,6 +986,9 @@
     }, 200);
     // 兜底：3秒后无论如何都加载一次
     setTimeout(() => { clearInterval(checkTab); bsRefreshAll(); }, 3000);
+
+    // 启动进度轮询（检查是否有正在运行的抓取任务）
+    bsPollCrawlProgress();
   });
 
   // 监听 Tab 切换事件（stats.js 切换时会改变 class）
@@ -1229,10 +1461,80 @@
     }
   };
 
+  // 进度轮询定时器
+  let bsProgressTimer = null;
+
+  async function bsPollCrawlProgress() {
+    try {
+      const res = await bsApi('GET', '/crawl/progress');
+      if (res.success && res.data) {
+        bsRenderCrawlProgress(res.data);
+        // 如果任务还在运行，继续轮询
+        if (res.data.running) {
+          bsProgressTimer = setTimeout(bsPollCrawlProgress, 3000);
+        } else if (res.data.status) {
+          // 任务已完成，再轮询一次确保状态更新
+          bsProgressTimer = setTimeout(bsPollCrawlProgress, 5000);
+        }
+      }
+    } catch (e) {
+      // 轮询失败不报错
+    }
+  }
+
+  function bsRenderCrawlProgress(data) {
+    const container = document.getElementById('bs-crawl-progress');
+    if (!container) return;
+
+    const isRunning = data.running;
+    const total = data.totalUsers || 0;
+    const processed = data.processedUsers || 0;
+    const success = data.successUsers || 0;
+    const failed = data.failedUsers || 0;
+    const errorRate = data.errorRate || '0%';
+    const posts = (data.totalPostsAll || 0) + (data.totalPostsReply || 0);
+    const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
+
+    container.style.display = 'block';
+
+    document.getElementById('bs-progress-status').textContent = isRunning ? '正在抓取...' : '抓取完成';
+    document.getElementById('bs-progress-stats').textContent = `${processed}/${total}`;
+    document.getElementById('bs-progress-bar-fill').style.width = percent + '%';
+    document.getElementById('bs-progress-bar-fill').classList.toggle('is-error', failed > 0);
+    document.getElementById('bs-progress-success').textContent = `成功: ${success}`;
+    document.getElementById('bs-progress-failed').textContent = `失败: ${failed}`;
+    document.getElementById('bs-progress-error-rate').textContent = `出错率: ${errorRate}`;
+    document.getElementById('bs-progress-posts').textContent = `帖子: ${posts}`;
+
+    // 失败详情
+    const errorsDiv = document.getElementById('bs-progress-errors');
+    const errorsList = document.getElementById('bs-progress-errors-list');
+    const errors = data.errors || [];
+    if (errors.length > 0) {
+      errorsDiv.style.display = 'block';
+      errorsList.innerHTML = errors.map(err =>
+        `<li><strong>${err.username}</strong>: ${err.error}</li>`
+      ).join('');
+    } else {
+      errorsDiv.style.display = 'none';
+      errorsList.innerHTML = '';
+    }
+  }
+
+  function bsStopProgressPolling() {
+    if (bsProgressTimer) {
+      clearTimeout(bsProgressTimer);
+      bsProgressTimer = null;
+    }
+  }
+
   async function bsCrawlPosts() {
     const btn = document.getElementById('bs-btn-crawl');
     btn.disabled = true;
     bsShowStatus('正在抓取帖子，这可能需要几分钟...', 'info');
+    // 启动进度轮询
+    bsStopProgressPolling();
+    bsPollCrawlProgress();
     try {
       const res = await bsApi('POST', '/crawl/posts');
       bsShowStatus(`抓取完成：${res.data?.totalPostsAll || 0} 主帖, ${res.data?.totalPostsReply || 0} 回复`, 'success');
@@ -1241,6 +1543,8 @@
       bsShowStatus('抓取失败：' + (e.message || '未知错误'), 'error');
     } finally {
       btn.disabled = false;
+      // 再轮询一次确保最终状态展示
+      setTimeout(bsPollCrawlProgress, 2000);
     }
   };
 
@@ -1354,8 +1658,99 @@
     }
   };
 
+  // ========== 镜像弹窗 ==========
+  function bsOpenSnapshotModal() {
+    document.getElementById('bs-snapshot-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function bsCloseSnapshotModal() {
+    document.getElementById('bs-snapshot-modal').style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
   async function bsViewPostSnapshots(postId) {
-    alert('帖子镜像查看功能开发中\npostId: ' + postId);
+    bsOpenSnapshotModal();
+
+    const loading = document.getElementById('bs-snapshot-loading');
+    const empty = document.getElementById('bs-snapshot-empty');
+    const list = document.getElementById('bs-snapshot-list');
+
+    loading.style.display = 'block';
+    empty.style.display = 'none';
+    list.style.display = 'none';
+    list.innerHTML = '';
+
+    try {
+      const res = await bsApi('GET', `/posts/${postId}/snapshots`);
+      const snapshots = res.success ? (res.data || []) : [];
+
+      loading.style.display = 'none';
+
+      if (!snapshots.length) {
+        empty.style.display = 'block';
+        return;
+      }
+
+      list.innerHTML = snapshots.map((s, index) => {
+        const isFirst = index === snapshots.length - 1;
+        const time = s.snapshotTime ? new Date(s.snapshotTime).toLocaleString('zh-CN') : '-';
+        const diffHtml = isFirst
+          ? '<div class="bs-snapshot-no-diff">首次抓取，无历史对比</div>'
+          : bsRenderSnapshotDiff(s.diffFromPrev);
+
+        return `
+          <div class="bs-snapshot-card">
+            <div class="bs-snapshot-time">
+              ${time}
+              <span class="bs-snapshot-batch">批次: ${s.snapshotId || '-'}</span>
+            </div>
+            <div class="bs-snapshot-metrics">
+              <span>点赞 ${s.likeCount !== null ? s.likeCount : '-'}</span>
+              <span>评论 ${s.commentCount !== null ? s.commentCount : '-'}</span>
+              <span>分享 ${s.shareCount !== null ? s.shareCount : '-'}</span>
+              <span>浏览 ${s.viewCount !== null ? s.viewCount : '-'}</span>
+            </div>
+            ${diffHtml}
+          </div>
+        `;
+      }).join('');
+
+      list.style.display = 'block';
+    } catch (e) {
+      loading.style.display = 'none';
+      empty.style.display = 'block';
+      empty.innerHTML = `<p style="color:#dc2626;">加载失败: ${e.message || '未知错误'}</p>`;
+    }
+  }
+
+  function bsRenderSnapshotDiff(diff) {
+    if (!diff || Object.keys(diff).length === 0) {
+      return '<div class="bs-snapshot-no-diff">无变化</div>';
+    }
+
+    const fieldNames = {
+      title: '标题',
+      content: '内容',
+      contentText: '正文',
+      likeCount: '点赞',
+      shareCount: '分享',
+      commentCount: '评论',
+      viewCount: '浏览',
+      isDeleted: '删除状态',
+    };
+
+    const items = Object.entries(diff).map(([key, val]) => {
+      const name = fieldNames[key] || key;
+      if (val.delta !== undefined) {
+        const cls = val.delta > 0 ? 'diff-up' : val.delta < 0 ? 'diff-down' : '';
+        const sign = val.delta > 0 ? '+' : '';
+        return `<div class="bs-snapshot-diff-item"><span>${name}:</span> <span class="${cls}">${val.old || 0} → ${val.new || 0} (${sign}${val.delta})</span></div>`;
+      }
+      return `<div class="bs-snapshot-diff-item"><span>${name}:</span> <span>${val.old || '-'} → ${val.new || '-'}</span></div>`;
+    }).join('');
+
+    return `<div class="bs-snapshot-diff"><div class="bs-snapshot-diff-title">变化:</div>${items}</div>`;
   };
 })();
 </script>
