@@ -342,6 +342,7 @@
         if (Array.isArray(config[currentHandle])) {
           config[currentHandle].splice(idx, 1);
           dirty = true;
+          $("tags-publish").disabled = !dirty;
           renderTagInputs();
           renderPreview();
           renderList();
@@ -378,6 +379,7 @@
       config[currentHandle] = tags;
     }
     dirty = true;
+    $("tags-publish").disabled = !dirty;
     renderPreview();
     renderList();
   }
