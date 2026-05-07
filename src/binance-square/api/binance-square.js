@@ -202,11 +202,14 @@ async function syncSingleUserFollowing(targetUsername) {
   const startTime = Date.now();
   let status = "success";
   let errorMessage = null;
+  let total = 0;
+  let followers = [];
 
   try {
     // 1. 调用API获取关注列表
     const result = await apiClient.fetchFollowingList(targetUsername);
-    const { followers, total } = result;
+    total = result.total || 0;
+    followers = result.followers || [];
 
     // 2. 对比数量，不一致标记为partial
     if (followers.length !== total) {
@@ -217,22 +220,22 @@ async function syncSingleUserFollowing(targetUsername) {
     // 3. 准备用户数据（upsert）
     const userRecords = followers.map((f) => ({
       username: f.username,
-      displayName: f.displayName || null,
-      squareUid: f.squareUid || null,
-      avatar: f.avatar || null,
-      biography: f.biography || null,
-      role: f.role || null,
-      verificationType: f.verificationType || null,
-      verificationDescription: f.verificationDescription || null,
-      totalFollowerCount: f.totalFollowerCount || null,
-      totalFollowingCount: f.totalFollowCount || null,
-      totalPostCount: f.totalPostCount || null,
-      totalLikeCount: f.totalLikeCount || null,
-      totalShareCount: f.totalShareCount || null,
-      accountLang: f.accountLang || null,
-      isKol: f.isKol || null,
-      userStatus: f.userStatus || null,
-      level: f.level || null,
+      displayName: f.displayName ?? null,
+      squareUid: f.squareUid ?? null,
+      avatar: f.avatar ?? null,
+      biography: f.biography ?? null,
+      role: f.role ?? null,
+      verificationType: f.verificationType ?? null,
+      verificationDescription: f.verificationDescription ?? null,
+      totalFollowerCount: f.totalFollowerCount ?? null,
+      totalFollowingCount: f.totalFollowCount ?? null,
+      totalPostCount: f.totalPostCount ?? null,
+      totalLikeCount: f.totalLikeCount ?? null,
+      totalShareCount: f.totalShareCount ?? null,
+      accountLang: f.accountLang ?? null,
+      isKol: f.isKol ?? null,
+      userStatus: f.userStatus ?? null,
+      level: f.level ?? null,
       rawData: f,
       isSeedUser: false, // 被关注者默认不是种子用户
       isTargetUser: false,

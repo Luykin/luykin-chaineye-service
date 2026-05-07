@@ -5,7 +5,7 @@
 
   <!-- 初始化提示（数据库未就绪时显示） -->
   <div id="bs-init-alert" class="bs-alert bs-alert-warning" style="display:none;">
-    <div class="bs-alert-icon">⚠️</div>
+    <div class="bs-alert-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
     <div class="bs-alert-content">
       <strong>数据库未初始化</strong>
       <p>币安广场数据表尚未创建，请先运行迁移：<code>yarn db:migrate:pg</code></p>
@@ -15,57 +15,57 @@
   <!-- 统计卡片 -->
   <div class="bs-stats-grid" id="bs-stats-grid">
     <div class="bs-stat-card">
-      <div class="bs-stat-icon">🌱</div>
-      <div class="bs-stat-value" id="bs-stat-seeds">-</div>
-      <div class="bs-stat-label">种子用户</div>
+      <div class="bs-stat-meta">
+        <div class="bs-stat-label">种子用户</div>
+        <div class="bs-stat-value" id="bs-stat-seeds">-</div>
+      </div>
+      <div class="bs-stat-indicator" style="--indicator-color:#3b82f6;"></div>
     </div>
     <div class="bs-stat-card">
-      <div class="bs-stat-icon">🎯</div>
-      <div class="bs-stat-value" id="bs-stat-targets">-</div>
-      <div class="bs-stat-label">目标用户</div>
+      <div class="bs-stat-meta">
+        <div class="bs-stat-label">目标用户</div>
+        <div class="bs-stat-value" id="bs-stat-targets">-</div>
+      </div>
+      <div class="bs-stat-indicator" style="--indicator-color:#f59e0b;"></div>
     </div>
     <div class="bs-stat-card">
-      <div class="bs-stat-icon">📝</div>
-      <div class="bs-stat-value" id="bs-stat-posts">-</div>
-      <div class="bs-stat-label">帖子总数</div>
+      <div class="bs-stat-meta">
+        <div class="bs-stat-label">帖子总数</div>
+        <div class="bs-stat-value" id="bs-stat-posts">-</div>
+      </div>
+      <div class="bs-stat-indicator" style="--indicator-color:#10b981;"></div>
     </div>
     <div class="bs-stat-card">
-      <div class="bs-stat-icon">📸</div>
-      <div class="bs-stat-value" id="bs-stat-snapshots">-</div>
-      <div class="bs-stat-label">镜像记录</div>
+      <div class="bs-stat-meta">
+        <div class="bs-stat-label">镜像记录</div>
+        <div class="bs-stat-value" id="bs-stat-snapshots">-</div>
+      </div>
+      <div class="bs-stat-indicator" style="--indicator-color:#8b5cf6;"></div>
     </div>
     <div class="bs-stat-card">
-      <div class="bs-stat-icon">⏰</div>
-      <div class="bs-stat-value" id="bs-stat-last-crawl">-</div>
-      <div class="bs-stat-label">上次抓取</div>
+      <div class="bs-stat-meta">
+        <div class="bs-stat-label">上次抓取</div>
+        <div class="bs-stat-value" id="bs-stat-last-crawl">-</div>
+      </div>
+      <div class="bs-stat-indicator" style="--indicator-color:#64748b;"></div>
     </div>
     <div class="bs-stat-card">
-      <div class="bs-stat-icon">⚙️</div>
-      <div class="bs-stat-value" id="bs-stat-scheduler">-</div>
-      <div class="bs-stat-label">调度器状态</div>
+      <div class="bs-stat-meta">
+        <div class="bs-stat-label">调度器状态</div>
+        <div class="bs-stat-value" id="bs-stat-scheduler">-</div>
+      </div>
+      <div class="bs-stat-indicator" style="--indicator-color:#ef4444;"></div>
     </div>
   </div>
 
   <!-- 操作按钮区 -->
   <div class="bs-actions-bar">
-    <button class="bs-btn bs-btn-primary" id="bs-btn-sync">
-      <span>🔄</span> 同步关注列表
-    </button>
-    <button class="bs-btn bs-btn-primary" id="bs-btn-calc">
-      <span>🎯</span> 计算 Top50
-    </button>
-    <button class="bs-btn bs-btn-primary" id="bs-btn-crawl">
-      <span>🕷️</span> 抓取帖子
-    </button>
-    <button class="bs-btn bs-btn-success" id="bs-btn-start">
-      <span>▶️</span> 启动调度器
-    </button>
-    <button class="bs-btn bs-btn-danger" id="bs-btn-pause">
-      <span>⏸️</span> 暂停调度器
-    </button>
-    <button class="bs-btn bs-btn-refresh" id="bs-btn-refresh">
-      <span>🔄</span> 刷新数据
-    </button>
+    <button class="bs-btn bs-btn-primary" id="bs-btn-sync">同步关注列表</button>
+    <button class="bs-btn bs-btn-primary" id="bs-btn-calc">计算 Top50</button>
+    <button class="bs-btn bs-btn-primary" id="bs-btn-crawl">抓取帖子</button>
+    <button class="bs-btn bs-btn-success" id="bs-btn-start">启动调度器</button>
+    <button class="bs-btn bs-btn-danger" id="bs-btn-pause">暂停调度器</button>
+    <button class="bs-btn bs-btn-refresh" id="bs-btn-refresh">刷新数据</button>
   </div>
 
   <!-- 全局操作状态 -->
@@ -90,21 +90,23 @@
     <div id="bs-overview-content" style="display:none;">
       <div class="bs-overview-grid">
         <div class="bs-overview-card">
-          <h4>📊 配置参数</h4>
+          <h4>配置参数</h4>
           <div class="bs-config-list" id="bs-config-list"></div>
         </div>
         <div class="bs-overview-card">
-          <h4>📈 最近抓取统计</h4>
+          <h4>最近抓取统计</h4>
           <div class="bs-recent-stats" id="bs-recent-stats"></div>
         </div>
         <div class="bs-overview-card">
-          <h4>📝 最近日志</h4>
+          <h4>最近日志</h4>
           <div class="bs-recent-logs" id="bs-recent-logs"></div>
         </div>
       </div>
     </div>
     <div id="bs-overview-empty" class="empty-state" style="display:none;">
-      <div class="empty-icon">📭</div>
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      </div>
       <h3>暂无数据</h3>
       <p>请先添加种子用户并同步关注列表</p>
     </div>
@@ -140,7 +142,9 @@
       </div>
     </div>
     <div id="bs-seeds-empty" class="empty-state" style="display:none;">
-      <div class="empty-icon">🌱</div>
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      </div>
       <h3>暂无种子用户</h3>
       <p>请先调用「初始化种子用户」或手动添加</p>
       <button class="bs-btn bs-btn-primary" id="bs-btn-init-seeds">初始化默认种子用户</button>
@@ -170,7 +174,9 @@
       </div>
     </div>
     <div id="bs-targets-empty" class="empty-state" style="display:none;">
-      <div class="empty-icon">🎯</div>
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      </div>
       <h3>尚未计算目标用户</h3>
       <p>请先同步关注列表，然后点击「计算 Top50」</p>
     </div>
@@ -215,7 +221,9 @@
       <div class="bs-pagination" id="bs-posts-pagination"></div>
     </div>
     <div id="bs-posts-empty" class="empty-state" style="display:none;">
-      <div class="empty-icon">📝</div>
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+      </div>
       <h3>暂无帖子数据</h3>
       <p>请先计算 Top50 目标用户，然后抓取帖子</p>
     </div>
@@ -263,7 +271,9 @@
       <div class="bs-pagination" id="bs-logs-pagination"></div>
     </div>
     <div id="bs-logs-empty" class="empty-state" style="display:none;">
-      <div class="empty-icon">📋</div>
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M9 8h2"/><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+      </div>
       <h3>暂无日志</h3>
       <p>执行一次抓取任务后日志将显示在这里</p>
     </div>
@@ -284,82 +294,93 @@
   margin-bottom: 24px;
 }
 .bs-stat-card {
-  background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+  background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
-  text-align: center;
+  border-radius: 10px;
+  padding: 16px 16px 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
 .bs-stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
-.bs-stat-icon {
-  font-size: 24px;
-  margin-bottom: 8px;
+.bs-stat-indicator {
+  width: 4px;
+  height: 40px;
+  border-radius: 2px;
+  background: var(--indicator-color, #94a3b8);
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+.bs-stat-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .bs-stat-value {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
   line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 .bs-stat-label {
   font-size: 12px;
+  font-weight: 500;
   color: #64748b;
-  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 /* 操作按钮区 */
 .bs-actions-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 20px;
-  padding: 16px;
-  background: #f8fafc;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
 }
 .bs-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
-  border-radius: 8px;
+  padding: 7px 14px;
+  border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   border: 1px solid transparent;
   transition: all 0.15s ease;
   white-space: nowrap;
+  line-height: 1.4;
 }
-.bs-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-.bs-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.bs-btn:hover { opacity: 0.85; }
+.bs-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .bs-btn-primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: #2563eb;
   color: #fff;
-  border-color: #2563eb;
 }
+.bs-btn-primary:hover { background: #1d4ed8; opacity: 1; }
 .bs-btn-success {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: #059669;
   color: #fff;
-  border-color: #059669;
 }
+.bs-btn-success:hover { background: #047857; opacity: 1; }
 .bs-btn-danger {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: #dc2626;
   color: #fff;
-  border-color: #dc2626;
 }
+.bs-btn-danger:hover { background: #b91c1c; opacity: 1; }
 .bs-btn-refresh {
-  background: #fff;
+  background: #f8fafc;
   color: #475569;
-  border-color: #cbd5e1;
+  border-color: #e2e8f0;
 }
-.bs-btn-refresh:hover {
-  background: #f1f5f9;
-}
+.bs-btn-refresh:hover { background: #f1f5f9; opacity: 1; }
 
 /* 操作状态提示 */
 .bs-action-status {
@@ -613,6 +634,25 @@
 .bs-page-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* 状态徽章 */
+.bs-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.bs-status-active {
+  background: #dcfce7;
+  color: #166534;
+}
+.bs-status-inactive {
+  background: #f3f4f6;
+  color: #6b7280;
 }
 
 /* 响应式 */
@@ -966,7 +1006,7 @@
           <td>${s.displayName || '-'}</td>
           <td>${bsFormatNum(s.totalFollowingCount)}</td>
           <td>${bsTimeAgo(s.lastCrawledAt)}</td>
-          <td><span style="color:${s.isActive !== false ? '#16a34a' : '#dc2626'}">${s.isActive !== false ? '✅ 活跃' : '⏸️ 停用'}</span></td>
+          <td><span class="bs-status-badge ${s.isActive !== false ? 'bs-status-active' : 'bs-status-inactive'}">${s.isActive !== false ? '活跃' : '停用'}</span></td>
           <td>
             <div class="bs-table-actions">
               <button class="bs-table-btn bs-table-btn-sync" data-action="sync-seed" data-username="${s.username}">同步</button>
