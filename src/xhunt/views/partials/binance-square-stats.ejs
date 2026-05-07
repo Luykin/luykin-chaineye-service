@@ -48,22 +48,22 @@
 
   <!-- 操作按钮区 -->
   <div class="bs-actions-bar">
-    <button class="bs-btn bs-btn-primary" id="bs-btn-sync" onclick="bsSyncFollowing()">
+    <button class="bs-btn bs-btn-primary" id="bs-btn-sync">
       <span>🔄</span> 同步关注列表
     </button>
-    <button class="bs-btn bs-btn-primary" id="bs-btn-calc" onclick="bsCalculateTargets()">
+    <button class="bs-btn bs-btn-primary" id="bs-btn-calc">
       <span>🎯</span> 计算 Top50
     </button>
-    <button class="bs-btn bs-btn-primary" id="bs-btn-crawl" onclick="bsCrawlPosts()">
+    <button class="bs-btn bs-btn-primary" id="bs-btn-crawl">
       <span>🕷️</span> 抓取帖子
     </button>
-    <button class="bs-btn bs-btn-success" id="bs-btn-start" onclick="bsStartScheduler()">
+    <button class="bs-btn bs-btn-success" id="bs-btn-start">
       <span>▶️</span> 启动调度器
     </button>
-    <button class="bs-btn bs-btn-danger" id="bs-btn-pause" onclick="bsPauseScheduler()">
+    <button class="bs-btn bs-btn-danger" id="bs-btn-pause">
       <span>⏸️</span> 暂停调度器
     </button>
-    <button class="bs-btn bs-btn-refresh" onclick="bsRefreshAll()">
+    <button class="bs-btn bs-btn-refresh" id="bs-btn-refresh">
       <span>🔄</span> 刷新数据
     </button>
   </div>
@@ -73,11 +73,11 @@
 
   <!-- 子面板导航 -->
   <div class="bs-sub-tabs">
-    <button class="bs-sub-tab active" data-subtab="overview" onclick="bsSwitchSubTab('overview')">总览</button>
-    <button class="bs-sub-tab" data-subtab="seeds" onclick="bsSwitchSubTab('seeds')">种子用户</button>
-    <button class="bs-sub-tab" data-subtab="targets" onclick="bsSwitchSubTab('targets')">目标用户</button>
-    <button class="bs-sub-tab" data-subtab="posts" onclick="bsSwitchSubTab('posts')">帖子列表</button>
-    <button class="bs-sub-tab" data-subtab="logs" onclick="bsSwitchSubTab('logs')">抓取日志</button>
+    <button class="bs-sub-tab active" data-subtab="overview">总览</button>
+    <button class="bs-sub-tab" data-subtab="seeds">种子用户</button>
+    <button class="bs-sub-tab" data-subtab="targets">目标用户</button>
+    <button class="bs-sub-tab" data-subtab="posts">帖子列表</button>
+    <button class="bs-sub-tab" data-subtab="logs">抓取日志</button>
   </div>
 
   <!-- ========== 总览面板 ========== -->
@@ -116,7 +116,7 @@
     <div class="bs-seed-add-row">
       <input type="text" id="bs-seed-username" placeholder="用户名（如 CZ）" />
       <input type="text" id="bs-seed-display" placeholder="显示名称（可选）" />
-      <button class="bs-btn bs-btn-primary" onclick="bsAddSeed()">添加</button>
+      <button class="bs-btn bs-btn-primary" id="bs-btn-add-seed">添加</button>
     </div>
     <div id="bs-seeds-loading" class="loading-state">
       <div class="spinner"></div>
@@ -143,7 +143,7 @@
       <div class="empty-icon">🌱</div>
       <h3>暂无种子用户</h3>
       <p>请先调用「初始化种子用户」或手动添加</p>
-      <button class="bs-btn bs-btn-primary" onclick="bsInitSeeds()">初始化默认种子用户</button>
+      <button class="bs-btn bs-btn-primary" id="bs-btn-init-seeds">初始化默认种子用户</button>
     </div>
   </div>
 
@@ -180,14 +180,14 @@
   <div class="bs-sub-panel" id="bs-panel-posts">
     <div class="bs-panel-title">帖子列表</div>
     <div class="bs-posts-filter">
-      <select id="bs-posts-filter-type" onchange="bsLoadPosts()">
+      <select id="bs-posts-filter-type">
         <option value="">全部类型</option>
         <option value="article">文章</option>
         <option value="quote">引用</option>
         <option value="reply">回复</option>
       </select>
-      <input type="text" id="bs-posts-filter-user" placeholder="筛选用户名" onkeypress="if(event.key==='Enter') bsLoadPosts()" />
-      <button class="bs-btn bs-btn-refresh" onclick="bsLoadPosts()">筛选</button>
+      <input type="text" id="bs-posts-filter-user" placeholder="筛选用户名" />
+      <button class="bs-btn bs-btn-refresh" id="bs-btn-filter-posts">筛选</button>
     </div>
     <div id="bs-posts-loading" class="loading-state">
       <div class="spinner"></div>
@@ -225,19 +225,19 @@
   <div class="bs-sub-panel" id="bs-panel-logs">
     <div class="bs-panel-title">抓取日志</div>
     <div class="bs-logs-filter">
-      <select id="bs-logs-filter-type" onchange="bsLoadLogs()">
+      <select id="bs-logs-filter-type">
         <option value="">全部类型</option>
         <option value="following">关注同步</option>
         <option value="post">帖子抓取</option>
         <option value="target_calculate">Top50计算</option>
       </select>
-      <select id="bs-logs-filter-status" onchange="bsLoadLogs()">
+      <select id="bs-logs-filter-status">
         <option value="">全部状态</option>
         <option value="success">成功</option>
         <option value="failed">失败</option>
         <option value="partial">部分成功</option>
       </select>
-      <button class="bs-btn bs-btn-refresh" onclick="bsLoadLogs()">刷新</button>
+      <button class="bs-btn bs-btn-refresh" id="bs-btn-refresh-logs">刷新</button>
     </div>
     <div id="bs-logs-loading" class="loading-state">
       <div class="spinner"></div>
@@ -639,6 +639,69 @@
 
   // ========== 初始化 ==========
   document.addEventListener('DOMContentLoaded', function() {
+    // === 绑定静态按钮事件 ===
+    document.getElementById('bs-btn-sync')?.addEventListener('click', bsSyncFollowing);
+    document.getElementById('bs-btn-calc')?.addEventListener('click', bsCalculateTargets);
+    document.getElementById('bs-btn-crawl')?.addEventListener('click', bsCrawlPosts);
+    document.getElementById('bs-btn-start')?.addEventListener('click', bsStartScheduler);
+    document.getElementById('bs-btn-pause')?.addEventListener('click', bsPauseScheduler);
+    document.getElementById('bs-btn-refresh')?.addEventListener('click', bsRefreshAll);
+
+    // === 绑定子 Tab 切换 ===
+    document.querySelectorAll('.bs-sub-tab').forEach(tab => {
+      tab.addEventListener('click', () => bsSwitchSubTab(tab.dataset.subtab));
+    });
+
+    // === 种子用户面板 ===
+    document.getElementById('bs-btn-add-seed')?.addEventListener('click', bsAddSeed);
+    document.getElementById('bs-btn-init-seeds')?.addEventListener('click', bsInitSeeds);
+
+    // === 帖子筛选 ===
+    document.getElementById('bs-posts-filter-type')?.addEventListener('change', () => bsLoadPosts());
+    document.getElementById('bs-posts-filter-user')?.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') bsLoadPosts();
+    });
+    document.getElementById('bs-btn-filter-posts')?.addEventListener('click', () => bsLoadPosts());
+
+    // === 日志筛选 ===
+    document.getElementById('bs-logs-filter-type')?.addEventListener('change', () => bsLoadLogs());
+    document.getElementById('bs-logs-filter-status')?.addEventListener('change', () => bsLoadLogs());
+    document.getElementById('bs-btn-refresh-logs')?.addEventListener('click', () => bsLoadLogs());
+
+    // === 表格事件委托 ===
+    // 种子用户表格
+    document.getElementById('bs-seeds-table-body')?.addEventListener('click', function(e) {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const username = btn.dataset.username;
+      if (action === 'sync-seed' && username) bsSyncOneSeed(username);
+      else if (action === 'remove-seed' && username) bsRemoveSeed(username);
+    });
+
+    // 帖子表格
+    document.getElementById('bs-posts-table-body')?.addEventListener('click', function(e) {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const postId = btn.dataset.postId;
+      if (action === 'view-snapshots' && postId) bsViewPostSnapshots(postId);
+    });
+
+    // === 分页事件委托 ===
+    document.getElementById('bs-posts-pagination')?.addEventListener('click', function(e) {
+      const btn = e.target.closest('.bs-page-btn');
+      if (!btn || btn.disabled) return;
+      const page = parseInt(btn.dataset.page, 10);
+      if (!isNaN(page)) bsLoadPosts(page);
+    });
+    document.getElementById('bs-logs-pagination')?.addEventListener('click', function(e) {
+      const btn = e.target.closest('.bs-page-btn');
+      if (!btn || btn.disabled) return;
+      const page = parseInt(btn.dataset.page, 10);
+      if (!isNaN(page)) bsLoadLogs(page);
+    });
+
     // 等待 stats.js 的 tab 切换系统就绪后再加载
     const checkTab = setInterval(() => {
       if (document.getElementById('binance-square')?.classList.contains('active')) {
@@ -724,7 +787,7 @@
   }
 
   // ========== 子 Tab 切换 ==========
-  window.bsSwitchSubTab = function(tab) {
+  function bsSwitchSubTab(tab) {
     document.querySelectorAll('.bs-sub-tab').forEach(t => t.classList.toggle('active', t.dataset.subtab === tab));
     document.querySelectorAll('.bs-sub-panel').forEach(p => p.classList.toggle('active', p.id === 'bs-panel-' + tab));
     // 加载对应面板数据
@@ -736,7 +799,7 @@
   };
 
   // ========== 刷新全部 ==========
-  window.bsRefreshAll = function() {
+  function bsRefreshAll() {
     if (!bsDbReady) return;
     bsLoadStats();
     bsLoadSchedulerStatus();
@@ -906,8 +969,8 @@
           <td><span style="color:${s.isActive !== false ? '#16a34a' : '#dc2626'}">${s.isActive !== false ? '✅ 活跃' : '⏸️ 停用'}</span></td>
           <td>
             <div class="bs-table-actions">
-              <button class="bs-table-btn bs-table-btn-sync" onclick="bsSyncOneSeed('${s.username}')">同步</button>
-              <button class="bs-table-btn bs-table-btn-remove" onclick="bsRemoveSeed('${s.username}')">移除</button>
+              <button class="bs-table-btn bs-table-btn-sync" data-action="sync-seed" data-username="${s.username}">同步</button>
+              <button class="bs-table-btn bs-table-btn-remove" data-action="remove-seed" data-username="${s.username}">移除</button>
             </div>
           </td>
         </tr>
@@ -956,7 +1019,7 @@
   }
 
   // ========== 帖子列表面板 ==========
-  window.bsLoadPosts = async function(page) {
+  async function bsLoadPosts(page) {
     page = page || bsPostsPage;
     bsPostsPage = page;
     bsSetLoading('bs-posts-loading', true);
@@ -993,14 +1056,14 @@
           <td>${bsFormatNum(p.viewCount)}</td>
           <td>${bsFormatDate(p.publishedAt)}</td>
           <td>
-            <button class="bs-table-btn bs-table-btn-view" onclick="bsViewPostSnapshots('${p.postId}')">镜像</button>
+            <button class="bs-table-btn bs-table-btn-view" data-action="view-snapshots" data-post-id="${p.postId}">镜像</button>
           </td>
         </tr>
       `).join('');
 
       // 分页
       const totalPages = Math.ceil(total / BS_PAGE_SIZE);
-      bsRenderPagination('bs-posts-pagination', totalPages, page, bsLoadPosts);
+      bsRenderPagination('bs-posts-pagination', totalPages, page);
 
       bsSetLoading('bs-posts-loading', false);
       bsSetVisible('bs-posts-content', true);
@@ -1011,7 +1074,7 @@
   };
 
   // ========== 日志面板 ==========
-  window.bsLoadLogs = async function(page) {
+  async function bsLoadLogs(page) {
     page = page || bsLogsPage;
     bsLogsPage = page;
     bsSetLoading('bs-logs-loading', true);
@@ -1054,7 +1117,7 @@
 
       // 分页
       const totalPages = Math.ceil(total / BS_PAGE_SIZE);
-      bsRenderPagination('bs-logs-pagination', totalPages, page, bsLoadLogs);
+      bsRenderPagination('bs-logs-pagination', totalPages, page);
 
       bsSetLoading('bs-logs-loading', false);
       bsSetVisible('bs-logs-content', true);
@@ -1065,7 +1128,7 @@
   };
 
   // ========== 分页渲染 ==========
-  function bsRenderPagination(containerId, totalPages, currentPage, callback) {
+  function bsRenderPagination(containerId, totalPages, currentPage) {
     const container = document.getElementById(containerId);
     if (!container || totalPages <= 1) {
       if (container) container.innerHTML = '';
@@ -1073,24 +1136,24 @@
     }
     let html = '';
     // 上一页
-    html += `<button class="bs-page-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="window.${callback.name}(${currentPage - 1})">上一页</button>`;
+    html += `<button class="bs-page-btn" ${currentPage <= 1 ? 'disabled' : ''} data-page="${currentPage - 1}">上一页</button>`;
     // 页码
     const maxButtons = 7;
     let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
     let end = Math.min(totalPages, start + maxButtons - 1);
     if (end - start < maxButtons - 1) start = Math.max(1, end - maxButtons + 1);
-    if (start > 1) html += `<button class="bs-page-btn" onclick="window.${callback.name}(1)">1</button>${start > 2 ? '<span style="padding:6px 4px;color:#94a3b8;">...</span>' : ''}`;
+    if (start > 1) html += `<button class="bs-page-btn" data-page="1">1</button>${start > 2 ? '<span style="padding:6px 4px;color:#94a3b8;">...</span>' : ''}`;
     for (let i = start; i <= end; i++) {
-      html += `<button class="bs-page-btn ${i === currentPage ? 'active' : ''}" onclick="window.${callback.name}(${i})">${i}</button>`;
+      html += `<button class="bs-page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
     }
-    if (end < totalPages) html += `${end < totalPages - 1 ? '<span style="padding:6px 4px;color:#94a3b8;">...</span>' : ''}<button class="bs-page-btn" onclick="window.${callback.name}(${totalPages})">${totalPages}</button>`;
+    if (end < totalPages) html += `${end < totalPages - 1 ? '<span style="padding:6px 4px;color:#94a3b8;">...</span>' : ''}<button class="bs-page-btn" data-page="${totalPages}">${totalPages}</button>`;
     // 下一页
-    html += `<button class="bs-page-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="window.${callback.name}(${currentPage + 1})">下一页</button>`;
+    html += `<button class="bs-page-btn" ${currentPage >= totalPages ? 'disabled' : ''} data-page="${currentPage + 1}">下一页</button>`;
     container.innerHTML = html;
   }
 
   // ========== 操作按钮 ==========
-  window.bsSyncFollowing = async function() {
+  async function bsSyncFollowing() {
     const btn = document.getElementById('bs-btn-sync');
     btn.disabled = true;
     bsShowStatus('正在同步关注列表，请稍候...', 'info');
@@ -1105,7 +1168,7 @@
     }
   };
 
-  window.bsCalculateTargets = async function() {
+  async function bsCalculateTargets() {
     const btn = document.getElementById('bs-btn-calc');
     btn.disabled = true;
     bsShowStatus('正在计算 Top50 目标用户...', 'info');
@@ -1120,7 +1183,7 @@
     }
   };
 
-  window.bsCrawlPosts = async function() {
+  async function bsCrawlPosts() {
     const btn = document.getElementById('bs-btn-crawl');
     btn.disabled = true;
     bsShowStatus('正在抓取帖子，这可能需要几分钟...', 'info');
@@ -1135,7 +1198,7 @@
     }
   };
 
-  window.bsStartScheduler = async function() {
+  async function bsStartScheduler() {
     const btn = document.getElementById('bs-btn-start');
     btn.disabled = true;
     try {
@@ -1150,7 +1213,7 @@
     }
   };
 
-  window.bsPauseScheduler = async function() {
+  async function bsPauseScheduler() {
     const btn = document.getElementById('bs-btn-pause');
     btn.disabled = true;
     try {
@@ -1165,7 +1228,7 @@
     }
   };
 
-  window.bsInitSeeds = async function() {
+  async function bsInitSeeds() {
     const defaultSeeds = [
       { username: "CZ", displayName: "CZ" },
       { username: "heyi", displayName: "heyi" },
@@ -1203,7 +1266,7 @@
     }
   };
 
-  window.bsAddSeed = async function() {
+  async function bsAddSeed() {
     const username = document.getElementById('bs-seed-username')?.value?.trim();
     const displayName = document.getElementById('bs-seed-display')?.value?.trim();
     if (!username) {
@@ -1222,7 +1285,7 @@
     }
   };
 
-  window.bsRemoveSeed = async function(username) {
+  async function bsRemoveSeed(username) {
     if (!confirm(`确定移除种子用户 ${username}？`)) return;
     try {
       await bsApi('POST', '/seed/remove', { username });
@@ -1234,7 +1297,7 @@
     }
   };
 
-  window.bsSyncOneSeed = async function(username) {
+  async function bsSyncOneSeed(username) {
     try {
       bsShowStatus(`正在同步 ${username} 的关注列表...`, 'info');
       const res = await bsApi('POST', `/following/sync/${username}`);
@@ -1245,7 +1308,7 @@
     }
   };
 
-  window.bsViewPostSnapshots = async function(postId) {
+  async function bsViewPostSnapshots(postId) {
     alert('帖子镜像查看功能开发中\npostId: ' + postId);
   };
 })();
