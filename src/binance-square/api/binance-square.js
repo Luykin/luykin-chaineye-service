@@ -84,7 +84,25 @@ router.get("/seed/list", async (req, res) => {
       order: [["sortOrder", "ASC"], ["createdAt", "ASC"]],
     });
 
-    res.json(success(seeds));
+    // 关联查询 BinanceSquareUser 获取 totalFollowingCount / lastCrawledAt
+    const seedUsernames = seeds.map((s) => s.username);
+    const users = await db.BinanceSquareUser.findAll({
+      where: { username: { [Op.in]: seedUsernames } },
+      attributes: ["username", "totalFollowingCount", "lastCrawledAt"],
+      raw: true,
+    });
+    const userMap = new Map(users.map((u) => [u.username, u]));
+
+    const enriched = seeds.map((s) => {
+      const user = userMap.get(s.username);
+      return {
+        ...s.toJSON(),
+        totalFollowingCount: user?.totalFollowingCount ?? null,
+        lastCrawledAt: user?.lastCrawledAt ?? null,
+      };
+    });
+
+    res.json(success(enriched));
   } catch (error) {
     console.error("[seed/list] error:", error);
     res.status(500).json(fail(error.message));
