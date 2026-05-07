@@ -1140,7 +1140,8 @@
     btn.disabled = true;
     try {
       const res = await bsApi('POST', '/crawl/start');
-      bsShowStatus('调度器已启动', 'success');
+      const msg = res.success && res.data?.message ? res.data.message : '启动命令已发送';
+      bsShowStatus(msg, 'success');
       bsLoadSchedulerStatus();
     } catch (e) {
       bsShowStatus('启动失败：' + (e.message || '未知错误'), 'error');
@@ -1154,7 +1155,8 @@
     btn.disabled = true;
     try {
       const res = await bsApi('POST', '/crawl/pause');
-      bsShowStatus('调度器已暂停', 'success');
+      const msg = res.success && res.data?.message ? res.data.message : '暂停命令已发送';
+      bsShowStatus(msg, 'success');
       bsLoadSchedulerStatus();
     } catch (e) {
       bsShowStatus('暂停失败：' + (e.message || '未知错误'), 'error');

@@ -873,14 +873,16 @@ router.get("/posts/snapshot-compare", async (req, res) => {
 
 /**
  * POST /crawl/start
- * 启动定时爬虫任务
+ * 启动定时爬虫任务（通过 Redis 通知单例服务）
  */
 router.post("/crawl/start", async (req, res) => {
   try {
-    const sched = getScheduler();
-    await sched.start();
-    const status = await sched.getStatus();
-    res.json(success(status));
+    await req.redisClient.set("binance_square:scheduler:control", "start");
+    res.json(success({
+      message: "启动命令已发送至单例任务服务",
+      note: "调度器将在30秒内启动",
+      control: "start",
+    }));
   } catch (error) {
     console.error("[crawl/start] error:", error);
     res.status(500).json(fail(error.message));
@@ -889,13 +891,15 @@ router.post("/crawl/start", async (req, res) => {
 
 /**
  * POST /crawl/pause
- * 暂停定时爬虫任务
+ * 暂停定时爬虫任务（通过 Redis 通知单例服务）
  */
 router.post("/crawl/pause", async (req, res) => {
   try {
-    const sched = getScheduler();
-    sched.stop();
-    res.json(success({ isRunning: false, message: "调度器已暂停" }));
+    await req.redisClient.set("binance_square:scheduler:control", "stop");
+    res.json(success({
+      message: "暂停命令已发送至单例任务服务",
+      control: "stop",
+    }));
   } catch (error) {
     console.error("[crawl/pause] error:", error);
     res.status(500).json(fail(error.message));
@@ -904,13 +908,30 @@ router.post("/crawl/pause", async (req, res) => {
 
 /**
  * GET /crawl/status
- * 获取爬虫运行状态
+ * 获取爬虫运行状态（从 Redis 读取单例服务状态）
  */
 router.get("/crawl/status", async (req, res) => {
   try {
-    const sched = getScheduler();
-    const status = await sched.getStatus();
-    res.json(success(status));
+    const control = await req.redisClient.get("binance_square:scheduler:control");
+    const isRunning = control === "start";
+
+    // 从数据库查询最近一次抓取日志
+    const lastLog = await db.BinanceSquareCrawlLog.findOne({
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.json(success({
+      control: control || "none",
+      isRunning,
+      lastCrawl: lastLog ? {
+        taskType: lastLog.taskType,
+        status: lastLog.status,
+        itemsCount: lastLog.itemsCount,
+        snapshotId: lastLog.snapshotId,
+        durationMs: lastLog.durationMs,
+        createdAt: lastLog.createdAt,
+      } : null,
+    }));
   } catch (error) {
     console.error("[crawl/status] error:", error);
     res.status(500).json(fail(error.message));
@@ -1009,9 +1030,16 @@ router.post("/config", async (req, res) => {
       { where: { configKey } }
     );
 
-    // 清除调度器缓存（下次任务读取新配置）
+    // 清除本地调度器缓存（API 层）
     const sched = getScheduler();
     sched.configService?.clearCache(configKey);
+
+    // 通知单例服务清除缓存（通过 Redis）
+    try {
+      await req.redisClient.set("binance_square:config:changed", configKey, { EX: 60 });
+    } catch (e) {
+      console.warn("[config/update] Redis 通知失败:", e.message);
+    }
 
     res.json(success({ configKey, configValue, updated: true }));
   } catch (error) {

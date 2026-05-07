@@ -13,11 +13,17 @@ const redis = require("redis");
 const pgBackupService = require("./services/pg-backup-service");
 const {
   setupPostgres,
+  pgInstance,
   VersionRequestStats,
   UrlRequestStats,
 } = require("./models/postgres-start");
 const { requestStatsManager } = require("./xhunt/middleware/security");
 const { initPerfMonitor } = require("./lib/perf-monitor"); // 性能监控模块
+
+// 币安广场调度器（单例服务运行，避免 cluster 模式重复执行）
+const initBinanceSquareModels = require("./binance-square/models");
+const { BinanceSquareScheduler } = require("./binance-square/services/scheduler");
+const { BinanceSquareTaskManager } = require("./binance-square/scraper/taskManager");
 
 // 初始化 Redis 客户端
 const redisClient = redis.createClient({
@@ -359,6 +365,56 @@ async function cleanupOldStats() {
         console.error("[DailyReport] 发送失败:", e);
       }
     });
+
+    // ========== 币安广场调度器（单例服务运行） ==========
+    let bsScheduler = null;
+    const BS_SCHEDULER_KEY = "binance_square:scheduler:control";
+
+    async function checkBinanceSquareScheduler() {
+      try {
+        // 1. 检查配置变更通知（来自 API 层的配置更新）
+        const changedConfigKey = await redisClient.get("binance_square:config:changed");
+        if (changedConfigKey && bsScheduler?.configService) {
+          bsScheduler.configService.clearCache(changedConfigKey);
+          console.log(`[BinanceSquare] 配置缓存已清除: ${changedConfigKey}`);
+          await redisClient.del("binance_square:config:changed");
+        }
+
+        // 2. 检查启停控制
+        const control = await redisClient.get(BS_SCHEDULER_KEY);
+
+        if (control === "start") {
+          if (!bsScheduler) {
+            try {
+              const bsDb = initBinanceSquareModels(pgInstance);
+              const taskManager = new BinanceSquareTaskManager(bsDb);
+              bsScheduler = new BinanceSquareScheduler(bsDb, taskManager);
+              console.log("[BinanceSquare] 调度器实例已创建");
+            } catch (e) {
+              console.error("[BinanceSquare] ❌ 创建调度器失败:", e.message);
+              return;
+            }
+          }
+          if (!bsScheduler.isRunning) {
+            await bsScheduler.start();
+            console.log("[BinanceSquare] ✅ 调度器已启动");
+          }
+        } else if (control === "stop") {
+          if (bsScheduler && bsScheduler.isRunning) {
+            bsScheduler.stop();
+            console.log("[BinanceSquare] ⏸️ 调度器已停止");
+          }
+        }
+        // 其他值或无值：保持当前状态
+      } catch (e) {
+        console.error("[BinanceSquare] ❌ 调度器检查失败:", e.message);
+      }
+    }
+
+    // 立即检查一次，然后每 30 秒轮询
+    checkBinanceSquareScheduler();
+    setInterval(checkBinanceSquareScheduler, 30000);
+    console.log("✅ 币安广场调度器控制已启动（每30秒轮询 Redis）");
 
     // // RootDataPro 每日维护任务：每天 UTC 03:00
     // const taskManager = require("./rootdatapro/scraper/taskManager");
