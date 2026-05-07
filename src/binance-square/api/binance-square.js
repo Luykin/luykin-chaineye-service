@@ -227,7 +227,16 @@ async function syncSingleUserFollowing(targetUsername) {
       followingSquareUid: f.squareUid || null,
     }));
 
-    // 5. 批量写入（事务）
+    // 5. 在写入前统计已存在的用户数量（否则事务提交后统计永远等于 followers.length）
+    const existingUsernames = await db.BinanceSquareUser.findAll({
+      where: { username: { [Op.in]: followers.map((f) => f.username) } },
+      attributes: ["username"],
+      raw: true,
+    });
+    const existingUsernameSet = new Set(existingUsernames.map((u) => u.username));
+    const newUsersCount = followers.filter((f) => !existingUsernameSet.has(f.username)).length;
+
+    // 6. 批量写入（事务）
     const transaction = await db.BinanceSquareUser.sequelize.transaction();
 
     try {
@@ -268,19 +277,13 @@ async function syncSingleUserFollowing(targetUsername) {
       throw err;
     }
 
-    // 6. 统计新增数量
-    const existingUsers = await db.BinanceSquareUser.count({
-      where: { username: { [Op.in]: followers.map((f) => f.username) } },
-    });
-    const newUsers = followers.length - existingUsers;
-
     const durationMs = Date.now() - startTime;
 
     return {
       username: targetUsername,
       total,
       fetched: followers.length,
-      newUsers: Math.max(0, newUsers),
+      newUsers: newUsersCount,
       newRelations: followingRecords.length,
       status,
       durationMs,
