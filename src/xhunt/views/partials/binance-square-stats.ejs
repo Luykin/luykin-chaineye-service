@@ -1074,8 +1074,8 @@
       if (user) url += `&username=${encodeURIComponent(user)}`;
 
       const res = await bsApi('GET', url);
-      const posts = res.success ? (res.data || []) : [];
-      const total = res.success ? (res.total || 0) : 0;
+      const posts = res.success ? (res.data?.data || []) : [];
+      const total = res.success ? (res.data?.total || 0) : 0;
       bsPostsTotal = total;
       const tbody = document.getElementById('bs-posts-table-body');
 
@@ -1129,8 +1129,8 @@
       if (status) url += `&status=${status}`;
 
       const res = await bsApi('GET', url);
-      const logs = res.success ? (res.data || []) : [];
-      const total = res.success ? (res.total || 0) : 0;
+      const logs = res.success ? (res.data?.data || []) : [];
+      const total = res.success ? (res.data?.total || 0) : 0;
       bsLogsTotal = total;
       const tbody = document.getElementById('bs-logs-table-body');
 
