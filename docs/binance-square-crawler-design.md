@@ -476,10 +476,10 @@ module.exports = (sequelize) => {
       comment: "浏览数 —— 源数据可能为空",
     },
 
-    // === 差异记录（TODO，当前留空） ===
+    // === 差异记录 ===
     diffFromPrev: {
       type: DataTypes.JSONB,
-      comment: "与上一版本的差异记录 —— TODO：对比逻辑确认后填充",
+      comment: "与上一版本的差异记录 —— 每次抓取时自动计算",
     },
   }, {
     tableName: "BinanceSquarePostSnapshots",
@@ -861,7 +861,7 @@ async function fetchAllFollowing(targetUsername) {
 │                                      │
 │ 5. 生成镜像记录                     │
 │    - 写入 BinanceSquarePostSnapshot │
-│    - diffFromPrev 留空               │
+│    - diffFromPrev 自动计算并填充     │
 │                                      │
 │ 6. 记录 CrawlLog                    │
 │    - taskType="post"                 │
@@ -920,21 +920,92 @@ async function fetchAllFollowing(targetUsername) {
 5. 每个目标用户需要调**两次**接口（ALL + REPLY），抓取量翻倍，注意控制请求频率
 6. 回复帖的 `body` / `bodyTextOnly` / `title` 可能为null，字段约束已做容错处理
 
-### 5.5 镜像对比机制（TODO）
+### 5.5 镜像对比机制
 
-> **状态：待定**
+> **策略：全量存储 + 全量diff**
 >
-> 镜像对比的具体逻辑（对比哪些字段、如何计算差异）待坤哥后续确认后再实现。
->
-> **当前阶段**：仅保存快照，不计算差异，`diffFromPrev` 字段留空。
+> 每次抓取都生成镜像记录，同时计算与上一版本的差异存入 `diffFromPrev`。
+> 估算存储：~457 MB / 3天（36,000条镜像），完全可接受。
 
-**预留的对比接口**：
+**对比字段范围**：
+
+| 字段 | 类型 | 对比方式 | diff记录格式 |
+|------|------|---------|-------------|
+| `title` | 文本 | 字符串严格对比 | `{old: "原标题", new: "新标题"}` |
+| `content` | 文本 | 字符串严格对比 | `{old: "原内容", new: "新内容"}` |
+| `contentText` | 文本 | 字符串严格对比 | `{old: "...", new: "..."}` |
+| `likeCount` | 数字 | 数值对比 | `{old: 100, new: 150, delta: 50}` |
+| `shareCount` | 数字 | 数值对比 | `{old: 10, new: 12, delta: 2}` |
+| `commentCount` | 数字 | 数值对比 | `{old: 5, new: 8, delta: 3}` |
+| `viewCount` | 数字 | 数值对比 | `{old: 1000, new: 1200, delta: 200}` |
+| `isDeleted` | 布尔 | 布尔对比 | `{old: false, new: true}` |
+
+**不参与对比的字段**（每次请求都会变，属于"噪声"）：
+- `createTime` / `updateTime` / `browseTime`（系统时间戳）
+- `isLiked` / `isFollowed`（和登录态相关）
+- `tradingPairs` 价格（实时变动）
+- 随机token、临时URL等
+
+**diffFromPrev 存储格式示例**：
+```json
+{
+  "title": {
+    "old": "AMA. 英语和中文（我只会这两种）",
+    "new": "AMA. 英语和中文（我只会这两种）- 更新"
+  },
+  "likeCount": {
+    "old": 15234,
+    "new": 15678,
+    "delta": 444
+  },
+  "viewCount": {
+    "old": 892100,
+    "new": 901200,
+    "delta": 9100
+  }
+}
+```
+
+**对比逻辑**：
+```javascript
+const DIFF_FIELDS = [
+  { key: "title", type: "text" },
+  { key: "content", type: "text" },
+  { key: "contentText", type: "text" },
+  { key: "likeCount", type: "number" },
+  { key: "shareCount", type: "number" },
+  { key: "commentCount", type: "number" },
+  { key: "viewCount", type: "number" },
+  { key: "isDeleted", type: "boolean" },
+];
+
+async function computeDiff(currentSnapshot, prevSnapshot) {
+  if (!prevSnapshot) return null;
+
+  const diff = {};
+  for (const { key, type } of DIFF_FIELDS) {
+    const oldVal = prevSnapshot[key];
+    const newVal = currentSnapshot[key];
+
+    if (oldVal !== newVal) {
+      diff[key] = { old: oldVal, new: newVal };
+      if (type === "number") {
+        diff[key].delta = (newVal || 0) - (oldVal || 0);
+      }
+    }
+  }
+
+  return Object.keys(diff).length > 0 ? diff : null;
+}
+```
+
+**查询接口**：
 ```
 GET /api/binance-square/internal/posts/snapshot-compare
-  ?snapshotId1=20260507090000
+  ?postId=12345
+  &snapshotId1=20260507090000
   &snapshotId2=20260507110000
 ```
-此接口先返回原始快照数据，对比逻辑后续补充。
 
 ### 5.6 数据清理策略
 
@@ -1119,7 +1190,7 @@ BINANCE_SQUARE_SNAPSHOT_RETENTION_DAYS=3
 | 1 | ~~帖子抓取方式~~ | ✅ 已确认 | 接口已明确，纯API调用，不需要Puppeteer |
 | 2 | **Cookie管理** | 🟢 当前不用 | 关注列表和帖子接口均为公开接口，暂不需要 |
 | 3 | ~~帖子详情抓取~~ | ✅ 已确认 | 纯API即可，接口返回完整帖子数据 |
-| 4 | **镜像对比逻辑** | 🔴 待定 | 对比哪些字段、如何计算差异 |
+| 4 | ~~镜像对比逻辑~~ | ✅ **已确认** | 全量diff：文本严格对比 + 数字delta |
 | 5 | **数据展示** | 🔴 待定 | 是否需要前端管理界面查看Top50列表、帖子对比等 |
 
 ---
@@ -1150,5 +1221,5 @@ BINANCE_SQUARE_SNAPSHOT_RETENTION_DAYS=3
 8. ✅ 定时清理任务（3天滚动删除镜像）
 
 **暂不实现**：
-- ❌ 镜像对比逻辑（等后续确认）
+- ✅ 镜像对比逻辑（全量存储 + 全量diff）
 - ❌ 数据展示前端（等后续确认）
