@@ -558,5 +558,300 @@ router.get("/target/list", async (req, res) => {
   }
 });
 
+// ==================== 帖子抓取与镜像管理 ====================
+
+const postParser = require("../scraper/parsers/postParser");
+
+/**
+ * 生成镜像批次ID
+ * @returns {string} YYYYMMDDHHmmss
+ */
+function generateSnapshotId() {
+  const now = new Date();
+  return (
+    String(now.getFullYear()) +
+    String(now.getMonth() + 1).padStart(2, "0") +
+    String(now.getDate()).padStart(2, "0") +
+    String(now.getHours()).padStart(2, "0") +
+    String(now.getMinutes()).padStart(2, "0") +
+    String(now.getSeconds()).padStart(2, "0")
+  );
+}
+
+/**
+ * 计算镜像差异
+ * @param {Object} current - 当前镜像数据
+ * @param {Object} prev - 上一个镜像数据
+ * @returns {Object|null} diff对象或null
+ */
+function computeSnapshotDiff(current, prev) {
+  if (!prev) return null;
+
+  const diff = {};
+  const fields = [
+    { key: "title", type: "text" },
+    { key: "content", type: "text" },
+    { key: "contentText", type: "text" },
+    { key: "likeCount", type: "number" },
+    { key: "shareCount", type: "number" },
+    { key: "commentCount", type: "number" },
+    { key: "viewCount", type: "number" },
+    { key: "isDeleted", type: "boolean" },
+  ];
+
+  for (const { key, type } of fields) {
+    const oldVal = prev[key];
+    const newVal = current[key];
+
+    if (oldVal !== newVal) {
+      diff[key] = { old: oldVal, new: newVal };
+      if (type === "number") {
+        diff[key].delta = (newVal || 0) - (oldVal || 0);
+      }
+    }
+  }
+
+  return Object.keys(diff).length > 0 ? diff : null;
+}
+
+/**
+ * POST /crawl/posts
+ * 手动触发：抓取目标用户的帖子（ALL + REPLY）
+ */
+router.post("/crawl/posts", async (req, res) => {
+  const startTime = Date.now();
+  const snapshotId = generateSnapshotId();
+  const snapshotTime = new Date();
+
+  try {
+    // 1. 获取目标用户
+    const targetUsers = await db.BinanceSquareUser.findAll({
+      where: { isTargetUser: true },
+      attributes: ["username", "squareUid"],
+    });
+
+    if (targetUsers.length === 0) {
+      return res.status(400).json(fail("没有目标用户，请先计算Top50"));
+    }
+
+    console.log(`[crawl/posts] 开始抓取 ${targetUsers.length} 个目标用户的帖子`);
+
+    let totalPostsAll = 0;
+    let totalPostsReply = 0;
+    let totalSnapshots = 0;
+    let failedUsers = [];
+
+    // 2. 逐个抓取目标用户
+    for (const user of targetUsers) {
+      if (!user.squareUid) {
+        console.warn(`[crawl/posts] ${user.username} 缺少squareUid，跳过`);
+        continue;
+      }
+
+      try {
+        // 2.1 抓取主帖（ALL）
+        const allResult = await apiClient.fetchUserPosts(user.squareUid, "ALL", 7);
+        const allPosts = postParser.parsePostContents(allResult.contents);
+        totalPostsAll += allPosts.length;
+
+        // 2.2 抓取回复（REPLY）
+        const replyResult = await apiClient.fetchUserPosts(user.squareUid, "REPLY", 7);
+        const replyPosts = postParser.parsePostContents(replyResult.contents);
+        totalPostsReply += replyPosts.length;
+
+        // 2.3 合并并写入数据库
+        const allPostsWithFilter = allPosts.map((p) => ({ ...p, username: user.username }));
+        const replyPostsWithFilter = replyPosts.map((p) => ({ ...p, username: user.username }));
+        const allParsed = [...allPostsWithFilter, ...replyPostsWithFilter];
+
+        // upsert Posts
+        for (const post of allParsed) {
+          await db.BinanceSquarePost.upsert({
+            ...post,
+            lastSnapshotId: snapshotId,
+          });
+        }
+
+        // 2.4 生成镜像 + 计算diff
+        for (const post of allParsed) {
+          // 查找上一个镜像
+          const prevSnapshot = await db.BinanceSquarePostSnapshot.findOne({
+            where: { postId: post.postId },
+            order: [["snapshotTime", "DESC"]],
+          });
+
+          // 计算diff
+          const diff = computeSnapshotDiff(post, prevSnapshot);
+
+          // 创建新镜像
+          await db.BinanceSquarePostSnapshot.create({
+            postId: post.postId,
+            snapshotId,
+            snapshotTime,
+            title: post.title,
+            content: post.content,
+            contentText: post.contentText,
+            mediaUrls: post.mediaUrls,
+            likeCount: post.likeCount,
+            shareCount: post.shareCount,
+            commentCount: post.commentCount,
+            viewCount: post.viewCount,
+            isDeleted: post.isDeleted,
+            diffFromPrev: diff,
+          });
+
+          totalSnapshots++;
+        }
+
+        // 2.5 更新用户lastCrawledAt
+        await db.BinanceSquareUser.update(
+          { lastCrawledAt: new Date() },
+          { where: { username: user.username } }
+        );
+      } catch (error) {
+        console.error(`[crawl/posts] ${user.username} 抓取失败:`, error.message);
+        failedUsers.push({ username: user.username, error: error.message });
+      }
+    }
+
+    // 3. 记录CrawlLog（ALL）
+    const durationMs = Date.now() - startTime;
+    const overallStatus = failedUsers.length > 0 ? "partial" : "success";
+
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "post",
+      status: overallStatus,
+      filterType: "ALL",
+      itemsCount: totalPostsAll + totalPostsReply,
+      snapshotId,
+      durationMs,
+    });
+
+    res.json(success({
+      snapshotId,
+      targetUsers: targetUsers.length,
+      totalPostsAll,
+      totalPostsReply,
+      totalSnapshots,
+      failedUsers: failedUsers.length,
+      failedDetails: failedUsers,
+      durationMs,
+      status: overallStatus,
+    }));
+  } catch (error) {
+    console.error("[crawl/posts] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /posts
+ * 查询帖子列表
+ */
+router.get("/posts", async (req, res) => {
+  try {
+    const {
+      username,
+      postType,
+      page = 1,
+      pageSize = 20,
+      startDate,
+      endDate,
+    } = req.query;
+
+    const where = {};
+    if (username) where.username = username;
+    if (postType) where.postType = postType;
+    if (startDate || endDate) {
+      where.publishedAt = {};
+      if (startDate) where.publishedAt[Op.gte] = new Date(startDate);
+      if (endDate) where.publishedAt[Op.lte] = new Date(endDate);
+    }
+
+    const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
+      where,
+      order: [["publishedAt", "DESC"]],
+      limit: parseInt(pageSize, 10),
+      offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
+    });
+
+    res.json(success({
+      total: count,
+      page: parseInt(page, 10),
+      pageSize: parseInt(pageSize, 10),
+      data: rows,
+    }));
+  } catch (error) {
+    console.error("[posts/list] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /posts/:postId/snapshots
+ * 查询某帖子的历史镜像
+ */
+router.get("/posts/:postId/snapshots", async (req, res) => {
+  try {
+    const { postId } = req.params;
+
+    const snapshots = await db.BinanceSquarePostSnapshot.findAll({
+      where: { postId },
+      order: [["snapshotTime", "DESC"]],
+    });
+
+    res.json(success(snapshots));
+  } catch (error) {
+    console.error("[posts/snapshots] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /posts/snapshot-compare
+ * 对比两个镜像批次
+ */
+router.get("/posts/snapshot-compare", async (req, res) => {
+  try {
+    const { postId, snapshotId1, snapshotId2 } = req.query;
+
+    if (!postId || !snapshotId1 || !snapshotId2) {
+      return res.status(400).json(fail("postId, snapshotId1, snapshotId2 必填"));
+    }
+
+    const [s1, s2] = await Promise.all([
+      db.BinanceSquarePostSnapshot.findOne({
+        where: { postId, snapshotId: snapshotId1 },
+      }),
+      db.BinanceSquarePostSnapshot.findOne({
+        where: { postId, snapshotId: snapshotId2 },
+      }),
+    ]);
+
+    if (!s1 || !s2) {
+      return res.status(404).json(fail("镜像不存在"));
+    }
+
+    res.json(success({
+      postId,
+      snapshot1: {
+        snapshotId: s1.snapshotId,
+        snapshotTime: s1.snapshotTime,
+        data: s1,
+      },
+      snapshot2: {
+        snapshotId: s2.snapshotId,
+        snapshotTime: s2.snapshotTime,
+        data: s2,
+      },
+      // 如果snapshot2是更新的，使用其diffFromPrev
+      diff: s2.diffFromPrev,
+    }));
+  } catch (error) {
+    console.error("[posts/snapshot-compare] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
 // 导出路由和初始化函数
 module.exports = { router, initRoutes };
