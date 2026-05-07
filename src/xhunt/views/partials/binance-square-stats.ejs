@@ -1093,33 +1093,15 @@
   // ========== 加载统计卡片 ==========
   async function bsLoadStats() {
     try {
-      // 并行获取各表统计
-      const [seedsRes, targetsRes, postsRes, snapshotsRes, lastCrawlRes] = await Promise.all([
-        bsApi('GET', '/seed/list').catch(e => ({ success: false, data: [] })),
-        bsApi('GET', '/target/list').catch(e => ({ success: false, data: [] })),
-        bsApi('GET', '/posts?page=1&pageSize=1').catch(e => ({ success: false, total: 0 })),
-        bsApi('GET', '/posts?page=1&pageSize=1').catch(e => ({ success: false, total: 0 })),
-        bsApi('GET', '/crawl/status').catch(e => ({ success: false }))
-      ]);
+      const statsRes = await bsApi('GET', '/stats');
 
-      const seedCount = seedsRes.success ? (seedsRes.data?.length || 0) : 0;
-      const targetCount = targetsRes.success ? (targetsRes.data?.length || 0) : 0;
-      const postTotal = postsRes.success ? (postsRes.total || 0) : 0;
-      // 镜像数量需要从 API 获取，目前帖子API返回 total
-      const snapshotTotal = postTotal; // 简化为帖子数，后续可加专门统计接口
-
-      document.getElementById('bs-stat-seeds').textContent = seedCount;
-      document.getElementById('bs-stat-targets').textContent = targetCount;
-      document.getElementById('bs-stat-posts').textContent = bsFormatNum(postTotal);
-      document.getElementById('bs-stat-snapshots').textContent = bsFormatNum(snapshotTotal);
-
-      // 获取最后抓取时间
-      try {
-        const logsRes = await bsApi('GET', '/crawl/logs?page=1&pageSize=1');
-        const lastLog = logsRes.success && logsRes.data?.length ? logsRes.data[0] : null;
-        document.getElementById('bs-stat-last-crawl').textContent = lastLog ? bsTimeAgo(lastLog.createdAt) : '-';
-      } catch (e) {
-        document.getElementById('bs-stat-last-crawl').textContent = '-';
+      if (statsRes.success && statsRes.data) {
+        const d = statsRes.data;
+        document.getElementById('bs-stat-seeds').textContent = d.seedCount || 0;
+        document.getElementById('bs-stat-targets').textContent = d.targetCount || 0;
+        document.getElementById('bs-stat-posts').textContent = bsFormatNum(d.postCount || 0);
+        document.getElementById('bs-stat-snapshots').textContent = bsFormatNum(d.snapshotCount || 0);
+        document.getElementById('bs-stat-last-crawl').textContent = d.lastCrawlAt ? bsTimeAgo(d.lastCrawlAt) : '-';
       }
     } catch (e) {
       if (e.status === 503 || e.message?.includes('Table') || e.message?.includes('relation') || e.message?.includes('does not exist')) {
@@ -1725,32 +1707,36 @@
   }
 
   function bsRenderSnapshotDiff(diff) {
-    if (!diff || Object.keys(diff).length === 0) {
-      return '<div class="bs-snapshot-no-diff">无变化</div>';
-    }
+    const fieldMeta = [
+      { key: 'title', label: '标题', type: 'text' },
+      { key: 'content', label: '内容', type: 'text' },
+      { key: 'contentText', label: '正文', type: 'text' },
+      { key: 'likeCount', label: '点赞', type: 'number' },
+      { key: 'shareCount', label: '分享', type: 'number' },
+      { key: 'commentCount', label: '评论', type: 'number' },
+      { key: 'viewCount', label: '浏览', type: 'number' },
+      { key: 'isDeleted', label: '删除状态', type: 'boolean' },
+    ];
 
-    const fieldNames = {
-      title: '标题',
-      content: '内容',
-      contentText: '正文',
-      likeCount: '点赞',
-      shareCount: '分享',
-      commentCount: '评论',
-      viewCount: '浏览',
-      isDeleted: '删除状态',
-    };
-
-    const items = Object.entries(diff).map(([key, val]) => {
-      const name = fieldNames[key] || key;
-      if (val.delta !== undefined) {
+    const items = fieldMeta.map(({ key, label, type }) => {
+      const val = diff?.[key];
+      if (!val) {
+        return `<div class="bs-snapshot-diff-item"><span>${label}:</span> <span class="bs-snapshot-no-diff">无变化</span></div>`;
+      }
+      if (type === 'number' && val.delta !== undefined) {
         const cls = val.delta > 0 ? 'diff-up' : val.delta < 0 ? 'diff-down' : '';
         const sign = val.delta > 0 ? '+' : '';
-        return `<div class="bs-snapshot-diff-item"><span>${name}:</span> <span class="${cls}">${val.old || 0} → ${val.new || 0} (${sign}${val.delta})</span></div>`;
+        return `<div class="bs-snapshot-diff-item"><span>${label}:</span> <span class="${cls}">${val.old || 0} → ${val.new || 0} (${sign}${val.delta})</span></div>`;
       }
-      return `<div class="bs-snapshot-diff-item"><span>${name}:</span> <span>${val.old || '-'} → ${val.new || '-'}</span></div>`;
+      // 文本字段变化：截断展示，避免太长
+      const oldText = val.old ? String(val.old).substring(0, 80) + (String(val.old).length > 80 ? '...' : '') : '-';
+      const newText = val.new ? String(val.new).substring(0, 80) + (String(val.new).length > 80 ? '...' : '') : '-';
+      return `<div class="bs-snapshot-diff-item"><span>${label}:</span> <span>${oldText} → ${newText}</span></div>`;
     }).join('');
 
-    return `<div class="bs-snapshot-diff"><div class="bs-snapshot-diff-title">变化:</div>${items}</div>`;
+    const hasAnyChange = diff && Object.keys(diff).length > 0;
+    const title = hasAnyChange ? '变化:' : '无变化';
+    return `<div class="bs-snapshot-diff"><div class="bs-snapshot-diff-title">${title}</div>${items}</div>`;
   };
 })();
 </script>

@@ -955,6 +955,42 @@ router.get("/crawl/logs", async (req, res) => {
   }
 });
 
+/**
+ * GET /stats
+ * 获取币安广场统计数据（供管理后台顶部卡片）
+ */
+router.get("/stats", async (req, res) => {
+  try {
+    const [
+      seedCount,
+      targetCount,
+      postCount,
+      snapshotCount,
+      lastCrawlLog,
+    ] = await Promise.all([
+      db.BinanceSquareSeedConfig.count({ where: { isActive: true } }),
+      db.BinanceSquareUser.count({ where: { isTargetUser: true } }),
+      db.BinanceSquarePost.count(),
+      db.BinanceSquarePostSnapshot.count(),
+      db.BinanceSquareCrawlLog.findOne({
+        order: [["createdAt", "DESC"]],
+      }),
+    ]);
+
+    res.json(success({
+      seedCount,
+      targetCount,
+      postCount,
+      snapshotCount,
+      lastCrawlAt: lastCrawlLog?.createdAt || null,
+      lastCrawlStatus: lastCrawlLog?.status || null,
+    }));
+  } catch (error) {
+    console.error("[stats] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
 // ==================== 配置管理（动态调控） ====================
 
 /**
