@@ -722,10 +722,16 @@
     // 帖子表格
     document.getElementById('bs-posts-table-body')?.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action]');
-      if (!btn) return;
-      const action = btn.dataset.action;
-      const postId = btn.dataset.postId;
-      if (action === 'view-snapshots' && postId) bsViewPostSnapshots(postId);
+      if (btn) {
+        const action = btn.dataset.action;
+        const postId = btn.dataset.postId;
+        if (action === 'view-snapshots' && postId) bsViewPostSnapshots(postId);
+        return;
+      }
+      const row = e.target.closest('tr[data-source-url]');
+      if (row && row.dataset.sourceUrl) {
+        window.open(row.dataset.sourceUrl, '_blank');
+      }
     });
 
     // === 分页事件委托 ===
@@ -1086,7 +1092,7 @@
       }
 
       tbody.innerHTML = posts.map(p => `
-        <tr>
+        <tr data-source-url="${p.sourceUrl || ''}" style="cursor:pointer;">
           <td><span class="bs-log-type ${p.postType === 'article' ? 'bs-log-type-post' : p.postType === 'reply' ? 'bs-log-type-following' : 'bs-log-type-target'}">${p.postType}</span></td>
           <td>${p.username}</td>
           <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.title || ''}">${p.title || '(无标题)'}</td>
