@@ -277,6 +277,19 @@ async function syncSingleUserFollowing(targetUsername) {
       throw err;
     }
 
+    // 7. 更新种子用户自身的统计信息（totalFollowingCount / lastCrawledAt）
+    try {
+      await db.BinanceSquareUser.update(
+        {
+          totalFollowingCount: total,
+          lastCrawledAt: new Date(),
+        },
+        { where: { username: targetUsername } }
+      );
+    } catch (e) {
+      console.warn(`[following/sync] ${targetUsername} 更新自身统计信息失败:`, e.message);
+    }
+
     const durationMs = Date.now() - startTime;
 
     return {
