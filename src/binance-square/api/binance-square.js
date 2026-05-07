@@ -171,5 +171,229 @@ router.post("/seed/remove", async (req, res) => {
   }
 });
 
+// ==================== 关注列表同步 ====================
+
+const apiClient = require("../scraper/api-client");
+
+/**
+ * 同步单个种子用户的关注列表
+ * @param {string} targetUsername - 种子用户名
+ * @returns {Promise<{username, total, fetched, newUsers, newRelations, status}>}
+ */
+async function syncSingleUserFollowing(targetUsername) {
+  const startTime = Date.now();
+  let status = "success";
+  let errorMessage = null;
+
+  try {
+    // 1. 调用API获取关注列表
+    const result = await apiClient.fetchFollowingList(targetUsername);
+    const { followers, total } = result;
+
+    // 2. 对比数量，不一致标记为partial
+    if (followers.length !== total) {
+      status = "partial";
+      console.warn(`[following/sync] ${targetUsername}: 抓取${followers.length}条, API返回total=${total}`);
+    }
+
+    // 3. 准备用户数据（upsert）
+    const userRecords = followers.map((f) => ({
+      username: f.username,
+      displayName: f.displayName || null,
+      squareUid: f.squareUid || null,
+      avatar: f.avatar || null,
+      biography: f.biography || null,
+      role: f.role || null,
+      verificationType: f.verificationType || null,
+      verificationDescription: f.verificationDescription || null,
+      totalFollowerCount: f.totalFollowerCount || null,
+      totalFollowingCount: f.totalFollowCount || null,
+      totalPostCount: f.totalPostCount || null,
+      totalLikeCount: f.totalLikeCount || null,
+      totalShareCount: f.totalShareCount || null,
+      accountLang: f.accountLang || null,
+      isKol: f.isKol || null,
+      userStatus: f.userStatus || null,
+      level: f.level || null,
+      rawData: f,
+      isSeedUser: false, // 被关注者默认不是种子用户
+      isTargetUser: false,
+    }));
+
+    // 4. 准备关注关系数据
+    const followingRecords = followers.map((f) => ({
+      followerUsername: targetUsername,
+      followingUsername: f.username,
+      followingSquareUid: f.squareUid || null,
+    }));
+
+    // 5. 批量写入（事务）
+    const transaction = await db.BinanceSquareUser.sequelize.transaction();
+
+    try {
+      // 写入/更新用户（不覆盖isSeedUser/isTargetUser/followScore）
+      await db.BinanceSquareUser.bulkCreate(userRecords, {
+        updateOnDuplicate: [
+          "displayName",
+          "squareUid",
+          "avatar",
+          "biography",
+          "role",
+          "verificationType",
+          "verificationDescription",
+          "totalFollowerCount",
+          "totalFollowingCount",
+          "totalPostCount",
+          "totalLikeCount",
+          "totalShareCount",
+          "accountLang",
+          "isKol",
+          "userStatus",
+          "level",
+          "rawData",
+          "updatedAt",
+        ],
+        transaction,
+      });
+
+      // 写入关注关系（忽略重复）
+      await db.BinanceSquareFollowing.bulkCreate(followingRecords, {
+        ignoreDuplicates: true,
+        transaction,
+      });
+
+      await transaction.commit();
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+
+    // 6. 统计新增数量
+    const existingUsers = await db.BinanceSquareUser.count({
+      where: { username: { [Op.in]: followers.map((f) => f.username) } },
+    });
+    const newUsers = followers.length - existingUsers;
+
+    const durationMs = Date.now() - startTime;
+
+    return {
+      username: targetUsername,
+      total,
+      fetched: followers.length,
+      newUsers: Math.max(0, newUsers),
+      newRelations: followingRecords.length,
+      status,
+      durationMs,
+    };
+  } catch (error) {
+    console.error(`[following/sync] ${targetUsername} 失败:`, error.message);
+    return {
+      username: targetUsername,
+      total: 0,
+      fetched: 0,
+      newUsers: 0,
+      newRelations: 0,
+      status: "failed",
+      errorMessage: error.message,
+      durationMs: Date.now() - startTime,
+    };
+  }
+}
+
+/**
+ * POST /following/sync
+ * 同步所有活跃种子用户的关注列表
+ */
+router.post("/following/sync", async (req, res) => {
+  try {
+    // 1. 获取活跃种子用户
+    const seeds = await db.BinanceSquareSeedConfig.findAll({
+      where: { isActive: true },
+      order: [["sortOrder", "ASC"]],
+    });
+
+    if (seeds.length === 0) {
+      return res.status(400).json(fail("没有活跃的种子用户"));
+    }
+
+    console.log(`[following/sync] 开始同步 ${seeds.length} 个种子用户的关注列表`);
+
+    // 2. 逐个同步（串行执行，避免被封）
+    const results = [];
+    let totalNewUsers = 0;
+    let totalNewRelations = 0;
+    let hasPartial = false;
+    let hasFailed = false;
+
+    for (const seed of seeds) {
+      const result = await syncSingleUserFollowing(seed.username);
+      results.push(result);
+      totalNewUsers += result.newUsers;
+      totalNewRelations += result.newRelations;
+      if (result.status === "partial") hasPartial = true;
+      if (result.status === "failed") hasFailed = true;
+
+      // 请求间隔：500-1200ms（api-client内部已处理，这里不需要额外延迟）
+    }
+
+    // 3. 记录 CrawlLog
+    const overallStatus = hasFailed ? "partial" : hasPartial ? "partial" : "success";
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "following",
+      status: overallStatus,
+      itemsCount: totalNewRelations,
+      durationMs: results.reduce((sum, r) => sum + r.durationMs, 0),
+    });
+
+    res.json(success({
+      totalSeeds: seeds.length,
+      processed: results.length,
+      newUsers: totalNewUsers,
+      newRelations: totalNewRelations,
+      details: results,
+      status: overallStatus,
+    }));
+  } catch (error) {
+    console.error("[following/sync] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * POST /following/sync/:username
+ * 同步单个种子用户的关注列表
+ */
+router.post("/following/sync/:username", async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    // 验证是活跃种子用户
+    const seed = await db.BinanceSquareSeedConfig.findOne({
+      where: { username, isActive: true },
+    });
+
+    if (!seed) {
+      return res.status(404).json(fail("种子用户不存在或未激活"));
+    }
+
+    const result = await syncSingleUserFollowing(username);
+
+    // 记录 CrawlLog
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "following",
+      status: result.status,
+      targetId: username,
+      itemsCount: result.newRelations,
+      durationMs: result.durationMs,
+      errorMessage: result.errorMessage || null,
+    });
+
+    res.json(success(result));
+  } catch (error) {
+    console.error(`[following/sync/${req.params.username}] error:`, error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
 // 导出路由和初始化函数
 module.exports = { router, initRoutes };
