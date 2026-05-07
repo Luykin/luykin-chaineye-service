@@ -12,11 +12,14 @@
 
 ### 1.2 架构定位
 本项目复用现有 `RootDataPro` 爬虫基础设施：
-- 复用 PostgreSQL 数据库（与 RootDataPro 同库，独立表前缀 `BinanceSquare*`）
+- **数据库**：使用 PostgreSQL（`rootdatapro` 数据库），**不使用 SQLite**
+- 迁移文件统一放在 `migrations-pg/` 目录下
 - 复用 Puppeteer + Stealth 浏览器封装
 - 复用 Redis 任务队列与状态管理
 - 复用 Sequelize ORM 与工厂函数模型定义
 - 复用 `node-schedule` 定时调度器
+- **代码组织**：所有新功能集中在 `src/binance-square/` 目录下，不分散到现有模块中
+- **管理后台**：复用现有 `src/xhunt/views/stats.ejs` 管理后台风格，新增币安广场管理页面
 
 ---
 
@@ -551,13 +554,50 @@ module.exports = (sequelize) => {
 };
 ```
 
+### 2.4 模型关联关系
+
+```javascript
+// src/binance-square/models/index.js
+
+// 用户 ↔ 关注关系（一对多）
+db.BinanceSquareUser.hasMany(db.BinanceSquareFollowing, {
+  foreignKey: "followerUsername",
+  sourceKey: "username",
+  as: "Followings",
+});
+
+// 用户 ↔ 帖子（一对多）
+db.BinanceSquareUser.hasMany(db.BinanceSquarePost, {
+  foreignKey: "username",
+  sourceKey: "username",
+  as: "Posts",
+});
+
+// 帖子 ↔ 镜像（一对多）
+db.BinanceSquarePost.hasMany(db.BinanceSquarePostSnapshot, {
+  foreignKey: "postId",
+  sourceKey: "postId",
+  as: "Snapshots",
+});
+```
+
+### 2.5 数据库连接
+
+币安广场模块复用 RootDataPro 的 PostgreSQL 连接（`rootdatapro` 数据库），在 `src/binance-square/models/index.js` 中通过传入已有的 `sequelize` 实例初始化模型。
+
+```javascript
+// 使用方式（复用 rootdatapro 的 sequelize 实例）
+const { sequelize } = require("../../rootdatapro/models");
+const db = require("./index")(sequelize);
+```
+
 ---
 
 ## 3. 目录结构设计
 
 ```
 src/binance-square/
-├── models/                          # 数据模型
+├── models/                          # 数据模型（PostgreSQL）
 │   ├── index.js                     # 模型初始化与关联
 │   ├── BinanceSquareUser.js
 │   ├── BinanceSquareFollowing.js
@@ -574,11 +614,17 @@ src/binance-square/
 │   ├── snapshot-manager.js          # 镜像管理器（生成/对比/清理）
 │   └── parsers/
 │       ├── followingParser.js       # 关注列表解析
-│       └── postParser.js            # 帖子内容解析（后续补充）
+│       └── postParser.js            # 帖子内容解析
 ├── api/                             # 内部管理API
 │   └── binance-square.js            # 路由：/api/binance-square/internal
-└── services/
-    └── scheduler.js                 # 币安广场定时调度器
+├── services/                        # 定时调度器
+│   └── scheduler.js
+└── views/                           # 管理后台页面（复用stats.ejs风格）
+    ├── binance-square-tab.ejs       # 嵌入stats.ejs的Tab页（总览+操作面板）
+    ├── seed-users.ejs               # 种子用户管理子面板
+    ├── target-users.ejs             # Top50目标用户子面板
+    ├── posts-list.ejs               # 帖子列表子面板
+    └── post-detail.ejs              # 帖子详情+镜像对比子面板
 ```
 
 ---
@@ -600,10 +646,14 @@ src/binance-square/
 | POST | `/crawl/posts` | 手动触发：抓取目标用户帖子 |
 | POST | `/crawl/start` | 启动定时爬虫任务 |
 | POST | `/crawl/pause` | 暂停定时爬虫任务 |
-| GET | `/crawl/status` | 获取爬虫状态 |
-| GET | `/posts` | 查询帖子列表（支持分页、类型筛选） |
-| GET | `/posts/:postId/snapshots` | 查询某帖子的历史镜像 |
-| GET | `/posts/snapshot-compare` | 对比两个镜像批次的数据差异 |
+| POST | `/crawl/posts` | 手动触发：抓取目标用户帖子 |
+| POST | `/crawl/start` | 启动定时爬虫任务 |
+| POST | `/crawl/pause` | 暂停定时爬虫任务 |
+| GET | `/crawl/status` | 获取爬虫运行状态 |
+| GET | `/posts` | 查询帖子列表（支持分页、类型筛选、用户名筛选） |
+| GET | `/posts/:postId` | 查询单条帖子详情 |
+| GET | `/posts/:postId/snapshots` | 查询某帖子的历史镜像列表 |
+| GET | `/posts/snapshot-compare` | 对比两个镜像批次（或同一帖子两个时间点） |
 
 ### 4.2 关键接口请求/响应示例
 
@@ -680,6 +730,69 @@ POST /api/binance-square/internal/target/calculate
     "updatedAt": "2026-05-07T09:00:00Z"
   }
 }
+```
+
+### 4.3 统一响应格式
+
+所有接口统一返回格式：
+```json
+{
+  "success": true|false,
+  "data": {},
+  "error": "错误信息（失败时）"
+}
+```
+
+### 4.4 管理后台集成
+
+币安广场管理后台以 **Tab 形式嵌入现有 `stats.ejs`**，复用相同的 Sidebar + Main Content 布局。
+
+**接入方式**：
+1. 在 `src/xhunt/views/stats.ejs` 的 sidebar 导航中添加"币安广场"入口
+2. 在 Tab 区域新增 `binance-square-tab.ejs` partial
+3. 币安广场的所有子页面作为该 Tab 内的子面板切换（不刷新页面）
+
+```javascript
+// src/apiServer.js 路由挂载
+const binanceSquareRoutes = require("./binance-square/api/binance-square");
+
+// API路由（JSON接口）
+app.use("/api/binance-square/internal", adminAuth, binanceSquareRoutes);
+```
+
+**管理后台页面结构**（单Tab内多子面板）：
+
+```
+┌─────────────────────────────────────────────┐
+│  币安广场                              [刷新] │  ← Tab标题
+├─────────────────────────────────────────────┤
+│ [总览] [种子用户] [目标用户] [帖子列表] [日志] │  ← 子面板导航
+├─────────────────────────────────────────────┤
+│                                               │
+│  子面板内容区（通过JS切换，不刷新页面）         │
+│                                               │
+└─────────────────────────────────────────────┘
+```
+
+**子面板功能**：
+
+| 子面板 | 功能 |
+|--------|------|
+| **总览** | 爬虫运行状态、上次抓取时间、最近24小时抓取统计、快捷操作按钮（同步关注/计算Top50/抓取帖子） |
+| **种子用户** | 25人名单表格（增删改）、每个用户的关注数、最后同步时间、手动触发同步按钮 |
+| **目标用户** | Top50排名表格（被关注次数、关注者列表）、手动重新计算按钮 |
+| **帖子列表** | 按用户名/类型/时间筛选、分页、查看详情按钮 |
+| **帖子详情** | 帖子内容、历史镜像时间轴、选中两个镜像对比diff |
+| **日志** | CrawlLog列表（任务类型/状态/耗时/数量）、支持按类型筛选 |
+
+### 4.5 路由挂载
+
+```javascript
+// src/apiServer.js 或主入口文件
+const binanceSquareRoutes = require("../binance-square/api/binance-square");
+
+// 挂载到 adminAuth 下
+app.use("/api/binance-square/internal", adminAuth, binanceSquareRoutes);
 ```
 
 ---
@@ -1161,6 +1274,8 @@ class BinanceSquareScheduler {
 ### 8.1 迁移文件命名
 `migrations-pg/20260507000000-create-binance-square-tables.js`
 
+> **注意**：迁移文件必须放在 `migrations-pg/` 目录下，使用 `config-pg.json` 中的 `rootdatapro` 数据库配置。
+
 ### 8.2 迁移内容
 仅包含6张表的 `createTable` 和 `addIndex` 操作。
 
@@ -1202,7 +1317,7 @@ BINANCE_SQUARE_SNAPSHOT_RETENTION_DAYS=3
 | 1 | Cookie是否需要 | 当前阶段**不需要**，后续按需加入 |
 | 2 | 初始名单导入方式 | **API手动导入**，不在迁移文件硬编码 |
 | 3 | Top50计算策略 | **手动触发**，不自动执行 |
-| 4 | 镜像保存策略 | 先**只保存原始快照**，对比逻辑后续确认 |
+| 4 | 镜像保存策略 | **全量存储 + 全量diff**，每次抓取都存镜像并计算差异 |
 | 5 | ~~帖子抓取~~ | ✅ **已确认**，接口和分页逻辑已明确 |
 
 ---
@@ -1218,8 +1333,321 @@ BINANCE_SQUARE_SNAPSHOT_RETENTION_DAYS=3
 5. ✅ 爬虫状态查询API（`/crawl/status`）
 6. ✅ 基础API HTTP客户端（调用币安关注列表接口）
 7. ✅ 数据库存储逻辑（用户、关注关系、排名）
-8. ✅ 定时清理任务（3天滚动删除镜像）
+8. ✅ 帖子抓取（每2小时自动 + 手动触发，ALL+REPLY，7天时间窗口）
+9. ✅ 镜像管理（全量存储 + 全量diff + 3天滚动清理）
+10. ✅ 定时清理任务（3天滚动删除镜像）
 
 **暂不实现**：
-- ✅ 镜像对比逻辑（全量存储 + 全量diff）
 - ❌ 数据展示前端（等后续确认）
+
+---
+
+## 13. 实现与测试步骤规划
+
+> **原则**：每一步完成后必须验证+测试，确认无误后再进行下一步。
+
+### Step 1: 数据库迁移 + 模型定义
+
+**实现内容**：
+- 迁移文件：`migrations-pg/20260507000000-create-binance-square-tables.js`
+- 模型文件：`src/binance-square/models/` 下7个模型 + `index.js`
+
+**验证方法**：
+```bash
+# 1. 运行迁移
+yarn db:migrate:pg
+
+# 2. 检查表是否创建
+psql -d rootdatapro -c "\dt" | grep BinanceSquare
+```
+
+**测试方法**：
+```javascript
+// 3. 用Sequelize写入测试数据，验证字段约束
+const db = require("./src/binance-square/models")(sequelize);
+await db.BinanceSquareUser.create({ username: "test_user" }); // 应成功
+await db.BinanceSquareUser.create({}); // 应失败（username not null）
+
+// 4. 验证API字段允许null
+await db.BinanceSquareUser.create({
+  username: "test2",
+  squareUid: null,  // 应成功
+  totalFollowerCount: null,  // 应成功
+});
+
+// 5. 验证唯一索引
+await db.BinanceSquareSeedConfig.create({ username: "CZ" });
+await db.BinanceSquareSeedConfig.create({ username: "CZ" }); // 应失败（unique冲突）
+```
+
+**通过标准**：6张表创建成功，字段约束符合2.2节设计原则，唯一索引生效。
+
+---
+
+### Step 2: 币安API HTTP客户端
+
+**实现内容**：
+- `src/binance-square/scraper/api-client.js`
+- 实现 `fetchFollowingList(targetUsername)` — 关注列表（分页）
+- 实现 `fetchUserPosts(squareUid, filterType)` — 帖子（分页，timeOffset控制）
+
+**验证方法**：
+```bash
+# 直接运行测试脚本，观察原始返回
+node -e "
+  const client = require('./src/binance-square/scraper/api-client');
+  client.fetchFollowingList('CZ').then(r => console.log('CZ关注数:', r.data.total));
+"
+```
+
+**测试方法**：
+```javascript
+// 1. 关注列表分页测试
+const result = await client.fetchFollowingList('CZ');
+console.assert(result.data.followers.length > 0, '应返回关注列表');
+console.assert(result.data.total > 0, 'total应大于0');
+
+// 2. 帖子接口测试（ALL）
+const posts = await client.fetchUserPosts('dxCeCLOM7uOFJKX8EnS3Kw', 'ALL');
+console.assert(posts.data.contents.length > 0, '应返回帖子列表');
+console.assert(typeof posts.data.timeOffset === 'number', '应返回timeOffset');
+
+// 3. 帖子接口测试（REPLY）
+const replies = await client.fetchUserPosts('dxCeCLOM7uOFJKX8EnS3Kw', 'REPLY');
+console.assert(replies.data.contents.every(c => c.isReplyPost === true), 'REPLY返回的应全是回复帖');
+
+// 4. 错误重试测试（模拟断网）
+// 5. 超时测试（模拟慢响应）
+```
+
+**通过标准**：能成功获取CZ的关注列表（>0条），能获取帖子内容（ALL和REPLY都有数据），分页逻辑正确，错误重试生效。
+
+---
+
+### Step 3: 种子用户管理API
+
+**实现内容**：
+- `src/binance-square/api/binance-square.js` 中的 seed 相关路由
+- `/seed/init`, `/seed/list`, `/seed/add`, `/seed/remove`
+
+**验证方法**：
+```bash
+# 1. 初始化种子用户
+curl -X POST http://localhost:8090/api/binance-square/internal/seed/init \
+  -H "Content-Type: application/json" \
+  -d '{"seeds": [{"username": "CZ", "displayName": "CZ"}]}'
+
+# 2. 检查数据库
+psql -d rootdatapro -c "SELECT * FROM \"BinanceSquareSeedConfigs\";"
+psql -d rootdatapro -c "SELECT * FROM \"BinanceSquareUsers\" WHERE \"isSeedUser\" = true;"
+```
+
+**测试方法**：
+```javascript
+// 3. 重复初始化应幂等（不报错，更新或忽略）
+// 4. 添加重复username应失败
+// 5. 移除后再添加应成功
+// 6. 检查BinanceSquareUser表的isSeedUser标记是否正确
+```
+
+**通过标准**：种子用户写入SeedConfig表，同时同步到User表（isSeedUser=true），增删改查正常。
+
+---
+
+### Step 4: 关注列表同步
+
+**实现内容**：
+- `/following/sync`, `/following/sync/:username`
+- 关注列表解析器：`src/binance-square/scraper/parsers/followingParser.js`
+- 数据库存储逻辑（bulkCreate用户 + 关注关系）
+
+**验证方法**：
+```bash
+# 1. 同步CZ的关注列表
+curl -X POST http://localhost:8090/api/binance-square/internal/following/sync/CZ
+
+# 2. 检查数据库
+psql -d rootdatapro -c "SELECT COUNT(*) FROM \"BinanceSquareFollowings\" WHERE \"followerUsername\" = 'CZ';"
+psql -d rootdatapro -c "SELECT COUNT(*) FROM \"BinanceSquareUsers\";"
+```
+
+**测试方法**：
+```javascript
+// 3. 验证关注数量与API返回的total一致
+// 4. 重复同步应幂等（不重复插入关注关系）
+// 5. 验证被关注者也写入了User表
+// 6. 测试批量写入性能（25个种子用户全部同步）
+// 7. 测试CrawlLog记录
+```
+
+**通过标准**：CZ的关注列表完整入库（数量与API一致），关注关系无重复，被关注者自动创建User记录。
+
+---
+
+### Step 5: Top50计算
+
+**实现内容**：
+- `/target/calculate`, `/target/list`
+- 聚合查询：按followingUsername分组COUNT
+
+**验证方法**：
+```bash
+# 1. 先确保已同步所有种子用户关注
+# 2. 计算Top50
+curl -X POST http://localhost:8090/api/binance-square/internal/target/calculate
+
+# 3. 检查结果
+psql -d rootdatapro -c "SELECT * FROM \"BinanceSquareTargetRanks\" ORDER BY rank LIMIT 10;"
+psql -d rootdatapro -c "SELECT * FROM \"BinanceSquareUsers\" WHERE \"isTargetUser\" = true;"
+```
+
+**测试方法**：
+```javascript
+// 4. 验证Top1的被关注次数等于实际COUNT
+// 5. 验证seedFollowers JSONB字段包含正确的种子用户列表
+// 6. 验证User表的isTargetUser标记（Top50=true，其他=false）
+// 7. 重新计算后旧排名应被清空，新排名写入
+// 8. 测试只有活跃种子用户(isActive=true)参与计算
+```
+
+**通过标准**：Top50排名准确，被关注次数统计正确，isTargetUser标记正确更新。
+
+---
+
+### Step 6: 帖子抓取
+
+**实现内容**：
+- `/crawl/posts`
+- 帖子解析器：`src/binance-square/scraper/parsers/postParser.js`
+- 帖子入库逻辑（upsert）
+
+**验证方法**：
+```bash
+# 1. 确保Top50已计算，获取一个目标用户的squareUid
+# 2. 手动触发帖子抓取
+curl -X POST http://localhost:8090/api/binance-square/internal/crawl/posts
+
+# 3. 检查数据库
+psql -d rootdatapro -c "SELECT COUNT(*) FROM \"BinanceSquarePosts\";"
+psql -d rootdatapro -c "SELECT \"postType\", COUNT(*) FROM \"BinanceSquarePosts\" GROUP BY \"postType\";"
+```
+
+**测试方法**：
+```javascript
+// 4. 验证只抓取了7天内的帖子（latestReleaseTime > now - 7d）
+// 5. 验证ALL和REPLY都有数据
+// 6. 验证postId唯一（upsert生效，不重复）
+// 7. 验证rawData字段有完整JSON
+// 8. 验证isReplyPost=true的帖子parentContentId已存入rawData
+// 9. 验证contentStatus映射到isDeleted（如contentStatus=2表示删除）
+// 10. 测试分页：一个用户有>20篇帖子时，timeOffset是否正确传递
+```
+
+**通过标准**：帖子正确入库，7天时间窗口生效，ALL和REPLY都抓取到，upsert不重复，rawData完整。
+
+---
+
+### Step 7: 镜像管理
+
+**实现内容**：
+- 镜像生成 + diff计算逻辑
+- `/posts/:postId/snapshots`, `/posts/snapshot-compare`
+
+**验证方法**：
+```bash
+# 1. 连续触发两次帖子抓取（间隔几分钟，让互动数据变化）
+curl -X POST http://localhost:8090/api/binance-square/internal/crawl/posts
+# 等几分钟...
+curl -X POST http://localhost:8090/api/binance-square/internal/crawl/posts
+
+# 2. 检查镜像表
+psql -d rootdatapro -c "SELECT COUNT(*) FROM \"BinanceSquarePostSnapshots\";"
+
+# 3. 查询某帖子的镜像
+curl http://localhost:8090/api/binance-square/internal/posts/12345/snapshots
+```
+
+**测试方法**：
+```javascript
+// 4. 验证同一帖子有两条镜像记录（snapshotId不同）
+// 5. 验证第二次镜像的diffFromPrev不为null（有likeCount变化）
+// 6. 验证diffFromPrev格式：{ likeCount: { old: 100, new: 150, delta: 50 } }
+// 7. 测试内容修改diff：手动构造title变化的数据，验证diff记录
+// 8. 测试对比接口：/posts/snapshot-compare?postId=xxx&snapshotId1=...&snapshotId2=...
+// 9. 验证3天前的镜像被自动清理（调系统时间或手动插入旧数据测试）
+```
+
+**通过标准**：每次抓取都生成镜像，diff正确计算（数字有delta，文本有old/new），对比接口正常返回差异。
+
+---
+
+### Step 8: 定时调度 + 清理
+
+**实现内容**：
+- `src/binance-square/services/scheduler.js`
+- `/crawl/start`, `/crawl/pause`, `/crawl/status`
+
+**验证方法**：
+```bash
+# 1. 启动调度器（通过API或重启服务）
+curl -X POST http://localhost:8090/api/binance-square/internal/crawl/start
+
+# 2. 查看状态
+curl http://localhost:8090/api/binance-square/internal/crawl/status
+
+# 3. 暂停
+curl -X POST http://localhost:8090/api/binance-square/internal/crawl/pause
+```
+
+**测试方法**：
+```javascript
+// 4. 验证调度器启动后Redis状态为running
+// 5. 验证每2小时触发一次帖子抓取（观察CrawlLog记录时间）
+// 6. 验证每天凌晨4点触发清理（观察3天前的镜像是否被删除）
+// 7. 验证暂停后不再触发新任务
+// 8. 验证重启服务后调度器自动恢复（如配置了自动启动）
+```
+
+**通过标准**：调度器正常启停，定时任务按预期执行，清理任务正确删除过期数据。
+
+---
+
+### Step 9: 集成测试（端到端）
+
+**完整流程**：
+```
+1. /seed/init（导入25人）
+2. /following/sync（同步所有种子关注）
+3. /target/calculate（计算Top50）
+4. /crawl/posts（手动触发帖子抓取）
+5. 等2小时，观察自动触发
+6. /posts/snapshot-compare（对比镜像）
+7. 等3天后观察自动清理（或手动插入旧数据测试）
+```
+
+**测试场景**：
+| 场景 | 操作 | 预期结果 |
+|------|------|---------|
+| 正常全流程 | 按上述步骤执行 | 数据完整，无报错 |
+| API限流 | 模拟429响应 | 指数退避重试，最终成功 |
+| 网络中断 | 模拟超时/断网 | 记录失败日志，不影响其他用户 |
+| 数据缺失 | API返回部分字段为null | 正常写入，缺失字段为null |
+| 重复抓取 | 连续调用/following/sync两次 | 幂等，不重复插入 |
+| Top50变动 | 添加新种子用户→同步→计算 | 新排名正确反映 |
+
+---
+
+### Step 10: 路由挂载 + 最终文档
+
+**实现内容**：
+- 在 `src/api/index.js` 挂载 `/api/binance-square/internal`
+- 更新 `AGENTS.md`
+
+**验证方法**：
+```bash
+# 通过adminAuth调用所有接口，确认权限控制正常
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8090/api/binance-square/internal/crawl/status
+```
+
+**通过标准**：所有接口通过adminAuth访问正常，未认证请求返回401，AGENTS.md已更新币安广场模块说明。
