@@ -36,6 +36,7 @@
 | BinanceSquarePost | `BinanceSquarePosts` | 帖子/文章主表（去重存储） |
 | BinanceSquarePostSnapshot | `BinanceSquarePostSnapshots` | 帖子历史镜像表（3天滚动） |
 | BinanceSquareCrawlLog | `BinanceSquareCrawlLogs` | 爬取日志表（复用 RootDataPro CrawlLog 模式） |
+| BinanceSquareConfig | `BinanceSquareConfigs` | 爬虫配置表（定时间隔等动态调控项） |
 
 ### 2.2 字段约束设计原则
 
@@ -87,7 +88,7 @@ module.exports = (sequelize) => {
     },
     lastCrawledAt: {
       type: DataTypes.DATE,
-      comment: "最后抓取时间",
+      comment: "最后抓取时间 —— 帖子抓取时更新，关注同步时不更新",
     },
 
     // === API返回的字段（全部允许null） ===
@@ -482,13 +483,13 @@ module.exports = (sequelize) => {
     // === 差异记录 ===
     diffFromPrev: {
       type: DataTypes.JSONB,
-      comment: "与上一版本的差异记录 —— 每次抓取时自动计算",
+      comment: "与上一版本的差异记录 —— 每次抓取时自动计算，无变化时存null",
     },
   }, {
     tableName: "BinanceSquarePostSnapshots",
     timestamps: true,
     indexes: [
-      { fields: ["postId", "snapshotId"] },
+      { unique: true, fields: ["postId", "snapshotId"], name: "idx_snapshot_postid_snapshotid_unique" },
       { fields: ["snapshotId"] },
       { fields: ["snapshotTime"] },
       { fields: ["postId", "snapshotTime"] },
@@ -537,6 +538,10 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       comment: "抓取项目数 —— 失败时可能为空",
     },
+    filterType: {
+      type: DataTypes.ENUM("ALL", "REPLY", "QUOTE"),
+      comment: "帖子抓取的filterType —— 非帖子任务为空",
+    },
     snapshotId: {
       type: DataTypes.STRING(64),
       comment: "关联镜像批次ID —— 非帖子任务为空",
@@ -546,6 +551,7 @@ module.exports = (sequelize) => {
     timestamps: true,
     indexes: [
       { fields: ["taskType", "status"] },
+      { fields: ["filterType"] },
       { fields: ["targetId"] },
       { fields: ["snapshotId"] },
       { fields: ["createdAt"] },
@@ -553,6 +559,63 @@ module.exports = (sequelize) => {
   });
 };
 ```
+
+#### 2.2.8 BinanceSquareConfig（爬虫配置表）
+
+> **设计原则**：支持管理后台动态调控爬虫行为，配置即时生效。
+
+```javascript
+module.exports = (sequelize) => {
+  return sequelize.define("BinanceSquareConfig", {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    configKey: {
+      type: DataTypes.STRING(64),
+      allowNull: false,
+      comment: "配置项key",
+    },
+    configValue: {
+      type: DataTypes.STRING(256),
+      allowNull: false,
+      comment: "配置项value（字符串存储，使用时转换）",
+    },
+    description: {
+      type: DataTypes.TEXT,
+      comment: "配置说明",
+    },
+    minValue: {
+      type: DataTypes.STRING(64),
+      comment: "最小值（用于前端校验，数字类型时）",
+    },
+    maxValue: {
+      type: DataTypes.STRING(64),
+      comment: "最大值（用于前端校验，数字类型时）",
+    },
+    updatedBy: {
+      type: DataTypes.STRING(128),
+      comment: "最后修改人（admin邮箱）",
+    },
+  }, {
+    tableName: "BinanceSquareConfigs",
+    timestamps: true,
+    indexes: [
+      { unique: true, fields: ["configKey"] },
+    ],
+  });
+};
+```
+
+**默认配置项**：
+
+| configKey | configValue | minValue | maxValue | 说明 |
+|-----------|-------------|----------|----------|------|
+| `post_crawl_interval_hours` | `2` | `0.5` | `4` | 帖子抓取间隔（小时） |
+| `snapshot_retention_days` | `3` | `1` | `7` | 镜像保留天数 |
+
+> 定时调度器启动时从数据库读取配置，支持**热更新**：管理后台修改配置后，下次调度时自动生效（正在运行的定时任务不受影响，新任务按新间隔执行）。
 
 ### 2.4 模型关联关系
 
@@ -605,7 +668,8 @@ src/binance-square/
 │   ├── BinanceSquareTargetRank.js
 │   ├── BinanceSquarePost.js
 │   ├── BinanceSquarePostSnapshot.js
-│   └── BinanceSquareCrawlLog.js
+│   ├── BinanceSquareCrawlLog.js
+│   └── BinanceSquareConfig.js       # 爬虫配置表（动态调控）
 ├── scraper/                         # 爬虫核心
 │   ├── index.js                     # 爬虫入口与主控逻辑
 │   ├── api-client.js                # 币安API HTTP客户端
@@ -617,8 +681,9 @@ src/binance-square/
 │       └── postParser.js            # 帖子内容解析
 ├── api/                             # 内部管理API
 │   └── binance-square.js            # 路由：/api/binance-square/internal
-├── services/                        # 定时调度器
-│   └── scheduler.js
+├── services/                        # 业务服务
+│   ├── scheduler.js                 # 定时调度器
+│   └── config-service.js            # 配置读取服务（动态调控）
 └── views/                           # 管理后台页面（复用stats.ejs风格）
     ├── binance-square-tab.ejs       # 嵌入stats.ejs的Tab页（总览+操作面板）
     ├── seed-users.ejs               # 种子用户管理子面板
@@ -654,6 +719,9 @@ src/binance-square/
 | GET | `/posts/:postId` | 查询单条帖子详情 |
 | GET | `/posts/:postId/snapshots` | 查询某帖子的历史镜像列表 |
 | GET | `/posts/snapshot-compare` | 对比两个镜像批次（或同一帖子两个时间点） |
+| GET | `/crawl/logs` | 查询爬取日志列表（支持按类型/状态/时间筛选） |
+| GET | `/config` | 获取爬虫配置列表 |
+| POST | `/config` | 更新爬虫配置（管理后台动态调控） |
 
 ### 4.2 关键接口请求/响应示例
 
@@ -814,6 +882,21 @@ app.use("/api/binance-square/internal", adminAuth, binanceSquareRoutes);
 └─────────────────────────────────────┘
 ```
 **注意**：名单通过API手动导入，不在迁移文件中硬编码。
+
+> **⚠️ 重要：关注同步时的Upsert策略**
+>
+> 被关注者可能本身就是种子用户（如CZ关注了heyi，heyi也在种子名单中）。
+> 写入Users表时必须**保护isSeedUser标记**，避免把种子用户覆盖为非种子用户：
+> ```javascript
+> // 正确做法：只更新API字段，不覆盖isSeedUser/isTargetUser
+> await BinanceSquareUser.bulkCreate(usersToUpsert, {
+>   updateOnDuplicate: [
+>     "squareUid", "displayName", "avatar", "biography",
+>     "totalFollowerCount", "totalPostCount", "rawData"
+>     // 注意：不更新 isSeedUser / isTargetUser / followScore
+>   ]
+> });
+> ```
 
 > **⚠️ 重要设计决策：种子用户配置与关注关系分离**
 >
@@ -985,6 +1068,9 @@ async function fetchAllFollowing(targetUsername) {
   获取返回的 contents 数组
       │
       ▼
+  如果 contents 为空数组 → 停止（该用户无此类型帖子）
+      │
+      ▼
   检查最后一篇帖子的 latestReleaseTime
       │
       ├─ 如果在7天内 → timeOffset = lastPostTime，继续请求
@@ -1043,7 +1129,7 @@ async function fetchAllFollowing(targetUsername) {
 |---------|--------|------|
 | `id` | `postId` | 帖子唯一ID |
 | `username` | `username` | 作者用户名 |
-| `contentType` | `postType` | 映射为 article/quote/reply |
+| `contentType` | `postType` | 映射规则见下方 |
 | `title` | `title` | 标题（注意：接口返回可能是对象或字符串） |
 | `body` | `content` | HTML正文 |
 | `bodyTextOnly` | `contentText` | 纯文本 |
@@ -1066,6 +1152,19 @@ async function fetchAllFollowing(targetUsername) {
 | `firstReleaseTime` | `rawData.firstReleaseTime` | 首次发布时间 |
 | `createTime` | `rawData.createTime` | 创建时间 |
 | `updateTime` | `rawData.updateTime` | 更新时间 |
+
+> **contentType → postType 映射规则**：
+>
+> 币安API的 `contentType` 是数字，需映射为数据库ENUM：
+>
+> | API contentType | postType | 说明 |
+> |----------------|----------|------|
+> | `0` | `article` | 普通文章/帖子 |
+> | `1` | `quote` | 引用帖（quoteContent不为null） |
+> | `2` | `reply` | 回复帖（isReplyPost=true） |
+> | 其他 | `article` | 未知类型默认归为article |
+>
+> 实际判断逻辑：先检查 `isReplyPost === true` → `reply`；再检查 `quoteContent !== null` → `quote`；其余 → `article`。
 
 **回复帖特有字段（存 rawData）**：
 
@@ -1285,26 +1384,48 @@ const REDIS_KEYS = {
 
 使用 `node-schedule` 复用现有调度器模式。
 
-**自动任务**：
+**自动任务（配置驱动）**：
 ```javascript
 const schedule = require("node-schedule");
 
 class BinanceSquareScheduler {
-  constructor(taskManager) {
+  constructor(taskManager, configService) {
     this.taskManager = taskManager;
+    this.configService = configService;
     this.jobs = {};
   }
 
   async start() {
-    // 每2小时抓取帖子（自动）
-    this.jobs.postCrawl = schedule.scheduleJob("0 */2 * * *", async () => {
-      await this.taskManager.runPostCrawl();
-    });
+    await this._schedulePostCrawl();
+    await this._scheduleCleanup();
+  }
 
-    // 每天凌晨4点清理3天前的镜像数据（自动）
-    this.jobs.cleanup = schedule.scheduleJob("0 4 * * *", async () => {
-      await this.taskManager.cleanupOldSnapshots();
+  async _schedulePostCrawl() {
+    // 从数据库读取配置（支持动态调控）
+    const hours = await this.configService.getFloat("post_crawl_interval_hours", 2);
+    const cron = this._hoursToCron(hours); // 0.5h→*/30, 1h→0, 2h→0 */2, 4h→0 */4
+
+    this.jobs.postCrawl = schedule.scheduleJob(cron, async () => {
+      await this.taskManager.runPostCrawl();
+      // 每次执行后重新调度（支持间隔动态变化）
+      this.jobs.postCrawl.cancel();
+      await this._schedulePostCrawl();
     });
+  }
+
+  async _scheduleCleanup() {
+    // 清理任务固定每天凌晨4点执行
+    this.jobs.cleanup = schedule.scheduleJob("0 4 * * *", async () => {
+      const days = await this.configService.getInt("snapshot_retention_days", 3);
+      await this.taskManager.cleanupOldSnapshots(days);
+    });
+  }
+
+  _hoursToCron(hours) {
+    // 支持 0.5→*/30, 1→0, 2→0 */2, 4→0 */4
+    if (hours === 0.5) return "*/30 * * * *";
+    if (hours === 1) return "0 * * * *";
+    return `0 */${Math.floor(hours)} * * *`;
   }
 
   stop() {
@@ -1312,6 +1433,12 @@ class BinanceSquareScheduler {
   }
 }
 ```
+
+> **动态调控机制**：
+> 1. 调度器每次执行任务后，重新读取数据库配置，按新间隔重新调度
+> 2. 管理后台修改配置后**即时生效**（下次任务执行时读取新配置）
+> 3. 配置范围限制：帖子间隔 `0.5~4` 小时，保留天数 `1~7` 天
+> 4. 前端slider控件限制输入范围，后端校验兜底
 
 **手动触发接口**：
 - `POST /following/sync` — 同步关注列表
@@ -1329,7 +1456,15 @@ class BinanceSquareScheduler {
 > **注意**：迁移文件必须放在 `migrations-pg/` 目录下，使用 `config-pg.json` 中的 `rootdatapro` 数据库配置。
 
 ### 8.2 迁移内容
-仅包含6张表的 `createTable` 和 `addIndex` 操作。
+包含**8张表**的 `createTable` 和 `addIndex` 操作：
+- `BinanceSquareUsers`
+- `BinanceSquareFollowings`
+- `BinanceSquareSeedConfigs`
+- `BinanceSquareTargetRanks`
+- `BinanceSquarePosts`
+- `BinanceSquarePostSnapshots`
+- `BinanceSquareCrawlLogs`
+- `BinanceSquareConfigs`
 
 **注意**：**不写入初始种子用户数据**，种子名单通过 `/seed/init` API 手动导入。
 
@@ -1342,7 +1477,9 @@ class BinanceSquareScheduler {
 ```bash
 # 币安广场爬虫配置
 BINANCE_SQUARE_ENABLED=true
-BINANCE_SQUARE_SNAPSHOT_RETENTION_DAYS=3
+
+# 动态调控项已迁移到数据库 BinanceSquareConfigs 表，不再使用环境变量
+# 如需初始化默认值，在迁移文件中 bulkInsert
 
 # TODO: 后续如需要Cookie再加入
 # BINANCE_SQUARE_COOKIE="..."
@@ -1432,7 +1569,7 @@ await db.BinanceSquareSeedConfig.create({ username: "CZ" });
 await db.BinanceSquareSeedConfig.create({ username: "CZ" }); // 应失败（unique冲突）
 ```
 
-**通过标准**：6张表创建成功，字段约束符合2.2节设计原则，唯一索引生效。
+**通过标准**：8张表创建成功，字段约束符合2.2节设计原则，唯一索引生效。
 
 ---
 
@@ -1654,52 +1791,108 @@ curl -X POST http://localhost:8090/api/binance-square/internal/crawl/pause
 **测试方法**：
 ```javascript
 // 4. 验证调度器启动后Redis状态为running
-// 5. 验证每2小时触发一次帖子抓取（观察CrawlLog记录时间）
-// 6. 验证每天凌晨4点触发清理（观察3天前的镜像是否被删除）
-// 7. 验证暂停后不再触发新任务
-// 8. 验证重启服务后调度器自动恢复（如配置了自动启动）
+// 5. 验证默认2小时触发一次帖子抓取（观察CrawlLog记录时间）
+// 6. 管理后台修改间隔为0.5小时，验证下次任务按新间隔执行
+// 7. 管理后台修改间隔为4小时，验证下次任务按新间隔执行
+// 8. 验证每天凌晨4点触发清理（观察3天前的镜像是否被删除）
+// 9. 验证暂停后不再触发新任务
+// 10. 验证重启服务后调度器自动恢复（如配置了自动启动）
 ```
 
-**通过标准**：调度器正常启停，定时任务按预期执行，清理任务正确删除过期数据。
+**通过标准**：调度器正常启停，定时任务按配置值执行，间隔修改后自动生效，清理任务正确删除过期数据。
 
 ---
 
-### Step 9: 集成测试（端到端）
+### Step 9: 管理后台页面
+
+**实现内容**：
+- `src/binance-square/views/binance-square-tab.ejs` — 主Tab框架（嵌入stats.ejs）
+- `src/binance-square/views/seed-users.ejs` — 种子用户管理子面板
+- `src/binance-square/views/target-users.ejs` — Top50目标用户子面板
+- `src/binance-square/views/posts-list.ejs` — 帖子列表子面板
+- `src/binance-square/views/post-detail.ejs` — 帖子详情+镜像对比
+- 在 `src/xhunt/views/stats.ejs` 中添加侧边栏入口和Tab页
+
+**管理后台功能清单**：
+
+| 功能 | 页面元素 | 调用的API |
+|------|---------|----------|
+| **总览看板** | 爬虫状态卡片、上次抓取时间、最近24h统计数字、调控面板（间隔slider/保留天数slider）、快捷操作按钮 | `GET /crawl/status` + `GET /config` + `POST /config` + `POST /following/sync` + `POST /target/calculate` + `POST /crawl/posts` |
+| **种子用户管理** | 25人表格（username/displayName/isActive）、增删改按钮、同步按钮 | `GET /seed/list` + `POST /seed/add` + `POST /seed/remove` + `POST /following/sync/:username` |
+| **目标用户查看** | Top50排名表格（rank/username/followerCount/seedFollowers）、重新计算按钮 | `GET /target/list` + `POST /target/calculate` |
+| **帖子列表** | 筛选（用户名/类型/时间）、分页表格、查看详情按钮 | `GET /posts` |
+| **帖子详情** | 帖子内容、镜像时间轴（可选两个时间点）、diff对比展示 | `GET /posts/:postId` + `GET /posts/:postId/snapshots` + `GET /posts/snapshot-compare` |
+| **日志查看** | CrawlLog表格（时间/类型/状态/耗时/数量）、按类型筛选 | 需新增 `GET /crawl/logs` API |
+
+**验证方法**：
+```bash
+# 1. 登录管理后台，确认侧边栏出现"币安广场"入口
+# 2. 点击进入，确认加载币安广场Tab页
+# 3. 确认6个子面板（总览/种子/目标/帖子/详情/日志）切换正常
+```
+
+**测试方法**：
+```javascript
+// 4. 在总览页点击"同步关注"按钮，确认触发API并显示loading状态
+// 5. 在总览页查看爬虫状态，确认数据实时刷新
+// 6. 在总览页拖动间隔slider改为0.5小时，确认保存成功，调度器按新间隔执行
+// 7. 在总览页拖动间隔slider改为4小时，确认保存成功，调度器按新间隔执行
+// 8. 在总览页修改保留天数，确认3天前的数据被清理
+// 9. 在种子用户页点击"添加种子"，确认弹窗→输入→保存→表格更新
+// 10. 在目标用户页点击"重新计算"，确认排名刷新
+// 11. 在帖子列表页筛选某个用户，确认只显示该用户的帖子
+// 12. 在帖子详情页选择两个镜像时间点，确认diff正确展示（绿色新增/红色删除/蓝色修改）
+// 13. 测试未登录访问管理后台，确认跳转到登录页
+// 14. 测试无权限用户访问，确认返回403
+```
+
+**通过标准**：管理后台所有操作（触发爬取、查看数据、对比镜像）均通过页面交互完成，无需手动调API。
+
+---
+
+### Step 10: 集成测试（端到端）
 
 **完整流程**：
 ```
-1. /seed/init（导入25人）
-2. /following/sync（同步所有种子关注）
-3. /target/calculate（计算Top50）
-4. /crawl/posts（手动触发帖子抓取）
-5. 等2小时，观察自动触发
-6. /posts/snapshot-compare（对比镜像）
+1. 管理后台 → 种子用户页 → 导入25人
+2. 管理后台 → 总览页 → 点击"同步关注"
+3. 管理后台 → 目标用户页 → 点击"重新计算" → 查看Top50
+4. 管理后台 → 总览页 → 点击"抓取帖子"
+5. 等当前配置间隔时间（默认2小时），观察自动触发（检查CrawlLog）
+6. 管理后台 → 帖子列表 → 查看帖子 → 对比镜像
 7. 等3天后观察自动清理（或手动插入旧数据测试）
 ```
 
 **测试场景**：
 | 场景 | 操作 | 预期结果 |
 |------|------|---------|
-| 正常全流程 | 按上述步骤执行 | 数据完整，无报错 |
-| API限流 | 模拟429响应 | 指数退避重试，最终成功 |
-| 网络中断 | 模拟超时/断网 | 记录失败日志，不影响其他用户 |
-| 数据缺失 | API返回部分字段为null | 正常写入，缺失字段为null |
-| 重复抓取 | 连续调用/following/sync两次 | 幂等，不重复插入 |
-| Top50变动 | 添加新种子用户→同步→计算 | 新排名正确反映 |
+| 正常全流程（管理后台） | 通过页面点击完成全部操作 | 数据完整，页面实时刷新 |
+| API限流 | 模拟429响应 | 指数退避重试，最终成功，页面提示重试中 |
+| 网络中断 | 模拟超时/断网 | 记录失败日志，页面显示错误提示，不影响其他用户 |
+| 数据缺失 | API返回部分字段为null | 正常写入，缺失字段显示"-"或"未知" |
+| 重复抓取 | 连续点击"同步关注"两次 | 幂等，不重复插入，第二次提示"已是最新" |
+| Top50变动 | 管理后台禁用某个种子用户→重新计算 | 排名自动更新，禁用用户的关系被排除 |
+| 权限控制 | 未登录访问/admin | 跳转登录页 |
+| 权限控制 | 普通用户访问币安广场Tab | 不显示入口或返回403 |
 
 ---
 
-### Step 10: 路由挂载 + 最终文档
+### Step 11: 路由挂载 + 最终文档
 
 **实现内容**：
-- 在 `src/api/index.js` 挂载 `/api/binance-square/internal`
+- 在 `src/apiServer.js` 挂载 `/api/binance-square/internal`
+- 在 `src/xhunt/views/stats.ejs` 添加币安广场Tab
 - 更新 `AGENTS.md`
 
 **验证方法**：
 ```bash
-# 通过adminAuth调用所有接口，确认权限控制正常
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+# 1. 确认API路由正常
+curl -H "Cookie: xh_admin_session=$TOKEN" \
   http://localhost:8090/api/binance-square/internal/crawl/status
+
+# 2. 确认管理后台页面正常
+open http://localhost:8090/admin
+# 侧边栏应有"币安广场"入口
 ```
 
-**通过标准**：所有接口通过adminAuth访问正常，未认证请求返回401，AGENTS.md已更新币安广场模块说明。
+**通过标准**：API接口adminAuth保护正常，管理后台页面可正常访问和操作，AGENTS.md已更新币安广场模块说明。
