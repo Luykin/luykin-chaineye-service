@@ -815,6 +815,22 @@ app.use("/api/binance-square/internal", adminAuth, binanceSquareRoutes);
 ```
 **注意**：名单通过API手动导入，不在迁移文件中硬编码。
 
+> **⚠️ 重要设计决策：种子用户配置与关注关系分离**
+>
+> - `BinanceSquareSeedConfigs` 仅用于**配置管理**（记录哪些用户名是种子、是否激活、排序），**不参与关注关系的业务逻辑**
+> - 实际的"谁关注谁"关系存储在 `BinanceSquareFollowing` 表中，关联的是 `BinanceSquareUsers` 表
+> - 种子用户的身份通过 `BinanceSquareUsers.isSeedUser = true` 标识，而非通过 `SeedConfigs` 表查询
+>
+> **同步时的数据流**：
+> ```
+> SeedConfigs（查配置：isActive=true的种子名单）
+>     ↓
+> 调用币安API获取关注列表
+>     ↓
+> Following表（写入关系：谁关注了谁）
+> Users表（upsert被关注者，isSeedUser=false）
+> ```
+
 ### 5.2 阶段二：关注列表同步
 
 ```
@@ -844,6 +860,27 @@ app.use("/api/binance-square/internal", adminAuth, binanceSquareRoutes);
     ▼
 记录 CrawlLog（taskType=following, status=success）
 ```
+
+> **⚠️ 重要：关注数的两种来源与一致性校验**
+>
+> 每个用户的"关注数"有两个来源，必须理解其区别：
+>
+> | 来源 | 获取方式 | 准确性 | 用途 |
+> |------|---------|--------|------|
+> | **API返回的 `data.total`** | 接口响应中的 total 字段 | 实时准确 | 存入 `Users.totalFollowingCount`，用于**校验抓取完整性** |
+> | **数据库 `Following` 表 COUNT** | `SELECT COUNT(*) FROM Followings WHERE followerUsername='xxx'` | 反映实际抓取到的数据 | 用于 **Top50排名计算** |
+>
+> **一致性校验**：每次同步完成后，对比两个数字
+> ```javascript
+> if (followingRecords.length !== apiResponse.data.total) {
+>   console.warn(
+>     `抓取不完整：${targetUsername} 抓了 ${followingRecords.length} 条，` +
+>     `API 返回 total=${apiResponse.data.total}`
+>   );
+>   // 记录到 CrawlLog，状态标记为 partial
+> }
+> ```
+> 如果不一致，说明分页抓取有遗漏（如API新增关注者、分页边界问题等），需要告警但**不阻塞流程**。
 
 **API 分页处理逻辑**：
 ```javascript
@@ -904,6 +941,21 @@ async function fetchAllFollowing(targetUsername) {
 └─────────────────────────────────────┘
 ```
 **策略**：纯手动触发，**不自动执行**。管理员可在关注同步完成后手动调用此接口计算最新Top50。
+
+> **⚠️ 重要：Top50计算只统计活跃种子用户的关注关系**
+>
+> 计算时只选取 `BinanceSquareSeedConfigs.isActive = true` 的种子用户作为关注者来源：
+> ```sql
+> SELECT "followingUsername", COUNT(*) as "followerCount"
+> FROM "BinanceSquareFollowings"
+> WHERE "followerUsername" IN (
+>   SELECT "username" FROM "BinanceSquareSeedConfigs" WHERE "isActive" = true
+> )
+> GROUP BY "followingUsername"
+> ORDER BY "followerCount" DESC
+> LIMIT 50
+> ```
+> 这样当某个种子用户被标记为 `isActive=false` 时，其关注关系不参与Top50计算，排名会自动重新计算。
 
 ### 5.4 阶段四：帖子抓取
 
