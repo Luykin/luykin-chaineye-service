@@ -395,5 +395,168 @@ router.post("/following/sync/:username", async (req, res) => {
   }
 });
 
+// ==================== Top50目标用户计算 ====================
+
+/**
+ * POST /target/calculate
+ * 手动触发：计算Top50目标用户
+ */
+router.post("/target/calculate", async (req, res) => {
+  const startTime = Date.now();
+
+  try {
+    // 1. 获取活跃种子用户名单
+    const activeSeeds = await db.BinanceSquareSeedConfig.findAll({
+      where: { isActive: true },
+      attributes: ["username", "displayName"],
+    });
+
+    if (activeSeeds.length === 0) {
+      return res.status(400).json(fail("没有活跃的种子用户"));
+    }
+
+    const seedUsernames = activeSeeds.map((s) => s.username);
+    console.log(`[target/calculate] 活跃种子用户: ${seedUsernames.join(", ")}`);
+
+    // 2. 聚合查询：被关注次数最多的前50人
+    const topCandidates = await db.BinanceSquareFollowing.findAll({
+      attributes: [
+        "followingUsername",
+        [db.BinanceSquareFollowing.sequelize.fn("COUNT", "*"), "followerCount"],
+      ],
+      where: {
+        followerUsername: { [Op.in]: seedUsernames },
+      },
+      group: ["followingUsername"],
+      order: [[db.BinanceSquareFollowing.sequelize.literal("\"followerCount\""), "DESC"]],
+      limit: 50,
+      raw: true,
+    });
+
+    console.log(`[target/calculate] 候选用户: ${topCandidates.length} 人`);
+
+    // 3. 获取每个候选用户的种子关注者详情
+    const enrichedCandidates = [];
+    for (const candidate of topCandidates) {
+      const seedFollowers = await db.BinanceSquareFollowing.findAll({
+        attributes: ["followerUsername"],
+        where: {
+          followerUsername: { [Op.in]: seedUsernames },
+          followingUsername: candidate.followingUsername,
+        },
+        raw: true,
+      });
+
+      // 获取种子关注者的displayName
+      const seedFollowerNames = seedFollowers.map((f) => f.followerUsername);
+      const seedConfigs = await db.BinanceSquareSeedConfig.findAll({
+        where: { username: { [Op.in]: seedFollowerNames } },
+        attributes: ["username", "displayName"],
+        raw: true,
+      });
+
+      enrichedCandidates.push({
+        username: candidate.followingUsername,
+        followerCount: parseInt(candidate.followerCount, 10),
+        seedFollowers: seedConfigs.map((s) => ({
+          username: s.username,
+          displayName: s.displayName,
+        })),
+      });
+    }
+
+    // 4. 事务：清空旧排名 + 写入新排名 + 更新Users表
+    const now = new Date();
+    const transaction = await db.BinanceSquareTargetRank.sequelize.transaction();
+
+    try {
+      // 4.1 清空旧排名（覆盖式更新）
+      await db.BinanceSquareTargetRank.destroy({
+        where: {},
+        truncate: true,
+        transaction,
+      });
+
+      // 4.2 重置所有用户的isTargetUser标记
+      await db.BinanceSquareUser.update(
+        { isTargetUser: false },
+        { where: { isTargetUser: true }, transaction }
+      );
+
+      // 4.3 批量写入新排名
+      const rankRecords = enrichedCandidates.map((c, index) => ({
+        username: c.username,
+        rank: index + 1,
+        followerCount: c.followerCount,
+        seedFollowers: c.seedFollowers,
+        lastCalculatedAt: now,
+      }));
+
+      await db.BinanceSquareTargetRank.bulkCreate(rankRecords, { transaction });
+
+      // 4.4 更新Top50用户的isTargetUser标记
+      await db.BinanceSquareUser.update(
+        { isTargetUser: true },
+        { where: { username: { [Op.in]: enrichedCandidates.map((c) => c.username) } }, transaction }
+      );
+
+      await transaction.commit();
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+
+    // 5. 记录CrawlLog
+    const durationMs = Date.now() - startTime;
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "target_calculate",
+      status: "success",
+      itemsCount: enrichedCandidates.length,
+      durationMs,
+    });
+
+    res.json(success({
+      totalCandidates: enrichedCandidates.length,
+      top50: enrichedCandidates.slice(0, 10).map((c) => ({
+        rank: enrichedCandidates.indexOf(c) + 1,
+        username: c.username,
+        followerCount: c.followerCount,
+        seedFollowers: c.seedFollowers.map((s) => s.username),
+      })),
+      updatedAt: now,
+      durationMs,
+    }));
+  } catch (error) {
+    console.error("[target/calculate] error:", error);
+
+    // 记录失败日志
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "target_calculate",
+      status: "failed",
+      errorMessage: error.message,
+      durationMs: Date.now() - startTime,
+    });
+
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /target/list
+ * 获取当前Top50目标用户列表
+ */
+router.get("/target/list", async (req, res) => {
+  try {
+    const ranks = await db.BinanceSquareTargetRank.findAll({
+      order: [["rank", "ASC"]],
+    });
+
+    res.json(success(ranks));
+  } catch (error) {
+    console.error("[target/list] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
 // 导出路由和初始化函数
 module.exports = { router, initRoutes };
