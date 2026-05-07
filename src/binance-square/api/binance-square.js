@@ -977,11 +977,24 @@ router.get("/stats", async (req, res) => {
       }),
     ]);
 
+    // 查询镜像表存储大小（PostgreSQL）
+    let snapshotStorageBytes = 0;
+    try {
+      const [result] = await db.BinanceSquarePostSnapshot.sequelize.query(
+        `SELECT pg_total_relation_size('"BinanceSquarePostSnapshots"') AS size_bytes`,
+        { type: require("sequelize").QueryTypes.SELECT }
+      );
+      snapshotStorageBytes = result?.size_bytes ? parseInt(result.size_bytes, 10) : 0;
+    } catch (e) {
+      console.warn("[stats] 查询镜像表大小失败:", e.message);
+    }
+
     res.json(success({
       seedCount,
       targetCount,
       postCount,
       snapshotCount,
+      snapshotStorageBytes,
       lastCrawlAt: lastCrawlLog?.createdAt || null,
       lastCrawlStatus: lastCrawlLog?.status || null,
     }));

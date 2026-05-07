@@ -44,6 +44,13 @@
     </div>
     <div class="bs-stat-card">
       <div class="bs-stat-meta">
+        <div class="bs-stat-label">镜像存储</div>
+        <div class="bs-stat-value" id="bs-stat-storage">-</div>
+      </div>
+      <div class="bs-stat-indicator" style="--indicator-color:#ec4899;"></div>
+    </div>
+    <div class="bs-stat-card">
+      <div class="bs-stat-meta">
         <div class="bs-stat-label">上次抓取</div>
         <div class="bs-stat-value" id="bs-stat-last-crawl">-</div>
       </div>
@@ -1038,6 +1045,17 @@
     return String(n);
   }
 
+  function bsFormatBytes(bytes) {
+    if (!bytes || bytes === 0) return '-';
+    const gb = bytes / (1024 * 1024 * 1024);
+    if (gb >= 1) return gb.toFixed(2) + ' GB';
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1) return mb.toFixed(2) + ' MB';
+    const kb = bytes / 1024;
+    if (kb >= 1) return kb.toFixed(2) + ' KB';
+    return bytes + ' B';
+  }
+
   function bsFormatDate(d) {
     if (!d) return '-';
     const date = new Date(d);
@@ -1101,6 +1119,7 @@
         document.getElementById('bs-stat-targets').textContent = d.targetCount || 0;
         document.getElementById('bs-stat-posts').textContent = bsFormatNum(d.postCount || 0);
         document.getElementById('bs-stat-snapshots').textContent = bsFormatNum(d.snapshotCount || 0);
+        document.getElementById('bs-stat-storage').textContent = bsFormatBytes(d.snapshotStorageBytes || 0);
         document.getElementById('bs-stat-last-crawl').textContent = d.lastCrawlAt ? bsTimeAgo(d.lastCrawlAt) : '-';
       }
     } catch (e) {
