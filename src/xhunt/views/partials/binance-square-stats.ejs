@@ -1135,7 +1135,16 @@
       const res = await bsApi('GET', '/crawl/status');
       const status = res.success ? res.data : null;
       const el = document.getElementById('bs-stat-scheduler');
-      if (status && status.isRunning) {
+      if (!status) {
+        el.textContent = '未知';
+        el.style.color = '#64748b';
+        return;
+      }
+      if (status.isCrawling && status.currentTask) {
+        const t = status.currentTask;
+        el.innerHTML = `运行中 <span style="font-size:12px;font-weight:400;color:#f59e0b;display:block;margin-top:2px;">正在爬取 ${t.processedUsers || 0}/${t.totalUsers || 0}</span>`;
+        el.style.color = '#16a34a';
+      } else if (status.isRunning) {
         el.textContent = '运行中';
         el.style.color = '#16a34a';
       } else {
