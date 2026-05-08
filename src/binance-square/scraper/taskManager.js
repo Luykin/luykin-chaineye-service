@@ -197,7 +197,7 @@ class BinanceSquareTaskManager {
         // 更新lastCrawledAt
         await this.db.BinanceSquareUser.update(
           { lastCrawledAt: new Date() },
-          { where: db.sequelize.where(db.sequelize.fn("LOWER", db.sequelize.col("username")), user.username.toLowerCase()) }
+          { where: this.db.sequelize.where(this.db.sequelize.fn("LOWER", this.db.sequelize.col("username")), user.username.toLowerCase()) }
         );
       } catch (error) {
         let detail = error.message;
@@ -316,7 +316,14 @@ class BinanceSquareTaskManager {
     const writeStart = Date.now();
     const allParsed = allPosts.map((p) => ({ ...p, username: user.username }));
     const replyParsed = replyPosts.map((p) => ({ ...p, username: user.username }));
-    const combined = [...allParsed, ...replyParsed];
+    // ALL 和 REPLY 中可能有重复帖子，用 Map 去重避免唯一索引冲突
+    const postMap = new Map();
+    [...allParsed, ...replyParsed].forEach((p) => {
+      if (!postMap.has(p.postId)) {
+        postMap.set(p.postId, p);
+      }
+    });
+    const combined = Array.from(postMap.values());
 
     // upsert Posts
     for (const post of combined) {
