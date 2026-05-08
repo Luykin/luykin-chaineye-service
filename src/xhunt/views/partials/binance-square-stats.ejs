@@ -1109,9 +1109,10 @@
         if (action === 'view-snapshots' && postId) bsViewPostSnapshots(postId);
         return;
       }
-      const row = e.target.closest('tr[data-source-url]');
-      if (row && row.dataset.sourceUrl) {
-        window.open(row.dataset.sourceUrl, '_blank');
+      const row = e.target.closest('tr[data-post-id]');
+      if (row && row.dataset.postId) {
+        const url = `https://www.binance.com/zh-CN/square/post/${row.dataset.postId}`;
+        window.open(url, '_blank');
       }
     });
 
@@ -1490,7 +1491,7 @@
       }
 
       tbody.innerHTML = posts.map(p => `
-        <tr data-source-url="${p.sourceUrl || ''}" style="cursor:pointer;">
+        <tr data-post-id="${p.postId}" data-source-url="${p.sourceUrl || ''}" style="cursor:pointer;">
           <td><span class="bs-log-type ${p.postType === 'article' ? 'bs-log-type-post' : p.postType === 'reply' ? 'bs-log-type-following' : 'bs-log-type-target'}">${p.postType}</span></td>
           <td>${p.username}</td>
           <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.title || ''}">${p.title || '(无标题)'}</td>
@@ -1930,7 +1931,7 @@
             : (p.title || '(无标题)');
           const titleAttr = isReplyMode ? (p.contentText || p.content || '') : (p.title || '');
           return `
-          <tr data-source-url="${p.sourceUrl || ''}" style="cursor:pointer;">
+          <tr data-post-id="${p.postId}" data-source-url="${p.sourceUrl || ''}" style="cursor:pointer;">
             <td><span class="bs-log-type ${p.postType === 'article' ? 'bs-log-type-post' : p.postType === 'reply' ? 'bs-log-type-following' : 'bs-log-type-target'}">${p.postType}</span></td>
             <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(titleAttr)}">${escapeHtml(displayContent)}</td>
             <td>${bsFormatNum(p.likeCount)}</td>
@@ -1943,9 +1944,9 @@
         }).join('') || '<tr><td colspan="7" style="text-align:center;color:#94a3b8;">暂无数据</td></tr>';
 
         // 绑定行点击跳转
-        tbody.querySelectorAll('tr[data-source-url]').forEach(row => {
+        tbody.querySelectorAll('tr[data-post-id]').forEach(row => {
           row.addEventListener('click', () => {
-            if (row.dataset.sourceUrl) window.open(row.dataset.sourceUrl, '_blank');
+            if (row.dataset.postId) window.open(`https://www.binance.com/zh-CN/square/post/${row.dataset.postId}`, '_blank');
           });
         });
       }

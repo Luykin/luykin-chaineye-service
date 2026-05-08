@@ -76,7 +76,10 @@ function parsePostContent(content) {
     publishedAt: content.latestReleaseTime
       ? new Date(content.latestReleaseTime)
       : null,
-    sourceUrl: content.webLink || null,
+    // 统一使用标准帖子链接，避免API返回的webLink指向audio/replay等特殊页面
+    sourceUrl: content.id
+      ? `https://www.binance.com/zh-CN/square/post/${content.id}`
+      : null,
 
     // 原始数据备份
     rawData: content,
