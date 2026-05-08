@@ -753,26 +753,21 @@ router.get("/posts", async (req, res) => {
       endDate,
     } = req.query;
 
-    const whereConditions = [];
+    const where = {};
     if (username) {
-      whereConditions.push(
-        db.sequelize.where(
-          db.sequelize.fn("LOWER", db.sequelize.col("username")),
-          username.toLowerCase()
-        )
-      );
+      where.username = { [Op.iLike]: username };
+      console.log(`[BS_CASE_DEBUG] /posts username filter: { [Op.iLike]: ${username} }`);
     }
-    if (postType) whereConditions.push({ postType });
+    if (postType) where.postType = postType;
     if (startDate || endDate) {
-      const publishedAt = {};
-      if (startDate) publishedAt[Op.gte] = new Date(startDate);
-      if (endDate) publishedAt[Op.lte] = new Date(endDate);
-      whereConditions.push({ publishedAt });
+      where.publishedAt = {};
+      if (startDate) where.publishedAt[Op.gte] = new Date(startDate);
+      if (endDate) where.publishedAt[Op.lte] = new Date(endDate);
     }
-    console.log(`[BS_CASE_DEBUG] /posts whereConditions=${JSON.stringify(whereConditions.map(c => typeof c === 'object' && c._isSequelizeMethod ? '[SequelizeMethod]' : c))}`);
+    console.log(`[BS_CASE_DEBUG] /posts where keys=${Object.keys(where).join(", ")}`);
 
     const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
-      where: whereConditions.length > 0 ? { [Op.and]: whereConditions } : {},
+      where,
       order: [["publishedAt", "DESC"]],
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
@@ -980,30 +975,23 @@ router.get("/posts/user/:username", async (req, res) => {
     const { username } = req.params;
     const { filterType = "ALL", page = 1, pageSize = 20 } = req.query;
 
-    const whereConditions = [];
-    whereConditions.push(
-      db.sequelize.where(
-        db.sequelize.fn("LOWER", db.sequelize.col("username")),
-        username.toLowerCase()
-      )
-    );
+    const where = { username: { [Op.iLike]: username } };
     if (filterType === "REPLY") {
-      whereConditions.push({ postType: "reply" });
+      where.postType = "reply";
     } else if (filterType === "QUOTE") {
-      whereConditions.push({ postType: "quote" });
+      where.postType = "quote";
     } else if (filterType === "ARTICLE") {
-      whereConditions.push({ postType: "article" });
+      where.postType = "article";
     }
-    // ALL 时不加 postType 条件
-    console.log(`[BS_CASE_DEBUG] /posts/user/:username username=${username}, filterType=${filterType}, conditions=${whereConditions.length}`);
+    console.log(`[BS_CASE_DEBUG] /posts/user/:username username=${username}, filterType=${filterType}, where=${JSON.stringify(where)}`);
 
     const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
-      where: { [Op.and]: whereConditions },
+      where,
       order: [["publishedAt", "DESC"]],
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
     });
-    console.log(`[BS_CASE_DEBUG] /posts/user/:username count=${count}, rows=${rows.length}, firstRow=${rows.length > 0 ? JSON.stringify({postId: rows[0].postId, username: rows[0].username, postType: rows[0].postType}) : 'null'}`);
+    console.log(`[BS_CASE_DEBUG] /posts/user/:username count=${count}, rows=${rows.length}`);
 
     res.json(success({
       total: count,
