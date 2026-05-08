@@ -188,7 +188,7 @@ class BinanceSquareTaskManager {
 
       try {
         // 单个用户处理加5分钟超时，防止永久卡住
-        await this._processUserWithTimeout(user, snapshotTime, snapshotId, 5 * 60 * 1000);
+        await this._processUserWithTimeout(user, snapshotTime, snapshotId, 10 * 60 * 1000);
 
         totalPostsAll += user._tmpAllPosts || 0;
         totalPostsReply += user._tmpReplyPosts || 0;
@@ -312,7 +312,7 @@ class BinanceSquareTaskManager {
     const replyPosts = postParser.parsePostContents(replyResult.contents);
     console.log(`[taskManager] ${user.username} 解析完成，耗时 ${Date.now() - parseStart}ms，ALL=${allPosts.length}，REPLY=${replyPosts.length}`);
 
-    // 3. 写入阶段
+    // 3. 写入阶段（批量操作，减少数据库往返）
     const writeStart = Date.now();
     const allParsed = allPosts.map((p) => ({ ...p, username: user.username }));
     const replyParsed = replyPosts.map((p) => ({ ...p, username: user.username }));
@@ -325,34 +325,44 @@ class BinanceSquareTaskManager {
     });
     const combined = Array.from(postMap.values());
 
-    // upsert Posts
-    for (const post of combined) {
-      await this.db.BinanceSquarePost.upsert({
-        ...post,
-        lastSnapshotId: snapshotId,
-      });
+    // 3.1 批量 upsert Posts（1次数据库操作替代 N 次）
+    const postRecords = combined.map((p) => ({
+      ...p,
+      lastSnapshotId: snapshotId,
+    }));
+    await this.db.BinanceSquarePost.bulkCreate(postRecords, {
+      updateOnDuplicate: [
+        "title", "content", "contentText", "mediaUrls",
+        "likeCount", "shareCount", "commentCount", "viewCount",
+        "publishedAt", "sourceUrl", "lastSnapshotId", "updatedAt",
+      ],
+    });
+
+    // 3.2 批量查询所有帖子的最新镜像（1次数据库操作替代 N 次）
+    const { Op } = require("sequelize");
+    const postIds = combined.map((p) => p.postId);
+    const allPrevSnapshots = await this.db.BinanceSquarePostSnapshot.findAll({
+      where: { postId: { [Op.in]: postIds } },
+      order: [["snapshotTime", "DESC"]],
+    });
+    const prevMap = new Map();
+    for (const s of allPrevSnapshots) {
+      if (!prevMap.has(s.postId)) {
+        prevMap.set(s.postId, s);
+      }
     }
 
-    // 生成镜像
-    let snapshots = 0;
-    for (const post of combined) {
-      const prevSnapshot = await this.db.BinanceSquarePostSnapshot.findOne({
-        where: { postId: post.postId },
-        order: [["snapshotTime", "DESC"]],
-      });
+    // 3.3 批量生成镜像（1次数据库操作替代 N 次）
+    const snapshotRecords = combined.map((post) => ({
+      postId: post.postId,
+      snapshotId,
+      snapshotTime,
+      ...post,
+      diffFromPrev: this._computeSnapshotDiff(post, prevMap.get(post.postId)),
+    }));
+    await this.db.BinanceSquarePostSnapshot.bulkCreate(snapshotRecords);
 
-      const diff = this._computeSnapshotDiff(post, prevSnapshot);
-
-      await this.db.BinanceSquarePostSnapshot.create({
-        postId: post.postId,
-        snapshotId,
-        snapshotTime,
-        ...post,
-        diffFromPrev: diff,
-      });
-
-      snapshots++;
-    }
+    const snapshots = snapshotRecords.length;
     console.log(`[taskManager] ${user.username} 写入完成，耗时 ${Date.now() - writeStart}ms，帖子=${combined.length}，镜像=${snapshots}`);
 
     // 暂存结果供外层累加

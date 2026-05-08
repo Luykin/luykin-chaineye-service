@@ -28,8 +28,14 @@ function resolvePostType(contentType, rawData) {
   if (rawData.isReplyPost === true) {
     return "reply";
   }
-  if (rawData.quoteContent && rawData.quoteContent !== null) {
-    return "quote";
+  // 判断是否为引用：quoteContent 必须有实质性的 id（不为 null/undefined/0/空字符串）
+  // 币安API普通帖也会返回 quoteContent={} 空对象，空对象是 truthy 的，需要额外检查
+  const qc = rawData.quoteContent;
+  if (qc && qc !== null) {
+    const qcId = qc.id;
+    if (qcId !== null && qcId !== undefined && qcId !== 0 && qcId !== "" && qcId !== "0") {
+      return "quote";
+    }
   }
   // contentType映射（兜底）
   const typeMap = {
