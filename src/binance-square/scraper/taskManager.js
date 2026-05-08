@@ -10,6 +10,7 @@ const { getRedisClient } = require("../../lib/redisClient");
 class BinanceSquareTaskManager {
   constructor(db) {
     this.db = db;
+    this.isRunning = false; // 并发锁：同一时间只能有一个爬取任务
   }
 
   /**
@@ -89,6 +90,19 @@ class BinanceSquareTaskManager {
    * @returns {Promise<Object>} 抓取结果统计
    */
   async runPostCrawl() {
+    if (this.isRunning) {
+      throw new Error("已有爬取任务正在运行，请等待完成后再试");
+    }
+    this.isRunning = true;
+
+    try {
+      return await this._doRunPostCrawl();
+    } finally {
+      this.isRunning = false;
+    }
+  }
+
+  async _doRunPostCrawl() {
     const startTime = Date.now();
     const snapshotId = this._generateSnapshotId();
     const snapshotTime = new Date();

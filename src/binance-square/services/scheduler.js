@@ -66,6 +66,8 @@ class BinanceSquareScheduler {
     this.isRunning = true;
 
     // 帖子抓取（配置驱动，支持动态调控）
+    // 如果距离上次抓取已超过间隔时间，立即执行一次（避免重启后长时间空等）
+    await this._checkAndRunImmediatePostCrawl();
     await this._schedulePostCrawl();
 
     // 数据清理（固定每天凌晨4点）
@@ -75,6 +77,40 @@ class BinanceSquareScheduler {
     });
 
     console.log("[scheduler] 调度器启动完成");
+  }
+
+  /**
+   * 检查是否需要立即执行帖子抓取（重启补偿）
+   */
+  async _checkAndRunImmediatePostCrawl() {
+    try {
+      const hours = await this.configService.getFloat("post_crawl_interval_hours", 2);
+      const intervalMs = hours * 60 * 60 * 1000;
+
+      const lastLog = await this.db.BinanceSquareCrawlLog.findOne({
+        where: { taskType: "post" },
+        order: [["createdAt", "DESC"]],
+      });
+
+      const now = Date.now();
+      const lastTime = lastLog ? new Date(lastLog.createdAt).getTime() : 0;
+      const elapsed = now - lastTime;
+
+      console.log(`[scheduler] 上次帖子抓取: ${lastLog ? lastLog.createdAt.toISOString() : '无'}，已过去 ${(elapsed / 3600000).toFixed(2)} 小时，间隔 ${hours} 小时`);
+
+      if (!lastLog || elapsed >= intervalMs) {
+        console.log(`[scheduler] 距离上次抓取已超过 ${hours} 小时，立即执行一次补偿抓取`);
+        try {
+          await this.taskManager.runPostCrawl();
+        } catch (error) {
+          console.error("[scheduler] 补偿抓取失败:", error.message);
+        }
+      } else {
+        console.log(`[scheduler] 距离上次抓取未满 ${hours} 小时，跳过补偿`);
+      }
+    } catch (error) {
+      console.error("[scheduler] 检查补偿抓取失败:", error.message);
+    }
   }
 
   stop() {
