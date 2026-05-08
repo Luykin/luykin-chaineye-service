@@ -102,7 +102,7 @@ router.get("/seed/list", async (req, res) => {
     const userMap = new Map(users.map((u) => [u.username.toLowerCase(), u]));
 
     const enriched = seeds.map((s) => {
-      const user = userMap.get(s.username);
+      const user = userMap.get(s.username.toLowerCase());
       return {
         ...s.toJSON(),
         totalFollowingCount: user?.totalFollowingCount ?? null,
@@ -145,11 +145,10 @@ router.post("/seed/add", async (req, res) => {
       );
 
       // 2. 同步写入Users（或更新isSeedUser）
+      // 注意：findOrCreate 内部会深拷贝 where，sequelize.where 深拷贝后状态丢失导致查不到
+      // 改用 PostgreSQL 原生 Op.iLike，直接放在 where 对象中可被 findOrCreate 正确处理
       await db.BinanceSquareUser.findOrCreate({
-        where: db.sequelize.where(
-          db.sequelize.fn("LOWER", db.sequelize.col("username")),
-          username.toLowerCase()
-        ),
+        where: { username: { [Op.iLike]: username } },
         defaults: {
           username,
           displayName: displayName || null,
@@ -920,7 +919,7 @@ router.get("/following/list/:username", async (req, res) => {
     const userMap = new Map(users.map((u) => [u.username.toLowerCase(), u]));
 
     const enriched = rows.map((r) => {
-      const user = userMap.get(r.followingUsername);
+      const user = userMap.get(r.followingUsername.toLowerCase());
       return {
         followingUsername: r.followingUsername,
         followingSquareUid: r.followingSquareUid,
