@@ -334,7 +334,8 @@ class BinanceSquareTaskManager {
       updateOnDuplicate: [
         "title", "content", "contentText", "mediaUrls",
         "likeCount", "shareCount", "commentCount", "viewCount",
-        "publishedAt", "sourceUrl", "lastSnapshotId", "updatedAt",
+        "publishedAt", "sourceUrl", "postType", "rawData",
+        "lastSnapshotId", "updatedAt",
       ],
     });
 

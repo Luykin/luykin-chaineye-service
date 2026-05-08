@@ -37,7 +37,10 @@ async function main() {
     typeCount[newType] = (typeCount[newType] || 0) + 1;
 
     if (newType !== post.postType) {
-      await post.update({ postType: newType });
+      await db.BinanceSquarePost.update(
+        { postType: newType },
+        { where: { postId: post.postId } }
+      );
       console.log(`  [修正] ${post.postId}: ${post.postType} -> ${newType}`);
       fixed++;
     } else {
