@@ -30,6 +30,7 @@ class BinanceSquareTaskManager {
       const current = existing ? JSON.parse(existing) : {};
       const merged = { ...current, ...update, updatedAt: new Date().toISOString() };
       await redis.set(key, JSON.stringify(merged), "EX", 7200); // 2小时过期
+      console.log(`[taskManager] 进度更新 key=${key} processed=${merged.processedUsers}/${merged.totalUsers} success=${merged.successUsers} failed=${merged.failedUsers} posts=${(merged.totalPostsAll||0)+(merged.totalPostsReply||0)}`);
     } catch (e) {
       console.warn("[taskManager] Redis进度更新失败:", e.message);
     }
@@ -127,12 +128,15 @@ class BinanceSquareTaskManager {
       status: "running",
     });
 
-    for (const user of targetUsers) {
+    for (let i = 0; i < targetUsers.length; i++) {
+      const user = targetUsers[i];
+      const processedCount = i + 1;
+
       if (!user.squareUid) {
         console.warn(`[taskManager] ${user.username} 缺少squareUid，跳过`);
         failedUsers.push({ username: user.username, error: "缺少squareUid", time: new Date().toISOString() });
         await this._updateProgress(snapshotId, {
-          processedUsers: failedUsers.length + (targetUsers.length - failedUsers.length - (targetUsers.length - user.index)),
+          processedUsers: processedCount,
           failedUsers: failedUsers.length,
           errors: failedUsers,
           errorRate: ((failedUsers.length / targetUsers.length) * 100).toFixed(2) + "%",
@@ -197,7 +201,6 @@ class BinanceSquareTaskManager {
       }
 
       // 更新 Redis 实时进度（每个用户处理完后）
-      const processedCount = targetUsers.indexOf(user) + 1;
       const successCount = processedCount - failedUsers.length;
       await this._updateProgress(snapshotId, {
         processedUsers: processedCount,

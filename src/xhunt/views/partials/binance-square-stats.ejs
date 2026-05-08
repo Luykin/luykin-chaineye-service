@@ -345,13 +345,13 @@
           <p>暂无数据</p>
         </div>
         <div id="bs-list-content" style="display:none;">
-          <div class="table-container">
+          <div class="table-container" style="max-height:50vh;overflow-y:auto;">
             <table class="data-table">
               <thead id="bs-list-thead"><tr></tr></thead>
               <tbody id="bs-list-tbody"></tbody>
             </table>
           </div>
-          <div class="bs-pagination" id="bs-list-pagination"></div>
+          <div class="bs-pagination" id="bs-list-pagination" style="position:sticky;bottom:0;background:#fff;padding-top:12px;border-top:1px solid #e2e8f0;"></div>
         </div>
       </div>
     </div>
@@ -1095,7 +1095,7 @@
         const username = btn.dataset.username;
         if (action === 'view-posts' && username) bsOpenPostsModal(username, 'ARTICLE', '帖子');
         else if (action === 'view-replies' && username) bsOpenPostsModal(username, 'REPLY', '回复');
-        else if (action === 'view-following' && username) bsOpenFollowingModal(username);
+        else if (action === 'view-quotes' && username) bsOpenPostsModal(username, 'QUOTE', '引用');
         return;
       }
     });
@@ -1448,7 +1448,7 @@
             <div class="bs-table-actions">
               <button class="bs-table-btn bs-table-btn-view" data-action="view-posts" data-username="${t.username}">帖子</button>
               <button class="bs-table-btn bs-table-btn-view" data-action="view-replies" data-username="${t.username}">回复</button>
-              <button class="bs-table-btn bs-table-btn-view" data-action="view-following" data-username="${t.username}">关注</button>
+              <button class="bs-table-btn bs-table-btn-view" data-action="view-quotes" data-username="${t.username}">引用</button>
             </div>
           </td>
         </tr>
@@ -1970,7 +1970,7 @@
   function bsRenderListPagination(totalPages, currentPage) {
     const container = document.getElementById('bs-list-pagination');
     if (!container) return;
-    if (totalPages <= 1) { container.innerHTML = ''; return; }
+    if (!totalPages || totalPages <= 0) { container.innerHTML = ''; return; }
 
     let html = '';
     // 上一页
