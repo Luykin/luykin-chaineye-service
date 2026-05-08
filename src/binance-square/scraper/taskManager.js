@@ -319,6 +319,10 @@ class BinanceSquareTaskManager {
       console.log(`[taskManager] ${user.username} 开始补全 ${replyIds.length} 条回复帖详情...`);
       const detailMap = new Map();
       for (let i = 0; i < replyIds.length; i++) {
+        if (this.shouldStop) {
+          console.warn(`[taskManager] ${user.username} 详情补全被强制终止`);
+          break;
+        }
         const postId = replyIds[i];
         const detail = await apiClient.fetchPostDetail(postId);
         if (detail) {
@@ -353,8 +357,9 @@ class BinanceSquareTaskManager {
     const allParsed = allPosts.map((p) => ({ ...p, username: user.username }));
     const replyParsed = replyPosts.map((p) => ({ ...p, username: user.username }));
     // ALL 和 REPLY 中可能有重复帖子，用 Map 去重避免唯一索引冲突
+    // 优先保留 REPLY 结果（经过详情补全，数据更完整）
     const postMap = new Map();
-    [...allParsed, ...replyParsed].forEach((p) => {
+    [...replyParsed, ...allParsed].forEach((p) => {
       if (!postMap.has(p.postId)) {
         postMap.set(p.postId, p);
       }

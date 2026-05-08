@@ -1497,7 +1497,7 @@
         <tr data-post-id="${p.postId}" data-source-url="${p.sourceUrl || ''}" style="cursor:pointer;">
           <td><span class="bs-log-type ${p.postType === 'article' ? 'bs-log-type-post' : p.postType === 'reply' ? 'bs-log-type-following' : 'bs-log-type-target'}">${p.postType}</span></td>
           <td>${p.username}</td>
-          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.title || p.contentText || ''}">${p.title || (p.contentText ? p.contentText.substring(0, 50) + (p.contentText.length > 50 ? '...' : '') : '(无标题)')}</td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(p.title || p.contentText || '').replace(/"/g, '&quot;')}">${p.title || (p.contentText ? p.contentText.substring(0, 50) + (p.contentText.length > 50 ? '...' : '') : '(无标题)')}</td>
           <td>${bsFormatNum(p.likeCount)}</td>
           <td>${bsFormatNum(p.commentCount)}</td>
           <td>${bsFormatNum(p.shareCount)}</td>
