@@ -89,14 +89,17 @@ router.get("/seed/list", async (req, res) => {
       order: [["sortOrder", "ASC"], ["createdAt", "ASC"]],
     });
 
-    // 关联查询 BinanceSquareUser 获取 totalFollowingCount / lastCrawledAt
+    // 关联查询 BinanceSquareUser 获取 totalFollowingCount / lastCrawledAt（大小写不敏感）
     const seedUsernames = seeds.map((s) => s.username);
     const users = await db.BinanceSquareUser.findAll({
-      where: { username: { [Op.in]: seedUsernames } },
+      where: db.sequelize.where(
+        db.sequelize.fn("LOWER", db.sequelize.col("username")),
+        { [Op.in]: seedUsernames.map((s) => s.toLowerCase()) }
+      ),
       attributes: ["username", "totalFollowingCount", "lastCrawledAt"],
       raw: true,
     });
-    const userMap = new Map(users.map((u) => [u.username, u]));
+    const userMap = new Map(users.map((u) => [u.username.toLowerCase(), u]));
 
     const enriched = seeds.map((s) => {
       const user = userMap.get(s.username);
@@ -143,7 +146,10 @@ router.post("/seed/add", async (req, res) => {
 
       // 2. 同步写入Users（或更新isSeedUser）
       await db.BinanceSquareUser.findOrCreate({
-        where: { username },
+        where: db.sequelize.where(
+          db.sequelize.fn("LOWER", db.sequelize.col("username")),
+          username.toLowerCase()
+        ),
         defaults: {
           username,
           displayName: displayName || null,
@@ -180,7 +186,10 @@ router.post("/seed/remove", async (req, res) => {
     // 标记为inactive（不删除，保留历史记录）
     const [affectedCount] = await db.BinanceSquareSeedConfig.update(
       { isActive: false },
-      { where: { username } }
+      { where: db.sequelize.where(
+        db.sequelize.fn("LOWER", db.sequelize.col("username")),
+        username.toLowerCase()
+      ) }
     );
 
     if (affectedCount === 0) {
@@ -253,14 +262,17 @@ async function syncSingleUserFollowing(targetUsername) {
       followingSquareUid: f.squareUid || null,
     }));
 
-    // 5. 在写入前统计已存在的用户数量（否则事务提交后统计永远等于 followers.length）
+    // 5. 在写入前统计已存在的用户数量（大小写不敏感）
     const existingUsernames = await db.BinanceSquareUser.findAll({
-      where: { username: { [Op.in]: followers.map((f) => f.username) } },
+      where: db.sequelize.where(
+        db.sequelize.fn("LOWER", db.sequelize.col("username")),
+        { [Op.in]: followers.map((f) => f.username.toLowerCase()) }
+      ),
       attributes: ["username"],
       raw: true,
     });
-    const existingUsernameSet = new Set(existingUsernames.map((u) => u.username));
-    const newUsersCount = followers.filter((f) => !existingUsernameSet.has(f.username)).length;
+    const existingUsernameSet = new Set(existingUsernames.map((u) => u.username.toLowerCase()));
+    const newUsersCount = followers.filter((f) => !existingUsernameSet.has(f.username.toLowerCase())).length;
 
     // 6. 批量写入（事务）
     const transaction = await db.BinanceSquareUser.sequelize.transaction();
@@ -309,7 +321,10 @@ async function syncSingleUserFollowing(targetUsername) {
           totalFollowingCount: total,
           lastCrawledAt: new Date(),
         },
-        { where: { username: targetUsername } }
+        { where: db.sequelize.where(
+          db.sequelize.fn("LOWER", db.sequelize.col("username")),
+          targetUsername.toLowerCase()
+        ) }
       );
     } catch (e) {
       console.warn(`[following/sync] ${targetUsername} 更新自身统计信息失败:`, e.message);
@@ -410,7 +425,15 @@ router.post("/following/sync/:username", async (req, res) => {
 
     // 验证是活跃种子用户
     const seed = await db.BinanceSquareSeedConfig.findOne({
-      where: { username, isActive: true },
+      where: {
+        [Op.and]: [
+          db.sequelize.where(
+            db.sequelize.fn("LOWER", db.sequelize.col("username")),
+            username.toLowerCase()
+          ),
+          { isActive: true },
+        ],
+      },
     });
 
     if (!seed) {
@@ -488,10 +511,13 @@ router.post("/target/calculate", async (req, res) => {
         raw: true,
       });
 
-      // 获取种子关注者的displayName
+      // 获取种子关注者的displayName（大小写不敏感）
       const seedFollowerNames = seedFollowers.map((f) => f.followerUsername);
       const seedConfigs = await db.BinanceSquareSeedConfig.findAll({
-        where: { username: { [Op.in]: seedFollowerNames } },
+        where: db.sequelize.where(
+          db.sequelize.fn("LOWER", db.sequelize.col("username")),
+          { [Op.in]: seedFollowerNames.map((s) => s.toLowerCase()) }
+        ),
         attributes: ["username", "displayName"],
         raw: true,
       });
@@ -538,7 +564,10 @@ router.post("/target/calculate", async (req, res) => {
       // 4.4 更新Top50用户的isTargetUser标记
       await db.BinanceSquareUser.update(
         { isTargetUser: true },
-        { where: { username: { [Op.in]: enrichedCandidates.map((c) => c.username) } }, transaction }
+        { where: db.sequelize.where(
+          db.sequelize.fn("LOWER", db.sequelize.col("username")),
+          { [Op.in]: enrichedCandidates.map((c) => c.username.toLowerCase()) }
+        ), transaction }
       );
 
       await transaction.commit();
@@ -702,21 +731,25 @@ router.get("/posts", async (req, res) => {
       endDate,
     } = req.query;
 
-    const where = {};
-    if (username) where.username = username;
-    if (postType) where.postType = postType;
+    const whereConditions = [];
+    if (username) {
+      whereConditions.push(
+        db.sequelize.where(
+          db.sequelize.fn("LOWER", db.sequelize.col("username")),
+          username.toLowerCase()
+        )
+      );
+    }
+    if (postType) whereConditions.push({ postType });
     if (startDate || endDate) {
-      where.publishedAt = {};
-      if (startDate) where.publishedAt[Op.gte] = new Date(startDate);
-      if (endDate) where.publishedAt[Op.lte] = new Date(endDate);
+      const publishedAt = {};
+      if (startDate) publishedAt[Op.gte] = new Date(startDate);
+      if (endDate) publishedAt[Op.lte] = new Date(endDate);
+      whereConditions.push({ publishedAt });
     }
 
-    // 大小写不敏感查询，避免API不同接口返回的用户名大小写不一致
     const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
-      where: db.sequelize.where(
-        db.sequelize.fn("LOWER", db.sequelize.col("username")),
-        username.toLowerCase()
-      ),
+      where: whereConditions.length > 0 ? { [Op.and]: whereConditions } : {},
       order: [["publishedAt", "DESC"]],
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
@@ -874,14 +907,17 @@ router.get("/following/list/:username", async (req, res) => {
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
     });
 
-    // 关联查询被关注者的用户信息
+    // 关联查询被关注者的用户信息（大小写不敏感）
     const followingUsernames = rows.map((r) => r.followingUsername);
     const users = await db.BinanceSquareUser.findAll({
-      where: { username: { [Op.in]: followingUsernames } },
+      where: db.sequelize.where(
+        db.sequelize.fn("LOWER", db.sequelize.col("username")),
+        { [Op.in]: followingUsernames.map((s) => s.toLowerCase()) }
+      ),
       attributes: ["username", "displayName", "avatar", "totalFollowerCount", "totalPostCount"],
       raw: true,
     });
-    const userMap = new Map(users.map((u) => [u.username, u]));
+    const userMap = new Map(users.map((u) => [u.username.toLowerCase(), u]));
 
     const enriched = rows.map((r) => {
       const user = userMap.get(r.followingUsername);
