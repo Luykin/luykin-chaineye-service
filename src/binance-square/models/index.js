@@ -22,6 +22,9 @@ function initModels(sequelize) {
       db[model.name] = model;
     });
 
+  // 挂载 sequelize 实例，供查询构建使用（如 sequelize.where / sequelize.fn）
+  db.sequelize = sequelize;
+
   // 定义关联关系
   // 用户 ↔ 关注关系（谁关注了别人）
   db.BinanceSquareUser.hasMany(db.BinanceSquareFollowing, {
