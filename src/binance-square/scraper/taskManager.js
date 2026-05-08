@@ -210,8 +210,17 @@ class BinanceSquareTaskManager {
           { where: { username: user.username } }
         );
       } catch (error) {
-        console.error(`[taskManager] ${user.username} 抓取失败:`, error.message);
-        failedUsers.push({ username: user.username, error: error.message, time: new Date().toISOString() });
+        let detail = error.message;
+        if (error.name === 'SequelizeValidationError' && error.errors) {
+          detail = error.errors.map(e => `${e.path}=${e.value} (${e.message})`).join('; ');
+          console.error(`[BS_CRAWL_FAIL] ${user.username} ValidationError:`, detail);
+        } else if (error.name === 'SequelizeUniqueConstraintError' && error.errors) {
+          detail = error.errors.map(e => `${e.path}=${e.value} (unique)`).join('; ');
+          console.error(`[BS_CRAWL_FAIL] ${user.username} UniqueConstraintError:`, detail);
+        } else {
+          console.error(`[BS_CRAWL_FAIL] ${user.username} 抓取失败:`, error.message);
+        }
+        failedUsers.push({ username: user.username, error: detail, time: new Date().toISOString() });
       }
 
       // 更新 Redis 实时进度（每个用户处理完后）

@@ -9,6 +9,20 @@
  * @param {Object} rawData - 原始数据（用于判断isReplyPost/quoteContent）
  * @returns {string} article|quote|reply|following
  */
+/**
+ * 安全转换整数，超出 PostgreSQL INTEGER 范围时截断
+ */
+function safeInteger(val) {
+  if (val === null || val === undefined) return null;
+  const num = Number(val);
+  if (isNaN(num)) return null;
+  const MAX_INT = 2147483647;
+  const MIN_INT = -2147483648;
+  if (num > MAX_INT) return MAX_INT;
+  if (num < MIN_INT) return MIN_INT;
+  return num;
+}
+
 function resolvePostType(contentType, rawData) {
   // 优先级：isReplyPost → quoteContent → contentType映射
   if (rawData.isReplyPost === true) {
@@ -69,10 +83,10 @@ function parsePostContent(content) {
     content: content.body || null,
     contentText: content.bodyTextOnly || null,
     mediaUrls: Array.isArray(content.imageList) ? content.imageList : null,
-    likeCount: content.likeCount ?? null,
-    shareCount: content.shareCount ?? null,
-    commentCount: content.commentCount ?? null,
-    viewCount: content.viewCount ?? null,
+    likeCount: safeInteger(content.likeCount),
+    shareCount: safeInteger(content.shareCount),
+    commentCount: safeInteger(content.commentCount),
+    viewCount: safeInteger(content.viewCount),
     publishedAt: content.latestReleaseTime
       ? new Date(content.latestReleaseTime)
       : null,
