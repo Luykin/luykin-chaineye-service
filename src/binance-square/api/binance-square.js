@@ -850,6 +850,94 @@ router.get("/posts/snapshot-compare", async (req, res) => {
   }
 });
 
+/**
+ * GET /following/list/:username
+ * 查询某用户的关注列表（分页）
+ */
+router.get("/following/list/:username", async (req, res) => {
+  try {
+    const { username } = req.params;
+    const { page = 1, pageSize = 20 } = req.query;
+
+    const { count, rows } = await db.BinanceSquareFollowing.findAndCountAll({
+      where: { followerUsername: username },
+      order: [["createdAt", "DESC"]],
+      limit: parseInt(pageSize, 10),
+      offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
+    });
+
+    // 关联查询被关注者的用户信息
+    const followingUsernames = rows.map((r) => r.followingUsername);
+    const users = await db.BinanceSquareUser.findAll({
+      where: { username: { [Op.in]: followingUsernames } },
+      attributes: ["username", "displayName", "avatar", "totalFollowerCount", "totalPostCount"],
+      raw: true,
+    });
+    const userMap = new Map(users.map((u) => [u.username, u]));
+
+    const enriched = rows.map((r) => {
+      const user = userMap.get(r.followingUsername);
+      return {
+        followingUsername: r.followingUsername,
+        followingSquareUid: r.followingSquareUid,
+        createdAt: r.createdAt,
+        displayName: user?.displayName || null,
+        avatar: user?.avatar || null,
+        totalFollowerCount: user?.totalFollowerCount || null,
+        totalPostCount: user?.totalPostCount || null,
+      };
+    });
+
+    res.json(success({
+      total: count,
+      page: parseInt(page, 10),
+      pageSize: parseInt(pageSize, 10),
+      data: enriched,
+    }));
+  } catch (error) {
+    console.error(`[following/list/${req.params.username}] error:`, error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /posts/user/:username
+ * 查询某用户的帖子列表（支持 filterType 筛选，分页）
+ */
+router.get("/posts/user/:username", async (req, res) => {
+  try {
+    const { username } = req.params;
+    const { filterType = "ALL", page = 1, pageSize = 20 } = req.query;
+
+    const where = { username };
+    if (filterType === "REPLY") {
+      where.postType = "reply";
+    } else if (filterType === "QUOTE") {
+      where.postType = "quote";
+    } else if (filterType === "ARTICLE") {
+      where.postType = "article";
+    }
+    // ALL 时不加 postType 条件
+
+    const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
+      where,
+      order: [["publishedAt", "DESC"]],
+      limit: parseInt(pageSize, 10),
+      offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
+    });
+
+    res.json(success({
+      total: count,
+      page: parseInt(page, 10),
+      pageSize: parseInt(pageSize, 10),
+      data: rows,
+    }));
+  } catch (error) {
+    console.error(`[posts/user/${req.params.username}] error:`, error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
 // ==================== 调度器管理 ====================
 
 /**

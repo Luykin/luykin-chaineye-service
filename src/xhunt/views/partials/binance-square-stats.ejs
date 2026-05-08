@@ -326,6 +326,35 @@
       </div>
     </div>
   </div>
+
+  <!-- 通用列表弹窗（关注列表 / 帖子列表 / 回复列表 / 引用列表） -->
+  <div id="bs-list-modal" class="bs-modal" style="display:none;">
+    <div class="bs-modal-overlay"></div>
+    <div class="bs-modal-content bs-modal-content-wide">
+      <div class="bs-modal-header">
+        <h3 id="bs-list-modal-title">列表</h3>
+        <button class="bs-modal-close" id="bs-list-modal-close">&times;</button>
+      </div>
+      <div class="bs-modal-body">
+        <div id="bs-list-loading" class="loading-state">
+          <div class="spinner"></div>
+          <span>加载中...</span>
+        </div>
+        <div id="bs-list-empty" class="empty-state" style="display:none;">
+          <p>暂无数据</p>
+        </div>
+        <div id="bs-list-content" style="display:none;">
+          <div class="table-container">
+            <table class="data-table">
+              <thead id="bs-list-thead"><tr></tr></thead>
+              <tbody id="bs-list-tbody"></tbody>
+            </table>
+          </div>
+          <div class="bs-pagination" id="bs-list-pagination"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
@@ -722,6 +751,16 @@
   border-color: #a7f3d0;
 }
 .bs-table-btn-view:hover { background: #f0fdf4; }
+.bs-following-link {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px dashed #93c5fd;
+}
+.bs-following-link:hover {
+  color: #1d4ed8;
+  border-bottom-color: #2563eb;
+}
 
 /* 分页 */
 .bs-pagination {
@@ -793,6 +832,8 @@
   width: 90%;
   max-width: 720px;
   max-height: 80vh;
+}
+.bs-modal-content-wide { max-width: 960px; }
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0,0,0,0.2);
@@ -944,15 +985,27 @@
       if (e.target.classList.contains('bs-modal-overlay')) bsCloseSnapshotModal();
     });
 
+    // === 通用列表弹窗关闭 ===
+    document.getElementById('bs-list-modal-close')?.addEventListener('click', bsCloseListModal);
+    document.getElementById('bs-list-modal')?.addEventListener('click', function(e) {
+      if (e.target.classList.contains('bs-modal-overlay')) bsCloseListModal();
+    });
+
     // === 表格事件委托 ===
     // 种子用户表格
     document.getElementById('bs-seeds-table-body')?.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action]');
-      if (!btn) return;
-      const action = btn.dataset.action;
-      const username = btn.dataset.username;
-      if (action === 'sync-seed' && username) bsSyncOneSeed(username);
-      else if (action === 'remove-seed' && username) bsRemoveSeed(username);
+      if (btn) {
+        const action = btn.dataset.action;
+        const username = btn.dataset.username;
+        if (action === 'sync-seed' && username) bsSyncOneSeed(username);
+        else if (action === 'remove-seed' && username) bsRemoveSeed(username);
+        else if (action === 'view-following' && username) bsOpenFollowingModal(username);
+        else if (action === 'view-posts' && username) bsOpenPostsModal(username, 'ARTICLE', '帖子');
+        else if (action === 'view-replies' && username) bsOpenPostsModal(username, 'REPLY', '回复');
+        else if (action === 'view-quotes' && username) bsOpenPostsModal(username, 'QUOTE', '引用');
+        return;
+      }
     });
 
     // 帖子表格
@@ -1252,11 +1305,18 @@
         <tr>
           <td><strong>${s.username}</strong></td>
           <td>${s.displayName || '-'}</td>
-          <td>${bsFormatNum(s.totalFollowingCount)}</td>
+          <td>
+            <a href="javascript:void(0)" class="bs-following-link" data-action="view-following" data-username="${s.username}" title="点击查看关注列表">
+              ${bsFormatNum(s.totalFollowingCount)}
+            </a>
+          </td>
           <td>${bsTimeAgo(s.lastCrawledAt)}</td>
           <td><span class="bs-status-badge ${s.isActive !== false ? 'bs-status-active' : 'bs-status-inactive'}">${s.isActive !== false ? '活跃' : '停用'}</span></td>
           <td>
             <div class="bs-table-actions">
+              <button class="bs-table-btn bs-table-btn-view" data-action="view-posts" data-username="${s.username}">帖子</button>
+              <button class="bs-table-btn bs-table-btn-view" data-action="view-replies" data-username="${s.username}">回复</button>
+              <button class="bs-table-btn bs-table-btn-view" data-action="view-quotes" data-username="${s.username}">引用</button>
               <button class="bs-table-btn bs-table-btn-sync" data-action="sync-seed" data-username="${s.username}">同步</button>
               <button class="bs-table-btn bs-table-btn-remove" data-action="remove-seed" data-username="${s.username}">移除</button>
             </div>
@@ -1677,6 +1737,141 @@
   function bsCloseSnapshotModal() {
     document.getElementById('bs-snapshot-modal').style.display = 'none';
     document.body.style.overflow = '';
+  }
+
+  // ========== 通用列表弹窗（关注列表 / 帖子列表） ==========
+  let bsListModalState = { type: '', username: '', page: 1, pageSize: 15, total: 0 };
+
+  function bsOpenListModal() {
+    document.getElementById('bs-list-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function bsCloseListModal() {
+    document.getElementById('bs-list-modal').style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
+  async function bsOpenFollowingModal(username) {
+    bsListModalState = { type: 'following', username, page: 1, pageSize: 15, total: 0 };
+    document.getElementById('bs-list-modal-title').textContent = `${username} 的关注列表`;
+    bsOpenListModal();
+    await bsLoadListModal();
+  }
+
+  async function bsOpenPostsModal(username, filterType, titleLabel) {
+    bsListModalState = { type: 'posts', username, filterType, page: 1, pageSize: 15, total: 0 };
+    document.getElementById('bs-list-modal-title').textContent = `${username} 的${titleLabel}`;
+    bsOpenListModal();
+    await bsLoadListModal();
+  }
+
+  async function bsLoadListModal() {
+    const { type, username, filterType, page, pageSize } = bsListModalState;
+    const loading = document.getElementById('bs-list-loading');
+    const empty = document.getElementById('bs-list-empty');
+    const content = document.getElementById('bs-list-content');
+    const thead = document.getElementById('bs-list-thead');
+    const tbody = document.getElementById('bs-list-tbody');
+
+    loading.style.display = 'block';
+    empty.style.display = 'none';
+    content.style.display = 'none';
+
+    try {
+      let res;
+      let rows = [];
+      let total = 0;
+
+      if (type === 'following') {
+        res = await bsApi('GET', `/following/list/${username}?page=${page}&pageSize=${pageSize}`);
+        if (res.success && res.data) {
+          rows = res.data.data || [];
+          total = res.data.total || 0;
+        }
+        thead.innerHTML = `<tr><th>用户名</th><th>显示名</th><th>粉丝数</th><th>帖子数</th></tr>`;
+        tbody.innerHTML = rows.map(u => `
+          <tr>
+            <td><strong>${u.followingUsername || '-'}</strong></td>
+            <td>${u.displayName || '-'}</td>
+            <td>${bsFormatNum(u.totalFollowerCount)}</td>
+            <td>${bsFormatNum(u.totalPostCount)}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;">暂无关注记录</td></tr>';
+      } else {
+        res = await bsApi('GET', `/posts/user/${username}?filterType=${filterType}&page=${page}&pageSize=${pageSize}`);
+        if (res.success && res.data) {
+          rows = res.data.data || [];
+          total = res.data.total || 0;
+        }
+        thead.innerHTML = `<tr><th>类型</th><th>标题</th><th>点赞</th><th>评论</th><th>分享</th><th>浏览</th><th>发布时间</th></tr>`;
+        tbody.innerHTML = rows.map(p => `
+          <tr data-source-url="${p.sourceUrl || ''}" style="cursor:pointer;">
+            <td><span class="bs-log-type ${p.postType === 'article' ? 'bs-log-type-post' : p.postType === 'reply' ? 'bs-log-type-following' : 'bs-log-type-target'}">${p.postType}</span></td>
+            <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.title || ''}">${p.title || '(无标题)'}</td>
+            <td>${bsFormatNum(p.likeCount)}</td>
+            <td>${bsFormatNum(p.commentCount)}</td>
+            <td>${bsFormatNum(p.shareCount)}</td>
+            <td>${bsFormatNum(p.viewCount)}</td>
+            <td>${bsFormatDate(p.publishedAt)}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="7" style="text-align:center;color:#94a3b8;">暂无数据</td></tr>';
+
+        // 绑定行点击跳转
+        tbody.querySelectorAll('tr[data-source-url]').forEach(row => {
+          row.addEventListener('click', () => {
+            if (row.dataset.sourceUrl) window.open(row.dataset.sourceUrl, '_blank');
+          });
+        });
+      }
+
+      bsListModalState.total = total;
+      loading.style.display = 'none';
+
+      if (rows.length === 0 && page === 1) {
+        empty.style.display = 'block';
+      } else {
+        content.style.display = 'block';
+        const totalPages = Math.ceil(total / pageSize);
+        bsRenderListPagination(totalPages, page);
+      }
+    } catch (e) {
+      loading.style.display = 'none';
+      empty.style.display = 'block';
+      empty.innerHTML = `<p style="color:#dc2626;">加载失败: ${e.message || '未知错误'}</p>`;
+    }
+  }
+
+  function bsRenderListPagination(totalPages, currentPage) {
+    const container = document.getElementById('bs-list-pagination');
+    if (!container) return;
+    if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+    let html = '';
+    // 上一页
+    html += `<button class="bs-page-btn" data-page="${currentPage - 1}" ${currentPage <= 1 ? 'disabled' : ''}>上一页</button>`;
+    // 页码
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+        html += `<button class="bs-page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+      } else if (i === currentPage - 2 || i === currentPage + 2) {
+        html += `<span style="padding:6px 4px;color:#94a3b8;">...</span>`;
+      }
+    }
+    // 下一页
+    html += `<button class="bs-page-btn" data-page="${currentPage + 1}" ${currentPage >= totalPages ? 'disabled' : ''}>下一页</button>`;
+    container.innerHTML = html;
+
+    container.querySelectorAll('.bs-page-btn').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        if (this.disabled) return;
+        const page = parseInt(this.dataset.page, 10);
+        if (!isNaN(page)) {
+          bsListModalState.page = page;
+          await bsLoadListModal();
+        }
+      });
+    });
   }
 
   async function bsViewPostSnapshots(postId) {
