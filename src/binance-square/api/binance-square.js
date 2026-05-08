@@ -88,21 +88,27 @@ router.get("/seed/list", async (req, res) => {
     const seeds = await db.BinanceSquareSeedConfig.findAll({
       order: [["sortOrder", "ASC"], ["createdAt", "ASC"]],
     });
+    console.log(`[BS_CASE_DEBUG] /seed/list seeds.length=${seeds.length}, usernames=[${seeds.map(s=>s.username).join(", ")}]`);
 
     // 关联查询 BinanceSquareUser 获取 totalFollowingCount / lastCrawledAt（大小写不敏感）
     const seedUsernames = seeds.map((s) => s.username);
+    const lowerUsernames = seedUsernames.map((s) => s.toLowerCase());
+    console.log(`[BS_CASE_DEBUG] /seed/list querying BinanceSquareUser with LOWER(username) IN [${lowerUsernames.join(", ")}]`);
     const users = await db.BinanceSquareUser.findAll({
       where: db.sequelize.where(
         db.sequelize.fn("LOWER", db.sequelize.col("username")),
-        { [Op.in]: seedUsernames.map((s) => s.toLowerCase()) }
+        { [Op.in]: lowerUsernames }
       ),
       attributes: ["username", "totalFollowingCount", "lastCrawledAt"],
       raw: true,
     });
+    console.log(`[BS_CASE_DEBUG] /seed/list users found=${users.length}, details=${JSON.stringify(users)}`);
     const userMap = new Map(users.map((u) => [u.username.toLowerCase(), u]));
+    console.log(`[BS_CASE_DEBUG] /seed/list userMap keys=[${Array.from(userMap.keys()).join(", ")}]`);
 
     const enriched = seeds.map((s) => {
       const user = userMap.get(s.username.toLowerCase());
+      console.log(`[BS_CASE_DEBUG] /seed/list mapping seed=${s.username} => user=${JSON.stringify(user)}`);
       return {
         ...s.toJSON(),
         totalFollowingCount: user?.totalFollowingCount ?? null,
@@ -112,7 +118,7 @@ router.get("/seed/list", async (req, res) => {
 
     res.json(success(enriched));
   } catch (error) {
-    console.error("[seed/list] error:", error);
+    console.error("[BS_CASE_DEBUG] /seed/list error:", error);
     res.status(500).json(fail(error.message));
   }
 });
@@ -147,7 +153,8 @@ router.post("/seed/add", async (req, res) => {
       // 2. 同步写入Users（或更新isSeedUser）
       // 注意：findOrCreate 内部会深拷贝 where，sequelize.where 深拷贝后状态丢失导致查不到
       // 改用 PostgreSQL 原生 Op.iLike，直接放在 where 对象中可被 findOrCreate 正确处理
-      await db.BinanceSquareUser.findOrCreate({
+      console.log(`[BS_CASE_DEBUG] /seed/add findOrCreate username=${username}, query={username: { [Op.iLike]: ${username} }}`);
+      const [user, created] = await db.BinanceSquareUser.findOrCreate({
         where: { username: { [Op.iLike]: username } },
         defaults: {
           username,
@@ -156,6 +163,7 @@ router.post("/seed/add", async (req, res) => {
         },
         transaction,
       });
+      console.log(`[BS_CASE_DEBUG] /seed/add findOrCreate result: found=${!created}, user.username=${user?.username}`);
 
       await transaction.commit();
 
@@ -183,6 +191,7 @@ router.post("/seed/remove", async (req, res) => {
     }
 
     // 标记为inactive（不删除，保留历史记录）
+    console.log(`[BS_CASE_DEBUG] /seed/remove username=${username}, LOWER(username)=${username.toLowerCase()}`);
     const [affectedCount] = await db.BinanceSquareSeedConfig.update(
       { isActive: false },
       { where: db.sequelize.where(
@@ -190,6 +199,7 @@ router.post("/seed/remove", async (req, res) => {
         username.toLowerCase()
       ) }
     );
+    console.log(`[BS_CASE_DEBUG] /seed/remove affectedCount=${affectedCount}`);
 
     if (affectedCount === 0) {
       return res.status(404).json(fail("种子用户不存在"));
@@ -262,6 +272,8 @@ async function syncSingleUserFollowing(targetUsername) {
     }));
 
     // 5. 在写入前统计已存在的用户数量（大小写不敏感）
+    const followerNames = followers.map((f) => f.username);
+    console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing followers=${followers.length}, names=[${followerNames.join(", ")}]`);
     const existingUsernames = await db.BinanceSquareUser.findAll({
       where: db.sequelize.where(
         db.sequelize.fn("LOWER", db.sequelize.col("username")),
@@ -270,8 +282,10 @@ async function syncSingleUserFollowing(targetUsername) {
       attributes: ["username"],
       raw: true,
     });
+    console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing existingUsernames=${existingUsernames.length}, details=${JSON.stringify(existingUsernames)}`);
     const existingUsernameSet = new Set(existingUsernames.map((u) => u.username.toLowerCase()));
     const newUsersCount = followers.filter((f) => !existingUsernameSet.has(f.username.toLowerCase())).length;
+    console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing newUsersCount=${newUsersCount}, existingSet=[${Array.from(existingUsernameSet).join(", ")}]`);
 
     // 6. 批量写入（事务）
     const transaction = await db.BinanceSquareUser.sequelize.transaction();
@@ -315,7 +329,8 @@ async function syncSingleUserFollowing(targetUsername) {
 
     // 7. 更新种子用户自身的统计信息（totalFollowingCount / lastCrawledAt）
     try {
-      await db.BinanceSquareUser.update(
+      console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing updating self username=${targetUsername}, total=${total}`);
+      const [updateCount] = await db.BinanceSquareUser.update(
         {
           totalFollowingCount: total,
           lastCrawledAt: new Date(),
@@ -325,6 +340,7 @@ async function syncSingleUserFollowing(targetUsername) {
           targetUsername.toLowerCase()
         ) }
       );
+      console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing updated rows=${updateCount}`);
     } catch (e) {
       console.warn(`[following/sync] ${targetUsername} 更新自身统计信息失败:`, e.message);
     }
@@ -423,6 +439,7 @@ router.post("/following/sync/:username", async (req, res) => {
     const { username } = req.params;
 
     // 验证是活跃种子用户
+    console.log(`[BS_CASE_DEBUG] /following/sync/:username username=${username}`);
     const seed = await db.BinanceSquareSeedConfig.findOne({
       where: {
         [Op.and]: [
@@ -434,6 +451,7 @@ router.post("/following/sync/:username", async (req, res) => {
         ],
       },
     });
+    console.log(`[BS_CASE_DEBUG] /following/sync/:username seed found=${!!seed}, seed.username=${seed?.username}`);
 
     if (!seed) {
       return res.status(404).json(fail("种子用户不存在或未激活"));
@@ -512,6 +530,7 @@ router.post("/target/calculate", async (req, res) => {
 
       // 获取种子关注者的displayName（大小写不敏感）
       const seedFollowerNames = seedFollowers.map((f) => f.followerUsername);
+      console.log(`[BS_CASE_DEBUG] target/calculate seedFollowerNames=[${seedFollowerNames.join(", ")}]`);
       const seedConfigs = await db.BinanceSquareSeedConfig.findAll({
         where: db.sequelize.where(
           db.sequelize.fn("LOWER", db.sequelize.col("username")),
@@ -520,6 +539,7 @@ router.post("/target/calculate", async (req, res) => {
         attributes: ["username", "displayName"],
         raw: true,
       });
+      console.log(`[BS_CASE_DEBUG] target/calculate seedConfigs found=${seedConfigs.length}, details=${JSON.stringify(seedConfigs)}`);
 
       enrichedCandidates.push({
         username: candidate.followingUsername,
@@ -561,13 +581,16 @@ router.post("/target/calculate", async (req, res) => {
       await db.BinanceSquareTargetRank.bulkCreate(rankRecords, { transaction });
 
       // 4.4 更新Top50用户的isTargetUser标记
-      await db.BinanceSquareUser.update(
+      const top50Names = enrichedCandidates.map((c) => c.username);
+      console.log(`[BS_CASE_DEBUG] target/calculate updating isTargetUser for [${top50Names.join(", ")}]`);
+      const [updateCount] = await db.BinanceSquareUser.update(
         { isTargetUser: true },
         { where: db.sequelize.where(
           db.sequelize.fn("LOWER", db.sequelize.col("username")),
           { [Op.in]: enrichedCandidates.map((c) => c.username.toLowerCase()) }
         ), transaction }
       );
+      console.log(`[BS_CASE_DEBUG] target/calculate updated isTargetUser rows=${updateCount}`);
 
       await transaction.commit();
     } catch (err) {
@@ -746,6 +769,7 @@ router.get("/posts", async (req, res) => {
       if (endDate) publishedAt[Op.lte] = new Date(endDate);
       whereConditions.push({ publishedAt });
     }
+    console.log(`[BS_CASE_DEBUG] /posts whereConditions=${JSON.stringify(whereConditions.map(c => typeof c === 'object' && c._isSequelizeMethod ? '[SequelizeMethod]' : c))}`);
 
     const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
       where: whereConditions.length > 0 ? { [Op.and]: whereConditions } : {},
@@ -753,6 +777,7 @@ router.get("/posts", async (req, res) => {
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
     });
+    console.log(`[BS_CASE_DEBUG] /posts count=${count}, rows=${rows.length}`);
 
     res.json(success({
       total: count,
@@ -895,7 +920,7 @@ router.get("/following/list/:username", async (req, res) => {
     const { username } = req.params;
     const { page = 1, pageSize = 20 } = req.query;
 
-    // 大小写不敏感查询
+    console.log(`[BS_CASE_DEBUG] /following/list/:username username=${username}`);
     const { count, rows } = await db.BinanceSquareFollowing.findAndCountAll({
       where: db.sequelize.where(
         db.sequelize.fn("LOWER", db.sequelize.col("followerUsername")),
@@ -905,9 +930,11 @@ router.get("/following/list/:username", async (req, res) => {
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
     });
+    console.log(`[BS_CASE_DEBUG] /following/list/:username count=${count}, rows=${rows.length}`);
 
     // 关联查询被关注者的用户信息（大小写不敏感）
     const followingUsernames = rows.map((r) => r.followingUsername);
+    console.log(`[BS_CASE_DEBUG] /following/list/:username followingUsernames=[${followingUsernames.join(", ")}]`);
     const users = await db.BinanceSquareUser.findAll({
       where: db.sequelize.where(
         db.sequelize.fn("LOWER", db.sequelize.col("username")),
@@ -916,6 +943,7 @@ router.get("/following/list/:username", async (req, res) => {
       attributes: ["username", "displayName", "avatar", "totalFollowerCount", "totalPostCount"],
       raw: true,
     });
+    console.log(`[BS_CASE_DEBUG] /following/list/:username users found=${users.length}, details=${JSON.stringify(users)}`);
     const userMap = new Map(users.map((u) => [u.username.toLowerCase(), u]));
 
     const enriched = rows.map((r) => {
@@ -952,22 +980,30 @@ router.get("/posts/user/:username", async (req, res) => {
     const { username } = req.params;
     const { filterType = "ALL", page = 1, pageSize = 20 } = req.query;
 
-    const where = { username };
+    const whereConditions = [];
+    whereConditions.push(
+      db.sequelize.where(
+        db.sequelize.fn("LOWER", db.sequelize.col("username")),
+        username.toLowerCase()
+      )
+    );
     if (filterType === "REPLY") {
-      where.postType = "reply";
+      whereConditions.push({ postType: "reply" });
     } else if (filterType === "QUOTE") {
-      where.postType = "quote";
+      whereConditions.push({ postType: "quote" });
     } else if (filterType === "ARTICLE") {
-      where.postType = "article";
+      whereConditions.push({ postType: "article" });
     }
     // ALL 时不加 postType 条件
+    console.log(`[BS_CASE_DEBUG] /posts/user/:username username=${username}, filterType=${filterType}, conditions=${whereConditions.length}`);
 
     const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
-      where,
+      where: { [Op.and]: whereConditions },
       order: [["publishedAt", "DESC"]],
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
     });
+    console.log(`[BS_CASE_DEBUG] /posts/user/:username count=${count}, rows=${rows.length}, firstRow=${rows.length > 0 ? JSON.stringify({postId: rows[0].postId, username: rows[0].username, postType: rows[0].postType}) : 'null'}`);
 
     res.json(success({
       total: count,
