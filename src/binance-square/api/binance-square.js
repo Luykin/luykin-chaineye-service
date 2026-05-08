@@ -580,17 +580,38 @@ router.post("/target/calculate", async (req, res) => {
 
       await db.BinanceSquareTargetRank.bulkCreate(rankRecords, { transaction });
 
-      // 4.4 更新Top50用户的isTargetUser标记
+      // 4.4 更新Top50用户的isTargetUser标记，同时补全squareUid
       const top50Names = enrichedCandidates.map((c) => c.username);
       console.log(`[BS_CASE_DEBUG] target/calculate updating isTargetUser for [${top50Names.join(", ")}]`);
-      const [updateCount] = await db.BinanceSquareUser.update(
-        { isTargetUser: true },
-        { where: db.sequelize.where(
-          db.sequelize.fn("LOWER", db.sequelize.col("username")),
-          { [Op.in]: enrichedCandidates.map((c) => c.username.toLowerCase()) }
-        ), transaction }
-      );
-      console.log(`[BS_CASE_DEBUG] target/calculate updated isTargetUser rows=${updateCount}`);
+
+      // 从关注关系表获取squareUid（取最新的一条）
+      const squareUidMap = new Map();
+      for (const candidate of enrichedCandidates) {
+        const following = await db.BinanceSquareFollowing.findOne({
+          where: { followingUsername: { [Op.iLike]: candidate.username } },
+          order: [["createdAt", "DESC"]],
+          attributes: ["followingSquareUid"],
+          raw: true,
+        });
+        if (following?.followingSquareUid) {
+          squareUidMap.set(candidate.username.toLowerCase(), following.followingSquareUid);
+        }
+      }
+
+      // 逐个更新（因为squareUid可能不同）
+      for (const candidate of enrichedCandidates) {
+        const squareUid = squareUidMap.get(candidate.username.toLowerCase());
+        const updateData = { isTargetUser: true };
+        if (squareUid) updateData.squareUid = squareUid;
+        await db.BinanceSquareUser.update(updateData, {
+          where: db.sequelize.where(
+            db.sequelize.fn("LOWER", db.sequelize.col("username")),
+            candidate.username.toLowerCase()
+          ),
+          transaction,
+        });
+      }
+      console.log(`[BS_CASE_DEBUG] target/calculate updated isTargetUser rows=${enrichedCandidates.length}, squareUid补全=${squareUidMap.size}`);
 
       await transaction.commit();
     } catch (err) {

@@ -188,7 +188,7 @@ class BinanceSquareTaskManager {
 
       try {
         // 单个用户处理加5分钟超时，防止永久卡住
-        await this._processUserWithTimeout(user, snapshotTime, snapshotId, 10 * 60 * 1000);
+        await this._processUserWithTimeout(user, snapshotTime, snapshotId, 15 * 60 * 1000);
 
         totalPostsAll += user._tmpAllPosts || 0;
         totalPostsReply += user._tmpReplyPosts || 0;
