@@ -1497,7 +1497,7 @@
         <tr data-post-id="${p.postId}" data-source-url="${p.sourceUrl || ''}" style="cursor:pointer;">
           <td><span class="bs-log-type ${p.postType === 'article' ? 'bs-log-type-post' : p.postType === 'reply' ? 'bs-log-type-following' : 'bs-log-type-target'}">${p.postType}</span></td>
           <td>${p.username}</td>
-          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.title || ''}">${p.title || '(无标题)'}</td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.title || p.contentText || ''}">${p.title || (p.contentText ? p.contentText.substring(0, 50) + (p.contentText.length > 50 ? '...' : '') : '(无标题)')}</td>
           <td>${bsFormatNum(p.likeCount)}</td>
           <td>${bsFormatNum(p.commentCount)}</td>
           <td>${bsFormatNum(p.shareCount)}</td>
@@ -1954,10 +1954,12 @@
         const contentHeader = isReplyMode ? '内容' : '标题';
         thead.innerHTML = `<tr><th>类型</th><th>${contentHeader}</th><th>点赞</th><th>评论</th><th>分享</th><th>浏览</th><th>发布时间</th></tr>`;
         tbody.innerHTML = rows.map(p => {
+          // 短帖无标题时展示内容摘要（从 contentText 或 content 中提取）
+          const textPreview = p.contentText || (typeof p.content === 'string' ? p.content.substring(0, 200) : '');
           const displayContent = isReplyMode
-            ? (p.contentText || p.content || '(无内容)').substring(0, 80) + ((p.contentText || p.content || '').length > 80 ? '...' : '')
-            : (p.title || '(无标题)');
-          const titleAttr = isReplyMode ? (p.contentText || p.content || '') : (p.title || '');
+            ? (p.contentText || '(无内容)').substring(0, 80) + ((p.contentText || '').length > 80 ? '...' : '')
+            : (p.title || textPreview.substring(0, 60) + (textPreview.length > 60 ? '...' : '') || '(无标题)');
+          const titleAttr = isReplyMode ? (p.contentText || '') : (p.title || textPreview);
           return `
           <tr data-post-id="${p.postId}" data-source-url="${p.sourceUrl || ''}" style="cursor:pointer;">
             <td><span class="bs-log-type ${p.postType === 'article' ? 'bs-log-type-post' : p.postType === 'reply' ? 'bs-log-type-following' : 'bs-log-type-target'}">${p.postType}</span></td>

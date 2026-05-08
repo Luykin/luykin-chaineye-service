@@ -10,7 +10,7 @@ require("dotenv").config({
 
 const { pgInstance } = require("../src/models/postgres-start");
 const initBinanceSquareModels = require("../src/binance-square/models");
-const { resolvePostType } = require("../src/binance-square/scraper/parsers/postParser");
+const { resolvePostType, extractBodyText } = require("../src/binance-square/scraper/parsers/postParser");
 
 async function main() {
   const db = initBinanceSquareModels(pgInstance);
@@ -34,14 +34,18 @@ async function main() {
     }
 
     const newType = resolvePostType(rawData.contentType, rawData);
+    const newContentText = extractBodyText(rawData.body);
     typeCount[newType] = (typeCount[newType] || 0) + 1;
 
-    if (newType !== post.postType) {
-      await db.BinanceSquarePost.update(
-        { postType: newType },
-        { where: { postId: post.postId } }
-      );
-      console.log(`  [修正] ${post.postId}: ${post.postType} -> ${newType}`);
+    const needsFixType = newType !== post.postType;
+    const needsFixText = newContentText && newContentText !== post.contentText;
+
+    if (needsFixType || needsFixText) {
+      const updateData = {};
+      if (needsFixType) updateData.postType = newType;
+      if (needsFixText) updateData.contentText = newContentText;
+      await db.BinanceSquarePost.update(updateData, { where: { postId: post.postId } });
+      console.log(`  [修正] ${post.postId}: ${needsFixType ? post.postType + '->' + newType : ''} ${needsFixText ? 'contentText更新' : ''}`);
       fixed++;
     } else {
       unchanged++;

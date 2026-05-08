@@ -23,6 +23,47 @@ function safeInteger(val) {
   return num;
 }
 
+/**
+ * 从币安API的body JSON中提取纯文本内容
+ * body结构: {"layout":{...}, "hash":{uuid:{"id":"RichTextText","config":{"content":"文本"}}}}
+ * @param {*} body - API返回的body（可能是JSON对象或JSON字符串）
+ * @returns {string|null}
+ */
+function extractBodyText(body) {
+  if (!body) return null;
+
+  let bodyData = body;
+  if (typeof body === "string") {
+    try {
+      bodyData = JSON.parse(body);
+    } catch (e) {
+      // 不是合法JSON，直接返回前500字符
+      return body.substring(0, 500);
+    }
+  }
+
+  const texts = [];
+
+  function traverse(obj) {
+    if (!obj || typeof obj !== "object") return;
+
+    // RichTextText 节点: config.content 是纯文本
+    if (obj.id === "RichTextText" && obj.config && typeof obj.config.content === "string") {
+      texts.push(obj.config.content);
+      return; // 已找到文本，不需要继续遍历子节点
+    }
+
+    for (const val of Object.values(obj)) {
+      if (typeof val === "object") {
+        traverse(val);
+      }
+    }
+  }
+
+  traverse(bodyData);
+  return texts.length > 0 ? texts.join(" ") : null;
+}
+
 function resolvePostType(contentType, rawData) {
   // contentType 只表示帖子格式（1=短帖, 2=长文, 3=长文, 4=AMA），不表示帖子类型
   // 帖子类型（article/quote/reply）由以下字段判断：
@@ -77,6 +118,9 @@ function parsePostContent(content) {
 
   const postType = resolvePostType(content.contentType, content);
 
+  // 从 body JSON 中提取纯文本（币安API没有 bodyTextOnly 字段）
+  const extractedText = extractBodyText(content.body);
+
   return {
     // 关键字段（程序传入）
     postId: String(content.id),
@@ -87,7 +131,7 @@ function parsePostContent(content) {
     // API返回的内容字段
     title: resolveTitle(content.title),
     content: content.body || null,
-    contentText: content.bodyTextOnly || null,
+    contentText: extractedText,
     mediaUrls: Array.isArray(content.imageList) ? content.imageList : null,
     likeCount: safeInteger(content.likeCount),
     shareCount: safeInteger(content.shareCount),
@@ -123,4 +167,5 @@ module.exports = {
   parsePostContents,
   resolvePostType,
   resolveTitle,
+  extractBodyText,
 };
