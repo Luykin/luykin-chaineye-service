@@ -80,7 +80,11 @@ class BinanceSquareScheduler {
   stop() {
     console.log("[scheduler] 停止调度器");
     this.isRunning = false;
-    Object.values(this.jobs).forEach((job) => job?.cancel());
+    Object.values(this.jobs).forEach((job) => {
+      if (job && typeof job.cancel === 'function') {
+        job.cancel();
+      }
+    });
     this.jobs = {};
   }
 
@@ -94,6 +98,12 @@ class BinanceSquareScheduler {
 
       console.log(`[scheduler] 帖子抓取间隔: ${hours}小时, cron: ${cron}`);
 
+      // 如果已有 Job，先取消（防止重复调度）
+      if (this.jobs.postCrawl) {
+        this.jobs.postCrawl.cancel();
+        this.jobs.postCrawl = null;
+      }
+
       this.jobs.postCrawl = schedule.scheduleJob(cron, async () => {
         if (!this.isRunning) return;
 
@@ -105,11 +115,15 @@ class BinanceSquareScheduler {
         }
 
         // 任务完成后重新调度（支持间隔动态变化）
-        this.jobs.postCrawl?.cancel();
         await this._schedulePostCrawl();
       });
+
+      const next = this.jobs.postCrawl?.nextInvocation();
+      console.log(`[scheduler] 下次帖子抓取时间: ${next ? next.toISOString() : '未设置'}`);
     } catch (error) {
       console.error("[scheduler] 调度帖子抓取失败:", error.message);
+      // 5秒后重试，防止一次性失败导致永久丢失
+      setTimeout(() => this._schedulePostCrawl(), 5000);
     }
   }
 
@@ -143,6 +157,11 @@ class BinanceSquareScheduler {
 
   _hoursToCron(hours) {
     // 支持 0.5→*/30, 1→0, 2→0 */2, 4→0 */4
+    // 防御 NaN 或非法值
+    if (!hours || isNaN(hours) || hours <= 0) {
+      console.warn(`[scheduler] 无效间隔 ${hours}，使用默认2小时`);
+      hours = 2;
+    }
     if (hours === 0.5) return "*/30 * * * *";
     if (hours === 1) return "0 * * * *";
     return `0 */${Math.floor(hours)} * * *`;

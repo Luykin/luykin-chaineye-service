@@ -398,6 +398,18 @@ async function cleanupOldStats() {
           if (!bsScheduler.isRunning) {
             await bsScheduler.start();
             console.log("[BinanceSquare] ✅ 调度器已启动");
+          } else {
+            // 健康检查：isRunning=true 但 Job 可能已丢失，检查下次触发时间
+            const status = await bsScheduler.getStatus();
+            const nextTime = status.nextPostCrawl ? new Date(status.nextPostCrawl) : null;
+            const now = new Date();
+            // 如果下次触发时间不存在或已过期超过5分钟，说明 Job 已丢失，需要重启
+            if (!nextTime || (nextTime.getTime() < now.getTime() - 5 * 60 * 1000)) {
+              console.warn(`[BinanceSquare] ⚠️ 调度器健康检查异常，下次触发时间=${nextTime?.toISOString() || '无'}，即将重启`);
+              bsScheduler.stop();
+              await bsScheduler.start();
+              console.log("[BinanceSquare] ✅ 调度器已重启");
+            }
           }
         } else if (control === "stop") {
           if (bsScheduler && bsScheduler.isRunning) {
