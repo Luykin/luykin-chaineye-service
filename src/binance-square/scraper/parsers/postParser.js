@@ -24,24 +24,15 @@ function safeInteger(val) {
 }
 
 function resolvePostType(contentType, rawData) {
-  // 优先级：isReplyPost → contentType → quoteContent兜底
+  // contentType 只表示帖子格式（1=短帖, 2=长文, 3=长文, 4=AMA），不表示帖子类型
+  // 帖子类型（article/quote/reply）由以下字段判断：
+
+  // 1. isReplyPost=true → 回复
   if (rawData.isReplyPost === true) {
     return "reply";
   }
 
-  // 优先信任 contentType，它是币安API的主要类型字段
-  const typeMap = {
-    0: "article",
-    1: "quote",
-    2: "reply",
-  };
-  if (contentType !== undefined && contentType !== null) {
-    const mapped = typeMap[contentType];
-    if (mapped) return mapped;
-  }
-
-  // contentType 不明确时，用 quoteContent 兜底
-  // 币安API普通帖也会返回 quoteContent 但 id 无实质内容
+  // 2. quoteContent 有有效的 id → 引用/转发
   const qc = rawData.quoteContent;
   if (qc && qc !== null) {
     const qcId = qc.id;
@@ -50,6 +41,8 @@ function resolvePostType(contentType, rawData) {
     }
   }
 
+  // 3. 其他都是普通帖（article）
+  // 包括：contentType=1 的短帖、contentType=2/3 的长文章、contentType=4 的 AMA
   return "article";
 }
 
