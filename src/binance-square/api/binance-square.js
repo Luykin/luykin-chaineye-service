@@ -711,8 +711,12 @@ router.get("/posts", async (req, res) => {
       if (endDate) where.publishedAt[Op.lte] = new Date(endDate);
     }
 
+    // 大小写不敏感查询，避免API不同接口返回的用户名大小写不一致
     const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
-      where,
+      where: db.sequelize.where(
+        db.sequelize.fn("LOWER", db.sequelize.col("username")),
+        username.toLowerCase()
+      ),
       order: [["publishedAt", "DESC"]],
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
@@ -859,8 +863,12 @@ router.get("/following/list/:username", async (req, res) => {
     const { username } = req.params;
     const { page = 1, pageSize = 20 } = req.query;
 
+    // 大小写不敏感查询
     const { count, rows } = await db.BinanceSquareFollowing.findAndCountAll({
-      where: { followerUsername: username },
+      where: db.sequelize.where(
+        db.sequelize.fn("LOWER", db.sequelize.col("followerUsername")),
+        username.toLowerCase()
+      ),
       order: [["createdAt", "DESC"]],
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
