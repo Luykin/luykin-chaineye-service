@@ -15,26 +15,27 @@ const { resolvePostType } = require("../src/binance-square/scraper/parsers/postP
 async function main() {
   const db = initBinanceSquareModels(pgInstance);
 
-  console.log("查询所有 postType='quote' 的帖子...");
+  console.log("查询所有帖子，重新判断 postType...");
   const posts = await db.BinanceSquarePost.findAll({
-    where: { postType: "quote" },
     attributes: ["postId", "postType", "rawData"],
   });
 
-  console.log(`共找到 ${posts.length} 条 quote 记录`);
+  console.log(`共找到 ${posts.length} 条记录`);
 
   let fixed = 0;
   let unchanged = 0;
+  const typeCount = { article: 0, quote: 0, reply: 0 };
 
   for (const post of posts) {
     const rawData = post.rawData;
     if (!rawData) {
-      console.log(`  [跳过] ${post.postId}: rawData 为空`);
       unchanged++;
       continue;
     }
 
     const newType = resolvePostType(rawData.contentType, rawData);
+    typeCount[newType] = (typeCount[newType] || 0) + 1;
+
     if (newType !== post.postType) {
       await post.update({ postType: newType });
       console.log(`  [修正] ${post.postId}: ${post.postType} -> ${newType}`);
@@ -45,6 +46,7 @@ async function main() {
   }
 
   console.log(`\n完成：修正 ${fixed} 条，无需修改 ${unchanged} 条`);
+  console.log(`修正后分布: article=${typeCount.article}, quote=${typeCount.quote}, reply=${typeCount.reply}`);
   process.exit(0);
 }
 

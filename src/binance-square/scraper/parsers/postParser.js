@@ -24,12 +24,24 @@ function safeInteger(val) {
 }
 
 function resolvePostType(contentType, rawData) {
-  // 优先级：isReplyPost → quoteContent → contentType映射
+  // 优先级：isReplyPost → contentType → quoteContent兜底
   if (rawData.isReplyPost === true) {
     return "reply";
   }
-  // 判断是否为引用：quoteContent 必须有实质性的 id（不为 null/undefined/0/空字符串）
-  // 币安API普通帖也会返回 quoteContent={} 空对象，空对象是 truthy 的，需要额外检查
+
+  // 优先信任 contentType，它是币安API的主要类型字段
+  const typeMap = {
+    0: "article",
+    1: "quote",
+    2: "reply",
+  };
+  if (contentType !== undefined && contentType !== null) {
+    const mapped = typeMap[contentType];
+    if (mapped) return mapped;
+  }
+
+  // contentType 不明确时，用 quoteContent 兜底
+  // 币安API普通帖也会返回 quoteContent 但 id 无实质内容
   const qc = rawData.quoteContent;
   if (qc && qc !== null) {
     const qcId = qc.id;
@@ -37,13 +49,8 @@ function resolvePostType(contentType, rawData) {
       return "quote";
     }
   }
-  // contentType映射（兜底）
-  const typeMap = {
-    0: "article",
-    1: "quote",
-    2: "reply",
-  };
-  return typeMap[contentType] || "article";
+
+  return "article";
 }
 
 /**
