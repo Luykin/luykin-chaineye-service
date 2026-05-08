@@ -182,7 +182,42 @@ async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7) {
   };
 }
 
+/**
+ * 获取帖子详情（用于补全回复帖的内容和计数）
+ * @param {string|number} postId - 帖子ID
+ * @returns {Promise<Object|null>} 详情数据，失败返回null
+ */
+async function fetchPostDetail(postId) {
+  try {
+    const res = await withRetry(
+      () =>
+        axios.get(
+          `${BASE_URL}/bapi/composite/v3/friendly/pgc/special/content/detail/${postId}`,
+          {
+            timeout: REQUEST_TIMEOUT,
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            },
+          }
+        ),
+      `fetchPostDetail(${postId})`
+    );
+
+    if (!res.data?.success || !res.data.data) {
+      console.warn(`[fetchPostDetail] ${postId} 返回异常:`, res.data);
+      return null;
+    }
+
+    return res.data.data;
+  } catch (error) {
+    console.warn(`[fetchPostDetail] ${postId} 获取失败:`, error.message);
+    return null;
+  }
+}
+
 module.exports = {
   fetchFollowingList,
   fetchUserPosts,
+  fetchPostDetail,
 };

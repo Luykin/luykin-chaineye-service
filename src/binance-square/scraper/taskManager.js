@@ -308,9 +308,45 @@ class BinanceSquareTaskManager {
 
     // 2. 解析阶段
     const parseStart = Date.now();
-    const allPosts = postParser.parsePostContents(allResult.contents);
-    const replyPosts = postParser.parsePostContents(replyResult.contents);
+    let allPosts = postParser.parsePostContents(allResult.contents);
+    let replyPosts = postParser.parsePostContents(replyResult.contents);
     console.log(`[taskManager] ${user.username} 解析完成，耗时 ${Date.now() - parseStart}ms，ALL=${allPosts.length}，REPLY=${replyPosts.length}`);
+
+    // 2.5 回复帖详情补全：币安API的REPLY接口不返回内容和计数，需要单独调详情接口
+    const replyIds = replyPosts.map((p) => p.postId);
+    if (replyIds.length > 0) {
+      const detailStart = Date.now();
+      console.log(`[taskManager] ${user.username} 开始补全 ${replyIds.length} 条回复帖详情...`);
+      const detailMap = new Map();
+      for (let i = 0; i < replyIds.length; i++) {
+        const postId = replyIds[i];
+        const detail = await apiClient.fetchPostDetail(postId);
+        if (detail) {
+          detailMap.set(String(postId), detail);
+        }
+        // 请求间隔：最后一个不需要等
+        if (i < replyIds.length - 1) {
+          await new Promise((r) => setTimeout(r, 300 + Math.floor(Math.random() * 500)));
+        }
+      }
+      // 用详情数据覆盖回复帖的字段
+      replyPosts = replyPosts.map((p) => {
+        const detail = detailMap.get(p.postId);
+        if (!detail) return p;
+        return {
+          ...p,
+          content: detail.body || p.content,
+          contentText: detail.bodyTextOnly || postParser.extractBodyText(detail.body) || p.contentText,
+          likeCount: detail.likeCount != null ? detail.likeCount : p.likeCount,
+          commentCount: detail.commentCount != null ? detail.commentCount : p.commentCount,
+          shareCount: detail.shareCount != null ? detail.shareCount : p.shareCount,
+          viewCount: detail.viewCount != null ? detail.viewCount : p.viewCount,
+          // 合并 rawData：保留原有数据，叠加详情数据
+          rawData: { ...p.rawData, _detail: detail },
+        };
+      });
+      console.log(`[taskManager] ${user.username} 详情补全完成，耗时 ${Date.now() - detailStart}ms，成功 ${detailMap.size}/${replyIds.length}`);
+    }
 
     // 3. 写入阶段（批量操作，减少数据库往返）
     const writeStart = Date.now();
