@@ -8,12 +8,12 @@ require("dotenv").config({
   path: `${process.env.NODE_ENV === "development" ? ".env-dev" : ".env-pro"}`,
 });
 
-const { sequelize } = require("../models");
+const { pgInstance } = require("../src/models/postgres-start");
 const initBinanceSquareModels = require("../src/binance-square/models");
 const { resolvePostType } = require("../src/binance-square/scraper/parsers/postParser");
 
 async function main() {
-  const db = initBinanceSquareModels(sequelize);
+  const db = initBinanceSquareModels(pgInstance);
 
   console.log("查询所有 postType='quote' 的帖子...");
   const posts = await db.BinanceSquarePost.findAll({
