@@ -109,22 +109,26 @@ class BinanceSquareTaskManager {
 
   /**
    * 执行帖子抓取任务
+   * @param {Object} options - 抓取选项
+   * @param {boolean} options.onlyFirstPage - 是否只查第一页（增量模式），默认false（全量模式）
    * @returns {Promise<Object>} 抓取结果统计
    */
-  async runPostCrawl() {
+  async runPostCrawl(options = {}) {
     if (this.isRunning) {
       throw new Error("已有爬取任务正在运行，请等待完成后再试");
     }
     this.isRunning = true;
 
     try {
-      return await this._doRunPostCrawl();
+      return await this._doRunPostCrawl(options);
     } finally {
       this.isRunning = false;
     }
   }
 
-  async _doRunPostCrawl() {
+  async _doRunPostCrawl(options = {}) {
+    const { onlyFirstPage = false } = options;
+    const mode = onlyFirstPage ? "增量" : "全量";
     const startTime = Date.now();
     const snapshotId = this._generateSnapshotId();
     const snapshotTime = new Date();
@@ -140,7 +144,7 @@ class BinanceSquareTaskManager {
       throw new Error("没有目标用户，请先计算Top50");
     }
 
-    console.log(`[taskManager] 开始抓取 ${targetUsers.length} 个目标用户的帖子`);
+    console.log(`[taskManager] 开始${mode}抓取 ${targetUsers.length} 个目标用户的帖子`);
 
     let totalPostsAll = 0;
     let totalPostsReply = 0;
@@ -151,6 +155,7 @@ class BinanceSquareTaskManager {
     await this._updateProgress(snapshotId, {
       taskType: "post",
       snapshotId,
+      onlyFirstPage,
       totalUsers: targetUsers.length,
       processedUsers: 0,
       successUsers: 0,
@@ -187,8 +192,10 @@ class BinanceSquareTaskManager {
       }
 
       try {
-        // 单个用户处理加5分钟超时，防止永久卡住
-        await this._processUserWithTimeout(user, snapshotTime, snapshotId, 15 * 60 * 1000);
+        // 单个用户处理加超时，防止永久卡住
+        // 增量模式（只查一页）3分钟足够；全量模式（翻页7天）15分钟
+        const timeoutMs = onlyFirstPage ? 3 * 60 * 1000 : 15 * 60 * 1000;
+        await this._processUserWithTimeout(user, snapshotTime, snapshotId, timeoutMs, onlyFirstPage);
 
         totalPostsAll += user._tmpAllPosts || 0;
         totalPostsReply += user._tmpReplyPosts || 0;
@@ -238,7 +245,7 @@ class BinanceSquareTaskManager {
     await this.db.BinanceSquareCrawlLog.create({
       taskType: "post",
       status: overallStatus,
-      filterType: "ALL",
+      filterType: onlyFirstPage ? "INCREMENTAL" : "FULL",
       itemsCount: totalPostsAll + totalPostsReply,
       snapshotId,
       durationMs,
@@ -276,11 +283,12 @@ class BinanceSquareTaskManager {
   /**
    * 处理单个用户（带超时保护）
    */
-  async _processUserWithTimeout(user, snapshotTime, snapshotId, timeoutMs) {
+  async _processUserWithTimeout(user, snapshotTime, snapshotId, timeoutMs, onlyFirstPage = false) {
     const start = Date.now();
-    console.log(`[taskManager] 开始处理用户 ${user.username} (${user.squareUid})`);
+    const mode = onlyFirstPage ? "增量" : "全量";
+    console.log(`[taskManager] [${mode}] 开始处理用户 ${user.username} (${user.squareUid})`);
 
-    const userPromise = this._processUser(user, snapshotTime, snapshotId);
+    const userPromise = this._processUser(user, snapshotTime, snapshotId, onlyFirstPage);
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error(`处理超时（>${timeoutMs / 1000}秒）`)), timeoutMs);
     });
@@ -297,69 +305,28 @@ class BinanceSquareTaskManager {
   /**
    * 处理单个用户的核心逻辑
    */
-  async _processUser(user, snapshotTime, snapshotId) {
+  async _processUser(user, snapshotTime, snapshotId, onlyFirstPage = false) {
     // 1. 请求阶段
     const reqStart = Date.now();
     const [allResult, replyResult] = await Promise.all([
-      apiClient.fetchUserPosts(user.squareUid, "ALL", 7),
-      apiClient.fetchUserPosts(user.squareUid, "REPLY", 7),
+      apiClient.fetchUserPosts(user.squareUid, "ALL", 7, onlyFirstPage),
+      apiClient.fetchUserPosts(user.squareUid, "REPLY", 7, onlyFirstPage),
     ]);
     console.log(`[taskManager] ${user.username} 请求完成，耗时 ${Date.now() - reqStart}ms`);
 
     // 2. 解析阶段
     const parseStart = Date.now();
-    let allPosts = postParser.parsePostContents(allResult.contents);
-    let replyPosts = postParser.parsePostContents(replyResult.contents);
+    const allPosts = postParser.parsePostContents(allResult.contents);
+    const replyPosts = postParser.parsePostContents(replyResult.contents);
     console.log(`[taskManager] ${user.username} 解析完成，耗时 ${Date.now() - parseStart}ms，ALL=${allPosts.length}，REPLY=${replyPosts.length}`);
-
-    // 2.5 回复帖详情补全：币安API的REPLY接口不返回内容和计数，需要单独调详情接口
-    const replyIds = replyPosts.map((p) => p.postId);
-    if (replyIds.length > 0) {
-      const detailStart = Date.now();
-      console.log(`[taskManager] ${user.username} 开始补全 ${replyIds.length} 条回复帖详情...`);
-      const detailMap = new Map();
-      for (let i = 0; i < replyIds.length; i++) {
-        if (this.shouldStop) {
-          console.warn(`[taskManager] ${user.username} 详情补全被强制终止`);
-          break;
-        }
-        const postId = replyIds[i];
-        const detail = await apiClient.fetchPostDetail(postId);
-        if (detail) {
-          detailMap.set(String(postId), detail);
-        }
-        // 请求间隔：最后一个不需要等
-        if (i < replyIds.length - 1) {
-          await new Promise((r) => setTimeout(r, 300 + Math.floor(Math.random() * 500)));
-        }
-      }
-      // 用详情数据覆盖回复帖的字段
-      replyPosts = replyPosts.map((p) => {
-        const detail = detailMap.get(p.postId);
-        if (!detail) return p;
-        return {
-          ...p,
-          content: detail.body || p.content,
-          contentText: detail.bodyTextOnly || postParser.extractBodyText(detail.body) || p.contentText,
-          likeCount: detail.likeCount != null ? detail.likeCount : p.likeCount,
-          commentCount: detail.commentCount != null ? detail.commentCount : p.commentCount,
-          shareCount: detail.shareCount != null ? detail.shareCount : p.shareCount,
-          viewCount: detail.viewCount != null ? detail.viewCount : p.viewCount,
-          // 合并 rawData：保留原有数据，叠加详情数据
-          rawData: { ...p.rawData, _detail: detail },
-        };
-      });
-      console.log(`[taskManager] ${user.username} 详情补全完成，耗时 ${Date.now() - detailStart}ms，成功 ${detailMap.size}/${replyIds.length}`);
-    }
 
     // 3. 写入阶段（批量操作，减少数据库往返）
     const writeStart = Date.now();
     const allParsed = allPosts.map((p) => ({ ...p, username: user.username }));
     const replyParsed = replyPosts.map((p) => ({ ...p, username: user.username }));
     // ALL 和 REPLY 中可能有重复帖子，用 Map 去重避免唯一索引冲突
-    // 优先保留 REPLY 结果（经过详情补全，数据更完整）
     const postMap = new Map();
-    [...replyParsed, ...allParsed].forEach((p) => {
+    [...allParsed, ...replyParsed].forEach((p) => {
       if (!postMap.has(p.postId)) {
         postMap.set(p.postId, p);
       }

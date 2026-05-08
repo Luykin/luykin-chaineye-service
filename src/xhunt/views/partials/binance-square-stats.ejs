@@ -69,7 +69,8 @@
   <div class="bs-actions-bar">
     <button class="bs-btn bs-btn-primary" id="bs-btn-sync">同步关注列表</button>
     <button class="bs-btn bs-btn-primary" id="bs-btn-calc">计算 Top50</button>
-    <button class="bs-btn bs-btn-primary" id="bs-btn-crawl">抓取帖子</button>
+    <button class="bs-btn bs-btn-primary" id="bs-btn-crawl-inc">增量抓取</button>
+    <button class="bs-btn bs-btn-primary" id="bs-btn-crawl-full">全量抓取</button>
     <button class="bs-btn bs-btn-success" id="bs-btn-start">启动调度器</button>
     <button class="bs-btn bs-btn-danger" id="bs-btn-pause">暂停调度器</button>
     <button class="bs-btn bs-btn-danger" id="bs-btn-force-stop" style="display:none;">强制终止</button>
@@ -1035,7 +1036,8 @@
     // === 绑定静态按钮事件 ===
     document.getElementById('bs-btn-sync')?.addEventListener('click', bsSyncFollowing);
     document.getElementById('bs-btn-calc')?.addEventListener('click', bsCalculateTargets);
-    document.getElementById('bs-btn-crawl')?.addEventListener('click', bsCrawlPosts);
+    document.getElementById('bs-btn-crawl-inc')?.addEventListener('click', () => bsCrawlPosts('incremental'));
+    document.getElementById('bs-btn-crawl-full')?.addEventListener('click', () => bsCrawlPosts('full'));
     document.getElementById('bs-btn-start')?.addEventListener('click', bsStartScheduler);
     document.getElementById('bs-btn-pause')?.addEventListener('click', bsPauseScheduler);
     document.getElementById('bs-btn-force-stop')?.addEventListener('click', bsForceStop);
@@ -1287,15 +1289,19 @@
         el.style.color = '#64748b';
         return;
       }
+      // 显示增量/全量任务的下一次执行时间
+      const incTime = status.nextIncrementalCrawl ? bsFormatDate(new Date(status.nextIncrementalCrawl)) : '-';
+      const fullTime = status.nextFullCrawl ? bsFormatDate(new Date(status.nextFullCrawl)) : '-';
       if (status.isCrawling && status.currentTask) {
         const t = status.currentTask;
-        el.innerHTML = `运行中 <span style="font-size:12px;font-weight:400;color:#f59e0b;display:block;margin-top:2px;">正在爬取 ${t.processedUsers || 0}/${t.totalUsers || 0}</span>`;
+        const modeLabel = t.onlyFirstPage ? '增量' : '全量';
+        el.innerHTML = `运行中 <span style="font-size:11px;font-weight:400;color:#f59e0b;display:block;margin-top:2px;">${modeLabel} ${t.processedUsers || 0}/${t.totalUsers || 0}</span><span style="font-size:10px;color:#94a3b8;display:block;">增量:${incTime} 全量:${fullTime}</span>`;
         el.style.color = '#16a34a';
       } else if (status.isRunning) {
-        el.textContent = '运行中';
+        el.innerHTML = `运行中<span style="font-size:10px;color:#94a3b8;display:block;">增量:${incTime} 全量:${fullTime}</span>`;
         el.style.color = '#16a34a';
       } else {
-        el.textContent = '已停止';
+        el.innerHTML = `已停止<span style="font-size:10px;color:#94a3b8;display:block;">增量:${incTime} 全量:${fullTime}</span>`;
         el.style.color = '#dc2626';
       }
     } catch (e) {
@@ -1345,7 +1351,8 @@
       const seedCount = seedsRes.success ? (seedsRes.data?.length || 0) : 0;
       recentStats.innerHTML = `
         <div class="bs-config-item"><span class="bs-config-key">活跃种子用户</span><span class="bs-config-val">${seedCount} 人</span></div>
-        <div class="bs-config-item"><span class="bs-config-key">帖子抓取间隔</span><span class="bs-config-val">${configRes.data?.find(c => c.configKey === 'post_crawl_interval_hours')?.configValue || '2'} 小时</span></div>
+        <div class="bs-config-item"><span class="bs-config-key">增量抓取</span><span class="bs-config-val">每 ${configRes.data?.find(c => c.configKey === 'post_crawl_interval_hours')?.configValue || '2'} 小时一次（最新一页）</span></div>
+        <div class="bs-config-item"><span class="bs-config-key">全量抓取</span><span class="bs-config-val">每天凌晨3点（翻页7天）</span></div>
         <div class="bs-config-item"><span class="bs-config-key">镜像保留天数</span><span class="bs-config-val">${configRes.data?.find(c => c.configKey === 'snapshot_retention_days')?.configValue || '3'} 天</span></div>
       `;
 
@@ -1710,21 +1717,28 @@
     }
   }
 
-  async function bsCrawlPosts() {
-    const btn = document.getElementById('bs-btn-crawl');
+  async function bsCrawlPosts(mode = 'full') {
+    const isInc = mode === 'incremental';
+    const btnId = isInc ? 'bs-btn-crawl-inc' : 'bs-btn-crawl-full';
+    const btn = document.getElementById(btnId);
+    const otherBtnId = isInc ? 'bs-btn-crawl-full' : 'bs-btn-crawl-inc';
+    const otherBtn = document.getElementById(otherBtnId);
     btn.disabled = true;
-    bsShowStatus('正在抓取帖子，这可能需要几分钟...', 'info');
+    if (otherBtn) otherBtn.disabled = true;
+    const label = isInc ? '增量抓取' : '全量抓取';
+    bsShowStatus(`${label}中${isInc ? '（只查最新一页）' : '（翻页7天，耗时较长）'}...`, 'info');
     // 启动进度轮询
     bsStopProgressPolling();
     bsPollCrawlProgress();
     try {
-      const res = await bsApi('POST', '/crawl/posts');
-      bsShowStatus(`抓取完成：${res.data?.totalPostsAll || 0} 主帖, ${res.data?.totalPostsReply || 0} 回复`, 'success');
+      const res = await bsApi('POST', '/crawl/posts', { mode });
+      bsShowStatus(`${label}完成：${res.data?.totalPostsAll || 0} 主帖, ${res.data?.totalPostsReply || 0} 回复`, 'success');
       bsRefreshAll();
     } catch (e) {
-      bsShowStatus('抓取失败：' + (e.message || '未知错误'), 'error');
+      bsShowStatus(`${label}失败：` + (e.message || '未知错误'), 'error');
     } finally {
       btn.disabled = false;
+      if (otherBtn) otherBtn.disabled = false;
       // 再轮询一次确保最终状态展示
       setTimeout(bsPollCrawlProgress, 2000);
     }

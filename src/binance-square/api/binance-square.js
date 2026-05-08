@@ -743,6 +743,7 @@ function computeSnapshotDiff(current, prev) {
 /**
  * POST /crawl/posts
  * 手动触发：抓取目标用户的帖子（ALL + REPLY）
+ * @body {string} mode - "incremental" | "full"，默认 "full"
  */
 router.post("/crawl/posts", async (req, res) => {
   try {
@@ -750,9 +751,14 @@ router.post("/crawl/posts", async (req, res) => {
       return res.status(500).json(fail("任务管理器未初始化"));
     }
 
-    const result = await taskManager.runPostCrawl();
+    const mode = req.body?.mode || "full";
+    const onlyFirstPage = mode === "incremental";
+    const label = onlyFirstPage ? "增量" : "全量";
 
-    res.json(success(result));
+    console.log(`[crawl/posts] 手动触发${label}抓取, mode=${mode}`);
+    const result = await taskManager.runPostCrawl({ onlyFirstPage });
+
+    res.json(success({ ...result, mode }));
   } catch (error) {
     console.error("[crawl/posts] error:", error);
     res.status(500).json(fail(error.message));

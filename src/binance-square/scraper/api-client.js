@@ -118,13 +118,14 @@ async function fetchFollowingList(targetUsername) {
 }
 
 /**
- * 获取用户帖子列表（分页遍历，直到7天前或没有数据）
+ * 获取用户帖子列表
  * @param {string} squareUid - 用户的squareUid
  * @param {string} filterType - "ALL" | "REPLY" | "QUOTE"
- * @param {number} daysBack - 回溯天数（默认7天）
+ * @param {number} daysBack - 回溯天数（默认7天，全量模式用）
+ * @param {boolean} onlyFirstPage - 是否只查第一页（增量模式用，默认false）
  * @returns {Promise<{contents: Array, timeOffset: number}>}
  */
-async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7) {
+async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7, onlyFirstPage = false) {
   const allContents = [];
   let timeOffset = -1;
   let hasMore = true;
@@ -164,6 +165,11 @@ async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7) {
     }
 
     allContents.push(...contents);
+
+    // 增量模式：只查第一页，直接退出
+    if (onlyFirstPage) {
+      break;
+    }
 
     // 检查最后一篇帖子的时间
     const lastPost = contents[contents.length - 1];
