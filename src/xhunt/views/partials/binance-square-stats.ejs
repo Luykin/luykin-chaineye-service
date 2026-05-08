@@ -72,6 +72,7 @@
     <button class="bs-btn bs-btn-primary" id="bs-btn-crawl">抓取帖子</button>
     <button class="bs-btn bs-btn-success" id="bs-btn-start">启动调度器</button>
     <button class="bs-btn bs-btn-danger" id="bs-btn-pause">暂停调度器</button>
+    <button class="bs-btn bs-btn-danger" id="bs-btn-force-stop" style="display:none;">强制终止</button>
     <button class="bs-btn bs-btn-refresh" id="bs-btn-refresh">刷新数据</button>
   </div>
 
@@ -1037,6 +1038,7 @@
     document.getElementById('bs-btn-crawl')?.addEventListener('click', bsCrawlPosts);
     document.getElementById('bs-btn-start')?.addEventListener('click', bsStartScheduler);
     document.getElementById('bs-btn-pause')?.addEventListener('click', bsPauseScheduler);
+    document.getElementById('bs-btn-force-stop')?.addEventListener('click', bsForceStop);
     document.getElementById('bs-btn-refresh')?.addEventListener('click', bsRefreshAll);
 
     // === 绑定子 Tab 切换 ===
@@ -1680,6 +1682,12 @@
     document.getElementById('bs-progress-error-rate').textContent = `出错率: ${errorRate}`;
     document.getElementById('bs-progress-posts').textContent = `帖子: ${posts}`;
 
+    // 显示/隐藏强制终止按钮
+    const forceStopBtn = document.getElementById('bs-btn-force-stop');
+    if (forceStopBtn) {
+      forceStopBtn.style.display = isRunning ? 'inline-block' : 'none';
+    }
+
     // 失败详情
     const errorsDiv = document.getElementById('bs-progress-errors');
     const errorsList = document.getElementById('bs-progress-errors-list');
@@ -1747,6 +1755,25 @@
       bsLoadSchedulerStatus();
     } catch (e) {
       bsShowStatus('暂停失败：' + (e.message || '未知错误'), 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  async function bsForceStop() {
+    const btn = document.getElementById('bs-btn-force-stop');
+    if (!confirm('确定要强制终止当前爬取任务吗？已处理的数据会保留。')) return;
+    btn.disabled = true;
+    try {
+      const res = await bsApi('POST', '/crawl/force-stop');
+      bsShowStatus(res.success ? '强制终止指令已发送' : '终止失败', res.success ? 'success' : 'error');
+      // 2秒后刷新状态
+      setTimeout(() => {
+        bsPollCrawlProgress();
+        bsLoadSchedulerStatus();
+      }, 2000);
+    } catch (e) {
+      bsShowStatus('终止失败：' + (e.message || '未知错误'), 'error');
     } finally {
       btn.disabled = false;
     }

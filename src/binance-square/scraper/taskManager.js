@@ -11,6 +11,28 @@ class BinanceSquareTaskManager {
   constructor(db) {
     this.db = db;
     this.isRunning = false; // 并发锁：同一时间只能有一个爬取任务
+    this.shouldStop = false; // 强制终止标志
+  }
+
+  /**
+   * 强制终止当前爬取任务
+   */
+  async forceStop() {
+    console.log("[taskManager] 收到强制终止指令");
+    this.shouldStop = true;
+    this.isRunning = false;
+
+    // 清理 Redis 中所有进度 key
+    try {
+      const redis = await getRedisClient();
+      const keys = await redis.keys("binance_square:task:progress:post:*");
+      if (keys.length > 0) {
+        await redis.del(keys);
+        console.log(`[taskManager] 已清理 ${keys.length} 个 Redis 进度 key`);
+      }
+    } catch (e) {
+      console.warn("[taskManager] 清理 Redis 进度失败:", e.message);
+    }
   }
 
   /**
@@ -143,6 +165,12 @@ class BinanceSquareTaskManager {
     });
 
     for (let i = 0; i < targetUsers.length; i++) {
+      // 检查强制终止标志
+      if (this.shouldStop) {
+        console.log("[taskManager] 强制终止，中断循环");
+        throw new Error("任务被强制终止");
+      }
+
       const user = targetUsers[i];
       const processedCount = i + 1;
 
@@ -159,55 +187,17 @@ class BinanceSquareTaskManager {
       }
 
       try {
-        // 抓取主帖和回复
-        const [allResult, replyResult] = await Promise.all([
-          apiClient.fetchUserPosts(user.squareUid, "ALL", 7),
-          apiClient.fetchUserPosts(user.squareUid, "REPLY", 7),
-        ]);
+        // 单个用户处理加5分钟超时，防止永久卡住
+        await this._processUserWithTimeout(user, snapshotTime, snapshotId, 5 * 60 * 1000);
 
-        const allPosts = postParser.parsePostContents(allResult.contents);
-        const replyPosts = postParser.parsePostContents(replyResult.contents);
-
-        totalPostsAll += allPosts.length;
-        totalPostsReply += replyPosts.length;
-
-        // 合并并写入
-        const allParsed = allPosts.map((p) => ({ ...p, username: user.username }));
-        const replyParsed = replyPosts.map((p) => ({ ...p, username: user.username }));
-        const combined = [...allParsed, ...replyParsed];
-
-        // upsert Posts
-        for (const post of combined) {
-          await this.db.BinanceSquarePost.upsert({
-            ...post,
-            lastSnapshotId: snapshotId,
-          });
-        }
-
-        // 生成镜像
-        for (const post of combined) {
-          const prevSnapshot = await this.db.BinanceSquarePostSnapshot.findOne({
-            where: { postId: post.postId },
-            order: [["snapshotTime", "DESC"]],
-          });
-
-          const diff = this._computeSnapshotDiff(post, prevSnapshot);
-
-          await this.db.BinanceSquarePostSnapshot.create({
-            postId: post.postId,
-            snapshotId,
-            snapshotTime,
-            ...post,
-            diffFromPrev: diff,
-          });
-
-          totalSnapshots++;
-        }
+        totalPostsAll += user._tmpAllPosts || 0;
+        totalPostsReply += user._tmpReplyPosts || 0;
+        totalSnapshots += user._tmpSnapshots || 0;
 
         // 更新lastCrawledAt
         await this.db.BinanceSquareUser.update(
           { lastCrawledAt: new Date() },
-          { where: { username: user.username } }
+          { where: db.sequelize.where(db.sequelize.fn("LOWER", db.sequelize.col("username")), user.username.toLowerCase()) }
         );
       } catch (error) {
         let detail = error.message;
@@ -221,6 +211,10 @@ class BinanceSquareTaskManager {
           console.error(`[BS_CRAWL_FAIL] ${user.username} 抓取失败:`, error.message);
         }
         failedUsers.push({ username: user.username, error: detail, time: new Date().toISOString() });
+      } finally {
+        delete user._tmpAllPosts;
+        delete user._tmpReplyPosts;
+        delete user._tmpSnapshots;
       }
 
       // 更新 Redis 实时进度（每个用户处理完后）
@@ -277,6 +271,87 @@ class BinanceSquareTaskManager {
       durationMs,
       status: overallStatus,
     };
+  }
+
+  /**
+   * 处理单个用户（带超时保护）
+   */
+  async _processUserWithTimeout(user, snapshotTime, snapshotId, timeoutMs) {
+    const start = Date.now();
+    console.log(`[taskManager] 开始处理用户 ${user.username} (${user.squareUid})`);
+
+    const userPromise = this._processUser(user, snapshotTime, snapshotId);
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`处理超时（>${timeoutMs / 1000}秒）`)), timeoutMs);
+    });
+
+    try {
+      await Promise.race([userPromise, timeoutPromise]);
+      console.log(`[taskManager] 完成用户 ${user.username}，耗时 ${Date.now() - start}ms，帖子=${user._tmpAllPosts + user._tmpReplyPosts}，镜像=${user._tmpSnapshots}`);
+    } catch (error) {
+      console.error(`[taskManager] 用户 ${user.username} 处理异常/超时，耗时 ${Date.now() - start}ms:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 处理单个用户的核心逻辑
+   */
+  async _processUser(user, snapshotTime, snapshotId) {
+    // 1. 请求阶段
+    const reqStart = Date.now();
+    const [allResult, replyResult] = await Promise.all([
+      apiClient.fetchUserPosts(user.squareUid, "ALL", 7),
+      apiClient.fetchUserPosts(user.squareUid, "REPLY", 7),
+    ]);
+    console.log(`[taskManager] ${user.username} 请求完成，耗时 ${Date.now() - reqStart}ms`);
+
+    // 2. 解析阶段
+    const parseStart = Date.now();
+    const allPosts = postParser.parsePostContents(allResult.contents);
+    const replyPosts = postParser.parsePostContents(replyResult.contents);
+    console.log(`[taskManager] ${user.username} 解析完成，耗时 ${Date.now() - parseStart}ms，ALL=${allPosts.length}，REPLY=${replyPosts.length}`);
+
+    // 3. 写入阶段
+    const writeStart = Date.now();
+    const allParsed = allPosts.map((p) => ({ ...p, username: user.username }));
+    const replyParsed = replyPosts.map((p) => ({ ...p, username: user.username }));
+    const combined = [...allParsed, ...replyParsed];
+
+    // upsert Posts
+    for (const post of combined) {
+      await this.db.BinanceSquarePost.upsert({
+        ...post,
+        lastSnapshotId: snapshotId,
+      });
+    }
+
+    // 生成镜像
+    let snapshots = 0;
+    for (const post of combined) {
+      const prevSnapshot = await this.db.BinanceSquarePostSnapshot.findOne({
+        where: { postId: post.postId },
+        order: [["snapshotTime", "DESC"]],
+      });
+
+      const diff = this._computeSnapshotDiff(post, prevSnapshot);
+
+      await this.db.BinanceSquarePostSnapshot.create({
+        postId: post.postId,
+        snapshotId,
+        snapshotTime,
+        ...post,
+        diffFromPrev: diff,
+      });
+
+      snapshots++;
+    }
+    console.log(`[taskManager] ${user.username} 写入完成，耗时 ${Date.now() - writeStart}ms，帖子=${combined.length}，镜像=${snapshots}`);
+
+    // 暂存结果供外层累加
+    user._tmpAllPosts = allPosts.length;
+    user._tmpReplyPosts = replyPosts.length;
+    user._tmpSnapshots = snapshots;
   }
 
   /**

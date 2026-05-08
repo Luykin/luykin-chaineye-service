@@ -739,6 +739,32 @@ router.post("/crawl/posts", async (req, res) => {
 });
 
 /**
+ * POST /crawl/force-stop
+ * 强制终止当前爬取任务
+ */
+router.post("/crawl/force-stop", async (req, res) => {
+  try {
+    if (!taskManager) {
+      return res.status(500).json(fail("任务管理器未初始化"));
+    }
+
+    await taskManager.forceStop();
+
+    // 同时写 Redis 通知单例服务（如果任务在单例中运行）
+    try {
+      await req.redisClient.set("binance_square:task:force_stop", "true", { EX: 60 });
+    } catch (e) {
+      console.warn("[crawl/force-stop] Redis 通知失败:", e.message);
+    }
+
+    res.json(success({ message: "已发送强制终止指令" }));
+  } catch (error) {
+    console.error("[crawl/force-stop] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
  * GET /posts
  * 查询帖子列表
  */
