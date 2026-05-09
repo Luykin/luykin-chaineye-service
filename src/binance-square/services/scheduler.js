@@ -97,9 +97,9 @@ class BinanceSquareScheduler {
       const hours = await this.configService.getFloat("post_crawl_interval_hours", 2);
       const intervalMs = hours * 60 * 60 * 1000;
 
-      // 只检查增量抓取日志（全量抓取不计入补偿判断）
+      // 只检查帖子抓取日志（taskType=post），不区分增量/全量
       const lastLog = await this.db.BinanceSquareCrawlLog.findOne({
-        where: { taskType: "post", filterType: "INCREMENTAL" },
+        where: { taskType: "post" },
         order: [["createdAt", "DESC"]],
       });
 
