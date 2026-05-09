@@ -1214,6 +1214,7 @@ router.get("/stats", async (req, res) => {
       db.BinanceSquarePost.count(),
       db.BinanceSquarePostSnapshot.count(),
       db.BinanceSquareCrawlLog.findOne({
+        where: { taskType: "post" },
         order: [["createdAt", "DESC"]],
       }),
     ]);
