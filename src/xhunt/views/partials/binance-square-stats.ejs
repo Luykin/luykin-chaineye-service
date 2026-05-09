@@ -1289,19 +1289,16 @@
         el.style.color = '#64748b';
         return;
       }
-      // 显示增量/全量任务的下一次执行时间
-      const incTime = status.nextIncrementalCrawl ? bsFormatDate(new Date(status.nextIncrementalCrawl)) : '-';
-      const fullTime = status.nextFullCrawl ? bsFormatDate(new Date(status.nextFullCrawl)) : '-';
       if (status.isCrawling && status.currentTask) {
         const t = status.currentTask;
         const modeLabel = t.onlyFirstPage ? '增量' : '全量';
-        el.innerHTML = `运行中 <span style="font-size:11px;font-weight:400;color:#f59e0b;display:block;margin-top:2px;">${modeLabel} ${t.processedUsers || 0}/${t.totalUsers || 0}</span><span style="font-size:10px;color:#94a3b8;display:block;">增量:${incTime} 全量:${fullTime}</span>`;
+        el.innerHTML = `运行中 <span style="font-size:11px;font-weight:400;color:#f59e0b;display:block;margin-top:2px;">${modeLabel} ${t.processedUsers || 0}/${t.totalUsers || 0}</span>`;
         el.style.color = '#16a34a';
       } else if (status.isRunning) {
-        el.innerHTML = `运行中<span style="font-size:10px;color:#94a3b8;display:block;">增量:${incTime} 全量:${fullTime}</span>`;
+        el.textContent = '运行中';
         el.style.color = '#16a34a';
       } else {
-        el.innerHTML = `已停止<span style="font-size:10px;color:#94a3b8;display:block;">增量:${incTime} 全量:${fullTime}</span>`;
+        el.textContent = '已停止';
         el.style.color = '#dc2626';
       }
     } catch (e) {
