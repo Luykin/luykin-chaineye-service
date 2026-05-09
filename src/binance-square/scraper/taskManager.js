@@ -242,17 +242,25 @@ class BinanceSquareTaskManager {
     const overallStatus = failedUsers.length > 0 ? "partial" : "success";
 
     // 记录CrawlLog（包含失败详情）
-    await this.db.BinanceSquareCrawlLog.create({
-      taskType: "post",
-      status: overallStatus,
-      filterType: onlyFirstPage ? "INCREMENTAL" : "FULL",
-      itemsCount: totalPostsAll + totalPostsReply,
-      snapshotId,
-      durationMs,
-      failedDetails: failedUsers.length > 0 ? failedUsers : null,
-    });
+    // filterType 保持 "ALL"（增量和全量都是查 ALL+REPLY）
+    // 用 failedDetails.mode 区分增量/全量
+    try {
+      await this.db.BinanceSquareCrawlLog.create({
+        taskType: "post",
+        status: overallStatus,
+        filterType: "ALL",
+        itemsCount: totalPostsAll + totalPostsReply,
+        snapshotId,
+        durationMs,
+        failedDetails: failedUsers.length > 0
+          ? { mode: onlyFirstPage ? "incremental" : "full", errors: failedUsers }
+          : { mode: onlyFirstPage ? "incremental" : "full" },
+      });
+    } catch (logError) {
+      console.error("[taskManager] CrawlLog 写入失败:", logError.message);
+    }
 
-    // 最终进度更新
+    // 最终进度更新：标记为已完成
     await this._updateProgress(snapshotId, {
       processedUsers: targetUsers.length,
       successUsers: targetUsers.length - failedUsers.length,
@@ -264,7 +272,8 @@ class BinanceSquareTaskManager {
       totalSnapshots,
       durationMs,
       completedAt: new Date().toISOString(),
-      status: overallStatus,
+      status: "completed",
+      mode: onlyFirstPage ? "incremental" : "full",
     });
 
     return {
@@ -277,6 +286,7 @@ class BinanceSquareTaskManager {
       failedDetails: failedUsers,
       durationMs,
       status: overallStatus,
+      mode: onlyFirstPage ? "incremental" : "full",
     };
   }
 
