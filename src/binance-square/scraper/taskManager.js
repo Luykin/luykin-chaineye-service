@@ -22,6 +22,15 @@ class BinanceSquareTaskManager {
     this.shouldStop = true;
     this.isRunning = false;
 
+    // 释放分布式锁（不管谁持有的，强制终止都要释放）
+    try {
+      const redis = await getRedisClient();
+      await redis.del("binance_square:task:lock");
+      console.log("[taskManager] 已释放 Redis 任务锁");
+    } catch (e) {
+      console.warn("[taskManager] 释放 Redis 锁失败:", e.message);
+    }
+
     // 清理 Redis 中所有进度 key
     try {
       const redis = await getRedisClient();
@@ -70,7 +79,11 @@ class BinanceSquareTaskManager {
       String(now.getDate()).padStart(2, "0") +
       String(now.getHours()).padStart(2, "0") +
       String(now.getMinutes()).padStart(2, "0") +
-      String(now.getSeconds()).padStart(2, "0")
+      String(now.getSeconds()).padStart(2, "0") +
+      "-" +
+      String(now.getMilliseconds()).padStart(3, "0") +
+      "-" +
+      Math.random().toString(36).substring(2, 6)
     );
   }
 
@@ -114,23 +127,39 @@ class BinanceSquareTaskManager {
    * @returns {Promise<Object>} 抓取结果统计
    */
   async runPostCrawl(options = {}) {
-    if (this.isRunning) {
-      throw new Error("已有爬取任务正在运行，请等待完成后再试");
+    const redis = await getRedisClient();
+    const LOCK_KEY = "binance_square:task:lock";
+    const LOCK_TTL = 1200; // 20分钟，覆盖最坏情况
+
+    // 分布式锁：防止多个实例并发执行
+    const lockValue = this._generateSnapshotId();
+    const lockResult = await redis.set(LOCK_KEY, lockValue, { NX: true, EX: LOCK_TTL });
+    if (!lockResult) {
+      const existing = await redis.get(LOCK_KEY);
+      throw new Error(`已有爬取任务正在运行（锁: ${existing}），请等待完成后再试`);
     }
+
     this.isRunning = true;
+    this.shouldStop = false;
 
     try {
-      return await this._doRunPostCrawl(options);
+      return await this._doRunPostCrawl(options, lockValue);
     } finally {
       this.isRunning = false;
+      this.shouldStop = false;
+      // 安全释放锁：只有持有者才能释放
+      const current = await redis.get(LOCK_KEY);
+      if (current === lockValue) {
+        await redis.del(LOCK_KEY);
+      }
     }
   }
 
-  async _doRunPostCrawl(options = {}) {
+  async _doRunPostCrawl(options = {}, snapshotId = null) {
     const { onlyFirstPage = false } = options;
     const mode = onlyFirstPage ? "增量" : "全量";
     const startTime = Date.now();
-    const snapshotId = this._generateSnapshotId();
+    if (!snapshotId) snapshotId = this._generateSnapshotId();
     const snapshotTime = new Date();
     const { Op } = require("sequelize");
 
@@ -379,7 +408,24 @@ class BinanceSquareTaskManager {
       ...post,
       diffFromPrev: this._computeSnapshotDiff(post, prevMap.get(post.postId)),
     }));
-    await this.db.BinanceSquarePostSnapshot.bulkCreate(snapshotRecords);
+    await this.db.BinanceSquarePostSnapshot.bulkCreate(snapshotRecords, {
+      updateOnDuplicate: [
+        "snapshotTime",
+        "postType",
+        "isDeleted",
+        "title",
+        "content",
+        "contentText",
+        "mediaUrls",
+        "likeCount",
+        "shareCount",
+        "commentCount",
+        "viewCount",
+        "rawData",
+        "diffFromPrev",
+        "updatedAt",
+      ],
+    });
 
     const snapshots = snapshotRecords.length;
     console.log(`[taskManager] ${user.username} 写入完成，耗时 ${Date.now() - writeStart}ms，帖子=${combined.length}，镜像=${snapshots}`);
