@@ -403,8 +403,39 @@ async function getPublicCampaignDetailBySlug(slug, { lang = "zh-CN" } = {}) {
   return buildCampaignDetail(record, lang);
 }
 
-async function getWebsiteCampaignAdminByNacosId(nacosCampaignId) {
-  return XHuntWebsiteCampaign.findOne({ where: { nacosCampaignId } });
+async function getWebsiteCampaignAdminByNacosId(identifier) {
+  const key = String(identifier || "").trim();
+  if (!key) return null;
+
+  const byNacosId = await XHuntWebsiteCampaign.findOne({ where: { nacosCampaignId: key } });
+  if (byNacosId) return byNacosId;
+
+  if (/^\d+$/.test(key)) {
+    return XHuntWebsiteCampaign.findByPk(Number(key));
+  }
+
+  return null;
+}
+
+async function findWebsiteCampaignForUpdate(identifier, transaction) {
+  const key = String(identifier || "").trim();
+  if (!key) return null;
+
+  const byNacosId = await XHuntWebsiteCampaign.findOne({
+    where: { nacosCampaignId: key },
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+  if (byNacosId) return byNacosId;
+
+  if (/^\d+$/.test(key)) {
+    return XHuntWebsiteCampaign.findByPk(Number(key), {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+  }
+
+  return null;
 }
 
 function validateContractAddress(value, label) {
@@ -414,25 +445,21 @@ function validateContractAddress(value, label) {
   }
 }
 
-async function saveWebsiteCampaignConfig(nacosCampaignId, payload) {
+async function saveWebsiteCampaignConfig(identifier, payload) {
   return pgInstance.transaction(async (transaction) => {
-    const record = await XHuntWebsiteCampaign.findOne({
-      where: { nacosCampaignId },
-      transaction,
-      lock: transaction.LOCK.UPDATE,
-    });
+    const record = await findWebsiteCampaignForUpdate(identifier, transaction);
     if (!record) {
       throw new Error("请先同步到网站数据库后再保存网站配置");
     }
 
     const nextStatus = normalizeWebsiteStatus(payload.webStatus || record.webStatus);
     const nextPageTemplate = trimOrNull(payload.pageTemplate) || record.pageTemplate || "standard";
-    const nextSlug = trimOrNull(payload.slug) || record.slug || normalizeSlug(record.campaignKey || nacosCampaignId);
+    const nextSlug = trimOrNull(payload.slug) || record.slug || normalizeSlug(record.campaignKey || record.nacosCampaignId);
 
     const existedSlug = await XHuntWebsiteCampaign.findOne({
       where: {
         slug: nextSlug,
-        nacosCampaignId: { [Op.ne]: nacosCampaignId },
+        id: { [Op.ne]: record.id },
       },
       transaction,
     });

@@ -2215,6 +2215,14 @@
       return getCurrentCampaign();
     }
 
+    function getWebsiteConfigKey(recordLike) {
+      if (!recordLike) return "";
+      if (currentSelectionType === "website_only") {
+        return recordLike.nacosCampaignId || recordLike.id || "";
+      }
+      return recordLike.id || recordLike.nacosCampaignId || "";
+    }
+
     function setEditorMode(mode) {
       currentSelectionType = mode === "website_only" ? "website_only" : "nacos";
       const legacyInfoEl = $("campaigns-legacy-info");
@@ -2499,14 +2507,15 @@
 
     async function loadWebsiteConfigForCurrentCampaign() {
       const c = getCurrentWebsiteTarget();
-      if (!c || !(c.id || c.nacosCampaignId)) {
+      const websiteConfigKey = getWebsiteConfigKey(c);
+      if (!websiteConfigKey) {
         clearWebsiteConfigEditor("请先选择活动");
         return;
       }
       setWebsiteControlsEnabled(true);
       renderWebsiteMeta(null);
       try {
-        const record = await apiGetWebsiteConfig(c.id || c.nacosCampaignId);
+        const record = await apiGetWebsiteConfig(websiteConfigKey);
         if (!record) {
           clearWebsiteConfigEditor("该活动尚未同步到网站数据库，请先点击“同步到网站”");
           return;
@@ -2550,12 +2559,12 @@
 
     async function saveWebsiteConfig() {
       const c = getCurrentWebsiteTarget();
-      if (!c || !(c.id || c.nacosCampaignId)) throw new Error("请先选择已保存活动并同步到网站");
-      const nacosCampaignId = c.id || c.nacosCampaignId;
+      const websiteConfigKey = getWebsiteConfigKey(c);
+      if (!websiteConfigKey) throw new Error("请先选择已保存活动并同步到网站");
       const payload = collectWebsiteConfigPayload();
-      const saved = await apiSaveWebsiteConfig(nacosCampaignId, payload);
+      const saved = await apiSaveWebsiteConfig(websiteConfigKey, payload);
       websiteConfigDirty = false;
-      const record = await apiGetWebsiteConfig(nacosCampaignId);
+      const record = await apiGetWebsiteConfig(websiteConfigKey);
       syncWebsiteRecordCache(record);
       fillWebsiteConfigForm(record, c);
       renderList();
