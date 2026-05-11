@@ -27,6 +27,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/stats',
   './xhunt/api/mantle',
   './xhunt/api/campaign',
+  './xhunt/api/website-campaigns',
   './xhunt/api/private-messages',
   './xhunt/api/rootdata',
   './xhunt/api/ghost-following',
@@ -110,6 +111,7 @@ const xHuntReportRoutes = require("./xhunt/api/report");
 const xHuntStatsRoutes = require("./xhunt/api/stats");
 const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntCampaignRoutes = require("./xhunt/api/campaign");
+const xHuntWebsiteCampaignRoutes = require("./xhunt/api/website-campaigns");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const xHuntGhostFollowingRoutes = require("./xhunt/api/ghost-following");
@@ -415,6 +417,7 @@ async function initializeAndStartServer() {
   app.use("/api/xhunt/mantle", xHuntMantleRoutes);
 
   app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
+  app.use("/api/xhunt/website/campaigns", xHuntWebsiteCampaignRoutes);
 
   // 未注册用户登记接口
   app.use("/api/xhunt/user-entry", xHuntUserEntryRoutes);

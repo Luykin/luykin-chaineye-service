@@ -23,6 +23,7 @@ const XhuntAdminWebAuthnCredentialModel = require("../xhunt/models/XhuntAdminWeb
 const XhuntVipTestUserModel = require("../xhunt/models/XhuntVipTestUser");
 const XHuntWebUserModel = require("../xhunt/models/XHuntWebUser");
 const XHuntWebUserTokenModel = require("../xhunt/models/XHuntWebUserToken");
+const XHuntWebsiteCampaignModel = require("../xhunt/models/XHuntWebsiteCampaign");
 
 const pgDialect = process.env.PG_DIALECT || "postgres";
 const pgHost = process.env.PG_HOST;
@@ -86,6 +87,7 @@ const XhuntAdminWebAuthnCredential = XhuntAdminWebAuthnCredentialModel(pgInstanc
 const XhuntVipTestUser = XhuntVipTestUserModel(pgInstance);
 const XHuntWebUser = XHuntWebUserModel(pgInstance);
 const XHuntWebUserToken = XHuntWebUserTokenModel(pgInstance);
+const XHuntWebsiteCampaign = XHuntWebsiteCampaignModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -296,4 +298,5 @@ module.exports = {
   // XHunt Web 用户数据表
   XHuntWebUser,
   XHuntWebUserToken,
+  XHuntWebsiteCampaign,
 };
