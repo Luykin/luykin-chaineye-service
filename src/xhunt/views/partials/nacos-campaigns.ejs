@@ -23,6 +23,7 @@
       <button class="btn danger" id="campaigns-delete" disabled>删除</button>
       <button class="btn success" id="campaigns-publish" disabled>发布</button>
       <button class="btn" id="campaigns-sync-website">同步到网站</button>
+      <button class="btn" id="campaigns-import-legacy">导入旧网站数据</button>
     </div>
   </div>
 
@@ -123,7 +124,13 @@
           </div>
         </div>
 
-        <div class="section section-compact">
+        <div class="field-row field-row-1" id="campaigns-legacy-info" style="display:none; margin-bottom: 12px;">
+          <div class="field">
+            <div class="muted" style="padding: 10px 12px; border:1px dashed #f59e0b; border-radius:10px; background:#fffbeb; color:#92400e; line-height:1.6;">ℹ️ 当前正在编辑“网页独有数据 / 插件已下架数据”。这类活动已不在 Nacos 中，所以只支持网站数据库配置，不展示 Nacos 配置部分。</div>
+          </div>
+        </div>
+
+        <div class="section section-compact campaigns-website-section">
           <div class="section-title">活动信息</div>
           <div class="field-row field-row-2">
             <div class="field">
@@ -177,7 +184,7 @@
           </div>
         </div>
 
-        <div class="section section-compact">
+        <div class="section section-compact campaigns-website-section">
           <div class="section-title">时间、奖励与门槛</div>
           
           <!-- 第一层：活动时间 -->
@@ -337,7 +344,7 @@
           </div>
         </div>
 
-        <div class="section section-compact">
+        <div class="section section-compact campaigns-website-section">
           <div class="section-title">链接 · 名单 · 报名文案</div>
           <div class="section-sub">
             <div class="section-title-sm">相关链接</div>
@@ -410,7 +417,7 @@
           </div>
         </div>
 
-        <div class="section section-compact">
+        <div class="section section-compact campaigns-website-section">
           <div class="section-title">Logo · 任务 · Tags</div>
           <div class="section-sub">
             <div class="section-title-sm">
@@ -441,7 +448,7 @@
           </div>
         </div>
 
-        <div class="section section-compact">
+        <div class="section section-compact campaigns-website-section">
           <div class="section-title">网站专属配置</div>
           <div class="field-row field-row-3">
             <div class="field">
@@ -494,7 +501,7 @@
               <textarea id="campaigns-webNoteEn" rows="2"></textarea>
             </div>
           </div>
-          <div id="campaigns-claim-config" style="display:none;">
+          <div id="campaigns-claim-config">
             <div class="section-sub">
               <div class="section-title-sm">领奖配置（claim 状态必填校验）</div>
               <div class="muted" id="campaigns-claim-hint" style="margin-bottom: 10px; line-height: 1.6;">claim 状态下需要填写领奖相关字段</div>
@@ -862,6 +869,26 @@
   .list-items {
     max-height: calc(100vh - 260px);
     overflow: auto;
+  }
+  .list-group + .list-group {
+    border-top: 1px solid #e5e7eb;
+  }
+  .list-group-title {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    background: #f9fafb;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .list-group-empty {
+    padding: 12px;
+    font-size: 12px;
+    color: #9ca3af;
+    line-height: 1.6;
   }
   .item {
     padding: 10px 12px;
@@ -2048,6 +2075,9 @@
     let search = "";
     let jsonModalMode = "config"; // 'config' | 'campaign'
     let websiteConfigDirty = false;
+    let websiteCampaignRecords = [];
+    let currentSelectionType = "nacos";
+    let currentWebsiteOnlyRecord = null;
 
     // Tag 颜色系定义（全局常量，供各函数使用）
     const TAG_COLOR_SCHEMES = [
@@ -2181,6 +2211,29 @@
     }
 
 
+    function getCurrentWebsiteTarget() {
+      if (currentSelectionType === "website_only") return currentWebsiteOnlyRecord;
+      return getCurrentCampaign();
+    }
+
+    function setEditorMode(mode) {
+      currentSelectionType = mode === "website_only" ? "website_only" : "nacos";
+      const legacyInfoEl = $("campaigns-legacy-info");
+      if (legacyInfoEl) legacyInfoEl.style.display = currentSelectionType === "website_only" ? "block" : "none";
+      const body = $("campaigns-editor-body");
+      if (!body) return;
+      const websiteSections = Array.from(body.querySelectorAll(".campaigns-website-section"));
+      const sections = body.querySelectorAll('.campaign-status-control, .field-row-basic, .campaign-options, .section');
+      sections.forEach((node) => {
+        if (websiteSections.includes(node)) {
+          node.style.display = "";
+          return;
+        }
+        node.style.display = currentSelectionType === "website_only" ? "none" : "";
+      });
+    }
+
+
     function confirmDiscardWebsiteConfigChanges() {
       if (!websiteConfigDirty) return true;
       return window.confirm("你当前有未保存的网站配置修改，继续操作会丢失这些修改。\n确认继续？");
@@ -2265,6 +2318,32 @@
       return json.data;
     }
 
+
+    async function apiListAllWebsiteCampaigns() {
+      const resp = await fetch(`/api/xhunt/website/campaigns/internal/list-all`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const json = await resp.json();
+      if (!resp.ok || !json.success) throw new Error(json.error || `HTTP ${resp.status}`);
+      return Array.isArray(json.data) ? json.data : [];
+    }
+
+    async function apiImportLegacyWebsiteCampaigns() {
+      const resp = await fetch(`/api/xhunt/website/campaigns/internal/import-legacy`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+      const json = await resp.json();
+      if (!resp.ok || !json.success) throw new Error(json.error || `HTTP ${resp.status}`);
+      return json.summary || {};
+    }
+
     function getWebsiteConfigIds() {
       return [
         "campaigns-webStatus",
@@ -2343,14 +2422,28 @@
       setTemplateConfigStatus("未检查", "default");
       const metaEl = $("campaigns-website-meta");
       if (metaEl) metaEl.textContent = message || "尚未加载网站配置";
-      const claimEl = $("campaigns-claim-config");
-      if (claimEl) claimEl.style.display = "none";
       websiteConfigDirty = false;
       setWebsiteControlsEnabled(false);
       const saveBtn = $("campaigns-save-website");
       if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.textContent = "请先同步到网站";
+      }
+    }
+
+    function syncWebsiteRecordCache(record) {
+      if (!record || !(record.nacosCampaignId || record.id)) return;
+      const key = String(record.nacosCampaignId || record.id);
+      const next = Array.isArray(websiteCampaignRecords) ? websiteCampaignRecords.slice() : [];
+      const idx = next.findIndex((item) => String(item.nacosCampaignId || item.id) === key);
+      if (idx >= 0) {
+        next[idx] = { ...next[idx], ...record };
+      } else {
+        next.push(record);
+      }
+      websiteCampaignRecords = next;
+      if (currentSelectionType === "website_only" && currentWebsiteOnlyRecord && String(currentWebsiteOnlyRecord.nacosCampaignId || currentWebsiteOnlyRecord.id) === key) {
+        currentWebsiteOnlyRecord = { ...currentWebsiteOnlyRecord, ...record };
       }
     }
 
@@ -2368,26 +2461,29 @@
     }
 
     function renderClaimRequirements() {
-      const c = getCurrentCampaign() || {};
+      const c = getCurrentWebsiteTarget() || {};
+      const nacosPayload = c.nacosPayload && typeof c.nacosPayload === "object" ? c.nacosPayload : {};
       const status = $("campaigns-webStatus") ? $("campaigns-webStatus").value : "draft";
-      const claimEl = $("campaigns-claim-config");
       const claimHintEl = $("campaigns-claim-hint");
       const powFieldEl = $("campaigns-claim-pow-field");
       const essayFieldEl = $("campaigns-claim-essay-field");
-      const powEnabled = !!c.enablePowLeaderboard;
-      const essayEnabled = !!c.enableEssayContest;
-      if (claimEl) claimEl.style.display = status === "claim" ? "block" : "none";
+      const powEnabled = !!(c.enablePowLeaderboard === true || nacosPayload.enablePowLeaderboard === true);
+      const essayEnabled = !!(c.enableEssayContest === true || nacosPayload.enableEssayContest === true);
       if (powFieldEl) powFieldEl.style.display = powEnabled ? "block" : "none";
       if (essayFieldEl) essayFieldEl.style.display = essayEnabled ? "block" : "none";
       if (claimHintEl) {
-        if (status !== "claim") {
-          claimHintEl.textContent = "仅当网站状态为 claim 时，才需要配置领奖相关字段。";
+        const parts = [];
+        if (status === "claim") {
+          parts.push("当前网站状态为 claim，POI 合约地址必填");
+          parts.push(powEnabled ? "当前活动已开启 POW，POW 合约地址必填" : "当前活动未开启 POW，POW 合约地址可留空");
+          parts.push(essayEnabled ? "当前活动已开启征文大赛，征文合约地址必填" : "当前活动未开启征文大赛，征文合约地址可留空");
         } else {
-          const parts = ["POI 合约地址必填"];
-          parts.push(powEnabled ? "当前活动已开启 POW，POW 合约地址必填" : "当前活动未开启 POW，可不填写 POW 合约地址");
-          parts.push(essayEnabled ? "当前活动已开启征文大赛，征文合约地址必填" : "当前活动未开启征文大赛，可不填写征文合约地址");
-          claimHintEl.textContent = parts.join("；");
+          parts.push("当前不是领奖中状态，可先留空，等领奖合约部署后再回来配置");
+          parts.push("切换为 claim 状态后，系统会按活动配置校验必填项");
+          parts.push(powEnabled ? "当前活动已开启 POW，可提前配置 POW 合约地址" : "当前活动未开启 POW，所以不需要配置 POW 合约地址");
+          parts.push(essayEnabled ? "当前活动已开启征文大赛，可提前配置征文合约地址" : "当前活动未开启征文大赛，所以不需要配置征文合约地址");
         }
+        claimHintEl.textContent = parts.join("；");
       }
     }
 
@@ -2412,25 +2508,26 @@
       renderClaimRequirements();
       renderWebsiteMeta(record);
       websiteConfigDirty = false;
-      setWebsiteControlsEnabled(!!campaign && !!campaign.id);
+      setWebsiteControlsEnabled(!!campaign && !!(campaign.id || campaign.nacosCampaignId));
       const saveBtn = $("campaigns-save-website");
       if (saveBtn) saveBtn.textContent = "保存网站配置";
     }
 
     async function loadWebsiteConfigForCurrentCampaign() {
-      const c = getCurrentCampaign();
-      if (!c || !c.id) {
-        clearWebsiteConfigEditor("请先选择已保存到 Nacos 的活动");
+      const c = getCurrentWebsiteTarget();
+      if (!c || !(c.id || c.nacosCampaignId)) {
+        clearWebsiteConfigEditor("请先选择活动");
         return;
       }
       setWebsiteControlsEnabled(true);
       renderWebsiteMeta(null);
       try {
-        const record = await apiGetWebsiteConfig(c.id);
+        const record = await apiGetWebsiteConfig(c.id || c.nacosCampaignId);
         if (!record) {
-          clearWebsiteConfigEditor("该活动尚未同步到网站数据库，请先点击“同步到网站”");
+          clearWebsiteConfigEditor("该活动尚未同步到网站数据库，请先点击“同步到网站”或导入旧网站数据");
           return;
         }
+        syncWebsiteRecordCache(record);
         fillWebsiteConfigForm(record, c);
       } catch (e) {
         clearWebsiteConfigEditor("加载网站配置失败：" + (e.message || "未知错误"));
@@ -2439,15 +2536,16 @@
 
     function collectWebsiteConfigPayload() {
       const templateConfig = parseTemplateConfigFromEditor();
-      const c = getCurrentCampaign() || {};
+      const c = getCurrentWebsiteTarget() || {};
+      const nacosPayload = c.nacosPayload && typeof c.nacosPayload === "object" ? c.nacosPayload : {};
       const nextStatus = $("campaigns-webStatus").value;
       const poi = $("campaigns-claimPoiContractAddress").value.trim();
       const pow = $("campaigns-claimPowContractAddress").value.trim();
       const essay = $("campaigns-claimEssayContractAddress").value.trim();
       if (nextStatus === "claim") {
         if (!poi) throw new Error("claim 状态下必须填写 POI 合约地址");
-        if (c.enablePowLeaderboard && !pow) throw new Error("当前活动已开启 POW，claim 状态下必须填写 POW 合约地址");
-        if (c.enableEssayContest && !essay) throw new Error("当前活动已开启征文大赛，claim 状态下必须填写征文大赛合约地址");
+        if ((c.enablePowLeaderboard || nacosPayload.enablePowLeaderboard) && !pow) throw new Error("当前活动已开启 POW，claim 状态下必须填写 POW 合约地址");
+        if ((c.enableEssayContest || nacosPayload.enableEssayContest) && !essay) throw new Error("当前活动已开启征文大赛，claim 状态下必须填写征文大赛合约地址");
       }
       return {
         slug: $("campaigns-website-slug").value.trim(),
@@ -2467,13 +2565,16 @@
     }
 
     async function saveWebsiteConfig() {
-      const c = getCurrentCampaign();
-      if (!c || !c.id) throw new Error("请先选择已保存活动并同步到网站");
+      const c = getCurrentWebsiteTarget();
+      if (!c || !(c.id || c.nacosCampaignId)) throw new Error("请先选择已保存活动并同步到网站");
+      const nacosCampaignId = c.id || c.nacosCampaignId;
       const payload = collectWebsiteConfigPayload();
-      const saved = await apiSaveWebsiteConfig(c.id, payload);
+      const saved = await apiSaveWebsiteConfig(nacosCampaignId, payload);
       websiteConfigDirty = false;
-      const record = await apiGetWebsiteConfig(c.id);
+      const record = await apiGetWebsiteConfig(nacosCampaignId);
+      syncWebsiteRecordCache(record);
       fillWebsiteConfigForm(record, c);
+      renderList();
       return saved;
     }
 
@@ -2572,18 +2673,11 @@
       const campaigns = Array.isArray(config.campaigns) ? config.campaigns : [];
       const q = String(search || "").trim().toLowerCase();
 
-      const filtered = campaigns
-        .map((c, idx) => ({ c, idx }))
+      const nacosItems = campaigns
+        .map((c, idx) => ({ c, idx, type: "nacos" }))
         .filter(({ c }) => {
           if (!q) return true;
-          const hay = [
-            c?.id,
-            c?.campaignKey,
-            c?.displayName?.zh,
-            c?.displayName?.en,
-            c?.copy?.title?.zh,
-            c?.copy?.title?.en,
-          ]
+          const hay = [c?.id, c?.campaignKey, c?.displayName?.zh, c?.displayName?.en, c?.copy?.title?.zh, c?.copy?.title?.en]
             .filter(Boolean)
             .join(" ")
             .toLowerCase();
@@ -2592,57 +2686,98 @@
         .sort((a, b) => {
           const wa = Number(a.c?.sortWeight) || 0;
           const wb = Number(b.c?.sortWeight) || 0;
-          if (wa !== wb) return wb - wa; // 权重越大越靠前
+          if (wa !== wb) return wb - wa;
           const ea = a.c?.enabled ? 1 : 0;
           const eb = b.c?.enabled ? 1 : 0;
-          if (ea !== eb) return eb - ea; // enabled first
+          if (ea !== eb) return eb - ea;
           const sa = Date.parse(a.c?.enrollmentWindow?.startAt || "") || 0;
           const sb = Date.parse(b.c?.enrollmentWindow?.startAt || "") || 0;
           return sb - sa;
         });
 
-      listEl.innerHTML =
-        filtered
-          .map(({ c, idx }) => {
-            const active = idx === currentIndex ? "active" : "";
-            const title =
-              c?.displayName?.zh ||
-              c?.displayName?.en ||
-              c?.copy?.title?.zh ||
-              c?.id ||
-              "(未命名)";
-            const weightNum = typeof c?.sortWeight === "number" && Number.isFinite(c.sortWeight) ? c.sortWeight : 0;
-            const chips = [
-              `<span class="chip chip-weight" title="排序权重，越大越靠前">${weightNum}</span>`,
-              c?.enabled ? `<span class="chip on">enabled</span>` : `<span class="chip">disabled</span>`,
-              c?.testingPhase ? `<span class="chip testing">testing</span>` : "",
-            ].filter(Boolean);
-            
-            return `
-              <div class="item ${active}" data-idx="${idx}">
-                <div class="item-content">
-                  <div class="item-title-wrapper">
-                    <div class="item-title">
-                      <span class="item-title-text">${escapeHtml(title)}</span>
-                      <span class="chips">${chips.join("")}</span>
-                    </div>
-                  </div>
+      const websiteOnlyItems = (websiteCampaignRecords || [])
+        .filter((item) => item && item.isDeleted)
+        .filter((item) => {
+          if (!q) return true;
+          const hay = [item.nacosCampaignId, item.campaignKey, item.slug, item.displayNameZh, item.displayNameEn, item.webAnnouncementZh, item.webAnnouncementEn]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(q);
+        })
+        .sort((a, b) => Number(b.sortWeight || 0) - Number(a.sortWeight || 0));
+
+      function renderGroup(title, html, emptyText) {
+        return `
+          <div class="list-group">
+            <div class="list-group-title">${title}</div>
+            ${html || `<div class="list-group-empty">${emptyText}</div>`}
+          </div>
+        `;
+      }
+
+      const nacosHtml = nacosItems.map(({ c, idx }) => {
+        const active = currentSelectionType === "nacos" && idx === currentIndex ? "active" : "";
+        const title = c?.displayName?.zh || c?.displayName?.en || c?.copy?.title?.zh || c?.id || "(未命名)";
+        const weightNum = typeof c?.sortWeight === "number" && Number.isFinite(c.sortWeight) ? c.sortWeight : 0;
+        const chips = [
+          `<span class="chip chip-weight" title="排序权重，越大越靠前">${weightNum}</span>`,
+          c?.enabled ? `<span class="chip on">enabled</span>` : `<span class="chip">disabled</span>`,
+          c?.testingPhase ? `<span class="chip testing">testing</span>` : "",
+        ].filter(Boolean);
+        return `
+          <div class="item ${active}" data-type="nacos" data-idx="${idx}">
+            <div class="item-content">
+              <div class="item-title-wrapper">
+                <div class="item-title">
+                  <span class="item-title-text">${escapeHtml(title)}</span>
+                  <span class="chips">${chips.join("")}</span>
                 </div>
               </div>
-            `;
-          })
-          .join("") ||
-        `<div style="padding:14px;color:#9ca3af;">暂无活动，点击"新增活动"创建</div>`;
+            </div>
+          </div>`;
+      }).join("");
 
-      if (countEl) countEl.textContent = `${filtered.length} 个`;
+      const websiteOnlyHtml = websiteOnlyItems.map((item) => {
+        const active = currentSelectionType === "website_only" && currentWebsiteOnlyRecord && currentWebsiteOnlyRecord.nacosCampaignId === item.nacosCampaignId ? "active" : "";
+        const title = item.displayNameZh || item.displayNameEn || item.campaignKey || item.slug || item.nacosCampaignId || "(未命名)";
+        const chips = [
+          `<span class="chip" title="插件已下架，仅网站展示">site-only</span>`,
+          `<span class="chip chip-weight" title="排序权重">${Number(item.sortWeight || 0)}</span>`,
+          item.webStatus ? `<span class="chip testing">${escapeHtml(item.webStatus)}</span>` : "",
+        ].filter(Boolean);
+        return `
+          <div class="item ${active}" data-type="website_only" data-nacos-id="${escapeHtml(item.nacosCampaignId)}">
+            <div class="item-content">
+              <div class="item-title-wrapper">
+                <div class="item-title">
+                  <span class="item-title-text">${escapeHtml(title)}</span>
+                  <span class="chips">${chips.join("")}</span>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }).join("");
 
-      listEl.querySelectorAll(".item").forEach((node) => {
+      listEl.innerHTML =
+        renderGroup("Nacos 当前活动", nacosHtml, "暂无 Nacos 活动") +
+        renderGroup("网页独有数据 <span title=\"插件已下架，仅供网站展示\">ℹ️</span>", websiteOnlyHtml, "暂无网页独有数据，可点击右上角“导入旧网站数据”");
+
+      const totalCount = nacosItems.length + websiteOnlyItems.length;
+      if (countEl) countEl.textContent = `${totalCount} 个`;
+
+      listEl.querySelectorAll('.item[data-type="nacos"]').forEach((node) => {
         node.addEventListener("click", () => {
           const idx = Number(node.getAttribute("data-idx"));
           selectCampaign(idx);
         });
       });
-
+      listEl.querySelectorAll('.item[data-type="website_only"]').forEach((node) => {
+        node.addEventListener("click", () => {
+          const nacosId = node.getAttribute("data-nacos-id");
+          selectWebsiteOnlyRecord(nacosId);
+        });
+      });
     }
 
     /**
@@ -3125,12 +3260,16 @@
         body.style.display = "none";
         empty.style.display = "block";
       }
+      currentWebsiteOnlyRecord = null;
+      setEditorMode("nacos");
       clearWebsiteConfigEditor("请先选择活动");
 
     }
 
     function selectCampaign(idx) {
-      if (idx !== currentIndex && !confirmDiscardWebsiteConfigChanges()) return;
+      if ((currentSelectionType !== "nacos" || idx !== currentIndex) && !confirmDiscardWebsiteConfigChanges()) return;
+      currentWebsiteOnlyRecord = null;
+      setEditorMode("nacos");
       currentIndex = idx;
       const c = getCurrentCampaign();
 
@@ -3330,6 +3469,24 @@
       renderRepeaters();
       renderList();
       loadWebsiteConfigForCurrentCampaign();
+    }
+
+    function selectWebsiteOnlyRecord(nacosCampaignId) {
+      if (!confirmDiscardWebsiteConfigChanges()) return;
+      const record = (websiteCampaignRecords || []).find((item) => String(item.nacosCampaignId) === String(nacosCampaignId));
+      currentWebsiteOnlyRecord = record || null;
+      currentIndex = -1;
+      setEditorMode("website_only");
+      setControlsEnabled(false);
+      const body = $("campaigns-editor-body");
+      const empty = $("campaigns-editor-empty");
+      if (body && empty) {
+        body.style.display = "block";
+        empty.style.display = "none";
+      }
+      $("campaigns-editor-hint").textContent = `正在编辑网页独有数据：${(record && (record.campaignKey || record.slug || record.nacosCampaignId)) || ""}`;
+      fillWebsiteConfigForm(record, record || {});
+      renderList();
     }
 
     function syncCampaignFromInputs() {
@@ -4183,7 +4340,7 @@
     async function loadFromNacos() {
       $("campaigns-dataid").textContent = DATA_ID;
       toast("正在从 Nacos 加载...", "info");
-      const data = await apiGetConfig(DATA_ID);
+      const [data, records] = await Promise.all([apiGetConfig(DATA_ID), apiListAllWebsiteCampaigns()]);
       let parsed;
       try {
         parsed = JSON.parse(data.content || "{}");
@@ -4191,6 +4348,7 @@
         throw new Error("Nacos content 不是合法 JSON，请检查当前配置内容");
       }
       config = normalizeConfig(parsed);
+      websiteCampaignRecords = Array.isArray(records) ? records : [];
       // 保存原始配置用于对比
       originalConfig = JSON.parse(JSON.stringify(config));
       dirty = false;
@@ -4643,6 +4801,23 @@
         publish().catch((e) => toast("发布失败：" + e.message, "error"));
       });
 
+      const importLegacyBtn = $("campaigns-import-legacy");
+      if (importLegacyBtn) {
+        importLegacyBtn.addEventListener("click", async () => {
+          try {
+            importLegacyBtn.disabled = true;
+            toast("正在导入旧网站数据...", "info");
+            const summary = await apiImportLegacyWebsiteCampaigns();
+            await loadFromNacos();
+            toast(`旧网站数据导入完成：新增 ${summary.created || 0}，更新 ${summary.updatedDeleted || 0}，跳过 ${summary.skipped || 0}`, "success");
+          } catch (e) {
+            toast("导入旧网站数据失败：" + (e.message || "未知错误"), "error");
+          } finally {
+            importLegacyBtn.disabled = false;
+          }
+        });
+      }
+
       const syncWebsiteBtn = $("campaigns-sync-website");
       if (syncWebsiteBtn) {
         syncWebsiteBtn.addEventListener("click", async () => {
@@ -4650,8 +4825,10 @@
             syncWebsiteBtn.disabled = true;
             toast("正在同步到网站数据库...", "info");
             const result = await apiSyncWebsiteCampaigns(false);
+            websiteCampaignRecords = await apiListAllWebsiteCampaigns();
+            renderList();
             toast(`同步完成：新增 ${result.summary.created}，更新 ${result.summary.updated}，删除 ${result.summary.softDeleted}`, "success");
-            if (getCurrentCampaign() && getCurrentCampaign().id) {
+            if (getCurrentWebsiteTarget() && (getCurrentWebsiteTarget().id || getCurrentWebsiteTarget().nacosCampaignId)) {
               await loadWebsiteConfigForCurrentCampaign();
             }
           } catch (e) {

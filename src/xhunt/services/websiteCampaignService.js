@@ -1,6 +1,7 @@
 const axios = require("axios");
 const { Op } = require("sequelize");
 const { XHuntWebsiteCampaign, pgInstance } = require("../../models/postgres-start");
+const LEGACY_WEBSITE_CAMPAIGNS = require("../constants/legacyWebsiteCampaigns");
 
 const CAMPAIGN_CONFIG_URL =
   "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_campaigns&group=DEFAULT_GROUP";
@@ -383,7 +384,6 @@ function buildCampaignDetail(record, lang = "zh-CN") {
 
 async function listPublicCampaigns({ lang = "zh-CN" } = {}) {
   const where = {
-    isDeleted: false,
     webStatus: { [Op.notIn]: ["draft", "archived"] },
   };
   const records = await XHuntWebsiteCampaign.findAll({ where });
@@ -396,7 +396,6 @@ async function getPublicCampaignDetailBySlug(slug, { lang = "zh-CN" } = {}) {
   const record = await XHuntWebsiteCampaign.findOne({
     where: {
       slug,
-      isDeleted: false,
       webStatus: { [Op.notIn]: ["draft", "archived"] },
     },
   });
@@ -480,6 +479,108 @@ async function saveWebsiteCampaignConfig(nacosCampaignId, payload) {
   });
 }
 
+
+async function listAllWebsiteCampaignsAdmin() {
+  const records = await XHuntWebsiteCampaign.findAll();
+  return records
+    .map((record) => ({
+      ...record.toJSON(),
+      groupType: record.isDeleted ? "website_only" : "nacos_active",
+    }))
+    .sort((a, b) => {
+      if (a.isDeleted !== b.isDeleted) return a.isDeleted ? 1 : -1;
+      const wa = Number(a.sortWeight || 0);
+      const wb = Number(b.sortWeight || 0);
+      if (wa !== wb) return wb - wa;
+      return String(a.campaignKey || a.slug).localeCompare(String(b.campaignKey || b.slug));
+    });
+}
+
+async function importLegacyWebsiteCampaigns() {
+  const summary = { created: 0, skipped: 0, updatedDeleted: 0 };
+  return pgInstance.transaction(async (transaction) => {
+    for (const item of LEGACY_WEBSITE_CAMPAIGNS) {
+      const existed = await XHuntWebsiteCampaign.findOne({
+        where: {
+          [Op.or]: [
+            { nacosCampaignId: item.nacosCampaignId },
+            { slug: item.slug },
+          ],
+        },
+        transaction,
+      });
+
+      if (!existed) {
+        await XHuntWebsiteCampaign.create(
+          {
+            nacosCampaignId: item.nacosCampaignId,
+            campaignKey: item.campaignKey,
+            slug: item.slug,
+            isDeleted: true,
+            deletedAt: new Date(),
+            lastSyncedAt: null,
+            enabled: false,
+            testingPhase: false,
+            sortWeight: item.sortWeight || 0,
+            displayNameZh: item.displayNameZh || null,
+            displayNameEn: item.displayNameEn || null,
+            projectIntroductionZh: item.webAnnouncementZh || null,
+            projectIntroductionEn: item.webAnnouncementEn || null,
+            rewardUnit: null,
+            guideUrl: null,
+            activeUrl: null,
+            logos: item.logos || [],
+            tags: [],
+            writingThemes: [],
+            nacosPayload: {},
+            webStatus: "draft",
+            webAnnouncementZh: item.webAnnouncementZh || null,
+            webAnnouncementEn: item.webAnnouncementEn || null,
+            webRewardTextZh: item.webRewardTextZh || null,
+            webRewardTextEn: item.webRewardTextEn || null,
+            webNoteZh: item.webNoteZh || null,
+            webNoteEn: item.webNoteEn || null,
+            pageTemplate: "standard",
+            templateConfig: {},
+            websiteExtra: { importedFrom: "legacy-static-data" },
+          },
+          { transaction }
+        );
+        summary.created += 1;
+        continue;
+      }
+
+      if (!existed.isDeleted) {
+        summary.skipped += 1;
+        continue;
+      }
+
+      await existed.update(
+        {
+          displayNameZh: existed.displayNameZh || item.displayNameZh || null,
+          displayNameEn: existed.displayNameEn || item.displayNameEn || null,
+          projectIntroductionZh: existed.projectIntroductionZh || item.webAnnouncementZh || null,
+          projectIntroductionEn: existed.projectIntroductionEn || item.webAnnouncementEn || null,
+          logos: Array.isArray(existed.logos) && existed.logos.length ? existed.logos : (item.logos || []),
+          webAnnouncementZh: existed.webAnnouncementZh || item.webAnnouncementZh || null,
+          webAnnouncementEn: existed.webAnnouncementEn || item.webAnnouncementEn || null,
+          webRewardTextZh: existed.webRewardTextZh || item.webRewardTextZh || null,
+          webRewardTextEn: existed.webRewardTextEn || item.webRewardTextEn || null,
+          webNoteZh: existed.webNoteZh || item.webNoteZh || null,
+          webNoteEn: existed.webNoteEn || item.webNoteEn || null,
+          websiteExtra: {
+            ...(existed.websiteExtra || {}),
+            importedFrom: "legacy-static-data",
+          },
+        },
+        { transaction }
+      );
+      summary.updatedDeleted += 1;
+    }
+    return summary;
+  });
+}
+
 module.exports = {
   WEBSITE_STATUS_VALUES,
   normalizeWebsiteStatus,
@@ -490,4 +591,6 @@ module.exports = {
   getWebsiteCampaignAdminByNacosId,
   saveWebsiteCampaignConfig,
   buildCampaignDetail,
+  listAllWebsiteCampaignsAdmin,
+  importLegacyWebsiteCampaigns,
 };
