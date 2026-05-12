@@ -505,17 +505,17 @@
             <div class="field-row field-row-3">
               <div class="field">
                 <label>XHunt 图标 URL</label>
-                <input id="campaigns-listLeftLogo" type="text" placeholder="/whitexhunt.png" />
+                <input id="campaigns-listLeftLogo" type="text" placeholder="https://xhunt.ai/whitexhunt.png" />
                 <div class="field-hint">列表卡片左侧图标；不填则使用同步过来的第 1 个 logo</div>
               </div>
               <div class="field">
                 <label>活动方 Logo URL</label>
-                <input id="campaigns-listRightLogo" type="text" placeholder="/MANTLE.png" />
+                <input id="campaigns-listRightLogo" type="text" placeholder="https://xhunt.ai/whitexhunt.png" />
                 <div class="field-hint">列表卡片右侧 logo；不填则使用同步过来的第 2 个 logo</div>
               </div>
               <div class="field">
                 <label>奖励图片 URL</label>
-                <input id="campaigns-listChestImage" type="text" placeholder="/usdc2.png" />
+                <input id="campaigns-listChestImage" type="text" placeholder="https://xhunt.ai/usdc2.png" />
                 <div class="field-hint">旧网站列表中间展示的奖池图片 / 宝箱图</div>
               </div>
             </div>
@@ -2508,16 +2508,17 @@
       renderClaimRequirements();
     }
 
+    const DEFAULT_WEBSITE_LIST_LEFT_LOGO = "https://xhunt.ai/whitexhunt.png";
+    const DEFAULT_WEBSITE_LIST_RIGHT_LOGO = "https://xhunt.ai/whitexhunt.png";
+    const DEFAULT_WEBSITE_LIST_CHEST_IMAGE = "https://xhunt.ai/usdc2.png";
+
     function getWebsiteListAssets(record, campaign) {
       const websiteExtra = record && record.websiteExtra && typeof record.websiteExtra === "object" ? record.websiteExtra : {};
       const listAssets = websiteExtra.listAssets && typeof websiteExtra.listAssets === "object" ? websiteExtra.listAssets : {};
-      const logos = Array.isArray(record && record.logos) && record.logos.length ? record.logos : (Array.isArray(campaign && campaign.logos) ? campaign.logos : []);
-      const left = logos[0] || {};
-      const right = logos[1] || {};
       return {
-        leftLogo: listAssets.leftLogo || left.image || "",
-        rightLogo: listAssets.rightLogo || right.image || "",
-        chestImage: listAssets.chestImage || "",
+        leftLogo: listAssets.leftLogo || DEFAULT_WEBSITE_LIST_LEFT_LOGO,
+        rightLogo: listAssets.rightLogo || DEFAULT_WEBSITE_LIST_RIGHT_LOGO,
+        chestImage: listAssets.chestImage || DEFAULT_WEBSITE_LIST_CHEST_IMAGE,
       };
     }
 
