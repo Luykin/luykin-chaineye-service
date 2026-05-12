@@ -149,6 +149,7 @@ async function syncCampaignsFromNacos({ dryRun = false } = {}) {
     updated: 0,
     restored: 0,
     softDeleted: 0,
+    alreadyDeleted: 0,
     unchanged: 0,
   };
   const items = {
@@ -156,6 +157,7 @@ async function syncCampaignsFromNacos({ dryRun = false } = {}) {
     updated: [],
     restored: [],
     softDeleted: [],
+    alreadyDeleted: [],
     unchanged: [],
   };
 
@@ -221,8 +223,23 @@ async function syncCampaignsFromNacos({ dryRun = false } = {}) {
 
     for (const existing of existingRecords) {
       if (!incomingIds.has(String(existing.nacosCampaignId))) {
+        const key = existing.campaignKey || existing.nacosCampaignId;
+        if (existing.isDeleted) {
+          summary.alreadyDeleted += 1;
+          items.alreadyDeleted.push(key);
+          if (!dryRun) {
+            await existing.update(
+              {
+                lastSyncedAt: new Date(),
+              },
+              { transaction }
+            );
+          }
+          continue;
+        }
+
         summary.softDeleted += 1;
-        items.softDeleted.push(existing.campaignKey || existing.nacosCampaignId);
+        items.softDeleted.push(key);
         if (!dryRun) {
           await existing.update(
             {

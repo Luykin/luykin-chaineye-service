@@ -4803,7 +4803,8 @@
             const result = await apiSyncWebsiteCampaigns(false);
             websiteCampaignRecords = await apiListAllWebsiteCampaigns();
             renderList();
-            toast(`同步完成：新增 ${result.summary.created}，更新 ${result.summary.updated}，删除 ${result.summary.softDeleted}`, "success");
+            const summary = result.summary || {};
+            toast(`同步完成：新增 ${summary.created || 0}，更新 ${summary.updated || 0}，本次从 Nacos 删除 ${summary.softDeleted || 0}`, "success");
             if (getCurrentWebsiteTarget() && (getCurrentWebsiteTarget().id || getCurrentWebsiteTarget().nacosCampaignId)) {
               await loadWebsiteConfigForCurrentCampaign();
             }
