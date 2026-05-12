@@ -500,6 +500,26 @@
               <textarea id="campaigns-webNoteEn" rows="2"></textarea>
             </div>
           </div>
+          <div class="section-sub">
+            <div class="section-title-sm">列表卡片图片</div>
+            <div class="field-row field-row-3">
+              <div class="field">
+                <label>XHunt 图标 URL</label>
+                <input id="campaigns-listLeftLogo" type="text" placeholder="/whitexhunt.png" />
+                <div class="field-hint">列表卡片左侧图标；不填则使用同步过来的第 1 个 logo</div>
+              </div>
+              <div class="field">
+                <label>活动方 Logo URL</label>
+                <input id="campaigns-listRightLogo" type="text" placeholder="/MANTLE.png" />
+                <div class="field-hint">列表卡片右侧 logo；不填则使用同步过来的第 2 个 logo</div>
+              </div>
+              <div class="field">
+                <label>奖励图片 URL</label>
+                <input id="campaigns-listChestImage" type="text" placeholder="/usdc2.png" />
+                <div class="field-hint">旧网站列表中间展示的奖池图片 / 宝箱图</div>
+              </div>
+            </div>
+          </div>
           <div id="campaigns-claim-config">
             <div class="section-sub">
               <div class="section-title-sm">领奖配置（claim 状态必填校验）</div>
@@ -2347,6 +2367,9 @@
         "campaigns-webRewardTextEn",
         "campaigns-webNoteZh",
         "campaigns-webNoteEn",
+        "campaigns-listLeftLogo",
+        "campaigns-listRightLogo",
+        "campaigns-listChestImage",
         "campaigns-claimPoiContractAddress",
         "campaigns-claimPowContractAddress",
         "campaigns-claimEssayContractAddress",
@@ -2405,6 +2428,8 @@
         if (!el) return;
         if (el.tagName === "SELECT") {
           if (id === "campaigns-webStatus") el.value = "draft";
+        } else if (el.type === "checkbox") {
+          el.checked = false;
         } else {
           el.value = "";
         }
@@ -2483,7 +2508,21 @@
       renderClaimRequirements();
     }
 
+    function getWebsiteListAssets(record, campaign) {
+      const websiteExtra = record && record.websiteExtra && typeof record.websiteExtra === "object" ? record.websiteExtra : {};
+      const listAssets = websiteExtra.listAssets && typeof websiteExtra.listAssets === "object" ? websiteExtra.listAssets : {};
+      const logos = Array.isArray(record && record.logos) && record.logos.length ? record.logos : (Array.isArray(campaign && campaign.logos) ? campaign.logos : []);
+      const left = logos[0] || {};
+      const right = logos[1] || {};
+      return {
+        leftLogo: listAssets.leftLogo || left.image || "",
+        rightLogo: listAssets.rightLogo || right.image || "",
+        chestImage: listAssets.chestImage || "",
+      };
+    }
+
     function fillWebsiteConfigForm(record, campaign) {
+      const listAssets = getWebsiteListAssets(record, campaign);
       $("campaigns-webStatus").value = (record && record.webStatus) || "draft";
       $("campaigns-website-slug").value = (record && record.slug) || (campaign && (campaign.campaignKey || "")) || "";
       $("campaigns-pageTemplate").value = (record && record.pageTemplate) || "standard";
@@ -2493,6 +2532,9 @@
       $("campaigns-webRewardTextEn").value = (record && record.webRewardTextEn) || "";
       $("campaigns-webNoteZh").value = (record && record.webNoteZh) || "";
       $("campaigns-webNoteEn").value = (record && record.webNoteEn) || "";
+      $("campaigns-listLeftLogo").value = listAssets.leftLogo;
+      $("campaigns-listRightLogo").value = listAssets.rightLogo;
+      $("campaigns-listChestImage").value = listAssets.chestImage;
       $("campaigns-claimPoiContractAddress").value = (record && record.claimPoiContractAddress) || "";
       $("campaigns-claimPowContractAddress").value = (record && record.claimPowContractAddress) || "";
       $("campaigns-claimEssayContractAddress").value = (record && record.claimEssayContractAddress) || "";
@@ -2554,6 +2596,13 @@
         claimEssayContractAddress: $("campaigns-claimEssayContractAddress").value,
         pageTemplate: $("campaigns-pageTemplate").value.trim() || "standard",
         templateConfig,
+        websiteExtra: {
+          listAssets: {
+            leftLogo: $("campaigns-listLeftLogo").value.trim(),
+            rightLogo: $("campaigns-listRightLogo").value.trim(),
+            chestImage: $("campaigns-listChestImage").value.trim(),
+          },
+        },
       };
     }
 

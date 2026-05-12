@@ -325,18 +325,80 @@ function deriveSortOrder(record) {
   return bucket + weight + Math.floor(startAtTs / 1000);
 }
 
+function getLegacyListAssets(recordLike) {
+  const keySet = new Set(
+    [recordLike?.nacosCampaignId, recordLike?.campaignKey, recordLike?.slug]
+      .filter(Boolean)
+      .map((item) => String(item))
+  );
+  const legacy = LEGACY_WEBSITE_CAMPAIGNS.find((item) =>
+    [item.nacosCampaignId, item.campaignKey, item.slug].some((key) => keySet.has(String(key)))
+  );
+  return toSafeObject(legacy && legacy.listAssets, {});
+}
+
+function removeEmptyAssetValues(listAssets) {
+  return Object.fromEntries(
+    Object.entries(toSafeObject(listAssets, {})).filter(([, value]) => {
+      if (typeof value === "boolean") return true;
+      if (value === null || value === undefined) return false;
+      return String(value).trim() !== "";
+    })
+  );
+}
+
+function mergeListAssets(recordLike) {
+  const websiteExtra = toSafeObject(recordLike?.websiteExtra, {});
+  const legacyListAssets = getLegacyListAssets(recordLike);
+  const listAssets = removeEmptyAssetValues(websiteExtra.listAssets);
+  const mergedListAssets = {
+    ...legacyListAssets,
+    ...listAssets,
+  };
+  return {
+    ...websiteExtra,
+    listAssets: {
+      leftLogo: trimOrNull(mergedListAssets.leftLogo),
+      rightLogo: trimOrNull(mergedListAssets.rightLogo),
+      chestImage: trimOrNull(mergedListAssets.chestImage),
+    },
+  };
+}
+
+function serializeWebsiteCampaignAdmin(record) {
+  if (!record) return null;
+  const data = typeof record.toJSON === "function" ? record.toJSON() : record;
+  return {
+    ...data,
+    websiteExtra: mergeListAssets(data),
+  };
+}
+
 function pickLogos(record) {
   const logos = toSafeArray(record.logos);
+  const websiteExtra = mergeListAssets(record);
+  const listAssets = toSafeObject(websiteExtra.listAssets, {});
   const left = logos[0] || null;
   const right = logos[1] || null;
   return {
-    leftLogo: left?.image || null,
-    rightLogo: right?.image || null,
+    leftLogo: trimOrNull(listAssets.leftLogo) || left?.image || null,
+    leftLogoAlt: left?.label || "XHunt Logo",
+    rightLogo: trimOrNull(listAssets.rightLogo) || right?.image || null,
+    rightLogoAlt: right?.label || "Campaign Logo",
+    chestImage: trimOrNull(listAssets.chestImage) || null,
+    showCompletedBadge: normalizeWebsiteStatus(record.webStatus) === "ended",
   };
 }
 
 function buildCampaignListItem(record, lang = "zh-CN") {
-  const { leftLogo, rightLogo } = pickLogos(record);
+  const {
+    leftLogo,
+    leftLogoAlt,
+    rightLogo,
+    rightLogoAlt,
+    chestImage,
+    showCompletedBadge,
+  } = pickLogos(record);
   const status = normalizeWebsiteStatus(record.webStatus);
   return {
     id: record.id,
@@ -354,7 +416,11 @@ function buildCampaignListItem(record, lang = "zh-CN") {
     buttonText: getButtonTextByStatus(status, lang),
     cardStyle: getCardStyleByStatus(status),
     leftLogo,
+    leftLogoAlt,
     rightLogo,
+    rightLogoAlt,
+    chestImage,
+    showCompletedBadge,
     sortOrder: deriveSortOrder(record),
     startAt: record.startAt,
     endAt: record.endAt,
@@ -395,6 +461,7 @@ function buildCampaignDetail(record, lang = "zh-CN") {
     },
     pageTemplate: record.pageTemplate || "standard",
     templateConfig: toSafeObject(record.templateConfig, {}),
+    websiteExtra: mergeListAssets(record),
     nacosPayload: toSafeObject(record.nacosPayload, {}),
   };
 }
@@ -455,6 +522,24 @@ async function findWebsiteCampaignForUpdate(identifier, transaction) {
   return null;
 }
 
+function normalizeWebsiteExtra(payloadExtra, existingExtra) {
+  const currentExtra = toSafeObject(existingExtra, {});
+  const nextExtra = {
+    ...currentExtra,
+    ...toSafeObject(payloadExtra, {}),
+  };
+  const currentListAssets = toSafeObject(toSafeObject(existingExtra, {}).listAssets, {});
+  const nextListAssets = toSafeObject(nextExtra.listAssets, currentListAssets);
+  return {
+    ...nextExtra,
+    listAssets: {
+      leftLogo: trimOrNull(nextListAssets.leftLogo),
+      rightLogo: trimOrNull(nextListAssets.rightLogo),
+      chestImage: trimOrNull(nextListAssets.chestImage),
+    },
+  };
+}
+
 function validateContractAddress(value, label) {
   if (!value) return;
   if (!/^0x[a-fA-F0-9]{40}$/.test(String(value).trim())) {
@@ -498,7 +583,7 @@ async function saveWebsiteCampaignConfig(identifier, payload) {
       claimEssayContractAddress: trimOrNull(payload.claimEssayContractAddress),
       pageTemplate: nextPageTemplate,
       templateConfig: toSafeObject(payload.templateConfig, {}),
-      websiteExtra: toSafeObject(payload.websiteExtra, record.websiteExtra || {}),
+      websiteExtra: normalizeWebsiteExtra(payload.websiteExtra, record.websiteExtra),
     };
 
     validateContractAddress(nextValues.claimPoiContractAddress, "POI 合约地址");
@@ -528,7 +613,7 @@ async function listAllWebsiteCampaignsAdmin() {
   const records = await XHuntWebsiteCampaign.findAll();
   return records
     .map((record) => ({
-      ...record.toJSON(),
+      ...serializeWebsiteCampaignAdmin(record),
       groupType: record.isDeleted ? "website_only" : "nacos_active",
     }))
     .sort((a, b) => {
@@ -586,7 +671,10 @@ async function importLegacyWebsiteCampaigns() {
             webNoteEn: item.webNoteEn || null,
             pageTemplate: "standard",
             templateConfig: {},
-            websiteExtra: { importedFrom: "legacy-static-data" },
+            websiteExtra: {
+              importedFrom: "legacy-static-data",
+              listAssets: item.listAssets || {},
+            },
           },
           { transaction }
         );
@@ -615,6 +703,10 @@ async function importLegacyWebsiteCampaigns() {
           websiteExtra: {
             ...(existed.websiteExtra || {}),
             importedFrom: "legacy-static-data",
+            listAssets: {
+              ...mergeListAssets(existed).listAssets,
+              ...toSafeObject(item.listAssets, {}),
+            },
           },
         },
         { transaction }
@@ -637,4 +729,5 @@ module.exports = {
   buildCampaignDetail,
   listAllWebsiteCampaignsAdmin,
   importLegacyWebsiteCampaigns,
+  serializeWebsiteCampaignAdmin,
 };

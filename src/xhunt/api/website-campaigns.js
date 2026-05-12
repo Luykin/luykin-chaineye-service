@@ -9,6 +9,7 @@ const {
   saveWebsiteCampaignConfig,
   listAllWebsiteCampaignsAdmin,
   importLegacyWebsiteCampaigns,
+  serializeWebsiteCampaignAdmin,
 } = require("../services/websiteCampaignService");
 
 const router = express.Router();
@@ -66,7 +67,7 @@ router.post("/internal/import-legacy", adminAuth, requirePermission("nacos_confi
 router.get("/internal/by-nacos-id/:nacosCampaignId", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
     const record = await getWebsiteCampaignAdminByNacosId(req.params.nacosCampaignId);
-    return res.json({ success: true, data: record ? record.toJSON() : null });
+    return res.json({ success: true, data: record ? serializeWebsiteCampaignAdmin(record) : null });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message || "读取网站配置失败" });
   }

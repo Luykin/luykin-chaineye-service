@@ -13,6 +13,11 @@ module.exports = [
       { image: "/whitexhunt.png", label: "XHunt Logo" },
       { image: "/bybit.jpg", label: "Bybit Official Logo" },
     ],
+    listAssets: {
+      leftLogo: "/whitexhunt.png",
+      rightLogo: "/bybit.jpg",
+      chestImage: "/usdc2.png",
+    },
     sortWeight: 600,
   },
   {
@@ -31,6 +36,11 @@ module.exports = [
       { image: "/whitexhunt.png", label: "XHunt Logo" },
       { image: "/realgologo.PNG", label: "RealGo Logo" },
     ],
+    listAssets: {
+      leftLogo: "/whitexhunt.png",
+      rightLogo: "/realgologo.PNG",
+      chestImage: "/reward.png",
+    },
     sortWeight: 590,
   },
   {
@@ -47,6 +57,11 @@ module.exports = [
       { image: "/whitexhunt.png", label: "XHunt Logo" },
       { image: "/MANTLE.png", label: "Mantle Logo" },
     ],
+    listAssets: {
+      leftLogo: "/whitexhunt.png",
+      rightLogo: "/MANTLE.png",
+      chestImage: "/usdc2.png",
+    },
     sortWeight: 580,
   },
   {
@@ -63,6 +78,11 @@ module.exports = [
       { image: "/whitexhunt.png", label: "XHunt Logo" },
       { image: "/bybit.jpg", label: "Bybit Alpha Logo" },
     ],
+    listAssets: {
+      leftLogo: "/whitexhunt.png",
+      rightLogo: "/bybit.jpg",
+      chestImage: "/usdc2.png",
+    },
     sortWeight: 400,
   },
   {
@@ -79,6 +99,11 @@ module.exports = [
       { image: "/whitexhunt.png", label: "XHunt Logo" },
       { image: "/MANTLE.png", label: "Mantle Logo" },
     ],
+    listAssets: {
+      leftLogo: "/whitexhunt.png",
+      rightLogo: "/MANTLE.png",
+      chestImage: "/usdc2.png",
+    },
     sortWeight: 390,
   },
   {
@@ -95,6 +120,11 @@ module.exports = [
       { image: "/whitexhunt.png", label: "XHunt Logo" },
       { image: "/MANTLE.png", label: "Mantle Logo" },
     ],
+    listAssets: {
+      leftLogo: "/whitexhunt.png",
+      rightLogo: "/MANTLE.png",
+      chestImage: "/rqq2.png",
+    },
     sortWeight: 380,
   },
 ];
