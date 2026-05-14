@@ -7,7 +7,7 @@
           统一查看低频统计事件，支持按 type、时间、对象、用户筛选，并提供按对象维度的聚合查看。
         </p>
       </div>
-      <button id="generic-stats-refresh" class="btn-primary">刷新</button>
+      <button id="generic-stats-refresh" class="generic-btn generic-btn-primary">刷新</button>
     </div>
 
     <div class="generic-stats-filters">
@@ -100,9 +100,9 @@
         当前筛选条件下暂无数据
       </div>
       <div class="generic-pagination">
-        <button id="generic-events-prev" class="btn btn-sm">上一页</button>
+        <button id="generic-events-prev" class="generic-btn generic-btn-secondary generic-btn-sm">上一页</button>
         <span id="generic-events-pagination-text">1 / 1</span>
-        <button id="generic-events-next" class="btn btn-sm">下一页</button>
+        <button id="generic-events-next" class="generic-btn generic-btn-secondary generic-btn-sm">下一页</button>
       </div>
     </div>
 
@@ -190,6 +190,60 @@
 
   .generic-card-hint {
     color: #6b7280;
+    font-size: 12px;
+  }
+
+  .generic-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #374151;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.18s ease;
+  }
+
+  .generic-btn:hover:not(:disabled) {
+    background: #f9fafb;
+    border-color: #9ca3af;
+  }
+
+  .generic-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .generic-btn-primary {
+    background: #374151;
+    border-color: #374151;
+    color: #ffffff;
+  }
+
+  .generic-btn-primary:hover:not(:disabled) {
+    background: #1f2937;
+    border-color: #1f2937;
+  }
+
+  .generic-btn-secondary {
+    background: #ffffff;
+    color: #374151;
+    border-color: #d1d5db;
+  }
+
+  .generic-btn-secondary:hover:not(:disabled) {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+
+  .generic-btn-sm {
+    padding: 8px 12px;
+    border-radius: 8px;
     font-size: 12px;
   }
 
