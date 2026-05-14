@@ -11,3 +11,5 @@
 @import "./pages/redis-management.css";
 @import "./pages/llm-test.css";
 @import "./pages/log-search.css";
+@import "./pages/admin-users.css";
+@import "./pages/vip-management.css";

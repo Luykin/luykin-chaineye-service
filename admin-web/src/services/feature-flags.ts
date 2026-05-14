@@ -27,3 +27,16 @@ export async function fetchFeatureTranslations() {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json() as Promise<{ zh?: Record<string, string> }>;
 }
+
+export async function addVipListUser(listType: "vip" | "internal_test", username: string) {
+  return apiRequest<{ success: boolean; data?: unknown; error?: string }>("/api/xhunt/stats/vip-lists/add", {
+    method: "POST",
+    body: { listType, username },
+  });
+}
+
+export async function deleteVipListUser(id: number) {
+  return apiRequest<{ success: boolean; error?: string }>(`/api/xhunt/stats/vip-lists/${id}`, {
+    method: "DELETE",
+  });
+}

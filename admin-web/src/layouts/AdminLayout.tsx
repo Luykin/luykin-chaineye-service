@@ -1,13 +1,18 @@
 import {
+  AppstoreOutlined,
+  BarChartOutlined,
   CaretRightOutlined,
+  CodeOutlined,
   LockOutlined,
   LogoutOutlined,
   MenuOutlined,
+  MonitorOutlined,
   PushpinFilled,
   PushpinOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   UserOutlined,
+  TeamOutlined,
   ExportOutlined,
 } from "@ant-design/icons";
 import {
@@ -47,12 +52,12 @@ const SIDEBAR_GROUPS_STORAGE_KEY = "admin_sidebar_group_open_keys";
 
 type SidebarGroupKey = NonNullable<AdminNavItem["sidebarGroup"]>;
 
-const sidebarGroupDefinitions: Array<{ key: SidebarGroupKey; label: string }> = [
-  { key: "data", label: "数据查看" },
-  { key: "operation", label: "运营配置" },
-  { key: "monitor", label: "状态监控" },
-  { key: "dev", label: "调试工具" },
-  { key: "system", label: "系统管理" },
+const sidebarGroupDefinitions: Array<{ key: SidebarGroupKey; label: string; icon: React.ReactNode }> = [
+  { key: "data", label: "数据查看", icon: <BarChartOutlined /> },
+  { key: "operation", label: "运营配置", icon: <AppstoreOutlined /> },
+  { key: "monitor", label: "状态监控", icon: <MonitorOutlined /> },
+  { key: "dev", label: "调试工具", icon: <CodeOutlined /> },
+  { key: "system", label: "系统管理", icon: <TeamOutlined /> },
 ];
 
 const defaultSidebarGroupKeys = sidebarGroupDefinitions.map((group) => group.key);
@@ -130,11 +135,6 @@ export function AdminLayout() {
     [hasPermission, visibleMainNavItems]
   );
 
-  const permittedMenuItems = useMemo(
-    () => permittedNavItems.map(toMenuItem),
-    [permittedNavItems]
-  );
-
   const permittedSidebarGroups = useMemo(
     () =>
       sidebarGroupDefinitions
@@ -144,6 +144,18 @@ export function AdminLayout() {
         })
         .filter((group) => group.items.length > 0),
     [permittedNavItems]
+  );
+
+  const collapsedGroupMenuItems = useMemo(
+    () =>
+      permittedSidebarGroups.map((group) => ({
+        key: `group-${group.key}`,
+        icon: group.icon,
+        label: group.label,
+        popupClassName: "admin-sidebar-collapsed-popup",
+        children: group.menuItems,
+      })),
+    [permittedSidebarGroups]
   );
 
   const noPermissionMenuItems = useMemo(
@@ -453,6 +465,7 @@ export function AdminLayout() {
           overflowX: "hidden",
           paddingBottom: 12,
         }}
+        className="admin-sidebar-scroll"
       >
         {sidebarCollapsed ? (
           <Menu
@@ -460,7 +473,7 @@ export function AdminLayout() {
             rootClassName="admin-sidebar-menu admin-sidebar-menu--main"
             inlineCollapsed
             selectedKeys={[location.pathname]}
-            items={permittedMenuItems}
+            items={collapsedGroupMenuItems}
             onClick={({ key }) => {
               navigate(key);
               if (isMobile) setMobileMenuOpen(false);
@@ -670,7 +683,7 @@ export function AdminLayout() {
               style={{
                 position: "fixed",
                 top: 20,
-                left: sidebarCollapsed ? 62 : 222,
+                left: sidebarCollapsed ? 40 : 200,
                 zIndex: 30,
                 width: 32,
                 height: 32,

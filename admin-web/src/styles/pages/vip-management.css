@@ -1,0 +1,15 @@
+.vip-management-container { padding: 16px; }
+.vip-management-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.vip-management-header h2 { margin: 0; font-size: 18px; font-weight: 600; color: #1f2937; }
+.vip-management-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.vip-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+.vip-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f3f4f6; }
+.vip-card-title { font-size: 15px; font-weight: 600; color: #374151; }
+.vip-card-count { font-size: 12px; color: #6b7280; background: #f3f4f6; padding: 2px 8px; border-radius: 12px; }
+.vip-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.vip-list { max-height: 520px; overflow-y: auto; border: 1px solid #f3f4f6; border-radius: 6px; padding: 8px; }
+.vip-list-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; border-radius: 4px; font-size: 13px; color: #374151; }
+.vip-list-item:nth-child(odd) { background: #f9fafb; }
+.vip-list-item:hover { background: #f3f4f6; }
+.vip-sync-section { margin-top: 20px; background: #f8fafc; border: 1px dashed #cbd5e1; }
+@media (max-width: 768px) { .vip-management-grid { grid-template-columns: 1fr; } .vip-input-row { flex-direction: column; } }
