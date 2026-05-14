@@ -8,6 +8,7 @@ import {
   LegacyStatsIcon,
   LegacyStatsSectionHeader,
 } from "@/components/ui/LegacyStats";
+import type { LegacyStatsIconName, LegacyTone } from "@/components/ui/LegacyStats";
 import { fetchOverviewStats } from "@/services/stats";
 import type { OverviewDailyActiveUserItem } from "@/types/stats";
 
@@ -35,37 +36,6 @@ function TrendArrow({ positive }: { positive: boolean }) {
   );
 }
 
-function SectionHeader({
-  title,
-  icon,
-  iconClass,
-  badge,
-  live,
-}: {
-  title: string;
-  icon: string;
-  iconClass: string;
-  badge?: string;
-  live?: boolean;
-}) {
-  return (
-    <div className="overview-section-header">
-      <div className="overview-section-title-wrapper">
-        <div className={`overview-section-icon ${iconClass}`}>
-          <Icon name={icon} />
-        </div>
-        <h2 className="overview-section-title">{title}</h2>
-      </div>
-      {badge ? (
-        <span className={`overview-section-badge ${live ? "overview-badge-live" : ""}`}>
-          {live ? <span className="overview-live-pulse" /> : null}
-          {badge}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
 function DailyActiveSection({
   items,
 }: {
@@ -90,17 +60,17 @@ function DailyActiveSection({
 
   return (
     <div className="overview-section">
-      <SectionHeader
+      <LegacyStatsSectionHeader
         title="设备指纹日活统计"
         icon="monitor"
-        iconClass="overview-icon-blue"
+        tone="blue"
         badge="最近7天"
       />
       <p className="overview-section-desc">
         基于设备指纹统计，包含所有访问用户（已登录 + 未登录）
       </p>
 
-      <div className="overview-stats-grid overview-daily-stats-grid">
+      <LegacyStatsGrid variant="daily">
         {items.length ? (
           items.map((item, index) => {
             const isToday = index === items.length - 1;
@@ -111,47 +81,45 @@ function DailyActiveSection({
             const isPositive = change >= 0;
 
             return (
-              <div
-                className={`overview-stat-card ${isToday ? "overview-stat-card-highlight" : ""}`}
+              <LegacyStatCard
+                centered
+                highlighted={isToday}
                 key={item.date}
-              >
-                <div className="overview-stat-card-header">
-                  <span className="overview-stat-date">{item.displayDate}</span>
-                  {isToday ? <span className="overview-today-badge">今日</span> : null}
-                </div>
-                <div className="overview-stat-value-large">
-                  {formatNumber(item.activeUsers)}
-                </div>
-                <div className="overview-stat-meta">
+                title={item.displayDate}
+                badge={isToday ? "今日" : undefined}
+                value={formatNumber(item.activeUsers)}
+                meta={
                   <span className="overview-stat-full-date">{item.date}</span>
-                </div>
-                {!isToday && index > 0 ? (
-                  <div
+                }
+                trend={
+                  !isToday && index > 0 ? (
+                    <span
                     className={`overview-stat-trend ${
                       isPositive ? "overview-trend-up" : "overview-trend-down"
                     }`}
                   >
                     <TrendArrow positive={isPositive} />
                     <span>{Math.abs(change).toFixed(1)}%</span>
-                  </div>
-                ) : null}
-              </div>
+                  </span>
+                  ) : undefined
+                }
+              />
             );
           })
         ) : (
-          <div className="overview-stat-card overview-stat-card-empty">
+          <div className="legacy-stat-card overview-stat-card-empty">
             <div className="overview-empty-state">
-              <Icon name="empty" />
+              <LegacyStatsIcon name="empty" />
               <span>暂无数据</span>
             </div>
           </div>
         )}
-      </div>
+      </LegacyStatsGrid>
 
       <div className="overview-trend-chart-container">
         <div className="overview-trend-chart-header">
           <div className="overview-trend-chart-title">
-            <Icon name="trend" />
+            <LegacyStatsIcon name="trend" />
             <span>7天趋势</span>
           </div>
           {items.length ? (
@@ -193,26 +161,18 @@ function DailyActiveSection({
 }
 
 function CoreMetricCard({
-  className,
   icon,
+  tone,
   title,
   value,
 }: {
-  className: string;
-  icon: string;
+  icon: LegacyStatsIconName;
+  tone: LegacyTone;
   title: string;
   value: number;
 }) {
   return (
-    <div className={`overview-stat-card ${className}`}>
-      <div className="overview-stat-card-icon">
-        <Icon name={icon} />
-      </div>
-      <div className="overview-stat-card-content">
-        <div className="overview-stat-title">{title}</div>
-        <div className="overview-stat-value">{formatNumber(value)}</div>
-      </div>
-    </div>
+    <LegacyStatCard icon={icon} tone={tone} title={title} value={formatNumber(value)} />
   );
 }
 
@@ -231,13 +191,13 @@ function TotalMetricCard({
     typeof value === "string" && value.includes(".") ? value : formatNumber(value);
 
   return (
-    <div className={`overview-stat-card overview-stat-card-minimal ${className || ""}`}>
-      <div className="overview-stat-title">{label}</div>
-      <div className={`overview-stat-value ${suffix ? "overview-rating-value" : ""}`}>
-        {displayValue}
-        {suffix ? <span className="overview-star-icon">{suffix}</span> : null}
-      </div>
-    </div>
+    <LegacyStatCard
+      minimal
+      className={className}
+      title={label}
+      value={displayValue}
+      suffix={suffix}
+    />
   );
 }
 
@@ -357,50 +317,50 @@ export function OverviewPage() {
           <DailyActiveSection items={dailyActiveUsersData} />
 
           <div className="overview-section">
-            <SectionHeader
+            <LegacyStatsSectionHeader
               title="核心指标"
               icon="layers"
-              iconClass="overview-icon-purple"
+              tone="purple"
               badge="实时"
               live
             />
 
-            <div className="overview-stats-grid overview-core-metrics-grid">
+            <LegacyStatsGrid variant="core">
               <CoreMetricCard
-                className="overview-stat-card-blue"
                 icon="users"
+                tone="blue"
                 title="日活用户 (已登录X)"
                 value={overview?.coreMetrics.dailyActiveUsers.value ?? 0}
               />
               <CoreMetricCard
-                className="overview-stat-card-green"
                 icon="message"
+                tone="green"
                 title="今日评论"
                 value={overview?.coreMetrics.dailyReviews.value ?? 0}
               />
               <CoreMetricCard
-                className="overview-stat-card-orange"
                 icon="user"
+                tone="orange"
                 title="评论用户"
                 value={overview?.coreMetrics.dailyReviewUsers.value ?? 0}
               />
               <CoreMetricCard
-                className="overview-stat-card-pink"
                 icon="user-plus"
+                tone="pink"
                 title="新注册用户 (已登录X)"
                 value={overview?.coreMetrics.dailyNewUsers.value ?? 0}
               />
-            </div>
+            </LegacyStatsGrid>
           </div>
 
           <div className="overview-section">
-            <SectionHeader
+            <LegacyStatsSectionHeader
               title="累计数据"
               icon="bars"
-              iconClass="overview-icon-teal"
+              tone="teal"
             />
 
-            <div className="overview-stats-grid overview-total-metrics-grid">
+            <LegacyStatsGrid variant="total">
               {totalMetricCards.map((item) => (
                 <TotalMetricCard
                   className={item.className}
@@ -410,14 +370,14 @@ export function OverviewPage() {
                   value={item.value}
                 />
               ))}
-            </div>
+            </LegacyStatsGrid>
           </div>
 
           <div className="overview-section overview-section-period">
-            <SectionHeader
+            <LegacyStatsSectionHeader
               title="周期统计"
               icon="calendar"
-              iconClass="overview-icon-indigo"
+              tone="indigo"
             />
 
             <div className="overview-period-stats-grid">
