@@ -27,11 +27,14 @@ VITE_API_TARGET=http://localhost:8090
 - React + Vite + TypeScript + Ant Design 基础壳子
 - 管理员会话接入（`/admin/session`）
 - 基础后台 Layout
-- 首批页面路由骨架
+- 404 页面
+- 无权限页面
+- `日活详情` 与 `在线用户` 页面接入
+- 其余首批页面路由骨架
 
 尚未完成：
 
 - `generic-stats` 真实数据接入
 - `admin-audit-logs` 真实数据接入
-- `url-stats` / `version-stats` 页面迁移
-
+- `url-stats` / `version-stats` 真实数据接入
+- 后续按原后台顺序继续迁移剩余页面

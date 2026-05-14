@@ -1,9 +1,11 @@
 import {
-  AppstoreOutlined,
   AuditOutlined,
   BarChartOutlined,
+  FireOutlined,
   LinkOutlined,
   LogoutOutlined,
+  TeamOutlined,
+  AppstoreOutlined,
 } from "@ant-design/icons";
 import { Button, Dropdown, Layout, Menu, Space, Typography } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -13,6 +15,18 @@ import { useAuth } from "@/app/auth";
 const { Header, Sider, Content } = Layout;
 
 const navItems = [
+  {
+    key: "/admin-react/dau-details",
+    icon: <FireOutlined />,
+    label: "日活详情",
+    permission: "dau-details",
+  },
+  {
+    key: "/admin-react/online-users",
+    icon: <TeamOutlined />,
+    label: "在线用户",
+    permission: "online-users",
+  },
   {
     key: "/admin-react/generic-stats",
     icon: <AppstoreOutlined />,

@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await fetchAdminSession();
       setUser(result.admin);
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
           window.location.href = "/admin/login";
