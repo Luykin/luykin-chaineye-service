@@ -18,6 +18,7 @@ import { SecurityViolationsPage } from "@/pages/SecurityViolationsPage";
 import { ReviewsManagementPage } from "@/pages/ReviewsManagementPage";
 import { MessagesPage } from "@/pages/MessagesPage";
 import { ServerCommandPage } from "@/pages/ServerCommandPage";
+import { BinanceSquarePage } from "@/pages/BinanceSquarePage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -38,6 +39,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   messages: <MessagesPage />,
   "reviews-management": <ReviewsManagementPage />,
   "server-command": <ServerCommandPage />,
+  "binance-square": <BinanceSquarePage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {
