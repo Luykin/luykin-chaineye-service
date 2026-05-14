@@ -1,5 +1,4 @@
 import { Card, Space, Typography } from "antd";
-import "@/styles/global.css";
 
 interface PageSectionProps {
   title: string;

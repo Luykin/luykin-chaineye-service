@@ -1,0 +1,25 @@
+.ff-diff-output {
+  max-height: 56vh;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #374151;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ff-diff-output .ff-diff-added {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.ff-diff-output .ff-diff-removed {
+  color: #b91c1c;
+  background: #fee2e2;
+  text-decoration: line-through;
+}

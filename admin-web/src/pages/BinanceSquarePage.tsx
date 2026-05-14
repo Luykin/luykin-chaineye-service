@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { CSSProperties } from "react";
 import {
   Alert,
   Button,
@@ -23,6 +22,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
+import { LegacyActionButton, LegacyMetricCard } from "@/components/ui/LegacyAdmin";
 import {
   addBinanceSquareSeed,
   calculateBinanceSquareTargets,
@@ -261,23 +261,25 @@ export function BinanceSquarePage() {
       width: 150,
       render: (_, record) => (
         <div className="bs-table-actions">
-          <Button
+          <LegacyActionButton
             size="small"
-            className="bs-table-btn bs-table-btn-sync"
+            compact
+            variant="sync"
             loading={syncSeedMutation.isPending}
             onClick={() => syncSeedMutation.mutate(record.username)}
           >
             同步
-          </Button>
+          </LegacyActionButton>
           <Popconfirm title="确认移除该种子用户？" onConfirm={() => removeSeedMutation.mutate(record.username)}>
-            <Button
+            <LegacyActionButton
               size="small"
-              className="bs-table-btn bs-table-btn-remove"
+              compact
+              variant="remove"
               danger
               loading={removeSeedMutation.isPending}
             >
               移除
-            </Button>
+            </LegacyActionButton>
           </Popconfirm>
         </div>
       ),
@@ -318,10 +320,11 @@ export function BinanceSquarePage() {
             ["回复", "reply"],
             ["引用", "quote"],
           ].map(([label, type]) => (
-            <Button
+            <LegacyActionButton
               key={type}
               size="small"
-              className="bs-table-btn bs-table-btn-view"
+              compact
+              variant="view"
               onClick={() => {
                 setPostsFilterUsername(record.username);
                 setPostsFilterType(type);
@@ -330,7 +333,7 @@ export function BinanceSquarePage() {
               }}
             >
               {label}
-            </Button>
+            </LegacyActionButton>
           ))}
         </div>
       ),
@@ -402,42 +405,41 @@ export function BinanceSquarePage() {
             ["上次抓取", stats?.lastCrawlAt ? dayjs(stats.lastCrawlAt).format("MM-DD HH:mm") : "-", "#64748b"],
             ["调度器状态", crawlStatus?.isRunning ? "运行中" : "已暂停", "#ef4444"],
           ].map(([label, value, color]) => (
-            <div className="bs-stat-card" key={String(label)}>
-              <div className="bs-stat-meta">
-                <div className="bs-stat-label">{label}</div>
-                <div className="bs-stat-value">{value}</div>
-              </div>
-              <div className="bs-stat-indicator" style={{ "--indicator-color": color } as CSSProperties} />
-            </div>
+            <LegacyMetricCard
+              key={String(label)}
+              label={label}
+              value={value}
+              indicatorColor={String(color)}
+            />
           ))}
         </div>
 
         <div className="bs-actions-bar">
-          <Button className="bs-btn bs-btn-primary" loading={syncAllMutation.isPending} onClick={() => syncAllMutation.mutate()}>
+          <LegacyActionButton variant="primary" loading={syncAllMutation.isPending} onClick={() => syncAllMutation.mutate()}>
             同步关注列表
-          </Button>
-          <Button className="bs-btn bs-btn-primary" loading={calcTargetMutation.isPending} onClick={() => calcTargetMutation.mutate()}>
+          </LegacyActionButton>
+          <LegacyActionButton variant="primary" loading={calcTargetMutation.isPending} onClick={() => calcTargetMutation.mutate()}>
             计算 Top50
-          </Button>
-          <Button className="bs-btn bs-btn-primary" loading={crawlMutation.isPending} onClick={() => crawlMutation.mutate("incremental")}>
+          </LegacyActionButton>
+          <LegacyActionButton variant="primary" loading={crawlMutation.isPending} onClick={() => crawlMutation.mutate("incremental")}>
             增量抓取
-          </Button>
-          <Button className="bs-btn bs-btn-primary" loading={crawlMutation.isPending} onClick={() => crawlMutation.mutate("full")}>
+          </LegacyActionButton>
+          <LegacyActionButton variant="primary" loading={crawlMutation.isPending} onClick={() => crawlMutation.mutate("full")}>
             全量抓取
-          </Button>
-          <Button className="bs-btn bs-btn-success" loading={startMutation.isPending} onClick={() => startMutation.mutate()}>
+          </LegacyActionButton>
+          <LegacyActionButton variant="success" loading={startMutation.isPending} onClick={() => startMutation.mutate()}>
             启动调度器
-          </Button>
-          <Button className="bs-btn bs-btn-danger" loading={pauseMutation.isPending} onClick={() => pauseMutation.mutate()}>
+          </LegacyActionButton>
+          <LegacyActionButton variant="danger" loading={pauseMutation.isPending} onClick={() => pauseMutation.mutate()}>
             暂停调度器
-          </Button>
+          </LegacyActionButton>
           {crawlStatus?.isCrawling ? (
-            <Button className="bs-btn bs-btn-danger" loading={stopMutation.isPending} onClick={() => stopMutation.mutate()}>
+            <LegacyActionButton variant="danger" loading={stopMutation.isPending} onClick={() => stopMutation.mutate()}>
               强制终止
-            </Button>
+            </LegacyActionButton>
           ) : null}
-          <Button
-            className="bs-btn bs-btn-refresh"
+          <LegacyActionButton
+            variant="neutral"
             onClick={() => {
               void statsQuery.refetch();
               void statusQuery.refetch();
@@ -450,7 +452,7 @@ export function BinanceSquarePage() {
             }}
           >
             刷新数据
-          </Button>
+          </LegacyActionButton>
         </div>
 
         <Tabs
@@ -533,9 +535,9 @@ export function BinanceSquarePage() {
                           <Input placeholder="显示名（可选）" />
                         </Form.Item>
                         <Form.Item>
-                          <Button className="bs-btn bs-btn-primary" htmlType="submit" loading={addSeedMutation.isPending}>
+                          <LegacyActionButton variant="primary" htmlType="submit" loading={addSeedMutation.isPending}>
                             添加
-                          </Button>
+                          </LegacyActionButton>
                         </Form.Item>
                       </Form>
                     </div>
@@ -596,7 +598,7 @@ export function BinanceSquarePage() {
                           { label: "回复", value: "reply" },
                         ]}
                       />
-                      <Button className="bs-btn bs-btn-refresh" onClick={() => { setPostsPage(1); void postsQuery.refetch(); }}>筛选</Button>
+                      <LegacyActionButton variant="neutral" onClick={() => { setPostsPage(1); void postsQuery.refetch(); }}>筛选</LegacyActionButton>
                     </div>
                     <Table
                       size="small"
@@ -647,7 +649,7 @@ export function BinanceSquarePage() {
                           { label: "部分成功", value: "partial" },
                         ]}
                       />
-                      <Button className="bs-btn bs-btn-refresh" onClick={() => void logsQuery.refetch()}>刷新</Button>
+                      <LegacyActionButton variant="neutral" onClick={() => void logsQuery.refetch()}>刷新</LegacyActionButton>
                     </div>
                     <Table size="small" rowKey="id" columns={logColumns} dataSource={logs?.data || []} pagination={false} scroll={{ y: TABLE_MAX_HEIGHT, x: 1000 }} />
                     <div style={{ display: "flex", justifyContent: "flex-end" }}>

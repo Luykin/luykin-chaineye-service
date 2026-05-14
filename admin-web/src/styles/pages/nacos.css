@@ -1,0 +1,72 @@
+.nacos-legacy-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.nacos-legacy-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.nacos-list-item {
+  cursor: pointer;
+  padding: 10px 12px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.nacos-list-item:hover {
+  background: #f8fafc;
+}
+
+.nacos-list-item.is-active {
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  padding-left: 9px !important;
+}
+
+.nacos-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nacos-message-preview {
+  min-height: 96px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #1f2937;
+  line-height: 1.6;
+}
+
+.campaign-status-control-react {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+@media (max-width: 768px) {
+  .nacos-legacy-toolbar {
+    align-items: stretch;
+  }
+
+  .nacos-legacy-toolbar-left,
+  .nacos-legacy-toolbar > .ant-space {
+    width: 100%;
+  }
+
+  .campaign-status-control-react {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,48 @@
+/* 全局列表 / 表格密度：按旧版后台 8~10px 单元格内边距收紧 */
+.ant-table-wrapper .ant-table {
+  font-size: 13px;
+}
+
+.ant-table-wrapper .ant-table-container {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th {
+  padding: 8px 12px !important;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f9fafb !important;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  padding: 7px 12px !important;
+  color: #4b5563;
+  line-height: 1.35;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: #f9fafb !important;
+}
+
+.ant-table-wrapper .ant-tag {
+  margin-inline-end: 0;
+  line-height: 18px;
+}
+
+.ant-table-wrapper .ant-btn-sm {
+  height: 24px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.ant-list .ant-list-item {
+  padding: 8px 12px;
+}
+
+.ant-descriptions-small .ant-descriptions-item-label,
+.ant-descriptions-small .ant-descriptions-item-content {
+  padding-bottom: 6px !important;
+  font-size: 13px;
+}
