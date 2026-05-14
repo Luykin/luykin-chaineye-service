@@ -25,7 +25,9 @@ import { PageSection } from "@/components/ui/PageSection";
 import {
   fetchAllWebsiteCampaigns,
   fetchNacosConfig,
+  fetchWebsiteCampaignByNacosId,
   publishNacosConfig,
+  saveWebsiteCampaignConfig,
   syncWebsiteCampaignsFromNacos,
 } from "@/services/nacos";
 
@@ -38,6 +40,44 @@ interface CampaignConfig extends Record<string, unknown> {
 
 const DATA_ID = "xhunt_campaigns";
 const GROUP = "DEFAULT_GROUP";
+
+interface WebsiteFormState {
+  webStatus: string;
+  slug: string;
+  pageTemplate: string;
+  webAnnouncementZh: string;
+  webAnnouncementEn: string;
+  webRewardTextZh: string;
+  webRewardTextEn: string;
+  webNoteZh: string;
+  webNoteEn: string;
+  listLeftLogo: string;
+  listRightLogo: string;
+  listChestImage: string;
+  claimPoiContractAddress: string;
+  claimPowContractAddress: string;
+  claimEssayContractAddress: string;
+  templateConfig: string;
+}
+
+const DEFAULT_WEBSITE_FORM: WebsiteFormState = {
+  webStatus: "draft",
+  slug: "",
+  pageTemplate: "standard",
+  webAnnouncementZh: "",
+  webAnnouncementEn: "",
+  webRewardTextZh: "",
+  webRewardTextEn: "",
+  webNoteZh: "",
+  webNoteEn: "",
+  listLeftLogo: "https://xhunt.ai/whitexhunt.png",
+  listRightLogo: "https://xhunt.ai/whitexhunt.png",
+  listChestImage: "https://xhunt.ai/usdc2.png",
+  claimPoiContractAddress: "",
+  claimPowContractAddress: "",
+  claimEssayContractAddress: "",
+  templateConfig: "{}",
+};
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -125,6 +165,38 @@ function toNumber(value: string) {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function getWebsiteAssets(record: Record<string, unknown> | null | undefined) {
+  const extra = record?.websiteExtra && typeof record.websiteExtra === "object" ? record.websiteExtra as Record<string, unknown> : {};
+  const listAssets = extra.listAssets && typeof extra.listAssets === "object" ? extra.listAssets as Record<string, unknown> : {};
+  return {
+    leftLogo: String(listAssets.leftLogo || DEFAULT_WEBSITE_FORM.listLeftLogo),
+    rightLogo: String(listAssets.rightLogo || DEFAULT_WEBSITE_FORM.listRightLogo),
+    chestImage: String(listAssets.chestImage || DEFAULT_WEBSITE_FORM.listChestImage),
+  };
+}
+
+function buildWebsiteForm(record: Record<string, unknown> | null | undefined, campaign: CampaignRecord | null): WebsiteFormState {
+  const assets = getWebsiteAssets(record);
+  return {
+    webStatus: String(record?.webStatus || "draft"),
+    slug: String(record?.slug || campaign?.campaignKey || ""),
+    pageTemplate: String(record?.pageTemplate || "standard"),
+    webAnnouncementZh: String(record?.webAnnouncementZh || ""),
+    webAnnouncementEn: String(record?.webAnnouncementEn || ""),
+    webRewardTextZh: String(record?.webRewardTextZh || ""),
+    webRewardTextEn: String(record?.webRewardTextEn || ""),
+    webNoteZh: String(record?.webNoteZh || ""),
+    webNoteEn: String(record?.webNoteEn || ""),
+    listLeftLogo: assets.leftLogo,
+    listRightLogo: assets.rightLogo,
+    listChestImage: assets.chestImage,
+    claimPoiContractAddress: String(record?.claimPoiContractAddress || ""),
+    claimPowContractAddress: String(record?.claimPowContractAddress || ""),
+    claimEssayContractAddress: String(record?.claimEssayContractAddress || ""),
+    templateConfig: JSON.stringify((record?.templateConfig && typeof record.templateConfig === "object" ? record.templateConfig : {}) as Record<string, unknown>, null, 2),
+  };
+}
+
 export function NacosCampaignsPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [search, setSearch] = useState("");
@@ -132,6 +204,9 @@ export function NacosCampaignsPage() {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [selectedJson, setSelectedJson] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [websiteForm, setWebsiteForm] = useState<WebsiteFormState>(DEFAULT_WEBSITE_FORM);
+  const [websiteDirty, setWebsiteDirty] = useState(false);
+  const [websiteMeta, setWebsiteMeta] = useState("尚未加载网站配置");
 
   const query = useQuery({
     queryKey: ["nacos-campaigns"],
@@ -212,7 +287,27 @@ export function NacosCampaignsPage() {
   }, [selectedJson]);
 
   const websiteRows = websiteQuery.data?.data || [];
-  const currentWebsiteRows = websiteRows.filter((item) => item.nacosCampaignId === getCampaignId(selectedCampaign));
+  const selectedCampaignId = getCampaignId(selectedCampaign);
+  const currentWebsiteRows = websiteRows.filter((item) => item.nacosCampaignId === selectedCampaignId);
+  const currentWebsiteRecord = currentWebsiteRows[0] as Record<string, unknown> | undefined;
+
+  useEffect(() => {
+    setWebsiteDirty(false);
+    if (!selectedCampaign) {
+      setWebsiteForm(DEFAULT_WEBSITE_FORM);
+      setWebsiteMeta("请先选择活动");
+      return;
+    }
+    if (!currentWebsiteRecord) {
+      setWebsiteForm(buildWebsiteForm(null, selectedCampaign));
+      setWebsiteMeta("该活动尚未同步到网站数据库，请先点击“同步到网站”");
+      return;
+    }
+    setWebsiteForm(buildWebsiteForm(currentWebsiteRecord, selectedCampaign));
+    const updatedAt = currentWebsiteRecord.updatedAt ? new Date(String(currentWebsiteRecord.updatedAt)).toLocaleString() : "-";
+    const syncedAt = currentWebsiteRecord.lastSyncedAt || currentWebsiteRecord.syncedFromNacosAt ? new Date(String(currentWebsiteRecord.lastSyncedAt || currentWebsiteRecord.syncedFromNacosAt)).toLocaleString() : "-";
+    setWebsiteMeta(`网站记录已存在｜状态：${currentWebsiteRecord.webStatus || "draft"}｜最后同步：${syncedAt}｜最后修改：${updatedAt}${currentWebsiteRecord.isDeleted ? "｜已软删除" : ""}`);
+  }, [currentWebsiteRecord, selectedCampaignId]);
 
   function updateConfig(updater: (draft: CampaignConfig) => void) {
     const next = clone(config);
@@ -291,6 +386,91 @@ export function NacosCampaignsPage() {
       draft.campaignKey = value;
       draft.id = value ? `${value}-hunter` : "";
     });
+  }
+
+  function patchWebsiteForm(patch: Partial<WebsiteFormState>) {
+    setWebsiteForm((current) => ({ ...current, ...patch }));
+    setWebsiteDirty(true);
+  }
+
+  async function loadWebsiteConfigForSelected() {
+    if (!selectedCampaign) return;
+    const campaignId = getCampaignId(selectedCampaign);
+    if (!campaignId) {
+      messageApi.warning("请先设置活动 ID");
+      return;
+    }
+    try {
+      const resp = await fetchWebsiteCampaignByNacosId(campaignId);
+      const record = resp.data as Record<string, unknown> | null;
+      if (!record) {
+        setWebsiteForm(buildWebsiteForm(null, selectedCampaign));
+        setWebsiteMeta("该活动尚未同步到网站数据库，请先点击“同步到网站”");
+        return;
+      }
+      setWebsiteForm(buildWebsiteForm(record, selectedCampaign));
+      setWebsiteDirty(false);
+      setWebsiteMeta(`网站记录已存在｜状态：${record.webStatus || "draft"}`);
+      void websiteQuery.refetch();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "读取网站配置失败");
+    }
+  }
+
+  function parseTemplateConfig() {
+    const raw = websiteForm.templateConfig.trim();
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+  }
+
+  async function saveWebsiteConfigForSelected() {
+    if (!selectedCampaign) return;
+    const campaignId = getCampaignId(selectedCampaign);
+    if (!campaignId) {
+      messageApi.warning("请先设置活动 ID 并同步到网站");
+      return;
+    }
+    try {
+      const templateConfig = parseTemplateConfig();
+      await saveWebsiteCampaignConfig(campaignId, {
+        slug: websiteForm.slug.trim(),
+        webStatus: websiteForm.webStatus,
+        webAnnouncementZh: websiteForm.webAnnouncementZh,
+        webAnnouncementEn: websiteForm.webAnnouncementEn,
+        webRewardTextZh: websiteForm.webRewardTextZh,
+        webRewardTextEn: websiteForm.webRewardTextEn,
+        webNoteZh: websiteForm.webNoteZh,
+        webNoteEn: websiteForm.webNoteEn,
+        claimPoiContractAddress: websiteForm.claimPoiContractAddress,
+        claimPowContractAddress: websiteForm.claimPowContractAddress,
+        claimEssayContractAddress: websiteForm.claimEssayContractAddress,
+        pageTemplate: websiteForm.pageTemplate.trim() || "standard",
+        templateConfig,
+        websiteExtra: {
+          listAssets: {
+            leftLogo: websiteForm.listLeftLogo.trim(),
+            rightLogo: websiteForm.listRightLogo.trim(),
+            chestImage: websiteForm.listChestImage.trim(),
+          },
+        },
+      });
+      messageApi.success("网站配置已保存");
+      setWebsiteDirty(false);
+      await loadWebsiteConfigForSelected();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "保存网站配置失败");
+    }
+  }
+
+  function formatWebsiteTemplateConfig() {
+    try {
+      const parsed = parseTemplateConfig();
+      patchWebsiteForm({ templateConfig: JSON.stringify(parsed, null, 2) });
+      messageApi.success("模板配置 JSON 格式合法");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? `JSON 格式错误：${error.message}` : "JSON 格式错误");
+    }
   }
 
   return (
@@ -450,6 +630,83 @@ export function NacosCampaignsPage() {
                           </Space>
                         </Col>
                       </Row>
+                    </Card>
+
+                    <Card size="small" className="campaigns-website-section" title="网站专属配置" extra={<Space><Button size="small" onClick={loadWebsiteConfigForSelected}>读取网站专属配置</Button><Button size="small" type="primary" disabled={!websiteDirty && !!currentWebsiteRecord} onClick={saveWebsiteConfigForSelected}>保存网站配置</Button></Space>}>
+                      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                        <Row gutter={[12, 12]}>
+                          <Col xs={24} md={8}>
+                            <Typography.Text strong>网站状态</Typography.Text>
+                            <Select
+                              value={websiteForm.webStatus}
+                              onChange={(value) => patchWebsiteForm({ webStatus: value })}
+                              options={["draft", "coming_soon", "live", "claim", "ended", "archived"].map((value) => ({ value, label: value }))}
+                              style={{ width: "100%" }}
+                            />
+                          </Col>
+                          <Col xs={24} md={8}>
+                            <Typography.Text strong>详情页 slug</Typography.Text>
+                            <Input value={websiteForm.slug} onChange={(event) => patchWebsiteForm({ slug: event.target.value })} placeholder="默认等于 campaignKey" />
+                          </Col>
+                          <Col xs={24} md={8}>
+                            <Typography.Text strong>页面模板</Typography.Text>
+                            <Input value={websiteForm.pageTemplate} onChange={(event) => patchWebsiteForm({ pageTemplate: event.target.value })} placeholder="standard" />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>网站公告（中文）</Typography.Text>
+                            <Input.TextArea rows={2} value={websiteForm.webAnnouncementZh} onChange={(event) => patchWebsiteForm({ webAnnouncementZh: event.target.value })} />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>Website Announcement (English)</Typography.Text>
+                            <Input.TextArea rows={2} value={websiteForm.webAnnouncementEn} onChange={(event) => patchWebsiteForm({ webAnnouncementEn: event.target.value })} />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>奖励文案（中文）</Typography.Text>
+                            <Input.TextArea rows={2} value={websiteForm.webRewardTextZh} onChange={(event) => patchWebsiteForm({ webRewardTextZh: event.target.value })} />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>Reward Text (English)</Typography.Text>
+                            <Input.TextArea rows={2} value={websiteForm.webRewardTextEn} onChange={(event) => patchWebsiteForm({ webRewardTextEn: event.target.value })} />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>备注（中文）</Typography.Text>
+                            <Input.TextArea rows={2} value={websiteForm.webNoteZh} onChange={(event) => patchWebsiteForm({ webNoteZh: event.target.value })} />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>Note (English)</Typography.Text>
+                            <Input.TextArea rows={2} value={websiteForm.webNoteEn} onChange={(event) => patchWebsiteForm({ webNoteEn: event.target.value })} />
+                          </Col>
+                        </Row>
+
+                        <div className="campaigns-section-sub">
+                          <div className="campaigns-section-title-sm">列表卡片图片</div>
+                          <Row gutter={[12, 12]}>
+                            <Col xs={24} md={8}><Typography.Text strong>XHunt 图标 URL</Typography.Text><Input value={websiteForm.listLeftLogo} onChange={(event) => patchWebsiteForm({ listLeftLogo: event.target.value })} /></Col>
+                            <Col xs={24} md={8}><Typography.Text strong>活动方 Logo URL</Typography.Text><Input value={websiteForm.listRightLogo} onChange={(event) => patchWebsiteForm({ listRightLogo: event.target.value })} /></Col>
+                            <Col xs={24} md={8}><Typography.Text strong>奖励图片 URL</Typography.Text><Input value={websiteForm.listChestImage} onChange={(event) => patchWebsiteForm({ listChestImage: event.target.value })} /></Col>
+                          </Row>
+                        </div>
+
+                        <div className="campaigns-section-sub">
+                          <div className="campaigns-section-title-sm">领奖配置（claim 状态必填校验）</div>
+                          <Alert type="info" showIcon message={websiteForm.webStatus === "claim" ? "claim 状态下 POI 合约地址必填；POW/征文合约会按活动开关校验。" : "当前不是领奖中状态，可先留空，等领奖合约部署后再配置。"} />
+                          <Row gutter={[12, 12]}>
+                            <Col xs={24}><Typography.Text strong>POI 合约地址</Typography.Text><Input value={websiteForm.claimPoiContractAddress} onChange={(event) => patchWebsiteForm({ claimPoiContractAddress: event.target.value })} placeholder="0x..." /></Col>
+                            <Col xs={24} md={12}><Typography.Text strong>POW 合约地址</Typography.Text><Input value={websiteForm.claimPowContractAddress} onChange={(event) => patchWebsiteForm({ claimPowContractAddress: event.target.value })} placeholder="0x..." /></Col>
+                            <Col xs={24} md={12}><Typography.Text strong>征文大赛合约地址</Typography.Text><Input value={websiteForm.claimEssayContractAddress} onChange={(event) => patchWebsiteForm({ claimEssayContractAddress: event.target.value })} placeholder="0x..." /></Col>
+                          </Row>
+                        </div>
+
+                        <div className="campaigns-section-sub">
+                          <Space style={{ justifyContent: "space-between", width: "100%" }}>
+                            <Typography.Text strong>模板配置（JSON）</Typography.Text>
+                            <Button size="small" onClick={formatWebsiteTemplateConfig}>格式化 JSON</Button>
+                          </Space>
+                          <Input.TextArea rows={8} value={websiteForm.templateConfig} onChange={(event) => patchWebsiteForm({ templateConfig: event.target.value })} placeholder='{"claimStatusBadge":"Claim is live"}' />
+                        </div>
+
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>{websiteMeta}</Typography.Text>
+                      </Space>
                     </Card>
 
                     <Collapse

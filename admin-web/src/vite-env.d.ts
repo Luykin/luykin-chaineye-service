@@ -12,6 +12,12 @@ declare global {
         on: (eventName: string, handler: (params: any) => void) => void;
       };
     };
+    Quill?: new (element: HTMLElement, options?: Record<string, unknown>) => {
+      root: HTMLElement;
+      clipboard?: { dangerouslyPasteHTML: (html: string) => void };
+      on: (eventName: string, handler: (...args: any[]) => void) => void;
+      getSemanticHTML?: () => string;
+    };
     Diff?: {
       diffJson: (
         oldValue: unknown,

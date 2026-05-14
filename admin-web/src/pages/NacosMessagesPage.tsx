@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -95,11 +95,41 @@ export function NacosMessagesPage() {
   const [dirty, setDirty] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [diffHtml, setDiffHtml] = useState("");
+  const quillHostRef = useRef<HTMLDivElement | null>(null);
+  const quillRef = useRef<InstanceType<NonNullable<typeof window.Quill>> | null>(null);
+  const quillSyncingRef = useRef(false);
+  const selectedIndexRef = useRef(-1);
+  const [quillReady, setQuillReady] = useState(false);
+
+  selectedIndexRef.current = selectedIndex;
 
   const query = useQuery({
     queryKey: ["nacos-messages", lang],
     queryFn: () => fetchNacosConfig({ dataId: DATA_IDS[lang] }),
   });
+
+  useEffect(() => {
+    if (!quillHostRef.current || quillRef.current || !window.Quill) return;
+    const quill = new window.Quill(quillHostRef.current, {
+      theme: "snow",
+      modules: {
+        toolbar: [
+          ["bold", "italic", "underline"],
+          [{ color: [] }, { background: [] }],
+          ["link", "clean"],
+        ],
+      },
+      placeholder: "请输入公告内容（支持富文本/HTML 粘贴）",
+    });
+    quillRef.current = quill;
+    setQuillReady(true);
+    quill.on("text-change", () => {
+      const index = selectedIndexRef.current;
+      if (quillSyncingRef.current || index < 0) return;
+      setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, content: quill.root.innerHTML } : item)));
+      setDirty(true);
+    });
+  }, [selectedIndex]);
 
   useEffect(() => {
     if (!query.data?.data.content || dirty) return;
@@ -117,6 +147,17 @@ export function NacosMessagesPage() {
 
   const selectedItem = selectedIndex >= 0 ? items[selectedIndex] : null;
   const hasChanges = dirty || JSON.stringify(items) !== JSON.stringify(originalItems);
+
+  useEffect(() => {
+    if (!quillRef.current || !selectedItem) return;
+    const html = String(selectedItem.content || "");
+    if (quillRef.current.root.innerHTML === html) return;
+    quillSyncingRef.current = true;
+    quillRef.current.clipboard?.dangerouslyPasteHTML(html);
+    window.setTimeout(() => {
+      quillSyncingRef.current = false;
+    }, 0);
+  }, [selectedIndex, selectedItem]);
 
   const publishMutation = useMutation({
     mutationFn: () =>
@@ -272,12 +313,17 @@ export function NacosMessagesPage() {
                     />
                     <div className="nacos-editor-field">
                       <Typography.Text strong>内容</Typography.Text>
-                      <Input.TextArea
-                        value={String(selectedItem.content || "")}
-                        onChange={(event) => updateSelected({ content: event.target.value })}
-                        rows={10}
-                        placeholder="请输入公告内容（支持 HTML）"
-                      />
+                      <div className="nacos-quill-wrap">
+                        <div ref={quillHostRef} className={quillReady ? "" : "is-hidden"} />
+                        {!quillReady ? (
+                          <Input.TextArea
+                            value={String(selectedItem.content || "")}
+                            onChange={(event) => updateSelected({ content: event.target.value })}
+                            rows={10}
+                            placeholder="请输入公告内容（支持 HTML）"
+                          />
+                        ) : null}
+                      </div>
                     </div>
                     <Card size="small" title="实时预览">
                       <div className="nacos-message-preview" dangerouslySetInnerHTML={{ __html: String(selectedItem.content || "") }} />

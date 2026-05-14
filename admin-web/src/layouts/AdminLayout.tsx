@@ -1,9 +1,10 @@
 import {
-  CaretLeftOutlined,
   CaretRightOutlined,
   LockOutlined,
   LogoutOutlined,
   MenuOutlined,
+  PushpinFilled,
+  PushpinOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   UserOutlined,
@@ -41,6 +42,7 @@ const ADMIN_HOME_PATH = "/admin-react/dau-details";
 const ADMIN_TITLE = "数据统计面板";
 const { useBreakpoint } = Grid;
 const NO_PERMISSION_COLLAPSED_STORAGE_KEY = "admin_sidebar_no_permission_collapsed";
+const SIDEBAR_PINNED_STORAGE_KEY = "admin_sidebar_pinned";
 
 export function AdminLayout() {
   const location = useLocation();
@@ -48,7 +50,11 @@ export function AdminLayout() {
   const { user, hasPermission, refresh } = useAuth();
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
-  const [collapsed, setCollapsed] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const [sidebarPinned, setSidebarPinned] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SIDEBAR_PINNED_STORAGE_KEY) === "true";
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -66,6 +72,7 @@ export function AdminLayout() {
   >([]);
   const [passwordForm] = Form.useForm();
   const [webauthnForm] = Form.useForm();
+  const sidebarCollapsed = !isMobile && !sidebarPinned && !sidebarHovered;
 
   const visibleMainNavItems = useMemo(
     () => {
@@ -168,6 +175,11 @@ export function AdminLayout() {
       noPermissionCollapsed ? "true" : "false"
     );
   }, [noPermissionCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SIDEBAR_PINNED_STORAGE_KEY, sidebarPinned ? "true" : "false");
+  }, [sidebarPinned]);
 
   const openLoginPage = () => {
     const loginUrl = new URL(buildApiUrl("/admin/login"), window.location.origin);
@@ -330,14 +342,14 @@ export function AdminLayout() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: collapsed ? "20px 12px" : "20px",
+          padding: sidebarCollapsed ? "20px 12px" : "20px",
           borderBottom: "1px solid #f1f5f9",
           color: "#1e293b",
           gap: 8,
         }}
       >
-        <Space size={collapsed ? 0 : 12} style={{ minWidth: 0, flex: 1 }}>
-          {!collapsed ? (
+        <Space size={sidebarCollapsed ? 0 : 12} style={{ minWidth: 0, flex: 1 }}>
+          {!sidebarCollapsed ? (
             <Image
               src={buildApiUrl("/admin/logo")}
               alt="XHunt Logo"
@@ -351,7 +363,7 @@ export function AdminLayout() {
               }}
             />
           ) : null}
-          {!collapsed ? (
+          {!sidebarCollapsed ? (
             <Space
               direction="vertical"
               size={0}
@@ -386,24 +398,6 @@ export function AdminLayout() {
             </Space>
           ) : null}
         </Space>
-        <Button
-          type="text"
-          size="small"
-          icon={collapsed ? <CaretRightOutlined /> : <CaretLeftOutlined />}
-          onClick={() => setCollapsed((value) => !value)}
-          aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
-          disabled={isMobile}
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            border: "1px solid #e2e8f0",
-            background: "#ffffff",
-            color: "#94a3b8",
-            boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-            flex: "0 0 auto",
-          }}
-        />
       </div>
       <div
         style={{
@@ -417,7 +411,7 @@ export function AdminLayout() {
         <Menu
           mode="inline"
           rootClassName="admin-sidebar-menu admin-sidebar-menu--main"
-          inlineCollapsed={!isMobile && collapsed}
+          inlineCollapsed={sidebarCollapsed}
           selectedKeys={[location.pathname]}
           items={permittedMenuItems}
           onClick={({ key }) => {
@@ -430,15 +424,17 @@ export function AdminLayout() {
         {noPermissionMenuItems.length > 0 ? (
           <>
             <Divider style={{ margin: "8px 16px" }} />
-            <div style={{ padding: collapsed ? "0 8px 12px" : "0 12px 12px" }}>
-              {collapsed ? (
+            <div style={{ padding: sidebarCollapsed ? "0 8px 12px" : "0 12px 12px" }}>
+              {sidebarCollapsed ? (
                 <Tooltip
                   placement="right"
                   title={`无权限功能 ${noPermissionMenuItems.length} 项，展开侧边栏查看`}
                 >
                   <Button
                     type="text"
-                    onClick={() => setCollapsed(false)}
+                    onClick={() => {
+                      setSidebarHovered(true);
+                    }}
                     aria-label="展开查看无权限功能"
                     style={{
                       width: "100%",
@@ -523,7 +519,7 @@ export function AdminLayout() {
         <Menu
           mode="inline"
           rootClassName="admin-sidebar-menu admin-sidebar-menu--shortcut"
-          inlineCollapsed={!isMobile && collapsed}
+          inlineCollapsed={sidebarCollapsed}
           selectable={false}
           items={shortcutItems}
           style={{ borderInlineEnd: "none" }}
@@ -550,27 +546,60 @@ export function AdminLayout() {
     <Layout style={{ minHeight: "100vh" }}>
       {contextHolder}
       {!isMobile ? (
-        <Sider
-          width={240}
-          theme="light"
-          collapsible
-          collapsed={collapsed}
-          onCollapse={setCollapsed}
-          collapsedWidth={80}
-          trigger={null}
-          style={{
-            minHeight: "100vh",
-            alignSelf: "stretch",
-            background: "#fff",
-            borderRight: "1px solid #e2e8f0",
-            boxShadow: collapsed
-              ? "4px 0 20px rgba(0,0,0,0.06)"
-              : "4px 0 24px rgba(0,0,0,0.08)",
-            overflow: "visible",
-          }}
-        >
-          {desktopSidebarContent}
-        </Sider>
+        <>
+          <Sider
+            width={240}
+            theme="light"
+            collapsible={false}
+            collapsed={sidebarCollapsed}
+            collapsedWidth={80}
+            trigger={null}
+            onMouseEnter={() => setSidebarHovered(true)}
+            onMouseLeave={() => setSidebarHovered(false)}
+            style={{
+              minHeight: "100vh",
+              alignSelf: "stretch",
+              background: "#fff",
+              borderRight: "1px solid #e2e8f0",
+              boxShadow: sidebarCollapsed
+                ? "4px 0 20px rgba(0,0,0,0.06)"
+                : "4px 0 24px rgba(0,0,0,0.08)",
+              overflow: "visible",
+              transition: "all 0.18s ease",
+            }}
+          >
+            {desktopSidebarContent}
+          </Sider>
+          <Tooltip
+            placement="right"
+            title={sidebarPinned ? "取消固定：移出后自动收起" : "固定侧边栏：移出后不收起"}
+          >
+            <Button
+              type="text"
+              size="small"
+              icon={sidebarPinned ? <PushpinFilled /> : <PushpinOutlined />}
+              onClick={() => {
+                setSidebarPinned((value) => !value);
+                setSidebarHovered(true);
+              }}
+              aria-label={sidebarPinned ? "取消固定侧边栏" : "固定侧边栏"}
+              style={{
+                position: "fixed",
+                top: 20,
+                left: sidebarCollapsed ? 62 : 222,
+                zIndex: 30,
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                border: sidebarPinned ? "1px solid #93c5fd" : "1px solid #e2e8f0",
+                background: sidebarPinned ? "#eff6ff" : "#ffffff",
+                color: sidebarPinned ? "#2563eb" : "#94a3b8",
+                boxShadow: "0 2px 8px rgba(15,23,42,0.12)",
+                transition: "left 0.18s ease, color 0.15s ease, background 0.15s ease",
+              }}
+            />
+          </Tooltip>
+        </>
       ) : (
         <Drawer
           placement="left"

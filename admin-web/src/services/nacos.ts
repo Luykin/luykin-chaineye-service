@@ -49,3 +49,19 @@ export async function syncWebsiteCampaignsFromNacos(dryRun = false) {
 export async function fetchAllWebsiteCampaigns() {
   return apiRequest<WebsiteCampaignListResponse>("/api/xhunt/website/campaigns/internal/list-all");
 }
+
+export async function fetchWebsiteCampaignByNacosId(nacosCampaignId: string) {
+  return apiRequest<{ success: boolean; data: WebsiteCampaignListResponse["data"][number] | null }>(
+    `/api/xhunt/website/campaigns/internal/by-nacos-id/${encodeURIComponent(nacosCampaignId)}`
+  );
+}
+
+export async function saveWebsiteCampaignConfig(nacosCampaignId: string, payload: Record<string, unknown>) {
+  return apiRequest<{ success: boolean; data?: unknown; error?: string }>(
+    `/api/xhunt/website/campaigns/internal/${encodeURIComponent(nacosCampaignId)}/web-config`,
+    {
+      method: "PUT",
+      body: payload,
+    }
+  );
+}
