@@ -479,7 +479,7 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
     }
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "daily-report:send", "admin:manage-permissions", "audit-logs:read"]);
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = perms.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -545,7 +545,7 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
       .filter((p) => p.length > 0);
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "daily-report:send", "admin:manage-permissions", "audit-logs:read"]);
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = sanitized.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {

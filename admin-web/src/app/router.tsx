@@ -27,7 +27,6 @@ import { NacosTagsPage } from "@/pages/NacosTagsPage";
 import { FeatureFlagsPage } from "@/pages/FeatureFlagsPage";
 import { RedisManagementPage } from "@/pages/RedisManagementPage";
 import { LlmTestPage } from "@/pages/LlmTestPage";
-import { DailyReportEmailPage } from "@/pages/DailyReportEmailPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import { VipManagementPage } from "@/pages/VipManagementPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
@@ -58,7 +57,6 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "feature-flags": <FeatureFlagsPage />,
   "redis-management": <RedisManagementPage />,
   "llm-test": <LlmTestPage />,
-  "daily-report-email": <DailyReportEmailPage />,
   "admin-users": <AdminUsersPage />,
   "vip-management": <VipManagementPage />,
 };
