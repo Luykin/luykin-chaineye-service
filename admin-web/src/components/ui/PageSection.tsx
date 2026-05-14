@@ -1,4 +1,5 @@
 import { Card, Space, Typography } from "antd";
+import "@/styles/global.css";
 
 interface PageSectionProps {
   title: string;
@@ -15,16 +16,19 @@ export function PageSection({
 }: PageSectionProps) {
   return (
     <Card
+      className="admin-page-section"
       styles={{
         body: { padding: 20 },
       }}
       title={
-        <Space direction="vertical" size={2}>
-          <Typography.Text strong style={{ fontSize: 16 }}>
+        <Space direction="vertical" size={0} className="admin-page-section__title-group">
+          <Typography.Text strong className="admin-page-section__title">
             {title}
           </Typography.Text>
           {description ? (
-            <Typography.Text type="secondary">{description}</Typography.Text>
+            <Typography.Text type="secondary" className="admin-page-section__description">
+              {description}
+            </Typography.Text>
           ) : null}
         </Space>
       }

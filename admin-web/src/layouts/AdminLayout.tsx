@@ -67,14 +67,19 @@ export function AdminLayout() {
   const [passwordForm] = Form.useForm();
   const [webauthnForm] = Form.useForm();
 
+  const visibleMainNavItems = useMemo(
+    () => adminMainNavItems.filter((item) => !item.superOnly || user?.role === "super"),
+    [user?.role]
+  );
+
   const permittedNavItems = useMemo(
-    () => adminMainNavItems.filter((item) => hasPermission(item.permission)),
-    [hasPermission]
+    () => visibleMainNavItems.filter((item) => hasPermission(item.permission)),
+    [hasPermission, visibleMainNavItems]
   );
 
   const noPermissionNavItems = useMemo(
-    () => adminMainNavItems.filter((item) => !hasPermission(item.permission)),
-    [hasPermission]
+    () => visibleMainNavItems.filter((item) => !hasPermission(item.permission)),
+    [hasPermission, visibleMainNavItems]
   );
 
   const permittedMenuItems = useMemo(
@@ -143,7 +148,7 @@ export function AdminLayout() {
             }}
           >
             <span>{item.label}</span>
-            <ExportOutlined style={{ fontSize: 12, color: "#94a3b8" }} />
+            <ExportOutlined className="admin-sidebar-external-icon" />
           </a>
         ),
       })),
@@ -405,6 +410,7 @@ export function AdminLayout() {
       >
         <Menu
           mode="inline"
+          rootClassName="admin-sidebar-menu admin-sidebar-menu--main"
           inlineCollapsed={!isMobile && collapsed}
           selectedKeys={[location.pathname]}
           items={permittedMenuItems}
@@ -414,10 +420,11 @@ export function AdminLayout() {
           }}
           style={{ borderInlineEnd: "none", paddingTop: 8 }}
         />
+
         {noPermissionMenuItems.length > 0 ? (
           <>
             <Divider style={{ margin: "8px 16px" }} />
-            <div style={{ padding: collapsed ? "0 8px" : "0 12px" }}>
+            <div style={{ padding: collapsed ? "0 8px 12px" : "0 12px 12px" }}>
               {collapsed ? (
                 <Tooltip
                   placement="right"
@@ -481,7 +488,7 @@ export function AdminLayout() {
                           onClick={() => {
                             messageApi.warning("当前账号暂无此功能权限");
                           }}
-                          rootClassName="admin-no-permission-menu"
+                          rootClassName="admin-sidebar-menu admin-no-permission-menu"
                           style={{
                             borderInlineEnd: "none",
                             background: "transparent",
@@ -505,24 +512,16 @@ export function AdminLayout() {
             </div>
           </>
         ) : null}
+
         <Divider style={{ margin: "8px 16px" }} />
-        <div style={{ padding: collapsed ? "0 8px 12px" : "0 12px 12px" }}>
-          {!collapsed ? (
-            <Typography.Text
-              type="secondary"
-              style={{ display: "block", padding: "0 8px 8px", fontSize: 12 }}
-            >
-              快捷入口
-            </Typography.Text>
-          ) : null}
-          <Menu
-            mode="inline"
-            inlineCollapsed={!isMobile && collapsed}
-            selectable={false}
-            items={shortcutItems}
-            style={{ borderInlineEnd: "none" }}
-          />
-        </div>
+        <Menu
+          mode="inline"
+          rootClassName="admin-sidebar-menu admin-sidebar-menu--shortcut"
+          inlineCollapsed={!isMobile && collapsed}
+          selectable={false}
+          items={shortcutItems}
+          style={{ borderInlineEnd: "none" }}
+        />
       </div>
     </div>
   );
