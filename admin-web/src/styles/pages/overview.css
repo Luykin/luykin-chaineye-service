@@ -1,11 +1,11 @@
-/* 数据概览：页面特有布局；通用统计卡片在 components/legacy-stats.css */
+/* 数据概览：克制版页面样式。通用组件仍复用 LegacyStats，这里只做页面级降噪。 */
 
 .overview-stats-section {
   width: 100%;
 }
 
 .overview-section {
-  margin-bottom: 30px;
+  margin-bottom: 22px;
 }
 
 .overview-section-period {
@@ -13,10 +13,10 @@
 }
 
 .overview-section-desc {
-  margin: -8px 0 20px;
+  margin: -6px 0 12px;
   color: #64748b;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .overview-stat-full-date {
@@ -29,242 +29,266 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-}
-
-.overview-stat-trend svg {
-  width: 14px;
-  height: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 .overview-trend-up {
-  color: #16a34a;
+  color: #15803d;
 }
 
 .overview-trend-down {
-  color: #dc2626;
+  color: #b91c1c;
 }
 
-.overview-stat-card-kol::before {
-  background: linear-gradient(90deg, #f59e0b, #d97706);
+/* 覆盖统计组件在数据概览页里的强视觉效果：少渐变、少阴影、少动效。 */
+.overview-stats-section .legacy-stats-section-header {
+  margin-bottom: 10px;
 }
 
-.overview-stat-card-kol-tier::before {
-  background: linear-gradient(90deg, #fbbf24, #f59e0b);
-}
-
-.overview-stat-card-points::before {
-  background: linear-gradient(90deg, #8b5cf6, #7c3aed);
-}
-
-.overview-stat-card-rating::before {
-  background: linear-gradient(90deg, #ec4899, #db2777);
-}
-
-.overview-stat-card-points-today::before {
-  background: linear-gradient(90deg, #10b981, #059669);
-}
-
-.overview-trend-chart-container {
-  margin-top: 24px;
-  padding: 24px;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
-}
-
-.overview-trend-chart-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.overview-trend-chart-title {
-  display: flex;
-  align-items: center;
+.overview-stats-section .legacy-stats-section-title-wrapper {
   gap: 8px;
-  color: #374151;
-  font-size: 15px;
+}
+
+.overview-stats-section .legacy-stats-section-title {
+  color: #1f2937;
+  font-size: 16px;
   font-weight: 600;
+  letter-spacing: 0;
 }
 
-.overview-trend-chart-title svg {
-  width: 18px;
-  height: 18px;
-  color: #3b82f6;
-}
-
-.overview-trend-chart-avg {
-  color: #64748b;
-  font-size: 13px;
-}
-
-.overview-trend-chart-avg strong {
-  color: #1e293b;
-  font-weight: 700;
-}
-
-.overview-trend-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  height: 160px;
-  padding-bottom: 8px;
-}
-
-.overview-trend-bar-wrapper {
-  flex: 1;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.overview-trend-bar {
-  position: relative;
-  display: flex;
-  width: 100%;
-  min-width: 32px;
-  max-width: 60px;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 8px;
-  border-radius: 8px 8px 4px 4px;
-  background: linear-gradient(180deg, #94a3b8 0%, #64748b 100%);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    filter 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.overview-trend-bar:hover {
-  transform: scaleY(1.02);
-  filter: brightness(1.1);
-}
-
-.overview-trend-bar-today {
-  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
-}
-
-.overview-trend-bar-value {
-  margin-top: 4px;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  transform: rotate(-90deg);
-  transform-origin: center;
-  white-space: nowrap;
-}
-
-.overview-trend-bar-label {
-  color: #64748b;
+.overview-stats-section .legacy-stats-section-badge {
+  padding: 3px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #6b7280;
   font-size: 11px;
   font-weight: 500;
 }
 
+.overview-stats-section .legacy-stats-grid {
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.overview-stats-section .legacy-stats-grid--daily {
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+}
+
+.overview-stats-section .legacy-stats-grid--core {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.overview-stats-section .legacy-stats-grid--total {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.overview-stats-section .legacy-stat-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.overview-stats-section .legacy-stat-card:hover {
+  transform: none;
+  border-color: #cbd5e1;
+  box-shadow: none;
+}
+
+.overview-stats-section .legacy-stat-card--centered {
+  min-height: 112px;
+  padding: 14px 12px;
+}
+
+.overview-stats-section .legacy-stat-card--highlighted {
+  border: 1px solid #93c5fd;
+  background: #f8fbff;
+  box-shadow: none;
+}
+
+.overview-stats-section .legacy-stat-card--with-icon {
+  gap: 12px;
+  padding: 16px;
+}
+
+.overview-stats-section .legacy-stat-card--minimal {
+  padding: 14px 16px;
+}
+
+.overview-stats-section .legacy-stat-card--minimal::before {
+  height: 2px;
+  background: #e5e7eb !important;
+}
+
+.overview-stats-section .legacy-stat-card__header {
+  margin-bottom: 8px;
+}
+
+.overview-stats-section .legacy-stat-card__title {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.overview-stats-section .legacy-stat-card--centered .legacy-stat-card__title {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.overview-stats-section .legacy-stat-card__badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.overview-stats-section .legacy-stat-card__value {
+  color: #111827;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.overview-stats-section .legacy-stat-card--minimal .legacy-stat-card__value {
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.overview-stats-section .legacy-stat-card__meta {
+  margin-top: 6px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.overview-stats-section .legacy-stat-card__trend {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.overview-stats-section .legacy-stat-card__icon {
+  width: 40px;
+  height: 40px;
+  flex-basis: 40px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc !important;
+  color: #64748b !important;
+}
+
+.overview-stats-section .legacy-stat-card__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.overview-stats-section .legacy-stat-card__content .legacy-stat-card__title {
+  margin-bottom: 6px;
+}
+
+.overview-stats-section .legacy-stat-card__suffix {
+  margin-left: 5px;
+  color: #d97706;
+  font-size: 15px;
+}
+
 .overview-period-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
 }
 
 .overview-period-card {
-  padding: 24px;
-  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
   background: #fff;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .overview-period-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  transform: none;
+  border-color: #cbd5e1;
+  box-shadow: none;
 }
 
-.overview-period-card-weekly {
-  border: 1px solid #bbf7d0;
-  background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);
-}
-
+.overview-period-card-weekly,
 .overview-period-card-monthly {
-  border: 1px solid #bfdbfe;
-  background: linear-gradient(135deg, #eff6ff 0%, #fff 100%);
+  background: #fff;
 }
 
 .overview-period-card-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .overview-period-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e5e7eb;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 48px;
-}
-
-.overview-period-card-weekly .overview-period-icon {
-  color: #16a34a;
-  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-}
-
-.overview-period-card-monthly .overview-period-icon {
-  color: #2563eb;
-  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  flex: 0 0 36px;
+  background: #f8fafc !important;
+  color: #64748b !important;
 }
 
 .overview-period-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
 }
 
 .overview-period-label {
-  color: #1e293b;
-  font-size: 18px;
-  font-weight: 700;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .overview-period-metrics {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 18px;
 }
 
 .overview-period-metric {
   flex: 1;
-  text-align: center;
+  text-align: left;
 }
 
 .overview-period-metric-value {
   display: block;
-  margin-bottom: 4px;
-  color: #1e293b;
-  font-size: 28px;
-  font-weight: 800;
+  margin-bottom: 3px;
+  color: #111827;
+  font-size: 24px;
+  font-weight: 650;
   line-height: 1.15;
 }
 
 .overview-period-metric-label {
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .overview-period-metric-divider {
   width: 1px;
-  height: 40px;
-  background: #e2e8f0;
+  height: 34px;
+  background: #e5e7eb;
 }
 
 .overview-stat-card-empty {
-  min-height: 120px;
+  min-height: 112px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -274,36 +298,35 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   color: #9ca3af;
 }
 
 .overview-empty-state svg {
-  width: 32px;
-  height: 32px;
-  opacity: 0.5;
+  width: 26px;
+  height: 26px;
+  opacity: 0.45;
 }
 
 .overview-empty-state span {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
 }
 
 @media (max-width: 768px) {
+  .overview-section {
+    margin-bottom: 18px;
+  }
+
+  .overview-stats-section .legacy-stats-grid--daily {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-stats-section .legacy-stat-card__value {
+    font-size: 22px;
+  }
+
   .overview-period-stats-grid {
     grid-template-columns: 1fr;
-  }
-
-  .overview-trend-chart {
-    height: 120px;
-    gap: 6px;
-  }
-
-  .overview-trend-chart-container {
-    padding: 18px 14px;
-  }
-
-  .overview-trend-bar-value {
-    font-size: 8px;
   }
 }

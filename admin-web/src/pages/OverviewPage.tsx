@@ -22,48 +22,15 @@ function calcChange(current: number, previous: number) {
   return ((current - previous) / previous) * 100;
 }
 
-function TrendArrow({ positive }: { positive: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline
-        points={
-          positive
-            ? "23 6 13.5 15.5 8.5 10.5 1 18"
-            : "23 18 13.5 8.5 8.5 13.5 1 6"
-        }
-      />
-    </svg>
-  );
-}
-
 function DailyActiveSection({
   items,
 }: {
   items: OverviewDailyActiveUserItem[];
 }) {
-  const trendSummary = useMemo(() => {
-    if (!items.length) {
-      return { average: 0, maxValue: 0 };
-    }
-
-    const total = items.reduce((sum, item) => sum + Number(item.activeUsers || 0), 0);
-    const maxValue = items.reduce(
-      (max, item) => Math.max(max, Number(item.activeUsers || 0)),
-      0
-    );
-
-    return {
-      average: Math.round(total / items.length),
-      maxValue,
-    };
-  }, [items]);
-
   return (
     <div className="overview-section">
       <LegacyStatsSectionHeader
         title="设备指纹日活统计"
-        icon="monitor"
-        tone="blue"
         badge="最近7天"
       />
       <p className="overview-section-desc">
@@ -94,13 +61,12 @@ function DailyActiveSection({
                 trend={
                   !isToday && index > 0 ? (
                     <span
-                    className={`overview-stat-trend ${
-                      isPositive ? "overview-trend-up" : "overview-trend-down"
-                    }`}
-                  >
-                    <TrendArrow positive={isPositive} />
-                    <span>{Math.abs(change).toFixed(1)}%</span>
-                  </span>
+                      className={`overview-stat-trend ${
+                        isPositive ? "overview-trend-up" : "overview-trend-down"
+                      }`}
+                    >
+                      <span>{isPositive ? "+" : "-"}{Math.abs(change).toFixed(1)}%</span>
+                    </span>
                   ) : undefined
                 }
               />
@@ -115,50 +81,10 @@ function DailyActiveSection({
           </div>
         )}
       </LegacyStatsGrid>
-
-      <div className="overview-trend-chart-container">
-        <div className="overview-trend-chart-header">
-          <div className="overview-trend-chart-title">
-            <LegacyStatsIcon name="trend" />
-            <span>7天趋势</span>
-          </div>
-          {items.length ? (
-            <div className="overview-trend-chart-avg">
-              平均: <strong>{formatNumber(trendSummary.average)}</strong>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="overview-trend-chart">
-          {items.map((item, index) => {
-            const height = trendSummary.maxValue
-              ? Math.max(20, (Number(item.activeUsers || 0) / trendSummary.maxValue) * 140)
-              : 20;
-            const isToday = index === items.length - 1;
-
-            return (
-              <div className="overview-trend-bar-wrapper" key={`${item.date}-bar`}>
-                <div
-                  className={`overview-trend-bar ${
-                    isToday ? "overview-trend-bar-today" : ""
-                  }`}
-                  style={{ height }}
-                >
-                  <span className="overview-trend-bar-value">
-                    {formatNumber(item.activeUsers)}
-                  </span>
-                </div>
-                <span className="overview-trend-bar-label">
-                  {item.displayDate.split(" ")[0]}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
+
 
 function CoreMetricCard({
   icon,
@@ -317,13 +243,7 @@ export function OverviewPage() {
           <DailyActiveSection items={dailyActiveUsersData} />
 
           <div className="overview-section">
-            <LegacyStatsSectionHeader
-              title="核心指标"
-              icon="layers"
-              tone="purple"
-              badge="实时"
-              live
-            />
+            <LegacyStatsSectionHeader title="核心指标" />
 
             <LegacyStatsGrid variant="core">
               <CoreMetricCard
@@ -354,11 +274,7 @@ export function OverviewPage() {
           </div>
 
           <div className="overview-section">
-            <LegacyStatsSectionHeader
-              title="累计数据"
-              icon="bars"
-              tone="teal"
-            />
+            <LegacyStatsSectionHeader title="累计数据" />
 
             <LegacyStatsGrid variant="total">
               {totalMetricCards.map((item) => (
@@ -374,11 +290,7 @@ export function OverviewPage() {
           </div>
 
           <div className="overview-section overview-section-period">
-            <LegacyStatsSectionHeader
-              title="周期统计"
-              icon="calendar"
-              tone="indigo"
-            />
+            <LegacyStatsSectionHeader title="周期统计" />
 
             <div className="overview-period-stats-grid">
               <PeriodCard

@@ -308,3 +308,64 @@
   margin-inline-start: 0 !important;
   line-height: 1 !important;
 }
+
+/* Header layout refinement: keep the navigation visually centered by giving
+   the brand and account areas symmetrical columns. */
+@media (min-width: 992px) {
+  .admin-top-header {
+    grid-template-columns: minmax(190px, 260px) minmax(0, 1fr) minmax(190px, 260px);
+  }
+
+  .admin-top-header-brand {
+    justify-self: start;
+  }
+
+  .admin-top-nav-menu.ant-menu-horizontal {
+    justify-self: center;
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .admin-top-user-button.ant-btn {
+    justify-self: end;
+  }
+}
+
+@media (max-width: 991px) {
+  .admin-top-header {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .admin-top-header-brand-title.ant-typography {
+    font-size: 17px;
+  }
+
+  .admin-top-header-logo {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .admin-top-nav-mobile-button.ant-btn {
+    padding-inline: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .admin-top-header {
+    gap: 8px;
+    padding-inline: 10px;
+  }
+
+  .admin-top-header-title-wrap {
+    display: none;
+  }
+
+  .admin-top-nav-mobile-button.ant-btn {
+    width: 36px;
+    padding-inline: 0;
+  }
+
+  .admin-top-nav-mobile-button.ant-btn > span:not(.anticon) {
+    display: none;
+  }
+}
