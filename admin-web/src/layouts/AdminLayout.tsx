@@ -68,7 +68,13 @@ export function AdminLayout() {
   const [webauthnForm] = Form.useForm();
 
   const visibleMainNavItems = useMemo(
-    () => adminMainNavItems.filter((item) => !item.superOnly || user?.role === "super"),
+    () => {
+      const visibleItems = adminMainNavItems.filter((item) => !item.superOnly || user?.role === "super");
+      return [
+        ...visibleItems.filter((item) => item.section !== "system"),
+        ...visibleItems.filter((item) => item.section === "system"),
+      ];
+    },
     [user?.role]
   );
 
