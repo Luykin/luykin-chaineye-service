@@ -11,7 +11,7 @@ yarn admin-web:dev
 默认会通过 Vite 代理请求到：
 
 ```bash
-http://localhost:8090
+https://kb.cryptohunt.ai
 ```
 
 如需修改后端代理地址，可设置环境变量：
@@ -19,6 +19,31 @@ http://localhost:8090
 ```bash
 VITE_API_TARGET=http://localhost:8090
 ```
+
+### 当前默认策略
+
+- 本地开发前端：`http://localhost:5174`
+- 默认代理目标：`https://kb.cryptohunt.ai`
+
+也就是说，当前 `admin-web` 默认是直接对接**线上接口**。
+
+如果要切回本地后端，再显式设置：
+
+```bash
+VITE_API_TARGET=http://localhost:8090
+```
+
+### 登录态说明
+
+由于前端页面运行在 `localhost:5174`，而接口在 `kb.cryptohunt.ai`，默认情况下浏览器不会天然复用线上登录态。
+
+当前方案默认依赖：
+
+- 坤哥通过浏览器插件或其它方式处理 cookie / 登录态注入
+
+这只是第一阶段联调方案，后续更推荐把前端挂到同域路径，例如：
+
+- `https://kb.cryptohunt.ai/admin-react`
 
 ## 当前阶段
 
