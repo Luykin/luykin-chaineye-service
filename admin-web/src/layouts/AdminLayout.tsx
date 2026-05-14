@@ -1,13 +1,14 @@
 import {
   AuditOutlined,
   BarChartOutlined,
+  CaretLeftOutlined,
+  CaretRightOutlined,
+  ClockCircleOutlined,
   FireOutlined,
   HomeOutlined,
   LinkOutlined,
   LockOutlined,
   LogoutOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
@@ -19,6 +20,7 @@ import {
   Button,
   Dropdown,
   Form,
+  Image,
   Input,
   Layout,
   List,
@@ -32,12 +34,13 @@ import {
   message,
 } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
 import { buildApiUrl } from "@/services/apiClient";
 
 const { Header, Sider, Content } = Layout;
 const ADMIN_HOME_PATH = "/admin-react/dau-details";
+const ADMIN_TITLE = "数据统计面板";
 
 const navItems = [
   {
@@ -83,6 +86,17 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const { user, hasPermission, refresh } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [currentTime, setCurrentTime] = useState(() =>
+    new Date().toLocaleString("zh-CN", {
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).replace(/-/g, "/")
+  );
   const [messageApi, contextHolder] = message.useMessage();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [webauthnModalOpen, setWebauthnModalOpen] = useState(false);
@@ -103,6 +117,26 @@ export function AdminLayout() {
         .map(({ key, icon, label }) => ({ key, icon, label })),
     [hasPermission]
   );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(
+        new Date()
+          .toLocaleString("zh-CN", {
+            hour12: false,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })
+          .replace(/-/g, "/")
+      );
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const openLoginPage = () => {
     const loginUrl = new URL(buildApiUrl("/admin/login"), window.location.origin);
@@ -268,21 +302,40 @@ export function AdminLayout() {
             height: 64,
             display: "flex",
             alignItems: "center",
-            justifyContent: collapsed ? "center" : "flex-start",
-            padding: collapsed ? "0 12px" : "0 20px",
+            justifyContent: "space-between",
+            padding: collapsed ? "0 12px" : "0 16px 0 20px",
             borderBottom: "1px solid #e5e7eb",
-            fontWeight: 700,
-            fontSize: 18,
             color: "#111827",
+            gap: 8,
           }}
         >
-          <Typography.Text
-            strong
-            ellipsis
-            style={{ fontSize: 18, margin: 0, maxWidth: "100%" }}
-          >
-            {collapsed ? "XA" : "XHunt Admin"}
-          </Typography.Text>
+          <Space size={collapsed ? 0 : 12} style={{ minWidth: 0, flex: 1 }}>
+            <Image
+              src={buildApiUrl("/admin/logo")}
+              alt="XHunt Logo"
+              preview={false}
+              width={collapsed ? 28 : 36}
+              height={collapsed ? 28 : 36}
+              style={{ borderRadius: 10, flex: "0 0 auto" }}
+            />
+            {!collapsed ? (
+              <Space direction="vertical" size={0} style={{ minWidth: 0 }}>
+                <Typography.Text strong ellipsis style={{ fontSize: 18, margin: 0 }}>
+                  XHunt
+                </Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  管理后台
+                </Typography.Text>
+              </Space>
+            ) : null}
+          </Space>
+          <Button
+            type="text"
+            size="small"
+            icon={collapsed ? <CaretRightOutlined /> : <CaretLeftOutlined />}
+            onClick={() => setCollapsed((value) => !value)}
+            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+          />
         </div>
         <Menu
           mode="inline"
@@ -302,26 +355,83 @@ export function AdminLayout() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "0 20px",
-            gap: 16,
+            padding: "0 24px",
+            gap: 20,
+            height: 74,
+            lineHeight: "74px",
           }}
         >
-          <Space size={12} style={{ minWidth: 0, flex: 1 }}>
-            <Button
-              type="text"
-              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={() => setCollapsed((value) => !value)}
-              aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
-            />
-            <Space direction="vertical" size={0} style={{ minWidth: 0 }}>
-              <Typography.Title level={4} ellipsis style={{ margin: 0, maxWidth: "100%" }}>
-                新版管理后台
-              </Typography.Title>
-              <Typography.Text type="secondary" ellipsis style={{ maxWidth: "100%" }}>
-                React + Ant Design 迁移试点
+          <Space size={16} align="center" style={{ minWidth: 0, flex: 1 }}>
+            <Typography.Title
+              level={3}
+              ellipsis
+              style={{
+                margin: 0,
+                maxWidth: "100%",
+                fontSize: 24,
+                lineHeight: 1.2,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              {ADMIN_TITLE}
+            </Typography.Title>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 18px",
+                border: "1px solid #bbf7d0",
+                borderRadius: 999,
+                background: "#f0fdf4",
+                flex: "0 0 auto",
+              }}
+            >
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  background: "#4ade80",
+                  boxShadow: "0 0 0 4px rgba(74, 222, 128, 0.18)",
+                }}
+              />
+              <Typography.Text
+                style={{
+                  color: "#16a34a",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  margin: 0,
+                  lineHeight: 1,
+                }}
+              >
+                实时监控中
               </Typography.Text>
-            </Space>
+            </div>
           </Space>
+
+          <div
+            style={{
+              flex: "0 0 auto",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 18px",
+              border: "1px solid #dbe4f0",
+              borderRadius: 20,
+              background: "#fff",
+              color: "#475569",
+              fontWeight: 700,
+              fontSize: 15,
+              lineHeight: 1,
+              minWidth: 300,
+              justifyContent: "center",
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+            }}
+          >
+            <ClockCircleOutlined style={{ color: "#94a3b8", fontSize: 18 }} />
+            <span style={{ letterSpacing: "0.01em" }}>{currentTime}</span>
+          </div>
 
           <Dropdown
             trigger={["hover", "click"]}
@@ -393,10 +503,34 @@ export function AdminLayout() {
             }}
           >
             <Tooltip title={user?.email || "管理员"}>
-              <Button type="text" style={{ maxWidth: 240 }}>
-                <Space size={8}>
-                  <Avatar size="small" icon={<UserOutlined />} />
-                  <Typography.Text ellipsis style={{ maxWidth: 160, margin: 0 }}>
+              <Button
+                type="text"
+                style={{
+                  maxWidth: 240,
+                  height: 48,
+                  padding: "0 14px",
+                  borderRadius: 18,
+                  border: "1px solid #dbe4f0",
+                  background: "#fff",
+                  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+                }}
+              >
+                <Space size={10}>
+                  <Avatar
+                    size={32}
+                    icon={<UserOutlined />}
+                    style={{ background: "#e5e7eb", color: "#64748b" }}
+                  />
+                  <Typography.Text
+                    ellipsis
+                    style={{
+                      maxWidth: 150,
+                      margin: 0,
+                      fontSize: 16,
+                      fontWeight: 600,
+                      color: "#334155",
+                    }}
+                  >
                     {user?.email || "管理员"}
                   </Typography.Text>
                 </Space>

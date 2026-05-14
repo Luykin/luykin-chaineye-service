@@ -32,3 +32,93 @@ export interface OnlineUsersResponse {
     };
   };
 }
+
+export interface GenericStatsTypeItem {
+  type: string;
+  count: number;
+  lastEventAt: string | null;
+}
+
+export interface GenericStatsTypesResponse {
+  success: boolean;
+  data: GenericStatsTypeItem[];
+}
+
+export interface GenericStatsAggregateItem {
+  subjectId: string;
+  subjectName: string;
+  callCount: number;
+  questionCount: number;
+  uniqueUserCount: number;
+}
+
+export interface GenericStatsAggregateResponse {
+  success: boolean;
+  data: {
+    type: string;
+    summary: {
+      totalKols: number;
+      totalCallCount: number;
+      totalQuestionCount: number;
+      totalUniqueUserCount: number;
+    };
+    items: GenericStatsAggregateItem[];
+  };
+}
+
+export interface GenericStatEventItem {
+  id: number;
+  type: string;
+  source: string;
+  action: string;
+  subjectType: string | null;
+  subjectId: string | null;
+  subjectName: string | null;
+  actorType: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  eventAt: string;
+  countValue: number;
+  numericValue: string | number | null;
+  dimensions?: Record<string, unknown> | null;
+  metrics?: Record<string, unknown> | null;
+  meta?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GenericStatsEventsResponse {
+  success: boolean;
+  data: {
+    items: GenericStatEventItem[];
+    pagination: {
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+  };
+}
+
+export interface AuditLogItem {
+  id: number;
+  createdAt: string;
+  email: string | null;
+  action: string | null;
+  method: string | null;
+  route: string | null;
+  success: boolean;
+  message: string | null;
+  ip: string | null;
+}
+
+export interface AuditLogsResponse {
+  success: boolean;
+  data: AuditLogItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
