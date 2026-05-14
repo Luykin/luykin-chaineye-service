@@ -31,7 +31,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         token: {
           colorPrimary: "#2563eb",
           borderRadius: 10,
-          colorBgLayout: "#f3f6fb",
+          colorBgLayout: "#f5f8fc",
           colorTextBase: "#1f2937",
           fontSize: 14,
         },
