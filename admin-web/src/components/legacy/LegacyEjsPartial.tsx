@@ -34,6 +34,16 @@ function ensureStylesheet(href: string) {
   document.head.appendChild(link);
 }
 
+function attachInlineStyles(styleNodes: HTMLStyleElement[], tabId: string) {
+  return styleNodes.map((style, index) => {
+    const promotedStyle = document.createElement("style");
+    promotedStyle.textContent = style.textContent || "";
+    promotedStyle.setAttribute("data-legacy-partial-style", `${tabId}:${index}`);
+    document.head.appendChild(promotedStyle);
+    return () => promotedStyle.remove();
+  });
+}
+
 export function LegacyEjsPartial({ html, tabId, initialize }: LegacyEjsPartialProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -49,6 +59,10 @@ export function LegacyEjsPartial({ html, tabId, initialize }: LegacyEjsPartialPr
       if (href) ensureStylesheet(href);
     });
 
+    const styleCleanups = attachInlineStyles(
+      Array.from(host.querySelectorAll<HTMLStyleElement>("style")),
+      tabId
+    );
     const scriptNodes = Array.from(host.querySelectorAll<HTMLScriptElement>("script"));
 
     void (async () => {
@@ -77,6 +91,7 @@ export function LegacyEjsPartial({ html, tabId, initialize }: LegacyEjsPartialPr
 
     return () => {
       disposed = true;
+      styleCleanups.forEach((cleanup) => cleanup());
       host.innerHTML = "";
     };
   }, [html, initialize, tabId]);
