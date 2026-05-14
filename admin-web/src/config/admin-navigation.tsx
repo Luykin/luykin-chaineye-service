@@ -38,6 +38,7 @@ export interface AdminNavItem {
 }
 
 export const adminNavItems: AdminNavItem[] = [
+  { key: "/admin-react/overview", icon: <BarChartOutlined />, label: "数据概览", permission: "overview", group: "main" },
   { key: "/admin-react/dau-details", icon: <FireOutlined />, label: "日活详情", permission: "dau-details", group: "main", implemented: true },
   { key: "/admin-react/online-users", icon: <TeamOutlined />, label: "在线用户", permission: "online-users", group: "main", implemented: true },
   { key: "/admin-react/cohorts", icon: <BarChartOutlined />, label: "留存分析", permission: "cohorts", group: "main" },

@@ -12,6 +12,7 @@ import {
 } from "@ant-design/icons";
 import {
   Button,
+  Collapse,
   Divider,
   Dropdown,
   Drawer,
@@ -31,7 +32,7 @@ import {
   message,
 } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
 import { buildApiUrl } from "@/services/apiClient";
 import { adminMainNavItems, adminShortcutNavItems } from "@/config/admin-navigation";
@@ -40,6 +41,7 @@ const { Header, Sider, Content } = Layout;
 const ADMIN_HOME_PATH = "/admin-react/dau-details";
 const ADMIN_TITLE = "数据统计面板";
 const { useBreakpoint } = Grid;
+const NO_PERMISSION_COLLAPSED_STORAGE_KEY = "admin_sidebar_no_permission_collapsed";
 
 export function AdminLayout() {
   const location = useLocation();
@@ -52,6 +54,10 @@ export function AdminLayout() {
   const [messageApi, contextHolder] = message.useMessage();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [webauthnModalOpen, setWebauthnModalOpen] = useState(false);
+  const [noPermissionCollapsed, setNoPermissionCollapsed] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem(NO_PERMISSION_COLLAPSED_STORAGE_KEY) !== "false";
+  });
   const [sendingCode, setSendingCode] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [loadingCredentials, setLoadingCredentials] = useState(false);
@@ -62,23 +68,61 @@ export function AdminLayout() {
   const [passwordForm] = Form.useForm();
   const [webauthnForm] = Form.useForm();
 
-  const items = useMemo(
+  const permittedNavItems = useMemo(
+    () => adminMainNavItems.filter((item) => hasPermission(item.permission)),
+    [hasPermission]
+  );
+
+  const noPermissionNavItems = useMemo(
+    () => adminMainNavItems.filter((item) => !hasPermission(item.permission)),
+    [hasPermission]
+  );
+
+  const permittedMenuItems = useMemo(
     () =>
-      adminMainNavItems.map(({ key, icon, label, permission }) => ({
+      permittedNavItems.map(({ key, icon, label }) => ({
+        key,
+        icon,
+        label,
+      })),
+    [permittedNavItems]
+  );
+
+  const noPermissionMenuItems = useMemo(
+    () =>
+      noPermissionNavItems.map(({ key, icon, label }) => ({
         key,
         icon,
         label: (
-          <Space size={8}>
-            <span>{label}</span>
-            {permission && !hasPermission(permission) ? (
-              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                无权限
-              </Typography.Text>
-            ) : null}
-          </Space>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              minWidth: 0,
+            }}
+          >
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+            <span
+              style={{
+                marginLeft: "auto",
+                fontSize: 10,
+                lineHeight: 1.2,
+                color: "#ef4444",
+                background: "#fee2e2",
+                borderRadius: 4,
+                padding: "1px 6px",
+                fontWeight: 500,
+                flex: "0 0 auto",
+              }}
+            >
+              无权限
+            </span>
+          </div>
         ),
       })),
-    [hasPermission]
+    [noPermissionNavItems]
   );
 
   const shortcutItems = useMemo(
@@ -106,6 +150,14 @@ export function AdminLayout() {
       })),
     []
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      NO_PERMISSION_COLLAPSED_STORAGE_KEY,
+      noPermissionCollapsed ? "true" : "false"
+    );
+  }, [noPermissionCollapsed]);
 
   const openLoginPage = () => {
     const loginUrl = new URL(buildApiUrl("/admin/login"), window.location.origin);
@@ -352,14 +404,106 @@ export function AdminLayout() {
       >
         <Menu
           mode="inline"
+          inlineCollapsed={!isMobile && collapsed}
           selectedKeys={[location.pathname]}
-          items={items}
+          items={permittedMenuItems}
           onClick={({ key }) => {
             navigate(key);
             if (isMobile) setMobileMenuOpen(false);
           }}
           style={{ borderInlineEnd: "none", paddingTop: 8 }}
         />
+        {noPermissionMenuItems.length > 0 ? (
+          <>
+            <Divider style={{ margin: "8px 16px" }} />
+            <div style={{ padding: collapsed ? "0 8px" : "0 12px" }}>
+              {collapsed ? (
+                <Tooltip
+                  placement="right"
+                  title={`无权限功能 ${noPermissionMenuItems.length} 项，展开侧边栏查看`}
+                >
+                  <Button
+                    type="text"
+                    onClick={() => setCollapsed(false)}
+                    aria-label="展开查看无权限功能"
+                    style={{
+                      width: "100%",
+                      height: 40,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: 10,
+                      color: "#94a3b8",
+                      background: "#f8fafc",
+                      border: "1px dashed #e2e8f0",
+                    }}
+                  >
+                    <LockOutlined style={{ fontSize: 16 }} />
+                  </Button>
+                </Tooltip>
+              ) : (
+                <Collapse
+                  ghost
+                  size="small"
+                  activeKey={noPermissionCollapsed ? [] : ["no-permission"]}
+                  onChange={(keys) => {
+                    const expanded = Array.isArray(keys)
+                      ? keys.includes("no-permission")
+                      : keys === "no-permission";
+                    setNoPermissionCollapsed(!expanded);
+                  }}
+                  items={[
+                    {
+                      key: "no-permission",
+                      label: (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            color: "#64748b",
+                            fontSize: 13,
+                            fontWeight: 500,
+                          }}
+                        >
+                          <span>无权限功能</span>
+                          <span style={{ color: "#94a3b8", fontSize: 11 }}>
+                            ({noPermissionMenuItems.length})
+                          </span>
+                        </div>
+                      ),
+                      children: (
+                        <Menu
+                          mode="inline"
+                          selectable={false}
+                          items={noPermissionMenuItems}
+                          onClick={() => {
+                            messageApi.warning("当前账号暂无此功能权限");
+                          }}
+                          rootClassName="admin-no-permission-menu"
+                          style={{
+                            borderInlineEnd: "none",
+                            background: "transparent",
+                          }}
+                        />
+                      ),
+                      styles: {
+                        header: {
+                          padding: "6px 8px",
+                          borderRadius: 10,
+                          color: "#64748b",
+                        },
+                        body: {
+                          padding: 0,
+                        },
+                      },
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          </>
+        ) : null}
         <Divider style={{ margin: "8px 16px" }} />
         <div style={{ padding: collapsed ? "0 8px 12px" : "0 12px 12px" }}>
           {!collapsed ? (
@@ -372,6 +516,7 @@ export function AdminLayout() {
           ) : null}
           <Menu
             mode="inline"
+            inlineCollapsed={!isMobile && collapsed}
             selectable={false}
             items={shortcutItems}
             style={{ borderInlineEnd: "none" }}

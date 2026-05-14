@@ -25,3 +25,18 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+.admin-no-permission-menu .ant-menu-item {
+  opacity: 0.58;
+  transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.admin-no-permission-menu .ant-menu-item:hover {
+  opacity: 0.9;
+  color: #b91c1c !important;
+  background: #fef2f2 !important;
+}
+
+.admin-no-permission-menu .ant-menu-item .ant-menu-item-icon {
+  color: #94a3b8;
+}
