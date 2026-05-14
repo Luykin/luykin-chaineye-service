@@ -39,7 +39,8 @@ import { buildApiUrl } from "@/services/apiClient";
 import { adminMainNavItems, adminShortcutNavItems, type AdminNavItem } from "@/config/admin-navigation";
 
 const { Header, Content } = Layout;
-const ADMIN_HOME_PATH = "/admin-react/dau-details";
+const ADMIN_HOME_PATH = "/admin-react/overview";
+const ADMIN_LOGIN_PATH = "/admin-react/login";
 const ADMIN_TITLE = "数据统计面板";
 const { useBreakpoint } = Grid;
 
@@ -132,12 +133,18 @@ export function AdminLayout() {
             children: adminShortcutNavItems.map((item) => ({
               key: item.key,
               icon: item.icon,
-              label: (
-                <a href={item.href} target="_blank" rel="noreferrer" className="admin-top-nav-external-link">
-                  <span>{item.label}</span>
-                  <ExportOutlined />
-                </a>
-              ),
+              label:
+                item.action === "supabase" ? (
+                  <span className="admin-top-nav-external-link" role="button">
+                    <span>{item.label}</span>
+                    <ExportOutlined />
+                  </span>
+                ) : (
+                  <a href={item.href} target="_blank" rel="noreferrer" className="admin-top-nav-external-link">
+                    <span>{item.label}</span>
+                    <ExportOutlined />
+                  </a>
+                ),
             })),
           },
         ]
@@ -168,16 +175,48 @@ export function AdminLayout() {
       messageApi.warning("当前账号暂无此功能权限");
       return;
     }
+    if (itemKey === "shortcut-supabase") {
+      void openSupabase();
+      return;
+    }
     if (itemKey.startsWith("/admin-react/")) {
       navigate(itemKey);
     }
   };
 
   const openLoginPage = () => {
-    const loginUrl = new URL(buildApiUrl("/admin/login"), window.location.origin);
+    const loginUrl = new URL(ADMIN_LOGIN_PATH, window.location.origin);
     loginUrl.searchParams.set("next", ADMIN_HOME_PATH);
     window.location.href = loginUrl.toString();
   };
+
+  const openSupabase = async () => {
+    try {
+      const response = await fetch(buildApiUrl("/admin/supabase/link-token"), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      });
+      const data = await response.json().catch(() => ({ success: false, error: "生成票据失败" }));
+
+      if (response.status === 403 && data?.error === "需要先录入生物识别") {
+        messageApi.warning('请先在「生物识别」中录入指纹 / Face ID，再使用 Supabase 入口。');
+        return;
+      }
+
+      if (!response.ok || !data?.success || !data?.url) {
+        throw new Error(data?.error || "生成票据失败");
+      }
+
+      window.open(data.url, "_blank", "noopener");
+    } catch (error) {
+      messageApi.error(`打开失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
 
   const handleLogout = async () => {
     await fetch(buildApiUrl("/admin/logout"), {

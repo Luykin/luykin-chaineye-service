@@ -1,0 +1,297 @@
+.admin-login-react-page {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 32px 20px;
+  background: #f5f8fc;
+  color: #102033;
+}
+
+.admin-login-bg,
+.admin-login-bg > span {
+  position: fixed;
+  pointer-events: none;
+}
+
+.admin-login-bg {
+  inset: 0;
+  overflow: hidden;
+}
+
+.admin-login-orb {
+  border-radius: 999px;
+  filter: blur(72px);
+  opacity: 0.46;
+  animation: adminLoginFloat 12s ease-in-out infinite;
+}
+
+.admin-login-orb--blue {
+  width: 520px;
+  height: 520px;
+  top: -180px;
+  right: -120px;
+  background: #bfdbfe;
+}
+
+.admin-login-orb--green {
+  width: 460px;
+  height: 460px;
+  left: -150px;
+  bottom: -120px;
+  background: #bbf7d0;
+  animation-delay: -4s;
+}
+
+.admin-login-orb--violet {
+  width: 360px;
+  height: 360px;
+  left: 48%;
+  top: 50%;
+  background: #ddd6fe;
+  opacity: 0.28;
+  animation-delay: -7s;
+}
+
+.admin-login-grid {
+  inset: -20%;
+  background-image:
+    linear-gradient(rgba(37, 99, 235, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.08) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 72%);
+  transform: rotate(-8deg);
+  animation: adminLoginGrid 22s linear infinite;
+}
+
+.admin-login-scanline {
+  left: -10%;
+  right: -10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.4), transparent);
+  opacity: 0.42;
+  animation: adminLoginScan 8s ease-in-out infinite;
+}
+
+.admin-login-scanline--one {
+  top: 28%;
+}
+
+.admin-login-scanline--two {
+  top: 68%;
+  animation-delay: -3.6s;
+}
+
+.admin-login-shell {
+  position: relative;
+  z-index: 1;
+  width: min(960px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 390px;
+  gap: 28px;
+  align-items: stretch;
+}
+
+.admin-login-brand-panel,
+.admin-login-card {
+  border: 1px solid rgba(203, 213, 225, 0.76);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(16px);
+}
+
+.admin-login-brand-panel {
+  min-height: 450px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 34px;
+  overflow: hidden;
+}
+
+.admin-login-brand-panel::before {
+  content: "";
+  position: absolute;
+  inset: auto 42px 42px auto;
+  width: 210px;
+  height: 210px;
+  border: 1px dashed rgba(37, 99, 235, 0.22);
+  border-radius: 999px;
+  animation: adminLoginSpin 24s linear infinite;
+}
+
+.admin-login-brand-mark {
+  width: 66px;
+  height: 66px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 22px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.13);
+}
+
+.admin-login-brand-mark .ant-image-img {
+  border-radius: 14px;
+}
+
+.admin-login-brand-title.ant-typography {
+  margin: 0 0 10px;
+  color: #0f172a;
+  font-size: clamp(34px, 5vw, 56px);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.admin-login-brand-copy.ant-typography {
+  max-width: 430px;
+  margin: 0;
+  color: #64748b;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.admin-login-card {
+  padding: 34px;
+}
+
+.admin-login-card-head {
+  margin-bottom: 24px;
+}
+
+.admin-login-kicker.ant-typography {
+  display: block;
+  margin-bottom: 8px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.admin-login-title.ant-typography {
+  margin: 0 0 4px;
+  color: #0f172a;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.admin-login-subtitle.ant-typography {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.admin-login-error.ant-alert {
+  margin-bottom: 18px;
+  border-radius: 12px;
+}
+
+.admin-login-card .ant-form-item {
+  margin-bottom: 18px;
+}
+
+.admin-login-card .ant-form-item-label {
+  padding-bottom: 6px;
+}
+
+.admin-login-card .ant-form-item-label > label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-login-card .ant-input-affix-wrapper {
+  border-color: #dbe3ee;
+  border-radius: 13px;
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.admin-login-card .ant-input-affix-wrapper:hover {
+  border-color: #bfdbfe;
+}
+
+.admin-login-card .ant-input-affix-wrapper-focused {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.admin-login-submit.ant-btn {
+  height: 46px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 13px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #2563eb, #3b82f6 52%, #4f46e5);
+  box-shadow: 0 12px 22px rgba(37, 99, 235, 0.26);
+}
+
+.admin-login-submit.ant-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.32);
+}
+
+@keyframes adminLoginFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(18px, -16px, 0) scale(1.06); }
+}
+
+@keyframes adminLoginGrid {
+  from { background-position: 0 0; }
+  to { background-position: 84px 42px; }
+}
+
+@keyframes adminLoginScan {
+  0%, 100% { transform: translateX(-16%); opacity: 0.18; }
+  50% { transform: translateX(16%); opacity: 0.58; }
+}
+
+@keyframes adminLoginSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 860px) {
+  .admin-login-shell {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .admin-login-brand-panel {
+    min-height: auto;
+    padding: 26px;
+  }
+
+  .admin-login-brand-panel::before {
+    display: none;
+  }
+
+  .admin-login-card {
+    padding: 26px;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-login-react-page {
+    padding: 18px;
+  }
+
+  .admin-login-brand-panel {
+    display: none;
+  }
+
+  .admin-login-card {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-login-bg *,
+  .admin-login-brand-panel::before,
+  .admin-login-submit.ant-btn {
+    animation: none !important;
+    transition: none !important;
+  }
+}

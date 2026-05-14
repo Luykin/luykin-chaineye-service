@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AdminLayout } from "@/layouts/AdminLayout";
+import { LoginPage } from "@/pages/LoginPage";
 import { GenericStatsPage } from "@/pages/GenericStatsPage";
 import { AuditLogsPage } from "@/pages/AuditLogsPage";
 import { UrlStatsPage } from "@/pages/UrlStatsPage";
@@ -74,6 +75,10 @@ const generatedAdminRoutes = adminMainNavItems.map((item) => {
 });
 
 export const router = createBrowserRouter([
+  {
+    path: "/admin-react/login",
+    element: <LoginPage />,
+  },
   {
     path: "/",
     element: <Navigate to="/admin-react/overview" replace />,

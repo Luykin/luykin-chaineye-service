@@ -4,10 +4,11 @@ import type { AdminSessionErrorResponse, AdminSessionUser } from "@/types/auth";
 import { fetchAdminSession } from "@/services/auth";
 import { ApiError, buildApiUrl } from "@/services/apiClient";
 
-const ADMIN_HOME_PATH = "/admin-react/dau-details";
+const ADMIN_HOME_PATH = "/admin-react/overview";
+const ADMIN_LOGIN_PATH = "/admin-react/login";
 
 function buildLoginUrl() {
-  const loginUrl = new URL(buildApiUrl("/admin/login"), window.location.origin);
+  const loginUrl = new URL(ADMIN_LOGIN_PATH, window.location.origin);
   loginUrl.searchParams.set("next", ADMIN_HOME_PATH);
   return loginUrl.toString();
 }
@@ -22,6 +23,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const isLoginRoute = window.location.pathname === ADMIN_LOGIN_PATH;
   const [user, setUser] = useState<AdminSessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,8 +58,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    if (isLoginRoute) {
+      setLoading(false);
+      return;
+    }
     void load();
-  }, []);
+  }, [isLoginRoute]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -103,7 +103,7 @@ function requirePermission(perm) {
 }
 
 function renderLoginRedirect() {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><script>location.replace('/admin/login')</script><style>body{background:#f8fafc;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,-apple-system,sans-serif;color:#64748b}</style></head><body>会话已过期，正在跳转...</body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><script>location.replace('/admin-react/login')</script><style>body{background:#f8fafc;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,-apple-system,sans-serif;color:#64748b}</style></head><body>会话已过期，正在跳转...</body></html>`;
 }
 
 module.exports = { adminAuth, requireRole, requirePermission, setSessionCookie };
