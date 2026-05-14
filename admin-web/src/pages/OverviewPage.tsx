@@ -210,7 +210,7 @@ function PeriodCard({
 }: {
   type: "weekly" | "monthly";
   label: string;
-  icon: string;
+  icon: LegacyStatsIconName;
   reviews: number;
   newUsers: number;
 }) {
@@ -218,7 +218,7 @@ function PeriodCard({
     <div className={`overview-period-card overview-period-card-${type}`}>
       <div className="overview-period-card-header">
         <div className="overview-period-icon">
-          <Icon name={icon} />
+          <LegacyStatsIcon name={icon} />
         </div>
         <span className="overview-period-label">{label}</span>
       </div>

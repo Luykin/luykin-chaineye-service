@@ -1,13 +1,9 @@
 import { useMemo, useState } from "react";
 import {
   Button,
-  Card,
-  Col,
   Empty,
   Input,
-  Row,
   Space,
-  Statistic,
   Table,
   Typography,
 } from "antd";
@@ -16,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
+import { LegacyStatCard, LegacyStatsGrid } from "@/components/ui/LegacyStats";
 import { fetchOnlineUsers } from "@/services/stats";
 import type { OnlineUserItem } from "@/types/stats";
 
@@ -97,23 +94,11 @@ export function OnlineUsersPage() {
             </Button>
           }
         >
-          <Row gutter={[16, 16]}>
-            <Col xs={24} md={8}>
-              <Card>
-                <Statistic title="在线用户" value={pagination?.totalCount ?? 0} />
-              </Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card>
-                <Statistic title="当前页" value={pagination?.currentPage ?? 1} />
-              </Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card>
-                <Statistic title="总页数" value={pagination?.totalPages ?? 1} />
-              </Card>
-            </Col>
-          </Row>
+          <LegacyStatsGrid className="admin-summary-grid">
+            <LegacyStatCard minimal title="在线用户" value={pagination?.totalCount ?? 0} accent="#3b82f6" />
+            <LegacyStatCard minimal title="当前页" value={pagination?.currentPage ?? 1} accent="#8b5cf6" />
+            <LegacyStatCard minimal title="总页数" value={pagination?.totalPages ?? 1} accent="#10b981" />
+          </LegacyStatsGrid>
         </PageSection>
 
         <PageSection

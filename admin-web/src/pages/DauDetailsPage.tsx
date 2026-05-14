@@ -1,14 +1,10 @@
 import { useMemo, useState } from "react";
 import {
   Button,
-  Card,
-  Col,
   DatePicker,
   Empty,
   Input,
-  Row,
   Space,
-  Statistic,
   Table,
   Tag,
   Typography,
@@ -18,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import dayjs, { Dayjs } from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
+import { LegacyStatCard, LegacyStatsGrid } from "@/components/ui/LegacyStats";
 import { fetchDauDetails } from "@/services/stats";
 import type { DauDetailItem } from "@/types/stats";
 
@@ -97,23 +94,11 @@ export function DauDetailsPage() {
             </Space>
           }
         >
-          <Row gutter={[16, 16]}>
-            <Col xs={24} md={8}>
-              <Card>
-                <Statistic title="指纹日活总数" value={summary.totalCount} />
-              </Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card>
-                <Statistic title="去重用户数" value={summary.uniqueUsers} />
-              </Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card>
-                <Statistic title="未知用户数" value={summary.unknownUsers} />
-              </Card>
-            </Col>
-          </Row>
+          <LegacyStatsGrid className="admin-summary-grid">
+            <LegacyStatCard minimal title="指纹日活总数" value={summary.totalCount} accent="#3b82f6" />
+            <LegacyStatCard minimal title="去重用户数" value={summary.uniqueUsers} accent="#10b981" />
+            <LegacyStatCard minimal title="未知用户数" value={summary.unknownUsers} accent="#94a3b8" />
+          </LegacyStatsGrid>
         </PageSection>
 
         <PageSection

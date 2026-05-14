@@ -136,6 +136,16 @@
   gap: 16px;
 }
 
+.admin-summary-grid {
+  margin-bottom: 0;
+}
+
+.admin-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 0;
+}
+
 .legacy-stat-card {
   position: relative;
   border-radius: 12px;

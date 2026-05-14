@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Button,
-  Card,
   Col,
   DatePicker,
   Empty,
@@ -10,7 +9,6 @@ import {
   Row,
   Select,
   Space,
-  Statistic,
   Table,
   Tag,
   Tooltip,
@@ -21,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import dayjs, { Dayjs } from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
+import { LegacyStatCard, LegacyStatsGrid } from "@/components/ui/LegacyStats";
 import {
   fetchGenericStatsAggregate,
   fetchGenericStatsEvents,
@@ -355,31 +354,12 @@ export function GenericStatsPage() {
           }
         >
           {aggregateSupported && aggregateQuery.data?.data?.summary ? (
-            <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-              <Col xs={24} md={6}>
-                <Card>
-                  <Statistic title="对象数量" value={aggregateQuery.data.data.summary.totalKols} />
-                </Card>
-              </Col>
-              <Col xs={24} md={6}>
-                <Card>
-                  <Statistic title="事件条数" value={aggregateQuery.data.data.summary.totalCallCount} />
-                </Card>
-              </Col>
-              <Col xs={24} md={6}>
-                <Card>
-                  <Statistic title="累计计数" value={aggregateQuery.data.data.summary.totalQuestionCount} />
-                </Card>
-              </Col>
-              <Col xs={24} md={6}>
-                <Card>
-                  <Statistic
-                    title="去重触发者数"
-                    value={aggregateQuery.data.data.summary.totalUniqueUserCount}
-                  />
-                </Card>
-              </Col>
-            </Row>
+            <LegacyStatsGrid variant="total" className="admin-summary-grid">
+              <LegacyStatCard minimal title="对象数量" value={aggregateQuery.data.data.summary.totalKols} accent="#3b82f6" />
+              <LegacyStatCard minimal title="事件条数" value={aggregateQuery.data.data.summary.totalCallCount} accent="#10b981" />
+              <LegacyStatCard minimal title="累计计数" value={aggregateQuery.data.data.summary.totalQuestionCount} accent="#8b5cf6" />
+              <LegacyStatCard minimal title="去重触发者数" value={aggregateQuery.data.data.summary.totalUniqueUserCount} accent="#f59e0b" />
+            </LegacyStatsGrid>
           ) : null}
 
           {!queryParams.type ? (

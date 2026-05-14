@@ -1,15 +1,11 @@
 import { useMemo, useState } from "react";
 import {
   Button,
-  Card,
-  Col,
   DatePicker,
   Empty,
   Input,
-  Row,
   Select,
   Space,
-  Statistic,
   Table,
   Typography,
 } from "antd";
@@ -18,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
+import { LegacyStatCard, LegacyStatsGrid } from "@/components/ui/LegacyStats";
 import { fetchNotes } from "@/services/stats";
 import type { NoteItem } from "@/types/stats";
 
@@ -138,17 +135,11 @@ export function NotesPage() {
             </Space>
           }
         >
-          <Row gutter={[16, 16]}>
-            <Col xs={24} md={8}>
-              <Card><Statistic title="总备注数" value={query.data?.data.stats.totalNotes || 0} /></Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card><Statistic title="备注用户数" value={query.data?.data.stats.uniqueUsers || 0} /></Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card><Statistic title="被备注账号数" value={query.data?.data.stats.uniqueAccounts || 0} /></Card>
-            </Col>
-          </Row>
+          <LegacyStatsGrid className="admin-summary-grid">
+            <LegacyStatCard minimal title="总备注数" value={query.data?.data.stats.totalNotes || 0} accent="#3b82f6" />
+            <LegacyStatCard minimal title="备注用户数" value={query.data?.data.stats.uniqueUsers || 0} accent="#10b981" />
+            <LegacyStatCard minimal title="被备注账号数" value={query.data?.data.stats.uniqueAccounts || 0} accent="#8b5cf6" />
+          </LegacyStatsGrid>
         </PageSection>
 
         <PageSection
