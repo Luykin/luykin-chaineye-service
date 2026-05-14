@@ -1,25 +1,22 @@
 import {
-  AuditOutlined,
-  BarChartOutlined,
   CaretLeftOutlined,
   CaretRightOutlined,
-  ClockCircleOutlined,
-  FireOutlined,
   HomeOutlined,
-  LinkOutlined,
   LockOutlined,
   LogoutOutlined,
+  MenuOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
-  TeamOutlined,
-  AppstoreOutlined,
   UserOutlined,
+  ExportOutlined,
 } from "@ant-design/icons";
 import {
-  Avatar,
   Button,
+  Divider,
   Dropdown,
+  Drawer,
   Form,
+  Grid,
   Image,
   Input,
   Layout,
@@ -34,69 +31,24 @@ import {
   message,
 } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
 import { buildApiUrl } from "@/services/apiClient";
+import { adminMainNavItems, adminShortcutNavItems } from "@/config/admin-navigation";
 
 const { Header, Sider, Content } = Layout;
 const ADMIN_HOME_PATH = "/admin-react/dau-details";
 const ADMIN_TITLE = "数据统计面板";
-
-const navItems = [
-  {
-    key: "/admin-react/dau-details",
-    icon: <FireOutlined />,
-    label: "日活详情",
-    permission: "dau-details",
-  },
-  {
-    key: "/admin-react/online-users",
-    icon: <TeamOutlined />,
-    label: "在线用户",
-    permission: "online-users",
-  },
-  {
-    key: "/admin-react/generic-stats",
-    icon: <AppstoreOutlined />,
-    label: "通用统计",
-    permission: "generic-stats",
-  },
-  {
-    key: "/admin-react/admin-audit-logs",
-    icon: <AuditOutlined />,
-    label: "操作记录",
-    permission: "audit-logs:read",
-  },
-  {
-    key: "/admin-react/url-stats",
-    icon: <LinkOutlined />,
-    label: "接口统计",
-    permission: "url-stats",
-  },
-  {
-    key: "/admin-react/version-stats",
-    icon: <BarChartOutlined />,
-    label: "版本统计",
-    permission: "version-stats",
-  },
-];
+const { useBreakpoint } = Grid;
 
 export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, hasPermission, refresh } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.lg;
   const [collapsed, setCollapsed] = useState(false);
-  const [currentTime, setCurrentTime] = useState(() =>
-    new Date().toLocaleString("zh-CN", {
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }).replace(/-/g, "/")
-  );
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [webauthnModalOpen, setWebauthnModalOpen] = useState(false);
@@ -112,31 +64,48 @@ export function AdminLayout() {
 
   const items = useMemo(
     () =>
-      navItems
-        .filter((item) => hasPermission(item.permission))
-        .map(({ key, icon, label }) => ({ key, icon, label })),
+      adminMainNavItems.map(({ key, icon, label, permission }) => ({
+        key,
+        icon,
+        label: (
+          <Space size={8}>
+            <span>{label}</span>
+            {permission && !hasPermission(permission) ? (
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                无权限
+              </Typography.Text>
+            ) : null}
+          </Space>
+        ),
+      })),
     [hasPermission]
   );
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setCurrentTime(
-        new Date()
-          .toLocaleString("zh-CN", {
-            hour12: false,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          })
-          .replace(/-/g, "/")
-      );
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, []);
+  const shortcutItems = useMemo(
+    () =>
+      adminShortcutNavItems.map((item) => ({
+        key: item.key,
+        icon: item.icon,
+        label: (
+          <a
+            href={item.href}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              width: "100%",
+              color: "inherit",
+            }}
+          >
+            <span>{item.label}</span>
+            <ExportOutlined style={{ fontSize: 12, color: "#94a3b8" }} />
+          </a>
+        ),
+      })),
+    []
+  );
 
   const openLoginPage = () => {
     const loginUrl = new URL(buildApiUrl("/admin/login"), window.location.origin);
@@ -284,93 +253,203 @@ export function AdminLayout() {
     }
   };
 
-  return (
-    <Layout style={{ minHeight: "100vh" }}>
-      {contextHolder}
-      <Sider
-        width={248}
-        theme="light"
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        collapsedWidth={80}
-        trigger={null}
-        style={{ borderRight: "1px solid #e5e7eb" }}
+  const sidebarContent = (
+    <div
+      style={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+      }}
+    >
+      <div
+        style={{
+          minHeight: 73,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: collapsed ? "20px 12px" : "20px",
+          borderBottom: "1px solid #f1f5f9",
+          color: "#1e293b",
+          gap: 8,
+        }}
       >
-        <div
-          style={{
-            height: 64,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: collapsed ? "0 12px" : "0 16px 0 20px",
-            borderBottom: "1px solid #e5e7eb",
-            color: "#111827",
-            gap: 8,
-          }}
-        >
-          <Space size={collapsed ? 0 : 12} style={{ minWidth: 0, flex: 1 }}>
-            <Image
-              src={buildApiUrl("/admin/logo")}
-              alt="XHunt Logo"
-              preview={false}
-              width={collapsed ? 28 : 36}
-              height={collapsed ? 28 : 36}
-              style={{ borderRadius: 10, flex: "0 0 auto" }}
-            />
-            {!collapsed ? (
-              <Space direction="vertical" size={0} style={{ minWidth: 0 }}>
-                <Typography.Text strong ellipsis style={{ fontSize: 18, margin: 0 }}>
-                  XHunt
-                </Typography.Text>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  管理后台
-                </Typography.Text>
-              </Space>
-            ) : null}
-          </Space>
-          <Button
-            type="text"
-            size="small"
-            icon={collapsed ? <CaretRightOutlined /> : <CaretLeftOutlined />}
-            onClick={() => setCollapsed((value) => !value)}
-            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+        <Space size={collapsed ? 0 : 12} style={{ minWidth: 0, flex: 1 }}>
+          <Image
+            src={buildApiUrl("/admin/logo")}
+            alt="XHunt Logo"
+            preview={false}
+            width={32}
+            height={32}
+            style={{
+              borderRadius: 8,
+              flex: "0 0 auto",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+            }}
           />
-        </div>
+          {!collapsed ? (
+            <Space
+              direction="vertical"
+              size={0}
+              align="start"
+              style={{ minWidth: 0, alignItems: "flex-start" }}
+            >
+              <Typography.Text
+                strong
+                ellipsis
+                style={{
+                  fontSize: 21,
+                  lineHeight: 1.1,
+                  letterSpacing: "-0.02em",
+                  margin: 0,
+                  color: "#1e293b",
+                }}
+              >
+                XHunt
+              </Typography.Text>
+              <Typography.Text
+                type="secondary"
+                style={{
+                  fontSize: 11,
+                  color: "#64748b",
+                  marginTop: 2,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                管理后台
+              </Typography.Text>
+            </Space>
+          ) : null}
+        </Space>
+        <Button
+          type="text"
+          size="small"
+          icon={collapsed ? <CaretRightOutlined /> : <CaretLeftOutlined />}
+          onClick={() => setCollapsed((value) => !value)}
+          aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+          disabled={isMobile}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            border: "1px solid #e2e8f0",
+            background: "#ffffff",
+            color: "#94a3b8",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+            flex: "0 0 auto",
+          }}
+        />
+      </div>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          paddingBottom: 12,
+        }}
+      >
         <Menu
           mode="inline"
           selectedKeys={[location.pathname]}
           items={items}
-          onClick={({ key }) => navigate(key)}
-          style={{ borderInlineEnd: "none", paddingTop: 12 }}
+          onClick={({ key }) => {
+            navigate(key);
+            if (isMobile) setMobileMenuOpen(false);
+          }}
+          style={{ borderInlineEnd: "none", paddingTop: 8 }}
         />
-      </Sider>
+        <Divider style={{ margin: "8px 16px" }} />
+        <div style={{ padding: collapsed ? "0 8px 12px" : "0 12px 12px" }}>
+          {!collapsed ? (
+            <Typography.Text
+              type="secondary"
+              style={{ display: "block", padding: "0 8px 8px", fontSize: 12 }}
+            >
+              快捷入口
+            </Typography.Text>
+          ) : null}
+          <Menu
+            mode="inline"
+            selectable={false}
+            items={shortcutItems}
+            style={{ borderInlineEnd: "none" }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <Layout style={{ minHeight: "100vh" }}>
+      {contextHolder}
+      {!isMobile ? (
+        <Sider
+          width={240}
+          theme="light"
+          collapsible
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
+          collapsedWidth={80}
+          trigger={null}
+          style={{
+            height: "100vh",
+            borderRight: "1px solid #e2e8f0",
+            boxShadow: collapsed
+              ? "4px 0 20px rgba(0,0,0,0.06)"
+              : "4px 0 24px rgba(0,0,0,0.08)",
+            overflow: "hidden",
+          }}
+        >
+          {sidebarContent}
+        </Sider>
+      ) : (
+        <Drawer
+          placement="left"
+          open={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+          closable={false}
+          bodyStyle={{ padding: 0 }}
+          width={240}
+        >
+          {sidebarContent}
+        </Drawer>
+      )}
 
       <Layout>
         <Header
           style={{
-            background: "rgba(255,255,255,0.88)",
-            backdropFilter: "blur(12px)",
-            borderBottom: "1px solid #e5e7eb",
+            background: "#fff",
+            borderBottom: "1px solid #e2e8f0",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "0 24px",
-            gap: 20,
-            height: 74,
-            lineHeight: "74px",
+            padding: "12px 24px",
+            gap: 16,
+            height: "auto",
+            lineHeight: 1,
           }}
         >
-          <Space size={16} align="center" style={{ minWidth: 0, flex: 1 }}>
+          <Space size={12} style={{ minWidth: 0, flex: 1, alignItems: "center" }}>
+            {isMobile ? (
+              <Button
+                type="text"
+                icon={<MenuOutlined />}
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="打开侧边栏"
+              />
+            ) : null}
             <Typography.Title
-              level={3}
+              level={4}
               ellipsis
               style={{
                 margin: 0,
                 maxWidth: "100%",
-                fontSize: 24,
-                lineHeight: 1.2,
-                letterSpacing: "-0.02em",
+                fontSize: 18,
+                fontWeight: 600,
+                color: "#1e293b",
+                letterSpacing: "-0.01em",
               }}
             >
               {ADMIN_TITLE}
@@ -379,59 +458,36 @@ export function AdminLayout() {
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 10,
-                padding: "8px 18px",
-                border: "1px solid #bbf7d0",
-                borderRadius: 999,
+                gap: 6,
+                padding: "4px 10px",
                 background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: 20,
                 flex: "0 0 auto",
               }}
             >
               <span
                 style={{
-                  width: 10,
-                  height: 10,
+                  width: 6,
+                  height: 6,
+                  background: "#22c55e",
                   borderRadius: "50%",
-                  background: "#4ade80",
-                  boxShadow: "0 0 0 4px rgba(74, 222, 128, 0.18)",
                 }}
               />
               <Typography.Text
                 style={{
+                  fontSize: 11,
+                  fontWeight: 600,
                   color: "#16a34a",
-                  fontWeight: 700,
-                  fontSize: 14,
                   margin: 0,
-                  lineHeight: 1,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.03em",
                 }}
               >
                 实时监控中
               </Typography.Text>
             </div>
           </Space>
-
-          <div
-            style={{
-              flex: "0 0 auto",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 12,
-              padding: "10px 18px",
-              border: "1px solid #dbe4f0",
-              borderRadius: 20,
-              background: "#fff",
-              color: "#475569",
-              fontWeight: 700,
-              fontSize: 15,
-              lineHeight: 1,
-              minWidth: 300,
-              justifyContent: "center",
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
-            }}
-          >
-            <ClockCircleOutlined style={{ color: "#94a3b8", fontSize: 18 }} />
-            <span style={{ letterSpacing: "0.01em" }}>{currentTime}</span>
-          </div>
 
           <Dropdown
             trigger={["hover", "click"]}
@@ -506,33 +562,36 @@ export function AdminLayout() {
               <Button
                 type="text"
                 style={{
-                  maxWidth: 240,
-                  height: 48,
-                  padding: "0 14px",
-                  borderRadius: 18,
-                  border: "1px solid #dbe4f0",
-                  background: "#fff",
-                  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+                  maxWidth: isMobile ? 180 : 240,
+                  height: 38,
+                  padding: "6px",
+                  borderRadius: 12,
+                  border: "1px solid #e2e8f0",
+                  background: "#f8fafc",
                 }}
               >
                 <Space size={10}>
-                  <Avatar
-                    size={32}
-                    icon={<UserOutlined />}
-                    style={{ background: "#e5e7eb", color: "#64748b" }}
-                  />
+                  <UserOutlined style={{ color: "#64748b", fontSize: 16 }} />
                   <Typography.Text
                     ellipsis
                     style={{
                       maxWidth: 150,
                       margin: 0,
-                      fontSize: 16,
-                      fontWeight: 600,
+                      fontSize: 13,
+                      fontWeight: 500,
                       color: "#334155",
+                      letterSpacing: "0.01em",
                     }}
                   >
                     {user?.email || "管理员"}
                   </Typography.Text>
+                  <CaretRightOutlined
+                    style={{
+                      color: "#94a3b8",
+                      fontSize: 13,
+                      transform: "rotate(90deg)",
+                    }}
+                  />
                 </Space>
               </Button>
             </Tooltip>
