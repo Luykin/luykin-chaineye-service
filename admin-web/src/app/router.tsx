@@ -6,12 +6,14 @@ import { AuditLogsPage } from "@/pages/AuditLogsPage";
 import { UrlStatsPage } from "@/pages/UrlStatsPage";
 import { VersionStatsPage } from "@/pages/VersionStatsPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
+import { OverviewPage } from "@/pages/OverviewPage";
 import { DauDetailsPage } from "@/pages/DauDetailsPage";
 import { OnlineUsersPage } from "@/pages/OnlineUsersPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
 const implementedRouteElements: Record<string, ReactNode> = {
+  overview: <OverviewPage />,
   "generic-stats": <GenericStatsPage />,
   "dau-details": <DauDetailsPage />,
   "online-users": <OnlineUsersPage />,

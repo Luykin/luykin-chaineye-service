@@ -3,6 +3,53 @@ export interface DauDetailItem {
   userId: string;
 }
 
+export interface OverviewDailyActiveUserItem {
+  date: string;
+  displayDate: string;
+  activeUsers: number;
+}
+
+export interface OverviewStatsResponse {
+  success: boolean;
+  data: {
+    coreMetrics: {
+      dailyActiveUsers: { value: number };
+      dailyReviews: { value: number };
+      dailyReviewUsers: { value: number };
+      dailyNewUsers: { value: number };
+    };
+    totalMetrics: {
+      totalUsers: number;
+      totalAccounts: number;
+      totalKOLUsers: number;
+      kolBuckets?: {
+        within200k?: number;
+        within50k?: number;
+        within20k?: number;
+        within5k?: number;
+      };
+      totalPointsAwarded: number;
+      averageRating: string;
+    };
+    periodMetrics: {
+      weekly: {
+        reviews: number;
+        newUsers: number;
+      };
+      monthly: {
+        reviews: number;
+        newUsers: number;
+      };
+    };
+    todayDetails: {
+      newAccounts: number;
+      pointsAwarded: number;
+      kolReviews: number;
+    };
+    dailyActiveUsersData: OverviewDailyActiveUserItem[];
+  };
+}
+
 export interface DauDetailsResponse {
   success: boolean;
   data: {

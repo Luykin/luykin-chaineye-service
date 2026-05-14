@@ -1,6 +1,6 @@
 const express = require("express");
 const path = require("path");
-const { getFullStats, getSimpleStats } = require("../services/statsService");
+const { getFullStats } = require("../services/statsService");
 const {
   adminAuth,
   requirePermission,
@@ -16,11 +16,10 @@ const readline = require("readline");
 const { exec } = require("child_process");
 const { promisify } = require("util");
 const execAsync = promisify(exec);
-const {
-  XhuntAdminAuditLog,
-  GenericStatEvent,
-  pgInstance,
-} = require("../../models/postgres-start");
+const overviewStatsRouter = require("./stats-routes/overview");
+const genericStatsRouter = require("./stats-routes/generic-stats");
+const adminAuditRouter = require("./stats-routes/admin-audit");
+const { logAdminAction } = require("./stats-routes/shared");
 
 const router = express.Router();
 
@@ -227,35 +226,7 @@ function formatDateTime(date = new Date()) {
   });
 }
 
-function parseDateOrNull(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 // 旧版 basicAuth 和 /logout 已废弃，改为基于 adminAuth 的 JWT Cookie 方案
-
-// 管理员审计日志记录辅助函数（仅记录危险操作或登录/登出，由各路由调用）
-async function logAdminAction(req, { action, success, message }) {
-  try {
-    const admin = req.adminUser;
-    if (!admin) return;
-    await XhuntAdminAuditLog.create({
-      adminId: admin.id,
-      email: admin.email,
-      action,
-      route: req.originalUrl || req.path || "",
-      method: req.method || "",
-      ip: req.ip || "",
-      userAgent: req.headers["user-agent"] || "",
-      payload: req.method === "GET" ? null : JSON.stringify(req.body || {}),
-      success: !!success,
-      message: message || null,
-    });
-  } catch (e) {
-    // 静默失败，避免影响主流程
-  }
-}
 
 /**
  * GET /stats
@@ -323,27 +294,9 @@ router.get("/", adminAuth, async (req, res) => {
     });
   }
 });
-
-/**
- * GET /stats/json
- * 获取JSON格式的统计数据（用于API调用，也需要认证）
- */
-router.get("/json", adminAuth, async (req, res) => {
-  try {
-    const stats = await getSimpleStats();
-
-    res.json({
-      success: true,
-      data: stats,
-    });
-  } catch (error) {
-    console.error("Error fetching JSON stats:", error);
-    res.status(500).json({
-      success: false,
-      error: "获取统计数据失败",
-    });
-  }
-});
+router.use(overviewStatsRouter);
+router.use(adminAuditRouter);
+router.use(genericStatsRouter);
 
 /**
  * GET /dau-details
@@ -3685,90 +3638,6 @@ router.post("/report/send", adminAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /admin-audit/logs
- * 获取管理员操作记录（需要认证，仅 luykin 用户）
- * @query page - 页码，默认 1
- * @query limit - 每页数量，默认 50
- * @query email - 按邮箱筛选（可选）
- * @query action - 按动作筛选（可选）
- */
-router.get("/admin-audit/logs", adminAuth, async (req, res) => {
-  try {
-    // 权限检查：只有 luykin 用户可以查看管理员操作记录
-    if (!req.user || req.user.role !== "super") {
-      console.log(
-        `[管理员操作记录] ❌ 权限不足: 用户=${
-          req.user?.username || "unknown"
-        }, 角色=${req.user?.role || "unknown"}`
-      );
-      return res.status(403).json({
-        success: false,
-        error: "权限不足",
-        message: "仅 luykin 用户可以查看管理员操作记录",
-      });
-    }
-
-    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limitQuery = parseInt(req.query.limit, 10) || 50;
-    const limit = Math.min(Math.max(limitQuery, 1), 100); // 限制最大 100
-    const offset = (page - 1) * limit;
-
-    const { XhuntAdminAuditLog } = require("../../models/postgres-start");
-    const { Op } = require("sequelize");
-
-    // 构建查询条件
-    const where = {};
-    if (req.query.email && req.query.email.trim()) {
-      where.email = {
-        [Op.iLike]: `%${req.query.email.trim()}%`, // 使用 iLike 进行模糊匹配（不区分大小写）
-      };
-    }
-    if (req.query.action && req.query.action.trim()) {
-      where.action = {
-        [Op.iLike]: `%${req.query.action.trim()}%`,
-      };
-    }
-
-    // 查询数据
-    const { rows, count } = await XhuntAdminAuditLog.findAndCountAll({
-      where,
-      order: [["createdAt", "DESC"]], // 按创建时间倒序
-      offset,
-      limit,
-      attributes: [
-        "id",
-        "createdAt",
-        "email",
-        "action",
-        "method",
-        "route",
-        "success",
-        "message",
-        "ip",
-      ],
-    });
-
-    res.json({
-      success: true,
-      data: rows.map((row) => row.toJSON()),
-      pagination: {
-        page,
-        limit,
-        total: count,
-        totalPages: Math.max(Math.ceil(count / limit), 1),
-      },
-    });
-  } catch (error) {
-    console.error("[管理员操作记录] ❌ 查询失败:", error);
-    res.status(500).json({
-      success: false,
-      error: "查询失败",
-      message: error.message,
-    });
-  }
-});
-
 // ===================== VIP / 内测名单管理 =====================
 
 const { loadVipLists, notifyRefresh } = require("../constants/xhuntVip");
@@ -3938,204 +3807,5 @@ router.delete("/vip-lists/:id", adminAuth, requirePermission("vip-management"), 
     res.status(500).json({ success: false, error: "删除失败", message: error.message });
   }
 });
-
-/**
- * GET /generic-stats/types
- * 获取通用统计中已有的 type 列表
- */
-router.get(
-  "/generic-stats/types",
-  adminAuth,
-  requirePermission("generic-stats"),
-  async (req, res) => {
-    try {
-      const types = await GenericStatEvent.findAll({
-        attributes: [
-          "type",
-          [pgInstance.fn("COUNT", pgInstance.col("id")), "count"],
-          [pgInstance.fn("MAX", pgInstance.col("event_at")), "lastEventAt"],
-        ],
-        group: ["type"],
-        order: [[pgInstance.literal("count"), "DESC"], [pgInstance.literal("\"lastEventAt\""), "DESC"]],
-        raw: true,
-      });
-
-      res.json({
-        success: true,
-        data: types.map((item) => ({
-          type: item.type,
-          count: Number(item.count || 0),
-          lastEventAt: item.lastEventAt || null,
-        })),
-      });
-    } catch (error) {
-      console.error("[generic-stats/types] 获取失败:", error);
-      res.status(500).json({ success: false, error: "获取 type 列表失败" });
-    }
-  }
-);
-
-/**
- * GET /generic-stats/events
- * 通用统计原始事件列表
- */
-router.get(
-  "/generic-stats/events",
-  adminAuth,
-  requirePermission("generic-stats"),
-  async (req, res) => {
-    try {
-      const { Op } = require("sequelize");
-      const {
-        type,
-        subjectType,
-        subjectId,
-        actorId,
-        dateFrom,
-        dateTo,
-        page = 1,
-        pageSize = 20,
-      } = req.query;
-
-      const where = {};
-
-      if (type) where.type = String(type).trim();
-      if (subjectType) where.subjectType = String(subjectType).trim();
-      if (subjectId) where.subjectId = String(subjectId).trim();
-      if (actorId) where.actorId = String(actorId).trim();
-
-      const eventAtRange = {};
-      const parsedFrom = parseDateOrNull(dateFrom);
-      const parsedTo = parseDateOrNull(dateTo);
-      if (parsedFrom) eventAtRange[Op.gte] = parsedFrom;
-      if (parsedTo) eventAtRange[Op.lte] = parsedTo;
-      if (Object.keys(eventAtRange).length > 0) {
-        where.eventAt = eventAtRange;
-      }
-
-      const safePage = Math.max(1, parseInt(page, 10) || 1);
-      const safePageSize = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 20));
-
-      const result = await GenericStatEvent.findAndCountAll({
-        where,
-        order: [["eventAt", "DESC"], ["id", "DESC"]],
-        offset: (safePage - 1) * safePageSize,
-        limit: safePageSize,
-      });
-
-      res.json({
-        success: true,
-        data: {
-          items: result.rows,
-          pagination: {
-            page: safePage,
-            pageSize: safePageSize,
-            total: result.count,
-            totalPages: Math.max(1, Math.ceil(result.count / safePageSize)),
-          },
-        },
-      });
-    } catch (error) {
-      console.error("[generic-stats/events] 获取失败:", error);
-      res.status(500).json({ success: false, error: "获取统计事件失败" });
-    }
-  }
-);
-
-/**
- * GET /generic-stats/aggregate
- * 针对特定 type 返回聚合结果
- */
-router.get(
-  "/generic-stats/aggregate",
-  adminAuth,
-  requirePermission("generic-stats"),
-  async (req, res) => {
-    try {
-      const { Op } = require("sequelize");
-      const { type, dateFrom, dateTo, subjectId } = req.query;
-
-      if (!type) {
-        return res.status(400).json({ success: false, error: "type 不能为空" });
-      }
-
-      const where = { type: String(type).trim() };
-      if (subjectId) where.subjectId = String(subjectId).trim();
-
-      const eventAtRange = {};
-      const parsedFrom = parseDateOrNull(dateFrom);
-      const parsedTo = parseDateOrNull(dateTo);
-      if (parsedFrom) eventAtRange[Op.gte] = parsedFrom;
-      if (parsedTo) eventAtRange[Op.lte] = parsedTo;
-      if (Object.keys(eventAtRange).length > 0) {
-        where.eventAt = eventAtRange;
-      }
-
-      if (where.type !== "xhunt.kol_chat.chat") {
-        return res.status(400).json({
-          success: false,
-          error: "当前仅支持 xhunt.kol_chat.chat 的聚合分析",
-        });
-      }
-
-      const rows = await GenericStatEvent.findAll({
-        where,
-        attributes: [
-          "subjectId",
-          "subjectName",
-          [pgInstance.fn("COUNT", pgInstance.col("id")), "callCount"],
-          [pgInstance.fn("SUM", pgInstance.col("count_value")), "questionCount"],
-          [
-            pgInstance.literal('COUNT(DISTINCT "actor_id")'),
-            "uniqueUserCount",
-          ],
-        ],
-        group: ["subjectId", "subjectName"],
-        order: [
-          [pgInstance.literal('"callCount"'), "DESC"],
-          [pgInstance.literal('"uniqueUserCount"'), "DESC"],
-          ["subjectId", "ASC"],
-        ],
-        raw: true,
-      });
-
-      const summaryRow = await GenericStatEvent.findOne({
-        where,
-        attributes: [
-          [pgInstance.fn("COUNT", pgInstance.col("id")), "totalCallCount"],
-          [pgInstance.fn("SUM", pgInstance.col("count_value")), "totalQuestionCount"],
-          [
-            pgInstance.literal('COUNT(DISTINCT "actor_id")'),
-            "totalUniqueUserCount",
-          ],
-        ],
-        raw: true,
-      });
-
-      res.json({
-        success: true,
-        data: {
-          type: where.type,
-          summary: {
-            totalKols: rows.length,
-            totalCallCount: Number(summaryRow?.totalCallCount || 0),
-            totalQuestionCount: Number(summaryRow?.totalQuestionCount || 0),
-            totalUniqueUserCount: Number(summaryRow?.totalUniqueUserCount || 0),
-          },
-          items: rows.map((item) => ({
-            subjectId: item.subjectId,
-            subjectName: item.subjectName || item.subjectId,
-            callCount: Number(item.callCount || 0),
-            questionCount: Number(item.questionCount || 0),
-            uniqueUserCount: Number(item.uniqueUserCount || 0),
-          })),
-        },
-      });
-    } catch (error) {
-      console.error("[generic-stats/aggregate] 获取失败:", error);
-      res.status(500).json({ success: false, error: "获取聚合统计失败" });
-    }
-  }
-);
 
 module.exports = router;

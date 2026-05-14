@@ -6,7 +6,12 @@ import type {
   GenericStatsEventsResponse,
   GenericStatsTypesResponse,
   OnlineUsersResponse,
+  OverviewStatsResponse,
 } from "@/types/stats";
+
+export async function fetchOverviewStats() {
+  return apiRequest<OverviewStatsResponse>("/api/xhunt/stats/overview");
+}
 
 export async function fetchDauDetails(date?: string) {
   const params = new URLSearchParams();
