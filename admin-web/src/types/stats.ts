@@ -50,6 +50,112 @@ export interface OverviewStatsResponse {
   };
 }
 
+export interface DailyCohortItem {
+  cohortDate: string;
+  newUsers: number;
+  dailyActiveUsers: number;
+  day2Active: number;
+  day2Retention: string | number;
+  day3Active: number;
+  day3Retention: string | number;
+  day4Active: number;
+  day4Retention: string | number;
+  day5Active: number;
+  day5Retention: string | number;
+  day6Active: number;
+  day6Retention: string | number;
+  day7Active: number;
+  day7Retention: string | number;
+  day8Active: number;
+  day8Retention: string | number;
+  day9Active: number;
+  day9Retention: string | number;
+  day10Active: number;
+  day10Retention: string | number;
+}
+
+export interface DailyCohortsResponse {
+  success: boolean;
+  data: {
+    cohorts: DailyCohortItem[];
+    totalCohorts: number;
+    dateRange: {
+      startDate: string;
+      endDate: string;
+    };
+  };
+}
+
+export interface NoteItem {
+  id: string | number;
+  note: string;
+  createdAt: string;
+  userUsername?: string | null;
+  userDisplayName?: string | null;
+  accountHandle?: string | null;
+  accountDisplayName?: string | null;
+}
+
+export interface NotesResponse {
+  success: boolean;
+  data: {
+    notes: NoteItem[];
+    stats: {
+      totalNotes: number;
+      uniqueUsers: number;
+      uniqueAccounts: number;
+    };
+    pagination: {
+      currentPage: number;
+      pageSize: number;
+      totalCount: number;
+      totalPages: number;
+    };
+    date: string;
+  };
+}
+
+export interface LogSearchResultLine {
+  lineNumber: number;
+  content: string;
+  isMatch: boolean;
+}
+
+export interface LogSearchResultItem {
+  lineNumber: number;
+  context: LogSearchResultLine[];
+  matchLine: string;
+  file: string;
+  timestamp: number;
+}
+
+export interface LogSearchResponse {
+  success: boolean;
+  data: {
+    query: string;
+    totalMatches: number;
+    results: LogSearchResultItem[];
+    searchedFiles: number;
+    totalFiles: number;
+    fileSizes: Array<{
+      name: string;
+      size: number;
+    }>;
+  };
+}
+
+export interface ErrorLogsResponse {
+  success: boolean;
+  data: {
+    logs: string[];
+    totalLines: number;
+    files: Array<{
+      name: string;
+      size: number;
+    }>;
+  };
+}
+
 export interface DauDetailsResponse {
   success: boolean;
   data: {

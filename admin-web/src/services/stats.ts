@@ -2,9 +2,13 @@ import { apiRequest } from "./apiClient";
 import type {
   AuditLogsResponse,
   DauDetailsResponse,
+  DailyCohortsResponse,
+  ErrorLogsResponse,
   GenericStatsAggregateResponse,
   GenericStatsEventsResponse,
   GenericStatsTypesResponse,
+  LogSearchResponse,
+  NotesResponse,
   OnlineUsersResponse,
   OverviewStatsResponse,
 } from "@/types/stats";
@@ -20,6 +24,51 @@ export async function fetchDauDetails(date?: string) {
   return apiRequest<DauDetailsResponse>(
     `/api/xhunt/stats/dau-details${query ? `?${query}` : ""}`
   );
+}
+
+export async function fetchDailyCohorts(params?: {
+  startDate?: string;
+  endDate?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.startDate) query.set("startDate", params.startDate);
+  if (params?.endDate) query.set("endDate", params.endDate);
+
+  return apiRequest<DailyCohortsResponse>(
+    `/api/xhunt/stats/daily-cohorts${query.toString() ? `?${query.toString()}` : ""}`
+  );
+}
+
+export async function fetchNotes(params?: {
+  date?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.date) query.set("date", params.date);
+  query.set("page", String(params?.page || 1));
+  query.set("limit", String(params?.limit || 50));
+
+  return apiRequest<NotesResponse>(`/api/xhunt/stats/notes?${query.toString()}`);
+}
+
+export async function fetchLogSearch(params: {
+  query: string;
+  contextLines?: number;
+  limit?: number;
+}) {
+  const search = new URLSearchParams();
+  search.set("query", params.query);
+  search.set("contextLines", String(params.contextLines || 3));
+  search.set("limit", String(params.limit || 5));
+
+  return apiRequest<LogSearchResponse>(`/api/xhunt/stats/log-search?${search.toString()}`);
+}
+
+export async function fetchErrorLogs(params?: { lines?: number }) {
+  const query = new URLSearchParams();
+  query.set("lines", String(params?.lines || 1000));
+  return apiRequest<ErrorLogsResponse>(`/api/xhunt/stats/error-logs?${query.toString()}`);
 }
 
 export async function fetchOnlineUsers(params: { page?: number; limit?: number }) {
