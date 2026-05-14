@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -82,13 +82,9 @@ export function NacosMessagesPage() {
     }
   }, [editorValue]);
 
-  useState(() => {
-    return undefined;
-  });
-
-  if (editorValue === "" && query.data?.data.content) {
-    setTimeout(() => setEditorValue(query.data?.data.content || "[]"), 0);
-  }
+  useEffect(() => {
+    setEditorValue(query.data?.data.content || "[]");
+  }, [query.data?.data.content]);
 
   return (
     <PermissionGuard permission="nacos-messages">
