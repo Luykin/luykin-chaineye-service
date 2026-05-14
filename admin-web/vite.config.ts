@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: mode === "production" ? "/static/admin-web/" : "/",
+    publicDir: mode === "production" ? false : "public",
     plugins: [react()],
     build: {
       outDir: "public/static/admin-web",

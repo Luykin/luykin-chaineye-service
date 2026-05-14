@@ -21,6 +21,7 @@ export default defineConfig(function (_a) {
     console.log("[vite-config] mode=".concat(mode, " apiBaseUrl=").concat(apiBaseUrl));
     return {
         base: mode === "production" ? "/static/admin-web/" : "/",
+        publicDir: mode === "production" ? false : "public",
         plugins: [react()],
         build: {
             outDir: "public/static/admin-web",

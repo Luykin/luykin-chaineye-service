@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-const CHART_JS_SRC = `${import.meta.env.BASE_URL}chart.umd.min.js`;
+const CHART_JS_SRC = import.meta.env.DEV ? "/chart.umd.min.js" : "/static/js/chart.umd.min.js";
 const LEGACY_CHART_JS_SRC = "/static/js/chart.umd.min.js";
 
 const VERSION_TIME_RANGE_OPTIONS = [
