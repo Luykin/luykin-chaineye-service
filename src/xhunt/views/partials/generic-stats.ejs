@@ -194,13 +194,13 @@
   }
 
   .generic-events-table td {
-    vertical-align: top;
+    vertical-align: middle;
     word-break: break-word;
   }
 
   .generic-events-table th:last-child,
   .generic-events-table td:last-child {
-    width: 38%;
+    width: 30%;
   }
 
   .generic-empty {
@@ -239,10 +239,11 @@
 
   .generic-meta {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-wrap: nowrap;
+    gap: 8px;
     align-items: center;
     max-width: 100%;
+    overflow: hidden;
   }
 
   .generic-pill {
@@ -256,6 +257,7 @@
     font-size: 12px;
     line-height: 1;
     white-space: nowrap;
+    max-width: 100%;
   }
 
   .generic-pill-key {
@@ -265,6 +267,11 @@
   .generic-type-text {
     font-weight: 600;
     color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    max-width: 220px;
   }
 
   .generic-subtext {
@@ -278,14 +285,16 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    min-width: 0;
   }
 
   .generic-entity-line {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    min-width: 0;
   }
 
   .generic-name {
@@ -295,6 +304,36 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 220px;
+  }
+
+  .generic-value-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    max-width: 220px;
+  }
+
+  .generic-value-text.wide {
+    max-width: 320px;
+  }
+
+  .generic-time-text {
+    white-space: nowrap;
+    line-height: 1.35;
+  }
+
+  .generic-count-text {
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .generic-info-summary {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #4b5563;
+    font-size: 13px;
   }
 
   @media (max-width: 1024px) {
@@ -449,6 +488,64 @@
       `;
     }
 
+    function buildTooltip(item) {
+      const lines = [];
+      lines.push(`Type: ${item.type || "-"}`);
+      if (item.source || item.action) {
+        lines.push(`来源: ${item.source || "-"} · 动作: ${item.action || "-"}`);
+      }
+      if (item.subjectType || item.subjectId || item.subjectName) {
+        lines.push(
+          `对象: ${item.subjectType || "-"} / ${item.subjectId || "-"}${
+            item.subjectName ? ` (${item.subjectName})` : ""
+          }`
+        );
+      }
+      if (item.actorType || item.actorId || item.actorName) {
+        lines.push(
+          `用户: ${item.actorType || "-"} / ${item.actorId || "-"}${
+            item.actorName ? ` (${item.actorName})` : ""
+          }`
+        );
+      }
+      if (item.countValue !== null && item.countValue !== undefined) {
+        lines.push(`计数: ${item.countValue}`);
+      }
+      const dimEntries = summarizeObject(item.dimensions);
+      if (dimEntries.length) {
+        lines.push(
+          `维度: ${dimEntries
+            .map(([key, value]) => `${key}=${formatMetaValue(value)}`)
+            .join(" | ")}`
+        );
+      }
+      const metricEntries = summarizeObject(item.metrics);
+      if (metricEntries.length) {
+        lines.push(
+          `指标: ${metricEntries
+            .map(([key, value]) => `${key}=${formatMetaValue(value)}`)
+            .join(" | ")}`
+        );
+      }
+      return lines.join("\n");
+    }
+
+    function buildEventSummary(item) {
+      const parts = [];
+      const dimEntries = summarizeObject(item.dimensions, ["route", "isVip"]);
+      const metricEntries = summarizeObject(item.metrics, ["callCount", "questionCount"]);
+
+      dimEntries.forEach(([key, value]) => {
+        parts.push(`${key}: ${formatMetaValue(value)}`);
+      });
+      metricEntries.forEach(([key, value]) => {
+        parts.push(`${key}: ${formatMetaValue(value)}`);
+      });
+
+      if (!parts.length) return "—";
+      return parts.join(" · ");
+    }
+
     function getFilters() {
       return {
         type: typeSelect.value || "",
@@ -600,48 +697,45 @@
 
       eventsEmpty.style.display = "none";
       eventsTbody.innerHTML = items
-        .map(
-          (item) => `
+        .map((item) => {
+          const tooltip = escapeHtml(buildTooltip(item));
+          const eventSummary = escapeHtml(buildEventSummary(item));
+          const subjectMain = escapeHtml(item.subjectId || item.subjectName || "-");
+          const actorMain = escapeHtml(item.actorName || item.actorId || "-");
+          const actorTitle = escapeHtml(
+            [item.actorType, item.actorId, item.actorName].filter(Boolean).join(" / ")
+          );
+          const subjectTitle = escapeHtml(
+            [item.subjectType, item.subjectId, item.subjectName].filter(Boolean).join(" / ")
+          );
+
+          return `
             <tr>
-              <td>${escapeHtml(formatDateTimeCell(item.eventAt))}</td>
-              <td>
-                <div class="generic-type-text">${escapeHtml(item.type)}</div>
-                <div class="generic-subtext">${escapeHtml(item.source || "-")} · ${escapeHtml(item.action || "-")}</div>
+              <td title="${tooltip}">
+                <div class="generic-time-text">${escapeHtml(formatDateTimeCell(item.eventAt)).replace(" ", "<br>")}</div>
               </td>
               <td>
+                <div class="generic-type-text" title="${tooltip}">${escapeHtml(item.type)}</div>
+              </td>
+              <td title="${subjectTitle}">
                 <div class="generic-entity-line">
                   <span class="generic-badge">${escapeHtml(item.subjectType || "-")}</span>
-                  <span>${escapeHtml(item.subjectId || "-")}</span>
+                  <span class="generic-value-text">${subjectMain}</span>
                 </div>
-                ${
-                  item.subjectName
-                    ? `<div class="generic-name">${escapeHtml(item.subjectName)}</div>`
-                    : ""
-                }
               </td>
-              <td>
+              <td title="${actorTitle}">
                 <div class="generic-entity-line">
                   <span class="generic-badge">${escapeHtml(item.actorType || "-")}</span>
-                  <span>${escapeHtml(item.actorId || "-")}</span>
+                  <span class="generic-value-text wide">${actorMain}</span>
                 </div>
-                ${
-                  item.actorName
-                    ? `<div class="generic-name">${escapeHtml(item.actorName)}</div>`
-                    : ""
-                }
               </td>
-              <td>${formatNumber(item.countValue)}</td>
-              <td>
-                <div class="generic-mainline">
-                  ${renderPills(item.dimensions, ["route", "isVip"])}
-                </div>
-                <div class="generic-subtext" style="margin-top:8px;">
-                  ${renderPills(item.metrics, ["callCount", "questionCount"], "无附加指标")}
-                </div>
+              <td title="${tooltip}"><span class="generic-count-text">${formatNumber(item.countValue)}</span></td>
+              <td title="${tooltip}">
+                <div class="generic-info-summary">${eventSummary}</div>
               </td>
             </tr>
           `
-        )
+        })
         .join("");
     }
 
