@@ -1,7 +1,6 @@
 import {
   CaretLeftOutlined,
   CaretRightOutlined,
-  HomeOutlined,
   LockOutlined,
   LogoutOutlined,
   MenuOutlined,
@@ -526,6 +525,20 @@ export function AdminLayout() {
     </div>
   );
 
+  const desktopSidebarContent = (
+    <div
+      style={{
+        position: "sticky",
+        top: 0,
+        height: "100vh",
+        overflow: "hidden",
+        background: "#fff",
+      }}
+    >
+      {sidebarContent}
+    </div>
+  );
+
   return (
     <Layout style={{ minHeight: "100vh" }}>
       {contextHolder}
@@ -539,15 +552,17 @@ export function AdminLayout() {
           collapsedWidth={80}
           trigger={null}
           style={{
-            height: "100vh",
+            minHeight: "100vh",
+            alignSelf: "stretch",
+            background: "#fff",
             borderRight: "1px solid #e2e8f0",
             boxShadow: collapsed
               ? "4px 0 20px rgba(0,0,0,0.06)"
               : "4px 0 24px rgba(0,0,0,0.08)",
-            overflow: "hidden",
+            overflow: "visible",
           }}
         >
-          {sidebarContent}
+          {desktopSidebarContent}
         </Sider>
       ) : (
         <Drawer
@@ -599,39 +614,41 @@ export function AdminLayout() {
             >
               {ADMIN_TITLE}
             </Typography.Title>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "4px 10px",
-                background: "#f0fdf4",
-                border: "1px solid #bbf7d0",
-                borderRadius: 20,
-                flex: "0 0 auto",
-              }}
-            >
-              <span
+            {!isMobile ? (
+              <div
                 style={{
-                  width: 6,
-                  height: 6,
-                  background: "#22c55e",
-                  borderRadius: "50%",
-                }}
-              />
-              <Typography.Text
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "#16a34a",
-                  margin: 0,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.03em",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "4px 10px",
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: 20,
+                  flex: "0 0 auto",
                 }}
               >
-                实时监控中
-              </Typography.Text>
-            </div>
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    background: "#22c55e",
+                    borderRadius: "50%",
+                  }}
+                />
+                <Typography.Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#16a34a",
+                    margin: 0,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.03em",
+                  }}
+                >
+                  实时监控中
+                </Typography.Text>
+              </div>
+            ) : null}
           </Space>
 
           <Dropdown
@@ -663,12 +680,6 @@ export function AdminLayout() {
                   ),
                 },
                 { type: "divider" },
-                {
-                  key: "home",
-                  label: "返回首页",
-                  icon: <HomeOutlined />,
-                  onClick: () => navigate(ADMIN_HOME_PATH),
-                },
                 {
                   key: "refresh-session",
                   label: "刷新会话",
