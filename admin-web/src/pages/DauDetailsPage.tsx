@@ -21,6 +21,8 @@ import { PageSection } from "@/components/ui/PageSection";
 import { fetchDauDetails } from "@/services/stats";
 import type { DauDetailItem } from "@/types/stats";
 
+const TABLE_MAX_HEIGHT = 520;
+
 function getTodayInBeijing() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "Asia/Shanghai" })
@@ -130,6 +132,7 @@ export function DauDetailsPage() {
             rowKey={(record) => `${record.userId}-${record.fingerprint}`}
             columns={columns}
             dataSource={filtered}
+            scroll={{ y: TABLE_MAX_HEIGHT }}
             loading={query.isLoading || query.isFetching}
             locale={{
               emptyText: query.isError ? (

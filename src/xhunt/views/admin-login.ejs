@@ -545,7 +545,7 @@
     const errText = err.querySelector('.error-text');
     const qs = new URLSearchParams(window.location.search);
     const nextRaw = qs.get('next');
-    const nextPath = (typeof nextRaw === 'string' && nextRaw.startsWith('/')) ? nextRaw : '/api/xhunt/stats';
+    const nextPath = (typeof nextRaw === 'string' && nextRaw.startsWith('/')) ? nextRaw : '/admin-react/dau-details';
 
     function setError(m) {
       if (m) {
@@ -663,11 +663,11 @@
           const verify = await verifyRes.json().catch(() => ({ success: false, error: '非JSON响应' }));
           if (!verify.success) throw new Error(verify.error || '二次验证失败');
           
-          window.location.assign(nextPath || verify.redirect || '/api/xhunt/stats');
+          window.location.assign(nextPath || verify.redirect || '/admin-react/dau-details');
           return;
         }
 
-        window.location.assign(nextPath || data.redirect || '/api/xhunt/stats');
+        window.location.assign(nextPath || data.redirect || '/admin-react/dau-details');
       } catch (ex) {
         setError(ex.message || '登录失败');
         setLoading(false);

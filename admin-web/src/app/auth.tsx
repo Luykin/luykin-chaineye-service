@@ -4,6 +4,14 @@ import type { AdminSessionErrorResponse, AdminSessionUser } from "@/types/auth";
 import { fetchAdminSession } from "@/services/auth";
 import { ApiError, buildApiUrl } from "@/services/apiClient";
 
+const ADMIN_HOME_PATH = "/admin-react/dau-details";
+
+function buildLoginUrl() {
+  const loginUrl = new URL(buildApiUrl("/admin/login"), window.location.origin);
+  loginUrl.searchParams.set("next", ADMIN_HOME_PATH);
+  return loginUrl.toString();
+}
+
 interface AuthContextValue {
   user: AdminSessionUser | null;
   loading: boolean;
@@ -31,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           : null);
 
         if (err.status === 401 || (err.status === 403 && errorData?.needLogin)) {
-          window.location.href = buildApiUrl("/admin/login");
+          window.location.href = buildLoginUrl();
           return;
         }
         if (err.status === 403) {

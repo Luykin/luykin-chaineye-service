@@ -245,7 +245,7 @@ router.post("/webauthn/authentication/verify", express.json(), async (req, res) 
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     await req.redisClient.del(challengeKey);
-    res.json({ success: true, redirect: "/api/xhunt/stats" });
+    res.json({ success: true, redirect: "/admin-react/dau-details" });
   } catch (e) {
     try { await XhuntAdminAuditLog.create({ adminId: null, email: null, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
     res.status(500).json({ success: false, error: "验证失败" });
@@ -440,7 +440,7 @@ router.post("/login", express.json(), async (req, res) => {
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
     res.set('Cache-Control','no-store');
     res.type('application/json');
-    res.json({ success: true, redirect: "/api/xhunt/stats", credCount });
+    res.json({ success: true, redirect: "/admin-react/dau-details", credCount });
   } catch (e) {
     console.error("[admin login] error:", e);
     res.status(500).json({ success: false, error: "登录失败" });

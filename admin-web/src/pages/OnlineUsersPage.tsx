@@ -19,6 +19,8 @@ import { PageSection } from "@/components/ui/PageSection";
 import { fetchOnlineUsers } from "@/services/stats";
 import type { OnlineUserItem } from "@/types/stats";
 
+const TABLE_MAX_HEIGHT = 520;
+
 function getTimeAgo(dateString: string) {
   const now = dayjs();
   const target = dayjs(dateString);
@@ -130,6 +132,7 @@ export function OnlineUsersPage() {
             rowKey={(record) => record.id}
             columns={columns}
             dataSource={filtered}
+            scroll={{ y: TABLE_MAX_HEIGHT }}
             loading={query.isLoading || query.isFetching}
             locale={{
               emptyText: query.isError ? (
