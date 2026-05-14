@@ -7,6 +7,7 @@
 @import "./layout/top-nav.css";
 @import "./pages/feature-flags.css";
 @import "./pages/nacos.css";
+@import "./pages/nacos-messages-legacy.css";
 @import "./pages/binance-square.css";
 @import "./pages/overview.css";
 @import "./pages/redis-management.css";

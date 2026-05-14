@@ -330,3 +330,119 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* 适度回补色彩：参考日活详情/币安广场的轻量色条，而不是大面积渐变。 */
+.overview-stats-section .legacy-stat-card {
+  overflow: hidden;
+}
+
+.overview-stats-section .legacy-stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: var(--overview-card-accent, #e5e7eb);
+}
+
+.overview-stats-section .legacy-stats-grid--daily .legacy-stat-card:nth-child(1) { --overview-card-accent: #94a3b8; }
+.overview-stats-section .legacy-stats-grid--daily .legacy-stat-card:nth-child(2) { --overview-card-accent: #60a5fa; }
+.overview-stats-section .legacy-stats-grid--daily .legacy-stat-card:nth-child(3) { --overview-card-accent: #38bdf8; }
+.overview-stats-section .legacy-stats-grid--daily .legacy-stat-card:nth-child(4) { --overview-card-accent: #22c55e; }
+.overview-stats-section .legacy-stats-grid--daily .legacy-stat-card:nth-child(5) { --overview-card-accent: #f59e0b; }
+.overview-stats-section .legacy-stats-grid--daily .legacy-stat-card:nth-child(6) { --overview-card-accent: #8b5cf6; }
+.overview-stats-section .legacy-stats-grid--daily .legacy-stat-card:nth-child(7) { --overview-card-accent: #2563eb; }
+
+.overview-stats-section .legacy-stat-card--highlighted {
+  --overview-card-accent: #2563eb;
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.overview-stats-section .legacy-stat-card--with-icon:nth-child(1) {
+  --overview-card-accent: #3b82f6;
+  background: linear-gradient(180deg, #eff6ff 0%, #fff 42%);
+}
+
+.overview-stats-section .legacy-stat-card--with-icon:nth-child(2) {
+  --overview-card-accent: #10b981;
+  background: linear-gradient(180deg, #ecfdf5 0%, #fff 42%);
+}
+
+.overview-stats-section .legacy-stat-card--with-icon:nth-child(3) {
+  --overview-card-accent: #f59e0b;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff 42%);
+}
+
+.overview-stats-section .legacy-stat-card--with-icon:nth-child(4) {
+  --overview-card-accent: #ec4899;
+  background: linear-gradient(180deg, #fdf2f8 0%, #fff 42%);
+}
+
+.overview-stats-section .legacy-stat-card__icon--blue {
+  border-color: #bfdbfe;
+  background: #eff6ff !important;
+  color: #2563eb !important;
+}
+
+.overview-stats-section .legacy-stat-card__icon--green {
+  border-color: #bbf7d0;
+  background: #f0fdf4 !important;
+  color: #16a34a !important;
+}
+
+.overview-stats-section .legacy-stat-card__icon--orange {
+  border-color: #fed7aa;
+  background: #fff7ed !important;
+  color: #ea580c !important;
+}
+
+.overview-stats-section .legacy-stat-card__icon--pink {
+  border-color: #fbcfe8;
+  background: #fdf2f8 !important;
+  color: #db2777 !important;
+}
+
+.overview-stat-card-kol,
+.overview-stat-card-kol-tier {
+  --overview-card-accent: #f59e0b;
+}
+
+.overview-stat-card-points {
+  --overview-card-accent: #8b5cf6;
+}
+
+.overview-stat-card-rating {
+  --overview-card-accent: #ec4899;
+}
+
+.overview-stat-card-points-today {
+  --overview-card-accent: #10b981;
+}
+
+.overview-stats-section .legacy-stat-card--minimal::before {
+  background: var(--overview-card-accent, #e5e7eb) !important;
+}
+
+.overview-period-card-weekly {
+  border-color: #bbf7d0;
+  background: linear-gradient(180deg, #f0fdf4 0%, #fff 45%);
+}
+
+.overview-period-card-monthly {
+  border-color: #bfdbfe;
+  background: linear-gradient(180deg, #eff6ff 0%, #fff 45%);
+}
+
+.overview-period-card-weekly .overview-period-icon {
+  border-color: #bbf7d0;
+  background: #f0fdf4 !important;
+  color: #16a34a !important;
+}
+
+.overview-period-card-monthly .overview-period-icon {
+  border-color: #bfdbfe;
+  background: #eff6ff !important;
+  color: #2563eb !important;
+}
