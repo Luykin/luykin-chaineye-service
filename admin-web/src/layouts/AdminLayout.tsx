@@ -11,6 +11,7 @@ import { Button, Dropdown, Layout, Menu, Space, Typography } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 import { useAuth } from "@/app/auth";
+import { buildApiUrl } from "@/services/apiClient";
 
 const { Header, Sider, Content } = Layout;
 
@@ -120,7 +121,7 @@ export function AdminLayout() {
                   key: "legacy",
                   label: "返回旧版后台",
                   onClick: () => {
-                    window.location.href = "/api/xhunt/stats";
+                    window.location.href = buildApiUrl("/api/xhunt/stats");
                   },
                 },
                 {
@@ -128,8 +129,11 @@ export function AdminLayout() {
                   label: "退出登录",
                   icon: <LogoutOutlined />,
                   onClick: async () => {
-                    await fetch("/admin/logout", { method: "POST", credentials: "include" });
-                    window.location.href = "/admin/login";
+                    await fetch(buildApiUrl("/admin/logout"), {
+                      method: "POST",
+                      credentials: "include",
+                    });
+                    window.location.href = buildApiUrl("/admin/login");
                   },
                 },
               ],

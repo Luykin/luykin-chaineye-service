@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Result, Spin } from "antd";
-import type { AdminSessionUser } from "@/types/auth";
+import type { AdminSessionErrorResponse, AdminSessionUser } from "@/types/auth";
 import { fetchAdminSession } from "@/services/auth";
-import { ApiError } from "@/services/apiClient";
+import { ApiError, buildApiUrl } from "@/services/apiClient";
 
 interface AuthContextValue {
   user: AdminSessionUser | null;
@@ -26,8 +26,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(result.admin);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
-        if (err.status === 401) {
-          window.location.href = "/admin/login";
+        const errorData = (typeof err.data === "object" && err.data
+          ? (err.data as AdminSessionErrorResponse)
+          : null);
+
+        if (err.status === 401 || (err.status === 403 && errorData?.needLogin)) {
+          window.location.href = buildApiUrl("/admin/login");
           return;
         }
         if (err.status === 403) {
@@ -70,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
-        <Spin size="large" tip="正在加载后台会话..." />
+        <Spin size="large" fullscreen tip="正在加载后台会话..." />
       </div>
     );
   }
@@ -83,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           title="无法进入新后台"
           subTitle={error}
           extra={
-            <a href="/api/xhunt/stats" style={{ color: "#2563eb" }}>
+            <a href={buildApiUrl("/api/xhunt/stats")} style={{ color: "#2563eb" }}>
               返回旧版后台
             </a>
           }

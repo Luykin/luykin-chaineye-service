@@ -16,3 +16,9 @@ export interface AdminSessionResponse {
   loggedIn: boolean;
   admin: AdminSessionUser;
 }
+
+export interface AdminSessionErrorResponse {
+  success?: boolean;
+  error?: string;
+  needLogin?: boolean;
+}

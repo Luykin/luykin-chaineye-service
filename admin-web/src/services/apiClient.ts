@@ -14,6 +14,29 @@ type RequestOptions = RequestInit & {
   body?: BodyInit | Record<string, unknown> | null;
 };
 
+function normalizeBaseUrl(value?: string | null) {
+  const base = (value || "").trim();
+  return base.replace(/\/+$/, "");
+}
+
+export function getApiBaseUrl() {
+  return normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
+}
+
+export function buildApiUrl(input: string) {
+  if (/^https?:\/\//i.test(input)) {
+    return input;
+  }
+
+  const normalizedPath = input.startsWith("/") ? input : `/${input}`;
+  const baseUrl = getApiBaseUrl();
+  if (!baseUrl) {
+    return normalizedPath;
+  }
+
+  return `${baseUrl}${normalizedPath}`;
+}
+
 async function parseResponse(response: Response) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
@@ -41,7 +64,9 @@ export async function apiRequest<T = unknown>(
     finalBody = JSON.stringify(body);
   }
 
-  const response = await fetch(input, {
+  const requestUrl = buildApiUrl(input);
+
+  const response = await fetch(requestUrl, {
     credentials: "include",
     ...rest,
     headers: finalHeaders,

@@ -1,0 +1,15 @@
+https://dev.kb.cryptohunt.ai {
+  tls internal
+  encode zstd gzip
+
+  @backend path /api/* /admin/*
+  handle @backend {
+    reverse_proxy https://kb.cryptohunt.ai {
+      header_up Host kb.cryptohunt.ai
+    }
+  }
+
+  handle {
+    reverse_proxy 127.0.0.1:5174
+  }
+}
