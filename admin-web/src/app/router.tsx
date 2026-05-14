@@ -23,6 +23,7 @@ import { PerfMonitorPage } from "@/pages/PerfMonitorPage";
 import { NacosMessagesPage } from "@/pages/NacosMessagesPage";
 import { NacosCampaignsPage } from "@/pages/NacosCampaignsPage";
 import { NacosTagsPage } from "@/pages/NacosTagsPage";
+import { FeatureFlagsPage } from "@/pages/FeatureFlagsPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -48,6 +49,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "nacos-messages": <NacosMessagesPage />,
   "nacos-campaigns": <NacosCampaignsPage />,
   "nacos-tags": <NacosTagsPage />,
+  "feature-flags": <FeatureFlagsPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {

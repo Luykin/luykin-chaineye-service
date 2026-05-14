@@ -12,6 +12,12 @@ declare global {
         on: (eventName: string, handler: (params: any) => void) => void;
       };
     };
+    Diff?: {
+      diffJson: (
+        oldValue: unknown,
+        newValue: unknown
+      ) => Array<{ value: string; added?: boolean; removed?: boolean }>;
+    };
   }
 }
 
