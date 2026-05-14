@@ -17,6 +17,13 @@ declare global {
         oldValue: unknown,
         newValue: unknown
       ) => Array<{ value: string; added?: boolean; removed?: boolean }>;
+      createPatch?: (
+        fileName: string,
+        oldStr: string,
+        newStr: string,
+        oldHeader?: string,
+        newHeader?: string
+      ) => string;
     };
   }
 }
