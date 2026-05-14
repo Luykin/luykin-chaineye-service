@@ -357,7 +357,8 @@ async function initializeAndStartServer() {
     })
   );
 
-  // 🆕 添加静态文件服务支持
+  // 静态文件服务：新版 admin-web 自带的资源优先，旧 public/static 仅作为历史页面兜底。
+  app.use("/static", express.static(path.join(__dirname, "../admin-web/public/static")));
   app.use("/static", express.static(path.join(__dirname, "../public/static")));
 
   // API 路由

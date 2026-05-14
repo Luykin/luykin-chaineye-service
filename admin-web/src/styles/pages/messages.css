@@ -1,0 +1,336 @@
+.messages-page {
+  width: 100%;
+}
+
+.messages-page .admin-page-section > .ant-card-body {
+  background:
+    radial-gradient(circle at 100% 0, rgba(59, 130, 246, 0.05), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.messages-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.9), rgba(255, 255, 255, 0.86)),
+    radial-gradient(circle at 92% 18%, rgba(99, 102, 241, 0.12), transparent 28%);
+}
+
+.messages-hero__eyebrow {
+  margin-bottom: 4px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.messages-hero__title.ant-typography {
+  margin: 0 0 4px;
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.messages-hero__desc.ant-typography {
+  max-width: 720px;
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.messages-hero__desc code {
+  padding: 1px 5px;
+  border: 1px solid #dbeafe;
+  border-radius: 5px;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 12px;
+}
+
+.messages-hero__chips {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 280px;
+}
+
+.messages-alert {
+  margin-bottom: 16px;
+}
+
+.messages-layout {
+  margin-top: 0;
+}
+
+.messages-card.ant-card {
+  border-color: #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.messages-card > .ant-card-head {
+  min-height: 44px;
+  border-bottom-color: #eef2f7;
+}
+
+.messages-card > .ant-card-head .ant-card-head-title {
+  padding: 11px 0;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.messages-card > .ant-card-body {
+  padding: 16px;
+}
+
+.messages-composer-card .ant-form-item {
+  margin-bottom: 15px;
+}
+
+.messages-composer-card .ant-form-item-label {
+  padding-bottom: 5px;
+}
+
+.messages-composer-card .ant-form-item-label > label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.messages-composer-card .ant-form-item-extra {
+  min-height: auto;
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.messages-composer-card .ant-input,
+.messages-composer-card .ant-input-affix-wrapper {
+  border-color: #dbe3ee;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.messages-composer-card .ant-input:hover,
+.messages-composer-card .ant-input-affix-wrapper:hover {
+  border-color: #bfdbfe;
+}
+
+.messages-composer-card .ant-input:focus,
+.messages-composer-card .ant-input-focused,
+.messages-composer-card .ant-input-affix-wrapper-focused {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.messages-mono-textarea,
+.messages-content-textarea {
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.messages-mono-textarea {
+  font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px !important;
+}
+
+.messages-content-textarea {
+  font-size: 13px !important;
+}
+
+.messages-count-tag.ant-tag {
+  margin-inline-end: 0;
+  border-color: #e0ecff;
+  background: #f8fbff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.messages-side-stack {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.messages-overview-card .ant-statistic-title,
+.messages-result-card .ant-statistic-title {
+  margin-bottom: 2px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.messages-overview-card .ant-statistic-content,
+.messages-result-card .ant-statistic-content {
+  color: #111827;
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.messages-stat,
+.messages-result-stat {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.messages-stat--users {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.messages-stat--links {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+
+.messages-result-stat--success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.messages-result-stat--missing {
+  border-color: #e5e7eb;
+  background: #f8fafc;
+}
+
+.messages-result-stat--repeat {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.messages-result-stat--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.messages-divider.ant-divider {
+  margin: 14px 0;
+  border-color: #eef2f7;
+}
+
+.messages-current-title .ant-typography-secondary {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.messages-current-title .ant-typography {
+  margin: 0;
+  color: #1f2937;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.messages-preview-message {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.messages-preview-message__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.messages-user-tag.ant-tag,
+.messages-link-tag.ant-tag,
+.messages-result-tag.ant-tag {
+  margin-inline-end: 0;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.messages-link-tag.ant-tag {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages-preview-message__title.ant-typography {
+  display: block;
+  margin-bottom: 6px;
+  color: #172033;
+  font-size: 13px;
+}
+
+.messages-preview-message__content.ant-typography {
+  max-height: 210px;
+  margin: 0;
+  overflow: auto;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.messages-preview-message__content::-webkit-scrollbar,
+.messages-modal-preview-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messages-preview-message__content::-webkit-scrollbar-thumb,
+.messages-modal-preview-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.messages-detail-card.ant-card {
+  margin-top: 16px;
+}
+
+.messages-result-tabs .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.messages-result-tabs .ant-tabs-tab {
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.messages-modal-preview-list {
+  max-height: 64vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+@media (max-width: 1200px) {
+  .messages-side-stack {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .messages-hero {
+    flex-direction: column;
+    padding: 14px;
+  }
+
+  .messages-hero__chips {
+    justify-content: flex-start;
+    max-width: none;
+  }
+
+  .messages-card > .ant-card-body {
+    padding: 14px;
+  }
+}

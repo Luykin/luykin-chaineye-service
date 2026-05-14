@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
 const path = require("path");
+const ejs = require("ejs");
 const { XhuntAdminManager, XhuntAdminAuditLog, XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
 const jwt = require("jsonwebtoken");
 const base64url = require("base64url");
@@ -22,25 +23,22 @@ const RP_ID = process.env.WEBAUTHN_RP_ID || (process.env.ADMIN_COOKIE_DOMAIN || 
 const ORIGIN = process.env.WEBAUTHN_ORIGIN || `https://${RP_ID}`;
 const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 const LINK_SECRET = process.env.SUPABASE_LINK_SECRET || "change-me-link";
+const ADMIN_WEB_EJS_DIR = path.join(__dirname, "../../../admin-web/src/legacy/ejs");
 
-// 登录页面（EJS）
+// 登录页面（EJS，模板归属 admin-web，避免继续依赖旧 xhunt/views）
 router.get("/login", async (req, res) => {
   try {
     res.set('Cache-Control','no-store, no-cache, must-revalidate, max-age=0');
     res.set('Pragma','no-cache');
     res.set('Expires','0');
     res.set('Surrogate-Control','no-store');
-    const app = req.app;
-    app.set("view engine", "ejs");
-    app.set("views", path.join(__dirname, "../../xhunt/views"));
-    app.render(
-      "admin-login",
+    res.set("X-Admin-Login-Template", "admin-web");
+    const html = await ejs.renderFile(
+      path.join(ADMIN_WEB_EJS_DIR, "admin-login.ejs"),
       { error: null, v: Date.now() },
-      (err, html) => {
-        if (err) return res.status(500).send("Render error");
-        res.send(html);
-      }
+      { cache: false }
     );
+    res.send(html);
   } catch (e) {
     res.status(500).send("Render error");
   }

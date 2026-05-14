@@ -17,6 +17,16 @@ import {
   Typography,
   message,
 } from "antd";
+import {
+  CheckCircleOutlined,
+  EyeOutlined,
+  LinkOutlined,
+  MessageOutlined,
+  SendOutlined,
+  StopOutlined,
+  UserOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -30,10 +40,48 @@ function splitLines(value: string) {
     .filter(Boolean);
 }
 
+function PreviewMessage({
+  username,
+  reportUrl,
+  title,
+  content,
+}: {
+  username: string;
+  reportUrl?: string;
+  title: string;
+  content: string;
+}) {
+  return (
+    <div className="messages-preview-message">
+      <div className="messages-preview-message__head">
+        <Tag color="blue" className="messages-user-tag">
+          @{username}
+        </Tag>
+        <Tag icon={<LinkOutlined />} className="messages-link-tag">
+          {reportUrl || "无报告链接"}
+        </Tag>
+      </div>
+      <Typography.Text strong className="messages-preview-message__title">
+        {title || "-"}
+      </Typography.Text>
+      <Typography.Paragraph className="messages-preview-message__content">
+        {content || "-"}
+      </Typography.Paragraph>
+    </div>
+  );
+}
+
 export function MessagesPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [confirmPayload, setConfirmPayload] = useState<{
+    campaignId: string;
+    title: string;
+    content: string;
+    handlers: string[];
+    reportUrls: string[];
+  } | null>(null);
   const [result, setResult] = useState<SendMessagesResponse["data"] | null>(null);
 
   const handlers = splitLines(Form.useWatch("handlers", form) || "");
@@ -56,6 +104,9 @@ export function MessagesPage() {
     [content, handlers, reportUrls]
   );
 
+  const hasUrlMismatch = reportUrls.length > 0 && handlers.length > 0 && reportUrls.length !== handlers.length;
+  const firstPreview = previewItems[0];
+
   const mutation = useMutation({
     mutationFn: sendBatchMessages,
     onSuccess: (response) => {
@@ -71,7 +122,8 @@ export function MessagesPage() {
     const values = await form.validateFields();
     const nextHandlers = splitLines(values.handlers);
     const nextUrls = splitLines(values.reportUrls || "");
-    mutation.mutate({
+
+    setConfirmPayload({
       campaignId: values.campaignId.trim(),
       title: values.title.trim(),
       content: values.content,
@@ -83,32 +135,51 @@ export function MessagesPage() {
   return (
     <PermissionGuard permission="messages">
       {contextHolder}
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <div className="messages-page">
         <PageSection
           title="站内消息"
           description="批量发送私信给多个用户，支持用户名与报告链接占位符。"
           extra={
-            <Space>
-              <Button onClick={() => setPreviewOpen(true)} disabled={!handlers.length}>
-                预览私信
+            <Space wrap size={8}>
+              <Button icon={<EyeOutlined />} onClick={() => setPreviewOpen(true)} disabled={!handlers.length}>
+                预览
               </Button>
-              <Button type="primary" onClick={() => void submit()} loading={mutation.isPending}>
+              <Button icon={<SendOutlined />} type="primary" onClick={() => void submit()} loading={mutation.isPending}>
                 发送私信
               </Button>
             </Space>
           }
         >
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-            message="占位符说明"
-            description="支持 {{ username }} 和 {{ reportUrl }}，发送时会按用户逐条替换。"
-          />
+          <div className="messages-hero">
+            <div>
+              <div className="messages-hero__eyebrow">XHunt Message Center</div>
+              <Typography.Title level={4} className="messages-hero__title">
+                批量消息发送台
+              </Typography.Title>
+              <Typography.Paragraph className="messages-hero__desc">
+                使用 <code>{"{{ username }}"}</code> 和 <code>{"{{ reportUrl }}"}</code> 做个性化替换。建议先预览，再发送。
+              </Typography.Paragraph>
+            </div>
+            <div className="messages-hero__chips">
+              <Tag color="blue">Campaign 去重</Tag>
+              <Tag color="green">逐用户替换</Tag>
+              <Tag color="purple">发送结果追踪</Tag>
+            </div>
+          </div>
 
-          <Row gutter={[16, 16]}>
-            <Col xs={24} xl={16}>
-              <Card>
+          {hasUrlMismatch ? (
+            <Alert
+              className="messages-alert"
+              type="warning"
+              showIcon
+              message="用户数和报告链接数不一致"
+              description="链接会按顺序和用户匹配；缺少链接的用户会收到空 reportUrl 替换结果。"
+            />
+          ) : null}
+
+          <Row gutter={[16, 16]} align="top" className="messages-layout">
+            <Col xs={24} xl={15} xxl={16}>
+              <Card className="messages-card messages-composer-card" title="消息内容" bordered>
                 <Form
                   form={form}
                   layout="vertical"
@@ -119,116 +190,163 @@ export function MessagesPage() {
                       "GM {{ username }}，\n\n感谢您一直以来对 XHunt 的支持与喜爱 💫\n报告链接：{{ reportUrl }}\n\n再次感谢您对 XHunt 社区的信任与陪伴！",
                   }}
                 >
-                  <Form.Item
-                    label="活动 ID"
-                    name="campaignId"
-                    rules={[{ required: true, message: "请输入活动 ID" }]}
-                  >
-                    <Input placeholder="例如：kol_report_20250127" />
-                  </Form.Item>
+                  <Row gutter={[14, 0]}>
+                    <Col xs={24} lg={12}>
+                      <Form.Item
+                        label="活动 ID"
+                        name="campaignId"
+                        rules={[{ required: true, message: "请输入活动 ID" }]}
+                      >
+                        <Input placeholder="例如：kol_report_20250127" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={12}>
+                      <Form.Item
+                        label="私信标题"
+                        name="title"
+                        rules={[{ required: true, message: "请输入私信标题" }]}
+                      >
+                        <Input placeholder="请输入私信标题" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
                   <Form.Item
-                    label="用户 Handler"
+                    label={
+                      <Space size={8}>
+                        <span>用户 Handler</span>
+                        <Tag className="messages-count-tag">{handlers.length} 个用户</Tag>
+                      </Space>
+                    }
                     name="handlers"
                     extra="多个用户用逗号或换行分隔"
                     rules={[{ required: true, message: "请输入至少一个用户 Handler" }]}
                   >
                     <Input.TextArea
-                      rows={5}
+                      className="messages-mono-textarea"
+                      autoSize={{ minRows: 4, maxRows: 8 }}
                       placeholder="例如：FloriaT96249, luoyukun4, alpha_gege"
                     />
                   </Form.Item>
 
                   <Form.Item
-                    label="私信标题"
-                    name="title"
-                    rules={[{ required: true, message: "请输入私信标题" }]}
-                  >
-                    <Input placeholder="请输入私信标题" />
-                  </Form.Item>
-
-                  <Form.Item
-                    label="私信内容"
+                    label={
+                      <Space size={8}>
+                        <span>私信内容</span>
+                        <Tag color="processing">支持占位符</Tag>
+                      </Space>
+                    }
                     name="content"
                     rules={[{ required: true, message: "请输入私信内容" }]}
                   >
-                    <Input.TextArea rows={10} placeholder="请输入私信内容" />
+                    <Input.TextArea
+                      className="messages-content-textarea"
+                      autoSize={{ minRows: 9, maxRows: 16 }}
+                      placeholder="请输入私信内容"
+                    />
                   </Form.Item>
 
-                  <Form.Item label="报告链接" name="reportUrls" extra="多个链接用逗号或换行分隔，顺序与用户对应">
-                    <Input.TextArea rows={5} placeholder="https://xhunt.ai/kolreport/..." />
+                  <Form.Item
+                    label={
+                      <Space size={8}>
+                        <span>报告链接</span>
+                        <Tag className="messages-count-tag">{reportUrls.length} 个链接</Tag>
+                      </Space>
+                    }
+                    name="reportUrls"
+                    extra="多个链接用逗号或换行分隔，顺序与用户对应"
+                  >
+                    <Input.TextArea
+                      className="messages-mono-textarea"
+                      autoSize={{ minRows: 4, maxRows: 8 }}
+                      placeholder="https://xhunt.ai/kolreport/..."
+                    />
                   </Form.Item>
                 </Form>
               </Card>
             </Col>
 
-            <Col xs={24} xl={8}>
-              <Card title="发送概览">
-                <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                  <Row gutter={[12, 12]}>
+            <Col xs={24} xl={9} xxl={8}>
+              <div className="messages-side-stack">
+                <Card className="messages-card messages-overview-card" title="发送概览">
+                  <Row gutter={[10, 10]}>
                     <Col span={12}>
-                      <Card size="small">
-                        <Statistic title="用户数" value={handlers.length} />
-                      </Card>
+                      <div className="messages-stat messages-stat--users">
+                        <Statistic title="用户数" value={handlers.length} prefix={<UserOutlined />} />
+                      </div>
                     </Col>
                     <Col span={12}>
-                      <Card size="small">
-                        <Statistic title="链接数" value={reportUrls.length} />
-                      </Card>
+                      <div className="messages-stat messages-stat--links">
+                        <Statistic title="链接数" value={reportUrls.length} prefix={<LinkOutlined />} />
+                      </div>
                     </Col>
                   </Row>
 
-                  <div>
+                  <Divider className="messages-divider" />
+
+                  <div className="messages-current-title">
                     <Typography.Text type="secondary">当前标题</Typography.Text>
-                    <Typography.Paragraph style={{ marginBottom: 0, marginTop: 6 }}>
+                    <Typography.Paragraph ellipsis={{ rows: 2 }}>
                       {title || "-"}
                     </Typography.Paragraph>
                   </div>
-
-                  <Divider style={{ margin: "4px 0" }} />
-
-                  <div>
-                    <Typography.Text type="secondary">示例替换结果</Typography.Text>
-                    {previewItems.length ? (
-                      <Card size="small" style={{ marginTop: 8, background: "#fafafa" }}>
-                        <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                          <Tag color="blue">@{previewItems[0].username}</Tag>
-                          <Typography.Paragraph style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>
-                            {previewItems[0].content}
-                          </Typography.Paragraph>
-                        </Space>
-                      </Card>
-                    ) : (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无预览数据" />
-                    )}
-                  </div>
-                </Space>
-              </Card>
-
-              {result ? (
-                <Card title="发送结果" style={{ marginTop: 16 }}>
-                  <Row gutter={[12, 12]}>
-                    <Col span={12}><Statistic title="成功" value={result.success.length} /></Col>
-                    <Col span={12}><Statistic title="未找到" value={result.notFound.length} /></Col>
-                    <Col span={12}><Statistic title="已发送过" value={result.alreadySent.length} /></Col>
-                    <Col span={12}><Statistic title="错误" value={result.errors.length} /></Col>
-                  </Row>
                 </Card>
-              ) : null}
+
+                <Card className="messages-card messages-preview-card" title="首条预览">
+                  {firstPreview ? (
+                    <PreviewMessage
+                      username={firstPreview.username}
+                      reportUrl={firstPreview.reportUrl}
+                      title={title}
+                      content={firstPreview.content}
+                    />
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="输入用户后展示首条预览" />
+                  )}
+                </Card>
+
+                {result ? (
+                  <Card className="messages-card messages-result-card" title="发送结果">
+                    <Row gutter={[10, 10]}>
+                      <Col span={12}>
+                        <div className="messages-result-stat messages-result-stat--success">
+                          <Statistic title="成功" value={result.success.length} prefix={<CheckCircleOutlined />} />
+                        </div>
+                      </Col>
+                      <Col span={12}>
+                        <div className="messages-result-stat messages-result-stat--missing">
+                          <Statistic title="未找到" value={result.notFound.length} prefix={<StopOutlined />} />
+                        </div>
+                      </Col>
+                      <Col span={12}>
+                        <div className="messages-result-stat messages-result-stat--repeat">
+                          <Statistic title="已发送过" value={result.alreadySent.length} prefix={<MessageOutlined />} />
+                        </div>
+                      </Col>
+                      <Col span={12}>
+                        <div className="messages-result-stat messages-result-stat--error">
+                          <Statistic title="错误" value={result.errors.length} prefix={<WarningOutlined />} />
+                        </div>
+                      </Col>
+                    </Row>
+                  </Card>
+                ) : null}
+              </div>
             </Col>
           </Row>
 
           {result ? (
-            <Card title="发送明细" style={{ marginTop: 16 }}>
+            <Card className="messages-card messages-detail-card" title="发送明细">
               <Tabs
+                className="messages-result-tabs"
                 items={[
                   {
                     key: "success",
                     label: `成功 (${result.success.length})`,
                     children: result.success.length ? (
-                      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                      <Space wrap size={[8, 8]}>
                         {result.success.map((item) => (
-                          <Tag key={item.messageId} color="success">
+                          <Tag key={item.messageId} color="success" className="messages-result-tag">
                             @{item.username} · {item.messageId}
                           </Tag>
                         ))}
@@ -243,7 +361,9 @@ export function MessagesPage() {
                     children: result.notFound.length ? (
                       <Space wrap>
                         {result.notFound.map((item) => (
-                          <Tag key={item} color="default">@{item}</Tag>
+                          <Tag key={item} color="default" className="messages-result-tag">
+                            @{item}
+                          </Tag>
                         ))}
                       </Space>
                     ) : (
@@ -256,7 +376,9 @@ export function MessagesPage() {
                     children: result.alreadySent.length ? (
                       <Space wrap>
                         {result.alreadySent.map((item) => (
-                          <Tag key={item} color="warning">@{item}</Tag>
+                          <Tag key={item} color="warning" className="messages-result-tag">
+                            @{item}
+                          </Tag>
                         ))}
                       </Space>
                     ) : (
@@ -287,7 +409,31 @@ export function MessagesPage() {
             </Card>
           ) : null}
         </PageSection>
-      </Space>
+      </div>
+
+      <Modal
+        open={!!confirmPayload}
+        title="确认发送站内消息？"
+        okText="确认发送"
+        cancelText="再检查一下"
+        confirmLoading={mutation.isPending}
+        onCancel={() => setConfirmPayload(null)}
+        onOk={() => {
+          if (!confirmPayload) return;
+          mutation.mutate(confirmPayload);
+          setConfirmPayload(null);
+        }}
+      >
+        <Typography.Paragraph style={{ marginBottom: 8 }}>
+          将向 <Typography.Text strong>{confirmPayload?.handlers.length || 0}</Typography.Text> 个用户发送：
+        </Typography.Paragraph>
+        <Typography.Paragraph style={{ marginBottom: 0 }}>
+          <Typography.Text strong>{confirmPayload?.title || "-"}</Typography.Text>
+        </Typography.Paragraph>
+        <Typography.Text type="secondary">
+          发送后会记录 campaignId，重复发送会被后端拦截。
+        </Typography.Text>
+      </Modal>
 
       <Modal
         open={previewOpen}
@@ -297,25 +443,22 @@ export function MessagesPage() {
         width={760}
       >
         {previewItems.length ? (
-          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <Space direction="vertical" size={12} style={{ width: "100%" }} className="messages-modal-preview-list">
             {previewItems.slice(0, 10).map((item, index) => (
-              <Card key={`${item.username}-${index}`} size="small">
-                <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                  <Space wrap>
-                    <Tag color="blue">@{item.username}</Tag>
-                    <Tag>{item.reportUrl || "无报告链接"}</Tag>
-                  </Space>
-                  <Typography.Text strong>{title || "-"}</Typography.Text>
-                  <Typography.Paragraph style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>
-                    {item.content}
-                  </Typography.Paragraph>
-                </Space>
-              </Card>
+              <PreviewMessage
+                key={`${item.username}-${index}`}
+                username={item.username}
+                reportUrl={item.reportUrl}
+                title={title}
+                content={item.content}
+              />
             ))}
             {previewItems.length > 10 ? (
-              <Typography.Text type="secondary">
-                仅展示前 10 条预览，实际会发送 {previewItems.length} 条。
-              </Typography.Text>
+              <Alert
+                type="info"
+                showIcon
+                message={`仅展示前 10 条预览，实际会发送 ${previewItems.length} 条。`}
+              />
             ) : null}
           </Space>
         ) : (
