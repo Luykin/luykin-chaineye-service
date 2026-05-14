@@ -3,12 +3,19 @@ import { LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useMemo, useState } from "react";
 import { buildApiUrl } from "@/services/apiClient";
 
-const DEFAULT_NEXT_PATH = "/admin-react/overview";
+const ADMIN_ENTRY_PATH = "/api/xhunt/stats";
+const DEFAULT_NEXT_PATH = "/overview";
+
+function normalizeNextPath(value?: string | null) {
+  if (!value || !value.startsWith("/")) return DEFAULT_NEXT_PATH;
+  if (value.startsWith("/admin-react/")) return value.replace("/admin-react", "") || DEFAULT_NEXT_PATH;
+  if (value.startsWith("/api/xhunt/stats#")) return value.replace("/api/xhunt/stats#", "") || DEFAULT_NEXT_PATH;
+  return value;
+}
 
 function getSafeNextPath() {
-  const params = new URLSearchParams(window.location.search);
-  const nextRaw = params.get("next");
-  return nextRaw && nextRaw.startsWith("/") ? nextRaw : DEFAULT_NEXT_PATH;
+  const params = new URLSearchParams(window.location.hash.split("?")[1] || window.location.search);
+  return normalizeNextPath(params.get("next"));
 }
 
 export function LoginPage() {
@@ -19,7 +26,8 @@ export function LoginPage() {
   const nextPath = useMemo(() => getSafeNextPath(), []);
 
   const finishLogin = (target?: string) => {
-    window.location.assign(target || nextPath || DEFAULT_NEXT_PATH);
+    const safeTarget = normalizeNextPath(target || nextPath || DEFAULT_NEXT_PATH);
+    window.location.assign(`${ADMIN_ENTRY_PATH}#${safeTarget}`);
   };
 
   const handleSubmit = async (values: { email: string; password: string }) => {

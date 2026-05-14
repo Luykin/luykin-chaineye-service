@@ -10,7 +10,7 @@ export function NotFoundPage() {
       title="页面不存在"
       subTitle="当前路由尚未迁移到新版管理后台。"
       extra={
-        <Button type="primary" onClick={() => navigate("/admin-react/dau-details")}>
+        <Button type="primary" onClick={() => navigate("/overview")}>
           返回首页
         </Button>
       }

@@ -10,7 +10,12 @@ export default defineConfig(({ mode }) => {
   console.log(`[vite-config] mode=${mode} apiBaseUrl=${apiBaseUrl}`);
 
   return {
+    base: mode === "production" ? "/static/admin-web/" : "/",
     plugins: [react()],
+    build: {
+      outDir: "public/static/admin-web",
+      emptyOutDir: true,
+    },
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),

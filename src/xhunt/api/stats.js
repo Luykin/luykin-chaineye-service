@@ -1,12 +1,10 @@
 const express = require("express");
 const path = require("path");
-const { getFullStats } = require("../services/statsService");
 const {
   adminAuth,
   requirePermission,
 } = require("../../admin/middleware/adminAuth");
 const axios = require("axios");
-const expressStatic = require("express");
 const XLSX = require("xlsx");
 const fs = require("fs").promises;
 const fsSync = require("fs");
@@ -23,21 +21,33 @@ const { logAdminAction } = require("./stats-routes/shared");
 
 const router = express.Router();
 
-// 获取文件修改时间作为版本号（用于静态资源缓存控制）
-function getFileMtimeVersion(filePath) {
-  try {
-    const stat = fsSync.statSync(filePath);
-    return stat.mtime.getTime().toString(36); // 使用 36 进制缩短长度
-  } catch (e) {
-    return Date.now().toString(36);
+function findProjectRoot(startDir) {
+  let currentDir = startDir;
+
+  while (true) {
+    const hasPackageJson = fsSync.existsSync(path.join(currentDir, "package.json"));
+    const hasAdminWeb = fsSync.existsSync(path.join(currentDir, "admin-web"));
+
+    if (hasPackageJson && hasAdminWeb) {
+      return currentDir;
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      return path.resolve(__dirname, "../../..");
+    }
+
+    currentDir = parentDir;
   }
 }
 
-// 静态资源版本号（启动时计算，文件修改后自动更新）
-const staticVersions = {
-  css: getFileMtimeVersion(path.join(__dirname, '../../public/static/css/stats.css')),
-  js: getFileMtimeVersion(path.join(__dirname, '../../public/static/js/stats.js')),
-};
+const PROJECT_ROOT = process.env.PROJECT_ROOT
+  ? path.resolve(process.env.PROJECT_ROOT)
+  : findProjectRoot(__dirname);
+const ADMIN_WEB_DIST_DIR = process.env.ADMIN_WEB_DIST_DIR
+  ? path.resolve(process.env.ADMIN_WEB_DIST_DIR)
+  : path.join(PROJECT_ROOT, "admin-web", "public", "static", "admin-web");
+const ADMIN_WEB_INDEX_PATH = path.join(ADMIN_WEB_DIST_DIR, "index.html");
 
 // -------------------- Nacos Config Admin (with auth) --------------------
 const NACOS_BASE_URL = process.env.NACOS_BASE_URL || "http://127.0.0.1:8848";
@@ -229,70 +239,15 @@ function formatDateTime(date = new Date()) {
 // 旧版 basicAuth 和 /logout 已废弃，改为基于 adminAuth 的 JWT Cookie 方案
 
 /**
- * GET /stats
- * 获取产品数据统计（需要认证）
+ * GET /api/xhunt/stats
+ * 旧版 EJS 管理后台入口已下线，保持原路径并返回 React 管理后台构建产物。
  */
-router.get("/", adminAuth, async (req, res) => {
-  try {
-    // 设置静态文件服务（在每次请求时设置）
-    const app = req.app;
-    const staticPath = path.join(__dirname, "../../public/static");
-    app.use("/static", expressStatic.static(staticPath));
-
-    // 获取统计数据
-    const stats = await getFullStats(req.redisClient);
-
-    // 将统计数据传递给前端JavaScript（用于下载功能）
-    const statsDataScript = `<script>window.statsData = ${JSON.stringify(
-      stats
-    )};</script>`;
-
-    // 设置 EJS 模板引擎
-    app.set("view engine", "ejs");
-    app.set("views", path.join(__dirname, "../views"));
-
-    // 渲染模板，传递所有需要的辅助函数和数据
-    const renderedHtml = await new Promise((resolve, reject) => {
-      app.render(
-        "stats",
-        {
-          stats,
-          formatNumber,
-          formatDateTime,
-          user: req.user, // 传递用户信息
-          staticVersions, // 静态资源版本号
-        },
-        (err, html) => {
-          if (err) reject(err);
-          else resolve(html);
-        }
-      );
-    });
-
-    // 在HTML中注入统计数据脚本与权限
-    const permsScript = `<script>window.adminPermissions = ${JSON.stringify(
-      req.user?.permissions || []
-    )};</script><script>window.__adminRole=${JSON.stringify(
-      req.user?.role || ""
-    )};window.__isSuperAdmin=${JSON.stringify(
-      req.user?.role === "super"
-    )};window.__adminEmail=${JSON.stringify(
-      req.user?.username || ""
-    )};</script>`;
-    const finalHtml = renderedHtml.replace(
-      "</body>",
-      `${statsDataScript}${permsScript}</body>`
-    );
-
-    res.send(finalHtml);
-  } catch (error) {
-    console.error("Error fetching stats:", error);
-    res.status(500).json({
-      error: "获取统计数据失败",
-      message: error.message,
-      stack: error.stack,
-    });
+router.get("/", async (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  if (!fsSync.existsSync(ADMIN_WEB_INDEX_PATH)) {
+    return res.status(503).send("Admin web build not found. Please run `yarn build` first.");
   }
+  return res.sendFile(ADMIN_WEB_INDEX_PATH);
 });
 router.use(overviewStatsRouter);
 router.use(adminAuditRouter);

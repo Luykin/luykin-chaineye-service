@@ -5,7 +5,7 @@
  * - POST /api/admin/llm-test - 执行测试
  * - GET /api/admin/llm-test/models - 可用模型列表
  * 
- * 注意：前端页面已集成到 stats.ejs 中，通过 tab 方式访问
+ * 注意：前端页面已迁移到 React 管理后台
  */
 
 const express = require('express');

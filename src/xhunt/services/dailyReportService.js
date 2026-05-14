@@ -171,7 +171,7 @@ async function collectDeviceStatus(redisClient) {
 }
 
 async function renderEmailHTML(data) {
-  const templatePath = path.join(__dirname, "../views/emails/daily-report.ejs");
+  const templatePath = path.join(__dirname, "../templates/emails/daily-report.ejs");
   return new Promise((resolve, reject) => {
     ejs.renderFile(
       templatePath,

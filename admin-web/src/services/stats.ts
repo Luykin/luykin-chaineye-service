@@ -19,6 +19,8 @@ import type {
   RootdataQuotaResponse,
   RootdataSetInitialResponse,
   SecurityViolationsResponse,
+  UrlStatsResponse,
+  VersionStatsResponse,
 } from "@/types/stats";
 
 export async function fetchOverviewStats() {
@@ -214,4 +216,17 @@ export async function fetchAuditLogs(params: {
   if (params.action) query.set("action", params.action);
 
   return apiRequest<AuditLogsResponse>(`/api/xhunt/stats/admin-audit/logs?${query.toString()}`);
+}
+
+
+export async function fetchVersionStats(timeRange: string) {
+  const query = new URLSearchParams();
+  query.set("timeRange", timeRange);
+  return apiRequest<VersionStatsResponse>(`/api/xhunt/stats/version-stats?${query.toString()}`);
+}
+
+export async function fetchUrlStats(timeRange: string) {
+  const query = new URLSearchParams();
+  query.set("timeRange", timeRange);
+  return apiRequest<UrlStatsResponse>(`/api/xhunt/stats/url-stats?${query.toString()}`);
 }

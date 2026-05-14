@@ -25,11 +25,9 @@ const LINK_SECRET = process.env.SUPABASE_LINK_SECRET || "change-me-link";
 // 登录页面由 React Admin 承载；保留 /admin/login 作为兼容入口。
 router.get("/login", (req, res) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-  const nextRaw = typeof req.query?.next === "string" ? req.query.next : "/admin-react/overview";
-  const next = nextRaw.startsWith("/") ? nextRaw : "/admin-react/overview";
-  const target = new URL("/admin-react/login", `${req.protocol}://${req.get("host") || "localhost"}`);
-  target.searchParams.set("next", next);
-  return res.redirect(302, `${target.pathname}${target.search}`);
+  const nextRaw = typeof req.query?.next === "string" ? req.query.next : "/overview";
+  const next = nextRaw.startsWith("/admin-react/") ? nextRaw.replace("/admin-react", "") : nextRaw.startsWith("/") ? nextRaw : "/overview";
+  return res.redirect(302, `/api/xhunt/stats#/login?next=${encodeURIComponent(next)}`);
 });
 
 // 提供给 Nginx auth_request 的轻量会话校验端点：会话有效返回 204
@@ -231,7 +229,7 @@ router.post("/webauthn/authentication/verify", express.json(), async (req, res) 
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     await req.redisClient.del(challengeKey);
-    res.json({ success: true, redirect: "/admin-react/dau-details" });
+    res.json({ success: true, redirect: "/overview" });
   } catch (e) {
     try { await XhuntAdminAuditLog.create({ adminId: null, email: null, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
     res.status(500).json({ success: false, error: "验证失败" });
@@ -426,7 +424,7 @@ router.post("/login", express.json(), async (req, res) => {
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
     res.set('Cache-Control','no-store');
     res.type('application/json');
-    res.json({ success: true, redirect: "/admin-react/dau-details", credCount });
+    res.json({ success: true, redirect: "/overview", credCount });
   } catch (e) {
     console.error("[admin login] error:", e);
     res.status(500).json({ success: false, error: "登录失败" });

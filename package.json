@@ -7,6 +7,8 @@
     "admin-web:dev": "yarn --cwd admin-web dev",
     "admin-web:build": "yarn --cwd admin-web build",
     "admin-web:preview": "yarn --cwd admin-web preview",
+    "build": "yarn admin-web:build",
+    "build:deploy": "yarn admin-web:build",
     "dev:pro": "NODE_ENV=production nodemon ./src/apiServer.js",
     "dev-crawler": "NODE_ENV=development nodemon ./src/crawlerServer.js",
     "directus:start": "env $(grep -v '^#' .env-pro | xargs) docker compose -f deploy/docker-compose.directus.yml up -d",

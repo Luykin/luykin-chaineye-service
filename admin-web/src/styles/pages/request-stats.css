@@ -1,0 +1,145 @@
+.request-stats-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.request-stats-summary-row {
+  margin-bottom: 0;
+}
+
+.request-stat-card.ant-card,
+.request-stats-card.ant-card {
+  border-color: #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.request-stat-card.ant-card .ant-card-body {
+  padding: 16px;
+}
+
+.request-stat-card .ant-statistic-title {
+  margin-bottom: 3px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.request-stat-card .ant-statistic-content {
+  color: #111827;
+  font-size: 24px;
+  font-weight: 650;
+}
+
+.request-stat-card--blue {
+  border-color: #bfdbfe !important;
+  background: #eff6ff !important;
+}
+
+.request-stat-card--green {
+  border-color: #bbf7d0 !important;
+  background: #f0fdf4 !important;
+}
+
+.request-stat-card--purple {
+  border-color: #ddd6fe !important;
+  background: #f5f3ff !important;
+}
+
+.request-stats-card > .ant-card-head {
+  min-height: 46px;
+  border-bottom-color: #eef2f7;
+}
+
+.request-stats-card > .ant-card-head .ant-card-head-title {
+  padding: 12px 0;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.request-stats-card > .ant-card-body {
+  padding: 16px;
+}
+
+.request-stats-chart-wrap {
+  position: relative;
+  height: 420px;
+  min-height: 320px;
+}
+
+.request-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.request-rank--1 {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.request-rank--2 {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.request-rank--3 {
+  background: #fed7aa;
+  color: #9a3412;
+}
+
+.url-stats-path.ant-typography {
+  max-width: 100%;
+  color: #1e293b;
+  font-size: 12px;
+  font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.url-stats-percent-text.ant-typography {
+  color: #475569;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+  .request-stats-card > .ant-card-head {
+    align-items: flex-start;
+  }
+
+  .request-stats-card > .ant-card-head-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .request-stats-card > .ant-card-head .ant-card-extra {
+    width: 100%;
+    margin-inline-start: 0;
+    padding: 0 0 12px;
+  }
+
+  .request-stats-card .ant-input {
+    width: 100% !important;
+  }
+
+  .request-stats-chart-wrap {
+    height: 340px;
+  }
+}
+
+.request-stats-chart-loading {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-size: 13px;
+}

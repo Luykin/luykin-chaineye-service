@@ -4,13 +4,12 @@ import type { AdminSessionErrorResponse, AdminSessionUser } from "@/types/auth";
 import { fetchAdminSession } from "@/services/auth";
 import { ApiError, buildApiUrl } from "@/services/apiClient";
 
-const ADMIN_HOME_PATH = "/admin-react/overview";
-const ADMIN_LOGIN_PATH = "/admin-react/login";
+const ADMIN_ENTRY_PATH = "/api/xhunt/stats";
+const ADMIN_HOME_PATH = "/overview";
+const ADMIN_LOGIN_HASH = "#/login";
 
 function buildLoginUrl() {
-  const loginUrl = new URL(ADMIN_LOGIN_PATH, window.location.origin);
-  loginUrl.searchParams.set("next", ADMIN_HOME_PATH);
-  return loginUrl.toString();
+  return `${ADMIN_ENTRY_PATH}${ADMIN_LOGIN_HASH}?next=${encodeURIComponent(ADMIN_HOME_PATH)}`;
 }
 
 interface AuthContextValue {
@@ -23,7 +22,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const isLoginRoute = window.location.pathname === ADMIN_LOGIN_PATH;
+  const isLoginRoute = window.location.hash.startsWith(ADMIN_LOGIN_HASH);
   const [user, setUser] = useState<AdminSessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

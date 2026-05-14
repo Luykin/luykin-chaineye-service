@@ -20,7 +20,12 @@ export default defineConfig(function (_a) {
     var port = Number(env.VITE_PORT || 5174);
     console.log("[vite-config] mode=".concat(mode, " apiBaseUrl=").concat(apiBaseUrl));
     return {
+        base: mode === "production" ? "/static/admin-web/" : "/",
         plugins: [react()],
+        build: {
+            outDir: "public/static/admin-web",
+            emptyOutDir: true,
+        },
         resolve: {
             alias: {
                 "@": path.resolve(__dirname, "src"),

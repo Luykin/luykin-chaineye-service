@@ -491,3 +491,41 @@ export interface AuditLogsResponse {
     totalPages: number;
   };
 }
+
+
+export interface VersionStatsDataset {
+  label: string;
+  data: number[];
+  borderColor?: string;
+  backgroundColor?: string;
+  tension?: number;
+}
+
+export interface VersionStatsResponse {
+  success: boolean;
+  timeRange: string;
+  labels: string[];
+  datasets: VersionStatsDataset[];
+  totalVersions: number;
+  error?: string;
+  message?: string;
+}
+
+export interface UrlStatsItem {
+  urlPath: string;
+  count: number;
+  percent: string | number;
+}
+
+export interface UrlStatsResponse {
+  success: boolean;
+  timeRange: string;
+  data: {
+    urlStats: UrlStatsItem[];
+    totalUrls: number;
+    totalRequests: number;
+    timeWindows: number;
+  };
+  error?: string;
+  message?: string;
+}

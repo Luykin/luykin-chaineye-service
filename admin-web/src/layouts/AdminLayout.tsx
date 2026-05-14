@@ -39,8 +39,9 @@ import { buildApiUrl } from "@/services/apiClient";
 import { adminMainNavItems, adminShortcutNavItems, type AdminNavItem } from "@/config/admin-navigation";
 
 const { Header, Content } = Layout;
-const ADMIN_HOME_PATH = "/admin-react/overview";
-const ADMIN_LOGIN_PATH = "/admin-react/login";
+const ADMIN_ENTRY_PATH = "/api/xhunt/stats";
+const ADMIN_HOME_PATH = "/overview";
+const ADMIN_LOGIN_HASH = "#/login";
 const ADMIN_TITLE = "数据统计面板";
 const { useBreakpoint } = Grid;
 
@@ -179,15 +180,13 @@ export function AdminLayout() {
       void openSupabase();
       return;
     }
-    if (itemKey.startsWith("/admin-react/")) {
+    if (itemKey.startsWith("/")) {
       navigate(itemKey);
     }
   };
 
   const openLoginPage = () => {
-    const loginUrl = new URL(ADMIN_LOGIN_PATH, window.location.origin);
-    loginUrl.searchParams.set("next", ADMIN_HOME_PATH);
-    window.location.href = loginUrl.toString();
+    window.location.href = `${ADMIN_ENTRY_PATH}${ADMIN_LOGIN_HASH}?next=${encodeURIComponent(ADMIN_HOME_PATH)}`;
   };
 
   const openSupabase = async () => {

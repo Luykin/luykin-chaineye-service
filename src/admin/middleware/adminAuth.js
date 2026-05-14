@@ -66,7 +66,7 @@ async function adminAuth(req, res, next) {
     // Sliding expiration: re-issue cookie on each valid request
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
 
-    // 注入兼容对象与权限，保持 stats.ejs 的 user 判断逻辑最小改动
+    // 注入兼容对象与权限，供管理后台 API 权限判断使用
     req.adminUser = admin;
     req.adminPermissions = permissions;
     req.user = {
@@ -103,7 +103,7 @@ function requirePermission(perm) {
 }
 
 function renderLoginRedirect() {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><script>location.replace('/admin-react/login')</script><style>body{background:#f8fafc;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,-apple-system,sans-serif;color:#64748b}</style></head><body>会话已过期，正在跳转...</body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><script>location.replace('/api/xhunt/stats#/login')</script><style>body{background:#f8fafc;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,-apple-system,sans-serif;color:#64748b}</style></head><body>会话已过期，正在跳转...</body></html>`;
 }
 
 module.exports = { adminAuth, requireRole, requirePermission, setSessionCookie };

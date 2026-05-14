@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createHashRouter, Navigate } from "react-router-dom";
 import { AdminLayout } from "@/layouts/AdminLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { GenericStatsPage } from "@/pages/GenericStatsPage";
@@ -64,7 +64,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {
-  const path = item.key.replace("/admin-react/", "");
+  const path = item.key.replace(/^\//, "");
   return {
     path,
     element:
@@ -74,22 +74,18 @@ const generatedAdminRoutes = adminMainNavItems.map((item) => {
   };
 });
 
-export const router = createBrowserRouter([
+export const router = createHashRouter([
   {
-    path: "/admin-react/login",
+    path: "/login",
     element: <LoginPage />,
   },
   {
     path: "/",
-    element: <Navigate to="/admin-react/overview" replace />,
-  },
-  {
-    path: "/admin-react",
     element: <AdminLayout />,
     children: [
       {
         index: true,
-        element: <Navigate to="/admin-react/overview" replace />,
+        element: <Navigate to="/overview" replace />,
       },
       ...generatedAdminRoutes,
     ],

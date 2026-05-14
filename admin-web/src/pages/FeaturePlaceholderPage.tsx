@@ -18,7 +18,7 @@ export function FeaturePlaceholderPage({ title, permission }: FeaturePlaceholder
         <Space>
           {permission ? <Tag color="blue">{permission}</Tag> : null}
           <Typography.Text type="secondary">可先从侧边栏保留完整导航结构</Typography.Text>
-          <Button type="primary" onClick={() => navigate("/admin-react/dau-details")}>
+          <Button type="primary" onClick={() => navigate("/overview")}>
             返回首页
           </Button>
         </Space>

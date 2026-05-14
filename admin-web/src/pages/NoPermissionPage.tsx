@@ -10,7 +10,7 @@ export function NoPermissionPage() {
       title="无权限访问"
       subTitle="当前账号没有访问该页面的权限，请联系坤哥分配权限。"
       extra={
-        <Button type="primary" onClick={() => navigate("/admin-react/dau-details")}>
+        <Button type="primary" onClick={() => navigate("/overview")}>
           返回首页
         </Button>
       }
