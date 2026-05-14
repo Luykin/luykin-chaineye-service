@@ -33,6 +33,7 @@ const { body } = require("express-validator");
 const { validateRequest } = require("../middleware/validate-request");
 const { authenticateToken } = require("../middleware/auth");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { recordGenericStat } = require("../services/generic-stats-service");
 
 const router = express.Router();
 
@@ -325,6 +326,35 @@ router.post(
       res.setHeader("X-RateLimit-Limit", rateLimitCheck.total);
       res.setHeader("X-RateLimit-Remaining", rateLimitCheck.remaining);
       res.setHeader("X-RateLimit-Reset", rateLimitCheck.resetTime);
+
+      try {
+        await recordGenericStat({
+          type: "xhunt.kol_chat.chat",
+          source: "xhunt",
+          action: "chat",
+          subjectType: "kol",
+          subjectId: kol_id,
+          subjectName: kol_id,
+          actorType: "xhunt_user",
+          actorId: req.user?.id || null,
+          actorName: req.user?.username || req.user?.displayName || null,
+          eventAt: new Date(),
+          countValue: 1,
+          dimensions: {
+            route: "/api/xhunt/kol-chat/chat",
+            isVip: !!isVip,
+          },
+          metrics: {
+            callCount: 1,
+            questionCount: 1,
+          },
+          meta: {
+            fingerprint: req.securityContext?.fingerprint || null,
+          },
+        });
+      } catch (statError) {
+        console.error("[KOL Chat] 写入通用统计失败:", statError.message);
+      }
 
       // 透传后端响应
       res.json(response.data);

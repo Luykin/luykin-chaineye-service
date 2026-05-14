@@ -349,6 +349,11 @@
             <%- include('partials/url-stats') %>
           </div>
 
+          <!-- 通用统计 Tab -->
+          <div class="tab-pane" id="generic-stats">
+            <%- include('partials/generic-stats') %>
+          </div>
+
           <!-- 公告配置 Tab -->
           <div class="tab-pane" id="nacos-messages">
             <%- include('partials/nacos-messages') %>
@@ -592,6 +597,7 @@
         { id: 'device-monitor', icon: '#icon-monitor', text: '设备监控', perm: 'device-status:read' },
         { id: 'version-stats', icon: '#icon-package', text: '版本统计', perm: 'version-stats' },
         { id: 'url-stats', icon: '#icon-link', text: '接口统计', perm: 'url-stats' },
+        { id: 'generic-stats', icon: '#icon-clipboard', text: '通用统计', perm: 'generic-stats' },
         { id: 'nacos-messages', icon: '#icon-megaphone', text: '公告配置', perm: 'nacos-messages' },
         { id: 'nacos-campaigns', icon: '#icon-target', text: 'Earn活动', perm: 'nacos_config' },
         { id: 'nacos-tags', icon: '#icon-tag', text: '内置标签', perm: 'nacos-tags' },

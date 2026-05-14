@@ -15,6 +15,7 @@ const DailyActiveUserModel = require("../xhunt/models/DailyActiveUser");
 const XHuntUserProSubscriptionModel = require("../xhunt/models/XHuntUserProSubscription");
 const VersionRequestStatsModel = require("../xhunt/models/VersionRequestStats");
 const UrlRequestStatsModel = require("../xhunt/models/UrlRequestStats");
+const GenericStatEventModel = require("../xhunt/models/GenericStatEvent");
 const SecurityViolationLogModel = require("../xhunt/models/SecurityViolationLog");
 const UnregisteredUserRegistrationModel = require("../xhunt/models/UnregisteredUserRegistration");
 const XhuntAdminManagerModel = require("../xhunt/models/XhuntAdminManager");
@@ -79,6 +80,7 @@ const DailyActiveUser = DailyActiveUserModel(pgInstance);
 const XHuntUserProSubscription = XHuntUserProSubscriptionModel(pgInstance);
 const VersionRequestStats = VersionRequestStatsModel(pgInstance);
 const UrlRequestStats = UrlRequestStatsModel(pgInstance);
+const GenericStatEvent = GenericStatEventModel(pgInstance);
 const SecurityViolationLog = SecurityViolationLogModel(pgInstance);
 const UnregisteredUserRegistration = UnregisteredUserRegistrationModel(pgInstance);
 const XhuntAdminManager = XhuntAdminManagerModel(pgInstance);
@@ -288,6 +290,7 @@ module.exports = {
   XHuntUserProSubscription,
   VersionRequestStats,
   UrlRequestStats,
+  GenericStatEvent,
   SecurityViolationLog,
   UnregisteredUserRegistration,
   XhuntAdminManager,
