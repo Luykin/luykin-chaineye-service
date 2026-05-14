@@ -35,7 +35,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
 import { buildApiUrl } from "@/services/apiClient";
-import { adminMainNavItems, adminShortcutNavItems } from "@/config/admin-navigation";
+import { adminMainNavItems, adminShortcutNavItems, type AdminNavItem } from "@/config/admin-navigation";
 
 const { Header, Sider, Content } = Layout;
 const ADMIN_HOME_PATH = "/admin-react/dau-details";
@@ -43,6 +43,32 @@ const ADMIN_TITLE = "数据统计面板";
 const { useBreakpoint } = Grid;
 const NO_PERMISSION_COLLAPSED_STORAGE_KEY = "admin_sidebar_no_permission_collapsed";
 const SIDEBAR_PINNED_STORAGE_KEY = "admin_sidebar_pinned";
+const SIDEBAR_GROUPS_STORAGE_KEY = "admin_sidebar_group_open_keys";
+
+type SidebarGroupKey = NonNullable<AdminNavItem["sidebarGroup"]>;
+
+const sidebarGroupDefinitions: Array<{ key: SidebarGroupKey; label: string }> = [
+  { key: "data", label: "数据查看" },
+  { key: "operation", label: "运营配置" },
+  { key: "monitor", label: "状态监控" },
+  { key: "dev", label: "调试工具" },
+  { key: "system", label: "系统管理" },
+];
+
+const defaultSidebarGroupKeys = sidebarGroupDefinitions.map((group) => group.key);
+
+function getSidebarGroupKey(item: AdminNavItem): SidebarGroupKey {
+  return item.sidebarGroup || (item.section === "system" ? "system" : "data");
+}
+
+function toMenuItem(item: AdminNavItem) {
+  return {
+    key: item.key,
+    icon: item.icon,
+    label: item.label,
+  };
+}
+
 
 export function AdminLayout() {
   const location = useLocation();
@@ -54,6 +80,15 @@ export function AdminLayout() {
   const [sidebarPinned, setSidebarPinned] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(SIDEBAR_PINNED_STORAGE_KEY) === "true";
+  });
+  const [openSidebarGroups, setOpenSidebarGroups] = useState<string[]>(() => {
+    if (typeof window === "undefined") return defaultSidebarGroupKeys;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(SIDEBAR_GROUPS_STORAGE_KEY) || "null");
+      return Array.isArray(stored) ? stored : defaultSidebarGroupKeys;
+    } catch {
+      return defaultSidebarGroupKeys;
+    }
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
@@ -96,12 +131,18 @@ export function AdminLayout() {
   );
 
   const permittedMenuItems = useMemo(
+    () => permittedNavItems.map(toMenuItem),
+    [permittedNavItems]
+  );
+
+  const permittedSidebarGroups = useMemo(
     () =>
-      permittedNavItems.map(({ key, icon, label }) => ({
-        key,
-        icon,
-        label,
-      })),
+      sidebarGroupDefinitions
+        .map((group) => {
+          const items = permittedNavItems.filter((item) => getSidebarGroupKey(item) === group.key);
+          return { ...group, items, menuItems: items.map(toMenuItem) };
+        })
+        .filter((group) => group.items.length > 0),
     [permittedNavItems]
   );
 
@@ -180,6 +221,11 @@ export function AdminLayout() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(SIDEBAR_PINNED_STORAGE_KEY, sidebarPinned ? "true" : "false");
   }, [sidebarPinned]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SIDEBAR_GROUPS_STORAGE_KEY, JSON.stringify(openSidebarGroups));
+  }, [openSidebarGroups]);
 
   const openLoginPage = () => {
     const loginUrl = new URL(buildApiUrl("/admin/login"), window.location.origin);
@@ -408,18 +454,56 @@ export function AdminLayout() {
           paddingBottom: 12,
         }}
       >
-        <Menu
-          mode="inline"
-          rootClassName="admin-sidebar-menu admin-sidebar-menu--main"
-          inlineCollapsed={sidebarCollapsed}
-          selectedKeys={[location.pathname]}
-          items={permittedMenuItems}
-          onClick={({ key }) => {
-            navigate(key);
-            if (isMobile) setMobileMenuOpen(false);
-          }}
-          style={{ borderInlineEnd: "none", paddingTop: 8 }}
-        />
+        {sidebarCollapsed ? (
+          <Menu
+            mode="inline"
+            rootClassName="admin-sidebar-menu admin-sidebar-menu--main"
+            inlineCollapsed
+            selectedKeys={[location.pathname]}
+            items={permittedMenuItems}
+            onClick={({ key }) => {
+              navigate(key);
+              if (isMobile) setMobileMenuOpen(false);
+            }}
+            style={{ borderInlineEnd: "none", paddingTop: 8 }}
+          />
+        ) : (
+          <Collapse
+            ghost
+            size="small"
+            className="admin-sidebar-groups"
+            activeKey={openSidebarGroups}
+            onChange={(keys) => {
+              setOpenSidebarGroups(Array.isArray(keys) ? keys.map(String) : [String(keys)]);
+            }}
+            items={permittedSidebarGroups.map((group) => ({
+              key: group.key,
+              label: (
+                <span className="admin-sidebar-group-label">
+                  <span>{group.label}</span>
+                  <span className="admin-sidebar-group-count">{group.items.length}</span>
+                </span>
+              ),
+              children: (
+                <Menu
+                  mode="inline"
+                  rootClassName="admin-sidebar-menu admin-sidebar-menu--main"
+                  selectedKeys={[location.pathname]}
+                  items={group.menuItems}
+                  onClick={({ key }) => {
+                    navigate(key);
+                    if (isMobile) setMobileMenuOpen(false);
+                  }}
+                  style={{ borderInlineEnd: "none" }}
+                />
+              ),
+              styles: {
+                header: { padding: "6px 16px 4px 18px" },
+                body: { padding: 0 },
+              },
+            }))}
+          />
+        )}
 
         {noPermissionMenuItems.length > 0 ? (
           <>

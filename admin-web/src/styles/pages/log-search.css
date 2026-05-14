@@ -1,0 +1,12 @@
+/* Log search result metadata should not push real log content too far down. */
+.log-search-file-tags {
+  max-height: 50px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  align-content: flex-start;
+}
+
+.log-search-file-tags .ant-tag {
+  margin-inline-end: 4px;
+}

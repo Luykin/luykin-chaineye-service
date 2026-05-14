@@ -135,7 +135,7 @@ export function LogSearchPage() {
                           styles={{ body: { padding: 16 } }}
                           title={`共 ${searchQuery.data.data.totalMatches} 个匹配，搜索了 ${searchQuery.data.data.searchedFiles} 个文件`}
                         >
-                          <Space wrap>
+                          <Space wrap className="log-search-file-tags">
                             {searchQuery.data.data.fileSizes.map((file) => (
                               <Tag key={file.name}>
                                 {file.name} · {file.size.toFixed(2)} MB

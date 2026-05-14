@@ -206,3 +206,50 @@
 .admin-no-permission-menu .ant-menu-item:hover .ant-menu-item-icon {
   color: #b91c1c !important;
 }
+
+.admin-sidebar-groups {
+  padding-top: 6px;
+}
+
+.admin-sidebar-groups.ant-collapse > .ant-collapse-item {
+  border-bottom: none;
+}
+
+.admin-sidebar-groups .ant-collapse-header {
+  min-height: 28px;
+  align-items: center !important;
+  color: #94a3b8 !important;
+  border-radius: 0;
+}
+
+.admin-sidebar-groups .ant-collapse-expand-icon {
+  height: 18px !important;
+  padding-inline-end: 5px !important;
+  color: #cbd5e1;
+}
+
+.admin-sidebar-group-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.admin-sidebar-group-count {
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.admin-sidebar-groups .ant-collapse-content-box {
+  padding: 0 !important;
+}
+
+.admin-sidebar-groups .admin-sidebar-menu .ant-menu-item:first-child {
+  margin-top: 0;
+}
