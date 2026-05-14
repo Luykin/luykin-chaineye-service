@@ -58,7 +58,7 @@ a {
 
 .ant-menu-inline .ant-menu-item .ant-menu-item-icon,
 .ant-menu-inline .ant-menu-submenu-title .ant-menu-item-icon {
-  margin-inline-end: 10px;
+  margin-inline-end: 12px;
 }
 
 .ant-menu-inline-collapsed > .ant-menu-item .ant-menu-item-icon,
@@ -69,4 +69,18 @@ a {
 .ant-menu-inline-collapsed .ant-menu-item .admin-legacy-sidebar-icon,
 .ant-menu-inline-collapsed .ant-menu-submenu-title .admin-legacy-sidebar-icon {
   margin-inline-end: 0;
+}
+
+.ant-menu-inline-collapsed > .ant-menu-item .ant-menu-title-content,
+.ant-menu-inline-collapsed > .ant-menu-submenu .ant-menu-submenu-title .ant-menu-title-content {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  display: inline-block;
+  pointer-events: none;
+}
+
+.ant-menu-inline-collapsed > .ant-menu-item,
+.ant-menu-inline-collapsed > .ant-menu-submenu > .ant-menu-submenu-title {
+  padding-inline: calc(50% - 9px) !important;
 }

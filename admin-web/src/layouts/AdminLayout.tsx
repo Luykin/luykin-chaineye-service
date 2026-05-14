@@ -326,18 +326,20 @@ export function AdminLayout() {
         }}
       >
         <Space size={collapsed ? 0 : 12} style={{ minWidth: 0, flex: 1 }}>
-          <Image
-            src={buildApiUrl("/admin/logo")}
-            alt="XHunt Logo"
-            preview={false}
-            width={32}
-            height={32}
-            style={{
-              borderRadius: 8,
-              flex: "0 0 auto",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            }}
-          />
+          {!collapsed ? (
+            <Image
+              src={buildApiUrl("/admin/logo")}
+              alt="XHunt Logo"
+              preview={false}
+              width={32}
+              height={32}
+              style={{
+                borderRadius: 8,
+                flex: "0 0 auto",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+              }}
+            />
+          ) : null}
           {!collapsed ? (
             <Space
               direction="vertical"
