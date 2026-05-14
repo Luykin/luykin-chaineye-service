@@ -4,7 +4,7 @@
       <div>
         <h2 class="section-title">通用统计</h2>
         <p class="generic-stats-desc">
-          统一查看低频统计事件，支持按 type、时间、对象、用户筛选；当前已内置 KOL Chat 聚合分析。
+          统一查看低频统计事件，支持按 type、时间、对象、用户筛选，并提供按对象维度的聚合查看。
         </p>
       </div>
       <button id="generic-stats-refresh" class="btn-primary">刷新</button>
@@ -35,40 +35,40 @@
 
     <div id="generic-stats-summary" class="generic-summary-grid" style="display:none;">
       <div class="stat-card">
-        <div class="stat-title">KOL 数量</div>
+        <div class="stat-title">对象数量</div>
         <div class="stat-value stat-value-lg" id="generic-total-kols">0</div>
       </div>
       <div class="stat-card">
-        <div class="stat-title">调用次数</div>
+        <div class="stat-title">事件条数</div>
         <div class="stat-value stat-value-lg" id="generic-total-calls">0</div>
       </div>
       <div class="stat-card">
-        <div class="stat-title">问题数</div>
+        <div class="stat-title">累计计数</div>
         <div class="stat-value stat-value-lg" id="generic-total-questions">0</div>
       </div>
       <div class="stat-card">
-        <div class="stat-title">去重用户数</div>
+        <div class="stat-title">去重触发者数</div>
         <div class="stat-value stat-value-lg" id="generic-total-users">0</div>
       </div>
     </div>
 
     <div class="generic-card">
       <div class="generic-card-header">
-        <h3 class="generic-card-title">聚合分析</h3>
+        <h3 class="generic-card-title">对象聚合</h3>
         <span class="generic-card-hint" id="generic-aggregate-hint"></span>
       </div>
       <div id="generic-aggregate-empty" class="generic-empty">
-        当前 type 暂无专用聚合视图
+        当前筛选条件下暂无聚合数据
       </div>
       <div id="generic-aggregate-wrap" class="table-container" style="display:none;">
         <table class="data-table">
           <thead>
             <tr>
-              <th>KOL ID</th>
-              <th>KOL 名称</th>
-              <th>调用次数</th>
-              <th>问题数</th>
-              <th>去重用户数</th>
+              <th>对象 ID</th>
+              <th>对象名称</th>
+              <th>事件条数</th>
+              <th>累计计数</th>
+              <th>去重触发者数</th>
             </tr>
           </thead>
           <tbody id="generic-aggregate-tbody"></tbody>
@@ -90,8 +90,7 @@
               <th>对象</th>
               <th>用户</th>
               <th>计数</th>
-              <th>维度</th>
-              <th>指标</th>
+              <th>事件信息</th>
             </tr>
           </thead>
           <tbody id="generic-events-tbody"></tbody>
@@ -199,6 +198,11 @@
     word-break: break-word;
   }
 
+  .generic-events-table th:last-child,
+  .generic-events-table td:last-child {
+    width: 38%;
+  }
+
   .generic-empty {
     padding: 16px;
     color: #6b7280;
@@ -233,6 +237,66 @@
     font-weight: 500;
   }
 
+  .generic-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    max-width: 100%;
+  }
+
+  .generic-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #374151;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .generic-pill-key {
+    color: #6b7280;
+  }
+
+  .generic-type-text {
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .generic-subtext {
+    color: #6b7280;
+    font-size: 12px;
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  .generic-mainline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .generic-entity-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .generic-name {
+    color: #6b7280;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+
   @media (max-width: 1024px) {
     .generic-summary-grid {
       grid-template-columns: repeat(2, 1fr);
@@ -253,7 +317,7 @@
 <script>
   (function () {
     const TAB_ID = "generic-stats";
-    const SUPPORTED_AGGREGATE_TYPE = "xhunt.kol_chat.chat";
+    const AGGREGATE_TYPE = "xhunt.kol_chat.chat";
     const state = {
       initialized: false,
       loadedTypes: false,
@@ -337,6 +401,54 @@
       return value.toLocaleString("zh-CN");
     }
 
+    function summarizeObject(obj, preferredOrder = []) {
+      if (!obj || typeof obj !== "object") return [];
+      const entries = Object.entries(obj).filter(([, value]) => {
+        if (value === null || value === undefined || value === "") return false;
+        if (Array.isArray(value) && value.length === 0) return false;
+        return true;
+      });
+
+      const orderMap = new Map(preferredOrder.map((key, index) => [key, index]));
+      entries.sort(([a], [b]) => {
+        const aIndex = orderMap.has(a) ? orderMap.get(a) : 999;
+        const bIndex = orderMap.has(b) ? orderMap.get(b) : 999;
+        if (aIndex !== bIndex) return aIndex - bIndex;
+        return a.localeCompare(b);
+      });
+
+      return entries;
+    }
+
+    function formatMetaValue(value) {
+      if (typeof value === "boolean") return value ? "是" : "否";
+      if (Array.isArray(value)) return value.join(", ");
+      if (typeof value === "object") return formatJson(value);
+      return String(value);
+    }
+
+    function renderPills(obj, preferredOrder = [], emptyText = "—") {
+      const entries = summarizeObject(obj, preferredOrder);
+      if (!entries.length) {
+        return `<span class="generic-subtext">${emptyText}</span>`;
+      }
+
+      return `
+        <div class="generic-meta">
+          ${entries
+            .map(
+              ([key, value]) => `
+                <span class="generic-pill">
+                  <span class="generic-pill-key">${escapeHtml(key)}:</span>
+                  <span>${escapeHtml(formatMetaValue(value))}</span>
+                </span>
+              `
+            )
+            .join("")}
+        </div>
+      `;
+    }
+
     function getFilters() {
       return {
         type: typeSelect.value || "",
@@ -372,8 +484,8 @@
       ];
       typeSelect.innerHTML = options.join("");
 
-      if (items.some((item) => item.type === SUPPORTED_AGGREGATE_TYPE)) {
-        typeSelect.value = SUPPORTED_AGGREGATE_TYPE;
+      if (items.some((item) => item.type === AGGREGATE_TYPE)) {
+        typeSelect.value = AGGREGATE_TYPE;
       }
 
       state.loadedTypes = true;
@@ -381,11 +493,22 @@
 
     async function loadAggregate() {
       const filters = getFilters();
-      if (filters.type !== SUPPORTED_AGGREGATE_TYPE) {
+      if (!filters.type) {
         summaryEl.style.display = "none";
         aggregateWrap.style.display = "none";
         aggregateEmpty.style.display = "block";
-        aggregateHint.textContent = "当前 type 未配置专用聚合";
+        aggregateEmpty.textContent = "请选择具体 type 后查看对象聚合";
+        aggregateHint.textContent = "未选择 type";
+        aggregateTbody.innerHTML = "";
+        return;
+      }
+
+      if (filters.type !== AGGREGATE_TYPE) {
+        summaryEl.style.display = "none";
+        aggregateWrap.style.display = "none";
+        aggregateEmpty.style.display = "block";
+        aggregateEmpty.textContent = "当前 type 暂不支持对象聚合";
+        aggregateHint.textContent = "当前 type 暂不支持聚合";
         aggregateTbody.innerHTML = "";
         return;
       }
@@ -396,7 +519,19 @@
       if (filters.dateTo) params.set("dateTo", filters.dateTo);
       if (filters.subjectId) params.set("subjectId", filters.subjectId);
 
-      const data = await fetchJson(`/api/xhunt/stats/generic-stats/aggregate?${params.toString()}`);
+      let data;
+      try {
+        data = await fetchJson(`/api/xhunt/stats/generic-stats/aggregate?${params.toString()}`);
+      } catch (error) {
+        summaryEl.style.display = "none";
+        aggregateWrap.style.display = "none";
+        aggregateEmpty.style.display = "block";
+        aggregateEmpty.textContent = "当前筛选条件下暂无聚合数据";
+        aggregateHint.textContent = "当前 type 暂不支持聚合";
+        aggregateTbody.innerHTML = "";
+        return;
+      }
+
       const items = Array.isArray(data.data?.items) ? data.data.items : [];
       const summary = data.data?.summary || {};
 
@@ -406,7 +541,7 @@
       document.getElementById("generic-total-users").textContent = formatNumber(summary.totalUniqueUserCount);
 
       summaryEl.style.display = "grid";
-      aggregateHint.textContent = `共 ${formatNumber(items.length)} 个 KOL`;
+      aggregateHint.textContent = `共 ${formatNumber(items.length)} 个对象`;
 
       if (!items.length) {
         aggregateWrap.style.display = "none";
@@ -469,18 +604,41 @@
           (item) => `
             <tr>
               <td>${escapeHtml(formatDateTimeCell(item.eventAt))}</td>
-              <td>${escapeHtml(item.type)}</td>
               <td>
-                <div>${escapeHtml(item.subjectType || "-")} / ${escapeHtml(item.subjectId || "-")}</div>
-                <div style="color:#6b7280;font-size:12px;">${escapeHtml(item.subjectName || "-")}</div>
+                <div class="generic-type-text">${escapeHtml(item.type)}</div>
+                <div class="generic-subtext">${escapeHtml(item.source || "-")} · ${escapeHtml(item.action || "-")}</div>
               </td>
               <td>
-                <div>${escapeHtml(item.actorType || "-")} / ${escapeHtml(item.actorId || "-")}</div>
-                <div style="color:#6b7280;font-size:12px;">${escapeHtml(item.actorName || "-")}</div>
+                <div class="generic-entity-line">
+                  <span class="generic-badge">${escapeHtml(item.subjectType || "-")}</span>
+                  <span>${escapeHtml(item.subjectId || "-")}</span>
+                </div>
+                ${
+                  item.subjectName
+                    ? `<div class="generic-name">${escapeHtml(item.subjectName)}</div>`
+                    : ""
+                }
+              </td>
+              <td>
+                <div class="generic-entity-line">
+                  <span class="generic-badge">${escapeHtml(item.actorType || "-")}</span>
+                  <span>${escapeHtml(item.actorId || "-")}</span>
+                </div>
+                ${
+                  item.actorName
+                    ? `<div class="generic-name">${escapeHtml(item.actorName)}</div>`
+                    : ""
+                }
               </td>
               <td>${formatNumber(item.countValue)}</td>
-              <td><pre class="generic-json">${escapeHtml(formatJson(item.dimensions))}</pre></td>
-              <td><pre class="generic-json">${escapeHtml(formatJson(item.metrics))}</pre></td>
+              <td>
+                <div class="generic-mainline">
+                  ${renderPills(item.dimensions, ["route", "isVip"])}
+                </div>
+                <div class="generic-subtext" style="margin-top:8px;">
+                  ${renderPills(item.metrics, ["callCount", "questionCount"], "无附加指标")}
+                </div>
+              </td>
             </tr>
           `
         )
