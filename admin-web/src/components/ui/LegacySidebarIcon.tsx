@@ -225,6 +225,7 @@ export function LegacySidebarIcon({
 }: LegacySidebarIconProps) {
   return (
     <svg
+      className="admin-legacy-sidebar-icon"
       viewBox="0 0 24 24"
       width={size}
       height={size}

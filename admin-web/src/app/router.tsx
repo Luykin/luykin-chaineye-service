@@ -15,6 +15,9 @@ import { OnlineUsersPage } from "@/pages/OnlineUsersPage";
 import { LogSearchPage } from "@/pages/LogSearchPage";
 import { RootdataPage } from "@/pages/RootdataPage";
 import { SecurityViolationsPage } from "@/pages/SecurityViolationsPage";
+import { ReviewsManagementPage } from "@/pages/ReviewsManagementPage";
+import { MessagesPage } from "@/pages/MessagesPage";
+import { ServerCommandPage } from "@/pages/ServerCommandPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -32,6 +35,9 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "url-stats": <UrlStatsPage />,
   "version-stats": <VersionStatsPage />,
   "security-violations": <SecurityViolationsPage />,
+  messages: <MessagesPage />,
+  "reviews-management": <ReviewsManagementPage />,
+  "server-command": <ServerCommandPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {

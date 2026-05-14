@@ -40,3 +40,20 @@ a {
 .admin-no-permission-menu .ant-menu-item .ant-menu-item-icon {
   color: #94a3b8;
 }
+
+.ant-menu .admin-legacy-sidebar-icon,
+.ant-dropdown-menu .admin-legacy-sidebar-icon {
+  display: inline-block;
+  vertical-align: -0.125em;
+  flex-shrink: 0;
+}
+
+.ant-menu-inline .ant-menu-item .admin-legacy-sidebar-icon,
+.ant-menu-inline .ant-menu-submenu-title .admin-legacy-sidebar-icon {
+  margin-inline-end: 10px;
+}
+
+.ant-menu-inline-collapsed .ant-menu-item .admin-legacy-sidebar-icon,
+.ant-menu-inline-collapsed .ant-menu-submenu-title .admin-legacy-sidebar-icon {
+  margin-inline-end: 0;
+}
