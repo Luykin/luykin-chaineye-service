@@ -11,7 +11,7 @@ type LegacyActionVariant =
   | "remove"
   | "view";
 
-interface LegacyActionButtonProps extends ButtonProps {
+interface LegacyActionButtonProps extends Omit<ButtonProps, "variant"> {
   variant?: LegacyActionVariant;
   compact?: boolean;
 }

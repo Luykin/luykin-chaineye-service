@@ -30,134 +30,11 @@
   margin-bottom: 24px;
 }
 
-.bs-stat-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  overflow: hidden;
-  padding: 16px 16px 16px 20px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #fff;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.bs-stat-card:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.bs-stat-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.bs-stat-label {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  line-height: 1.3;
-  text-transform: uppercase;
-}
-
-.bs-stat-value {
-  overflow: hidden;
-  color: #0f172a;
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bs-stat-indicator {
-  width: 4px;
-  height: 40px;
-  margin-left: 12px;
-  border-radius: 2px;
-  background: var(--indicator-color, #94a3b8);
-  flex-shrink: 0;
-}
-
 .bs-actions-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 20px;
-}
-
-.binance-square-page .bs-btn.ant-btn,
-.binance-square-page .bs-btn {
-  display: inline-flex;
-  height: auto;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  box-shadow: none;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.binance-square-page .bs-btn.ant-btn:hover {
-  opacity: 0.9;
-}
-
-.binance-square-page .bs-btn-primary.ant-btn {
-  border-color: #2563eb;
-  background: #2563eb;
-  color: #fff;
-}
-
-.binance-square-page .bs-btn-primary.ant-btn:hover {
-  border-color: #1d4ed8 !important;
-  background: #1d4ed8 !important;
-  color: #fff !important;
-  opacity: 1;
-}
-
-.binance-square-page .bs-btn-success.ant-btn {
-  border-color: #059669;
-  background: #059669;
-  color: #fff;
-}
-
-.binance-square-page .bs-btn-success.ant-btn:hover {
-  border-color: #047857 !important;
-  background: #047857 !important;
-  color: #fff !important;
-}
-
-.binance-square-page .bs-btn-danger.ant-btn {
-  border-color: #dc2626;
-  background: #dc2626;
-  color: #fff;
-}
-
-.binance-square-page .bs-btn-danger.ant-btn:hover {
-  border-color: #b91c1c !important;
-  background: #b91c1c !important;
-  color: #fff !important;
-}
-
-.binance-square-page .bs-btn-refresh.ant-btn {
-  border-color: #e2e8f0;
-  background: #f8fafc;
-  color: #475569;
-}
-
-.binance-square-page .bs-btn-refresh.ant-btn:hover {
-  border-color: #cbd5e1 !important;
-  background: #f1f5f9 !important;
-  color: #334155 !important;
 }
 
 .bs-sub-tabs-react.ant-tabs {
@@ -393,46 +270,6 @@
 .bs-table-actions {
   display: flex;
   gap: 6px;
-}
-
-.binance-square-page .bs-table-btn.ant-btn {
-  height: 24px;
-  padding: 0 9px;
-  border-radius: 4px;
-  background: #fff;
-  box-shadow: none;
-  font-size: 12px;
-  line-height: 22px;
-}
-
-.binance-square-page .bs-table-btn-sync.ant-btn {
-  border-color: #bfdbfe;
-  color: #2563eb;
-}
-
-.binance-square-page .bs-table-btn-sync.ant-btn:hover {
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
-}
-
-.binance-square-page .bs-table-btn-remove.ant-btn {
-  border-color: #fecaca;
-  color: #dc2626;
-}
-
-.binance-square-page .bs-table-btn-remove.ant-btn:hover {
-  background: #fef2f2 !important;
-  color: #b91c1c !important;
-}
-
-.binance-square-page .bs-table-btn-view.ant-btn {
-  border-color: #a7f3d0;
-  color: #059669;
-}
-
-.binance-square-page .bs-table-btn-view.ant-btn:hover {
-  background: #f0fdf4 !important;
-  color: #047857 !important;
 }
 
 .bs-following-link {

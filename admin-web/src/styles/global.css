@@ -2,6 +2,7 @@
 @import "./components/page-section.css";
 @import "./components/tables.css";
 @import "./components/legacy-admin.css";
+@import "./components/legacy-stats.css";
 @import "./layout/sidebar.css";
 @import "./pages/feature-flags.css";
 @import "./pages/nacos.css";
