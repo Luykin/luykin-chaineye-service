@@ -9,9 +9,12 @@ import { NotFoundPage } from "@/pages/NotFoundPage";
 import { OverviewPage } from "@/pages/OverviewPage";
 import { CohortsPage } from "@/pages/CohortsPage";
 import { DauDetailsPage } from "@/pages/DauDetailsPage";
+import { DeviceMonitorPage } from "@/pages/DeviceMonitorPage";
 import { NotesPage } from "@/pages/NotesPage";
 import { OnlineUsersPage } from "@/pages/OnlineUsersPage";
 import { LogSearchPage } from "@/pages/LogSearchPage";
+import { RootdataPage } from "@/pages/RootdataPage";
+import { SecurityViolationsPage } from "@/pages/SecurityViolationsPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -20,12 +23,15 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "generic-stats": <GenericStatsPage />,
   cohorts: <CohortsPage />,
   "dau-details": <DauDetailsPage />,
+  rootdata: <RootdataPage />,
   "online-users": <OnlineUsersPage />,
   notes: <NotesPage />,
   "log-search": <LogSearchPage />,
+  "device-monitor": <DeviceMonitorPage />,
   "admin-audit-logs": <AuditLogsPage />,
   "url-stats": <UrlStatsPage />,
   "version-stats": <VersionStatsPage />,
+  "security-violations": <SecurityViolationsPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {
@@ -42,7 +48,7 @@ const generatedAdminRoutes = adminMainNavItems.map((item) => {
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <Navigate to="/admin-react/dau-details" replace />,
+    element: <Navigate to="/admin-react/overview" replace />,
   },
   {
     path: "/admin-react",
@@ -50,7 +56,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate to="/admin-react/dau-details" replace />,
+        element: <Navigate to="/admin-react/overview" replace />,
       },
       ...generatedAdminRoutes,
     ],

@@ -1,8 +1,10 @@
 import { apiRequest } from "./apiClient";
 import type {
   AuditLogsResponse,
+  ClearCacheResponse,
   DauDetailsResponse,
   DailyCohortsResponse,
+  DeviceStatusResponse,
   ErrorLogsResponse,
   GenericStatsAggregateResponse,
   GenericStatsEventsResponse,
@@ -11,6 +13,12 @@ import type {
   NotesResponse,
   OnlineUsersResponse,
   OverviewStatsResponse,
+  RootdataDailyResponse,
+  RootdataForceVerifyResponse,
+  RootdataManualCrawlResponse,
+  RootdataQuotaResponse,
+  RootdataSetInitialResponse,
+  SecurityViolationsResponse,
 } from "@/types/stats";
 
 export async function fetchOverviewStats() {
@@ -69,6 +77,74 @@ export async function fetchErrorLogs(params?: { lines?: number }) {
   const query = new URLSearchParams();
   query.set("lines", String(params?.lines || 1000));
   return apiRequest<ErrorLogsResponse>(`/api/xhunt/stats/error-logs?${query.toString()}`);
+}
+
+export async function fetchRootdataQuota() {
+  return apiRequest<RootdataQuotaResponse>("/api/xhunt/stats/rootdata-quota");
+}
+
+export async function fetchRootdataDaily(params: { date: string; page?: number; limit?: number }) {
+  const query = new URLSearchParams();
+  query.set("date", params.date);
+  if (params.page) query.set("page", String(params.page));
+  if (params.limit) query.set("limit", String(params.limit));
+  return apiRequest<RootdataDailyResponse>(`/api/xhunt/stats/rootdata-daily?${query.toString()}`);
+}
+
+export async function setRootdataInitial(date: string) {
+  return apiRequest<RootdataSetInitialResponse>("/api/xhunt/stats/rootdata-daily/set-initial", {
+    method: "POST",
+    body: { date },
+  });
+}
+
+export async function forceVerifyRootdata(params: {
+  keyword?: string;
+  twitterUrl?: string;
+  projectLink?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params.keyword) query.set("keyword", params.keyword);
+  if (params.twitterUrl) query.set("twitterUrl", params.twitterUrl);
+  if (params.projectLink) query.set("projectLink", params.projectLink);
+  return apiRequest<RootdataForceVerifyResponse>(`/api/xhunt/rootdata/force-verify?${query.toString()}`);
+}
+
+export async function manualCrawlRootdata(params: { url: string; force?: boolean }) {
+  return apiRequest<RootdataManualCrawlResponse>("/api/rootdata/manual-crawl", {
+    method: "POST",
+    body: params,
+    headers: {
+      "x-request-id": `admin-web-${Date.now()}`,
+    },
+  });
+}
+
+export async function fetchDeviceStatus() {
+  return apiRequest<DeviceStatusResponse>("/api/xhunt/stats/device-status");
+}
+
+export async function clearCacheByPrefix(prefix: string) {
+  return apiRequest<ClearCacheResponse>("/api/xhunt/stats/clear-cache", {
+    method: "POST",
+    body: { prefix },
+  });
+}
+
+export async function fetchSecurityViolations(params: {
+  page?: number;
+  limit?: number;
+  reasonCode?: string;
+  ip?: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("page", String(params.page || 1));
+  query.set("limit", String(params.limit || 50));
+  if (params.reasonCode) query.set("reasonCode", params.reasonCode);
+  if (params.ip) query.set("ip", params.ip);
+  return apiRequest<SecurityViolationsResponse>(
+    `/api/xhunt/stats/security-violations?${query.toString()}`
+  );
 }
 
 export async function fetchOnlineUsers(params: { page?: number; limit?: number }) {

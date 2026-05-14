@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-type RequestOptions = RequestInit & {
+type RequestOptions = Omit<RequestInit, "body"> & {
   body?: BodyInit | Record<string, unknown> | null;
 };
 
