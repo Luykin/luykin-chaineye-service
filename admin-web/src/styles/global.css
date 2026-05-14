@@ -111,6 +111,55 @@ a {
   font-weight: 400;
 }
 
+/* 全局列表 / 表格密度：按旧版后台 8~10px 单元格内边距收紧 */
+.ant-table-wrapper .ant-table {
+  font-size: 13px;
+}
+
+.ant-table-wrapper .ant-table-container {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th {
+  padding: 8px 12px !important;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f9fafb !important;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  padding: 7px 12px !important;
+  color: #4b5563;
+  line-height: 1.35;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: #f9fafb !important;
+}
+
+.ant-table-wrapper .ant-tag {
+  margin-inline-end: 0;
+  line-height: 18px;
+}
+
+.ant-table-wrapper .ant-btn-sm {
+  height: 24px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.ant-list .ant-list-item {
+  padding: 8px 12px;
+}
+
+.ant-descriptions-small .ant-descriptions-item-label,
+.ant-descriptions-small .ant-descriptions-item-content {
+  padding-bottom: 6px !important;
+  font-size: 13px;
+}
+
 @media (max-width: 768px) {
   .admin-page-section .ant-card-head {
     min-height: 68px;
@@ -374,6 +423,510 @@ a {
 
   .campaign-status-control-react {
     grid-template-columns: 1fr;
+  }
+}
+
+/* =====================================================
+   币安广场：贴近旧版 binance-square-stats.ejs 布局
+   ===================================================== */
+
+.binance-square-page {
+  padding: 0;
+}
+
+.binance-square-page .section-title {
+  margin: 0 0 8px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e5e7eb;
+  color: #1f2937;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.binance-square-page .section-desc {
+  margin: 0 0 20px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.bs-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.bs-stat-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 16px 16px 16px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bs-stat-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.bs-stat-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bs-stat-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.bs-stat-value {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bs-stat-indicator {
+  width: 4px;
+  height: 40px;
+  margin-left: 12px;
+  border-radius: 2px;
+  background: var(--indicator-color, #94a3b8);
+  flex-shrink: 0;
+}
+
+.bs-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.binance-square-page .bs-btn.ant-btn,
+.binance-square-page .bs-btn {
+  display: inline-flex;
+  height: auto;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.binance-square-page .bs-btn.ant-btn:hover {
+  opacity: 0.9;
+}
+
+.binance-square-page .bs-btn-primary.ant-btn {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.binance-square-page .bs-btn-primary.ant-btn:hover {
+  border-color: #1d4ed8 !important;
+  background: #1d4ed8 !important;
+  color: #fff !important;
+  opacity: 1;
+}
+
+.binance-square-page .bs-btn-success.ant-btn {
+  border-color: #059669;
+  background: #059669;
+  color: #fff;
+}
+
+.binance-square-page .bs-btn-success.ant-btn:hover {
+  border-color: #047857 !important;
+  background: #047857 !important;
+  color: #fff !important;
+}
+
+.binance-square-page .bs-btn-danger.ant-btn {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+.binance-square-page .bs-btn-danger.ant-btn:hover {
+  border-color: #b91c1c !important;
+  background: #b91c1c !important;
+  color: #fff !important;
+}
+
+.binance-square-page .bs-btn-refresh.ant-btn {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.binance-square-page .bs-btn-refresh.ant-btn:hover {
+  border-color: #cbd5e1 !important;
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+}
+
+.bs-sub-tabs-react.ant-tabs {
+  margin-top: 0;
+}
+
+.bs-sub-tabs-react > .ant-tabs-nav {
+  margin-bottom: 20px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.bs-sub-tabs-react > .ant-tabs-nav::before {
+  display: none;
+}
+
+.bs-sub-tabs-react .ant-tabs-tab {
+  margin: 0 4px 0 0 !important;
+  padding: 10px 20px;
+  border-radius: 6px 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.bs-sub-tabs-react .ant-tabs-tab:hover {
+  background: #f1f5f9;
+  color: #3b82f6;
+}
+
+.bs-sub-tabs-react .ant-tabs-tab-active {
+  background: #eff6ff;
+}
+
+.bs-sub-tabs-react .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #2563eb !important;
+}
+
+.bs-sub-tabs-react .ant-tabs-ink-bar {
+  height: 2px;
+  background: #2563eb;
+}
+
+.bs-panel-title {
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.bs-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.bs-overview-card {
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.bs-overview-card h4 {
+  margin: 0 0 12px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.bs-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.bs-config-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+}
+
+.bs-config-item:last-child {
+  border-bottom: 0;
+}
+
+.bs-config-key {
+  color: #64748b;
+}
+
+.bs-config-val {
+  color: #1e293b;
+  font-weight: 500;
+  text-align: right;
+}
+
+.bs-recent-logs {
+  font-size: 13px;
+}
+
+.bs-recent-log-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.bs-recent-log-item:last-child {
+  border-bottom: 0;
+}
+
+.bs-log-time {
+  color: #94a3b8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bs-log-type {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.bs-log-type-following {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.bs-log-type-post {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.bs-log-type-target {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.bs-log-status-success {
+  color: #16a34a;
+}
+
+.bs-log-status-failed {
+  color: #dc2626;
+}
+
+.bs-log-status-partial {
+  color: #d97706;
+}
+
+.bs-seed-add-row,
+.bs-posts-filter,
+.bs-logs-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.bs-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.bs-inline-form .ant-form-item {
+  margin: 0;
+}
+
+.bs-seed-add-row .ant-input,
+.bs-posts-filter .ant-input,
+.bs-posts-filter .ant-select,
+.bs-logs-filter .ant-select {
+  min-width: 160px;
+}
+
+.bs-seed-add-row .ant-input,
+.bs-posts-filter .ant-input,
+.bs-posts-filter .ant-select-selector,
+.bs-logs-filter .ant-select-selector {
+  height: 34px !important;
+  border-color: #d1d5db !important;
+  border-radius: 6px !important;
+  font-size: 13px;
+}
+
+.bs-crawl-progress {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.bs-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.bs-progress-status {
+  color: #2563eb;
+}
+
+.bs-progress-stats {
+  color: #64748b;
+}
+
+.bs-progress-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.bs-table-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.binance-square-page .bs-table-btn.ant-btn {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.binance-square-page .bs-table-btn-sync.ant-btn {
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+
+.binance-square-page .bs-table-btn-sync.ant-btn:hover {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
+.binance-square-page .bs-table-btn-remove.ant-btn {
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.binance-square-page .bs-table-btn-remove.ant-btn:hover {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
+.binance-square-page .bs-table-btn-view.ant-btn {
+  border-color: #a7f3d0;
+  color: #059669;
+}
+
+.binance-square-page .bs-table-btn-view.ant-btn:hover {
+  background: #f0fdf4 !important;
+  color: #047857 !important;
+}
+
+.bs-following-link {
+  color: #2563eb;
+  font-weight: 500;
+  border-bottom: 1px dashed #93c5fd;
+  cursor: pointer;
+}
+
+.bs-following-link:hover {
+  color: #1d4ed8;
+  border-bottom-color: #2563eb;
+}
+
+.bs-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.bs-status-active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.bs-status-inactive {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.bs-post-title-link {
+  display: block;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binance-square-page .ant-pagination {
+  margin-top: 16px;
+}
+
+@media (max-width: 768px) {
+  .bs-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bs-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bs-actions-bar {
+    justify-content: center;
+  }
+
+  .bs-sub-tabs-react .ant-tabs-nav-wrap {
+    overflow-x: auto;
+  }
+
+  .bs-sub-tabs-react .ant-tabs-tab {
+    padding: 9px 14px;
   }
 }
 
