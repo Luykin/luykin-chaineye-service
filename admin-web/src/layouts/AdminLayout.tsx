@@ -118,13 +118,6 @@ export function AdminLayout() {
             menu={{
               items: [
                 {
-                  key: "legacy",
-                  label: "返回旧版后台",
-                  onClick: () => {
-                    window.location.href = buildApiUrl("/api/xhunt/stats");
-                  },
-                },
-                {
                   key: "logout",
                   label: "退出登录",
                   icon: <LogoutOutlined />,

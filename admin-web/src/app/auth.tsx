@@ -86,11 +86,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           status="403"
           title="无法进入新后台"
           subTitle={error}
-          extra={
-            <a href={buildApiUrl("/api/xhunt/stats")} style={{ color: "#2563eb" }}>
-              返回旧版后台
-            </a>
-          }
         />
       </div>
     );

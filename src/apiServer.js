@@ -231,6 +231,8 @@ async function initializeAndStartServer() {
         "https://x.com",
         "https://kb.cryptohunt.ai",
         "http://kb.cryptohunt.ai",
+        "https://dev.kb.cryptohunt.ai",
+        "http://dev.kb.cryptohunt.ai",
         "https://kb.xhunt.ai",
         "http://kb.xhunt.ai",
         "https://xhunt.ai",
