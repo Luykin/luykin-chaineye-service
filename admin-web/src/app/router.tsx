@@ -19,6 +19,10 @@ import { ReviewsManagementPage } from "@/pages/ReviewsManagementPage";
 import { MessagesPage } from "@/pages/MessagesPage";
 import { ServerCommandPage } from "@/pages/ServerCommandPage";
 import { BinanceSquarePage } from "@/pages/BinanceSquarePage";
+import { PerfMonitorPage } from "@/pages/PerfMonitorPage";
+import { NacosMessagesPage } from "@/pages/NacosMessagesPage";
+import { NacosCampaignsPage } from "@/pages/NacosCampaignsPage";
+import { NacosTagsPage } from "@/pages/NacosTagsPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -40,6 +44,10 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "reviews-management": <ReviewsManagementPage />,
   "server-command": <ServerCommandPage />,
   "binance-square": <BinanceSquarePage />,
+  "perf-monitor": <PerfMonitorPage />,
+  "nacos-messages": <NacosMessagesPage />,
+  "nacos-campaigns": <NacosCampaignsPage />,
+  "nacos-tags": <NacosTagsPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {
