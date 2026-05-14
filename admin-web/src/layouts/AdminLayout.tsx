@@ -668,9 +668,9 @@ export function AdminLayout() {
                   label: (
                     <Space direction="vertical" size={0}>
                       <Typography.Text strong>{user?.email || "管理员"}</Typography.Text>
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {/* <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         当前账号
-                      </Typography.Text>
+                      </Typography.Text> */}
                     </Space>
                   ),
                 },
@@ -679,7 +679,7 @@ export function AdminLayout() {
                   disabled: true,
                   label: (
                     <Space size={8}>
-                      <Typography.Text type="secondary">角色</Typography.Text>
+                      {/* <Typography.Text type="secondary">角色</Typography.Text> */}
                       <Tag color={user?.role === "super" ? "gold" : "blue"}>
                         {user?.role === "super" ? "Super Admin" : "Admin"}
                       </Tag>
@@ -721,7 +721,7 @@ export function AdminLayout() {
               ],
             }}
           >
-            <Tooltip title={user?.email || "管理员"}>
+            <Tooltip>
               <Button
                 type="text"
                 style={{
