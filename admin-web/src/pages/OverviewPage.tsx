@@ -1,20 +1,7 @@
 import { useMemo } from "react";
-import {
-  Alert,
-  Card,
-  Col,
-  Empty,
-  Progress,
-  Row,
-  Space,
-  Statistic,
-  Tag,
-  Typography,
-} from "antd";
-import { ReloadOutlined, RiseOutlined } from "@ant-design/icons";
+import { Alert, Spin } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
-import { PageSection } from "@/components/ui/PageSection";
 import { fetchOverviewStats } from "@/services/stats";
 import type { OverviewDailyActiveUserItem } from "@/types/stats";
 
@@ -28,6 +15,370 @@ function calcChange(current: number, previous: number) {
   return ((current - previous) / previous) * 100;
 }
 
+function Icon({ name }: { name: string }) {
+  if (name === "monitor") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
+      </svg>
+    );
+  }
+
+  if (name === "layers") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5" />
+      </svg>
+    );
+  }
+
+  if (name === "bars") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <line x1="12" y1="20" x2="12" y2="10" />
+        <line x1="18" y1="20" x2="18" y2="4" />
+        <line x1="6" y1="20" x2="6" y2="16" />
+      </svg>
+    );
+  }
+
+  if (name === "calendar") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+      </svg>
+    );
+  }
+
+  if (name === "trend") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 3v18h18" />
+        <path d="m18.7 8-5.1 5.2-2.8-2.7L7 14.3" />
+      </svg>
+    );
+  }
+
+  if (name === "users") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    );
+  }
+
+  if (name === "message") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
+      </svg>
+    );
+  }
+
+  if (name === "user") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    );
+  }
+
+  if (name === "user-plus") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="8.5" cy="7" r="4" />
+        <line x1="20" y1="8" x2="20" y2="14" />
+        <line x1="23" y1="11" x2="17" y2="11" />
+      </svg>
+    );
+  }
+
+  if (name === "week") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M2 12h20" />
+        <path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6" />
+        <path d="m12 12 4-4" />
+        <path d="m12 12-4-4" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
+function TrendArrow({ positive }: { positive: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline
+        points={
+          positive
+            ? "23 6 13.5 15.5 8.5 10.5 1 18"
+            : "23 18 13.5 8.5 8.5 13.5 1 6"
+        }
+      />
+    </svg>
+  );
+}
+
+function SectionHeader({
+  title,
+  icon,
+  iconClass,
+  badge,
+  live,
+}: {
+  title: string;
+  icon: string;
+  iconClass: string;
+  badge?: string;
+  live?: boolean;
+}) {
+  return (
+    <div className="overview-section-header">
+      <div className="overview-section-title-wrapper">
+        <div className={`overview-section-icon ${iconClass}`}>
+          <Icon name={icon} />
+        </div>
+        <h2 className="overview-section-title">{title}</h2>
+      </div>
+      {badge ? (
+        <span className={`overview-section-badge ${live ? "overview-badge-live" : ""}`}>
+          {live ? <span className="overview-live-pulse" /> : null}
+          {badge}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function DailyActiveSection({
+  items,
+}: {
+  items: OverviewDailyActiveUserItem[];
+}) {
+  const trendSummary = useMemo(() => {
+    if (!items.length) {
+      return { average: 0, maxValue: 0 };
+    }
+
+    const total = items.reduce((sum, item) => sum + Number(item.activeUsers || 0), 0);
+    const maxValue = items.reduce(
+      (max, item) => Math.max(max, Number(item.activeUsers || 0)),
+      0
+    );
+
+    return {
+      average: Math.round(total / items.length),
+      maxValue,
+    };
+  }, [items]);
+
+  return (
+    <div className="overview-section">
+      <SectionHeader
+        title="设备指纹日活统计"
+        icon="monitor"
+        iconClass="overview-icon-blue"
+        badge="最近7天"
+      />
+      <p className="overview-section-desc">
+        基于设备指纹统计，包含所有访问用户（已登录 + 未登录）
+      </p>
+
+      <div className="overview-stats-grid overview-daily-stats-grid">
+        {items.length ? (
+          items.map((item, index) => {
+            const isToday = index === items.length - 1;
+            const previous = index > 0 ? items[index - 1] : undefined;
+            const change = previous
+              ? calcChange(Number(item.activeUsers || 0), Number(previous.activeUsers || 0))
+              : 0;
+            const isPositive = change >= 0;
+
+            return (
+              <div
+                className={`overview-stat-card ${isToday ? "overview-stat-card-highlight" : ""}`}
+                key={item.date}
+              >
+                <div className="overview-stat-card-header">
+                  <span className="overview-stat-date">{item.displayDate}</span>
+                  {isToday ? <span className="overview-today-badge">今日</span> : null}
+                </div>
+                <div className="overview-stat-value-large">
+                  {formatNumber(item.activeUsers)}
+                </div>
+                <div className="overview-stat-meta">
+                  <span className="overview-stat-full-date">{item.date}</span>
+                </div>
+                {!isToday && index > 0 ? (
+                  <div
+                    className={`overview-stat-trend ${
+                      isPositive ? "overview-trend-up" : "overview-trend-down"
+                    }`}
+                  >
+                    <TrendArrow positive={isPositive} />
+                    <span>{Math.abs(change).toFixed(1)}%</span>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        ) : (
+          <div className="overview-stat-card overview-stat-card-empty">
+            <div className="overview-empty-state">
+              <Icon name="empty" />
+              <span>暂无数据</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="overview-trend-chart-container">
+        <div className="overview-trend-chart-header">
+          <div className="overview-trend-chart-title">
+            <Icon name="trend" />
+            <span>7天趋势</span>
+          </div>
+          {items.length ? (
+            <div className="overview-trend-chart-avg">
+              平均: <strong>{formatNumber(trendSummary.average)}</strong>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="overview-trend-chart">
+          {items.map((item, index) => {
+            const height = trendSummary.maxValue
+              ? Math.max(20, (Number(item.activeUsers || 0) / trendSummary.maxValue) * 140)
+              : 20;
+            const isToday = index === items.length - 1;
+
+            return (
+              <div className="overview-trend-bar-wrapper" key={`${item.date}-bar`}>
+                <div
+                  className={`overview-trend-bar ${
+                    isToday ? "overview-trend-bar-today" : ""
+                  }`}
+                  style={{ height }}
+                >
+                  <span className="overview-trend-bar-value">
+                    {formatNumber(item.activeUsers)}
+                  </span>
+                </div>
+                <span className="overview-trend-bar-label">
+                  {item.displayDate.split(" ")[0]}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CoreMetricCard({
+  className,
+  icon,
+  title,
+  value,
+}: {
+  className: string;
+  icon: string;
+  title: string;
+  value: number;
+}) {
+  return (
+    <div className={`overview-stat-card ${className}`}>
+      <div className="overview-stat-card-icon">
+        <Icon name={icon} />
+      </div>
+      <div className="overview-stat-card-content">
+        <div className="overview-stat-title">{title}</div>
+        <div className="overview-stat-value">{formatNumber(value)}</div>
+      </div>
+    </div>
+  );
+}
+
+function TotalMetricCard({
+  label,
+  value,
+  className,
+  suffix,
+}: {
+  label: string;
+  value: number | string;
+  className?: string;
+  suffix?: string;
+}) {
+  const displayValue =
+    typeof value === "string" && value.includes(".") ? value : formatNumber(value);
+
+  return (
+    <div className={`overview-stat-card overview-stat-card-minimal ${className || ""}`}>
+      <div className="overview-stat-title">{label}</div>
+      <div className={`overview-stat-value ${suffix ? "overview-rating-value" : ""}`}>
+        {displayValue}
+        {suffix ? <span className="overview-star-icon">{suffix}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function PeriodCard({
+  type,
+  label,
+  icon,
+  reviews,
+  newUsers,
+}: {
+  type: "weekly" | "monthly";
+  label: string;
+  icon: string;
+  reviews: number;
+  newUsers: number;
+}) {
+  return (
+    <div className={`overview-period-card overview-period-card-${type}`}>
+      <div className="overview-period-card-header">
+        <div className="overview-period-icon">
+          <Icon name={icon} />
+        </div>
+        <span className="overview-period-label">{label}</span>
+      </div>
+      <div className="overview-period-metrics">
+        <div className="overview-period-metric">
+          <span className="overview-period-metric-value">{formatNumber(reviews)}</span>
+          <span className="overview-period-metric-label">评论</span>
+        </div>
+        <div className="overview-period-metric-divider" />
+        <div className="overview-period-metric">
+          <span className="overview-period-metric-value">{formatNumber(newUsers)}</span>
+          <span className="overview-period-metric-label">新用户</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function OverviewPage() {
   const query = useQuery({
     queryKey: ["overview-stats"],
@@ -37,59 +388,56 @@ export function OverviewPage() {
   const overview = query.data?.data;
   const dailyActiveUsersData = overview?.dailyActiveUsersData ?? [];
 
-  const trendSummary = useMemo(() => {
-    if (!dailyActiveUsersData.length) {
-      return {
-        average: 0,
-        maxValue: 0,
-      };
-    }
-
-    const total = dailyActiveUsersData.reduce((sum, item) => sum + Number(item.activeUsers || 0), 0);
-    const maxValue = dailyActiveUsersData.reduce(
-      (max, item) => Math.max(max, Number(item.activeUsers || 0)),
-      0
-    );
-
-    return {
-      average: Math.round(total / dailyActiveUsersData.length),
-      maxValue,
-    };
-  }, [dailyActiveUsersData]);
-
   const totalMetricCards = useMemo(
     () => [
-      { label: "总用户数", value: overview?.totalMetrics.totalUsers ?? 0 },
-      { label: "总账号数", value: overview?.totalMetrics.totalAccounts ?? 0 },
-      { label: "KOL 用户数", value: overview?.totalMetrics.totalKOLUsers ?? 0 },
-      { label: "KOL ≤ 20万", value: overview?.totalMetrics.kolBuckets?.within200k ?? 0 },
-      { label: "KOL ≤ 5万", value: overview?.totalMetrics.kolBuckets?.within50k ?? 0 },
-      { label: "KOL ≤ 2万", value: overview?.totalMetrics.kolBuckets?.within20k ?? 0 },
-      { label: "KOL ≤ 5千", value: overview?.totalMetrics.kolBuckets?.within5k ?? 0 },
-      { label: "累计积分", value: overview?.totalMetrics.totalPointsAwarded ?? 0 },
+      {
+        label: "总用户数",
+        value: overview?.totalMetrics.totalUsers ?? 0,
+      },
+      {
+        label: "总账号数",
+        value: overview?.totalMetrics.totalAccounts ?? 0,
+      },
+      {
+        label: "KOL 用户数",
+        value: overview?.totalMetrics.totalKOLUsers ?? 0,
+        className: "overview-stat-card-kol",
+      },
+      {
+        label: "KOL ≤ 20万",
+        value: overview?.totalMetrics.kolBuckets?.within200k ?? 0,
+        className: "overview-stat-card-kol-tier",
+      },
+      {
+        label: "KOL ≤ 5万",
+        value: overview?.totalMetrics.kolBuckets?.within50k ?? 0,
+        className: "overview-stat-card-kol-tier",
+      },
+      {
+        label: "KOL ≤ 2万",
+        value: overview?.totalMetrics.kolBuckets?.within20k ?? 0,
+        className: "overview-stat-card-kol-tier",
+      },
+      {
+        label: "KOL ≤ 5千",
+        value: overview?.totalMetrics.kolBuckets?.within5k ?? 0,
+        className: "overview-stat-card-kol-tier",
+      },
+      {
+        label: "累计积分",
+        value: overview?.totalMetrics.totalPointsAwarded ?? 0,
+        className: "overview-stat-card-points",
+      },
       {
         label: "平均评分",
         value: overview?.totalMetrics.averageRating ?? "0.00",
+        className: "overview-stat-card-rating",
         suffix: "★",
       },
-      { label: "今日积分", value: overview?.todayDetails.pointsAwarded ?? 0 },
-    ],
-    [overview]
-  );
-
-  const periodCards = useMemo(
-    () => [
       {
-        title: "本周",
-        color: "#3b82f6",
-        reviews: overview?.periodMetrics.weekly.reviews ?? 0,
-        newUsers: overview?.periodMetrics.weekly.newUsers ?? 0,
-      },
-      {
-        title: "本月",
-        color: "#8b5cf6",
-        reviews: overview?.periodMetrics.monthly.reviews ?? 0,
-        newUsers: overview?.periodMetrics.monthly.newUsers ?? 0,
+        label: "今日积分",
+        value: overview?.todayDetails.pointsAwarded ?? 0,
+        className: "overview-stat-card-points-today",
       },
     ],
     [overview]
@@ -97,266 +445,102 @@ export function OverviewPage() {
 
   return (
     <PermissionGuard permission="overview">
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <PageSection
-          title="数据概览"
-          description="后台总体运行概况，包含最近 7 天设备指纹日活、核心指标、累计数据与周期统计。"
-          extra={
-            <Space>
-              <Tag color="processing" bordered={false}>
-                最近 7 天
-              </Tag>
-              <Tag color="success" bordered={false}>
-                实时
-              </Tag>
-              <a
-                onClick={(event) => {
-                  event.preventDefault();
-                  void query.refetch();
-                }}
-                style={{ color: "#1677ff" }}
-              >
-                <ReloadOutlined /> 刷新
-              </a>
-            </Space>
-          }
-        >
-          {query.isError ? (
-            <Alert
-              type="error"
-              showIcon
-              message="加载数据概览失败"
-              description="请稍后重试，或检查当前账号是否具备 overview 权限。"
+      <div className="overview-stats-section">
+        {query.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="加载数据概览失败"
+            description="请稍后重试，或检查当前账号是否具备 overview 权限。"
+          />
+        ) : null}
+
+        <Spin spinning={query.isLoading || query.isFetching}>
+          <DailyActiveSection items={dailyActiveUsersData} />
+
+          <div className="overview-section">
+            <SectionHeader
+              title="核心指标"
+              icon="layers"
+              iconClass="overview-icon-purple"
+              badge="实时"
+              live
             />
-          ) : (
-            <Row gutter={[16, 16]}>
-              <Col xs={24} xl={14}>
-                <Card
-                  loading={query.isLoading || query.isFetching}
-                  styles={{ body: { padding: 20 } }}
-                  title="设备指纹日活统计"
-                  extra={<Typography.Text type="secondary">包含已登录 + 未登录访问</Typography.Text>}
-                >
-                  {dailyActiveUsersData.length ? (
-                    <Space direction="vertical" size={14} style={{ width: "100%" }}>
-                      <Row gutter={[12, 12]}>
-                        {dailyActiveUsersData.map((item, index) => {
-                          const previous = index > 0 ? dailyActiveUsersData[index - 1] : undefined;
-                          const change = previous
-                            ? calcChange(Number(item.activeUsers || 0), Number(previous.activeUsers || 0))
-                            : 0;
-                          const isToday = index === dailyActiveUsersData.length - 1;
 
-                          return (
-                            <Col xs={12} md={8} xl={12} xxl={8} key={item.date}>
-                              <Card
-                                size="small"
-                                styles={{ body: { padding: 14 } }}
-                                style={{
-                                  borderColor: isToday ? "#bfdbfe" : "#e5e7eb",
-                                  background: isToday ? "#eff6ff" : "#fff",
-                                }}
-                              >
-                                <Space
-                                  direction="vertical"
-                                  size={8}
-                                  style={{ width: "100%" }}
-                                >
-                                  <Space
-                                    align="center"
-                                    style={{ width: "100%", justifyContent: "space-between" }}
-                                  >
-                                    <Typography.Text strong>{item.displayDate}</Typography.Text>
-                                    {isToday ? <Tag color="blue">今日</Tag> : null}
-                                  </Space>
-                                  <Typography.Title level={3} style={{ margin: 0 }}>
-                                    {formatNumber(item.activeUsers)}
-                                  </Typography.Title>
-                                  <Typography.Text type="secondary">{item.date}</Typography.Text>
-                                  {previous ? (
-                                    <Typography.Text
-                                      style={{
-                                        color: change >= 0 ? "#16a34a" : "#dc2626",
-                                        fontSize: 12,
-                                      }}
-                                    >
-                                      <RiseOutlined rotate={change >= 0 ? 0 : 180} />{" "}
-                                      {Math.abs(change).toFixed(1)}%
-                                    </Typography.Text>
-                                  ) : (
-                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                      基准日
-                                    </Typography.Text>
-                                  )}
-                                </Space>
-                              </Card>
-                            </Col>
-                          );
-                        })}
-                      </Row>
+            <div className="overview-stats-grid overview-core-metrics-grid">
+              <CoreMetricCard
+                className="overview-stat-card-blue"
+                icon="users"
+                title="日活用户 (已登录X)"
+                value={overview?.coreMetrics.dailyActiveUsers.value ?? 0}
+              />
+              <CoreMetricCard
+                className="overview-stat-card-green"
+                icon="message"
+                title="今日评论"
+                value={overview?.coreMetrics.dailyReviews.value ?? 0}
+              />
+              <CoreMetricCard
+                className="overview-stat-card-orange"
+                icon="user"
+                title="评论用户"
+                value={overview?.coreMetrics.dailyReviewUsers.value ?? 0}
+              />
+              <CoreMetricCard
+                className="overview-stat-card-pink"
+                icon="user-plus"
+                title="新注册用户 (已登录X)"
+                value={overview?.coreMetrics.dailyNewUsers.value ?? 0}
+              />
+            </div>
+          </div>
 
-                      <Card
-                        size="small"
-                        styles={{ body: { padding: 16 } }}
-                        style={{ background: "#fafcff", borderColor: "#e2e8f0" }}
-                      >
-                        <Space
-                          align="center"
-                          style={{ width: "100%", justifyContent: "space-between", marginBottom: 12 }}
-                        >
-                          <Typography.Text strong>7 天趋势</Typography.Text>
-                          <Typography.Text type="secondary">
-                            平均 <strong>{formatNumber(trendSummary.average)}</strong>
-                          </Typography.Text>
-                        </Space>
+          <div className="overview-section">
+            <SectionHeader
+              title="累计数据"
+              icon="bars"
+              iconClass="overview-icon-teal"
+            />
 
-                        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                          {dailyActiveUsersData.map((item: OverviewDailyActiveUserItem) => {
-                            const percent = trendSummary.maxValue
-                              ? Math.round((Number(item.activeUsers || 0) / trendSummary.maxValue) * 100)
-                              : 0;
+            <div className="overview-stats-grid overview-total-metrics-grid">
+              {totalMetricCards.map((item) => (
+                <TotalMetricCard
+                  className={item.className}
+                  key={item.label}
+                  label={item.label}
+                  suffix={item.suffix}
+                  value={item.value}
+                />
+              ))}
+            </div>
+          </div>
 
-                            return (
-                              <div key={`${item.date}-progress`}>
-                                <Space
-                                  align="center"
-                                  style={{ width: "100%", justifyContent: "space-between" }}
-                                >
-                                  <Typography.Text>{item.displayDate}</Typography.Text>
-                                  <Typography.Text strong>
-                                    {formatNumber(item.activeUsers)}
-                                  </Typography.Text>
-                                </Space>
-                                <Progress
-                                  percent={percent}
-                                  showInfo={false}
-                                  strokeColor={item.date === dailyActiveUsersData[dailyActiveUsersData.length - 1]?.date ? "#3b82f6" : "#94a3b8"}
-                                  trailColor="#e5e7eb"
-                                />
-                              </div>
-                            );
-                          })}
-                        </Space>
-                      </Card>
-                    </Space>
-                  ) : (
-                    <Empty description="暂无最近 7 天日活数据" />
-                  )}
-                </Card>
-              </Col>
+          <div className="overview-section overview-section-period">
+            <SectionHeader
+              title="周期统计"
+              icon="calendar"
+              iconClass="overview-icon-indigo"
+            />
 
-              <Col xs={24} xl={10}>
-                <Card
-                  loading={query.isLoading || query.isFetching}
-                  styles={{ body: { padding: 20 } }}
-                  title="核心指标"
-                  extra={<Tag color="success">实时</Tag>}
-                >
-                  <Row gutter={[12, 12]}>
-                    <Col span={12}>
-                      <Card size="small" styles={{ body: { padding: 16 } }}>
-                        <Statistic
-                          title="日活用户 (已登录X)"
-                          value={overview?.coreMetrics.dailyActiveUsers.value ?? 0}
-                          formatter={(value) => formatNumber(Number(value || 0))}
-                        />
-                      </Card>
-                    </Col>
-                    <Col span={12}>
-                      <Card size="small" styles={{ body: { padding: 16 } }}>
-                        <Statistic
-                          title="今日评论"
-                          value={overview?.coreMetrics.dailyReviews.value ?? 0}
-                          formatter={(value) => formatNumber(Number(value || 0))}
-                        />
-                      </Card>
-                    </Col>
-                    <Col span={12}>
-                      <Card size="small" styles={{ body: { padding: 16 } }}>
-                        <Statistic
-                          title="评论用户"
-                          value={overview?.coreMetrics.dailyReviewUsers.value ?? 0}
-                          formatter={(value) => formatNumber(Number(value || 0))}
-                        />
-                      </Card>
-                    </Col>
-                    <Col span={12}>
-                      <Card size="small" styles={{ body: { padding: 16 } }}>
-                        <Statistic
-                          title="新注册用户 (已登录X)"
-                          value={overview?.coreMetrics.dailyNewUsers.value ?? 0}
-                          formatter={(value) => formatNumber(Number(value || 0))}
-                        />
-                      </Card>
-                    </Col>
-                  </Row>
-                </Card>
-              </Col>
-            </Row>
-          )}
-        </PageSection>
-
-        <PageSection
-          title="累计数据"
-          description="用户体量、KOL 分层、评分与积分累计情况。"
-        >
-          <Row gutter={[16, 16]}>
-            {totalMetricCards.map((item) => (
-              <Col xs={12} md={8} xl={6} xxl={4} key={item.label}>
-                <Card size="small" styles={{ body: { padding: 16 } }}>
-                  <Statistic
-                    title={item.label}
-                    value={item.value}
-                    suffix={item.suffix}
-                    formatter={(value) => {
-                      if (typeof value === "string" && value.includes(".")) return value;
-                      return formatNumber(Number(value || 0));
-                    }}
-                  />
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        </PageSection>
-
-        <PageSection title="周期统计" description="查看本周 / 本月的评论与新增用户节奏。">
-          <Row gutter={[16, 16]}>
-            {periodCards.map((card) => (
-              <Col xs={24} md={12} key={card.title}>
-                <Card
-                  style={{
-                    borderColor: `${card.color}22`,
-                    background: `${card.color}08`,
-                  }}
-                  styles={{ body: { padding: 20 } }}
-                >
-                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                    <Space align="center">
-                      <Tag color={card.color}>{card.title}</Tag>
-                    </Space>
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Statistic
-                          title="评论"
-                          value={card.reviews}
-                          formatter={(value) => formatNumber(Number(value || 0))}
-                        />
-                      </Col>
-                      <Col span={12}>
-                        <Statistic
-                          title="新用户"
-                          value={card.newUsers}
-                          formatter={(value) => formatNumber(Number(value || 0))}
-                        />
-                      </Col>
-                    </Row>
-                  </Space>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        </PageSection>
-      </Space>
+            <div className="overview-period-stats-grid">
+              <PeriodCard
+                type="weekly"
+                label="本周"
+                icon="week"
+                reviews={overview?.periodMetrics.weekly.reviews ?? 0}
+                newUsers={overview?.periodMetrics.weekly.newUsers ?? 0}
+              />
+              <PeriodCard
+                type="monthly"
+                label="本月"
+                icon="calendar"
+                reviews={overview?.periodMetrics.monthly.reviews ?? 0}
+                newUsers={overview?.periodMetrics.monthly.newUsers ?? 0}
+              />
+            </div>
+          </div>
+        </Spin>
+      </div>
     </PermissionGuard>
   );
 }
