@@ -1,4 +1,10 @@
 node_modules
+admin-web/node_modules
+admin-web/dist
+admin-web/.vite
+admin-web/.cache
+admin-web/coverage
+admin-web/*.tsbuildinfo
 # Ignore the database file
 database.sqlite
 # Ignore all .env files

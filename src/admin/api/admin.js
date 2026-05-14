@@ -56,6 +56,30 @@ router.get("/auth-check", adminAuth, async (req, res) => {
   }
 });
 
+// 提供给 React Admin 的当前管理员会话信息
+router.get("/session", adminAuth, async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const admin = req.adminUser;
+    return res.json({
+      success: true,
+      loggedIn: true,
+      admin: {
+        id: admin.id,
+        email: admin.email,
+        role: admin.role,
+        permissions: Array.isArray(admin.permissions) ? admin.permissions : [],
+        receivesDailyReport: !!admin.receivesDailyReport,
+        isActive: !!admin.isActive,
+        canLogin: !!admin.canLogin,
+        lastLoginAt: admin.lastLoginAt || null,
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: "获取会话信息失败" });
+  }
+});
+
 // ========== WebAuthn 注册（添加指纹/人脸） ==========
 router.get("/webauthn/registration/options", async (req, res) => {
   try {
