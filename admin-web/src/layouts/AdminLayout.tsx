@@ -3,24 +3,20 @@ import {
   BarChartOutlined,
   CaretRightOutlined,
   CodeOutlined,
+  ExportOutlined,
   LockOutlined,
   LogoutOutlined,
   MenuOutlined,
   MonitorOutlined,
-  PushpinFilled,
-  PushpinOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
-  UserOutlined,
   TeamOutlined,
-  ExportOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
+import type { MenuProps } from "antd";
 import {
   Button,
-  Collapse,
-  Divider,
   Dropdown,
-  Drawer,
   Form,
   Grid,
   Image,
@@ -32,27 +28,24 @@ import {
   Popconfirm,
   Space,
   Tag,
-  Tooltip,
   Typography,
   message,
 } from "antd";
+import type { ReactNode } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
 import { buildApiUrl } from "@/services/apiClient";
 import { adminMainNavItems, adminShortcutNavItems, type AdminNavItem } from "@/config/admin-navigation";
 
-const { Header, Sider, Content } = Layout;
+const { Header, Content } = Layout;
 const ADMIN_HOME_PATH = "/admin-react/dau-details";
 const ADMIN_TITLE = "数据统计面板";
 const { useBreakpoint } = Grid;
-const NO_PERMISSION_COLLAPSED_STORAGE_KEY = "admin_sidebar_no_permission_collapsed";
-const SIDEBAR_PINNED_STORAGE_KEY = "admin_sidebar_pinned";
-const SIDEBAR_GROUPS_STORAGE_KEY = "admin_sidebar_group_open_keys";
 
 type SidebarGroupKey = NonNullable<AdminNavItem["sidebarGroup"]>;
 
-const sidebarGroupDefinitions: Array<{ key: SidebarGroupKey; label: string; icon: React.ReactNode }> = [
+const navGroupDefinitions: Array<{ key: SidebarGroupKey; label: string; icon: ReactNode }> = [
   { key: "data", label: "数据查看", icon: <BarChartOutlined /> },
   { key: "operation", label: "运营配置", icon: <AppstoreOutlined /> },
   { key: "monitor", label: "状态监控", icon: <MonitorOutlined /> },
@@ -60,20 +53,18 @@ const sidebarGroupDefinitions: Array<{ key: SidebarGroupKey; label: string; icon
   { key: "system", label: "系统管理", icon: <TeamOutlined /> },
 ];
 
-const defaultSidebarGroupKeys = sidebarGroupDefinitions.map((group) => group.key);
-
-function getSidebarGroupKey(item: AdminNavItem): SidebarGroupKey {
+function getNavGroupKey(item: AdminNavItem): SidebarGroupKey {
   return item.sidebarGroup || (item.section === "system" ? "system" : "data");
 }
 
-function toMenuItem(item: AdminNavItem) {
-  return {
-    key: item.key,
-    icon: item.icon,
-    label: item.label,
-  };
+function getPermissionLabel(item: AdminNavItem) {
+  return (
+    <span className="admin-top-nav-no-permission-item">
+      <span className="admin-top-nav-no-permission-title">{item.label}</span>
+      <span className="admin-top-nav-no-permission-badge">无权限</span>
+    </span>
+  );
 }
-
 
 export function AdminLayout() {
   const location = useLocation();
@@ -81,28 +72,9 @@ export function AdminLayout() {
   const { user, hasPermission, refresh } = useAuth();
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
-  const [sidebarHovered, setSidebarHovered] = useState(false);
-  const [sidebarPinned, setSidebarPinned] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(SIDEBAR_PINNED_STORAGE_KEY) === "true";
-  });
-  const [openSidebarGroups, setOpenSidebarGroups] = useState<string[]>(() => {
-    if (typeof window === "undefined") return defaultSidebarGroupKeys;
-    try {
-      const stored = JSON.parse(window.localStorage.getItem(SIDEBAR_GROUPS_STORAGE_KEY) || "null");
-      return Array.isArray(stored) ? stored : defaultSidebarGroupKeys;
-    } catch {
-      return defaultSidebarGroupKeys;
-    }
-  });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [webauthnModalOpen, setWebauthnModalOpen] = useState(false);
-  const [noPermissionCollapsed, setNoPermissionCollapsed] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem(NO_PERMISSION_COLLAPSED_STORAGE_KEY) !== "false";
-  });
   const [sendingCode, setSendingCode] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [loadingCredentials, setLoadingCredentials] = useState(false);
@@ -112,18 +84,14 @@ export function AdminLayout() {
   >([]);
   const [passwordForm] = Form.useForm();
   const [webauthnForm] = Form.useForm();
-  const sidebarCollapsed = !isMobile && !sidebarPinned && !sidebarHovered;
 
-  const visibleMainNavItems = useMemo(
-    () => {
-      const visibleItems = adminMainNavItems.filter((item) => !item.superOnly || user?.role === "super");
-      return [
-        ...visibleItems.filter((item) => item.section !== "system"),
-        ...visibleItems.filter((item) => item.section === "system"),
-      ];
-    },
-    [user?.role]
-  );
+  const visibleMainNavItems = useMemo(() => {
+    const visibleItems = adminMainNavItems.filter((item) => !item.superOnly || user?.role === "super");
+    return [
+      ...visibleItems.filter((item) => item.section !== "system"),
+      ...visibleItems.filter((item) => item.section === "system"),
+    ];
+  }, [user?.role]);
 
   const permittedNavItems = useMemo(
     () => visibleMainNavItems.filter((item) => hasPermission(item.permission)),
@@ -135,109 +103,75 @@ export function AdminLayout() {
     [hasPermission, visibleMainNavItems]
   );
 
-  const permittedSidebarGroups = useMemo(
-    () =>
-      sidebarGroupDefinitions
-        .map((group) => {
-          const items = permittedNavItems.filter((item) => getSidebarGroupKey(item) === group.key);
-          return { ...group, items, menuItems: items.map(toMenuItem) };
-        })
-        .filter((group) => group.items.length > 0),
-    [permittedNavItems]
-  );
+  const navigationMenuItems = useMemo<MenuProps["items"]>(() => {
+    const groupedItems = navGroupDefinitions
+      .map((group) => {
+        const items = permittedNavItems.filter((item) => getNavGroupKey(item) === group.key);
+        if (!items.length) return null;
+        return {
+          key: `group-${group.key}`,
+          icon: group.icon,
+          label: group.label,
+          popupClassName: "admin-top-nav-popup",
+          children: items.map((item) => ({
+            key: item.key,
+            icon: item.icon,
+            label: item.label,
+          })),
+        };
+      })
+      .filter(Boolean) as NonNullable<MenuProps["items"]>;
 
-  const collapsedGroupMenuItems = useMemo(
-    () =>
-      permittedSidebarGroups.map((group) => ({
-        key: `group-${group.key}`,
-        icon: group.icon,
-        label: group.label,
-        popupClassName: "admin-sidebar-collapsed-popup",
-        children: group.menuItems,
-      })),
-    [permittedSidebarGroups]
-  );
+    const shortcutGroup = adminShortcutNavItems.length
+      ? [
+          {
+            key: "group-shortcut",
+            icon: <ExportOutlined />,
+            label: "快捷入口",
+            popupClassName: "admin-top-nav-popup",
+            children: adminShortcutNavItems.map((item) => ({
+              key: item.key,
+              icon: item.icon,
+              label: (
+                <a href={item.href} target="_blank" rel="noreferrer" className="admin-top-nav-external-link">
+                  <span>{item.label}</span>
+                  <ExportOutlined />
+                </a>
+              ),
+            })),
+          },
+        ]
+      : [];
 
-  const noPermissionMenuItems = useMemo(
-    () =>
-      noPermissionNavItems.map(({ key, icon, label }) => ({
-        key,
-        icon,
-        label: (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "100%",
-              minWidth: 0,
-            }}
-          >
-            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
-            <span
-              style={{
-                marginLeft: "auto",
-                fontSize: 10,
-                lineHeight: 1.2,
-                color: "#ef4444",
-                background: "#fee2e2",
-                borderRadius: 4,
-                padding: "1px 6px",
-                fontWeight: 500,
-                flex: "0 0 auto",
-              }}
-            >
-              无权限
-            </span>
-          </div>
-        ),
-      })),
-    [noPermissionNavItems]
-  );
+    const noPermissionGroup = noPermissionNavItems.length
+      ? [
+          {
+            key: "group-no-permission",
+            icon: <LockOutlined />,
+            label: "无权限",
+            popupClassName: "admin-top-nav-popup admin-top-nav-popup--no-permission",
+            children: noPermissionNavItems.map((item) => ({
+              key: `no-permission:${item.key}`,
+              icon: item.icon,
+              label: getPermissionLabel(item),
+            })),
+          },
+        ]
+      : [];
 
-  const shortcutItems = useMemo(
-    () =>
-      adminShortcutNavItems.map((item) => ({
-        key: item.key,
-        icon: item.icon,
-        label: (
-          <a
-            href={item.href}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              width: "100%",
-              color: "inherit",
-            }}
-          >
-            <span>{item.label}</span>
-            <ExportOutlined className="admin-sidebar-external-icon" />
-          </a>
-        ),
-      })),
-    []
-  );
+    return [...groupedItems, ...shortcutGroup, ...noPermissionGroup];
+  }, [noPermissionNavItems, permittedNavItems]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      NO_PERMISSION_COLLAPSED_STORAGE_KEY,
-      noPermissionCollapsed ? "true" : "false"
-    );
-  }, [noPermissionCollapsed]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(SIDEBAR_PINNED_STORAGE_KEY, sidebarPinned ? "true" : "false");
-  }, [sidebarPinned]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(SIDEBAR_GROUPS_STORAGE_KEY, JSON.stringify(openSidebarGroups));
-  }, [openSidebarGroups]);
+  const handleNavigationClick: MenuProps["onClick"] = ({ key }) => {
+    const itemKey = String(key);
+    if (itemKey.startsWith("no-permission:")) {
+      messageApi.warning("当前账号暂无此功能权限");
+      return;
+    }
+    if (itemKey.startsWith("/admin-react/")) {
+      navigate(itemKey);
+    }
+  };
 
   const openLoginPage = () => {
     const loginUrl = new URL(buildApiUrl("/admin/login"), window.location.origin);
@@ -385,512 +319,127 @@ export function AdminLayout() {
     }
   };
 
-  const sidebarContent = (
-    <div
-      style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 0,
-      }}
-    >
-      <div
-        style={{
-          minHeight: 73,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: sidebarCollapsed ? "20px 12px" : "20px",
-          borderBottom: "1px solid #f1f5f9",
-          color: "#1e293b",
-          gap: 8,
-        }}
-      >
-        <Space size={sidebarCollapsed ? 0 : 12} style={{ minWidth: 0, flex: 1 }}>
-          {!sidebarCollapsed ? (
-            <Image
-              src={buildApiUrl("/admin/logo")}
-              alt="XHunt Logo"
-              preview={false}
-              width={32}
-              height={32}
-              style={{
-                borderRadius: 8,
-                flex: "0 0 auto",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              }}
-            />
-          ) : null}
-          {!sidebarCollapsed ? (
-            <Space
-              direction="vertical"
-              size={0}
-              align="start"
-              style={{ minWidth: 0, alignItems: "flex-start" }}
-            >
-              <Typography.Text
-                strong
-                ellipsis
-                style={{
-                  fontSize: 21,
-                  lineHeight: 1.1,
-                  letterSpacing: "-0.02em",
-                  margin: 0,
-                  color: "#1e293b",
-                }}
-              >
-                XHunt
-              </Typography.Text>
-              <Typography.Text
-                type="secondary"
-                style={{
-                  fontSize: 11,
-                  color: "#64748b",
-                  marginTop: 2,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                }}
-              >
-                管理后台
-              </Typography.Text>
-            </Space>
-          ) : null}
-        </Space>
-      </div>
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          overflowX: "hidden",
-          paddingBottom: 12,
-        }}
-        className="admin-sidebar-scroll"
-      >
-        {sidebarCollapsed ? (
-          <Menu
-            mode="inline"
-            rootClassName="admin-sidebar-menu admin-sidebar-menu--main"
-            inlineCollapsed
-            selectedKeys={[location.pathname]}
-            items={collapsedGroupMenuItems}
-            onClick={({ key }) => {
-              navigate(key);
-              if (isMobile) setMobileMenuOpen(false);
-            }}
-            style={{ borderInlineEnd: "none", paddingTop: 8 }}
+  return (
+    <Layout className="admin-shell admin-shell--top-nav">
+      {contextHolder}
+      <Header className="admin-top-header">
+        <div className="admin-top-header-brand" onClick={() => navigate(ADMIN_HOME_PATH)} role="button" tabIndex={0}>
+          <Image
+            src={buildApiUrl("/admin/logo")}
+            alt="XHunt Logo"
+            preview={false}
+            width={30}
+            height={30}
+            className="admin-top-header-logo"
           />
+          <div className="admin-top-header-title-wrap">
+            <Typography.Text className="admin-top-header-brand-title">XHunt</Typography.Text>
+            <Typography.Text className="admin-top-header-brand-subtitle">管理后台</Typography.Text>
+          </div>
+        </div>
+
+        {isMobile ? (
+          <Dropdown
+            trigger={["click"]}
+            placement="bottomLeft"
+            menu={{ items: navigationMenuItems, onClick: handleNavigationClick, selectedKeys: [location.pathname] }}
+          >
+            <Button icon={<MenuOutlined />} className="admin-top-nav-mobile-button">
+              导航
+            </Button>
+          </Dropdown>
         ) : (
-          <Collapse
-            ghost
-            size="small"
-            className="admin-sidebar-groups"
-            activeKey={openSidebarGroups}
-            onChange={(keys) => {
-              setOpenSidebarGroups(Array.isArray(keys) ? keys.map(String) : [String(keys)]);
-            }}
-            items={permittedSidebarGroups.map((group) => ({
-              key: group.key,
-              label: (
-                <span className="admin-sidebar-group-label">
-                  <span>{group.label}</span>
-                  <span className="admin-sidebar-group-count">{group.items.length}</span>
-                </span>
-              ),
-              children: (
-                <Menu
-                  mode="inline"
-                  rootClassName="admin-sidebar-menu admin-sidebar-menu--main"
-                  selectedKeys={[location.pathname]}
-                  items={group.menuItems}
-                  onClick={({ key }) => {
-                    navigate(key);
-                    if (isMobile) setMobileMenuOpen(false);
-                  }}
-                  style={{ borderInlineEnd: "none" }}
-                />
-              ),
-              styles: {
-                header: { padding: "6px 16px 4px 18px" },
-                body: { padding: 0 },
-              },
-            }))}
+          <Menu
+            mode="horizontal"
+            className="admin-top-nav-menu"
+            selectedKeys={[location.pathname]}
+            items={navigationMenuItems}
+            onClick={handleNavigationClick}
           />
         )}
 
-        {noPermissionMenuItems.length > 0 ? (
-          <>
-            <Divider style={{ margin: "8px 16px" }} />
-            <div style={{ padding: sidebarCollapsed ? "0 8px 12px" : "0 12px 12px" }}>
-              {sidebarCollapsed ? (
-                <Tooltip
-                  placement="right"
-                  title={`无权限功能 ${noPermissionMenuItems.length} 项，展开侧边栏查看`}
-                >
-                  <Button
-                    type="text"
-                    onClick={() => {
-                      setSidebarHovered(true);
-                    }}
-                    aria-label="展开查看无权限功能"
-                    style={{
-                      width: "100%",
-                      height: 40,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 10,
-                      color: "#94a3b8",
-                      background: "#f8fafc",
-                      border: "1px dashed #e2e8f0",
-                    }}
-                  >
-                    <LockOutlined style={{ fontSize: 16 }} />
-                  </Button>
-                </Tooltip>
-              ) : (
-                <Collapse
-                  ghost
-                  size="small"
-                  activeKey={noPermissionCollapsed ? [] : ["no-permission"]}
-                  onChange={(keys) => {
-                    const expanded = Array.isArray(keys)
-                      ? keys.includes("no-permission")
-                      : keys === "no-permission";
-                    setNoPermissionCollapsed(!expanded);
-                  }}
-                  items={[
-                    {
-                      key: "no-permission",
-                      label: (
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            color: "#64748b",
-                            fontSize: 13,
-                            fontWeight: 500,
-                          }}
-                        >
-                          <span>无权限功能</span>
-                          <span style={{ color: "#94a3b8", fontSize: 11 }}>
-                            ({noPermissionMenuItems.length})
-                          </span>
-                        </div>
-                      ),
-                      children: (
-                        <Menu
-                          mode="inline"
-                          selectable={false}
-                          items={noPermissionMenuItems}
-                          onClick={() => {
-                            messageApi.warning("当前账号暂无此功能权限");
-                          }}
-                          rootClassName="admin-sidebar-menu admin-no-permission-menu"
-                          style={{
-                            borderInlineEnd: "none",
-                            background: "transparent",
-                          }}
-                        />
-                      ),
-                      styles: {
-                        header: {
-                          padding: "6px 8px",
-                          borderRadius: 10,
-                          color: "#64748b",
-                        },
-                        body: {
-                          padding: 0,
-                        },
-                      },
-                    },
-                  ]}
-                />
-              )}
-            </div>
-          </>
-        ) : null}
-
-        <Divider style={{ margin: "8px 16px" }} />
-        <Menu
-          mode="inline"
-          rootClassName="admin-sidebar-menu admin-sidebar-menu--shortcut"
-          inlineCollapsed={sidebarCollapsed}
-          selectable={false}
-          items={shortcutItems}
-          style={{ borderInlineEnd: "none" }}
-        />
-      </div>
-    </div>
-  );
-
-  const desktopSidebarContent = (
-    <div
-      style={{
-        position: "sticky",
-        top: 0,
-        height: "100vh",
-        overflow: "hidden",
-        background: "#fff",
-      }}
-    >
-      {sidebarContent}
-    </div>
-  );
-
-  return (
-    <Layout style={{ minHeight: "100vh" }}>
-      {contextHolder}
-      {!isMobile ? (
-        <>
-          <Sider
-            width={240}
-            theme="light"
-            collapsible={false}
-            collapsed={sidebarCollapsed}
-            collapsedWidth={80}
-            trigger={null}
-            onMouseEnter={() => setSidebarHovered(true)}
-            onMouseLeave={() => setSidebarHovered(false)}
-            style={{
-              minHeight: "100vh",
-              alignSelf: "stretch",
-              background: "#fff",
-              borderRight: "1px solid #e2e8f0",
-              boxShadow: sidebarCollapsed
-                ? "4px 0 20px rgba(0,0,0,0.06)"
-                : "4px 0 24px rgba(0,0,0,0.08)",
-              overflow: "visible",
-              transition: "all 0.18s ease",
-            }}
-          >
-            {desktopSidebarContent}
-          </Sider>
-          <Tooltip
-            placement="right"
-            title={sidebarPinned ? "取消固定：移出后自动收起" : "固定侧边栏：移出后不收起"}
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={sidebarPinned ? <PushpinFilled /> : <PushpinOutlined />}
-              onClick={() => {
-                setSidebarPinned((value) => !value);
-                setSidebarHovered(true);
-              }}
-              aria-label={sidebarPinned ? "取消固定侧边栏" : "固定侧边栏"}
-              style={{
-                position: "fixed",
-                top: 20,
-                left: sidebarCollapsed ? 40 : 200,
-                zIndex: 30,
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                border: sidebarPinned ? "1px solid #93c5fd" : "1px solid #e2e8f0",
-                background: sidebarPinned ? "#eff6ff" : "#ffffff",
-                color: sidebarPinned ? "#2563eb" : "#94a3b8",
-                boxShadow: "0 2px 8px rgba(15,23,42,0.12)",
-                transition: "left 0.18s ease, color 0.15s ease, background 0.15s ease",
-              }}
-            />
-          </Tooltip>
-        </>
-      ) : (
-        <Drawer
-          placement="left"
-          open={mobileMenuOpen}
-          onClose={() => setMobileMenuOpen(false)}
-          closable={false}
-          bodyStyle={{ padding: 0 }}
-          width={240}
-        >
-          {sidebarContent}
-        </Drawer>
-      )}
-
-      <Layout>
-        <Header
-          style={{
-            background: "#fff",
-            borderBottom: "1px solid #e2e8f0",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "12px 24px",
-            gap: 16,
-            height: "auto",
-            lineHeight: 1,
+        <Dropdown
+          trigger={["hover", "click"]}
+          menu={{
+            items: [
+              {
+                key: "email",
+                disabled: true,
+                label: (
+                  <Space direction="vertical" size={0}>
+                    <Typography.Text strong>{user?.email || "管理员"}</Typography.Text>
+                  </Space>
+                ),
+              },
+              {
+                key: "role",
+                disabled: true,
+                label: (
+                  <Space size={8}>
+                    <Tag color={user?.role === "super" ? "gold" : "blue"}>
+                      {user?.role === "super" ? "Super Admin" : "Admin"}
+                    </Tag>
+                  </Space>
+                ),
+              },
+              { type: "divider" },
+              {
+                key: "refresh-session",
+                label: "刷新会话",
+                icon: <ReloadOutlined />,
+                onClick: async () => {
+                  await refresh();
+                },
+              },
+              {
+                key: "change-password",
+                label: "修改密码",
+                icon: <LockOutlined />,
+                onClick: () => setPasswordModalOpen(true),
+              },
+              {
+                key: "webauthn",
+                label: "生物识别",
+                icon: <SafetyCertificateOutlined />,
+                onClick: () => {
+                  void openWebAuthnModal();
+                },
+              },
+              { type: "divider" },
+              {
+                key: "logout",
+                label: "退出登录",
+                icon: <LogoutOutlined />,
+                onClick: async () => {
+                  await handleLogout();
+                },
+              },
+            ],
           }}
         >
-          <Space size={12} style={{ minWidth: 0, flex: 1, alignItems: "center" }}>
-            {isMobile ? (
-              <Button
-                type="text"
-                icon={<MenuOutlined />}
-                onClick={() => setMobileMenuOpen(true)}
-                aria-label="打开侧边栏"
-              />
-            ) : null}
-            <Typography.Title
-              level={4}
-              ellipsis
-              style={{
-                margin: 0,
-                maxWidth: "100%",
-                fontSize: 18,
-                fontWeight: 600,
-                color: "#1e293b",
-                letterSpacing: "-0.01em",
-              }}
-            >
-              {ADMIN_TITLE}
-            </Typography.Title>
-            {!isMobile ? (
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "4px 10px",
-                  background: "#f0fdf4",
-                  border: "1px solid #bbf7d0",
-                  borderRadius: 20,
-                  flex: "0 0 auto",
-                }}
-              >
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    background: "#22c55e",
-                    borderRadius: "50%",
-                  }}
-                />
-                <Typography.Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: "#16a34a",
-                    margin: 0,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.03em",
-                  }}
-                >
-                  实时监控中
+          <Button type="text" className="admin-top-user-button">
+            <Space size={8} wrap={false}>
+              <UserOutlined className="admin-top-user-icon" />
+              {!isMobile ? (
+                <Typography.Text ellipsis className="admin-top-user-email">
+                  {user?.email || "管理员"}
                 </Typography.Text>
-              </div>
-            ) : null}
-          </Space>
+              ) : null}
+              <CaretRightOutlined className="admin-top-user-caret" />
+            </Space>
+          </Button>
+        </Dropdown>
+      </Header>
 
-          <Dropdown
-            trigger={["hover", "click"]}
-            menu={{
-              items: [
-                {
-                  key: "email",
-                  disabled: true,
-                  label: (
-                    <Space direction="vertical" size={0}>
-                      <Typography.Text strong>{user?.email || "管理员"}</Typography.Text>
-                      {/* <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        当前账号
-                      </Typography.Text> */}
-                    </Space>
-                  ),
-                },
-                {
-                  key: "role",
-                  disabled: true,
-                  label: (
-                    <Space size={8}>
-                      {/* <Typography.Text type="secondary">角色</Typography.Text> */}
-                      <Tag color={user?.role === "super" ? "gold" : "blue"}>
-                        {user?.role === "super" ? "Super Admin" : "Admin"}
-                      </Tag>
-                    </Space>
-                  ),
-                },
-                { type: "divider" },
-                {
-                  key: "refresh-session",
-                  label: "刷新会话",
-                  icon: <ReloadOutlined />,
-                  onClick: async () => {
-                    await refresh();
-                  },
-                },
-                {
-                  key: "change-password",
-                  label: "修改密码",
-                  icon: <LockOutlined />,
-                  onClick: () => setPasswordModalOpen(true),
-                },
-                {
-                  key: "webauthn",
-                  label: "生物识别",
-                  icon: <SafetyCertificateOutlined />,
-                  onClick: () => {
-                    void openWebAuthnModal();
-                  },
-                },
-                { type: "divider" },
-                {
-                  key: "logout",
-                  label: "退出登录",
-                  icon: <LogoutOutlined />,
-                  onClick: async () => {
-                    await handleLogout();
-                  },
-                },
-              ],
-            }}
-          >
-            <Tooltip>
-              <Button
-                type="text"
-                style={{
-                  maxWidth: isMobile ? 180 : 240,
-                  height: 38,
-                  padding: "6px",
-                  borderRadius: 12,
-                  border: "1px solid #e2e8f0",
-                  background: "#f8fafc",
-                }}
-              >
-                <Space size={10}>
-                  <UserOutlined style={{ color: "#64748b", fontSize: 16 }} />
-                  <Typography.Text
-                    ellipsis
-                    style={{
-                      maxWidth: 150,
-                      margin: 0,
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "#334155",
-                      letterSpacing: "0.01em",
-                    }}
-                  >
-                    {user?.email || "管理员"}
-                  </Typography.Text>
-                  <CaretRightOutlined
-                    style={{
-                      color: "#94a3b8",
-                      fontSize: 13,
-                      transform: "rotate(90deg)",
-                    }}
-                  />
-                </Space>
-              </Button>
-            </Tooltip>
-          </Dropdown>
-        </Header>
+      <div className="admin-page-title-bar">
+        <Typography.Title level={4} ellipsis className="admin-page-title">
+          {ADMIN_TITLE}
+        </Typography.Title>
+      </div>
 
-        <Content style={{ padding: 20, overflow: "auto" }}>
-          <Outlet />
-        </Content>
-      </Layout>
+      <Content className="admin-top-content">
+        <Outlet />
+      </Content>
 
       <Modal
         title="修改密码"
@@ -904,21 +453,15 @@ export function AdminLayout() {
         }}
         okText="提交"
         confirmLoading={resettingPassword}
-        destroyOnClose
+        destroyOnHidden
       >
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Typography.Text type="secondary">
-            验证码会发送到当前管理员邮箱，修改成功后将重新登录。
-          </Typography.Text>
+          <Typography.Text type="secondary">验证码会发送到当前管理员邮箱，修改成功后将重新登录。</Typography.Text>
           <Button onClick={() => void sendPasswordCode()} loading={sendingCode}>
             发送验证码
           </Button>
           <Form form={passwordForm} layout="vertical">
-            <Form.Item
-              label="验证码"
-              name="code"
-              rules={[{ required: true, message: "请输入验证码" }]}
-            >
+            <Form.Item label="验证码" name="code" rules={[{ required: true, message: "请输入验证码" }]}>
               <Input placeholder="请输入邮箱收到的验证码" />
             </Form.Item>
             <Form.Item
@@ -962,12 +505,10 @@ export function AdminLayout() {
         }}
         footer={null}
         width={560}
-        destroyOnClose
+        destroyOnHidden
       >
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Typography.Text type="secondary">
-            为当前管理员添加或删除指纹 / Face ID 登录凭证。
-          </Typography.Text>
+          <Typography.Text type="secondary">为当前管理员添加或删除指纹 / Face ID 登录凭证。</Typography.Text>
           <Form form={webauthnForm} layout="vertical">
             <Form.Item label="设备备注" name="nickname">
               <Input placeholder="例如：MacBook Pro / iPhone" />

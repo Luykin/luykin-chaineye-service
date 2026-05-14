@@ -1,0 +1,310 @@
+.admin-shell--top-nav {
+  min-height: 100vh;
+  background: #f5f7fb;
+}
+
+.admin-top-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  height: 58px;
+  padding: 0 18px;
+  line-height: 1;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 1px 8px rgba(15, 23, 42, 0.04);
+}
+
+.admin-top-header-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 150px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.admin-top-header-logo {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.admin-top-header-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.admin-top-header-brand-title.ant-typography {
+  margin: 0;
+  color: #1e293b;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.admin-top-header-brand-subtitle.ant-typography {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-top-nav-menu.ant-menu-horizontal {
+  min-width: 0;
+  border-bottom: 0;
+  line-height: 56px;
+  background: transparent;
+}
+
+.admin-top-nav-menu.ant-menu-horizontal > .ant-menu-submenu,
+.admin-top-nav-menu.ant-menu-horizontal > .ant-menu-item {
+  top: 0;
+  height: 56px;
+  padding-inline: 13px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-top-nav-menu.ant-menu-horizontal > .ant-menu-submenu::after,
+.admin-top-nav-menu.ant-menu-horizontal > .ant-menu-item::after {
+  inset-inline: 12px;
+  border-bottom-width: 2px;
+  border-radius: 999px;
+}
+
+.admin-top-nav-menu.ant-menu-horizontal .ant-menu-title-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-top-nav-popup .ant-dropdown-menu,
+.admin-top-nav-popup.ant-menu-submenu-popup .ant-menu {
+  padding: 6px;
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+}
+
+.admin-top-nav-popup .ant-menu-item,
+.admin-top-nav-popup.ant-menu-submenu-popup .ant-menu-item {
+  height: 34px;
+  line-height: 34px;
+  margin: 1px 0;
+  border-radius: 7px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.admin-top-nav-popup .admin-legacy-sidebar-icon,
+.admin-top-nav-menu .admin-legacy-sidebar-icon,
+.ant-dropdown-menu .admin-legacy-sidebar-icon {
+  vertical-align: -0.125em;
+}
+
+.admin-top-nav-external-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 132px;
+  color: inherit;
+}
+
+.admin-top-nav-no-permission-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 148px;
+}
+
+.admin-top-nav-no-permission-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-top-nav-no-permission-badge {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.admin-top-user-button.ant-btn {
+  height: 34px;
+  max-width: 230px;
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.admin-top-user-icon {
+  color: #64748b;
+  font-size: 15px;
+}
+
+.admin-top-user-email.ant-typography {
+  max-width: 142px;
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.admin-top-user-caret {
+  color: #94a3b8;
+  font-size: 12px;
+  transform: rotate(90deg);
+}
+
+.admin-top-nav-mobile-button.ant-btn {
+  height: 34px;
+  border-radius: 9px;
+}
+
+.admin-page-title-bar {
+  display: none;
+  padding: 14px 18px 0;
+}
+
+.admin-page-title.ant-typography {
+  margin: 0;
+  color: #1e293b;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.admin-top-content {
+  min-height: calc(100vh - 58px);
+  padding: 18px 20px 24px;
+  overflow: auto;
+}
+
+@media (max-width: 991px) {
+  .admin-top-header {
+    grid-template-columns: auto auto minmax(0, auto);
+    gap: 10px;
+    height: 54px;
+    padding-inline: 12px;
+  }
+
+  .admin-top-header-brand {
+    min-width: 0;
+  }
+
+  .admin-top-header-brand-subtitle {
+    display: none;
+  }
+
+  .admin-page-title-bar {
+    display: block;
+  }
+
+  .admin-top-content {
+    min-height: calc(100vh - 54px);
+    padding: 14px 12px 18px;
+  }
+
+  .admin-top-user-button.ant-btn {
+    max-width: 46px;
+    padding-inline: 8px;
+  }
+}
+
+/* AntD horizontal submenu popups are rendered in a portal, so keep the rules
+   intentionally explicit here instead of relying on header descendants. */
+.ant-menu-submenu-popup.admin-top-nav-popup,
+.admin-top-nav-popup.ant-menu-submenu-popup {
+  padding-top: 6px;
+}
+
+.ant-menu-submenu-popup.admin-top-nav-popup .ant-menu,
+.admin-top-nav-popup.ant-menu-submenu-popup .ant-menu,
+.ant-menu-submenu-popup .admin-top-nav-popup.ant-menu {
+  min-width: 188px !important;
+  padding: 8px !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.13) !important;
+}
+
+.ant-menu-submenu-popup.admin-top-nav-popup .ant-menu-item,
+.admin-top-nav-popup.ant-menu-submenu-popup .ant-menu-item,
+.ant-menu-submenu-popup .admin-top-nav-popup.ant-menu .ant-menu-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  margin: 1px 0 !important;
+  padding: 0 10px !important;
+  line-height: 36px !important;
+  border-radius: 8px !important;
+  color: #475569 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.ant-menu-submenu-popup.admin-top-nav-popup .ant-menu-item:hover,
+.admin-top-nav-popup.ant-menu-submenu-popup .ant-menu-item:hover,
+.ant-menu-submenu-popup .admin-top-nav-popup.ant-menu .ant-menu-item:hover {
+  color: #1d4ed8 !important;
+  background: #eff6ff !important;
+}
+
+.ant-menu-submenu-popup.admin-top-nav-popup .ant-menu-item-selected,
+.admin-top-nav-popup.ant-menu-submenu-popup .ant-menu-item-selected,
+.ant-menu-submenu-popup .admin-top-nav-popup.ant-menu .ant-menu-item-selected {
+  color: #2563eb !important;
+  background: #eef5ff !important;
+  font-weight: 600 !important;
+}
+
+.ant-menu-submenu-popup.admin-top-nav-popup .ant-menu-item-icon,
+.admin-top-nav-popup.ant-menu-submenu-popup .ant-menu-item-icon,
+.ant-menu-submenu-popup .admin-top-nav-popup.ant-menu .ant-menu-item-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  min-width: 18px !important;
+  margin-inline-end: 0 !important;
+  color: currentColor !important;
+}
+
+.ant-menu-submenu-popup.admin-top-nav-popup .admin-legacy-sidebar-icon,
+.admin-top-nav-popup.ant-menu-submenu-popup .admin-legacy-sidebar-icon,
+.ant-menu-submenu-popup .admin-top-nav-popup.ant-menu .admin-legacy-sidebar-icon {
+  width: 17px !important;
+  height: 17px !important;
+  stroke-width: 2 !important;
+}
+
+.ant-menu-submenu-popup.admin-top-nav-popup .ant-menu-title-content,
+.admin-top-nav-popup.ant-menu-submenu-popup .ant-menu-title-content,
+.ant-menu-submenu-popup .admin-top-nav-popup.ant-menu .ant-menu-title-content {
+  display: inline-flex !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  margin-inline-start: 0 !important;
+  line-height: 1 !important;
+}

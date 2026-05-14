@@ -4,6 +4,7 @@
 @import "./components/legacy-admin.css";
 @import "./components/legacy-stats.css";
 @import "./layout/sidebar.css";
+@import "./layout/top-nav.css";
 @import "./pages/feature-flags.css";
 @import "./pages/nacos.css";
 @import "./pages/binance-square.css";

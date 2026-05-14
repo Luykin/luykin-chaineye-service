@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 interface LegacyEjsPartialProps {
   html: string;
   tabId: string;
+  initialize?: () => void;
 }
 
 function ensureExternalScript(src: string) {
@@ -33,14 +34,12 @@ function ensureStylesheet(href: string) {
   document.head.appendChild(link);
 }
 
-export function LegacyEjsPartial({ html, tabId }: LegacyEjsPartialProps) {
+export function LegacyEjsPartial({ html, tabId, initialize }: LegacyEjsPartialProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const executedRef = useRef(false);
-
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || executedRef.current) return;
-    executedRef.current = true;
+    if (!host) return;
+    let disposed = false;
 
     host.innerHTML = html;
 
@@ -53,28 +52,34 @@ export function LegacyEjsPartial({ html, tabId }: LegacyEjsPartialProps) {
     const scriptNodes = Array.from(host.querySelectorAll<HTMLScriptElement>("script"));
 
     void (async () => {
-      for (const script of scriptNodes) {
-        const src = script.getAttribute("src");
-        if (src) await ensureExternalScript(src);
-      }
+      try {
+        for (const script of scriptNodes) {
+          const src = script.getAttribute("src");
+          if (src) await ensureExternalScript(src);
+        }
 
-      for (const script of scriptNodes) {
-        if (script.getAttribute("src")) continue;
-        const code = script.textContent || "";
-        if (!code.trim()) continue;
-        // Run legacy partial scripts in the page global scope so their DOM-based logic is preserved.
-        new Function(code)();
-      }
+        if (disposed) return;
 
-      window.setTimeout(() => {
-        document.dispatchEvent(new CustomEvent("stats-tab-activated", { detail: { tabId } }));
-      }, 0);
+        // CSP forbids unsafe-eval/inline script execution. Legacy inline scripts are
+        // migrated into bundled initializer modules and invoked here after the DOM
+        // has been inserted and external dependencies are available.
+        initialize?.();
+
+        window.setTimeout(() => {
+          if (!disposed) {
+            document.dispatchEvent(new CustomEvent("stats-tab-activated", { detail: { tabId } }));
+          }
+        }, 0);
+      } catch (error) {
+        console.error("Legacy partial initialization failed", error);
+      }
     })();
 
     return () => {
+      disposed = true;
       host.innerHTML = "";
     };
-  }, [html, tabId]);
+  }, [html, initialize, tabId]);
 
   return <div ref={hostRef} />;
 }
