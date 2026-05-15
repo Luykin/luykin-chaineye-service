@@ -245,7 +245,7 @@ function formatDateTime(date = new Date()) {
 router.get("/", async (req, res) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   if (!fsSync.existsSync(ADMIN_WEB_INDEX_PATH)) {
-    return res.status(503).send("Admin web build not found. Please run `yarn build` first.");
+    return res.status(503).send("Admin web build not found. Please run `npm run build` first.");
   }
   return res.sendFile(ADMIN_WEB_INDEX_PATH);
 });

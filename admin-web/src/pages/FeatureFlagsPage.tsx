@@ -102,21 +102,13 @@ function SummaryList({
   }
 
   return (
-    <Space direction="vertical" size={6} style={{ width: "100%" }}>
+    <Space direction="vertical" size={0} className="ff-summary-list">
       {items.map((item) => (
-        <div
-          key={item.key}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-          }}
-        >
-          <Typography.Text ellipsis style={{ color: "#374151", fontSize: 13 }}>
+        <div key={item.key} className="ff-summary-row-item">
+          <Typography.Text ellipsis className="ff-summary-name">
             {formatFeatureLabel(item.key, translations)}
           </Typography.Text>
-          {showCount ? <Tag color="blue">{item.count || 0} user(s)</Tag> : null}
+          {showCount ? <Tag className="ff-summary-count">{item.count || 0} user(s)</Tag> : null}
         </div>
       ))}
     </Space>
@@ -137,6 +129,7 @@ function TagEditor({
   return (
     <Select
       mode="tags"
+      className="ff-tag-editor"
       value={value}
       onChange={(next) => onChange(normalizeTags(next))}
       placeholder={placeholder || "输入后回车添加，支持粘贴逗号分隔内容"}
@@ -315,7 +308,7 @@ export function FeatureFlagsPage() {
         title="功能开关"
         description="管理测试功能对特定用户的可见性。"
         extra={
-          <Space>
+          <Space className="ff-toolbar" wrap>
             {dirty ? <Tag color="orange">未发布</Tag> : <Tag color="green">已同步</Tag>}
             <Button icon={<ReloadOutlined />} onClick={() => void reloadConfig()} loading={configQuery.isFetching}>
               刷新
@@ -326,6 +319,7 @@ export function FeatureFlagsPage() {
           </Space>
         }
       >
+        <div className="feature-flags-page">
         {translationsQuery.isError ? (
           <Alert
             type="warning"
@@ -336,39 +330,42 @@ export function FeatureFlagsPage() {
           />
         ) : null}
 
-        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Row gutter={[12, 12]} className="ff-summary-row">
           <Col xs={24} lg={8}>
-            <Card size="small" title="灵活测试">
+            <Card size="small" title="灵活测试" className="ff-summary-card ff-summary-card--flex">
               <SummaryList items={summaryFlexible} emptyText="No active flexible rules." translations={translations} showCount />
             </Card>
           </Col>
           <Col xs={24} lg={8}>
-            <Card size="small" title="测试组">
+            <Card size="small" title="测试组" className="ff-summary-card ff-summary-card--test">
               <SummaryList items={summaryTest} emptyText="No features in test group." translations={translations} />
             </Card>
           </Col>
           <Col xs={24} lg={8}>
-            <Card size="small" title="金丝雀">
+            <Card size="small" title="金丝雀" className="ff-summary-card ff-summary-card--canary">
               <SummaryList items={summaryCanary} emptyText="No features in canary group." translations={translations} />
             </Card>
           </Col>
         </Row>
 
         <Tabs
+          className="feature-flags-tabs"
           items={[
             {
               key: "flexible",
               label: "灵活测试",
               children: (
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                  <Typography.Text type="secondary">最高优先级，覆盖其他组的同名配置。</Typography.Text>
+                  <Typography.Text type="secondary" className="ff-tab-note">最高优先级，覆盖其他组的同名配置。</Typography.Text>
                   <Row gutter={[12, 12]}>
                     {Object.entries(flexibleTesting).map(([featureKey, users]) => (
                       <Col xs={24} xl={12} key={featureKey}>
                         <Card
                           size="small"
+                          className="ff-rule-card"
                           title={
                             <Input
+                              className="ff-rule-title-input"
                               defaultValue={featureKey}
                               onBlur={(event) => {
                                 const nextKey = event.target.value.trim();
@@ -398,7 +395,7 @@ export function FeatureFlagsPage() {
                           }
                         >
                           <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            <Typography.Text type="secondary" className="ff-rule-desc">
                               {translations[featureKey] || translations[featureKey.replace(/^_/, "")] || "未匹配到中文说明"}
                             </Typography.Text>
                             <TagEditor
@@ -427,6 +424,7 @@ export function FeatureFlagsPage() {
                   <Button
                     icon={<PlusOutlined />}
                     block
+                    className="ff-add-rule-button"
                     onClick={() => {
                       updateConfig((draft) => {
                         draft.flexibleTesting = draft.flexibleTesting || {};
@@ -444,12 +442,12 @@ export function FeatureFlagsPage() {
               label: "测试组",
               children: (
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                  <Typography.Text type="secondary">仅 Testers 列表中的用户可见。</Typography.Text>
-                  <Card size="small">
-                    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                      <div>
-                        <Typography.Text strong>功能列表</Typography.Text>
-                        <div style={{ marginTop: 8 }}>
+                  <Typography.Text type="secondary" className="ff-tab-note">仅 Testers 列表中的用户可见。</Typography.Text>
+                  <Card size="small" className="ff-editor-card">
+                    <Space direction="vertical" size={0} style={{ width: "100%" }}>
+                      <div className="ff-field-block">
+                        <div className="ff-field-title"><Typography.Text strong>功能列表</Typography.Text></div>
+                        <div>
                           <TagEditor
                             value={normalizeTags(testConfig.features)}
                             options={featureOptions}
@@ -462,10 +460,10 @@ export function FeatureFlagsPage() {
                           />
                         </div>
                       </div>
-                      <div>
-                        <Space style={{ marginBottom: 8 }}>
+                      <div className="ff-field-block">
+                        <Space className="ff-field-title">
                           <Typography.Text strong>测试用户</Typography.Text>
-                          <Tag>{normalizeTags(testConfig.testers).length} users</Tag>
+                          <Tag className="ff-field-count">{normalizeTags(testConfig.testers).length} users</Tag>
                         </Space>
                         <TagEditor
                           value={normalizeTags(testConfig.testers)}
@@ -476,7 +474,7 @@ export function FeatureFlagsPage() {
                             });
                           }}
                         />
-                        <Space wrap style={{ marginTop: 8 }}>
+                        <Space wrap className="ff-quick-actions">
                           <Button size="small" onClick={() => addUsersTo("test", vipUsers)}>VIP 名单</Button>
                           <Button size="small" onClick={() => addUsersTo("test", internalUsers)}>内部测试用户</Button>
                         </Space>
@@ -491,12 +489,12 @@ export function FeatureFlagsPage() {
               label: "金丝雀",
               children: (
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                  <Typography.Text type="secondary">仅 Canaries 列表中的用户可见。</Typography.Text>
-                  <Card size="small">
-                    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                      <div>
-                        <Typography.Text strong>功能列表</Typography.Text>
-                        <div style={{ marginTop: 8 }}>
+                  <Typography.Text type="secondary" className="ff-tab-note">仅 Canaries 列表中的用户可见。</Typography.Text>
+                  <Card size="small" className="ff-editor-card">
+                    <Space direction="vertical" size={0} style={{ width: "100%" }}>
+                      <div className="ff-field-block">
+                        <div className="ff-field-title"><Typography.Text strong>功能列表</Typography.Text></div>
+                        <div>
                           <TagEditor
                             value={normalizeTags(canaryConfig.features)}
                             options={featureOptions}
@@ -509,10 +507,10 @@ export function FeatureFlagsPage() {
                           />
                         </div>
                       </div>
-                      <div>
-                        <Space style={{ marginBottom: 8 }}>
+                      <div className="ff-field-block">
+                        <Space className="ff-field-title">
                           <Typography.Text strong>灰度用户</Typography.Text>
-                          <Tag>{normalizeTags(canaryConfig.canaries).length} users</Tag>
+                          <Tag className="ff-field-count">{normalizeTags(canaryConfig.canaries).length} users</Tag>
                         </Space>
                         <TagEditor
                           value={normalizeTags(canaryConfig.canaries)}
@@ -523,7 +521,7 @@ export function FeatureFlagsPage() {
                             });
                           }}
                         />
-                        <Space wrap style={{ marginTop: 8 }}>
+                        <Space wrap className="ff-quick-actions">
                           <Button size="small" onClick={() => addUsersTo("canary", vipUsers)}>VIP 名单</Button>
                           <Button size="small" onClick={() => addUsersTo("canary", internalUsers)}>内部测试用户</Button>
                         </Space>
@@ -538,7 +536,7 @@ export function FeatureFlagsPage() {
 
         <Collapse
           size="small"
-          style={{ marginTop: 16 }}
+          className="ff-key-collapse"
           items={[
             {
               key: "keys",
@@ -547,7 +545,7 @@ export function FeatureFlagsPage() {
                 <Row gutter={[8, 8]}>
                   {featureOptions.length ? featureOptions.map((item) => (
                     <Col xs={24} md={12} xl={8} key={item.value}>
-                      <Card size="small">
+                      <Card size="small" className="ff-key-card">
                         <Typography.Text code>{item.value}</Typography.Text>
                         <br />
                         <Typography.Text type="secondary">{translations[item.value]}</Typography.Text>
@@ -583,6 +581,7 @@ export function FeatureFlagsPage() {
             dangerouslySetInnerHTML={{ __html: diffHtml }}
           />
         </Modal>
+        </div>
       </PageSection>
     </PermissionGuard>
   );
