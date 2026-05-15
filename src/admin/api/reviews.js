@@ -13,6 +13,33 @@ const router = express.Router();
 // 虚拟账号 ID（软删除目标）
 const VIRTUAL_ACCOUNT_ID = "00000000-0000-0000-0000-000000000000";
 
+function normalizeHandle(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "");
+}
+
+function comparableHandle(value) {
+  return normalizeHandle(value).toLowerCase();
+}
+
+function sortAccountCandidates(inputHandle, accounts) {
+  const keyword = comparableHandle(inputHandle);
+  return accounts.sort((a, b) => {
+    const aHandle = comparableHandle(a.handle);
+    const bHandle = comparableHandle(b.handle);
+    const score = (handle) => {
+      if (handle === keyword) return 0;
+      if (handle.startsWith(keyword)) return 1;
+      if (handle.includes(keyword)) return 2;
+      return 3;
+    };
+    const scoreDiff = score(aHandle) - score(bHandle);
+    if (scoreDiff !== 0) return scoreDiff;
+    return aHandle.length - bHandle.length;
+  });
+}
+
 /**
  * GET /api/admin/reviews
  * 通过 handle 搜索评论
@@ -33,20 +60,53 @@ router.get(
         });
       }
 
+      const normalizedHandle = normalizeHandle(handle);
+      if (!normalizedHandle) {
+        return res.status(400).json({
+          success: false,
+          error: "handle 不能为空",
+        });
+      }
+
       // 1. 查找被评论人账号（大小写不敏感）
-      const targetAccount = await XAccount.findOne({
+      // 先精确匹配；如果运营输入的是片段（例如 teddy），再按 handle 做 startsWith / contains 候选。
+      let targetAccount = await XAccount.findOne({
         where: {
-          handle: {
-            [Op.iLike]: handle.trim(),
-          },
+          [Op.or]: [
+            { handle: { [Op.iLike]: normalizedHandle } },
+            { handle: { [Op.iLike]: `@${normalizedHandle}` } },
+          ],
         },
         attributes: ["id", "handle", "displayName", "avatar"],
       });
 
       if (!targetAccount) {
-        return res.status(404).json({
-          success: false,
-          error: "未找到该 handle 对应的账号",
+        const candidates = await XAccount.findAll({
+          where: {
+            [Op.or]: [
+              { handle: { [Op.iLike]: `${normalizedHandle}%` } },
+              { handle: { [Op.iLike]: `@${normalizedHandle}%` } },
+              { handle: { [Op.iLike]: `%${normalizedHandle}%` } },
+            ],
+          },
+          attributes: ["id", "handle", "displayName", "avatar"],
+          limit: 30,
+        });
+        targetAccount = sortAccountCandidates(normalizedHandle, candidates)[0] || null;
+      }
+
+      if (!targetAccount) {
+        return res.json({
+          success: true,
+          data: {
+            targetAccount: {
+              handle: normalizedHandle,
+              displayName: null,
+              avatar: null,
+            },
+            reviews: [],
+            total: 0,
+          },
         });
       }
 

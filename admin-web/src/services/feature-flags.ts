@@ -1,5 +1,6 @@
 import { apiRequest } from "./apiClient";
 import type {
+  AdBannerConfig,
   FeatureFlagsPublishResponse,
   FeatureFlagsResponse,
   VipListsResponse,
@@ -13,6 +14,24 @@ export async function publishFeatureFlagsConfig(content: string) {
   return apiRequest<FeatureFlagsPublishResponse>("/api/xhunt/stats/feature-flags", {
     method: "POST",
     body: { content },
+  });
+}
+
+export async function fetchBannerConfig() {
+  return apiRequest<{
+    success: boolean;
+    data: {
+      dataId: string;
+      group: string;
+      adBanners: AdBannerConfig[];
+    };
+  }>("/api/xhunt/stats/banner-config");
+}
+
+export async function publishBannerConfig(adBanners: AdBannerConfig[]) {
+  return apiRequest<FeatureFlagsPublishResponse>("/api/xhunt/stats/banner-config", {
+    method: "POST",
+    body: { adBanners },
   });
 }
 

@@ -109,7 +109,7 @@ export async function forceVerifyRootdata(params: {
   if (params.keyword) query.set("keyword", params.keyword);
   if (params.twitterUrl) query.set("twitterUrl", params.twitterUrl);
   if (params.projectLink) query.set("projectLink", params.projectLink);
-  return apiRequest<RootdataForceVerifyResponse>(`/api/xhunt/rootdata/force-verify?${query.toString()}`);
+  return apiRequest<RootdataForceVerifyResponse>(`/api/rootdata/force-verify?${query.toString()}`);
 }
 
 export async function manualCrawlRootdata(params: { url: string; force?: boolean }) {

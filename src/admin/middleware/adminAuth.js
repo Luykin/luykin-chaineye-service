@@ -94,6 +94,7 @@ function requireRole(required) {
 
 function requirePermission(perm) {
   return function (req, res, next) {
+    if (req.adminUser?.role === "super") return next();
     const perms = req.adminPermissions || [];
     if (perms.includes("*")) return next();
     const allowed = Array.isArray(perm) ? perm.some((p) => perms.includes(p)) : perms.includes(perm);

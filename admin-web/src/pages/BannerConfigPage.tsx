@@ -26,7 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { AdminImageUpload } from "@/components/upload/AdminImageUpload";
-import { fetchFeatureFlagsConfig, publishFeatureFlagsConfig } from "@/services/feature-flags";
+import { fetchBannerConfig, publishBannerConfig } from "@/services/feature-flags";
 import type { AdBannerConfig, FeatureFlagsConfig } from "@/types/feature-flags";
 
 const BANNER_IMAGE_MAX_MB = 3;
@@ -38,12 +38,6 @@ const BANNER_TYPE_OPTIONS = [
   { label: "站内运营", value: "operation" },
   { label: "其他", value: "custom" },
 ];
-
-function parseConfig(content?: string): FeatureFlagsConfig {
-  if (!content) return {};
-  const parsed = JSON.parse(content) as FeatureFlagsConfig;
-  return parsed && typeof parsed === "object" ? parsed : {};
-}
 
 function cloneConfig<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -132,8 +126,8 @@ export function BannerConfigPage() {
 
   const configQuery = useQuery({
     queryKey: ["banner-config", "xhunt_config"],
-    queryFn: fetchFeatureFlagsConfig,
-    select: (data) => parseConfig(data.data.content),
+    queryFn: fetchBannerConfig,
+    select: (data) => ({ adBanners: data.data.adBanners } as FeatureFlagsConfig),
   });
 
   useEffect(() => {
@@ -146,10 +140,7 @@ export function BannerConfigPage() {
 
   const publishMutation = useMutation({
     mutationFn: async (nextBanners: AdBannerConfig[]) => {
-      const latest = parseConfig((await fetchFeatureFlagsConfig()).data.content);
-      const nextConfig = cloneConfig(latest);
-      nextConfig.adBanners = toPublishBanners(nextBanners);
-      return publishFeatureFlagsConfig(JSON.stringify(nextConfig, null, 2));
+      return publishBannerConfig(toPublishBanners(nextBanners));
     },
     onSuccess: async () => {
       messageApi.success("Banner 配置已发布");

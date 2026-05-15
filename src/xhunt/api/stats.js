@@ -1814,6 +1814,143 @@ router.post(
   }
 );
 
+/**
+ * -------------------- Banner Config Admin (xhunt_config.adBanners) --------------------
+ * 权限：banner-config。只允许读写 xhunt_config.adBanners，避免和 Feature Flags 权限混用。
+ */
+
+router.get(
+  "/banner-config",
+  adminAuth,
+  requirePermission("banner-config"),
+  async (req, res) => {
+    try {
+      const dataId = "xhunt_config";
+      const group = "DEFAULT_GROUP";
+
+      const resp = await nacosRequest("GET", "/nacos/v1/cs/configs", {
+        params: { dataId, group },
+      });
+
+      if (resp.status !== 200) {
+        return res.status(resp.status).json({
+          success: false,
+          error: "读取 Nacos xhunt_config 失败",
+          status: resp.status,
+          data: resp.data,
+        });
+      }
+
+      const content = typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data || {});
+      let config = {};
+      try {
+        config = JSON.parse(content || "{}");
+      } catch (e) {
+        return res.status(500).json({
+          success: false,
+          error: "xhunt_config 不是合法 JSON，无法读取 Banner 配置",
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          dataId,
+          group,
+          adBanners: Array.isArray(config.adBanners) ? config.adBanners : [],
+        },
+      });
+    } catch (e) {
+      console.error("[banner_config] read error:", e);
+      res.status(500).json({ success: false, error: e.message || "读取失败" });
+    }
+  }
+);
+
+router.post(
+  "/banner-config",
+  adminAuth,
+  requirePermission("banner-config"),
+  async (req, res) => {
+    try {
+      const { adBanners } = req.body || {};
+      const dataId = "xhunt_config";
+      const group = "DEFAULT_GROUP";
+      const type = "json";
+
+      if (!Array.isArray(adBanners)) {
+        return res.status(400).json({ success: false, error: "adBanners 必须是数组" });
+      }
+
+      const readResp = await nacosRequest("GET", "/nacos/v1/cs/configs", {
+        params: { dataId, group },
+      });
+
+      if (readResp.status !== 200) {
+        return res.status(readResp.status).json({
+          success: false,
+          error: "读取 Nacos xhunt_config 失败",
+          status: readResp.status,
+          data: readResp.data,
+        });
+      }
+
+      const currentContent = typeof readResp.data === "string" ? readResp.data : JSON.stringify(readResp.data || {});
+      let nextConfig = {};
+      try {
+        nextConfig = JSON.parse(currentContent || "{}");
+      } catch (e) {
+        return res.status(500).json({
+          success: false,
+          error: "xhunt_config 不是合法 JSON，无法发布 Banner 配置",
+        });
+      }
+
+      nextConfig.adBanners = adBanners;
+      const content = JSON.stringify(nextConfig, null, 2);
+      const form = new URLSearchParams({
+        dataId,
+        group,
+        content,
+        type,
+      });
+
+      const resp = await nacosRequest("POST", "/nacos/v1/cs/configs", {
+        data: form.toString(),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+
+      if (resp.status !== 200 || (resp.data !== true && resp.data !== "true")) {
+        return res.status(resp.status || 500).json({
+          success: false,
+          error: "发布 Nacos xhunt_config.adBanners 失败",
+          status: resp.status,
+          data: resp.data,
+        });
+      }
+
+      await logAdminAction(req, {
+        action: "banner-config-publish",
+        success: true,
+        message: `adBanners=${adBanners.length}`,
+      });
+
+      res.json({
+        success: true,
+        data: { dataId, group, published: true },
+      });
+    } catch (e) {
+      console.error("[banner_config] publish error:", e);
+      await logAdminAction(req, {
+        action: "banner-config-publish",
+        success: false,
+        message: e.message || "发布失败",
+      });
+      res.status(500).json({ success: false, error: e.message || "发布失败" });
+    }
+  }
+);
+
 router.get("/health", (req, res) => {
   res.json({
     status: "ok",
