@@ -672,36 +672,38 @@ export function NacosMessagesPage() {
             : "选择左侧公告开始编辑"
         }
       >
-        <div className="editor-form">
-          <div className="form-field">
-            <label>标题</label>
-            <Input
-              className="nacos-input"
-              value={selectedItem?.title || ""}
-              placeholder="请输入公告标题"
-              disabled={!editorEnabled}
-              onChange={(event) =>
-                updateItem(currentIndex, { title: event.target.value })
-              }
-            />
+        <div className="editor-form nacos-message-editor-form">
+          <div className="nacos-message-compact-fields">
+            <div className="form-field nacos-message-title-field">
+              <label>标题</label>
+              <Input
+                className="nacos-input"
+                value={selectedItem?.title || ""}
+                placeholder="请输入公告标题"
+                disabled={!editorEnabled}
+                onChange={(event) =>
+                  updateItem(currentIndex, { title: event.target.value })
+                }
+              />
+            </div>
+
+            <div className="form-field nacos-message-type-field">
+              <label>类型</label>
+              <Select
+                className="nacos-input nacos-select"
+                value={selectedItem?.type || "all"}
+                disabled={!editorEnabled}
+                onChange={(value) => updateItem(currentIndex, { type: value })}
+                options={[
+                  { value: "all", label: "全部" },
+                  { value: "web3", label: "Web3" },
+                  { value: "ai", label: "AI" },
+                ]}
+              />
+            </div>
           </div>
 
-          <div className="form-field">
-            <label>类型</label>
-            <Select
-              className="nacos-input nacos-select"
-              value={selectedItem?.type || "all"}
-              disabled={!editorEnabled}
-              onChange={(value) => updateItem(currentIndex, { type: value })}
-              options={[
-                { value: "all", label: "全部" },
-                { value: "web3", label: "Web3" },
-                { value: "ai", label: "AI" },
-              ]}
-            />
-          </div>
-
-          <div className="form-field">
+          <div className="form-field nacos-message-content-field">
             <label>内容</label>
             <div className="editor-color-notice">
               <svg
@@ -713,10 +715,8 @@ export function NacosMessagesPage() {
                 <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <span>
-                <strong>⚠️ 重要提示：</strong>粘贴内容后，请先
-                <strong>全选(Ctrl+A)</strong>然后点击工具栏的{" "}
-                <strong>🧹 清除样式</strong>{" "}
-                按钮，确保文字颜色继承自主题，如需特殊高亮语句清楚颜色后单独再设置颜色。发布后请在白天/黑夜模式下都检查一下显示效果。
+                粘贴后建议先 <strong>Ctrl+A</strong> 再点{" "}
+                <strong>🧹 清除样式</strong>，避免深浅色主题下文字颜色异常。
               </span>
             </div>
 
@@ -795,18 +795,6 @@ export function NacosMessagesPage() {
                 onInput={syncContentFromEditor}
               />
             </div>
-          </div>
-
-          <div className="preview-section">
-            <div className="preview-header">
-              <span>实时预览</span>
-            </div>
-            <div
-              className="preview-box"
-              dangerouslySetInnerHTML={{
-                __html: sanitizeRichTextHtml(selectedItem?.content || ""),
-              }}
-            />
           </div>
 
           <div className="help-section">

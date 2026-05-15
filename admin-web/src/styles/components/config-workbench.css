@@ -800,3 +800,50 @@
 .config-workbench .list-group-title {
   display: none;
 }
+
+.config-workbench .nacos-message-editor-form {
+  gap: 12px;
+}
+
+.config-workbench .nacos-message-compact-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: 12px;
+  align-items: end;
+}
+
+.config-workbench .nacos-message-type-field .ant-select,
+.config-workbench .nacos-message-type-field .nacos-select {
+  width: 100%;
+}
+
+.config-workbench .nacos-message-content-field {
+  gap: 7px;
+}
+
+.config-workbench .nacos-message-content-field .editor-color-notice {
+  margin: 0;
+  padding: 7px 9px;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  border-radius: 10px;
+}
+
+.config-workbench .nacos-message-content-field .editor-color-notice svg {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
+.config-workbench .nacos-message-content-field .ql-container.ql-snow,
+.config-workbench .nacos-message-content-field .ql-editor,
+.config-workbench .nacos-message-content-field .rte-editor {
+  min-height: 360px;
+}
+
+@media (max-width: 900px) {
+  .config-workbench .nacos-message-compact-fields {
+    grid-template-columns: 1fr;
+  }
+}
