@@ -49,21 +49,6 @@ const WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT = 10;
 const WEBAUTHN_PROMPT_SUPPRESS_DAYS = 7;
 const { useBreakpoint } = Grid;
 
-declare global {
-  interface Window {
-    __adminWebauthnPromptDebug?: Record<string, unknown>;
-  }
-}
-
-if (typeof window !== "undefined") {
-  window.__adminWebauthnPromptDebug = {
-    stage: "module_loaded",
-    href: window.location.href,
-    updatedAt: new Date().toISOString(),
-  };
-  console.error("[AdminWebAuthnPrompt]", window.__adminWebauthnPromptDebug);
-}
-
 type SidebarGroupKey = NonNullable<AdminNavItem["sidebarGroup"]>;
 
 const navGroupDefinitions: Array<{ key: SidebarGroupKey; label: string; icon: ReactNode }> = [
@@ -138,31 +123,12 @@ function getEffectivePermissionCount(role?: string, permissions?: string[]) {
   return new Set(list).size;
 }
 
-function updateWebAuthnPromptDebug(payload: Record<string, unknown>) {
-  if (typeof window === "undefined") return;
-  window.__adminWebauthnPromptDebug = {
-    ...(window.__adminWebauthnPromptDebug || {}),
-    ...payload,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function logWebAuthnPromptDebug(stage: string, payload: Record<string, unknown> = {}) {
-  const debugPayload = {
-    stage,
-    ...payload,
-  };
-
-  updateWebAuthnPromptDebug(debugPayload);
-  console.error("[AdminWebAuthnPrompt]", debugPayload);
-}
-
 async function browserSupportsWebAuthn() {
   const browserApi = window.SimpleWebAuthnBrowser;
   if (browserApi) {
     return Promise.resolve(browserApi.browserSupportsWebAuthn()).catch(() => false);
   }
-  
+
   return typeof window.PublicKeyCredential !== "undefined";
 }
 
@@ -186,17 +152,6 @@ export function AdminLayout() {
   >([]);
   const [passwordForm] = Form.useForm();
   const [webauthnForm] = Form.useForm();
-
-  useEffect(() => {
-    logWebAuthnPromptDebug("layout_mounted", {
-      href: window.location.href,
-      pathname: location.pathname,
-      hash: window.location.hash,
-      hasUser: !!user,
-      adminId: user?.id || null,
-      email: user?.email || null,
-    });
-  }, [location.pathname, user?.email, user?.id]);
 
   const visibleMainNavItems = useMemo(() => {
     const visibleItems = adminMainNavItems.filter((item) => !item.superOnly || user?.role === "super");
@@ -388,7 +343,6 @@ export function AdminLayout() {
   const loadCredentials = async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
       setLoadingCredentials(true);
-      logWebAuthnPromptDebug("credentials_fetch_start", { silent });
       const response = await fetch(buildApiUrl("/admin/webauthn/credentials"), {
         credentials: "include",
       });
@@ -397,17 +351,9 @@ export function AdminLayout() {
         throw new Error(data.error || "加载失败");
       }
       const items = Array.isArray(data.credentials) ? data.credentials : [];
-      logWebAuthnPromptDebug("credentials_fetch_success", {
-        silent,
-        credentialCount: items.length,
-      });
       setCredentialItems(items);
       return items;
     } catch (error) {
-      logWebAuthnPromptDebug("credentials_fetch_failed", {
-        silent,
-        error: error instanceof Error ? error.message : String(error),
-      });
       if (!silent) {
         messageApi.error(error instanceof Error ? error.message : "加载生物识别设备失败");
       }
@@ -502,68 +448,31 @@ export function AdminLayout() {
         const permissionCount = getEffectivePermissionCount(user.role, user.permissions);
         const snoozeUntil = getWebAuthnPromptSnoozeUntil(user.id);
 
-        logWebAuthnPromptDebug("effect_start", {
-          adminId: user.id,
-          email: user.email,
-          role: user.role,
-          permissionCount,
-          permissionListLength: Array.isArray(user.permissions) ? user.permissions.length : 0,
-          lastLoginAt: user.lastLoginAt || null,
-          snoozeUntil,
-          now: Date.now(),
-        });
-
         if (
           permissionCount < WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT
         ) {
-          logWebAuthnPromptDebug("skip_low_permission", {
-            permissionCount,
-            minPermissionCount: WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT,
-          });
           return;
         }
 
         if (snoozeUntil > Date.now()) {
-          logWebAuthnPromptDebug("skip_snoozed", {
-            snoozeUntil,
-          });
           return;
         }
 
-        const browserApi = window.SimpleWebAuthnBrowser;
         const supports = await browserSupportsWebAuthn();
 
-        logWebAuthnPromptDebug("support_check_result", {
-          hasBrowserApi: !!browserApi,
-          hasPublicKeyCredential: typeof window.PublicKeyCredential !== "undefined",
-          supports,
-        });
-
         if (!supports) {
-          logWebAuthnPromptDebug("skip_not_supported");
           return;
         }
 
         const items = await loadCredentials({ silent: true });
         if (cancelled || !Array.isArray(items) || items.length > 0) {
-          logWebAuthnPromptDebug("skip_after_credentials_check", {
-            cancelled,
-            credentialsLoaded: Array.isArray(items),
-            credentialCount: Array.isArray(items) ? items.length : null,
-          });
           return;
         }
 
         setWebauthnPromptSnoozeChecked(false);
         setWebauthnPromptOpen(true);
-        logWebAuthnPromptDebug("prompt_opened", {
-          adminId: user.id,
-          credentialCount: items.length,
-        });
-      } catch (error) {
-        logWebAuthnPromptDebug("check_failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
+      } catch {
+        // 提示只是安全建议，检查失败时不打断后台使用。
       }
     };
 
@@ -571,9 +480,6 @@ export function AdminLayout() {
 
     return () => {
       cancelled = true;
-      logWebAuthnPromptDebug("effect_cleanup", {
-        adminId: user.id,
-      });
     };
   }, [user?.email, user?.id, user?.lastLoginAt, user?.permissions, user?.role]);
 
@@ -704,49 +610,31 @@ export function AdminLayout() {
         open={webauthnPromptOpen}
         onCancel={() => closeWebAuthnPrompt({ persistSnooze: true })}
         footer={null}
-        width={640}
+        width={460}
         centered
         destroyOnHidden
       >
         <div className="admin-webauthn-prompt">
-          <div className="admin-webauthn-prompt-hero">
-            <div className="admin-webauthn-prompt-badge">Security upgrade</div>
+          <div className="admin-webauthn-prompt-icon">
+            <SafetyCertificateOutlined />
+          </div>
+          <div className="admin-webauthn-prompt-copy-block">
             <Typography.Title level={2} className="admin-webauthn-prompt-title">
-              建议为当前管理员开启生物识别登录
+              建议开启生物识别
             </Typography.Title>
             <Typography.Paragraph className="admin-webauthn-prompt-copy">
               当前账号权限较高，建议录入指纹或 Face ID，为后台增加一层设备级安全验证。
             </Typography.Paragraph>
-
-            <div className="admin-webauthn-prompt-highlights">
-              <div className="admin-webauthn-prompt-highlight">
-                <CheckCircleFilled />
-                <span>高权限操作多一层生物识别保护</span>
-              </div>
-              <div className="admin-webauthn-prompt-highlight">
-                <CheckCircleFilled />
-                <span>只绑定当前设备，不影响原有登录方式</span>
-              </div>
-              <div className="admin-webauthn-prompt-highlight">
-                <CheckCircleFilled />
-                <span>点击后可直接开始录入</span>
-              </div>
-            </div>
           </div>
 
-          <div className="admin-webauthn-prompt-card" aria-hidden="true">
-            <div className="admin-webauthn-prompt-card-ring" />
-            <div className="admin-webauthn-prompt-card-chip">
-              <SafetyCertificateOutlined />
+          <div className="admin-webauthn-prompt-highlights">
+            <div className="admin-webauthn-prompt-highlight">
+              <CheckCircleFilled />
+              <span>只绑定当前设备</span>
             </div>
-            <div className="admin-webauthn-prompt-card-meta">
-              <span>Recommended for</span>
-              <strong>{user?.email || "当前管理员"}</strong>
-            </div>
-            <div className="admin-webauthn-prompt-card-lines">
-              <span />
-              <span />
-              <span />
+            <div className="admin-webauthn-prompt-highlight">
+              <CheckCircleFilled />
+              <span>不影响原有登录方式</span>
             </div>
           </div>
 
