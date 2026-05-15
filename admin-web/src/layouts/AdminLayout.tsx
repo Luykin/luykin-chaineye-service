@@ -2,6 +2,7 @@ import {
   AppstoreOutlined,
   BarChartOutlined,
   CaretRightOutlined,
+  CheckCircleFilled,
   CodeOutlined,
   ExportOutlined,
   LockOutlined,
@@ -16,6 +17,7 @@ import {
 import type { MenuProps } from "antd";
 import {
   Button,
+  Checkbox,
   Dropdown,
   Form,
   Grid,
@@ -33,7 +35,7 @@ import {
 } from "antd";
 import type { ReactNode } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/app/auth";
 import { buildApiUrl } from "@/services/apiClient";
 import { adminMainNavItems, adminShortcutNavItems, type AdminNavItem } from "@/config/admin-navigation";
@@ -43,6 +45,8 @@ const ADMIN_ENTRY_PATH = "/api/xhunt/stats";
 const ADMIN_HOME_PATH = "/overview";
 const ADMIN_LOGIN_HASH = "#/login";
 const ADMIN_TITLE = "数据统计面板";
+const WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT = 10;
+const WEBAUTHN_PROMPT_SUPPRESS_DAYS = 7;
 const { useBreakpoint } = Grid;
 
 type SidebarGroupKey = NonNullable<AdminNavItem["sidebarGroup"]>;
@@ -68,6 +72,57 @@ function getPermissionLabel(item: AdminNavItem) {
   );
 }
 
+function getWebAuthnPromptStorageKey(adminId?: number) {
+  return adminId ? `admin:webauthn:prompt:snooze_until:${adminId}` : "";
+}
+
+function getWebAuthnPromptSnoozeUntil(adminId?: number) {
+  if (!adminId || typeof window === "undefined") return 0;
+  const rawValue = window.localStorage.getItem(getWebAuthnPromptStorageKey(adminId));
+  const parsed = Number(rawValue || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function setWebAuthnPromptSnooze(adminId: number, days = WEBAUTHN_PROMPT_SUPPRESS_DAYS) {
+  if (typeof window === "undefined") return;
+  const until = Date.now() + days * 24 * 60 * 60 * 1000;
+  window.localStorage.setItem(getWebAuthnPromptStorageKey(adminId), String(until));
+}
+
+function clearWebAuthnPromptSnooze(adminId?: number) {
+  if (!adminId || typeof window === "undefined") return;
+  window.localStorage.removeItem(getWebAuthnPromptStorageKey(adminId));
+}
+
+function getSuggestedCredentialNickname() {
+  if (typeof navigator === "undefined") return "";
+
+  const userAgent = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+
+  if (/iPhone/i.test(userAgent)) return "iPhone";
+  if (/iPad/i.test(userAgent)) return "iPad";
+  if (/Android/i.test(userAgent)) return "Android 设备";
+  if (/Mac/i.test(platform) || /Mac OS/i.test(userAgent)) return "Mac";
+  if (/Win/i.test(platform) || /Windows/i.test(userAgent)) return "Windows 设备";
+  if (/Linux/i.test(platform)) return "Linux 设备";
+
+  return "";
+}
+
+function getEffectivePermissionCount(role?: string, permissions?: string[]) {
+  if (role === "super") {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  const list = Array.isArray(permissions) ? permissions.filter((item) => typeof item === "string" && item.trim()) : [];
+  if (list.includes("*")) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  return new Set(list).size;
+}
+
 export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -77,10 +132,13 @@ export function AdminLayout() {
   const [messageApi, contextHolder] = message.useMessage();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [webauthnModalOpen, setWebauthnModalOpen] = useState(false);
+  const [webauthnPromptOpen, setWebauthnPromptOpen] = useState(false);
+  const [webauthnPromptSnoozeChecked, setWebauthnPromptSnoozeChecked] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [loadingCredentials, setLoadingCredentials] = useState(false);
   const [addingCredential, setAddingCredential] = useState(false);
+  const promptCheckRef = useRef<string>("");
   const [credentialItems, setCredentialItems] = useState<
     Array<{ id: number; nickname?: string | null; lastUsedAt?: string | null; createdAt?: string | null }>
   >([]);
@@ -274,7 +332,7 @@ export function AdminLayout() {
     }
   };
 
-  const loadCredentials = async () => {
+  const loadCredentials = async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
       setLoadingCredentials(true);
       const response = await fetch(buildApiUrl("/admin/webauthn/credentials"), {
@@ -284,10 +342,15 @@ export function AdminLayout() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || "加载失败");
       }
-      setCredentialItems(Array.isArray(data.credentials) ? data.credentials : []);
+      const items = Array.isArray(data.credentials) ? data.credentials : [];
+      setCredentialItems(items);
+      return items;
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message : "加载生物识别设备失败");
+      if (!silent) {
+        messageApi.error(error instanceof Error ? error.message : "加载生物识别设备失败");
+      }
       setCredentialItems([]);
+      return null;
     } finally {
       setLoadingCredentials(false);
     }
@@ -298,10 +361,10 @@ export function AdminLayout() {
     await loadCredentials();
   };
 
-  const addCredential = async () => {
+  const addCredential = async ({ nickname: preferredNickname }: { nickname?: string } = {}) => {
     try {
       setAddingCredential(true);
-      const nickname = (webauthnForm.getFieldValue("nickname") || "").trim();
+      const nickname = String(preferredNickname ?? webauthnForm.getFieldValue("nickname") ?? "").trim();
       const browserApi = window.SimpleWebAuthnBrowser;
       const supports = browserApi
         ? await browserApi.browserSupportsWebAuthn()
@@ -331,8 +394,13 @@ export function AdminLayout() {
         throw new Error(verifyData.error || "注册失败");
       }
       messageApi.success("已添加当前设备，可用于生物识别登录");
+      if (user?.id) {
+        clearWebAuthnPromptSnooze(user.id);
+      }
+      setWebauthnPromptOpen(false);
+      setWebauthnPromptSnoozeChecked(false);
       webauthnForm.resetFields();
-      await loadCredentials();
+      await loadCredentials({ silent: true });
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "注册生物识别失败");
     } finally {
@@ -356,6 +424,59 @@ export function AdminLayout() {
       messageApi.error(error instanceof Error ? error.message : "删除设备失败");
     }
   };
+
+  const closeWebAuthnPrompt = ({ persistSnooze = false }: { persistSnooze?: boolean } = {}) => {
+    if (persistSnooze && user?.id && webauthnPromptSnoozeChecked) {
+      setWebAuthnPromptSnooze(user.id);
+    }
+    setWebauthnPromptOpen(false);
+  };
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const promptScopeKey = `${user.id}:${user.lastLoginAt || ""}`;
+    if (promptCheckRef.current === promptScopeKey) return;
+    promptCheckRef.current = promptScopeKey;
+
+    let cancelled = false;
+
+    const maybeShowPrompt = async () => {
+      if (
+        getEffectivePermissionCount(user.role, user.permissions) <
+        WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT
+      ) {
+        return;
+      }
+
+      if (getWebAuthnPromptSnoozeUntil(user.id) > Date.now()) {
+        return;
+      }
+
+      const browserApi = window.SimpleWebAuthnBrowser;
+      const supports = browserApi
+        ? await browserApi.browserSupportsWebAuthn().catch(() => false)
+        : typeof window.PublicKeyCredential !== "undefined";
+
+      if (!supports) {
+        return;
+      }
+
+      const items = await loadCredentials({ silent: true });
+      if (cancelled || !Array.isArray(items) || items.length > 0) {
+        return;
+      }
+
+      setWebauthnPromptSnoozeChecked(false);
+      setWebauthnPromptOpen(true);
+    };
+
+    void maybeShowPrompt();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.lastLoginAt]);
 
   return (
     <Layout className="admin-shell admin-shell--top-nav">
@@ -478,6 +599,79 @@ export function AdminLayout() {
       <Content className="admin-top-content">
         <Outlet />
       </Content>
+
+      <Modal
+        className="admin-webauthn-prompt-modal"
+        open={webauthnPromptOpen}
+        onCancel={() => closeWebAuthnPrompt({ persistSnooze: true })}
+        footer={null}
+        width={640}
+        centered
+        destroyOnHidden
+      >
+        <div className="admin-webauthn-prompt">
+          <div className="admin-webauthn-prompt-hero">
+            <div className="admin-webauthn-prompt-badge">Security upgrade</div>
+            <Typography.Title level={2} className="admin-webauthn-prompt-title">
+              建议为当前管理员开启生物识别登录
+            </Typography.Title>
+            <Typography.Paragraph className="admin-webauthn-prompt-copy">
+              当前账号权限较高，建议录入指纹或 Face ID，为后台增加一层设备级安全验证。
+            </Typography.Paragraph>
+
+            <div className="admin-webauthn-prompt-highlights">
+              <div className="admin-webauthn-prompt-highlight">
+                <CheckCircleFilled />
+                <span>高权限操作多一层生物识别保护</span>
+              </div>
+              <div className="admin-webauthn-prompt-highlight">
+                <CheckCircleFilled />
+                <span>只绑定当前设备，不影响原有登录方式</span>
+              </div>
+              <div className="admin-webauthn-prompt-highlight">
+                <CheckCircleFilled />
+                <span>点击后可直接开始录入</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="admin-webauthn-prompt-card" aria-hidden="true">
+            <div className="admin-webauthn-prompt-card-ring" />
+            <div className="admin-webauthn-prompt-card-chip">
+              <SafetyCertificateOutlined />
+            </div>
+            <div className="admin-webauthn-prompt-card-meta">
+              <span>Recommended for</span>
+              <strong>{user?.email || "当前管理员"}</strong>
+            </div>
+            <div className="admin-webauthn-prompt-card-lines">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+
+          <div className="admin-webauthn-prompt-actions">
+            <Checkbox
+              checked={webauthnPromptSnoozeChecked}
+              onChange={(event) => setWebauthnPromptSnoozeChecked(event.target.checked)}
+            >
+              7 天内不再提示
+            </Checkbox>
+
+            <Space size={12}>
+              <Button onClick={() => closeWebAuthnPrompt({ persistSnooze: true })}>暂时跳过</Button>
+              <Button
+                type="primary"
+                loading={addingCredential}
+                onClick={() => void addCredential({ nickname: getSuggestedCredentialNickname() })}
+              >
+                立即录入
+              </Button>
+            </Space>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         title="修改密码"

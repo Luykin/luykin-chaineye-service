@@ -3,6 +3,7 @@
 @import "./components/tables.css";
 @import "./components/legacy-admin.css";
 @import "./components/legacy-stats.css";
+@import "./components/webauthn-prompt.css";
 @import "./layout/sidebar.css";
 @import "./layout/top-nav.css";
 @import "./pages/feature-flags.css";
