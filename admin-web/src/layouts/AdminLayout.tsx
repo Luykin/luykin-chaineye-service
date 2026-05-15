@@ -35,7 +35,7 @@ import {
 } from "antd";
 import type { ReactNode } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
 import { buildApiUrl } from "@/services/apiClient";
 import { adminMainNavItems, adminShortcutNavItems, type AdminNavItem } from "@/config/admin-navigation";
@@ -123,6 +123,30 @@ function getEffectivePermissionCount(role?: string, permissions?: string[]) {
   return new Set(list).size;
 }
 
+function updateWebAuthnPromptDebug(payload: Record<string, unknown>) {
+  if (typeof window === "undefined") return;
+
+  const debugWindow = window as typeof window & {
+    __adminWebauthnPromptDebug?: Record<string, unknown>;
+  };
+
+  debugWindow.__adminWebauthnPromptDebug = {
+    ...(debugWindow.__adminWebauthnPromptDebug || {}),
+    ...payload,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function logWebAuthnPromptDebug(stage: string, payload: Record<string, unknown> = {}) {
+  const debugPayload = {
+    stage,
+    ...payload,
+  };
+
+  updateWebAuthnPromptDebug(debugPayload);
+  console.info("[AdminWebAuthnPrompt]", debugPayload);
+}
+
 export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -138,7 +162,6 @@ export function AdminLayout() {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [loadingCredentials, setLoadingCredentials] = useState(false);
   const [addingCredential, setAddingCredential] = useState(false);
-  const promptCheckRef = useRef<string>("");
   const [credentialItems, setCredentialItems] = useState<
     Array<{ id: number; nickname?: string | null; lastUsedAt?: string | null; createdAt?: string | null }>
   >([]);
@@ -335,6 +358,7 @@ export function AdminLayout() {
   const loadCredentials = async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
       setLoadingCredentials(true);
+      logWebAuthnPromptDebug("credentials_fetch_start", { silent });
       const response = await fetch(buildApiUrl("/admin/webauthn/credentials"), {
         credentials: "include",
       });
@@ -343,9 +367,17 @@ export function AdminLayout() {
         throw new Error(data.error || "加载失败");
       }
       const items = Array.isArray(data.credentials) ? data.credentials : [];
+      logWebAuthnPromptDebug("credentials_fetch_success", {
+        silent,
+        credentialCount: items.length,
+      });
       setCredentialItems(items);
       return items;
     } catch (error) {
+      logWebAuthnPromptDebug("credentials_fetch_failed", {
+        silent,
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (!silent) {
         messageApi.error(error instanceof Error ? error.message : "加载生物识别设备失败");
       }
@@ -435,21 +467,37 @@ export function AdminLayout() {
   useEffect(() => {
     if (!user?.id) return;
 
-    const promptScopeKey = `${user.id}:${user.lastLoginAt || ""}`;
-    if (promptCheckRef.current === promptScopeKey) return;
-    promptCheckRef.current = promptScopeKey;
-
     let cancelled = false;
 
     const maybeShowPrompt = async () => {
+      const permissionCount = getEffectivePermissionCount(user.role, user.permissions);
+      const snoozeUntil = getWebAuthnPromptSnoozeUntil(user.id);
+
+      logWebAuthnPromptDebug("effect_start", {
+        adminId: user.id,
+        email: user.email,
+        role: user.role,
+        permissionCount,
+        permissionListLength: Array.isArray(user.permissions) ? user.permissions.length : 0,
+        lastLoginAt: user.lastLoginAt || null,
+        snoozeUntil,
+        now: Date.now(),
+      });
+
       if (
-        getEffectivePermissionCount(user.role, user.permissions) <
-        WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT
+        permissionCount < WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT
       ) {
+        logWebAuthnPromptDebug("skip_low_permission", {
+          permissionCount,
+          minPermissionCount: WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT,
+        });
         return;
       }
 
-      if (getWebAuthnPromptSnoozeUntil(user.id) > Date.now()) {
+      if (snoozeUntil > Date.now()) {
+        logWebAuthnPromptDebug("skip_snoozed", {
+          snoozeUntil,
+        });
         return;
       }
 
@@ -458,25 +506,44 @@ export function AdminLayout() {
         ? await browserApi.browserSupportsWebAuthn().catch(() => false)
         : typeof window.PublicKeyCredential !== "undefined";
 
+      logWebAuthnPromptDebug("support_check_result", {
+        hasBrowserApi: !!browserApi,
+        hasPublicKeyCredential: typeof window.PublicKeyCredential !== "undefined",
+        supports,
+      });
+
       if (!supports) {
+        logWebAuthnPromptDebug("skip_not_supported");
         return;
       }
 
       const items = await loadCredentials({ silent: true });
       if (cancelled || !Array.isArray(items) || items.length > 0) {
+        logWebAuthnPromptDebug("skip_after_credentials_check", {
+          cancelled,
+          credentialsLoaded: Array.isArray(items),
+          credentialCount: Array.isArray(items) ? items.length : null,
+        });
         return;
       }
 
       setWebauthnPromptSnoozeChecked(false);
       setWebauthnPromptOpen(true);
+      logWebAuthnPromptDebug("prompt_opened", {
+        adminId: user.id,
+        credentialCount: items.length,
+      });
     };
 
     void maybeShowPrompt();
 
     return () => {
       cancelled = true;
+      logWebAuthnPromptDebug("effect_cleanup", {
+        adminId: user.id,
+      });
     };
-  }, [user?.id, user?.lastLoginAt]);
+  }, [user?.email, user?.id, user?.lastLoginAt, user?.permissions, user?.role]);
 
   return (
     <Layout className="admin-shell admin-shell--top-nav">
