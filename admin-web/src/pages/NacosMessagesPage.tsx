@@ -723,7 +723,7 @@ export function NacosMessagesPage() {
             <div
               className={quillReady ? "" : "nacos-hidden"}
               style={{
-                display: editorEnabled && quillReady ? "block" : "none",
+                display: quillReady ? "block" : "none",
               }}
             >
               <div ref={quillHostRef} id="nacos-msg-content" />
