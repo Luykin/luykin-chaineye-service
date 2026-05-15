@@ -21,34 +21,59 @@
 }
 
 .perf-filter-card .ant-card-body {
-  padding: 16px 18px;
+  padding: 12px 14px;
 }
 
 .perf-filter-shell {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .perf-filter-card .ant-picker,
 .perf-filter-card .ant-input,
+.perf-filter-card .ant-input-affix-wrapper,
 .perf-filter-card .ant-btn {
-  height: 36px;
-  border-radius: 9px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 13px;
 }
 
 .perf-filter-card .ant-btn {
+  padding-inline: 14px;
   font-weight: 600;
+}
+
+.perf-filter-card .ant-input-affix-wrapper {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.perf-filter-card .ant-input-affix-wrapper .ant-input,
+.perf-filter-card .ant-picker-input > input {
+  height: 30px;
+  font-size: 13px;
+}
+
+.perf-filter-card .ant-picker-range-separator {
+  padding-inline: 6px;
+  color: #94a3b8;
+}
+
+.perf-filter-card .ant-picker-suffix,
+.perf-filter-card .ant-input-clear-icon {
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .perf-filter-group {
   display: grid;
-  gap: 7px;
+  gap: 5px;
   min-width: 0;
 }
 
 .perf-filter-label {
   color: #475569;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 750;
   letter-spacing: 0.01em;
 }
@@ -56,42 +81,58 @@
 .perf-filter-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .perf-range-picker.ant-picker {
-  width: 390px;
+  width: 356px;
   max-width: 100%;
 }
 
 .perf-request-input.ant-input-affix-wrapper,
 .perf-request-input.ant-input {
-  width: 420px;
+  width: 356px;
   max-width: 100%;
 }
 
 .perf-filter-grid {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.4fr) minmax(150px, 0.8fr) auto;
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
+}
+
+.perf-filter-grid > .ant-input-affix-wrapper:nth-child(1),
+.perf-filter-grid > .ant-input:nth-child(1) {
+  width: 220px;
+}
+
+.perf-filter-grid > .ant-input-affix-wrapper:nth-child(2),
+.perf-filter-grid > .ant-input:nth-child(2) {
+  width: 320px;
+}
+
+.perf-filter-grid > .ant-input-affix-wrapper:nth-child(3),
+.perf-filter-grid > .ant-input:nth-child(3) {
+  width: 180px;
 }
 
 .perf-filter-actions {
   display: inline-flex;
-  gap: 8px;
+  gap: 7px;
   white-space: nowrap;
 }
 
 .perf-filter-primary-btn.ant-btn,
 .perf-filter-secondary-btn.ant-btn {
-  min-width: 104px;
-  padding-inline: 20px;
+  min-width: 82px;
+  padding-inline: 14px;
 }
 
 .perf-filter-primary-btn.ant-btn-primary {
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.16);
 }
 
 .perf-filter-secondary-btn.ant-btn {

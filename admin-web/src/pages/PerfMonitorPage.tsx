@@ -3,7 +3,6 @@ import {
   Alert,
   Button,
   Card,
-  Collapse,
   Col,
   DatePicker,
   Descriptions,
@@ -24,7 +23,6 @@ import dayjs, { Dayjs } from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import {
-  fetchPerfErrorTraces,
   fetchPerfKpis,
   fetchPerfMetrics,
   fetchPerfQueueStatus,
@@ -33,7 +31,6 @@ import {
 } from "@/services/perf";
 import { fetchLogSearch } from "@/services/stats";
 import type {
-  PerfErrorTracePoint,
   PerfKpiResponse,
   PerfMetricPoint,
   PerfTraceDetail,
@@ -44,7 +41,6 @@ const TRACE_PAGE_SIZE = 50;
 const TABLE_MAX_HEIGHT = 420;
 const SCATTER_HEIGHT = 520;
 const METRICS_HEIGHT = 360;
-const ERRORS_SCATTER_HEIGHT = 360;
 
 function getDefaultRange() {
   const end = dayjs();
@@ -216,15 +212,12 @@ export function PerfMonitorPage() {
   const [detailData, setDetailData] = useState<PerfTraceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [requestIdSearch, setRequestIdSearch] = useState("");
-  const [errorPage, setErrorPage] = useState(1);
-  const [errorsExpanded, setErrorsExpanded] = useState(false);
+  const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false);
 
   const scatterContainerRef = useRef<HTMLDivElement | null>(null);
   const metricsContainerRef = useRef<HTMLDivElement | null>(null);
-  const errorsScatterContainerRef = useRef<HTMLDivElement | null>(null);
   const scatterChartRef = useRef<any>(null);
   const metricsChartRef = useRef<any>(null);
-  const errorsScatterChartRef = useRef<any>(null);
   const [echartsReady, setEchartsReady] = useState(false);
 
   const startMs = appliedStart.valueOf();
@@ -232,7 +225,7 @@ export function PerfMonitorPage() {
   const spanSecs = Math.max((endMs - startMs) / 1000, 1);
   const intervalSecs = spanSecs > 2 * 3600 ? 300 : 60;
 
-  const [queueQuery, kpiQuery, metricsQuery, tracesQuery, errorsQuery] = useQueries({
+  const [queueQuery, kpiQuery, metricsQuery, tracesQuery] = useQueries({
     queries: [
       {
         queryKey: ["perf", "queue-status"],
@@ -250,11 +243,6 @@ export function PerfMonitorPage() {
       {
         queryKey: ["perf", "traces", startMs, endMs],
         queryFn: () => fetchPerfTraces({ startTime: startMs, endTime: endMs, limit: 15000 }),
-      },
-      {
-        queryKey: ["perf", "errors"],
-        queryFn: () => fetchPerfErrorTraces({ maxScan: 100000 }),
-        enabled: errorsExpanded,
       },
     ],
   });
@@ -282,10 +270,6 @@ export function PerfMonitorPage() {
   useEffect(() => {
     setTracePage(1);
   }, [filterUserId, filterPath, filterIp, startMs, endMs]);
-
-  useEffect(() => {
-    setErrorPage(1);
-  }, [errorsExpanded]);
 
   const pagedTraces = useMemo(() => {
     const start = (tracePage - 1) * TRACE_PAGE_SIZE;
@@ -326,12 +310,6 @@ export function PerfMonitorPage() {
     if (!needle) return null;
     return filteredTraces.find((item) => String(item.requestId || "").startsWith(needle)) || null;
   }, [requestIdSearch, filteredTraces]);
-
-  const errorRows = useMemo(() => {
-    const rows = errorsQuery.data || [];
-    const start = (errorPage - 1) * TRACE_PAGE_SIZE;
-    return rows.slice(start, start + TRACE_PAGE_SIZE);
-  }, [errorsQuery.data, errorPage]);
 
   async function openTraceDetail(traceOrRequestId: PerfTracePoint | string) {
     const requestId = typeof traceOrRequestId === "string" ? traceOrRequestId : traceOrRequestId.requestId || "";
@@ -392,18 +370,9 @@ export function PerfMonitorPage() {
       metricsChartRef.current = echarts.init(metricsContainerRef.current);
     }
 
-    if (errorsScatterContainerRef.current && !errorsScatterChartRef.current) {
-      errorsScatterChartRef.current = echarts.init(errorsScatterContainerRef.current);
-      errorsScatterChartRef.current.on("click", (params: any) => {
-        const requestId = params?.value?.[3];
-        if (requestId) void openTraceDetail(requestId);
-      });
-    }
-
     const handleResize = () => {
       scatterChartRef.current?.resize();
       metricsChartRef.current?.resize();
-      errorsScatterChartRef.current?.resize();
     };
 
     window.addEventListener("resize", handleResize);
@@ -414,10 +383,8 @@ export function PerfMonitorPage() {
       window.removeEventListener("resize", handleResize);
       scatterChartRef.current?.dispose();
       metricsChartRef.current?.dispose();
-      errorsScatterChartRef.current?.dispose();
       scatterChartRef.current = null;
       metricsChartRef.current = null;
-      errorsScatterChartRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -557,49 +524,6 @@ export function PerfMonitorPage() {
     );
   }, [echartsReady, endMs, intervalSecs, metricsQuery.data, metricsQuery.isFetching, startMs]);
 
-  useEffect(() => {
-    if (!echartsReady || !errorsScatterChartRef.current || !errorsExpanded) return;
-    const chart = errorsScatterChartRef.current;
-
-    if (errorsQuery.isFetching) {
-      chart.showLoading("default", {
-        text: "正在加载 500+ 错误点...",
-        maskColor: "rgba(255,255,255,0.65)",
-      });
-      return;
-    }
-
-    chart.hideLoading();
-    const points = errorsQuery.data || [];
-
-    if (!points.length) {
-      chart.setOption({ title: { text: "暂无 500+ 错误点", left: "center", top: "center", textStyle: { color: "#94a3b8", fontSize: 14, fontWeight: 500 } } }, true);
-      return;
-    }
-
-    const seriesData = points.map((d) => ({ value: [d.ts, d.durationMs, d.status, d.requestId, d.path, d.userId] }));
-
-    chart.setOption(
-      {
-        animation: false,
-        tooltip: {
-          trigger: "item",
-          formatter: (params: any) => {
-            const v = params.value;
-            const path = v[4] || "";
-            const truncatedPath = path.length > 65 ? `${path.substring(0, 65)}...` : path;
-            return `<b>requestId:</b> ${escapeHtml(v[3] || "")}<br/><b>path:</b> <span title="${escapeHtml(path)}">${escapeHtml(truncatedPath)}</span><br/><b>status:</b> ${v[2]}<br/><b>duration:</b> ${Number(v[1]).toFixed(2)} ms<br/><b>点击查看详情</b>`;
-          },
-        },
-        xAxis: { type: "time", name: "Time", scale: true, axisLabel: { color: "#64748b" }, nameTextStyle: { color: "#64748b" } },
-        yAxis: { type: "value", name: "Duration (ms)", scale: true, axisLabel: { color: "#64748b" }, nameTextStyle: { color: "#64748b" } },
-        series: [{ name: "5xx", type: "scatter", symbolSize: 8, itemStyle: { color: "#ef4444" }, data: seriesData }],
-        grid: { left: 50, right: 24, top: 20, bottom: 60 },
-      },
-      true,
-    );
-  }, [echartsReady, errorsExpanded, errorsQuery.data, errorsQuery.isFetching]);
-
   const traceColumns: ColumnsType<PerfTracePoint> = [
     { title: "时间", key: "ts", width: 170, render: (_, record) => dayjs(record.ts).format("YYYY-MM-DD HH:mm:ss") },
     { title: "状态", dataIndex: "status", key: "status", width: 90, render: (value: number) => <Tag color={statusTagColor(value)}>{value}</Tag> },
@@ -627,15 +551,6 @@ export function PerfMonitorPage() {
         </Button>
       ),
     },
-  ];
-
-  const errorColumns: ColumnsType<PerfErrorTracePoint> = [
-    { title: "时间", key: "ts", width: 170, render: (_, record) => dayjs(record.ts).format("YYYY-MM-DD HH:mm:ss") },
-    { title: "状态", dataIndex: "status", key: "status", width: 90, render: (value: number) => <Tag color="error">{value}</Tag> },
-    { title: "耗时", dataIndex: "durationMs", key: "durationMs", width: 110, render: (value: number) => formatMs(value) },
-    { title: "接口路径", dataIndex: "path", key: "path", render: (value: string) => value || "-" },
-    { title: "userId", dataIndex: "userId", key: "userId", width: 180, render: (value: string) => value || "-" },
-    { title: "requestId", dataIndex: "requestId", key: "requestId", width: 220 },
   ];
 
   const logSearchQuery = useQuery({
@@ -706,73 +621,83 @@ export function PerfMonitorPage() {
                   >
                     最近30分钟
                   </Button>
-                </div>
-              </div>
-
-              <div className="perf-filter-group">
-                <div className="perf-filter-label">条件筛选</div>
-                <div className="perf-filter-grid">
-                  <Input allowClear value={filterUserIdInput} onChange={(event) => setFilterUserIdInput(event.target.value)} placeholder="userId" />
-                  <Input allowClear value={filterPathInput} onChange={(event) => setFilterPathInput(event.target.value)} placeholder="path，例如 /api/xhunt" />
-                  <Input allowClear value={filterIpInput} onChange={(event) => setFilterIpInput(event.target.value)} placeholder="IP" />
-                  <div className="perf-filter-actions">
-                    <Button
-                      type="primary"
-                      className="perf-filter-primary-btn"
-                      onClick={() => {
-                        setFilterUserId(filterUserIdInput);
-                        setFilterPath(filterPathInput);
-                        setFilterIp(filterIpInput);
-                      }}
-                    >
-                      筛选
-                    </Button>
-                    <Button
-                      className="perf-filter-secondary-btn"
-                      onClick={() => {
-                        setFilterUserIdInput("");
-                        setFilterPathInput("");
-                        setFilterIpInput("");
-                        setFilterUserId("");
-                        setFilterPath("");
-                        setFilterIp("");
-                      }}
-                    >
-                      清除
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="perf-filter-group perf-filter-request-group">
-                <div className="perf-filter-label">定位请求详情</div>
-                <div className="perf-filter-row">
-                  <Input
-                    allowClear
-                    value={requestIdSearch}
-                    onChange={(event) => setRequestIdSearch(event.target.value)}
-                    placeholder="requestId 前缀，例如 b6550afd-9194"
-                    className="perf-request-input"
-                  />
                   <Button
-                    type="primary"
-                    className="perf-filter-primary-btn"
-                    onClick={() => {
-                      if (!requestIdSearch.trim()) {
-                        messageApi.info("请先输入 requestId 前缀");
-                        return;
-                      }
-                      if (!requestSearchResult) {
-                        messageApi.warning("当前筛选范围内未匹配到 requestId");
-                        return;
-                      }
-                      void openTraceDetail(requestSearchResult);
-                    }}
+                    className="perf-filter-secondary-btn"
+                    onClick={() => setAdvancedSearchOpen((value) => !value)}
                   >
-                    搜索
+                    {advancedSearchOpen ? "收起筛选" : "高级筛选"}
                   </Button>
                 </div>
               </div>
+
+              {advancedSearchOpen ? (
+                <div className="perf-advanced-filter">
+                  <div className="perf-filter-group">
+                    <div className="perf-filter-label">条件筛选</div>
+                    <div className="perf-filter-grid">
+                      <Input allowClear value={filterUserIdInput} onChange={(event) => setFilterUserIdInput(event.target.value)} placeholder="userId" />
+                      <Input allowClear value={filterPathInput} onChange={(event) => setFilterPathInput(event.target.value)} placeholder="path，例如 /api/xhunt" />
+                      <Input allowClear value={filterIpInput} onChange={(event) => setFilterIpInput(event.target.value)} placeholder="IP" />
+                      <div className="perf-filter-actions">
+                        <Button
+                          type="primary"
+                          className="perf-filter-primary-btn"
+                          onClick={() => {
+                            setFilterUserId(filterUserIdInput);
+                            setFilterPath(filterPathInput);
+                            setFilterIp(filterIpInput);
+                          }}
+                        >
+                          筛选
+                        </Button>
+                        <Button
+                          className="perf-filter-secondary-btn"
+                          onClick={() => {
+                            setFilterUserIdInput("");
+                            setFilterPathInput("");
+                            setFilterIpInput("");
+                            setFilterUserId("");
+                            setFilterPath("");
+                            setFilterIp("");
+                          }}
+                        >
+                          清除
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="perf-filter-group perf-filter-request-group">
+                    <div className="perf-filter-label">定位请求详情</div>
+                    <div className="perf-filter-row">
+                      <Input
+                        allowClear
+                        value={requestIdSearch}
+                        onChange={(event) => setRequestIdSearch(event.target.value)}
+                        placeholder="requestId 前缀，例如 b6550afd-9194"
+                        className="perf-request-input"
+                      />
+                      <Button
+                        type="primary"
+                        className="perf-filter-primary-btn"
+                        onClick={() => {
+                          if (!requestIdSearch.trim()) {
+                            messageApi.info("请先输入 requestId 前缀");
+                            return;
+                          }
+                          if (!requestSearchResult) {
+                            messageApi.warning("当前筛选范围内未匹配到 requestId");
+                            return;
+                          }
+                          void openTraceDetail(requestSearchResult);
+                        }}
+                      >
+                        搜索
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </Card>
 
@@ -794,51 +719,6 @@ export function PerfMonitorPage() {
           <Space direction="vertical" size={16} style={{ width: "100%", marginTop: 16 }}>
             <PerfPanelCard title="请求耗时分布（散点图）（采样后）">
               <ChartContainer chartRef={scatterContainerRef} height={SCATTER_HEIGHT} ready={echartsReady} emptyText="ECharts 未加载" />
-              <Collapse
-                size="small"
-                className="perf-error-collapse"
-                onChange={(keys) => setErrorsExpanded(Array.isArray(keys) ? keys.includes("errors") : keys === "errors")}
-                items={[{
-                  key: "errors",
-                  label: (
-                    <Space size={8} wrap>
-                      <span>500+ 错误请求分布（全量，点击展开后加载）</span>
-                      <Button
-                        size="small"
-                        type="default"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          setErrorsExpanded(true);
-                          void errorsQuery.refetch();
-                        }}
-                      >刷新</Button>
-                    </Space>
-                  ),
-                  children: (
-                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                      <ChartContainer chartRef={errorsScatterContainerRef} height={ERRORS_SCATTER_HEIGHT} ready={echartsReady} emptyText="ECharts 未加载" />
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        说明：该图不受时间范围筛选影响，展示 Redis 已保留窗口内所有 status &gt;= 500 的请求点。
-                      </Typography.Text>
-                      <Table
-                        className="perf-compact-table"
-                        rowKey={(record) => `${record.requestId}-${record.ts}`}
-                        columns={errorColumns}
-                        dataSource={errorRows}
-                        loading={errorsQuery.isFetching}
-                        pagination={false}
-                        size="small"
-                        scroll={{ y: 280, x: 1000 }}
-                        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 500+ 错误请求" /> }}
-                      />
-                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                        <Pagination current={errorPage} pageSize={TRACE_PAGE_SIZE} total={errorsQuery.data?.length || 0} showSizeChanger={false} onChange={setErrorPage} />
-                      </div>
-                    </Space>
-                  ),
-                }]}
-              />
             </PerfPanelCard>
 
             <PerfPanelCard title="平均耗时与吞吐量（折线图）（采样后）">
