@@ -49,6 +49,21 @@ const WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT = 10;
 const WEBAUTHN_PROMPT_SUPPRESS_DAYS = 7;
 const { useBreakpoint } = Grid;
 
+declare global {
+  interface Window {
+    __adminWebauthnPromptDebug?: Record<string, unknown>;
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.__adminWebauthnPromptDebug = {
+    stage: "module_loaded",
+    href: window.location.href,
+    updatedAt: new Date().toISOString(),
+  };
+  console.error("[AdminWebAuthnPrompt]", window.__adminWebauthnPromptDebug);
+}
+
 type SidebarGroupKey = NonNullable<AdminNavItem["sidebarGroup"]>;
 
 const navGroupDefinitions: Array<{ key: SidebarGroupKey; label: string; icon: ReactNode }> = [
@@ -125,13 +140,8 @@ function getEffectivePermissionCount(role?: string, permissions?: string[]) {
 
 function updateWebAuthnPromptDebug(payload: Record<string, unknown>) {
   if (typeof window === "undefined") return;
-
-  const debugWindow = window as typeof window & {
-    __adminWebauthnPromptDebug?: Record<string, unknown>;
-  };
-
-  debugWindow.__adminWebauthnPromptDebug = {
-    ...(debugWindow.__adminWebauthnPromptDebug || {}),
+  window.__adminWebauthnPromptDebug = {
+    ...(window.__adminWebauthnPromptDebug || {}),
     ...payload,
     updatedAt: new Date().toISOString(),
   };
@@ -144,7 +154,16 @@ function logWebAuthnPromptDebug(stage: string, payload: Record<string, unknown> 
   };
 
   updateWebAuthnPromptDebug(debugPayload);
-  console.info("[AdminWebAuthnPrompt]", debugPayload);
+  console.error("[AdminWebAuthnPrompt]", debugPayload);
+}
+
+async function browserSupportsWebAuthn() {
+  const browserApi = window.SimpleWebAuthnBrowser;
+  if (browserApi) {
+    return Promise.resolve(browserApi.browserSupportsWebAuthn()).catch(() => false);
+  }
+  
+  return typeof window.PublicKeyCredential !== "undefined";
 }
 
 export function AdminLayout() {
@@ -167,6 +186,17 @@ export function AdminLayout() {
   >([]);
   const [passwordForm] = Form.useForm();
   const [webauthnForm] = Form.useForm();
+
+  useEffect(() => {
+    logWebAuthnPromptDebug("layout_mounted", {
+      href: window.location.href,
+      pathname: location.pathname,
+      hash: window.location.hash,
+      hasUser: !!user,
+      adminId: user?.id || null,
+      email: user?.email || null,
+    });
+  }, [location.pathname, user?.email, user?.id]);
 
   const visibleMainNavItems = useMemo(() => {
     const visibleItems = adminMainNavItems.filter((item) => !item.superOnly || user?.role === "super");
@@ -398,9 +428,7 @@ export function AdminLayout() {
       setAddingCredential(true);
       const nickname = String(preferredNickname ?? webauthnForm.getFieldValue("nickname") ?? "").trim();
       const browserApi = window.SimpleWebAuthnBrowser;
-      const supports = browserApi
-        ? await browserApi.browserSupportsWebAuthn()
-        : typeof window.PublicKeyCredential !== "undefined";
+      const supports = await browserSupportsWebAuthn();
 
       if (!supports || !browserApi) {
         throw new Error("当前环境不支持生物识别注册，请使用支持指纹/FaceID 的设备");
@@ -470,69 +498,73 @@ export function AdminLayout() {
     let cancelled = false;
 
     const maybeShowPrompt = async () => {
-      const permissionCount = getEffectivePermissionCount(user.role, user.permissions);
-      const snoozeUntil = getWebAuthnPromptSnoozeUntil(user.id);
+      try {
+        const permissionCount = getEffectivePermissionCount(user.role, user.permissions);
+        const snoozeUntil = getWebAuthnPromptSnoozeUntil(user.id);
 
-      logWebAuthnPromptDebug("effect_start", {
-        adminId: user.id,
-        email: user.email,
-        role: user.role,
-        permissionCount,
-        permissionListLength: Array.isArray(user.permissions) ? user.permissions.length : 0,
-        lastLoginAt: user.lastLoginAt || null,
-        snoozeUntil,
-        now: Date.now(),
-      });
-
-      if (
-        permissionCount < WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT
-      ) {
-        logWebAuthnPromptDebug("skip_low_permission", {
+        logWebAuthnPromptDebug("effect_start", {
+          adminId: user.id,
+          email: user.email,
+          role: user.role,
           permissionCount,
-          minPermissionCount: WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT,
-        });
-        return;
-      }
-
-      if (snoozeUntil > Date.now()) {
-        logWebAuthnPromptDebug("skip_snoozed", {
+          permissionListLength: Array.isArray(user.permissions) ? user.permissions.length : 0,
+          lastLoginAt: user.lastLoginAt || null,
           snoozeUntil,
+          now: Date.now(),
         });
-        return;
-      }
 
-      const browserApi = window.SimpleWebAuthnBrowser;
-      const supports = browserApi
-        ? await browserApi.browserSupportsWebAuthn().catch(() => false)
-        : typeof window.PublicKeyCredential !== "undefined";
+        if (
+          permissionCount < WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT
+        ) {
+          logWebAuthnPromptDebug("skip_low_permission", {
+            permissionCount,
+            minPermissionCount: WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT,
+          });
+          return;
+        }
 
-      logWebAuthnPromptDebug("support_check_result", {
-        hasBrowserApi: !!browserApi,
-        hasPublicKeyCredential: typeof window.PublicKeyCredential !== "undefined",
-        supports,
-      });
+        if (snoozeUntil > Date.now()) {
+          logWebAuthnPromptDebug("skip_snoozed", {
+            snoozeUntil,
+          });
+          return;
+        }
 
-      if (!supports) {
-        logWebAuthnPromptDebug("skip_not_supported");
-        return;
-      }
+        const browserApi = window.SimpleWebAuthnBrowser;
+        const supports = await browserSupportsWebAuthn();
 
-      const items = await loadCredentials({ silent: true });
-      if (cancelled || !Array.isArray(items) || items.length > 0) {
-        logWebAuthnPromptDebug("skip_after_credentials_check", {
-          cancelled,
-          credentialsLoaded: Array.isArray(items),
-          credentialCount: Array.isArray(items) ? items.length : null,
+        logWebAuthnPromptDebug("support_check_result", {
+          hasBrowserApi: !!browserApi,
+          hasPublicKeyCredential: typeof window.PublicKeyCredential !== "undefined",
+          supports,
         });
-        return;
-      }
 
-      setWebauthnPromptSnoozeChecked(false);
-      setWebauthnPromptOpen(true);
-      logWebAuthnPromptDebug("prompt_opened", {
-        adminId: user.id,
-        credentialCount: items.length,
-      });
+        if (!supports) {
+          logWebAuthnPromptDebug("skip_not_supported");
+          return;
+        }
+
+        const items = await loadCredentials({ silent: true });
+        if (cancelled || !Array.isArray(items) || items.length > 0) {
+          logWebAuthnPromptDebug("skip_after_credentials_check", {
+            cancelled,
+            credentialsLoaded: Array.isArray(items),
+            credentialCount: Array.isArray(items) ? items.length : null,
+          });
+          return;
+        }
+
+        setWebauthnPromptSnoozeChecked(false);
+        setWebauthnPromptOpen(true);
+        logWebAuthnPromptDebug("prompt_opened", {
+          adminId: user.id,
+          credentialCount: items.length,
+        });
+      } catch (error) {
+        logWebAuthnPromptDebug("check_failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     };
 
     void maybeShowPrompt();
