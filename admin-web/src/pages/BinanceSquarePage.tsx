@@ -402,7 +402,7 @@ export function BinanceSquarePage() {
             ["帖子总数", stats?.postCount || 0, "#10b981"],
             ["镜像记录", stats?.snapshotCount || 0, "#8b5cf6"],
             ["镜像存储", formatBytes(stats?.snapshotStorageBytes), "#ec4899"],
-            ["上次抓取", stats?.lastCrawlAt ? dayjs(stats.lastCrawlAt).format("MM-DD HH:mm") : "-", "#64748b"],
+            ["上次抓取", stats?.lastCrawlAt ? dayjs(stats.lastCrawlAt).format("HH:mm") : "-", "#64748b"],
             ["调度器状态", crawlStatus?.isRunning ? "运行中" : "已暂停", "#ef4444"],
           ].map(([label, value, color]) => (
             <LegacyMetricCard
