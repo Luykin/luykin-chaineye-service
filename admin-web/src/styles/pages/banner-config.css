@@ -1,8 +1,21 @@
 .banner-config-alert.ant-alert {
-  margin-bottom: 14px;
-  border-color: #bfdbfe;
-  border-radius: 12px;
-  background: #eff6ff;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  border-color: #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.banner-config-alert .ant-alert-icon {
+  margin-inline-end: 7px;
+  font-size: 13px;
+}
+
+.banner-config-alert .ant-alert-message {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .banner-config-summary {

@@ -306,8 +306,7 @@ export function BannerConfigPage() {
           type="info"
           showIcon
           className="banner-config-alert"
-          message="上传前请先压缩图片"
-          description={`这一页只修改 xhunt_config 的 adBanners 字段，不会覆盖 Feature Flags 的其他配置。图片上传走 Vercel Blob，单张最大 ${BANNER_IMAGE_MAX_MB}MB，推荐 webp/png。`}
+          message={`自动压缩后上传 · 本页只修改 xhunt_config.adBanners，不覆盖 Feature Flags 其他配置 · 单张最大 ${BANNER_IMAGE_MAX_MB}MB，推荐 webp/png`}
         />
 
         <Row gutter={[12, 12]} className="banner-config-summary">

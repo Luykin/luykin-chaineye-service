@@ -7,7 +7,6 @@ import {
   ADMIN_IMAGE_MAX_SIZE_MB,
   type AdminImageUploadResult,
   uploadAdminImage,
-  validateAdminImageFile,
 } from "@/services/blobUpload";
 
 interface AdminImageUploadProps {
@@ -32,17 +31,27 @@ export function AdminImageUpload({
   const { message } = App.useApp();
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
+  const [uploadHint, setUploadHint] = useState("");
 
   const customRequest: UploadProps["customRequest"] = async (options) => {
     const file = options.file as File;
     try {
-      validateAdminImageFile(file, maxSizeMb);
       setUploading(true);
       setProgress(0);
+      setUploadHint("正在压缩图片…");
       const blob = await uploadAdminImage(file, {
         purpose,
         directory,
         maxSizeMb,
+        onPrepared: (result) => {
+          if (result.compressed) {
+            const before = (result.originalSize / 1024 / 1024).toFixed(2);
+            const after = (result.preparedSize / 1024 / 1024).toFixed(2);
+            setUploadHint(`已自动压缩：${before}MB → ${after}MB`);
+          } else {
+            setUploadHint("图片无需压缩，开始上传…");
+          }
+        },
         onProgress: (event) => {
           setProgress(event.percentage);
           options.onProgress?.({ percent: event.percentage });
@@ -58,6 +67,7 @@ export function AdminImageUpload({
     } finally {
       setUploading(false);
       setProgress(null);
+      setUploadHint("");
     }
   };
 
@@ -82,7 +92,8 @@ export function AdminImageUpload({
         ) : null}
       </Space>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        支持 jpg/png/webp/gif，最大 {maxSizeMb}MB{progress !== null ? `，上传中 ${Math.round(progress)}%` : ""}
+        支持 jpg/png/webp/gif，上传前自动压缩，最大 {maxSizeMb}MB{progress !== null ? `，上传中 ${Math.round(progress)}%` : ""}
+        {uploadHint ? `，${uploadHint}` : ""}
       </Typography.Text>
     </Space>
   );
