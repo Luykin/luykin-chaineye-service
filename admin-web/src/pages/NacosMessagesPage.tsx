@@ -534,7 +534,7 @@ export function NacosMessagesPage() {
           <div className="nacos-modal">
             <div className="modal-backdrop" onClick={() => setHtmlModalOpen(false)} />
             <div className="modal-panel">
-              <div className="modal-header"><h3>编辑 HTML 源码</h3><button className="modal-close" type="button" onClick={() => setHtmlModalOpen(false)}>&times;</button></div>
+              <div className="modal-header"><h3>编辑 HTML 源码</h3><Button className="modal-close" htmlType="button" type="text" onClick={() => setHtmlModalOpen(false)}>&times;</Button></div>
               <div className="modal-body"><TextArea id="nacos-html-source" value={htmlSource} onChange={(event) => setHtmlSource(event.target.value)} spellCheck={false} /></div>
               <div className="modal-footer"><Button className="nacos-btn nacos-btn-secondary" htmlType="button" onClick={() => setHtmlModalOpen(false)}>取消</Button><Button className="nacos-btn nacos-btn-primary" htmlType="button" onClick={saveHtmlFromModal}>保存</Button></div>
             </div>
@@ -545,7 +545,7 @@ export function NacosMessagesPage() {
           <div className="nacos-modal">
             <div className="modal-backdrop" onClick={() => setJsonPreviewOpen(false)} />
             <div className="modal-panel modal-panel-lg">
-              <div className="modal-header"><h3>预览 JSON 配置</h3><button className="modal-close" type="button" onClick={() => setJsonPreviewOpen(false)}>&times;</button></div>
+              <div className="modal-header"><h3>预览 JSON 配置</h3><Button className="modal-close" htmlType="button" type="text" onClick={() => setJsonPreviewOpen(false)}>&times;</Button></div>
               <div className="modal-body">
                 <div className="preview-info">
                   <span>即将发布到 Nacos： <code>{dataId}</code></span>

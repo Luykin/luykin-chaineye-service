@@ -1,0 +1,174 @@
+.device-monitor-page {
+  --device-ok: #16a34a;
+  --device-warn: #d97706;
+  --device-danger: #dc2626;
+  --device-ink: #172033;
+  --device-muted: #64748b;
+}
+
+.device-overview {
+  border: 1px solid #e5e7eb;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.device-overview::before {
+  content: "";
+  display: block;
+  height: 4px;
+  background: var(--device-ok);
+}
+
+.device-overview.is-warn::before { background: var(--device-warn); }
+.device-overview.is-danger::before { background: var(--device-danger); }
+
+.device-overview .ant-card-body {
+  padding: 18px 20px;
+}
+
+.device-overview-main {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.device-kicker {
+  color: var(--device-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.device-overview-title {
+  color: var(--device-ink);
+  font-size: clamp(26px, 4vw, 42px);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.device-overview.is-warn .device-overview-title { color: var(--device-warn); }
+.device-overview.is-danger .device-overview-title { color: var(--device-danger); }
+
+.device-overview-desc,
+.device-overview-time {
+  color: var(--device-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.device-overview-time {
+  white-space: nowrap;
+}
+
+.device-health-card {
+  border: 1px solid #e5e7eb;
+  box-shadow: none;
+  min-height: 196px;
+}
+
+.device-health-card.is-warn { border-color: #fbbf24; background: #fffbeb; }
+.device-health-card.is-danger { border-color: #fca5a5; background: #fef2f2; }
+.device-health-card.is-ok { background: #ffffff; }
+
+.device-health-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.device-health-value {
+  margin-top: 14px;
+  color: var(--device-ink);
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.device-health-card.is-warn .device-health-value { color: var(--device-warn); }
+.device-health-card.is-danger .device-health-value { color: var(--device-danger); }
+.device-health-card.is-ok .device-health-value { color: var(--device-ok); }
+
+.device-health-detail {
+  margin-top: 10px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.device-health-meta {
+  margin-top: 4px;
+  color: var(--device-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-panel {
+  border: 1px solid #e5e7eb;
+  box-shadow: none;
+}
+
+.device-panel .ant-card-head {
+  min-height: 44px;
+  border-bottom-color: #eef2f7;
+}
+
+.device-panel .ant-card-head-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.device-db-panel .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-db-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.device-db-meta {
+  color: var(--device-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.device-db-divider {
+  height: 1px;
+  background: #eef2f7;
+  margin: 6px 0;
+}
+
+@media (max-width: 768px) {
+  .device-overview-main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .device-overview-time {
+    white-space: normal;
+  }
+
+  .device-health-value {
+    font-size: 36px;
+  }
+}

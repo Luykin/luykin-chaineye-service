@@ -759,6 +759,11 @@
   align-items: center;
 }
 
+.nacos-section-react .ant-btn.modal-close {
+  padding: 0;
+  box-shadow: none;
+}
+
 .nacos-section-react .ant-input.nacos-input {
   height: 40px;
 }

@@ -1470,6 +1470,26 @@
   line-height: 1.5;
   resize: vertical;
 }
+
+.campaigns-container .campaigns-search .ant-input {
+  border: none;
+  outline: none;
+  flex: 1;
+  font-size: 12px;
+  padding: 0;
+  background: transparent;
+  min-width: 0;
+  box-shadow: none;
+}
+
+.campaigns-container .ant-btn.list-toggle {
+  min-width: 24px;
+  box-shadow: none;
+}
+
+.campaigns-container .ant-btn.list-toggle > span {
+  display: inline-flex;
+}
 .campaigns-container .repeaters .ant-input,
 .campaigns-container .repeaters-horizontal .ant-input {
   background: #fff;
