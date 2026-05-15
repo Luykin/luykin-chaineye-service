@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Input, InputNumber, Modal, Select, Switch } from "antd";
+import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import {
   fetchAllWebsiteCampaigns,
@@ -1152,85 +1153,16 @@ export function NacosCampaignsPage() {
 
   return (
     <PermissionGuard permission="nacos_config">
-      <div
+      <ConfigWorkbench
         id="nacos-campaigns"
         className="campaigns-container campaigns-react-page"
-      >
-        <div className="campaigns-header">
-          <h2>Xhunt Earn 活动配置</h2>
-        </div>
-        <div className="campaigns-toolbar">
-          <div className="left">
-            <span className="muted">
-              dataId: <code>{DATA_ID}</code>
-            </span>
-            <span className="muted">
-              group: <code>{GROUP}</code>
-            </span>
-          </div>
-          <div className="right">
-            <div className="campaigns-search">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
-              <Input
-                variant="borderless"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="搜索活动..."
-              />
-            </div>
-            <Button
-              type="primary"
-              onClick={() => void loadFromNacos()}
-              loading={loading}
-            >
-              刷新
-            </Button>
-            <Button onClick={newCampaign}>新增</Button>
-            <Button disabled={!editorEnabled} onClick={duplicateCampaign}>
-              复制
-            </Button>
-            <Button
-              danger
-              disabled={!editorEnabled}
-              onClick={() => void deleteCampaign()}
-            >
-              删除
-            </Button>
-            <Button
-              type="primary"
-              disabled={!editorEnabled && !dirty}
-              onClick={showPublishPreview}
-            >
-              发布
-            </Button>
-            <Button onClick={() => void syncWebsite()}>同步到网站</Button>
-          </div>
-        </div>
-
-        <div
-          className={`campaigns-body ${listCollapsed ? "list-collapsed" : ""}`}
-        >
-          <div className="list">
-            <div className="list-header">
-              <Button
-                htmlType="button"
-                className="list-toggle"
-                title={listCollapsed ? "展开列表" : "收起列表"}
-                aria-label={listCollapsed ? "展开列表" : "收起列表"}
-                onClick={() => setListCollapsedAndStore(!listCollapsed)}
-              >
+        title="Xhunt Earn 活动配置"
+        description="统一维护插件活动 JSON 与网站专属配置。"
+        collapsed={listCollapsed}
+        toolbar={
+          <>
+            <div className="left">
+              <div className="campaigns-search">
                 <svg
                   width="14"
                   height="14"
@@ -1241,205 +1173,263 @@ export function NacosCampaignsPage() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
-                  <path d="m15 18-6-6 6-6" />
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.3-4.3" />
                 </svg>
-              </Button>
-              <div className="list-header-text">
-                <span>活动列表</span>
-                <span className="muted">
-                  {listData.nacosItems.length + listData.websiteOnly.length}
-                </span>
-              </div>
-            </div>
-            <div className="list-items">
-              <ListGroup
-                title="Nacos 活动"
-                emptyText="暂无活动"
-                items={listData.nacosItems.map(({ c: item, idx }) => ({
-                  key: `nacos-${idx}`,
-                  active:
-                    selection?.type === "nacos" && selection.index === idx,
-                  onClick: () => selectCampaign(idx),
-                  title:
-                    item.displayName?.zh ||
-                    item.displayName?.en ||
-                    item.copy?.title?.zh ||
-                    item.id ||
-                    "(未命名)",
-                  meta: item.id || item.campaignKey || "-",
-                  chips: [
-                    item.enabled ? "展示" : "隐藏",
-                    item.testingPhase ? "testing" : "",
-                    Number(item.sortWeight) ? `权重 ${item.sortWeight}` : "",
-                  ].filter(Boolean),
-                  logos: Array.isArray(item.logos) ? item.logos : [],
-                }))}
-              />
-              <ListGroup
-                title="网页独有 / 插件已下架"
-                emptyText="暂无网页独有数据"
-                items={listData.websiteOnly.map((item: AnyObj) => ({
-                  key: `web-${item.nacosCampaignId}`,
-                  active:
-                    selection?.type === "website_only" &&
-                    selection.id === String(item.nacosCampaignId),
-                  onClick: () =>
-                    selectWebsiteOnly(String(item.nacosCampaignId)),
-                  title:
-                    item.displayNameZh ||
-                    item.displayNameEn ||
-                    item.campaignKey ||
-                    item.slug ||
-                    item.nacosCampaignId ||
-                    "(未命名)",
-                  meta: item.nacosCampaignId || "-",
-                  chips: [item.webStatus || "draft", "website-only"].filter(
-                    Boolean,
-                  ),
-                  logos: [],
-                }))}
-              />
-            </div>
-          </div>
-
-          <div className="editor">
-            <div className="editor-header">
-              <div>
-                <span>编辑活动</span>
-                <span className="muted" style={{ marginLeft: 8 }}>
-                  {c
-                    ? `正在编辑：${c.id || "(未设置 id)"}`
-                    : websiteOnlyMode
-                      ? `正在编辑网页独有数据：${selectedWebsiteRecord?.campaignKey || selectedWebsiteRecord?.slug || selectedWebsiteRecord?.nacosCampaignId || ""}`
-                      : "选择左侧活动开始编辑"}
-                </span>
-              </div>
-            </div>
-            {!c && !websiteOnlyMode ? (
-              <div className="editor-empty">
-                <div className="empty-title">请选择一个活动</div>
-                <div className="empty-desc">
-                  从左侧列表选择活动进行编辑，或点击「新增」创建活动
-                </div>
-              </div>
-            ) : (
-              <div id="campaigns-editor-body">
-                {websiteOnlyMode ? (
-                  <div
-                    className="field-row field-row-1"
-                    style={{ marginBottom: 12 }}
-                  >
-                    <div className="field">
-                      <div
-                        className="muted"
-                        style={{
-                          padding: "10px 12px",
-                          border: "1px dashed #f59e0b",
-                          borderRadius: 10,
-                          background: "#fffbeb",
-                          color: "#92400e",
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        ℹ️ 当前正在编辑“网页独有数据 /
-                        插件已下架数据”。这类活动已不在 Nacos
-                        中，所以只支持网站数据库配置，不展示 Nacos 配置部分。
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                {c ? (
-                  <CampaignEditor
-                    c={c}
-                    setCampaignPath={setCampaignPath}
-                    updateSelectedCampaign={updateSelectedCampaign}
-                    changeThreshold={changeThreshold}
-                    thresholdValue={thresholdValue(c)}
-                    changeRiskConfirm={changeRiskConfirm}
-                    addArrayItem={addArrayItem}
-                    updateArrayItem={updateArrayItem}
-                    moveArrayItem={moveArrayItem}
-                    removeArrayItem={removeArrayItem}
-                  />
-                ) : null}
-                <WebsiteSection
-                  form={websiteForm}
-                  update={updateWebsiteForm}
-                  enabled={websiteControlsEnabled}
-                  meta={websiteMeta}
-                  claimVisible={claimVisible}
-                  powEnabled={powEnabled}
-                  essayEnabled={essayEnabled}
-                  onSave={() => void saveWebsiteConfig()}
+                <Input
+                  variant="borderless"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="搜索活动..."
                 />
               </div>
-            )}
-          </div>
-        </div>
-
-        {toast ? (
-          <div
-            className="campaigns-toast"
-            style={{
-              background:
-                toast.type === "error"
-                  ? "#991b1b"
-                  : toast.type === "success"
-                    ? "#065f46"
-                    : "#111827",
-            }}
-          >
-            {toast.message}
-          </div>
-        ) : null}
-
-        <Modal
-          open={jsonPreviewOpen}
-          title="预览 JSON 配置"
-          width="90%"
-          style={{ maxWidth: 1400 }}
-          onCancel={() => setJsonPreviewOpen(false)}
-          footer={
-            <>
-              <Button onClick={() => setJsonPreviewOpen(false)}>取消</Button>
+            </div>
+            <div className="right">
               <Button
-                type="primary"
-                loading={publishing}
-                onClick={() => void confirmPublish()}
+                className="config-action config-action-secondary"
+                onClick={() => void loadFromNacos()}
+                loading={loading}
               >
-                确认发布
+                刷新
               </Button>
-            </>
-          }
-        >
-          <div
-            className="json-preview-modal-body"
-            style={{ padding: 0, maxHeight: "70vh" }}
-          >
-            <p className="json-preview-legend">
-              即将发布到 Nacos（dataId: <code>{DATA_ID}</code>）
-              <span
-                style={{ marginLeft: 8, color: "#3b82f6", fontWeight: 600 }}
+              <Button
+                className="config-action config-action-primary"
+                onClick={newCampaign}
               >
-                {jsonDiffHint}
-              </span>{" "}
-              <span className="legend-removed">删除</span> |{" "}
-              <span className="legend-added">新增</span>
-            </p>
-            <pre dangerouslySetInnerHTML={{ __html: jsonPreviewHtml }} />
+                新增
+              </Button>
+              <Button
+                className="config-action config-action-secondary"
+                disabled={!editorEnabled}
+                onClick={duplicateCampaign}
+              >
+                复制
+              </Button>
+              <Button
+                className="config-action config-action-danger"
+                danger
+                disabled={!editorEnabled}
+                onClick={() => void deleteCampaign()}
+              >
+                删除
+              </Button>
+              <Button
+                className="config-action config-action-primary"
+                disabled={!editorEnabled && !dirty}
+                onClick={showPublishPreview}
+              >
+                发布
+              </Button>
+              <Button
+                className="config-action config-action-secondary"
+                onClick={() => void syncWebsite()}
+              >
+                同步到网站
+              </Button>
+            </div>
+          </>
+        }
+        sidebarTitle={
+          <>
+            <Button
+              htmlType="button"
+              className="config-workbench-collapse-button list-toggle"
+              title={listCollapsed ? "展开列表" : "收起列表"}
+              aria-label={listCollapsed ? "展开列表" : "收起列表"}
+              onClick={() => setListCollapsedAndStore(!listCollapsed)}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </Button>
+            <span>活动列表</span>
+          </>
+        }
+        sidebarMeta={listData.nacosItems.length + listData.websiteOnly.length}
+        sidebar={
+          <div className="list-items">
+            <ListGroup
+              emptyText="暂无活动"
+              items={listData.nacosItems.map(({ c: item, idx }) => ({
+                key: `nacos-${idx}`,
+                active: selection?.type === "nacos" && selection.index === idx,
+                onClick: () => selectCampaign(idx),
+                title:
+                  item.displayName?.zh ||
+                  item.displayName?.en ||
+                  item.copy?.title?.zh ||
+                  item.id ||
+                  "(未命名)",
+                meta: item.id || item.campaignKey || "-",
+                chips: [
+                  item.enabled ? "展示" : "隐藏",
+                  item.testingPhase ? "testing" : "",
+                  Number(item.sortWeight) ? `权重 ${item.sortWeight}` : "",
+                ].filter(Boolean),
+                logos: Array.isArray(item.logos) ? item.logos : [],
+              }))}
+            />
+            <ListGroup
+              emptyText="暂无网页独有数据"
+              items={listData.websiteOnly.map((item: AnyObj) => ({
+                key: `web-${item.nacosCampaignId}`,
+                active:
+                  selection?.type === "website_only" &&
+                  selection.id === String(item.nacosCampaignId),
+                onClick: () => selectWebsiteOnly(String(item.nacosCampaignId)),
+                title:
+                  item.displayNameZh ||
+                  item.displayNameEn ||
+                  item.campaignKey ||
+                  item.slug ||
+                  item.nacosCampaignId ||
+                  "(未命名)",
+                meta: item.nacosCampaignId || "-",
+                chips: [item.webStatus || "draft", "website-only"].filter(
+                  Boolean,
+                ),
+                logos: [],
+              }))}
+            />
           </div>
-        </Modal>
-      </div>
+        }
+        editorTitle="编辑活动"
+        editorMeta={
+          c
+            ? `正在编辑：${c.id || "(未设置 id)"}`
+            : websiteOnlyMode
+              ? `正在编辑网页独有数据：${selectedWebsiteRecord?.campaignKey || selectedWebsiteRecord?.slug || selectedWebsiteRecord?.nacosCampaignId || ""}`
+              : "选择左侧活动开始编辑"
+        }
+      >
+        {!c && !websiteOnlyMode ? (
+          <div className="editor-empty">
+            <div className="empty-title">请选择一个活动</div>
+            <div className="empty-desc">
+              从左侧列表选择活动进行编辑，或点击「新增」创建活动
+            </div>
+          </div>
+        ) : (
+          <div id="campaigns-editor-body">
+            {websiteOnlyMode ? (
+              <div
+                className="field-row field-row-1"
+                style={{ marginBottom: 12 }}
+              >
+                <div className="field">
+                  <div
+                    className="muted"
+                    style={{
+                      padding: "10px 12px",
+                      border: "1px dashed #f59e0b",
+                      borderRadius: 10,
+                      background: "#fffbeb",
+                      color: "#92400e",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    ℹ️ 当前正在编辑“网页独有数据 /
+                    插件已下架数据”。这类活动已不在 Nacos
+                    中，所以只支持网站数据库配置，不展示 Nacos 配置部分。
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {c ? (
+              <CampaignEditor
+                c={c}
+                setCampaignPath={setCampaignPath}
+                updateSelectedCampaign={updateSelectedCampaign}
+                changeThreshold={changeThreshold}
+                thresholdValue={thresholdValue(c)}
+                changeRiskConfirm={changeRiskConfirm}
+                addArrayItem={addArrayItem}
+                updateArrayItem={updateArrayItem}
+                moveArrayItem={moveArrayItem}
+                removeArrayItem={removeArrayItem}
+              />
+            ) : null}
+            <WebsiteSection
+              form={websiteForm}
+              update={updateWebsiteForm}
+              enabled={websiteControlsEnabled}
+              meta={websiteMeta}
+              claimVisible={claimVisible}
+              powEnabled={powEnabled}
+              essayEnabled={essayEnabled}
+              onSave={() => void saveWebsiteConfig()}
+            />
+          </div>
+        )}
+      </ConfigWorkbench>
+
+      {toast ? (
+        <div
+          className="campaigns-toast"
+          style={{
+            background:
+              toast.type === "error"
+                ? "#991b1b"
+                : toast.type === "success"
+                  ? "#065f46"
+                  : "#111827",
+          }}
+        >
+          {toast.message}
+        </div>
+      ) : null}
+
+      <Modal
+        open={jsonPreviewOpen}
+        title="预览 JSON 配置"
+        width="90%"
+        style={{ maxWidth: 1400 }}
+        onCancel={() => setJsonPreviewOpen(false)}
+        footer={
+          <>
+            <Button onClick={() => setJsonPreviewOpen(false)}>取消</Button>
+            <Button
+              type="primary"
+              loading={publishing}
+              onClick={() => void confirmPublish()}
+            >
+              确认发布
+            </Button>
+          </>
+        }
+      >
+        <div
+          className="json-preview-modal-body"
+          style={{ padding: 0, maxHeight: "70vh" }}
+        >
+          <p className="json-preview-legend">
+            即将发布到 Nacos
+            <span style={{ marginLeft: 8, color: "#3b82f6", fontWeight: 600 }}>
+              {jsonDiffHint}
+            </span>{" "}
+            <span className="legend-removed">删除</span> |{" "}
+            <span className="legend-added">新增</span>
+          </p>
+          <pre dangerouslySetInnerHTML={{ __html: jsonPreviewHtml }} />
+        </div>
+      </Modal>
     </PermissionGuard>
   );
 }
 
 function ListGroup({
-  title,
   emptyText,
   items,
 }: {
-  title: string;
   emptyText: string;
   items: Array<{
     key: string;
@@ -1453,7 +1443,6 @@ function ListGroup({
 }) {
   return (
     <div className="list-group">
-      <div className="list-group-title">{title}</div>
       {items.length ? (
         items.map((item) => (
           <div

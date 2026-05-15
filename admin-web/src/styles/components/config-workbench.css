@@ -1,0 +1,802 @@
+.config-workbench {
+  --cw-border: #e5e7eb;
+  --cw-border-strong: #d1d5db;
+  --cw-bg: #f6f7f9;
+  --cw-panel: #ffffff;
+  --cw-text: #111827;
+  --cw-muted: #6b7280;
+  --cw-soft: #f9fafb;
+  --cw-primary: #1f2937;
+
+  width: min(100%, 1600px);
+  margin: 0 auto;
+  padding: 18px;
+  box-sizing: border-box;
+  color: var(--cw-text);
+}
+
+.config-workbench-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.config-workbench-heading h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--cw-text);
+}
+
+.config-workbench-heading p {
+  margin: 6px 0 0;
+  color: var(--cw-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.config-workbench-meta,
+.config-workbench-toolbar .toolbar-left,
+.config-workbench-toolbar .left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.config-workbench-meta code,
+.config-workbench-toolbar code,
+.dataid-label code {
+  padding: 2px 7px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+}
+
+.config-workbench-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--cw-border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbfc 100%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.config-workbench-toolbar .toolbar-right,
+.config-workbench-toolbar .right,
+.config-workbench-toolbar .nacos-react-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.config-workbench-body {
+  display: grid;
+  grid-template-columns: 328px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.config-workbench-collapsed .config-workbench-body {
+  grid-template-columns: 46px minmax(0, 1fr);
+}
+
+.config-workbench-sidebar,
+.config-workbench-editor {
+  min-width: 0;
+  border: 1px solid var(--cw-border);
+  border-radius: 16px;
+  background: var(--cw-panel);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+
+.config-workbench-sidebar {
+  position: sticky;
+  top: 14px;
+  max-height: calc(100vh - 110px);
+  display: flex;
+  flex-direction: column;
+}
+
+.config-workbench-editor {
+  overflow-x: auto;
+}
+
+.config-workbench-panel-header {
+  min-height: 48px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid #eef0f3;
+  background: #fbfbfc;
+}
+
+.config-workbench-panel-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.config-workbench-panel-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.config-workbench-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.config-workbench-editor-meta {
+  max-width: 62vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.config-workbench-sidebar-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.config-workbench-editor-content {
+  padding: 16px;
+}
+
+.config-workbench-collapsed .config-workbench-sidebar-content,
+.config-workbench-collapsed .config-workbench-count,
+.config-workbench-collapsed
+  .config-workbench-sidebar
+  .config-workbench-panel-side,
+.config-workbench-collapsed
+  .config-workbench-sidebar
+  .config-workbench-panel-title
+  > span:not(.config-workbench-collapse-keep) {
+  display: none;
+}
+
+.config-workbench-collapsed
+  .config-workbench-sidebar
+  .config-workbench-panel-header {
+  justify-content: center;
+  padding: 10px 6px;
+}
+
+.config-workbench-collapse-button {
+  width: 26px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px !important;
+  color: #6b7280;
+}
+
+.config-workbench-collapsed .config-workbench-collapse-button svg {
+  transform: rotate(180deg);
+}
+
+.config-workbench-collapse-button svg {
+  transition: transform 0.18s ease;
+}
+
+.config-workbench .lang-tabs {
+  padding: 3px;
+  border-radius: 10px;
+  background: #eef0f3;
+}
+
+.config-workbench .lang-tab {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.config-workbench .lang-tab.active {
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.config-workbench .dataid-label,
+.config-workbench .muted {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.config-workbench-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-workbench-list-item,
+.config-workbench .item {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.config-workbench-list-item {
+  padding: 11px 12px;
+}
+
+.config-workbench-list-item:hover,
+.config-workbench .item:hover {
+  background: #f8fafc;
+  border-color: #e5e7eb;
+}
+
+.config-workbench-list-item.active,
+.config-workbench .item.active {
+  background: #f2f5f9;
+  border-color: #cfd8e3;
+}
+
+.config-workbench-list-title,
+.config-workbench .item-title-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.config-workbench-list-meta,
+.config-workbench .item-meta {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.config-workbench-empty,
+.config-workbench .list-group-empty {
+  margin: 8px;
+  padding: 18px 12px;
+  border: 1px dashed #d8dee8;
+  border-radius: 12px;
+  background: #fafbfc;
+  color: #6b7280;
+  text-align: center;
+  font-size: 13px;
+}
+
+.config-workbench .list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: none;
+  overflow: visible;
+}
+
+.config-workbench .list-group-title {
+  margin: 6px 8px 4px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.config-workbench .list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.config-workbench .item {
+  padding: 10px;
+}
+
+.config-workbench .item-content {
+  display: flex;
+  gap: 9px;
+  min-width: 0;
+}
+
+.config-workbench .item-logos {
+  display: flex;
+  flex-shrink: 0;
+  width: 42px;
+  padding-top: 1px;
+}
+
+.config-workbench .item-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #eef0f3;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+.config-workbench .item-logo + .item-logo {
+  margin-left: -10px;
+}
+
+.config-workbench .item-title-wrapper {
+  min-width: 0;
+  flex: 1;
+}
+
+.config-workbench .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.config-workbench .chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.config-workbench .chip.on {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.config-workbench .chip.testing {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.config-workbench .chip-weight {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.config-workbench .campaigns-search {
+  min-width: 220px;
+  max-width: 280px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid #d8dee8;
+  background: #fff;
+}
+
+.config-workbench .editor-form,
+.config-workbench #campaigns-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.config-workbench .editor-form {
+  padding: 0;
+}
+
+.config-workbench .editor-empty {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #d8dee8;
+  border-radius: 14px;
+  background: #fafbfc;
+}
+
+.config-workbench .empty-title {
+  color: #111827;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.config-workbench .empty-desc {
+  margin-top: 6px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .config-workbench,
+  .campaigns-container.config-workbench {
+    padding: 12px;
+  }
+
+  .config-workbench-header,
+  .config-workbench-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .config-workbench-body,
+  .config-workbench-collapsed .config-workbench-body {
+    grid-template-columns: 1fr;
+  }
+
+  .config-workbench-sidebar {
+    position: static;
+    max-height: none;
+  }
+
+  .config-workbench-collapsed .config-workbench-sidebar-content,
+  .config-workbench-collapsed
+    .config-workbench-sidebar
+    .config-workbench-panel-side,
+  .config-workbench-collapsed
+    .config-workbench-sidebar
+    .config-workbench-panel-title
+    > span:not(.config-workbench-collapse-keep) {
+    display: initial;
+  }
+
+  .config-workbench-collapsed .config-workbench-sidebar-content {
+    display: block;
+  }
+
+  .config-workbench-collapsed .config-workbench-count {
+    display: inline-flex;
+  }
+
+  .config-workbench-collapsed .config-workbench-collapse-button svg {
+    transform: none;
+  }
+}
+
+.config-workbench .form-field,
+.config-workbench .field {
+  gap: 7px;
+}
+
+.config-workbench .form-field label,
+.config-workbench .field > label,
+.config-workbench .task-field > label,
+.config-workbench .tag-field > label {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.config-workbench .field-row {
+  gap: 12px;
+}
+
+.config-workbench .section,
+.config-workbench .preview-section,
+.config-workbench .help-section,
+.config-workbench .editor-color-notice {
+  border-color: #e6eaf0;
+  border-radius: 14px;
+}
+
+.config-workbench .section {
+  padding: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.config-workbench .section + .section,
+.config-workbench .section + .campaigns-website-section,
+.config-workbench .campaigns-website-section {
+  margin-top: 0;
+}
+
+.config-workbench .section-title,
+.config-workbench .section-title-inline,
+.config-workbench .section-title-sm {
+  color: #111827;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.config-workbench .section-sub {
+  border: 1px solid #eef0f3;
+  border-radius: 12px;
+  background: #fbfcfd;
+  padding: 12px;
+}
+
+.config-workbench .campaign-status-control {
+  border: 1px solid #e6eaf0;
+  border-radius: 14px;
+  background: #fbfcfd;
+  padding: 12px 14px;
+}
+
+.config-workbench .campaign-options,
+.config-workbench .reward-tier,
+.config-workbench .rep-card {
+  border-color: #e6eaf0;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.config-workbench .rep-card {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.config-workbench .rep-header {
+  border-bottom-color: #eef0f3;
+}
+
+.config-workbench .preview-section {
+  background: #fff;
+  overflow: hidden;
+}
+
+.config-workbench .preview-header {
+  background: #fbfcfd;
+  border-bottom-color: #eef0f3;
+}
+
+.config-workbench .preview-box {
+  border-radius: 0 0 14px 14px;
+}
+
+.config-workbench .help-section {
+  background: #f8fafc;
+}
+
+.config-workbench .editor-color-notice {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.config-workbench :where(.ant-input, .ant-input-number, .ant-select-selector) {
+  border-radius: 10px !important;
+}
+
+.config-workbench.nacos-tags-container .config-workbench-sidebar-content {
+  padding: 10px;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-search {
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-list {
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  gap: 7px;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-item {
+  margin: 0;
+  padding: 10px 11px;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-item.is-active {
+  background: #f2f7ff;
+  border-color: #bfdbfe;
+  box-shadow: inset 3px 0 0 #3b82f6;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-item-count,
+.config-workbench.nacos-tags-container .nacos-tags-input-index {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-editor-body {
+  padding: 0;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-stats {
+  margin-bottom: 14px;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-stat-card,
+.config-workbench.nacos-tags-container .nacos-tags-list-editor,
+.config-workbench.nacos-tags-container .nacos-tags-chip-preview,
+.config-workbench.nacos-tags-container .nacos-tags-preview-pre {
+  border-radius: 13px;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-stat-card {
+  min-height: 54px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-field-row label {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-input-row {
+  background: #fbfcfd;
+  border-color: #e6eaf0;
+  border-radius: 12px;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-chip-preview-section,
+.config-workbench.nacos-tags-container .nacos-tags-preview-section {
+  padding: 12px;
+  border: 1px solid #e6eaf0;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-chip-preview-section {
+  margin: 4px 0 14px;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-preview-section {
+  margin-top: 0;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-preview-header {
+  margin-bottom: 8px;
+}
+
+.config-workbench.nacos-tags-container .nacos-tags-editor-empty {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .config-workbench.nacos-tags-container .nacos-tags-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+.config-workbench-toolbar .config-action,
+.config-workbench-toolbar .nacos-btn {
+  min-width: 76px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: none;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
+}
+
+.config-workbench-toolbar .config-action svg,
+.config-workbench-toolbar .nacos-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.config-workbench-toolbar .config-action:not(:disabled):hover,
+.config-workbench-toolbar .nacos-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.config-workbench-toolbar .config-action-secondary,
+.config-workbench-toolbar .nacos-btn-secondary {
+  background: #ffffff;
+  border-color: #d8dee8;
+  color: #374151;
+}
+
+.config-workbench-toolbar .config-action-secondary:not(:disabled):hover,
+.config-workbench-toolbar .nacos-btn-secondary:not(:disabled):hover {
+  background: #f8fafc;
+  border-color: #b8c2cf;
+  color: #111827;
+}
+
+.config-workbench-toolbar .config-action-primary,
+.config-workbench-toolbar .nacos-btn-primary {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.config-workbench-toolbar .config-action-primary:not(:disabled):hover,
+.config-workbench-toolbar .nacos-btn-primary:not(:disabled):hover {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.config-workbench-toolbar .config-action-success,
+.config-workbench-toolbar .nacos-btn-success {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.config-workbench-toolbar .config-action-success:not(:disabled):hover,
+.config-workbench-toolbar .nacos-btn-success:not(:disabled):hover {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.config-workbench-toolbar .config-action-danger,
+.config-workbench-toolbar .nacos-btn-danger {
+  background: #ffffff;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.config-workbench-toolbar .config-action-danger:not(:disabled):hover,
+.config-workbench-toolbar .nacos-btn-danger:not(:disabled):hover {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.config-workbench-toolbar .config-action:disabled,
+.config-workbench-toolbar .nacos-btn:disabled,
+.config-workbench-toolbar .config-action.ant-btn-disabled,
+.config-workbench-toolbar .nacos-btn.ant-btn-disabled {
+  opacity: 0.46;
+  transform: none;
+}
+
+.config-workbench .list-group-title {
+  display: none;
+}

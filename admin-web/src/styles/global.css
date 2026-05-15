@@ -13,6 +13,7 @@
 @import "./pages/nacos.css";
 @import "./pages/nacos-campaigns-legacy.css";
 @import "./pages/nacos-messages-legacy.css";
+@import "./components/config-workbench.css";
 @import "./pages/binance-square.css";
 @import "./pages/overview.css";
 @import "./pages/redis-management.css";
