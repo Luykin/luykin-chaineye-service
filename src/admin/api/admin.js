@@ -12,6 +12,7 @@ const {
 } = require("@simplewebauthn/server");
 const { adminAuth, requireRole, requirePermission, setSessionCookie } = require("../middleware/adminAuth");
 const { randomUUID } = require("crypto");
+const { handleUpload } = require("@vercel/blob/client");
 
 const router = express.Router();
 
@@ -21,6 +22,78 @@ const RP_ID = process.env.WEBAUTHN_RP_ID || (process.env.ADMIN_COOKIE_DOMAIN || 
 const ORIGIN = process.env.WEBAUTHN_ORIGIN || `https://${RP_ID}`;
 const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 const LINK_SECRET = process.env.SUPABASE_LINK_SECRET || "change-me-link";
+
+const ADMIN_BLOB_PREFIX = (process.env.ADMIN_BLOB_PREFIX || "admin-images")
+  .replace(/^\/+|\/+$/g, "") || "admin-images";
+const ADMIN_BLOB_MAX_SIZE_MB = Math.max(1, Number(process.env.ADMIN_BLOB_MAX_SIZE_MB || 10));
+const ADMIN_BLOB_MAX_SIZE_BYTES = Math.round(ADMIN_BLOB_MAX_SIZE_MB * 1024 * 1024);
+const ADMIN_BLOB_ALLOWED_CONTENT_TYPES = (process.env.ADMIN_BLOB_ALLOWED_CONTENT_TYPES || "image/jpeg,image/png,image/webp,image/gif")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean);
+
+function parseRawCookies(cookieHeader) {
+  const out = {};
+  if (!cookieHeader) return out;
+  for (const part of cookieHeader.split(";")) {
+    const [key, ...valueParts] = part.trim().split("=");
+    if (!key) continue;
+    out[key] = decodeURIComponent(valueParts.join("="));
+  }
+  return out;
+}
+
+async function getAdminFromRequest(req) {
+  const cookieName = process.env.ADMIN_COOKIE_NAME || "xh_admin_session";
+  const cookies = { ...parseRawCookies(req.headers.cookie || ""), ...(req.cookies || {}) };
+  const token = cookies[cookieName];
+  if (!token) return null;
+
+  let session;
+  try {
+    session = jwt.verify(token, process.env.ADMIN_JWT_SECRET || "change-me");
+  } catch (e) {
+    return null;
+  }
+
+  const admin = await XhuntAdminManager.findByPk(session.id);
+  if (!admin || !admin.isActive || !admin.canLogin) return null;
+  return admin;
+}
+
+function adminCanUploadAssets(admin) {
+  if (!admin) return false;
+  if (admin.role === "super") return true;
+  const permissions = Array.isArray(admin.permissions) ? admin.permissions : [];
+  return permissions.includes("*") || permissions.includes("assets:upload");
+}
+
+function assertValidBlobPath(pathname) {
+  const value = String(pathname || "").replace(/\\+/g, "/");
+  if (!value || value.length > 220) {
+    throw new Error("上传路径无效");
+  }
+  if (value.startsWith("/") || value.includes("..") || value.includes("//")) {
+    throw new Error("上传路径不允许包含危险字符");
+  }
+  if (!value.startsWith(`${ADMIN_BLOB_PREFIX}/`)) {
+    throw new Error(`上传路径必须位于 ${ADMIN_BLOB_PREFIX}/ 目录下`);
+  }
+  if (!/\.(jpe?g|png|webp|gif)$/i.test(value)) {
+    throw new Error("仅支持 jpg、png、webp、gif 图片");
+  }
+  return value;
+}
+
+function parseClientPayload(payload) {
+  if (!payload) return {};
+  try {
+    const parsed = JSON.parse(payload);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
 
 // 登录页面由 React Admin 承载；保留 /admin/login 作为兼容入口。
 router.get("/login", (req, res) => {
@@ -428,6 +501,89 @@ router.post("/login", express.json(), async (req, res) => {
   } catch (e) {
     console.error("[admin login] error:", e);
     res.status(500).json({ success: false, error: "登录失败" });
+  }
+});
+
+// Vercel Blob 浏览器直传：后端只签发短期上传凭证，不接收图片文件
+router.post("/uploads/blob", async (req, res) => {
+  try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return res.status(500).json({ success: false, error: "缺少 BLOB_READ_WRITE_TOKEN 配置" });
+    }
+
+    const body = req.body || {};
+    const isGenerateTokenEvent = body.type === "blob.generate-client-token";
+    let currentAdmin = null;
+
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
+      onBeforeGenerateToken: async (pathname, clientPayload, multipart) => {
+        if (isGenerateTokenEvent) {
+          const requestedWith = String(req.headers["x-requested-with"] || "").toLowerCase();
+          if (requestedWith !== "xmlhttprequest") {
+            throw new Error("非法上传请求");
+          }
+        }
+
+        currentAdmin = await getAdminFromRequest(req);
+        if (!currentAdmin) {
+          throw new Error("请先登录后再上传图片");
+        }
+        if (!adminCanUploadAssets(currentAdmin)) {
+          throw new Error("当前账号没有图片上传权限");
+        }
+
+        const safePathname = assertValidBlobPath(pathname);
+        const payload = parseClientPayload(clientPayload);
+        try {
+          await XhuntAdminAuditLog.create({
+            adminId: currentAdmin.id,
+            email: currentAdmin.email,
+            action: "blob-upload-token",
+            route: "/admin/uploads/blob",
+            method: "POST",
+            ip: req.ip || "",
+            userAgent: req.headers["user-agent"] || "",
+            success: true,
+            message: JSON.stringify({ pathname: safePathname, multipart: !!multipart, purpose: payload.purpose || null }),
+          });
+        } catch (e) {}
+
+        return {
+          allowedContentTypes: ADMIN_BLOB_ALLOWED_CONTENT_TYPES,
+          maximumSizeInBytes: ADMIN_BLOB_MAX_SIZE_BYTES,
+          addRandomSuffix: true,
+          cacheControlMaxAge: 60 * 60 * 24 * 30,
+          tokenPayload: JSON.stringify({
+            adminId: currentAdmin.id,
+            email: currentAdmin.email,
+            pathname: safePathname,
+            purpose: payload.purpose || "admin-image",
+          }),
+        };
+      },
+    });
+
+    res.set("Cache-Control", "no-store");
+    return res.status(200).json(jsonResponse);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "生成上传凭证失败";
+    const status = /登录/.test(message) ? 401 : /权限/.test(message) ? 403 : /BLOB_READ_WRITE_TOKEN/.test(message) ? 500 : 400;
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: null,
+        email: null,
+        action: "blob-upload-token",
+        route: "/admin/uploads/blob",
+        method: "POST",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: false,
+        message,
+      });
+    } catch (_e) {}
+    return res.status(status).json({ success: false, error: message });
   }
 });
 
