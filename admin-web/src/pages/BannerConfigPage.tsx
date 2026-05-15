@@ -112,11 +112,11 @@ function BannerPreview({ banner }: { banner: AdBannerConfig }) {
     <div className="banner-preview-stack">
       <div className="banner-preview-panel">
         <span className="banner-preview-label">中文</span>
-        {zhImage ? <Image src={zhImage} alt={banner.alt_text_zh || banner.id} preview={false} /> : <div className="banner-preview-empty">未配置图片</div>}
+        {zhImage ? <Image src={zhImage} alt={banner.alt_text_zh || banner.id} preview={{ mask: "点击预览" }} /> : <div className="banner-preview-empty">未配置图片</div>}
       </div>
       <div className="banner-preview-panel">
         <span className="banner-preview-label">English</span>
-        {enImage ? <Image src={enImage} alt={banner.alt_text_en || banner.id} preview={false} /> : <div className="banner-preview-empty">No image</div>}
+        {enImage ? <Image src={enImage} alt={banner.alt_text_en || banner.id} preview={{ mask: "Preview" }} /> : <div className="banner-preview-empty">No image</div>}
       </div>
     </div>
   );
