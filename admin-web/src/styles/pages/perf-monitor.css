@@ -21,24 +21,81 @@
 }
 
 .perf-filter-card .ant-card-body {
-  padding: 14px;
+  padding: 16px 18px;
 }
 
-.perf-filter-card .ant-typography {
-  display: inline-flex;
-  margin-bottom: 3px;
-  color: #475569 !important;
-  letter-spacing: 0.01em;
+.perf-filter-shell {
+  display: grid;
+  gap: 14px;
 }
 
 .perf-filter-card .ant-picker,
 .perf-filter-card .ant-input,
 .perf-filter-card .ant-btn {
+  height: 36px;
   border-radius: 9px;
 }
 
 .perf-filter-card .ant-btn {
   font-weight: 600;
+}
+
+.perf-filter-group {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.perf-filter-label {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.perf-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.perf-range-picker.ant-picker {
+  width: 390px;
+  max-width: 100%;
+}
+
+.perf-request-input.ant-input-affix-wrapper,
+.perf-request-input.ant-input {
+  width: 420px;
+  max-width: 100%;
+}
+
+.perf-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.4fr) minmax(150px, 0.8fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.perf-filter-actions {
+  display: inline-flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.perf-filter-primary-btn.ant-btn,
+.perf-filter-secondary-btn.ant-btn {
+  min-width: 104px;
+  padding-inline: 20px;
+}
+
+.perf-filter-primary-btn.ant-btn-primary {
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+}
+
+.perf-filter-secondary-btn.ant-btn {
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .perf-kpi-card.ant-card {
@@ -268,6 +325,24 @@
   .perf-filter-card .ant-card-body,
   .perf-panel-card > .ant-card-body {
     padding: 12px;
+  }
+
+  .perf-filter-row,
+  .perf-filter-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .perf-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .perf-range-picker.ant-picker,
+  .perf-request-input.ant-input-affix-wrapper,
+  .perf-request-input.ant-input,
+  .perf-filter-primary-btn.ant-btn,
+  .perf-filter-secondary-btn.ant-btn {
+    width: 100%;
   }
 
   .perf-kpi-value {

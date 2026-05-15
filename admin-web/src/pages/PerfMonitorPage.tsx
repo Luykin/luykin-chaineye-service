@@ -664,119 +664,116 @@ export function PerfMonitorPage() {
             size="small"
             className="perf-filter-card"
           >
-            <Row gutter={[10, 10]} align="bottom">
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>开始时间</Typography.Text>
-                <DatePicker showTime value={startTime} onChange={(value) => value && setStartTime(value)} allowClear={false} style={{ width: "100%", marginTop: 4 }} />
-              </Col>
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>结束时间</Typography.Text>
-                <DatePicker showTime value={endTime} onChange={(value) => value && setEndTime(value)} allowClear={false} style={{ width: "100%", marginTop: 4 }} />
-              </Col>
-              <Col xs={12} sm={8} md={4} xl={3}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>&nbsp;</Typography.Text>
-                <Button
-                  type="primary"
-                  block
-                  style={{ marginTop: 4 }}
-                  onClick={() => {
-                    if (endTime.diff(startTime, "minute") > 30) {
-                      messageApi.warning("查询范围不能超过 30 分钟");
-                      return;
-                    }
-                    setAppliedStart(startTime);
-                    setAppliedEnd(endTime);
-                  }}
-                >
-                  查询
-                </Button>
-              </Col>
-              <Col xs={12} sm={8} md={4} xl={3}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>&nbsp;</Typography.Text>
-                <Button
-                  block
-                  style={{ marginTop: 4 }}
-                  onClick={() => {
-                    const next = getDefaultRange();
-                    setStartTime(next.start);
-                    setEndTime(next.end);
-                    setAppliedStart(next.start);
-                    setAppliedEnd(next.end);
-                  }}
-                >
-                  最近30分钟
-                </Button>
-              </Col>
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>按 userId 筛选</Typography.Text>
-                <Input value={filterUserIdInput} onChange={(event) => setFilterUserIdInput(event.target.value)} style={{ marginTop: 4 }} />
-              </Col>
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>按 path 筛选</Typography.Text>
-                <Input value={filterPathInput} onChange={(event) => setFilterPathInput(event.target.value)} style={{ marginTop: 4 }} />
-              </Col>
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>按 IP 筛选</Typography.Text>
-                <Input value={filterIpInput} onChange={(event) => setFilterIpInput(event.target.value)} style={{ marginTop: 4 }} />
-              </Col>
-              <Col xs={12} sm={8} md={4} xl={3}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>&nbsp;</Typography.Text>
-                <Button
-                  type="primary"
-                  block
-                  style={{ marginTop: 4 }}
-                  onClick={() => {
-                    setFilterUserId(filterUserIdInput);
-                    setFilterPath(filterPathInput);
-                    setFilterIp(filterIpInput);
-                  }}
-                >
-                  筛选
-                </Button>
-              </Col>
-              <Col xs={12} sm={8} md={4} xl={3}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>&nbsp;</Typography.Text>
-                <Button
-                  block
-                  style={{ marginTop: 4 }}
-                  onClick={() => {
-                    setFilterUserIdInput("");
-                    setFilterPathInput("");
-                    setFilterIpInput("");
-                    setFilterUserId("");
-                    setFilterPath("");
-                    setFilterIp("");
-                  }}
-                >
-                  清除
-                </Button>
-              </Col>
-              <Col xs={24} md={16} xl={6}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>按 requestId 查询详情</Typography.Text>
-                <Input value={requestIdSearch} onChange={(event) => setRequestIdSearch(event.target.value)} placeholder="支持前缀（例如 b6550afd-9194）" style={{ marginTop: 4 }} />
-              </Col>
-              <Col xs={12} sm={8} md={4} xl={3}>
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>&nbsp;</Typography.Text>
-                <Button
-                  type="primary"
-                  block
-                  style={{ marginTop: 4 }}
-                  onClick={() => {
-                    if (!requestIdSearch.trim()) {
-                      messageApi.info("请先输入 requestId 前缀");
-                      return;
-                    }
-                    if (!requestSearchResult) {
-                      messageApi.warning("当前筛选范围内未匹配到 requestId");
-                      return;
-                    }
-                    void openTraceDetail(requestSearchResult);
-                  }}
-                >
-                  搜索
-                </Button>
-              </Col>
-            </Row>
+            <div className="perf-filter-shell">
+              <div className="perf-filter-group perf-filter-time-group">
+                <div className="perf-filter-label">时间范围</div>
+                <div className="perf-filter-row">
+                  <DatePicker.RangePicker
+                    showTime
+                    allowClear={false}
+                    value={[startTime, endTime]}
+                    onChange={(values) => {
+                      if (values?.[0] && values?.[1]) {
+                        setStartTime(values[0]);
+                        setEndTime(values[1]);
+                      }
+                    }}
+                    className="perf-range-picker"
+                  />
+                  <Button
+                    type="primary"
+                    className="perf-filter-primary-btn"
+                    onClick={() => {
+                      if (endTime.diff(startTime, "minute") > 30) {
+                        messageApi.warning("查询范围不能超过 30 分钟");
+                        return;
+                      }
+                      setAppliedStart(startTime);
+                      setAppliedEnd(endTime);
+                    }}
+                  >
+                    查询
+                  </Button>
+                  <Button
+                    className="perf-filter-secondary-btn"
+                    onClick={() => {
+                      const next = getDefaultRange();
+                      setStartTime(next.start);
+                      setEndTime(next.end);
+                      setAppliedStart(next.start);
+                      setAppliedEnd(next.end);
+                    }}
+                  >
+                    最近30分钟
+                  </Button>
+                </div>
+              </div>
+
+              <div className="perf-filter-group">
+                <div className="perf-filter-label">条件筛选</div>
+                <div className="perf-filter-grid">
+                  <Input allowClear value={filterUserIdInput} onChange={(event) => setFilterUserIdInput(event.target.value)} placeholder="userId" />
+                  <Input allowClear value={filterPathInput} onChange={(event) => setFilterPathInput(event.target.value)} placeholder="path，例如 /api/xhunt" />
+                  <Input allowClear value={filterIpInput} onChange={(event) => setFilterIpInput(event.target.value)} placeholder="IP" />
+                  <div className="perf-filter-actions">
+                    <Button
+                      type="primary"
+                      className="perf-filter-primary-btn"
+                      onClick={() => {
+                        setFilterUserId(filterUserIdInput);
+                        setFilterPath(filterPathInput);
+                        setFilterIp(filterIpInput);
+                      }}
+                    >
+                      筛选
+                    </Button>
+                    <Button
+                      className="perf-filter-secondary-btn"
+                      onClick={() => {
+                        setFilterUserIdInput("");
+                        setFilterPathInput("");
+                        setFilterIpInput("");
+                        setFilterUserId("");
+                        setFilterPath("");
+                        setFilterIp("");
+                      }}
+                    >
+                      清除
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="perf-filter-group perf-filter-request-group">
+                <div className="perf-filter-label">定位请求详情</div>
+                <div className="perf-filter-row">
+                  <Input
+                    allowClear
+                    value={requestIdSearch}
+                    onChange={(event) => setRequestIdSearch(event.target.value)}
+                    placeholder="requestId 前缀，例如 b6550afd-9194"
+                    className="perf-request-input"
+                  />
+                  <Button
+                    type="primary"
+                    className="perf-filter-primary-btn"
+                    onClick={() => {
+                      if (!requestIdSearch.trim()) {
+                        messageApi.info("请先输入 requestId 前缀");
+                        return;
+                      }
+                      if (!requestSearchResult) {
+                        messageApi.warning("当前筛选范围内未匹配到 requestId");
+                        return;
+                      }
+                      void openTraceDetail(requestSearchResult);
+                    }}
+                  >
+                    搜索
+                  </Button>
+                </div>
+              </div>
+            </div>
           </Card>
 
           <Row gutter={[16, 16]}>
