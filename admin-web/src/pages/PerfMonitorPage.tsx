@@ -13,7 +13,6 @@ import {
   Pagination,
   Row,
   Space,
-  Statistic,
   Table,
   Tag,
   Typography,
@@ -43,8 +42,6 @@ import type {
 
 const TRACE_PAGE_SIZE = 50;
 const TABLE_MAX_HEIGHT = 420;
-const CARD_BORDER_COLOR = "#e5e7eb";
-const TITLE_DIVIDER_COLOR = "#f3f4f6";
 const SCATTER_HEIGHT = 520;
 const METRICS_HEIGHT = 360;
 const ERRORS_SCATTER_HEIGHT = 360;
@@ -115,29 +112,35 @@ function PerfPanelCard({
   return (
     <Card
       size="small"
-      style={{ borderColor: CARD_BORDER_COLOR, borderRadius: 6 }}
+      className="perf-panel-card"
       title={
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            fontSize: 15,
-            fontWeight: 600,
-            color: "#374151",
-          }}
-        >
+        <div className="perf-panel-title">
           <span>{title}</span>
-          {extra ? <span style={{ fontWeight: 400, fontSize: 12 }}>{extra}</span> : null}
+          {extra ? <span className="perf-panel-extra">{extra}</span> : null}
         </div>
       }
-      styles={{
-        header: { minHeight: 48, padding: "0 16px", borderBottom: `1px solid ${TITLE_DIVIDER_COLOR}` },
-        body: { padding: 16 },
-      }}
     >
       {children}
+    </Card>
+  );
+}
+
+function PerfKpiCard({
+  label,
+  value,
+  tone,
+  hint,
+}: {
+  label: string;
+  value: React.ReactNode;
+  tone: "blue" | "green" | "orange" | "red";
+  hint?: string;
+}) {
+  return (
+    <Card size="small" className={`perf-kpi-card perf-kpi-${tone}`}>
+      <span className="perf-kpi-label">{label}</span>
+      <strong className="perf-kpi-value">{value}</strong>
+      {hint ? <span className="perf-kpi-hint">{hint}</span> : null}
     </Card>
   );
 }
@@ -155,28 +158,12 @@ function ChartContainer({
 }) {
   return (
     <div
-      style={{
-        width: "100%",
-        height,
-        border: `1px solid ${CARD_BORDER_COLOR}`,
-        borderRadius: 6,
-        background: "#fff",
-        overflow: "hidden",
-        position: "relative",
-      }}
+      className="perf-chart-container"
+      style={{ height }}
     >
       <div ref={chartRef} style={{ width: "100%", height: "100%" }} />
       {!ready ? (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(255,255,255,0.85)",
-          }}
-        >
+        <div className="perf-chart-empty-mask">
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText || "图表库未加载"} />
         </div>
       ) : null}
@@ -277,6 +264,7 @@ export function PerfMonitorPage() {
   const avgDuration = getAvgDuration(curKpi);
   const p95Duration = getP95Duration(curKpi);
   const rps = requestCount / spanSecs;
+  const rangeText = `${appliedStart.format("MM-DD HH:mm")} ~ ${appliedEnd.format("MM-DD HH:mm")}`;
 
   const filteredTraces = useMemo(() => {
     const traces = tracesQuery.data || [];
@@ -659,16 +647,22 @@ export function PerfMonitorPage() {
   return (
     <PermissionGuard permission="perf-monitor">
       {contextHolder}
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Space direction="vertical" size={16} style={{ width: "100%" }} className="perf-monitor-page">
         <PageSection
           title="性能监控"
           description="实时追踪 API 性能指标、请求分布与接口延迟分析"
-          extra={<Tag color="blue">队列积压: {queueQuery.data?.queueLength ?? "--"}</Tag>}
+          extra={
+            <Space size={8} wrap>
+              <Tag color={Number(queueQuery.data?.queueLength || 0) > 1000 ? "red" : "blue"}>
+                队列积压: {queueQuery.data?.queueLength ?? "--"}
+              </Tag>
+              <Tag color="geekblue">{rangeText}</Tag>
+            </Space>
+          }
         >
           <Card
             size="small"
-            style={{ marginBottom: 16, borderColor: CARD_BORDER_COLOR, borderRadius: 6, background: "#fafafa" }}
-            styles={{ body: { padding: 16 } }}
+            className="perf-filter-card"
           >
             <Row gutter={[10, 10]} align="bottom">
               <Col xs={24} sm={12} md={8} xl={4}>
@@ -786,10 +780,18 @@ export function PerfMonitorPage() {
           </Card>
 
           <Row gutter={[16, 16]}>
-            <Col xs={12} md={6}><Card size="small" style={{ borderColor: CARD_BORDER_COLOR, borderRadius: 6 }} styles={{ body: { padding: 20 } }}><Statistic title="请求数" value={requestCount || 0} /></Card></Col>
-            <Col xs={12} md={6}><Card size="small" style={{ borderColor: CARD_BORDER_COLOR, borderRadius: 6 }} styles={{ body: { padding: 20 } }}><Statistic title="RPS" value={Number(rps.toFixed(2))} /></Card></Col>
-            <Col xs={12} md={6}><Card size="small" style={{ borderColor: CARD_BORDER_COLOR, borderRadius: 6 }} styles={{ body: { padding: 20 } }}><Statistic title="平均耗时" value={formatMs(avgDuration)} /></Card></Col>
-            <Col xs={12} md={6}><Card size="small" style={{ borderColor: CARD_BORDER_COLOR, borderRadius: 6 }} styles={{ body: { padding: 20 } }}><Statistic title="P95 耗时" value={formatMs(p95Duration)} /></Card></Col>
+            <Col xs={12} md={6}>
+              <PerfKpiCard label="请求数" value={requestCount || 0} tone="blue" hint="当前窗口" />
+            </Col>
+            <Col xs={12} md={6}>
+              <PerfKpiCard label="RPS" value={Number(rps.toFixed(2))} tone="green" hint="吞吐量" />
+            </Col>
+            <Col xs={12} md={6}>
+              <PerfKpiCard label="平均耗时" value={formatMs(avgDuration)} tone={avgDuration > 1000 ? "orange" : "blue"} hint="Avg" />
+            </Col>
+            <Col xs={12} md={6}>
+              <PerfKpiCard label="P95 耗时" value={formatMs(p95Duration)} tone={p95Duration > 3000 ? "red" : p95Duration > 1000 ? "orange" : "green"} hint="慢请求水位" />
+            </Col>
           </Row>
 
           <Space direction="vertical" size={16} style={{ width: "100%", marginTop: 16 }}>
@@ -797,7 +799,7 @@ export function PerfMonitorPage() {
               <ChartContainer chartRef={scatterContainerRef} height={SCATTER_HEIGHT} ready={echartsReady} emptyText="ECharts 未加载" />
               <Collapse
                 size="small"
-                style={{ marginTop: 12 }}
+                className="perf-error-collapse"
                 onChange={(keys) => setErrorsExpanded(Array.isArray(keys) ? keys.includes("errors") : keys === "errors")}
                 items={[{
                   key: "errors",
@@ -823,6 +825,7 @@ export function PerfMonitorPage() {
                         说明：该图不受时间范围筛选影响，展示 Redis 已保留窗口内所有 status &gt;= 500 的请求点。
                       </Typography.Text>
                       <Table
+                        className="perf-compact-table"
                         rowKey={(record) => `${record.requestId}-${record.ts}`}
                         columns={errorColumns}
                         dataSource={errorRows}
@@ -847,6 +850,7 @@ export function PerfMonitorPage() {
 
             <PerfPanelCard title="接口平均耗时排行榜（采样后）">
               <Table
+                className="perf-compact-table"
                 rowKey="path"
                 pagination={false}
                 scroll={{ y: 400, x: 860 }}
@@ -865,6 +869,7 @@ export function PerfMonitorPage() {
 
             <PerfPanelCard title="当前窗口请求明细（采样后）">
               <Table
+                className="perf-compact-table"
                 rowKey={(record) => `${record.requestId}-${record.ts}`}
                 columns={traceColumns}
                 dataSource={pagedTraces}
@@ -879,7 +884,7 @@ export function PerfMonitorPage() {
             </PerfPanelCard>
 
             <PerfPanelCard title="指标说明">
-              <Space direction="vertical" size={8} style={{ color: "#6b7280", fontSize: 13, lineHeight: 1.6 }}>
+              <Space direction="vertical" size={8} className="perf-help-text">
                 <Typography.Text><b>RPS</b>（Requests Per Second）：每秒请求数，反映系统吞吐量。</Typography.Text>
                 <Typography.Text><b>Avg Duration</b>：统计窗口内的平均耗时（毫秒）。窗口大小由后端聚合（通常 60s 或 300s）。</Typography.Text>
                 <Typography.Text><b>队列积压</b>：perf:events:queue 当前长度。持续升高表示后台消费速度不足。</Typography.Text>
@@ -891,17 +896,17 @@ export function PerfMonitorPage() {
           </Space>
 
           {queueQuery.isError || kpiQuery.isError || metricsQuery.isError || tracesQuery.isError ? (
-            <Alert type="error" showIcon style={{ marginTop: 16 }} message="性能监控部分数据加载失败" description="请检查后端 perf-monitor 服务、Redis 队列或管理员登录状态。" />
+            <Alert className="perf-error-alert" type="error" showIcon message="性能监控部分数据加载失败" description="请检查后端 perf-monitor 服务、Redis 队列或管理员登录状态。" />
           ) : null}
         </PageSection>
 
-        <Modal open={detailOpen} onCancel={() => setDetailOpen(false)} footer={null} width={920} title="请求追踪详情">
+        <Modal className="perf-detail-modal" open={detailOpen} onCancel={() => setDetailOpen(false)} footer={null} width={920} title="请求追踪详情">
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <Descriptions size="small" column={1}>
               <Descriptions.Item label="requestId">{detailRequestId || getTraceRequestId(requestSearchResult)}</Descriptions.Item>
             </Descriptions>
             <Card size="small" loading={detailLoading}>
-              <pre style={{ margin: 0, maxHeight: 360, overflow: "auto", background: "#1e293b", color: "#e2e8f0", padding: 16, borderRadius: 8, fontSize: 12, lineHeight: 1.5 }}>
+              <pre className="perf-detail-json">
                 {JSON.stringify(detailData, null, 2)}
               </pre>
             </Card>
@@ -914,8 +919,8 @@ export function PerfMonitorPage() {
                       <Typography.Text strong>{result.file}</Typography.Text>
                       <div style={{ marginTop: 8 }}>
                         {result.context.map((line) => (
-                          <div key={`${result.file}-${line.lineNumber}`} style={{ marginBottom: 4, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                            <span style={{ color: "#94a3b8", marginRight: 10 }}>{line.lineNumber}:</span>
+                          <div key={`${result.file}-${line.lineNumber}`} className="perf-log-line">
+                            <span className="perf-log-line-number">{line.lineNumber}:</span>
                             <span dangerouslySetInnerHTML={{ __html: highlightText(line.content, detailRequestId) }} />
                           </div>
                         ))}
