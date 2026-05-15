@@ -27,6 +27,7 @@ const PERMISSION_OPTIONS = [
   { label: "活动配置", value: "nacos_config" },
   { label: "标签配置", value: "nacos-tags" },
   { label: "功能开关", value: "feature_flags_config" },
+  { label: "Banner配置", value: "banner-config" },
   { label: "图片上传", value: "assets:upload" },
   { label: "VIP 管理", value: "vip-management" },
   { label: "Redis 管理", value: "redis-management" },

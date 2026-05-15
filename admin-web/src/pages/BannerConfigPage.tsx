@@ -288,7 +288,7 @@ export function BannerConfigPage() {
   ];
 
   return (
-    <PermissionGuard permission="feature_flags_config">
+    <PermissionGuard permission="banner-config">
       {contextHolder}
       <PageSection
         title="Banner 配置"
