@@ -18,6 +18,10 @@ const { Op } = require("sequelize");
 const axios = require("axios");
 const retry = require("async-retry");
 const { getXUserId, checkLegacyPro } = require("../utils/legacy-pro");
+const {
+  sanitizePlainText,
+  sanitizeSafeUrl,
+} = require("../services/inputValidator");
 
 const router = express.Router();
 
@@ -211,15 +215,18 @@ router.post(
       console.log(`[TwitterCallback] Step 4: 开始获取 Twitter 用户信息`);
       const twitterUser = await getTwitterUserInfo(accessToken);
       console.log(`[TwitterCallback] Step 4: 用户信息获取成功, id=${twitterUser.id}, username=${twitterUser.username}`);
+      const sanitizedUsername = sanitizePlainText(twitterUser.username, 100);
+      const sanitizedDisplayName = sanitizePlainText(twitterUser.name, 255);
+      const sanitizedAvatar = sanitizeSafeUrl(twitterUser.profile_image_url, 2048);
 
       // Step 5: 创建或更新用户信息
       console.log(`[TwitterCallback] Step 5: 开始创建/更新用户, twitterId=${twitterUser.id}`);
       const [user, created] = await XHuntUser.findOrCreate({
         where: { twitterId: twitterUser.id },
         defaults: {
-          username: twitterUser.username,
-          displayName: twitterUser.name,
-          avatar: twitterUser.profile_image_url,
+          username: sanitizedUsername,
+          displayName: sanitizedDisplayName,
+          avatar: sanitizedAvatar,
         },
       });
       console.log(`[TwitterCallback] Step 5: 用户${created ? '创建' : '更新'}成功, userId=${user.id}`);
@@ -227,9 +234,9 @@ router.post(
       // 如果用户已存在，更新可能变化的信息
       if (!created) {
         await user.update({
-          username: twitterUser.username,
-          displayName: twitterUser.name,
-          avatar: twitterUser.profile_image_url,
+          username: sanitizedUsername,
+          displayName: sanitizedDisplayName,
+          avatar: sanitizedAvatar,
         });
       }
 

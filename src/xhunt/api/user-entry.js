@@ -10,6 +10,10 @@ const {
   UnregisteredUserRegistration,
 } = require("../../models/postgres-start");
 const { validateRequest } = require("../middleware/validate-request");
+const {
+  sanitizePlainText,
+  sanitizeJsonStringsDeep,
+} = require("../services/inputValidator");
 
 const router = express.Router();
 
@@ -36,8 +40,10 @@ router.post(
 
       // 提取关键字段
       const twitterId = userData.id_str;
-      const name = userData.name || null;
-      const screenName = userData.screen_name || null;
+      const name = userData.name ? sanitizePlainText(userData.name, 255) : null;
+      const screenName = userData.screen_name
+        ? sanitizePlainText(userData.screen_name, 100)
+        : null;
       const followersCount =
         typeof userData.followers_count === "number"
           ? userData.followers_count
@@ -53,7 +59,10 @@ router.post(
       }
 
       // 提取生日信息
-      const birthdate = userData.birthdate || null;
+      const birthdate = userData.birthdate
+        ? sanitizeJsonStringsDeep(userData.birthdate)
+        : null;
+      const sanitizedRawData = sanitizeJsonStringsDeep(userData);
 
       // 验证 Twitter ID 是否已存在
       const existingRegistration =
@@ -69,7 +78,7 @@ router.post(
           followersCount,
           twitterCreatedAt,
           birthdate,
-          rawData: userData,
+          rawData: sanitizedRawData,
         });
 
         return res.status(200).json({
@@ -97,7 +106,7 @@ router.post(
         followersCount,
         twitterCreatedAt,
         birthdate,
-        rawData: userData,
+        rawData: sanitizedRawData,
       });
 
       return res.status(201).json({
@@ -127,4 +136,3 @@ router.post(
 );
 
 module.exports = router;
-

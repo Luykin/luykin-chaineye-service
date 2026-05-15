@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input, Select } from "antd";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { fetchNacosConfig, publishNacosConfig } from "@/services/nacos";
+import { sanitizeRichTextHtml } from "@/utils/richTextSanitizer";
 
 type MessageLang = "zh" | "en";
 
@@ -72,7 +73,7 @@ function escapeHtml(value: unknown) {
 function removeBlackColors(html: string) {
   if (!html || typeof html !== "string") return html;
   const temp = document.createElement("div");
-  temp.innerHTML = html;
+  temp.innerHTML = sanitizeRichTextHtml(html);
   const blackPatterns = [/^#000000$/i, /^#000$/i, /^rgb\s*\(\s*0\s*,\s*0\s*,\s*0\s*\)$/i, /^rgba\s*\(\s*0\s*,\s*0\s*,\s*0\s*,\s*[01](?:\.\d+)?\s*\)$/i, /^black$/i];
   const isBlack = (color: string) => blackPatterns.some((pattern) => pattern.test(color.trim()));
   temp.querySelectorAll("*").forEach((el) => {
@@ -102,7 +103,7 @@ function parseItems(content: string) {
       created: Number(value.created || Date.now()),
       title: String(value.title || ""),
       type: String(value.type || "all"),
-      content: String(value.content || ""),
+      content: sanitizeRichTextHtml(String(value.content || "")),
     };
   });
 }
@@ -176,12 +177,14 @@ export function NacosMessagesPage() {
   }
 
   function getEditorHtml() {
-    if (quillReady && quillRef.current?.root) return removeBlackColors(quillRef.current.root.innerHTML || "");
-    return removeBlackColors(fallbackRef.current?.innerHTML || "");
+    if (quillReady && quillRef.current?.root) {
+      return removeBlackColors(sanitizeRichTextHtml(quillRef.current.root.innerHTML || ""));
+    }
+    return removeBlackColors(sanitizeRichTextHtml(fallbackRef.current?.innerHTML || ""));
   }
 
   function setEditorHtml(html: string) {
-    const cleaned = removeBlackColors(html || "");
+    const cleaned = removeBlackColors(sanitizeRichTextHtml(html || ""));
     suppressEditorChangeRef.current = true;
     if (quillReady && quillRef.current?.clipboard) {
       quillRef.current.clipboard.dangerouslyPasteHTML(cleaned);
@@ -267,7 +270,7 @@ export function NacosMessagesPage() {
   }
 
   function saveHtmlFromModal() {
-    const cleaned = removeBlackColors(htmlSource || "");
+    const cleaned = removeBlackColors(sanitizeRichTextHtml(htmlSource || ""));
     setEditorHtml(cleaned);
     if (editorEnabled) updateItem(currentIndex, { content: cleaned });
     setHtmlModalOpen(false);
@@ -353,7 +356,7 @@ export function NacosMessagesPage() {
         const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(text);
         let toInsert = html.trim() ? html : looksLikeHtml ? text : "";
         if (!toInsert) return;
-        toInsert = removeBlackColors(toInsert);
+        toInsert = removeBlackColors(sanitizeRichTextHtml(toInsert));
         event.preventDefault();
         const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
         quill.clipboard.dangerouslyPasteHTML(range.index, toInsert, "user");
@@ -517,7 +520,10 @@ export function NacosMessagesPage() {
 
               <div className="preview-section">
                 <div className="preview-header"><span>实时预览</span></div>
-                <div className="preview-box" dangerouslySetInnerHTML={{ __html: selectedItem?.content || "" }} />
+                <div
+                  className="preview-box"
+                  dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(selectedItem?.content || "") }}
+                />
               </div>
 
               <div className="help-section">

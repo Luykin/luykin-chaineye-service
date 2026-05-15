@@ -3,6 +3,10 @@ const { authenticateToken } = require("../middleware/auth");
 const { XPrivateMessage, XHuntUser } = require("../../models/postgres-start");
 const { Op } = require("sequelize");
 const { getRedisClient } = require("../../lib/redisClient");
+const {
+  sanitizePlainText,
+  sanitizeRichTextHtml,
+} = require("../services/inputValidator");
 
 const router = express.Router();
 
@@ -289,6 +293,8 @@ router.post("/send-batch-by-type", async (req, res) => {
     }
 
     const template = getMessageTemplateByType(type);
+    const sanitizedTitle = sanitizePlainText(template.title, 255);
+    const sanitizedTemplateContent = sanitizeRichTextHtml(template.content, 12000);
 
     // 去重后根据 twitterId 批量查询对应的 XHuntUser（拿到真正的 user.id）
     const uniqueTwitterIds = Array.from(new Set(twitterIdList));
@@ -377,11 +383,11 @@ router.post("/send-batch-by-type", async (req, res) => {
     // 构造批量插入的数据（仅对未被限流的用户发送）
     const now = new Date();
     console.log(LOG_TAG, "4/5 开始构造待发送", { ...logCtx(), effectiveCount: effectiveTargetUsers.length });
-    const messagesToCreate = effectiveTargetUsers.map((user) => ({
+      const messagesToCreate = effectiveTargetUsers.map((user) => ({
       senderId,
       receiverId: user.id,
-      title: template.title,
-      content: template.content,
+      title: sanitizedTitle,
+      content: sanitizedTemplateContent,
       displayAt: displayAtDate,
       sentAt: now,
       isRead: false,

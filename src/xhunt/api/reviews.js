@@ -16,7 +16,13 @@ const {
   validateNote,
   validateComment,
 } = require("../middleware/reviewValidator");
-const { sanitizeNote, sanitizeComment } = require("../services/inputValidator");
+const {
+  sanitizeNote,
+  sanitizeComment,
+  sanitizePlainText,
+  sanitizeSafeUrl,
+  isSafeHttpUrl,
+} = require("../services/inputValidator");
 const { getPointsByRank } = require("../services/twitter");
 const router = express.Router();
 
@@ -476,10 +482,22 @@ router.post(
   "/",
   [
     authenticateToken,
-    body("handle").trim().notEmpty(),
-    body("xLink").trim().notEmpty(),
-    body("displayName").trim().notEmpty(),
-    body("avatar").trim().notEmpty(),
+    body("handle").trim().notEmpty().customSanitizer((value) => sanitizePlainText(value, 100)),
+    body("xLink")
+      .trim()
+      .notEmpty()
+      .custom((value) => {
+        if (!isSafeHttpUrl(value)) throw new Error("xLink 必须是合法的 http/https URL");
+        return true;
+      }),
+    body("displayName").trim().notEmpty().customSanitizer((value) => sanitizePlainText(value, 255)),
+    body("avatar")
+      .trim()
+      .notEmpty()
+      .custom((value) => {
+        if (!isSafeHttpUrl(value)) throw new Error("avatar 必须是合法的 http/https URL");
+        return true;
+      }),
     body("rating")
       .isFloat({ min: 0.0, max: 5.0 })
       .withMessage("评分必须在 0.0 到 5.0 之间")
@@ -510,6 +528,10 @@ router.post(
         comment,
       } = req.body;
       const twid = req.twid;
+      const sanitizedHandle = sanitizePlainText(handle, 100);
+      const sanitizedXLink = sanitizeSafeUrl(xLink, 2048);
+      const sanitizedDisplayName = sanitizePlainText(displayName, 255);
+      const sanitizedAvatar = sanitizeSafeUrl(avatar, 2048);
       const _userId =
         String(req.headers["x-user-id"]).toLocaleLowerCase() ||
         String(req.user?.username).toLocaleLowerCase();
@@ -536,7 +558,7 @@ router.post(
         xAccount = await XAccount.findOne({
           where: {
             handle: {
-              [Op.iLike]: handle, // 使用 iLike 进行大小写不敏感查找
+              [Op.iLike]: sanitizedHandle, // 使用 iLike 进行大小写不敏感查找
             },
           },
         });
@@ -545,10 +567,10 @@ router.post(
       if (!xAccount) {
         // 如果不存在，创建一个新的 XAccount
         xAccount = await XAccount.create({
-          xLink,
-          handle,
-          displayName,
-          avatar,
+          xLink: sanitizedXLink,
+          handle: sanitizedHandle,
+          displayName: sanitizedDisplayName,
+          avatar: sanitizedAvatar,
           followers: followers || 0,
           following: following || 0,
           ...(twid ? { xId: twid } : {}),
@@ -556,8 +578,10 @@ router.post(
       } else {
         // 如果存在，更新相关信息
         await xAccount.update({
-          displayName,
-          avatar,
+          handle: sanitizedHandle,
+          xLink: sanitizedXLink,
+          displayName: sanitizedDisplayName,
+          avatar: sanitizedAvatar,
           followers: followers || 0,
           following: following || 0,
           ...(twid ? { xId: twid } : {}),

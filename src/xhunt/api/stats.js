@@ -19,8 +19,40 @@ const genericStatsRouter = require("./stats-routes/generic-stats");
 const adminAuditRouter = require("./stats-routes/admin-audit");
 const vipListsRouter = require("./stats-routes/vip-lists");
 const { logAdminAction } = require("./stats-routes/shared");
+const {
+  sanitizePlainText,
+  sanitizeSafeUrl,
+  sanitizeRichTextHtml,
+} = require("../services/inputValidator");
 
 const router = express.Router();
+
+function sanitizeMessageCampaignId(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9:_-]/g, "")
+    .slice(0, 120);
+}
+
+function sanitizeNacosMessagesConfigContent(content) {
+  const parsed = JSON.parse(content || "[]");
+  if (!Array.isArray(parsed)) {
+    throw new Error("nacos-messages content 必须是数组");
+  }
+  const sanitized = parsed.map((item) => {
+    const current = item && typeof item === "object" ? item : {};
+    return {
+      created:
+        Number.isFinite(Number(current.created)) && Number(current.created) > 0
+          ? Number(current.created)
+          : Date.now(),
+      title: sanitizePlainText(current.title || "", 255),
+      type: sanitizePlainText(current.type || "all", 50) || "all",
+      content: sanitizeRichTextHtml(current.content || "", 20000),
+    };
+  });
+  return JSON.stringify(sanitized);
+}
 
 function findProjectRoot(startDir) {
   let currentDir = startDir;
@@ -1024,6 +1056,28 @@ router.post("/send-messages", adminAuth, async (req, res) => {
       });
     }
 
+    const sanitizedCampaignId = sanitizeMessageCampaignId(campaignId);
+    const sanitizedTitle = sanitizePlainText(title, 255);
+    const normalizedHandlers = handlers
+      .map((item) => sanitizePlainText(item, 100))
+      .filter(Boolean);
+    const normalizedReportUrls = Array.isArray(reportUrls)
+      ? reportUrls.map((item) => sanitizeSafeUrl(item, 2048))
+      : [];
+    const rawContent = String(content || "").trim();
+
+    if (
+      !sanitizedCampaignId ||
+      !sanitizedTitle ||
+      !rawContent ||
+      normalizedHandlers.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "参数清洗后为空，请检查 campaignId、title、content、handlers",
+      });
+    }
+
     // 获取PostgreSQL模型
     const postgresModels = require("../../models/postgres-start");
     const XPrivateMessage = postgresModels.XPrivateMessage;
@@ -1038,9 +1092,9 @@ router.post("/send-messages", adminAuth, async (req, res) => {
     };
 
     // 处理每个用户
-    for (let i = 0; i < handlers.length; i++) {
-      const username = handlers[i];
-      const reportUrl = reportUrls && reportUrls[i] ? reportUrls[i] : "";
+    for (let i = 0; i < normalizedHandlers.length; i++) {
+      const username = normalizedHandlers[i];
+      const reportUrl = normalizedReportUrls[i] || "";
 
       try {
         console.log(`处理用户: ${username}`);
@@ -1064,31 +1118,34 @@ router.post("/send-messages", adminAuth, async (req, res) => {
         const existingMessage = await XPrivateMessage.findOne({
           where: {
             receiverId: user.id,
-            campaignId: campaignId,
+            campaignId: sanitizedCampaignId,
           },
         });
 
         if (existingMessage) {
-          console.log(`用户 ${username} 已经收到过活动 ${campaignId} 的消息`);
+          console.log(`用户 ${username} 已经收到过活动 ${sanitizedCampaignId} 的消息`);
           results.alreadySent.push(username);
           continue;
         }
 
         // 个性化内容（替换占位符）
-        const personalizedContent = content
+        const personalizedContent = sanitizeRichTextHtml(
+          rawContent
           .replace(/\{\{\s*username\s*\}\}/g, username)
-          .replace(/\{\{\s*reportUrl\s*\}\}/g, reportUrl);
+          .replace(/\{\{\s*reportUrl\s*\}\}/g, reportUrl),
+          12000
+        );
 
         // 创建私信记录
         const message = await XPrivateMessage.create({
           senderId: "6666666d-cc11-8888-8888-034d3e9a8888",
           receiverId: user.id,
-          title: title,
+          title: sanitizedTitle,
           content: personalizedContent,
           displayAt: new Date(),
           sentAt: new Date(),
           isRead: false,
-          campaignId: campaignId,
+          campaignId: sanitizedCampaignId,
         });
 
         console.log(`✅ 成功发送私信给用户 ${username} (ID: ${user.id})`);
@@ -1613,7 +1670,7 @@ router.post(
       ? `${req.body.source}-publish`
       : "nacos-config-publish";
     try {
-      const {
+      let {
         dataId,
         group = "DEFAULT_GROUP",
         tenant,
@@ -1638,6 +1695,17 @@ router.post(
           return res.status(400).json({
             success: false,
             error: "content 不是合法 JSON（type=json）",
+          });
+        }
+      }
+
+      if (req.body && req.body.source === "nacos-messages") {
+        try {
+          content = sanitizeNacosMessagesConfigContent(content);
+        } catch (error) {
+          return res.status(400).json({
+            success: false,
+            error: error.message || "nacos-messages 内容清洗失败",
           });
         }
       }

@@ -3,7 +3,12 @@ const { body, param } = require('express-validator');
 const { validateRequest } = require('../middleware/validate-request');
 const { authenticateToken } = require('../middleware/auth');
 const { XPrivateNote, XAccount, XReviewForAccount } = require('../../models/postgres-start');
-const { sanitizeNote } = require('../services/inputValidator');
+const {
+	sanitizeNote,
+	sanitizePlainText,
+	sanitizeSafeUrl,
+	isSafeHttpUrl
+} = require('../services/inputValidator');
 
 const router = express.Router();
 
@@ -76,9 +81,27 @@ router.get('/:handle', [
 router.post('/', [
 	authenticateToken,
 	body('handle').trim().notEmpty().withMessage('账号handle不能为空'),
-	body('xLink').trim().notEmpty().withMessage('账号链接不能为空'),
-	body('displayName').trim().notEmpty().withMessage('显示名称不能为空'),
-	body('avatar').trim().notEmpty().withMessage('头像不能为空'),
+	body('xLink')
+		.trim()
+		.notEmpty()
+		.withMessage('账号链接不能为空')
+		.custom((value) => {
+			if (!isSafeHttpUrl(value)) throw new Error('账号链接必须是合法的 http/https URL');
+			return true;
+		}),
+	body('displayName')
+		.trim()
+		.notEmpty()
+		.withMessage('显示名称不能为空')
+		.customSanitizer((value) => sanitizePlainText(value, 255)),
+	body('avatar')
+		.trim()
+		.notEmpty()
+		.withMessage('头像不能为空')
+		.custom((value) => {
+			if (!isSafeHttpUrl(value)) throw new Error('头像必须是合法的 http/https URL');
+			return true;
+		}),
 	body('note')
 		.optional()
 		.isString()
@@ -95,6 +118,10 @@ router.post('/', [
 	try {
 		const { handle, xLink, displayName, avatar, followers, following, note } = req.body;
 		const twid = req.twid;
+		const sanitizedHandle = sanitizePlainText(handle, 100);
+		const sanitizedXLink = sanitizeSafeUrl(xLink, 2048);
+		const sanitizedDisplayName = sanitizePlainText(displayName, 255);
+		const sanitizedAvatar = sanitizeSafeUrl(avatar, 2048);
 
 		// Step 1: 查找或创建 XAccount（优先按 twid 匹配 xId）
 		let xAccount = null;
@@ -102,16 +129,16 @@ router.post('/', [
 			xAccount = await XAccount.findOne({ where: { xId: twid } });
 		}
 		if (!xAccount) {
-			xAccount = await XAccount.findOne({ where: { handle } });
+			xAccount = await XAccount.findOne({ where: { handle: sanitizedHandle } });
 		}
 
 		if (!xAccount) {
 			// 如果不存在，创建一个新的 XAccount
 			xAccount = await XAccount.create({
-				xLink,
-				handle,
-				displayName,
-				avatar,
+				xLink: sanitizedXLink,
+				handle: sanitizedHandle,
+				displayName: sanitizedDisplayName,
+				avatar: sanitizedAvatar,
 				followers: followers || 0,
 				following: following || 0,
 				...(twid ? { xId: twid } : {})
@@ -119,8 +146,10 @@ router.post('/', [
 		} else {
 			// 如果存在，更新相关信息
 			await xAccount.update({
-				displayName,
-				avatar,
+				handle: sanitizedHandle,
+				xLink: sanitizedXLink,
+				displayName: sanitizedDisplayName,
+				avatar: sanitizedAvatar,
 				followers: followers || 0,
 				following: following || 0,
 				...(twid ? { xId: twid } : {})
