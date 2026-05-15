@@ -516,6 +516,7 @@ router.post("/uploads/blob", async (req, res) => {
     let currentAdmin = null;
 
     const jsonResponse = await handleUpload({
+      token: process.env.BLOB_READ_WRITE_TOKEN,
       body,
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload, multipart) => {
