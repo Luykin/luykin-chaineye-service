@@ -579,7 +579,6 @@ export function NacosMessagesPage() {
       <ConfigWorkbench
         className="nacos-section nacos-section-react"
         title="公告配置"
-        description="维护插件公告内容，支持中文 / English 两套 Nacos 配置。"
         toolbar={
           <>
             <div className="toolbar-left">

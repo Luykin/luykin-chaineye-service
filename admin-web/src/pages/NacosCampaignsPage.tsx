@@ -1157,7 +1157,6 @@ export function NacosCampaignsPage() {
         id="nacos-campaigns"
         className="campaigns-container campaigns-react-page"
         title="Xhunt Earn 活动配置"
-        description="统一维护插件活动 JSON 与网站专属配置。"
         collapsed={listCollapsed}
         toolbar={
           <>

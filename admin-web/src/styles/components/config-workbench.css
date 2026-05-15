@@ -10,22 +10,22 @@
 
   width: min(100%, 1600px);
   margin: 0 auto;
-  padding: 18px;
+  padding: 14px 18px;
   box-sizing: border-box;
   color: var(--cw-text);
 }
 
 .config-workbench-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
 .config-workbench-heading h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 17px;
   line-height: 1.25;
   font-weight: 650;
   letter-spacing: -0.02em;
@@ -33,10 +33,10 @@
 }
 
 .config-workbench-heading p {
-  margin: 6px 0 0;
+  margin: 2px 0 0;
   color: var(--cw-muted);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .config-workbench-meta,
@@ -65,8 +65,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
-  padding: 10px 12px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
   border: 1px solid var(--cw-border);
   border-radius: 14px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfbfc 100%);

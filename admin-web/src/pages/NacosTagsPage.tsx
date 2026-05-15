@@ -345,7 +345,6 @@ export function NacosTagsPage() {
       <ConfigWorkbench
         className="nacos-tags-container"
         title="内置标签配置"
-        description="维护用户 handle 与内置标签映射，发布到 Nacos 后插件侧生效。"
         meta={
           <Tag
             color={hasChanges ? "orange" : "green"}
