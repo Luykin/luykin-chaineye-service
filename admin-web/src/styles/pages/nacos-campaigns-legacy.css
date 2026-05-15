@@ -88,10 +88,12 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 8px;
+    height: 31px;
+    padding: 0 8px;
     border-radius: 4px;
     background: #fff;
     border: 1px solid #d1d5db;
+    box-sizing: border-box;
     min-width: 140px;
     max-width: 180px;
     transition: border-color 0.15s;
@@ -1434,8 +1436,11 @@
   min-height: 31px;
 }
 .campaigns-container .ant-switch {
+  width: 36px;
   min-width: 36px;
   height: 20px;
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
 .campaigns-container .ant-switch .ant-switch-handle {
   width: 16px;
@@ -1475,6 +1480,8 @@
   border: none;
   outline: none;
   flex: 1;
+  height: 29px;
+  line-height: 29px;
   font-size: 12px;
   padding: 0;
   background: transparent;
@@ -1483,12 +1490,31 @@
 }
 
 .campaigns-container .ant-btn.list-toggle {
+  width: 24px;
   min-width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
   box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .campaigns-container .ant-btn.list-toggle > span {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.campaigns-container .ant-btn.list-toggle svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  color: currentColor;
+  stroke: currentColor;
+  fill: none;
 }
 .campaigns-container .repeaters .ant-input,
 .campaigns-container .repeaters-horizontal .ant-input {
