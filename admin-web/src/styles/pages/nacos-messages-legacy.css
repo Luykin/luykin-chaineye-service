@@ -749,6 +749,37 @@
     border-color: #15803d;
 }
 
+.nacos-section-react .ant-btn.nacos-btn {
+  line-height: 1;
+  box-shadow: none;
+}
+
+.nacos-section-react .ant-btn.nacos-btn > span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.nacos-section-react .ant-input.nacos-input {
+  height: 40px;
+}
+
+.nacos-section-react .nacos-select {
+  height: 40px;
+  padding: 0;
+}
+
+.nacos-section-react .nacos-select .ant-select-selector {
+  min-height: 40px;
+  border-radius: 8px;
+  border-color: #d1d5db;
+  align-items: center;
+}
+
+.nacos-section-react .nacos-select.ant-select-focused .ant-select-selector {
+  border-color: #6b7280 !important;
+  box-shadow: 0 0 0 3px rgba(107, 114, 128, 0.08) !important;
+}
+
 /* 颜色继承提示 */
 .editor-color-notice {
   display: flex;

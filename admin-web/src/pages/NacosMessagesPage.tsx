@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Button, Input, Select } from "antd";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { fetchNacosConfig, publishNacosConfig } from "@/services/nacos";
 
@@ -13,6 +14,7 @@ type NacosMessageItem = {
 
 type ToastState = { message: string; type?: "success" | "error" | "info" } | null;
 
+const { TextArea } = Input;
 const DATA_IDS: Record<MessageLang, string> = { zh: "xhunt_message", en: "xhunt_message_en" };
 const DEFAULT_FOOTER_HTML = `<br>请加入我们的<a href='https://t.me/xhunt_ai' target='_blank' style='color:rgb(29, 155, 240)'>电报群</a>获取最新资讯。`;
 const TOOLBAR_ICONS = {
@@ -438,10 +440,10 @@ export function NacosMessagesPage() {
           </div>
 
           <div className="toolbar-right nacos-react-toolbar-actions">
-            <button className="nacos-btn nacos-btn-secondary" type="button" onClick={() => void loadConfig(lang)} disabled={loading}>{TOOLBAR_ICONS.refresh}重新加载</button>
-            <button className="nacos-btn nacos-btn-primary" type="button" onClick={newItem}>{TOOLBAR_ICONS.add}新增公告</button>
-            <button className="nacos-btn nacos-btn-danger" type="button" onClick={deleteCurrent} disabled={!editorEnabled}>{TOOLBAR_ICONS.delete}删除</button>
-            <button className="nacos-btn nacos-btn-success" type="button" onClick={showPublishPreview} disabled={!editorEnabled || publishing}>{TOOLBAR_ICONS.publish}发布</button>
+            <Button className="nacos-btn nacos-btn-secondary" htmlType="button" onClick={() => void loadConfig(lang)} disabled={loading} loading={loading}>{TOOLBAR_ICONS.refresh}重新加载</Button>
+            <Button className="nacos-btn nacos-btn-primary" htmlType="button" onClick={newItem}>{TOOLBAR_ICONS.add}新增公告</Button>
+            <Button className="nacos-btn nacos-btn-danger" htmlType="button" danger onClick={deleteCurrent} disabled={!editorEnabled}>{TOOLBAR_ICONS.delete}删除</Button>
+            <Button className="nacos-btn nacos-btn-success" htmlType="button" onClick={showPublishPreview} disabled={!editorEnabled || publishing}>{TOOLBAR_ICONS.publish}发布</Button>
           </div>
         </div>
 
@@ -470,16 +472,22 @@ export function NacosMessagesPage() {
             <div className="editor-form">
               <div className="form-field">
                 <label>标题</label>
-                <input className="nacos-input" value={selectedItem?.title || ""} placeholder="请输入公告标题" disabled={!editorEnabled} onChange={(event) => updateItem(currentIndex, { title: event.target.value })} />
+                <Input className="nacos-input" value={selectedItem?.title || ""} placeholder="请输入公告标题" disabled={!editorEnabled} onChange={(event) => updateItem(currentIndex, { title: event.target.value })} />
               </div>
 
               <div className="form-field">
                 <label>类型</label>
-                <select className="nacos-input" value={selectedItem?.type || "all"} disabled={!editorEnabled} onChange={(event) => updateItem(currentIndex, { type: event.target.value })}>
-                  <option value="all">全部</option>
-                  <option value="web3">Web3</option>
-                  <option value="ai">AI</option>
-                </select>
+                <Select
+                  className="nacos-input nacos-select"
+                  value={selectedItem?.type || "all"}
+                  disabled={!editorEnabled}
+                  onChange={(value) => updateItem(currentIndex, { type: value })}
+                  options={[
+                    { value: "all", label: "全部" },
+                    { value: "web3", label: "Web3" },
+                    { value: "ai", label: "AI" },
+                  ]}
+                />
               </div>
 
               <div className="form-field">
@@ -527,8 +535,8 @@ export function NacosMessagesPage() {
             <div className="modal-backdrop" onClick={() => setHtmlModalOpen(false)} />
             <div className="modal-panel">
               <div className="modal-header"><h3>编辑 HTML 源码</h3><button className="modal-close" type="button" onClick={() => setHtmlModalOpen(false)}>&times;</button></div>
-              <div className="modal-body"><textarea id="nacos-html-source" value={htmlSource} onChange={(event) => setHtmlSource(event.target.value)} spellCheck={false} /></div>
-              <div className="modal-footer"><button className="nacos-btn nacos-btn-secondary" type="button" onClick={() => setHtmlModalOpen(false)}>取消</button><button className="nacos-btn nacos-btn-primary" type="button" onClick={saveHtmlFromModal}>保存</button></div>
+              <div className="modal-body"><TextArea id="nacos-html-source" value={htmlSource} onChange={(event) => setHtmlSource(event.target.value)} spellCheck={false} /></div>
+              <div className="modal-footer"><Button className="nacos-btn nacos-btn-secondary" htmlType="button" onClick={() => setHtmlModalOpen(false)}>取消</Button><Button className="nacos-btn nacos-btn-primary" htmlType="button" onClick={saveHtmlFromModal}>保存</Button></div>
             </div>
           </div>
         ) : null}
@@ -546,7 +554,7 @@ export function NacosMessagesPage() {
                 </div>
                 <pre id="nacos-msg-json-preview-content" dangerouslySetInnerHTML={{ __html: jsonPreviewHtml }} />
               </div>
-              <div className="modal-footer"><button className="nacos-btn nacos-btn-secondary" type="button" onClick={() => setJsonPreviewOpen(false)}>取消</button><button className="nacos-btn nacos-btn-primary" type="button" onClick={() => void doPublish()} disabled={publishing}>确认发布</button></div>
+              <div className="modal-footer"><Button className="nacos-btn nacos-btn-secondary" htmlType="button" onClick={() => setJsonPreviewOpen(false)}>取消</Button><Button className="nacos-btn nacos-btn-primary" htmlType="button" onClick={() => void doPublish()} disabled={publishing} loading={publishing}>确认发布</Button></div>
             </div>
           </div>
         ) : null}

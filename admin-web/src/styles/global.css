@@ -8,6 +8,7 @@
 @import "./pages/feature-flags.css";
 @import "./pages/banner-config.css";
 @import "./pages/nacos.css";
+@import "./pages/nacos-campaigns-legacy.css";
 @import "./pages/nacos-messages-legacy.css";
 @import "./pages/binance-square.css";
 @import "./pages/overview.css";
