@@ -17,6 +17,7 @@ const execAsync = promisify(exec);
 const overviewStatsRouter = require("./stats-routes/overview");
 const genericStatsRouter = require("./stats-routes/generic-stats");
 const adminAuditRouter = require("./stats-routes/admin-audit");
+const vipListsRouter = require("./stats-routes/vip-lists");
 const { logAdminAction } = require("./stats-routes/shared");
 
 const router = express.Router();
@@ -251,6 +252,7 @@ router.get("/", async (req, res) => {
 });
 router.use(overviewStatsRouter);
 router.use(adminAuditRouter);
+router.use(vipListsRouter);
 router.use(genericStatsRouter);
 
 /**

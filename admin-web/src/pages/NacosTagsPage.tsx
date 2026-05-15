@@ -6,7 +6,9 @@ import {
   Input,
   Modal,
   Popconfirm,
+  Segmented,
   Space,
+  Tag,
   Typography,
   message,
 } from "antd";
@@ -140,6 +142,8 @@ export function NacosTagsPage() {
 
   const hasChanges = dirty || stringifyConfig(config) !== stringifyConfig(originalConfig);
   const selectedTags = selectedHandle ? config[selectedHandle] || [] : [];
+  const totalHandles = Object.keys(config).length;
+  const totalTags = Object.values(config).reduce((sum, tags) => sum + (Array.isArray(tags) ? tags.filter(Boolean).length : 0), 0);
 
   const filteredEntries = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -293,16 +297,24 @@ export function NacosTagsPage() {
   return (
     <PermissionGuard permission="nacos-tags">
       {contextHolder}
-      <PageSection title="内置标签配置" description="可视化编辑 Nacos 配置：xhunt_built_in_tag / xhunt_built_in_tag_en。">
+      <PageSection title="内置标签配置" description="可视化编辑 xhunt_built_in_tag / xhunt_built_in_tag_en。">
         <div className="nacos-tags-container">
           <div className="nacos-tags-toolbar">
             <div className="nacos-tags-toolbar-left">
-              <Space.Compact>
-                <Button type={lang === "zh" ? "primary" : "default"} onClick={() => switchLang("zh")}>中文</Button>
-                <Button type={lang === "en" ? "primary" : "default"} onClick={() => switchLang("en")}>English</Button>
-              </Space.Compact>
-              <Text type="secondary">dataId: <Text code>{DATA_IDS[lang]}</Text></Text>
-              <Text type="secondary">group: <Text code>DEFAULT_GROUP</Text></Text>
+              <Segmented
+                size="small"
+                value={lang}
+                options={[
+                  { label: "中文", value: "zh" },
+                  { label: "English", value: "en" },
+                ]}
+                onChange={(value) => switchLang(value as TagLang)}
+              />
+              <span className="nacos-tags-meta-pill">dataId: <Text code>{DATA_IDS[lang]}</Text></span>
+              <span className="nacos-tags-meta-pill">group: <Text code>DEFAULT_GROUP</Text></span>
+              <Tag color={hasChanges ? "orange" : "green"} className="nacos-tags-status-tag">
+                {hasChanges ? "有未发布修改" : "已同步"}
+              </Tag>
             </div>
             <Space wrap size={6}>
               <Button icon={<ReloadOutlined />} onClick={reload} loading={query.isFetching}>刷新</Button>
@@ -312,6 +324,21 @@ export function NacosTagsPage() {
               </Popconfirm>
               <Button type="primary" icon={<SendOutlined />} disabled={!hasChanges} loading={publishMutation.isPending} onClick={openPublishPreview}>发布</Button>
             </Space>
+          </div>
+
+          <div className="nacos-tags-stats">
+            <div className="nacos-tags-stat-card">
+              <span>Handle 总数</span>
+              <strong>{totalHandles}</strong>
+            </div>
+            <div className="nacos-tags-stat-card">
+              <span>标签总数</span>
+              <strong>{totalTags}</strong>
+            </div>
+            <div className="nacos-tags-stat-card">
+              <span>当前语言</span>
+              <strong>{lang === "zh" ? "中文" : "EN"}</strong>
+            </div>
           </div>
 
           {query.isError ? <Alert style={{ marginBottom: 12 }} type="error" showIcon message="加载标签配置失败" /> : null}
@@ -334,7 +361,7 @@ export function NacosTagsPage() {
               <div className="nacos-tags-list">
                 {filteredEntries.length ? filteredEntries.map(([handle, tags]) => {
                   const tagList = Array.isArray(tags) ? tags : [];
-                  const preview = tagList.slice(0, 3).join("、") + (tagList.length > 3 ? " ..." : "");
+                  const previewTags = tagList.slice(0, 3);
                   const active = handle === selectedHandle;
                   return (
                     <button
@@ -346,7 +373,10 @@ export function NacosTagsPage() {
                       <span className="nacos-tags-item-count">{tagList.length}</span>
                       <span className="nacos-tags-item-main">
                         <span className="nacos-tags-item-handle">{handle}</span>
-                        <span className="nacos-tags-item-preview">{preview || "无标签"}</span>
+                        <span className="nacos-tags-item-preview">
+                          {previewTags.length ? previewTags.map((item) => <span className="nacos-tags-mini-chip" key={`${handle}-${item}`}>{item}</span>) : "无标签"}
+                          {tagList.length > 3 ? <span className="nacos-tags-more-chip">+{tagList.length - 3}</span> : null}
+                        </span>
                       </span>
                     </button>
                   );
@@ -358,7 +388,7 @@ export function NacosTagsPage() {
               <div className="nacos-tags-panel-header">
                 <span>编辑标签</span>
                 <span className="nacos-tags-editor-hint">
-                  {selectedHandle ? `正在编辑: ${selectedHandle}` : "选择左侧 handle 开始编辑"}
+                  {selectedHandle ? <Tag color="blue">{selectedTags.length} 个标签</Tag> : "选择左侧 handle 开始编辑"}
                 </span>
               </div>
 
@@ -385,16 +415,26 @@ export function NacosTagsPage() {
                     <div className="nacos-tags-list-editor">
                       {selectedTags.length ? selectedTags.map((tag, index) => (
                         <div className="nacos-tags-input-row" key={`${selectedHandle}-${index}`}>
+                          <span className="nacos-tags-input-index">{index + 1}</span>
                           <Input
                             value={tag}
                             placeholder="输入标签内容..."
                             onChange={(event) => updateTag(index, event.target.value)}
                           />
-                          <Button danger onClick={() => removeTag(index)}>删除</Button>
+                          <Button danger icon={<DeleteOutlined />} onClick={() => removeTag(index)} />
                         </div>
                       )) : <div className="nacos-tags-tag-empty">暂无标签，点击下方按钮添加</div>}
                     </div>
-                    <Button size="small" onClick={addTag}>+ 添加标签</Button>
+                    <Button className="nacos-tags-add-tag-btn" size="small" icon={<PlusOutlined />} onClick={addTag}>添加标签</Button>
+                  </div>
+
+                  <div className="nacos-tags-chip-preview-section">
+                    <div className="nacos-tags-preview-header">标签效果预览</div>
+                    <div className="nacos-tags-chip-preview">
+                      {selectedTags.filter(Boolean).length ? selectedTags.filter(Boolean).map((tag, index) => (
+                        <span className="nacos-tags-preview-chip" key={`${tag}-${index}`}>{tag}</span>
+                      )) : <span className="nacos-tags-preview-empty-text">暂无可预览标签</span>}
+                    </div>
                   </div>
 
                   <div className="nacos-tags-preview-section">
