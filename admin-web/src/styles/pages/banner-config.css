@@ -1,0 +1,87 @@
+.banner-config-alert.ant-alert {
+  margin-bottom: 14px;
+  border-color: #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+}
+
+.banner-config-summary {
+  margin-bottom: 14px;
+}
+
+.banner-config-summary .ant-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 58px;
+}
+
+.banner-config-summary strong {
+  color: #0f172a;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.banner-config-table .ant-table-cell {
+  vertical-align: middle;
+}
+
+.banner-preview-stack {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.banner-preview-panel {
+  position: relative;
+  min-height: 62px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.banner-preview-panel .ant-image,
+.banner-preview-panel img {
+  display: block;
+  width: 100%;
+  height: 62px;
+  object-fit: cover;
+}
+
+.banner-preview-label {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  z-index: 1;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.banner-preview-empty {
+  display: grid;
+  place-items: center;
+  height: 62px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.banner-form-card.ant-card {
+  margin-bottom: 14px;
+  border-radius: 12px;
+}
+
+.banner-form-card .ant-card-head {
+  min-height: 40px;
+}
+
+@media (max-width: 720px) {
+  .banner-preview-stack {
+    grid-template-columns: 1fr;
+  }
+}

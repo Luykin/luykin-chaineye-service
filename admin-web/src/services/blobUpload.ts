@@ -16,6 +16,7 @@ export interface AdminImageUploadResult {
 interface UploadAdminImageOptions {
   purpose?: string;
   directory?: string;
+  maxSizeMb?: number;
   onProgress?: (progress: { loaded: number; total: number; percentage: number }) => void;
 }
 
@@ -61,7 +62,7 @@ export function validateAdminImageFile(file: File, maxSizeMb = ADMIN_IMAGE_MAX_S
 }
 
 export async function uploadAdminImage(file: File, options: UploadAdminImageOptions = {}) {
-  validateAdminImageFile(file);
+  validateAdminImageFile(file, options.maxSizeMb);
 
   const directory = sanitizePathSegment(options.directory || ADMIN_IMAGE_UPLOAD_PREFIX);
   const pathname = `${directory}/${sanitizeFileName(file)}`;
@@ -76,6 +77,7 @@ export async function uploadAdminImage(file: File, options: UploadAdminImageOpti
       originalName: file.name,
       size: file.size,
       contentType: file.type,
+      maxSizeMb: options.maxSizeMb || ADMIN_IMAGE_MAX_SIZE_MB,
     }),
     headers: {
       "X-Requested-With": "XMLHttpRequest",

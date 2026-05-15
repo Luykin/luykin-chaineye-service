@@ -6,6 +6,7 @@
 @import "./layout/sidebar.css";
 @import "./layout/top-nav.css";
 @import "./pages/feature-flags.css";
+@import "./pages/banner-config.css";
 @import "./pages/nacos.css";
 @import "./pages/nacos-messages-legacy.css";
 @import "./pages/binance-square.css";

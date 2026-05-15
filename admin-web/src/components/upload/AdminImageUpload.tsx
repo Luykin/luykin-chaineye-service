@@ -42,6 +42,7 @@ export function AdminImageUpload({
       const blob = await uploadAdminImage(file, {
         purpose,
         directory,
+        maxSizeMb,
         onProgress: (event) => {
           setProgress(event.percentage);
           options.onProgress?.({ percent: event.percentage });

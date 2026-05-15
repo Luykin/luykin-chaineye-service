@@ -38,6 +38,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/nacos-campaigns", icon: <LegacySidebarIcon name="target" />, label: "活动配置", permission: "nacos_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-tags", icon: <LegacySidebarIcon name="tag" />, label: "标签配置", permission: "nacos-tags", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/feature-flags", icon: <LegacySidebarIcon name="toggle" />, label: "功能开关", permission: "feature_flags_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
+  { key: "/banner-config", icon: <LegacySidebarIcon name="square" />, label: "Banner配置", permission: "feature_flags_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/redis-management", icon: <LegacySidebarIcon name="database" />, label: "Redis管理", permission: "redis-management", group: "main", sidebarGroup: "dev", implemented: true, section: "system", superOnly: true },
   { key: "/llm-test", icon: <LegacySidebarIcon name="cpu" />, label: "LLM测试", permission: "llm-test", group: "main", sidebarGroup: "dev", implemented: true, section: "system", superOnly: true },
   { key: "/admin-users", icon: <LegacySidebarIcon name="user" />, label: "管理员列表", permission: "admin-users", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },

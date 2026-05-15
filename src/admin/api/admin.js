@@ -26,7 +26,6 @@ const LINK_SECRET = process.env.SUPABASE_LINK_SECRET || "change-me-link";
 const ADMIN_BLOB_PREFIX = (process.env.ADMIN_BLOB_PREFIX || "admin-images")
   .replace(/^\/+|\/+$/g, "") || "admin-images";
 const ADMIN_BLOB_MAX_SIZE_MB = Math.max(1, Number(process.env.ADMIN_BLOB_MAX_SIZE_MB || 10));
-const ADMIN_BLOB_MAX_SIZE_BYTES = Math.round(ADMIN_BLOB_MAX_SIZE_MB * 1024 * 1024);
 const ADMIN_BLOB_ALLOWED_CONTENT_TYPES = (process.env.ADMIN_BLOB_ALLOWED_CONTENT_TYPES || "image/jpeg,image/png,image/webp,image/gif")
   .split(",")
   .map((item) => item.trim())
@@ -537,6 +536,11 @@ router.post("/uploads/blob", async (req, res) => {
 
         const safePathname = assertValidBlobPath(pathname);
         const payload = parseClientPayload(clientPayload);
+        const requestedMaxSizeMb = Number(payload.maxSizeMb || ADMIN_BLOB_MAX_SIZE_MB);
+        const purposeMaxSizeMb = payload.purpose === "banner-image" ? 3 : ADMIN_BLOB_MAX_SIZE_MB;
+        const maximumSizeInBytes = Math.round(
+          Math.max(1, Math.min(requestedMaxSizeMb, purposeMaxSizeMb, ADMIN_BLOB_MAX_SIZE_MB)) * 1024 * 1024
+        );
         try {
           await XhuntAdminAuditLog.create({
             adminId: currentAdmin.id,
@@ -553,7 +557,7 @@ router.post("/uploads/blob", async (req, res) => {
 
         return {
           allowedContentTypes: ADMIN_BLOB_ALLOWED_CONTENT_TYPES,
-          maximumSizeInBytes: ADMIN_BLOB_MAX_SIZE_BYTES,
+          maximumSizeInBytes,
           addRandomSuffix: true,
           cacheControlMaxAge: 60 * 60 * 24 * 30,
           tokenPayload: JSON.stringify({

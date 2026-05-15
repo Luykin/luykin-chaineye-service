@@ -1,4 +1,19 @@
+export interface AdBannerConfig {
+  id: string;
+  enabled: boolean;
+  type: string;
+  daily_limit: number;
+  visible_to: string[];
+  image_url_zh: string;
+  link_url_zh: string;
+  alt_text_zh: string;
+  image_url_en: string;
+  link_url_en: string;
+  alt_text_en: string;
+}
+
 export interface FeatureFlagsConfig {
+  adBanners?: AdBannerConfig[];
   flexibleTesting?: Record<string, string[]>;
   testConfig?: {
     features?: string[];

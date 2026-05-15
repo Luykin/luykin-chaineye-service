@@ -25,6 +25,7 @@ import { NacosMessagesPage } from "@/pages/NacosMessagesPage";
 import { NacosCampaignsPage } from "@/pages/NacosCampaignsPage";
 import { NacosTagsPage } from "@/pages/NacosTagsPage";
 import { FeatureFlagsPage } from "@/pages/FeatureFlagsPage";
+import { BannerConfigPage } from "@/pages/BannerConfigPage";
 import { RedisManagementPage } from "@/pages/RedisManagementPage";
 import { LlmTestPage } from "@/pages/LlmTestPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
@@ -55,6 +56,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "nacos-campaigns": <NacosCampaignsPage />,
   "nacos-tags": <NacosTagsPage />,
   "feature-flags": <FeatureFlagsPage />,
+  "banner-config": <BannerConfigPage />,
   "redis-management": <RedisManagementPage />,
   "llm-test": <LlmTestPage />,
   "admin-users": <AdminUsersPage />,
