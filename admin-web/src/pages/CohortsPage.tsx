@@ -70,21 +70,37 @@ function getDayRetention(record: DailyCohortItem, day: number) {
 
 export function CohortsPage() {
   const [range, setRange] = useState<[Dayjs, Dayjs]>(getDefaultRange());
+  const [submittedParams, setSubmittedParams] = useState<{
+    startDate: string;
+    endDate: string;
+  } | null>(null);
+  const [queryVersion, setQueryVersion] = useState(0);
 
   const params = useMemo(
     () => ({
       startDate: range[0].format("YYYY-MM-DD"),
       endDate: range[1].format("YYYY-MM-DD"),
     }),
-    [range]
+    [range],
   );
 
   const query = useQuery({
-    queryKey: ["daily-cohorts", params.startDate, params.endDate],
-    queryFn: () => fetchDailyCohorts(params),
+    queryKey: [
+      "daily-cohorts",
+      submittedParams?.startDate,
+      submittedParams?.endDate,
+      queryVersion,
+    ],
+    queryFn: () => fetchDailyCohorts(submittedParams || params),
+    enabled: !!submittedParams,
   });
 
-  const data = query.data?.data;
+  const data = submittedParams ? query.data?.data : undefined;
+
+  function submitQuery() {
+    setSubmittedParams(params);
+    setQueryVersion((version) => version + 1);
+  }
 
   const columns: ColumnsType<DailyCohortItem> = [
     {
@@ -120,7 +136,9 @@ export function CohortsPage() {
         return (
           <Space direction="vertical" size={2}>
             <Typography.Text>{active}</Typography.Text>
-            <Tag color={getRetentionColor(retention)}>{formatPercent(retention)}</Tag>
+            <Tag color={getRetentionColor(retention)}>
+              {formatPercent(retention)}
+            </Tag>
           </Space>
         );
       },
@@ -144,12 +162,17 @@ export function CohortsPage() {
                 }}
                 allowClear={false}
               />
-              <Button type="primary" onClick={() => query.refetch()} loading={query.isFetching}>
+              <Button
+                type="primary"
+                onClick={submitQuery}
+                loading={query.isFetching}
+              >
                 查询
               </Button>
               <Button
                 onClick={() => {
                   setRange(getDefaultRange());
+                  setSubmittedParams(null);
                 }}
               >
                 重置为最近 8 天
@@ -169,7 +192,15 @@ export function CohortsPage() {
                 scroll={{ x: 1280, y: TABLE_MAX_HEIGHT }}
                 pagination={false}
                 locale={{
-                  emptyText: <Empty description="当前日期范围暂无留存数据" />,
+                  emptyText: (
+                    <Empty
+                      description={
+                        submittedParams
+                          ? "当前日期范围暂无留存数据"
+                          : "选择日期范围后点击查询"
+                      }
+                    />
+                  ),
                 }}
               />
             </Card>
