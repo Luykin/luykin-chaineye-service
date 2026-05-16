@@ -1,32 +1,18 @@
-name: Deploy to AWS
+name: Deploy to AWS (Static Keys)
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deploy environment'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-          - production
-          - staging
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: us-west-1
   ECR_REPOSITORY: luykin-chaineye-service
-  ECS_CLUSTER: luykin-chaineye-cluster
-  ECS_SERVICE: luykin-chaineye-service
-  ECS_TASK_FAMILY: luykin-chaineye-task
 
 jobs:
   build-and-push:
     name: Build and Push to ECR
     runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
     
     steps:
       - name: Checkout
@@ -35,12 +21,18 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Create ECR Repo (if not exists)
+        run: |
+          aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} || \
+          aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
 
       - name: Generate Image Tag
         id: meta
@@ -59,103 +51,9 @@ jobs:
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.version }}
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
 
-      - name: Save Image Artifact
-        run: |
-          docker save ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.version }} \
-            | gzip > image-artifact.tar.gz
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image
-          path: image-artifact.tar.gz
-          retention-days: 7
-
-  deploy:
-    name: Deploy to ECS
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    environment: ${{ github.event.inputs.environment || 'production' }}
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Render ECS Task Definition
-        run: |
-          cat > task-definition.json << 'TASKDEF'
-          {
-            "family": "${{ env.ECS_TASK_FAMILY }}",
-            "networkMode": "awsvpc",
-            "requiresCompatibilities": ["FARGATE"],
-            "cpu": "1024",
-            "memory": "2048",
-            "executionRoleArn": "${{ secrets.ECS_EXECUTION_ROLE_ARN }}",
-            "taskRoleArn": "${{ secrets.ECS_TASK_ROLE_ARN }}",
-            "containerDefinitions": [
-              {
-                "name": "api",
-                "image": "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build-and-push.outputs.image_tag }}",
-                "portMappings": [
-                  { "containerPort": 3000, "protocol": "tcp" }
-                ],
-                "environment": [
-                  { "name": "NODE_ENV", "value": "production" },
-                  { "name": "AWS_REGION", "value": "${{ env.AWS_REGION }}" }
-                ],
-                "logConfiguration": {
-                  "logDriver": "awslogs",
-                  "options": {
-                    "awslogs-group": "/ecs/${{ env.ECS_TASK_FAMILY }}",
-                    "awslogs-region": "${{ env.AWS_REGION }}",
-                    "awslogs-stream-prefix": "api"
-                  }
-                },
-                "healthCheck": {
-                  "command": ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"],
-                  "interval": 30,
-                  "timeout": 5,
-                  "retries": 3,
-                  "startPeriod": 30
-                }
-              }
-            ]
-          }
-          TASKDEF
-
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: task-definition.json
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-
-  notify:
-    name: Notify Result
-    runs-on: ubuntu-latest
-    needs: deploy
-    if: always()
-    steps:
-      - name: Success Notification
-        if: needs.deploy.result == 'success'
+      - name: Deploy Summary
         run: |
           echo "=== DEPLOY CONCLUIDO ==="
-          echo "Image: ${{ needs.build-and-push.outputs.image_tag }}"
+          echo "Image: ${{ steps.meta.outputs.version }}"
+          echo "ECR: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
           echo "Region: ${{ env.AWS_REGION }}"
-      
-      - name: Failure Notification
-        if: needs.deploy.result == 'failure'
-        run: |
-          echo "=== DEPLOY FALHOU ==="
-          echo "Verifique os logs no GitHub Actions e AWS CloudWatch"
