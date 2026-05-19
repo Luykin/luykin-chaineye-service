@@ -38,6 +38,11 @@ function sumDataset(dataset: VersionStatsDataset) {
   return dataset.data.reduce((sum, value) => sum + Number(value || 0), 0);
 }
 
+function displayVersionLabel(value: string) {
+  if (value === "__other_versions__") return "其他版本（已聚合）";
+  return value || "未知版本";
+}
+
 export function VersionStatsPage() {
   const [timeRange, setTimeRange] = useState("30m");
   const [chartReady, setChartReady] = useState(() => typeof window !== "undefined" && !!window.Chart);
@@ -59,6 +64,7 @@ export function VersionStatsPage() {
       datasets
         .map((item) => ({
           version: item.label,
+          versionLabel: displayVersionLabel(item.label),
           total: sumDataset(item),
           color: item.borderColor || "#3b82f6",
           latest: Number(item.data[item.data.length - 1] || 0),
@@ -133,6 +139,7 @@ export function VersionStatsPage() {
       labels: formattedLabels,
       datasets: datasets.map((dataset) => ({
         ...dataset,
+        label: displayVersionLabel(dataset.label),
         borderWidth: 2,
         pointRadius: 2,
         pointHoverRadius: 5,
@@ -186,7 +193,7 @@ export function VersionStatsPage() {
     {
       title: "版本",
       dataIndex: "version",
-      render: (value, record) => <Tag color={record.color}>{value || "未知版本"}</Tag>,
+      render: (value, record) => <Tag color={value === "__other_versions__" ? "orange" : record.color}>{record.versionLabel}</Tag>,
     },
     {
       title: "请求总数",

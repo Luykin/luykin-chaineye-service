@@ -22,6 +22,11 @@ function normalizePercent(value: string | number) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function displayUrlPath(value: string) {
+  if (value === "__other_urls__") return "其他接口（已聚合）";
+  return value;
+}
+
 export function UrlStatsPage() {
   const [timeRange, setTimeRange] = useState("30m");
   const [search, setSearch] = useState("");
@@ -35,11 +40,11 @@ export function UrlStatsPage() {
   const filteredStats = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     if (!keyword) return allUrlStats;
-    return allUrlStats.filter((item) => item.urlPath.toLowerCase().includes(keyword));
+    return allUrlStats.filter((item) => `${item.urlPath} ${displayUrlPath(item.urlPath)}`.toLowerCase().includes(keyword));
   }, [allUrlStats, search]);
 
   const filteredRequests = useMemo(() => filteredStats.reduce((sum, item) => sum + Number(item.count || 0), 0), [filteredStats]);
-  const topPath = filteredStats[0]?.urlPath || "-";
+  const topPath = filteredStats[0] ? displayUrlPath(filteredStats[0].urlPath) : "-";
 
   const columns: ColumnsType<UrlStatsItem & { rank: number }> = [
     {
@@ -55,7 +60,7 @@ export function UrlStatsPage() {
       ellipsis: true,
       render: (value: string) => (
         <Typography.Text copyable className="url-stats-path" title={value}>
-          {value}
+          {value === "__other_urls__" ? <Tag color="orange">其他接口（已聚合）</Tag> : value}
         </Typography.Text>
       ),
     },
