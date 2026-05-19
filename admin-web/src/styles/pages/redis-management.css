@@ -813,3 +813,33 @@
     grid-template-columns: 1fr;
   }
 }
+
+.redis-config-console {
+  margin-top: 24px;
+}
+
+.redis-config-console.is-collapsed .config-runtime-strip,
+.redis-config-console.is-collapsed .config-grid {
+  display: none;
+}
+
+.redis-config-console .config-collapsed-note {
+  padding: 14px 24px 18px;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.58);
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+
+.redis-config-console .config-preset-input {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1.2fr);
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .redis-config-console .config-preset-input {
+    grid-template-columns: 1fr;
+  }
+}

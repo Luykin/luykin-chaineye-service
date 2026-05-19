@@ -53,6 +53,7 @@ const REDIS_CONFIG_CATALOG = [
     key: "save",
     label: "RDB 快照规则",
     type: "text",
+    options: ["", "900 1", "900 1 300 10", "3600 1 300 100 60 10000"],
     recommendedValue: "",
     placeholder: "空=关闭；如 900 1",
     risk: "high",

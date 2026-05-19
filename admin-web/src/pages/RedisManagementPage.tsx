@@ -84,6 +84,7 @@ export function RedisManagementPage() {
   const [info, setInfo] = useState<RedisInfo | null>(null);
   const [configData, setConfigData] = useState<RedisConfigData | null>(null);
   const [configInputs, setConfigInputs] = useState<Record<string, string>>({});
+  const [configOpen, setConfigOpen] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
   const [savingConfigKey, setSavingConfigKey] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState("");
@@ -335,73 +336,6 @@ export function RedisManagementPage() {
           }, [])}
         </div>
 
-        <div className="redis-config-console">
-          <div className="config-hero">
-            <div>
-              <span className="config-eyebrow">Runtime tuning</span>
-              <h3>Redis 运行配置</h3>
-              <p>这些配置会直接影响 Redis CPU、内存和持久化行为。监控数据可丢，业务缓存优先。</p>
-            </div>
-            <div className="config-scoreboard">
-              <div><strong>{configSummary.matched}</strong><span>符合建议</span></div>
-              <div><strong>{configSummary.highRiskDrift}</strong><span>高风险偏离</span></div>
-              <div><strong>{configData?.runtime?.latestForkUsec ? `${Math.round(configData.runtime.latestForkUsec / 1000)}ms` : "-"}</strong><span>最近 fork</span></div>
-            </div>
-            <div className="config-actions-top">
-              <button className="redis-btn redis-btn-secondary" disabled={configLoading} onClick={loadConfig}>刷新配置</button>
-              <button className="redis-btn redis-btn-primary" disabled={configLoading || !configData?.items?.length} onClick={applyRecommendedConfig}>应用低风险建议</button>
-            </div>
-          </div>
-
-          <div className="config-runtime-strip">
-            <div className="runtime-pill"><span>当前内存</span><strong>{configData?.runtime?.usedMemoryHuman || info?.usedMemory || "-"}</strong></div>
-            <div className="runtime-pill"><span>峰值内存</span><strong>{configData?.runtime?.usedMemoryPeakHuman || info?.usedMemoryPeak || "-"}</strong></div>
-            <div className="runtime-pill"><span>Maxmemory</span><strong>{configData?.runtime?.maxmemoryHuman || "-"}</strong></div>
-            <div className="runtime-pill"><span>淘汰策略</span><strong>{configData?.runtime?.maxmemoryPolicy || "-"}</strong></div>
-            <div className={configData?.runtime?.rdbBgsaveInProgress ? "runtime-pill runtime-pill-hot" : "runtime-pill"}><span>RDB</span><strong>{configData?.runtime?.rdbBgsaveInProgress ? "BGSAVE 中" : "空闲"}</strong></div>
-            <div className={configData?.runtime?.aofRewriteInProgress ? "runtime-pill runtime-pill-hot" : "runtime-pill"}><span>AOF</span><strong>{configData?.runtime?.aofRewriteInProgress ? "Rewrite 中" : configData?.runtime?.aofEnabled ? "开启" : "关闭"}</strong></div>
-          </div>
-
-          <div className="config-grid">
-            {(configData?.items || []).map((item) => {
-              const value = configInputs[item.key] ?? "";
-              const dirty = value !== (item.value ?? "");
-              const recommended = String(item.value ?? "") === String(item.recommendedValue);
-              return (
-                <div className={`config-card config-card-${riskTone(item.risk)}`} key={item.key}>
-                  <div className="config-card-head">
-                    <div>
-                      <h4>{item.label}</h4>
-                      <code>{item.key}</code>
-                    </div>
-                    <span className={`config-risk config-risk-${riskTone(item.risk)}`}>{riskLabel(item.risk)}</span>
-                  </div>
-                  <p className="config-description">{item.description}</p>
-                  <div className="config-current-line"><span>当前</span><strong title={displayConfigValue(item.value)}>{displayConfigValue(item.value)}</strong></div>
-                  <div className="config-input-line">
-                    {item.type === "select" ? (
-                      <select className="redis-input" value={value} onChange={(e) => setConfigValue(item.key, e.target.value)}>
-                        {(item.options || []).map((option) => <option value={option} key={option}>{option}</option>)}
-                      </select>
-                    ) : (
-                      <input className="redis-input" type={item.type === "number" ? "number" : "text"} value={value} placeholder={item.placeholder} onChange={(e) => setConfigValue(item.key, e.target.value)} />
-                    )}
-                  </div>
-                  <div className="config-recommendation">
-                    <span>建议值</span>
-                    <button className="config-recommend-value" type="button" onClick={() => setConfigValue(item.key, item.recommendedValue)}>{displayConfigValue(item.recommendedValue)}</button>
-                  </div>
-                  <p className="config-note">{item.recommendation}</p>
-                  <div className="config-card-actions">
-                    <span className={recommended ? "config-status config-status-ok" : "config-status"}>{recommended ? "已符合建议" : "可优化"}</span>
-                    <button className="redis-btn redis-btn-secondary" disabled={!dirty || savingConfigKey === item.key} onClick={() => saveConfigItem(item)}>{savingConfigKey === item.key ? "保存中" : "保存"}</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
         <div className="redis-main">
           <div className="redis-panel redis-panel-query">
             <div className="panel-header"><h3>查询 Key</h3></div>
@@ -475,6 +409,86 @@ export function RedisManagementPage() {
             </div>
           )}
         </div>
+
+        <div className={`redis-config-console ${configOpen ? "is-open" : "is-collapsed"}`}>
+          <div className="config-hero">
+            <div>
+              <span className="config-eyebrow">Runtime tuning</span>
+              <h3>Redis 运行配置</h3>
+              <p>这些配置会直接影响 Redis CPU、内存和持久化行为。监控数据可丢，业务缓存优先。</p>
+            </div>
+            <div className="config-scoreboard">
+              <div><strong>{configSummary.matched}</strong><span>符合建议</span></div>
+              <div><strong>{configSummary.highRiskDrift}</strong><span>高风险偏离</span></div>
+              <div><strong>{configData?.runtime?.latestForkUsec ? `${Math.round(configData.runtime.latestForkUsec / 1000)}ms` : "-"}</strong><span>最近 fork</span></div>
+            </div>
+            <div className="config-actions-top">
+              <button className="redis-btn redis-btn-secondary" onClick={() => setConfigOpen((open) => !open)}>{configOpen ? "收起配置" : "展开配置"}</button>
+              <button className="redis-btn redis-btn-secondary" disabled={configLoading} onClick={loadConfig}>刷新配置</button>
+              <button className="redis-btn redis-btn-primary" disabled={configLoading || !configData?.items?.length} onClick={applyRecommendedConfig}>应用低风险建议</button>
+            </div>
+          </div>
+
+          {!configOpen ? <div className="config-collapsed-note">配置默认折叠，避免干扰日常 Key 查询。需要调整 Redis 内存、持久化或 lazyfree 时再展开。</div> : null}
+
+          <div className="config-runtime-strip">
+            <div className="runtime-pill"><span>当前内存</span><strong>{configData?.runtime?.usedMemoryHuman || info?.usedMemory || "-"}</strong></div>
+            <div className="runtime-pill"><span>峰值内存</span><strong>{configData?.runtime?.usedMemoryPeakHuman || info?.usedMemoryPeak || "-"}</strong></div>
+            <div className="runtime-pill"><span>Maxmemory</span><strong>{configData?.runtime?.maxmemoryHuman || "-"}</strong></div>
+            <div className="runtime-pill"><span>淘汰策略</span><strong>{configData?.runtime?.maxmemoryPolicy || "-"}</strong></div>
+            <div className={configData?.runtime?.rdbBgsaveInProgress ? "runtime-pill runtime-pill-hot" : "runtime-pill"}><span>RDB</span><strong>{configData?.runtime?.rdbBgsaveInProgress ? "BGSAVE 中" : "空闲"}</strong></div>
+            <div className={configData?.runtime?.aofRewriteInProgress ? "runtime-pill runtime-pill-hot" : "runtime-pill"}><span>AOF</span><strong>{configData?.runtime?.aofRewriteInProgress ? "Rewrite 中" : configData?.runtime?.aofEnabled ? "开启" : "关闭"}</strong></div>
+          </div>
+
+          <div className="config-grid">
+            {(configData?.items || []).map((item) => {
+              const value = configInputs[item.key] ?? "";
+              const dirty = value !== (item.value ?? "");
+              const recommended = String(item.value ?? "") === String(item.recommendedValue);
+              return (
+                <div className={`config-card config-card-${riskTone(item.risk)}`} key={item.key}>
+                  <div className="config-card-head">
+                    <div>
+                      <h4>{item.label}</h4>
+                      <code>{item.key}</code>
+                    </div>
+                    <span className={`config-risk config-risk-${riskTone(item.risk)}`}>{riskLabel(item.risk)}</span>
+                  </div>
+                  <p className="config-description">{item.description}</p>
+                  <div className="config-current-line"><span>当前</span><strong title={displayConfigValue(item.value)}>{displayConfigValue(item.value)}</strong></div>
+                  <div className="config-input-line">
+                    {item.type === "select" ? (
+                      <select className="redis-input" value={value} onChange={(e) => setConfigValue(item.key, e.target.value)}>
+                        {(item.options || []).map((option) => <option value={option} key={option}>{displayConfigValue(option)}</option>)}
+                      </select>
+                    ) : item.options?.length ? (
+                      <div className="config-preset-input">
+                        <select className="redis-input" value={item.options.includes(value) ? value : "__custom__"} onChange={(e) => { if (e.target.value !== "__custom__") setConfigValue(item.key, e.target.value); }}>
+                          {item.options.map((option) => <option value={option} key={option}>{displayConfigValue(option)}</option>)}
+                          <option value="__custom__">自定义</option>
+                        </select>
+                        <input className="redis-input" type={item.type === "number" ? "number" : "text"} value={value} placeholder={item.placeholder} onChange={(e) => setConfigValue(item.key, e.target.value)} />
+                      </div>
+                    ) : (
+                      <input className="redis-input" type={item.type === "number" ? "number" : "text"} value={value} placeholder={item.placeholder} onChange={(e) => setConfigValue(item.key, e.target.value)} />
+                    )}
+                  </div>
+                  <div className="config-recommendation">
+                    <span>建议值</span>
+                    <button className="config-recommend-value" type="button" onClick={() => setConfigValue(item.key, item.recommendedValue)}>{displayConfigValue(item.recommendedValue)}</button>
+                  </div>
+                  <p className="config-note">{item.recommendation}</p>
+                  <div className="config-card-actions">
+                    <span className={recommended ? "config-status config-status-ok" : "config-status"}>{recommended ? "已符合建议" : "可优化"}</span>
+                    <button className="redis-btn redis-btn-secondary" disabled={!dirty || savingConfigKey === item.key} onClick={() => saveConfigItem(item)}>{savingConfigKey === item.key ? "保存中" : "保存"}</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+
 
         <Modal title="编辑 Value" open={editOpen} onCancel={() => setEditOpen(false)} onOk={handleUpdate} okText="保存" cancelText="取消" width={620}>
           <div className="form-row"><label>Key</label><div className="form-static">{current?.key}</div></div>
