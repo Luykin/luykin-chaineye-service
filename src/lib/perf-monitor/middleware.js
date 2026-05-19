@@ -29,7 +29,7 @@ function extractValue(req, sourceConfig) {
   }
 }
 
-async function flushBuffers(redisClient) {
+async function flushBuffers(redisClient, options = {}) {
   if (flushInProgress || eventsBuffer.length === 0) return;
   flushInProgress = true;
   const eventsToPush = eventsBuffer.splice(0, eventsBuffer.length);
@@ -40,7 +40,7 @@ async function flushBuffers(redisClient) {
       eventsToPush.map(JSON.stringify)
     );
 
-    if (eventsToPush.length > 0 && config.logSuccess === true) {
+    if (eventsToPush.length > 0 && options.logSuccess === true) {
       console.log(
         `[perf-monitor-success] Flushed ${eventsToPush.length} events to Redis queue.`
       );
@@ -68,12 +68,12 @@ function createPerfMiddleware(config) {
     clearInterval(intervalId);
   }
 
-  intervalId = setInterval(() => flushBuffers(redisClient), flushIntervalMs);
+  intervalId = setInterval(() => flushBuffers(redisClient, config), flushIntervalMs);
 
   const gracefulShutdown = async () => {
     console.log("[perf-monitor] Flushing buffers before exit...");
     clearInterval(intervalId);
-    await flushBuffers(redisClient);
+    await flushBuffers(redisClient, config);
   };
 
   process.on("SIGINT", gracefulShutdown);
