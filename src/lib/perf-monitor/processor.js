@@ -53,6 +53,7 @@ class PerfDataProcessor {
     const metricsByWindow = {};
     const metricsMulti = this.redisClient.multi();
     const tracesMulti = this.redisClient.multi();
+    let hasTraceCommands = false;
 
     for (const record of records) {
       try {
@@ -101,6 +102,7 @@ class PerfDataProcessor {
           // Corrected: zAdd for redis v4 expects an array of members
           tracesMulti.zAdd(indexKey, [{ score: event.ts, value: scatterPoint }]);
           tracesMulti.expire(indexKey, this.traceConfig.retentionHours * 3600);
+          hasTraceCommands = true;
         }
 
         // --- 3. Process Detailed Trace (only if detail exists) ---
@@ -124,6 +126,7 @@ class PerfDataProcessor {
 
           tracesMulti.hSet(detailKey, stringifiedDetailData);
           tracesMulti.expire(detailKey, this.traceConfig.retentionHours * 3600);
+          hasTraceCommands = true;
         }
       } catch (e) {
         console.warn("[perf-monitor] Failed to parse event record:", record, e);
@@ -132,6 +135,7 @@ class PerfDataProcessor {
 
     // --- Commit Aggregated Metrics to Redis ---
     const metricsRetentionSeconds = this.metricsConfig.retentionHours * 3600;
+    let hasMetricsCommands = false;
     for (const [ts, metrics] of Object.entries(metricsByWindow)) {
       const key = `perf:metrics:${ts}`;
       metricsMulti.hIncrBy(key, "request_count", metrics.request_count);
@@ -140,18 +144,23 @@ class PerfDataProcessor {
         metricsMulti.hIncrBy(key, `status_${statusGroup}`, count);
       }
       metricsMulti.expire(key, metricsRetentionSeconds);
+      hasMetricsCommands = true;
     }
 
     // --- Finalize and clean up the queue ---
     const cleanupMulti = this.redisClient.multi();
     cleanupMulti.lTrim("perf:events:queue", 0, -records.length - 1);
 
-    // Execute all batched commands in parallel
-    await Promise.all([
-      metricsMulti.exec(),
-      tracesMulti.exec(),
-      cleanupMulti.exec(),
-    ]);
+    // Execute all batched commands in parallel.
+    // trace 写入默认是采样的，可能没有任何命令；避免空 multi 在不同 redis 客户端版本中的兼容风险。
+    const execPromises = [cleanupMulti.exec()];
+    if (hasMetricsCommands) {
+      execPromises.push(metricsMulti.exec());
+    }
+    if (hasTraceCommands) {
+      execPromises.push(tracesMulti.exec());
+    }
+    await Promise.all(execPromises);
 
     if (records.length > 0 && this.logSuccess) {
       console.log(

@@ -69,7 +69,7 @@ async function scanKeys(client, pattern, options = {}) {
   let cursor = "0";
   do {
     const result = await client.scan(cursor, { MATCH: pattern, COUNT: count });
-    cursor = result.cursor || result[0];
+    cursor = result.cursor ?? result[0];
     const batch = result.keys || result[1] || [];
     for (const key of batch) {
       keys.push(key);

@@ -162,11 +162,11 @@ function createRequestStatsMaintenance({
         ]);
 
         if (versionKeys.length > 0) {
-          await redisClient.del(versionKeys);
+          await deleteKeysInChunks(redisClient, versionKeys);
           versionCleanedCount += versionKeys.length;
         }
         if (urlKeys.length > 0) {
-          await redisClient.del(urlKeys);
+          await deleteKeysInChunks(redisClient, urlKeys);
           urlCleanedCount += urlKeys.length;
         }
       }
