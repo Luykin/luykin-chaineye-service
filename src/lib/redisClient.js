@@ -40,4 +40,68 @@ async function getRedisClient() {
   return redisClient;
 }
 
-module.exports = { getRedisClient };
+
+/**
+ * 使用 SCAN 按 pattern 分批查找 key，避免 KEYS 阻塞 Redis 主线程。
+ * @param {import('redis').RedisClientType} client
+ * @param {string} pattern
+ * @param {{ count?: number, maxKeys?: number }} options
+ * @returns {Promise<string[]>}
+ */
+async function scanKeys(client, pattern, options = {}) {
+  const count = options.count || 500;
+  const maxKeys = options.maxKeys || Infinity;
+  const keys = [];
+
+  if (!client) return keys;
+
+  if (typeof client.scanIterator === "function") {
+    for await (const item of client.scanIterator({ MATCH: pattern, COUNT: count })) {
+      const batch = Array.isArray(item) ? item : [item];
+      for (const key of batch) {
+        keys.push(key);
+        if (keys.length >= maxKeys) return keys;
+      }
+    }
+    return keys;
+  }
+
+  let cursor = "0";
+  do {
+    const result = await client.scan(cursor, { MATCH: pattern, COUNT: count });
+    cursor = result.cursor || result[0];
+    const batch = result.keys || result[1] || [];
+    for (const key of batch) {
+      keys.push(key);
+      if (keys.length >= maxKeys) return keys;
+    }
+  } while (String(cursor) !== "0");
+
+  return keys;
+}
+
+/**
+ * 分批删除 key，优先使用 UNLINK 异步释放内存，避免一次 DEL 参数过多。
+ * @param {import('redis').RedisClientType} client
+ * @param {string[]} keys
+ * @param {number} chunkSize
+ * @returns {Promise<number>}
+ */
+async function deleteKeysInChunks(client, keys, chunkSize = 500) {
+  if (!client || !Array.isArray(keys) || keys.length === 0) return 0;
+
+  const deleteCommand =
+    typeof client.unlink === "function"
+      ? client.unlink.bind(client)
+      : client.del.bind(client);
+
+  let deleted = 0;
+  for (let i = 0; i < keys.length; i += chunkSize) {
+    const chunk = keys.slice(i, i + chunkSize);
+    await deleteCommand(chunk);
+    deleted += chunk.length;
+  }
+  return deleted;
+}
+
+module.exports = { getRedisClient, scanKeys, deleteKeysInChunks };

@@ -212,6 +212,8 @@ async function initializeAndStartServer() {
   const { middleware: perfMiddleware, apiRouter: perfApiRouter } =
     initPerfMonitor({
       redisClient: redisClient,
+      enabled: process.env.PERF_MONITOR_ENABLED !== "false",
+      logSuccess: process.env.PERF_MONITOR_LOG_SUCCESS === "true",
       // --- Data Extraction Config ---
       requestIdFrom: ["headers", "x-request-id"],
       userIdFrom: ["headers", "x-user-id"],
@@ -222,16 +224,17 @@ async function initializeAndStartServer() {
         ua: ["get", "user-agent"],
       },
       // --- Operational Config ---
-      flushThreshold: 100,
-      flushIntervalMs: 5000,
+      flushThreshold: parseInt(process.env.PERF_MONITOR_FLUSH_THRESHOLD || "100", 10),
+      flushIntervalMs: parseInt(process.env.PERF_MONITOR_FLUSH_INTERVAL_MS || "5000", 10),
       trace: {
-        sampleRate: 0.03, // 5% of fast/successful requests
-        slowThresholdMs: 500, // Trace all requests slower than 500ms
-        retentionHours: 30,
+        sampleRate: parseFloat(process.env.PERF_MONITOR_TRACE_SAMPLE_RATE || "0.03"),
+        slowThresholdMs: parseInt(process.env.PERF_MONITOR_SLOW_THRESHOLD_MS || "500", 10),
+        retentionHours: parseInt(process.env.PERF_MONITOR_RETENTION_HOURS || "30", 10),
+        indexAllRequests: process.env.PERF_MONITOR_INDEX_ALL_REQUESTS === "true",
       },
       metrics: {
         timeWindowSecs: 60, // Aggregate metrics every minute
-        retentionHours: 30,
+        retentionHours: parseInt(process.env.PERF_MONITOR_RETENTION_HOURS || "30", 10),
       },
     });
   app.use(perfMiddleware);

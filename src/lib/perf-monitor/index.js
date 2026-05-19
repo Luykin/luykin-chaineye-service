@@ -4,6 +4,10 @@ const { createPerfMiddleware } = require("./middleware");
 const { PerfDataProcessor } = require("./processor");
 const { createApiRouter } = require("./api");
 
+function noopMiddleware(req, res, next) {
+  next();
+}
+
 /**
  * Initializes the performance monitoring module.
  *
@@ -24,6 +28,15 @@ function initPerfMonitor(config) {
     );
   }
 
+  if (config.enabled === false) {
+    const express = require("express");
+    return {
+      middleware: noopMiddleware,
+      processor: { run: async () => {} },
+      apiRouter: express.Router(),
+    };
+  }
+
   const finalConfig = {
     // Default data extraction configuration
     requestIdFrom: ["headers", "x-request-id"],
@@ -37,11 +50,13 @@ function initPerfMonitor(config) {
     // Default operational configuration
     flushThreshold: 100,
     flushIntervalMs: 5000,
+    logSuccess: false,
     ...config, // User-provided config overrides defaults
     trace: {
       sampleRate: 0.01,
       slowThresholdMs: 500,
       retentionHours: 48,
+      indexAllRequests: false,
       ...config.trace,
     },
     metrics: {

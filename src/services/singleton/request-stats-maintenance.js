@@ -1,3 +1,5 @@
+const { scanKeys, deleteKeysInChunks } = require("../../lib/redisClient");
+
 // 获取5分钟时间窗口（向下取整到5分钟）
 function get5MinWindow(date = new Date()) {
   const minutes = date.getUTCMinutes();
@@ -47,7 +49,7 @@ function createRequestStatsMaintenance({
         (async () => {
           try {
             const pattern = `version_stats:${prevWindow}:*`;
-            const keys = await redisClient.keys(pattern);
+            const keys = await scanKeys(redisClient, pattern);
 
             if (keys.length === 0) {
               console.log(`[版本统计] 上一个窗口 ${prevWindow} 没有数据，跳过`);
@@ -81,7 +83,7 @@ function createRequestStatsMaintenance({
             }
 
             if (keys.length > 0) {
-              await redisClient.del(keys);
+              await deleteKeysInChunks(redisClient, keys);
               console.log(`[版本统计] ✅ 已删除Redis中的 ${keys.length} 个key`);
             }
           } catch (error) {
@@ -91,7 +93,7 @@ function createRequestStatsMaintenance({
         (async () => {
           try {
             const pattern = `url_stats:${prevWindow}|*`;
-            const keys = await redisClient.keys(pattern);
+            const keys = await scanKeys(redisClient, pattern);
 
             if (keys.length === 0) {
               console.log(`[URL统计] 上一个窗口 ${prevWindow} 没有数据，跳过`);
@@ -128,7 +130,7 @@ function createRequestStatsMaintenance({
             }
 
             if (keys.length > 0) {
-              await redisClient.del(keys);
+              await deleteKeysInChunks(redisClient, keys);
               console.log(`[URL统计] ✅ 已删除Redis中的 ${keys.length} 个key`);
             }
           } catch (error) {
@@ -155,8 +157,8 @@ function createRequestStatsMaintenance({
         const urlPattern = `url_stats:${oldWindow}|*`;
 
         const [versionKeys, urlKeys] = await Promise.all([
-          redisClient.keys(versionPattern),
-          redisClient.keys(urlPattern),
+          scanKeys(redisClient, versionPattern),
+          scanKeys(redisClient, urlPattern),
         ]);
 
         if (versionKeys.length > 0) {

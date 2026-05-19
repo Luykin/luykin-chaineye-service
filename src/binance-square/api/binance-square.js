@@ -1,5 +1,6 @@
 const express = require("express");
 const { Op } = require("sequelize");
+const { scanKeys } = require("../../lib/redisClient");
 
 // 模型将在路由挂载时注入（通过initRoutes函数）
 let db = null;
@@ -849,7 +850,7 @@ router.get("/crawl/progress", async (req, res) => {
     const redis = await getRedisClient();
 
     // 扫描所有帖子抓取进度 key
-    const keys = await redis.keys("binance_square:task:progress:post:*");
+    const keys = await scanKeys(redis, "binance_square:task:progress:post:*");
 
     if (keys.length === 0) {
       return res.json(success({ running: false, message: "当前没有正在执行或近期的抓取任务" }));
@@ -1108,7 +1109,7 @@ router.get("/crawl/status", async (req, res) => {
     let isCrawling = false;
     let currentTask = null;
     try {
-      const keys = await req.redisClient.keys("binance_square:task:progress:post:*");
+      const keys = await scanKeys(req.redisClient, "binance_square:task:progress:post:*");
       if (keys.length > 0) {
         const progressList = [];
         for (const key of keys) {

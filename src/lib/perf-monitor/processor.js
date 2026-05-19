@@ -8,6 +8,7 @@ class PerfDataProcessor {
     this.metricsConfig = config.metrics;
     this.traceConfig = config.trace;
     this.processing = false;
+    this.logSuccess = config.logSuccess === true;
   }
 
   async run() {
@@ -78,23 +79,29 @@ class PerfDataProcessor {
         windowMetrics.status_codes[statusGroup] =
           (windowMetrics.status_codes[statusGroup] || 0) + 1;
 
-        // --- 2. Process Scatter Plot Index (for every event) ---
-        // NOTE: path/userId must always exist in scatter payload, default to empty string
-        const hourTs = new Date(event.ts).toISOString().substring(0, 13);
-        const indexKey = `perf:trace:index:${hourTs}`;
-        const scatterPoint = JSON.stringify({
-          requestId: event.requestId,
-          durationMs: event.durationMs,
-          status: event.status,
-          path: event.path,
-          userId: event.userId || event.details?.userId || "N/A",
-          // 基础索引点也记录 clientIp，便于前端按 IP 筛选/定位异常流量
-          ip: event.ip || "",
-          hasDetail: !!event.hasDetail,
-        });
-        // Corrected: zAdd for redis v4 expects an array of members
-        tracesMulti.zAdd(indexKey, [{ score: event.ts, value: scatterPoint }]);
-        tracesMulti.expire(indexKey, this.traceConfig.retentionHours * 3600);
+        // --- 2. Process Scatter Plot Index ---
+        // 默认只索引慢请求 / 错误请求 / 采样请求，避免每个请求都写 ZSET 打满 Redis CPU。
+        // 如需恢复旧行为，可设置 trace.indexAllRequests = true。
+        const shouldIndexTrace =
+          this.traceConfig.indexAllRequests === true || !!event.hasDetail;
+        if (shouldIndexTrace) {
+          // NOTE: path/userId must always exist in scatter payload, default to empty string
+          const hourTs = new Date(event.ts).toISOString().substring(0, 13);
+          const indexKey = `perf:trace:index:${hourTs}`;
+          const scatterPoint = JSON.stringify({
+            requestId: event.requestId,
+            durationMs: event.durationMs,
+            status: event.status,
+            path: event.path,
+            userId: event.userId || event.details?.userId || "N/A",
+            // 基础索引点也记录 clientIp，便于前端按 IP 筛选/定位异常流量
+            ip: event.ip || "",
+            hasDetail: !!event.hasDetail,
+          });
+          // Corrected: zAdd for redis v4 expects an array of members
+          tracesMulti.zAdd(indexKey, [{ score: event.ts, value: scatterPoint }]);
+          tracesMulti.expire(indexKey, this.traceConfig.retentionHours * 3600);
+        }
 
         // --- 3. Process Detailed Trace (only if detail exists) ---
         if (event.hasDetail && event.details) {
@@ -146,7 +153,7 @@ class PerfDataProcessor {
       cleanupMulti.exec(),
     ]);
 
-    if (records.length > 0) {
+    if (records.length > 0 && this.logSuccess) {
       console.log(
         `[perf-monitor-success-processor] Processed ${records.length} events from the queue.`
       );

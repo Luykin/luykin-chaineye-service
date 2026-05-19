@@ -5,7 +5,7 @@
 
 const apiClient = require("./api-client");
 const postParser = require("./parsers/postParser");
-const { getRedisClient } = require("../../lib/redisClient");
+const { getRedisClient, scanKeys, deleteKeysInChunks } = require("../../lib/redisClient");
 
 class BinanceSquareTaskManager {
   constructor(db) {
@@ -34,9 +34,9 @@ class BinanceSquareTaskManager {
     // 清理 Redis 中所有进度 key
     try {
       const redis = await getRedisClient();
-      const keys = await redis.keys("binance_square:task:progress:post:*");
+      const keys = await scanKeys(redis, "binance_square:task:progress:post:*");
       if (keys.length > 0) {
-        await redis.del(keys);
+        await deleteKeysInChunks(redis, keys);
         console.log(`[taskManager] 已清理 ${keys.length} 个 Redis 进度 key`);
       }
     } catch (e) {

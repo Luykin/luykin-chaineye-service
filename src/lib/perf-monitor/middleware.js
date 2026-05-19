@@ -40,8 +40,7 @@ async function flushBuffers(redisClient) {
       eventsToPush.map(JSON.stringify)
     );
 
-    // Add a success log
-    if (eventsToPush.length > 0) {
+    if (eventsToPush.length > 0 && config.logSuccess === true) {
       console.log(
         `[perf-monitor-success] Flushed ${eventsToPush.length} events to Redis queue.`
       );

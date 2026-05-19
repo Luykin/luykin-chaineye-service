@@ -50,12 +50,17 @@ const redisClient = redis.createClient({
     // --- Performance Monitor Initialization ---
     const { processor: perfProcessor } = initPerfMonitor({
       redisClient: redisClient,
+      enabled: process.env.PERF_MONITOR_ENABLED !== "false",
+      logSuccess: process.env.PERF_MONITOR_LOG_SUCCESS === "true",
       trace: {
-        retentionHours: 30,
+        sampleRate: parseFloat(process.env.PERF_MONITOR_TRACE_SAMPLE_RATE || "0.03"),
+        slowThresholdMs: parseInt(process.env.PERF_MONITOR_SLOW_THRESHOLD_MS || "500", 10),
+        retentionHours: parseInt(process.env.PERF_MONITOR_RETENTION_HOURS || "30", 10),
+        indexAllRequests: process.env.PERF_MONITOR_INDEX_ALL_REQUESTS === "true",
       },
       metrics: {
         timeWindowSecs: 60,
-        retentionHours: 30,
+        retentionHours: parseInt(process.env.PERF_MONITOR_RETENTION_HOURS || "30", 10),
       },
     });
 
