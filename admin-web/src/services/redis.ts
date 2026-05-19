@@ -26,6 +26,37 @@ export interface RedisKeyInfo {
   parsedValue?: unknown;
 }
 
+
+export interface RedisConfigItem {
+  key: string;
+  label: string;
+  type: "text" | "select" | "number";
+  options?: string[];
+  value: string | null;
+  recommendedValue: string;
+  placeholder?: string;
+  risk: "low" | "medium" | "high";
+  description: string;
+  recommendation: string;
+  isRecommended?: boolean;
+}
+
+export interface RedisConfigRuntime {
+  usedMemoryHuman?: string | null;
+  usedMemoryPeakHuman?: string | null;
+  maxmemoryHuman?: string | null;
+  maxmemoryPolicy?: string | null;
+  rdbBgsaveInProgress?: boolean;
+  aofRewriteInProgress?: boolean;
+  latestForkUsec?: number | null;
+  aofEnabled?: boolean;
+}
+
+export interface RedisConfigData {
+  items: RedisConfigItem[];
+  runtime: RedisConfigRuntime;
+}
+
 interface ApiEnvelope<T> {
   success: boolean;
   data: T;
@@ -58,5 +89,16 @@ export function deleteRedisKey(key: string) {
   return apiRequest<ApiEnvelope<unknown>>("/admin/system/redis/delete", {
     method: "DELETE",
     body: { key },
+  });
+}
+
+export function fetchRedisConfig() {
+  return apiRequest<ApiEnvelope<RedisConfigData>>("/admin/system/redis/config");
+}
+
+export function updateRedisConfig(params: { key: string; value: string }) {
+  return apiRequest<ApiEnvelope<{ key: string; before: string | null; after: string | null; rewriteResult?: string | null }>>("/admin/system/redis/config", {
+    method: "POST",
+    body: params,
   });
 }

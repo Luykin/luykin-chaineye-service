@@ -533,3 +533,283 @@
     flex-direction: column;
   }
 }
+
+.redis-config-console {
+  margin-bottom: 24px;
+  border: 1px solid #d8e0e8;
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92)),
+    radial-gradient(circle at 14% 10%, rgba(16, 185, 129, 0.12), transparent 28%);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.redis-config-console .config-hero {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto auto;
+  gap: 20px;
+  align-items: center;
+  padding: 22px 24px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.redis-config-console .config-eyebrow {
+  display: inline-flex;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.redis-config-console h3 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.redis-config-console h4 {
+  margin: 0 0 4px;
+  color: #111827;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.redis-config-console p {
+  margin: 0;
+}
+
+.redis-config-console .config-hero p {
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+
+.redis-config-console .config-scoreboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(86px, 1fr));
+  gap: 8px;
+}
+
+.redis-config-console .config-scoreboard div {
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.redis-config-console .config-scoreboard strong {
+  display: block;
+  color: #0f172a;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.redis-config-console .config-scoreboard span,
+.redis-config-console .runtime-pill span,
+.redis-config-console .config-current-line span,
+.redis-config-console .config-recommendation span {
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.redis-config-console .config-actions-top {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.redis-config-console .config-runtime-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 10px;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.56);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.redis-config-console .runtime-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.redis-config-console .runtime-pill strong {
+  color: #334155;
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redis-config-console .runtime-pill-hot {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.redis-config-console .runtime-pill-hot strong {
+  color: #b91c1c;
+}
+
+.redis-config-console .config-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  gap: 14px;
+  padding: 18px;
+}
+
+.redis-config-console .config-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 310px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.redis-config-console .config-card-warning {
+  border-color: #fde68a;
+  background: linear-gradient(180deg, #fffbeb, #ffffff 46%);
+}
+
+.redis-config-console .config-card-danger {
+  border-color: #fecaca;
+  background: linear-gradient(180deg, #fff7f7, #ffffff 46%);
+}
+
+.redis-config-console .config-card-head,
+.redis-config-console .config-current-line,
+.redis-config-console .config-recommendation,
+.redis-config-console .config-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.redis-config-console .config-card code,
+.redis-config-console .config-current-line strong,
+.redis-config-console .config-recommend-value {
+  font-family: 'SF Mono', ui-monospace, monospace;
+}
+
+.redis-config-console .config-card code {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.redis-config-console .config-risk {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.redis-config-console .config-risk-safe {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.redis-config-console .config-risk-warning {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.redis-config-console .config-risk-danger {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.redis-config-console .config-description,
+.redis-config-console .config-note {
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+.redis-config-console .config-note {
+  min-height: 58px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.redis-config-console .config-current-line strong {
+  min-width: 0;
+  color: #334155;
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redis-config-console .config-input-line .redis-input {
+  width: 100%;
+}
+
+.redis-config-console .config-recommend-value {
+  max-width: 58%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redis-config-console .config-recommend-value:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.redis-config-console .config-status {
+  color: #b45309;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.redis-config-console .config-status-ok {
+  color: #047857;
+}
+
+@media (max-width: 1200px) {
+  .redis-config-console .config-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .redis-config-console .config-actions-top {
+    justify-content: flex-start;
+  }
+
+  .redis-config-console .config-runtime-strip,
+  .redis-config-console .config-grid {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .redis-config-console .config-scoreboard,
+  .redis-config-console .config-runtime-strip,
+  .redis-config-console .config-grid {
+    grid-template-columns: 1fr;
+  }
+}

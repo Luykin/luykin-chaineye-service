@@ -3,10 +3,14 @@ import { Modal, message } from "antd";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import {
   deleteRedisKey,
+  fetchRedisConfig,
   fetchRedisInfo,
   queryRedisKey,
   scanRedisKeys,
+  updateRedisConfig,
   updateRedisKey,
+  type RedisConfigData,
+  type RedisConfigItem,
   type RedisInfo,
   type RedisKeyInfo,
 } from "@/services/redis";
@@ -57,9 +61,31 @@ function hitRate(info?: RedisInfo | null) {
   return total > 0 ? `${((hits / total) * 100).toFixed(2)}%` : "-";
 }
 
+
+function riskLabel(risk: RedisConfigItem["risk"]) {
+  if (risk === "high") return "高风险";
+  if (risk === "medium") return "需确认";
+  return "安全项";
+}
+
+function riskTone(risk: RedisConfigItem["risk"]) {
+  if (risk === "high") return "danger";
+  if (risk === "medium") return "warning";
+  return "safe";
+}
+
+function displayConfigValue(value?: string | null) {
+  if (value === null || value === undefined || value === "") return "空 / 关闭";
+  return value;
+}
+
 export function RedisManagementPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [info, setInfo] = useState<RedisInfo | null>(null);
+  const [configData, setConfigData] = useState<RedisConfigData | null>(null);
+  const [configInputs, setConfigInputs] = useState<Record<string, string>>({});
+  const [configLoading, setConfigLoading] = useState(false);
+  const [savingConfigKey, setSavingConfigKey] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState("");
   const [pattern, setPattern] = useState("");
   const [scannedKeys, setScannedKeys] = useState<string[]>([]);
@@ -83,8 +109,26 @@ export function RedisManagementPage() {
     }
   }
 
+
+  async function loadConfig() {
+    setConfigLoading(true);
+    try {
+      const resp = await fetchRedisConfig();
+      const data = resp.data || null;
+      setConfigData(data);
+      if (data?.items) {
+        setConfigInputs(Object.fromEntries(data.items.map((item) => [item.key, item.value ?? ""])));
+      }
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "加载 Redis 配置失败");
+    } finally {
+      setConfigLoading(false);
+    }
+  }
+
   useEffect(() => {
     void loadInfo();
+    void loadConfig();
   }, []);
 
   function saveHistory(key: string) {
@@ -186,6 +230,66 @@ export function RedisManagementPage() {
     localStorage.removeItem(HISTORY_KEY);
   }
 
+
+  function setConfigValue(key: string, value: string) {
+    setConfigInputs((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function saveConfigItem(item: RedisConfigItem, value = configInputs[item.key] ?? "") {
+    const run = async () => {
+      setSavingConfigKey(item.key);
+      try {
+        const resp = await updateRedisConfig({ key: item.key, value });
+        messageApi.success(`${item.label} 已更新${resp.data?.rewriteResult && String(resp.data.rewriteResult).includes("失败") ? "（但持久化写入失败，请检查 redis.conf 权限）" : ""}`);
+        await loadConfig();
+        await loadInfo();
+      } catch (error) {
+        messageApi.error(error instanceof Error ? error.message : "更新 Redis 配置失败");
+      } finally {
+        setSavingConfigKey(null);
+      }
+    };
+
+    if (item.risk === "high") {
+      Modal.confirm({
+        title: `确认修改高风险配置：${item.label}`,
+        content: `当前值：${displayConfigValue(item.value)}；新值：${displayConfigValue(value)}。该配置可能影响 Redis 持久化、数据保留或内存淘汰策略，请确认已经理解影响。`,
+        okText: "确认修改",
+        cancelText: "取消",
+        okButtonProps: { danger: true },
+        onOk: run,
+      });
+      return;
+    }
+
+    await run();
+  }
+
+  async function applyRecommendedConfig() {
+    const candidates = (configData?.items || []).filter((item) => item.risk === "low" && String(item.value ?? "") !== String(item.recommendedValue));
+    if (!candidates.length) {
+      messageApi.info("没有可自动应用的低风险建议项");
+      return;
+    }
+
+    Modal.confirm({
+      title: "应用安全建议配置",
+      content: `将更新 ${candidates.length} 个低风险配置；中/高风险配置（如 maxmemory、持久化、淘汰策略）不会自动修改。`,
+      okText: "应用建议",
+      cancelText: "取消",
+      onOk: async () => {
+        for (const item of candidates) {
+          setSavingConfigKey(item.key);
+          await updateRedisConfig({ key: item.key, value: item.recommendedValue });
+        }
+        setSavingConfigKey(null);
+        messageApi.success("已应用安全建议配置");
+        await loadConfig();
+        await loadInfo();
+      },
+    });
+  }
+
   const infoItems = useMemo(() => [
     ["版本", info?.version || "-"],
     ["模式", info?.mode || "-"],
@@ -194,6 +298,16 @@ export function RedisManagementPage() {
     ["连接", String(info?.connectedClients ?? "-")],
     ["命中率", hitRate(info)],
   ], [info]);
+
+
+  const configSummary = useMemo(() => {
+    const items = configData?.items || [];
+    return {
+      total: items.length,
+      matched: items.filter((item) => String(item.value ?? "") === String(item.recommendedValue)).length,
+      highRiskDrift: items.filter((item) => item.risk === "high" && String(item.value ?? "") !== String(item.recommendedValue)).length,
+    };
+  }, [configData]);
 
   return (
     <PermissionGuard permission="redis-management">
@@ -219,6 +333,73 @@ export function RedisManagementPage() {
             nodes.push(node);
             return nodes;
           }, [])}
+        </div>
+
+        <div className="redis-config-console">
+          <div className="config-hero">
+            <div>
+              <span className="config-eyebrow">Runtime tuning</span>
+              <h3>Redis 运行配置</h3>
+              <p>这些配置会直接影响 Redis CPU、内存和持久化行为。监控数据可丢，业务缓存优先。</p>
+            </div>
+            <div className="config-scoreboard">
+              <div><strong>{configSummary.matched}</strong><span>符合建议</span></div>
+              <div><strong>{configSummary.highRiskDrift}</strong><span>高风险偏离</span></div>
+              <div><strong>{configData?.runtime?.latestForkUsec ? `${Math.round(configData.runtime.latestForkUsec / 1000)}ms` : "-"}</strong><span>最近 fork</span></div>
+            </div>
+            <div className="config-actions-top">
+              <button className="redis-btn redis-btn-secondary" disabled={configLoading} onClick={loadConfig}>刷新配置</button>
+              <button className="redis-btn redis-btn-primary" disabled={configLoading || !configData?.items?.length} onClick={applyRecommendedConfig}>应用低风险建议</button>
+            </div>
+          </div>
+
+          <div className="config-runtime-strip">
+            <div className="runtime-pill"><span>当前内存</span><strong>{configData?.runtime?.usedMemoryHuman || info?.usedMemory || "-"}</strong></div>
+            <div className="runtime-pill"><span>峰值内存</span><strong>{configData?.runtime?.usedMemoryPeakHuman || info?.usedMemoryPeak || "-"}</strong></div>
+            <div className="runtime-pill"><span>Maxmemory</span><strong>{configData?.runtime?.maxmemoryHuman || "-"}</strong></div>
+            <div className="runtime-pill"><span>淘汰策略</span><strong>{configData?.runtime?.maxmemoryPolicy || "-"}</strong></div>
+            <div className={configData?.runtime?.rdbBgsaveInProgress ? "runtime-pill runtime-pill-hot" : "runtime-pill"}><span>RDB</span><strong>{configData?.runtime?.rdbBgsaveInProgress ? "BGSAVE 中" : "空闲"}</strong></div>
+            <div className={configData?.runtime?.aofRewriteInProgress ? "runtime-pill runtime-pill-hot" : "runtime-pill"}><span>AOF</span><strong>{configData?.runtime?.aofRewriteInProgress ? "Rewrite 中" : configData?.runtime?.aofEnabled ? "开启" : "关闭"}</strong></div>
+          </div>
+
+          <div className="config-grid">
+            {(configData?.items || []).map((item) => {
+              const value = configInputs[item.key] ?? "";
+              const dirty = value !== (item.value ?? "");
+              const recommended = String(item.value ?? "") === String(item.recommendedValue);
+              return (
+                <div className={`config-card config-card-${riskTone(item.risk)}`} key={item.key}>
+                  <div className="config-card-head">
+                    <div>
+                      <h4>{item.label}</h4>
+                      <code>{item.key}</code>
+                    </div>
+                    <span className={`config-risk config-risk-${riskTone(item.risk)}`}>{riskLabel(item.risk)}</span>
+                  </div>
+                  <p className="config-description">{item.description}</p>
+                  <div className="config-current-line"><span>当前</span><strong title={displayConfigValue(item.value)}>{displayConfigValue(item.value)}</strong></div>
+                  <div className="config-input-line">
+                    {item.type === "select" ? (
+                      <select className="redis-input" value={value} onChange={(e) => setConfigValue(item.key, e.target.value)}>
+                        {(item.options || []).map((option) => <option value={option} key={option}>{option}</option>)}
+                      </select>
+                    ) : (
+                      <input className="redis-input" type={item.type === "number" ? "number" : "text"} value={value} placeholder={item.placeholder} onChange={(e) => setConfigValue(item.key, e.target.value)} />
+                    )}
+                  </div>
+                  <div className="config-recommendation">
+                    <span>建议值</span>
+                    <button className="config-recommend-value" type="button" onClick={() => setConfigValue(item.key, item.recommendedValue)}>{displayConfigValue(item.recommendedValue)}</button>
+                  </div>
+                  <p className="config-note">{item.recommendation}</p>
+                  <div className="config-card-actions">
+                    <span className={recommended ? "config-status config-status-ok" : "config-status"}>{recommended ? "已符合建议" : "可优化"}</span>
+                    <button className="redis-btn redis-btn-secondary" disabled={!dirty || savingConfigKey === item.key} onClick={() => saveConfigItem(item)}>{savingConfigKey === item.key ? "保存中" : "保存"}</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div className="redis-main">
