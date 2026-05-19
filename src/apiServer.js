@@ -226,6 +226,10 @@ async function initializeAndStartServer() {
       // --- Operational Config ---
       flushThreshold: parseInt(process.env.PERF_MONITOR_FLUSH_THRESHOLD || "100", 10),
       flushIntervalMs: parseInt(process.env.PERF_MONITOR_FLUSH_INTERVAL_MS || "5000", 10),
+      maxBufferSize: parseInt(process.env.PERF_MONITOR_MAX_BUFFER_SIZE || "1000", 10),
+      maxQueueLength: parseInt(process.env.PERF_MONITOR_MAX_QUEUE_LENGTH || "5000", 10),
+      trimQueueToLength: parseInt(process.env.PERF_MONITOR_TRIM_QUEUE_TO_LENGTH || "1000", 10),
+      dropOnFlushError: process.env.PERF_MONITOR_DROP_ON_FLUSH_ERROR !== "false",
       trace: {
         sampleRate: parseFloat(process.env.PERF_MONITOR_TRACE_SAMPLE_RATE || "0.03"),
         slowThresholdMs: parseInt(process.env.PERF_MONITOR_SLOW_THRESHOLD_MS || "500", 10),

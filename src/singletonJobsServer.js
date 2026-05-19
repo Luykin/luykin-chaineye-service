@@ -52,6 +52,8 @@ const redisClient = redis.createClient({
       redisClient: redisClient,
       enabled: process.env.PERF_MONITOR_ENABLED !== "false",
       logSuccess: process.env.PERF_MONITOR_LOG_SUCCESS === "true",
+      maxQueueLength: parseInt(process.env.PERF_MONITOR_MAX_QUEUE_LENGTH || "5000", 10),
+      trimQueueToLength: parseInt(process.env.PERF_MONITOR_TRIM_QUEUE_TO_LENGTH || "1000", 10),
       trace: {
         sampleRate: parseFloat(process.env.PERF_MONITOR_TRACE_SAMPLE_RATE || "0.03"),
         slowThresholdMs: parseInt(process.env.PERF_MONITOR_SLOW_THRESHOLD_MS || "500", 10),

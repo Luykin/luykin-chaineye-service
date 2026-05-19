@@ -1,6 +1,7 @@
 // src/lib/perf-monitor/processor.js
 
 const BATCH_SIZE = 500; // Keep increased batch size to handle high queue pressure
+const PERF_QUEUE_KEY = "perf:events:queue";
 
 class PerfDataProcessor {
   constructor(config) {
@@ -9,6 +10,8 @@ class PerfDataProcessor {
     this.traceConfig = config.trace;
     this.processing = false;
     this.logSuccess = config.logSuccess === true;
+    this.maxQueueLength = Number(config.maxQueueLength) || 5000;
+    this.trimQueueToLength = Number(config.trimQueueToLength) || 1000;
   }
 
   async run() {
@@ -25,18 +28,39 @@ class PerfDataProcessor {
       this.processing = false;
     }
 
-    // After processing, check queue length for monitoring purposes
+    // After processing, check queue length for monitoring purposes.
+    // 性能监控优先级低：积压过大时直接裁剪旧数据，保障业务 Redis 优先。
+    await this.enforceQueueLimit();
+  }
+
+  async enforceQueueLimit() {
+    if (!this.maxQueueLength || this.maxQueueLength <= 0) return;
+
     try {
-      const queueSize = await this.redisClient.lLen("perf:events:queue");
-      const highWaterMark = 10000;
-      if (queueSize > highWaterMark) {
-        console.warn(
-          `[perf-monitor] High queue pressure detected! Events queue size: ${queueSize}. Consider increasing BATCH_SIZE or run interval.`
-        );
+      const queueSize = await this.redisClient.lLen(PERF_QUEUE_KEY);
+      if (queueSize <= this.maxQueueLength) return;
+
+      const trimToLength = Math.max(
+        0,
+        Math.min(this.trimQueueToLength, this.maxQueueLength)
+      );
+
+      if (trimToLength > 0) {
+        // LPUSH 写入新事件在左侧，保留左侧最近数据，丢弃右侧旧积压。
+        await this.redisClient.lTrim(PERF_QUEUE_KEY, 0, trimToLength - 1);
+      } else {
+        await this.redisClient.del(PERF_QUEUE_KEY);
       }
+
+      console.warn("[perf-monitor] Queue backlog trimmed", {
+        queueSize,
+        maxQueueLength: this.maxQueueLength,
+        trimToLength,
+        droppedApprox: Math.max(0, queueSize - trimToLength),
+      });
     } catch (monitoringError) {
       console.error(
-        "[perf-monitor] Failed to check queue length:",
+        "[perf-monitor] Failed to enforce queue limit:",
         monitoringError
       );
     }
@@ -44,7 +68,7 @@ class PerfDataProcessor {
 
   async processEventsQueue() {
     const records = await this.redisClient.lRange(
-      "perf:events:queue",
+      PERF_QUEUE_KEY,
       -BATCH_SIZE,
       -1
     );
@@ -149,7 +173,7 @@ class PerfDataProcessor {
 
     // --- Finalize and clean up the queue ---
     const cleanupMulti = this.redisClient.multi();
-    cleanupMulti.lTrim("perf:events:queue", 0, -records.length - 1);
+    cleanupMulti.lTrim(PERF_QUEUE_KEY, 0, -records.length - 1);
 
     // Execute all batched commands in parallel.
     // trace 写入默认是采样的，可能没有任何命令；避免空 multi 在不同 redis 客户端版本中的兼容风险。

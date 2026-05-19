@@ -3,6 +3,24 @@
 const eventsBuffer = [];
 let flushInProgress = false;
 let intervalId = null;
+let droppedEventsCount = 0;
+let lastDropLogAt = 0;
+
+const PERF_QUEUE_KEY = "perf:events:queue";
+
+function logDrop(reason, count, extra = {}) {
+  droppedEventsCount += count;
+  const now = Date.now();
+  // 降级日志最多每 30 秒输出一次，避免监控异常时进一步放大日志 IO。
+  if (now - lastDropLogAt < 30 * 1000) return;
+  lastDropLogAt = now;
+  console.warn("[perf-monitor] Dropped performance events", {
+    reason,
+    count,
+    droppedEventsCount,
+    ...extra,
+  });
+}
 
 /**
  * Extracts a value from the request object based on a configuration array.
@@ -34,9 +52,21 @@ async function flushBuffers(redisClient, options = {}) {
   flushInProgress = true;
   const eventsToPush = eventsBuffer.splice(0, eventsBuffer.length);
   try {
+    const maxQueueLength = Number(options.maxQueueLength) || 0;
+    if (maxQueueLength > 0) {
+      const queueLength = await redisClient.lLen(PERF_QUEUE_KEY);
+      if (queueLength >= maxQueueLength) {
+        logDrop("queue_over_limit_before_flush", eventsToPush.length, {
+          queueLength,
+          maxQueueLength,
+        });
+        return;
+      }
+    }
+
     // Corrected: Use camelCase lPush for redis v4 client
     await redisClient.lPush(
-      "perf:events:queue",
+      PERF_QUEUE_KEY,
       eventsToPush.map(JSON.stringify)
     );
 
@@ -47,7 +77,13 @@ async function flushBuffers(redisClient, options = {}) {
     }
   } catch (err) {
     console.warn("[perf-monitor] Buffer flush failed:", err);
-    eventsBuffer.unshift(...eventsToPush);
+    if (options.dropOnFlushError === false) {
+      eventsBuffer.unshift(...eventsToPush);
+    } else {
+      logDrop("flush_failed", eventsToPush.length, {
+        error: err?.message || String(err),
+      });
+    }
   } finally {
     flushInProgress = false;
   }
@@ -58,6 +94,7 @@ function createPerfMiddleware(config) {
     redisClient,
     flushThreshold,
     flushIntervalMs,
+    maxBufferSize,
     trace: traceConfig,
     requestIdFrom,
     userIdFrom,
@@ -91,13 +128,12 @@ function createPerfMiddleware(config) {
       const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
       const status = res.statusCode;
 
-      const MAX_BUFFER_SIZE = 10000;
-      if (eventsBuffer.length >= MAX_BUFFER_SIZE) {
-        if (Math.random() < 0.01) {
-          console.warn(
-            "[perf-monitor] Buffer is full, dropping new performance data."
-          );
-        }
+      const bufferLimit = Number(maxBufferSize) || 10000;
+      if (eventsBuffer.length >= bufferLimit) {
+        logDrop("memory_buffer_full", 1, {
+          bufferSize: eventsBuffer.length,
+          maxBufferSize: bufferLimit,
+        });
         return;
       }
 

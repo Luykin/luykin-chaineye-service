@@ -50,6 +50,10 @@ function initPerfMonitor(config) {
     // Default operational configuration
     flushThreshold: 100,
     flushIntervalMs: 5000,
+    maxBufferSize: 1000,
+    maxQueueLength: 5000,
+    trimQueueToLength: 1000,
+    dropOnFlushError: true,
     logSuccess: false,
     ...config, // User-provided config overrides defaults
     trace: {
