@@ -1,5 +1,3 @@
-const { scanKeys, deleteKeysInChunks } = require("../../lib/redisClient");
-
 // 获取5分钟时间窗口（向下取整到5分钟）
 function get5MinWindow(date = new Date()) {
   const minutes = date.getUTCMinutes();
@@ -16,6 +14,33 @@ function getPrev5MinWindow() {
   const now = new Date();
   const prev = new Date(now.getTime() - 5 * 60 * 1000);
   return get5MinWindow(prev);
+}
+
+const REQUEST_STATS_MAX_FLUSH_FIELDS = parseInt(process.env.REQUEST_STATS_MAX_FLUSH_FIELDS || "500", 10);
+
+async function readStatsHash(redisClient, key, maxFields = REQUEST_STATS_MAX_FLUSH_FIELDS) {
+  const stats = {};
+  const type = await redisClient.type(key).catch(() => "none");
+  if (type !== "hash") return stats;
+
+  // 新结构每个窗口只有一个 hash，不再 SCAN 全库。这里最多读取 maxFields 个字段，统计是低优先级，过多直接丢弃。
+  if (typeof redisClient.hScanIterator === "function") {
+    let count = 0;
+    for await (const entry of redisClient.hScanIterator(key, { COUNT: 100 })) {
+      if (!entry) continue;
+      const field = entry.field ?? entry.name ?? entry[0];
+      const value = entry.value ?? entry[1];
+      if (field !== undefined) {
+        stats[String(field)] = value;
+        count++;
+      }
+      if (count >= maxFields) break;
+    }
+    return stats;
+  }
+
+  const allStats = await redisClient.hGetAll(key);
+  return Object.fromEntries(Object.entries(allStats || {}).slice(0, maxFields));
 }
 
 function createRequestStatsMaintenance({
@@ -48,19 +73,18 @@ function createRequestStatsMaintenance({
       await Promise.all([
         (async () => {
           try {
-            const pattern = `version_stats:${prevWindow}:*`;
-            const keys = await scanKeys(redisClient, pattern);
+            const key = `version_stats:${prevWindow}`;
+            const stats = await readStatsHash(redisClient, key);
+            const entries = Object.entries(stats);
 
-            if (keys.length === 0) {
+            if (entries.length === 0) {
               console.log(`[版本统计] 上一个窗口 ${prevWindow} 没有数据，跳过`);
               return;
             }
 
             const statsData = [];
-            for (const key of keys) {
-              const count = await redisClient.get(key);
+            for (const [version, count] of entries) {
               if (count) {
-                const version = key.split(":").pop();
                 statsData.push({
                   timeWindow: new Date(prevWindow),
                   version,
@@ -82,37 +106,31 @@ function createRequestStatsMaintenance({
               );
             }
 
-            if (keys.length > 0) {
-              await deleteKeysInChunks(redisClient, keys);
-              console.log(`[版本统计] ✅ 已删除Redis中的 ${keys.length} 个key`);
-            }
+            await redisClient.del(key);
+            console.log(`[版本统计] ✅ 已删除Redis窗口 hash: ${key}`);
           } catch (error) {
             console.error("[版本统计] ❌ 处理失败:", error);
           }
         })(),
         (async () => {
           try {
-            const pattern = `url_stats:${prevWindow}|*`;
-            const keys = await scanKeys(redisClient, pattern);
+            const key = `url_stats:${prevWindow}`;
+            const stats = await readStatsHash(redisClient, key);
+            const entries = Object.entries(stats);
 
-            if (keys.length === 0) {
+            if (entries.length === 0) {
               console.log(`[URL统计] 上一个窗口 ${prevWindow} 没有数据，跳过`);
               return;
             }
 
             const statsData = [];
-            for (const key of keys) {
-              const count = await redisClient.get(key);
+            for (const [urlPath, count] of entries) {
               if (count) {
-                const separatorIndex = key.indexOf("|");
-                if (separatorIndex > 0) {
-                  const urlPath = key.substring(separatorIndex + 1);
-                  statsData.push({
-                    timeWindow: new Date(prevWindow),
-                    urlPath,
-                    requestCount: parseInt(count, 10),
-                  });
-                }
+                statsData.push({
+                  timeWindow: new Date(prevWindow),
+                  urlPath,
+                  requestCount: parseInt(count, 10),
+                });
               }
             }
 
@@ -129,10 +147,8 @@ function createRequestStatsMaintenance({
               );
             }
 
-            if (keys.length > 0) {
-              await deleteKeysInChunks(redisClient, keys);
-              console.log(`[URL统计] ✅ 已删除Redis中的 ${keys.length} 个key`);
-            }
+            await redisClient.del(key);
+            console.log(`[URL统计] ✅ 已删除Redis窗口 hash: ${key}`);
           } catch (error) {
             console.error("[URL统计] ❌ 处理失败:", error);
           }
@@ -153,22 +169,12 @@ function createRequestStatsMaintenance({
       let urlCleanedCount = 0;
 
       for (const oldWindow of oldWindows) {
-        const versionPattern = `version_stats:${oldWindow}:*`;
-        const urlPattern = `url_stats:${oldWindow}|*`;
-
-        const [versionKeys, urlKeys] = await Promise.all([
-          scanKeys(redisClient, versionPattern),
-          scanKeys(redisClient, urlPattern),
+        const [versionDeleted, urlDeleted] = await Promise.all([
+          redisClient.del(`version_stats:${oldWindow}`),
+          redisClient.del(`url_stats:${oldWindow}`),
         ]);
-
-        if (versionKeys.length > 0) {
-          await deleteKeysInChunks(redisClient, versionKeys);
-          versionCleanedCount += versionKeys.length;
-        }
-        if (urlKeys.length > 0) {
-          await deleteKeysInChunks(redisClient, urlKeys);
-          urlCleanedCount += urlKeys.length;
-        }
+        versionCleanedCount += versionDeleted;
+        urlCleanedCount += urlDeleted;
       }
 
       if (versionCleanedCount > 0 || urlCleanedCount > 0) {

@@ -138,6 +138,11 @@ class RequestStatsManager {
     this.requestCount = 0; // 当前窗口的请求计数（用于每100个请求flush）
     this.isInitialized = false;
     this.MAX_MEMORY_WINDOWS = 3; // 最多在内存中保留的时间窗口数量（当前窗口 + 前2个窗口）
+    this.REDIS_STATS_TTL_SECONDS = parseInt(process.env.REQUEST_STATS_REDIS_TTL_SECONDS || "1200", 10);
+    this.MAX_VERSION_FIELDS_PER_WINDOW = parseInt(process.env.REQUEST_STATS_MAX_VERSION_FIELDS_PER_WINDOW || "100", 10);
+    this.MAX_URL_FIELDS_PER_WINDOW = parseInt(process.env.REQUEST_STATS_MAX_URL_FIELDS_PER_WINDOW || "300", 10);
+    this.VERSION_OVERFLOW_FIELD = "__other_versions__";
+    this.URL_OVERFLOW_FIELD = "__other_urls__";
   }
 
   // 初始化
@@ -268,6 +273,18 @@ class RequestStatsManager {
     }
   }
 
+  incrementBoundedCounter(counter, field, maxFields, overflowField) {
+    if (!field) return;
+    if (!Object.prototype.hasOwnProperty.call(counter, field)) {
+      const currentFieldCount = Object.keys(counter).length;
+      if (currentFieldCount >= maxFields) {
+        counter[overflowField] = (counter[overflowField] || 0) + 1;
+        return;
+      }
+    }
+    counter[field] = (counter[field] || 0) + 1;
+  }
+
   // 将版本统计内存数据flush到Redis
   async flushVersionMemoryToRedis(timeWindow, redisClient) {
     if (!this.versionMemoryCounter[timeWindow] || !redisClient) {
@@ -276,14 +293,17 @@ class RequestStatsManager {
 
     const versions = this.versionMemoryCounter[timeWindow];
     const pipeline = redisClient.multi();
+    const key = `version_stats:${timeWindow}`;
+    let hasData = false;
 
     for (const [version, count] of Object.entries(versions)) {
       if (count > 0) {
-        const key = `version_stats:${timeWindow}:${version}`;
-        pipeline.incrBy(key, count);
-        // 设置过期时间（20分钟）
-        pipeline.expire(key, 20 * 60);
+        pipeline.hIncrBy(key, version, count);
+        hasData = true;
       }
+    }
+    if (hasData) {
+      pipeline.expire(key, this.REDIS_STATS_TTL_SECONDS);
     }
 
     try {
@@ -303,15 +323,17 @@ class RequestStatsManager {
 
     const urls = this.urlMemoryCounter[timeWindow];
     const pipeline = redisClient.multi();
+    const key = `url_stats:${timeWindow}`;
+    let hasData = false;
 
     for (const [urlPath, count] of Object.entries(urls)) {
       if (count > 0) {
-        // 使用 | 作为分隔符，避免与时间窗口ISO字符串中的冒号冲突
-        const key = `url_stats:${timeWindow}|${urlPath}`;
-        pipeline.incrBy(key, count);
-        // 设置过期时间（20分钟）
-        pipeline.expire(key, 20 * 60);
+        pipeline.hIncrBy(key, urlPath, count);
+        hasData = true;
       }
+    }
+    if (hasData) {
+      pipeline.expire(key, this.REDIS_STATS_TTL_SECONDS);
     }
 
     try {
@@ -362,9 +384,12 @@ class RequestStatsManager {
         if (!this.versionMemoryCounter[currentTimeWindow]) {
           this.versionMemoryCounter[currentTimeWindow] = {};
         }
-        // 累加当前请求的版本
-        this.versionMemoryCounter[currentTimeWindow][version] =
-          (this.versionMemoryCounter[currentTimeWindow][version] || 0) + 1;
+        this.incrementBoundedCounter(
+          this.versionMemoryCounter[currentTimeWindow],
+          version,
+          this.MAX_VERSION_FIELDS_PER_WINDOW,
+          this.VERSION_OVERFLOW_FIELD
+        );
       }
     }
 
@@ -375,9 +400,12 @@ class RequestStatsManager {
       if (!this.urlMemoryCounter[currentTimeWindow]) {
         this.urlMemoryCounter[currentTimeWindow] = {};
       }
-      // 累加当前请求的URL
-      this.urlMemoryCounter[currentTimeWindow][urlPath] =
-        (this.urlMemoryCounter[currentTimeWindow][urlPath] || 0) + 1;
+      this.incrementBoundedCounter(
+        this.urlMemoryCounter[currentTimeWindow],
+        urlPath,
+        this.MAX_URL_FIELDS_PER_WINDOW,
+        this.URL_OVERFLOW_FIELD
+      );
     }
 
     this.requestCount++;

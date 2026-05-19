@@ -234,6 +234,11 @@ const EXPENSIVE_COMMANDS = {
     title: "发现 KEYS：可能阻塞 Redis 主线程",
     advice: "线上排查请使用 SCAN 分批扫描，避免 KEYS 在 key 多时把 Redis 打满。",
   },
+  scan: {
+    severity: "warning",
+    title: "SCAN 耗时偏高",
+    advice: "SCAN 虽然比 KEYS 安全，但 keyspace 很大或 COUNT 偏高时仍会吃 CPU；固定窗口统计建议改为 hash/索引直读，避免扫全库。",
+  },
   zrange: {
     severity: "warning",
     title: "ZSET 范围读取较多",
