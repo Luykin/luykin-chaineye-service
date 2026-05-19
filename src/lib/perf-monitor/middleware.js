@@ -173,7 +173,7 @@ function createPerfMiddleware(config) {
       eventsBuffer.push(event);
 
       if (eventsBuffer.length >= flushThreshold) {
-        flushBuffers(redisClient);
+        flushBuffers(redisClient, config);
       }
     });
 
