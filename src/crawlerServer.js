@@ -14,6 +14,9 @@
 require("dotenv").config({
   path: `${process.env.NODE_ENV === "development" ? ".env-dev" : ".env-pro"}`,
 });
+
+const { enhanceConsoleWithRequestId } = require("./xhunt/utils/request-id");
+enhanceConsoleWithRequestId();
 const { setupSqlite } = require("./models/sqlite-start");
 const { setupPostgresFundraising } = require("./models/postgres-fundraising");
 const scheduler = require("./services/scheduler");

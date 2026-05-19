@@ -8,6 +8,15 @@ require("dotenv").config({
 });
 console.log(process.env.NODE_ENV, "process.env.NODE_ENV运行环境");
 
+const {
+  requestContextMiddleware,
+  enhanceConsoleWithRequestId,
+} = require("./xhunt/utils/request-id");
+
+// 全局增强 console：注入 requestId，并做日志级别、限流、截断，降低 PM2 日志 IO 压力。
+enhanceConsoleWithRequestId();
+
+
 // ============================================
 // 启动时模块预加载检查 - 防止运行时路径错误导致崩溃
 // ============================================
@@ -171,10 +180,6 @@ const {
   browserOnlyMiddleware,
   sseSecurityMiddleware,
 } = require("./xhunt/middleware/security");
-const {
-  requestContextMiddleware,
-  enhanceConsoleWithRequestId,
-} = require("./xhunt/utils/request-id");
 // const StatsD = require("hot-shots");
 // const dataDog = new StatsD();
 const { adminAuth } = require("./admin/middleware/adminAuth");
@@ -182,10 +187,6 @@ const { setupRootdataProPostgres } = require("./rootdatapro/models");
 
 const app = express();
 const PORT = process.env.PORT || 8090;
-
-// 全局增强所有 console 方法（log, error, warn, info, debug），自动在日志中注入 requestId
-// 如果第一个参数是字符串，requestId 会直接拼接到字符串前面
-enhanceConsoleWithRequestId();
 
 // 将 Express 应用的设置和启动逻辑封装在一个异步函数中
 async function initializeAndStartServer() {

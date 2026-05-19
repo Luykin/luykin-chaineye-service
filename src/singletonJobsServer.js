@@ -2,6 +2,9 @@ require("dotenv").config({
   path: `${process.env.NODE_ENV === "development" ? ".env-dev" : ".env-pro"}`,
 });
 
+const { enhanceConsoleWithRequestId } = require("./xhunt/utils/request-id");
+enhanceConsoleWithRequestId();
+
 const schedule = require("node-schedule");
 const redis = require("redis");
 

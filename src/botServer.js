@@ -1,4 +1,6 @@
 require('dotenv').config();
+const { enhanceConsoleWithRequestId } = require('./xhunt/utils/request-id');
+enhanceConsoleWithRequestId();
 const redis = require('redis');
 const TgBot = require('./bot/group-bot');
 const bot6666 = new TgBot(process.env.TG_6666BOT_TOKEN, process.env.TG_CRYPTOHUNT_CHART1_ID);
