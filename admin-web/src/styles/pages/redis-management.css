@@ -663,6 +663,515 @@
   color: #b91c1c;
 }
 
+.redis-config-console .redis-diagnostics {
+  padding: 18px 24px 22px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(248, 250, 252, 0.42)),
+    radial-gradient(circle at 88% 16%, rgba(245, 158, 11, 0.12), transparent 26%);
+}
+
+.redis-config-console .diagnostics-head {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(150px, auto) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.redis-config-console .diagnostics-head p {
+  max-width: 680px;
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+
+.redis-config-console .diagnostics-status {
+  min-width: 150px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.redis-config-console .diagnostics-status span,
+.redis-config-console .diagnostic-metric span,
+.redis-config-console .diagnostics-card-head span {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.redis-config-console .diagnostics-status strong {
+  display: block;
+  margin-top: 4px;
+  color: #334155;
+  font-size: 0.92rem;
+}
+
+.redis-config-console .diagnostics-status-danger {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.redis-config-console .diagnostics-status-danger strong {
+  color: #b91c1c;
+}
+
+.redis-config-console .diagnostics-status-warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.redis-config-console .diagnostics-status-warning strong {
+  color: #b45309;
+}
+
+.redis-config-console .diagnostics-status-safe {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.redis-config-console .diagnostics-status-safe strong {
+  color: #047857;
+}
+
+.redis-config-console .diagnostics-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.redis-config-console .diagnostics-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.redis-config-console .diagnostic-metric {
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.redis-config-console .diagnostic-metric strong {
+  display: block;
+  margin-top: 5px;
+  color: #0f172a;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redis-config-console .diagnostics-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.15fr) minmax(300px, 0.95fr);
+  gap: 14px;
+}
+
+.redis-config-console .diagnostics-card {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.redis-config-console .diagnostics-card-findings,
+.redis-config-console .diagnostics-card-slowlog {
+  grid-row: span 2;
+}
+
+.redis-config-console .diagnostics-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fbfdff;
+}
+
+.redis-config-console .diagnostics-card-head h4 {
+  margin: 0;
+}
+
+.redis-config-console .finding-list,
+.redis-config-console .queue-list,
+.redis-config-console .slowlog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+}
+
+.redis-config-console .finding-item {
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  background: #f8fafc;
+}
+
+.redis-config-console .finding-item-danger {
+  border-color: #fecaca;
+  background: linear-gradient(180deg, #fff7f7, #ffffff);
+}
+
+.redis-config-console .finding-item-warning {
+  border-color: #fde68a;
+  background: linear-gradient(180deg, #fffbeb, #ffffff);
+}
+
+.redis-config-console .finding-item-safe {
+  border-color: #bbf7d0;
+  background: linear-gradient(180deg, #f0fdf4, #ffffff);
+}
+
+.redis-config-console .finding-title-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.redis-config-console .finding-title-line strong {
+  color: #0f172a;
+  font-size: 0.86rem;
+}
+
+.redis-config-console .finding-title-line span {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.redis-config-console .finding-item p {
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+
+.redis-config-console .finding-item em {
+  display: block;
+  margin-top: 7px;
+  color: #334155;
+  font-size: 0.76rem;
+  font-style: normal;
+  line-height: 1.6;
+}
+
+.redis-config-console .diagnostics-table-wrap {
+  max-height: 310px;
+  overflow: auto;
+}
+
+.redis-config-console .diagnostics-table td {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.redis-config-console .diagnostics-table code,
+.redis-config-console .slowlog-item code,
+.redis-config-console .queue-key {
+  font-family: 'SF Mono', ui-monospace, monospace;
+}
+
+.redis-config-console .queue-item {
+  padding: 11px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.redis-config-console .queue-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #334155;
+  font-size: 0.8rem;
+}
+
+.redis-config-console .queue-key {
+  margin: 4px 0 8px;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redis-config-console .queue-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f1f5f9;
+}
+
+.redis-config-console .queue-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #10b981;
+}
+
+.redis-config-console .queue-item-warning .queue-bar i {
+  background: #f59e0b;
+}
+
+.redis-config-console .queue-item-danger .queue-bar i {
+  background: #ef4444;
+}
+
+.redis-config-console .slowlog-item {
+  padding: 11px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.redis-config-console .slowlog-meta {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 9px;
+  align-items: center;
+  margin-bottom: 7px;
+}
+
+.redis-config-console .slowlog-meta strong {
+  color: #0f172a;
+  font-size: 0.75rem;
+}
+
+.redis-config-console .slowlog-meta span {
+  color: #b91c1c;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.redis-config-console .slowlog-meta time {
+  color: #94a3b8;
+  font-size: 0.7rem;
+  text-align: right;
+}
+
+.redis-config-console .slowlog-item code {
+  display: block;
+  color: #475569;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  word-break: break-all;
+}
+
+.redis-config-console .slowlog-client {
+  margin-top: 6px;
+  color: #94a3b8;
+  font-size: 0.68rem;
+}
+
+.redis-config-console .diagnostics-empty {
+  padding: 18px;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.redis-config-console .diagnostics-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.redis-config-console .diagnostics-notes span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.9);
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.redis-config-console .redis-systemd-panel {
+  padding: 18px 24px 22px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.46), rgba(255, 255, 255, 0.58)),
+    radial-gradient(circle at 9% 14%, rgba(239, 68, 68, 0.08), transparent 24%);
+}
+
+.redis-config-console .systemd-head {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 0.72fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.redis-config-console .systemd-head p {
+  max-width: 720px;
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+
+.redis-config-console .systemd-service-picker label {
+  display: block;
+  margin-bottom: 6px;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.redis-config-console .systemd-service-row,
+.redis-config-console .systemd-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.redis-config-console .systemd-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.redis-config-console .systemd-warning {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.redis-config-console .systemd-warning-danger {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #b91c1c;
+}
+
+.redis-config-console .systemd-warning code {
+  font-family: 'SF Mono', ui-monospace, monospace;
+}
+
+.redis-config-console .systemd-runtime {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.8fr) repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.redis-config-console .systemd-runtime div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.redis-config-console .systemd-runtime span,
+.redis-config-console .systemd-current span {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.redis-config-console .systemd-runtime strong,
+.redis-config-console .systemd-current strong {
+  display: block;
+  margin-top: 4px;
+  color: #334155;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redis-config-console .systemd-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.redis-config-console .systemd-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.redis-config-console .systemd-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.redis-config-console .systemd-card h4 {
+  margin: 0 0 4px;
+}
+
+.redis-config-console .systemd-card code,
+.redis-config-console .systemd-card-head button {
+  font-family: 'SF Mono', ui-monospace, monospace;
+}
+
+.redis-config-console .systemd-card code {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.redis-config-console .systemd-card-head button {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.redis-config-console .systemd-card p,
+.redis-config-console .systemd-card em {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-style: normal;
+  line-height: 1.6;
+}
+
+.redis-config-console .systemd-card em {
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.redis-config-console .systemd-dirty {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  color: #b45309;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
 .redis-config-console .config-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(260px, 1fr));
@@ -801,7 +1310,24 @@
   }
 
   .redis-config-console .config-runtime-strip,
-  .redis-config-console .config-grid {
+  .redis-config-console .config-grid,
+  .redis-config-console .diagnostics-metrics,
+  .redis-config-console .diagnostics-grid {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+
+  .redis-config-console .diagnostics-head,
+  .redis-config-console .systemd-head {
+    grid-template-columns: 1fr;
+  }
+
+  .redis-config-console .diagnostics-actions,
+  .redis-config-console .systemd-actions {
+    justify-content: flex-start;
+  }
+
+  .redis-config-console .systemd-runtime,
+  .redis-config-console .systemd-grid {
     grid-template-columns: repeat(2, minmax(220px, 1fr));
   }
 }
@@ -809,8 +1335,16 @@
 @media (max-width: 768px) {
   .redis-config-console .config-scoreboard,
   .redis-config-console .config-runtime-strip,
-  .redis-config-console .config-grid {
+  .redis-config-console .config-grid,
+  .redis-config-console .diagnostics-metrics,
+  .redis-config-console .diagnostics-grid,
+  .redis-config-console .systemd-runtime,
+  .redis-config-console .systemd-grid {
     grid-template-columns: 1fr;
+  }
+
+  .redis-config-console .systemd-service-row {
+    flex-direction: column;
   }
 }
 
@@ -819,7 +1353,9 @@
 }
 
 .redis-config-console.is-collapsed .config-runtime-strip,
-.redis-config-console.is-collapsed .config-grid {
+.redis-config-console.is-collapsed .config-grid,
+.redis-config-console.is-collapsed .redis-diagnostics,
+.redis-config-console.is-collapsed .redis-systemd-panel {
   display: none;
 }
 
