@@ -77,6 +77,42 @@ module.exports = (sequelize) => {
         type: DataTypes.JSONB,
         comment: "原始API数据",
       },
+      score: {
+        type: DataTypes.FLOAT,
+        comment: "综合热度分",
+      },
+      viewScore: {
+        type: DataTypes.FLOAT,
+        comment: "浏览归一化分",
+      },
+      shareScore: {
+        type: DataTypes.FLOAT,
+        comment: "分享归一化分",
+      },
+      commentScore: {
+        type: DataTypes.FLOAT,
+        comment: "评论归一化分",
+      },
+      likeScore: {
+        type: DataTypes.FLOAT,
+        comment: "点赞归一化分",
+      },
+      freshnessScore: {
+        type: DataTypes.FLOAT,
+        comment: "新鲜度分",
+      },
+      scoreDetails: {
+        type: DataTypes.JSONB,
+        comment: "评分明细：权重、原始值、归一化值、max值等",
+      },
+      scoreVersion: {
+        type: DataTypes.STRING(32),
+        comment: "评分公式版本",
+      },
+      lastScoredAt: {
+        type: DataTypes.DATE,
+        comment: "最后计算得分时间",
+      },
     },
     {
       tableName: "BinanceSquarePosts",
@@ -88,6 +124,9 @@ module.exports = (sequelize) => {
         { fields: ["publishedAt"], name: "idx_binance_square_posts_published" },
         { fields: ["isDeleted"], name: "idx_binance_square_posts_deleted" },
         { fields: ["lastSnapshotId"], name: "idx_binance_square_posts_last_snapshot" },
+        { fields: ["score"], name: "idx_binance_square_posts_score" },
+        { fields: ["score", "publishedAt"], name: "idx_binance_square_posts_score_published" },
+        { fields: ["scoreVersion", "lastScoredAt"], name: "idx_binance_square_posts_score_version_time" },
       ],
     }
   );

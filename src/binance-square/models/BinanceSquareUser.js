@@ -23,16 +23,28 @@ module.exports = (sequelize) => {
       isTargetUser: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
-        comment: "是否为目标用户(Top50)",
+        comment: "是否为最终目标用户(finalTop1000)",
       },
       followScore: {
         type: DataTypes.INTEGER,
         defaultValue: 0,
-        comment: "被关注分数（种子用户关注次数）",
+        comment: "被关注分数（当前目标rankSet来源用户关注次数）",
+      },
+      targetRank: {
+        type: DataTypes.INTEGER,
+        comment: "最终目标用户排名（finalTop1000）",
+      },
+      targetRankSet: {
+        type: DataTypes.STRING(32),
+        comment: "最终目标用户所属rankSet，一般为top1000",
       },
       lastCrawledAt: {
         type: DataTypes.DATE,
         comment: "最后抓取时间 —— 帖子抓取时更新，关注同步时不更新",
+      },
+      lastFollowingSyncedAt: {
+        type: DataTypes.DATE,
+        comment: "最后同步关注列表时间",
       },
       squareUid: {
         type: DataTypes.STRING(64),
@@ -113,6 +125,8 @@ module.exports = (sequelize) => {
         { fields: ["isTargetUser"], name: "idx_binance_square_users_is_target" },
         { fields: ["followScore"], name: "idx_binance_square_users_follow_score" },
         { fields: ["lastCrawledAt"], name: "idx_binance_square_users_last_crawled" },
+        { fields: ["targetRankSet", "targetRank"], name: "idx_binance_square_users_target_rankset_rank" },
+        { fields: ["lastFollowingSyncedAt"], name: "idx_binance_square_users_last_following_synced" },
       ],
     }
   );

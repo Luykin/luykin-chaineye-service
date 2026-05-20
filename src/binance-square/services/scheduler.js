@@ -65,20 +65,9 @@ class BinanceSquareScheduler {
     console.log("[scheduler] 启动币安广场定时调度器");
     this.isRunning = true;
 
-    // 增量抓取：每2小时一次，只查最新一页
+    // 帖子抓取：保守低频，抓 finalTop1000 近7天 ALL+REPLY
     await this._checkAndRunImmediatePostCrawl();
     await this._scheduleIncrementalCrawl();
-
-    // 全量抓取：每天凌晨3点一次，翻页查7天
-    this.jobs.fullCrawl = schedule.scheduleJob("0 3 * * *", async () => {
-      if (!this.isRunning) return;
-      console.log("[scheduler] 触发全量帖子抓取任务（翻页7天）");
-      try {
-        await this.taskManager.runPostCrawl({ onlyFirstPage: false });
-      } catch (error) {
-        console.error("[scheduler] 全量抓取失败:", error.message);
-      }
-    });
 
     // 数据清理（固定每天凌晨4点）
     this.jobs.cleanup = schedule.scheduleJob("0 4 * * *", async () => {
@@ -107,20 +96,23 @@ class BinanceSquareScheduler {
       const lastTime = lastLog ? new Date(lastLog.createdAt).getTime() : 0;
       const elapsed = now - lastTime;
 
-      console.log(`[scheduler] 上次增量抓取: ${lastLog ? lastLog.createdAt.toISOString() : '无'}，已过去 ${(elapsed / 3600000).toFixed(2)} 小时，间隔 ${hours} 小时`);
+      console.log(`[scheduler] 上次帖子抓取: ${lastLog ? lastLog.createdAt.toISOString() : '无'}，已过去 ${(elapsed / 3600000).toFixed(2)} 小时，间隔 ${hours} 小时`);
 
       if (!lastLog || elapsed >= intervalMs) {
-        console.log(`[scheduler] 距离上次增量抓取已超过 ${hours} 小时，立即执行一次补偿增量抓取`);
+        console.log(`[scheduler] 距离上次帖子抓取已超过 ${hours} 小时，立即执行一次补偿抓取`);
         try {
-          await this.taskManager.runPostCrawl({ onlyFirstPage: true });
+          const result = await this.taskManager.runPostCrawl(await this._buildPostCrawlOptions());
+          if (result?.status === "skipped") {
+            console.log(`[scheduler] 补偿抓取跳过: ${result.reason}`);
+          }
         } catch (error) {
-          console.error("[scheduler] 补偿增量抓取失败:", error.message);
+          console.error("[scheduler] 补偿帖子抓取失败:", error.message);
         }
       } else {
-        console.log(`[scheduler] 距离上次增量抓取未满 ${hours} 小时，跳过补偿`);
+        console.log(`[scheduler] 距离上次帖子抓取未满 ${hours} 小时，跳过补偿`);
       }
     } catch (error) {
-      console.error("[scheduler] 检查补偿增量抓取失败:", error.message);
+      console.error("[scheduler] 检查补偿帖子抓取失败:", error.message);
     }
   }
 
@@ -143,7 +135,7 @@ class BinanceSquareScheduler {
       const hours = await this.configService.getFloat("post_crawl_interval_hours", 2);
       const cron = this._hoursToCron(hours);
 
-      console.log(`[scheduler] 增量抓取间隔: ${hours}小时, cron: ${cron}`);
+      console.log(`[scheduler] 帖子抓取间隔: ${hours}小时, cron: ${cron}`);
 
       // 如果已有 Job，先取消（防止重复调度）
       if (this.jobs.incrementalCrawl) {
@@ -154,11 +146,14 @@ class BinanceSquareScheduler {
       this.jobs.incrementalCrawl = schedule.scheduleJob(cron, async () => {
         if (!this.isRunning) return;
 
-        console.log(`[scheduler] 触发增量帖子抓取任务（只查最新一页）`);
+        console.log(`[scheduler] 触发帖子抓取任务（finalTop1000近7天ALL+REPLY）`);
         try {
-          await this.taskManager.runPostCrawl({ onlyFirstPage: true });
+          const result = await this.taskManager.runPostCrawl(await this._buildPostCrawlOptions());
+          if (result?.status === "skipped") {
+            console.log(`[scheduler] 帖子抓取跳过: ${result.reason}`);
+          }
         } catch (error) {
-          console.error("[scheduler] 增量抓取失败:", error.message);
+          console.error("[scheduler] 帖子抓取失败:", error.message);
         }
 
         // 任务完成后重新调度（支持间隔动态变化）
@@ -166,12 +161,35 @@ class BinanceSquareScheduler {
       });
 
       const next = this.jobs.incrementalCrawl?.nextInvocation();
-      console.log(`[scheduler] 下次增量抓取时间: ${next ? next.toISOString() : '未设置'}`);
+      console.log(`[scheduler] 下次帖子抓取时间: ${next ? next.toISOString() : '未设置'}`);
     } catch (error) {
-      console.error("[scheduler] 调度增量抓取失败:", error.message);
+      console.error("[scheduler] 调度帖子抓取失败:", error.message);
       // 5秒后重试，防止一次性失败导致永久丢失
       setTimeout(() => this._scheduleIncrementalCrawl(), 5000);
     }
+  }
+
+  async _buildPostCrawlOptions() {
+    const daysBack = await this.configService.getInt("post_crawl_days_back", 7);
+    const concurrency = await this.configService.getInt("post_crawl_concurrency", 2);
+    const cooldownMinutes = await this.configService.getInt("post_crawl_min_cooldown_minutes", 30);
+    const filterTypesRaw = await this.configService.get("post_crawl_filter_types", "ALL,REPLY");
+    const scoreVersion = await this.configService.get("post_score_version", "bs_post_v1");
+    const filterTypes = String(filterTypesRaw)
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
+
+    return {
+      onlyFirstPage: false,
+      daysBack,
+      concurrency,
+      filterTypes: filterTypes.length > 0 ? filterTypes : ["ALL", "REPLY"],
+      skipIfRunning: true,
+      enforceCooldown: true,
+      cooldownMinutes,
+      scoreVersion,
+    };
   }
 
   async _runCleanup() {
@@ -217,16 +235,17 @@ class BinanceSquareScheduler {
   // 获取当前状态
   async getStatus() {
     const nextIncremental = this.jobs.incrementalCrawl?.nextInvocation();
-    const nextFull = this.jobs.fullCrawl?.nextInvocation();
     const nextCleanup = this.jobs.cleanup?.nextInvocation();
 
     return {
       isRunning: this.isRunning,
       nextIncrementalCrawl: nextIncremental ? nextIncremental.toISOString() : null,
-      nextFullCrawl: nextFull ? nextFull.toISOString() : null,
       nextCleanup: nextCleanup ? nextCleanup.toISOString() : null,
       incrementalCrawlInterval: await this.configService.getFloat("post_crawl_interval_hours", 2),
-      fullCrawlSchedule: "每天凌晨3点",
+      postCrawlCooldownMinutes: await this.configService.getInt("post_crawl_min_cooldown_minutes", 30),
+      postCrawlDaysBack: await this.configService.getInt("post_crawl_days_back", 7),
+      postCrawlConcurrency: await this.configService.getInt("post_crawl_concurrency", 2),
+      postCrawlFilterTypes: await this.configService.get("post_crawl_filter_types", "ALL,REPLY"),
       retentionDays: await this.configService.getInt("snapshot_retention_days", 3),
     };
   }

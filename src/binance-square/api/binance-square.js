@@ -27,6 +27,21 @@ function fail(error) {
   return { success: false, error };
 }
 
+function generateRunId(prefix = "run") {
+  const now = new Date();
+  return (
+    `${prefix}-` +
+    String(now.getFullYear()) +
+    String(now.getMonth() + 1).padStart(2, "0") +
+    String(now.getDate()).padStart(2, "0") +
+    String(now.getHours()).padStart(2, "0") +
+    String(now.getMinutes()).padStart(2, "0") +
+    String(now.getSeconds()).padStart(2, "0") +
+    "-" +
+    Math.random().toString(36).substring(2, 8)
+  );
+}
+
 // ==================== 种子用户管理 ====================
 
 /**
@@ -91,7 +106,7 @@ router.get("/seed/list", async (req, res) => {
     });
     console.log(`[BS_CASE_DEBUG] /seed/list seeds.length=${seeds.length}, usernames=[${seeds.map(s=>s.username).join(", ")}]`);
 
-    // 关联查询 BinanceSquareUser 获取 totalFollowingCount / lastCrawledAt（大小写不敏感）
+    // 关联查询 BinanceSquareUser 获取 totalFollowingCount / lastFollowingSyncedAt（大小写不敏感）
     const seedUsernames = seeds.map((s) => s.username);
     const lowerUsernames = seedUsernames.map((s) => s.toLowerCase());
     console.log(`[BS_CASE_DEBUG] /seed/list querying BinanceSquareUser with LOWER(username) IN [${lowerUsernames.join(", ")}]`);
@@ -100,7 +115,7 @@ router.get("/seed/list", async (req, res) => {
         db.sequelize.fn("LOWER", db.sequelize.col("username")),
         { [Op.in]: lowerUsernames }
       ),
-      attributes: ["username", "totalFollowingCount", "lastCrawledAt"],
+      attributes: ["username", "totalFollowingCount", "lastCrawledAt", "lastFollowingSyncedAt"],
       raw: true,
     });
     console.log(`[BS_CASE_DEBUG] /seed/list users found=${users.length}, details=${JSON.stringify(users)}`);
@@ -113,6 +128,7 @@ router.get("/seed/list", async (req, res) => {
       return {
         ...s.toJSON(),
         totalFollowingCount: user?.totalFollowingCount ?? null,
+        lastFollowingSyncedAt: user?.lastFollowingSyncedAt ?? null,
         lastCrawledAt: user?.lastCrawledAt ?? null,
       };
     });
@@ -218,27 +234,41 @@ router.post("/seed/remove", async (req, res) => {
 const apiClient = require("../scraper/api-client");
 
 /**
- * 同步单个种子用户的关注列表
- * @param {string} targetUsername - 种子用户名
- * @returns {Promise<{username, total, fetched, newUsers, newRelations, status}>}
+ * 同步单个用户的关注列表（Seed/Top50/Top100/Top300 都可用）
+ * @param {string} targetUsername - 目标用户名
+ * @param {Object} options
+ * @returns {Promise<{username, total, fetched, newUsers, newRelations, deactivatedRelations, status}>}
  */
-async function syncSingleUserFollowing(targetUsername) {
+async function syncSingleUserFollowing(targetUsername, options = {}) {
   const startTime = Date.now();
+  const now = new Date();
+  const syncRunId = options.syncRunId || generateRunId("follow");
   let status = "success";
-  let errorMessage = null;
   let total = 0;
   let followers = [];
+  let deactivatedRelations = 0;
 
   try {
+    // 0. 查询关注者自身信息，补 followerSquareUid
+    const sourceUser = await db.BinanceSquareUser.findOne({
+      where: { username: { [Op.iLike]: targetUsername } },
+      attributes: ["username", "squareUid"],
+      raw: true,
+    });
+    // 关注关系中的 followerUsername 必须使用调用方传入的来源用户名，
+    // 这样后续按 Seed/RankSet sourceUsernames 聚合时不会被大小写/别名打散。
+    const normalizedTargetUsername = targetUsername;
+    const followerSquareUid = sourceUser?.squareUid || null;
+
     // 1. 调用API获取关注列表
-    const result = await apiClient.fetchFollowingList(targetUsername);
+    const result = await apiClient.fetchFollowingList(normalizedTargetUsername);
     total = result.total || 0;
     followers = result.followers || [];
 
     // 2. 对比数量，不一致标记为partial
     if (followers.length !== total) {
       status = "partial";
-      console.warn(`[following/sync] ${targetUsername}: 抓取${followers.length}条, API返回total=${total}`);
+      console.warn(`[following/sync] ${normalizedTargetUsername}: 抓取${followers.length}条, API返回total=${total}`);
     }
 
     // 3. 准备用户数据（upsert）
@@ -261,66 +291,96 @@ async function syncSingleUserFollowing(targetUsername) {
       userStatus: f.userStatus ?? null,
       level: f.level ?? null,
       rawData: f,
-      isSeedUser: false, // 被关注者默认不是种子用户
+      isSeedUser: false, // 被关注者默认不是种子用户；upsert时不会覆盖已有标记
       isTargetUser: false,
     }));
 
-    // 4. 准备关注关系数据
+    // 4. 准备关注关系数据：本次看到的关系置为 active
     const followingRecords = followers.map((f) => ({
-      followerUsername: targetUsername,
+      followerUsername: normalizedTargetUsername,
+      followerSquareUid,
       followingUsername: f.username,
       followingSquareUid: f.squareUid || null,
+      isActive: true,
+      firstSeenAt: now,
+      lastSeenAt: now,
+      lastSyncRunId: syncRunId,
     }));
 
     // 5. 在写入前统计已存在的用户数量（大小写不敏感）
-    const followerNames = followers.map((f) => f.username);
-    console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing followers=${followers.length}, names=[${followerNames.join(", ")}]`);
-    const existingUsernames = await db.BinanceSquareUser.findAll({
-      where: db.sequelize.where(
-        db.sequelize.fn("LOWER", db.sequelize.col("username")),
-        { [Op.in]: followers.map((f) => f.username.toLowerCase()) }
-      ),
-      attributes: ["username"],
-      raw: true,
-    });
-    console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing existingUsernames=${existingUsernames.length}, details=${JSON.stringify(existingUsernames)}`);
+    const existingUsernames = followers.length > 0
+      ? await db.BinanceSquareUser.findAll({
+          where: db.sequelize.where(
+            db.sequelize.fn("LOWER", db.sequelize.col("username")),
+            { [Op.in]: followers.map((f) => f.username.toLowerCase()) }
+          ),
+          attributes: ["username"],
+          raw: true,
+        })
+      : [];
     const existingUsernameSet = new Set(existingUsernames.map((u) => u.username.toLowerCase()));
     const newUsersCount = followers.filter((f) => !existingUsernameSet.has(f.username.toLowerCase())).length;
-    console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing newUsersCount=${newUsersCount}, existingSet=[${Array.from(existingUsernameSet).join(", ")}]`);
 
     // 6. 批量写入（事务）
     const transaction = await db.BinanceSquareUser.sequelize.transaction();
 
     try {
-      // 写入/更新用户（不覆盖isSeedUser/isTargetUser/followScore）
-      await db.BinanceSquareUser.bulkCreate(userRecords, {
-        updateOnDuplicate: [
-          "displayName",
-          "squareUid",
-          "avatar",
-          "biography",
-          "role",
-          "verificationType",
-          "verificationDescription",
-          "totalFollowerCount",
-          "totalPostCount",
-          "totalLikeCount",
-          "totalShareCount",
-          "accountLang",
-          "isKol",
-          "userStatus",
-          "level",
-          "rawData",
-          "updatedAt",
-        ],
-        transaction,
-      });
+      if (userRecords.length > 0) {
+        // 写入/更新用户（不覆盖isSeedUser/isTargetUser/followScore）
+        await db.BinanceSquareUser.bulkCreate(userRecords, {
+          updateOnDuplicate: [
+            "displayName",
+            "squareUid",
+            "avatar",
+            "biography",
+            "role",
+            "verificationType",
+            "verificationDescription",
+            "totalFollowerCount",
+            "totalFollowingCount",
+            "totalPostCount",
+            "totalLikeCount",
+            "totalShareCount",
+            "accountLang",
+            "isKol",
+            "userStatus",
+            "level",
+            "rawData",
+            "updatedAt",
+          ],
+          transaction,
+        });
+      }
 
-      // 写入关注关系（忽略重复）
-      await db.BinanceSquareFollowing.bulkCreate(followingRecords, {
-        ignoreDuplicates: true,
-        transaction,
-      });
+      if (followingRecords.length > 0) {
+        // 写入/更新关注关系，重复关系也要刷新lastSeenAt/isActive
+        await db.BinanceSquareFollowing.bulkCreate(followingRecords, {
+          updateOnDuplicate: [
+            "followerSquareUid",
+            "followingSquareUid",
+            "isActive",
+            "lastSeenAt",
+            "lastSyncRunId",
+            "updatedAt",
+          ],
+          transaction,
+        });
+      }
+
+      // 将本次没再出现的旧关系标记为 inactive，避免历史关系污染TopN
+      const activeFollowingNames = followers.map((f) => f.username);
+      const inactiveWhere = {
+        followerUsername: normalizedTargetUsername,
+        isActive: true,
+      };
+      if (activeFollowingNames.length > 0) {
+        inactiveWhere.followingUsername = { [Op.notIn]: activeFollowingNames };
+      }
+      const [inactiveCount] = await db.BinanceSquareFollowing.update(
+        { isActive: false, lastSyncRunId: syncRunId },
+        { where: inactiveWhere, transaction }
+      );
+      deactivatedRelations = inactiveCount || 0;
 
       await transaction.commit();
     } catch (err) {
@@ -328,33 +388,34 @@ async function syncSingleUserFollowing(targetUsername) {
       throw err;
     }
 
-    // 7. 更新种子用户自身的统计信息（totalFollowingCount / lastCrawledAt）
+    // 7. 更新用户自身统计信息（关注同步时间单独记录，不占用帖子lastCrawledAt语义）
     try {
-      console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing updating self username=${targetUsername}, total=${total}`);
       const [updateCount] = await db.BinanceSquareUser.update(
         {
           totalFollowingCount: total,
-          lastCrawledAt: new Date(),
+          lastFollowingSyncedAt: now,
         },
         { where: db.sequelize.where(
           db.sequelize.fn("LOWER", db.sequelize.col("username")),
-          targetUsername.toLowerCase()
+          normalizedTargetUsername.toLowerCase()
         ) }
       );
-      console.log(`[BS_CASE_DEBUG] syncSingleUserFollowing updated rows=${updateCount}`);
+      console.log(`[following/sync] ${normalizedTargetUsername} 更新自身统计 rows=${updateCount}, totalFollowing=${total}`);
     } catch (e) {
-      console.warn(`[following/sync] ${targetUsername} 更新自身统计信息失败:`, e.message);
+      console.warn(`[following/sync] ${normalizedTargetUsername} 更新自身统计信息失败:`, e.message);
     }
 
     const durationMs = Date.now() - startTime;
 
     return {
-      username: targetUsername,
+      username: normalizedTargetUsername,
       total,
       fetched: followers.length,
       newUsers: newUsersCount,
       newRelations: followingRecords.length,
+      deactivatedRelations,
       status,
+      syncRunId,
       durationMs,
     };
   } catch (error) {
@@ -365,8 +426,10 @@ async function syncSingleUserFollowing(targetUsername) {
       fetched: 0,
       newUsers: 0,
       newRelations: 0,
+      deactivatedRelations,
       status: "failed",
       errorMessage: error.message,
+      syncRunId,
       durationMs: Date.now() - startTime,
     };
   }
@@ -394,6 +457,7 @@ router.post("/following/sync", async (req, res) => {
     const results = [];
     let totalNewUsers = 0;
     let totalNewRelations = 0;
+    let totalDeactivatedRelations = 0;
     let hasPartial = false;
     let hasFailed = false;
 
@@ -402,6 +466,7 @@ router.post("/following/sync", async (req, res) => {
       results.push(result);
       totalNewUsers += result.newUsers;
       totalNewRelations += result.newRelations;
+      totalDeactivatedRelations += result.deactivatedRelations || 0;
       if (result.status === "partial") hasPartial = true;
       if (result.status === "failed") hasFailed = true;
 
@@ -422,6 +487,7 @@ router.post("/following/sync", async (req, res) => {
       processed: results.length,
       newUsers: totalNewUsers,
       newRelations: totalNewRelations,
+      deactivatedRelations: totalDeactivatedRelations,
       details: results,
       status: overallStatus,
     }));
@@ -477,192 +543,421 @@ router.post("/following/sync/:username", async (req, res) => {
   }
 });
 
-// ==================== Top50目标用户计算 ====================
+// ==================== 分阶段目标用户计算（Top50/Top100/Top300/Top1000） ====================
+
+const RANK_STAGE_CONFIG = {
+  top50: { rankSet: "top50", sourceRankSet: "seed", limit: 50, previousRankSets: [] },
+  top100: { rankSet: "top100", sourceRankSet: "top50", limit: 100, previousRankSets: ["top50"] },
+  top300: { rankSet: "top300", sourceRankSet: "top100", limit: 300, previousRankSets: ["top50", "top100"] },
+  top1000: { rankSet: "top1000", sourceRankSet: "top300", limit: 1000, previousRankSets: ["top50", "top100", "top300"] },
+};
+
+function normalizeRankSet(rankSet) {
+  return String(rankSet || "").toLowerCase();
+}
+
+async function getStageSourceUsers(config) {
+  if (config.sourceRankSet === "seed") {
+    const seeds = await db.BinanceSquareSeedConfig.findAll({
+      where: { isActive: true },
+      attributes: ["username", "displayName"],
+      order: [["sortOrder", "ASC"], ["createdAt", "ASC"]],
+      raw: true,
+    });
+    return seeds.map((s) => ({ username: s.username, displayName: s.displayName || null, sourceRank: null }));
+  }
+
+  const ranks = await db.BinanceSquareTargetRank.findAll({
+    where: { rankSet: config.sourceRankSet },
+    attributes: ["username", "rank"],
+    order: [["rank", "ASC"]],
+    raw: true,
+  });
+
+  if (ranks.length === 0) {
+    throw new Error(`请先更新 ${config.sourceRankSet}，再更新 ${config.rankSet}（不允许跳步）`);
+  }
+
+  const users = await db.BinanceSquareUser.findAll({
+    where: db.sequelize.where(
+      db.sequelize.fn("LOWER", db.sequelize.col("username")),
+      { [Op.in]: ranks.map((r) => r.username.toLowerCase()) }
+    ),
+    attributes: ["username", "displayName"],
+    raw: true,
+  });
+  const userMap = new Map(users.map((u) => [u.username.toLowerCase(), u]));
+
+  return ranks.map((r) => {
+    const user = userMap.get(r.username.toLowerCase());
+    return { username: user?.username || r.username, displayName: user?.displayName || null, sourceRank: r.rank };
+  });
+}
+
+async function syncSourceUsersFollowings(sourceUsers, config, runId) {
+  const results = [];
+  let hasFailed = false;
+  let hasPartial = false;
+  let totalNewUsers = 0;
+  let totalRelations = 0;
+  let totalDeactivated = 0;
+
+  for (let i = 0; i < sourceUsers.length; i++) {
+    const source = sourceUsers[i];
+    console.log(`[target/${config.rankSet}] 同步来源用户关注列表 ${i + 1}/${sourceUsers.length}: ${source.username}`);
+    const result = await syncSingleUserFollowing(source.username, {
+      syncRunId: runId,
+      sourceRankSet: config.sourceRankSet,
+      targetRankSet: config.rankSet,
+    });
+    results.push(result);
+    totalNewUsers += result.newUsers || 0;
+    totalRelations += result.newRelations || 0;
+    totalDeactivated += result.deactivatedRelations || 0;
+    if (result.status === "failed") hasFailed = true;
+    if (result.status === "partial") hasPartial = true;
+  }
+
+  return {
+    results,
+    totalNewUsers,
+    totalRelations,
+    totalDeactivated,
+    status: hasFailed ? "partial" : hasPartial ? "partial" : "success",
+  };
+}
+
+function buildSourceMap(sourceUsers) {
+  const map = new Map();
+  for (const source of sourceUsers) {
+    map.set(source.username.toLowerCase(), {
+      username: source.username,
+      displayName: source.displayName || null,
+      rank: source.sourceRank || null,
+    });
+  }
+  return map;
+}
+
+async function calculateCandidatesFromFollowings(sourceUsers) {
+  const sourceUsernames = sourceUsers.map((s) => s.username);
+  if (sourceUsernames.length === 0) return [];
+
+  const sourceMap = buildSourceMap(sourceUsers);
+  const relations = await db.BinanceSquareFollowing.findAll({
+    where: {
+      followerUsername: { [Op.in]: sourceUsernames },
+      isActive: true,
+    },
+    attributes: ["followerUsername", "followingUsername", "followingSquareUid", "updatedAt"],
+    raw: true,
+  });
+
+  const grouped = new Map();
+  for (const relation of relations) {
+    if (!relation.followingUsername) continue;
+    const key = relation.followingUsername.toLowerCase();
+    const followerKey = relation.followerUsername.toLowerCase();
+    const source = sourceMap.get(followerKey) || { username: relation.followerUsername, displayName: null, rank: null };
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        username: relation.followingUsername,
+        followerSet: new Set(),
+        followerCount: 0,
+        sourceFollowers: [],
+        squareUid: relation.followingSquareUid || null,
+      });
+    }
+
+    const item = grouped.get(key);
+    if (relation.followingSquareUid && !item.squareUid) {
+      item.squareUid = relation.followingSquareUid;
+    }
+    if (!item.followerSet.has(followerKey)) {
+      item.followerSet.add(followerKey);
+      item.sourceFollowers.push(source);
+    }
+  }
+
+  const candidates = Array.from(grouped.values()).map((item) => ({
+    username: item.username,
+    followerCount: item.followerSet.size,
+    sourceFollowers: item.sourceFollowers,
+    squareUid: item.squareUid,
+  }));
+
+  candidates.sort((a, b) => {
+    if (b.followerCount !== a.followerCount) return b.followerCount - a.followerCount;
+    return a.username.localeCompare(b.username);
+  });
+
+  return candidates;
+}
+
+async function loadPreviousRankEntries(previousRankSets) {
+  if (!previousRankSets || previousRankSets.length === 0) return [];
+  const previousRanks = await db.BinanceSquareTargetRank.findAll({
+    where: { rankSet: { [Op.in]: previousRankSets } },
+    order: [["rankSet", "ASC"], ["rank", "ASC"]],
+    raw: true,
+  });
+
+  const orderWeight = new Map(previousRankSets.map((rankSet, index) => [rankSet, index]));
+  previousRanks.sort((a, b) => {
+    const weightDiff = (orderWeight.get(a.rankSet) ?? 999) - (orderWeight.get(b.rankSet) ?? 999);
+    if (weightDiff !== 0) return weightDiff;
+    return a.rank - b.rank;
+  });
+
+  const result = [];
+  const seen = new Set();
+  for (const rank of previousRanks) {
+    const key = rank.username.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      username: rank.username,
+      followerCount: rank.followerCount || 0,
+      sourceFollowers: rank.sourceFollowers || rank.seedFollowers || [],
+      squareUid: null,
+      includedRankSets: Array.from(new Set([...(rank.includedRankSets || []), rank.rankSet])),
+      previousRankSet: rank.rankSet,
+      previousRank: rank.rank,
+    });
+  }
+  return result;
+}
+
+async function buildRankEntries(config, candidates) {
+  const previousEntries = await loadPreviousRankEntries(config.previousRankSets);
+  const entryMap = new Map();
+  const ordered = [];
+
+  function addOrMerge(entry, includedRankSet) {
+    const key = entry.username.toLowerCase();
+    if (!entryMap.has(key)) {
+      const merged = {
+        username: entry.username,
+        followerCount: entry.followerCount || 0,
+        sourceFollowers: entry.sourceFollowers || [],
+        squareUid: entry.squareUid || null,
+        includedRankSets: Array.from(new Set([...(entry.includedRankSets || []), includedRankSet].filter(Boolean))),
+        previousRankSet: entry.previousRankSet || null,
+        previousRank: entry.previousRank || null,
+      };
+      entryMap.set(key, merged);
+      ordered.push(merged);
+      return;
+    }
+
+    const existing = entryMap.get(key);
+    if ((entry.followerCount || 0) > (existing.followerCount || 0)) {
+      existing.followerCount = entry.followerCount || 0;
+      existing.sourceFollowers = entry.sourceFollowers || existing.sourceFollowers;
+    }
+    if (entry.squareUid && !existing.squareUid) existing.squareUid = entry.squareUid;
+    existing.includedRankSets = Array.from(new Set([...(existing.includedRankSets || []), includedRankSet].filter(Boolean)));
+  }
+
+  // 先写入上一层/中间层，确保 finalTop1000 包含 Top50/100/300。
+  for (const entry of previousEntries) {
+    addOrMerge(entry, entry.previousRankSet);
+  }
+  for (const candidate of candidates) {
+    addOrMerge(candidate, config.rankSet);
+    if (ordered.length >= config.limit && entryMap.size >= config.limit) {
+      // candidates 已按分数排序；超过limit后仍可能只是merge旧人，简单提前减少无谓循环。
+      // 不直接break，避免前limit中重复太多时数量不足；这里entryMap.size判断即可。
+    }
+  }
+
+  return ordered.slice(0, config.limit).map((entry, index) => ({
+    ...entry,
+    rank: index + 1,
+  }));
+}
+
+async function writeRankSet(config, rankEntries, sourceUsers, runId, syncSummary) {
+  const now = new Date();
+  const transaction = await db.BinanceSquareTargetRank.sequelize.transaction();
+
+  try {
+    await db.BinanceSquareTargetRank.destroy({
+      where: { rankSet: config.rankSet },
+      transaction,
+    });
+
+    const rankRecords = rankEntries.map((entry) => ({
+      username: entry.username,
+      rankSet: config.rankSet,
+      rank: entry.rank,
+      followerCount: entry.followerCount || 0,
+      sourceRankSet: config.sourceRankSet,
+      sourceUserCount: sourceUsers.length,
+      seedFollowers: entry.sourceFollowers || [], // 兼容旧字段
+      sourceFollowers: entry.sourceFollowers || [],
+      includedRankSets: entry.includedRankSets || [config.rankSet],
+      calculationRunId: runId,
+      lastCalculatedAt: now,
+    }));
+
+    if (rankRecords.length > 0) {
+      await db.BinanceSquareTargetRank.bulkCreate(rankRecords, { transaction });
+    }
+
+    // 补全用户表squareUid；最终top1000才更新isTargetUser标记
+    for (const entry of rankEntries) {
+      const updateData = { followScore: entry.followerCount || 0 };
+      if (entry.squareUid) updateData.squareUid = entry.squareUid;
+      if (config.rankSet === "top1000") {
+        updateData.isTargetUser = true;
+        updateData.targetRank = entry.rank;
+        updateData.targetRankSet = "top1000";
+      }
+      await db.BinanceSquareUser.update(updateData, {
+        where: db.sequelize.where(
+          db.sequelize.fn("LOWER", db.sequelize.col("username")),
+          entry.username.toLowerCase()
+        ),
+        transaction,
+      });
+    }
+
+    if (config.rankSet === "top1000") {
+      const finalNamesLower = rankEntries.map((entry) => entry.username.toLowerCase());
+      await db.BinanceSquareUser.update(
+        { isTargetUser: false, targetRank: null, targetRankSet: null },
+        {
+          where: {
+            [Op.and]: [
+              { isTargetUser: true },
+              db.sequelize.where(db.sequelize.fn("LOWER", db.sequelize.col("username")), { [Op.notIn]: finalNamesLower }),
+            ],
+          },
+          transaction,
+        }
+      );
+    }
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+
+  return {
+    rankSet: config.rankSet,
+    sourceRankSet: config.sourceRankSet,
+    sourceUserCount: sourceUsers.length,
+    total: rankEntries.length,
+    updatedAt: now,
+    runId,
+    syncSummary,
+  };
+}
+
+async function runRankStage(rankSet) {
+  const config = RANK_STAGE_CONFIG[normalizeRankSet(rankSet)];
+  if (!config) {
+    throw new Error("rankSet 必须是 top50/top100/top300/top1000");
+  }
+
+  const startTime = Date.now();
+  const runId = generateRunId(`target-${config.rankSet}`);
+  const sourceUsers = await getStageSourceUsers(config);
+
+  if (sourceUsers.length === 0) {
+    throw new Error(`没有可用来源用户，无法更新 ${config.rankSet}`);
+  }
+
+  console.log(`[target/${config.rankSet}] 开始更新，source=${config.sourceRankSet}, sourceUsers=${sourceUsers.length}, runId=${runId}`);
+  const syncSummary = await syncSourceUsersFollowings(sourceUsers, config, runId);
+  const candidates = await calculateCandidatesFromFollowings(sourceUsers);
+  const rankEntries = await buildRankEntries(config, candidates);
+  const writeResult = await writeRankSet(config, rankEntries, sourceUsers, runId, syncSummary);
+
+  const durationMs = Date.now() - startTime;
+  await db.BinanceSquareCrawlLog.create({
+    taskType: "target_calculate",
+    status: syncSummary.status,
+    targetId: config.rankSet,
+    itemsCount: rankEntries.length,
+    durationMs,
+    failedDetails: {
+      rankSet: config.rankSet,
+      sourceRankSet: config.sourceRankSet,
+      runId,
+      syncSummary,
+    },
+  });
+
+  return {
+    ...writeResult,
+    candidateCount: candidates.length,
+    durationMs,
+    preview: rankEntries.slice(0, 20).map((entry) => ({
+      rank: entry.rank,
+      username: entry.username,
+      followerCount: entry.followerCount,
+      includedRankSets: entry.includedRankSets,
+      sourceFollowers: (entry.sourceFollowers || []).slice(0, 10).map((s) => s.username),
+    })),
+  };
+}
 
 /**
  * POST /target/calculate
- * 手动触发：计算Top50目标用户
+ * 兼容旧接口：默认手动更新Top50
  */
 router.post("/target/calculate", async (req, res) => {
-  const startTime = Date.now();
-
   try {
-    // 1. 获取活跃种子用户名单
-    const activeSeeds = await db.BinanceSquareSeedConfig.findAll({
-      where: { isActive: true },
-      attributes: ["username", "displayName"],
-    });
-
-    if (activeSeeds.length === 0) {
-      return res.status(400).json(fail("没有活跃的种子用户"));
-    }
-
-    const seedUsernames = activeSeeds.map((s) => s.username);
-    console.log(`[target/calculate] 活跃种子用户: ${seedUsernames.join(", ")}`);
-
-    // 2. 聚合查询：被关注次数最多的前50人
-    const topCandidates = await db.BinanceSquareFollowing.findAll({
-      attributes: [
-        "followingUsername",
-        [db.BinanceSquareFollowing.sequelize.fn("COUNT", "*"), "followerCount"],
-      ],
-      where: {
-        followerUsername: { [Op.in]: seedUsernames },
-      },
-      group: ["followingUsername"],
-      order: [[db.BinanceSquareFollowing.sequelize.literal("\"followerCount\""), "DESC"]],
-      limit: 50,
-      raw: true,
-    });
-
-    console.log(`[target/calculate] 候选用户: ${topCandidates.length} 人`);
-
-    // 3. 获取每个候选用户的种子关注者详情
-    const enrichedCandidates = [];
-    for (const candidate of topCandidates) {
-      const seedFollowers = await db.BinanceSquareFollowing.findAll({
-        attributes: ["followerUsername"],
-        where: {
-          followerUsername: { [Op.in]: seedUsernames },
-          followingUsername: candidate.followingUsername,
-        },
-        raw: true,
-      });
-
-      // 获取种子关注者的displayName（大小写不敏感）
-      const seedFollowerNames = seedFollowers.map((f) => f.followerUsername);
-      console.log(`[BS_CASE_DEBUG] target/calculate seedFollowerNames=[${seedFollowerNames.join(", ")}]`);
-      const seedConfigs = await db.BinanceSquareSeedConfig.findAll({
-        where: db.sequelize.where(
-          db.sequelize.fn("LOWER", db.sequelize.col("username")),
-          { [Op.in]: seedFollowerNames.map((s) => s.toLowerCase()) }
-        ),
-        attributes: ["username", "displayName"],
-        raw: true,
-      });
-      console.log(`[BS_CASE_DEBUG] target/calculate seedConfigs found=${seedConfigs.length}, details=${JSON.stringify(seedConfigs)}`);
-
-      enrichedCandidates.push({
-        username: candidate.followingUsername,
-        followerCount: parseInt(candidate.followerCount, 10),
-        seedFollowers: seedConfigs.map((s) => ({
-          username: s.username,
-          displayName: s.displayName,
-        })),
-      });
-    }
-
-    // 4. 事务：清空旧排名 + 写入新排名 + 更新Users表
-    const now = new Date();
-    const transaction = await db.BinanceSquareTargetRank.sequelize.transaction();
-
-    try {
-      // 4.1 清空旧排名（覆盖式更新）
-      await db.BinanceSquareTargetRank.destroy({
-        where: {},
-        truncate: true,
-        transaction,
-      });
-
-      // 4.2 重置所有用户的isTargetUser标记
-      await db.BinanceSquareUser.update(
-        { isTargetUser: false },
-        { where: { isTargetUser: true }, transaction }
-      );
-
-      // 4.3 批量写入新排名
-      const rankRecords = enrichedCandidates.map((c, index) => ({
-        username: c.username,
-        rank: index + 1,
-        followerCount: c.followerCount,
-        seedFollowers: c.seedFollowers,
-        lastCalculatedAt: now,
-      }));
-
-      await db.BinanceSquareTargetRank.bulkCreate(rankRecords, { transaction });
-
-      // 4.4 更新Top50用户的isTargetUser标记，同时补全squareUid
-      const top50Names = enrichedCandidates.map((c) => c.username);
-      console.log(`[BS_CASE_DEBUG] target/calculate updating isTargetUser for [${top50Names.join(", ")}]`);
-
-      // 从关注关系表获取squareUid（取最新的一条）
-      const squareUidMap = new Map();
-      for (const candidate of enrichedCandidates) {
-        const following = await db.BinanceSquareFollowing.findOne({
-          where: { followingUsername: { [Op.iLike]: candidate.username } },
-          order: [["createdAt", "DESC"]],
-          attributes: ["followingSquareUid"],
-          raw: true,
-        });
-        if (following?.followingSquareUid) {
-          squareUidMap.set(candidate.username.toLowerCase(), following.followingSquareUid);
-        }
-      }
-
-      // 逐个更新（因为squareUid可能不同）
-      for (const candidate of enrichedCandidates) {
-        const squareUid = squareUidMap.get(candidate.username.toLowerCase());
-        const updateData = { isTargetUser: true };
-        if (squareUid) updateData.squareUid = squareUid;
-        await db.BinanceSquareUser.update(updateData, {
-          where: db.sequelize.where(
-            db.sequelize.fn("LOWER", db.sequelize.col("username")),
-            candidate.username.toLowerCase()
-          ),
-          transaction,
-        });
-      }
-      console.log(`[BS_CASE_DEBUG] target/calculate updated isTargetUser rows=${enrichedCandidates.length}, squareUid补全=${squareUidMap.size}`);
-
-      await transaction.commit();
-    } catch (err) {
-      await transaction.rollback();
-      throw err;
-    }
-
-    // 5. 记录CrawlLog
-    const durationMs = Date.now() - startTime;
-    await db.BinanceSquareCrawlLog.create({
-      taskType: "target_calculate",
-      status: "success",
-      itemsCount: enrichedCandidates.length,
-      durationMs,
-    });
-
-    res.json(success({
-      totalCandidates: enrichedCandidates.length,
-      top50: enrichedCandidates.slice(0, 10).map((c) => ({
-        rank: enrichedCandidates.indexOf(c) + 1,
-        username: c.username,
-        followerCount: c.followerCount,
-        seedFollowers: c.seedFollowers.map((s) => s.username),
-      })),
-      updatedAt: now,
-      durationMs,
-    }));
+    const result = await runRankStage("top50");
+    res.json(success(result));
   } catch (error) {
     console.error("[target/calculate] error:", error);
-
-    // 记录失败日志
     await db.BinanceSquareCrawlLog.create({
       taskType: "target_calculate",
       status: "failed",
+      targetId: "top50",
       errorMessage: error.message,
-      durationMs: Date.now() - startTime,
-    });
+    }).catch(() => {});
+    res.status(500).json(fail(error.message));
+  }
+});
 
+/**
+ * POST /target/calculate/:rankSet
+ * 手动分阶段更新：top50/top100/top300/top1000，不允许跳步
+ */
+router.post("/target/calculate/:rankSet", async (req, res) => {
+  const { rankSet } = req.params;
+  try {
+    const result = await runRankStage(rankSet);
+    res.json(success(result));
+  } catch (error) {
+    console.error(`[target/calculate/${rankSet}] error:`, error);
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "target_calculate",
+      status: "failed",
+      targetId: rankSet,
+      errorMessage: error.message,
+    }).catch(() => {});
     res.status(500).json(fail(error.message));
   }
 });
 
 /**
  * GET /target/list
- * 获取当前Top50目标用户列表
+ * 获取目标用户列表，支持 ?rankSet=top50/top100/top300/top1000
  */
 router.get("/target/list", async (req, res) => {
   try {
+    const rankSet = normalizeRankSet(req.query.rankSet || "top1000");
+    const where = RANK_STAGE_CONFIG[rankSet] ? { rankSet } : {};
     const ranks = await db.BinanceSquareTargetRank.findAll({
-      order: [["rank", "ASC"]],
+      where,
+      order: [["rankSet", "ASC"], ["rank", "ASC"]],
     });
 
     res.json(success(ranks));
@@ -743,8 +1038,10 @@ function computeSnapshotDiff(current, prev) {
 
 /**
  * POST /crawl/posts
- * 手动触发：抓取目标用户的帖子（ALL + REPLY）
- * @body {string} mode - "incremental" | "full"，默认 "full"
+ * 手动触发：抓取finalTop1000目标用户近N天帖子（ALL + REPLY），并重算分
+ * @body {string} mode - "incremental" | "full"，默认 "full"；incremental仅兼容旧调试
+ * @body {number} daysBack - 默认7
+ * @body {number} concurrency - 默认2
  */
 router.post("/crawl/posts", async (req, res) => {
   try {
@@ -754,10 +1051,22 @@ router.post("/crawl/posts", async (req, res) => {
 
     const mode = req.body?.mode || "full";
     const onlyFirstPage = mode === "incremental";
-    const label = onlyFirstPage ? "增量" : "全量";
+    const label = onlyFirstPage ? "增量" : "近7天";
+    const daysBack = parseInt(req.body?.daysBack || 7, 10);
+    const concurrency = parseInt(req.body?.concurrency || 2, 10);
+    const filterTypes = Array.isArray(req.body?.filterTypes)
+      ? req.body.filterTypes
+      : String(req.body?.filterTypes || "ALL,REPLY").split(",");
 
-    console.log(`[crawl/posts] 手动触发${label}抓取, mode=${mode}`);
-    const result = await taskManager.runPostCrawl({ onlyFirstPage });
+    console.log(`[crawl/posts] 手动触发${label}抓取, mode=${mode}, daysBack=${daysBack}, concurrency=${concurrency}`);
+    const result = await taskManager.runPostCrawl({
+      onlyFirstPage,
+      daysBack,
+      concurrency,
+      filterTypes: filterTypes.map((s) => String(s).trim().toUpperCase()).filter(Boolean),
+      skipIfRunning: false,
+      enforceCooldown: false,
+    });
 
     res.json(success({ ...result, mode }));
   } catch (error) {
@@ -805,6 +1114,8 @@ router.get("/posts", async (req, res) => {
       pageSize = 20,
       startDate,
       endDate,
+      orderBy = "score",
+      minScore,
     } = req.query;
 
     const where = {};
@@ -818,11 +1129,24 @@ router.get("/posts", async (req, res) => {
       if (startDate) where.publishedAt[Op.gte] = new Date(startDate);
       if (endDate) where.publishedAt[Op.lte] = new Date(endDate);
     }
+    if (minScore !== undefined) {
+      where.score = { [Op.gte]: parseFloat(minScore) };
+    }
     console.log(`[BS_CASE_DEBUG] /posts where keys=${Object.keys(where).join(", ")}`);
+
+    const orderMap = {
+      score: [["score", "DESC"], ["publishedAt", "DESC"]],
+      publishedAt: [["publishedAt", "DESC"]],
+      viewCount: [["viewCount", "DESC"], ["publishedAt", "DESC"]],
+      shareCount: [["shareCount", "DESC"], ["publishedAt", "DESC"]],
+      commentCount: [["commentCount", "DESC"], ["publishedAt", "DESC"]],
+      likeCount: [["likeCount", "DESC"], ["publishedAt", "DESC"]],
+    };
+    const order = orderMap[orderBy] || orderMap.score;
 
     const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
       where,
-      order: [["publishedAt", "DESC"]],
+      order,
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
     });
@@ -832,6 +1156,7 @@ router.get("/posts", async (req, res) => {
       total: count,
       page: parseInt(page, 10),
       pageSize: parseInt(pageSize, 10),
+      orderBy,
       data: rows,
     }));
   } catch (error) {
@@ -882,7 +1207,11 @@ router.get("/crawl/progress", async (req, res) => {
       errors: latest.errors || [],
       totalPostsAll: latest.totalPostsAll,
       totalPostsReply: latest.totalPostsReply,
+      totalUpsertedPosts: latest.totalUpsertedPosts || 0,
       totalSnapshots: latest.totalSnapshots,
+      scoredPosts: latest.scoredPosts || 0,
+      daysBack: latest.daysBack || null,
+      filterTypes: latest.filterTypes || null,
       startedAt: latest.startedAt,
       completedAt: latest.completedAt || null,
       durationMs: latest.durationMs || null,
@@ -967,15 +1296,23 @@ router.get("/posts/snapshot-compare", async (req, res) => {
 router.get("/following/list/:username", async (req, res) => {
   try {
     const { username } = req.params;
-    const { page = 1, pageSize = 20 } = req.query;
+    const { page = 1, pageSize = 20, includeInactive = "false" } = req.query;
 
     console.log(`[BS_CASE_DEBUG] /following/list/:username username=${username}`);
+    const where = {
+      [Op.and]: [
+        db.sequelize.where(
+          db.sequelize.fn("LOWER", db.sequelize.col("followerUsername")),
+          username.toLowerCase()
+        ),
+      ],
+    };
+    if (includeInactive !== "true") {
+      where.isActive = true;
+    }
     const { count, rows } = await db.BinanceSquareFollowing.findAndCountAll({
-      where: db.sequelize.where(
-        db.sequelize.fn("LOWER", db.sequelize.col("followerUsername")),
-        username.toLowerCase()
-      ),
-      order: [["createdAt", "DESC"]],
+      where,
+      order: [["lastSeenAt", "DESC"], ["createdAt", "DESC"]],
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
     });
@@ -1000,6 +1337,9 @@ router.get("/following/list/:username", async (req, res) => {
       return {
         followingUsername: r.followingUsername,
         followingSquareUid: r.followingSquareUid,
+        isActive: r.isActive,
+        firstSeenAt: r.firstSeenAt,
+        lastSeenAt: r.lastSeenAt,
         createdAt: r.createdAt,
         displayName: user?.displayName || null,
         avatar: user?.avatar || null,
@@ -1027,7 +1367,7 @@ router.get("/following/list/:username", async (req, res) => {
 router.get("/posts/user/:username", async (req, res) => {
   try {
     const { username } = req.params;
-    const { filterType = "ALL", page = 1, pageSize = 20 } = req.query;
+    const { filterType = "ALL", page = 1, pageSize = 20, orderBy = "publishedAt" } = req.query;
 
     const where = { username: { [Op.iLike]: username } };
     if (filterType === "REPLY") {
@@ -1041,7 +1381,7 @@ router.get("/posts/user/:username", async (req, res) => {
 
     const { count, rows } = await db.BinanceSquarePost.findAndCountAll({
       where,
-      order: [["publishedAt", "DESC"]],
+      order: orderBy === "score" ? [["score", "DESC"], ["publishedAt", "DESC"]] : [["publishedAt", "DESC"]],
       limit: parseInt(pageSize, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
     });
@@ -1051,6 +1391,7 @@ router.get("/posts/user/:username", async (req, res) => {
       total: count,
       page: parseInt(page, 10),
       pageSize: parseInt(pageSize, 10),
+      orderBy,
       data: rows,
     }));
   } catch (error) {
@@ -1128,6 +1469,11 @@ router.get("/crawl/status", async (req, res) => {
             successUsers: latest.successUsers,
             failedUsers: latest.failedUsers,
             errorRate: latest.errorRate,
+            totalPostsAll: latest.totalPostsAll || 0,
+            totalPostsReply: latest.totalPostsReply || 0,
+            totalUpsertedPosts: latest.totalUpsertedPosts || 0,
+            daysBack: latest.daysBack || null,
+            filterTypes: latest.filterTypes || null,
             startedAt: latest.startedAt,
           };
         }
