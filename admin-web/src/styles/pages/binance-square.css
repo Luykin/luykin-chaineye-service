@@ -223,7 +223,7 @@
 
 .bs-overview-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: minmax(460px, 1.35fr) repeat(2, minmax(280px, 1fr));
   gap: 16px;
 }
 
@@ -241,6 +241,10 @@
   font-weight: 600;
 }
 
+.bs-config-card {
+  min-width: 0;
+}
+
 .bs-config-list {
   display: flex;
   flex-direction: column;
@@ -250,9 +254,9 @@
 .bs-config-item {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  padding: 10px 0;
+  padding: 9px 0;
   border-bottom: 1px solid #f1f5f9;
   font-size: 13px;
 }
@@ -266,16 +270,28 @@
 }
 
 .bs-config-label {
-  display: block;
-  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
   color: #0f172a;
   font-size: 13px;
   font-weight: 700;
 }
 
+.bs-config-info-icon {
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: help;
+  transition: color 0.15s ease;
+}
+
+.bs-config-info-icon:hover {
+  color: #2563eb;
+}
+
 .bs-config-key {
   display: inline-block;
-  margin-bottom: 5px;
   padding: 1px 6px;
   border-radius: 5px;
   background: #f1f5f9;
@@ -284,25 +300,24 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.bs-config-desc,
-.bs-config-tip {
-  display: block;
-  color: #64748b;
+.bs-config-tooltip {
+  max-width: 320px;
   font-size: 12px;
   line-height: 1.45;
 }
 
-.bs-config-tip {
-  margin-top: 3px;
-  color: #b45309;
+.bs-config-tooltip-tip {
+  margin-top: 6px;
+  color: #fde68a;
 }
 
 .bs-config-val {
   flex: 0 0 auto;
-  min-width: 96px;
+  min-width: 128px;
   color: #1e293b;
   font-weight: 500;
   text-align: right;
+  white-space: nowrap;
 }
 
 .bs-hidden-maintenance {

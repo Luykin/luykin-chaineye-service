@@ -15,10 +15,12 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -68,27 +70,27 @@ const CONFIG_HELP: Record<string, { label: string; desc: string; tip?: string }>
   post_crawl_concurrency: {
     label: "帖子抓取并发数",
     desc: "同一时间并行抓取多少个 Top1000 用户。数值越大越快，但越容易触发币安风控。",
-    tip: "建议先用 2，稳定后再慢慢调高。",
+    tip: "建议从 2 开始，观察稳定性后再逐步调高。",
   },
   post_crawl_days_back: {
     label: "帖子回溯天数",
     desc: "每次抓取目标用户最近多少天的帖子，并在这个时间窗口内重算热度分。",
-    tip: "当前策略是近 7 天。",
+    tip: "当前推荐窗口为 7 天。",
   },
   post_crawl_filter_types: {
     label: "抓取内容类型",
     desc: "调用币安广场接口时抓哪些内容类型。ALL 是主页内容，REPLY 是回复内容。",
-    tip: "坤哥已确认固定 ALL,REPLY。",
+    tip: "当前配置会同时抓取主页内容和回复内容。",
   },
   post_crawl_interval_hours: {
     label: "定时抓取间隔",
     desc: "调度器每隔多少小时尝试抓取一次 Top1000 近 7 天帖子。",
-    tip: "不是强制执行；如果上一轮还在跑或处于冷却期，会自动跳过。",
+    tip: "这是尝试触发的间隔；如果上一轮还在运行或处于冷却期，系统会自动跳过。",
   },
   post_crawl_min_cooldown_minutes: {
     label: "完成后冷却时间",
     desc: "上一轮抓取完成后，至少等待多少分钟才允许下一轮开始。",
-    tip: "用于降低封控风险；当前建议 30 分钟。",
+    tip: "用于降低访问频率和封控风险，当前建议 30 分钟。",
   },
   post_score_version: {
     label: "评分公式版本",
@@ -578,7 +580,7 @@ export function BinanceSquarePage() {
                 <div className="bs-sub-panel-react">
                   <div className="bs-panel-title">爬虫运行概览</div>
                   <div className="bs-overview-grid">
-                    <div className="bs-overview-card">
+                    <div className="bs-overview-card bs-config-card">
                       <h4>配置参数</h4>
                       <div className="bs-config-list">
                         {configs.length ? configs.map((item) => {
@@ -586,10 +588,21 @@ export function BinanceSquarePage() {
                           return (
                             <div className="bs-config-item" key={item.configKey}>
                               <div className="bs-config-copy">
-                                <span className="bs-config-label">{help.label}</span>
+                                <span className="bs-config-label">
+                                  {help.label}
+                                  <Tooltip
+                                    placement="right"
+                                    title={
+                                      <div className="bs-config-tooltip">
+                                        <div>{help.desc}</div>
+                                        {help.tip ? <div className="bs-config-tooltip-tip">{help.tip}</div> : null}
+                                      </div>
+                                    }
+                                  >
+                                    <InfoCircleOutlined className="bs-config-info-icon" />
+                                  </Tooltip>
+                                </span>
                                 <code className="bs-config-key">{item.configKey}</code>
-                                <span className="bs-config-desc">{help.desc}</span>
-                                {help.tip ? <span className="bs-config-tip">{help.tip}</span> : null}
                               </div>
                               <span className="bs-config-val">
                                 {item.configValue}{item.unit ? ` ${item.unit}` : ""}
