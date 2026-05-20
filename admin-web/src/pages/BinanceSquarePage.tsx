@@ -38,6 +38,7 @@ import {
   fetchBinanceSquareTargets,
   forceStopBinanceSquareCrawl,
   pauseBinanceSquareScheduler,
+  purgeBinanceSquareSnapshots,
   removeBinanceSquareSeed,
   startBinanceSquareScheduler,
   syncAllBinanceSquareFollowings,
@@ -237,6 +238,11 @@ export function BinanceSquarePage() {
     mutationFn: forceStopBinanceSquareCrawl,
     onSuccess: (result) => handleActionSuccess("强制终止", result.data),
     onError: (error: Error) => messageApi.error(error.message || "终止失败"),
+  });
+  const purgeSnapshotsMutation = useMutation({
+    mutationFn: purgeBinanceSquareSnapshots,
+    onSuccess: (result) => handleActionSuccess("清空旧镜像", result.data),
+    onError: (error: Error) => messageApi.error(error.message || "清理失败"),
   });
   const addSeedMutation = useMutation({
     mutationFn: addBinanceSquareSeed,
@@ -496,8 +502,6 @@ export function BinanceSquarePage() {
             ["种子用户", stats?.seedCount || 0, "#3b82f6"],
             ["最终目标", stats?.targetCount || 0, "#f59e0b"],
             ["帖子总数", stats?.postCount || 0, "#10b981"],
-            ["历史镜像", stats?.snapshotCount || 0, "#8b5cf6"],
-            ["镜像存储", formatBytes(stats?.snapshotStorageBytes), "#ec4899"],
             ["上次抓取", stats?.lastCrawlAt ? dayjs(stats.lastCrawlAt).format("HH:mm") : "-", "#64748b"],
             ["调度器状态", crawlStatus?.isRunning ? "运行中" : "已暂停", "#ef4444"],
           ].map(([label, value, color]) => (
@@ -604,6 +608,25 @@ export function BinanceSquarePage() {
                             </div>
                           );
                         }) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无配置项" />}
+                      </div>
+                      <div className="bs-hidden-maintenance">
+                        <Popconfirm
+                          title="确认清空旧镜像数据？"
+                          description="只清空 BinanceSquarePostSnapshots 历史数据，保留表结构；新版本不再写完整镜像。"
+                          okText="确认清空"
+                          cancelText="取消"
+                          okButtonProps={{ danger: true }}
+                          onConfirm={() => purgeSnapshotsMutation.mutate()}
+                        >
+                          <Button
+                            type="link"
+                            size="small"
+                            danger
+                            loading={purgeSnapshotsMutation.isPending}
+                          >
+                            清空旧镜像数据
+                          </Button>
+                        </Popconfirm>
                       </div>
                     </div>
                     <div className="bs-overview-card">

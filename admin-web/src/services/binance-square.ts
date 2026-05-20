@@ -130,6 +130,13 @@ export async function forceStopBinanceSquareCrawl() {
   );
 }
 
+export async function purgeBinanceSquareSnapshots() {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(
+    `${BASE}/maintenance/purge-snapshots`,
+    { method: "POST" }
+  );
+}
+
 export async function fetchBinanceSquarePosts(params: {
   page?: number;
   pageSize?: number;

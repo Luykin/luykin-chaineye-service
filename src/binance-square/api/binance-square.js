@@ -1290,6 +1290,71 @@ router.get("/posts/snapshot-compare", async (req, res) => {
 });
 
 /**
+ * POST /maintenance/purge-snapshots
+ * 清空旧帖子镜像数据。新版本不再写完整镜像，此接口用于释放历史数据空间。
+ */
+router.post("/maintenance/purge-snapshots", async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const beforeCount = await db.BinanceSquarePostSnapshot.count();
+    let beforeStorageBytes = 0;
+    try {
+      const [result] = await db.BinanceSquarePostSnapshot.sequelize.query(
+        `SELECT pg_total_relation_size('"BinanceSquarePostSnapshots"') AS size_bytes`,
+        { type: require("sequelize").QueryTypes.SELECT }
+      );
+      beforeStorageBytes = result?.size_bytes ? parseInt(result.size_bytes, 10) : 0;
+    } catch (e) {
+      console.warn("[maintenance/purge-snapshots] 查询清理前存储大小失败:", e.message);
+    }
+
+    await db.BinanceSquarePostSnapshot.destroy({
+      where: {},
+      truncate: true,
+      cascade: false,
+    });
+
+    let afterStorageBytes = 0;
+    try {
+      const [result] = await db.BinanceSquarePostSnapshot.sequelize.query(
+        `SELECT pg_total_relation_size('"BinanceSquarePostSnapshots"') AS size_bytes`,
+        { type: require("sequelize").QueryTypes.SELECT }
+      );
+      afterStorageBytes = result?.size_bytes ? parseInt(result.size_bytes, 10) : 0;
+    } catch (e) {
+      console.warn("[maintenance/purge-snapshots] 查询清理后存储大小失败:", e.message);
+    }
+
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "post",
+      status: "success",
+      targetId: "purge_snapshots",
+      itemsCount: beforeCount,
+      durationMs: Date.now() - startTime,
+      failedDetails: {
+        action: "purge_snapshots",
+        beforeCount,
+        beforeStorageBytes,
+        afterStorageBytes,
+      },
+    }).catch((e) => {
+      console.warn("[maintenance/purge-snapshots] 写入清理日志失败:", e.message);
+    });
+
+    res.json(success({
+      message: "旧镜像数据已清空",
+      deletedSnapshots: beforeCount,
+      beforeStorageBytes,
+      afterStorageBytes,
+      durationMs: Date.now() - startTime,
+    }));
+  } catch (error) {
+    console.error("[maintenance/purge-snapshots] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
  * GET /following/list/:username
  * 查询某用户的关注列表（分页）
  */

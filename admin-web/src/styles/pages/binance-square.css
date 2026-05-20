@@ -25,9 +25,14 @@
 
 .bs-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
+}
+
+.binance-square-page .legacy-metric-card__value {
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .bs-actions-bar {
@@ -298,6 +303,25 @@
   color: #1e293b;
   font-weight: 500;
   text-align: right;
+}
+
+.bs-hidden-maintenance {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e7eb;
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
+
+.bs-hidden-maintenance:hover {
+  opacity: 1;
+}
+
+.bs-hidden-maintenance .ant-btn {
+  padding-inline: 0;
+  font-size: 12px;
 }
 
 .bs-recent-logs {
