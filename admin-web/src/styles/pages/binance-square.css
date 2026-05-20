@@ -108,6 +108,41 @@
   line-height: 1.45;
 }
 
+.bs-rank-stage-update.ant-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-color: #2563eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 30px;
+}
+
+.bs-rank-stage-update.ant-btn:hover {
+  border-color: #1d4ed8 !important;
+  background: #eff6ff !important;
+  color: #1e40af !important;
+}
+
+.bs-rank-stage-update.is-final.ant-btn {
+  border-color: #10b981;
+  color: #047857;
+}
+
+.bs-rank-stage-update.is-final.ant-btn:hover {
+  border-color: #059669 !important;
+  background: #ecfdf5 !important;
+  color: #065f46 !important;
+}
+
+.bs-rank-stage-update.ant-btn > span {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+}
+
 .bs-stage-alert {
   margin-bottom: 14px;
 }
@@ -210,8 +245,9 @@
 .bs-config-item {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  padding: 6px 0;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 10px 0;
   border-bottom: 1px solid #f1f5f9;
   font-size: 13px;
 }
@@ -220,11 +256,45 @@
   border-bottom: 0;
 }
 
+.bs-config-copy {
+  min-width: 0;
+}
+
+.bs-config-label {
+  display: block;
+  margin-bottom: 3px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .bs-config-key {
+  display: inline-block;
+  margin-bottom: 5px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #f1f5f9;
   color: #64748b;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.bs-config-desc,
+.bs-config-tip {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.bs-config-tip {
+  margin-top: 3px;
+  color: #b45309;
 }
 
 .bs-config-val {
+  flex: 0 0 auto;
+  min-width: 96px;
   color: #1e293b;
   font-weight: 500;
   text-align: right;

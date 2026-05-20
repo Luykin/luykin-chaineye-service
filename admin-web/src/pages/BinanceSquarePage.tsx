@@ -63,6 +63,51 @@ const RANK_STAGES: Array<{ key: BinanceSquareRankSet; label: string; source: str
   { key: "top1000", label: "Top1000", source: "Top300", desc: "同步 Top300 并合并中间层" },
 ];
 
+const CONFIG_HELP: Record<string, { label: string; desc: string; tip?: string }> = {
+  post_crawl_concurrency: {
+    label: "帖子抓取并发数",
+    desc: "同一时间并行抓取多少个 Top1000 用户。数值越大越快，但越容易触发币安风控。",
+    tip: "建议先用 2，稳定后再慢慢调高。",
+  },
+  post_crawl_days_back: {
+    label: "帖子回溯天数",
+    desc: "每次抓取目标用户最近多少天的帖子，并在这个时间窗口内重算热度分。",
+    tip: "当前策略是近 7 天。",
+  },
+  post_crawl_filter_types: {
+    label: "抓取内容类型",
+    desc: "调用币安广场接口时抓哪些内容类型。ALL 是主页内容，REPLY 是回复内容。",
+    tip: "坤哥已确认固定 ALL,REPLY。",
+  },
+  post_crawl_interval_hours: {
+    label: "定时抓取间隔",
+    desc: "调度器每隔多少小时尝试抓取一次 Top1000 近 7 天帖子。",
+    tip: "不是强制执行；如果上一轮还在跑或处于冷却期，会自动跳过。",
+  },
+  post_crawl_min_cooldown_minutes: {
+    label: "完成后冷却时间",
+    desc: "上一轮抓取完成后，至少等待多少分钟才允许下一轮开始。",
+    tip: "用于降低封控风险；当前建议 30 分钟。",
+  },
+  post_score_version: {
+    label: "评分公式版本",
+    desc: "帖子热度分的算法版本。当前 bs_post_v1 使用浏览、分享、评论、点赞和新鲜度加权。",
+    tip: "后续调整公式时可升级版本，方便区分历史分数。",
+  },
+  snapshot_retention_days: {
+    label: "旧镜像保留天数",
+    desc: "历史镜像表的清理周期。新版本不再写完整帖子镜像，但旧数据仍按该配置清理。",
+    tip: "当前只用于回收旧 snapshot 数据。",
+  },
+};
+
+function getConfigHelp(configKey: string) {
+  return CONFIG_HELP[configKey] || {
+    label: configKey,
+    desc: "自定义配置项，请结合后端说明使用。",
+  };
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
   const parsed = dayjs(value);
@@ -532,25 +577,33 @@ export function BinanceSquarePage() {
                     <div className="bs-overview-card">
                       <h4>配置参数</h4>
                       <div className="bs-config-list">
-                        {configs.length ? configs.map((item) => (
-                          <div className="bs-config-item" key={item.configKey}>
-                            <span className="bs-config-key">{item.configKey}</span>
-                            <span className="bs-config-val">
-                              {item.configValue}{item.unit ? ` ${item.unit}` : ""}
-                              <Button
-                                size="small"
-                                type="link"
-                                onClick={() => {
-                                  setEditingConfig(item);
-                                  configForm.setFieldsValue({ configValue: item.configValue });
-                                  setConfigModalOpen(true);
-                                }}
-                              >
-                                修改
-                              </Button>
-                            </span>
-                          </div>
-                        )) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无配置项" />}
+                        {configs.length ? configs.map((item) => {
+                          const help = getConfigHelp(item.configKey);
+                          return (
+                            <div className="bs-config-item" key={item.configKey}>
+                              <div className="bs-config-copy">
+                                <span className="bs-config-label">{help.label}</span>
+                                <code className="bs-config-key">{item.configKey}</code>
+                                <span className="bs-config-desc">{help.desc}</span>
+                                {help.tip ? <span className="bs-config-tip">{help.tip}</span> : null}
+                              </div>
+                              <span className="bs-config-val">
+                                {item.configValue}{item.unit ? ` ${item.unit}` : ""}
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  onClick={() => {
+                                    setEditingConfig(item);
+                                    configForm.setFieldsValue({ configValue: item.configValue });
+                                    setConfigModalOpen(true);
+                                  }}
+                                >
+                                  修改
+                                </Button>
+                              </span>
+                            </div>
+                          );
+                        }) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无配置项" />}
                       </div>
                     </div>
                     <div className="bs-overview-card">
@@ -630,15 +683,14 @@ export function BinanceSquarePage() {
                             </span>
                           </button>
                           <p>{stage.desc}</p>
-                          <LegacyActionButton
+                          <Button
                             size="small"
-                            compact
-                            variant={stage.key === "top1000" ? "success" : "primary"}
+                            className={`bs-rank-stage-update ${stage.key === "top1000" ? "is-final" : ""}`}
                             loading={calcTargetMutation.isPending && calcTargetMutation.variables === stage.key}
                             onClick={() => calcTargetMutation.mutate(stage.key)}
                           >
-                            更新
-                          </LegacyActionButton>
+                            更新 {stage.label}
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -865,7 +917,9 @@ export function BinanceSquarePage() {
             </Form.Item>
             {editingConfig ? (
               <Descriptions size="small" column={1}>
-                <Descriptions.Item label="说明">{editingConfig.description || "-"}</Descriptions.Item>
+                <Descriptions.Item label="中文名">{getConfigHelp(editingConfig.configKey).label}</Descriptions.Item>
+                <Descriptions.Item label="说明">{getConfigHelp(editingConfig.configKey).desc}</Descriptions.Item>
+                <Descriptions.Item label="建议">{getConfigHelp(editingConfig.configKey).tip || editingConfig.description || "-"}</Descriptions.Item>
                 <Descriptions.Item label="范围">
                   {editingConfig.minValue ?? "-"} ~ {editingConfig.maxValue ?? "-"}
                 </Descriptions.Item>
