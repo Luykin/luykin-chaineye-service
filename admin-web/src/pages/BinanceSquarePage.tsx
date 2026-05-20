@@ -44,6 +44,7 @@ import {
   syncBinanceSquareSeedFollowing,
   updateBinanceSquareConfig,
 } from "@/services/binance-square";
+import type { BinanceSquareRankSet } from "@/services/binance-square";
 import type {
   BinanceSquareActionResult,
   BinanceSquareConfigItem,
@@ -55,6 +56,12 @@ import type {
 } from "@/types/binance-square";
 
 const TABLE_MAX_HEIGHT = 480;
+const RANK_STAGES: Array<{ key: BinanceSquareRankSet; label: string; source: string; desc: string }> = [
+  { key: "top50", label: "Top50", source: "Seed", desc: "同步 Seed 关注列表后计算" },
+  { key: "top100", label: "Top100", source: "Top50", desc: "同步 Top50 关注列表后计算" },
+  { key: "top300", label: "Top300", source: "Top100", desc: "同步 Top100 关注列表后计算" },
+  { key: "top1000", label: "Top1000", source: "Top300", desc: "同步 Top300 并合并中间层" },
+];
 
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
@@ -89,9 +96,12 @@ export function BinanceSquarePage() {
   const [postsPage, setPostsPage] = useState(1);
   const [postsFilterUsername, setPostsFilterUsername] = useState("");
   const [postsFilterType, setPostsFilterType] = useState<string>();
+  const [postsOrderBy, setPostsOrderBy] = useState("score");
+  const [postsMinScore, setPostsMinScore] = useState("");
   const [logsPage, setLogsPage] = useState(1);
   const [logsTaskType, setLogsTaskType] = useState<string>();
   const [logsStatus, setLogsStatus] = useState<string>();
+  const [targetRankSet, setTargetRankSet] = useState<BinanceSquareRankSet>("top1000");
   const [followingUser, setFollowingUser] = useState<string | null>(null);
   const [followingPage, setFollowingPage] = useState(1);
   const [configModalOpen, setConfigModalOpen] = useState(false);
@@ -102,16 +112,21 @@ export function BinanceSquarePage() {
   const statusQuery = useQuery({ queryKey: ["binance-square", "status"], queryFn: fetchBinanceSquareStatus, refetchInterval: 15_000 });
   const progressQuery = useQuery({ queryKey: ["binance-square", "progress"], queryFn: fetchBinanceSquareProgress, refetchInterval: 15_000 });
   const seedsQuery = useQuery({ queryKey: ["binance-square", "seeds"], queryFn: fetchBinanceSquareSeeds });
-  const targetsQuery = useQuery({ queryKey: ["binance-square", "targets"], queryFn: fetchBinanceSquareTargets });
+  const targetsQuery = useQuery({
+    queryKey: ["binance-square", "targets", targetRankSet],
+    queryFn: () => fetchBinanceSquareTargets(targetRankSet),
+  });
   const configQuery = useQuery({ queryKey: ["binance-square", "config"], queryFn: fetchBinanceSquareConfig });
   const postsQuery = useQuery({
-    queryKey: ["binance-square", "posts", postsPage, postsFilterUsername, postsFilterType],
+    queryKey: ["binance-square", "posts", postsPage, postsFilterUsername, postsFilterType, postsOrderBy, postsMinScore],
     queryFn: () =>
       fetchBinanceSquarePosts({
         page: postsPage,
         pageSize: 20,
         username: postsFilterUsername || undefined,
         postType: postsFilterType || undefined,
+        orderBy: postsOrderBy,
+        minScore: postsMinScore || undefined,
       }),
   });
   const logsQuery = useQuery({
@@ -155,7 +170,7 @@ export function BinanceSquarePage() {
   });
   const calcTargetMutation = useMutation({
     mutationFn: calculateBinanceSquareTargets,
-    onSuccess: (result) => handleActionSuccess("计算 Top50", result.data),
+    onSuccess: (result) => handleActionSuccess("更新目标层级", result.data),
     onError: (error: Error) => messageApi.error(error.message || "计算失败"),
   });
   const crawlMutation = useMutation({
@@ -244,7 +259,7 @@ export function BinanceSquarePage() {
         </a>
       ),
     },
-    { title: "最后同步", dataIndex: "lastCrawledAt", key: "lastCrawledAt", width: 170, render: formatDateTime },
+    { title: "最后同步", dataIndex: "lastFollowingSyncedAt", key: "lastFollowingSyncedAt", width: 170, render: formatDateTime },
     {
       title: "状态",
       key: "status",
@@ -288,6 +303,13 @@ export function BinanceSquarePage() {
 
   const targetColumns: ColumnsType<BinanceSquareTargetRankItem> = [
     {
+      title: "层级",
+      dataIndex: "rankSet",
+      key: "rankSet",
+      width: 95,
+      render: (value) => <Tag color={value === "top1000" ? "gold" : "blue"}>{value || targetRankSet}</Tag>,
+    },
+    {
       title: "排名",
       dataIndex: "rank",
       key: "rank",
@@ -301,13 +323,27 @@ export function BinanceSquarePage() {
       key: "followerCount",
       width: 160,
       render: (value, record) => {
-        const seedNames = record.seedFollowers?.map((item) => item.displayName || item.username).join(", ");
+        const sourceFollowers = record.sourceFollowers || record.seedFollowers || [];
+        const seedNames = sourceFollowers.map((item) => item.displayName || item.username).join(", ");
         return (
-          <span title={seedNames ? `被以下种子用户关注：${seedNames}` : undefined} style={{ cursor: seedNames ? "help" : "default" }}>
-            {value ?? 0} 个种子关注
+          <span title={seedNames ? `来源关注者：${seedNames}` : undefined} style={{ cursor: seedNames ? "help" : "default" }}>
+            {value ?? 0} 个来源关注
           </span>
         );
       },
+    },
+    {
+      title: "命中层",
+      dataIndex: "includedRankSets",
+      key: "includedRankSets",
+      width: 180,
+      render: (value?: string[] | null) => (
+        <div className="bs-rankset-tags">
+          {(value?.length ? value : [targetRankSet]).map((rankSet) => (
+            <Tag key={rankSet}>{rankSet}</Tag>
+          ))}
+        </div>
+      ),
     },
     {
       title: "操作",
@@ -341,6 +377,13 @@ export function BinanceSquarePage() {
   ];
 
   const postColumns: ColumnsType<BinanceSquarePostItem> = [
+    {
+      title: "分数",
+      dataIndex: "score",
+      key: "score",
+      width: 90,
+      render: (value) => <strong className="bs-score-cell">{typeof value === "number" ? value.toFixed(4) : "-"}</strong>,
+    },
     { title: "类型", dataIndex: "postType", key: "postType", width: 90, render: (value) => <span className={`bs-log-type ${value === "article" ? "bs-log-type-post" : value === "reply" ? "bs-log-type-following" : "bs-log-type-target"}`}>{value || "-"}</span> },
     { title: "用户名", dataIndex: "username", key: "username", width: 150 },
     {
@@ -349,7 +392,7 @@ export function BinanceSquarePage() {
       render: (_, record) => (
         <Typography.Link
           className="bs-post-title-link"
-          href={record.postUrl || undefined}
+          href={record.sourceUrl || record.postUrl || undefined}
           target="_blank"
           title={record.title || record.contentText || record.content || ""}
         >
@@ -361,6 +404,7 @@ export function BinanceSquarePage() {
     { title: "评论", dataIndex: "commentCount", key: "commentCount", width: 80, render: (value) => value ?? "-" },
     { title: "分享", dataIndex: "shareCount", key: "shareCount", width: 80, render: (value) => value ?? "-" },
     { title: "浏览", dataIndex: "viewCount", key: "viewCount", width: 80, render: (value) => value ?? "-" },
+    { title: "评分时间", dataIndex: "lastScoredAt", key: "lastScoredAt", width: 170, render: formatDateTime },
     { title: "发布时间", dataIndex: "publishedAt", key: "publishedAt", width: 170, render: formatDateTime },
   ];
 
@@ -371,7 +415,7 @@ export function BinanceSquarePage() {
     { title: "目标", dataIndex: "targetId", key: "targetId", width: 140, render: (value) => value || "-" },
     { title: "数量", dataIndex: "itemsCount", key: "itemsCount", width: 90, render: (value) => value ?? "-" },
     { title: "耗时", dataIndex: "durationMs", key: "durationMs", width: 100, render: (value) => (value == null ? "-" : `${value}ms`) },
-    { title: "镜像批次", dataIndex: "snapshotId", key: "snapshotId", width: 150, render: (value) => value || "-" },
+    { title: "抓取批次", dataIndex: "snapshotId", key: "snapshotId", width: 150, render: (value) => value || "-" },
   ];
 
   const followingColumns: ColumnsType<BinanceSquareFollowingUser> = [
@@ -383,9 +427,16 @@ export function BinanceSquarePage() {
       render: (value) => <strong>{value || "-"}</strong>,
     },
     { title: "显示名", dataIndex: "displayName", key: "displayName", render: (value) => value || "-" },
+    {
+      title: "状态",
+      dataIndex: "isActive",
+      key: "isActive",
+      width: 90,
+      render: (value) => <Tag color={value === false ? "default" : "success"}>{value === false ? "失效" : "有效"}</Tag>,
+    },
     { title: "粉丝数", dataIndex: "totalFollowerCount", key: "totalFollowerCount", width: 100, render: (value) => value ?? "-" },
     { title: "帖子数", dataIndex: "totalPostCount", key: "totalPostCount", width: 100, render: (value) => value ?? "-" },
-    { title: "同步时间", dataIndex: "createdAt", key: "createdAt", width: 170, render: formatDateTime },
+    { title: "最近看到", dataIndex: "lastSeenAt", key: "lastSeenAt", width: 170, render: formatDateTime },
   ];
 
   return (
@@ -393,14 +444,14 @@ export function BinanceSquarePage() {
       {contextHolder}
       <div className="binance-square-page" id="binance-square-section">
         <h2 className="section-title">币安广场爬虫管理</h2>
-        <p className="section-desc">种子用户关注同步 → Top50目标计算 → 帖子定时抓取 → 镜像对比分析</p>
+        <p className="section-desc">Seed 关注同步 → Top50/100/300/1000 分阶段扩展 → Top1000 近7天 ALL+REPLY 抓取 → 热度评分排序</p>
 
         <div className="bs-stats-grid">
           {[
             ["种子用户", stats?.seedCount || 0, "#3b82f6"],
-            ["目标用户", stats?.targetCount || 0, "#f59e0b"],
+            ["最终目标", stats?.targetCount || 0, "#f59e0b"],
             ["帖子总数", stats?.postCount || 0, "#10b981"],
-            ["镜像记录", stats?.snapshotCount || 0, "#8b5cf6"],
+            ["历史镜像", stats?.snapshotCount || 0, "#8b5cf6"],
             ["镜像存储", formatBytes(stats?.snapshotStorageBytes), "#ec4899"],
             ["上次抓取", stats?.lastCrawlAt ? dayjs(stats.lastCrawlAt).format("HH:mm") : "-", "#64748b"],
             ["调度器状态", crawlStatus?.isRunning ? "运行中" : "已暂停", "#ef4444"],
@@ -418,14 +469,25 @@ export function BinanceSquarePage() {
           <LegacyActionButton variant="primary" loading={syncAllMutation.isPending} onClick={() => syncAllMutation.mutate()}>
             同步关注列表
           </LegacyActionButton>
-          <LegacyActionButton variant="primary" loading={calcTargetMutation.isPending} onClick={() => calcTargetMutation.mutate()}>
-            计算 Top50
-          </LegacyActionButton>
-          <LegacyActionButton variant="primary" loading={crawlMutation.isPending} onClick={() => crawlMutation.mutate("incremental")}>
-            增量抓取
-          </LegacyActionButton>
-          <LegacyActionButton variant="primary" loading={crawlMutation.isPending} onClick={() => crawlMutation.mutate("full")}>
-            全量抓取
+          {RANK_STAGES.map((stage) => (
+            <LegacyActionButton
+              key={stage.key}
+              variant={stage.key === "top1000" ? "success" : "primary"}
+              loading={calcTargetMutation.isPending && calcTargetMutation.variables === stage.key}
+              onClick={() => {
+                setTargetRankSet(stage.key);
+                calcTargetMutation.mutate(stage.key);
+              }}
+            >
+              更新 {stage.label}
+            </LegacyActionButton>
+          ))}
+          <LegacyActionButton
+            variant="primary"
+            loading={crawlMutation.isPending}
+            onClick={() => crawlMutation.mutate({ mode: "full", daysBack: 7, concurrency: 2, filterTypes: ["ALL", "REPLY"] })}
+          >
+            抓取近7天
           </LegacyActionButton>
           <LegacyActionButton variant="success" loading={startMutation.isPending} onClick={() => startMutation.mutate()}>
             启动调度器
@@ -496,6 +558,8 @@ export function BinanceSquarePage() {
                       <Descriptions size="small" column={1}>
                         <Descriptions.Item label="调度器">{crawlStatus?.isRunning ? "运行中" : "已暂停"}</Descriptions.Item>
                         <Descriptions.Item label="当前抓取">{crawlStatus?.isCrawling ? "执行中" : "空闲"}</Descriptions.Item>
+                        <Descriptions.Item label="抓取窗口">{crawlStatus?.postCrawlDaysBack || 7} 天 / {crawlStatus?.postCrawlFilterTypes || "ALL,REPLY"}</Descriptions.Item>
+                        <Descriptions.Item label="冷却/并发">{crawlStatus?.postCrawlCooldownMinutes ?? 30} 分钟 / {crawlStatus?.postCrawlConcurrency ?? 2} 并发</Descriptions.Item>
                         <Descriptions.Item label="最近任务状态">{crawlStatus?.lastCrawl?.status || "-"}</Descriptions.Item>
                         <Descriptions.Item label="最近任务时间">{formatDateTime(crawlStatus?.lastCrawl?.createdAt)}</Descriptions.Item>
                       </Descriptions>
@@ -550,8 +614,60 @@ export function BinanceSquarePage() {
                 label: "目标用户",
                 children: (
                   <div className="bs-sub-panel-react">
-                    <div className="bs-panel-title">Top 50 目标用户</div>
-                    <Table size="small" rowKey="username" columns={targetColumns} dataSource={targets} pagination={false} scroll={{ y: TABLE_MAX_HEIGHT }} />
+                    <div className="bs-panel-title">分阶段目标用户</div>
+                    <div className="bs-rank-pipeline">
+                      {RANK_STAGES.map((stage, index) => (
+                        <div className={`bs-rank-stage ${targetRankSet === stage.key ? "is-active" : ""}`} key={stage.key}>
+                          <button
+                            type="button"
+                            className="bs-rank-stage-main"
+                            onClick={() => setTargetRankSet(stage.key)}
+                          >
+                            <span className="bs-rank-stage-index">{index + 1}</span>
+                            <span>
+                              <strong>{stage.label}</strong>
+                              <em>{stage.source} → {stage.label}</em>
+                            </span>
+                          </button>
+                          <p>{stage.desc}</p>
+                          <LegacyActionButton
+                            size="small"
+                            compact
+                            variant={stage.key === "top1000" ? "success" : "primary"}
+                            loading={calcTargetMutation.isPending && calcTargetMutation.variables === stage.key}
+                            onClick={() => calcTargetMutation.mutate(stage.key)}
+                          >
+                            更新
+                          </LegacyActionButton>
+                        </div>
+                      ))}
+                    </div>
+                    <Alert
+                      type="info"
+                      showIcon
+                      className="bs-stage-alert"
+                      message="需要按 Top50 → Top100 → Top300 → Top1000 顺序更新"
+                      description="每一步会自动同步上一层用户的关注列表；Top1000 会合并 Top50/100/300，最终写入 isTargetUser。"
+                    />
+                    <div className="bs-target-toolbar">
+                      <Select
+                        value={targetRankSet}
+                        onChange={(value) => setTargetRankSet(value as BinanceSquareRankSet)}
+                        options={RANK_STAGES.map((stage) => ({ label: stage.label, value: stage.key }))}
+                      />
+                      <LegacyActionButton variant="neutral" onClick={() => void targetsQuery.refetch()}>
+                        刷新当前层
+                      </LegacyActionButton>
+                    </div>
+                    <Table
+                      size="small"
+                      rowKey={(record) => `${record.rankSet || targetRankSet}-${record.username}`}
+                      columns={targetColumns}
+                      dataSource={targets}
+                      pagination={false}
+                      scroll={{ y: TABLE_MAX_HEIGHT, x: 1050 }}
+                      loading={targetsQuery.isFetching}
+                    />
                   </div>
                 ),
               },
@@ -576,7 +692,10 @@ export function BinanceSquarePage() {
                           <span>成功: {progress.successUsers || 0}</span>
                           <span style={{ color: "#ef4444" }}>失败: {progress.failedUsers || 0}</span>
                           <span>出错率: {progress.errorRate || 0}%</span>
-                          <span>帖子: {progress.totalPostsAll || 0}</span>
+                          <span>ALL: {progress.totalPostsAll || 0}</span>
+                          <span>REPLY: {progress.totalPostsReply || 0}</span>
+                          <span>入库: {progress.totalUpsertedPosts || 0}</span>
+                          <span>评分: {progress.scoredPosts || 0}</span>
                         </div>
                       </div>
                     ) : null}
@@ -597,6 +716,24 @@ export function BinanceSquarePage() {
                           { label: "引用", value: "quote" },
                           { label: "回复", value: "reply" },
                         ]}
+                      />
+                      <Select
+                        value={postsOrderBy}
+                        onChange={(value) => { setPostsOrderBy(value); setPostsPage(1); }}
+                        options={[
+                          { label: "按热度分", value: "score" },
+                          { label: "按发布时间", value: "publishedAt" },
+                          { label: "按浏览", value: "viewCount" },
+                          { label: "按分享", value: "shareCount" },
+                          { label: "按评论", value: "commentCount" },
+                          { label: "按点赞", value: "likeCount" },
+                        ]}
+                      />
+                      <Input
+                        placeholder="最低分"
+                        value={postsMinScore}
+                        onChange={(event) => setPostsMinScore(event.target.value)}
+                        onPressEnter={() => setPostsPage(1)}
                       />
                       <LegacyActionButton variant="neutral" onClick={() => { setPostsPage(1); void postsQuery.refetch(); }}>筛选</LegacyActionButton>
                     </div>
@@ -635,7 +772,7 @@ export function BinanceSquarePage() {
                         options={[
                           { label: "关注同步", value: "following" },
                           { label: "帖子抓取", value: "post" },
-                          { label: "Top50计算", value: "target_calculate" },
+                          { label: "目标计算", value: "target_calculate" },
                         ]}
                       />
                       <Select

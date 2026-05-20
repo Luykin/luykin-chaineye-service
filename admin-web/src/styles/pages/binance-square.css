@@ -37,6 +37,99 @@
   margin-bottom: 20px;
 }
 
+.bs-rank-pipeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.bs-rank-stage {
+  position: relative;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.bs-rank-stage.is-active {
+  border-color: #f59e0b;
+  box-shadow: 0 10px 28px rgba(245, 158, 11, 0.12);
+}
+
+.bs-rank-stage-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bs-rank-stage-main strong {
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.bs-rank-stage-main em {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.bs-rank-stage-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bs-rank-stage p {
+  min-height: 34px;
+  margin: 10px 0 12px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.bs-stage-alert {
+  margin-bottom: 14px;
+}
+
+.bs-target-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.bs-target-toolbar .ant-select {
+  min-width: 160px;
+}
+
+.bs-rankset-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .bs-sub-tabs-react.ant-tabs {
   margin-top: 0;
 }
@@ -313,6 +406,11 @@
   white-space: nowrap;
 }
 
+.bs-score-cell {
+  color: #b45309;
+  font-variant-numeric: tabular-nums;
+}
+
 .binance-square-page .ant-pagination {
   margin-top: 16px;
 }
@@ -323,6 +421,10 @@
   }
 
   .bs-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bs-rank-pipeline {
     grid-template-columns: 1fr;
   }
 

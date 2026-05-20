@@ -69,29 +69,45 @@ export async function fetchBinanceSquareFollowingList(params: {
   username: string;
   page?: number;
   pageSize?: number;
+  includeInactive?: boolean;
 }) {
   const query = new URLSearchParams();
   query.set("page", String(params.page || 1));
   query.set("pageSize", String(params.pageSize || 20));
+  if (params.includeInactive) query.set("includeInactive", "true");
   return apiRequest<BinanceSquareApiResponse<BinanceSquarePaginated<BinanceSquareFollowingUser>>>(
     `${BASE}/following/list/${encodeURIComponent(params.username)}?${query.toString()}`
   );
 }
 
-export async function calculateBinanceSquareTargets() {
-  return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(`${BASE}/target/calculate`, {
+export type BinanceSquareRankSet = "top50" | "top100" | "top300" | "top1000";
+
+export async function calculateBinanceSquareTargets(rankSet: BinanceSquareRankSet = "top50") {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(`${BASE}/target/calculate/${rankSet}`, {
     method: "POST",
   });
 }
 
-export async function fetchBinanceSquareTargets() {
-  return apiRequest<BinanceSquareApiResponse<BinanceSquareTargetRankItem[]>>(`${BASE}/target/list`);
+export async function fetchBinanceSquareTargets(rankSet: BinanceSquareRankSet = "top1000") {
+  const query = new URLSearchParams();
+  query.set("rankSet", rankSet);
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareTargetRankItem[]>>(`${BASE}/target/list?${query.toString()}`);
 }
 
-export async function crawlBinanceSquarePosts(mode: "incremental" | "full") {
+export async function crawlBinanceSquarePosts(params: {
+  mode?: "incremental" | "full";
+  daysBack?: number;
+  concurrency?: number;
+  filterTypes?: string[];
+} = {}) {
   return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(`${BASE}/crawl/posts`, {
     method: "POST",
-    body: { mode },
+    body: {
+      mode: params.mode || "full",
+      daysBack: params.daysBack || 7,
+      concurrency: params.concurrency || 2,
+      filterTypes: params.filterTypes || ["ALL", "REPLY"],
+    },
   });
 }
 
@@ -119,12 +135,16 @@ export async function fetchBinanceSquarePosts(params: {
   pageSize?: number;
   username?: string;
   postType?: string;
+  orderBy?: string;
+  minScore?: string | number;
 }) {
   const query = new URLSearchParams();
   query.set("page", String(params.page || 1));
   query.set("pageSize", String(params.pageSize || 20));
   if (params.username) query.set("username", params.username);
   if (params.postType) query.set("postType", params.postType);
+  if (params.orderBy) query.set("orderBy", params.orderBy);
+  if (params.minScore !== undefined && params.minScore !== "") query.set("minScore", String(params.minScore));
   return apiRequest<BinanceSquareApiResponse<BinanceSquarePaginated<BinanceSquarePostItem>>>(
     `${BASE}/posts?${query.toString()}`
   );

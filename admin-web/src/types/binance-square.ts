@@ -22,6 +22,7 @@ export interface BinanceSquareSeedItem {
   description?: string | null;
   totalFollowingCount?: number | null;
   lastCrawledAt?: string | null;
+  lastFollowingSyncedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -29,6 +30,9 @@ export interface BinanceSquareSeedItem {
 export interface BinanceSquareFollowingUser {
   followingUsername: string;
   followingSquareUid?: string | null;
+  isActive?: boolean | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
   createdAt?: string;
   displayName?: string | null;
   avatar?: string | null;
@@ -46,12 +50,22 @@ export interface BinanceSquarePaginated<T> {
 export interface BinanceSquareTargetRankItem {
   id?: number;
   username: string;
+  rankSet?: string;
   rank: number;
   followerCount: number;
+  sourceRankSet?: string | null;
+  sourceUserCount?: number | null;
   seedFollowers?: Array<{
     username: string;
     displayName?: string | null;
   }>;
+  sourceFollowers?: Array<{
+    username: string;
+    displayName?: string | null;
+    rank?: number | null;
+  }>;
+  includedRankSets?: string[] | null;
+  calculationRunId?: string | null;
   lastCalculatedAt?: string;
 }
 
@@ -67,8 +81,17 @@ export interface BinanceSquarePostItem {
   shareCount?: number | null;
   commentCount?: number | null;
   viewCount?: number | null;
+  score?: number | null;
+  viewScore?: number | null;
+  shareScore?: number | null;
+  commentScore?: number | null;
+  likeScore?: number | null;
+  freshnessScore?: number | null;
+  scoreVersion?: string | null;
+  lastScoredAt?: string | null;
   publishedAt?: string | null;
   postUrl?: string | null;
+  sourceUrl?: string | null;
   isDeleted?: boolean | null;
   createdAt?: string;
 }
@@ -97,6 +120,11 @@ export interface BinanceSquareCrawlStatus {
     successUsers?: number;
     failedUsers?: number;
     errorRate?: number;
+    totalPostsAll?: number;
+    totalPostsReply?: number;
+    totalUpsertedPosts?: number;
+    daysBack?: number | null;
+    filterTypes?: string[] | null;
     startedAt?: string;
   } | null;
   lastCrawl?: {
@@ -107,6 +135,11 @@ export interface BinanceSquareCrawlStatus {
     durationMs?: number;
     createdAt?: string;
   } | null;
+  postCrawlCooldownMinutes?: number;
+  postCrawlDaysBack?: number;
+  postCrawlConcurrency?: number;
+  postCrawlFilterTypes?: string;
+  incrementalCrawlInterval?: number;
 }
 
 export interface BinanceSquareProgress {
@@ -122,7 +155,11 @@ export interface BinanceSquareProgress {
   errors?: Array<{ username?: string; error?: string }>;
   totalPostsAll?: number;
   totalPostsReply?: number;
+  totalUpsertedPosts?: number;
   totalSnapshots?: number;
+  scoredPosts?: number;
+  daysBack?: number | null;
+  filterTypes?: string[] | null;
   startedAt?: string;
   completedAt?: string | null;
   durationMs?: number | null;
