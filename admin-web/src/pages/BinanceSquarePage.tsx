@@ -130,6 +130,25 @@ function formatBytes(bytes?: number | null) {
   return `${size.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
 }
 
+function formatDurationMs(value?: number | null) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  const ms = Math.max(0, value);
+  if (ms < 1000) return `${Math.round(ms)}毫秒`;
+
+  const totalSeconds = ms / 1000;
+  if (totalSeconds < 60) return `${totalSeconds.toFixed(totalSeconds < 10 ? 1 : 0)}秒`;
+
+  const seconds = Math.round(totalSeconds);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainSeconds = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}小时${minutes}分${remainSeconds}秒`;
+  }
+  return `${minutes}分${remainSeconds.toString().padStart(2, "0")}秒`;
+}
+
 function statusTagColor(status?: string | null) {
   if (!status) return "default";
   if (status === "success" || status === "running") return "success";
@@ -305,15 +324,17 @@ export function BinanceSquarePage() {
       key: "totalFollowingCount",
       width: 100,
       render: (value, record) => (
-        <a
-          className="bs-following-link"
-          onClick={() => {
-            setFollowingUser(record.username);
-            setFollowingPage(1);
-          }}
-        >
-          {value ?? "-"}
-        </a>
+        <Tooltip title={`当前有效关注关系数${record.apiTotalFollowingCount == null ? "" : `；API统计值：${record.apiTotalFollowingCount}`}`}>
+          <a
+            className="bs-following-link"
+            onClick={() => {
+              setFollowingUser(record.username);
+              setFollowingPage(1);
+            }}
+          >
+            {value ?? "-"}
+          </a>
+        </Tooltip>
       ),
     },
     { title: "最后同步", dataIndex: "lastFollowingSyncedAt", key: "lastFollowingSyncedAt", width: 170, render: formatDateTime },
@@ -471,7 +492,7 @@ export function BinanceSquarePage() {
     { title: "状态", dataIndex: "status", key: "status", width: 90, render: (value) => <Tag color={statusTagColor(value)}>{value || "-"}</Tag> },
     { title: "目标", dataIndex: "targetId", key: "targetId", width: 140, render: (value) => value || "-" },
     { title: "数量", dataIndex: "itemsCount", key: "itemsCount", width: 90, render: (value) => value ?? "-" },
-    { title: "耗时", dataIndex: "durationMs", key: "durationMs", width: 100, render: (value) => (value == null ? "-" : `${value}ms`) },
+    { title: "耗时", dataIndex: "durationMs", key: "durationMs", width: 110, render: formatDurationMs },
     { title: "抓取批次", dataIndex: "snapshotId", key: "snapshotId", width: 150, render: (value) => value || "-" },
   ];
 

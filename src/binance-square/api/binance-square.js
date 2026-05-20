@@ -1,5 +1,5 @@
 const express = require("express");
-const { Op } = require("sequelize");
+const { Op, QueryTypes } = require("sequelize");
 const { scanKeys, getRedisClient } = require("../../lib/redisClient");
 
 // 模型将在路由挂载时注入（通过initRoutes函数）
@@ -106,7 +106,9 @@ router.get("/seed/list", async (req, res) => {
     });
     console.log(`[BS_CASE_DEBUG] /seed/list seeds.length=${seeds.length}, usernames=[${seeds.map(s=>s.username).join(", ")}]`);
 
-    // 关联查询 BinanceSquareUser 获取 totalFollowingCount / lastFollowingSyncedAt（大小写不敏感）
+    // 关联查询 BinanceSquareUser 获取 lastFollowingSyncedAt 等资料（大小写不敏感）。
+    // “关注数”用于打开关注列表，应该以当前有效关注关系数为准，而不是 BinanceSquareUsers.totalFollowingCount。
+    // 后者来自API个人统计字段，部分账号会返回0/不完整，容易和实际已入库关注关系不一致。
     const seedUsernames = seeds.map((s) => s.username);
     const lowerUsernames = seedUsernames.map((s) => s.toLowerCase());
     console.log(`[BS_CASE_DEBUG] /seed/list querying BinanceSquareUser with LOWER(username) IN [${lowerUsernames.join(", ")}]`);
@@ -122,12 +124,36 @@ router.get("/seed/list", async (req, res) => {
     const userMap = new Map(users.map((u) => [u.username.toLowerCase(), u]));
     console.log(`[BS_CASE_DEBUG] /seed/list userMap keys=[${Array.from(userMap.keys()).join(", ")}]`);
 
+    const relationCounts = lowerUsernames.length > 0
+      ? await db.sequelize.query(
+        `
+          SELECT
+            LOWER("followerUsername") AS "usernameLower",
+            COUNT(*)::int AS "activeFollowingCount"
+          FROM "BinanceSquareFollowings"
+          WHERE LOWER("followerUsername") IN (:lowerUsernames)
+            AND "isActive" = true
+          GROUP BY LOWER("followerUsername")
+        `,
+        {
+          replacements: { lowerUsernames },
+          type: QueryTypes.SELECT,
+        }
+      )
+      : [];
+    const relationCountMap = new Map(
+      relationCounts.map((row) => [row.usernameLower, Number(row.activeFollowingCount) || 0])
+    );
+
     const enriched = seeds.map((s) => {
-      const user = userMap.get(s.username.toLowerCase());
+      const lowerUsername = s.username.toLowerCase();
+      const user = userMap.get(lowerUsername);
+      const activeFollowingCount = relationCountMap.get(lowerUsername);
       console.log(`[BS_CASE_DEBUG] /seed/list mapping seed=${s.username} => user=${JSON.stringify(user)}`);
       return {
         ...s.toJSON(),
-        totalFollowingCount: user?.totalFollowingCount ?? null,
+        totalFollowingCount: activeFollowingCount ?? (user?.lastFollowingSyncedAt ? 0 : user?.totalFollowingCount ?? null),
+        apiTotalFollowingCount: user?.totalFollowingCount ?? null,
         lastFollowingSyncedAt: user?.lastFollowingSyncedAt ?? null,
         lastCrawledAt: user?.lastCrawledAt ?? null,
       };

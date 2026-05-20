@@ -21,6 +21,7 @@ export interface BinanceSquareSeedItem {
   isActive?: boolean;
   description?: string | null;
   totalFollowingCount?: number | null;
+  apiTotalFollowingCount?: number | null;
   lastCrawledAt?: string | null;
   lastFollowingSyncedAt?: string | null;
   createdAt?: string;
