@@ -11,6 +11,7 @@ import type {
   BinanceSquareSeedItem,
   BinanceSquareStats,
   BinanceSquareTargetRankItem,
+  BinanceSquareTargetProgress,
   BinanceSquareFollowingUser,
 } from "@/types/binance-square";
 
@@ -26,6 +27,10 @@ export async function fetchBinanceSquareStatus() {
 
 export async function fetchBinanceSquareProgress() {
   return apiRequest<BinanceSquareApiResponse<BinanceSquareProgress>>(`${BASE}/crawl/progress`);
+}
+
+export async function fetchBinanceSquareTargetProgress() {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareTargetProgress>>(`${BASE}/target/progress`);
 }
 
 export async function fetchBinanceSquareSeeds() {

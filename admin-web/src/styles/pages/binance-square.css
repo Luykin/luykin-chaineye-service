@@ -152,6 +152,26 @@
   margin-bottom: 14px;
 }
 
+.bs-target-progress {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.bs-target-progress.is-running {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.bs-progress-error {
+  margin-top: 10px;
+  color: #dc2626;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .bs-target-toolbar {
   display: flex;
   flex-wrap: wrap;

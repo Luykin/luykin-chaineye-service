@@ -1,6 +1,6 @@
 const express = require("express");
 const { Op } = require("sequelize");
-const { scanKeys } = require("../../lib/redisClient");
+const { scanKeys, getRedisClient } = require("../../lib/redisClient");
 
 // 模型将在路由挂载时注入（通过initRoutes函数）
 let db = null;
@@ -552,6 +552,43 @@ const RANK_STAGE_CONFIG = {
   top1000: { rankSet: "top1000", sourceRankSet: "top300", limit: 1000, previousRankSets: ["top50", "top100", "top300"] },
 };
 
+function getTargetProgressKey(runId) {
+  return `binance_square:task:progress:target:${runId}`;
+}
+
+async function updateTargetProgress(runId, update) {
+  try {
+    const redis = await getRedisClient();
+    const key = getTargetProgressKey(runId);
+    const existing = await redis.get(key);
+    const current = existing ? JSON.parse(existing) : {};
+    const merged = { ...current, ...update, updatedAt: new Date().toISOString() };
+    await redis.set(key, JSON.stringify(merged), "EX", 24 * 60 * 60);
+    return merged;
+  } catch (e) {
+    console.warn("[target/progress] 更新Redis进度失败:", e.message);
+    return null;
+  }
+}
+
+async function getTargetProgressList() {
+  const redis = await getRedisClient();
+  const keys = await scanKeys(redis, "binance_square:task:progress:target:*", { maxKeys: 100 });
+  const progressList = [];
+
+  for (const key of keys) {
+    try {
+      const data = await redis.get(key);
+      if (data) progressList.push(JSON.parse(data));
+    } catch (e) {
+      console.warn("[target/progress] 解析Redis进度失败:", e.message);
+    }
+  }
+
+  progressList.sort((a, b) => new Date(b.updatedAt || b.startedAt || 0) - new Date(a.updatedAt || a.startedAt || 0));
+  return progressList;
+}
+
 function normalizeRankSet(rankSet) {
   return String(rankSet || "").toLowerCase();
 }
@@ -594,7 +631,7 @@ async function getStageSourceUsers(config) {
   });
 }
 
-async function syncSourceUsersFollowings(sourceUsers, config, runId) {
+async function syncSourceUsersFollowings(sourceUsers, config, runId, onProgress = null) {
   const results = [];
   let hasFailed = false;
   let hasPartial = false;
@@ -616,6 +653,18 @@ async function syncSourceUsersFollowings(sourceUsers, config, runId) {
     totalDeactivated += result.deactivatedRelations || 0;
     if (result.status === "failed") hasFailed = true;
     if (result.status === "partial") hasPartial = true;
+    if (onProgress) {
+      await onProgress({
+        processedSourceUsers: i + 1,
+        currentSourceUser: source.username,
+        totalNewUsers,
+        totalRelations,
+        totalDeactivated,
+        failedSourceUsers: results.filter((item) => item.status === "failed").length,
+        partialSourceUsers: results.filter((item) => item.status === "partial").length,
+        lastResult: result,
+      });
+    }
   }
 
   return {
@@ -872,38 +921,109 @@ async function runRankStage(rankSet) {
   }
 
   console.log(`[target/${config.rankSet}] 开始更新，source=${config.sourceRankSet}, sourceUsers=${sourceUsers.length}, runId=${runId}`);
-  const syncSummary = await syncSourceUsersFollowings(sourceUsers, config, runId);
-  const candidates = await calculateCandidatesFromFollowings(sourceUsers);
-  const rankEntries = await buildRankEntries(config, candidates);
-  const writeResult = await writeRankSet(config, rankEntries, sourceUsers, runId, syncSummary);
-
-  const durationMs = Date.now() - startTime;
-  await db.BinanceSquareCrawlLog.create({
+  await updateTargetProgress(runId, {
     taskType: "target_calculate",
-    status: syncSummary.status,
-    targetId: config.rankSet,
-    itemsCount: rankEntries.length,
-    durationMs,
-    failedDetails: {
-      rankSet: config.rankSet,
-      sourceRankSet: config.sourceRankSet,
-      runId,
-      syncSummary,
-    },
+    runId,
+    rankSet: config.rankSet,
+    sourceRankSet: config.sourceRankSet,
+    status: "running",
+    stage: "sync_followings",
+    totalSourceUsers: sourceUsers.length,
+    processedSourceUsers: 0,
+    failedSourceUsers: 0,
+    partialSourceUsers: 0,
+    totalNewUsers: 0,
+    totalRelations: 0,
+    totalDeactivated: 0,
+    candidateCount: 0,
+    rankedCount: 0,
+    startedAt: new Date().toISOString(),
   });
 
-  return {
-    ...writeResult,
-    candidateCount: candidates.length,
-    durationMs,
-    preview: rankEntries.slice(0, 20).map((entry) => ({
-      rank: entry.rank,
-      username: entry.username,
-      followerCount: entry.followerCount,
-      includedRankSets: entry.includedRankSets,
-      sourceFollowers: (entry.sourceFollowers || []).slice(0, 10).map((s) => s.username),
-    })),
-  };
+  try {
+    const syncSummary = await syncSourceUsersFollowings(sourceUsers, config, runId, async (progress) => {
+      await updateTargetProgress(runId, {
+        stage: "sync_followings",
+        ...progress,
+      });
+    });
+
+    await updateTargetProgress(runId, { stage: "calculate_candidates" });
+    const candidates = await calculateCandidatesFromFollowings(sourceUsers);
+
+    await updateTargetProgress(runId, {
+      stage: "build_rank",
+      candidateCount: candidates.length,
+    });
+    const rankEntries = await buildRankEntries(config, candidates);
+
+    await updateTargetProgress(runId, {
+      stage: "write_rank",
+      rankedCount: rankEntries.length,
+    });
+    const writeResult = await writeRankSet(config, rankEntries, sourceUsers, runId, syncSummary);
+
+    const durationMs = Date.now() - startTime;
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "target_calculate",
+      status: syncSummary.status,
+      targetId: config.rankSet,
+      itemsCount: rankEntries.length,
+      durationMs,
+      failedDetails: {
+        rankSet: config.rankSet,
+        sourceRankSet: config.sourceRankSet,
+        runId,
+        syncSummary,
+      },
+    });
+
+    const finalProgress = await updateTargetProgress(runId, {
+      status: "completed",
+      stage: "completed",
+      candidateCount: candidates.length,
+      rankedCount: rankEntries.length,
+      durationMs,
+      completedAt: new Date().toISOString(),
+    });
+
+    return {
+      ...writeResult,
+      candidateCount: candidates.length,
+      durationMs,
+      progress: finalProgress,
+      preview: rankEntries.slice(0, 20).map((entry) => ({
+        rank: entry.rank,
+        username: entry.username,
+        followerCount: entry.followerCount,
+        includedRankSets: entry.includedRankSets,
+        sourceFollowers: (entry.sourceFollowers || []).slice(0, 10).map((s) => s.username),
+      })),
+    };
+  } catch (error) {
+    const durationMs = Date.now() - startTime;
+    await updateTargetProgress(runId, {
+      status: "failed",
+      stage: "failed",
+      errorMessage: error.message,
+      durationMs,
+      completedAt: new Date().toISOString(),
+    });
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "target_calculate",
+      status: "failed",
+      targetId: config.rankSet,
+      errorMessage: error.message,
+      durationMs,
+      failedDetails: {
+        action: "target_calculate",
+        rankSet: config.rankSet,
+        sourceRankSet: config.sourceRankSet,
+        runId,
+      },
+    }).catch(() => {});
+    throw error;
+  }
 }
 
 /**
@@ -916,12 +1036,6 @@ router.post("/target/calculate", async (req, res) => {
     res.json(success(result));
   } catch (error) {
     console.error("[target/calculate] error:", error);
-    await db.BinanceSquareCrawlLog.create({
-      taskType: "target_calculate",
-      status: "failed",
-      targetId: "top50",
-      errorMessage: error.message,
-    }).catch(() => {});
     res.status(500).json(fail(error.message));
   }
 });
@@ -937,12 +1051,6 @@ router.post("/target/calculate/:rankSet", async (req, res) => {
     res.json(success(result));
   } catch (error) {
     console.error(`[target/calculate/${rankSet}] error:`, error);
-    await db.BinanceSquareCrawlLog.create({
-      taskType: "target_calculate",
-      status: "failed",
-      targetId: rankSet,
-      errorMessage: error.message,
-    }).catch(() => {});
     res.status(500).json(fail(error.message));
   }
 });
@@ -963,6 +1071,31 @@ router.get("/target/list", async (req, res) => {
     res.json(success(ranks));
   } catch (error) {
     console.error("[target/list] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /target/progress
+ * 查询当前/最近一次目标用户分阶段更新进度
+ */
+router.get("/target/progress", async (req, res) => {
+  try {
+    const progressList = await getTargetProgressList();
+
+    if (progressList.length === 0) {
+      return res.json(success({ running: false, message: "当前没有目标用户更新任务" }));
+    }
+
+    const latest = progressList[0];
+
+    res.json(success({
+      running: latest?.status === "running",
+      latest,
+      list: progressList.slice(0, 10),
+    }));
+  } catch (error) {
+    console.error("[target/progress] error:", error);
     res.status(500).json(fail(error.message));
   }
 });
@@ -1587,20 +1720,61 @@ router.get("/crawl/logs", async (req, res) => {
 
     const where = {};
     if (taskType) where.taskType = taskType;
-    if (status) where.status = status;
+    if (status && status !== "running") where.status = status;
 
-    const { count, rows } = await db.BinanceSquareCrawlLog.findAndCountAll({
-      where,
-      order: [["createdAt", "DESC"]],
-      limit: parseInt(pageSize, 10),
-      offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
-    });
+    const logResult = status === "running"
+      ? { count: 0, rows: [] }
+      : await db.BinanceSquareCrawlLog.findAndCountAll({
+        where,
+        order: [["createdAt", "DESC"]],
+        limit: parseInt(pageSize, 10),
+        offset: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
+      });
+    const { count, rows } = logResult;
+
+    const data = rows.map((row) => row.toJSON());
+    let virtualRunningLogs = [];
+
+    // 目标用户分阶段更新是长任务：DB日志在完成/失败后写入；运行中状态从Redis进度合并展示，刷新页面也不会丢。
+    if (parseInt(page, 10) === 1 && (!taskType || taskType === "target_calculate") && (!status || status === "running")) {
+      try {
+        const targetProgressList = await getTargetProgressList();
+        virtualRunningLogs = targetProgressList
+          .filter((progress) => progress.status === "running")
+          .map((progress) => {
+            const startedAt = progress.startedAt || progress.updatedAt || new Date().toISOString();
+            const durationMs = progress.startedAt ? Date.now() - new Date(progress.startedAt).getTime() : null;
+            return {
+              id: `target-running-${progress.runId}`,
+              taskType: "target_calculate",
+              status: "running",
+              targetId: progress.rankSet || null,
+              itemsCount: progress.rankedCount || progress.candidateCount || null,
+              durationMs,
+              snapshotId: progress.runId || null,
+              errorMessage: null,
+              failedDetails: {
+                stage: progress.stage,
+                sourceRankSet: progress.sourceRankSet,
+                processedSourceUsers: progress.processedSourceUsers,
+                totalSourceUsers: progress.totalSourceUsers,
+              },
+              createdAt: startedAt,
+              updatedAt: progress.updatedAt || startedAt,
+            };
+          });
+      } catch (e) {
+        console.warn("[crawl/logs] 合并目标用户运行进度失败:", e.message);
+      }
+    }
+
+    const mergedData = [...virtualRunningLogs, ...data].slice(0, parseInt(pageSize, 10));
 
     res.json(success({
-      total: count,
+      total: count + virtualRunningLogs.length,
       page: parseInt(page, 10),
       pageSize: parseInt(pageSize, 10),
-      data: rows,
+      data: mergedData,
     }));
   } catch (error) {
     console.error("[crawl/logs] error:", error);

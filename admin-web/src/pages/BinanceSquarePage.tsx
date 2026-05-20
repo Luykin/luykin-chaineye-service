@@ -37,6 +37,7 @@ import {
   fetchBinanceSquareSeeds,
   fetchBinanceSquareStats,
   fetchBinanceSquareStatus,
+  fetchBinanceSquareTargetProgress,
   fetchBinanceSquareTargets,
   forceStopBinanceSquareCrawl,
   pauseBinanceSquareScheduler,
@@ -159,6 +160,7 @@ export function BinanceSquarePage() {
   const statsQuery = useQuery({ queryKey: ["binance-square", "stats"], queryFn: fetchBinanceSquareStats, refetchInterval: 30_000 });
   const statusQuery = useQuery({ queryKey: ["binance-square", "status"], queryFn: fetchBinanceSquareStatus, refetchInterval: 15_000 });
   const progressQuery = useQuery({ queryKey: ["binance-square", "progress"], queryFn: fetchBinanceSquareProgress, refetchInterval: 15_000 });
+  const targetProgressQuery = useQuery({ queryKey: ["binance-square", "target-progress"], queryFn: fetchBinanceSquareTargetProgress, refetchInterval: 5_000 });
   const seedsQuery = useQuery({ queryKey: ["binance-square", "seeds"], queryFn: fetchBinanceSquareSeeds });
   const targetsQuery = useQuery({
     queryKey: ["binance-square", "targets", targetRankSet],
@@ -204,6 +206,7 @@ export function BinanceSquarePage() {
       statsQuery.refetch(),
       statusQuery.refetch(),
       progressQuery.refetch(),
+      targetProgressQuery.refetch(),
       seedsQuery.refetch(),
       targetsQuery.refetch(),
       postsQuery.refetch(),
@@ -285,6 +288,7 @@ export function BinanceSquarePage() {
   const stats = statsQuery.data?.data;
   const crawlStatus = statusQuery.data?.data;
   const progress = progressQuery.data?.data;
+  const targetProgress = targetProgressQuery.data?.data;
   const seeds = seedsQuery.data?.data || [];
   const targets = targetsQuery.data?.data || [];
   const posts = postsQuery.data?.data;
@@ -525,6 +529,7 @@ export function BinanceSquarePage() {
               key={stage.key}
               variant={stage.key === "top1000" ? "success" : "primary"}
               loading={calcTargetMutation.isPending && calcTargetMutation.variables === stage.key}
+              disabled={Boolean(targetProgress?.running)}
               onClick={() => {
                 setTargetRankSet(stage.key);
                 calcTargetMutation.mutate(stage.key);
@@ -557,6 +562,7 @@ export function BinanceSquarePage() {
               void statsQuery.refetch();
               void statusQuery.refetch();
               void progressQuery.refetch();
+              void targetProgressQuery.refetch();
               void seedsQuery.refetch();
               void targetsQuery.refetch();
               void postsQuery.refetch();
@@ -723,6 +729,7 @@ export function BinanceSquarePage() {
                             size="small"
                             className={`bs-rank-stage-update ${stage.key === "top1000" ? "is-final" : ""}`}
                             loading={calcTargetMutation.isPending && calcTargetMutation.variables === stage.key}
+                            disabled={Boolean(targetProgress?.running)}
                             onClick={() => calcTargetMutation.mutate(stage.key)}
                           >
                             更新 {stage.label}
@@ -737,6 +744,36 @@ export function BinanceSquarePage() {
                       message="需要按 Top50 → Top100 → Top300 → Top1000 顺序更新"
                       description="每一步会自动同步上一层用户的关注列表；Top1000 会合并 Top50/100/300，最终写入 isTargetUser。"
                     />
+                    {targetProgress?.latest ? (
+                      <div className={`bs-target-progress ${targetProgress.running ? "is-running" : ""}`}>
+                        <div className="bs-progress-header">
+                          <span className="bs-progress-status">
+                            {targetProgress.running ? "目标用户更新中" : "最近目标更新"}
+                            {targetProgress.latest.rankSet ? ` · ${targetProgress.latest.rankSet}` : ""}
+                          </span>
+                          <span className="bs-progress-stats">
+                            {targetProgress.latest.processedSourceUsers || 0}/{targetProgress.latest.totalSourceUsers || 0}
+                          </span>
+                        </div>
+                        <Progress
+                          percent={targetProgress.latest.totalSourceUsers ? Math.round(((targetProgress.latest.processedSourceUsers || 0) / targetProgress.latest.totalSourceUsers) * 100) : 0}
+                          showInfo={false}
+                          size="small"
+                          status={targetProgress.latest.status === "failed" ? "exception" : targetProgress.running ? "active" : "success"}
+                        />
+                        <div className="bs-progress-detail">
+                          <span>阶段: {targetProgress.latest.stage || "-"}</span>
+                          <span>当前: {targetProgress.latest.currentSourceUser || "-"}</span>
+                          <span>候选: {targetProgress.latest.candidateCount || 0}</span>
+                          <span>入榜: {targetProgress.latest.rankedCount || 0}</span>
+                          <span>关系: {targetProgress.latest.totalRelations || 0}</span>
+                          <span>更新: {formatDateTime(targetProgress.latest.updatedAt)}</span>
+                        </div>
+                        {targetProgress.latest.errorMessage ? (
+                          <div className="bs-progress-error">{targetProgress.latest.errorMessage}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="bs-target-toolbar">
                       <Select
                         value={targetRankSet}
@@ -869,6 +906,7 @@ export function BinanceSquarePage() {
                         value={logsStatus}
                         onChange={(value) => { setLogsStatus(value); setLogsPage(1); }}
                         options={[
+                          { label: "运行中", value: "running" },
                           { label: "成功", value: "success" },
                           { label: "失败", value: "failed" },
                           { label: "部分成功", value: "partial" },

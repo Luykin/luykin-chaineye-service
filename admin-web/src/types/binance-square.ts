@@ -97,7 +97,7 @@ export interface BinanceSquarePostItem {
 }
 
 export interface BinanceSquareCrawlLogItem {
-  id: number;
+  id: number | string;
   taskType: string;
   status: string;
   targetId?: string | null;
@@ -164,6 +164,38 @@ export interface BinanceSquareProgress {
   completedAt?: string | null;
   durationMs?: number | null;
   status?: string;
+}
+
+export interface BinanceSquareTargetProgressDetail {
+  running?: boolean;
+  taskType?: string;
+  runId?: string;
+  rankSet?: string;
+  sourceRankSet?: string;
+  status?: string;
+  stage?: string;
+  totalSourceUsers?: number;
+  processedSourceUsers?: number;
+  failedSourceUsers?: number;
+  partialSourceUsers?: number;
+  totalNewUsers?: number;
+  totalRelations?: number;
+  totalDeactivated?: number;
+  candidateCount?: number;
+  rankedCount?: number;
+  currentSourceUser?: string;
+  errorMessage?: string;
+  startedAt?: string;
+  completedAt?: string;
+  updatedAt?: string;
+  durationMs?: number;
+}
+
+export interface BinanceSquareTargetProgress {
+  running: boolean;
+  message?: string;
+  latest?: BinanceSquareTargetProgressDetail;
+  list?: BinanceSquareTargetProgressDetail[];
 }
 
 export interface BinanceSquareConfigItem {
