@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { HttpsProxyAgent } = require("https-proxy-agent");
 
 const BASE_URL = "https://www.binance.com";
 const REQUEST_DELAY_MIN = 500;
@@ -10,19 +11,11 @@ function buildProxyConfig(proxyUrl) {
   if (!proxyUrl) return {};
 
   try {
-    const parsed = new URL(proxyUrl);
     return {
-      proxy: {
-        protocol: parsed.protocol.replace(":", "") || "http",
-        host: parsed.hostname,
-        port: parsed.port ? parseInt(parsed.port, 10) : undefined,
-        auth: parsed.username
-          ? {
-              username: decodeURIComponent(parsed.username),
-              password: decodeURIComponent(parsed.password || ""),
-            }
-          : undefined,
-      },
+      // axios 内置 proxy 在部分 HTTP 代理访问 HTTPS 站点时会返回 400；
+      // 显式使用 HTTPS proxy agent，走 CONNECT 隧道，与 curl -x 行为一致。
+      httpsAgent: new HttpsProxyAgent(proxyUrl),
+      proxy: false,
     };
   } catch (e) {
     console.warn(`[api-client] 代理地址无效，已忽略: ${proxyUrl} (${e.message})`);

@@ -38,6 +38,11 @@ function generateRunId(prefix = "run") {
   );
 }
 
+function parsePositiveInt(value, defaultValue) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
+}
+
 // ==================== 种子用户管理 ====================
 
 /**
@@ -1190,7 +1195,7 @@ router.post("/crawl/posts", async (req, res) => {
     const onlyFirstPage = mode === "incremental";
     const label = onlyFirstPage ? "增量" : "近7天";
     const daysBack = parseInt(req.body?.daysBack || 7, 10);
-    const concurrency = parseInt(req.body?.concurrency || process.env.BINANCE_SQUARE_PROXY_LINE_COUNT || 8, 10);
+    const concurrency = Math.max(parsePositiveInt(req.body?.concurrency, 5), 5);
     const filterTypes = Array.isArray(req.body?.filterTypes)
       ? req.body.filterTypes
       : String(req.body?.filterTypes || "ALL,REPLY").split(",");
@@ -1204,11 +1209,13 @@ router.post("/crawl/posts", async (req, res) => {
         onlyFirstPage,
         daysBack,
         concurrency,
-        proxyLineCount: parseInt(req.body?.proxyLineCount || process.env.BINANCE_SQUARE_PROXY_LINE_COUNT || concurrency, 10),
-        targetLimit: parseInt(req.body?.targetLimit || process.env.BINANCE_SQUARE_TARGET_LIMIT || 1000, 10),
-        batchWriteUsers: parseInt(req.body?.batchWriteUsers || process.env.BINANCE_SQUARE_BATCH_WRITE_USERS || 25, 10),
-        batchWriteMaxPosts: parseInt(req.body?.batchWriteMaxPosts || process.env.BINANCE_SQUARE_BATCH_WRITE_MAX_POSTS || 800, 10),
-        progressEveryUsers: parseInt(req.body?.progressEveryUsers || process.env.BINANCE_SQUARE_PROGRESS_EVERY_USERS || 5, 10),
+        // 注意：这里不读取 API 服务器的 BINANCE_SQUARE_TARGET_* 环境变量，
+        // 避免主服务历史调试变量把独立爬虫限制成只抓 1 个用户。
+        proxyLineCount: parsePositiveInt(req.body?.proxyLineCount, concurrency),
+        targetLimit: parsePositiveInt(req.body?.targetLimit, 1000),
+        batchWriteUsers: parsePositiveInt(req.body?.batchWriteUsers, 25),
+        batchWriteMaxPosts: parsePositiveInt(req.body?.batchWriteMaxPosts, 800),
+        progressEveryUsers: parsePositiveInt(req.body?.progressEveryUsers, 5),
         filterTypes: filterTypes.map((s) => String(s).trim().toUpperCase()).filter(Boolean),
       },
     };

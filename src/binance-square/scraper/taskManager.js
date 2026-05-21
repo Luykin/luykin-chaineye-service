@@ -309,6 +309,21 @@ class BinanceSquareTaskManager {
       safeTargetEnd !== null ? safeTargetEnd + 1 : safeTargetStart + safeTargetLimit
     );
 
+    console.log("[taskManager] target range debug", {
+      targetLimit,
+      targetStart,
+      targetEnd,
+      safeTargetLimit,
+      safeTargetStart,
+      safeTargetEnd,
+      queryLimit,
+      dbMatchedUsers: allTargetUsers.length,
+      selectedUsers: targetUsers.length,
+      envTargetLimit: process.env.BINANCE_SQUARE_TARGET_LIMIT || null,
+      envTargetStart: process.env.BINANCE_SQUARE_TARGET_START || null,
+      envTargetEnd: process.env.BINANCE_SQUARE_TARGET_END || null,
+    });
+
     if (targetUsers.length === 0) {
       throw new Error("没有目标用户，请先计算Top1000");
     }

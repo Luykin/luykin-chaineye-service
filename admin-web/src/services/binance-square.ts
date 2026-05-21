@@ -110,7 +110,7 @@ export async function crawlBinanceSquarePosts(params: {
     body: {
       mode: params.mode || "full",
       daysBack: params.daysBack || 7,
-      concurrency: params.concurrency || 2,
+      concurrency: params.concurrency || 5,
       filterTypes: params.filterTypes || ["ALL", "REPLY"],
     },
   });
