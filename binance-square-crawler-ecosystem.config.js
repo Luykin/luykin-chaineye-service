@@ -10,7 +10,7 @@ module.exports = {
       env: {
         TZ: "Asia/Shanghai",
         NODE_ENV: "development",
-        BINANCE_SQUARE_PROXY_LINE_COUNT: 8,
+        BINANCE_SQUARE_PROXY_LINE_COUNT: 5,
         BINANCE_SQUARE_TARGET_LIMIT: 1000,
         BINANCE_SQUARE_BATCH_WRITE_USERS: 25,
         BINANCE_SQUARE_BATCH_WRITE_MAX_POSTS: 800,
@@ -19,7 +19,7 @@ module.exports = {
       env_production: {
         TZ: "Asia/Shanghai",
         NODE_ENV: "production",
-        BINANCE_SQUARE_PROXY_LINE_COUNT: 8,
+        BINANCE_SQUARE_PROXY_LINE_COUNT: 5,
         BINANCE_SQUARE_TARGET_LIMIT: 1000,
         BINANCE_SQUARE_BATCH_WRITE_USERS: 25,
         BINANCE_SQUARE_BATCH_WRITE_MAX_POSTS: 800,
