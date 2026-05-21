@@ -291,9 +291,14 @@ class BinanceSquareTaskManager {
     const startTime = Date.now();
     if (!snapshotId) snapshotId = this._generateSnapshotId();
 
-    const safeTargetLimit = Number.isFinite(Number(targetLimit)) && Number(targetLimit) > 0 ? Number(targetLimit) : 1000;
-    const safeTargetStart = Number.isFinite(Number(targetStart)) && Number(targetStart) >= 0 ? Number(targetStart) : 0;
-    const safeTargetEnd = Number.isFinite(Number(targetEnd)) && Number(targetEnd) >= safeTargetStart ? Number(targetEnd) : null;
+    const parsedTargetLimit = Number(targetLimit);
+    const parsedTargetStart = Number(targetStart);
+    const hasExplicitTargetEnd = targetEnd !== null && targetEnd !== undefined && String(targetEnd).trim() !== "";
+    const parsedTargetEnd = hasExplicitTargetEnd ? Number(targetEnd) : NaN;
+
+    const safeTargetLimit = Number.isFinite(parsedTargetLimit) && parsedTargetLimit > 0 ? parsedTargetLimit : 1000;
+    const safeTargetStart = Number.isFinite(parsedTargetStart) && parsedTargetStart >= 0 ? parsedTargetStart : 0;
+    const safeTargetEnd = Number.isFinite(parsedTargetEnd) && parsedTargetEnd >= safeTargetStart ? parsedTargetEnd : null;
     const queryLimit = safeTargetEnd !== null ? safeTargetEnd + 1 : safeTargetStart + safeTargetLimit;
 
     // 获取最终Top1000目标用户；独立爬虫默认只取前1000，支持按下标切片分片。
