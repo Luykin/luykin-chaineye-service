@@ -16,6 +16,19 @@ const POST_SCORE_WEIGHTS = {
   freshness: 0.10,
 };
 
+const HTTPS_PROXY_IDS = [
+  "http://user81794:8ipjmd@185.232.47.106:7446",
+  "http://user81794:8ipjmd@216.10.9.111:7446",
+  "http://user81794:8ipjmd@185.232.47.101:7446",
+  "http://user81794:8ipjmd@216.10.9.234:7446",
+  "http://user81794:8ipjmd@185.232.47.233:7446",
+  "http://user81794:8ipjmd@163.5.88.220:6324",
+  "http://user81794:8ipjmd@108.165.167.7:6324",
+  "http://user81794:8ipjmd@108.165.167.11:6324",
+  "http://user81794:8ipjmd@45.135.251.198:6324",
+  "http://user81794:8ipjmd@45.135.251.37:6324",
+];
+
 function chunkArray(arr, size) {
   const chunks = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -47,6 +60,47 @@ function normPow(value, maxValue, power = 0.7) {
   if (max <= 0) return 0;
   const score = Math.pow(safeNumber(value), power) / Math.pow(max, power);
   return Number.isFinite(score) ? score : 0;
+}
+
+function getProxyUrlsFromEnv() {
+  const raw = process.env.BINANCE_SQUARE_PROXY_URLS || "";
+  return raw
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function getDefaultProxyUrls() {
+  const envProxyUrls = getProxyUrlsFromEnv();
+  return envProxyUrls.length > 0 ? envProxyUrls : HTTPS_PROXY_IDS;
+}
+
+function maskProxyUrl(proxyUrl) {
+  if (!proxyUrl) return "direct";
+  try {
+    const url = new URL(proxyUrl);
+    return `${url.protocol}//***:***@${url.hostname}:${url.port}`;
+  } catch (_) {
+    return "proxy";
+  }
+}
+
+function splitContiguousRanges(items, lineCount) {
+  const count = Math.max(1, Math.min(lineCount, items.length));
+  const chunkSize = Math.ceil(items.length / count);
+  const ranges = [];
+  for (let i = 0; i < count; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, items.length);
+    if (start >= end) break;
+    ranges.push({
+      lineIndex: i,
+      start,
+      end: end - 1,
+      users: items.slice(start, end),
+    });
+  }
+  return ranges;
 }
 
 class BinanceSquareTaskManager {
@@ -219,23 +273,56 @@ class BinanceSquareTaskManager {
       concurrency = 1,
       filterTypes = ["ALL", "REPLY"],
       scoreVersion = POST_SCORE_VERSION,
+      targetLimit = parseInt(process.env.BINANCE_SQUARE_TARGET_LIMIT || "1000", 10),
+      targetStart = parseInt(process.env.BINANCE_SQUARE_TARGET_START || "0", 10),
+      targetEnd = process.env.BINANCE_SQUARE_TARGET_END !== undefined
+        ? parseInt(process.env.BINANCE_SQUARE_TARGET_END, 10)
+        : null,
+      batchWriteUsers = parseInt(process.env.BINANCE_SQUARE_BATCH_WRITE_USERS || "25", 10),
+      batchWriteMaxPosts = parseInt(process.env.BINANCE_SQUARE_BATCH_WRITE_MAX_POSTS || "800", 10),
+      progressEveryUsers = parseInt(process.env.BINANCE_SQUARE_PROGRESS_EVERY_USERS || "5", 10),
+      proxyUrls = getDefaultProxyUrls(),
+      proxyLineCount = parseInt(process.env.BINANCE_SQUARE_PROXY_LINE_COUNT || String(concurrency || 1), 10),
+      useProxyShards = process.env.BINANCE_SQUARE_USE_PROXY_SHARDS !== "false",
     } = options;
     const mode = onlyFirstPage ? "增量" : "近7天";
     const startTime = Date.now();
     if (!snapshotId) snapshotId = this._generateSnapshotId();
 
-    // 获取最终Top1000目标用户
-    const targetUsers = await this.db.BinanceSquareUser.findAll({
+    const safeTargetLimit = Number.isFinite(Number(targetLimit)) && Number(targetLimit) > 0 ? Number(targetLimit) : 1000;
+    const safeTargetStart = Number.isFinite(Number(targetStart)) && Number(targetStart) >= 0 ? Number(targetStart) : 0;
+    const safeTargetEnd = Number.isFinite(Number(targetEnd)) && Number(targetEnd) >= safeTargetStart ? Number(targetEnd) : null;
+    const queryLimit = safeTargetEnd !== null ? safeTargetEnd + 1 : safeTargetStart + safeTargetLimit;
+
+    // 获取最终Top1000目标用户；独立爬虫默认只取前1000，支持按下标切片分片。
+    const allTargetUsers = await this.db.BinanceSquareUser.findAll({
       where: { isTargetUser: true },
       attributes: ["username", "squareUid", "targetRank"],
       order: [["targetRank", "ASC"], ["updatedAt", "ASC"]],
+      limit: queryLimit,
     });
+
+    const targetUsers = allTargetUsers.slice(
+      safeTargetStart,
+      safeTargetEnd !== null ? safeTargetEnd + 1 : safeTargetStart + safeTargetLimit
+    );
 
     if (targetUsers.length === 0) {
       throw new Error("没有目标用户，请先计算Top1000");
     }
 
-    console.log(`[taskManager] 开始${mode}抓取 ${targetUsers.length} 个finalTop1000目标用户的帖子，daysBack=${daysBack}, filterTypes=${filterTypes.join(",")}, concurrency=${concurrency}`);
+    const normalizedProxyUrls = Array.isArray(proxyUrls)
+      ? proxyUrls.map((s) => String(s).trim()).filter(Boolean)
+      : [];
+    const safeBatchWriteUsers = Math.max(1, Number(batchWriteUsers || 25));
+    const safeBatchWriteMaxPosts = Math.max(1, Number(batchWriteMaxPosts || 800));
+    const safeProgressEveryUsers = Math.max(1, Number(progressEveryUsers || 5));
+
+    console.log(
+      `[taskManager] 开始${mode}抓取 ${targetUsers.length} 个finalTop1000目标用户的帖子，` +
+      `range=${safeTargetStart}-${safeTargetStart + targetUsers.length - 1}, daysBack=${daysBack}, ` +
+      `filterTypes=${filterTypes.join(",")}, concurrency=${concurrency}, batchWriteUsers=${safeBatchWriteUsers}, proxies=${normalizedProxyUrls.length}`
+    );
 
     let totalPostsAll = 0;
     let totalPostsReply = 0;
@@ -251,6 +338,10 @@ class BinanceSquareTaskManager {
       daysBack,
       filterTypes,
       totalUsers: targetUsers.length,
+      targetStart: safeTargetStart,
+      targetEnd: safeTargetStart + targetUsers.length - 1,
+      batchWriteUsers: safeBatchWriteUsers,
+      proxyLines: normalizedProxyUrls.length > 0 ? Math.min(Number(proxyLineCount || 1), normalizedProxyUrls.length) : 0,
       processedUsers: 0,
       successUsers: 0,
       failedUsers: 0,
@@ -265,44 +356,96 @@ class BinanceSquareTaskManager {
       status: "running",
     });
 
-    const workerCount = Math.max(1, Math.min(Number(concurrency || 1), 10, targetUsers.length));
-    let nextIndex = 0;
+    const redis = await getRedisClient();
+    const checkForceStop = async () => {
+      if (this.shouldStop) return true;
+      const forceStop = await redis.get("binance_square:task:force_stop");
+      if (forceStop === "true") {
+        this.shouldStop = true;
+        await redis.del("binance_square:task:force_stop");
+        console.log("[taskManager] 收到 Redis 强制终止指令");
+        return true;
+      }
+      return false;
+    };
 
-    const processOne = async (user) => {
+    const processOne = async (user, proxyUrl = null) => {
       if (!user.squareUid) {
         throw new Error("缺少squareUid");
       }
 
       const timeoutMs = onlyFirstPage ? 3 * 60 * 1000 : 20 * 60 * 1000;
-      await this._processUserWithTimeout(user, snapshotId, timeoutMs, {
+      const result = await this._processUserWithTimeout(user, snapshotId, timeoutMs, {
         onlyFirstPage,
         daysBack,
         filterTypes,
+        proxyUrl,
+        deferWrite: true,
       });
 
-      totalPostsAll += user._tmpAllPosts || 0;
-      totalPostsReply += user._tmpReplyPosts || 0;
-      totalUpsertedPosts += user._tmpUpsertedPosts || 0;
+      totalPostsAll += result.allPostsCount || 0;
+      totalPostsReply += result.replyPostsCount || 0;
 
-      // 更新lastCrawledAt
-      await this.db.BinanceSquareUser.update(
-        { lastCrawledAt: new Date() },
-        { where: this.db.sequelize.where(this.db.sequelize.fn("LOWER", this.db.sequelize.col("username")), user.username.toLowerCase()) }
-      );
+      return result;
     };
 
-    const worker = async () => {
-      while (nextIndex < targetUsers.length) {
-        if (this.shouldStop) {
+    const updateProgressIfNeeded = async (force = false) => {
+      if (!force && processedUsers % safeProgressEveryUsers !== 0 && processedUsers < targetUsers.length) {
+        return;
+      }
+
+      const successCount = processedUsers - failedUsers.length;
+      await this._updateProgress(snapshotId, {
+        processedUsers,
+        successUsers: successCount,
+        failedUsers: failedUsers.length,
+        errorRate: processedUsers > 0 ? ((failedUsers.length / processedUsers) * 100).toFixed(2) + "%" : "0.00%",
+        errors: failedUsers,
+        totalPostsAll,
+        totalPostsReply,
+        totalUpsertedPosts,
+        totalSnapshots: 0,
+      });
+    };
+
+    const worker = async ({ lineIndex, users, start, end, proxyUrl = null }) => {
+      const postBuffer = [];
+      const crawledUsernames = [];
+      let usersSinceFlush = 0;
+
+      const flushBuffer = async (reason) => {
+        if (postBuffer.length === 0 && crawledUsernames.length === 0) return;
+        const posts = postBuffer.splice(0, postBuffer.length);
+        const usernames = crawledUsernames.splice(0, crawledUsernames.length);
+        usersSinceFlush = 0;
+
+        const result = await this._flushPostBatch(posts, usernames, snapshotId);
+        totalUpsertedPosts += result.upsertedPosts || 0;
+        console.log(
+          `[taskManager] line=${lineIndex + 1} 批量写入完成 reason=${reason} users=${usernames.length} posts=${posts.length} upsert=${result.upsertedPosts || 0}`
+        );
+      };
+
+      console.log(
+        `[taskManager] line=${lineIndex + 1} 启动，负责全局下标 ${safeTargetStart + start}-${safeTargetStart + end}，` +
+        `用户数=${users.length}，proxy=${maskProxyUrl(proxyUrl)}`
+      );
+
+      for (const user of users) {
+        if (await checkForceStop()) {
           console.log("[taskManager] 强制终止，中断worker循环");
-          throw new Error("任务被强制终止");
+          break;
         }
 
-        const currentIndex = nextIndex++;
-        const user = targetUsers[currentIndex];
-
         try {
-          await processOne(user);
+          const result = await processOne(user, proxyUrl);
+          postBuffer.push(...(result.postRecords || []));
+          crawledUsernames.push(user.username);
+          usersSinceFlush++;
+
+          if (usersSinceFlush >= safeBatchWriteUsers || postBuffer.length >= safeBatchWriteMaxPosts) {
+            await flushBuffer("threshold");
+          }
         } catch (error) {
           let detail = error.message;
           if (error.name === "SequelizeValidationError" && error.errors) {
@@ -314,30 +457,35 @@ class BinanceSquareTaskManager {
           } else {
             console.error(`[BS_CRAWL_FAIL] ${user.username} 抓取失败:`, error.message);
           }
-          failedUsers.push({ username: user.username, error: detail, time: new Date().toISOString() });
+          failedUsers.push({ username: user.username, error: detail, time: new Date().toISOString(), line: lineIndex + 1 });
         } finally {
           delete user._tmpAllPosts;
           delete user._tmpReplyPosts;
           delete user._tmpUpsertedPosts;
           processedUsers++;
-
-          const successCount = processedUsers - failedUsers.length;
-          await this._updateProgress(snapshotId, {
-            processedUsers,
-            successUsers: successCount,
-            failedUsers: failedUsers.length,
-            errorRate: ((failedUsers.length / processedUsers) * 100).toFixed(2) + "%",
-            errors: failedUsers,
-            totalPostsAll,
-            totalPostsReply,
-            totalUpsertedPosts,
-            totalSnapshots: 0,
-          });
+          await updateProgressIfNeeded(false);
         }
       }
+
+      await flushBuffer("final");
+      await updateProgressIfNeeded(true);
     };
 
-    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    if (useProxyShards && normalizedProxyUrls.length > 0) {
+      const lineCount = Math.max(
+        1,
+        Math.min(Number(proxyLineCount || concurrency || 1), Number(concurrency || proxyLineCount || 1), normalizedProxyUrls.length, targetUsers.length)
+      );
+      const ranges = splitContiguousRanges(targetUsers, lineCount).map((range, idx) => ({
+        ...range,
+        proxyUrl: normalizedProxyUrls[idx % normalizedProxyUrls.length],
+      }));
+      await Promise.all(ranges.map((range) => worker(range)));
+    } else {
+      const workerCount = Math.max(1, Math.min(Number(concurrency || 1), 10, targetUsers.length));
+      const ranges = splitContiguousRanges(targetUsers, workerCount);
+      await Promise.all(ranges.map((range) => worker(range)));
+    }
 
     // 抓取完成后，对finalTop1000近N天帖子批量重算分
     const scoringResult = await this.recalculatePostScores({
@@ -347,7 +495,7 @@ class BinanceSquareTaskManager {
     });
 
     const durationMs = Date.now() - startTime;
-    const overallStatus = failedUsers.length > 0 ? "partial" : "success";
+    const overallStatus = this.shouldStop || failedUsers.length > 0 ? "partial" : "success";
 
     // 记录CrawlLog（包含失败详情）
     try {
@@ -359,8 +507,8 @@ class BinanceSquareTaskManager {
         snapshotId,
         durationMs,
         failedDetails: failedUsers.length > 0
-          ? { mode: onlyFirstPage ? "incremental" : "rolling_7d", errors: failedUsers, scoring: scoringResult }
-          : { mode: onlyFirstPage ? "incremental" : "rolling_7d", scoring: scoringResult },
+          ? { mode: onlyFirstPage ? "incremental" : "rolling_7d", stopped: this.shouldStop, errors: failedUsers, scoring: scoringResult }
+          : { mode: onlyFirstPage ? "incremental" : "rolling_7d", stopped: this.shouldStop, scoring: scoringResult },
       });
     } catch (logError) {
       console.error("[taskManager] CrawlLog 写入失败:", logError.message);
@@ -368,10 +516,10 @@ class BinanceSquareTaskManager {
 
     // 最终进度更新：标记为已完成
     await this._updateProgress(snapshotId, {
-      processedUsers: targetUsers.length,
-      successUsers: targetUsers.length - failedUsers.length,
+      processedUsers,
+      successUsers: processedUsers - failedUsers.length,
       failedUsers: failedUsers.length,
-      errorRate: ((failedUsers.length / targetUsers.length) * 100).toFixed(2) + "%",
+      errorRate: processedUsers > 0 ? ((failedUsers.length / processedUsers) * 100).toFixed(2) + "%" : "0.00%",
       errors: failedUsers,
       totalPostsAll,
       totalPostsReply,
@@ -380,7 +528,7 @@ class BinanceSquareTaskManager {
       scoredPosts: scoringResult.scoredPosts,
       durationMs,
       completedAt: new Date().toISOString(),
-      status: "completed",
+      status: this.shouldStop ? "stopped" : "completed",
       mode: onlyFirstPage ? "incremental" : "rolling_7d",
     });
 
@@ -415,8 +563,12 @@ class BinanceSquareTaskManager {
     });
 
     try {
-      await Promise.race([userPromise, timeoutPromise]);
-      console.log(`[taskManager] 完成用户 ${user.username}，耗时 ${Date.now() - start}ms，ALL=${user._tmpAllPosts || 0}，REPLY=${user._tmpReplyPosts || 0}，upsert=${user._tmpUpsertedPosts || 0}`);
+      const result = await Promise.race([userPromise, timeoutPromise]);
+      const allCount = result?.allPostsCount ?? user._tmpAllPosts ?? 0;
+      const replyCount = result?.replyPostsCount ?? user._tmpReplyPosts ?? 0;
+      const upsertCount = result?.upsertedPosts ?? user._tmpUpsertedPosts ?? 0;
+      console.log(`[taskManager] 完成用户 ${user.username}，耗时 ${Date.now() - start}ms，ALL=${allCount}，REPLY=${replyCount}，upsert=${upsertCount}`);
+      return result;
     } catch (error) {
       console.error(`[taskManager] 用户 ${user.username} 处理异常/超时，耗时 ${Date.now() - start}ms:`, error.message);
       throw error;
@@ -431,6 +583,8 @@ class BinanceSquareTaskManager {
       onlyFirstPage = false,
       daysBack = 7,
       filterTypes = ["ALL", "REPLY"],
+      proxyUrl = null,
+      deferWrite = false,
     } = crawlOptions;
 
     // 1. 请求阶段
@@ -438,7 +592,9 @@ class BinanceSquareTaskManager {
     const normalizedFilterTypes = Array.from(new Set(filterTypes.map((f) => String(f).trim().toUpperCase()).filter(Boolean)));
     const results = await Promise.all(
       normalizedFilterTypes.map(async (filterType) => {
-        const result = await apiClient.fetchUserPosts(user.squareUid, filterType, daysBack, onlyFirstPage);
+        const result = await apiClient.fetchUserPosts(user.squareUid, filterType, daysBack, onlyFirstPage, {
+          proxyUrl,
+        });
         return { filterType, result };
       })
     );
@@ -476,23 +632,78 @@ class BinanceSquareTaskManager {
       lastSnapshotId: snapshotId, // 兼容旧字段：现在记录最近抓取批次ID
     }));
 
-    if (postRecords.length > 0) {
-      await this.db.BinanceSquarePost.bulkCreate(postRecords, {
-        updateOnDuplicate: [
-          "title", "content", "contentText", "mediaUrls",
-          "likeCount", "shareCount", "commentCount", "viewCount",
-          "publishedAt", "sourceUrl", "postType", "rawData",
-          "lastSnapshotId", "updatedAt",
-        ],
-      });
+    if (deferWrite) {
+      return {
+        username: user.username,
+        allPostsCount: allPosts.length,
+        replyPostsCount: replyPosts.length,
+        upsertedPosts: combined.length,
+        postRecords,
+      };
     }
 
+    const writeResult = await this._flushPostBatch(postRecords, [user.username], snapshotId);
     console.log(`[taskManager] ${user.username} 写入完成，耗时 ${Date.now() - writeStart}ms，帖子=${combined.length}，不写镜像`);
 
     // 暂存结果供外层累加
     user._tmpAllPosts = allPosts.length;
     user._tmpReplyPosts = replyPosts.length;
-    user._tmpUpsertedPosts = combined.length;
+    user._tmpUpsertedPosts = writeResult.upsertedPosts || combined.length;
+    return {
+      username: user.username,
+      allPostsCount: allPosts.length,
+      replyPostsCount: replyPosts.length,
+      upsertedPosts: writeResult.upsertedPosts || combined.length,
+      postRecords: [],
+    };
+  }
+
+  async _flushPostBatch(postRecords = [], usernames = [], snapshotId = null) {
+    const sequelize = this.db.sequelize;
+    const uniquePostMap = new Map();
+
+    for (const record of postRecords) {
+      if (record?.postId && !uniquePostMap.has(record.postId)) {
+        uniquePostMap.set(record.postId, record);
+      }
+    }
+
+    const uniquePosts = Array.from(uniquePostMap.values());
+    const uniqueLowerUsernames = Array.from(
+      new Set((usernames || []).map((u) => String(u || "").trim().toLowerCase()).filter(Boolean))
+    );
+
+    if (uniquePosts.length > 0) {
+      for (const chunk of chunkArray(uniquePosts, 500)) {
+        await this.db.BinanceSquarePost.bulkCreate(chunk, {
+          updateOnDuplicate: [
+            "title", "content", "contentText", "mediaUrls",
+            "likeCount", "shareCount", "commentCount", "viewCount",
+            "publishedAt", "sourceUrl", "postType", "rawData",
+            "lastSnapshotId", "updatedAt",
+          ],
+        });
+      }
+    }
+
+    if (uniqueLowerUsernames.length > 0) {
+      for (const chunk of chunkArray(uniqueLowerUsernames, 200)) {
+        await sequelize.query(
+          `
+            UPDATE "BinanceSquareUsers"
+            SET "lastCrawledAt" = NOW(), "updatedAt" = NOW()
+            WHERE LOWER("username") IN (:usernames)
+          `,
+          { replacements: { usernames: chunk } }
+        );
+      }
+    }
+
+    return {
+      upsertedPosts: uniquePosts.length,
+      updatedUsers: uniqueLowerUsernames.length,
+      snapshotId,
+    };
   }
 
   async recalculatePostScores(options = {}) {

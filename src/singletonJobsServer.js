@@ -28,9 +28,6 @@ const {
 const {
   createBackendHealthChecker,
 } = require("./services/singleton/backend-health-checker");
-const {
-  createBinanceSquareController,
-} = require("./services/singleton/binance-square-controller");
 
 // 初始化 Redis 客户端
 const redisClient = redis.createClient({
@@ -96,10 +93,6 @@ const redisClient = redis.createClient({
       recordGenericStat,
     });
 
-    const binanceSquareController = createBinanceSquareController({
-      redisClient,
-      pgInstance,
-    });
 
     // 启动备份服务
     await pgBackupService.start();
@@ -120,8 +113,7 @@ const redisClient = redis.createClient({
     // 后端健康自检测：每 30 分钟执行一次，仅在发现风险时给超级管理员发送邮件
     schedule.scheduleJob("*/30 * * * *", backendHealthChecker.run);
 
-    // 币安广场调度器控制：立即检查一次，然后每 30 秒轮询
-    binanceSquareController.startControlLoop(30000);
+    // 币安广场爬虫已迁移到独立进程/独立服务器：src/binanceSquareCrawlerServer.js
 
     console.log(
       "✅ 统计数据定时任务已启动（每5分钟执行一次，处理版本统计和URL统计）"

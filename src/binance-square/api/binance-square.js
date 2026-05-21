@@ -4,16 +4,12 @@ const { scanKeys, getRedisClient } = require("../../lib/redisClient");
 
 // 模型将在路由挂载时注入（通过initRoutes函数）
 let db = null;
-let taskManager = null;
 
 function initRoutes(sequelize) {
   // 延迟加载模型（确保sequelize实例已就绪）
   const initModels = require("../models");
   db = initModels(sequelize);
 
-  // 初始化任务管理器（供手动触发和调度器共用）
-  const { BinanceSquareTaskManager } = require("../scraper/taskManager");
-  taskManager = new BinanceSquareTaskManager(db);
 }
 
 const router = express.Router();
@@ -1128,20 +1124,6 @@ router.get("/target/progress", async (req, res) => {
 
 // ==================== 帖子抓取与镜像管理 ====================
 
-const postParser = require("../scraper/parsers/postParser");
-const { BinanceSquareScheduler } = require("../services/scheduler");
-const { BinanceSquareTaskManager } = require("../scraper/taskManager");
-
-// 调度器实例（单例）
-let scheduler = null;
-
-function getScheduler() {
-  if (!scheduler) {
-    const taskManager = new BinanceSquareTaskManager(db);
-    scheduler = new BinanceSquareScheduler(db, taskManager);
-  }
-  return scheduler;
-}
 
 /**
  * 生成镜像批次ID
@@ -1204,30 +1186,44 @@ function computeSnapshotDiff(current, prev) {
  */
 router.post("/crawl/posts", async (req, res) => {
   try {
-    if (!taskManager) {
-      return res.status(500).json(fail("任务管理器未初始化"));
-    }
-
     const mode = req.body?.mode || "full";
     const onlyFirstPage = mode === "incremental";
     const label = onlyFirstPage ? "增量" : "近7天";
     const daysBack = parseInt(req.body?.daysBack || 7, 10);
-    const concurrency = parseInt(req.body?.concurrency || 2, 10);
+    const concurrency = parseInt(req.body?.concurrency || process.env.BINANCE_SQUARE_PROXY_LINE_COUNT || 8, 10);
     const filterTypes = Array.isArray(req.body?.filterTypes)
       ? req.body.filterTypes
       : String(req.body?.filterTypes || "ALL,REPLY").split(",");
+    const requestId = generateRunId("post-crawl");
 
-    console.log(`[crawl/posts] 手动触发${label}抓取, mode=${mode}, daysBack=${daysBack}, concurrency=${concurrency}`);
-    const result = await taskManager.runPostCrawl({
-      onlyFirstPage,
-      daysBack,
-      concurrency,
-      filterTypes: filterTypes.map((s) => String(s).trim().toUpperCase()).filter(Boolean),
-      skipIfRunning: false,
-      enforceCooldown: false,
-    });
+    const command = {
+      requestId,
+      requestedBy: req.adminUser?.email || req.user?.username || "admin",
+      createdAt: new Date().toISOString(),
+      options: {
+        onlyFirstPage,
+        daysBack,
+        concurrency,
+        proxyLineCount: parseInt(req.body?.proxyLineCount || process.env.BINANCE_SQUARE_PROXY_LINE_COUNT || concurrency, 10),
+        targetLimit: parseInt(req.body?.targetLimit || process.env.BINANCE_SQUARE_TARGET_LIMIT || 1000, 10),
+        batchWriteUsers: parseInt(req.body?.batchWriteUsers || process.env.BINANCE_SQUARE_BATCH_WRITE_USERS || 25, 10),
+        batchWriteMaxPosts: parseInt(req.body?.batchWriteMaxPosts || process.env.BINANCE_SQUARE_BATCH_WRITE_MAX_POSTS || 800, 10),
+        progressEveryUsers: parseInt(req.body?.progressEveryUsers || process.env.BINANCE_SQUARE_PROGRESS_EVERY_USERS || 5, 10),
+        filterTypes: filterTypes.map((s) => String(s).trim().toUpperCase()).filter(Boolean),
+      },
+    };
 
-    res.json(success({ ...result, mode }));
+    console.log(`[crawl/posts] 手动触发${label}抓取命令已入队, requestId=${requestId}, mode=${mode}, daysBack=${daysBack}, concurrency=${concurrency}`);
+    await req.redisClient.set("binance_square:task:command:post", JSON.stringify(command), { EX: 24 * 60 * 60 });
+
+    res.json(success({
+      requestId,
+      mode,
+      status: "queued",
+      message: "帖子抓取命令已发送至独立爬虫服务",
+      note: "实际执行进度请查看 /crawl/progress；API 服务不再直接执行爬取",
+      options: command.options,
+    }));
   } catch (error) {
     console.error("[crawl/posts] error:", error);
     res.status(500).json(fail(error.message));
@@ -1240,18 +1236,8 @@ router.post("/crawl/posts", async (req, res) => {
  */
 router.post("/crawl/force-stop", async (req, res) => {
   try {
-    if (!taskManager) {
-      return res.status(500).json(fail("任务管理器未初始化"));
-    }
-
-    await taskManager.forceStop();
-
-    // 同时写 Redis 通知单例服务（如果任务在单例中运行）
-    try {
-      await req.redisClient.set("binance_square:task:force_stop", "true", { EX: 60 });
-    } catch (e) {
-      console.warn("[crawl/force-stop] Redis 通知失败:", e.message);
-    }
+    // 爬取任务在独立爬虫服务中执行；这里仅写 Redis 指令，避免 API 进程误删远端任务锁。
+    await req.redisClient.set("binance_square:task:force_stop", "true", { EX: 2 * 60 * 60 });
 
     res.json(success({ message: "已发送强制终止指令" }));
   } catch (error) {
@@ -1628,14 +1614,14 @@ router.get("/posts/user/:username", async (req, res) => {
 
 /**
  * POST /crawl/start
- * 启动定时爬虫任务（通过 Redis 通知单例服务）
+ * 启动定时爬虫任务（通过 Redis 通知独立爬虫服务）
  */
 router.post("/crawl/start", async (req, res) => {
   try {
     await req.redisClient.set("binance_square:scheduler:control", "start");
     res.json(success({
-      message: "启动命令已发送至单例任务服务",
-      note: "调度器将在30秒内启动",
+      message: "启动命令已发送至独立爬虫服务",
+      note: "独立爬虫服务将在30秒内启动调度器",
       control: "start",
     }));
   } catch (error) {
@@ -1646,13 +1632,13 @@ router.post("/crawl/start", async (req, res) => {
 
 /**
  * POST /crawl/pause
- * 暂停定时爬虫任务（通过 Redis 通知单例服务）
+ * 暂停定时爬虫任务（通过 Redis 通知独立爬虫服务）
  */
 router.post("/crawl/pause", async (req, res) => {
   try {
     await req.redisClient.set("binance_square:scheduler:control", "stop");
     res.json(success({
-      message: "暂停命令已发送至单例任务服务",
+      message: "暂停命令已发送至独立爬虫服务",
       control: "stop",
     }));
   } catch (error) {
@@ -1663,7 +1649,7 @@ router.post("/crawl/pause", async (req, res) => {
 
 /**
  * GET /crawl/status
- * 获取爬虫运行状态（从 Redis 读取单例服务状态）
+ * 获取爬虫运行状态（从 Redis 读取独立爬虫服务状态）
  */
 router.get("/crawl/status", async (req, res) => {
   try {
@@ -1914,11 +1900,7 @@ router.post("/config", async (req, res) => {
       { where: { configKey } }
     );
 
-    // 清除本地调度器缓存（API 层）
-    const sched = getScheduler();
-    sched.configService?.clearCache(configKey);
-
-    // 通知单例服务清除缓存（通过 Redis）
+    // 通知独立爬虫服务清除缓存（通过 Redis）
     try {
       await req.redisClient.set("binance_square:config:changed", configKey, { EX: 60 });
     } catch (e) {

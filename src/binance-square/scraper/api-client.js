@@ -6,6 +6,43 @@ const REQUEST_DELAY_MAX = 1200;
 const REQUEST_TIMEOUT = 10000;
 const MAX_RETRIES = 3;
 
+function buildProxyConfig(proxyUrl) {
+  if (!proxyUrl) return {};
+
+  try {
+    const parsed = new URL(proxyUrl);
+    return {
+      proxy: {
+        protocol: parsed.protocol.replace(":", "") || "http",
+        host: parsed.hostname,
+        port: parsed.port ? parseInt(parsed.port, 10) : undefined,
+        auth: parsed.username
+          ? {
+              username: decodeURIComponent(parsed.username),
+              password: decodeURIComponent(parsed.password || ""),
+            }
+          : undefined,
+      },
+    };
+  } catch (e) {
+    console.warn(`[api-client] 代理地址无效，已忽略: ${proxyUrl} (${e.message})`);
+    return {};
+  }
+}
+
+function buildRequestConfig({ timeout = REQUEST_TIMEOUT, headers = {}, proxyUrl = null } = {}) {
+  return {
+    timeout,
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      ...headers,
+    },
+    ...buildProxyConfig(proxyUrl),
+  };
+}
+
+
 /**
  * 随机延迟（毫秒）
  */
@@ -66,7 +103,7 @@ async function withRetry(fn, operationName) {
  * @param {string} targetUsername - 目标用户名（如 "CZ"）
  * @returns {Promise<{followers: Array, total: number}>}
  */
-async function fetchFollowingList(targetUsername) {
+async function fetchFollowingList(targetUsername, options = {}) {
   const allFollowings = [];
   let pageIndex = 1;
   let hasMore = true;
@@ -82,14 +119,10 @@ async function fetchFollowingList(targetUsername) {
             pageIndex,
             pageSize: 20,
           },
-          {
-            timeout: REQUEST_TIMEOUT,
-            headers: {
-              "Content-Type": "application/json",
-              "User-Agent":
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            },
-          }
+          buildRequestConfig({
+            proxyUrl: options.proxyUrl,
+            headers: { "Content-Type": "application/json" },
+          })
         ),
       `fetchFollowingList(${targetUsername}, page=${pageIndex})`
     );
@@ -125,7 +158,7 @@ async function fetchFollowingList(targetUsername) {
  * @param {boolean} onlyFirstPage - 是否只查第一页（增量模式用，默认false）
  * @returns {Promise<{contents: Array, timeOffset: number}>}
  */
-async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7, onlyFirstPage = false) {
+async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7, onlyFirstPage = false, options = {}) {
   const allContents = [];
   let timeOffset = -1;
   let hasMore = true;
@@ -137,15 +170,11 @@ async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7, onlyF
         axios.get(
           `${BASE_URL}/bapi/composite/v2/friendly/pgc/content/queryUserProfilePageContentsWithFilter`,
           {
+            ...buildRequestConfig({ proxyUrl: options.proxyUrl }),
             params: {
               targetSquareUid: squareUid,
               timeOffset,
               filterType,
-            },
-            timeout: REQUEST_TIMEOUT,
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             },
           }
         ),
@@ -193,19 +222,13 @@ async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7, onlyF
  * @param {string|number} postId - 帖子ID
  * @returns {Promise<Object|null>} 详情数据，失败返回null
  */
-async function fetchPostDetail(postId) {
+async function fetchPostDetail(postId, options = {}) {
   try {
     const res = await withRetry(
       () =>
         axios.get(
           `${BASE_URL}/bapi/composite/v3/friendly/pgc/special/content/detail/${postId}`,
-          {
-            timeout: REQUEST_TIMEOUT,
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            },
-          }
+          buildRequestConfig({ proxyUrl: options.proxyUrl })
         ),
       `fetchPostDetail(${postId})`
     );

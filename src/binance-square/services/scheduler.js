@@ -171,7 +171,9 @@ class BinanceSquareScheduler {
 
   async _buildPostCrawlOptions() {
     const daysBack = await this.configService.getInt("post_crawl_days_back", 7);
-    const concurrency = await this.configService.getInt("post_crawl_concurrency", 2);
+    const configuredConcurrency = await this.configService.getInt("post_crawl_concurrency", 2);
+    const proxyLineCount = parseInt(process.env.BINANCE_SQUARE_PROXY_LINE_COUNT || String(configuredConcurrency), 10);
+    const concurrency = Math.max(configuredConcurrency, Number.isFinite(proxyLineCount) ? proxyLineCount : configuredConcurrency);
     const cooldownMinutes = await this.configService.getInt("post_crawl_min_cooldown_minutes", 30);
     const filterTypesRaw = await this.configService.get("post_crawl_filter_types", "ALL,REPLY");
     const scoreVersion = await this.configService.get("post_score_version", "bs_post_v1");
@@ -184,6 +186,11 @@ class BinanceSquareScheduler {
       onlyFirstPage: false,
       daysBack,
       concurrency,
+      proxyLineCount,
+      targetLimit: parseInt(process.env.BINANCE_SQUARE_TARGET_LIMIT || "1000", 10),
+      batchWriteUsers: parseInt(process.env.BINANCE_SQUARE_BATCH_WRITE_USERS || "25", 10),
+      batchWriteMaxPosts: parseInt(process.env.BINANCE_SQUARE_BATCH_WRITE_MAX_POSTS || "800", 10),
+      progressEveryUsers: parseInt(process.env.BINANCE_SQUARE_PROGRESS_EVERY_USERS || "5", 10),
       filterTypes: filterTypes.length > 0 ? filterTypes : ["ALL", "REPLY"],
       skipIfRunning: true,
       enforceCooldown: true,
