@@ -5,13 +5,14 @@ require("dotenv").config({
 const { enhanceConsoleWithRequestId } = require("./xhunt/utils/request-id");
 enhanceConsoleWithRequestId();
 
-const { setupPostgres, pgInstance } = require("./models/postgres-start");
+const { pgInstance } = require("./models/postgres-start");
 const { getRedisClient } = require("./lib/redisClient");
 const { createBinanceSquareController } = require("./services/singleton/binance-square-controller");
 
 (async () => {
   try {
-    await setupPostgres();
+    // 独立爬虫只需要连接已有主库，不执行 sync，方便使用最小权限数据库角色。
+    await pgInstance.authenticate();
     console.log("✅ PostgreSQL 连接成功（币安广场独立爬虫）");
 
     const redisClient = await getRedisClient();
