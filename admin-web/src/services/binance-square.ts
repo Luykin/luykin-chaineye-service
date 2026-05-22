@@ -142,6 +142,22 @@ export async function purgeBinanceSquareSnapshots() {
   );
 }
 
+export async function recalculateBinanceSquarePostScores(params: {
+  daysBack?: number;
+  targetOnly?: boolean;
+} = {}) {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(
+    `${BASE}/posts/recalculate-scores`,
+    {
+      method: "POST",
+      body: {
+        daysBack: params.daysBack || 7,
+        targetOnly: params.targetOnly !== false,
+      },
+    }
+  );
+}
+
 export async function fetchBinanceSquarePosts(params: {
   page?: number;
   pageSize?: number;

@@ -1254,6 +1254,74 @@ router.post("/crawl/force-stop", async (req, res) => {
 });
 
 /**
+ * POST /posts/recalculate-scores
+ * 手动补评分：重算 Top1000 目标用户近N天帖子热度分。
+ * 用于爬虫中途崩溃、已入库但未走到最终评分阶段时补算。
+ * @body {number} daysBack - 默认7
+ * @body {string} scoreVersion - 默认当前版本
+ * @body {boolean} targetOnly - 默认true，仅重算最终目标用户
+ */
+router.post("/posts/recalculate-scores", async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const daysBack = parsePositiveInt(req.body?.daysBack, 7);
+    const scoreVersion = String(req.body?.scoreVersion || "bs_post_v1");
+    const targetOnly = req.body?.targetOnly !== false;
+
+    let targetUsernames = null;
+    if (targetOnly) {
+      const targetUsers = await db.BinanceSquareUser.findAll({
+        where: { isTargetUser: true },
+        attributes: ["username"],
+        raw: true,
+      });
+      targetUsernames = targetUsers.map((u) => u.username).filter(Boolean);
+      if (targetUsernames.length === 0) {
+        return res.status(400).json(fail("没有目标用户，请先计算Top1000"));
+      }
+    }
+
+    const { BinanceSquareTaskManager } = require("../scraper/taskManager");
+    const manager = new BinanceSquareTaskManager(db);
+    const result = await manager.recalculatePostScores({
+      daysBack,
+      targetUsernames,
+      scoreVersion,
+    });
+
+    const durationMs = Date.now() - startTime;
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "post",
+      status: "success",
+      targetId: "recalculate_scores",
+      itemsCount: result.scoredPosts || 0,
+      durationMs,
+      failedDetails: {
+        action: "recalculate_scores",
+        daysBack,
+        targetOnly,
+        targetUsers: targetUsernames?.length || null,
+        scoreVersion,
+        result,
+      },
+    }).catch((e) => {
+      console.warn("[posts/recalculate-scores] 写入日志失败:", e.message);
+    });
+
+    res.json(success({
+      message: `已重算近${daysBack}天帖子评分`,
+      ...result,
+      targetOnly,
+      targetUsers: targetUsernames?.length || null,
+      durationMs,
+    }));
+  } catch (error) {
+    console.error("[posts/recalculate-scores] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
  * GET /posts
  * 查询帖子列表
  */

@@ -42,6 +42,7 @@ import {
   forceStopBinanceSquareCrawl,
   pauseBinanceSquareScheduler,
   purgeBinanceSquareSnapshots,
+  recalculateBinanceSquarePostScores,
   removeBinanceSquareSeed,
   startBinanceSquareScheduler,
   syncAllBinanceSquareFollowings,
@@ -267,6 +268,11 @@ export function BinanceSquarePage() {
     mutationFn: purgeBinanceSquareSnapshots,
     onSuccess: (result) => handleActionSuccess("清空旧镜像", result.data),
     onError: (error: Error) => messageApi.error(error.message || "清理失败"),
+  });
+  const recalcScoresMutation = useMutation({
+    mutationFn: recalculateBinanceSquarePostScores,
+    onSuccess: (result) => handleActionSuccess("补评分", result.data),
+    onError: (error: Error) => messageApi.error(error.message || "补评分失败"),
   });
   const addSeedMutation = useMutation({
     mutationFn: addBinanceSquareSeed,
@@ -566,6 +572,17 @@ export function BinanceSquarePage() {
           >
             抓取近7天
           </LegacyActionButton>
+          <Popconfirm
+            title="确认补评分？"
+            description="将重算 Top1000 目标用户近7天帖子热度分。适合爬虫中途崩溃、已入库但未完成最终评分时使用。"
+            okText="开始补评分"
+            cancelText="取消"
+            onConfirm={() => recalcScoresMutation.mutate({ daysBack: 7, targetOnly: true })}
+          >
+            <LegacyActionButton variant="neutral" loading={recalcScoresMutation.isPending}>
+              补评分
+            </LegacyActionButton>
+          </Popconfirm>
           <LegacyActionButton variant="success" loading={startMutation.isPending} onClick={() => startMutation.mutate()}>
             启动调度器
           </LegacyActionButton>
