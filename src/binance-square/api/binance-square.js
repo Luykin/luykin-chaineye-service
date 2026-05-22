@@ -1354,13 +1354,16 @@ router.get("/posts", async (req, res) => {
     }
     console.log(`[BS_CASE_DEBUG] /posts where keys=${Object.keys(where).join(", ")}`);
 
+    const descNullsLast = (field) => [
+      db.sequelize.literal(`"${field}" DESC NULLS LAST`),
+    ];
     const orderMap = {
-      score: [["score", "DESC"], ["publishedAt", "DESC"]],
+      score: [...descNullsLast("score"), ["publishedAt", "DESC"]],
       publishedAt: [["publishedAt", "DESC"]],
-      viewCount: [["viewCount", "DESC"], ["publishedAt", "DESC"]],
-      shareCount: [["shareCount", "DESC"], ["publishedAt", "DESC"]],
-      commentCount: [["commentCount", "DESC"], ["publishedAt", "DESC"]],
-      likeCount: [["likeCount", "DESC"], ["publishedAt", "DESC"]],
+      viewCount: [...descNullsLast("viewCount"), ["publishedAt", "DESC"]],
+      shareCount: [...descNullsLast("shareCount"), ["publishedAt", "DESC"]],
+      commentCount: [...descNullsLast("commentCount"), ["publishedAt", "DESC"]],
+      likeCount: [...descNullsLast("likeCount"), ["publishedAt", "DESC"]],
     };
     const order = orderMap[orderBy] || orderMap.score;
 
