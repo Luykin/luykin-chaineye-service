@@ -119,6 +119,24 @@ function formatDateTime(value?: string | null) {
   return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm:ss") : value;
 }
 
+function hasChineseText(value?: string | null) {
+  return /[\u3400-\u9fff]/.test(value || "");
+}
+
+function getChinesePostTitle(record: BinanceSquarePostItem) {
+  const title = record.title?.trim();
+  if (title && hasChineseText(title)) {
+    return title;
+  }
+
+  const contentText = record.contentText?.trim();
+  if (contentText && hasChineseText(contentText)) {
+    return `${contentText.slice(0, 50)}${contentText.length > 50 ? "..." : ""}`;
+  }
+
+  return "(无中文标题)";
+}
+
 function formatBytes(bytes?: number | null) {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -473,16 +491,19 @@ export function BinanceSquarePage() {
     {
       title: "标题",
       key: "content",
-      render: (_, record) => (
-        <Typography.Link
-          className="bs-post-title-link"
-          href={record.sourceUrl || record.postUrl || undefined}
-          target="_blank"
-          title={record.title || record.contentText || record.content || ""}
-        >
-          {record.title || (record.contentText ? `${record.contentText.slice(0, 50)}${record.contentText.length > 50 ? "..." : ""}` : "(无标题)")}
-        </Typography.Link>
-      ),
+      render: (_, record) => {
+        const chineseTitle = getChinesePostTitle(record);
+        return (
+          <Typography.Link
+            className="bs-post-title-link"
+            href={record.sourceUrl || record.postUrl || undefined}
+            target="_blank"
+            title={chineseTitle}
+          >
+            {chineseTitle}
+          </Typography.Link>
+        );
+      },
     },
     { title: "点赞", dataIndex: "likeCount", key: "likeCount", width: 80, render: (value) => value ?? "-" },
     { title: "评论", dataIndex: "commentCount", key: "commentCount", width: 80, render: (value) => value ?? "-" },
