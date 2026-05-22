@@ -69,11 +69,6 @@ const RANK_STAGES: Array<{ key: BinanceSquareRankSet; label: string; source: str
 ];
 
 const CONFIG_HELP: Record<string, { label: string; desc: string; tip?: string }> = {
-  post_crawl_concurrency: {
-    label: "帖子抓取并发数",
-    desc: "同一时间并行抓取多少个 Top1000 用户。数值越大越快，但越容易触发币安风控。",
-    tip: "建议从 2 开始，观察稳定性后再逐步调高。",
-  },
   post_crawl_days_back: {
     label: "帖子回溯天数",
     desc: "每次抓取目标用户最近多少天的帖子，并在这个时间窗口内重算热度分。",
@@ -105,6 +100,7 @@ const CONFIG_HELP: Record<string, { label: string; desc: string; tip?: string }>
     tip: "当前只用于回收旧 snapshot 数据。",
   },
 };
+const HIDDEN_CONFIG_KEYS = new Set(["post_crawl_concurrency"]);
 
 function getConfigHelp(configKey: string) {
   return CONFIG_HELP[configKey] || {
@@ -343,7 +339,7 @@ export function BinanceSquarePage() {
   const targets = targetsQuery.data?.data || [];
   const posts = postsQuery.data?.data;
   const logs = logsQuery.data?.data;
-  const configs = configQuery.data?.data || [];
+  const configs = (configQuery.data?.data || []).filter((item) => !HIDDEN_CONFIG_KEYS.has(item.configKey));
   const followingData = followingQuery.data?.data;
 
   const seedColumns: ColumnsType<BinanceSquareSeedItem> = [
