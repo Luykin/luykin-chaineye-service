@@ -282,6 +282,7 @@ class BinanceSquareTaskManager {
         : null,
       batchWriteUsers = parseInt(process.env.BINANCE_SQUARE_BATCH_WRITE_USERS || "25", 10),
       batchWriteMaxPosts = parseInt(process.env.BINANCE_SQUARE_BATCH_WRITE_MAX_POSTS || "800", 10),
+      maxPagesPerFilter = parseInt(process.env.BINANCE_SQUARE_MAX_PAGES_PER_FILTER || "30", 10),
       progressEveryUsers = parseInt(process.env.BINANCE_SQUARE_PROGRESS_EVERY_USERS || "5", 10),
       proxyUrls = getDefaultProxyUrls(),
       proxyLineCount = parseInt(process.env.BINANCE_SQUARE_PROXY_LINE_COUNT || String(concurrency || 1), 10),
@@ -402,6 +403,7 @@ class BinanceSquareTaskManager {
         daysBack,
         filterTypes,
         proxyUrl,
+        maxPagesPerFilter,
         deferWrite: true,
       });
 
@@ -579,19 +581,32 @@ class BinanceSquareTaskManager {
     const mode = crawlOptions.onlyFirstPage ? "增量" : "近7天";
     console.log(`[taskManager] [${mode}] 开始处理用户 ${user.username} (${user.squareUid})`);
 
-    const userPromise = this._processUser(user, snapshotId, crawlOptions);
+    const abortController = new AbortController();
+    let timeoutId = null;
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`处理超时（>${timeoutMs / 1000}秒）`)), timeoutMs);
+      timeoutId = setTimeout(() => {
+        abortController.abort();
+        reject(new Error(`处理超时（>${timeoutMs / 1000}秒）`));
+      }, timeoutMs);
     });
 
     try {
-      const result = await Promise.race([userPromise, timeoutPromise]);
+      const result = await Promise.race([
+        this._processUser(user, snapshotId, {
+          ...crawlOptions,
+          signal: abortController.signal,
+        }),
+        timeoutPromise,
+      ]);
+      if (timeoutId) clearTimeout(timeoutId);
       const allCount = result?.allPostsCount ?? user._tmpAllPosts ?? 0;
       const replyCount = result?.replyPostsCount ?? user._tmpReplyPosts ?? 0;
       const upsertCount = result?.upsertedPosts ?? user._tmpUpsertedPosts ?? 0;
       console.log(`[taskManager] 完成用户 ${user.username}，耗时 ${Date.now() - start}ms，ALL=${allCount}，REPLY=${replyCount}，upsert=${upsertCount}`);
       return result;
     } catch (error) {
+      if (timeoutId) clearTimeout(timeoutId);
+      abortController.abort();
       console.error(`[taskManager] 用户 ${user.username} 处理异常/超时，耗时 ${Date.now() - start}ms:`, error.message);
       throw error;
     }
@@ -606,6 +621,8 @@ class BinanceSquareTaskManager {
       daysBack = 7,
       filterTypes = ["ALL", "REPLY"],
       proxyUrl = null,
+      signal = null,
+      maxPagesPerFilter = 30,
       deferWrite = false,
     } = crawlOptions;
 
@@ -616,6 +633,8 @@ class BinanceSquareTaskManager {
       normalizedFilterTypes.map(async (filterType) => {
         const result = await apiClient.fetchUserPosts(user.squareUid, filterType, daysBack, onlyFirstPage, {
           proxyUrl,
+          signal,
+          maxPages: maxPagesPerFilter,
         });
         return { filterType, result };
       })

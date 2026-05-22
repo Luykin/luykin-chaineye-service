@@ -6,6 +6,7 @@ const REQUEST_DELAY_MIN = 500;
 const REQUEST_DELAY_MAX = 1200;
 const REQUEST_TIMEOUT = 10000;
 const MAX_RETRIES = 3;
+const DEFAULT_MAX_PAGES = 30;
 
 function buildProxyConfig(proxyUrl) {
   if (!proxyUrl) return {};
@@ -23,9 +24,10 @@ function buildProxyConfig(proxyUrl) {
   }
 }
 
-function buildRequestConfig({ timeout = REQUEST_TIMEOUT, headers = {}, proxyUrl = null } = {}) {
+function buildRequestConfig({ timeout = REQUEST_TIMEOUT, headers = {}, proxyUrl = null, signal = null } = {}) {
   return {
     timeout,
+    signal,
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -39,13 +41,28 @@ function buildRequestConfig({ timeout = REQUEST_TIMEOUT, headers = {}, proxyUrl 
 /**
  * 随机延迟（毫秒）
  */
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms, signal = null) {
+  if (signal?.aborted) {
+    return Promise.reject(new Error("请求已取消"));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    if (signal) {
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          reject(new Error("请求已取消"));
+        },
+        { once: true }
+      );
+    }
+  });
 }
 
-function randomDelay() {
+function randomDelay(signal = null) {
   const ms = REQUEST_DELAY_MIN + Math.random() * (REQUEST_DELAY_MAX - REQUEST_DELAY_MIN);
-  return sleep(ms);
+  return sleep(ms, signal);
 }
 
 /**
@@ -53,14 +70,19 @@ function randomDelay() {
  * @param {Function} fn - 异步函数
  * @param {string} operationName - 操作名称（用于日志）
  */
-async function withRetry(fn, operationName) {
+async function withRetry(fn, operationName, options = {}) {
   let lastError;
+  const { signal = null } = options;
 
   for (let i = 0; i < MAX_RETRIES; i++) {
     try {
+      if (signal?.aborted) throw new Error("请求已取消");
       return await fn();
     } catch (error) {
       lastError = error;
+      if (signal?.aborted || error.name === "CanceledError" || error.code === "ERR_CANCELED") {
+        throw new Error("请求已取消");
+      }
 
       const status = error.response?.status;
       const isNetworkError = !error.response;
@@ -69,7 +91,7 @@ async function withRetry(fn, operationName) {
       if (status === 429) {
         const waitMs = (i + 1) * 5000 + Math.random() * 3000;
         console.warn(`[${operationName}] 429限流，等待 ${waitMs}ms 后重试 (${i + 1}/${MAX_RETRIES})`);
-        await sleep(waitMs);
+        await sleep(waitMs, signal);
         continue;
       }
 
@@ -77,7 +99,7 @@ async function withRetry(fn, operationName) {
       if (status >= 500 || isNetworkError) {
         const waitMs = Math.pow(2, i) * 1000 + Math.random() * 1000;
         console.warn(`[${operationName}] ${isNetworkError ? "网络错误" : `${status}错误`}，等待 ${waitMs}ms 后重试 (${i + 1}/${MAX_RETRIES})`);
-        await sleep(waitMs);
+        await sleep(waitMs, signal);
         continue;
       }
 
@@ -114,10 +136,12 @@ async function fetchFollowingList(targetUsername, options = {}) {
           },
           buildRequestConfig({
             proxyUrl: options.proxyUrl,
+            signal: options.signal,
             headers: { "Content-Type": "application/json" },
           })
         ),
-      `fetchFollowingList(${targetUsername}, page=${pageIndex})`
+      `fetchFollowingList(${targetUsername}, page=${pageIndex})`,
+      { signal: options.signal }
     );
 
     if (!res.data?.success || !res.data.data?.followers) {
@@ -133,7 +157,7 @@ async function fetchFollowingList(targetUsername, options = {}) {
     pageIndex++;
 
     if (hasMore) {
-      await randomDelay();
+      await randomDelay(options.signal);
     }
   }
 
@@ -156,14 +180,24 @@ async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7, onlyF
   let timeOffset = -1;
   let hasMore = true;
   const cutoffTime = Date.now() - daysBack * 24 * 60 * 60 * 1000;
+  const maxPages = Math.max(1, Number(options.maxPages || DEFAULT_MAX_PAGES));
+  let pageCount = 0;
+  const seenOffsets = new Set();
 
   while (hasMore) {
+    if (options.signal?.aborted) throw new Error("请求已取消");
+    pageCount++;
+    if (pageCount > maxPages) {
+      console.warn(`[fetchUserPosts] ${squareUid} ${filterType} 超过最大页数 ${maxPages}，提前停止`);
+      break;
+    }
+
     const res = await withRetry(
       () =>
         axios.get(
           `${BASE_URL}/bapi/composite/v2/friendly/pgc/content/queryUserProfilePageContentsWithFilter`,
           {
-            ...buildRequestConfig({ proxyUrl: options.proxyUrl }),
+            ...buildRequestConfig({ proxyUrl: options.proxyUrl, signal: options.signal }),
             params: {
               targetSquareUid: squareUid,
               timeOffset,
@@ -171,7 +205,8 @@ async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7, onlyF
             },
           }
         ),
-      `fetchUserPosts(${squareUid}, ${filterType}, timeOffset=${timeOffset})`
+      `fetchUserPosts(${squareUid}, ${filterType}, timeOffset=${timeOffset})`,
+      { signal: options.signal }
     );
 
     if (!res.data?.success || !res.data.data) {
@@ -199,9 +234,13 @@ async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7, onlyF
 
     if (lastPostTime < cutoffTime) {
       hasMore = false;
+    } else if (!lastPostTime || seenOffsets.has(String(lastPostTime)) || String(lastPostTime) === String(timeOffset)) {
+      console.warn(`[fetchUserPosts] ${squareUid} ${filterType} timeOffset 未推进(${lastPostTime})，提前停止，避免循环`);
+      hasMore = false;
     } else {
+      seenOffsets.add(String(timeOffset));
       timeOffset = lastPostTime;
-      await randomDelay();
+      await randomDelay(options.signal);
     }
   }
 
@@ -221,9 +260,10 @@ async function fetchPostDetail(postId, options = {}) {
       () =>
         axios.get(
           `${BASE_URL}/bapi/composite/v3/friendly/pgc/special/content/detail/${postId}`,
-          buildRequestConfig({ proxyUrl: options.proxyUrl })
+          buildRequestConfig({ proxyUrl: options.proxyUrl, signal: options.signal })
         ),
-      `fetchPostDetail(${postId})`
+      `fetchPostDetail(${postId})`,
+      { signal: options.signal }
     );
 
     if (!res.data?.success || !res.data.data) {
