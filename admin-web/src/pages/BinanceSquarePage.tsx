@@ -134,7 +134,14 @@ function getChinesePostTitle(record: BinanceSquarePostItem) {
     return `${contentText.slice(0, 50)}${contentText.length > 50 ? "..." : ""}`;
   }
 
-  return "(无中文标题)";
+  if (title) {
+    return title;
+  }
+  if (contentText) {
+    return `${contentText.slice(0, 50)}${contentText.length > 50 ? "..." : ""}`;
+  }
+
+  return "(无标题)";
 }
 
 function formatBytes(bytes?: number | null) {
