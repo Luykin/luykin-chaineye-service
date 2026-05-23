@@ -2499,6 +2499,131 @@ router.post("/maintenance/purge-snapshots", async (req, res) => {
 });
 
 /**
+ * POST /maintenance/cleanup-old-data
+ * 删除 N 天前的帖子数据（文章/引用/回复）及相关历史镜像。
+ */
+router.post("/maintenance/cleanup-old-data", async (req, res) => {
+  const startTime = Date.now();
+  const allowedRetentionDays = [7, 14, 30, 60, 90];
+  const retentionDays = parsePositiveInt(req.body?.retentionDays, 30);
+
+  if (!allowedRetentionDays.includes(retentionDays)) {
+    return res.status(400).json(fail(`retentionDays 只支持 ${allowedRetentionDays.join(", ")}`));
+  }
+
+  try {
+    const redis = req.redisClient || await getRedisClient();
+    const [postLock, introLock] = await Promise.all([
+      redis.get("binance_square:task:lock").catch(() => null),
+      redis.get(USER_INTRO_LOCK_KEY).catch(() => null),
+    ]);
+
+    if (postLock || introLock) {
+      return res.status(409).json(fail("当前有帖子抓取或用户介绍生成任务正在执行，请先等待完成或重置任务状态后再清理"));
+    }
+
+    const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+    const sequelize = db.sequelize || db.BinanceSquarePost.sequelize;
+    const transaction = await sequelize.transaction();
+
+    try {
+      const [postCountRow] = await sequelize.query(
+        `SELECT COUNT(*)::int AS count
+         FROM "BinanceSquarePosts"
+         WHERE COALESCE("publishedAt", "createdAt") < :cutoffDate`,
+        { replacements: { cutoffDate }, type: QueryTypes.SELECT, transaction }
+      );
+
+      const postTypeCounts = await sequelize.query(
+        `SELECT "postType", COUNT(*)::int AS count
+         FROM "BinanceSquarePosts"
+         WHERE COALESCE("publishedAt", "createdAt") < :cutoffDate
+         GROUP BY "postType"
+         ORDER BY "postType" ASC`,
+        { replacements: { cutoffDate }, type: QueryTypes.SELECT, transaction }
+      );
+
+      const [snapshotsByPostRow] = await sequelize.query(
+        `WITH deleted AS (
+           DELETE FROM "BinanceSquarePostSnapshots" s
+           USING "BinanceSquarePosts" p
+           WHERE s."postId" = p."postId"
+             AND COALESCE(p."publishedAt", p."createdAt") < :cutoffDate
+           RETURNING 1
+         )
+         SELECT COUNT(*)::int AS count FROM deleted`,
+        { replacements: { cutoffDate }, type: QueryTypes.SELECT, transaction }
+      );
+
+      const [oldSnapshotsRow] = await sequelize.query(
+        `WITH deleted AS (
+           DELETE FROM "BinanceSquarePostSnapshots"
+           WHERE "snapshotTime" < :cutoffDate
+           RETURNING 1
+         )
+         SELECT COUNT(*)::int AS count FROM deleted`,
+        { replacements: { cutoffDate }, type: QueryTypes.SELECT, transaction }
+      );
+
+      const [postsRow] = await sequelize.query(
+        `WITH deleted AS (
+           DELETE FROM "BinanceSquarePosts"
+           WHERE COALESCE("publishedAt", "createdAt") < :cutoffDate
+           RETURNING 1
+         )
+         SELECT COUNT(*)::int AS count FROM deleted`,
+        { replacements: { cutoffDate }, type: QueryTypes.SELECT, transaction }
+      );
+
+      await transaction.commit();
+
+      const deletedPosts = postsRow?.count || 0;
+      const deletedSnapshotsByPost = snapshotsByPostRow?.count || 0;
+      const deletedOldSnapshots = oldSnapshotsRow?.count || 0;
+      const durationMs = Date.now() - startTime;
+
+      await db.BinanceSquareCrawlLog.create({
+        taskType: "post",
+        status: "success",
+        targetId: "cleanup_old_data",
+        itemsCount: deletedPosts,
+        durationMs,
+        failedDetails: {
+          action: "cleanup_old_data",
+          retentionDays,
+          cutoffDate: cutoffDate.toISOString(),
+          beforePostCount: postCountRow?.count || 0,
+          deletedPosts,
+          deletedSnapshotsByPost,
+          deletedOldSnapshots,
+          postTypeCounts,
+        },
+      }).catch((e) => {
+        console.warn("[maintenance/cleanup-old-data] 写入清理日志失败:", e.message);
+      });
+
+      res.json(success({
+        message: `已清理 ${retentionDays} 天前帖子数据：帖子 ${deletedPosts} 条，镜像 ${deletedSnapshotsByPost + deletedOldSnapshots} 条`,
+        retentionDays,
+        cutoffDate: cutoffDate.toISOString(),
+        deletedPosts,
+        deletedSnapshotsByPost,
+        deletedOldSnapshots,
+        deletedSnapshots: deletedSnapshotsByPost + deletedOldSnapshots,
+        postTypeCounts,
+        durationMs,
+      }));
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  } catch (error) {
+    console.error("[maintenance/cleanup-old-data] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
  * POST /maintenance/reset-running-tasks
  * 危险操作：重置币安广场所有运行中任务的 Redis 状态。
  * 用于进程 OOM/异常退出后，管理后台仍显示 running 或锁残留的恢复场景。

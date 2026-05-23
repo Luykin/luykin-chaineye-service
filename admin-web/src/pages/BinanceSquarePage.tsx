@@ -29,6 +29,7 @@ import { LegacyActionButton, LegacyMetricCard } from "@/components/ui/LegacyAdmi
 import {
   addBinanceSquareSeed,
   calculateBinanceSquareTargets,
+  cleanupBinanceSquareOldData,
   crawlBinanceSquarePosts,
   fetchBinanceSquareConfig,
   fetchBinanceSquareFollowingList,
@@ -104,6 +105,10 @@ const CONFIG_HELP: Record<string, { label: string; desc: string; tip?: string }>
   },
 };
 const HIDDEN_CONFIG_KEYS = new Set(["post_crawl_concurrency"]);
+const CLEANUP_RETENTION_OPTIONS = [7, 14, 30, 60, 90].map((days) => ({
+  label: `${days} 天前`,
+  value: days,
+}));
 
 function getConfigHelp(configKey: string) {
   return CONFIG_HELP[configKey] || {
@@ -310,6 +315,7 @@ export function BinanceSquarePage() {
   const [editingConfig, setEditingConfig] = useState<BinanceSquareConfigItem | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [rankPipelineOpen, setRankPipelineOpen] = useState(false);
+  const [cleanupRetentionDays, setCleanupRetentionDays] = useState(30);
 
   const statsQuery = useQuery({ queryKey: ["binance-square", "stats"], queryFn: fetchBinanceSquareStats, refetchInterval: 30_000 });
   const statusQuery = useQuery({ queryKey: ["binance-square", "status"], queryFn: fetchBinanceSquareStatus, refetchInterval: 15_000 });
@@ -421,6 +427,11 @@ export function BinanceSquarePage() {
   const purgeSnapshotsMutation = useMutation({
     mutationFn: purgeBinanceSquareSnapshots,
     onSuccess: (result) => handleActionSuccess("清空旧镜像", result.data),
+    onError: (error: Error) => messageApi.error(error.message || "清理失败"),
+  });
+  const cleanupOldDataMutation = useMutation({
+    mutationFn: cleanupBinanceSquareOldData,
+    onSuccess: (result) => handleActionSuccess("清理历史数据", result.data),
     onError: (error: Error) => messageApi.error(error.message || "清理失败"),
   });
   const resetTasksMutation = useMutation({
@@ -769,6 +780,27 @@ export function BinanceSquarePage() {
               补评分
             </LegacyActionButton>
           </Popconfirm>
+          <div className="bs-action-combo">
+            <Select
+              value={cleanupRetentionDays}
+              options={CLEANUP_RETENTION_OPTIONS}
+              onChange={setCleanupRetentionDays}
+              style={{ width: 104 }}
+              disabled={cleanupOldDataMutation.isPending}
+            />
+            <Popconfirm
+              title={`确认清理 ${cleanupRetentionDays} 天前的数据？`}
+              description="会删除该日期前的帖子、引用、回复及相关历史镜像，操作不可恢复；任务运行中会被后端拒绝。"
+              okText="确认清理"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => cleanupOldDataMutation.mutate({ retentionDays: cleanupRetentionDays })}
+            >
+              <LegacyActionButton variant="danger" loading={cleanupOldDataMutation.isPending}>
+                一键清理{cleanupRetentionDays}天前数据
+              </LegacyActionButton>
+            </Popconfirm>
+          </div>
           <LegacyActionButton variant="success" loading={startMutation.isPending} onClick={() => startMutation.mutate()}>
             启动调度器
           </LegacyActionButton>

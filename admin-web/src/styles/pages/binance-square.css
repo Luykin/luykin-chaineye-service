@@ -37,9 +37,16 @@
 
 .bs-actions-bar {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 20px;
+}
+
+.bs-action-combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .bs-rank-pipeline {

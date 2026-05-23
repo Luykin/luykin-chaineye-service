@@ -171,6 +171,16 @@ export async function resetBinanceSquareRunningTasks() {
   );
 }
 
+export async function cleanupBinanceSquareOldData(params: { retentionDays: number }) {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(
+    `${BASE}/maintenance/cleanup-old-data`,
+    {
+      method: "POST",
+      body: { retentionDays: params.retentionDays },
+    }
+  );
+}
+
 export async function recalculateBinanceSquarePostScores(params: {
   daysBack?: number;
   targetOnly?: boolean;
