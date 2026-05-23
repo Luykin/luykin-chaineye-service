@@ -45,7 +45,6 @@ import {
   recalculateBinanceSquarePostScores,
   removeBinanceSquareSeed,
   startBinanceSquareScheduler,
-  syncAllBinanceSquareFollowings,
   syncBinanceSquareSeedFollowing,
   updateBinanceSquareConfig,
 } from "@/services/binance-square";
@@ -255,11 +254,6 @@ export function BinanceSquarePage() {
     ]);
   };
 
-  const syncAllMutation = useMutation({
-    mutationFn: syncAllBinanceSquareFollowings,
-    onSuccess: (result) => handleActionSuccess("同步关注列表", result.data),
-    onError: (error: Error) => messageApi.error(error.message || "同步失败"),
-  });
   const calcTargetMutation = useMutation({
     mutationFn: calculateBinanceSquareTargets,
     onSuccess: (result) => handleActionSuccess("更新目标层级", result.data),
@@ -579,23 +573,6 @@ export function BinanceSquarePage() {
         </div>
 
         <div className="bs-actions-bar">
-          <LegacyActionButton variant="primary" loading={syncAllMutation.isPending} onClick={() => syncAllMutation.mutate()}>
-            同步关注列表
-          </LegacyActionButton>
-          {RANK_STAGES.map((stage) => (
-            <LegacyActionButton
-              key={stage.key}
-              variant={stage.key === "top1000" ? "success" : "primary"}
-              loading={calcTargetMutation.isPending && calcTargetMutation.variables === stage.key}
-              disabled={Boolean(targetProgress?.running)}
-              onClick={() => {
-                setTargetRankSet(stage.key);
-                calcTargetMutation.mutate(stage.key);
-              }}
-            >
-              更新 {stage.label}
-            </LegacyActionButton>
-          ))}
           <LegacyActionButton
             variant="primary"
             loading={crawlMutation.isPending}
