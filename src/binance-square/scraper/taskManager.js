@@ -211,6 +211,7 @@ class BinanceSquareTaskManager {
   async runPostCrawl(options = {}) {
     const redis = await getRedisClient();
     const LOCK_KEY = "binance_square:task:lock";
+    const FORCE_STOP_KEY = "binance_square:task:force_stop";
     const LOCK_TTL = 6 * 60 * 60; // 6小时，允许Top1000慢慢抓；异常时可用force-stop释放
 
     const {
@@ -235,6 +236,14 @@ class BinanceSquareTaskManager {
     let shouldReleaseLock = true;
     this.isRunning = true;
     this.shouldStop = false;
+
+    // 兼容旧版本遗留的全局 force_stop=true。新版本的停止信号会绑定具体 snapshotId，
+    // 避免一次重置/终止后误杀下一轮新任务。
+    const forceStopValue = await redis.get(FORCE_STOP_KEY).catch(() => null);
+    if (forceStopValue === "true") {
+      await redis.del(FORCE_STOP_KEY).catch(() => {});
+      console.warn("[taskManager] 已清理旧版全局 force_stop=true，避免误杀新任务");
+    }
 
     try {
       if (enforceCooldown) {
@@ -383,10 +392,10 @@ class BinanceSquareTaskManager {
     const checkForceStop = async () => {
       if (this.shouldStop) return true;
       const forceStop = await redis.get("binance_square:task:force_stop");
-      if (forceStop === "true") {
+      if (forceStop === snapshotId) {
         this.shouldStop = true;
         await redis.del("binance_square:task:force_stop");
-        console.log("[taskManager] 收到 Redis 强制终止指令");
+        console.log(`[taskManager] 收到 Redis 强制终止指令 snapshotId=${snapshotId}`);
         return true;
       }
       return false;

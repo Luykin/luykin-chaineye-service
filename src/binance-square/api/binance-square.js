@@ -2119,9 +2119,14 @@ router.post("/crawl/posts", async (req, res) => {
 router.post("/crawl/force-stop", async (req, res) => {
   try {
     // 爬取任务在独立爬虫服务中执行；这里仅写 Redis 指令，避免 API 进程误删远端任务锁。
-    await req.redisClient.set("binance_square:task:force_stop", "true", { EX: 2 * 60 * 60 });
+    const currentPostLock = await req.redisClient.get("binance_square:task:lock");
+    if (!currentPostLock) {
+      await req.redisClient.del("binance_square:task:force_stop");
+      return res.json(success({ message: "当前没有帖子抓取任务锁，已清理遗留终止指令", stopped: false }));
+    }
+    await req.redisClient.set("binance_square:task:force_stop", currentPostLock, { EX: 10 * 60 });
 
-    res.json(success({ message: "已发送强制终止指令" }));
+    res.json(success({ message: "已发送强制终止指令", stopped: true, snapshotId: currentPostLock }));
   } catch (error) {
     console.error("[crawl/force-stop] error:", error);
     res.status(500).json(fail(error.message));
@@ -2479,9 +2484,10 @@ router.post("/maintenance/reset-running-tasks", async (req, res) => {
     }
 
     const postLock = await redis.get("binance_square:task:lock");
-    // 给独立帖子爬虫一个短期停止信号；如果没有帖子锁则清掉旧停止信号，避免下一次新任务被误杀。
+    // 给独立帖子爬虫一个绑定当前 snapshotId 的短期停止信号；
+    // 新任务的 snapshotId 不同，不会被旧停止信号误杀。
     if (postLock) {
-      await redis.set("binance_square:task:force_stop", "true", { EX: 10 * 60 });
+      await redis.set("binance_square:task:force_stop", postLock, { EX: 10 * 60 });
     } else {
       await redis.del("binance_square:task:force_stop");
     }
