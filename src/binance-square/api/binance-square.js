@@ -770,6 +770,7 @@ const RANK_STAGE_CONFIG = {
   top300: { rankSet: "top300", sourceRankSet: "top100", limit: 300, previousRankSets: ["top50", "top100"] },
   top1000: { rankSet: "top1000", sourceRankSet: "top300", limit: 1000, previousRankSets: ["top50", "top100", "top300"] },
 };
+const RECENT_PROGRESS_SCAN_LIMIT = 30;
 
 function getTargetProgressKey(runId) {
   return `binance_square:task:progress:target:${runId}`;
@@ -792,7 +793,8 @@ async function updateTargetProgress(runId, update) {
 
 async function getTargetProgressList() {
   const redis = await getRedisClient();
-  const keys = await scanKeys(redis, "binance_square:task:progress:target:*", { maxKeys: 100 });
+  // 管理后台只展示最近进度，不需要扫描完整历史 key，避免 Redis key 多时拖慢状态页。
+  const keys = await scanKeys(redis, "binance_square:task:progress:target:*", { count: 100, maxKeys: RECENT_PROGRESS_SCAN_LIMIT });
   const progressList = [];
 
   for (const key of keys) {
@@ -851,7 +853,8 @@ async function updateUserIntroProgress(taskId, update) {
 
 async function getUserIntroProgressList() {
   const redis = await getRedisClient();
-  const keys = await scanKeys(redis, "binance_square:task:progress:intro:*", { maxKeys: 100 });
+  // 管理后台只展示最近进度，不需要扫描完整历史 key，避免 Redis key 多时拖慢状态页。
+  const keys = await scanKeys(redis, "binance_square:task:progress:intro:*", { count: 100, maxKeys: RECENT_PROGRESS_SCAN_LIMIT });
   const progressList = [];
 
   for (const key of keys) {
@@ -2269,8 +2272,11 @@ router.get("/crawl/progress", async (req, res) => {
     const { getRedisClient } = require("../../lib/redisClient");
     const redis = await getRedisClient();
 
-    // 扫描所有帖子抓取进度 key
-    const keys = await scanKeys(redis, "binance_square:task:progress:post:*");
+    // 优先直接读取当前任务锁对应的进度；没有运行锁时，只扫描一小批最近进度用于展示。
+    const runningSnapshotId = await redis.get("binance_square:task:lock");
+    const keys = runningSnapshotId
+      ? [`binance_square:task:progress:post:${runningSnapshotId}`]
+      : await scanKeys(redis, "binance_square:task:progress:post:*", { count: 100, maxKeys: RECENT_PROGRESS_SCAN_LIMIT });
 
     if (keys.length === 0) {
       return res.json(success({ running: false, message: "当前没有正在执行或近期的抓取任务" }));
