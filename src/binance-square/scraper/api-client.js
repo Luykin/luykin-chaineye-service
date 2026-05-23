@@ -7,15 +7,21 @@ const REQUEST_DELAY_MAX = 1200;
 const REQUEST_TIMEOUT = 10000;
 const MAX_RETRIES = 3;
 const DEFAULT_MAX_PAGES = 30;
+const PROXY_AGENT_CACHE = new Map();
 
 function buildProxyConfig(proxyUrl) {
   if (!proxyUrl) return {};
 
   try {
+    let httpsAgent = PROXY_AGENT_CACHE.get(proxyUrl);
+    if (!httpsAgent) {
+      httpsAgent = new HttpsProxyAgent(proxyUrl);
+      PROXY_AGENT_CACHE.set(proxyUrl, httpsAgent);
+    }
     return {
       // axios 内置 proxy 在部分 HTTP 代理访问 HTTPS 站点时会返回 400；
       // 显式使用 HTTPS proxy agent，走 CONNECT 隧道，与 curl -x 行为一致。
-      httpsAgent: new HttpsProxyAgent(proxyUrl),
+      httpsAgent,
       proxy: false,
     };
   } catch (e) {
@@ -37,6 +43,25 @@ function buildRequestConfig({ timeout = REQUEST_TIMEOUT, headers = {}, proxyUrl 
   };
 }
 
+async function withLinkedSignal(parentSignal, fn) {
+  if (!parentSignal) {
+    return fn(null);
+  }
+  if (parentSignal.aborted) {
+    throw new Error("请求已取消");
+  }
+
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(parentSignal.reason);
+  parentSignal.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    return await fn(controller.signal);
+  } finally {
+    parentSignal.removeEventListener("abort", onAbort);
+  }
+}
+
 
 /**
  * 随机延迟（毫秒）
@@ -46,16 +71,32 @@ function sleep(ms, signal = null) {
     return Promise.reject(new Error("请求已取消"));
   }
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
+    let settled = false;
+    let timer = null;
+    let onAbort = null;
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (signal && onAbort) {
+        signal.removeEventListener("abort", onAbort);
+        onAbort = null;
+      }
+    };
+
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn(value);
+    };
+
+    timer = setTimeout(() => settle(resolve), ms);
     if (signal) {
-      signal.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timer);
-          reject(new Error("请求已取消"));
-        },
-        { once: true }
-      );
+      onAbort = () => settle(reject, new Error("请求已取消"));
+      signal.addEventListener("abort", onAbort, { once: true });
     }
   });
 }
@@ -127,18 +168,20 @@ async function fetchFollowingList(targetUsername, options = {}) {
   while (hasMore) {
     const res = await withRetry(
       () =>
-        axios.post(
-          `${BASE_URL}/bapi/composite/v3/friendly/pgc/user/following`,
-          {
-            targetUsername,
-            pageIndex,
-            pageSize: 20,
-          },
-          buildRequestConfig({
-            proxyUrl: options.proxyUrl,
-            signal: options.signal,
-            headers: { "Content-Type": "application/json" },
-          })
+        withLinkedSignal(options.signal, (requestSignal) =>
+          axios.post(
+            `${BASE_URL}/bapi/composite/v3/friendly/pgc/user/following`,
+            {
+              targetUsername,
+              pageIndex,
+              pageSize: 20,
+            },
+            buildRequestConfig({
+              proxyUrl: options.proxyUrl,
+              signal: requestSignal,
+              headers: { "Content-Type": "application/json" },
+            })
+          )
         ),
       `fetchFollowingList(${targetUsername}, page=${pageIndex})`,
       { signal: options.signal }
@@ -194,16 +237,18 @@ async function fetchUserPosts(squareUid, filterType = "ALL", daysBack = 7, onlyF
 
     const res = await withRetry(
       () =>
-        axios.get(
-          `${BASE_URL}/bapi/composite/v2/friendly/pgc/content/queryUserProfilePageContentsWithFilter`,
-          {
-            ...buildRequestConfig({ proxyUrl: options.proxyUrl, signal: options.signal }),
-            params: {
-              targetSquareUid: squareUid,
-              timeOffset,
-              filterType,
-            },
-          }
+        withLinkedSignal(options.signal, (requestSignal) =>
+          axios.get(
+            `${BASE_URL}/bapi/composite/v2/friendly/pgc/content/queryUserProfilePageContentsWithFilter`,
+            {
+              ...buildRequestConfig({ proxyUrl: options.proxyUrl, signal: requestSignal }),
+              params: {
+                targetSquareUid: squareUid,
+                timeOffset,
+                filterType,
+              },
+            }
+          )
         ),
       `fetchUserPosts(${squareUid}, ${filterType}, timeOffset=${timeOffset})`,
       { signal: options.signal }
@@ -258,9 +303,11 @@ async function fetchPostDetail(postId, options = {}) {
   try {
     const res = await withRetry(
       () =>
-        axios.get(
-          `${BASE_URL}/bapi/composite/v3/friendly/pgc/special/content/detail/${postId}`,
-          buildRequestConfig({ proxyUrl: options.proxyUrl, signal: options.signal })
+        withLinkedSignal(options.signal, (requestSignal) =>
+          axios.get(
+            `${BASE_URL}/bapi/composite/v3/friendly/pgc/special/content/detail/${postId}`,
+            buildRequestConfig({ proxyUrl: options.proxyUrl, signal: requestSignal })
+          )
         ),
       `fetchPostDetail(${postId})`,
       { signal: options.signal }
