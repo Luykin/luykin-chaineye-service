@@ -5,6 +5,7 @@ import type { CSSProperties, ReactNode } from "react";
 type LegacyActionVariant =
   | "primary"
   | "success"
+  | "warning"
   | "danger"
   | "neutral"
   | "sync"

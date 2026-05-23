@@ -213,6 +213,7 @@ export function BinanceSquarePage() {
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState<BinanceSquareConfigItem | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [rankPipelineOpen, setRankPipelineOpen] = useState(false);
 
   const statsQuery = useQuery({ queryKey: ["binance-square", "stats"], queryFn: fetchBinanceSquareStats, refetchInterval: 30_000 });
   const statusQuery = useQuery({ queryKey: ["binance-square", "status"], queryFn: fetchBinanceSquareStatus, refetchInterval: 15_000 });
@@ -636,7 +637,7 @@ export function BinanceSquarePage() {
             cancelText="取消"
             onConfirm={() => recalcScoresMutation.mutate({ daysBack: 7, targetOnly: true })}
           >
-            <LegacyActionButton variant="neutral" loading={recalcScoresMutation.isPending}>
+            <LegacyActionButton variant="warning" loading={recalcScoresMutation.isPending}>
               补评分
             </LegacyActionButton>
           </Popconfirm>
@@ -805,41 +806,53 @@ export function BinanceSquarePage() {
                 label: "目标用户",
                 children: (
                   <div className="bs-sub-panel-react">
-                    <div className="bs-panel-title">分阶段目标用户</div>
-                    <div className="bs-rank-pipeline">
-                      {RANK_STAGES.map((stage, index) => (
-                        <div className={`bs-rank-stage ${targetRankSet === stage.key ? "is-active" : ""}`} key={stage.key}>
-                          <button
-                            type="button"
-                            className="bs-rank-stage-main"
-                            onClick={() => setTargetRankSet(stage.key)}
-                          >
-                            <span className="bs-rank-stage-index">{index + 1}</span>
-                            <span>
-                              <strong>{stage.label}</strong>
-                              <em>{stage.source} → {stage.label}</em>
-                            </span>
-                          </button>
-                          <p>{stage.desc}</p>
-                          <Button
-                            size="small"
-                            className={`bs-rank-stage-update ${stage.key === "top1000" ? "is-final" : ""}`}
-                            loading={calcTargetMutation.isPending && calcTargetMutation.variables === stage.key}
-                            disabled={Boolean(targetProgress?.running)}
-                            onClick={() => calcTargetMutation.mutate(stage.key)}
-                          >
-                            更新 {stage.label}
-                          </Button>
-                        </div>
-                      ))}
+                    <div className="bs-panel-title-row">
+                      <div>
+                        <div className="bs-panel-title">目标用户列表</div>
+                        <div className="bs-panel-subtitle">低频的 Top50/100/300/1000 分阶段更新已默认折叠。</div>
+                      </div>
+                      <Button size="small" onClick={() => setRankPipelineOpen((open) => !open)}>
+                        {rankPipelineOpen ? "收起低频更新" : "展开低频更新"}
+                      </Button>
                     </div>
-                    <Alert
-                      type="info"
-                      showIcon
-                      className="bs-stage-alert"
-                      message="需要按 Top50 → Top100 → Top300 → Top1000 顺序更新"
-                      description="每一步会自动同步上一层用户的关注列表；Top1000 会合并 Top50/100/300，最终写入 isTargetUser。"
-                    />
+                    {rankPipelineOpen ? (
+                      <>
+                        <div className="bs-rank-pipeline">
+                          {RANK_STAGES.map((stage, index) => (
+                            <div className={`bs-rank-stage ${targetRankSet === stage.key ? "is-active" : ""}`} key={stage.key}>
+                              <button
+                                type="button"
+                                className="bs-rank-stage-main"
+                                onClick={() => setTargetRankSet(stage.key)}
+                              >
+                                <span className="bs-rank-stage-index">{index + 1}</span>
+                                <span>
+                                  <strong>{stage.label}</strong>
+                                  <em>{stage.source} → {stage.label}</em>
+                                </span>
+                              </button>
+                              <p>{stage.desc}</p>
+                              <Button
+                                size="small"
+                                className={`bs-rank-stage-update ${stage.key === "top1000" ? "is-final" : ""}`}
+                                loading={calcTargetMutation.isPending && calcTargetMutation.variables === stage.key}
+                                disabled={Boolean(targetProgress?.running)}
+                                onClick={() => calcTargetMutation.mutate(stage.key)}
+                              >
+                                更新 {stage.label}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                        <Alert
+                          type="info"
+                          showIcon
+                          className="bs-stage-alert"
+                          message="需要按 Top50 → Top100 → Top300 → Top1000 顺序更新"
+                          description="每一步会自动同步上一层用户的关注列表；Top1000 会合并 Top50/100/300，最终写入 isTargetUser。"
+                        />
+                      </>
+                    ) : null}
                     {targetProgress?.latest ? (
                       <div className={`bs-target-progress ${targetProgress.running ? "is-running" : ""}`}>
                         <div className="bs-progress-header">

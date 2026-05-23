@@ -49,6 +49,21 @@
   margin-bottom: 14px;
 }
 
+.bs-panel-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.bs-panel-subtitle {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .bs-rank-stage {
   position: relative;
   padding: 12px;

@@ -96,6 +96,18 @@
   color: #fff !important;
 }
 
+.legacy-action-btn--warning.ant-btn {
+  border-color: #f59e0b;
+  background: #f59e0b;
+  color: #fff;
+}
+
+.legacy-action-btn--warning.ant-btn:hover {
+  border-color: #d97706 !important;
+  background: #d97706 !important;
+  color: #fff !important;
+}
+
 .legacy-action-btn--danger.ant-btn {
   border-color: #dc2626;
   background: #dc2626;
