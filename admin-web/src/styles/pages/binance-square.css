@@ -180,6 +180,15 @@
   background: #eff6ff;
 }
 
+.bs-loading-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: #64748b;
+  font-size: 13px;
+}
+
 .bs-progress-error {
   margin-top: 10px;
   color: #dc2626;

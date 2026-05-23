@@ -17,6 +17,7 @@ import {
   Tag,
   Tooltip,
   Typography,
+  Spin,
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -355,10 +356,12 @@ export function BinanceSquarePage() {
   const progress = progressQuery.data?.data;
   const targetProgress = targetProgressQuery.data?.data;
   const userIntroProgress = userIntroProgressQuery.data?.data;
+  const isStatusInitialLoading = statusQuery.isLoading && !crawlStatus;
   const seeds = seedsQuery.data?.data || [];
   const targets = targetsQuery.data?.data || [];
   const posts = postsQuery.data?.data;
   const logs = logsQuery.data?.data;
+  const isLogsInitialLoading = logsQuery.isLoading && !logs;
   const configs = (configQuery.data?.data || []).filter((item) => !HIDDEN_CONFIG_KEYS.has(item.configKey));
   const followingData = followingQuery.data?.data;
 
@@ -609,9 +612,9 @@ export function BinanceSquarePage() {
           {[
             ["种子用户", stats?.seedCount || 0, "#3b82f6"],
             ["最终目标", stats?.targetCount || 0, "#f59e0b"],
-            ["帖子总数", stats?.postCount || 0, "#10b981"],
+            ["帖子总数", formatCompactNumber(stats?.postCount), "#10b981"],
             ["上次抓取", stats?.lastCrawlAt ? dayjs(stats.lastCrawlAt).format("HH:mm") : "-", "#64748b"],
-            ["调度器状态", crawlStatus?.isRunning ? "运行中" : "已暂停", "#ef4444"],
+            ["调度器状态", isStatusInitialLoading ? "加载中…" : crawlStatus?.isRunning ? "运行中" : "已暂停", isStatusInitialLoading ? "#94a3b8" : crawlStatus?.isRunning ? "#10b981" : "#ef4444"],
           ].map(([label, value, color]) => (
             <LegacyMetricCard
               key={String(label)}
@@ -747,19 +750,31 @@ export function BinanceSquarePage() {
                     </div>
                     <div className="bs-overview-card">
                       <h4>最近抓取统计</h4>
-                      <Descriptions size="small" column={1}>
-                        <Descriptions.Item label="调度器">{crawlStatus?.isRunning ? "运行中" : "已暂停"}</Descriptions.Item>
-                        <Descriptions.Item label="当前抓取">{crawlStatus?.isCrawling ? "执行中" : "空闲"}</Descriptions.Item>
-                        <Descriptions.Item label="抓取窗口">{crawlStatus?.postCrawlDaysBack || 7} 天 / {crawlStatus?.postCrawlFilterTypes || "ALL,REPLY"}</Descriptions.Item>
-                        <Descriptions.Item label="冷却时间">{crawlStatus?.postCrawlCooldownMinutes ?? 30} 分钟</Descriptions.Item>
-                        <Descriptions.Item label="最近任务状态">{crawlStatus?.lastCrawl?.status || "-"}</Descriptions.Item>
-                        <Descriptions.Item label="最近任务时间">{formatDateTime(crawlStatus?.lastCrawl?.createdAt)}</Descriptions.Item>
-                      </Descriptions>
+                      {isStatusInitialLoading ? (
+                        <div className="bs-loading-state">
+                          <Spin size="small" />
+                          <span>正在获取调度器状态…</span>
+                        </div>
+                      ) : (
+                        <Descriptions size="small" column={1}>
+                          <Descriptions.Item label="调度器">{crawlStatus?.isRunning ? "运行中" : "已暂停"}</Descriptions.Item>
+                          <Descriptions.Item label="当前抓取">{crawlStatus?.isCrawling ? "执行中" : "空闲"}</Descriptions.Item>
+                          <Descriptions.Item label="抓取窗口">{crawlStatus?.postCrawlDaysBack || 7} 天 / {crawlStatus?.postCrawlFilterTypes || "ALL,REPLY"}</Descriptions.Item>
+                          <Descriptions.Item label="冷却时间">{crawlStatus?.postCrawlCooldownMinutes ?? 30} 分钟</Descriptions.Item>
+                          <Descriptions.Item label="最近任务状态">{crawlStatus?.lastCrawl?.status || "-"}</Descriptions.Item>
+                          <Descriptions.Item label="最近任务时间">{formatDateTime(crawlStatus?.lastCrawl?.createdAt)}</Descriptions.Item>
+                        </Descriptions>
+                      )}
                     </div>
                     <div className="bs-overview-card">
                       <h4>最近日志</h4>
                       <div className="bs-recent-logs">
-                        {logs?.data?.length ? logs.data.slice(0, 6).map((log) => (
+                        {isLogsInitialLoading ? (
+                          <div className="bs-loading-state">
+                            <Spin size="small" />
+                            <span>正在加载最近抓取日志…</span>
+                          </div>
+                        ) : logs?.data?.length ? logs.data.slice(0, 6).map((log) => (
                           <div className="bs-recent-log-item" key={log.id}>
                             <span>
                               <span className={`bs-log-type ${log.taskType === "following" ? "bs-log-type-following" : log.taskType === "post" ? "bs-log-type-post" : "bs-log-type-target"}`}>
@@ -1063,7 +1078,7 @@ export function BinanceSquarePage() {
                       />
                       <LegacyActionButton variant="neutral" onClick={() => void logsQuery.refetch()}>刷新</LegacyActionButton>
                     </div>
-                    <Table size="small" rowKey="id" columns={logColumns} dataSource={logs?.data || []} pagination={false} scroll={{ y: TABLE_MAX_HEIGHT, x: 1000 }} />
+                    <Table size="small" rowKey="id" columns={logColumns} dataSource={logs?.data || []} pagination={false} loading={logsQuery.isFetching} scroll={{ y: TABLE_MAX_HEIGHT, x: 1000 }} />
                     <div style={{ display: "flex", justifyContent: "flex-end" }}>
                       <Pagination
                         current={logs?.page || 1}
