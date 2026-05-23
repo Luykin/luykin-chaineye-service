@@ -868,8 +868,61 @@ function sha256Json(value) {
   return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function safeJsonStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch (e) {
+    return String(value || "");
+  }
+}
+
+function extractIntroRawText(value, depth = 0) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (depth > 4) return safeJsonStringify(value);
+
+  if (Array.isArray(value)) {
+    const text = value
+      .map((item) => extractIntroRawText(item, depth + 1))
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    return text || safeJsonStringify(value);
+  }
+
+  if (typeof value === "object") {
+    const preferredKeys = [
+      "intro",
+      "oneLineIntro",
+      "one_line_intro",
+      "aiOneLineIntro",
+      "summary",
+      "description",
+      "text",
+      "output_text",
+      "content",
+      "message",
+    ];
+
+    for (const key of preferredKeys) {
+      if (value[key] != null) {
+        const text = extractIntroRawText(value[key], depth + 1);
+        if (text) return text;
+      }
+    }
+
+    const parsedValueText = Object.values(value)
+      .map((item) => extractIntroRawText(item, depth + 1))
+      .find((text) => text && text.trim().length >= 8);
+
+    return parsedValueText || safeJsonStringify(value);
+  }
+
+  return String(value || "");
+}
+
 function sanitizeIntroText(value) {
-  let text = String(value || "")
+  let text = extractIntroRawText(value)
     .replace(/```[\s\S]*?```/g, "")
     .replace(/^[-*\d.、\s]+/g, "")
     .replace(/[\r\n]+/g, " ")
@@ -883,6 +936,11 @@ function sanitizeIntroText(value) {
     text = text.slice(1, -1).trim();
   }
   return text;
+}
+
+function isUsableIntroText(value) {
+  const text = sanitizeIntroText(value);
+  return Boolean(text && text.length >= 12 && !/^\[object Object\]$/i.test(text));
 }
 
 async function getIntroRecentPosts(username, postLimit) {
@@ -979,7 +1037,7 @@ async function generateIntroForUser(rankEntry, options) {
   const inputPayload = { promptVersion: USER_INTRO_PROMPT_VERSION, profile, posts };
   const inputHash = sha256Json(inputPayload);
 
-  if (!force && user.aiOneLineIntro && user.aiIntroStatus === "success" && user.aiIntroInputHash === inputHash) {
+  if (!force && user.aiOneLineIntro && user.aiIntroStatus === "success" && user.aiIntroInputHash === inputHash && isUsableIntroText(user.aiOneLineIntro)) {
     return {
       username,
       status: "skipped",
@@ -1691,12 +1749,13 @@ router.get("/target/list", async (req, res) => {
 
     const enrichedRanks = rankRows.map((rank) => {
       const user = userMap.get(rank.username.toLowerCase());
+      const intro = isUsableIntroText(user?.aiOneLineIntro) ? sanitizeIntroText(user.aiOneLineIntro) : null;
       return {
         ...rank,
         displayName: user?.displayName || null,
         avatar: user?.avatar || null,
-        aiOneLineIntro: user?.aiOneLineIntro || null,
-        aiIntroStatus: user?.aiIntroStatus || null,
+        aiOneLineIntro: intro,
+        aiIntroStatus: user?.aiIntroStatus === "success" && !intro ? null : user?.aiIntroStatus || null,
         aiIntroModel: user?.aiIntroModel || null,
         aiIntroPromptVersion: user?.aiIntroPromptVersion || null,
         aiIntroGeneratedAt: user?.aiIntroGeneratedAt || null,

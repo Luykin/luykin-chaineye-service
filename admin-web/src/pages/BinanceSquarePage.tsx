@@ -132,6 +132,60 @@ function formatCompactNumber(value?: number | string | null) {
   return String(num);
 }
 
+function safeJsonStringify(value: unknown) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value || "");
+  }
+}
+
+function extractIntroDisplayText(value: unknown, depth = 0): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (depth > 4) return safeJsonStringify(value);
+
+  if (Array.isArray(value)) {
+    const text = value
+      .map((item) => extractIntroDisplayText(item, depth + 1))
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    return text || safeJsonStringify(value);
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const preferredKeys = [
+      "intro",
+      "oneLineIntro",
+      "one_line_intro",
+      "aiOneLineIntro",
+      "summary",
+      "description",
+      "text",
+      "output_text",
+      "content",
+      "message",
+    ];
+
+    for (const key of preferredKeys) {
+      if (record[key] !== null && record[key] !== undefined) {
+        const text = extractIntroDisplayText(record[key], depth + 1);
+        if (text) return text;
+      }
+    }
+
+    const parsedValueText = Object.values(record)
+      .map((item) => extractIntroDisplayText(item, depth + 1))
+      .find((text) => text && text.trim().length >= 8);
+
+    return parsedValueText || safeJsonStringify(value);
+  }
+
+  return String(value || "");
+}
+
 function hasChineseText(value?: string | null) {
   return /[\u3400-\u9fff]/.test(value || "");
 }
@@ -458,11 +512,12 @@ export function BinanceSquarePage() {
       key: "aiOneLineIntro",
       width: 360,
       render: (value, record) => {
-        if (value) {
+        const introText = extractIntroDisplayText(value).trim();
+        if (introText) {
           return (
-            <Tooltip title={value}>
+            <Tooltip title={introText}>
               <Typography.Text ellipsis style={{ maxWidth: 340 }}>
-                {value}
+                {introText}
               </Typography.Text>
             </Tooltip>
           );
