@@ -4,6 +4,7 @@ import {
   Button,
   Descriptions,
   Drawer,
+  Dropdown,
   Empty,
   Form,
   Input,
@@ -20,8 +21,9 @@ import {
   Spin,
   message,
 } from "antd";
+import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { InfoCircleOutlined } from "@ant-design/icons";
+import { InfoCircleOutlined, MoreOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -298,6 +300,7 @@ function statusTagColor(status?: string | null) {
 
 export function BinanceSquarePage() {
   const [messageApi, contextHolder] = message.useMessage();
+  const [modalApi, modalContextHolder] = Modal.useModal();
   const [seedForm] = Form.useForm();
   const [configForm] = Form.useForm();
   const [postsPage, setPostsPage] = useState(1);
@@ -315,6 +318,7 @@ export function BinanceSquarePage() {
   const [editingConfig, setEditingConfig] = useState<BinanceSquareConfigItem | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [rankPipelineOpen, setRankPipelineOpen] = useState(false);
+  const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
   const [cleanupRetentionDays, setCleanupRetentionDays] = useState(30);
 
   const statsQuery = useQuery({ queryKey: ["binance-square", "stats"], queryFn: fetchBinanceSquareStats, refetchInterval: 30_000 });
@@ -493,6 +497,75 @@ export function BinanceSquarePage() {
   const isLogsInitialLoading = logsQuery.isLoading && !logs;
   const configs = (configQuery.data?.data || []).filter((item) => !HIDDEN_CONFIG_KEYS.has(item.configKey));
   const followingData = followingQuery.data?.data;
+  const isMoreActionPending =
+    cleanupOldDataMutation.isPending ||
+    startMutation.isPending ||
+    pauseMutation.isPending ||
+    stopMutation.isPending ||
+    resetTasksMutation.isPending;
+
+  const confirmMoreAction = (
+    title: string,
+    content: string,
+    onOk: () => void,
+    options: { okText?: string; danger?: boolean } = {}
+  ) => {
+    modalApi.confirm({
+      title,
+      content,
+      okText: options.okText || "确认",
+      cancelText: "取消",
+      okButtonProps: { danger: options.danger !== false },
+      onOk,
+    });
+  };
+
+  const moreMenuItems: MenuProps["items"] = [
+    { key: "cleanup", label: "一键清理历史数据", danger: true },
+    { type: "divider" },
+    { key: "start", label: "启动调度器", disabled: startMutation.isPending },
+    { key: "pause", label: "暂停调度器", danger: true, disabled: pauseMutation.isPending },
+    {
+      key: "stop",
+      label: "强制终止当前抓取",
+      danger: true,
+      disabled: !crawlStatus?.isCrawling || stopMutation.isPending,
+    },
+    { type: "divider" },
+    { key: "reset", label: "重置任务状态", danger: true, disabled: resetTasksMutation.isPending },
+  ];
+
+  const handleMoreAction: MenuProps["onClick"] = ({ key }) => {
+    if (key === "cleanup") {
+      setCleanupModalOpen(true);
+      return;
+    }
+    if (key === "start") {
+      startMutation.mutate();
+      return;
+    }
+    if (key === "pause") {
+      pauseMutation.mutate();
+      return;
+    }
+    if (key === "stop") {
+      confirmMoreAction(
+        "确认强制终止当前抓取？",
+        "会给当前帖子抓取任务发送停止信号。仅在任务异常、长时间无进度时使用。",
+        () => stopMutation.mutate(),
+        { okText: "强制终止" }
+      );
+      return;
+    }
+    if (key === "reset") {
+      confirmMoreAction(
+        "确认重置所有运行中任务状态？",
+        "会清理帖子抓取、目标用户更新、介绍生成的 Redis 锁和进度，并给帖子爬虫发送停止信号。仅在任务卡死或进程异常退出后使用。",
+        () => resetTasksMutation.mutate(),
+        { okText: "确认重置" }
+      );
+    }
+  };
 
   const seedColumns: ColumnsType<BinanceSquareSeedItem> = [
     { title: "用户名", dataIndex: "username", key: "username", width: 160, render: (value) => <strong>{value}</strong> },
@@ -740,6 +813,7 @@ export function BinanceSquarePage() {
   return (
     <PermissionGuard permission="binance-square">
       {contextHolder}
+      {modalContextHolder}
       <div className="binance-square-page" id="binance-square-section">
         <h2 className="section-title">币安广场爬虫管理</h2>
         <p className="section-desc">Seed 关注同步 → Top50/100/300/1000 分阶段扩展 → Top1000 近7天 ALL+REPLY 抓取 → 热度评分排序</p>
@@ -780,50 +854,15 @@ export function BinanceSquarePage() {
               补评分
             </LegacyActionButton>
           </Popconfirm>
-          <div className="bs-action-combo">
-            <Select
-              value={cleanupRetentionDays}
-              options={CLEANUP_RETENTION_OPTIONS}
-              onChange={setCleanupRetentionDays}
-              style={{ width: 104 }}
-              disabled={cleanupOldDataMutation.isPending}
-            />
-            <Popconfirm
-              title={`确认清理 ${cleanupRetentionDays} 天前的数据？`}
-              description="会删除该日期前的帖子、引用、回复及相关历史镜像，操作不可恢复；任务运行中会被后端拒绝。"
-              okText="确认清理"
-              cancelText="取消"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => cleanupOldDataMutation.mutate({ retentionDays: cleanupRetentionDays })}
-            >
-              <LegacyActionButton variant="danger" loading={cleanupOldDataMutation.isPending}>
-                一键清理{cleanupRetentionDays}天前数据
-              </LegacyActionButton>
-            </Popconfirm>
-          </div>
-          <LegacyActionButton variant="success" loading={startMutation.isPending} onClick={() => startMutation.mutate()}>
-            启动调度器
-          </LegacyActionButton>
-          <LegacyActionButton variant="danger" loading={pauseMutation.isPending} onClick={() => pauseMutation.mutate()}>
-            暂停调度器
-          </LegacyActionButton>
-          {crawlStatus?.isCrawling ? (
-            <LegacyActionButton variant="danger" loading={stopMutation.isPending} onClick={() => stopMutation.mutate()}>
-              强制终止
-            </LegacyActionButton>
-          ) : null}
-          <Popconfirm
-            title="确认重置所有运行中任务状态？"
-            description="会清理帖子抓取、目标用户更新、介绍生成的 Redis 锁和进度，并给帖子爬虫发送停止信号。仅在任务卡死或进程异常退出后使用。"
-            okText="确认重置"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => resetTasksMutation.mutate()}
+          <Dropdown
+            menu={{ items: moreMenuItems, onClick: handleMoreAction }}
+            trigger={["click"]}
+            placement="bottomRight"
           >
-            <LegacyActionButton variant="danger" loading={resetTasksMutation.isPending}>
-              重置任务状态
+            <LegacyActionButton variant="neutral" loading={isMoreActionPending}>
+              <MoreOutlined /> 更多
             </LegacyActionButton>
-          </Popconfirm>
+          </Dropdown>
           <LegacyActionButton
             variant="neutral"
             onClick={() => {
@@ -1298,6 +1337,39 @@ export function BinanceSquarePage() {
             />
           </div>
         </Drawer>
+
+        <Modal
+          title="一键清理历史数据"
+          open={cleanupModalOpen}
+          onCancel={() => setCleanupModalOpen(false)}
+          okText={`清理${cleanupRetentionDays}天前数据`}
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+          confirmLoading={cleanupOldDataMutation.isPending}
+          onOk={() => {
+            cleanupOldDataMutation.mutate(
+              { retentionDays: cleanupRetentionDays },
+              { onSuccess: () => setCleanupModalOpen(false) }
+            );
+          }}
+        >
+          <Alert
+            type="warning"
+            showIcon
+            message="这是不可恢复操作"
+            description="会删除所选天数前的帖子、引用、回复及相关历史镜像。用户、目标排名、关注关系和种子配置不会删除；任务运行中后端会拒绝清理。"
+            style={{ marginBottom: 16 }}
+          />
+          <Form layout="vertical">
+            <Form.Item label="清理多少天前的数据">
+              <Select
+                value={cleanupRetentionDays}
+                options={CLEANUP_RETENTION_OPTIONS}
+                onChange={setCleanupRetentionDays}
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
 
         <Modal
           title={editingConfig ? `修改配置：${editingConfig.configKey}` : "修改配置"}

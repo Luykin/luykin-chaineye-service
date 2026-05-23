@@ -43,12 +43,6 @@
   margin-bottom: 20px;
 }
 
-.bs-action-combo {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .bs-rank-pipeline {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
