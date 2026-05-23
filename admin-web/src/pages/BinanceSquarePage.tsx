@@ -209,14 +209,12 @@ function parseBilingualIntro(value: unknown) {
   const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   let zh = "";
   let en = "";
-  const rest: string[] = [];
 
   for (const line of lines) {
     const zhMatch = line.match(/^(?:中文|Chinese|ZH|CN)[:：]\s*(.+)$/i);
     const enMatch = line.match(/^(?:英文|English|EN)[:：]\s*(.+)$/i);
     if (zhMatch) zh = zhMatch[1].trim();
     else if (enMatch) en = enMatch[1].trim();
-    else rest.push(line);
   }
 
   if (!en) {
@@ -226,11 +224,7 @@ function parseBilingualIntro(value: unknown) {
       zh = (zh || raw.slice(0, inlineEnglish.index).replace(/^(?:中文|Chinese|ZH|CN)[:：]\s*/i, "")).trim();
     }
   }
-
-  if (!zh && rest.length > 0) zh = rest[0];
-  if (!en && rest.length > 1) en = rest.slice(1).join(" ");
-
-  return { raw, zh, en };
+  return { raw, zh, en, isValid: Boolean(zh && en) };
 }
 
 function hasChineseText(value?: string | null) {
@@ -583,16 +577,18 @@ export function BinanceSquarePage() {
       width: 460,
       render: (value, record) => {
         const intro = parseBilingualIntro(value);
-        if (intro.raw) {
+        if (intro.isValid) {
           return (
             <Tooltip title={intro.raw}>
               <div className="bs-bilingual-intro-cell">
-                {intro.zh && <div className="bs-bilingual-intro-zh">{intro.zh}</div>}
-                {intro.en && <div className="bs-bilingual-intro-en">{intro.en}</div>}
-                {!intro.zh && !intro.en && <div className="bs-bilingual-intro-raw">{intro.raw}</div>}
+                <div className="bs-bilingual-intro-zh">{intro.zh}</div>
+                <div className="bs-bilingual-intro-en">{intro.en}</div>
               </div>
             </Tooltip>
           );
+        }
+        if (intro.raw && record.aiIntroStatus === "success") {
+          return <Tooltip title={intro.raw}><Tag color="orange">格式异常</Tag></Tooltip>;
         }
         if (record.aiIntroStatus === "failed") {
           return <Tooltip title={record.aiIntroError || "生成失败"}><Tag color="red">生成失败</Tag></Tooltip>;
