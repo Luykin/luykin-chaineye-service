@@ -260,6 +260,142 @@ router.post("/seed/remove", async (req, res) => {
 
 const apiClient = require("../scraper/api-client");
 
+const FOLLOWING_PROXY_URLS = [
+  // 2026-05-21 新服务器 curl 测试结果：以下 7446 端口代理连接超时，暂时禁用。
+  // "http://user81794:8ipjmd@185.232.47.106:7446",
+  // "http://user81794:8ipjmd@216.10.9.111:7446",
+  // "http://user81794:8ipjmd@185.232.47.101:7446",
+  // "http://user81794:8ipjmd@216.10.9.234:7446",
+  // "http://user81794:8ipjmd@185.232.47.233:7446",
+  // 2026-05-21 新服务器 curl 测试结果：以下 6324 端口代理 CONNECT 可用，当前默认使用。
+  "http://user81794:8ipjmd@163.5.88.220:6324",
+  "http://user81794:8ipjmd@108.165.167.7:6324",
+  "http://user81794:8ipjmd@108.165.167.11:6324",
+  "http://user81794:8ipjmd@45.135.251.198:6324",
+  "http://user81794:8ipjmd@45.135.251.37:6324",
+];
+
+function getFollowingProxyUrlsFromEnv() {
+  const raw = process.env.BINANCE_SQUARE_FOLLOWING_PROXY_URLS || process.env.BINANCE_SQUARE_PROXY_URLS || "";
+  return raw
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function getFollowingProxyUrls() {
+  const envProxyUrls = getFollowingProxyUrlsFromEnv();
+  return envProxyUrls.length > 0 ? envProxyUrls : FOLLOWING_PROXY_URLS;
+}
+
+function getFollowingProxyLineCount(totalItems, proxyUrls) {
+  if (totalItems <= 0) return 0;
+  const defaultLineCount = proxyUrls.length > 0 ? proxyUrls.length : 1;
+  const configuredLineCount = parsePositiveInt(
+    process.env.BINANCE_SQUARE_FOLLOWING_PROXY_LINE_COUNT || process.env.BINANCE_SQUARE_PROXY_LINE_COUNT,
+    defaultLineCount
+  );
+  return Math.max(1, Math.min(configuredLineCount, defaultLineCount, totalItems));
+}
+
+function maskProxyUrl(proxyUrl) {
+  if (!proxyUrl) return "direct";
+  try {
+    const url = new URL(proxyUrl);
+    return `${url.protocol}//***:***@${url.hostname}:${url.port}`;
+  } catch (_) {
+    return "proxy";
+  }
+}
+
+function splitContiguousRanges(items, lineCount) {
+  const count = Math.max(1, Math.min(lineCount, items.length));
+  const chunkSize = Math.ceil(items.length / count);
+  const ranges = [];
+  for (let i = 0; i < count; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, items.length);
+    if (start >= end) break;
+    ranges.push({
+      lineIndex: i,
+      start,
+      end: end - 1,
+      items: items.slice(start, end),
+    });
+  }
+  return ranges;
+}
+
+function summarizeFollowingSyncResults(results) {
+  let totalNewUsers = 0;
+  let totalNewRelations = 0;
+  let totalDeactivatedRelations = 0;
+  let hasPartial = false;
+  let hasFailed = false;
+
+  for (const result of results) {
+    totalNewUsers += result.newUsers || 0;
+    totalNewRelations += result.newRelations || 0;
+    totalDeactivatedRelations += result.deactivatedRelations || 0;
+    if (result.status === "partial") hasPartial = true;
+    if (result.status === "failed") hasFailed = true;
+  }
+
+  return {
+    totalNewUsers,
+    totalNewRelations,
+    totalDeactivatedRelations,
+    failedCount: results.filter((item) => item.status === "failed").length,
+    partialCount: results.filter((item) => item.status === "partial").length,
+    status: hasFailed ? "partial" : hasPartial ? "partial" : "success",
+  };
+}
+
+async function runFollowingSyncByProxyLines(items, options = {}) {
+  const proxyUrls = getFollowingProxyUrls();
+  const lineCount = getFollowingProxyLineCount(items.length, proxyUrls);
+  const ranges = splitContiguousRanges(items, lineCount);
+  const results = new Array(items.length);
+
+  console.log(
+    `[following/sync] ${options.logPrefix || "批量同步"} 使用 ${ranges.length} 条线路并发，proxies=${proxyUrls.length || 0}`
+  );
+
+  await Promise.all(
+    ranges.map(async (range) => {
+      const proxyUrl = proxyUrls.length > 0 ? proxyUrls[range.lineIndex % proxyUrls.length] : null;
+      console.log(
+        `[following/sync] line=${range.lineIndex + 1} 启动，负责下标 ${range.start}-${range.end}，用户数=${range.items.length}，proxy=${maskProxyUrl(proxyUrl)}`
+      );
+
+      for (let offset = 0; offset < range.items.length; offset++) {
+        const item = range.items[offset];
+        const globalIndex = range.start + offset;
+        const username = typeof item === "string" ? item : item.username;
+        const result = await syncSingleUserFollowing(username, {
+          ...options.syncOptions,
+          proxyUrl,
+        });
+        results[globalIndex] = result;
+
+        if (options.onProgress) {
+          const finishedResults = results.filter(Boolean);
+          await options.onProgress({
+            processed: finishedResults.length,
+            total: items.length,
+            currentSourceUser: username,
+            lineIndex: range.lineIndex,
+            lastResult: result,
+            ...summarizeFollowingSyncResults(finishedResults),
+          });
+        }
+      }
+    })
+  );
+
+  return results.filter(Boolean);
+}
+
 /**
  * 同步单个用户的关注列表（Seed/Top50/Top100/Top300 都可用）
  * @param {string} targetUsername - 目标用户名
@@ -288,7 +424,11 @@ async function syncSingleUserFollowing(targetUsername, options = {}) {
     const followerSquareUid = sourceUser?.squareUid || null;
 
     // 1. 调用API获取关注列表
-    const result = await apiClient.fetchFollowingList(normalizedTargetUsername);
+    console.log(`[following/sync] ${normalizedTargetUsername} 开始抓取关注列表，proxy=${maskProxyUrl(options.proxyUrl)}`);
+    const result = await apiClient.fetchFollowingList(normalizedTargetUsername, {
+      proxyUrl: options.proxyUrl,
+      signal: options.signal,
+    });
     total = result.total || 0;
     followers = result.followers || [];
 
@@ -443,6 +583,7 @@ async function syncSingleUserFollowing(targetUsername, options = {}) {
       deactivatedRelations,
       status,
       syncRunId,
+      proxy: maskProxyUrl(options.proxyUrl),
       durationMs,
     };
   } catch (error) {
@@ -457,6 +598,7 @@ async function syncSingleUserFollowing(targetUsername, options = {}) {
       status: "failed",
       errorMessage: error.message,
       syncRunId,
+      proxy: maskProxyUrl(options.proxyUrl),
       durationMs: Date.now() - startTime,
     };
   }
@@ -480,28 +622,17 @@ router.post("/following/sync", async (req, res) => {
 
     console.log(`[following/sync] 开始同步 ${seeds.length} 个种子用户的关注列表`);
 
-    // 2. 逐个同步（串行执行，避免被封）
-    const results = [];
-    let totalNewUsers = 0;
-    let totalNewRelations = 0;
-    let totalDeactivatedRelations = 0;
-    let hasPartial = false;
-    let hasFailed = false;
-
-    for (const seed of seeds) {
-      const result = await syncSingleUserFollowing(seed.username);
-      results.push(result);
-      totalNewUsers += result.newUsers;
-      totalNewRelations += result.newRelations;
-      totalDeactivatedRelations += result.deactivatedRelations || 0;
-      if (result.status === "partial") hasPartial = true;
-      if (result.status === "failed") hasFailed = true;
-
-      // 请求间隔：500-1200ms（api-client内部已处理，这里不需要额外延迟）
-    }
+    // 2. 多代理线路并发同步：每条线路串行跑自己负责的一段用户，线路之间并发。
+    const results = await runFollowingSyncByProxyLines(seeds.map((seed) => ({ username: seed.username })), {
+      logPrefix: "种子用户关注列表同步",
+    });
+    const summary = summarizeFollowingSyncResults(results);
+    const totalNewUsers = summary.totalNewUsers;
+    const totalNewRelations = summary.totalNewRelations;
+    const totalDeactivatedRelations = summary.totalDeactivatedRelations;
 
     // 3. 记录 CrawlLog
-    const overallStatus = hasFailed ? "partial" : hasPartial ? "partial" : "success";
+    const overallStatus = summary.status;
     await db.BinanceSquareCrawlLog.create({
       taskType: "following",
       status: overallStatus,
@@ -551,7 +682,10 @@ router.post("/following/sync/:username", async (req, res) => {
       return res.status(404).json(fail("种子用户不存在或未激活"));
     }
 
-    const result = await syncSingleUserFollowing(username);
+    const proxyUrls = getFollowingProxyUrls();
+    const result = await syncSingleUserFollowing(username, {
+      proxyUrl: proxyUrls[0] || null,
+    });
 
     // 记录 CrawlLog
     await db.BinanceSquareCrawlLog.create({
@@ -659,47 +793,39 @@ async function getStageSourceUsers(config) {
 }
 
 async function syncSourceUsersFollowings(sourceUsers, config, runId, onProgress = null) {
-  const results = [];
-  let hasFailed = false;
-  let hasPartial = false;
-  let totalNewUsers = 0;
-  let totalRelations = 0;
-  let totalDeactivated = 0;
-
-  for (let i = 0; i < sourceUsers.length; i++) {
-    const source = sourceUsers[i];
-    console.log(`[target/${config.rankSet}] 同步来源用户关注列表 ${i + 1}/${sourceUsers.length}: ${source.username}`);
-    const result = await syncSingleUserFollowing(source.username, {
+  const results = await runFollowingSyncByProxyLines(sourceUsers, {
+    logPrefix: `${config.rankSet} 来源用户关注列表同步`,
+    syncOptions: {
       syncRunId: runId,
       sourceRankSet: config.sourceRankSet,
       targetRankSet: config.rankSet,
-    });
-    results.push(result);
-    totalNewUsers += result.newUsers || 0;
-    totalRelations += result.newRelations || 0;
-    totalDeactivated += result.deactivatedRelations || 0;
-    if (result.status === "failed") hasFailed = true;
-    if (result.status === "partial") hasPartial = true;
-    if (onProgress) {
-      await onProgress({
-        processedSourceUsers: i + 1,
-        currentSourceUser: source.username,
-        totalNewUsers,
-        totalRelations,
-        totalDeactivated,
-        failedSourceUsers: results.filter((item) => item.status === "failed").length,
-        partialSourceUsers: results.filter((item) => item.status === "partial").length,
-        lastResult: result,
-      });
-    }
-  }
+    },
+    onProgress: async (progress) => {
+      console.log(
+        `[target/${config.rankSet}] 同步进度 ${progress.processed}/${progress.total}: ${progress.currentSourceUser}, line=${progress.lineIndex + 1}`
+      );
+      if (onProgress) {
+        await onProgress({
+          processedSourceUsers: progress.processed,
+          currentSourceUser: progress.currentSourceUser,
+          totalNewUsers: progress.totalNewUsers,
+          totalRelations: progress.totalNewRelations,
+          totalDeactivated: progress.totalDeactivatedRelations,
+          failedSourceUsers: progress.failedCount,
+          partialSourceUsers: progress.partialCount,
+          lastResult: progress.lastResult,
+        });
+      }
+    },
+  });
 
+  const summary = summarizeFollowingSyncResults(results);
   return {
     results,
-    totalNewUsers,
-    totalRelations,
-    totalDeactivated,
-    status: hasFailed ? "partial" : hasPartial ? "partial" : "success",
+    totalNewUsers: summary.totalNewUsers,
+    totalRelations: summary.totalNewRelations,
+    totalDeactivated: summary.totalDeactivatedRelations,
+    status: summary.status,
   };
 }
 
