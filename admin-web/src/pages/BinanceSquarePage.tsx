@@ -156,6 +156,21 @@ function extractIntroDisplayText(value: unknown, depth = 0): string {
 
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
+    const pickText = (keys: string[]) => {
+      for (const key of keys) {
+        if (record[key] !== null && record[key] !== undefined) {
+          const text = extractIntroDisplayText(record[key], depth + 1).trim();
+          if (text) return text;
+        }
+      }
+      return "";
+    };
+    const zhText = pickText(["zh", "cn", "chinese", "chineseIntro", "zhIntro", "cnIntro", "中文", "中文介绍"]);
+    const enText = pickText(["en", "english", "englishIntro", "enIntro", "英文", "英文介绍"]);
+    if (zhText || enText) {
+      return [zhText ? `中文：${zhText}` : "", enText ? `English: ${enText}` : ""].filter(Boolean).join("\n");
+    }
+
     const preferredKeys = [
       "intro",
       "oneLineIntro",
@@ -184,6 +199,37 @@ function extractIntroDisplayText(value: unknown, depth = 0): string {
   }
 
   return String(value || "");
+}
+
+function parseBilingualIntro(value: unknown) {
+  const raw = extractIntroDisplayText(value).replace(/\r\n?/g, "\n").trim();
+  if (!raw) return { raw: "", zh: "", en: "" };
+
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  let zh = "";
+  let en = "";
+  const rest: string[] = [];
+
+  for (const line of lines) {
+    const zhMatch = line.match(/^(?:中文|Chinese|ZH|CN)[:：]\s*(.+)$/i);
+    const enMatch = line.match(/^(?:英文|English|EN)[:：]\s*(.+)$/i);
+    if (zhMatch) zh = zhMatch[1].trim();
+    else if (enMatch) en = enMatch[1].trim();
+    else rest.push(line);
+  }
+
+  if (!en) {
+    const inlineEnglish = raw.match(/(?:^|\s)(?:English|英文|EN)[:：]\s*(.+)$/i);
+    if (inlineEnglish) {
+      en = inlineEnglish[1].trim();
+      zh = (zh || raw.slice(0, inlineEnglish.index).replace(/^(?:中文|Chinese|ZH|CN)[:：]\s*/i, "")).trim();
+    }
+  }
+
+  if (!zh && rest.length > 0) zh = rest[0];
+  if (!en && rest.length > 1) en = rest.slice(1).join(" ");
+
+  return { raw, zh, en };
 }
 
 function hasChineseText(value?: string | null) {
@@ -507,18 +553,20 @@ export function BinanceSquarePage() {
       render: (value) => value || "-",
     },
     {
-      title: "一句话介绍",
+      title: "双语介绍",
       dataIndex: "aiOneLineIntro",
       key: "aiOneLineIntro",
-      width: 360,
+      width: 460,
       render: (value, record) => {
-        const introText = extractIntroDisplayText(value).trim();
-        if (introText) {
+        const intro = parseBilingualIntro(value);
+        if (intro.raw) {
           return (
-            <Tooltip title={introText}>
-              <Typography.Text ellipsis style={{ maxWidth: 340 }}>
-                {introText}
-              </Typography.Text>
+            <Tooltip title={intro.raw}>
+              <div className="bs-bilingual-intro-cell">
+                {intro.zh && <div className="bs-bilingual-intro-zh">{intro.zh}</div>}
+                {intro.en && <div className="bs-bilingual-intro-en">{intro.en}</div>}
+                {!intro.zh && !intro.en && <div className="bs-bilingual-intro-raw">{intro.raw}</div>}
+              </div>
             </Tooltip>
           );
         }
@@ -990,7 +1038,7 @@ export function BinanceSquarePage() {
                       />
                       <Popconfirm
                         title="生成 Top100 用户介绍？"
-                        description="会读取 Top1000 前100名用户的 profile 和最近最多50篇帖子，调用大模型生成一句话介绍；已有且输入未变化的会自动跳过。"
+                        description="会读取 Top1000 前100名用户的 profile 和最近最多50篇帖子，调用大模型生成中文30-70字+英文一句的双语介绍；已有且输入未变化的会自动跳过。"
                         okText="开始生成"
                         cancelText="取消"
                         onConfirm={() => userIntroMutation.mutate({ rankSet: "top1000", limit: 100, postLimit: 50, force: false })}

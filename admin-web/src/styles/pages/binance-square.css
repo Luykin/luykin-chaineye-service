@@ -593,3 +593,31 @@
     padding: 9px 14px;
   }
 }
+
+.bs-bilingual-intro-cell {
+  max-width: 430px;
+  line-height: 1.45;
+}
+
+.bs-bilingual-intro-zh,
+.bs-bilingual-intro-en,
+.bs-bilingual-intro-raw {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bs-bilingual-intro-zh {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.bs-bilingual-intro-en {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.bs-bilingual-intro-raw {
+  color: #374151;
+}

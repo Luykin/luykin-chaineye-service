@@ -2,7 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const { Op, QueryTypes } = require("sequelize");
 const { scanKeys, getRedisClient } = require("../../lib/redisClient");
-const { chat } = require("../../lib/llm");
+const { structuredChat } = require("../../lib/llm");
 
 // 模型将在路由挂载时注入（通过initRoutes函数）
 let db = null;
@@ -812,8 +812,23 @@ function normalizeRankSet(rankSet) {
   return String(rankSet || "").toLowerCase();
 }
 
-const USER_INTRO_PROMPT_VERSION = "bs_user_intro_v1";
+const USER_INTRO_PROMPT_VERSION = "bs_user_intro_v3_bilingual_json";
 const USER_INTRO_LOCK_KEY = "binance_square:task:lock:user_intro";
+const USER_INTRO_SCHEMA = {
+  type: "object",
+  properties: {
+    zh: {
+      type: "string",
+      description: "中文一句话介绍，30-70 个中文字符，言简意赅。",
+    },
+    en: {
+      type: "string",
+      description: "English one-line intro, concise and natural, 12-28 words.",
+    },
+  },
+  required: ["zh", "en"],
+  additionalProperties: false,
+};
 
 function getUserIntroProgressKey(taskId) {
   return `binance_square:task:progress:intro:${taskId}`;
@@ -876,6 +891,16 @@ function safeJsonStringify(value) {
   }
 }
 
+function pickIntroObjectText(value, keys, depth) {
+  for (const key of keys) {
+    if (value[key] != null) {
+      const text = extractIntroRawText(value[key], depth + 1).trim();
+      if (text) return text;
+    }
+  }
+  return "";
+}
+
 function extractIntroRawText(value, depth = 0) {
   if (value == null) return "";
   if (typeof value === "string") return value;
@@ -885,12 +910,20 @@ function extractIntroRawText(value, depth = 0) {
     const text = value
       .map((item) => extractIntroRawText(item, depth + 1))
       .filter(Boolean)
-      .join(" ")
+      .join("\n")
       .trim();
     return text || safeJsonStringify(value);
   }
 
   if (typeof value === "object") {
+    const chineseText = pickIntroObjectText(value, ["zh", "cn", "chinese", "chineseIntro", "zhIntro", "cnIntro", "中文", "中文介绍"], depth);
+    const englishText = pickIntroObjectText(value, ["en", "english", "englishIntro", "enIntro", "英文", "英文介绍"], depth);
+    if (chineseText || englishText) {
+      return [chineseText ? `中文：${chineseText}` : "", englishText ? `English: ${englishText}` : ""]
+        .filter(Boolean)
+        .join("\n");
+    }
+
     const preferredKeys = [
       "intro",
       "oneLineIntro",
@@ -921,12 +954,11 @@ function extractIntroRawText(value, depth = 0) {
   return String(value || "");
 }
 
-function sanitizeIntroText(value) {
-  let text = extractIntroRawText(value)
-    .replace(/```[\s\S]*?```/g, "")
+function sanitizeIntroLine(line) {
+  let text = String(line || "")
     .replace(/^[-*\d.、\s]+/g, "")
-    .replace(/[\r\n]+/g, " ")
     .replace(/\s+/g, " ")
+    .replace(/^(?:中文|Chinese|ZH|CN|英文|English|EN)[:：]\s*/i, "")
     .replace(/^介绍[:：]\s*/i, "")
     .replace(/^一句话介绍[:：]\s*/i, "")
     .replace(/^根据资料显示[，,：:]?\s*/g, "")
@@ -938,9 +970,61 @@ function sanitizeIntroText(value) {
   return text;
 }
 
+function sanitizeIntroText(value) {
+  return extractIntroRawText(value)
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/\r\n?/g, "\n")
+    .split(/\n+/)
+    .map(sanitizeIntroLine)
+    .filter(Boolean)
+    .slice(0, 4)
+    .join("\n")
+    .trim();
+}
+
 function isUsableIntroText(value) {
   const text = sanitizeIntroText(value);
   return Boolean(text && text.length >= 12 && !/^\[object Object\]$/i.test(text));
+}
+
+function parseBilingualIntroText(value) {
+  const raw = sanitizeIntroText(value).replace(/\r\n?/g, "\n").trim();
+  if (!raw) return { raw: "", zh: "", en: "" };
+
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  let zh = "";
+  let en = "";
+  const rest = [];
+
+  for (const line of lines) {
+    const zhMatch = line.match(/^(?:中文|Chinese|ZH|CN)[:：]\s*(.+)$/i);
+    const enMatch = line.match(/^(?:英文|English|EN)[:：]\s*(.+)$/i);
+    if (zhMatch) zh = zhMatch[1].trim();
+    else if (enMatch) en = enMatch[1].trim();
+    else rest.push(line);
+  }
+
+  if (!en) {
+    const inlineEnglish = raw.match(/(?:^|\s)(?:English|英文|EN)[:：]\s*(.+)$/i);
+    if (inlineEnglish) {
+      en = inlineEnglish[1].trim();
+      zh = (zh || raw.slice(0, inlineEnglish.index).replace(/^(?:中文|Chinese|ZH|CN)[:：]\s*/i, "")).trim();
+    }
+  }
+
+  if (!zh) zh = rest.find((line) => /[\u3400-\u9fff]/.test(line)) || rest[0] || "";
+  if (!en) en = rest.find((line) => /[a-zA-Z]/.test(line) && line !== zh) || "";
+
+  return { raw, zh, en };
+}
+
+function formatBilingualIntroText(parsedIntro) {
+  return [`中文：${parsedIntro.zh}`, `English: ${parsedIntro.en}`].join("\n");
+}
+
+function isUsableBilingualIntroText(value) {
+  const parsedIntro = parseBilingualIntroText(value);
+  return Boolean(parsedIntro.zh && parsedIntro.en && !/^\[object Object\]$/i.test(parsedIntro.raw));
 }
 
 async function getIntroRecentPosts(username, postLimit) {
@@ -991,9 +1075,38 @@ async function getIntroRecentPosts(username, postLimit) {
 function buildUserIntroPrompt(profile, posts) {
   const profileJson = JSON.stringify(profile, null, 2);
   const postsJson = JSON.stringify(posts, null, 2);
-  return `请根据下面用户资料和最近帖子，生成一句中文介绍。\n\n要求：\n1. 只输出一句话，不要换行，不要列表，不要解释。\n2. 60-120 个中文字符左右。\n3. 风格类似人物卡片介绍，信息密度高，可以适度有一点画面感。\n4. 必须基于输入内容，不要编造。\n5. 如果身份不明确，用“主要关注/经常分享/偏向讨论”这类表达，不要强行写 CEO、创始人、投资人、交易员等身份。\n6. 不要出现“根据资料显示”“该用户”等机械表述。\n7. 不要输出英文介绍。\n\n参考风格：\n- 心动公司 CEO、TapTap 和 VeryCD 创始人，常从游戏、产品、创业和平台生态角度观察 AI；像老玩家拿着新地图看版本更新。\n- 币圈知名的野生交易员和 Web3 投资人，以直爽接地气的风格分享现货、合约交易心得、热点项目分析和套利机会，常自称“茁壮的野生交易员”，深受散户欢迎。\n\n用户资料：\n${profileJson}\n\n最近帖子：\n${postsJson}`;
+  return `请根据下面用户资料和最近帖子，生成中英双语的一句话介绍，并按 JSON Schema 返回对象。这个用户可能主要讨论加密/Web3，也可能涉及 AI、科技、金融市场、创业、产品等热门话题，请按实际内容概括。
+
+输出格式：
+{
+  "zh": "<30-70 个中文字符，言简意赅>",
+  "en": "<one concise English sentence, 12-28 words>"
 }
 
+要求：
+1. 只输出 JSON 对象，不要列表，不要解释，不要 markdown。
+2. 中文介绍 30-70 个中文字符，言简意赅，信息密度高。
+3. 英文介绍要表达同一含义，简洁自然，不要逐字硬翻。
+4. 必须基于输入内容，不要编造。
+5. 如果身份不明确，用“主要关注/经常分享/偏向讨论”这类表达，不要强行写 CEO、创始人、投资人、交易员等身份。
+6. 不要出现“根据资料显示”“该用户”等机械表述。
+
+参考风格：
+{
+  "zh": "心动公司 CEO、TapTap 和 VeryCD 创始人，常从游戏、产品和创业角度观察 AI。",
+  "en": "CEO of XD, founder of TapTap and VeryCD, viewing AI through games, products, and startups."
+}
+{
+  "zh": "币圈野生交易员，直爽分享现货、合约、热点项目和套利机会。",
+  "en": "A grassroots crypto trader sharing candid takes on spot, futures, hot projects, and arbitrage chances."
+}
+
+用户资料：
+${profileJson}
+
+最近帖子：
+${postsJson}`;
+}
 async function generateIntroForUser(rankEntry, options) {
   const { taskId, postLimit, force, model } = options;
   const username = rankEntry.username;
@@ -1037,7 +1150,7 @@ async function generateIntroForUser(rankEntry, options) {
   const inputPayload = { promptVersion: USER_INTRO_PROMPT_VERSION, profile, posts };
   const inputHash = sha256Json(inputPayload);
 
-  if (!force && user.aiOneLineIntro && user.aiIntroStatus === "success" && user.aiIntroInputHash === inputHash && isUsableIntroText(user.aiOneLineIntro)) {
+  if (!force && user.aiOneLineIntro && user.aiIntroStatus === "success" && user.aiIntroInputHash === inputHash && isUsableBilingualIntroText(user.aiOneLineIntro)) {
     return {
       username,
       status: "skipped",
@@ -1064,17 +1177,22 @@ async function generateIntroForUser(rankEntry, options) {
     { where: { username: { [Op.iLike]: username } } }
   );
 
-  const systemPrompt = "你是一个中文加密行业内容分析助手。你需要根据币安广场用户的 profile 和最近帖子，生成一句中文介绍。介绍要准确、克制、具体，不要编造身份。输出只能是一句话。";
-  const rawIntro = await chat(buildUserIntroPrompt(profile, posts), {
+  const systemPrompt = "你是一个 Web3、科技与财经内容分析助手。你需要根据币安广场用户的 profile 和最近帖子，生成中英双语的一句话介绍。介绍要准确、克制、具体，不要把用户强行限定为加密领域；如果内容涉及 AI、科技、创业、产品或金融市场，也要如实体现。不要编造身份。输出必须是 JSON 对象，且只包含 zh 和 en 两个字段。";
+  const rawIntro = await structuredChat(buildUserIntroPrompt(profile, posts), USER_INTRO_SCHEMA, {
     model,
     temperature: 0.25,
     maxTokens: 240,
     systemPrompt,
   });
-  const intro = sanitizeIntroText(rawIntro);
+  const parsedIntro = {
+    raw: safeJsonStringify(rawIntro),
+    zh: sanitizeIntroLine(rawIntro?.zh || ""),
+    en: sanitizeIntroLine(rawIntro?.en || ""),
+  };
+  const intro = parsedIntro.zh && parsedIntro.en ? formatBilingualIntroText(parsedIntro) : parsedIntro.raw;
 
-  if (!intro || intro.length < 12) {
-    throw new Error(`模型输出过短或为空: ${rawIntro}`);
+  if (!parsedIntro.zh || !parsedIntro.en || intro.length < 12) {
+    throw new Error(`模型未按中英双语格式输出: ${typeof rawIntro === "string" ? rawIntro : safeJsonStringify(rawIntro)}`);
   }
 
   await db.BinanceSquareUser.update(
