@@ -45,6 +45,62 @@ function parsePositiveInt(value, defaultValue) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
 }
 
+function getBinanceSquareAuditAction(req) {
+  const routePath = req.route?.path || req.path || req.originalUrl || "";
+  const normalizedPath = String(routePath)
+    .replace(/^\/+/, "")
+    .replace(/[:/]+/g, "-")
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 40);
+  return `binance-square:${String(req.method || "").toLowerCase()}:${normalizedPath || "action"}`.slice(0, 64);
+}
+
+function truncateForAudit(value, maxLength) {
+  if (value === undefined || value === null) return null;
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+async function writeBinanceSquareAuditLog(req, { action, success: auditSuccess, message }) {
+  try {
+    const { XhuntAdminAuditLog } = require("../../models/postgres-start");
+    const admin = req.adminUser || req.user || {};
+    await XhuntAdminAuditLog.create({
+      adminId: admin.id || 0,
+      email: admin.email || admin.username || "unknown",
+      action,
+      route: truncateForAudit(req.originalUrl || req.url || "", 256),
+      method: req.method || "",
+      ip: req.headers["x-forwarded-for"] || req.ip || "",
+      userAgent: truncateForAudit(req.headers["user-agent"] || "", 512),
+      payload: req.method === "GET" ? null : truncateForAudit(req.body || {}, 4000),
+      success: !!auditSuccess,
+      message: truncateForAudit(message, 512),
+    });
+  } catch (e) {
+    console.error("[binance-square admin-audit] log failed:", e.message);
+  }
+}
+
+// 所有币安广场管理后台按钮触发的写操作都进入管理员操作记录。
+router.use((req, res, next) => {
+  const method = String(req.method || "").toUpperCase();
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    return next();
+  }
+
+  const startedAt = Date.now();
+  res.on("finish", () => {
+    const durationMs = Date.now() - startedAt;
+    writeBinanceSquareAuditLog(req, {
+      action: getBinanceSquareAuditAction(req),
+      success: res.statusCode < 400,
+      message: `status=${res.statusCode}, durationMs=${durationMs}`,
+    });
+  });
+  return next();
+});
+
 // ==================== 种子用户管理 ====================
 
 /**

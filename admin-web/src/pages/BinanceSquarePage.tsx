@@ -116,6 +116,21 @@ function formatDateTime(value?: string | null) {
   return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm:ss") : value;
 }
 
+function formatCompactNumber(value?: number | string | null) {
+  if (value === null || value === undefined || value === "") return "-";
+  const num = Number(value);
+  if (!Number.isFinite(num)) return String(value);
+  const abs = Math.abs(num);
+  const format = (divisor: number, suffix: string) => {
+    const compact = num / divisor;
+    const digits = Math.abs(compact) >= 10 ? 0 : 1;
+    return `${compact.toFixed(digits).replace(/\.0$/, "")}${suffix}`;
+  };
+  if (abs >= 1_000_000) return format(1_000_000, "M");
+  if (abs >= 1_000) return format(1_000, "k");
+  return String(num);
+}
+
 function hasChineseText(value?: string | null) {
   return /[\u3400-\u9fff]/.test(value || "");
 }
@@ -543,10 +558,10 @@ export function BinanceSquarePage() {
         );
       },
     },
-    { title: "点赞", dataIndex: "likeCount", key: "likeCount", width: 80, render: (value) => value ?? "-" },
-    { title: "评论", dataIndex: "commentCount", key: "commentCount", width: 80, render: (value) => value ?? "-" },
-    { title: "分享", dataIndex: "shareCount", key: "shareCount", width: 80, render: (value) => value ?? "-" },
-    { title: "浏览", dataIndex: "viewCount", key: "viewCount", width: 80, render: (value) => value ?? "-" },
+    { title: "点赞", dataIndex: "likeCount", key: "likeCount", width: 80, render: (value) => <Tooltip title={value ?? "-"}>{formatCompactNumber(value)}</Tooltip> },
+    { title: "评论", dataIndex: "commentCount", key: "commentCount", width: 80, render: (value) => <Tooltip title={value ?? "-"}>{formatCompactNumber(value)}</Tooltip> },
+    { title: "分享", dataIndex: "shareCount", key: "shareCount", width: 80, render: (value) => <Tooltip title={value ?? "-"}>{formatCompactNumber(value)}</Tooltip> },
+    { title: "浏览", dataIndex: "viewCount", key: "viewCount", width: 80, render: (value) => <Tooltip title={value ?? "-"}>{formatCompactNumber(value)}</Tooltip> },
     { title: "评分时间", dataIndex: "lastScoredAt", key: "lastScoredAt", width: 170, render: formatDateTime },
     { title: "发布时间", dataIndex: "publishedAt", key: "publishedAt", width: 170, render: formatDateTime },
   ];
@@ -735,7 +750,7 @@ export function BinanceSquarePage() {
                         <Descriptions.Item label="调度器">{crawlStatus?.isRunning ? "运行中" : "已暂停"}</Descriptions.Item>
                         <Descriptions.Item label="当前抓取">{crawlStatus?.isCrawling ? "执行中" : "空闲"}</Descriptions.Item>
                         <Descriptions.Item label="抓取窗口">{crawlStatus?.postCrawlDaysBack || 7} 天 / {crawlStatus?.postCrawlFilterTypes || "ALL,REPLY"}</Descriptions.Item>
-                        <Descriptions.Item label="冷却/并发">{crawlStatus?.postCrawlCooldownMinutes ?? 30} 分钟 / {crawlStatus?.postCrawlConcurrency ?? 2} 并发</Descriptions.Item>
+                        <Descriptions.Item label="冷却时间">{crawlStatus?.postCrawlCooldownMinutes ?? 30} 分钟</Descriptions.Item>
                         <Descriptions.Item label="最近任务状态">{crawlStatus?.lastCrawl?.status || "-"}</Descriptions.Item>
                         <Descriptions.Item label="最近任务时间">{formatDateTime(crawlStatus?.lastCrawl?.createdAt)}</Descriptions.Item>
                       </Descriptions>
