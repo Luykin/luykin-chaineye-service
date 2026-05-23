@@ -1,7 +1,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const { Op, QueryTypes } = require("sequelize");
-const { scanKeys, getRedisClient } = require("../../lib/redisClient");
+const { scanKeys, getRedisClient, deleteKeysInChunks } = require("../../lib/redisClient");
 const { structuredChat } = require("../../lib/llm");
 
 // 模型将在路由挂载时注入（通过initRoutes函数）
@@ -2451,6 +2451,72 @@ router.post("/maintenance/purge-snapshots", async (req, res) => {
     }));
   } catch (error) {
     console.error("[maintenance/purge-snapshots] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * POST /maintenance/reset-running-tasks
+ * 危险操作：重置币安广场所有运行中任务的 Redis 状态。
+ * 用于进程 OOM/异常退出后，管理后台仍显示 running 或锁残留的恢复场景。
+ */
+router.post("/maintenance/reset-running-tasks", async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const redis = req.redisClient || await getRedisClient();
+    const patterns = [
+      "binance_square:task:progress:post:*",
+      "binance_square:task:progress:target:*",
+      "binance_square:task:progress:intro:*",
+    ];
+    const keysByPattern = {};
+    const allProgressKeys = [];
+
+    for (const pattern of patterns) {
+      const keys = await scanKeys(redis, pattern);
+      keysByPattern[pattern] = keys.length;
+      allProgressKeys.push(...keys);
+    }
+
+    const postLock = await redis.get("binance_square:task:lock");
+    // 给独立帖子爬虫一个短期停止信号；如果没有帖子锁则清掉旧停止信号，避免下一次新任务被误杀。
+    if (postLock) {
+      await redis.set("binance_square:task:force_stop", "true", { EX: 10 * 60 });
+    } else {
+      await redis.del("binance_square:task:force_stop");
+    }
+
+    const lockKeys = [
+      "binance_square:task:lock",
+      USER_INTRO_LOCK_KEY,
+    ];
+
+    let deletedLocks = 0;
+    for (const key of lockKeys) {
+      deletedLocks += await redis.del(key);
+    }
+
+    const deletedProgressKeys = await deleteKeysInChunks(redis, allProgressKeys);
+    const [resetIntroUsers] = await db.BinanceSquareUser.update(
+      {
+        aiIntroStatus: null,
+        aiIntroError: "管理员已重置运行中任务状态",
+      },
+      { where: { aiIntroStatus: "running" } }
+    );
+
+    res.json(success({
+      message: "已重置币安广场运行中任务状态",
+      deletedLocks,
+      deletedProgressKeys,
+      keysByPattern,
+      postStopSignalSent: Boolean(postLock),
+      resetIntroUsers,
+      durationMs: Date.now() - startedAt,
+      note: "此操作会清理管理后台运行状态；帖子爬虫会收到停止信号。若目标用户更新/介绍生成的 API 进程仍在执行，可能会在结束时重新写入结果。",
+    }));
+  } catch (error) {
+    console.error("[maintenance/reset-running-tasks] error:", error);
     res.status(500).json(fail(error.message));
   }
 });

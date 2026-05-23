@@ -46,6 +46,7 @@ import {
   pauseBinanceSquareScheduler,
   purgeBinanceSquareSnapshots,
   recalculateBinanceSquarePostScores,
+  resetBinanceSquareRunningTasks,
   removeBinanceSquareSeed,
   startBinanceSquareScheduler,
   syncBinanceSquareSeedFollowing,
@@ -428,6 +429,11 @@ export function BinanceSquarePage() {
     onSuccess: (result) => handleActionSuccess("清空旧镜像", result.data),
     onError: (error: Error) => messageApi.error(error.message || "清理失败"),
   });
+  const resetTasksMutation = useMutation({
+    mutationFn: resetBinanceSquareRunningTasks,
+    onSuccess: (result) => handleActionSuccess("重置任务状态", result.data),
+    onError: (error: Error) => messageApi.error(error.message || "重置失败"),
+  });
   const recalcScoresMutation = useMutation({
     mutationFn: recalculateBinanceSquarePostScores,
     onSuccess: (result) => handleActionSuccess("补评分", result.data),
@@ -776,6 +782,18 @@ export function BinanceSquarePage() {
               强制终止
             </LegacyActionButton>
           ) : null}
+          <Popconfirm
+            title="确认重置所有运行中任务状态？"
+            description="会清理帖子抓取、目标用户更新、介绍生成的 Redis 锁和进度，并给帖子爬虫发送停止信号。仅在任务卡死或进程异常退出后使用。"
+            okText="确认重置"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => resetTasksMutation.mutate()}
+          >
+            <LegacyActionButton variant="danger" loading={resetTasksMutation.isPending}>
+              重置任务状态
+            </LegacyActionButton>
+          </Popconfirm>
           <LegacyActionButton
             variant="neutral"
             onClick={() => {

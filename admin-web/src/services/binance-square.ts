@@ -164,6 +164,13 @@ export async function purgeBinanceSquareSnapshots() {
   );
 }
 
+export async function resetBinanceSquareRunningTasks() {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(
+    `${BASE}/maintenance/reset-running-tasks`,
+    { method: "POST" }
+  );
+}
+
 export async function recalculateBinanceSquarePostScores(params: {
   daysBack?: number;
   targetOnly?: boolean;
