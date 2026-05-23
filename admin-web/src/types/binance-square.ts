@@ -51,6 +51,8 @@ export interface BinanceSquarePaginated<T> {
 export interface BinanceSquareTargetRankItem {
   id?: number;
   username: string;
+  displayName?: string | null;
+  avatar?: string | null;
   rankSet?: string;
   rank: number;
   followerCount: number;

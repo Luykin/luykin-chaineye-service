@@ -421,7 +421,14 @@ export function BinanceSquarePage() {
       width: 80,
       render: (value: number) => <span style={{ fontWeight: 700, color: value <= 3 ? "#f59e0b" : "#64748b" }}>#{value}</span>,
     },
-    { title: "用户名", dataIndex: "username", key: "username", width: 180, render: (value) => <strong>{value}</strong> },
+    { title: "Handler", dataIndex: "username", key: "username", width: 180, render: (value) => <strong>{value}</strong> },
+    {
+      title: "用户名字",
+      dataIndex: "displayName",
+      key: "displayName",
+      width: 180,
+      render: (value) => value || "-",
+    },
     {
       title: "被关注次数",
       dataIndex: "followerCount",

@@ -974,7 +974,19 @@ async function buildRankEntries(config, candidates) {
     }
   }
 
-  return ordered.slice(0, config.limit).map((entry, index) => ({
+  // 先按“必须包含上一层”的规则选满当前层，再按被关注次数重新排序生成 rank。
+  // 之前这里直接按插入顺序写 rank：上一层用户会保留旧排名顺序，导致 Top100/300/1000
+  // 页面看起来不是按“被关注次数”降序排列。
+  const selected = ordered.slice(0, config.limit);
+  selected.sort((a, b) => {
+    const countDiff = (b.followerCount || 0) - (a.followerCount || 0);
+    if (countDiff !== 0) return countDiff;
+    const previousRankDiff = (a.previousRank || Number.MAX_SAFE_INTEGER) - (b.previousRank || Number.MAX_SAFE_INTEGER);
+    if (previousRankDiff !== 0) return previousRankDiff;
+    return a.username.localeCompare(b.username);
+  });
+
+  return selected.map((entry, index) => ({
     ...entry,
     rank: index + 1,
   }));
@@ -1221,7 +1233,30 @@ router.get("/target/list", async (req, res) => {
       order: [["rankSet", "ASC"], ["rank", "ASC"]],
     });
 
-    res.json(success(ranks));
+    const rankRows = ranks.map((rank) => rank.toJSON());
+    const usernames = rankRows.map((rank) => rank.username).filter(Boolean);
+    const users = usernames.length > 0
+      ? await db.BinanceSquareUser.findAll({
+          where: db.sequelize.where(
+            db.sequelize.fn("LOWER", db.sequelize.col("username")),
+            { [Op.in]: usernames.map((username) => username.toLowerCase()) }
+          ),
+          attributes: ["username", "displayName", "avatar"],
+          raw: true,
+        })
+      : [];
+    const userMap = new Map(users.map((user) => [user.username.toLowerCase(), user]));
+
+    const enrichedRanks = rankRows.map((rank) => {
+      const user = userMap.get(rank.username.toLowerCase());
+      return {
+        ...rank,
+        displayName: user?.displayName || null,
+        avatar: user?.avatar || null,
+      };
+    });
+
+    res.json(success(enrichedRanks));
   } catch (error) {
     console.error("[target/list] error:", error);
     res.status(500).json(fail(error.message));
