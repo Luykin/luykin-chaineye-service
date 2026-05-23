@@ -1,6 +1,8 @@
 const express = require("express");
+const crypto = require("crypto");
 const { Op, QueryTypes } = require("sequelize");
 const { scanKeys, getRedisClient } = require("../../lib/redisClient");
+const { chat } = require("../../lib/llm");
 
 // 模型将在路由挂载时注入（通过initRoutes函数）
 let db = null;
@@ -754,6 +756,381 @@ function normalizeRankSet(rankSet) {
   return String(rankSet || "").toLowerCase();
 }
 
+const USER_INTRO_PROMPT_VERSION = "bs_user_intro_v1";
+const USER_INTRO_LOCK_KEY = "binance_square:task:lock:user_intro";
+
+function getUserIntroProgressKey(taskId) {
+  return `binance_square:task:progress:intro:${taskId}`;
+}
+
+async function updateUserIntroProgress(taskId, update) {
+  try {
+    const redis = await getRedisClient();
+    const key = getUserIntroProgressKey(taskId);
+    const existing = await redis.get(key);
+    const current = existing ? JSON.parse(existing) : {};
+    const merged = { ...current, ...update, updatedAt: new Date().toISOString() };
+    await redis.set(key, JSON.stringify(merged), "EX", 24 * 60 * 60);
+    return merged;
+  } catch (e) {
+    console.warn("[user-intro/progress] 更新Redis进度失败:", e.message);
+    return null;
+  }
+}
+
+async function getUserIntroProgressList() {
+  const redis = await getRedisClient();
+  const keys = await scanKeys(redis, "binance_square:task:progress:intro:*", { maxKeys: 100 });
+  const progressList = [];
+
+  for (const key of keys) {
+    try {
+      const data = await redis.get(key);
+      if (data) progressList.push(JSON.parse(data));
+    } catch (e) {
+      console.warn("[user-intro/progress] 解析Redis进度失败:", e.message);
+    }
+  }
+
+  progressList.sort((a, b) => new Date(b.updatedAt || b.startedAt || 0) - new Date(a.updatedAt || a.startedAt || 0));
+  return progressList;
+}
+
+function getIntroConcurrency(totalItems) {
+  if (totalItems <= 0) return 0;
+  const configured = parsePositiveInt(process.env.BINANCE_SQUARE_INTRO_LLM_CONCURRENCY, 2);
+  return Math.max(1, Math.min(configured, totalItems));
+}
+
+function truncateText(value, maxLength = 600) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}…`;
+}
+
+function sha256Json(value) {
+  return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function sanitizeIntroText(value) {
+  let text = String(value || "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^[-*\d.、\s]+/g, "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^介绍[:：]\s*/i, "")
+    .replace(/^一句话介绍[:：]\s*/i, "")
+    .replace(/^根据资料显示[，,：:]?\s*/g, "")
+    .trim();
+
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("“") && text.endsWith("”"))) {
+    text = text.slice(1, -1).trim();
+  }
+  return text;
+}
+
+async function getIntroRecentPosts(username, postLimit) {
+  const posts = await db.BinanceSquarePost.findAll({
+    where: {
+      username: { [Op.iLike]: username },
+      isDeleted: false,
+      [Op.or]: [
+        { title: { [Op.ne]: null } },
+        { contentText: { [Op.ne]: null } },
+        { content: { [Op.ne]: null } },
+      ],
+    },
+    attributes: [
+      "postId",
+      "postType",
+      "title",
+      "contentText",
+      "content",
+      "publishedAt",
+      "score",
+      "viewCount",
+      "likeCount",
+      "shareCount",
+      "commentCount",
+    ],
+    order: [db.sequelize.literal('"publishedAt" DESC NULLS LAST')],
+    limit: postLimit,
+    raw: true,
+  });
+
+  return posts
+    .map((post) => ({
+      postId: post.postId,
+      postType: post.postType,
+      publishedAt: post.publishedAt,
+      title: truncateText(post.title, 180),
+      content: truncateText(post.contentText || post.content, 700),
+      score: post.score ?? null,
+      viewCount: post.viewCount ?? null,
+      likeCount: post.likeCount ?? null,
+      shareCount: post.shareCount ?? null,
+      commentCount: post.commentCount ?? null,
+    }))
+    .filter((post) => post.title || post.content);
+}
+
+function buildUserIntroPrompt(profile, posts) {
+  const profileJson = JSON.stringify(profile, null, 2);
+  const postsJson = JSON.stringify(posts, null, 2);
+  return `请根据下面用户资料和最近帖子，生成一句中文介绍。\n\n要求：\n1. 只输出一句话，不要换行，不要列表，不要解释。\n2. 60-120 个中文字符左右。\n3. 风格类似人物卡片介绍，信息密度高，可以适度有一点画面感。\n4. 必须基于输入内容，不要编造。\n5. 如果身份不明确，用“主要关注/经常分享/偏向讨论”这类表达，不要强行写 CEO、创始人、投资人、交易员等身份。\n6. 不要出现“根据资料显示”“该用户”等机械表述。\n7. 不要输出英文介绍。\n\n参考风格：\n- 心动公司 CEO、TapTap 和 VeryCD 创始人，常从游戏、产品、创业和平台生态角度观察 AI；像老玩家拿着新地图看版本更新。\n- 币圈知名的野生交易员和 Web3 投资人，以直爽接地气的风格分享现货、合约交易心得、热点项目分析和套利机会，常自称“茁壮的野生交易员”，深受散户欢迎。\n\n用户资料：\n${profileJson}\n\n最近帖子：\n${postsJson}`;
+}
+
+async function generateIntroForUser(rankEntry, options) {
+  const { taskId, postLimit, force, model } = options;
+  const username = rankEntry.username;
+  const user = await db.BinanceSquareUser.findOne({
+    where: { username: { [Op.iLike]: username } },
+    attributes: [
+      "username",
+      "displayName",
+      "biography",
+      "verificationDescription",
+      "totalFollowerCount",
+      "totalFollowingCount",
+      "totalPostCount",
+      "accountLang",
+      "aiOneLineIntro",
+      "aiIntroInputHash",
+      "aiIntroStatus",
+    ],
+    raw: true,
+  });
+
+  if (!user) {
+    throw new Error(`用户不存在: ${username}`);
+  }
+
+  const posts = await getIntroRecentPosts(username, postLimit);
+  const profile = {
+    username: user.username,
+    displayName: user.displayName || null,
+    biography: user.biography || null,
+    verificationDescription: user.verificationDescription || null,
+    totalFollowerCount: user.totalFollowerCount ?? null,
+    totalFollowingCount: user.totalFollowingCount ?? null,
+    totalPostCount: user.totalPostCount ?? null,
+    accountLang: user.accountLang || null,
+    rank: rankEntry.rank,
+    rankSet: rankEntry.rankSet,
+    followerCountInSource: rankEntry.followerCount || 0,
+    sourceFollowers: (rankEntry.sourceFollowers || rankEntry.seedFollowers || []).slice(0, 30),
+  };
+  const inputPayload = { promptVersion: USER_INTRO_PROMPT_VERSION, profile, posts };
+  const inputHash = sha256Json(inputPayload);
+
+  if (!force && user.aiOneLineIntro && user.aiIntroStatus === "success" && user.aiIntroInputHash === inputHash) {
+    return {
+      username,
+      status: "skipped",
+      intro: user.aiOneLineIntro,
+      postCount: posts.length,
+      inputHash,
+    };
+  }
+
+  const profileText = [profile.displayName, profile.biography, profile.verificationDescription].filter(Boolean).join(" ");
+  if (!profileText && posts.length === 0) {
+    throw new Error("profile 和帖子内容不足，无法生成介绍");
+  }
+
+  await db.BinanceSquareUser.update(
+    {
+      aiIntroStatus: "running",
+      aiIntroModel: model,
+      aiIntroPromptVersion: USER_INTRO_PROMPT_VERSION,
+      aiIntroInputHash: inputHash,
+      aiIntroError: null,
+      aiIntroDetails: { taskId, postCount: posts.length, rank: rankEntry.rank, rankSet: rankEntry.rankSet },
+    },
+    { where: { username: { [Op.iLike]: username } } }
+  );
+
+  const systemPrompt = "你是一个中文加密行业内容分析助手。你需要根据币安广场用户的 profile 和最近帖子，生成一句中文介绍。介绍要准确、克制、具体，不要编造身份。输出只能是一句话。";
+  const rawIntro = await chat(buildUserIntroPrompt(profile, posts), {
+    model,
+    temperature: 0.25,
+    maxTokens: 240,
+    systemPrompt,
+  });
+  const intro = sanitizeIntroText(rawIntro);
+
+  if (!intro || intro.length < 12) {
+    throw new Error(`模型输出过短或为空: ${rawIntro}`);
+  }
+
+  await db.BinanceSquareUser.update(
+    {
+      aiOneLineIntro: intro,
+      aiIntroStatus: "success",
+      aiIntroModel: model,
+      aiIntroPromptVersion: USER_INTRO_PROMPT_VERSION,
+      aiIntroInputHash: inputHash,
+      aiIntroGeneratedAt: new Date(),
+      aiIntroError: null,
+      aiIntroDetails: {
+        taskId,
+        postCount: posts.length,
+        rank: rankEntry.rank,
+        rankSet: rankEntry.rankSet,
+        model,
+        promptVersion: USER_INTRO_PROMPT_VERSION,
+      },
+    },
+    { where: { username: { [Op.iLike]: username } } }
+  );
+
+  return { username, status: "success", intro, postCount: posts.length, inputHash };
+}
+
+async function runUserIntroGenerationTask(params = {}) {
+  const taskId = params.taskId || generateRunId("intro");
+  const rankSet = normalizeRankSet(params.rankSet || "top1000");
+  const limit = Math.min(parsePositiveInt(params.limit, 100), 300);
+  const postLimit = Math.min(parsePositiveInt(params.postLimit, parsePositiveInt(process.env.BINANCE_SQUARE_INTRO_POST_LIMIT, 50)), 50);
+  const force = Boolean(params.force);
+  const model = params.model || process.env.BINANCE_SQUARE_INTRO_MODEL || process.env.LLM_MODEL;
+  const startTime = Date.now();
+  const redis = await getRedisClient();
+  const lockValue = `${taskId}:${process.pid}:${Date.now()}`;
+  const lockResult = await redis.set(USER_INTRO_LOCK_KEY, lockValue, { NX: true, EX: 24 * 60 * 60 });
+
+  if (!lockResult) {
+    throw new Error("已有用户介绍生成任务正在执行");
+  }
+
+  try {
+    const rankEntries = await db.BinanceSquareTargetRank.findAll({
+      where: { rankSet },
+      order: [["rank", "ASC"]],
+      limit,
+      raw: true,
+    });
+
+    if (rankEntries.length === 0) {
+      throw new Error(`没有可用 ${rankSet} 目标用户，请先更新目标用户`);
+    }
+
+    const lineCount = getIntroConcurrency(rankEntries.length);
+    const ranges = splitContiguousRanges(rankEntries, lineCount);
+    const results = new Array(rankEntries.length);
+    let processed = 0;
+    let successCount = 0;
+    let failedCount = 0;
+    let skippedCount = 0;
+
+    await updateUserIntroProgress(taskId, {
+      taskType: "user_intro_generate",
+      taskId,
+      status: "running",
+      rankSet,
+      limit,
+      postLimit,
+      model: model || null,
+      promptVersion: USER_INTRO_PROMPT_VERSION,
+      total: rankEntries.length,
+      processed,
+      success: successCount,
+      failed: failedCount,
+      skipped: skippedCount,
+      currentUsername: null,
+      concurrency: ranges.length,
+      startedAt: new Date().toISOString(),
+    });
+
+    console.log(`[user-intro] 开始生成 ${rankEntries.length} 个用户介绍，rankSet=${rankSet}, concurrency=${ranges.length}`);
+
+    await Promise.all(
+      ranges.map(async (range) => {
+        console.log(`[user-intro] worker=${range.lineIndex + 1} 启动，负责下标 ${range.start}-${range.end}`);
+
+        for (let offset = 0; offset < range.items.length; offset++) {
+          const rankEntry = range.items[offset];
+          const globalIndex = range.start + offset;
+          await updateUserIntroProgress(taskId, { currentUsername: rankEntry.username, currentLine: range.lineIndex + 1 });
+
+          try {
+            const result = await generateIntroForUser(rankEntry, { taskId, postLimit, force, model });
+            results[globalIndex] = result;
+            if (result.status === "skipped") skippedCount += 1;
+            else successCount += 1;
+          } catch (error) {
+            failedCount += 1;
+            results[globalIndex] = { username: rankEntry.username, status: "failed", errorMessage: error.message };
+            console.warn(`[user-intro] ${rankEntry.username} 生成失败:`, error.message);
+            await db.BinanceSquareUser.update(
+              {
+                aiIntroStatus: "failed",
+                aiIntroModel: model || null,
+                aiIntroPromptVersion: USER_INTRO_PROMPT_VERSION,
+                aiIntroError: error.message,
+                aiIntroDetails: { taskId, rank: rankEntry.rank, rankSet },
+              },
+              { where: { username: { [Op.iLike]: rankEntry.username } } }
+            ).catch(() => {});
+          } finally {
+            processed += 1;
+            await updateUserIntroProgress(taskId, {
+              processed,
+              success: successCount,
+              failed: failedCount,
+              skipped: skippedCount,
+              lastResult: results[globalIndex],
+            });
+          }
+        }
+      })
+    );
+
+    const durationMs = Date.now() - startTime;
+    const finalStatus = failedCount > 0 ? "partial" : "success";
+    await updateUserIntroProgress(taskId, {
+      status: "completed",
+      currentUsername: null,
+      durationMs,
+      completedAt: new Date().toISOString(),
+    });
+
+    await db.BinanceSquareCrawlLog.create({
+      taskType: "user_intro_generate",
+      status: finalStatus,
+      targetId: rankSet,
+      itemsCount: successCount,
+      durationMs,
+      failedDetails: {
+        taskId,
+        rankSet,
+        limit,
+        postLimit,
+        success: successCount,
+        failed: failedCount,
+        skipped: skippedCount,
+        failedUsers: results.filter((item) => item?.status === "failed"),
+      },
+    }).catch((e) => console.warn("[user-intro] 写入CrawlLog失败:", e.message));
+
+    return { taskId, status: finalStatus, processed, success: successCount, failed: failedCount, skipped: skippedCount, durationMs };
+  } catch (error) {
+    const durationMs = Date.now() - startTime;
+    await updateUserIntroProgress(taskId, {
+      status: "failed",
+      errorMessage: error.message,
+      durationMs,
+      completedAt: new Date().toISOString(),
+    });
+    throw error;
+  } finally {
+    const currentLock = await redis.get(USER_INTRO_LOCK_KEY).catch(() => null);
+    if (currentLock === lockValue) {
+      await redis.del(USER_INTRO_LOCK_KEY).catch(() => {});
+    }
+  }
+}
+
 async function getStageSourceUsers(config) {
   if (config.sourceRankSet === "seed") {
     const seeds = await db.BinanceSquareSeedConfig.findAll({
@@ -1241,7 +1618,17 @@ router.get("/target/list", async (req, res) => {
             db.sequelize.fn("LOWER", db.sequelize.col("username")),
             { [Op.in]: usernames.map((username) => username.toLowerCase()) }
           ),
-          attributes: ["username", "displayName", "avatar"],
+          attributes: [
+            "username",
+            "displayName",
+            "avatar",
+            "aiOneLineIntro",
+            "aiIntroStatus",
+            "aiIntroModel",
+            "aiIntroPromptVersion",
+            "aiIntroGeneratedAt",
+            "aiIntroError",
+          ],
           raw: true,
         })
       : [];
@@ -1253,6 +1640,12 @@ router.get("/target/list", async (req, res) => {
         ...rank,
         displayName: user?.displayName || null,
         avatar: user?.avatar || null,
+        aiOneLineIntro: user?.aiOneLineIntro || null,
+        aiIntroStatus: user?.aiIntroStatus || null,
+        aiIntroModel: user?.aiIntroModel || null,
+        aiIntroPromptVersion: user?.aiIntroPromptVersion || null,
+        aiIntroGeneratedAt: user?.aiIntroGeneratedAt || null,
+        aiIntroError: user?.aiIntroError || null,
       };
     });
 
@@ -1284,6 +1677,67 @@ router.get("/target/progress", async (req, res) => {
     }));
   } catch (error) {
     console.error("[target/progress] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * POST /users/generate-intros
+ * 异步生成 TopN 目标用户的一句话介绍（默认 top1000 前100）
+ */
+router.post("/users/generate-intros", async (req, res) => {
+  try {
+    const redis = await getRedisClient();
+    const existingLock = await redis.get(USER_INTRO_LOCK_KEY);
+    if (existingLock) {
+      return res.status(409).json(fail("已有用户介绍生成任务正在执行"));
+    }
+
+    const taskId = generateRunId("intro");
+    const params = {
+      taskId,
+      rankSet: req.body?.rankSet || "top1000",
+      limit: req.body?.limit || 100,
+      postLimit: req.body?.postLimit || 50,
+      force: Boolean(req.body?.force),
+      model: req.body?.model || undefined,
+    };
+
+    runUserIntroGenerationTask(params).catch((error) => {
+      console.error(`[user-intro] taskId=${taskId} 异步任务失败:`, error);
+    });
+
+    res.json(success({
+      taskId,
+      status: "running",
+      message: "用户介绍生成任务已启动",
+      ...params,
+    }));
+  } catch (error) {
+    console.error("[users/generate-intros] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /users/generate-intros/progress
+ * 查询用户介绍生成任务进度
+ */
+router.get("/users/generate-intros/progress", async (req, res) => {
+  try {
+    const progressList = await getUserIntroProgressList();
+    if (progressList.length === 0) {
+      return res.json(success({ running: false, message: "当前没有用户介绍生成任务" }));
+    }
+
+    const latest = progressList[0];
+    res.json(success({
+      running: latest?.status === "running",
+      latest,
+      list: progressList.slice(0, 10),
+    }));
+  } catch (error) {
+    console.error("[users/generate-intros/progress] error:", error);
     res.status(500).json(fail(error.message));
   }
 });

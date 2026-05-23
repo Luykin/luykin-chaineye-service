@@ -114,6 +114,38 @@ module.exports = (sequelize) => {
         type: DataTypes.JSONB,
         comment: "原始API响应数据（完整备份）—— API异常时用于排查",
       },
+      aiOneLineIntro: {
+        type: DataTypes.TEXT,
+        comment: "AI生成的一句话用户介绍",
+      },
+      aiIntroStatus: {
+        type: DataTypes.STRING(32),
+        comment: "AI介绍生成状态：pending/running/success/failed/skipped",
+      },
+      aiIntroModel: {
+        type: DataTypes.STRING(128),
+        comment: "AI介绍生成使用的大模型",
+      },
+      aiIntroPromptVersion: {
+        type: DataTypes.STRING(64),
+        comment: "AI介绍生成使用的Prompt版本",
+      },
+      aiIntroInputHash: {
+        type: DataTypes.STRING(64),
+        comment: "AI介绍生成输入内容hash，用于判断是否需要重算",
+      },
+      aiIntroGeneratedAt: {
+        type: DataTypes.DATE,
+        comment: "AI介绍生成时间",
+      },
+      aiIntroError: {
+        type: DataTypes.TEXT,
+        comment: "AI介绍生成失败原因",
+      },
+      aiIntroDetails: {
+        type: DataTypes.JSONB,
+        comment: "AI介绍生成元数据，例如帖子数量、输入长度、任务ID等",
+      },
     },
     {
       tableName: "BinanceSquareUsers",

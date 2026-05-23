@@ -12,6 +12,7 @@ import type {
   BinanceSquareStats,
   BinanceSquareTargetRankItem,
   BinanceSquareTargetProgress,
+  BinanceSquareUserIntroProgress,
   BinanceSquareFollowingUser,
 } from "@/types/binance-square";
 
@@ -97,6 +98,27 @@ export async function fetchBinanceSquareTargets(rankSet: BinanceSquareRankSet = 
   const query = new URLSearchParams();
   query.set("rankSet", rankSet);
   return apiRequest<BinanceSquareApiResponse<BinanceSquareTargetRankItem[]>>(`${BASE}/target/list?${query.toString()}`);
+}
+
+export async function generateBinanceSquareUserIntros(params: {
+  rankSet?: BinanceSquareRankSet;
+  limit?: number;
+  postLimit?: number;
+  force?: boolean;
+} = {}) {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(`${BASE}/users/generate-intros`, {
+    method: "POST",
+    body: {
+      rankSet: params.rankSet || "top1000",
+      limit: params.limit || 100,
+      postLimit: params.postLimit || 50,
+      force: Boolean(params.force),
+    },
+  });
+}
+
+export async function fetchBinanceSquareUserIntroProgress() {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareUserIntroProgress>>(`${BASE}/users/generate-intros/progress`);
 }
 
 export async function crawlBinanceSquarePosts(params: {

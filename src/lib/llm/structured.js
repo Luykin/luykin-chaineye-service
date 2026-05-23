@@ -139,7 +139,7 @@ function validateJsonSchema(data, schema, path = '') {
 }
 
 async function structuredChat(message, schema, options = {}) {
-  const { model: modelName, temperature = 0, systemPrompt } = options;
+  const { model: modelName, temperature = 0, systemPrompt, maxTokens } = options;
 
   return withRetry(async () => {
     // schema 应该是普通 JSON Schema（来自用户输入）
@@ -151,6 +151,7 @@ async function structuredChat(message, schema, options = {}) {
       model: modelName,
       temperature,
       streaming: false,
+      maxTokens,
       responseFormat: "json_schema",
       jsonSchema: {
         name: "structured_output",

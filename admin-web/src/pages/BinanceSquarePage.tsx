@@ -39,7 +39,9 @@ import {
   fetchBinanceSquareStatus,
   fetchBinanceSquareTargetProgress,
   fetchBinanceSquareTargets,
+  fetchBinanceSquareUserIntroProgress,
   forceStopBinanceSquareCrawl,
+  generateBinanceSquareUserIntros,
   pauseBinanceSquareScheduler,
   purgeBinanceSquareSnapshots,
   recalculateBinanceSquarePostScores,
@@ -201,6 +203,7 @@ export function BinanceSquarePage() {
   const statusQuery = useQuery({ queryKey: ["binance-square", "status"], queryFn: fetchBinanceSquareStatus, refetchInterval: 15_000 });
   const progressQuery = useQuery({ queryKey: ["binance-square", "progress"], queryFn: fetchBinanceSquareProgress, refetchInterval: 15_000 });
   const targetProgressQuery = useQuery({ queryKey: ["binance-square", "target-progress"], queryFn: fetchBinanceSquareTargetProgress, refetchInterval: 5_000 });
+  const userIntroProgressQuery = useQuery({ queryKey: ["binance-square", "user-intro-progress"], queryFn: fetchBinanceSquareUserIntroProgress, refetchInterval: 5_000 });
   const seedsQuery = useQuery({ queryKey: ["binance-square", "seeds"], queryFn: fetchBinanceSquareSeeds });
   const targetsQuery = useQuery({
     queryKey: ["binance-square", "targets", targetRankSet],
@@ -247,6 +250,7 @@ export function BinanceSquarePage() {
       statusQuery.refetch(),
       progressQuery.refetch(),
       targetProgressQuery.refetch(),
+      userIntroProgressQuery.refetch(),
       seedsQuery.refetch(),
       targetsQuery.refetch(),
       postsQuery.refetch(),
@@ -258,6 +262,11 @@ export function BinanceSquarePage() {
     mutationFn: calculateBinanceSquareTargets,
     onSuccess: (result) => handleActionSuccess("更新目标层级", result.data),
     onError: (error: Error) => messageApi.error(error.message || "计算失败"),
+  });
+  const userIntroMutation = useMutation({
+    mutationFn: generateBinanceSquareUserIntros,
+    onSuccess: (result) => handleActionSuccess("用户介绍生成", result.data),
+    onError: (error: Error) => messageApi.error(error.message || "生成失败"),
   });
   const crawlMutation = useMutation({
     mutationFn: crawlBinanceSquarePosts,
@@ -329,6 +338,7 @@ export function BinanceSquarePage() {
   const crawlStatus = statusQuery.data?.data;
   const progress = progressQuery.data?.data;
   const targetProgress = targetProgressQuery.data?.data;
+  const userIntroProgress = userIntroProgressQuery.data?.data;
   const seeds = seedsQuery.data?.data || [];
   const targets = targetsQuery.data?.data || [];
   const posts = postsQuery.data?.data;
@@ -422,6 +432,30 @@ export function BinanceSquarePage() {
       key: "displayName",
       width: 180,
       render: (value) => value || "-",
+    },
+    {
+      title: "一句话介绍",
+      dataIndex: "aiOneLineIntro",
+      key: "aiOneLineIntro",
+      width: 360,
+      render: (value, record) => {
+        if (value) {
+          return (
+            <Tooltip title={value}>
+              <Typography.Text ellipsis style={{ maxWidth: 340 }}>
+                {value}
+              </Typography.Text>
+            </Tooltip>
+          );
+        }
+        if (record.aiIntroStatus === "failed") {
+          return <Tooltip title={record.aiIntroError || "生成失败"}><Tag color="red">生成失败</Tag></Tooltip>;
+        }
+        if (record.aiIntroStatus === "running") {
+          return <Tag color="blue">生成中</Tag>;
+        }
+        return <Tag>未生成</Tag>;
+      },
     },
     {
       title: "被关注次数",
@@ -609,6 +643,7 @@ export function BinanceSquarePage() {
               void statusQuery.refetch();
               void progressQuery.refetch();
               void targetProgressQuery.refetch();
+              void userIntroProgressQuery.refetch();
               void seedsQuery.refetch();
               void targetsQuery.refetch();
               void postsQuery.refetch();
@@ -820,12 +855,52 @@ export function BinanceSquarePage() {
                         ) : null}
                       </div>
                     ) : null}
+                    {userIntroProgress?.latest ? (
+                      <div className={`bs-target-progress ${userIntroProgress.running ? "is-running" : ""}`}>
+                        <div className="bs-progress-header">
+                          <span className="bs-progress-status">
+                            {userIntroProgress.running ? "Top100 用户介绍生成中" : "最近用户介绍生成"}
+                          </span>
+                          <span className="bs-progress-stats">
+                            {(userIntroProgress.latest.processed || 0)}/{userIntroProgress.latest.total || 0}
+                          </span>
+                        </div>
+                        <Progress
+                          percent={userIntroProgress.latest.total ? Math.round(((userIntroProgress.latest.processed || 0) / userIntroProgress.latest.total) * 100) : 0}
+                          showInfo={false}
+                          size="small"
+                          status={userIntroProgress.latest.status === "failed" ? "exception" : userIntroProgress.running ? "active" : "success"}
+                        />
+                        <div className="bs-progress-detail">
+                          <span>成功: {userIntroProgress.latest.success || 0}</span>
+                          <span>跳过: {userIntroProgress.latest.skipped || 0}</span>
+                          <span style={{ color: "#ef4444" }}>失败: {userIntroProgress.latest.failed || 0}</span>
+                          <span>当前: {userIntroProgress.latest.currentUsername || "-"}</span>
+                          <span>并发: {userIntroProgress.latest.concurrency || "-"}</span>
+                          <span>更新: {formatDateTime(userIntroProgress.latest.updatedAt)}</span>
+                        </div>
+                        {userIntroProgress.latest.errorMessage ? (
+                          <div className="bs-progress-error">{userIntroProgress.latest.errorMessage}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="bs-target-toolbar">
                       <Select
                         value={targetRankSet}
                         onChange={(value) => setTargetRankSet(value as BinanceSquareRankSet)}
                         options={RANK_STAGES.map((stage) => ({ label: stage.label, value: stage.key }))}
                       />
+                      <Popconfirm
+                        title="生成 Top100 用户介绍？"
+                        description="会读取 Top1000 前100名用户的 profile 和最近最多50篇帖子，调用大模型生成一句话介绍；已有且输入未变化的会自动跳过。"
+                        okText="开始生成"
+                        cancelText="取消"
+                        onConfirm={() => userIntroMutation.mutate({ rankSet: "top1000", limit: 100, postLimit: 50, force: false })}
+                      >
+                        <LegacyActionButton variant="primary" loading={userIntroMutation.isPending} disabled={Boolean(userIntroProgress?.running)}>
+                          生成Top100介绍
+                        </LegacyActionButton>
+                      </Popconfirm>
                       <LegacyActionButton variant="neutral" onClick={() => void targetsQuery.refetch()}>
                         刷新当前层
                       </LegacyActionButton>
@@ -836,7 +911,7 @@ export function BinanceSquarePage() {
                       columns={targetColumns}
                       dataSource={targets}
                       pagination={false}
-                      scroll={{ y: TABLE_MAX_HEIGHT, x: 1050 }}
+                      scroll={{ y: TABLE_MAX_HEIGHT, x: 1400 }}
                       loading={targetsQuery.isFetching}
                     />
                   </div>

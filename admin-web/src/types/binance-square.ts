@@ -53,6 +53,12 @@ export interface BinanceSquareTargetRankItem {
   username: string;
   displayName?: string | null;
   avatar?: string | null;
+  aiOneLineIntro?: string | null;
+  aiIntroStatus?: string | null;
+  aiIntroModel?: string | null;
+  aiIntroPromptVersion?: string | null;
+  aiIntroGeneratedAt?: string | null;
+  aiIntroError?: string | null;
   rankSet?: string;
   rank: number;
   followerCount: number;
@@ -192,6 +198,38 @@ export interface BinanceSquareTargetProgressDetail {
   completedAt?: string;
   updatedAt?: string;
   durationMs?: number;
+}
+
+export interface BinanceSquareUserIntroProgressDetail {
+  running?: boolean;
+  taskType?: string;
+  taskId?: string;
+  rankSet?: string;
+  status?: string;
+  total?: number;
+  processed?: number;
+  success?: number;
+  failed?: number;
+  skipped?: number;
+  currentUsername?: string | null;
+  currentLine?: number;
+  concurrency?: number;
+  postLimit?: number;
+  model?: string | null;
+  promptVersion?: string;
+  errorMessage?: string;
+  startedAt?: string;
+  completedAt?: string;
+  updatedAt?: string;
+  durationMs?: number;
+  lastResult?: Record<string, unknown>;
+}
+
+export interface BinanceSquareUserIntroProgress {
+  running: boolean;
+  message?: string;
+  latest?: BinanceSquareUserIntroProgressDetail;
+  list?: BinanceSquareUserIntroProgressDetail[];
 }
 
 export interface BinanceSquareTargetProgress {
