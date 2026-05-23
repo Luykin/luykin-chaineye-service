@@ -2603,14 +2603,19 @@ router.post("/crawl/pause", async (req, res) => {
  */
 router.get("/crawl/status", async (req, res) => {
   try {
-    const control = await req.redisClient.get("binance_square:scheduler:control");
+    const [control, runningSnapshotId] = await Promise.all([
+      req.redisClient.get("binance_square:scheduler:control"),
+      req.redisClient.get("binance_square:task:lock"),
+    ]);
     const isRunning = control === "start";
 
     // 检查是否有正在执行的爬取任务（从 Redis 进度中查询）
-    let isCrawling = false;
-    let currentTask = null;
+    let isCrawling = Boolean(runningSnapshotId);
+    let currentTask = runningSnapshotId ? { snapshotId: runningSnapshotId } : null;
     try {
-      const keys = await scanKeys(req.redisClient, "binance_square:task:progress:post:*");
+      const keys = runningSnapshotId
+        ? [`binance_square:task:progress:post:${runningSnapshotId}`]
+        : [];
       if (keys.length > 0) {
         const progressList = [];
         for (const key of keys) {
@@ -2644,7 +2649,9 @@ router.get("/crawl/status", async (req, res) => {
 
     // 从数据库查询最近一次抓取日志
     const lastLog = await db.BinanceSquareCrawlLog.findOne({
+      attributes: ["taskType", "status", "itemsCount", "snapshotId", "durationMs", "createdAt"],
       order: [["createdAt", "DESC"]],
+      raw: true,
     });
 
     res.json(success({

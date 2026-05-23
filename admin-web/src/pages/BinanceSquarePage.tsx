@@ -318,13 +318,29 @@ export function BinanceSquarePage() {
 
   const statsQuery = useQuery({ queryKey: ["binance-square", "stats"], queryFn: fetchBinanceSquareStats, refetchInterval: 30_000 });
   const statusQuery = useQuery({ queryKey: ["binance-square", "status"], queryFn: fetchBinanceSquareStatus, refetchInterval: 15_000 });
-  const progressQuery = useQuery({ queryKey: ["binance-square", "progress"], queryFn: fetchBinanceSquareProgress, refetchInterval: 15_000 });
-  const targetProgressQuery = useQuery({ queryKey: ["binance-square", "target-progress"], queryFn: fetchBinanceSquareTargetProgress, refetchInterval: 5_000 });
-  const userIntroProgressQuery = useQuery({ queryKey: ["binance-square", "user-intro-progress"], queryFn: fetchBinanceSquareUserIntroProgress, refetchInterval: 5_000 });
-  const seedsQuery = useQuery({ queryKey: ["binance-square", "seeds"], queryFn: fetchBinanceSquareSeeds });
+  const progressQuery = useQuery({
+    queryKey: ["binance-square", "progress"],
+    queryFn: fetchBinanceSquareProgress,
+    enabled: activeTab === "posts",
+    refetchInterval: activeTab === "posts" ? 15_000 : false,
+  });
+  const targetProgressQuery = useQuery({
+    queryKey: ["binance-square", "target-progress"],
+    queryFn: fetchBinanceSquareTargetProgress,
+    enabled: activeTab === "targets",
+    refetchInterval: activeTab === "targets" ? 5_000 : false,
+  });
+  const userIntroProgressQuery = useQuery({
+    queryKey: ["binance-square", "user-intro-progress"],
+    queryFn: fetchBinanceSquareUserIntroProgress,
+    enabled: activeTab === "targets",
+    refetchInterval: activeTab === "targets" ? 5_000 : false,
+  });
+  const seedsQuery = useQuery({ queryKey: ["binance-square", "seeds"], queryFn: fetchBinanceSquareSeeds, enabled: activeTab === "seeds" });
   const targetsQuery = useQuery({
     queryKey: ["binance-square", "targets", targetRankSet],
     queryFn: () => fetchBinanceSquareTargets(targetRankSet),
+    enabled: activeTab === "targets",
   });
   const configQuery = useQuery({ queryKey: ["binance-square", "config"], queryFn: fetchBinanceSquareConfig });
   const postsQuery = useQuery({
@@ -338,6 +354,7 @@ export function BinanceSquarePage() {
         orderBy: postsOrderBy,
         minScore: postsMinScore || undefined,
       }),
+    enabled: activeTab === "posts",
   });
   const logsQuery = useQuery({
     queryKey: ["binance-square", "logs", logsPage, logsTaskType, logsStatus],
@@ -348,6 +365,7 @@ export function BinanceSquarePage() {
         taskType: logsTaskType,
         status: logsStatus,
       }),
+    enabled: activeTab === "overview" || activeTab === "logs",
   });
   const followingQuery = useQuery({
     queryKey: ["binance-square", "following", followingUser, followingPage],
