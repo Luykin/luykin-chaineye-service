@@ -1088,6 +1088,40 @@ async function getIntroRecentPosts(username, postLimit) {
     .filter((post) => post.title || post.content);
 }
 
+async function findUserForIntro(username) {
+  const escapedUsername = db.sequelize.escape(username);
+  return db.BinanceSquareUser.findOne({
+    where: { username: { [Op.iLike]: username } },
+    attributes: [
+      "id",
+      "username",
+      "displayName",
+      "biography",
+      "verificationDescription",
+      "totalFollowerCount",
+      "totalFollowingCount",
+      "totalPostCount",
+      "accountLang",
+      "aiOneLineIntro",
+      "aiOneLineIntroI18n",
+      "aiIntroInputHash",
+      "aiIntroStatus",
+    ],
+    order: [
+      [db.sequelize.literal(`CASE WHEN "username" = ${escapedUsername} THEN 0 ELSE 1 END`), "ASC"],
+      ["id", "DESC"],
+    ],
+    raw: true,
+  });
+}
+
+async function markIntroFailedByUsername(username, updateData) {
+  const user = await findUserForIntro(username);
+  if (!user?.id) return 0;
+  const [affectedCount] = await db.BinanceSquareUser.update(updateData, { where: { id: user.id } });
+  return affectedCount;
+}
+
 function buildUserIntroPrompt(profile, posts) {
   const profileJson = JSON.stringify(profile, null, 2);
   const postsJson = JSON.stringify(posts, null, 2);
@@ -1126,24 +1160,7 @@ ${postsJson}`;
 async function generateIntroForUser(rankEntry, options) {
   const { taskId, postLimit, force, model } = options;
   const username = rankEntry.username;
-  const user = await db.BinanceSquareUser.findOne({
-    where: { username: { [Op.iLike]: username } },
-    attributes: [
-      "username",
-      "displayName",
-      "biography",
-      "verificationDescription",
-      "totalFollowerCount",
-      "totalFollowingCount",
-      "totalPostCount",
-      "accountLang",
-      "aiOneLineIntro",
-      "aiOneLineIntroI18n",
-      "aiIntroInputHash",
-      "aiIntroStatus",
-    ],
-    raw: true,
-  });
+  const user = await findUserForIntro(username);
 
   if (!user) {
     throw new Error(`用户不存在: ${username}`);
@@ -1195,7 +1212,7 @@ async function generateIntroForUser(rankEntry, options) {
       aiIntroError: null,
       aiIntroDetails: { taskId, postCount: posts.length, rank: rankEntry.rank, rankSet: rankEntry.rankSet },
     },
-    { where: { username: { [Op.iLike]: username } } }
+    { where: { id: user.id } }
   );
 
   const systemPrompt = "你是一个 Web3、科技与财经内容分析助手。你需要根据币安广场用户的 profile 和最近帖子，生成中英双语的一句话介绍。介绍要准确、克制、具体，不要把用户强行限定为加密领域；如果内容涉及 AI、科技、创业、产品或金融市场，也要如实体现。不要编造身份。输出必须是 JSON 对象，且只包含 zh 和 en 两个字段。";
@@ -1235,7 +1252,7 @@ async function generateIntroForUser(rankEntry, options) {
         promptVersion: USER_INTRO_PROMPT_VERSION,
       },
     },
-    { where: { username: { [Op.iLike]: username } } }
+    { where: { id: user.id } }
   );
 
   return { username, status: "success", intro, introI18n, postCount: posts.length, inputHash };
@@ -1323,16 +1340,13 @@ async function runUserIntroGenerationTask(params = {}) {
             failedCount += 1;
             results[globalIndex] = { username: rankEntry.username, status: "failed", errorMessage: error.message };
             console.warn(`[user-intro] ${rankEntry.username} 生成失败:`, error.message);
-            await db.BinanceSquareUser.update(
-              {
-                aiIntroStatus: "failed",
-                aiIntroModel: model || null,
-                aiIntroPromptVersion: USER_INTRO_PROMPT_VERSION,
-                aiIntroError: error.message,
-                aiIntroDetails: { taskId, rank: rankEntry.rank, rankSet },
-              },
-              { where: { username: { [Op.iLike]: rankEntry.username } } }
-            ).catch(() => {});
+            await markIntroFailedByUsername(rankEntry.username, {
+              aiIntroStatus: "failed",
+              aiIntroModel: model || null,
+              aiIntroPromptVersion: USER_INTRO_PROMPT_VERSION,
+              aiIntroError: error.message,
+              aiIntroDetails: { taskId, rank: rankEntry.rank, rankSet },
+            }).catch(() => {});
           } finally {
             processed += 1;
             await updateUserIntroProgress(taskId, {
