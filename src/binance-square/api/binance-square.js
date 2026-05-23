@@ -1407,11 +1407,9 @@ async function buildRankEntries(config, candidates) {
     }
   }
 
-  // 先按“必须包含上一层”的规则选满当前层，再按被关注次数重新排序生成 rank。
-  // 之前这里直接按插入顺序写 rank：上一层用户会保留旧排名顺序，导致 Top100/300/1000
-  // 页面看起来不是按“被关注次数”降序排列。
-  const selected = ordered.slice(0, config.limit);
-  selected.sort((a, b) => {
+  // 合并上一层/中间层和当前候选后，统一按“被关注次数”降序生成 rank。
+  // 不能先按旧层级顺序 slice 再排序，否则旧 Top50/100/300 的历史 rank 会污染新层级排名。
+  ordered.sort((a, b) => {
     const countDiff = (b.followerCount || 0) - (a.followerCount || 0);
     if (countDiff !== 0) return countDiff;
     const previousRankDiff = (a.previousRank || Number.MAX_SAFE_INTEGER) - (b.previousRank || Number.MAX_SAFE_INTEGER);
@@ -1419,6 +1417,7 @@ async function buildRankEntries(config, candidates) {
     return a.username.localeCompare(b.username);
   });
 
+  const selected = ordered.slice(0, config.limit);
   return selected.map((entry, index) => ({
     ...entry,
     rank: index + 1,
@@ -1705,7 +1704,24 @@ router.get("/target/list", async (req, res) => {
       };
     });
 
-    res.json(success(enrichedRanks));
+    const rankSetOrder = new Map(["top50", "top100", "top300", "top1000"].map((item, index) => [item, index]));
+    enrichedRanks.sort((a, b) => {
+      const rankSetDiff = (rankSetOrder.get(a.rankSet) ?? 999) - (rankSetOrder.get(b.rankSet) ?? 999);
+      if (rankSetDiff !== 0) return rankSetDiff;
+      const countDiff = (b.followerCount || 0) - (a.followerCount || 0);
+      if (countDiff !== 0) return countDiff;
+      return (a.rank || Number.MAX_SAFE_INTEGER) - (b.rank || Number.MAX_SAFE_INTEGER);
+    });
+
+    const rankCounterBySet = new Map();
+    const displayRanks = enrichedRanks.map((rank) => {
+      const key = rank.rankSet || rankSet || "unknown";
+      const nextRank = (rankCounterBySet.get(key) || 0) + 1;
+      rankCounterBySet.set(key, nextRank);
+      return { ...rank, rank: nextRank };
+    });
+
+    res.json(success(displayRanks));
   } catch (error) {
     console.error("[target/list] error:", error);
     res.status(500).json(fail(error.message));
