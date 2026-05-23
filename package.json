@@ -40,7 +40,8 @@
     "restart-binance-square-crawler": "pm2 restart luykin-chaineye-binance-square-crawler",
     "logs-binance-square-crawler": "pm2 logs luykin-chaineye-binance-square-crawler",
     "stop-binance-square-crawler": "pm2 stop luykin-chaineye-binance-square-crawler",
-    "delete-binance-square-crawler": "pm2 delete luykin-chaineye-binance-square-crawler"
+    "delete-binance-square-crawler": "pm2 delete luykin-chaineye-binance-square-crawler",
+    "backfill-binance-intro-i18n": "NODE_ENV=production node scripts/backfill-binance-user-intro-i18n.js"
   },
   "dependencies": {
     "@langchain/core": "^1.1.32",
