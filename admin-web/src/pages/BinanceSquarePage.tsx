@@ -576,17 +576,19 @@ export function BinanceSquarePage() {
       key: "aiOneLineIntro",
       width: 460,
       render: (value, record) => {
-        const intro = parseBilingualIntro(value);
-        if (intro.isValid) {
+        const zh = record.aiOneLineIntroI18n?.zh?.trim() || record.aiOneLineIntroZh?.trim() || "";
+        const en = record.aiOneLineIntroI18n?.en?.trim() || record.aiOneLineIntroEn?.trim() || "";
+        if (zh && en) {
           return (
-            <Tooltip title={intro.raw}>
+            <Tooltip title={`中文：${zh}\nEnglish: ${en}`}>
               <div className="bs-bilingual-intro-cell">
-                <div className="bs-bilingual-intro-zh">{intro.zh}</div>
-                <div className="bs-bilingual-intro-en">{intro.en}</div>
+                <div className="bs-bilingual-intro-zh">{zh}</div>
+                <div className="bs-bilingual-intro-en">{en}</div>
               </div>
             </Tooltip>
           );
         }
+        const intro = parseBilingualIntro(value);
         if (intro.raw && record.aiIntroStatus === "success") {
           return <Tooltip title={intro.raw}><Tag color="orange">格式异常</Tag></Tooltip>;
         }

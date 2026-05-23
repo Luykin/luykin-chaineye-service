@@ -116,7 +116,11 @@ module.exports = (sequelize) => {
       },
       aiOneLineIntro: {
         type: DataTypes.TEXT,
-        comment: "AI生成的一句话用户介绍",
+        comment: "AI生成的一句话用户介绍（兼容旧字段，展示优先使用aiOneLineIntroI18n）",
+      },
+      aiOneLineIntroI18n: {
+        type: DataTypes.JSONB,
+        comment: "AI生成的一句话用户介绍多语言内容，例如 { zh, en }",
       },
       aiIntroStatus: {
         type: DataTypes.STRING(32),

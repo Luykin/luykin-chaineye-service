@@ -54,6 +54,9 @@ export interface BinanceSquareTargetRankItem {
   displayName?: string | null;
   avatar?: string | null;
   aiOneLineIntro?: string | null;
+  aiOneLineIntroI18n?: { zh?: string | null; en?: string | null } | null;
+  aiOneLineIntroZh?: string | null;
+  aiOneLineIntroEn?: string | null;
   aiIntroStatus?: string | null;
   aiIntroModel?: string | null;
   aiIntroPromptVersion?: string | null;

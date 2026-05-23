@@ -814,7 +814,7 @@ function normalizeRankSet(rankSet) {
   return String(rankSet || "").toLowerCase();
 }
 
-const USER_INTRO_PROMPT_VERSION = "bs_user_intro_v3_bilingual_json";
+const USER_INTRO_PROMPT_VERSION = "bs_user_intro_v4_bilingual_jsonb";
 const USER_INTRO_LOCK_KEY = "binance_square:task:lock:user_intro";
 const USER_INTRO_SCHEMA = {
   type: "object",
@@ -1025,9 +1025,22 @@ function formatBilingualIntroText(parsedIntro) {
   return [`中文：${parsedIntro.zh}`, `English: ${parsedIntro.en}`].join("\n");
 }
 
+function normalizeIntroI18n(value, fallbackText = null) {
+  const parsed = parseBilingualIntroText(value);
+  if (parsed.zh && parsed.en) {
+    return { zh: parsed.zh, en: parsed.en };
+  }
+
+  const fallbackParsed = parseBilingualIntroText(fallbackText);
+  if (fallbackParsed.zh && fallbackParsed.en) {
+    return { zh: fallbackParsed.zh, en: fallbackParsed.en };
+  }
+
+  return null;
+}
+
 function isUsableBilingualIntroText(value) {
-  const parsedIntro = parseBilingualIntroText(value);
-  return Boolean(parsedIntro.zh && parsedIntro.en && !/^\[object Object\]$/i.test(parsedIntro.raw));
+  return Boolean(normalizeIntroI18n(value));
 }
 
 async function getIntroRecentPosts(username, postLimit) {
@@ -1125,6 +1138,7 @@ async function generateIntroForUser(rankEntry, options) {
       "totalPostCount",
       "accountLang",
       "aiOneLineIntro",
+      "aiOneLineIntroI18n",
       "aiIntroInputHash",
       "aiIntroStatus",
     ],
@@ -1154,11 +1168,14 @@ async function generateIntroForUser(rankEntry, options) {
   const inputPayload = { promptVersion: USER_INTRO_PROMPT_VERSION, profile, posts };
   const inputHash = sha256Json(inputPayload);
 
-  if (!force && user.aiOneLineIntro && user.aiIntroStatus === "success" && user.aiIntroInputHash === inputHash && isUsableBilingualIntroText(user.aiOneLineIntro)) {
+  const existingIntroI18n = normalizeIntroI18n(user.aiOneLineIntroI18n, user.aiOneLineIntro);
+  if (!force && existingIntroI18n && user.aiIntroStatus === "success" && user.aiIntroInputHash === inputHash) {
+    const intro = formatBilingualIntroText(existingIntroI18n);
     return {
       username,
       status: "skipped",
-      intro: user.aiOneLineIntro,
+      intro,
+      introI18n: existingIntroI18n,
       postCount: posts.length,
       inputHash,
     };
@@ -1188,12 +1205,12 @@ async function generateIntroForUser(rankEntry, options) {
     maxTokens: 240,
     systemPrompt,
   });
-  const parsedIntro = {
-    raw: safeJsonStringify(rawIntro),
+  const introI18n = {
     zh: sanitizeIntroLine(rawIntro?.zh || ""),
     en: sanitizeIntroLine(rawIntro?.en || ""),
   };
-  const intro = parsedIntro.zh && parsedIntro.en ? formatBilingualIntroText(parsedIntro) : parsedIntro.raw;
+  const parsedIntro = { raw: safeJsonStringify(rawIntro), ...introI18n };
+  const intro = introI18n.zh && introI18n.en ? formatBilingualIntroText(introI18n) : parsedIntro.raw;
 
   if (!parsedIntro.zh || !parsedIntro.en || intro.length < 12) {
     throw new Error(`模型未按中英双语格式输出: ${typeof rawIntro === "string" ? rawIntro : safeJsonStringify(rawIntro)}`);
@@ -1202,6 +1219,7 @@ async function generateIntroForUser(rankEntry, options) {
   await db.BinanceSquareUser.update(
     {
       aiOneLineIntro: intro,
+      aiOneLineIntroI18n: introI18n,
       aiIntroStatus: "success",
       aiIntroModel: model,
       aiIntroPromptVersion: USER_INTRO_PROMPT_VERSION,
@@ -1220,7 +1238,7 @@ async function generateIntroForUser(rankEntry, options) {
     { where: { username: { [Op.iLike]: username } } }
   );
 
-  return { username, status: "success", intro, postCount: posts.length, inputHash };
+  return { username, status: "success", intro, introI18n, postCount: posts.length, inputHash };
 }
 
 async function runUserIntroGenerationTask(params = {}) {
@@ -1865,6 +1883,7 @@ router.get("/target/list", async (req, res) => {
             "displayName",
             "avatar",
             "aiOneLineIntro",
+            "aiOneLineIntroI18n",
             "aiIntroStatus",
             "aiIntroModel",
             "aiIntroPromptVersion",
@@ -1878,12 +1897,17 @@ router.get("/target/list", async (req, res) => {
 
     const enrichedRanks = rankRows.map((rank) => {
       const user = userMap.get(rank.username.toLowerCase());
-      const intro = isUsableIntroText(user?.aiOneLineIntro) ? sanitizeIntroText(user.aiOneLineIntro) : null;
+      const introI18n = normalizeIntroI18n(user?.aiOneLineIntroI18n, user?.aiOneLineIntro);
+      const hasBilingualIntro = Boolean(introI18n);
+      const intro = hasBilingualIntro ? formatBilingualIntroText(introI18n) : null;
       return {
         ...rank,
         displayName: user?.displayName || null,
         avatar: user?.avatar || null,
         aiOneLineIntro: intro,
+        aiOneLineIntroI18n: introI18n,
+        aiOneLineIntroZh: hasBilingualIntro ? introI18n.zh : null,
+        aiOneLineIntroEn: hasBilingualIntro ? introI18n.en : null,
         aiIntroStatus: user?.aiIntroStatus === "success" && !intro ? null : user?.aiIntroStatus || null,
         aiIntroModel: user?.aiIntroModel || null,
         aiIntroPromptVersion: user?.aiIntroPromptVersion || null,
