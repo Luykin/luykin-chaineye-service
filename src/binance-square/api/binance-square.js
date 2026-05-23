@@ -1143,6 +1143,7 @@ async function generateIntroForUser(rankEntry, options) {
     totalPostCount: user.totalPostCount ?? null,
     accountLang: user.accountLang || null,
     rank: rankEntry.rank,
+    originalRank: rankEntry.originalRank || rankEntry.rank,
     rankSet: rankEntry.rankSet,
     followerCountInSource: rankEntry.followerCount || 0,
     sourceFollowers: (rankEntry.sourceFollowers || rankEntry.seedFollowers || []).slice(0, 30),
@@ -1236,12 +1237,19 @@ async function runUserIntroGenerationTask(params = {}) {
   }
 
   try {
-    const rankEntries = await db.BinanceSquareTargetRank.findAll({
+    const rankRows = await db.BinanceSquareTargetRank.findAll({
       where: { rankSet },
-      order: [["rank", "ASC"]],
+      // 生成 Top100 介绍时按“被关注次数”取前 N，而不是沿用表里的历史 rank 顺序。
+      order: [db.sequelize.literal('"followerCount" DESC NULLS LAST'), ["rank", "ASC"]],
       limit,
       raw: true,
     });
+
+    const rankEntries = rankRows.map((entry, index) => ({
+      ...entry,
+      originalRank: entry.rank,
+      rank: index + 1,
+    }));
 
     if (rankEntries.length === 0) {
       throw new Error(`没有可用 ${rankSet} 目标用户，请先更新目标用户`);
