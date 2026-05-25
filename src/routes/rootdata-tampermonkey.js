@@ -98,11 +98,23 @@ function parseNameFromRootDataDetailUrl(value) {
   if (!value) return "";
   try {
     const url = new URL(value, "https://www.rootdata.com");
-    const match = url.pathname.match(/\/(?:projects|Projects)\/detail\/([^/?#]+)/);
+    const match = url.pathname.match(/\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
     if (!match?.[1]) return "";
     return decodeURIComponent(match[1]).replace(/\+/g, " ").trim();
   } catch (_) {
     return "";
+  }
+}
+
+function isRootDataDetailUrl(value) {
+  try {
+    const url = new URL(value, "https://www.rootdata.com");
+    return (
+      /(^|\.)rootdata\.com$/i.test(url.hostname) &&
+      /\/(?:projects|Projects|investors|Investors)\/detail\//.test(url.pathname)
+    );
+  } catch (_) {
+    return false;
   }
 }
 
@@ -164,6 +176,207 @@ function parseDate(dateStr) {
 
   const timestamp = Date.parse(formattedDateStr);
   return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function stringToHashTimestamp(str) {
+  if (!str) return null;
+
+  let hash = 5381;
+  for (let index = 0; index < String(str).length; index += 1) {
+    hash = (hash << 5) + hash + String(str).charCodeAt(index);
+  }
+
+  const baseTime = new Date("2000-01-01").getTime();
+  const range = new Date("2020-01-01").getTime() - baseTime;
+  return baseTime + (Math.abs(hash) % range);
+}
+
+function normalizeDetailEntity(item) {
+  const projectLink = absoluteRootDataUrl(item?.projectLink || item?.link || "");
+  const projectName =
+    cleanText(item?.projectName || item?.name, 255) ||
+    parseNameFromRootDataDetailUrl(projectLink);
+
+  if (!projectName || !projectLink || !isRootDataDetailUrl(projectLink)) {
+    return null;
+  }
+
+  const amount = cleanText(item?.amount, 255);
+  const valuation = cleanText(item?.valuation, 255);
+  const date = cleanText(item?.date, 255);
+
+  return {
+    projectName,
+    projectLink,
+    lead: Boolean(item?.lead),
+    round: cleanText(item?.round, 255) || "--",
+    amount: amount || null,
+    valuation: valuation || null,
+    date: date || null,
+    formattedAmount:
+      item?.formattedAmount === null || item?.formattedAmount === undefined
+        ? parseAmount(amount)
+        : Number(item.formattedAmount),
+    formattedValuation:
+      item?.formattedValuation === null || item?.formattedValuation === undefined
+        ? parseAmount(valuation)
+        : Number(item.formattedValuation),
+    timestamp:
+      item?.timestamp ||
+      parseDate(date) ||
+      (date ? stringToHashTimestamp(date) : null),
+  };
+}
+
+function sanitizeSocialLinks(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const result = {};
+  Object.entries(value).forEach(([rawKey, rawUrl]) => {
+    const key = cleanText(rawKey, 64).toLowerCase();
+    const url = cleanText(rawUrl, 2000);
+    if (key && /^https?:\/\//i.test(url)) result[key] = url;
+  });
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function sanitizeTeamMembers(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(0, 200)
+    .map((member) => ({
+      name: cleanText(member?.name, 255),
+      position: cleanText(member?.position, 255),
+      avatar: cleanText(member?.avatar, 2000),
+      profileLink: absoluteRootDataUrl(member?.profileLink || ""),
+    }))
+    .filter((member) => member.name || member.profileLink);
+}
+
+async function upsertInvestmentRelationships(project, investors, program = "auto_crawler") {
+  const normalizedInvestors = (investors || [])
+    .map(normalizeDetailEntity)
+    .filter(Boolean);
+
+  if (normalizedInvestors.length === 0) return 0;
+
+  const sequelize = Fundraising.Project.sequelize;
+  const transaction = await sequelize.transaction();
+
+  try {
+    const records = [];
+
+    for (const investor of normalizedInvestors) {
+      const [investorProject] = await Fundraising.Project.findOrCreate({
+        where: { projectLink: investor.projectLink },
+        defaults: {
+          projectName: investor.projectName,
+          isInitial: false,
+          socialLinks: null,
+          detailFailuresNumber: 0,
+          detailFetchedAt: null,
+          updateProgram: program,
+        },
+        transaction,
+      });
+
+      records.push({
+        investorProjectId: investorProject.id,
+        fundedProjectId: project.id,
+        round: investor.round || "--",
+        amount: investor.amount || null,
+        formattedAmount: Number.isFinite(investor.formattedAmount)
+          ? investor.formattedAmount
+          : null,
+        valuation: investor.valuation || null,
+        formattedValuation: Number.isFinite(investor.formattedValuation)
+          ? investor.formattedValuation
+          : null,
+        date: investor.timestamp || null,
+        lead: Boolean(investor.lead),
+        updateProgram: program,
+      });
+    }
+
+    if (records.length > 0) {
+      await Fundraising.InvestmentRelationships.bulkCreate(records, {
+        transaction,
+        updateOnDuplicate: [
+          "lead",
+          "round",
+          "amount",
+          "valuation",
+          "date",
+          "formattedAmount",
+          "formattedValuation",
+          "updateProgram",
+        ],
+      });
+    }
+
+    await transaction.commit();
+    return records.length;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
+async function upsertInvestedRelationships(investorProject, investedProjects, program = "auto_crawler") {
+  const normalizedProjects = (investedProjects || [])
+    .map(normalizeDetailEntity)
+    .filter(Boolean);
+
+  if (normalizedProjects.length === 0) return 0;
+
+  const sequelize = Fundraising.Project.sequelize;
+  const transaction = await sequelize.transaction();
+
+  try {
+    const records = [];
+
+    for (const project of normalizedProjects) {
+      const [fundedProject] = await Fundraising.Project.findOrCreate({
+        where: { projectLink: project.projectLink },
+        defaults: {
+          projectName: project.projectName,
+          isInitial: false,
+          socialLinks: null,
+          detailFailuresNumber: 0,
+          detailFetchedAt: null,
+          updateProgram: program,
+        },
+        transaction,
+      });
+
+      records.push({
+        investorProjectId: investorProject.id,
+        fundedProjectId: fundedProject.id,
+        round: "--",
+        amount: null,
+        formattedAmount: null,
+        valuation: null,
+        formattedValuation: null,
+        date: null,
+        lead: false,
+        updateProgram: program,
+      });
+    }
+
+    if (records.length > 0) {
+      await Fundraising.InvestmentRelationships.bulkCreate(records, {
+        transaction,
+        ignoreDuplicates: true,
+      });
+    }
+
+    await transaction.commit();
+    return records.length;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 }
 
 function sanitizeImportRow(row, page) {
@@ -509,6 +722,223 @@ router.post("/import", requireClientToken, async (req, res) => {
       skippedItems: skipped,
     },
   });
+});
+
+router.post("/details/import", requireClientToken, async (req, res) => {
+  const payload = req.body || {};
+  const projectLink = absoluteRootDataUrl(payload.projectLink);
+  const projectName =
+    cleanText(payload.projectName, 255) ||
+    parseNameFromRootDataDetailUrl(projectLink);
+  const scheduleSlot = payload.scheduleSlot || null;
+  const program = "auto_crawler";
+
+  if (!projectName || !projectLink || !isRootDataDetailUrl(projectLink)) {
+    await safeRecordCollectorStat(req, "detail_failure", {
+      scheduleSlot,
+      meta: {
+        error: "INVALID_DETAIL_PROJECT",
+        projectLink,
+        projectName,
+        pageUrl: payload.pageUrl || null,
+      },
+    });
+
+    return res.status(400).json({
+      success: false,
+      error: "INVALID_DETAIL_PROJECT",
+      message: "详情页 projectLink/projectName 无效",
+    });
+  }
+
+  const socialLinks = sanitizeSocialLinks(payload.socialLinks);
+  const teamMembers = sanitizeTeamMembers(payload.teamMembers);
+  const investors = Array.isArray(payload.investors) ? payload.investors : [];
+  const investedProjects = Array.isArray(payload.investedProjects)
+    ? payload.investedProjects
+    : [];
+  const isInitial = payload.isInitial !== false;
+  const hasUsefulDetails =
+    Boolean(projectName) &&
+    (Boolean(payload.logo) ||
+      Boolean(socialLinks) ||
+      teamMembers.length > 0 ||
+      investors.length > 0 ||
+      investedProjects.length > 0);
+
+  try {
+    const [project] = await Fundraising.Project.findOrCreate({
+      where: { projectLink },
+      defaults: {
+        projectName,
+        projectLink,
+        logo: cleanText(payload.logo, 2000) || null,
+        isInitial,
+        socialLinks,
+        teamMembers,
+        detailFetchedAt: hasUsefulDetails ? Date.now() : null,
+        detailFailuresNumber: hasUsefulDetails ? 0 : 1,
+        updateProgram: program,
+      },
+    });
+
+    const updateValues = {
+      projectName,
+      logo: cleanText(payload.logo, 2000) || project.logo || null,
+      socialLinks,
+      teamMembers,
+      detailFetchedAt: hasUsefulDetails ? Date.now() : null,
+      detailFailuresNumber: hasUsefulDetails
+        ? 0
+        : Number(project.detailFailuresNumber || 0) + 1,
+      updateProgram: program,
+    };
+
+    if (isInitial && project.isInitial !== true) {
+      updateValues.isInitial = true;
+    }
+
+    await project.update(updateValues);
+
+    const investmentRelationships = isInitial
+      ? await upsertInvestmentRelationships(project, investors, program)
+      : 0;
+    const investedRelationships = isInitial
+      ? await upsertInvestedRelationships(project, investedProjects, program)
+      : 0;
+
+    console.log("[rootdata-tampermonkey] 导入详情数据成功:", {
+      projectName,
+      projectLink,
+      isInitial,
+      socialLinks: socialLinks ? Object.keys(socialLinks).length : 0,
+      teamMembers: teamMembers.length,
+      investors: investors.length,
+      investedProjects: investedProjects.length,
+      investmentRelationships,
+      investedRelationships,
+      scheduleSlot,
+    });
+
+    await safeRecordCollectorStat(req, "detail_success", {
+      scheduleSlot,
+      numericValue: 1,
+      metrics: {
+        isInitial,
+        socialLinks: socialLinks ? Object.keys(socialLinks).length : 0,
+        teamMembers: teamMembers.length,
+        investors: investors.length,
+        investedProjects: investedProjects.length,
+        investmentRelationships,
+        investedRelationships,
+      },
+      meta: {
+        projectName,
+        projectLink,
+        pageUrl: payload.pageUrl || null,
+        scrapedAt: payload.scrapedAt || null,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        projectId: project.id,
+        projectName,
+        projectLink,
+        isInitial,
+        investmentRelationships,
+        investedRelationships,
+      },
+    });
+  } catch (error) {
+    console.error("[rootdata-tampermonkey] 导入详情数据失败:", error);
+    await safeRecordCollectorStat(req, "detail_failure", {
+      scheduleSlot,
+      meta: {
+        error: error.message,
+        projectName,
+        projectLink,
+        pageUrl: payload.pageUrl || null,
+        scrapedAt: payload.scrapedAt || null,
+      },
+    });
+
+    return res.status(500).json({
+      success: false,
+      error: "DETAIL_IMPORT_FAILED",
+      message: error.message,
+    });
+  }
+});
+
+router.post("/details/failure", requireClientToken, async (req, res) => {
+  const payload = req.body || {};
+  const projectLink = absoluteRootDataUrl(payload.projectLink);
+  const projectName =
+    cleanText(payload.projectName, 255) ||
+    parseNameFromRootDataDetailUrl(projectLink) ||
+    "Unknown";
+  const scheduleSlot = payload.scheduleSlot || null;
+
+  if (!projectLink || !isRootDataDetailUrl(projectLink)) {
+    return res.status(400).json({
+      success: false,
+      error: "INVALID_DETAIL_PROJECT",
+      message: "详情页 projectLink 无效",
+    });
+  }
+
+  try {
+    const [project] = await Fundraising.Project.findOrCreate({
+      where: { projectLink },
+      defaults: {
+        projectName,
+        projectLink,
+        isInitial: payload.isInitial !== false,
+        detailFailuresNumber: 0,
+        detailFetchedAt: null,
+        updateProgram: "auto_crawler",
+      },
+    });
+
+    await project.update({
+      detailFailuresNumber: Number(project.detailFailuresNumber || 0) + 1,
+      updateProgram: "auto_crawler",
+    });
+
+    await safeRecordCollectorStat(req, "detail_failure", {
+      scheduleSlot,
+      metrics: {
+        isInitial: payload.isInitial !== false,
+      },
+      meta: {
+        error: payload.error || "DETAIL_CRAWL_FAILED",
+        projectName,
+        projectLink,
+        pageUrl: payload.pageUrl || null,
+        details: payload.details || null,
+        scrapedAt: payload.scrapedAt || null,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        projectId: project.id,
+        projectName,
+        projectLink,
+        detailFailuresNumber: project.detailFailuresNumber,
+      },
+    });
+  } catch (error) {
+    console.error("[rootdata-tampermonkey] 记录详情失败状态失败:", error);
+    return res.status(500).json({
+      success: false,
+      error: "DETAIL_FAILURE_SAVE_FAILED",
+      message: error.message,
+    });
+  }
 });
 
 module.exports = router;

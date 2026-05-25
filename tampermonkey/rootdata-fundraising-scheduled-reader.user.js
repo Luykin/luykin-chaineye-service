@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.3.2
+// @version      0.4.0
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -21,6 +21,8 @@
     API_BASE: "https://kb.cryptohunt.ai",
     ALERT_ENDPOINT: "/api/internal/rootdata/fundraising/alert",
     IMPORT_ENDPOINT: "/api/internal/rootdata/fundraising/import",
+    DETAIL_IMPORT_ENDPOINT: "/api/internal/rootdata/fundraising/details/import",
+    DETAIL_FAILURE_ENDPOINT: "/api/internal/rootdata/fundraising/details/failure",
     PING_ENDPOINT: "/api/internal/rootdata/fundraising/ping",
     CLIENT_TOKEN: "ct_uWOoKsZ9_MzozUUrVkc9gGnyvBQAp96pVmvLu7R1WE4",
 
@@ -32,8 +34,15 @@
     pollIntervalMs: 500,
     maxRetries: 3,
     retryDelayMs: 10 * 1000,
+    detailEnabled: true,
+    detailMaxProjectsPerRun: 30,
+    subDetailMaxProjectsPerRun: 80,
+    detailFrameTimeoutMs: 45 * 1000,
+    detailFramePollIntervalMs: 500,
+    detailBetweenMs: 1200,
 
     panelId: "rd-fundraising-reader-panel-v3",
+    detailFrameId: "rd-fundraising-detail-frame-v3",
     storageKeys: {
       pendingJob: "rd_fr_pending_job_v3",
       lastRunMap: "rd_fr_last_run_map_v3",
@@ -330,6 +339,363 @@
     });
   }
 
+  function uniqueByLink(items) {
+    const map = new Map();
+    for (const item of items || []) {
+      const link = absoluteUrl(item.projectLink || item.link || "");
+      if (!link || map.has(link)) continue;
+      map.set(link, { ...item, projectLink: link });
+    }
+    return Array.from(map.values());
+  }
+
+  function ensureDetailFrame() {
+    let frame = document.getElementById(CONFIG.detailFrameId);
+    if (frame) return frame;
+
+    frame = document.createElement("iframe");
+    frame.id = CONFIG.detailFrameId;
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = [
+      "position: fixed",
+      "left: -10000px",
+      "top: 0",
+      "width: 1280px",
+      "height: 900px",
+      "opacity: 0.01",
+      "pointer-events: none",
+      "border: 0",
+      "z-index: -1",
+    ].join(";");
+    document.body.appendChild(frame);
+    return frame;
+  }
+
+  function removeDetailFrame() {
+    document.getElementById(CONFIG.detailFrameId)?.remove();
+  }
+
+  function getFrameDocument(frame) {
+    try {
+      return frame.contentDocument || frame.contentWindow?.document || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function detectBlockedDocument(doc, url) {
+    const html = doc?.documentElement?.outerHTML || "";
+    const bodyText = cleanText(doc?.body?.innerText || "");
+    const checks = [
+      { type: "waf_block", matched: /WAF Block Page|Your request has been interrupted|web application firewall/i.test(html) },
+      { type: "captcha", matched: /CaptchaScript|sg\.captcha\.qcloud\.com|new Captcha\(|\/WafCaptcha|__captcha/i.test(html) },
+      { type: "cloudflare", matched: /cloudflare|attention required|checking your browser|verify you are human/i.test(html) },
+      { type: "blank_page", matched: html.length < 1000 || bodyText.length < 20 },
+    ];
+    const hit = checks.find((item) => item.matched);
+    if (!hit) return { blocked: false };
+    return {
+      blocked: true,
+      reason: hit.type,
+      url,
+      title: doc?.title || "",
+      bodyText: bodyText.slice(0, 1000),
+      htmlLength: html.length,
+      htmlStart: html.slice(0, 1500),
+    };
+  }
+
+  async function loadDetailDocument(frame, url) {
+    frame.src = "about:blank";
+    await sleep(120);
+    frame.src = url;
+
+    const start = Date.now();
+    let lastDetails = null;
+
+    while (Date.now() - start < CONFIG.detailFrameTimeoutMs) {
+      const doc = getFrameDocument(frame);
+      if (!doc) {
+        await sleep(CONFIG.detailFramePollIntervalMs);
+        continue;
+      }
+
+      const blocked = detectBlockedDocument(doc, url);
+      if (blocked.blocked && blocked.reason !== "blank_page") {
+        throw Object.assign(new Error(`详情页异常：${blocked.reason}`), { details: blocked });
+      }
+
+      lastDetails = parseDetailDocument(doc, url, { isInitial: true, dryRun: true });
+      if (lastDetails.ready) return doc;
+
+      await sleep(CONFIG.detailFramePollIntervalMs);
+    }
+
+    const doc = getFrameDocument(frame);
+    const blocked = doc ? detectBlockedDocument(doc, url) : { blocked: true, reason: "no_frame_document" };
+    throw Object.assign(new Error(`详情页等待超时：${url}`), {
+      details: {
+        ...(blocked || {}),
+        lastDetails,
+      },
+    });
+  }
+
+  function inferSocialType(link) {
+    const href = String(link?.href || "").toLowerCase();
+    const text = cleanText(link?.textContent || link?.getAttribute("aria-label") || "").toLowerCase();
+    if (/twitter\.com|x\.com/.test(href) || /\bx\b|twitter/.test(text)) return "x";
+    if (/discord/.test(href) || /discord/.test(text)) return "discord";
+    if (/t\.me|telegram/.test(href) || /telegram/.test(text)) return "telegram";
+    if (/linkedin/.test(href) || /linkedin/.test(text)) return "linkedin";
+    if (/github/.test(href) || /github/.test(text)) return "github";
+    if (/medium/.test(href) || /medium/.test(text)) return "medium";
+    if (/docs?\.|gitbook|notion/.test(href) || /docs?/.test(text)) return "docs";
+    return text || "website";
+  }
+
+  function readEntityLink(anchor) {
+    if (!anchor) return null;
+    const link = absoluteUrl(anchor.getAttribute("href") || anchor.href || "");
+    if (!/rootdata\.com\/(?:projects|Projects|investors|Investors)\/detail\//.test(link)) return null;
+    const rawText = cleanText(anchor.querySelector("h2")?.textContent || anchor.textContent || "");
+    const name = normalizeEntityName(rawText, link);
+    if (!name && !link) return null;
+    return { projectName: name, projectLink: link };
+  }
+
+  function parseInitialInvestors(doc) {
+    let items = Array.from(doc.querySelectorAll(".investor .row .item"));
+    if (!items.length) items = Array.from(doc.querySelectorAll(".investor .item"));
+
+    return items
+      .map((item) => {
+        const link = item.querySelector('a[href*="/investors/detail/"], a[href*="/Investors/detail/"], a[href*="/projects/detail/"], a[href*="/Projects/detail/"], a[href]');
+        const entity = readEntityLink(link);
+        if (!entity) return null;
+        return {
+          ...entity,
+          lead: !!item.querySelector(".status_icon.status_position") || /\*/.test(cleanText(item.textContent)),
+          source: "initial",
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function parseRoundsInvestors(doc) {
+    const headerCells = Array.from(
+      doc.querySelectorAll(".investor thead th, .investor tr:first-child th, .investor tr:first-child td")
+    );
+    const headerTexts = headerCells.map((th) => cleanText(th.textContent).toLowerCase());
+    const findIndexBy = (regex, fallbackIndex) => {
+      const index = headerTexts.findIndex((text) => regex.test(text));
+      return index >= 0 ? index : fallbackIndex;
+    };
+
+    const idxRound = findIndexBy(/round/i, 0);
+    const idxAmount = findIndexBy(/amount/i, 1);
+    const idxValuation = findIndexBy(/valuation/i, 2);
+    const idxDate = findIndexBy(/date/i, 3);
+    const idxInvestors = findIndexBy(/investor/i, Math.max(headerCells.length - 1, 4));
+
+    return Array.from(doc.querySelectorAll(".investor tr"))
+      .slice(1)
+      .flatMap((row) => {
+        const cells = row.querySelectorAll("td");
+        const investorCell = cells[idxInvestors];
+        if (!investorCell) return [];
+
+        return Array.from(investorCell.querySelectorAll("a[href]"))
+          .map((anchor) => {
+            const entity = readEntityLink(anchor);
+            if (!entity) return null;
+            const anchorText = cleanText(anchor.textContent);
+            return {
+              ...entity,
+              lead: anchorText.includes("*"),
+              round: cleanText(cells[idxRound]?.textContent) || "--",
+              amount: cleanText(cells[idxAmount]?.textContent),
+              valuation: cleanText(cells[idxValuation]?.textContent),
+              date: cleanText(cells[idxDate]?.textContent),
+              source: "rounds",
+            };
+          })
+          .filter(Boolean);
+      });
+  }
+
+  function mergeInvestorData(initial, rounds) {
+    const resultMap = new Map();
+    const roundNames = new Set();
+
+    for (const item of rounds || []) {
+      roundNames.add(item.projectName);
+      const key = `${item.projectLink}|${item.round || "--"}`;
+      if (!resultMap.has(key)) resultMap.set(key, item);
+    }
+
+    for (const item of initial || []) {
+      if (roundNames.has(item.projectName)) continue;
+      const key = `${item.projectLink}|--`;
+      if (!resultMap.has(key)) {
+        resultMap.set(key, {
+          ...item,
+          round: "--",
+          amount: null,
+          valuation: null,
+          date: null,
+        });
+      }
+    }
+
+    return Array.from(resultMap.values());
+  }
+
+  function parseInvestmentItems(doc) {
+    return Array.from(doc.querySelectorAll(".investment .row.list .item a.card, .investment a.card"))
+      .map(readEntityLink)
+      .filter(Boolean);
+  }
+
+  function clickButtonsByText(doc, regex) {
+    Array.from(doc.querySelectorAll("button")).forEach((button) => {
+      if (!regex.test(cleanText(button.textContent))) return;
+      const EventCtor = doc.defaultView?.MouseEvent || MouseEvent;
+      button.dispatchEvent(new EventCtor("click", { view: doc.defaultView, bubbles: true, cancelable: true }));
+    });
+  }
+
+  async function scrapeInvestedProjectsFromDetail(doc, detailUrl) {
+    if (!doc.querySelector(".investment")) return [];
+
+    clickButtonsByText(doc, /portfolio/i);
+    await sleep(1800);
+    const portfolio = parseInvestmentItems(doc);
+
+    let vc = [];
+    if (/\/(?:investors|Investors)\/detail\//.test(detailUrl)) {
+      clickButtonsByText(doc, /\bvc\b/i);
+      await sleep(1800);
+      vc = parseInvestmentItems(doc);
+    }
+
+    return uniqueByLink([...portfolio, ...vc]);
+  }
+
+  function parseBasicDetail(doc, detailUrl) {
+    const socialLinks = {};
+    doc.querySelectorAll(".base_info .links a[href], .base_info a[href], a[href^='http']").forEach((link) => {
+      const type = cleanText(link.querySelector("span")?.textContent || inferSocialType(link)).toLowerCase();
+      const href = link.href || "";
+      if (!type || !/^https?:\/\//i.test(href)) return;
+      // 详情页内部 RootData 链接不算 socialLinks，避免把项目/投资方详情链接误存成官网。
+      if (/^https?:\/\/(?:www\.)?rootdata\.com\//i.test(href)) return;
+      socialLinks[type] = href;
+    });
+
+    const teamMembers = Array.from(doc.querySelectorAll(".team_member .item, .team-member .item"))
+      .map((member) => ({
+        name: cleanText(member.querySelector(".content h2, h2")?.textContent),
+        position: cleanText(member.querySelector(".content p, p")?.textContent),
+        avatar: member.querySelector(".logo-wraper img, img")?.src || "",
+        profileLink: absoluteUrl(member.querySelector("a.card, a[href]")?.getAttribute("href") || ""),
+      }))
+      .filter((member) => member.name || member.profileLink);
+
+    const projectName =
+      cleanText(doc.querySelector(".detail_info_head h1.name, .detail_info_head h1, h1.name")?.textContent) ||
+      cleanText(doc.querySelector('meta[property="og:title"], meta[name="twitter:title"]')?.getAttribute("content")) ||
+      cleanText(doc.title).replace(/\s*[-|]\s*RootData.*$/i, "") ||
+      parseNameFromDetailUrl(detailUrl);
+    const logo =
+      doc.querySelector(".detail_info_head .logo, .detail_info_head img, img.logo")?.src ||
+      doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]')?.getAttribute("content") ||
+      "";
+
+    return {
+      socialLinks,
+      teamMembers,
+      projectName: normalizeEntityName(projectName, detailUrl),
+      logo,
+    };
+  }
+
+  function parseDetailDocument(doc, detailUrl, { isInitial = true, dryRun = false } = {}) {
+    const basic = parseBasicDetail(doc, detailUrl);
+    const initialInvestors = isInitial ? parseInitialInvestors(doc) : [];
+    const roundsInvestors = isInitial ? parseRoundsInvestors(doc) : [];
+    const investors = isInitial ? mergeInvestorData(initialInvestors, roundsInvestors) : [];
+    const bodyText = cleanText(doc.body?.innerText || "");
+    const detailShellFound =
+      doc.querySelectorAll(
+        ".detail_info_head, .base_info, .team_member, .team-member, .investor, .investment"
+      ).length > 0;
+    const detailDataFound =
+      Boolean(basic.logo) ||
+      Object.keys(basic.socialLinks).length > 0 ||
+      basic.teamMembers.length > 0 ||
+      investors.length > 0 ||
+      doc.querySelectorAll(".investment .item, .investment a.card").length > 0;
+
+    return {
+      // 不能只靠 URL slug + bodyText 判定 ready，否则 Next/Vue 还没渲染详情内容时会过早入库空详情。
+      ready: Boolean(basic.projectName) && detailShellFound && detailDataFound,
+      dryRun,
+      ...basic,
+      investors,
+      investedProjects: [],
+      debug: {
+        title: doc.title,
+        bodyText: bodyText.slice(0, 300),
+        detailShellFound,
+        detailDataFound,
+        socialLinkKeys: Object.keys(basic.socialLinks),
+        teamMembers: basic.teamMembers.length,
+        investorItems: doc.querySelectorAll(".investor .item").length,
+        investorRows: doc.querySelectorAll(".investor tr").length,
+        investmentItems: doc.querySelectorAll(".investment .item").length,
+      },
+    };
+  }
+
+  async function crawlDetailPage(frame, item, { isInitial = true } = {}) {
+    const detailUrl = absoluteUrl(item.projectLink);
+    const doc = await loadDetailDocument(frame, detailUrl);
+
+    clickButtonsByText(doc, /expand\s*more/i);
+    await sleep(800);
+
+    if (isInitial) {
+      clickButtonsByText(doc, /rounds/i);
+      await sleep(1000);
+    }
+
+    const details = parseDetailDocument(doc, detailUrl, { isInitial });
+    if (isInitial) {
+      details.investedProjects = await scrapeInvestedProjectsFromDetail(doc, detailUrl);
+    }
+
+    if (!details.ready) {
+      throw Object.assign(new Error("详情页未解析到有效数据"), { details: details.debug });
+    }
+
+    return {
+      source: "tampermonkey",
+      projectName: details.projectName || item.projectName || parseNameFromDetailUrl(detailUrl),
+      projectLink: detailUrl,
+      logo: details.logo || item.logo || "",
+      socialLinks: details.socialLinks,
+      teamMembers: details.teamMembers,
+      investors: details.investors,
+      investedProjects: details.investedProjects,
+      isInitial,
+      pageUrl: location.href,
+      detailUrl,
+      scrapedAt: nowIso(),
+      debug: details.debug,
+    };
+  }
+
   function requestJson({ url, method = "POST", headers = {}, body }) {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -432,6 +798,139 @@
     });
   }
 
+  async function submitDetailData(detail, job) {
+    return requestJson({
+      url: `${CONFIG.API_BASE}${CONFIG.DETAIL_IMPORT_ENDPOINT}`,
+      body: {
+        ...detail,
+        scheduleSlot: job?.slot || null,
+      },
+    });
+  }
+
+  async function submitDetailFailure(item, job, error, { isInitial = true } = {}) {
+    return requestJson({
+      url: `${CONFIG.API_BASE}${CONFIG.DETAIL_FAILURE_ENDPOINT}`,
+      body: {
+        source: "tampermonkey",
+        projectName: item?.projectName || parseNameFromDetailUrl(item?.projectLink || ""),
+        projectLink: item?.projectLink || "",
+        isInitial,
+        scheduleSlot: job?.slot || null,
+        pageUrl: location.href,
+        error: error?.message || String(error || "detail crawl failed"),
+        details: error?.details || null,
+        scrapedAt: nowIso(),
+      },
+    });
+  }
+
+  function buildDetailQueueFromRows(rows) {
+    return uniqueByLink(rows)
+      .filter((item) => /rootdata\.com\/(?:projects|Projects)\/detail\//.test(item.projectLink))
+      .slice(0, CONFIG.detailMaxProjectsPerRun);
+  }
+
+  async function crawlDetailsForRows(rows, job) {
+    if (!CONFIG.detailEnabled) {
+      return { enabled: false, initialSuccess: 0, initialFailed: 0, subSuccess: 0, subFailed: 0 };
+    }
+
+    const frame = ensureDetailFrame();
+    const initialQueue = buildDetailQueueFromRows(rows);
+    const subDetailMap = new Map();
+    const stats = {
+      enabled: true,
+      initialTotal: initialQueue.length,
+      initialSuccess: 0,
+      initialFailed: 0,
+      subTotal: 0,
+      subSuccess: 0,
+      subFailed: 0,
+      errors: [],
+    };
+
+    try {
+      for (let index = 0; index < initialQueue.length; index += 1) {
+        const item = initialQueue[index];
+        renderPanel({
+          ok: true,
+          status: `details:${index + 1}/${initialQueue.length}`,
+          retryCount: job.retryCount || 0,
+          data: rows,
+          detailStats: stats,
+        });
+
+        try {
+          const detail = await crawlDetailPage(frame, item, { isInitial: true });
+          await submitDetailData(detail, job);
+          stats.initialSuccess += 1;
+
+          for (const investor of detail.investors || []) {
+            if (!investor.projectLink || subDetailMap.has(investor.projectLink)) continue;
+            subDetailMap.set(investor.projectLink, {
+              projectName: investor.projectName,
+              projectLink: investor.projectLink,
+            });
+          }
+
+          console.log("[RootData Reader] ✅ detail imported:", {
+            projectName: detail.projectName,
+            investors: detail.investors.length,
+            investedProjects: detail.investedProjects.length,
+          });
+        } catch (error) {
+          stats.initialFailed += 1;
+          stats.errors.push({ projectName: item.projectName, projectLink: item.projectLink, error: error.message });
+          console.error("[RootData Reader] detail failed:", item, error);
+          try {
+            await submitDetailFailure(item, job, error, { isInitial: true });
+          } catch (failureError) {
+            console.error("[RootData Reader] detail failure report failed:", failureError);
+          }
+        }
+
+        await sleep(CONFIG.detailBetweenMs);
+      }
+
+      const subQueue = Array.from(subDetailMap.values()).slice(0, CONFIG.subDetailMaxProjectsPerRun);
+      stats.subTotal = subQueue.length;
+
+      for (let index = 0; index < subQueue.length; index += 1) {
+        const item = subQueue[index];
+        renderPanel({
+          ok: true,
+          status: `sub_details:${index + 1}/${subQueue.length}`,
+          retryCount: job.retryCount || 0,
+          data: rows,
+          detailStats: stats,
+        });
+
+        try {
+          const detail = await crawlDetailPage(frame, item, { isInitial: false });
+          await submitDetailData(detail, job);
+          stats.subSuccess += 1;
+          console.log("[RootData Reader] ✅ sub detail imported:", detail.projectName);
+        } catch (error) {
+          stats.subFailed += 1;
+          stats.errors.push({ projectName: item.projectName, projectLink: item.projectLink, error: error.message });
+          console.error("[RootData Reader] sub detail failed:", item, error);
+          try {
+            await submitDetailFailure(item, job, error, { isInitial: false });
+          } catch (failureError) {
+            console.error("[RootData Reader] sub detail failure report failed:", failureError);
+          }
+        }
+
+        await sleep(CONFIG.detailBetweenMs);
+      }
+
+      return stats;
+    } finally {
+      removeDetailFrame();
+    }
+  }
+
   function createPanel() {
     let panel = document.getElementById(CONFIG.panelId);
     if (panel) return panel;
@@ -485,6 +984,17 @@
       <div style="margin-bottom:8px;color:#cbd5e1;">Retries:
         <strong>${state.retryCount || 0}/${CONFIG.maxRetries}</strong>
       </div>
+      ${
+        state.detailStats
+          ? `<div style="margin-bottom:8px;color:#cbd5e1;">Details:
+              <strong style="color:#86efac;">${state.detailStats.initialSuccess || 0}</strong>/<span>${state.detailStats.initialTotal || 0}</span>
+              initial,
+              <strong style="color:#93c5fd;">${state.detailStats.subSuccess || 0}</strong>/<span>${state.detailStats.subTotal || 0}</span>
+              sub,
+              <span style="color:#fca5a5;">failed ${(state.detailStats.initialFailed || 0) + (state.detailStats.subFailed || 0)}</span>
+            </div>`
+          : ""
+      }
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
         <button id="rd-fr-manual" style="cursor:pointer;border:0;border-radius:8px;padding:6px 10px;background:#2563eb;color:white;">Refresh & Run</button>
         <button id="rd-fr-copy" style="cursor:pointer;border:0;border-radius:8px;padding:6px 10px;background:#475569;color:white;">Copy JSON</button>
@@ -611,7 +1121,16 @@
       try {
         const importResult = await submitData(data, job);
         console.log("[RootData Reader] import result:", importResult);
-        renderPanel({ ok: true, status: "success_imported", retryCount: job.retryCount || 0, data });
+        renderPanel({ ok: true, status: "success_imported_crawling_details", retryCount: job.retryCount || 0, data });
+        const detailStats = await crawlDetailsForRows(data, job);
+        console.log("[RootData Reader] detail crawl result:", detailStats);
+        renderPanel({
+          ok: true,
+          status: "success_imported_with_details",
+          retryCount: job.retryCount || 0,
+          data,
+          detailStats,
+        });
       } catch (submitError) {
         console.error("[RootData Reader] import failed:", submitError);
         await sendAlert({
@@ -717,6 +1236,41 @@
       },
 
       /**
+       * 只跑详情页采集：会用隐藏 iframe 顺序打开第一页项目详情，不会跳走当前列表页。
+       * 控制台调用：await RootDataFundraisingCollector.crawlDetailsNow()
+       */
+      async crawlDetailsNow() {
+        const data = parseFundraisingRows();
+        const job = {
+          id: `manual-console-details-${Date.now()}`,
+          slot: "manual-console-details",
+          reason: "manual_console_details",
+          retryCount: 0,
+          createdAt: nowIso(),
+        };
+        return crawlDetailsForRows(data, job);
+      },
+
+      /**
+       * 诊断单个详情页 iframe 是否能打开、能解析到多少数据。
+       * 控制台调用：await RootDataFundraisingCollector.debugDetail("https://www.rootdata.com/projects/detail/Variational?k=NTc4Mg%3D%3D")
+       */
+      async debugDetail(url) {
+        const frame = ensureDetailFrame();
+        try {
+          const item = {
+            projectName: parseNameFromDetailUrl(url),
+            projectLink: absoluteUrl(url),
+          };
+          const detail = await crawlDetailPage(frame, item, { isInitial: true });
+          console.log("[RootData Reader] detail debug:", detail);
+          return detail;
+        } finally {
+          removeDetailFrame();
+        }
+      },
+
+      /**
        * 测试服务端是否可达，以及当前 CLIENT_TOKEN 是否有效。
        * 控制台调用：await RootDataFundraisingCollector.testConnection()
        */
@@ -750,9 +1304,14 @@
             apiBase: CONFIG.API_BASE,
             alertEndpoint: CONFIG.ALERT_ENDPOINT,
             importEndpoint: CONFIG.IMPORT_ENDPOINT,
+            detailImportEndpoint: CONFIG.DETAIL_IMPORT_ENDPOINT,
+            detailFailureEndpoint: CONFIG.DETAIL_FAILURE_ENDPOINT,
             pingEndpoint: CONFIG.PING_ENDPOINT,
             scheduleBeijingTimes: CONFIG.scheduleBeijingTimes,
             maxRetries: CONFIG.maxRetries,
+            detailEnabled: CONFIG.detailEnabled,
+            detailMaxProjectsPerRun: CONFIG.detailMaxProjectsPerRun,
+            subDetailMaxProjectsPerRun: CONFIG.subDetailMaxProjectsPerRun,
             tokenConfigured:
               Boolean(CONFIG.CLIENT_TOKEN) &&
               CONFIG.CLIENT_TOKEN !== "REPLACE_WITH_LONG_RANDOM_TOKEN",
@@ -770,7 +1329,7 @@
     PAGE_WINDOW.RootDataFundraisingCollector = debugApi;
 
     console.log(
-      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), parse(), testConnection(), sendTestAlert(), status()"
+      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), parse(), crawlDetailsNow(), debugDetail(url), testConnection(), sendTestAlert(), status()"
     );
   }
 
