@@ -197,6 +197,14 @@ class FundraisingCrawler extends BaseCrawler {
         const html = await this.fetchFundraisingPageHtml(url);
         fundraisingData = parseFundraisingListHtml(html);
         console.log(`[fundraising] axios解析第${pageNum}页成功，条数=${fundraisingData.length}`);
+        if (!fundraisingData || fundraisingData.length === 0) {
+          logFundraisingHtmlDiagnostics(html, {
+            source: "axios-empty-result",
+            pageNum,
+            url,
+          });
+          throw new Error("axios返回HTML但解析到0条Fundraising数据");
+        }
       } catch (axiosError) {
         console.warn(`[fundraising] axios解析第${pageNum}页失败，回退Puppeteer: ${axiosError?.message}`);
       }
@@ -274,13 +282,28 @@ class FundraisingCrawler extends BaseCrawler {
           },
         });
         const html = String(response?.data || "");
+        const finalUrl = response?.request?.res?.responseUrl || url;
 
         if (response.status < 200 || response.status >= 300) {
+          logFundraisingHtmlDiagnostics(html, {
+            source: "axios-non-2xx",
+            status: response.status,
+            finalUrl,
+            proxy: maskProxyUrl(proxyUrl),
+          });
           this.assertFundraisingHtmlAvailable(html, `axios status=${response.status}`);
           throw new Error(`RootData fundraising axios status=${response.status}, proxy=${maskProxyUrl(proxyUrl)}`);
         }
 
         this.assertFundraisingHtmlAvailable(html, `axios proxy=${maskProxyUrl(proxyUrl)}`);
+        if (!FUNDRAISING_PROJECT_LINK_PATTERN.test(html)) {
+          logFundraisingHtmlDiagnostics(html, {
+            source: "axios-no-project-link",
+            status: response.status,
+            finalUrl,
+            proxy: maskProxyUrl(proxyUrl),
+          });
+        }
         return html;
       } catch (error) {
         lastError = error;
@@ -2063,6 +2086,39 @@ function parseFundraisingListHtml(html) {
       };
     })
     .filter((item) => item.projectName && item.projectLink);
+}
+
+function logFundraisingHtmlDiagnostics(html, meta = {}) {
+  try {
+    const htmlText = String(html || "");
+    const dom = new JSDOM(htmlText, { url: baseRootDataURL });
+    const { document } = dom.window;
+    const bodyText = document.body?.textContent?.replace(/\s+/g, " ").trim() || "";
+    const links = Array.from(document.querySelectorAll("a[href]"))
+      .slice(0, 30)
+      .map((link) => ({
+        href: link.getAttribute("href"),
+        text: link.textContent?.replace(/\s+/g, " ").trim().slice(0, 80) || "",
+      }));
+    const diagnostics = {
+      ...meta,
+      title: document.title,
+      htmlLength: htmlText.length,
+      bodyText: bodyText.slice(0, 1000),
+      htmlStart: htmlText.slice(0, 1500),
+      tableCount: document.querySelectorAll("table").length,
+      rowCount: document.querySelectorAll("table tbody tr").length,
+      projectLinkLowerCount: document.querySelectorAll('a[href*="/projects/detail/"]').length,
+      projectLinkUpperCount: document.querySelectorAll('a[href*="/Projects/detail/"]').length,
+      nextDataScriptCount: document.querySelectorAll('script[src*="_next"], script[id="__NEXT_DATA__"]').length,
+      hasWafText: /WAF Block Page|Your request has been interrupted|web application firewall/i.test(htmlText),
+      hasLoginText: /log in|sign in|登录|登入/i.test(bodyText),
+      sampleLinks: links,
+    };
+    console.warn(`[fundraising] html diagnostics: ${JSON.stringify(diagnostics)}`);
+  } catch (error) {
+    console.warn(`[fundraising] html diagnostics failed: ${error?.message}`);
+  }
 }
 
 function getFundraisingProxyUrls() {
