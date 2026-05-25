@@ -2,6 +2,7 @@ const express = require("express");
 const { Op, literal } = require("sequelize");
 const axios = require("axios");
 const { adminAuth } = require("../../admin/middleware/adminAuth");
+const { authenticateTokenOptional } = require("../middleware/auth");
 const router = express.Router();
 
 // 爬虫队列服务（双重验证机制）
@@ -1302,7 +1303,7 @@ async function batchUpdateProjectLogos(avatarMap, Fundraising) {
  * GET /api/rootdata/search
  * 根据 Twitter 用户名搜索项目信息
  */
-router.get("/search", async (req, res) => {
+router.get("/search", authenticateTokenOptional, async (req, res) => {
   try {
     // 1. 参数验证和清理
     let { keyword } = req.query;
@@ -1314,8 +1315,10 @@ router.get("/search", async (req, res) => {
         message: "No keyword provided or keyword too short",
       });
     }
-    const username = String(req.headers["x-user-id"]).toLocaleLowerCase() || String(req?.user?.username)
-    if(username !== 'luykinai') {
+    const username = String(req.get("x-user-id") || req?.user?.username || "")
+      .trim()
+      .toLowerCase();
+    if (username !== "luykinai") {
       // TODO 修复后恢复
       return res.json({
         invested: null,
