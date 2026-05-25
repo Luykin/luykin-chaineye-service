@@ -7,7 +7,7 @@ const { sendEmail } = require("../services/emailService");
 const router = express.Router();
 
 const MAX_IMPORT_ROWS = parseInt(
-  process.env.ROOTDATA_TAMPERMONKEY_MAX_IMPORT_ROWS || "100",
+  process.env.COLLECTOR_MAX_IMPORT_ROWS || "100",
   10
 );
 
@@ -18,21 +18,21 @@ function safeEqual(leftValue, rightValue) {
 }
 
 function requireClientToken(req, res, next) {
-  const configuredToken = process.env.ROOTDATA_TAMPERMONKEY_TOKEN;
+  const configuredToken = process.env.COLLECTOR_CLIENT_TOKEN;
   if (!configuredToken) {
     return res.status(503).json({
       success: false,
-      error: "ROOTDATA_TAMPERMONKEY_TOKEN_NOT_CONFIGURED",
-      message: "RootData Tampermonkey token 未配置",
+      error: "COLLECTOR_CLIENT_TOKEN_NOT_CONFIGURED",
+      message: "采集客户端 token 未配置",
     });
   }
 
-  const requestToken = req.get("x-rootdata-client-token");
+  const requestToken = req.get("x-collector-client-token");
   if (!safeEqual(requestToken, configuredToken)) {
     return res.status(401).json({
       success: false,
       error: "UNAUTHORIZED",
-      message: "RootData Tampermonkey token 不正确",
+      message: "采集客户端 token 不正确",
     });
   }
 
@@ -162,7 +162,7 @@ function truncateJson(value, maxLength = 6000) {
 }
 
 async function getAlertRecipients() {
-  const envEmails = String(process.env.ROOTDATA_TAMPERMONKEY_ALERT_EMAILS || "")
+  const envEmails = String(process.env.COLLECTOR_ALERT_EMAILS || "")
     .split(",")
     .map((email) => email.trim())
     .filter(Boolean);

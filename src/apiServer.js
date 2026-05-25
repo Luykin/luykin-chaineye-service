@@ -310,7 +310,7 @@ async function initializeAndStartServer() {
       "x-extension-version",
       "x-user-id",
       "x-window-location-href",
-      "x-rootdata-client-token",
+      "x-collector-client-token",
       "x-admin",
       "admin",
       "Admin"

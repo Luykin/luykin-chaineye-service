@@ -549,7 +549,7 @@ Tampermonkey 需要在页面内检测以下异常：
         url,
         headers: {
           "Content-Type": "application/json",
-          "x-rootdata-client-token": CONFIG.CLIENT_TOKEN,
+          "x-collector-client-token": CONFIG.CLIENT_TOKEN,
           ...headers,
         },
         data: body ? JSON.stringify(body) : undefined,
@@ -909,7 +909,7 @@ POST /api/internal/rootdata/fundraising/alert
 
 ```txt
 Content-Type: application/json
-x-rootdata-client-token: <token>
+x-collector-client-token: <token>
 ```
 
 请求体：
@@ -940,7 +940,7 @@ x-rootdata-client-token: <token>
 
 服务端处理：
 
-1. 校验 `x-rootdata-client-token`。
+1. 校验 `x-collector-client-token`。
 2. 写日志。
 3. 发 Telegram / 管理后台通知。
 4. 返回 `{ success: true }`。
@@ -955,7 +955,7 @@ POST /api/internal/rootdata/fundraising/import
 
 ```txt
 Content-Type: application/json
-x-rootdata-client-token: <token>
+x-collector-client-token: <token>
 ```
 
 请求体：
@@ -989,13 +989,13 @@ x-rootdata-client-token: <token>
 Tampermonkey 不应持有管理员 JWT。建议独立 token：
 
 ```txt
-ROOTDATA_TAMPERMONKEY_TOKEN=<long-random-secret>
+COLLECTOR_CLIENT_TOKEN=<long-random-secret>
 ```
 
 ### 11.2 Header 校验
 
 ```txt
-x-rootdata-client-token
+x-collector-client-token
 ```
 
 ### 11.3 可选增强

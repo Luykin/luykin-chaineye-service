@@ -290,7 +290,7 @@
         url,
         headers: {
           "Content-Type": "application/json",
-          "x-rootdata-client-token": CONFIG.CLIENT_TOKEN,
+          "x-collector-client-token": CONFIG.CLIENT_TOKEN,
           ...headers,
         },
         data: body ? JSON.stringify(body) : undefined,
