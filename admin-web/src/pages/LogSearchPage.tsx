@@ -56,20 +56,35 @@ export function LogSearchPage() {
   const [queryText, setQueryText] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [logScope, setLogScope] = useState("all");
+  const [submittedLogScope, setSubmittedLogScope] = useState("all");
   const [contextLines, setContextLines] = useState(3);
+  const [submittedContextLines, setSubmittedContextLines] = useState(3);
   const [resultLimit, setResultLimit] = useState(5);
+  const [submittedResultLimit, setSubmittedResultLimit] = useState(5);
+  const [searchNonce, setSearchNonce] = useState(0);
   const [errorLogLines, setErrorLogLines] = useState(1000);
 
+  const submitSearch = () => {
+    const keyword = queryText.trim();
+    if (!keyword) return;
+    setSubmittedQuery(keyword);
+    setSubmittedLogScope(logScope);
+    setSubmittedContextLines(contextLines);
+    setSubmittedResultLimit(resultLimit);
+    setSearchNonce((value) => value + 1);
+  };
+
   const searchQuery = useQuery({
-    queryKey: ["log-search", submittedQuery, logScope, contextLines, resultLimit],
+    queryKey: ["log-search", submittedQuery, submittedLogScope, submittedContextLines, submittedResultLimit, searchNonce],
     queryFn: () =>
       fetchLogSearch({
         query: submittedQuery,
-        scope: logScope,
-        contextLines,
-        limit: resultLimit,
+        scope: submittedLogScope,
+        contextLines: submittedContextLines,
+        limit: submittedResultLimit,
       }),
     enabled: Boolean(submittedQuery.trim()),
+    refetchOnWindowFocus: false,
     retry: false,
   });
 
@@ -81,7 +96,7 @@ export function LogSearchPage() {
 
   const results = searchQuery.data?.data.results || [];
   const selectedScopeLabel =
-    LOG_SEARCH_SCOPE_OPTIONS.find((item) => item.value === logScope)?.label || "全部服务";
+    LOG_SEARCH_SCOPE_OPTIONS.find((item) => item.value === submittedLogScope)?.label || "全部服务";
 
   return (
     <PermissionGuard permission="log-search:read">
@@ -109,9 +124,7 @@ export function LogSearchPage() {
                         onChange={(event) => setQueryText(event.target.value)}
                         placeholder="输入搜索关键词..."
                         style={{ minWidth: 260, flex: 1 }}
-                        onPressEnter={() => {
-                          if (queryText.trim()) setSubmittedQuery(queryText.trim());
-                        }}
+                        onPressEnter={submitSearch}
                       />
                       <Select
                         value={contextLines}
@@ -133,9 +146,7 @@ export function LogSearchPage() {
                       />
                       <Button
                         type="primary"
-                        onClick={() => {
-                          if (queryText.trim()) setSubmittedQuery(queryText.trim());
-                        }}
+                        onClick={submitSearch}
                         loading={searchQuery.isFetching}
                       >
                         搜索

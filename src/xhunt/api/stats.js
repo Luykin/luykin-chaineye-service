@@ -123,8 +123,13 @@ function normalizeLogSearchScope(value) {
   return LOG_SEARCH_SCOPES.some((item) => item.key === scope) ? scope : "all";
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function isPm2AppLogFile(fileName, appName) {
-  return fileName === `${appName}.log` || fileName.startsWith(`${appName}-`);
+  const escapedAppName = escapeRegExp(appName);
+  return new RegExp(`^(?:dev-|prod-|production-)?${escapedAppName}(?:-|\\.log$)`).test(fileName);
 }
 
 function filterLogFilesByScope(logFiles, scope) {
@@ -237,9 +242,9 @@ const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
 /**
  * 高效搜索日志文件 - 优化版本
  */
-async function searchLogFile(filePath, query, contextLines, limit) {
+async function searchLogFile(filePath, query, contextLines, limit, cacheVersion = "") {
   // 检查缓存
-  const cacheKey = `${filePath}-${query}-${contextLines}`;
+  const cacheKey = `${filePath}-${query}-${contextLines}-${cacheVersion}`;
   const cached = fileCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.results.slice(0, limit);
@@ -770,7 +775,8 @@ router.get(
             file.path,
             query,
             contextLinesNum,
-            limitNum - totalMatches
+            limitNum - totalMatches,
+            `${file.mtime}-${file.size}`
           );
 
           const formattedResults = fileResults.map((result) => ({
