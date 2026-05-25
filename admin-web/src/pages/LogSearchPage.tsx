@@ -5,6 +5,7 @@ import {
   Card,
   Empty,
   Input,
+  InputNumber,
   List,
   Select,
   Space,
@@ -27,6 +28,11 @@ const LOG_SEARCH_SCOPE_OPTIONS = [
   { label: "Jobs · luykin-chaineye-jobs", value: "jobs" },
   { label: "币安广场爬虫", value: "binance-square-crawler" },
   { label: "其他日志", value: "other" },
+];
+const LOG_CONTEXT_MODE_OPTIONS = [
+  { label: "前后", value: "around" },
+  { label: "仅后", value: "after" },
+  { label: "仅前", value: "before" },
 ];
 
 function highlightText(text: string, keyword: string) {
@@ -57,29 +63,51 @@ export function LogSearchPage() {
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [logScope, setLogScope] = useState("all");
   const [submittedLogScope, setSubmittedLogScope] = useState("all");
+  const [contextMode, setContextMode] = useState("around");
+  const [submittedContextMode, setSubmittedContextMode] = useState("around");
   const [contextLines, setContextLines] = useState(3);
   const [submittedContextLines, setSubmittedContextLines] = useState(3);
   const [resultLimit, setResultLimit] = useState(5);
   const [submittedResultLimit, setSubmittedResultLimit] = useState(5);
   const [searchNonce, setSearchNonce] = useState(0);
+  const [errorLogScope, setErrorLogScope] = useState("all");
+  const [submittedErrorLogScope, setSubmittedErrorLogScope] = useState("all");
   const [errorLogLines, setErrorLogLines] = useState(1000);
+  const [submittedErrorLogLines, setSubmittedErrorLogLines] = useState(1000);
+  const [errorLogNonce, setErrorLogNonce] = useState(0);
 
   const submitSearch = () => {
     const keyword = queryText.trim();
     if (!keyword) return;
     setSubmittedQuery(keyword);
     setSubmittedLogScope(logScope);
+    setSubmittedContextMode(contextMode);
     setSubmittedContextLines(contextLines);
     setSubmittedResultLimit(resultLimit);
     setSearchNonce((value) => value + 1);
   };
 
+  const submitErrorLogs = () => {
+    setSubmittedErrorLogScope(errorLogScope);
+    setSubmittedErrorLogLines(errorLogLines);
+    setErrorLogNonce((value) => value + 1);
+  };
+
   const searchQuery = useQuery({
-    queryKey: ["log-search", submittedQuery, submittedLogScope, submittedContextLines, submittedResultLimit, searchNonce],
+    queryKey: [
+      "log-search",
+      submittedQuery,
+      submittedLogScope,
+      submittedContextMode,
+      submittedContextLines,
+      submittedResultLimit,
+      searchNonce,
+    ],
     queryFn: () =>
       fetchLogSearch({
         query: submittedQuery,
         scope: submittedLogScope,
+        contextMode: submittedContextMode,
         contextLines: submittedContextLines,
         limit: submittedResultLimit,
       }),
@@ -89,14 +117,23 @@ export function LogSearchPage() {
   });
 
   const errorLogsQuery = useQuery({
-    queryKey: ["error-logs", errorLogLines],
-    queryFn: () => fetchErrorLogs({ lines: errorLogLines }),
+    queryKey: ["error-logs", submittedErrorLogScope, submittedErrorLogLines, errorLogNonce],
+    queryFn: () => fetchErrorLogs({ scope: submittedErrorLogScope, lines: submittedErrorLogLines }),
     enabled: canReadErrorLogs,
+    refetchOnWindowFocus: false,
   });
 
   const results = searchQuery.data?.data.results || [];
   const selectedScopeLabel =
     LOG_SEARCH_SCOPE_OPTIONS.find((item) => item.value === submittedLogScope)?.label || "全部服务";
+  const selectedErrorLogScopeLabel =
+    LOG_SEARCH_SCOPE_OPTIONS.find((item) => item.value === submittedErrorLogScope)?.label || "全部服务";
+  const submittedContextSummary =
+    submittedContextMode === "after"
+      ? `命中行后 ${submittedContextLines} 行`
+      : submittedContextMode === "before"
+        ? `命中行前 ${submittedContextLines} 行`
+        : `命中行前后各 ${submittedContextLines} 行`;
 
   return (
     <PermissionGuard permission="log-search:read">
@@ -127,19 +164,24 @@ export function LogSearchPage() {
                         onPressEnter={submitSearch}
                       />
                       <Select
+                        value={contextMode}
+                        onChange={setContextMode}
+                        style={{ width: 96 }}
+                        options={LOG_CONTEXT_MODE_OPTIONS}
+                      />
+                      <InputNumber
                         value={contextLines}
-                        onChange={setContextLines}
-                        style={{ width: 120 }}
-                        options={[1, 3, 5, 10, 20].map((value) => ({
-                          label: `${value} 行上下文`,
-                          value,
-                        }))}
+                        onChange={(value) => setContextLines(Math.max(0, Math.floor(Number(value) || 0)))}
+                        min={0}
+                        precision={0}
+                        addonAfter="行"
+                        style={{ width: 130 }}
                       />
                       <Select
                         value={resultLimit}
                         onChange={setResultLimit}
                         style={{ width: 120 }}
-                        options={[5, 10, 50, 100, 200].map((value) => ({
+                        options={[1, 5, 10, 50, 100, 200].map((value) => ({
                           label: `${value} 条`,
                           value,
                         }))}
@@ -166,6 +208,9 @@ export function LogSearchPage() {
                           styles={{ body: { padding: 16 } }}
                           title={`${selectedScopeLabel}：共 ${searchQuery.data.data.totalMatches} 个匹配，搜索了 ${searchQuery.data.data.searchedFiles} 个文件`}
                         >
+                          <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+                            当前展示模式：{submittedContextSummary}
+                          </Typography.Text>
                           <Space wrap className="log-search-file-tags">
                             {searchQuery.data.data.fileSizes.map((file) => (
                               <Tag key={file.name}>
@@ -243,6 +288,12 @@ export function LogSearchPage() {
                         <Card styles={{ body: { padding: 16 } }}>
                           <Space wrap>
                             <Select
+                              value={errorLogScope}
+                              onChange={setErrorLogScope}
+                              style={{ width: 220 }}
+                              options={LOG_SEARCH_SCOPE_OPTIONS}
+                            />
+                            <Select
                               value={errorLogLines}
                               onChange={setErrorLogLines}
                               style={{ width: 140 }}
@@ -251,7 +302,7 @@ export function LogSearchPage() {
                                 value,
                               }))}
                             />
-                            <Button onClick={() => errorLogsQuery.refetch()} loading={errorLogsQuery.isFetching}>
+                            <Button onClick={submitErrorLogs} loading={errorLogsQuery.isFetching}>
                               刷新日志
                             </Button>
                           </Space>
@@ -263,7 +314,7 @@ export function LogSearchPage() {
 
                         {errorLogsQuery.data?.data.logs?.length ? (
                           <Card
-                            title={`共 ${errorLogsQuery.data.data.totalLines} 行，来自 ${errorLogsQuery.data.data.files.length} 个文件`}
+                            title={`${selectedErrorLogScopeLabel}：共 ${errorLogsQuery.data.data.totalLines} 行，来自 ${errorLogsQuery.data.data.files.length} 个文件`}
                             extra={
                               <Space wrap>
                                 {errorLogsQuery.data.data.files.map((file) => (

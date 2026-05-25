@@ -134,6 +134,8 @@ export interface LogSearchResponse {
   data: {
     query: string;
     scope?: string;
+    contextMode?: string;
+    contextLines?: number;
     availableScopes?: Array<{
       key: string;
       label: string;
@@ -152,6 +154,11 @@ export interface LogSearchResponse {
 export interface ErrorLogsResponse {
   success: boolean;
   data: {
+    scope?: string;
+    availableScopes?: Array<{
+      key: string;
+      label: string;
+    }>;
     logs: string[];
     totalLines: number;
     files: Array<{

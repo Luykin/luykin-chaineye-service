@@ -65,20 +65,23 @@ export async function fetchNotes(params?: {
 export async function fetchLogSearch(params: {
   query: string;
   scope?: string;
+  contextMode?: string;
   contextLines?: number;
   limit?: number;
 }) {
   const search = new URLSearchParams();
   search.set("query", params.query);
   search.set("scope", params.scope || "all");
-  search.set("contextLines", String(params.contextLines || 3));
-  search.set("limit", String(params.limit || 5));
+  search.set("contextMode", params.contextMode || "around");
+  search.set("contextLines", String(params.contextLines ?? 3));
+  search.set("limit", String(params.limit ?? 5));
 
   return apiRequest<LogSearchResponse>(`/api/xhunt/stats/log-search?${search.toString()}`);
 }
 
-export async function fetchErrorLogs(params?: { lines?: number }) {
+export async function fetchErrorLogs(params?: { scope?: string; lines?: number }) {
   const query = new URLSearchParams();
+  query.set("scope", params?.scope || "all");
   query.set("lines", String(params?.lines || 1000));
   return apiRequest<ErrorLogsResponse>(`/api/xhunt/stats/error-logs?${query.toString()}`);
 }

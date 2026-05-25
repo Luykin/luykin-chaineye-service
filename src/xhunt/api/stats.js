@@ -238,13 +238,39 @@ async function nacosRequest(method, path, { params, data, headers } = {}) {
 // 文件缓存，避免重复读取
 const fileCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
+const DEFAULT_LOG_SEARCH_MAX_CONTEXT_LINES = 5000;
+
+function normalizeLogContextMode(value) {
+  const mode = String(value || "around").trim();
+  return ["around", "after", "before"].includes(mode) ? mode : "around";
+}
+
+function normalizeLogContextLines(value) {
+  const parsed = parseInt(value, 10);
+  const maxContextLines = parseInt(
+    process.env.LOG_SEARCH_MAX_CONTEXT_LINES || String(DEFAULT_LOG_SEARCH_MAX_CONTEXT_LINES),
+    10
+  );
+  const safeMax = Number.isFinite(maxContextLines) && maxContextLines > 0
+    ? maxContextLines
+    : DEFAULT_LOG_SEARCH_MAX_CONTEXT_LINES;
+
+  if (!Number.isFinite(parsed) || parsed < 0) return 3;
+  return Math.min(parsed, safeMax);
+}
+
+function normalizeLogSearchLimit(value) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 5;
+  return Math.min(parsed, 200);
+}
 
 /**
  * 高效搜索日志文件 - 优化版本
  */
-async function searchLogFile(filePath, query, contextLines, limit, cacheVersion = "") {
+async function searchLogFile(filePath, query, contextLines, limit, cacheVersion = "", contextMode = "around") {
   // 检查缓存
-  const cacheKey = `${filePath}-${query}-${contextLines}-${cacheVersion}`;
+  const cacheKey = `${filePath}-${query}-${contextLines}-${contextMode}-${cacheVersion}`;
   const cached = fileCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.results.slice(0, limit);
@@ -265,8 +291,8 @@ async function searchLogFile(filePath, query, contextLines, limit, cacheVersion 
       const line = lines[i];
       if (line.toLowerCase().includes(query.toLowerCase())) {
         // 获取上下文行
-        const startLine = Math.max(0, i - contextLines);
-        const endLine = Math.min(lines.length - 1, i + contextLines);
+        const startLine = contextMode === "after" ? i : Math.max(0, i - contextLines);
+        const endLine = contextMode === "before" ? i : Math.min(lines.length - 1, i + contextLines);
 
         const context = [];
         for (let j = startLine; j <= endLine; j++) {
@@ -700,8 +726,9 @@ router.get(
     try {
       console.log(`[日志搜索] ✅ 权限验证通过: 用户=${req.user.username}`);
 
-      const { query, contextLines = 3, limit = 5 } = req.query;
+      const { query } = req.query;
       const scope = normalizeLogSearchScope(req.query.scope);
+      const contextMode = normalizeLogContextMode(req.query.contextMode);
 
       if (!query || query.trim().length === 0) {
         return res.status(400).json({
@@ -762,8 +789,8 @@ router.get(
       logFiles.sort((a, b) => b.mtime - a.mtime);
 
       const results = [];
-      const contextLinesNum = parseInt(contextLines);
-      const limitNum = parseInt(limit);
+      const contextLinesNum = normalizeLogContextLines(req.query.contextLines);
+      const limitNum = normalizeLogSearchLimit(req.query.limit);
       let totalMatches = 0;
 
       // 串行搜索日志文件（安全稳定）
@@ -776,7 +803,8 @@ router.get(
             query,
             contextLinesNum,
             limitNum - totalMatches,
-            `${file.mtime}-${file.size}`
+            `${file.mtime}-${file.size}`,
+            contextMode
           );
 
           const formattedResults = fileResults.map((result) => ({
@@ -798,6 +826,8 @@ router.get(
         data: {
           query: query,
           scope,
+          contextMode,
+          contextLines: contextLinesNum,
           availableScopes: LOG_SEARCH_SCOPES,
           totalMatches: totalMatches,
           results: results,
@@ -821,7 +851,7 @@ router.get(
 
 /**
  * GET /error-logs
- * 获取最新API错误日志（需要认证）
+ * 获取最新PM2错误日志（需要认证），支持 ?scope=api/crawler/bot/jobs/binance-square-crawler/other/all
  */
 router.get(
   "/error-logs",
@@ -831,6 +861,7 @@ router.get(
     try {
       const { lines = 1000 } = req.query;
       const linesNum = parseInt(lines);
+      const scope = normalizeLogSearchScope(req.query.scope);
 
       // 获取 PM2 日志目录
       const homeDir = os.homedir();
@@ -846,13 +877,13 @@ router.get(
         });
       }
 
-      // 获取所有API错误日志文件
+      // 获取所有 PM2 错误日志文件
       const files = await fs.readdir(pm2LogsDir);
       const errorLogFiles = [];
 
-      // 过滤API错误日志文件
+      // 过滤错误日志文件，再按服务范围过滤
       for (const file of files) {
-        if (file.endsWith(".log") && file.includes("api-error")) {
+        if (file.endsWith(".log") && file.includes("-error")) {
           const filePath = path.join(pm2LogsDir, file);
 
           try {
@@ -876,15 +907,16 @@ router.get(
           }
         }
       }
+      const scopedErrorLogFiles = filterLogFilesByScope(errorLogFiles, scope);
 
       // 按修改时间排序（最新的在前）
-      errorLogFiles.sort((a, b) => b.mtime - a.mtime);
+      scopedErrorLogFiles.sort((a, b) => b.mtime - a.mtime);
 
       const allLogs = [];
       let totalLines = 0;
 
       // 读取每个错误日志文件的最新内容
-      for (const file of errorLogFiles) {
+      for (const file of scopedErrorLogFiles) {
         if (totalLines >= linesNum) break;
 
         try {
@@ -917,8 +949,10 @@ router.get(
         success: true,
         data: {
           logs: allLogs,
+          scope,
+          availableScopes: LOG_SEARCH_SCOPES,
           totalLines: allLogs.length,
-          files: errorLogFiles.map((f) => ({
+          files: scopedErrorLogFiles.map((f) => ({
             name: f.name,
             size: f.size,
           })),
