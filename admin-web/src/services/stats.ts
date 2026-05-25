@@ -64,11 +64,13 @@ export async function fetchNotes(params?: {
 
 export async function fetchLogSearch(params: {
   query: string;
+  scope?: string;
   contextLines?: number;
   limit?: number;
 }) {
   const search = new URLSearchParams();
   search.set("query", params.query);
+  search.set("scope", params.scope || "all");
   search.set("contextLines", String(params.contextLines || 3));
   search.set("limit", String(params.limit || 5));
 

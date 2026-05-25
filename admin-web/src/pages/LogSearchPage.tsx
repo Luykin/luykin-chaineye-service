@@ -19,6 +19,16 @@ import { fetchErrorLogs, fetchLogSearch } from "@/services/stats";
 import type { LogSearchResultItem } from "@/types/stats";
 import { useAuth } from "@/app/auth";
 
+const LOG_SEARCH_SCOPE_OPTIONS = [
+  { label: "全部服务", value: "all" },
+  { label: "API · luykin-chaineye-api", value: "api" },
+  { label: "爬虫 · luykin-chaineye-crawler", value: "crawler" },
+  { label: "Bot · luykin-chaineye-bot", value: "bot" },
+  { label: "Jobs · luykin-chaineye-jobs", value: "jobs" },
+  { label: "币安广场爬虫", value: "binance-square-crawler" },
+  { label: "其他日志", value: "other" },
+];
+
 function highlightText(text: string, keyword: string) {
   if (!keyword) return text;
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -45,15 +55,17 @@ export function LogSearchPage() {
 
   const [queryText, setQueryText] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
+  const [logScope, setLogScope] = useState("all");
   const [contextLines, setContextLines] = useState(3);
   const [resultLimit, setResultLimit] = useState(5);
   const [errorLogLines, setErrorLogLines] = useState(1000);
 
   const searchQuery = useQuery({
-    queryKey: ["log-search", submittedQuery, contextLines, resultLimit],
+    queryKey: ["log-search", submittedQuery, logScope, contextLines, resultLimit],
     queryFn: () =>
       fetchLogSearch({
         query: submittedQuery,
+        scope: logScope,
         contextLines,
         limit: resultLimit,
       }),
@@ -68,6 +80,8 @@ export function LogSearchPage() {
   });
 
   const results = searchQuery.data?.data.results || [];
+  const selectedScopeLabel =
+    LOG_SEARCH_SCOPE_OPTIONS.find((item) => item.value === logScope)?.label || "全部服务";
 
   return (
     <PermissionGuard permission="log-search:read">
@@ -84,6 +98,12 @@ export function LogSearchPage() {
                 <Space direction="vertical" size={16} style={{ width: "100%" }}>
                   <Card styles={{ body: { padding: 16 } }}>
                     <Space wrap style={{ width: "100%" }}>
+                      <Select
+                        value={logScope}
+                        onChange={setLogScope}
+                        style={{ width: 220 }}
+                        options={LOG_SEARCH_SCOPE_OPTIONS}
+                      />
                       <Input
                         value={queryText}
                         onChange={(event) => setQueryText(event.target.value)}
@@ -133,7 +153,7 @@ export function LogSearchPage() {
                         <Card
                           size="small"
                           styles={{ body: { padding: 16 } }}
-                          title={`共 ${searchQuery.data.data.totalMatches} 个匹配，搜索了 ${searchQuery.data.data.searchedFiles} 个文件`}
+                          title={`${selectedScopeLabel}：共 ${searchQuery.data.data.totalMatches} 个匹配，搜索了 ${searchQuery.data.data.searchedFiles} 个文件`}
                         >
                           <Space wrap className="log-search-file-tags">
                             {searchQuery.data.data.fileSizes.map((file) => (

@@ -82,6 +82,68 @@ const ADMIN_WEB_DIST_DIR = process.env.ADMIN_WEB_DIST_DIR
   : path.join(PROJECT_ROOT, "admin-web", "public", "static", "admin-web");
 const ADMIN_WEB_INDEX_PATH = path.join(ADMIN_WEB_DIST_DIR, "index.html");
 
+const LOG_SEARCH_APP_SCOPES = [
+  {
+    key: "api",
+    label: "luykin-chaineye-api",
+    appNames: ["luykin-chaineye-api"],
+  },
+  {
+    key: "crawler",
+    label: "luykin-chaineye-crawler",
+    appNames: ["luykin-chaineye-crawler"],
+  },
+  {
+    key: "bot",
+    label: "luykin-chaineye-bot",
+    appNames: ["luykin-chaineye-bot"],
+  },
+  {
+    key: "jobs",
+    label: "luykin-chaineye-jobs",
+    appNames: ["luykin-chaineye-jobs"],
+  },
+  {
+    key: "binance-square-crawler",
+    label: "luykin-chaineye-binance-square-crawler",
+    appNames: ["luykin-chaineye-binance-square-crawler"],
+  },
+];
+
+const LOG_SEARCH_SCOPES = [
+  { key: "all", label: "全部服务" },
+  ...LOG_SEARCH_APP_SCOPES.map(({ key, label }) => ({ key, label })),
+  { key: "other", label: "其他日志" },
+];
+
+const LOG_SEARCH_KNOWN_APP_NAMES = LOG_SEARCH_APP_SCOPES.flatMap((scope) => scope.appNames);
+
+function normalizeLogSearchScope(value) {
+  const scope = String(value || "all").trim();
+  return LOG_SEARCH_SCOPES.some((item) => item.key === scope) ? scope : "all";
+}
+
+function isPm2AppLogFile(fileName, appName) {
+  return fileName === `${appName}.log` || fileName.startsWith(`${appName}-`);
+}
+
+function filterLogFilesByScope(logFiles, scope) {
+  if (scope === "all") return logFiles;
+
+  if (scope === "other") {
+    return logFiles.filter(
+      (file) => !LOG_SEARCH_KNOWN_APP_NAMES.some((appName) => isPm2AppLogFile(file.name, appName))
+    );
+  }
+
+  const scopeConfig = LOG_SEARCH_APP_SCOPES.find((item) => item.key === scope);
+  if (!scopeConfig) return logFiles;
+
+  return logFiles.filter((file) =>
+    scopeConfig.appNames.some((appName) => isPm2AppLogFile(file.name, appName))
+  );
+}
+
 // -------------------- Nacos Config Admin (with auth) --------------------
 const NACOS_BASE_URL = process.env.NACOS_BASE_URL || "http://127.0.0.1:8848";
 const NACOS_USERNAME = process.env.NACOS_USERNAME || "nacos";
@@ -634,6 +696,7 @@ router.get(
       console.log(`[日志搜索] ✅ 权限验证通过: 用户=${req.user.username}`);
 
       const { query, contextLines = 3, limit = 5 } = req.query;
+      const scope = normalizeLogSearchScope(req.query.scope);
 
       if (!query || query.trim().length === 0) {
         return res.status(400).json({
@@ -687,7 +750,8 @@ router.get(
         });
 
       const fileResults = await Promise.all(fileCheckPromises);
-      logFiles.push(...fileResults.filter((file) => file !== null));
+      const allLogFiles = fileResults.filter((file) => file !== null);
+      logFiles.push(...filterLogFilesByScope(allLogFiles, scope));
 
       // 按修改时间排序（最新的在前）
       logFiles.sort((a, b) => b.mtime - a.mtime);
@@ -727,10 +791,12 @@ router.get(
         success: true,
         data: {
           query: query,
+          scope,
+          availableScopes: LOG_SEARCH_SCOPES,
           totalMatches: totalMatches,
           results: results,
           searchedFiles: logFiles.length,
-          totalFiles: logFiles.length,
+          totalFiles: allLogFiles.length,
           fileSizes: logFiles.map((f) => ({
             name: f.name,
             size: f.size,

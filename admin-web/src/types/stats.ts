@@ -133,6 +133,11 @@ export interface LogSearchResponse {
   success: boolean;
   data: {
     query: string;
+    scope?: string;
+    availableScopes?: Array<{
+      key: string;
+      label: string;
+    }>;
     totalMatches: number;
     results: LogSearchResultItem[];
     searchedFiles: number;
