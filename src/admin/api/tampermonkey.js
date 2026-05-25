@@ -2,6 +2,8 @@ const express = require("express");
 const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
+const { Op } = require("sequelize");
+const { Fundraising } = require("../../models/postgres-fundraising");
 const { CollectorClientToken } = require("../../models/postgres-start");
 const { requirePermission } = require("../middleware/adminAuth");
 const { recordGenericStat } = require("../../xhunt/services/generic-stats-service");
@@ -43,6 +45,69 @@ function formatToken(row) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     expired: row.expiresAt ? new Date(row.expiresAt).getTime() <= Date.now() : false,
+  };
+}
+
+function cleanText(value, maxLength = 500) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function normalizeRootDataUrl(value) {
+  if (!value) return "";
+  try {
+    return new URL(value, "https://www.rootdata.com").toString();
+  } catch (_) {
+    return String(value || "");
+  }
+}
+
+function serializeProject(project) {
+  if (!project) return null;
+  const row = typeof project.toJSON === "function" ? project.toJSON() : project;
+  return {
+    id: row.id,
+    projectName: row.projectName,
+    projectLink: row.projectLink,
+    logo: row.logo,
+    round: row.round,
+    amount: row.amount,
+    formattedAmount: row.formattedAmount,
+    valuation: row.valuation,
+    formattedValuation: row.formattedValuation,
+    date: row.date,
+    fundedAt: row.fundedAt,
+    isInitial: row.isInitial,
+    socialLinks: row.socialLinks,
+    twitterUrl: row.twitterUrl,
+    teamMembers: row.teamMembers,
+    originalPageNumber: row.originalPageNumber,
+    detailFetchedAt: row.detailFetchedAt,
+    detailFailuresNumber: row.detailFailuresNumber,
+    updateProgram: row.updateProgram,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function serializeRelationship(relationship) {
+  const row = typeof relationship.toJSON === "function" ? relationship.toJSON() : relationship;
+  return {
+    id: row.id,
+    investorProjectId: row.investorProjectId,
+    fundedProjectId: row.fundedProjectId,
+    round: row.round,
+    lead: row.lead,
+    amount: row.amount,
+    formattedAmount: row.formattedAmount,
+    valuation: row.valuation,
+    formattedValuation: row.formattedValuation,
+    date: row.date,
+    updateProgram: row.updateProgram,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    investorProject: serializeProject(row.investorProject),
+    fundedProject: serializeProject(row.fundedProject),
   };
 }
 
@@ -139,6 +204,113 @@ router.patch("/tokens/:id/revoke", async (req, res) => {
   } catch (error) {
     console.error("[tampermonkey-admin] token 撤销失败:", error);
     res.status(500).json({ success: false, error: "撤销 token 失败" });
+  }
+});
+
+router.get("/rootdata/lookup", async (req, res) => {
+  try {
+    const query = cleanText(req.query.q, 300);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || "10", 10) || 10, 1), 20);
+
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        error: "请输入项目名、RootData 详情链接或数据库 ID",
+      });
+    }
+
+    const normalizedUrl = normalizeRootDataUrl(query);
+    const whereItems = [
+      { projectName: { [Op.iLike]: `%${query}%` } },
+      { projectLink: { [Op.iLike]: `%${query}%` } },
+    ];
+
+    if (/^https?:\/\//i.test(normalizedUrl)) {
+      whereItems.unshift({ projectLink: normalizedUrl });
+    }
+
+    if (/^\d+$/.test(query)) {
+      whereItems.unshift({ id: Number(query) });
+    }
+
+    const projects = await Fundraising.Project.findAll({
+      where: { [Op.or]: whereItems },
+      order: [
+        ["updatedAt", "DESC"],
+        ["id", "DESC"],
+      ],
+      limit,
+    });
+
+    const projectIds = projects.map((project) => project.id);
+    const [investmentsReceived, investmentsGiven] =
+      projectIds.length > 0
+        ? await Promise.all([
+            Fundraising.InvestmentRelationships.findAll({
+              where: { fundedProjectId: { [Op.in]: projectIds } },
+              include: [
+                {
+                  model: Fundraising.Project,
+                  as: "investorProject",
+                },
+                {
+                  model: Fundraising.Project,
+                  as: "fundedProject",
+                },
+              ],
+              order: [["updatedAt", "DESC"]],
+              limit: 300,
+            }),
+            Fundraising.InvestmentRelationships.findAll({
+              where: { investorProjectId: { [Op.in]: projectIds } },
+              include: [
+                {
+                  model: Fundraising.Project,
+                  as: "investorProject",
+                },
+                {
+                  model: Fundraising.Project,
+                  as: "fundedProject",
+                },
+              ],
+              order: [["updatedAt", "DESC"]],
+              limit: 300,
+            }),
+          ])
+        : [[], []];
+
+    const grouped = projects.map((project) => ({
+      project: serializeProject(project),
+      investmentsReceived: investmentsReceived
+        .filter((item) => item.fundedProjectId === project.id)
+        .map(serializeRelationship),
+      investmentsGiven: investmentsGiven
+        .filter((item) => item.investorProjectId === project.id)
+        .map(serializeRelationship),
+    }));
+
+    await safeRecordAdminStat("lookup_rootdata_project", {
+      adminId: req.adminUser?.id,
+      adminEmail: req.adminUser?.email,
+      metrics: {
+        matches: grouped.length,
+        investmentsReceived: investmentsReceived.length,
+        investmentsGiven: investmentsGiven.length,
+      },
+      meta: { query },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        query,
+        total: grouped.length,
+        items: grouped,
+      },
+    });
+  } catch (error) {
+    console.error("[tampermonkey-admin] RootData 导入验证查询失败:", error);
+    res.status(500).json({ success: false, error: "RootData 导入验证查询失败" });
   }
 });
 

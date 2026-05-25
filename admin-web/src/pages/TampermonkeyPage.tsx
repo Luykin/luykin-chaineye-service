@@ -16,7 +16,16 @@ import {
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { CopyOutlined, EyeOutlined, KeyOutlined, LinkOutlined, ReloadOutlined, StopOutlined } from "@ant-design/icons";
+import {
+  CopyOutlined,
+  DatabaseOutlined,
+  EyeOutlined,
+  KeyOutlined,
+  LinkOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+  StopOutlined,
+} from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -25,8 +34,10 @@ import {
   fetchCollectorTokens,
   fetchTampermonkeyScriptContent,
   fetchTampermonkeyScripts,
+  lookupRootDataProject,
   revokeCollectorToken,
   type CollectorTokenItem,
+  type RootDataInvestmentRelationship,
   type TampermonkeyScriptItem,
 } from "@/services/tampermonkey";
 
@@ -47,6 +58,20 @@ function formatBytes(bytes?: number) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
+function formatEpochTime(value?: number | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function formatRelationDate(value?: number | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("zh-CN");
+}
+
 async function copyText(text: string) {
   await navigator.clipboard.writeText(text);
 }
@@ -54,6 +79,7 @@ async function copyText(text: string) {
 export function TampermonkeyPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<{ name: string }>();
+  const [lookupForm] = Form.useForm<{ query: string }>();
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [previewFileName, setPreviewFileName] = useState<string | null>(null);
 
@@ -85,10 +111,23 @@ export function TampermonkeyPage() {
     onError: (error: Error) => messageApi.error(error.message || "停用 token 失败"),
   });
 
+  const lookupMutation = useMutation({
+    mutationFn: lookupRootDataProject,
+    onSuccess: (resp) => {
+      if (resp.data.total === 0) {
+        messageApi.warning("没有查到对应的 RootData 项目");
+      } else {
+        messageApi.success(`查到 ${resp.data.total} 个项目`);
+      }
+    },
+    onError: (error: Error) => messageApi.error(error.message || "查询 RootData 导入数据失败"),
+  });
+
   const tokenRows = tokensQuery.data?.data || [];
   const activeTokenCount = tokenRows.filter((item) => item.isActive && !item.expired).length;
   const scriptRows = scriptsQuery.data?.data || [];
   const previewContent = scriptContentQuery.data?.data.content || "";
+  const lookupItems = lookupMutation.data?.data.items || [];
 
   const tokenColumns: ColumnsType<CollectorTokenItem> = useMemo(
     () => [
@@ -206,6 +245,84 @@ export function TampermonkeyPage() {
     [messageApi]
   );
 
+  const receivedColumns: ColumnsType<RootDataInvestmentRelationship> = useMemo(
+    () => [
+      {
+        title: "投资方",
+        key: "investor",
+        render: (_, row) => (
+          <Space direction="vertical" size={0}>
+            <Typography.Text strong>{row.investorProject?.projectName || "-"}</Typography.Text>
+            <Typography.Text className="tm-mono" type="secondary" ellipsis copyable>
+              {row.investorProject?.projectLink || "-"}
+            </Typography.Text>
+          </Space>
+        ),
+      },
+      {
+        title: "轮次",
+        dataIndex: "round",
+        key: "round",
+        width: 120,
+        render: (value?: string | null) => value || "-",
+      },
+      {
+        title: "金额",
+        dataIndex: "amount",
+        key: "amount",
+        width: 120,
+        render: (value?: string | null) => value || "-",
+      },
+      {
+        title: "日期",
+        dataIndex: "date",
+        key: "date",
+        width: 130,
+        render: (value?: number | null) => formatRelationDate(value),
+      },
+      {
+        title: "领投",
+        dataIndex: "lead",
+        key: "lead",
+        width: 90,
+        render: (value?: boolean | null) => (value ? <Tag color="gold">Lead</Tag> : "-"),
+      },
+    ],
+    []
+  );
+
+  const givenColumns: ColumnsType<RootDataInvestmentRelationship> = useMemo(
+    () => [
+      {
+        title: "被投项目",
+        key: "funded",
+        render: (_, row) => (
+          <Space direction="vertical" size={0}>
+            <Typography.Text strong>{row.fundedProject?.projectName || "-"}</Typography.Text>
+            <Typography.Text className="tm-mono" type="secondary" ellipsis copyable>
+              {row.fundedProject?.projectLink || "-"}
+            </Typography.Text>
+          </Space>
+        ),
+      },
+      {
+        title: "轮次",
+        dataIndex: "round",
+        key: "round",
+        width: 120,
+        render: (value?: string | null) => value || "-",
+      },
+      {
+        title: "更新时间",
+        dataIndex: "updatedAt",
+        key: "updatedAt",
+        width: 190,
+        render: (value?: string) => formatDateTime(value),
+      },
+    ],
+    []
+  );
+
   return (
     <PermissionGuard permission="tampermonkey">
       {contextHolder}
@@ -311,6 +428,120 @@ export function TampermonkeyPage() {
             <Descriptions.Item label="动作"><Space><Tag color="success">success</Tag><Tag color="error">failure</Tag><Tag color="warning">alert</Tag></Space></Descriptions.Item>
             <Descriptions.Item label="跳转"><Button href={COLLECTOR_STATS_HASH} icon={<LinkOutlined />}>打开通用统计</Button></Descriptions.Item>
           </Descriptions>
+        </PageSection>
+
+        <PageSection
+          title="RootData 导入验证"
+          description="输入项目名、RootData 详情链接或数据库 ID，检查 Tampermonkey 新增/更新的 Project 与投资关系是否已经落库。"
+        >
+          <Form
+            form={lookupForm}
+            layout="inline"
+            className="tm-lookup-form"
+            onFinish={(values) => lookupMutation.mutate(values.query.trim())}
+          >
+            <Form.Item
+              name="query"
+              rules={[{ required: true, message: "请输入项目名或 RootData 详情链接" }]}
+              style={{ minWidth: 420, flex: 1 }}
+            >
+              <Input
+                allowClear
+                prefix={<DatabaseOutlined />}
+                placeholder="例如 Variational 或 https://www.rootdata.com/projects/detail/Variational?k=..."
+              />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={lookupMutation.isPending}>
+                查询入库结果
+              </Button>
+            </Form.Item>
+          </Form>
+
+          <div className="tm-lookup-result">
+            {lookupMutation.isPending ? (
+              <Empty description="正在查询 Project 和关系..." />
+            ) : lookupMutation.isSuccess && lookupItems.length === 0 ? (
+              <Empty description="没有查到项目。可以换成完整 RootData 详情链接再试。" />
+            ) : (
+              lookupItems.map((item) => (
+                <Card
+                  key={item.project.id}
+                  className="tm-lookup-card"
+                  title={
+                    <Space wrap>
+                      <Typography.Text strong>{item.project.projectName}</Typography.Text>
+                      <Tag color={item.project.isInitial ? "blue" : "purple"}>
+                        {item.project.isInitial ? "initial" : "sub-detail"}
+                      </Tag>
+                      <Tag color={item.project.detailFetchedAt ? "success" : "warning"}>
+                        {item.project.detailFetchedAt ? "详情已抓" : "详情未抓"}
+                      </Tag>
+                    </Space>
+                  }
+                  extra={<Typography.Text className="tm-mono">ID: {item.project.id}</Typography.Text>}
+                >
+                  <Descriptions bordered size="small" column={{ xs: 1, md: 2 }} className="tm-lookup-desc">
+                    <Descriptions.Item label="RootData 链接" span={2}>
+                      <Typography.Text copyable className="tm-mono">{item.project.projectLink}</Typography.Text>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="融资轮次">{item.project.round || "-"}</Descriptions.Item>
+                    <Descriptions.Item label="融资金额">{item.project.amount || "-"}</Descriptions.Item>
+                    <Descriptions.Item label="融资日期">{item.project.date || "-"}</Descriptions.Item>
+                    <Descriptions.Item label="原始页码">{item.project.originalPageNumber || "-"}</Descriptions.Item>
+                    <Descriptions.Item label="详情抓取时间">{formatEpochTime(item.project.detailFetchedAt)}</Descriptions.Item>
+                    <Descriptions.Item label="详情失败次数">{item.project.detailFailuresNumber ?? 0}</Descriptions.Item>
+                    <Descriptions.Item label="社交链接">
+                      {Object.keys(item.project.socialLinks || {}).length ? (
+                        <Space wrap>
+                          {Object.entries(item.project.socialLinks || {}).map(([key, value]) => (
+                            <Typography.Link key={key} href={value} target="_blank" rel="noreferrer">
+                              {key}
+                            </Typography.Link>
+                          ))}
+                        </Space>
+                      ) : "-"}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="团队成员">{item.project.teamMembers?.length || 0}</Descriptions.Item>
+                    <Descriptions.Item label="更新程序">{item.project.updateProgram || "-"}</Descriptions.Item>
+                    <Descriptions.Item label="更新时间">{formatDateTime(item.project.updatedAt)}</Descriptions.Item>
+                  </Descriptions>
+
+                  <div className="tm-relationship-grid">
+                    <div>
+                      <div className="tm-relationship-title">
+                        被投资关系 <Tag>{item.investmentsReceived.length}</Tag>
+                      </div>
+                      <Table
+                        rowKey={(row) => String(row.id)}
+                        columns={receivedColumns}
+                        dataSource={item.investmentsReceived}
+                        pagination={false}
+                        size="small"
+                        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无投资方关系" /> }}
+                        scroll={{ x: 760 }}
+                      />
+                    </div>
+
+                    <div>
+                      <div className="tm-relationship-title">
+                        对外投资关系 <Tag>{item.investmentsGiven.length}</Tag>
+                      </div>
+                      <Table
+                        rowKey={(row) => String(row.id)}
+                        columns={givenColumns}
+                        dataSource={item.investmentsGiven}
+                        pagination={false}
+                        size="small"
+                        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无对外投资关系" /> }}
+                        scroll={{ x: 620 }}
+                      />
+                    </div>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
         </PageSection>
 
         <Modal

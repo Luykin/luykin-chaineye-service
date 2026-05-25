@@ -141,6 +141,45 @@
   white-space: pre-wrap;
 }
 
+.tm-lookup-form {
+  gap: 8px;
+}
+
+.tm-lookup-result {
+  margin-top: 16px;
+}
+
+.tm-lookup-card.ant-card {
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 16px;
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+.tm-lookup-card .ant-card-head {
+  background: linear-gradient(90deg, rgba(255, 247, 237, 0.72), rgba(255, 255, 255, 0.88));
+}
+
+.tm-lookup-desc .ant-descriptions-item-content {
+  word-break: break-word;
+}
+
+.tm-relationship-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.tm-relationship-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--tm-ink);
+  font-weight: 700;
+}
+
 @media (max-width: 900px) {
   .tm-hero {
     flex-direction: column;
@@ -148,5 +187,9 @@
   }
   .tm-kpi-grid {
     grid-template-columns: 1fr;
+  }
+  .tm-lookup-form .ant-form-item {
+    width: 100%;
+    min-width: 0 !important;
   }
 }
