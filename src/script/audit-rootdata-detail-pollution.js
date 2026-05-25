@@ -297,13 +297,15 @@ async function main() {
       projectLink: item.projectLink,
       reasons: item.reviewReasons,
     }));
-  const tampermonkeyQueue = definiteQueue.map((item) => ({
-    id: item.id,
-    entityType: item.entityType,
-    projectName: item.projectName,
-    projectLink: item.projectLink,
-    reasons: item.reasons,
-  }));
+  const tampermonkeyQueue = definiteQueue
+    .filter((item) => item.entityType === "project" || item.entityType === "investor")
+    .map((item) => ({
+      id: item.id,
+      entityType: item.entityType,
+      projectName: item.projectName,
+      projectLink: item.projectLink,
+      reasons: item.reasons,
+    }));
 
   const report = {
     generatedAt: new Date().toISOString(),
@@ -320,6 +322,9 @@ async function main() {
       critical: suspicious.filter((item) => item.severity === "critical").length,
       warning: suspicious.filter((item) => item.severity === "warning").length,
       review: suspicious.filter((item) => item.severity === "review").length,
+      definite: definiteQueue.length,
+      recrawlable: tampermonkeyQueue.length,
+      unsupported: definiteQueue.length - tampermonkeyQueue.length,
       byReason,
     },
     definiteQueue,

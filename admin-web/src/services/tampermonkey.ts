@@ -1,4 +1,5 @@
 import { apiRequest } from "./apiClient";
+import type { RootdataDetailPollutionAuditResponse } from "@/types/stats";
 
 export interface CollectorTokenItem {
   id: number;
@@ -134,5 +135,17 @@ export async function lookupRootDataProject(query: string) {
   const params = new URLSearchParams({ q: query, limit: "10" });
   return apiRequest<RootDataLookupResponse>(
     `/api/admin/tampermonkey/rootdata/lookup?${params.toString()}`
+  );
+}
+
+export async function fetchRootdataDetailPollutionAudit(params?: {
+  recentHours?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.recentHours) query.set("recentHours", String(params.recentHours));
+  if (params?.limit) query.set("limit", String(params.limit));
+  return apiRequest<RootdataDetailPollutionAuditResponse>(
+    `/api/admin/tampermonkey/rootdata/detail-pollution-audit${query.toString() ? `?${query.toString()}` : ""}`
   );
 }

@@ -37,13 +37,13 @@ import {
   fetchCollectorTokens,
   fetchTampermonkeyScriptContent,
   fetchTampermonkeyScripts,
+  fetchRootdataDetailPollutionAudit,
   lookupRootDataProject,
   revokeCollectorToken,
   type CollectorTokenItem,
   type RootDataInvestmentRelationship,
   type TampermonkeyScriptItem,
 } from "@/services/tampermonkey";
-import { fetchRootdataDetailPollutionAudit } from "@/services/stats";
 import type { RootdataDetailPollutionProject } from "@/types/stats";
 
 const COLLECTOR_STATS_HASH =
@@ -537,18 +537,23 @@ export function TampermonkeyPage() {
             }
           >
             {pollutionAuditQuery.isError ? (
-              <Alert type="error" showIcon message="加载详情污染验证失败" />
+              <Alert
+                type="error"
+                showIcon
+                message="加载详情污染验证失败"
+                description={pollutionAuditQuery.error instanceof Error ? pollutionAuditQuery.error.message : undefined}
+              />
             ) : pollutionAudit ? (
               <Space direction="vertical" size={16} style={{ width: "100%" }}>
                 <Alert
                   type={pollutionAudit.summary.definite > 0 ? "warning" : "success"}
                   showIcon
                   message={
-                    pollutionAudit.summary.definite > 0
-                      ? `还有 ${pollutionAudit.summary.definite} 个确定污染项需要重爬`
+                    pollutionAudit.tampermonkeyQueue.length > 0
+                      ? `还有 ${pollutionAudit.tampermonkeyQueue.length} 个项目/机构污染项可重爬`
                       : "当前没有确定污染项"
                   }
-                  description={`扫描 ${pollutionAudit.summary.scanned} 个项目，生成时间：${formatDateTime(pollutionAudit.generatedAt)}。列表仅展示前 ${pollutionAudit.filter.listLimit} 个异常，复制命令会包含全部确定污染项。`}
+                  description={`扫描 ${pollutionAudit.summary.scanned} 个项目，生成时间：${formatDateTime(pollutionAudit.generatedAt)}。确定污染 ${pollutionAudit.summary.definite} 个，其中 ${pollutionAudit.summary.unsupported || 0} 个不是 Projects/Investors，复制命令只包含可重爬项。`}
                 />
                 <Row gutter={[16, 16]}>
                   <Col xs={12} md={6}>
@@ -561,7 +566,7 @@ export function TampermonkeyPage() {
                     <Card size="small"><Statistic title="Review" value={pollutionAudit.summary.review} /></Card>
                   </Col>
                   <Col xs={12} md={6}>
-                    <Card size="small"><Statistic title="确定重爬" value={pollutionAudit.summary.definite} /></Card>
+                    <Card size="small"><Statistic title="可重爬" value={pollutionAudit.tampermonkeyQueue.length} /></Card>
                   </Col>
                 </Row>
                 <Table

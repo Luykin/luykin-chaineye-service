@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.4.3
+// @version      0.4.6
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -530,6 +530,111 @@
     return isRootDataOwnedExternalUrl(text, href);
   }
 
+  function isNonEntityDetailScope(element) {
+    return Boolean(
+      element?.closest?.(
+        [
+          "header",
+          "footer",
+          "nav",
+          ".team_member",
+          ".team-member",
+          ".investor",
+          ".investment",
+          "table",
+          "[class*='team' i]",
+          "[class*='member' i]",
+          "[class*='investor' i]",
+          "[class*='investment' i]",
+          "[class*='portfolio' i]",
+          "[class*='news' i]",
+          "[class*='article' i]",
+          "[class*='event' i]",
+        ].join(", ")
+      )
+    );
+  }
+
+  function isEntityInfoScope(element) {
+    return Boolean(
+      element?.closest?.(
+        [
+          "#base-info-header",
+          ".detail_info_head",
+          ".base_info",
+          "[class*='detail_info' i]",
+          "[class*='base_info' i]",
+          "[class*='base-info' i]",
+        ].join(", ")
+      )
+    );
+  }
+
+  function getDetailTitle(doc) {
+    return (
+      cleanText(doc.querySelector("#base-info-header h1, main h1")?.textContent) ||
+      cleanText(doc.querySelector('meta[property="og:title"], meta[name="twitter:title"]')?.getAttribute("content")).replace(
+        /\s*[-|]\s*RootData.*$/i,
+        ""
+      ) ||
+      cleanText(doc.title).replace(/\s*[-|]\s*RootData.*$/i, "")
+    );
+  }
+
+  function isSuspiciousDetailImageUrl(rawUrl) {
+    const url = String(rawUrl || "").toLowerCase();
+    if (!url) return true;
+    if (/detail_icon_|official_website|detail_icon_twitter|detail_icon_linkedin/.test(url)) return true;
+    if (/rootdata\.com\/images\/(logo|rootdata|favicon|icon)/.test(url)) return true;
+    if (/\/favicon\.|\/apple-touch-icon|placeholder|default-avatar|default_logo/.test(url)) return true;
+    return false;
+  }
+
+  function isUsableEntityLogoImage(img) {
+    if (!img || isNonEntityDetailScope(img)) return false;
+    const src = img.src || img.getAttribute("src") || "";
+    if (isSuspiciousDetailImageUrl(src)) return false;
+    return isEntityInfoScope(img) || img.matches("img.logo, .logo img, .logo-wraper img");
+  }
+
+  function pickEntityLogo(doc) {
+    const title = getDetailTitle(doc);
+    const headerImage = Array.from(doc.querySelectorAll("#base-info-header img[alt]")).find((img) => {
+      return cleanText(img.getAttribute("alt")) === title && !isSuspiciousDetailImageUrl(img.src || img.getAttribute("src"));
+    });
+    if (headerImage?.src) return headerImage.src;
+
+    const detailRoot = doc.querySelector("main") || doc.body || doc;
+    const image = Array.from(
+      detailRoot.querySelectorAll(".detail_info_head img, .base_info img, img.logo, .logo img, .logo-wraper img")
+    ).find(isUsableEntityLogoImage);
+    if (image?.src) return image.src;
+
+    const metaImage = doc
+      .querySelector('meta[property="og:image"], meta[name="twitter:image"]')
+      ?.getAttribute("content");
+    if (metaImage && !isSuspiciousDetailImageUrl(metaImage)) return metaImage;
+
+    return "";
+  }
+
+  function findOfficialAsideXUrl(doc, detailUrl) {
+    const title = normalizeEntityName(getDetailTitle(doc), detailUrl);
+    const links = Array.from(doc.querySelectorAll('aside a[href*="x.com"], aside a[href*="twitter.com"]'));
+
+    const link = links.find((anchor) => {
+      const text = cleanText(anchor.textContent);
+      if (!text.startsWith("@")) return false;
+      if (!normalizeXUrl(anchor.href)) return false;
+
+      const card = anchor.closest("div.relative, div.rounded-xl, aside") || anchor.closest("aside");
+      const cardText = cleanText(card?.textContent || "");
+      return !title || cardText.includes(title) || text.slice(1).toLowerCase().includes(title.toLowerCase().replace(/\s+/g, ""));
+    });
+
+    return link ? normalizeXUrl(link.href) : "";
+  }
+
   function normalizeXUrl(rawUrl) {
     if (!rawUrl) return "";
     try {
@@ -849,6 +954,9 @@
   }
 
   function isLikelyDetailSocialLink(link) {
+    if (isNonEntityDetailScope(link)) return false;
+    if (!isEntityInfoScope(link)) return false;
+
     const iconSrc = String(link?.querySelector?.("img")?.getAttribute("src") || "").toLowerCase();
     if (/detail_icon_|official_website|detail_icon_twitter|detail_icon_linkedin/.test(iconSrc)) return true;
     if (link.closest(".base_info .links, .base_info, [class*='base' i] [class*='link' i], [class*='social' i], [class*='contact' i]")) return true;
@@ -857,9 +965,12 @@
 
   function parseBasicDetail(doc, detailUrl) {
     const socialLinks = {};
+    const officialXUrl = findOfficialAsideXUrl(doc, detailUrl);
+    if (officialXUrl) socialLinks.x = officialXUrl;
+
     const detailRoot = doc.querySelector("main") || doc.body || doc;
     detailRoot.querySelectorAll("a[href]").forEach((link) => {
-      if (link.closest("header, footer, nav")) return;
+      if (link.closest("aside")) return;
       if (!isLikelyDetailSocialLink(link)) return;
       if (isRootDataOwnedExternalLink(link)) return;
 
@@ -886,17 +997,12 @@
       .filter((member) => member.name || member.profileLink);
 
     const projectName =
+      getDetailTitle(doc) ||
       cleanText(doc.querySelector(".detail_info_head h1.name, .detail_info_head h1, h1.name")?.textContent) ||
       cleanText(doc.querySelector('meta[property="og:title"], meta[name="twitter:title"]')?.getAttribute("content")) ||
       cleanText(doc.title).replace(/\s*[-|]\s*RootData.*$/i, "") ||
       parseNameFromDetailUrl(detailUrl);
-    const logo =
-      doc.querySelector(".detail_info_head .logo, .detail_info_head img, img.logo")?.src ||
-      doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]')?.getAttribute("content") ||
-      Array.from(doc.querySelectorAll("img[src]"))
-        .map((img) => img.src)
-        .find((src) => /public\.rootdata\.com|\/images\//i.test(src)) ||
-      "";
+    const logo = pickEntityLogo(doc);
 
     return {
       socialLinks: safeSocialLinks,
@@ -1569,7 +1675,7 @@
                 projectLink,
               };
             })
-            .filter((item) => item.projectName && /rootdata\.com\/(?:projects|Projects)\/detail\//.test(item.projectLink))
+            .filter((item) => item.projectName && /rootdata\.com\/(?:projects|Projects|investors|Investors)\/detail\//.test(item.projectLink))
         );
 
         const oldMaxInitial = CONFIG.detailMaxProjectsPerRun;

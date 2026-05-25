@@ -276,6 +276,13 @@ function sanitizeSocialLinks(value) {
   return result.x ? result : null;
 }
 
+function hasRootDataOwnedSocialLinks(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value).some(([key, url]) => {
+    return url && isRootDataOwnedSocialUrl(key, url);
+  });
+}
+
 function normalizeXUrl(rawUrl) {
   if (!rawUrl) return "";
   try {
@@ -876,8 +883,12 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       // X 链接是强匹配字段，不合并旧 socialLinks，避免历史错误的 RootData 官方账号继续残留。
       updateValues.socialLinks = socialLinks;
       updateValues.twitterUrl = socialLinks.x;
-    } else if (hasSocialLinksPayload && project.socialLinks && !sanitizeSocialLinks(project.socialLinks)) {
-      // 新详情明确没有合法 x，且旧库里的 socialLinks 也不合法/疑似污染，则清掉旧的 twitterUrl。
+    } else if (
+      hasSocialLinksPayload &&
+      project.socialLinks &&
+      (!sanitizeSocialLinks(project.socialLinks) || hasRootDataOwnedSocialLinks(project.socialLinks))
+    ) {
+      // 新详情明确没有合法 x，且旧库里的 socialLinks 不合法或含 RootData 污染链接，则清掉旧的 x。
       updateValues.socialLinks = null;
       updateValues.twitterUrl = null;
     }

@@ -2,7 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
-const { Op } = require("sequelize");
+const { Op, QueryTypes } = require("sequelize");
 const { Fundraising } = require("../../models/postgres-fundraising");
 const { CollectorClientToken } = require("../../models/postgres-start");
 const { requirePermission } = require("../middleware/adminAuth");
@@ -108,6 +108,123 @@ function serializeRelationship(relationship) {
     updatedAt: row.updatedAt,
     investorProject: serializeProject(row.investorProject),
     fundedProject: serializeProject(row.fundedProject),
+  };
+}
+
+function normalizeAuditXUrl(rawUrl) {
+  if (!rawUrl) return "";
+  try {
+    const url = new URL(String(rawUrl));
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (hostname !== "x.com" && hostname !== "twitter.com") return "";
+    if (!url.pathname || url.pathname === "/") return "";
+    if (/^\/RootDataCrypto\/?$/i.test(url.pathname)) return "";
+    url.protocol = "https:";
+    url.hostname = "x.com";
+    url.hash = "";
+    return url.toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+function isRootDataOwnedAuditUrl(label, rawUrl) {
+  const text = cleanText(label).toLowerCase();
+  if (!rawUrl) return false;
+  try {
+    const url = new URL(String(rawUrl));
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    const full = `${hostname}${url.pathname}${url.search}`.toLowerCase();
+    if (/rootdata\.com$/.test(hostname)) return true;
+    if (/x\.com|twitter\.com/.test(hostname) && /rootdatacrypto/i.test(url.pathname)) return true;
+    if (hostname === "t.me" && /rootdatalabs/i.test(url.pathname)) return true;
+    if (hostname === "rootdatalabs.medium.com") return true;
+    if (hostname === "calendly.com" && /rootdata|elvin-rootdata/i.test(url.pathname)) return true;
+    if (hostname === "notion.so" && /business|development|hiring|rootdata|source=copy_link/i.test(url.pathname + url.search)) return true;
+    if (hostname === "play.google.com" && /rootdata|com\.flutter\.benliu\.rootdata/i.test(full)) return true;
+    if (hostname === "drive.google.com" && /media|kit/i.test(text)) return true;
+    if (hostname === "linkedin.com" && /lucasschuermann/i.test(url.pathname)) return true;
+  } catch (_) {
+    return true;
+  }
+  return /rootdata|business cooperation|hiring|media kit/.test(text);
+}
+
+function parseAuditSocialLinks(value) {
+  if (!value) return null;
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function isSuspiciousAuditLogo(rawLogo) {
+  const logo = cleanText(rawLogo, 3000).toLowerCase();
+  if (!logo) return false;
+  if (/detail_icon_|official_website|detail_icon_twitter|detail_icon_linkedin/.test(logo)) return true;
+  if (/rootdata\.com\/images\/(logo|rootdata|favicon|icon)/.test(logo)) return true;
+  if (/\/favicon\.|\/apple-touch-icon|placeholder|default-avatar|default_logo/.test(logo)) return true;
+  return false;
+}
+
+function getAuditEntityType(projectLink) {
+  const link = cleanText(projectLink, 3000);
+  if (/\/(?:investors|Investors)\/detail\//.test(link)) return "investor";
+  if (/\/(?:projects|Projects)\/detail\//.test(link)) return "project";
+  return "unknown";
+}
+
+function auditRootDataDetailProject(row, options = {}) {
+  const reasons = [];
+  const reviewReasons = [];
+  const socialLinks = parseAuditSocialLinks(row.socialLinks);
+  const twitterUrl = cleanText(row.twitterUrl, 3000);
+  const detailFetchedAt = Number(row.detailFetchedAt || 0);
+  const updatedAt = row.updatedAt ? new Date(row.updatedAt).getTime() : 0;
+
+  if (twitterUrl) {
+    if (isRootDataOwnedAuditUrl("twitterUrl", twitterUrl)) reasons.push("twitterUrl_rootdata_owned");
+    if (!normalizeAuditXUrl(twitterUrl)) reasons.push("twitterUrl_invalid_or_not_x_domain");
+  }
+
+  if (socialLinks) {
+    const xRaw = socialLinks.x || socialLinks.X || socialLinks.twitter || socialLinks.Twitter || "";
+    const xUrl = normalizeAuditXUrl(xRaw);
+    if (xRaw && isRootDataOwnedAuditUrl("x", xRaw)) reasons.push("social_x_rootdata_owned");
+    if (xRaw && !xUrl) reasons.push("social_x_invalid_or_not_x_domain");
+
+    for (const [key, url] of Object.entries(socialLinks)) {
+      if (url && isRootDataOwnedAuditUrl(key, url)) {
+        reasons.push(`social_${String(key).toLowerCase()}_rootdata_owned`);
+      }
+    }
+
+    if (Object.keys(socialLinks).length > 0 && !xUrl) {
+      reviewReasons.push(options.sinceMs ? "social_links_without_valid_x" : "social_links_without_valid_x_historical_review");
+    }
+  }
+
+  if (isSuspiciousAuditLogo(row.logo)) reasons.push("logo_rootdata_static_or_placeholder");
+
+  if (options.sinceMs) {
+    const touchedInWindow = detailFetchedAt >= options.sinceMs || updatedAt >= options.sinceMs;
+    if (touchedInWindow && cleanText(row.updateProgram) === "auto_crawler") {
+      reviewReasons.push("recent_auto_crawler_detail_update_recheck");
+    }
+  }
+
+  const uniqueReasons = Array.from(new Set(reasons));
+  const uniqueReviewReasons = Array.from(new Set(reviewReasons));
+  const hasCritical = uniqueReasons.some((reason) => /twitterUrl_|social_x_/.test(reason));
+
+  return {
+    severity: hasCritical ? "critical" : uniqueReasons.length > 0 ? "warning" : uniqueReviewReasons.length > 0 ? "review" : "ok",
+    reasons: uniqueReasons,
+    reviewReasons: uniqueReviewReasons,
   };
 }
 
@@ -311,6 +428,124 @@ router.get("/rootdata/lookup", async (req, res) => {
   } catch (error) {
     console.error("[tampermonkey-admin] RootData 导入验证查询失败:", error);
     res.status(500).json({ success: false, error: "RootData 导入验证查询失败" });
+  }
+});
+
+router.get("/rootdata/detail-pollution-audit", async (req, res) => {
+  try {
+    const recentHours = Number(req.query.recentHours || 0);
+    const limit = Math.min(Math.max(Number(req.query.limit || 100), 1), 1000);
+    const sinceMs = recentHours > 0 ? Date.now() - recentHours * 60 * 60 * 1000 : null;
+    const where = [];
+    const replacements = {};
+
+    if (sinceMs) {
+      where.push(`(
+        COALESCE("detailFetchedAt", 0) >= :sinceMs
+        OR "updatedAt" >= to_timestamp(:sinceMs / 1000.0)
+        OR "socialLinks"::text ILIKE '%RootDataCrypto%'
+        OR COALESCE("twitterUrl", '') ILIKE '%RootDataCrypto%'
+      )`);
+      replacements.sinceMs = sinceMs;
+    }
+
+    const rows = await Fundraising.Project.sequelize.query(
+      `
+        SELECT
+          id,
+          "projectName",
+          "projectLink",
+          logo,
+          "socialLinks",
+          "twitterUrl",
+          "detailFetchedAt",
+          "updateProgram",
+          "createdAt",
+          "updatedAt"
+        FROM "Projects"
+        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+        ORDER BY "updatedAt" DESC, id DESC
+      `,
+      { type: QueryTypes.SELECT, replacements }
+    );
+
+    const audited = rows
+      .map((row) => {
+        const audit = auditRootDataDetailProject(row, { sinceMs });
+        return {
+          id: row.id,
+          projectName: row.projectName,
+          projectLink: row.projectLink,
+          entityType: getAuditEntityType(row.projectLink),
+          logo: row.logo,
+          twitterUrl: row.twitterUrl,
+          socialLinks: parseAuditSocialLinks(row.socialLinks),
+          detailFetchedAt: row.detailFetchedAt,
+          detailFetchedAtIso: row.detailFetchedAt ? new Date(Number(row.detailFetchedAt)).toISOString() : null,
+          updateProgram: row.updateProgram,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          severity: audit.severity,
+          reasons: audit.reasons,
+          reviewReasons: audit.reviewReasons,
+        };
+      })
+      .filter((item) => item.reasons.length > 0 || item.reviewReasons.length > 0);
+
+    const byReason = {};
+    for (const item of audited) {
+      for (const reason of item.reasons) byReason[reason] = (byReason[reason] || 0) + 1;
+      for (const reason of item.reviewReasons) {
+        const key = `review:${reason}`;
+        byReason[key] = (byReason[key] || 0) + 1;
+      }
+    }
+
+    const definiteQueue = audited
+      .filter((item) => item.reasons.length > 0)
+      .map((item) => ({
+        id: item.id,
+        entityType: item.entityType,
+        projectName: item.projectName,
+        projectLink: item.projectLink,
+        reasons: item.reasons,
+      }));
+    const tampermonkeyQueue = definiteQueue.filter((item) => {
+      return item.entityType === "project" || item.entityType === "investor";
+    });
+
+    res.json({
+      success: true,
+      data: {
+        generatedAt: new Date().toISOString(),
+        filter: {
+          recentHours: recentHours || null,
+          sinceMs,
+          sinceIso: sinceMs ? new Date(sinceMs).toISOString() : null,
+          listLimit: limit,
+        },
+        summary: {
+          scanned: rows.length,
+          suspicious: audited.length,
+          critical: audited.filter((item) => item.severity === "critical").length,
+          warning: audited.filter((item) => item.severity === "warning").length,
+          review: audited.filter((item) => item.severity === "review").length,
+          definite: definiteQueue.length,
+          recrawlable: tampermonkeyQueue.length,
+          unsupported: definiteQueue.length - tampermonkeyQueue.length,
+          byReason,
+        },
+        tampermonkeyQueue,
+        projects: audited.slice(0, limit),
+      },
+    });
+  } catch (error) {
+    console.error("[tampermonkey-admin] RootData 详情污染验证失败:", error);
+    res.status(500).json({
+      success: false,
+      error: "RootData 详情污染验证失败",
+      message: error.message,
+    });
   }
 });
 

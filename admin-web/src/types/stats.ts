@@ -301,6 +301,8 @@ export interface RootdataDetailPollutionAuditResponse {
       warning: number;
       review: number;
       definite: number;
+      recrawlable?: number;
+      unsupported?: number;
       byReason: Record<string, number>;
     };
     tampermonkeyQueue: Array<{
