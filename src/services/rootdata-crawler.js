@@ -2261,11 +2261,11 @@ function parseDate(dateStr) {
   let formattedDateStr;
 
   // 英文日期格式处理
-  if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(dateStr)) {
+  if (/^[A-Za-z]{3} \d{1,2}, \d{4}$/.test(dateStr)) {
     formattedDateStr = dateStr;
-  } else if (/^[A-Za-z]{3}, \d{4}$/.test(dateStr)) {
+  } else if (/^[A-Za-z]{3},? \d{4}$/.test(dateStr)) {
     formattedDateStr = `01 ${dateStr.replace(",", "")}`;
-  } else if (/^[A-Za-z]{3} \d{2}$/.test(dateStr)) {
+  } else if (/^[A-Za-z]{3} \d{1,2}$/.test(dateStr)) {
     formattedDateStr = `${dateStr}, ${currentYear}`;
   }
 

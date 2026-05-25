@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.4.6
+// @version      0.4.7
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -675,6 +675,10 @@
     return result;
   }
 
+  function placeholderEntityLink(projectName) {
+    return `javascript:void(0)/${cleanText(projectName) || `unknown-${Date.now()}`}`;
+  }
+
   function readEntityLink(anchor) {
     if (!anchor) return null;
     const link = canonicalRootDataDetailUrl(absoluteUrl(anchor.getAttribute("href") || anchor.href || ""));
@@ -683,6 +687,16 @@
     const name = normalizeEntityName(rawText, link);
     if (!name && !link) return null;
     return { projectName: name, projectLink: link };
+  }
+
+  function readPlainInvestorEntity(element) {
+    if (!element) return null;
+    const rawName = cleanText(
+      element.querySelector(".animate-underline, [class*='font-medium' i]")?.textContent || element.textContent || ""
+    );
+    const name = normalizeEntityName(rawName);
+    if (!name) return null;
+    return { projectName: name, projectLink: placeholderEntityLink(name) };
   }
 
   function isCurrentDetailLink(link, detailUrl) {
@@ -822,14 +836,21 @@
             )
           );
 
-          anchors
-            .map((anchor) => {
-              const entity = readEntityLink(anchor);
+          const plainInvestorElements = Array.from(
+            investorCell.querySelectorAll("span.cursor-not-allowed")
+          ).filter((element) => !element.closest("a"));
+
+          const investorEntities = [
+            ...anchors.map((anchor) => ({ entity: readEntityLink(anchor), text: cleanText(anchor.textContent) })),
+            ...plainInvestorElements.map((element) => ({ entity: readPlainInvestorEntity(element), text: cleanText(element.textContent) })),
+          ];
+
+          investorEntities
+            .map(({ entity, text }) => {
               if (!entity || (detailUrl && isCurrentDetailLink(entity.projectLink, detailUrl))) return null;
-              const anchorText = cleanText(anchor.textContent);
               return {
                 ...entity,
-                lead: anchorText.includes("*"),
+                lead: text.includes("*"),
                 round: cleanText(cells[idxRound]?.textContent) || "--",
                 amount: cleanText(cells[idxAmount]?.textContent) || null,
                 valuation: cleanText(cells[idxValuation]?.textContent) || null,

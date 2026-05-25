@@ -144,6 +144,23 @@ function isRootDataDetailUrl(value) {
   }
 }
 
+function placeholderEntityUrl(projectLink, projectName) {
+  const rawLink = String(projectLink || "");
+  if (!rawLink.includes("javascript:void(0)")) return "";
+  const name = cleanText(projectName, 255) || crypto.randomUUID();
+  return `javascript:void(0)/${name}`;
+}
+
+function normalizeRelatedEntityUrl(projectLink, projectName) {
+  const placeholder = placeholderEntityUrl(projectLink, projectName);
+  if (placeholder) return placeholder;
+  return canonicalRootDataDetailUrl(projectLink || "");
+}
+
+function isImportableRelatedEntityUrl(value) {
+  return isRootDataDetailUrl(value) || String(value || "").includes("javascript:void(0)/");
+}
+
 function parseAmount(valueStr) {
   if (!valueStr || valueStr === "--") return null;
 
@@ -181,6 +198,15 @@ function parseAmount(valueStr) {
   return Number.isFinite(value) ? value * multiplier : null;
 }
 
+function normalizeFormattedAmount(value, fallbackText) {
+  if (value === null || value === undefined || value === "") {
+    return parseAmount(fallbackText);
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : parseAmount(fallbackText);
+}
+
 function parseDate(dateStr) {
   if (!dateStr) return null;
 
@@ -188,9 +214,9 @@ function parseDate(dateStr) {
   let formattedDateStr;
   const text = String(dateStr).trim();
 
-  if (/^[A-Za-z]{3} \d{2}, \d{4}$/.test(text)) {
+  if (/^[A-Za-z]{3} \d{1,2}, \d{4}$/.test(text)) {
     formattedDateStr = text;
-  } else if (/^[A-Za-z]{3}, \d{4}$/.test(text)) {
+  } else if (/^[A-Za-z]{3},? \d{4}$/.test(text)) {
     formattedDateStr = `01 ${text.replace(",", "")}`;
   } else if (/^[A-Za-z]{3} \d{1,2}$/.test(text)) {
     formattedDateStr = `${text}, ${currentYear}`;
@@ -218,12 +244,12 @@ function stringToHashTimestamp(str) {
 }
 
 function normalizeDetailEntity(item) {
-  const projectLink = canonicalRootDataDetailUrl(item?.projectLink || item?.link || "");
-  const projectName =
-    cleanText(item?.projectName || item?.name, 255) ||
-    parseNameFromRootDataDetailUrl(projectLink);
+  const rawName = cleanText(item?.projectName || item?.name, 255);
+  const rawLink = item?.projectLink || item?.link || "";
+  const projectLink = normalizeRelatedEntityUrl(rawLink, rawName);
+  const projectName = rawName || parseNameFromRootDataDetailUrl(projectLink);
 
-  if (!projectName || !projectLink || !isRootDataDetailUrl(projectLink)) {
+  if (!projectName || !projectLink || !isImportableRelatedEntityUrl(projectLink)) {
     return null;
   }
 
@@ -239,14 +265,8 @@ function normalizeDetailEntity(item) {
     amount: amount || null,
     valuation: valuation || null,
     date: date || null,
-    formattedAmount:
-      item?.formattedAmount === null || item?.formattedAmount === undefined
-        ? parseAmount(amount)
-        : Number(item.formattedAmount),
-    formattedValuation:
-      item?.formattedValuation === null || item?.formattedValuation === undefined
-        ? parseAmount(valuation)
-        : Number(item.formattedValuation),
+    formattedAmount: normalizeFormattedAmount(item?.formattedAmount, amount),
+    formattedValuation: normalizeFormattedAmount(item?.formattedValuation, valuation),
     timestamp:
       item?.timestamp ||
       parseDate(date) ||
