@@ -182,135 +182,44 @@ class FundraisingCrawler extends BaseCrawler {
       if (!pageInstance || pageInstance.isClosed()) {
         throw new Error("pageInstance not found");
       }
-      const url = `https://www.rootdata.com/Fundraising?page=${pageNum}`;
+      const url = `https://www.rootdata.com/fundraising?page=${pageNum}`;
       // console.log('正在打开网页', url);
-      await pageInstance?.goto(url, {
-        waitUntil: "networkidle0",
+      await pageInstance.goto(url, {
+        waitUntil: "domcontentloaded",
         timeout: 20000, // 设置超时
       });
-      // 确保主容器加载完成
-      await pageInstance.waitForSelector(".main_container", { timeout: 10000 });
-      // 定位分页输入框并输入页码
-      const inputSelector =
-        "div.el-input.el-pagination__editor.is-in-pagination input";
-      await pageInstance.waitForSelector(inputSelector, { timeout: 10000 });
-      try {
-        await pageInstance.waitForFunction(
-          (selector, expectedValue) => {
-            const input = document.querySelector(selector);
-            return input && input.value === expectedValue;
-          },
-          { timeout: 3000 },
-          inputSelector,
-          String(pageNum)
-        );
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      } catch (err) {
-        
-        // 步骤2：直接操作DOM清空并设置值（核心逻辑）
-        await pageInstance.evaluate(
-          (selector, newValue) => {
-            const input = document.querySelector(selector);
-            if (!input) throw new Error("输入框未找到");
+      await pageInstance.waitForSelector('table tbody tr a[href*="/projects/detail/"]', { timeout: 15000 });
 
-            // 清空并设置新值
-            input.value = newValue;
-
-            // 触发必要事件（兼容Vue/React/Angular）
-            const events = ["input", "change", "keydown", "keyup"];
-            events.forEach((eventName) =>
-              input.dispatchEvent(new Event(eventName, { bubbles: true }))
-            );
-          },
-          inputSelector,
-          String(pageNum)
-        );
-
-        // 步骤3：模拟回车键（双重保障）
-        await pageInstance.keyboard.press("Enter");
-
-        // 步骤4：验证输入结果（关键！）
-        await pageInstance.waitForFunction(
-          (selector, expectedValue) => {
-            const input = document.querySelector(selector);
-            return input && input.value === expectedValue;
-          },
-          { timeout: 3000 },
-          inputSelector,
-          String(pageNum)
-        );
-        await new Promise((resolve) => setTimeout(resolve, 500)); // 设置间隔
-
-        // 自定义轮询函数（每300ms检查一次，最多60秒）
-        async function waitForLoadingComplete() {
-          const startTime = Date.now();
-          const timeout = 60000; // 60秒超时
-          const interval = 1000; // 1s检查间隔
-
-          return new Promise((resolve, reject) => {
-            const check = async () => {
-              try {
-                // 检查DOM状态
-                const result = await pageInstance.evaluate(() => {
-                  const container = document.querySelector(
-                    ".watermusk_center.table-compat-sort.table-compat-sticky.table-responsive"
-                  );
-                  return !container?.classList.contains(
-                    "el-loading-parent--relative"
-                  );
-                });
-
-                if (result) {
-                  clearInterval(timer);
-                  resolve();
-                } else if (Date.now() - startTime > timeout) {
-                  clearInterval(timer);
-                  reject(new Error("轮询超时：加载状态未消失"));
-                }
-              } catch (error) {
-                clearInterval(timer);
-                reject(error);
-              }
-            };
-
-            // 启动轮询
-            const timer = setInterval(check, interval);
-            check(); // 立即首次检查
-          });
-        }
-
-        try {
-          //等待DOM加载状态消失（el-loading-parent--relative被移除）
-          await waitForLoadingComplete();
-        } catch (error) {
-          
-          await new Promise((resolve) => setTimeout(resolve, 10000));
-        }
-      }
-
-      // 提取并格式化数据（保持原有逻辑不变）
-      const fundraisingData = await pageInstance.evaluate(async () => {
-        const rows = document.querySelectorAll(".main_container tr");
+      // 提取并格式化数据：RootData 当前为 Next.js table 结构。
+      const fundraisingData = await pageInstance.evaluate(() => {
+        const getText = (node) => node?.textContent?.replace(/\s+/g, " ").trim() || "";
+        const rows = document.querySelectorAll("table tbody tr");
         return Array.from(rows)
-          .slice(1)
           .map((row) => {
             const cells = row.querySelectorAll("td");
-            const projectElement = cells[0]?.querySelector(".name .list_name");
+            const projectCell = cells[0];
+            const projectLinks = Array.from(
+              projectCell?.querySelectorAll('a[href*="/projects/detail/"]') || []
+            );
+            const projectElement =
+              projectLinks.find((link) => getText(link)) || projectLinks[0];
+            const projectName =
+              getText(projectElement) ||
+              projectCell?.querySelector("img")?.getAttribute("alt") ||
+              "";
+
             return {
-              logo: cells[0]?.querySelector("a img")?.src || "",
-              projectName: projectElement?.childNodes[0]?.textContent?.trim(),
-              projectLink: projectElement?.href,
-              description: cells[0]?.textContent
-                ?.trim()
-                .replace(projectElement?.textContent?.trim(), "")
-                .trim(),
-              round: cells[1]?.textContent?.trim(),
-              amount: cells[2]?.textContent?.trim(),
-              valuation: cells[3]?.textContent?.trim(),
-              date: cells[4]?.textContent?.trim(),
+              logo: projectCell?.querySelector("img")?.src || "",
+              projectName,
+              projectLink: projectElement?.getAttribute("href") || projectElement?.href,
+              round: getText(cells[1]),
+              amount: getText(cells[2]),
+              valuation: getText(cells[3]),
+              date: getText(cells[4]),
               isInitial: true,
             };
-          });
+          })
+          .filter((item) => item.projectName && item.projectLink);
       });
 
       if (
