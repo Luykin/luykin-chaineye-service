@@ -1,8 +1,9 @@
 const express = require("express");
 const crypto = require("crypto");
 const { Fundraising } = require("../models/postgres-fundraising");
-const { XhuntAdminManager } = require("../models/postgres-start");
+const { XhuntAdminManager, CollectorClientToken } = require("../models/postgres-start");
 const { sendEmail } = require("../services/emailService");
+const { recordGenericStat } = require("../xhunt/services/generic-stats-service");
 
 const router = express.Router();
 
@@ -17,26 +18,66 @@ function safeEqual(leftValue, rightValue) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
-function requireClientToken(req, res, next) {
-  const configuredToken = process.env.COLLECTOR_CLIENT_TOKEN;
-  if (!configuredToken) {
-    return res.status(503).json({
-      success: false,
-      error: "COLLECTOR_CLIENT_TOKEN_NOT_CONFIGURED",
-      message: "采集客户端 token 未配置",
-    });
-  }
+function hashToken(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
 
+async function requireClientToken(req, res, next) {
+  const configuredToken = process.env.COLLECTOR_CLIENT_TOKEN;
   const requestToken = req.get("x-collector-client-token");
-  if (!safeEqual(requestToken, configuredToken)) {
+
+  if (!requestToken) {
     return res.status(401).json({
       success: false,
       error: "UNAUTHORIZED",
-      message: "采集客户端 token 不正确",
+      message: "缺少采集客户端 token",
     });
   }
 
-  next();
+  if (configuredToken && safeEqual(requestToken, configuredToken)) {
+    req.collectorClient = {
+      id: "env",
+      name: "env.COLLECTOR_CLIENT_TOKEN",
+      tokenPrefix: "env",
+    };
+    return next();
+  }
+
+  try {
+    const row = await CollectorClientToken.findOne({
+      where: {
+        tokenHash: hashToken(requestToken),
+        isActive: true,
+      },
+    });
+
+    if (!row || new Date(row.expiresAt).getTime() <= Date.now()) {
+      return res.status(401).json({
+        success: false,
+        error: "UNAUTHORIZED",
+        message: "采集客户端 token 不正确或已过期",
+      });
+    }
+
+    row.lastUsedAt = new Date();
+    row.save().catch((error) => {
+      console.warn("[rootdata-tampermonkey] 更新 token lastUsedAt 失败:", error.message);
+    });
+
+    req.collectorClient = {
+      id: String(row.id),
+      name: row.name,
+      tokenPrefix: row.tokenPrefix,
+    };
+    return next();
+  } catch (error) {
+    console.error("[rootdata-tampermonkey] token 校验失败:", error);
+    return res.status(500).json({
+      success: false,
+      error: "TOKEN_VALIDATE_FAILED",
+      message: "采集客户端 token 校验失败",
+    });
+  }
 }
 
 function cleanText(value, maxLength = 2000) {
@@ -161,6 +202,36 @@ function truncateJson(value, maxLength = 6000) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}\n... [truncated]` : text;
 }
 
+async function safeRecordCollectorStat(req, action, payload = {}) {
+  try {
+    await recordGenericStat({
+      type: "collector.tampermonkey.crawl",
+      source: "tampermonkey",
+      action,
+      subjectType: "script",
+      subjectId: "rootdata-fundraising",
+      subjectName: "RootData Fundraising",
+      actorType: "collector_token",
+      actorId: req.collectorClient?.id || null,
+      actorName: req.collectorClient?.name || null,
+      countValue: 1,
+      numericValue: payload.numericValue ?? null,
+      dimensions: {
+        site: "rootdata",
+        page: "fundraising",
+        script: "rootdata-fundraising-scheduled-reader",
+        scheduleSlot: payload.scheduleSlot || null,
+        tokenPrefix: req.collectorClient?.tokenPrefix || null,
+        status: action,
+      },
+      metrics: payload.metrics || null,
+      meta: payload.meta || null,
+    });
+  } catch (error) {
+    console.warn("[rootdata-tampermonkey] 记录通用统计失败:", error.message);
+  }
+}
+
 async function getAlertRecipients() {
   const envEmails = String(process.env.COLLECTOR_ALERT_EMAILS || "")
     .split(",")
@@ -267,6 +338,17 @@ router.post("/alert", requireClientToken, async (req, res) => {
   });
 
   try {
+    await safeRecordCollectorStat(req, "alert", {
+      scheduleSlot: payload.scheduleSlot,
+      meta: {
+        reason: payload.reason,
+        pageUrl: payload.pageUrl,
+        retryCount: payload.retryCount,
+        maxRetries: payload.maxRetries,
+        occurredAt: payload.occurredAt,
+        details: payload.details || null,
+      },
+    });
     const emailResult = await sendAlertEmail(payload);
     return res.json({
       success: true,
@@ -287,6 +369,10 @@ router.post("/import", requireClientToken, async (req, res) => {
   const { rows, page = 1, pageUrl, scheduleSlot, scrapedAt } = req.body || {};
 
   if (!Array.isArray(rows)) {
+    await safeRecordCollectorStat(req, "failure", {
+      scheduleSlot,
+      meta: { error: "INVALID_ROWS", pageUrl, scrapedAt },
+    });
     return res.status(400).json({
       success: false,
       error: "INVALID_ROWS",
@@ -295,6 +381,11 @@ router.post("/import", requireClientToken, async (req, res) => {
   }
 
   if (rows.length > MAX_IMPORT_ROWS) {
+    await safeRecordCollectorStat(req, "failure", {
+      scheduleSlot,
+      metrics: { received: rows.length, maxImportRows: MAX_IMPORT_ROWS },
+      meta: { error: "ROWS_TOO_MANY", pageUrl, scrapedAt },
+    });
     return res.status(400).json({
       success: false,
       error: "ROWS_TOO_MANY",
@@ -323,6 +414,11 @@ router.post("/import", requireClientToken, async (req, res) => {
   });
 
   if (data.length === 0) {
+    await safeRecordCollectorStat(req, "failure", {
+      scheduleSlot,
+      metrics: { received: rows.length, imported: 0, skipped: skipped.length },
+      meta: { error: "NO_VALID_ROWS", pageUrl, scrapedAt, skipped },
+    });
     return res.status(400).json({
       success: false,
       error: "NO_VALID_ROWS",
@@ -335,9 +431,22 @@ router.post("/import", requireClientToken, async (req, res) => {
     (field) => !["id", "projectLink", "createdAt", "updatedAt"].includes(field)
   );
 
-  await Fundraising.Project.bulkCreate(data, {
-    updateOnDuplicate: fieldsToUpdate,
-  });
+  try {
+    await Fundraising.Project.bulkCreate(data, {
+      updateOnDuplicate: fieldsToUpdate,
+    });
+  } catch (error) {
+    await safeRecordCollectorStat(req, "failure", {
+      scheduleSlot,
+      metrics: { received: rows.length, imported: 0, skipped: skipped.length },
+      meta: { error: error.message, pageUrl, scrapedAt },
+    });
+    return res.status(500).json({
+      success: false,
+      error: "IMPORT_FAILED",
+      message: error.message,
+    });
+  }
 
   console.log("[rootdata-tampermonkey] 导入融资列表数据成功:", {
     received: rows.length,
@@ -347,6 +456,22 @@ router.post("/import", requireClientToken, async (req, res) => {
     pageUrl,
     scheduleSlot,
     scrapedAt,
+  });
+
+  await safeRecordCollectorStat(req, "success", {
+    scheduleSlot,
+    numericValue: data.length,
+    metrics: {
+      received: rows.length,
+      imported: data.length,
+      skipped: skipped.length,
+    },
+    meta: {
+      page,
+      pageUrl,
+      scrapedAt,
+      skippedItems: skipped.slice(0, 20),
+    },
   });
 
   return res.json({

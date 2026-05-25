@@ -33,6 +33,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/reviews-management", icon: <LegacySidebarIcon name="message-circle" />, label: "点评管理", permission: "reviews-management", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/perf-monitor", icon: <LegacySidebarIcon name="zap" />, label: "性能监控", permission: "perf-monitor", group: "main", sidebarGroup: "monitor", implemented: true, section: "primary" },
   { key: "/server-command", icon: <LegacySidebarIcon name="server" />, label: "服务器命令", permission: "server:execute", group: "main", sidebarGroup: "dev", implemented: true, section: "primary" },
+  { key: "/tampermonkey", icon: <LegacySidebarIcon name="cpu" />, label: "采集脚本", permission: "tampermonkey", group: "main", sidebarGroup: "dev", implemented: true, section: "primary" },
   { key: "/vip-management", icon: <LegacySidebarIcon name="user" />, label: "VIP 管理", permission: "vip-management", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-messages", icon: <LegacySidebarIcon name="megaphone" />, label: "公告配置", permission: "nacos-messages", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-campaigns", icon: <LegacySidebarIcon name="target" />, label: "活动配置", permission: "nacos_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },

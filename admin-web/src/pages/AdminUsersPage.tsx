@@ -23,6 +23,7 @@ const PERMISSION_OPTIONS = [
   { label: "点评管理", value: "reviews-management" },
   { label: "性能监控", value: "perf-monitor" },
   { label: "服务器命令", value: "server:execute" },
+  { label: "采集脚本", value: "tampermonkey" },
   { label: "公告配置", value: "nacos-messages" },
   { label: "活动配置", value: "nacos_config" },
   { label: "标签配置", value: "nacos-tags" },

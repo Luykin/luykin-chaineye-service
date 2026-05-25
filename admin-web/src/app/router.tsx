@@ -30,6 +30,7 @@ import { RedisManagementPage } from "@/pages/RedisManagementPage";
 import { LlmTestPage } from "@/pages/LlmTestPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import { VipManagementPage } from "@/pages/VipManagementPage";
+import { TampermonkeyPage } from "@/pages/TampermonkeyPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -61,6 +62,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "llm-test": <LlmTestPage />,
   "admin-users": <AdminUsersPage />,
   "vip-management": <VipManagementPage />,
+  tampermonkey: <TampermonkeyPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {

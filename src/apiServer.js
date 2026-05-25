@@ -49,6 +49,7 @@ const MODULES_TO_PRELOAD = [
   // Admin API
   './admin/api/admin',
   './admin/api/reviews',
+  './admin/api/tampermonkey',
   
   // 币安广场
   './binance-square/api/binance-square',
@@ -168,6 +169,7 @@ const rootdataProRoutes = require("./rootdatapro/api/rootdatapro");
 const adminRoutes = require("./admin/api/admin");
 const adminReviewsRoutes = require("./admin/api/reviews");
 const adminLlmTestRoutes = require("./admin/api/llm-test");
+const adminTampermonkeyRoutes = require("./admin/api/tampermonkey");
 const binanceSquareRoutes = require("./binance-square/api/binance-square");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
@@ -543,6 +545,9 @@ async function initializeAndStartServer() {
 
   // 管理后台 - LLM 测试工具 API
   app.use("/api/admin/llm-test", adminAuth, adminLlmTestRoutes);
+
+  // 管理后台 - Tampermonkey 采集脚本与 token 管理
+  app.use("/api/admin/tampermonkey", adminAuth, adminTampermonkeyRoutes);
 
   // 管理后台 - 币安广场
   app.use("/api/admin/binance-square", adminAuth, binanceSquareRoutes.router);

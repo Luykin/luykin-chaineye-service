@@ -16,6 +16,7 @@ import {
 } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import dayjs, { Dayjs } from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -90,8 +91,13 @@ function buildEventTooltip(item: GenericStatEventItem) {
 
 export function GenericStatsPage() {
   const [form] = Form.useForm();
+  const [searchParams] = useSearchParams();
+  const initialType = searchParams.get("type") || undefined;
+  const initialSubjectId = searchParams.get("subjectId") || undefined;
+  const initialActorId = searchParams.get("actorId") || undefined;
+  const initialParamsKey = searchParams.toString();
   const [page, setPage] = useState(1);
-  const [selectedType, setSelectedType] = useState<string | undefined>(undefined);
+  const [selectedType, setSelectedType] = useState<string | undefined>(initialType);
 
   const typesQuery = useQuery({
     queryKey: ["generic-stats", "types"],
@@ -109,6 +115,20 @@ export function GenericStatsPage() {
     | undefined;
 
   useEffect(() => {
+    if (initialType || initialSubjectId || initialActorId) {
+      form.setFieldsValue({
+        type: initialType,
+        subjectId: initialSubjectId,
+        actorId: initialActorId,
+        dateFrom: getDefaultDateFrom(),
+      });
+      setSelectedType(initialType);
+      setPage(1);
+    }
+  }, [form, initialActorId, initialParamsKey, initialSubjectId, initialType]);
+
+  useEffect(() => {
+    if (initialType) return;
     if (!typesQuery.data?.data?.length) return;
     if (selectedType) return;
 
@@ -119,7 +139,7 @@ export function GenericStatsPage() {
       form.setFieldValue("type", AGGREGATE_TYPE);
       setSelectedType(AGGREGATE_TYPE);
     }
-  }, [form, selectedType, typesQuery.data]);
+  }, [form, initialType, selectedType, typesQuery.data]);
 
   const queryParams = useMemo(
     () => ({
@@ -297,7 +317,12 @@ export function GenericStatsPage() {
           <Form
             form={form}
             layout="vertical"
-            initialValues={{ dateFrom: getDefaultDateFrom() }}
+            initialValues={{
+              dateFrom: getDefaultDateFrom(),
+              type: initialType,
+              subjectId: initialSubjectId,
+              actorId: initialActorId,
+            }}
             onValuesChange={(changedValues) => {
               if (Object.prototype.hasOwnProperty.call(changedValues, "type")) {
                 setSelectedType(changedValues.type || undefined);
