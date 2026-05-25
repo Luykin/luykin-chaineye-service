@@ -1,5 +1,6 @@
 const express = require("express");
 const crypto = require("crypto");
+const { Op } = require("sequelize");
 const { Fundraising } = require("../models/postgres-fundraising");
 const { XhuntAdminManager, CollectorClientToken } = require("../models/postgres-start");
 const { sendEmail } = require("../services/emailService");
@@ -101,14 +102,19 @@ function canonicalRootDataDetailUrl(value) {
     url.protocol = "https:";
     url.hostname = "www.rootdata.com";
 
-    const match = url.pathname.match(/^\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
-    if (!match?.[1]) return url.toString();
+    const detailMatch = url.pathname.match(/^\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
+    const memberMatch = url.pathname.match(/^\/member\/([^/?#]+)/);
+    if (!detailMatch?.[1] && !memberMatch?.[1]) return url.toString();
 
-    const type = /\/(?:investors|Investors)\//.test(url.pathname)
-      ? "Investors"
-      : "Projects";
-    const slug = match[1];
-    url.pathname = `/${type}/detail/${slug}`;
+    if (memberMatch?.[1]) {
+      url.pathname = `/member/${memberMatch[1]}`;
+    } else {
+      const type = /\/(?:investors|Investors)\//.test(url.pathname)
+        ? "Investors"
+        : "Projects";
+      const slug = detailMatch[1];
+      url.pathname = `/${type}/detail/${slug}`;
+    }
 
     const k = url.searchParams.get("k");
     url.search = "";
@@ -120,15 +126,85 @@ function canonicalRootDataDetailUrl(value) {
   }
 }
 
+function rootDataDetailUrlCandidates(value) {
+  const canonical = canonicalRootDataDetailUrl(value);
+  const candidates = new Set([canonical, String(value || "")].filter(Boolean));
+
+  try {
+    const url = new URL(canonical, "https://www.rootdata.com");
+    const detailMatch = url.pathname.match(/^\/(Projects|Investors)\/detail\/([^/?#]+)/);
+    const memberMatch = url.pathname.match(/^\/member\/([^/?#]+)/);
+    const k = url.searchParams.get("k");
+
+    if (memberMatch?.[1]) {
+      const item = new URL(canonical);
+      item.pathname = `/member/${memberMatch[1]}`;
+      item.search = "";
+      if (k) item.searchParams.set("k", k);
+      item.hash = "";
+      candidates.add(item.toString());
+      return Array.from(candidates);
+    }
+
+    if (!detailMatch?.[1] || !detailMatch?.[2]) return Array.from(candidates);
+
+    const type = detailMatch[1];
+    const lowerType = type.toLowerCase();
+    const slug = detailMatch[2];
+
+    for (const pathType of [type, lowerType]) {
+      const item = new URL(canonical);
+      item.pathname = `/${pathType}/detail/${slug}`;
+      item.search = "";
+      if (k) item.searchParams.set("k", k);
+      item.hash = "";
+      candidates.add(item.toString());
+    }
+  } catch (_) {}
+
+  return Array.from(candidates).filter(Boolean);
+}
+
+async function findOrCreateProjectByDetailLink(projectLink, defaults, transaction) {
+  const candidates = rootDataDetailUrlCandidates(projectLink);
+  const existing = await Fundraising.Project.findOne({
+    where: { projectLink: { [Op.in]: candidates } },
+    order: [["updatedAt", "DESC"], ["id", "DESC"]],
+    transaction,
+  });
+
+  if (existing) return [existing, false];
+
+  return Fundraising.Project.findOrCreate({
+    where: { projectLink },
+    defaults,
+    transaction,
+  });
+}
+
 function parseNameFromRootDataDetailUrl(value) {
   if (!value) return "";
   try {
     const url = new URL(value, "https://www.rootdata.com");
-    const match = url.pathname.match(/\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
-    if (!match?.[1]) return "";
-    return decodeURIComponent(match[1]).replace(/\+/g, " ").trim();
+    const detailMatch = url.pathname.match(/\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
+    const memberMatch = url.pathname.match(/\/member\/([^/?#]+)/);
+    const slug = detailMatch?.[1] || memberMatch?.[1];
+    if (!slug) return "";
+    return decodeURIComponent(slug).replace(/\+/g, " ").trim();
   } catch (_) {
     return "";
+  }
+}
+
+function isRootDataProjectOrInvestorDetailUrl(value) {
+  try {
+    const url = new URL(value, "https://www.rootdata.com");
+    return (
+      /(^|\.)rootdata\.com$/i.test(url.hostname) &&
+      /\/(?:projects|Projects|investors|Investors)\/detail\//.test(url.pathname)
+    );
+  } catch (_) {
+    return false;
   }
 }
 
@@ -137,8 +213,18 @@ function isRootDataDetailUrl(value) {
     const url = new URL(value, "https://www.rootdata.com");
     return (
       /(^|\.)rootdata\.com$/i.test(url.hostname) &&
-      /\/(?:projects|Projects|investors|Investors)\/detail\//.test(url.pathname)
+      (/\/(?:projects|Projects|investors|Investors)\/detail\//.test(url.pathname) || /\/member\//.test(url.pathname))
     );
+  } catch (_) {
+    return false;
+  }
+}
+
+
+function isRootDataMemberUrl(value) {
+  try {
+    const url = new URL(value, "https://www.rootdata.com");
+    return /(^|\.)rootdata\.com$/i.test(url.hostname) && /\/member\//.test(url.pathname);
   } catch (_) {
     return false;
   }
@@ -158,7 +244,8 @@ function normalizeRelatedEntityUrl(projectLink, projectName) {
 }
 
 function isImportableRelatedEntityUrl(value) {
-  return isRootDataDetailUrl(value) || String(value || "").includes("javascript:void(0)/");
+  // 投资关系只允许项目/机构或无详情页占位投资方；member 人物页不能作为融资关系实体写入。
+  return isRootDataProjectOrInvestorDetailUrl(value) || String(value || "").includes("javascript:void(0)/");
 }
 
 function parseAmount(valueStr) {
@@ -371,9 +458,9 @@ async function upsertInvestmentRelationships(project, investors, program = "auto
     const records = [];
 
     for (const investor of normalizedInvestors) {
-      const [investorProject] = await Fundraising.Project.findOrCreate({
-        where: { projectLink: investor.projectLink },
-        defaults: {
+      const [investorProject] = await findOrCreateProjectByDetailLink(
+        investor.projectLink,
+        {
           projectName: investor.projectName,
           isInitial: false,
           socialLinks: null,
@@ -381,8 +468,8 @@ async function upsertInvestmentRelationships(project, investors, program = "auto
           detailFetchedAt: null,
           updateProgram: program,
         },
-        transaction,
-      });
+        transaction
+      );
 
       records.push({
         investorProjectId: investorProject.id,
@@ -440,9 +527,9 @@ async function upsertInvestedRelationships(investorProject, investedProjects, pr
     const records = [];
 
     for (const project of normalizedProjects) {
-      const [fundedProject] = await Fundraising.Project.findOrCreate({
-        where: { projectLink: project.projectLink },
-        defaults: {
+      const [fundedProject] = await findOrCreateProjectByDetailLink(
+        project.projectLink,
+        {
           projectName: project.projectName,
           isInitial: false,
           socialLinks: null,
@@ -450,8 +537,8 @@ async function upsertInvestedRelationships(investorProject, investedProjects, pr
           detailFetchedAt: null,
           updateProgram: program,
         },
-        transaction,
-      });
+        transaction
+      );
 
       records.push({
         investorProjectId: investorProject.id,
@@ -865,6 +952,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     ? payload.investedProjects
     : [];
   const isInitial = payload.isInitial !== false;
+  const isMemberDetail = isRootDataMemberUrl(projectLink);
   const hasUsefulDetails =
     Boolean(projectName) &&
     (Boolean(payload.logo) ||
@@ -874,19 +962,16 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       investedProjects.length > 0);
 
   try {
-    const [project] = await Fundraising.Project.findOrCreate({
-      where: { projectLink },
-      defaults: {
-        projectName,
-        projectLink,
-        logo: cleanText(payload.logo, 2000) || null,
-        isInitial,
-        socialLinks,
-        teamMembers,
-        detailFetchedAt: hasUsefulDetails ? Date.now() : null,
-        detailFailuresNumber: hasUsefulDetails ? 0 : 1,
-        updateProgram: program,
-      },
+    const [project] = await findOrCreateProjectByDetailLink(projectLink, {
+      projectName,
+      projectLink,
+      logo: cleanText(payload.logo, 2000) || null,
+      isInitial,
+      socialLinks,
+      teamMembers,
+      detailFetchedAt: hasUsefulDetails ? Date.now() : null,
+      detailFailuresNumber: hasUsefulDetails ? 0 : 1,
+      updateProgram: program,
     });
 
     const updateValues = {
@@ -923,10 +1008,11 @@ router.post("/details/import", requireClientToken, async (req, res) => {
 
     await project.update(updateValues);
 
-    const investmentRelationships = isInitial
+    // member 人物页只修基础资料；不能把人物页里的 Work History / 相关项目写成融资关系。
+    const investmentRelationships = isInitial && !isMemberDetail
       ? await upsertInvestmentRelationships(project, investors, program)
       : 0;
-    const investedRelationships = isInitial
+    const investedRelationships = isInitial && !isMemberDetail
       ? await upsertInvestedRelationships(project, investedProjects, program)
       : 0;
 
@@ -1013,16 +1099,13 @@ router.post("/details/failure", requireClientToken, async (req, res) => {
   }
 
   try {
-    const [project] = await Fundraising.Project.findOrCreate({
-      where: { projectLink },
-      defaults: {
-        projectName,
-        projectLink,
-        isInitial: payload.isInitial !== false,
-        detailFailuresNumber: 0,
-        detailFetchedAt: null,
-        updateProgram: "auto_crawler",
-      },
+    const [project] = await findOrCreateProjectByDetailLink(projectLink, {
+      projectName,
+      projectLink,
+      isInitial: payload.isInitial !== false,
+      detailFailuresNumber: 0,
+      detailFetchedAt: null,
+      updateProgram: "auto_crawler",
     });
 
     await project.update({

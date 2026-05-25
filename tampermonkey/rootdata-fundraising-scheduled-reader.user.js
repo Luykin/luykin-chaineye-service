@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.4.7
+// @version      0.4.8
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -80,13 +80,18 @@
     if (!rawUrl) return "";
     try {
       const url = new URL(rawUrl, location.origin);
-      const match = url.pathname.match(/^\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
-      if (!match?.[1]) return url.toString();
+      const detailMatch = url.pathname.match(/^\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
+      const memberMatch = url.pathname.match(/^\/member\/([^/?#]+)/);
+      if (!detailMatch?.[1] && !memberMatch?.[1]) return url.toString();
 
-      const type = /\/(?:investors|Investors)\//.test(url.pathname) ? "Investors" : "Projects";
       url.protocol = "https:";
       url.hostname = "www.rootdata.com";
-      url.pathname = `/${type}/detail/${match[1]}`;
+      if (memberMatch?.[1]) {
+        url.pathname = `/member/${memberMatch[1]}`;
+      } else {
+        const type = /\/(?:investors|Investors)\//.test(url.pathname) ? "Investors" : "Projects";
+        url.pathname = `/${type}/detail/${detailMatch[1]}`;
+      }
 
       const k = url.searchParams.get("k");
       url.search = "";
@@ -173,9 +178,11 @@
     if (!rawUrl) return "";
     try {
       const url = new URL(rawUrl, location.origin);
-      const match = url.pathname.match(/\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
-      if (!match?.[1]) return "";
-      return decodeURIComponent(match[1]).replace(/\+/g, " ").trim();
+      const detailMatch = url.pathname.match(/\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
+      const memberMatch = url.pathname.match(/\/member\/([^/?#]+)/);
+      const slug = detailMatch?.[1] || memberMatch?.[1];
+      if (!slug) return "";
+      return decodeURIComponent(slug).replace(/\+/g, " ").trim();
     } catch (_) {
       return "";
     }
@@ -635,6 +642,13 @@
     return link ? normalizeXUrl(link.href) : "";
   }
 
+
+  function findHeaderXUrl(doc) {
+    const link = Array.from(doc.querySelectorAll('#base-info-header a[href*="x.com"], #base-info-header a[href*="twitter.com"]'))
+      .find((anchor) => normalizeXUrl(anchor.href));
+    return link ? normalizeXUrl(link.href) : "";
+  }
+
   function normalizeXUrl(rawUrl) {
     if (!rawUrl) return "";
     try {
@@ -712,7 +726,7 @@
   function collectEntityLinks(scope, detailUrl, { allowProjects = true, allowInvestors = true } = {}) {
     const links = Array.from(
       scope.querySelectorAll(
-        'a[href*="/investors/detail/"], a[href*="/Investors/detail/"], a[href*="/projects/detail/"], a[href*="/Projects/detail/"]'
+        'a[href*="/investors/detail/"], a[href*="/Investors/detail/"], a[href*="/projects/detail/"], a[href*="/Projects/detail/"], a[href*="/member/"]'
       )
     );
     const result = [];
@@ -986,7 +1000,7 @@
 
   function parseBasicDetail(doc, detailUrl) {
     const socialLinks = {};
-    const officialXUrl = findOfficialAsideXUrl(doc, detailUrl);
+    const officialXUrl = findOfficialAsideXUrl(doc, detailUrl) || findHeaderXUrl(doc);
     if (officialXUrl) socialLinks.x = officialXUrl;
 
     const detailRoot = doc.querySelector("main") || doc.body || doc;
@@ -1035,9 +1049,11 @@
 
   function parseDetailDocument(doc, detailUrl, { isInitial = true, dryRun = false } = {}) {
     const basic = parseBasicDetail(doc, detailUrl);
-    const initialInvestors = isInitial ? parseInitialInvestors(doc, detailUrl) : [];
-    const roundsInvestors = isInitial ? parseRoundsInvestors(doc, detailUrl) : [];
-    const investors = isInitial ? mergeInvestorData(initialInvestors, roundsInvestors) : [];
+    const isMemberDetail = isRootDataMemberUrl(detailUrl);
+    // member 人物页只修基础资料（头像 / 官方 X），不能把 Work History / 相关项目误当成融资关系。
+    const initialInvestors = isInitial && !isMemberDetail ? parseInitialInvestors(doc, detailUrl) : [];
+    const roundsInvestors = isInitial && !isMemberDetail ? parseRoundsInvestors(doc, detailUrl) : [];
+    const investors = isInitial && !isMemberDetail ? mergeInvestorData(initialInvestors, roundsInvestors) : [];
     const bodyText = cleanText(doc.body?.innerText || "");
     const rootDataEntityLinkCount = collectEntityLinks(doc, detailUrl).length;
     const detailShellFound =
@@ -1085,13 +1101,14 @@
     clickButtonsByText(doc, /expand\s*more/i);
     await sleep(800);
 
-    if (isInitial) {
+    const isMemberDetail = isRootDataMemberUrl(detailUrl);
+    if (isInitial && !isMemberDetail) {
       await clickRoundsTab(doc);
       await sleep(600);
     }
 
     const details = parseDetailDocument(doc, detailUrl, { isInitial });
-    if (isInitial) {
+    if (isInitial && !isMemberDetail) {
       details.investedProjects = await scrapeInvestedProjectsFromDetail(doc, detailUrl);
     }
 
@@ -1245,10 +1262,17 @@
     });
   }
 
+
+  function isRootDataMemberUrl(rawUrl) {
+    const link = canonicalRootDataDetailUrl(absoluteUrl(rawUrl || ""));
+    return /rootdata\.com\/member\//.test(link);
+  }
+
   function isRootDataEntityDetailUrl(rawUrl, { allowInvestors = false } = {}) {
     const link = canonicalRootDataDetailUrl(absoluteUrl(rawUrl || ""));
     if (/rootdata\.com\/(?:projects|Projects)\/detail\//.test(link)) return true;
     if (allowInvestors && /rootdata\.com\/(?:investors|Investors)\/detail\//.test(link)) return true;
+    if (allowInvestors && /rootdata\.com\/member\//.test(link)) return true;
     return false;
   }
 
@@ -1696,7 +1720,7 @@
                 projectLink,
               };
             })
-            .filter((item) => item.projectName && /rootdata\.com\/(?:projects|Projects|investors|Investors)\/detail\//.test(item.projectLink))
+            .filter((item) => item.projectName && (/rootdata\.com\/(?:projects|Projects|investors|Investors)\/detail\//.test(item.projectLink) || /rootdata\.com\/member\//.test(item.projectLink)))
         );
 
         const oldMaxInitial = CONFIG.detailMaxProjectsPerRun;

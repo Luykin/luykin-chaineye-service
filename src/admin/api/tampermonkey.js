@@ -175,6 +175,7 @@ function getAuditEntityType(projectLink) {
   const link = cleanText(projectLink, 3000);
   if (/\/(?:investors|Investors)\/detail\//.test(link)) return "investor";
   if (/\/(?:projects|Projects)\/detail\//.test(link)) return "project";
+  if (/\/member\//.test(link)) return "member";
   return "unknown";
 }
 
@@ -511,7 +512,7 @@ router.get("/rootdata/detail-pollution-audit", async (req, res) => {
         reasons: item.reasons,
       }));
     const tampermonkeyQueue = definiteQueue.filter((item) => {
-      return item.entityType === "project" || item.entityType === "investor";
+      return item.entityType === "project" || item.entityType === "investor" || item.entityType === "member";
     });
 
     res.json({

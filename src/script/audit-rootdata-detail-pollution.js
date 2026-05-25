@@ -118,6 +118,7 @@ function getEntityType(projectLink) {
   const link = cleanText(projectLink);
   if (/\/(?:investors|Investors)\/detail\//.test(link)) return "investor";
   if (/\/(?:projects|Projects)\/detail\//.test(link)) return "project";
+  if (/\/member\//.test(link)) return "member";
   return "unknown";
 }
 
@@ -298,7 +299,7 @@ async function main() {
       reasons: item.reviewReasons,
     }));
   const tampermonkeyQueue = definiteQueue
-    .filter((item) => item.entityType === "project" || item.entityType === "investor")
+    .filter((item) => item.entityType === "project" || item.entityType === "investor" || item.entityType === "member")
     .map((item) => ({
       id: item.id,
       entityType: item.entityType,
