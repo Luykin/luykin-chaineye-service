@@ -1,5 +1,6 @@
 const retry = require("async-retry");
 const axios = require("axios");
+const { JSDOM } = require("jsdom");
 // 从 SQLite 导入爬取状态管理
 const { NewCrawlState, C_STATE_TYPE } = require("../models/sqlite-start");
 // 从 PostgreSQL 导入 Fundraising 模型
@@ -177,51 +178,37 @@ class FundraisingCrawler extends BaseCrawler {
    * 【爬虫】每一页的操作，爬取项目列表页面，包括等待页面加载，输入页数量，数据构建等
    * **/
   async crawlPage(pageNum) {
-    const { browser, page: pageInstance } = await this.initBrowserAndPage();
+    let browser = null;
+    let pageInstance = null;
     try {
       console.log("开始爬取第", pageNum, "页");
-      if (!pageInstance || pageInstance.isClosed()) {
-        throw new Error("pageInstance not found");
-      }
       const url = `https://www.rootdata.com/fundraising?page=${pageNum}`;
-      // console.log('正在打开网页', url);
-      await pageInstance.goto(url, {
-        waitUntil: "domcontentloaded",
-        timeout: 20000, // 设置超时
-      });
-      await this.waitForFundraisingPageReady(pageInstance, pageNum);
 
-      // 提取并格式化数据：RootData 当前为 Next.js table 结构。
-      const fundraisingData = await pageInstance.evaluate(() => {
-        const getText = (node) => node?.textContent?.replace(/\s+/g, " ").trim() || "";
-        const rows = document.querySelectorAll("table tbody tr");
-        return Array.from(rows)
-          .map((row) => {
-            const cells = row.querySelectorAll("td");
-            const projectCell = cells[0];
-            const projectLinks = Array.from(
-              projectCell?.querySelectorAll('a[href*="/projects/detail/"]') || []
-            );
-            const projectElement =
-              projectLinks.find((link) => getText(link)) || projectLinks[0];
-            const projectName =
-              getText(projectElement) ||
-              projectCell?.querySelector("img")?.getAttribute("alt") ||
-              "";
+      let fundraisingData = [];
+      try {
+        const html = await this.fetchFundraisingPageHtml(url);
+        fundraisingData = parseFundraisingListHtml(html);
+        console.log(`[fundraising] axios解析第${pageNum}页成功，条数=${fundraisingData.length}`);
+      } catch (axiosError) {
+        console.warn(`[fundraising] axios解析第${pageNum}页失败，回退Puppeteer: ${axiosError?.message}`);
+      }
 
-            return {
-              logo: projectCell?.querySelector("img")?.src || "",
-              projectName,
-              projectLink: projectElement?.getAttribute("href") || projectElement?.href,
-              round: getText(cells[1]),
-              amount: getText(cells[2]),
-              valuation: getText(cells[3]),
-              date: getText(cells[4]),
-              isInitial: true,
-            };
-          })
-          .filter((item) => item.projectName && item.projectLink);
-      });
+      if (!fundraisingData || fundraisingData.length <= 1) {
+        const browserPage = await this.initBrowserAndPage();
+        browser = browserPage.browser;
+        pageInstance = browserPage.page;
+        if (!pageInstance || pageInstance.isClosed()) {
+          throw new Error("pageInstance not found");
+        }
+        await this.prepareFundraisingPage(pageInstance);
+        await pageInstance.goto(url, {
+          waitUntil: "domcontentloaded",
+          timeout: 20000, // 设置超时
+        });
+        await this.waitForFundraisingPageReady(pageInstance, pageNum);
+        fundraisingData = parseFundraisingListHtml(await pageInstance.content());
+        console.log(`[fundraising] puppeteer解析第${pageNum}页完成，条数=${fundraisingData.length}`);
+      }
 
       if (
         !fundraisingData ||
@@ -248,6 +235,52 @@ class FundraisingCrawler extends BaseCrawler {
     }
   }
 
+  async fetchFundraisingPageHtml(url) {
+    const response = await this.axiosRequestWithRetry(
+      url,
+      {
+        timeout: 20000,
+        maxRedirects: 3,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+          Cookie: this.loginCookies.forAxios,
+        },
+      },
+      3
+    );
+    const html = String(response?.data || "");
+    this.assertFundraisingHtmlAvailable(html, "axios");
+    return html;
+  }
+
+  async prepareFundraisingPage(pageInstance) {
+    await pageInstance.setUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    );
+    await pageInstance.setExtraHTTPHeaders({
+      "Accept-Language": "en-US,en;q=0.9",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    });
+    await pageInstance.setCookie(...this.loginCookies.forPuppeteer);
+  }
+
+  assertFundraisingHtmlAvailable(html, source) {
+    if (/WAF Block Page|Your request has been interrupted|web application firewall/i.test(html)) {
+      const requestUuid = html.match(/Request UUID:\s*([a-zA-Z0-9-]+)/i)?.[1];
+      throw new Error(`RootData WAF blocked ${source} request${requestUuid ? `, requestUuid=${requestUuid}` : ""}`);
+    }
+    if (/cloudflare|attention required|checking your browser|verify you are human/i.test(html)) {
+      throw new Error(`RootData anti-bot page returned for ${source}`);
+    }
+  }
+
   async waitForFundraisingPageReady(pageInstance, pageNum) {
     const selector = 'table tbody tr a[href*="/projects/detail/"]';
     try {
@@ -255,6 +288,7 @@ class FundraisingCrawler extends BaseCrawler {
       return;
     } catch (selectorError) {
       const html = await pageInstance.content().catch(() => "");
+      this.assertFundraisingHtmlAvailable(html, "puppeteer");
       if (FUNDRAISING_PROJECT_LINK_PATTERN.test(html)) {
         console.warn(
           `[fundraising] selector等待失败但HTML中已存在项目链接，继续解析。page=${pageNum}, selector=${selector}`
@@ -1962,6 +1996,40 @@ class FundraisingCrawler extends BaseCrawler {
 }
 
 module.exports = new FundraisingCrawler();
+
+function parseFundraisingListHtml(html) {
+  const dom = new JSDOM(html, { url: baseRootDataURL });
+  const { document } = dom.window;
+  const getText = (node) => node?.textContent?.replace(/\s+/g, " ").trim() || "";
+  const rows = document.querySelectorAll("table tbody tr");
+
+  return Array.from(rows)
+    .map((row) => {
+      const cells = row.querySelectorAll("td");
+      const projectCell = cells[0];
+      const projectLinks = Array.from(
+        projectCell?.querySelectorAll('a[href*="/projects/detail/"]') || []
+      );
+      const projectElement =
+        projectLinks.find((link) => getText(link)) || projectLinks[0];
+      const projectName =
+        getText(projectElement) ||
+        projectCell?.querySelector("img")?.getAttribute("alt") ||
+        "";
+
+      return {
+        logo: projectCell?.querySelector("img")?.src || "",
+        projectName,
+        projectLink: projectElement?.getAttribute("href") || projectElement?.href,
+        round: getText(cells[1]),
+        amount: getText(cells[2]),
+        valuation: getText(cells[3]),
+        date: getText(cells[4]),
+        isInitial: true,
+      };
+    })
+    .filter((item) => item.projectName && item.projectLink);
+}
 
 function joinUrl(path, projectName) {
   // 如果 path 包含无效的 'javascript:void(0)' 链接，替换为唯一标识符
