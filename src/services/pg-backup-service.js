@@ -36,7 +36,7 @@ class PostgresBackupService {
     // 运行 pg_dump 时优先走本机环回地址，避免本地 socket 认证与外网连通差异
     this.dumpHost = process.env.PG_DUMP_HOST || "127.0.0.1";
 
-    // 只备份 X 开头的表（XHunt 相关业务表）
+    // 备份白名单业务表：XHunt 表 + RootData Fundraising 核心表
     this.tablesToBackup = [
       "XHuntUsers",
       "XHuntUserTokens",
@@ -57,9 +57,9 @@ class PostgresBackupService {
     this.restoreGroups = [
       {
         key: "fundraising_project_relationships",
-        label: "RootData Fundraising：项目 + 关系表",
+        label: "RootData Fundraising：项目 + 投资关系 + 职位关系表",
         description:
-          "恢复 Projects、InvestmentRelationships、PositionRelationships 到指定备份时间点。",
+          "恢复 Projects、InvestmentRelationships、PositionRelationships 到指定备份时间点。PositionRelationships 也引用 Projects，必须一起处理，避免恢复后外键关系不一致。",
         tables: ["Projects", "InvestmentRelationships", "PositionRelationships"],
       },
     ];
@@ -434,7 +434,7 @@ class PostgresBackupService {
     console.log(`📦 开始备份数据库: ${this.dbConfig.database}`);
     console.log(`📝 备份文件: ${backupFileName}`);
     console.log(
-      `📋 备份表数量: ${this.tablesToBackup.length} 个 (只备份 X 开头的业务表)`
+      `📋 备份表数量: ${this.tablesToBackup.length} 个 (XHunt + RootData Fundraising 白名单表)`
     );
 
     try {

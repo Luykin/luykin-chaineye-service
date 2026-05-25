@@ -1314,6 +1314,12 @@ router.get("/search", async (req, res) => {
         message: "No keyword provided or keyword too short",
       });
     }
+    // TODO 修复后恢复
+    return res.json({
+      invested: null,
+      investor: null,
+      message: "No keyword provided or keyword too short",
+    });
 
     // const lowerKeyword = String(keyword).toLowerCase();
 
