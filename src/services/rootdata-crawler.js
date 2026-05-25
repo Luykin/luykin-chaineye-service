@@ -1,6 +1,7 @@
 const retry = require("async-retry");
 const axios = require("axios");
 const { JSDOM } = require("jsdom");
+const { HttpsProxyAgent } = require("https-proxy-agent");
 // 从 SQLite 导入爬取状态管理
 const { NewCrawlState, C_STATE_TYPE } = require("../models/sqlite-start");
 // 从 PostgreSQL 导入 Fundraising 模型
@@ -11,6 +12,13 @@ const BaseCrawler = require("./base-crawler");
 const { ip1, ip2, ip3, ip4 } = require("./base-crawler");
 const baseRootDataURL = "https://www.rootdata.com";
 const FUNDRAISING_PROJECT_LINK_PATTERN = /href="([^"]*\/projects\/detail\/[^"]*)"/i;
+const FUNDRAISING_PROXY_POOL = [
+  "http://user81794:8ipjmd@163.5.88.220:6324",
+  "http://user81794:8ipjmd@108.165.167.7:6324",
+  "http://user81794:8ipjmd@108.165.167.11:6324",
+  "http://user81794:8ipjmd@45.135.251.198:6324",
+  "http://user81794:8ipjmd@45.135.251.37:6324",
+];
 
 class FundraisingCrawler extends BaseCrawler {
   constructor() {
@@ -236,27 +244,53 @@ class FundraisingCrawler extends BaseCrawler {
   }
 
   async fetchFundraisingPageHtml(url) {
-    const response = await this.axiosRequestWithRetry(
-      url,
-      {
-        timeout: 20000,
-        maxRedirects: 3,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-          Accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Cache-Control": "no-cache",
-          Pragma: "no-cache",
-          Cookie: this.loginCookies.forAxios,
-        },
-      },
-      3
-    );
-    const html = String(response?.data || "");
-    this.assertFundraisingHtmlAvailable(html, "axios");
-    return html;
+    const proxyUrls = getFundraisingProxyUrls();
+    const candidates = proxyUrls.length ? proxyUrls : [null];
+    let lastError = null;
+
+    for (let attempt = 0; attempt < candidates.length; attempt++) {
+      const proxyUrl = candidates[attempt];
+      try {
+        const response = await axios.get(url, {
+          timeout: 20000,
+          maxRedirects: 3,
+          validateStatus: () => true,
+          proxy: false,
+          ...(proxyUrl
+            ? {
+                httpAgent: new HttpsProxyAgent(proxyUrl),
+                httpsAgent: new HttpsProxyAgent(proxyUrl),
+              }
+            : {}),
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            Accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+            Cookie: this.loginCookies.forAxios,
+          },
+        });
+        const html = String(response?.data || "");
+
+        if (response.status < 200 || response.status >= 300) {
+          this.assertFundraisingHtmlAvailable(html, `axios status=${response.status}`);
+          throw new Error(`RootData fundraising axios status=${response.status}, proxy=${maskProxyUrl(proxyUrl)}`);
+        }
+
+        this.assertFundraisingHtmlAvailable(html, `axios proxy=${maskProxyUrl(proxyUrl)}`);
+        return html;
+      } catch (error) {
+        lastError = error;
+        console.warn(
+          `[fundraising] axios尝试失败 attempt=${attempt + 1}/${candidates.length}, proxy=${maskProxyUrl(proxyUrl)}, error=${error?.message}`
+        );
+      }
+    }
+
+    throw lastError || new Error("RootData fundraising axios failed");
   }
 
   async prepareFundraisingPage(pageInstance) {
@@ -2029,6 +2063,35 @@ function parseFundraisingListHtml(html) {
       };
     })
     .filter((item) => item.projectName && item.projectLink);
+}
+
+function getFundraisingProxyUrls() {
+  const raw = process.env.ROOTDATA_FUNDRAISING_PROXY_URLS || process.env.BINANCE_SQUARE_PROXY_URLS || "";
+  const envProxyUrls = raw
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const proxyUrls = envProxyUrls.length > 0 ? envProxyUrls : FUNDRAISING_PROXY_POOL;
+  return shuffleArray(proxyUrls);
+}
+
+function maskProxyUrl(proxyUrl) {
+  if (!proxyUrl) return "direct";
+  try {
+    const url = new URL(proxyUrl);
+    return `${url.protocol}//***:***@${url.hostname}:${url.port}`;
+  } catch (_) {
+    return "proxy";
+  }
+}
+
+function shuffleArray(items) {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index--) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[randomIndex]] = [result[randomIndex], result[index]];
+  }
+  return result;
 }
 
 function joinUrl(path, projectName) {
