@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.3.1
+// @version      0.3.2
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -245,6 +245,11 @@
     const title = document.title || "";
     const bodyText = cleanText(document.body?.innerText || "");
     const html = document.documentElement?.outerHTML || "";
+    const tableCount = document.querySelectorAll("table").length;
+    const rowCount = document.querySelectorAll("table tbody tr").length;
+    const projectLinkCount = document.querySelectorAll(
+      'a[href*="/projects/detail/"], a[href*="/Projects/detail/"]'
+    ).length;
 
     const checks = [
       {
@@ -261,11 +266,13 @@
       },
       {
         type: "blank_page",
-        matched: html.length < 1000 || bodyText.length < 20,
+        matched: projectLinkCount === 0 && rowCount === 0 && (html.length < 1000 || bodyText.length < 20),
       },
       {
         type: "login_page",
-        matched: /log in|sign in|登录|登入/i.test(bodyText),
+        // RootData 正常页面导航里也可能出现 Log in / Sign in，不能仅凭文案判断。
+        // 只有在完全没有列表数据时，才认为可能落到了登录页。
+        matched: projectLinkCount === 0 && rowCount === 0 && /log in|sign in|登录|登入/i.test(bodyText),
       },
     ];
 
@@ -279,11 +286,9 @@
       bodyText: bodyText.slice(0, 1000),
       htmlStart: html.slice(0, 1500),
       htmlLength: html.length,
-      tableCount: document.querySelectorAll("table").length,
-      rowCount: document.querySelectorAll("table tbody tr").length,
-      projectLinkCount: document.querySelectorAll(
-        'a[href*="/projects/detail/"], a[href*="/Projects/detail/"]'
-      ).length,
+      tableCount,
+      rowCount,
+      projectLinkCount,
       url: location.href,
     };
   }
@@ -292,13 +297,13 @@
     const start = Date.now();
 
     while (Date.now() - start < CONFIG.maxWaitMs) {
+      const data = parseFundraisingRows();
+      if (data.length > 0) return data;
+
       const blocked = detectBlockedPage();
       if (blocked.blocked) {
         throw Object.assign(new Error(`页面异常：${blocked.reason}`), { details: blocked });
       }
-
-      const data = parseFundraisingRows();
-      if (data.length > 0) return data;
 
       await sleep(CONFIG.pollIntervalMs);
     }
