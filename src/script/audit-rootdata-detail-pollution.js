@@ -343,11 +343,15 @@ async function main() {
   console.log(`\n报告文件: ${outputPath}`);
 
   if (tampermonkeyQueue.length > 0) {
-    const firstChunk = tampermonkeyQueue
-      .slice(0, 30)
+    const fullQueue = tampermonkeyQueue
       .map(({ projectName, projectLink }) => ({ projectName, projectLink }));
-    console.log("\nTampermonkey 控制台可先重爬前 30 个确定污染项：");
-    console.log(`await RootDataFundraisingCollector.recrawlDetails(${JSON.stringify(firstChunk)}, { maxInitial: 30, maxSub: 0 })`);
+    const command = `await RootDataFundraisingCollector.recrawlDetails(${JSON.stringify(fullQueue)}, { maxInitial: ${fullQueue.length}, maxSub: 0 })`;
+    const commandPath = /\.json$/i.test(outputPath)
+      ? outputPath.replace(/\.json$/i, ".tampermonkey.js")
+      : `${outputPath}.tampermonkey.js`;
+    fs.writeFileSync(commandPath, command);
+    console.log(`\nTampermonkey 确定污染项共 ${fullQueue.length} 个，已生成全量重爬命令：`);
+    console.log(commandPath);
   }
 }
 

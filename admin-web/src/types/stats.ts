@@ -266,6 +266,54 @@ export interface RootdataManualCrawlResponse {
   };
 }
 
+export interface RootdataDetailPollutionProject {
+  id: number | string;
+  projectName?: string | null;
+  projectLink?: string | null;
+  entityType?: string;
+  logo?: string | null;
+  twitterUrl?: string | null;
+  socialLinks?: Record<string, unknown> | null;
+  detailFetchedAt?: number | string | null;
+  detailFetchedAtIso?: string | null;
+  updateProgram?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  severity: "critical" | "warning" | "review" | "ok";
+  reasons: string[];
+  reviewReasons: string[];
+}
+
+export interface RootdataDetailPollutionAuditResponse {
+  success: boolean;
+  data: {
+    generatedAt: string;
+    filter: {
+      recentHours?: number | null;
+      sinceMs?: number | null;
+      sinceIso?: string | null;
+      listLimit: number;
+    };
+    summary: {
+      scanned: number;
+      suspicious: number;
+      critical: number;
+      warning: number;
+      review: number;
+      definite: number;
+      byReason: Record<string, number>;
+    };
+    tampermonkeyQueue: Array<{
+      id: number | string;
+      entityType?: string;
+      projectName?: string | null;
+      projectLink?: string | null;
+      reasons: string[];
+    }>;
+    projects: RootdataDetailPollutionProject[];
+  };
+}
+
 export interface BackupFileItem {
   name: string;
   path?: string;

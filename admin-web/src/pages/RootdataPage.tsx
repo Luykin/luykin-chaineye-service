@@ -27,12 +27,17 @@ import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import {
   fetchRootdataDaily,
+  fetchRootdataDetailPollutionAudit,
   fetchRootdataQuota,
   forceVerifyRootdata,
   manualCrawlRootdata,
   setRootdataInitial,
 } from "@/services/stats";
-import type { RootdataProjectItem, RootdataRelationshipItem } from "@/types/stats";
+import type {
+  RootdataDetailPollutionProject,
+  RootdataProjectItem,
+  RootdataRelationshipItem,
+} from "@/types/stats";
 
 const TABLE_MAX_HEIGHT = 480;
 
@@ -70,6 +75,11 @@ export function RootdataPage() {
     enabled: Boolean(date),
   });
 
+  const pollutionAuditQuery = useQuery({
+    queryKey: ["rootdata", "detail-pollution-audit"],
+    queryFn: () => fetchRootdataDetailPollutionAudit({ limit: 100 }),
+  });
+
   const forceVerifyMutation = useMutation({
     mutationFn: forceVerifyRootdata,
     onSuccess: (result) => {
@@ -103,6 +113,7 @@ export function RootdataPage() {
 
   const quota = quotaQuery.data?.data;
   const daily = dailyQuery.data?.data;
+  const pollutionAudit = pollutionAuditQuery.data?.data;
 
   const projectColumns: ColumnsType<RootdataProjectItem> = [
     {
@@ -166,6 +177,67 @@ export function RootdataPage() {
       key: "round",
       width: 120,
       render: (value: string | null | undefined) => value || "-",
+    },
+  ];
+
+  const pollutionColumns: ColumnsType<RootdataDetailPollutionProject> = [
+    {
+      title: "等级",
+      dataIndex: "severity",
+      key: "severity",
+      width: 100,
+      render: (value: RootdataDetailPollutionProject["severity"]) => {
+        const color = value === "critical" ? "red" : value === "warning" ? "orange" : "blue";
+        return <Tag color={color}>{value}</Tag>;
+      },
+    },
+    {
+      title: "项目",
+      key: "projectName",
+      width: 260,
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Typography.Link href={record.projectLink || undefined} target="_blank">
+            {record.projectName || "-"}
+          </Typography.Link>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {record.entityType || "-"} · ID: {record.id}
+          </Typography.Text>
+        </Space>
+      ),
+    },
+    {
+      title: "原因",
+      key: "reasons",
+      render: (_, record) => (
+        <Space wrap size={[4, 4]}>
+          {[...record.reasons, ...record.reviewReasons.map((item) => `review:${item}`)].map((reason) => (
+            <Tag key={reason}>{reason}</Tag>
+          ))}
+        </Space>
+      ),
+    },
+    {
+      title: "Twitter",
+      dataIndex: "twitterUrl",
+      key: "twitterUrl",
+      width: 220,
+      ellipsis: true,
+      render: (value: string | null | undefined) =>
+        value ? (
+          <Typography.Link href={value} target="_blank">
+            {value}
+          </Typography.Link>
+        ) : (
+          "-"
+        ),
+    },
+    {
+      title: "更新时间",
+      dataIndex: "updatedAt",
+      key: "updatedAt",
+      width: 170,
+      render: (value: string | null | undefined) => formatDateTime(value),
     },
   ];
 
@@ -287,6 +359,75 @@ export function RootdataPage() {
                     />
                   ) : null}
                 </Space>
+              </Card>
+            </Col>
+
+            <Col span={24}>
+              <Card
+                title="详情污染验证"
+                extra={
+                  <Space wrap>
+                    <Button onClick={() => pollutionAuditQuery.refetch()} loading={pollutionAuditQuery.isFetching}>
+                      刷新验证
+                    </Button>
+                    <Button
+                      disabled={!pollutionAudit?.tampermonkeyQueue.length}
+                      onClick={async () => {
+                        if (!pollutionAudit?.tampermonkeyQueue.length) return;
+                        const queue = pollutionAudit.tampermonkeyQueue.map(({ projectName, projectLink }) => ({
+                          projectName,
+                          projectLink,
+                        }));
+                        const command = `await RootDataFundraisingCollector.recrawlDetails(${JSON.stringify(queue)}, { maxInitial: ${queue.length}, maxSub: 0 })`;
+                        await navigator.clipboard.writeText(command);
+                        messageApi.success(`已复制 ${queue.length} 个确定污染项的全量重爬命令`);
+                      }}
+                    >
+                      复制全量重爬命令
+                    </Button>
+                  </Space>
+                }
+              >
+                {pollutionAuditQuery.isError ? (
+                  <Alert type="error" showIcon message="加载详情污染验证失败" />
+                ) : pollutionAudit ? (
+                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                    <Alert
+                      type={pollutionAudit.summary.definite > 0 ? "warning" : "success"}
+                      showIcon
+                      message={
+                        pollutionAudit.summary.definite > 0
+                          ? `还有 ${pollutionAudit.summary.definite} 个确定污染项需要重爬`
+                          : "当前没有确定污染项"
+                      }
+                      description={`扫描 ${pollutionAudit.summary.scanned} 个项目，生成时间：${formatDateTime(pollutionAudit.generatedAt)}。列表仅展示前 ${pollutionAudit.filter.listLimit} 个异常，复制命令会包含全部确定污染项。`}
+                    />
+                    <Row gutter={[16, 16]}>
+                      <Col xs={12} md={6}>
+                        <Card size="small"><Statistic title="Critical" value={pollutionAudit.summary.critical} valueStyle={{ color: "#cf1322" }} /></Card>
+                      </Col>
+                      <Col xs={12} md={6}>
+                        <Card size="small"><Statistic title="Warning" value={pollutionAudit.summary.warning} valueStyle={{ color: "#d46b08" }} /></Card>
+                      </Col>
+                      <Col xs={12} md={6}>
+                        <Card size="small"><Statistic title="Review" value={pollutionAudit.summary.review} /></Card>
+                      </Col>
+                      <Col xs={12} md={6}>
+                        <Card size="small"><Statistic title="确定重爬" value={pollutionAudit.summary.definite} /></Card>
+                      </Col>
+                    </Row>
+                    <Table
+                      rowKey={(record) => String(record.id)}
+                      columns={pollutionColumns}
+                      dataSource={pollutionAudit.projects}
+                      scroll={{ y: TABLE_MAX_HEIGHT, x: 980 }}
+                      pagination={{ pageSize: 20 }}
+                      locale={{ emptyText: <Empty description="暂无异常项目" /> }}
+                    />
+                  </Space>
+                ) : (
+                  <Empty description="暂无验证数据" />
+                )}
               </Card>
             </Col>
 

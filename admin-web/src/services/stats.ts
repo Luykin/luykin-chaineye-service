@@ -15,6 +15,7 @@ import type {
   OnlineUsersResponse,
   OverviewStatsResponse,
   RootdataDailyResponse,
+  RootdataDetailPollutionAuditResponse,
   RootdataForceVerifyResponse,
   RootdataManualCrawlResponse,
   RootdataQuotaResponse,
@@ -128,6 +129,18 @@ export async function manualCrawlRootdata(params: { url: string; force?: boolean
       "x-request-id": `admin-web-${Date.now()}`,
     },
   });
+}
+
+export async function fetchRootdataDetailPollutionAudit(params?: {
+  recentHours?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.recentHours) query.set("recentHours", String(params.recentHours));
+  if (params?.limit) query.set("limit", String(params.limit));
+  return apiRequest<RootdataDetailPollutionAuditResponse>(
+    `/api/xhunt/stats/rootdata-detail-pollution-audit${query.toString() ? `?${query.toString()}` : ""}`
+  );
 }
 
 export async function fetchDeviceStatus() {
