@@ -261,10 +261,59 @@ function sanitizeSocialLinks(value) {
   Object.entries(value).forEach(([rawKey, rawUrl]) => {
     const key = cleanText(rawKey, 64).toLowerCase();
     const url = cleanText(rawUrl, 2000);
-    if (key && /^https?:\/\//i.test(url)) result[key] = url;
+    if (key && /^https?:\/\//i.test(url) && !isRootDataOwnedSocialUrl(key, url)) {
+      const normalizedKey = key === "twitter" ? "x" : key;
+      if (normalizedKey === "x") {
+        const xUrl = normalizeXUrl(url);
+        if (xUrl) result.x = xUrl;
+      } else {
+        result[normalizedKey] = url;
+      }
+    }
   });
 
-  return Object.keys(result).length > 0 ? result : null;
+  // 坤哥要求：回传详情必须有合法 x，且 x 必须是 x.com；否则整组 socialLinks 丢弃，不覆盖旧值。
+  return result.x ? result : null;
+}
+
+function normalizeXUrl(rawUrl) {
+  if (!rawUrl) return "";
+  try {
+    const url = new URL(rawUrl);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (hostname !== "x.com" && hostname !== "twitter.com") return "";
+    if (!url.pathname || url.pathname === "/") return "";
+    url.protocol = "https:";
+    url.hostname = "x.com";
+    url.hash = "";
+    return url.toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+function isRootDataOwnedSocialUrl(key, rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    const full = `${hostname}${url.pathname}${url.search}`.toLowerCase();
+    const normalizedKey = String(key || "").toLowerCase();
+
+    if (/rootdata\.com$/.test(hostname)) return true;
+    if (/x\.com|twitter\.com/.test(hostname) && /rootdatacrypto/i.test(url.pathname)) return true;
+    if (hostname === "t.me" && /rootdatalabs/i.test(url.pathname)) return true;
+    if (hostname === "rootdatalabs.medium.com") return true;
+    if (hostname === "calendly.com" && /rootdata|elvin-rootdata/i.test(url.pathname)) return true;
+    if (hostname === "notion.so" && /business|development|hiring|rootdata|source=copy_link/i.test(url.pathname + url.search)) return true;
+    if (hostname === "play.google.com" && /rootdata|com\.flutter\.benliu\.rootdata/i.test(full)) return true;
+    if (hostname === "drive.google.com" && /media|kit/i.test(normalizedKey)) return true;
+    if (hostname === "linkedin.com" && /lucasschuermann/i.test(url.pathname)) return true;
+  } catch (_) {
+    return true;
+  }
+
+  if (/rootdata|business cooperation|hiring|media kit/.test(String(key || "").toLowerCase())) return true;
+  return false;
 }
 
 function sanitizeTeamMembers(value) {
@@ -811,14 +860,23 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     const updateValues = {
       projectName,
       logo: cleanText(payload.logo, 2000) || project.logo || null,
-      socialLinks,
-      teamMembers,
       detailFetchedAt: hasUsefulDetails ? Date.now() : null,
       detailFailuresNumber: hasUsefulDetails
         ? 0
         : Number(project.detailFailuresNumber || 0) + 1,
       updateProgram: program,
     };
+
+    if (socialLinks) {
+      updateValues.socialLinks = {
+        ...(project.socialLinks && typeof project.socialLinks === "object" ? project.socialLinks : {}),
+        ...socialLinks,
+      };
+    }
+
+    if (teamMembers.length > 0 || !Array.isArray(project.teamMembers)) {
+      updateValues.teamMembers = teamMembers;
+    }
 
     if (isInitial && project.isInitial !== true) {
       updateValues.isInitial = true;

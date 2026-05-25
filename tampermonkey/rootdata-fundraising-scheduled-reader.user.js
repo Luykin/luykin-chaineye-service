@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.4.0
+// @version      0.4.1
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -73,6 +73,28 @@
       return new URL(href, location.origin).toString();
     } catch (_) {
       return href;
+    }
+  }
+
+  function canonicalRootDataDetailUrl(rawUrl) {
+    if (!rawUrl) return "";
+    try {
+      const url = new URL(rawUrl, location.origin);
+      const match = url.pathname.match(/^\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
+      if (!match?.[1]) return url.toString();
+
+      const type = /\/(?:investors|Investors)\//.test(url.pathname) ? "Investors" : "Projects";
+      url.protocol = "https:";
+      url.hostname = "www.rootdata.com";
+      url.pathname = `/${type}/detail/${match[1]}`;
+
+      const k = url.searchParams.get("k");
+      url.search = "";
+      if (k) url.searchParams.set("k", k);
+      url.hash = "";
+      return url.toString();
+    } catch (_) {
+      return rawUrl;
     }
   }
 
@@ -196,7 +218,7 @@
 
     const linkedInvestors = links
       .map((link) => ({
-        link: absoluteUrl(link.getAttribute("href")),
+        link: canonicalRootDataDetailUrl(absoluteUrl(link.getAttribute("href"))),
         rawText: cleanText(link.textContent),
       }))
       .map((item) => ({
@@ -222,7 +244,7 @@
         const cells = row.querySelectorAll("td");
         const projectCell = cells[0];
         const projectLinkEl = findProjectLink(projectCell);
-        const projectLink = absoluteUrl(projectLinkEl?.getAttribute("href") || "");
+        const projectLink = canonicalRootDataDetailUrl(absoluteUrl(projectLinkEl?.getAttribute("href") || ""));
         const projectName =
           normalizeEntityName(projectLinkEl?.textContent, projectLink) ||
           projectCell?.querySelector("img")?.getAttribute("alt") ||
@@ -342,7 +364,7 @@
   function uniqueByLink(items) {
     const map = new Map();
     for (const item of items || []) {
-      const link = absoluteUrl(item.projectLink || item.link || "");
+      const link = canonicalRootDataDetailUrl(absoluteUrl(item.projectLink || item.link || ""));
       if (!link || map.has(link)) continue;
       map.set(link, { ...item, projectLink: link });
     }
@@ -455,6 +477,17 @@
   function inferSocialType(link) {
     const href = String(link?.href || "").toLowerCase();
     const text = cleanText(link?.textContent || link?.getAttribute("aria-label") || "").toLowerCase();
+    const iconSrc = String(link?.querySelector?.("img")?.getAttribute("src") || "").toLowerCase();
+
+    if (/official_website|website|web_site/.test(iconSrc)) return "website";
+    if (/twitter|\/x\./.test(iconSrc)) return "x";
+    if (/linkedin/.test(iconSrc)) return "linkedin";
+    if (/discord/.test(iconSrc)) return "discord";
+    if (/telegram/.test(iconSrc)) return "telegram";
+    if (/medium/.test(iconSrc)) return "medium";
+    if (/github/.test(iconSrc)) return "github";
+    if (/docs?/.test(iconSrc)) return "docs";
+
     if (/twitter\.com|x\.com/.test(href) || /\bx\b|twitter/.test(text)) return "x";
     if (/discord/.test(href) || /discord/.test(text)) return "discord";
     if (/t\.me|telegram/.test(href) || /telegram/.test(text)) return "telegram";
@@ -465,9 +498,69 @@
     return text || "website";
   }
 
+  function isRootDataOwnedExternalLink(link) {
+    const href = String(link?.href || "");
+    const text = cleanText(link?.textContent || link?.getAttribute("aria-label") || "").toLowerCase();
+    if (!href) return true;
+
+    try {
+      const url = new URL(href);
+      const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+      const full = `${hostname}${url.pathname}${url.search}`.toLowerCase();
+
+      if (/rootdata\.com$/.test(hostname)) return true;
+      if (/x\.com|twitter\.com/.test(hostname) && /rootdatacrypto/i.test(url.pathname)) return true;
+      if (hostname === "t.me" && /rootdatalabs/i.test(url.pathname)) return true;
+      if (hostname === "rootdatalabs.medium.com") return true;
+      if (hostname === "calendly.com" && /rootdata|elvin-rootdata/i.test(url.pathname)) return true;
+      if (hostname === "notion.so" && /business|development|hiring|rootdata|source=copy_link/i.test(url.pathname + url.search)) return true;
+      if (hostname === "drive.google.com" && /media|kit/i.test(text)) return true;
+      if (hostname === "play.google.com" && /rootdata|com\.flutter\.benliu\.rootdata/i.test(full)) return true;
+      if (hostname === "linkedin.com" && /lucasschuermann/i.test(url.pathname)) return true;
+    } catch (_) {
+      return true;
+    }
+
+    if (/rootdata|business cooperation|hiring|media kit/.test(text)) return true;
+    return false;
+  }
+
+  function normalizeXUrl(rawUrl) {
+    if (!rawUrl) return "";
+    try {
+      const url = new URL(rawUrl);
+      const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+      if (hostname !== "x.com" && hostname !== "twitter.com") return "";
+      if (!url.pathname || url.pathname === "/") return "";
+      url.protocol = "https:";
+      url.hostname = "x.com";
+      url.hash = "";
+      return url.toString();
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function sanitizeParsedSocialLinks(rawSocialLinks) {
+    const result = {};
+
+    for (const [rawKey, rawUrl] of Object.entries(rawSocialLinks || {})) {
+      const key = rawKey === "twitter" ? "x" : rawKey;
+      if (key === "x") {
+        const xUrl = normalizeXUrl(rawUrl);
+        if (xUrl) result.x = xUrl;
+        continue;
+      }
+      if (result.x && rawUrl) result[key] = rawUrl;
+    }
+
+    // 坤哥要求：没有合法 x.com 的 x，就整组 socialLinks 丢弃，避免污染 twitterUrl。
+    return result.x ? result : {};
+  }
+
   function readEntityLink(anchor) {
     if (!anchor) return null;
-    const link = absoluteUrl(anchor.getAttribute("href") || anchor.href || "");
+    const link = canonicalRootDataDetailUrl(absoluteUrl(anchor.getAttribute("href") || anchor.href || ""));
     if (!/rootdata\.com\/(?:projects|Projects|investors|Investors)\/detail\//.test(link)) return null;
     const rawText = cleanText(anchor.querySelector("h2")?.textContent || anchor.textContent || "");
     const name = normalizeEntityName(rawText, link);
@@ -699,14 +792,32 @@
 
   function parseBasicDetail(doc, detailUrl) {
     const socialLinks = {};
-    doc.querySelectorAll(".base_info .links a[href], .base_info a[href], a[href^='http']").forEach((link) => {
-      const type = cleanText(link.querySelector("span")?.textContent || inferSocialType(link)).toLowerCase();
+    const detailRoot = doc.querySelector("main") || doc.body || doc;
+    detailRoot.querySelectorAll(
+      [
+        ".base_info .links a[href]",
+        ".base_info a[href]",
+        '[class*="base" i] [class*="link" i] a[href]',
+        '[class*="social" i] a[href]',
+        '[class*="contact" i] a[href]',
+        'a[href^="http"]',
+      ].join(",")
+    ).forEach((link) => {
+      if (link.closest("header, footer, nav")) return;
+      if (isRootDataOwnedExternalLink(link)) return;
+      const inferredType = inferSocialType(link);
+      const labelType = cleanText(link.querySelector("span")?.textContent).toLowerCase();
+      const type = /^(website|x|twitter|linkedin|discord|telegram|medium|github|docs?)$/.test(inferredType)
+        ? inferredType
+        : (labelType || inferredType);
       const href = link.href || "";
       if (!type || !/^https?:\/\//i.test(href)) return;
       // 详情页内部 RootData 链接不算 socialLinks，避免把项目/投资方详情链接误存成官网。
       if (/^https?:\/\/(?:www\.)?rootdata\.com\//i.test(href)) return;
       socialLinks[type] = href;
     });
+
+    const safeSocialLinks = sanitizeParsedSocialLinks(socialLinks);
 
     const teamMembers = Array.from(doc.querySelectorAll(".team_member .item, .team-member .item"))
       .map((member) => ({
@@ -731,7 +842,7 @@
       "";
 
     return {
-      socialLinks,
+      socialLinks: safeSocialLinks,
       teamMembers,
       projectName: normalizeEntityName(projectName, detailUrl),
       logo,
@@ -782,7 +893,7 @@
   }
 
   async function crawlDetailPage(frame, item, { isInitial = true } = {}) {
-    const detailUrl = absoluteUrl(item.projectLink);
+    const detailUrl = canonicalRootDataDetailUrl(absoluteUrl(item.projectLink));
     const doc = await loadDetailDocument(frame, detailUrl);
 
     clickButtonsByText(doc, /expand\s*more/i);
@@ -1383,7 +1494,7 @@
         try {
           const item = {
             projectName: parseNameFromDetailUrl(url),
-            projectLink: absoluteUrl(url),
+            projectLink: canonicalRootDataDetailUrl(absoluteUrl(url)),
           };
           const detail = await crawlDetailPage(frame, item, { isInitial: true });
           console.log("[RootData Reader] detail debug:", detail);
