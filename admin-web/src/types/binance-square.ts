@@ -51,8 +51,24 @@ export interface BinanceSquarePaginated<T> {
 export interface BinanceSquareTargetRankItem {
   id?: number;
   username: string;
+  squareUid?: string | null;
   displayName?: string | null;
   avatar?: string | null;
+  biography?: string | null;
+  role?: number | null;
+  verificationType?: number | null;
+  verificationDescription?: string | null;
+  totalFollowerCount?: number | null;
+  totalFollowingCount?: number | null;
+  totalPostCount?: number | null;
+  totalLikeCount?: number | null;
+  totalShareCount?: number | null;
+  accountLang?: string | null;
+  isKol?: boolean | null;
+  userStatus?: number | null;
+  level?: number | null;
+  lastCrawledAt?: string | null;
+  lastFollowingSyncedAt?: string | null;
   aiOneLineIntro?: string | null;
   aiOneLineIntroI18n?: { zh?: string | null; en?: string | null } | null;
   aiOneLineIntroZh?: string | null;

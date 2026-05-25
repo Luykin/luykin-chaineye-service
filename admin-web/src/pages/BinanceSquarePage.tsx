@@ -8,6 +8,7 @@ import {
   Empty,
   Form,
   Input,
+  InputNumber,
   Modal,
   Pagination,
   Popconfirm,
@@ -23,7 +24,7 @@ import {
 } from "antd";
 import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { InfoCircleOutlined, MoreOutlined } from "@ant-design/icons";
+import { DownloadOutlined, InfoCircleOutlined, MoreOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -73,6 +74,9 @@ const RANK_STAGES: Array<{ key: BinanceSquareRankSet; label: string; source: str
   { key: "top300", label: "Top300", source: "Top100", desc: "同步 Top100 关注列表后计算" },
   { key: "top1000", label: "Top1000", source: "Top300", desc: "同步 Top300 并合并中间层" },
 ];
+const TOP1000_EXPORT_MIN = 1;
+const TOP1000_EXPORT_MAX = 1000;
+const TOP1000_EXPORT_DEFAULT = 100;
 
 const CONFIG_HELP: Record<string, { label: string; desc: string; tip?: string }> = {
   post_crawl_days_back: {
@@ -123,6 +127,120 @@ function formatDateTime(value?: string | null) {
   if (!value) return "-";
   const parsed = dayjs(value);
   return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm:ss") : value;
+}
+
+function normalizeExportLimit(value?: number | null) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return TOP1000_EXPORT_DEFAULT;
+  return Math.min(TOP1000_EXPORT_MAX, Math.max(TOP1000_EXPORT_MIN, Math.floor(parsed)));
+}
+
+function escapeHtml(value: unknown) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatExportText(value: unknown) {
+  if (value === null || value === undefined) return "";
+  const text = Array.isArray(value) ? value.join(", ") : String(value);
+  const safeText = /^[=+\-@]/.test(text.trim()) ? `'${text}` : text;
+  return escapeHtml(safeText.replace(/\r\n?/g, "\n"));
+}
+
+function joinSourceFollowers(record: BinanceSquareTargetRankItem) {
+  const followers = record.sourceFollowers || record.seedFollowers || [];
+  return followers
+    .map((item) => {
+      const name = item.displayName?.trim();
+      return name ? `${name}(${item.username})` : item.username;
+    })
+    .join(", ");
+}
+
+function getTargetIntroForExport(record: BinanceSquareTargetRankItem) {
+  const zh = record.aiOneLineIntroI18n?.zh?.trim() || record.aiOneLineIntroZh?.trim() || "";
+  const en = record.aiOneLineIntroI18n?.en?.trim() || record.aiOneLineIntroEn?.trim() || "";
+  if (zh || en) return { zh, en };
+  const parsed = parseBilingualIntro(record.aiOneLineIntro);
+  return { zh: parsed.zh, en: parsed.en };
+}
+
+function downloadTop1000TargetsExcel(records: BinanceSquareTargetRankItem[], limit: number) {
+  const exportLimit = normalizeExportLimit(limit);
+  const rows = records
+    .filter((record) => record.rankSet === "top1000" || !record.rankSet)
+    .sort((a, b) => (a.rank || Number.MAX_SAFE_INTEGER) - (b.rank || Number.MAX_SAFE_INTEGER))
+    .slice(0, exportLimit);
+
+  if (rows.length === 0) {
+    throw new Error("暂无可导出的 Top1000 用户数据");
+  }
+
+  const columns: Array<{ title: string; value: (record: BinanceSquareTargetRankItem) => unknown }> = [
+    { title: "排名", value: (record) => record.rank },
+    { title: "Handler", value: (record) => record.username },
+    { title: "用户名字", value: (record) => record.displayName || "" },
+    { title: "币安广场UID", value: (record) => record.squareUid || "" },
+    { title: "中文介绍", value: (record) => getTargetIntroForExport(record).zh },
+    { title: "English Intro", value: (record) => getTargetIntroForExport(record).en },
+    { title: "个人简介", value: (record) => record.biography || "" },
+    { title: "来源关注次数", value: (record) => record.followerCount ?? 0 },
+    { title: "来源关注者", value: joinSourceFollowers },
+    { title: "命中层", value: (record) => (record.includedRankSets || []).join(", ") },
+    { title: "粉丝数", value: (record) => record.totalFollowerCount ?? "" },
+    { title: "关注数", value: (record) => record.totalFollowingCount ?? "" },
+    { title: "帖子数", value: (record) => record.totalPostCount ?? "" },
+    { title: "获赞数", value: (record) => record.totalLikeCount ?? "" },
+    { title: "分享数", value: (record) => record.totalShareCount ?? "" },
+    { title: "账号语言", value: (record) => record.accountLang || "" },
+    { title: "是否KOL", value: (record) => (record.isKol == null ? "" : record.isKol ? "是" : "否") },
+    { title: "认证描述", value: (record) => record.verificationDescription || "" },
+    { title: "头像URL", value: (record) => record.avatar || "" },
+    { title: "最近同步关注", value: (record) => formatDateTime(record.lastFollowingSyncedAt) },
+    { title: "最近抓取帖子", value: (record) => formatDateTime(record.lastCrawledAt) },
+    { title: "排名计算时间", value: (record) => formatDateTime(record.lastCalculatedAt) },
+  ];
+
+  const headerHtml = columns.map((column) => `<th>${escapeHtml(column.title)}</th>`).join("");
+  const rowsHtml = rows
+    .map((record) => `<tr>${columns.map((column) => `<td>${formatExportText(column.value(record))}</td>`).join("")}</tr>`)
+    .join("");
+  const worksheetName = `Top${rows.length}`;
+  const html = `<!doctype html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head>
+  <meta charset="UTF-8" />
+  <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>${worksheetName}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+  <style>
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #d9e2ec; padding: 6px 8px; mso-number-format: "\\@"; vertical-align: top; }
+    th { background: #f8fafc; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <table>
+    <thead><tr>${headerHtml}</tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+</body>
+</html>`;
+
+  const blob = new Blob([`\ufeff${html}`], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `binance-square-top${rows.length}-users-${dayjs().format("YYYYMMDD-HHmm")}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  return rows.length;
 }
 
 function formatCompactNumber(value?: number | string | null) {
@@ -320,6 +438,7 @@ export function BinanceSquarePage() {
   const [rankPipelineOpen, setRankPipelineOpen] = useState(false);
   const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
   const [cleanupRetentionDays, setCleanupRetentionDays] = useState(30);
+  const [top1000ExportLimit, setTop1000ExportLimit] = useState(TOP1000_EXPORT_DEFAULT);
 
   const statsQuery = useQuery({ queryKey: ["binance-square", "stats"], queryFn: fetchBinanceSquareStats, refetchInterval: 30_000 });
   const statusQuery = useQuery({ queryKey: ["binance-square", "status"], queryFn: fetchBinanceSquareStatus, refetchInterval: 15_000 });
@@ -482,6 +601,15 @@ export function BinanceSquarePage() {
       void configQuery.refetch();
     },
     onError: (error: Error) => messageApi.error(error.message || "配置更新失败"),
+  });
+  const exportTop1000Mutation = useMutation({
+    mutationFn: async (limit: number) => {
+      const exportLimit = normalizeExportLimit(limit);
+      const result = await fetchBinanceSquareTargets("top1000", exportLimit);
+      return downloadTop1000TargetsExcel(result.data || [], exportLimit);
+    },
+    onSuccess: (count) => messageApi.success(`已导出 Top${count} 用户 Excel`),
+    onError: (error: Error) => messageApi.error(error.message || "导出失败"),
   });
 
   const stats = statsQuery.data?.data;
@@ -1141,6 +1269,24 @@ export function BinanceSquarePage() {
                         onChange={(value) => setTargetRankSet(value as BinanceSquareRankSet)}
                         options={RANK_STAGES.map((stage) => ({ label: stage.label, value: stage.key }))}
                       />
+                      <div className="bs-export-control">
+                        <span>导出 Top</span>
+                        <InputNumber
+                          min={TOP1000_EXPORT_MIN}
+                          max={TOP1000_EXPORT_MAX}
+                          precision={0}
+                          value={top1000ExportLimit}
+                          onChange={(value) => setTop1000ExportLimit(normalizeExportLimit(value))}
+                        />
+                        <span>用户</span>
+                        <LegacyActionButton
+                          variant="neutral"
+                          loading={exportTop1000Mutation.isPending}
+                          onClick={() => exportTop1000Mutation.mutate(top1000ExportLimit)}
+                        >
+                          <DownloadOutlined /> 导出Excel
+                        </LegacyActionButton>
+                      </div>
                       <Popconfirm
                         title="生成 Top100 用户介绍？"
                         description="会读取 Top1000 前100名用户的 profile 和最近最多50篇帖子，调用大模型生成中文30-70字+英文一句的双语介绍；已有且输入未变化的会自动跳过。"

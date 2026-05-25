@@ -94,9 +94,10 @@ export async function calculateBinanceSquareTargets(rankSet: BinanceSquareRankSe
   });
 }
 
-export async function fetchBinanceSquareTargets(rankSet: BinanceSquareRankSet = "top1000") {
+export async function fetchBinanceSquareTargets(rankSet: BinanceSquareRankSet = "top1000", limit?: number) {
   const query = new URLSearchParams();
   query.set("rankSet", rankSet);
+  if (limit && Number.isFinite(limit) && limit > 0) query.set("limit", String(Math.floor(limit)));
   return apiRequest<BinanceSquareApiResponse<BinanceSquareTargetRankItem[]>>(`${BASE}/target/list?${query.toString()}`);
 }
 

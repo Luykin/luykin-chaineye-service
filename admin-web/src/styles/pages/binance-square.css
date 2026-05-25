@@ -209,6 +209,22 @@
   min-width: 160px;
 }
 
+.bs-export-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+}
+
+.bs-export-control .ant-input-number {
+  width: 88px;
+}
+
 .bs-rankset-tags {
   display: flex;
   flex-wrap: wrap;

@@ -1873,16 +1873,20 @@ router.post("/target/calculate/:rankSet", async (req, res) => {
 
 /**
  * GET /target/list
- * 获取目标用户列表，支持 ?rankSet=top50/top100/top300/top1000
+ * 获取目标用户列表，支持 ?rankSet=top50/top100/top300/top1000&limit=100
  */
 router.get("/target/list", async (req, res) => {
   try {
     const rankSet = normalizeRankSet(req.query.rankSet || "top1000");
+    const requestedLimit = parsePositiveInt(req.query.limit, 0);
+    const limit = requestedLimit > 0 ? Math.min(requestedLimit, 1000) : undefined;
     const where = RANK_STAGE_CONFIG[rankSet] ? { rankSet } : {};
-    const ranks = await db.BinanceSquareTargetRank.findAll({
+    const findOptions = {
       where,
       order: [["rankSet", "ASC"], ["rank", "ASC"]],
-    });
+    };
+    if (limit) findOptions.limit = limit;
+    const ranks = await db.BinanceSquareTargetRank.findAll(findOptions);
 
     const rankRows = ranks.map((rank) => rank.toJSON());
     const usernames = rankRows.map((rank) => rank.username).filter(Boolean);
@@ -1894,8 +1898,24 @@ router.get("/target/list", async (req, res) => {
           ),
           attributes: [
             "username",
+            "squareUid",
             "displayName",
             "avatar",
+            "biography",
+            "role",
+            "verificationType",
+            "verificationDescription",
+            "totalFollowerCount",
+            "totalFollowingCount",
+            "totalPostCount",
+            "totalLikeCount",
+            "totalShareCount",
+            "accountLang",
+            "isKol",
+            "userStatus",
+            "level",
+            "lastCrawledAt",
+            "lastFollowingSyncedAt",
             "aiOneLineIntro",
             "aiOneLineIntroI18n",
             "aiIntroStatus",
@@ -1916,8 +1936,24 @@ router.get("/target/list", async (req, res) => {
       const intro = hasBilingualIntro ? formatBilingualIntroText(introI18n) : null;
       return {
         ...rank,
+        squareUid: user?.squareUid || null,
         displayName: user?.displayName || null,
         avatar: user?.avatar || null,
+        biography: user?.biography || null,
+        role: user?.role ?? null,
+        verificationType: user?.verificationType ?? null,
+        verificationDescription: user?.verificationDescription || null,
+        totalFollowerCount: user?.totalFollowerCount ?? null,
+        totalFollowingCount: user?.totalFollowingCount ?? null,
+        totalPostCount: user?.totalPostCount ?? null,
+        totalLikeCount: user?.totalLikeCount ?? null,
+        totalShareCount: user?.totalShareCount ?? null,
+        accountLang: user?.accountLang || null,
+        isKol: user?.isKol ?? null,
+        userStatus: user?.userStatus ?? null,
+        level: user?.level ?? null,
+        lastCrawledAt: user?.lastCrawledAt || null,
+        lastFollowingSyncedAt: user?.lastFollowingSyncedAt || null,
         aiOneLineIntro: intro,
         aiOneLineIntroI18n: introI18n,
         aiOneLineIntroZh: hasBilingualIntro ? introI18n.zh : null,
