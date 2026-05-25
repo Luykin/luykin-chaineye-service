@@ -20,6 +20,7 @@
     API_BASE: "https://your-api-domain.com",
     ALERT_ENDPOINT: "/api/internal/rootdata/fundraising/alert",
     IMPORT_ENDPOINT: "/api/internal/rootdata/fundraising/import",
+    PING_ENDPOINT: "/api/internal/rootdata/fundraising/ping",
     CLIENT_TOKEN: "REPLACE_WITH_LONG_RANDOM_TOKEN",
 
     // 北京时间：对应原 scheduler 的 07:10 与 18:10
@@ -337,6 +338,40 @@
     }
   }
 
+  async function testConnection({ silent = false } = {}) {
+    const url = `${CONFIG.API_BASE}${CONFIG.PING_ENDPOINT}`;
+    const startedAt = Date.now();
+
+    if (!silent) {
+      console.log("[RootData Reader] testing collector token connection:", {
+        apiBase: CONFIG.API_BASE,
+        endpoint: CONFIG.PING_ENDPOINT,
+        tokenConfigured:
+          Boolean(CONFIG.CLIENT_TOKEN) &&
+          CONFIG.CLIENT_TOKEN !== "REPLACE_WITH_LONG_RANDOM_TOKEN",
+      });
+    }
+
+    try {
+      const result = await requestJson({ url, method: "GET" });
+      const costMs = Date.now() - startedAt;
+      console.log("[RootData Reader] ✅ token connection ok:", {
+        costMs,
+        result,
+      });
+      return { ok: true, costMs, result };
+    } catch (error) {
+      const costMs = Date.now() - startedAt;
+      console.error("[RootData Reader] ❌ token connection failed:", {
+        costMs,
+        error: error.message,
+        apiBase: CONFIG.API_BASE,
+        endpoint: CONFIG.PING_ENDPOINT,
+      });
+      return { ok: false, costMs, error };
+    }
+  }
+
   async function submitData(data, job) {
     return requestJson({
       url: `${CONFIG.API_BASE}${CONFIG.IMPORT_ENDPOINT}`,
@@ -502,10 +537,16 @@
     renderPanel({ ok: true, status: "waiting_rows", retryCount: job.retryCount || 0, data: [] });
 
     try {
+      await testConnection({ silent: true });
       const data = await waitForRowsOrBlocked();
       if (!data.length) throw new Error("解析结果为空");
 
       window.__ROOTDATA_FUNDRAISING_DATA__ = data;
+      console.log("[RootData Reader] ✅ page data available:", {
+        rowsCount: data.length,
+        firstRow: data[0] || null,
+        pageUrl: location.href,
+      });
 
       const result = {
         ok: true,
@@ -587,6 +628,105 @@
     renderPanel({ ok: true, status: "idle", retryCount: 0, data: lastResult?.data || [] });
   }
 
+  function exposeDebugApi() {
+    window.RootDataFundraisingCollector = {
+      /**
+       * 手动触发完整流程：先刷新页面，再等待页面加载后采集并提交。
+       * 控制台调用：RootDataFundraisingCollector.run()
+       */
+      run() {
+        startRefreshThenScrape({ slot: "manual-console", reason: "manual_console" });
+      },
+
+      /**
+       * 不刷新，直接解析当前页面并提交。适合页面已经加载完成后快速验证。
+       * 控制台调用：await RootDataFundraisingCollector.scrapeNow()
+       */
+      async scrapeNow() {
+        const job = {
+          id: `manual-console-no-refresh-${Date.now()}`,
+          slot: "manual-console-no-refresh",
+          reason: "manual_console_no_refresh",
+          retryCount: 0,
+          createdAt: nowIso(),
+          nextAction: "scrape_without_reload",
+        };
+        await scrapeCurrentPage(job);
+      },
+
+      /**
+       * 只解析当前 DOM，不提交服务端。
+       * 控制台调用：RootDataFundraisingCollector.parse()
+       */
+      parse() {
+        const data = parseFundraisingRows();
+        window.__ROOTDATA_FUNDRAISING_DATA__ = data;
+        console.log(data.length > 0 ? "[RootData Reader] ✅ parse data ok:" : "[RootData Reader] ⚠️ parse data empty:", {
+          rowsCount: data.length,
+          firstRow: data[0] || null,
+          data,
+          pageUrl: location.href,
+        });
+        return data;
+      },
+
+      /**
+       * 测试服务端是否可达，以及当前 CLIENT_TOKEN 是否有效。
+       * 控制台调用：await RootDataFundraisingCollector.testConnection()
+       */
+      testConnection,
+
+      /**
+       * 发送一条测试告警，验证服务端告警接口和邮件。
+       * 控制台调用：await RootDataFundraisingCollector.sendTestAlert()
+       */
+      async sendTestAlert() {
+        return sendAlert({
+          scheduleSlot: "manual-console-test",
+          reason: "manual test alert from console",
+          retryCount: 0,
+          maxRetries: CONFIG.maxRetries,
+          details: {
+            test: true,
+            pageUrl: location.href,
+            title: document.title,
+          },
+        });
+      },
+
+      /**
+       * 查看当前配置、pending job、最近结果。
+       * 控制台调用：RootDataFundraisingCollector.status()
+       */
+      status() {
+        return {
+          config: {
+            apiBase: CONFIG.API_BASE,
+            alertEndpoint: CONFIG.ALERT_ENDPOINT,
+            importEndpoint: CONFIG.IMPORT_ENDPOINT,
+            pingEndpoint: CONFIG.PING_ENDPOINT,
+            scheduleBeijingTimes: CONFIG.scheduleBeijingTimes,
+            maxRetries: CONFIG.maxRetries,
+            tokenConfigured:
+              Boolean(CONFIG.CLIENT_TOKEN) &&
+              CONFIG.CLIENT_TOKEN !== "REPLACE_WITH_LONG_RANDOM_TOKEN",
+          },
+          pendingJob: getPendingJob(),
+          lastResult: safeJsonParse(localStorage.getItem(CONFIG.storageKeys.lastResult), null),
+          beijingTime: getBeijingParts().full,
+        };
+      },
+
+      clearPendingJob,
+    };
+
+    console.log(
+      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), parse(), testConnection(), sendTestAlert(), status()"
+    );
+  }
+
+  exposeDebugApi();
+  testConnection({ silent: false });
   initScheduleLoop();
   bootstrap();
 })();

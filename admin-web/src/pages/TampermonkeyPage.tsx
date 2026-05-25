@@ -220,14 +220,12 @@ export function TampermonkeyPage() {
             <Button
               href={COLLECTOR_STATS_HASH}
               icon={<LinkOutlined />}
-              size="large"
             >
               查看采集统计
             </Button>
             <Button
               type="primary"
               icon={<ReloadOutlined />}
-              size="large"
               onClick={() => {
                 void tokensQuery.refetch();
                 void scriptsQuery.refetch();

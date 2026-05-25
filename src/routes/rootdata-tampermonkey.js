@@ -365,6 +365,17 @@ router.post("/alert", requireClientToken, async (req, res) => {
   }
 });
 
+router.get("/ping", requireClientToken, async (req, res) => {
+  return res.json({
+    success: true,
+    data: {
+      connected: true,
+      serverTime: new Date().toISOString(),
+      collectorClient: req.collectorClient || null,
+    },
+  });
+});
+
 router.post("/import", requireClientToken, async (req, res) => {
   const { rows, page = 1, pageUrl, scheduleSlot, scrapedAt } = req.body || {};
 
