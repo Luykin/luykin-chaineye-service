@@ -1320,7 +1320,7 @@ router.get("/search", async (req, res) => {
       return res.json({
         invested: null,
         investor: null,
-        message: "No keyword provided or keyword too short",
+        message: `1No keyword provided or keyword too short. ${username}`,
       });
     }
 
