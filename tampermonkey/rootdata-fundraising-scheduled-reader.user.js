@@ -37,7 +37,7 @@
     detailEnabled: true,
     detailMaxProjectsPerRun: 30,
     subDetailMaxProjectsPerRun: 80,
-    detailFrameTimeoutMs: 45 * 1000,
+    detailFrameTimeoutMs: 20 * 1000,
     detailFramePollIntervalMs: 500,
     detailBetweenMs: 1200,
 
@@ -412,6 +412,7 @@
 
     const start = Date.now();
     let lastDetails = null;
+    let loadedAt = 0;
 
     while (Date.now() - start < CONFIG.detailFrameTimeoutMs) {
       const doc = getFrameDocument(frame);
@@ -427,6 +428,16 @@
 
       lastDetails = parseDetailDocument(doc, url, { isInitial: true, dryRun: true });
       if (lastDetails.ready) return doc;
+      if (
+        !loadedAt &&
+        doc.readyState === "complete" &&
+        cleanText(doc.body?.innerText || "").length > 200
+      ) {
+        loadedAt = Date.now();
+      }
+      // RootData 详情页现在 class 变化较频繁，不能一直死等旧 class；
+      // 页面 complete 后给 React/Next 再渲染 2 秒，然后交给通用解析器兜底。
+      if (loadedAt && Date.now() - loadedAt > 2000) return doc;
 
       await sleep(CONFIG.detailFramePollIntervalMs);
     }
@@ -464,48 +475,126 @@
     return { projectName: name, projectLink: link };
   }
 
-  function parseInitialInvestors(doc) {
+  function isCurrentDetailLink(link, detailUrl) {
+    try {
+      const left = new URL(link, location.origin);
+      const right = new URL(detailUrl, location.origin);
+      return left.pathname.toLowerCase() === right.pathname.toLowerCase();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function collectEntityLinks(scope, detailUrl, { allowProjects = true, allowInvestors = true } = {}) {
+    const links = Array.from(
+      scope.querySelectorAll(
+        'a[href*="/investors/detail/"], a[href*="/Investors/detail/"], a[href*="/projects/detail/"], a[href*="/Projects/detail/"]'
+      )
+    );
+    const result = [];
+    const seen = new Set();
+
+    for (const anchor of links) {
+      const entity = readEntityLink(anchor);
+      if (!entity) continue;
+      if (!allowProjects && /\/(?:projects|Projects)\/detail\//.test(entity.projectLink)) continue;
+      if (!allowInvestors && /\/(?:investors|Investors)\/detail\//.test(entity.projectLink)) continue;
+      if (detailUrl && isCurrentDetailLink(entity.projectLink, detailUrl)) continue;
+      if (seen.has(entity.projectLink)) continue;
+      seen.add(entity.projectLink);
+      result.push(entity);
+    }
+
+    return result;
+  }
+
+  function findSectionElementsByKeywords(doc, keywords) {
+    const regex = new RegExp(keywords.join("|"), "i");
+    const candidates = Array.from(doc.querySelectorAll("section, article, div, main"))
+      .filter((node) => {
+        const text = cleanText(node.textContent).slice(0, 300);
+        return regex.test(text) && node.querySelector("a[href]");
+      })
+      .sort((a, b) => cleanText(a.textContent).length - cleanText(b.textContent).length);
+
+    return candidates.slice(0, 8);
+  }
+
+  function parseInitialInvestors(doc, detailUrl) {
     let items = Array.from(doc.querySelectorAll(".investor .row .item"));
     if (!items.length) items = Array.from(doc.querySelectorAll(".investor .item"));
 
-    return items
-      .map((item) => {
-        const link = item.querySelector('a[href*="/investors/detail/"], a[href*="/Investors/detail/"], a[href*="/projects/detail/"], a[href*="/Projects/detail/"], a[href]');
-        const entity = readEntityLink(link);
-        if (!entity) return null;
-        return {
+    if (items.length) {
+      return items
+        .map((item) => {
+          const link = item.querySelector('a[href*="/investors/detail/"], a[href*="/Investors/detail/"], a[href*="/projects/detail/"], a[href*="/Projects/detail/"], a[href]');
+          const entity = readEntityLink(link);
+          if (!entity) return null;
+          return {
+            ...entity,
+            lead: !!item.querySelector(".status_icon.status_position") || /\*/.test(cleanText(item.textContent)),
+            source: "initial",
+          };
+        })
+        .filter(Boolean);
+    }
+
+    const sections = findSectionElementsByKeywords(doc, [
+      "investor",
+      "investors",
+      "funding",
+      "financing",
+      "round",
+      "backers",
+      "投资",
+      "融资",
+    ]);
+
+    return uniqueByLink(
+      sections.flatMap((section) =>
+        collectEntityLinks(section, detailUrl).map((entity) => ({
           ...entity,
-          lead: !!item.querySelector(".status_icon.status_position") || /\*/.test(cleanText(item.textContent)),
-          source: "initial",
-        };
-      })
-      .filter(Boolean);
+          lead: /\*/.test(cleanText(section.textContent)),
+          source: "section",
+        }))
+      )
+    );
   }
 
   function parseRoundsInvestors(doc) {
-    const headerCells = Array.from(
-      doc.querySelectorAll(".investor thead th, .investor tr:first-child th, .investor tr:first-child td")
-    );
-    const headerTexts = headerCells.map((th) => cleanText(th.textContent).toLowerCase());
-    const findIndexBy = (regex, fallbackIndex) => {
-      const index = headerTexts.findIndex((text) => regex.test(text));
-      return index >= 0 ? index : fallbackIndex;
-    };
+    const result = [];
+    const tables = Array.from(doc.querySelectorAll(".investor table, table"));
 
-    const idxRound = findIndexBy(/round/i, 0);
-    const idxAmount = findIndexBy(/amount/i, 1);
-    const idxValuation = findIndexBy(/valuation/i, 2);
-    const idxDate = findIndexBy(/date/i, 3);
-    const idxInvestors = findIndexBy(/investor/i, Math.max(headerCells.length - 1, 4));
+    for (const table of tables) {
+      const headerCells = Array.from(
+        table.querySelectorAll("thead th, tr:first-child th, tr:first-child td")
+      );
+      const headerTexts = headerCells.map((th) => cleanText(th.textContent).toLowerCase());
+      if (!headerTexts.length) continue;
 
-    return Array.from(doc.querySelectorAll(".investor tr"))
-      .slice(1)
-      .flatMap((row) => {
+      const hasInvestorColumn = headerTexts.some((text) => /investor|backer|投资/.test(text));
+      const hasRoundColumn = headerTexts.some((text) => /round|轮次|amount|valuation|date|金额|估值|日期/.test(text));
+      if (!hasInvestorColumn && !hasRoundColumn) continue;
+
+      const findIndexBy = (regex, fallbackIndex) => {
+        const index = headerTexts.findIndex((text) => regex.test(text));
+        return index >= 0 ? index : fallbackIndex;
+      };
+
+      const idxRound = findIndexBy(/round|轮次/i, 0);
+      const idxAmount = findIndexBy(/amount|金额/i, 1);
+      const idxValuation = findIndexBy(/valuation|估值/i, 2);
+      const idxDate = findIndexBy(/date|日期/i, 3);
+      const idxInvestors = findIndexBy(/investor|backer|投资/i, Math.max(headerCells.length - 1, 0));
+
+      Array.from(table.querySelectorAll("tr"))
+        .slice(1)
+        .forEach((row) => {
         const cells = row.querySelectorAll("td");
         const investorCell = cells[idxInvestors];
-        if (!investorCell) return [];
+          if (!investorCell) return;
 
-        return Array.from(investorCell.querySelectorAll("a[href]"))
+          Array.from(investorCell.querySelectorAll("a[href]"))
           .map((anchor) => {
             const entity = readEntityLink(anchor);
             if (!entity) return null;
@@ -520,8 +609,18 @@
               source: "rounds",
             };
           })
-          .filter(Boolean);
-      });
+            .filter(Boolean)
+            .forEach((item) => result.push(item));
+        });
+    }
+
+    const seen = new Set();
+    return result.filter((item) => {
+      const key = `${item.projectLink}|${item.round || "--"}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   function mergeInvestorData(initial, rounds) {
@@ -551,10 +650,26 @@
     return Array.from(resultMap.values());
   }
 
-  function parseInvestmentItems(doc) {
-    return Array.from(doc.querySelectorAll(".investment .row.list .item a.card, .investment a.card"))
+  function parseInvestmentItems(doc, detailUrl) {
+    const oldItems = Array.from(doc.querySelectorAll(".investment .row.list .item a.card, .investment a.card"))
       .map(readEntityLink)
       .filter(Boolean);
+    if (oldItems.length) return uniqueByLink(oldItems);
+
+    const sections = findSectionElementsByKeywords(doc, [
+      "portfolio",
+      "investments",
+      "investment",
+      "invested",
+      "投资组合",
+      "对外投资",
+    ]);
+
+    return uniqueByLink(
+      sections.flatMap((section) =>
+        collectEntityLinks(section, detailUrl, { allowProjects: true, allowInvestors: false })
+      )
+    );
   }
 
   function clickButtonsByText(doc, regex) {
@@ -566,17 +681,17 @@
   }
 
   async function scrapeInvestedProjectsFromDetail(doc, detailUrl) {
-    if (!doc.querySelector(".investment")) return [];
-
-    clickButtonsByText(doc, /portfolio/i);
-    await sleep(1800);
-    const portfolio = parseInvestmentItems(doc);
+    if (doc.querySelector(".investment")) {
+      clickButtonsByText(doc, /portfolio/i);
+      await sleep(1800);
+    }
+    const portfolio = parseInvestmentItems(doc, detailUrl);
 
     let vc = [];
-    if (/\/(?:investors|Investors)\/detail\//.test(detailUrl)) {
+    if (doc.querySelector(".investment") && /\/(?:investors|Investors)\/detail\//.test(detailUrl)) {
       clickButtonsByText(doc, /\bvc\b/i);
       await sleep(1800);
-      vc = parseInvestmentItems(doc);
+      vc = parseInvestmentItems(doc, detailUrl);
     }
 
     return uniqueByLink([...portfolio, ...vc]);
@@ -610,6 +725,9 @@
     const logo =
       doc.querySelector(".detail_info_head .logo, .detail_info_head img, img.logo")?.src ||
       doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]')?.getAttribute("content") ||
+      Array.from(doc.querySelectorAll("img[src]"))
+        .map((img) => img.src)
+        .find((src) => /public\.rootdata\.com|\/images\//i.test(src)) ||
       "";
 
     return {
@@ -622,20 +740,24 @@
 
   function parseDetailDocument(doc, detailUrl, { isInitial = true, dryRun = false } = {}) {
     const basic = parseBasicDetail(doc, detailUrl);
-    const initialInvestors = isInitial ? parseInitialInvestors(doc) : [];
+    const initialInvestors = isInitial ? parseInitialInvestors(doc, detailUrl) : [];
     const roundsInvestors = isInitial ? parseRoundsInvestors(doc) : [];
     const investors = isInitial ? mergeInvestorData(initialInvestors, roundsInvestors) : [];
     const bodyText = cleanText(doc.body?.innerText || "");
+    const rootDataEntityLinkCount = collectEntityLinks(doc, detailUrl).length;
     const detailShellFound =
       doc.querySelectorAll(
         ".detail_info_head, .base_info, .team_member, .team-member, .investor, .investment"
-      ).length > 0;
+      ).length > 0 ||
+      rootDataEntityLinkCount > 0 ||
+      Object.keys(basic.socialLinks).length > 0;
     const detailDataFound =
       Boolean(basic.logo) ||
       Object.keys(basic.socialLinks).length > 0 ||
       basic.teamMembers.length > 0 ||
       investors.length > 0 ||
-      doc.querySelectorAll(".investment .item, .investment a.card").length > 0;
+      doc.querySelectorAll(".investment .item, .investment a.card").length > 0 ||
+      rootDataEntityLinkCount > 0;
 
     return {
       // 不能只靠 URL slug + bodyText 判定 ready，否则 Next/Vue 还没渲染详情内容时会过早入库空详情。
@@ -649,6 +771,7 @@
         bodyText: bodyText.slice(0, 300),
         detailShellFound,
         detailDataFound,
+        rootDataEntityLinkCount,
         socialLinkKeys: Object.keys(basic.socialLinks),
         teamMembers: basic.teamMembers.length,
         investorItems: doc.querySelectorAll(".investor .item").length,
