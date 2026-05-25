@@ -303,6 +303,7 @@ class FundraisingCrawler extends BaseCrawler {
             finalUrl,
             proxy: maskProxyUrl(proxyUrl),
           });
+          throw new Error(`RootData fundraising axios no project link, proxy=${maskProxyUrl(proxyUrl)}`);
         }
         return html;
       } catch (error) {
@@ -332,6 +333,9 @@ class FundraisingCrawler extends BaseCrawler {
     if (/WAF Block Page|Your request has been interrupted|web application firewall/i.test(html)) {
       const requestUuid = html.match(/Request UUID:\s*([a-zA-Z0-9-]+)/i)?.[1];
       throw new Error(`RootData WAF blocked ${source} request${requestUuid ? `, requestUuid=${requestUuid}` : ""}`);
+    }
+    if (/CaptchaScript|sg\.captcha\.qcloud\.com|new Captcha\(|\/WafCaptcha|__captcha/i.test(html)) {
+      throw new Error(`RootData WAF captcha returned for ${source}`);
     }
     if (/cloudflare|attention required|checking your browser|verify you are human/i.test(html)) {
       throw new Error(`RootData anti-bot page returned for ${source}`);
