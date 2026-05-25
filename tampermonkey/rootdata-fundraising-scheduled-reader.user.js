@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.4.2
+// @version      0.4.3
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -1545,6 +1545,48 @@
       },
 
       /**
+       * 按审计脚本输出的项目清单重爬详情并提交服务端。
+       * 控制台调用：await RootDataFundraisingCollector.recrawlDetails([{ projectName, projectLink }], { maxInitial: 30, maxSub: 0 })
+       */
+      async recrawlDetails(items, options = {}) {
+        const list = Array.isArray(items) ? items : [items];
+        const data = uniqueByLink(
+          list
+            .map((item) => {
+              const rawLink = typeof item === "string" ? item : item?.projectLink || item?.link || "";
+              const projectLink = canonicalRootDataDetailUrl(absoluteUrl(rawLink));
+              return {
+                projectName:
+                  (typeof item === "object" && cleanText(item.projectName || item.name)) ||
+                  parseNameFromDetailUrl(projectLink),
+                projectLink,
+              };
+            })
+            .filter((item) => item.projectName && /rootdata\.com\/(?:projects|Projects)\/detail\//.test(item.projectLink))
+        );
+
+        const oldMaxInitial = CONFIG.detailMaxProjectsPerRun;
+        const oldMaxSub = CONFIG.subDetailMaxProjectsPerRun;
+        if (Number.isFinite(Number(options.maxInitial))) CONFIG.detailMaxProjectsPerRun = Number(options.maxInitial);
+        if (Number.isFinite(Number(options.maxSub))) CONFIG.subDetailMaxProjectsPerRun = Number(options.maxSub);
+
+        const job = {
+          id: `manual-console-recrawl-details-${Date.now()}`,
+          slot: options.slot || "manual-console-recrawl-details",
+          reason: "manual_console_recrawl_details",
+          retryCount: 0,
+          createdAt: nowIso(),
+        };
+
+        try {
+          return await crawlDetailsForRows(data, job);
+        } finally {
+          CONFIG.detailMaxProjectsPerRun = oldMaxInitial;
+          CONFIG.subDetailMaxProjectsPerRun = oldMaxSub;
+        }
+      },
+
+      /**
        * 诊断单个详情页 iframe 是否能打开、能解析到多少数据。
        * 控制台调用：await RootDataFundraisingCollector.debugDetail("https://www.rootdata.com/projects/detail/Variational?k=NTc4Mg%3D%3D")
        */
@@ -1622,7 +1664,7 @@
     PAGE_WINDOW.RootDataFundraisingCollector = debugApi;
 
     console.log(
-      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), parse(), crawlDetailsNow(), debugDetail(url), testConnection(), sendTestAlert(), status()"
+      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), parse(), crawlDetailsNow(), recrawlDetails(items), debugDetail(url), testConnection(), sendTestAlert(), status()"
     );
   }
 

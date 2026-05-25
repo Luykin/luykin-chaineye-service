@@ -283,6 +283,7 @@ function normalizeXUrl(rawUrl) {
     const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
     if (hostname !== "x.com" && hostname !== "twitter.com") return "";
     if (!url.pathname || url.pathname === "/") return "";
+    if (/^\/RootDataCrypto\/?$/i.test(url.pathname)) return "";
     url.protocol = "https:";
     url.hostname = "x.com";
     url.hash = "";
@@ -826,6 +827,10 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     });
   }
 
+  const hasSocialLinksPayload =
+    payload.socialLinks &&
+    typeof payload.socialLinks === "object" &&
+    !Array.isArray(payload.socialLinks);
   const socialLinks = sanitizeSocialLinks(payload.socialLinks);
   const teamMembers = sanitizeTeamMembers(payload.teamMembers);
   const investors = Array.isArray(payload.investors) ? payload.investors : [];
@@ -868,10 +873,13 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     };
 
     if (socialLinks) {
-      updateValues.socialLinks = {
-        ...(project.socialLinks && typeof project.socialLinks === "object" ? project.socialLinks : {}),
-        ...socialLinks,
-      };
+      // X 链接是强匹配字段，不合并旧 socialLinks，避免历史错误的 RootData 官方账号继续残留。
+      updateValues.socialLinks = socialLinks;
+      updateValues.twitterUrl = socialLinks.x;
+    } else if (hasSocialLinksPayload && project.socialLinks && !sanitizeSocialLinks(project.socialLinks)) {
+      // 新详情明确没有合法 x，且旧库里的 socialLinks 也不合法/疑似污染，则清掉旧的 twitterUrl。
+      updateValues.socialLinks = null;
+      updateValues.twitterUrl = null;
     }
 
     if (teamMembers.length > 0 || !Array.isArray(project.teamMembers)) {
