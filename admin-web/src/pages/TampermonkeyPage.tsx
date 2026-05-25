@@ -58,9 +58,10 @@ function formatBytes(bytes?: number) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
-function formatEpochTime(value?: number | null) {
+function formatEpochTime(value?: number | string | null) {
   if (!value) return "-";
-  const date = new Date(value);
+  const numericValue = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
+  const date = new Date(numericValue);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleString("zh-CN", { hour12: false });
 }

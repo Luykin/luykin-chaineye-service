@@ -94,6 +94,32 @@ function absoluteRootDataUrl(value) {
   }
 }
 
+function canonicalRootDataDetailUrl(value) {
+  if (!value) return "";
+  try {
+    const url = new URL(value, "https://www.rootdata.com");
+    url.protocol = "https:";
+    url.hostname = "www.rootdata.com";
+
+    const match = url.pathname.match(/^\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
+    if (!match?.[1]) return url.toString();
+
+    const type = /\/(?:investors|Investors)\//.test(url.pathname)
+      ? "Investors"
+      : "Projects";
+    const slug = match[1];
+    url.pathname = `/${type}/detail/${slug}`;
+
+    const k = url.searchParams.get("k");
+    url.search = "";
+    if (k) url.searchParams.set("k", k);
+    url.hash = "";
+    return url.toString();
+  } catch (_) {
+    return String(value);
+  }
+}
+
 function parseNameFromRootDataDetailUrl(value) {
   if (!value) return "";
   try {
@@ -192,7 +218,7 @@ function stringToHashTimestamp(str) {
 }
 
 function normalizeDetailEntity(item) {
-  const projectLink = absoluteRootDataUrl(item?.projectLink || item?.link || "");
+  const projectLink = canonicalRootDataDetailUrl(item?.projectLink || item?.link || "");
   const projectName =
     cleanText(item?.projectName || item?.name, 255) ||
     parseNameFromRootDataDetailUrl(projectLink);
@@ -380,7 +406,7 @@ async function upsertInvestedRelationships(investorProject, investedProjects, pr
 }
 
 function sanitizeImportRow(row, page) {
-  const projectLink = absoluteRootDataUrl(row.projectLink);
+  const projectLink = canonicalRootDataDetailUrl(row.projectLink);
   const projectNameFromPayload = cleanText(row.projectName, 255);
   const projectNameFromUrl = parseNameFromRootDataDetailUrl(projectLink);
   const projectName =
@@ -726,7 +752,7 @@ router.post("/import", requireClientToken, async (req, res) => {
 
 router.post("/details/import", requireClientToken, async (req, res) => {
   const payload = req.body || {};
-  const projectLink = absoluteRootDataUrl(payload.projectLink);
+  const projectLink = canonicalRootDataDetailUrl(payload.projectLink);
   const projectName =
     cleanText(payload.projectName, 255) ||
     parseNameFromRootDataDetailUrl(projectLink);
@@ -874,7 +900,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
 
 router.post("/details/failure", requireClientToken, async (req, res) => {
   const payload = req.body || {};
-  const projectLink = absoluteRootDataUrl(payload.projectLink);
+  const projectLink = canonicalRootDataDetailUrl(payload.projectLink);
   const projectName =
     cleanText(payload.projectName, 255) ||
     parseNameFromRootDataDetailUrl(projectLink) ||
