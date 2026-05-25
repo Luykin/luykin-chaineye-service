@@ -1314,7 +1314,8 @@ router.get("/search", async (req, res) => {
         message: "No keyword provided or keyword too short",
       });
     }
-    if(String(req?.user?.username) !== 'luykinai') {
+    const username = String(req.headers["x-user-id"]).toLocaleLowerCase() || String(req?.user?.username)
+    if(username !== 'luykinai') {
       // TODO 修复后恢复
       return res.json({
         invested: null,
