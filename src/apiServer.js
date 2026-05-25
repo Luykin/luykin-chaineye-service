@@ -59,6 +59,7 @@ const MODULES_TO_PRELOAD = [
   './routes/proxy',
   './routes/ex-news',
   './routes/general',
+  './routes/rootdata-tampermonkey',
   './api/internal-query',
   
   // RootDataPro
@@ -147,6 +148,7 @@ const cryptoRoutes = require("./routes/cryptohunt-tg");
 const proxyRoutes = require("./routes/proxy");
 const newsRoutes = require("./routes/ex-news");
 const generalRoutes = require("./routes/general");
+const rootdataTampermonkeyRoutes = require("./routes/rootdata-tampermonkey");
 const xHuntAuthRoutes = require("./xhunt/api/auth");
 const xHuntWebAuthRoutes = require("./xhunt/api/web-auth");
 const xHuntProxyRoutes = require("./xhunt/api/proxy");
@@ -308,6 +310,7 @@ async function initializeAndStartServer() {
       "x-extension-version",
       "x-user-id",
       "x-window-location-href",
+      "x-rootdata-client-token",
       "x-admin",
       "admin",
       "Admin"
@@ -528,6 +531,9 @@ async function initializeAndStartServer() {
 
   // RootdataPro: 触发爬虫并入库
   app.use("/api/rootdatapro/internal", adminAuth, rootdataProRoutes);
+
+  // RootData Fundraising Tampermonkey 采集入口（独立 token 校验，不使用 admin JWT）
+  app.use("/api/internal/rootdata/fundraising", rootdataTampermonkeyRoutes);
 
   // 管理后台（登录、会话、管理员基础配置）
   app.use("/admin", adminRoutes);

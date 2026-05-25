@@ -19,36 +19,13 @@ class CrawlerScheduler {
 
   async startScheduler() {
     this.scheduleTmpPuppeteerCleanup();
-    // 每天北京时间上午 7:10（对应 UTC 时间晚上 11:10）
-    this.morningJob = schedule.scheduleJob("10 23 * * *", async () => {
-      console.log("Starting morning quick update...");
-      try {
-        await this.startRootDataCrawl();
-        console.log("Morning quick update completed");
-      } catch (error) {
-        console.error("Morning quick update failed:", error);
-      }
-    });
-
-    // 每天北京时间晚上 6:10（对应 UTC 时间早上 10:10）
-    this.eveningJob = schedule.scheduleJob("10 10 * * *", async () => {
-      console.log("Starting evening quick update...");
-      try {
-        await this.startRootDataCrawl();
-        console.log("Evening quick update completed");
-      } catch (error) {
-        console.error("Evening quick update failed:", error);
-      }
-    });
+    console.log(
+      "RootData fundraising 定时更新已迁移到 Tampermonkey，跳过服务器侧 morning/evening quick update。"
+    );
     await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
     await this.resetAllState();
     /** 每次重启没必要执行一次 rootData 的更新 start ============ **/
-    /** 开始RootData爬虫 **/
-    this.startRootDataCrawl()
-      .then(() => {
-        console.log("首次启动任务执行完: startRootDataCrawl");
-      })
-      .catch((err) => console.log(err));
+    /** RootData fundraising 列表已改由 Tampermonkey 定时采集，服务重启时不再自动触发 RootData 爬虫 **/
     // await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
     // this.startInvestorsCrawl().then(r => r);
     // await new Promise((resolve) => setTimeout(resolve, 2000)); // 延时2s
