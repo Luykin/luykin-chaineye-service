@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.4.8
+// @version      0.4.9
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -442,6 +442,7 @@
     const start = Date.now();
     let lastDetails = null;
     let loadedAt = 0;
+    let readyAt = 0;
 
     while (Date.now() - start < CONFIG.detailFrameTimeoutMs) {
       const doc = getFrameDocument(frame);
@@ -456,7 +457,15 @@
       }
 
       lastDetails = parseDetailDocument(doc, url, { isInitial: true, dryRun: true });
-      if (lastDetails.ready) return doc;
+      if (lastDetails.ready) {
+        const hasSocialLinks = (lastDetails.debug?.socialLinkKeys || []).length > 0;
+        if (hasSocialLinks) return doc;
+
+        // 不能一看到 logo 就立刻返回；member / 新版详情页的 X 链接经常比头像晚渲染。
+        // 没有 socialLinks 时多等一小段时间，避免把可解析的官方 X 漏成空对象。
+        if (!readyAt) readyAt = Date.now();
+        if (Date.now() - readyAt > 1800) return doc;
+      }
       if (
         !loadedAt &&
         doc.readyState === "complete" &&
