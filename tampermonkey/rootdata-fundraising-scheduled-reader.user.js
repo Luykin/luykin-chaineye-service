@@ -138,6 +138,34 @@
     }
   }
 
+  function parseNameFromDetailUrl(rawUrl) {
+    if (!rawUrl) return "";
+    try {
+      const url = new URL(rawUrl, location.origin);
+      const match = url.pathname.match(/\/(?:projects|Projects|investors|Investors)\/detail\/([^/?#]+)/);
+      if (!match?.[1]) return "";
+      return decodeURIComponent(match[1]).replace(/\+/g, " ").trim();
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function normalizeEntityName(rawName, detailUrl = "") {
+    const fromUrl = parseNameFromDetailUrl(detailUrl);
+    const text = cleanText(rawName).replace(/\*$/, "").trim();
+
+    // RootData 新页面的链接文本里经常混入头像 alt，表现为 “SSquid” / “CCoinbase Ventures”。
+    // 详情 URL 中的 slug 反而更稳定，因此优先使用 URL 解析出的名称。
+    if (fromUrl) return fromUrl;
+
+    // 无链接兜底：去掉部分 “首字母重复” 噪音，如 “HHana Financial” -> “Hana Financial”。
+    if (/^([A-Za-z])\1[A-Za-z]/.test(text)) {
+      return text.slice(1);
+    }
+
+    return text;
+  }
+
   function findProjectLink(projectCell) {
     if (!projectCell) return null;
     const links = Array.from(
@@ -159,9 +187,12 @@
 
     const linkedInvestors = links
       .map((link) => ({
-        name: cleanText(link.textContent).replace(/\*$/, "").trim(),
         link: absoluteUrl(link.getAttribute("href")),
         rawText: cleanText(link.textContent),
+      }))
+      .map((item) => ({
+        ...item,
+        name: normalizeEntityName(item.rawText, item.link),
       }))
       .filter((item) => item.name || item.link);
 
@@ -171,7 +202,7 @@
       .split(/\s{2,}|\n/)
       .map((name) => cleanText(name))
       .filter(Boolean)
-      .map((name) => ({ name, link: "" }));
+      .map((name) => ({ name: normalizeEntityName(name), link: "" }));
   }
 
   function parseFundraisingRows() {
@@ -184,7 +215,7 @@
         const projectLinkEl = findProjectLink(projectCell);
         const projectLink = absoluteUrl(projectLinkEl?.getAttribute("href") || "");
         const projectName =
-          cleanText(projectLinkEl?.textContent) ||
+          normalizeEntityName(projectLinkEl?.textContent, projectLink) ||
           projectCell?.querySelector("img")?.getAttribute("alt") ||
           "";
 

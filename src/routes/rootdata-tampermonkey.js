@@ -94,6 +94,18 @@ function absoluteRootDataUrl(value) {
   }
 }
 
+function parseNameFromRootDataDetailUrl(value) {
+  if (!value) return "";
+  try {
+    const url = new URL(value, "https://www.rootdata.com");
+    const match = url.pathname.match(/\/(?:projects|Projects)\/detail\/([^/?#]+)/);
+    if (!match?.[1]) return "";
+    return decodeURIComponent(match[1]).replace(/\+/g, " ").trim();
+  } catch (_) {
+    return "";
+  }
+}
+
 function parseAmount(valueStr) {
   if (!valueStr || valueStr === "--") return null;
 
@@ -155,8 +167,11 @@ function parseDate(dateStr) {
 }
 
 function sanitizeImportRow(row, page) {
-  const projectName = cleanText(row.projectName, 255);
   const projectLink = absoluteRootDataUrl(row.projectLink);
+  const projectNameFromPayload = cleanText(row.projectName, 255);
+  const projectNameFromUrl = parseNameFromRootDataDetailUrl(projectLink);
+  const projectName =
+    projectNameFromPayload.length > 1 ? projectNameFromPayload : projectNameFromUrl;
 
   if (!projectName || !projectLink || !/rootdata\.com\/projects\/detail\//i.test(projectLink)) {
     return null;
