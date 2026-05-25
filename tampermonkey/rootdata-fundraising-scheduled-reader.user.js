@@ -8,6 +8,7 @@
 // @match        https://www.rootdata.com/Fundraising*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
+// @grant        unsafeWindow
 // @connect      *
 // @run-at       document-idle
 // ==/UserScript==
@@ -39,6 +40,15 @@
       lastResult: "rd_fr_last_result_v3",
     },
   };
+
+  const PAGE_WINDOW =
+    typeof unsafeWindow !== "undefined" && unsafeWindow ? unsafeWindow : window;
+
+  console.log("[RootData Reader] userscript loaded:", {
+    href: location.href,
+    title: document.title,
+    runAt: nowIso(),
+  });
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -629,7 +639,7 @@
   }
 
   function exposeDebugApi() {
-    window.RootDataFundraisingCollector = {
+    const debugApi = {
       /**
        * 手动触发完整流程：先刷新页面，再等待页面加载后采集并提交。
        * 控制台调用：RootDataFundraisingCollector.run()
@@ -719,6 +729,9 @@
 
       clearPendingJob,
     };
+
+    window.RootDataFundraisingCollector = debugApi;
+    PAGE_WINDOW.RootDataFundraisingCollector = debugApi;
 
     console.log(
       "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), parse(), testConnection(), sendTestAlert(), status()"
