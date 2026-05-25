@@ -3,12 +3,15 @@ import {
   Alert,
   Button,
   Card,
+  Col,
   Descriptions,
   Empty,
   Form,
   Input,
   Modal,
+  Row,
   Space,
+  Statistic,
   Table,
   Tag,
   Tooltip,
@@ -40,9 +43,12 @@ import {
   type RootDataInvestmentRelationship,
   type TampermonkeyScriptItem,
 } from "@/services/tampermonkey";
+import { fetchRootdataDetailPollutionAudit } from "@/services/stats";
+import type { RootdataDetailPollutionProject } from "@/types/stats";
 
 const COLLECTOR_STATS_HASH =
   "#/generic-stats?type=collector.tampermonkey.crawl&subjectId=rootdata-fundraising";
+const TABLE_MAX_HEIGHT = 480;
 
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
@@ -86,6 +92,10 @@ export function TampermonkeyPage() {
 
   const tokensQuery = useQuery({ queryKey: ["tampermonkey", "tokens"], queryFn: fetchCollectorTokens });
   const scriptsQuery = useQuery({ queryKey: ["tampermonkey", "scripts"], queryFn: fetchTampermonkeyScripts });
+  const pollutionAuditQuery = useQuery({
+    queryKey: ["tampermonkey", "rootdata-detail-pollution-audit"],
+    queryFn: () => fetchRootdataDetailPollutionAudit({ limit: 100 }),
+  });
   const scriptContentQuery = useQuery({
     queryKey: ["tampermonkey", "script", previewFileName],
     queryFn: () => fetchTampermonkeyScriptContent(previewFileName!),
@@ -129,6 +139,7 @@ export function TampermonkeyPage() {
   const scriptRows = scriptsQuery.data?.data || [];
   const previewContent = scriptContentQuery.data?.data.content || "";
   const lookupItems = lookupMutation.data?.data.items || [];
+  const pollutionAudit = pollutionAuditQuery.data?.data;
 
   const tokenColumns: ColumnsType<CollectorTokenItem> = useMemo(
     () => [
@@ -324,6 +335,70 @@ export function TampermonkeyPage() {
     []
   );
 
+  const pollutionColumns: ColumnsType<RootdataDetailPollutionProject> = useMemo(
+    () => [
+      {
+        title: "等级",
+        dataIndex: "severity",
+        key: "severity",
+        width: 100,
+        render: (value: RootdataDetailPollutionProject["severity"]) => {
+          const color = value === "critical" ? "red" : value === "warning" ? "orange" : "blue";
+          return <Tag color={color}>{value}</Tag>;
+        },
+      },
+      {
+        title: "项目",
+        key: "projectName",
+        width: 260,
+        render: (_, record) => (
+          <Space direction="vertical" size={0}>
+            <Typography.Link href={record.projectLink || undefined} target="_blank">
+              {record.projectName || "-"}
+            </Typography.Link>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {record.entityType || "-"} · ID: {record.id}
+            </Typography.Text>
+          </Space>
+        ),
+      },
+      {
+        title: "原因",
+        key: "reasons",
+        render: (_, record) => (
+          <Space wrap size={[4, 4]}>
+            {[...record.reasons, ...record.reviewReasons.map((item) => `review:${item}`)].map((reason) => (
+              <Tag key={reason}>{reason}</Tag>
+            ))}
+          </Space>
+        ),
+      },
+      {
+        title: "Twitter",
+        dataIndex: "twitterUrl",
+        key: "twitterUrl",
+        width: 220,
+        ellipsis: true,
+        render: (value: string | null | undefined) =>
+          value ? (
+            <Typography.Link href={value} target="_blank">
+              {value}
+            </Typography.Link>
+          ) : (
+            "-"
+          ),
+      },
+      {
+        title: "更新时间",
+        dataIndex: "updatedAt",
+        key: "updatedAt",
+        width: 170,
+        render: (value: string | null | undefined) => formatDateTime(value),
+      },
+    ],
+    []
+  );
+
   return (
     <PermissionGuard permission="tampermonkey">
       {contextHolder}
@@ -347,8 +422,9 @@ export function TampermonkeyPage() {
               onClick={() => {
                 void tokensQuery.refetch();
                 void scriptsQuery.refetch();
+                void pollutionAuditQuery.refetch();
               }}
-              loading={tokensQuery.isFetching || scriptsQuery.isFetching}
+              loading={tokensQuery.isFetching || scriptsQuery.isFetching || pollutionAuditQuery.isFetching}
             >
               刷新
             </Button>
@@ -429,6 +505,78 @@ export function TampermonkeyPage() {
             <Descriptions.Item label="动作"><Space><Tag color="success">success</Tag><Tag color="error">failure</Tag><Tag color="warning">alert</Tag></Space></Descriptions.Item>
             <Descriptions.Item label="跳转"><Button href={COLLECTOR_STATS_HASH} icon={<LinkOutlined />}>打开通用统计</Button></Descriptions.Item>
           </Descriptions>
+        </PageSection>
+
+        <PageSection
+          title="RootData 详情污染验证"
+          description="重爬后在这里刷新验证剩余污染项；复制命令会包含所有确定污染项，不只前 30 个。"
+        >
+          <Card
+            extra={
+              <Space wrap>
+                <Button onClick={() => pollutionAuditQuery.refetch()} loading={pollutionAuditQuery.isFetching}>
+                  刷新验证
+                </Button>
+                <Button
+                  disabled={!pollutionAudit?.tampermonkeyQueue.length}
+                  icon={<CopyOutlined />}
+                  onClick={async () => {
+                    if (!pollutionAudit?.tampermonkeyQueue.length) return;
+                    const queue = pollutionAudit.tampermonkeyQueue.map(({ projectName, projectLink }) => ({
+                      projectName,
+                      projectLink,
+                    }));
+                    const command = `await RootDataFundraisingCollector.recrawlDetails(${JSON.stringify(queue)}, { maxInitial: ${queue.length}, maxSub: 0 })`;
+                    await copyText(command);
+                    messageApi.success(`已复制 ${queue.length} 个确定污染项的全量重爬命令`);
+                  }}
+                >
+                  复制全量重爬命令
+                </Button>
+              </Space>
+            }
+          >
+            {pollutionAuditQuery.isError ? (
+              <Alert type="error" showIcon message="加载详情污染验证失败" />
+            ) : pollutionAudit ? (
+              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <Alert
+                  type={pollutionAudit.summary.definite > 0 ? "warning" : "success"}
+                  showIcon
+                  message={
+                    pollutionAudit.summary.definite > 0
+                      ? `还有 ${pollutionAudit.summary.definite} 个确定污染项需要重爬`
+                      : "当前没有确定污染项"
+                  }
+                  description={`扫描 ${pollutionAudit.summary.scanned} 个项目，生成时间：${formatDateTime(pollutionAudit.generatedAt)}。列表仅展示前 ${pollutionAudit.filter.listLimit} 个异常，复制命令会包含全部确定污染项。`}
+                />
+                <Row gutter={[16, 16]}>
+                  <Col xs={12} md={6}>
+                    <Card size="small"><Statistic title="Critical" value={pollutionAudit.summary.critical} valueStyle={{ color: "#cf1322" }} /></Card>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Card size="small"><Statistic title="Warning" value={pollutionAudit.summary.warning} valueStyle={{ color: "#d46b08" }} /></Card>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Card size="small"><Statistic title="Review" value={pollutionAudit.summary.review} /></Card>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Card size="small"><Statistic title="确定重爬" value={pollutionAudit.summary.definite} /></Card>
+                  </Col>
+                </Row>
+                <Table
+                  rowKey={(record) => String(record.id)}
+                  columns={pollutionColumns}
+                  dataSource={pollutionAudit.projects}
+                  scroll={{ y: TABLE_MAX_HEIGHT, x: 980 }}
+                  pagination={{ pageSize: 20 }}
+                  locale={{ emptyText: <Empty description="暂无异常项目" /> }}
+                />
+              </Space>
+            ) : (
+              <Empty description="暂无验证数据" />
+            )}
+          </Card>
         </PageSection>
 
         <PageSection
