@@ -9,6 +9,7 @@ const { Op, literal } = require("sequelize");
 const BaseCrawler = require("./base-crawler");
 const { ip1, ip2, ip3, ip4 } = require("./base-crawler");
 const baseRootDataURL = "https://www.rootdata.com";
+const FUNDRAISING_PROJECT_LINK_PATTERN = /href="([^"]*\/projects\/detail\/[^"]*)"/i;
 
 class FundraisingCrawler extends BaseCrawler {
   constructor() {
@@ -188,7 +189,7 @@ class FundraisingCrawler extends BaseCrawler {
         waitUntil: "domcontentloaded",
         timeout: 20000, // 设置超时
       });
-      await pageInstance.waitForSelector('table tbody tr a[href*="/projects/detail/"]', { timeout: 15000 });
+      await this.waitForFundraisingPageReady(pageInstance, pageNum);
 
       // 提取并格式化数据：RootData 当前为 Next.js table 结构。
       const fundraisingData = await pageInstance.evaluate(() => {
@@ -240,9 +241,63 @@ class FundraisingCrawler extends BaseCrawler {
       }));
     } catch (error) {
       console.error(`Error crawling page ${pageNum}:`, error?.message);
+      await this.logFundraisingPageDiagnostics(pageInstance, pageNum, error);
       throw error;
     } finally {
       browser && (await browser?.close());
+    }
+  }
+
+  async waitForFundraisingPageReady(pageInstance, pageNum) {
+    const selector = 'table tbody tr a[href*="/projects/detail/"]';
+    try {
+      await pageInstance.waitForSelector(selector, { timeout: 15000 });
+      return;
+    } catch (selectorError) {
+      const html = await pageInstance.content().catch(() => "");
+      if (FUNDRAISING_PROJECT_LINK_PATTERN.test(html)) {
+        console.warn(
+          `[fundraising] selector等待失败但HTML中已存在项目链接，继续解析。page=${pageNum}, selector=${selector}`
+        );
+        return;
+      }
+      throw selectorError;
+    }
+  }
+
+  async logFundraisingPageDiagnostics(pageInstance, pageNum, error) {
+    try {
+      if (!pageInstance || pageInstance.isClosed?.()) return;
+
+      const diagnostics = await pageInstance.evaluate(() => {
+        const html = document.documentElement?.outerHTML || "";
+        const text = document.body?.innerText || "";
+        const pickText = (value) => value.replace(/\s+/g, " ").trim().slice(0, 500);
+        return {
+          url: location.href,
+          title: document.title,
+          readyState: document.readyState,
+          bodyText: pickText(text),
+          htmlStart: html.slice(0, 1200),
+          htmlLength: html.length,
+          tableCount: document.querySelectorAll("table").length,
+          rowCount: document.querySelectorAll("table tbody tr").length,
+          projectLinkCount: document.querySelectorAll('a[href*="/projects/detail/"]').length,
+          scriptCount: document.querySelectorAll("script").length,
+          hasCloudflareText: /cloudflare|attention required|checking your browser|verify you are human/i.test(text),
+          hasLoginText: /log in|sign in|登录|登入/i.test(text),
+        };
+      });
+
+      console.error(
+        `[fundraising] page diagnostics after crawl failure: ${JSON.stringify({
+          pageNum,
+          error: error?.message,
+          ...diagnostics,
+        })}`
+      );
+    } catch (diagError) {
+      console.error(`[fundraising] failed to collect page diagnostics: ${diagError?.message}`);
     }
   }
 
