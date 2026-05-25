@@ -1,6 +1,7 @@
 import { apiRequest } from "./apiClient";
 import type {
   AuditLogsResponse,
+  BackupStatusResponse,
   ClearCacheResponse,
   DauDetailsResponse,
   DailyCohortsResponse,
@@ -19,6 +20,8 @@ import type {
   RootdataQuotaResponse,
   RootdataSetInitialResponse,
   SecurityViolationsResponse,
+  RestoreBackupTablesResponse,
+  TriggerBackupResponse,
   UrlStatsResponse,
   VersionStatsResponse,
 } from "@/types/stats";
@@ -221,6 +224,27 @@ export async function fetchAuditLogs(params: {
   if (params.action) query.set("action", params.action);
 
   return apiRequest<AuditLogsResponse>(`/api/xhunt/stats/admin-audit/logs?${query.toString()}`);
+}
+
+export async function fetchBackupStatus() {
+  return apiRequest<BackupStatusResponse>("/api/xhunt/stats/backup-status");
+}
+
+export async function triggerBackup() {
+  return apiRequest<TriggerBackupResponse>("/api/xhunt/stats/trigger-backup", {
+    method: "POST",
+  });
+}
+
+export async function restoreBackupTables(params: {
+  backupName: string;
+  groupKey: string;
+  confirmText: string;
+}) {
+  return apiRequest<RestoreBackupTablesResponse>("/api/xhunt/stats/restore-backup-tables", {
+    method: "POST",
+    body: params,
+  });
 }
 
 

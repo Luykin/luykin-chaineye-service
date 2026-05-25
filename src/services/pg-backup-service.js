@@ -2,6 +2,8 @@ const schedule = require("node-schedule");
 const { exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
+const readline = require("readline");
 const { promisify } = require("util");
 const { Client } = require("pg");
 
@@ -44,7 +46,22 @@ class PostgresBackupService {
       "XPrivateNotes",
       "XPrivateMessages",
       "XPointRecords",
+      // RootData Fundraising 核心表：支持管理后台按备份时间点恢复
+      "Projects",
+      "InvestmentRelationships",
+      "PositionRelationships",
       //   "MantleRegistrations",
+    ];
+
+    // 管理后台允许恢复的表组。严禁开放任意表名，避免误删/注入。
+    this.restoreGroups = [
+      {
+        key: "fundraising_project_relationships",
+        label: "RootData Fundraising：项目 + 关系表",
+        description:
+          "恢复 Projects、InvestmentRelationships、PositionRelationships 到指定备份时间点。",
+        tables: ["Projects", "InvestmentRelationships", "PositionRelationships"],
+      },
     ];
   }
 
@@ -115,6 +132,211 @@ class PostgresBackupService {
   // 简单的标识符引用（双引号包裹且转义内部双引号）
   quoteIdent(ident) {
     return '"' + String(ident).replace(/"/g, '""') + '"';
+  }
+
+  shellEscape(value) {
+    return `'${String(value).replace(/'/g, "'\\''")}'`;
+  }
+
+  getRestoreGroups() {
+    return this.restoreGroups.map((group) => ({ ...group }));
+  }
+
+  getRestoreGroup(groupKey) {
+    const group = this.restoreGroups.find((item) => item.key === groupKey);
+    if (!group) {
+      throw new Error("不支持的恢复表组");
+    }
+    return group;
+  }
+
+  resolveBackupFile(backupName) {
+    const safeName = path.basename(String(backupName || ""));
+    if (
+      !safeName ||
+      safeName !== backupName ||
+      !/^pg_backup_[A-Za-z0-9_.:-]+\.sql$/.test(safeName)
+    ) {
+      throw new Error("备份文件名不合法");
+    }
+
+    const backupFilePath = path.resolve(this.backupDir, safeName);
+    const backupRoot = path.resolve(this.backupDir);
+    if (!backupFilePath.startsWith(`${backupRoot}${path.sep}`)) {
+      throw new Error("备份文件路径不合法");
+    }
+    if (!fs.existsSync(backupFilePath)) {
+      throw new Error("备份文件不存在");
+    }
+    return backupFilePath;
+  }
+
+  isCopyLineForTable(line, tableName) {
+    return (
+      line.startsWith(`COPY public.${this.quoteIdent(tableName)} `) ||
+      line.startsWith(`COPY ${this.quoteIdent(tableName)} `) ||
+      line.startsWith(`COPY public.${tableName} `) ||
+      line.startsWith(`COPY ${tableName} `)
+    );
+  }
+
+  isSequenceSetLineForTable(line, tableName) {
+    return (
+      line.startsWith("SELECT pg_catalog.setval(") &&
+      line.includes(`${tableName}_id_seq`)
+    );
+  }
+
+  async extractDataOnlySqlFromPlainDump(backupFilePath, tables) {
+    const blocksByTable = new Map(tables.map((table) => [table, []]));
+    const sequenceLines = [];
+    const presentTables = new Set();
+
+    const stream = fs.createReadStream(backupFilePath, { encoding: "utf8" });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+    let currentTable = null;
+    let currentBlock = [];
+
+    for await (const line of rl) {
+      if (currentTable) {
+        currentBlock.push(line);
+        if (line === "\\.") {
+          blocksByTable.get(currentTable).push(currentBlock.join("\n"));
+          currentTable = null;
+          currentBlock = [];
+        }
+        continue;
+      }
+
+      const copyTable = tables.find((table) => this.isCopyLineForTable(line, table));
+      if (copyTable) {
+        presentTables.add(copyTable);
+        currentTable = copyTable;
+        currentBlock = [line];
+        continue;
+      }
+
+      const sequenceTable = tables.find((table) =>
+        this.isSequenceSetLineForTable(line, table)
+      );
+      if (sequenceTable) {
+        sequenceLines.push(line);
+      }
+    }
+
+    const missingTables = tables.filter((table) => !presentTables.has(table));
+    if (missingTables.length > 0) {
+      throw new Error(
+        `备份文件不包含这些表的数据：${missingTables.join(", ")}。请确认该时间点之后的备份已包含 Fundraising 表。`
+      );
+    }
+
+    return [
+      "SET statement_timeout = 0;",
+      "SET lock_timeout = 0;",
+      "SET client_encoding = 'UTF8';",
+      "",
+      `TRUNCATE TABLE ${tables
+        .map((table) => `public.${this.quoteIdent(table)}`)
+        .join(", ")} RESTART IDENTITY;`,
+      "",
+      ...tables.flatMap((table) => blocksByTable.get(table)),
+      "",
+      ...sequenceLines,
+      "",
+    ].join("\n");
+  }
+
+  async countRows(tables) {
+    const client = new Client({
+      host: this.dbConfig.host,
+      port: Number(this.dbConfig.port),
+      database: this.dbConfig.database,
+      user: this.dbConfig.username,
+      password: this.dbConfig.password,
+    });
+
+    await client.connect();
+    try {
+      const result = {};
+      for (const table of tables) {
+        const res = await client.query(
+          `select count(*)::int as count from public.${this.quoteIdent(table)}`
+        );
+        result[table] = Number(res.rows[0]?.count || 0);
+      }
+      return result;
+    } finally {
+      await client.end();
+    }
+  }
+
+  async restoreTablesFromBackup({ backupName, groupKey, createSafetyBackup = true }) {
+    const startedAt = Date.now();
+    const group = this.getRestoreGroup(groupKey);
+    const backupFilePath = this.resolveBackupFile(backupName);
+    const tables = group.tables;
+
+    console.log(
+      `♻️ 开始恢复表组: ${group.label}，备份文件: ${backupName}，表: ${tables.join(", ")}`
+    );
+
+    await this.ensureBackupDir();
+
+    const restoreSql = await this.extractDataOnlySqlFromPlainDump(backupFilePath, tables);
+    const beforeCounts = await this.countRows(tables);
+    let safetyBackup = null;
+    if (createSafetyBackup) {
+      console.log("🛟 恢复前先创建安全备份...");
+      safetyBackup = await this.performBackup();
+    }
+
+    const tmpFile = path.join(
+      os.tmpdir(),
+      `pg_restore_${Date.now()}_${Math.random().toString(16).slice(2)}.sql`
+    );
+
+    try {
+      await fs.promises.writeFile(tmpFile, restoreSql, "utf8");
+
+      const command = `PGPASSWORD=${this.shellEscape(
+        this.dbConfig.password
+      )} psql -h ${this.shellEscape(this.dumpHost)} -p ${this.shellEscape(
+        this.dbConfig.port
+      )} -U ${this.shellEscape(this.dbConfig.username)} -d ${this.shellEscape(
+        this.dbConfig.database
+      )} -v ON_ERROR_STOP=1 --single-transaction -f ${this.shellEscape(tmpFile)}`;
+
+      await execAsync(command);
+      const afterCounts = await this.countRows(tables);
+      const duration = ((Date.now() - startedAt) / 1000).toFixed(2);
+
+      console.log(
+        `✅ 表恢复完成: ${group.label}，耗时 ${duration}s，安全备份: ${
+          safetyBackup?.name || "-"
+        }`
+      );
+
+      return {
+        backupName,
+        groupKey,
+        groupLabel: group.label,
+        tables,
+        beforeCounts,
+        afterCounts,
+        safetyBackup,
+        durationSeconds: Number(duration),
+      };
+    } finally {
+      try {
+        if (fs.existsSync(tmpFile)) {
+          await fs.promises.unlink(tmpFile);
+        }
+      } catch (error) {
+        console.warn("清理临时恢复 SQL 文件失败:", error.message);
+      }
+    }
   }
 
   /**
@@ -245,6 +467,14 @@ class PostgresBackupService {
 
       // 清理旧备份文件
       await this.cleanupOldBackups();
+
+      return {
+        name: backupFileName,
+        path: backupFilePath,
+        size: stats.size,
+        sizeMB: fileSizeMB,
+        createdAt: new Date().toISOString(),
+      };
     } catch (error) {
       console.error("❌ 备份失败:", error.message);
 

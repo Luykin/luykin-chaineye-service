@@ -266,6 +266,60 @@ export interface RootdataManualCrawlResponse {
   };
 }
 
+export interface BackupFileItem {
+  name: string;
+  path?: string;
+  size: number;
+  sizeMB: string;
+  mtime: string;
+  mtimeStr: string;
+}
+
+export interface BackupRestoreGroup {
+  key: string;
+  label: string;
+  description: string;
+  tables: string[];
+}
+
+export interface BackupStatusResponse {
+  success: boolean;
+  data: {
+    backups: BackupFileItem[];
+    restoreGroups: BackupRestoreGroup[];
+    stats: {
+      totalBackups: number;
+      maxBackups: number;
+      totalSizeMB: string;
+      backupDir: string;
+    };
+  };
+}
+
+export interface TriggerBackupResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface RestoreBackupTablesResponse {
+  success: boolean;
+  message: string;
+  data: {
+    backupName: string;
+    groupKey: string;
+    groupLabel: string;
+    tables: string[];
+    beforeCounts: Record<string, number>;
+    afterCounts: Record<string, number>;
+    safetyBackup?: {
+      name: string;
+      sizeMB: string;
+      createdAt: string;
+    } | null;
+    durationSeconds: number;
+  };
+}
+
 export interface DeviceStatusResponse {
   timestamp: string;
   system?: {

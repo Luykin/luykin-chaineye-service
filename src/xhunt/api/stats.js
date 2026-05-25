@@ -3261,6 +3261,7 @@ router.get("/backup-status", adminAuth, async (req, res) => {
       success: true,
       data: {
         backups: backups,
+        restoreGroups: pgBackupService.getRestoreGroups(),
         stats: {
           totalBackups: backups.length,
           maxBackups: pgBackupService.maxBackups,
@@ -3316,6 +3317,69 @@ router.post(
       res.status(500).json({
         success: false,
         error: "触发备份失败",
+        message: error.message,
+      });
+    }
+  }
+);
+
+/**
+ * POST /restore-backup-tables
+ * 从指定备份恢复白名单表组（需要认证）
+ */
+router.post(
+  "/restore-backup-tables",
+  adminAuth,
+  requirePermission("backup:operate"),
+  async (req, res) => {
+    try {
+      const { backupName, groupKey, confirmText } = req.body || {};
+      if (confirmText !== "RESTORE") {
+        return res.status(400).json({
+          success: false,
+          error: "确认文本错误",
+          message: "请输入 RESTORE 后才能执行表恢复",
+        });
+      }
+
+      const pgBackupService = require("../../services/pg-backup-service");
+      const result = await pgBackupService.restoreTablesFromBackup({
+        backupName,
+        groupKey,
+        createSafetyBackup: true,
+      });
+
+      try {
+        await logAdminAction(req, {
+          action: "restore-backup-tables",
+          success: true,
+          message: JSON.stringify({
+            backupName,
+            groupKey,
+            tables: result.tables,
+            safetyBackup: result.safetyBackup?.name,
+          }),
+        });
+      } catch (e) {}
+
+      res.json({
+        success: true,
+        message: "表恢复完成",
+        data: result,
+      });
+    } catch (error) {
+      console.error("[表恢复] ❌ 恢复失败:", error);
+      try {
+        await logAdminAction(req, {
+          action: "restore-backup-tables",
+          success: false,
+          message: error.message,
+        });
+      } catch (e) {}
+
+      res.status(500).json({
+        success: false,
+        error: "表恢复失败",
         message: error.message,
       });
     }

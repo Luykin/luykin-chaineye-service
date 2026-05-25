@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.4.1
+// @version      0.4.2
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -498,13 +498,12 @@
     return text || "website";
   }
 
-  function isRootDataOwnedExternalLink(link) {
-    const href = String(link?.href || "");
-    const text = cleanText(link?.textContent || link?.getAttribute("aria-label") || "").toLowerCase();
-    if (!href) return true;
+  function isRootDataOwnedExternalUrl(label, rawUrl) {
+    const text = cleanText(label || "").toLowerCase();
+    if (!rawUrl) return true;
 
     try {
-      const url = new URL(href);
+      const url = new URL(rawUrl);
       const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
       const full = `${hostname}${url.pathname}${url.search}`.toLowerCase();
 
@@ -525,6 +524,12 @@
     return false;
   }
 
+  function isRootDataOwnedExternalLink(link) {
+    const href = String(link?.href || "");
+    const text = cleanText(link?.textContent || link?.getAttribute("aria-label") || "").toLowerCase();
+    return isRootDataOwnedExternalUrl(text, href);
+  }
+
   function normalizeXUrl(rawUrl) {
     if (!rawUrl) return "";
     try {
@@ -532,6 +537,7 @@
       const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
       if (hostname !== "x.com" && hostname !== "twitter.com") return "";
       if (!url.pathname || url.pathname === "/") return "";
+      if (/^\/RootDataCrypto\/?$/i.test(url.pathname)) return "";
       url.protocol = "https:";
       url.hostname = "x.com";
       url.hash = "";
@@ -542,20 +548,26 @@
   }
 
   function sanitizeParsedSocialLinks(rawSocialLinks) {
-    const result = {};
+    const entries = Object.entries(rawSocialLinks || {});
+    const xEntry = entries.find(([rawKey, rawUrl]) => {
+      const key = String(rawKey || "").toLowerCase();
+      return (key === "x" || key === "twitter") && Boolean(normalizeXUrl(rawUrl));
+    });
+    const xUrl = xEntry ? normalizeXUrl(xEntry[1]) : "";
 
-    for (const [rawKey, rawUrl] of Object.entries(rawSocialLinks || {})) {
-      const key = rawKey === "twitter" ? "x" : rawKey;
-      if (key === "x") {
-        const xUrl = normalizeXUrl(rawUrl);
-        if (xUrl) result.x = xUrl;
-        continue;
-      }
-      if (result.x && rawUrl) result[key] = rawUrl;
+    // 坤哥要求：x 链接非常重要，不允许用官网/RootData 官方账号/任意外链兜底；没有合法 x.com 就整组丢弃。
+    if (!xUrl) return {};
+
+    const result = { x: xUrl };
+    for (const [rawKey, rawUrl] of entries) {
+      const key = String(rawKey || "").toLowerCase() === "twitter" ? "x" : String(rawKey || "").toLowerCase();
+      const url = String(rawUrl || "").trim();
+      if (!key || key === "x" || !/^https?:\/\//i.test(url)) continue;
+      if (isRootDataOwnedExternalUrl(key, url)) continue;
+      result[key] = url;
     }
 
-    // 坤哥要求：没有合法 x.com 的 x，就整组 socialLinks 丢弃，避免污染 twitterUrl。
-    return result.x ? result : {};
+    return result;
   }
 
   function readEntityLink(anchor) {
@@ -654,9 +666,25 @@
     );
   }
 
-  function parseRoundsInvestors(doc) {
+  function findFundraisingRoundTables(doc) {
+    return Array.from(doc.querySelectorAll("table")).filter((table) => {
+      const headerText = cleanText(
+        Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td"))
+          .map((cell) => cell.textContent)
+          .join(" ")
+      ).toLowerCase();
+      if (!/round|轮次/.test(headerText)) return false;
+      if (!/amount|金额/.test(headerText)) return false;
+      if (!/investor|backer|投资/.test(headerText)) return false;
+
+      const sectionText = cleanText(table.closest("section, article, main, div")?.textContent || "").slice(0, 500).toLowerCase();
+      return /fundraising|financing|funding|融资/.test(sectionText) || true;
+    });
+  }
+
+  function parseRoundsInvestors(doc, detailUrl) {
     const result = [];
-    const tables = Array.from(doc.querySelectorAll(".investor table, table"));
+    const tables = findFundraisingRoundTables(doc);
 
     for (const table of tables) {
       const headerCells = Array.from(
@@ -664,10 +692,6 @@
       );
       const headerTexts = headerCells.map((th) => cleanText(th.textContent).toLowerCase());
       if (!headerTexts.length) continue;
-
-      const hasInvestorColumn = headerTexts.some((text) => /investor|backer|投资/.test(text));
-      const hasRoundColumn = headerTexts.some((text) => /round|轮次|amount|valuation|date|金额|估值|日期/.test(text));
-      if (!hasInvestorColumn && !hasRoundColumn) continue;
 
       const findIndexBy = (regex, fallbackIndex) => {
         const index = headerTexts.findIndex((text) => regex.test(text));
@@ -678,30 +702,36 @@
       const idxAmount = findIndexBy(/amount|金额/i, 1);
       const idxValuation = findIndexBy(/valuation|估值/i, 2);
       const idxDate = findIndexBy(/date|日期/i, 3);
-      const idxInvestors = findIndexBy(/investor|backer|投资/i, Math.max(headerCells.length - 1, 0));
+      const idxInvestors = findIndexBy(/investor|backer|投资/i, headerCells.length - 1);
 
-      Array.from(table.querySelectorAll("tr"))
-        .slice(1)
+      Array.from(table.querySelectorAll("tbody tr, tr"))
+        .filter((row) => row.querySelectorAll("td").length > 0)
         .forEach((row) => {
-        const cells = row.querySelectorAll("td");
-        const investorCell = cells[idxInvestors];
+          const cells = row.querySelectorAll("td");
+          const investorCell = cells[idxInvestors];
           if (!investorCell) return;
 
-          Array.from(investorCell.querySelectorAll("a[href]"))
-          .map((anchor) => {
-            const entity = readEntityLink(anchor);
-            if (!entity) return null;
-            const anchorText = cleanText(anchor.textContent);
-            return {
-              ...entity,
-              lead: anchorText.includes("*"),
-              round: cleanText(cells[idxRound]?.textContent) || "--",
-              amount: cleanText(cells[idxAmount]?.textContent),
-              valuation: cleanText(cells[idxValuation]?.textContent),
-              date: cleanText(cells[idxDate]?.textContent),
-              source: "rounds",
-            };
-          })
+          const anchors = Array.from(
+            investorCell.querySelectorAll(
+              'a[href*="/investors/detail/"], a[href*="/Investors/detail/"], a[href*="/projects/detail/"], a[href*="/Projects/detail/"]'
+            )
+          );
+
+          anchors
+            .map((anchor) => {
+              const entity = readEntityLink(anchor);
+              if (!entity || (detailUrl && isCurrentDetailLink(entity.projectLink, detailUrl))) return null;
+              const anchorText = cleanText(anchor.textContent);
+              return {
+                ...entity,
+                lead: anchorText.includes("*"),
+                round: cleanText(cells[idxRound]?.textContent) || "--",
+                amount: cleanText(cells[idxAmount]?.textContent) || null,
+                valuation: cleanText(cells[idxValuation]?.textContent) || null,
+                date: cleanText(cells[idxDate]?.textContent) || null,
+                source: "rounds",
+              };
+            })
             .filter(Boolean)
             .forEach((item) => result.push(item));
         });
@@ -709,7 +739,7 @@
 
     const seen = new Set();
     return result.filter((item) => {
-      const key = `${item.projectLink}|${item.round || "--"}`;
+      const key = `${item.projectLink}|${item.round || "--"}|${item.date || ""}|${item.amount || ""}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -765,12 +795,40 @@
     );
   }
 
-  function clickButtonsByText(doc, regex) {
-    Array.from(doc.querySelectorAll("button")).forEach((button) => {
-      if (!regex.test(cleanText(button.textContent))) return;
-      const EventCtor = doc.defaultView?.MouseEvent || MouseEvent;
-      button.dispatchEvent(new EventCtor("click", { view: doc.defaultView, bubbles: true, cancelable: true }));
+  function dispatchUserClick(doc, element) {
+    const view = doc.defaultView || window;
+    const PointerEventCtor = view.PointerEvent || PointerEvent;
+    const MouseEventCtor = view.MouseEvent || MouseEvent;
+    ["pointerdown", "mousedown", "mouseup", "click"].forEach((type) => {
+      const Ctor = type.startsWith("pointer") ? PointerEventCtor : MouseEventCtor;
+      element.dispatchEvent(new Ctor(type, { view, bubbles: true, cancelable: true }));
     });
+    if (typeof element.click === "function") element.click();
+  }
+
+  function clickButtonsByText(doc, regex) {
+    Array.from(doc.querySelectorAll("button, [role='tab']")).forEach((button) => {
+      if (!regex.test(cleanText(button.textContent))) return;
+      dispatchUserClick(doc, button);
+    });
+  }
+
+  async function clickRoundsTab(doc) {
+    const candidates = Array.from(doc.querySelectorAll("button, [role='tab']"));
+    const roundsTab = candidates.find((button) => /^rounds$/i.test(cleanText(button.textContent)));
+    if (!roundsTab) return false;
+
+    const alreadyActive =
+      roundsTab.getAttribute("aria-selected") === "true" ||
+      roundsTab.getAttribute("data-state") === "active";
+    if (!alreadyActive) dispatchUserClick(doc, roundsTab);
+
+    const start = Date.now();
+    while (Date.now() - start < 4000) {
+      if (findFundraisingRoundTables(doc).length > 0) return true;
+      await sleep(300);
+    }
+    return findFundraisingRoundTables(doc).length > 0;
   }
 
   async function scrapeInvestedProjectsFromDetail(doc, detailUrl) {
@@ -790,21 +848,21 @@
     return uniqueByLink([...portfolio, ...vc]);
   }
 
+  function isLikelyDetailSocialLink(link) {
+    const iconSrc = String(link?.querySelector?.("img")?.getAttribute("src") || "").toLowerCase();
+    if (/detail_icon_|official_website|detail_icon_twitter|detail_icon_linkedin/.test(iconSrc)) return true;
+    if (link.closest(".base_info .links, .base_info, [class*='base' i] [class*='link' i], [class*='social' i], [class*='contact' i]")) return true;
+    return false;
+  }
+
   function parseBasicDetail(doc, detailUrl) {
     const socialLinks = {};
     const detailRoot = doc.querySelector("main") || doc.body || doc;
-    detailRoot.querySelectorAll(
-      [
-        ".base_info .links a[href]",
-        ".base_info a[href]",
-        '[class*="base" i] [class*="link" i] a[href]',
-        '[class*="social" i] a[href]',
-        '[class*="contact" i] a[href]',
-        'a[href^="http"]',
-      ].join(",")
-    ).forEach((link) => {
+    detailRoot.querySelectorAll("a[href]").forEach((link) => {
       if (link.closest("header, footer, nav")) return;
+      if (!isLikelyDetailSocialLink(link)) return;
       if (isRootDataOwnedExternalLink(link)) return;
+
       const inferredType = inferSocialType(link);
       const labelType = cleanText(link.querySelector("span")?.textContent).toLowerCase();
       const type = /^(website|x|twitter|linkedin|discord|telegram|medium|github|docs?)$/.test(inferredType)
@@ -812,7 +870,6 @@
         : (labelType || inferredType);
       const href = link.href || "";
       if (!type || !/^https?:\/\//i.test(href)) return;
-      // 详情页内部 RootData 链接不算 socialLinks，避免把项目/投资方详情链接误存成官网。
       if (/^https?:\/\/(?:www\.)?rootdata\.com\//i.test(href)) return;
       socialLinks[type] = href;
     });
@@ -852,7 +909,7 @@
   function parseDetailDocument(doc, detailUrl, { isInitial = true, dryRun = false } = {}) {
     const basic = parseBasicDetail(doc, detailUrl);
     const initialInvestors = isInitial ? parseInitialInvestors(doc, detailUrl) : [];
-    const roundsInvestors = isInitial ? parseRoundsInvestors(doc) : [];
+    const roundsInvestors = isInitial ? parseRoundsInvestors(doc, detailUrl) : [];
     const investors = isInitial ? mergeInvestorData(initialInvestors, roundsInvestors) : [];
     const bodyText = cleanText(doc.body?.innerText || "");
     const rootDataEntityLinkCount = collectEntityLinks(doc, detailUrl).length;
@@ -887,6 +944,8 @@
         teamMembers: basic.teamMembers.length,
         investorItems: doc.querySelectorAll(".investor .item").length,
         investorRows: doc.querySelectorAll(".investor tr").length,
+        roundTables: findFundraisingRoundTables(doc).length,
+        roundsInvestors: roundsInvestors.length,
         investmentItems: doc.querySelectorAll(".investment .item").length,
       },
     };
@@ -900,8 +959,8 @@
     await sleep(800);
 
     if (isInitial) {
-      clickButtonsByText(doc, /rounds/i);
-      await sleep(1000);
+      await clickRoundsTab(doc);
+      await sleep(600);
     }
 
     const details = parseDetailDocument(doc, detailUrl, { isInitial });
