@@ -114,8 +114,16 @@ function isSuspiciousLogo(rawLogo) {
   return false;
 }
 
+function getEntityType(projectLink) {
+  const link = cleanText(projectLink);
+  if (/\/(?:investors|Investors)\/detail\//.test(link)) return "investor";
+  if (/\/(?:projects|Projects)\/detail\//.test(link)) return "project";
+  return "unknown";
+}
+
 function auditProject(row, options) {
   const reasons = [];
+  const reviewReasons = [];
   const socialLinks = parseSocialLinks(row.socialLinks);
   const twitterUrl = cleanText(row.twitterUrl);
   const detailFetchedAt = Number(row.detailFetchedAt || 0);
@@ -141,7 +149,8 @@ function auditProject(row, options) {
 
     // 新规则：没有合法 x.com 时，整组 socialLinks 不应该入库。
     if (Object.keys(socialLinks).length > 0 && !xUrl) {
-      reasons.push("social_links_without_valid_x");
+      if (options.sinceMs) reviewReasons.push("social_links_without_valid_x");
+      else reviewReasons.push("social_links_without_valid_x_historical_review");
     }
   }
 
@@ -150,17 +159,19 @@ function auditProject(row, options) {
   if (options.sinceMs) {
     const touchedInWindow = detailFetchedAt >= options.sinceMs || updatedAt >= options.sinceMs;
     if (touchedInWindow && cleanText(row.updateProgram) === "auto_crawler") {
-      reasons.push("recent_auto_crawler_detail_update_recheck");
+      reviewReasons.push("recent_auto_crawler_detail_update_recheck");
     }
   }
 
   const uniqueReasons = Array.from(new Set(reasons));
-  const hasCritical = uniqueReasons.some((reason) => /twitterUrl_|social_x_|without_valid_x/.test(reason));
+  const uniqueReviewReasons = Array.from(new Set(reviewReasons));
+  const hasCritical = uniqueReasons.some((reason) => /twitterUrl_|social_x_/.test(reason));
 
   return {
-    suspicious: uniqueReasons.length > 0,
-    severity: hasCritical ? "critical" : uniqueReasons.length > 0 ? "warning" : "ok",
+    suspicious: uniqueReasons.length > 0 || uniqueReviewReasons.length > 0,
+    severity: hasCritical ? "critical" : uniqueReasons.length > 0 ? "warning" : uniqueReviewReasons.length > 0 ? "review" : "ok",
     reasons: uniqueReasons,
+    reviewReasons: uniqueReviewReasons,
   };
 }
 
@@ -241,6 +252,7 @@ async function main() {
       id: row.id,
       projectName: row.projectName,
       projectLink: row.projectLink,
+      entityType: getEntityType(row.projectLink),
       logo: row.logo,
       twitterUrl: row.twitterUrl,
       socialLinks: parseSocialLinks(row.socialLinks),
@@ -251,17 +263,43 @@ async function main() {
       updatedAt: row.updatedAt,
       severity: audit.severity,
       reasons: audit.reasons,
+      reviewReasons: audit.reviewReasons,
     };
   });
 
-  const suspicious = audited.filter((item) => item.reasons.length > 0);
+  const suspicious = audited.filter(
+    (item) => item.reasons.length > 0 || item.reviewReasons.length > 0
+  );
   const byReason = {};
   for (const item of suspicious) {
     for (const reason of item.reasons) byReason[reason] = (byReason[reason] || 0) + 1;
+    for (const reason of item.reviewReasons) {
+      const key = `review:${reason}`;
+      byReason[key] = (byReason[key] || 0) + 1;
+    }
   }
 
-  const tampermonkeyQueue = suspicious.map((item) => ({
+  const definiteQueue = suspicious
+    .filter((item) => item.reasons.length > 0)
+    .map((item) => ({
+      id: item.id,
+      entityType: item.entityType,
+      projectName: item.projectName,
+      projectLink: item.projectLink,
+      reasons: item.reasons,
+    }));
+  const reviewQueue = suspicious
+    .filter((item) => item.reasons.length === 0 && item.reviewReasons.length > 0)
+    .map((item) => ({
+      id: item.id,
+      entityType: item.entityType,
+      projectName: item.projectName,
+      projectLink: item.projectLink,
+      reasons: item.reviewReasons,
+    }));
+  const tampermonkeyQueue = definiteQueue.map((item) => ({
     id: item.id,
+    entityType: item.entityType,
     projectName: item.projectName,
     projectLink: item.projectLink,
     reasons: item.reasons,
@@ -281,8 +319,11 @@ async function main() {
       suspicious: suspicious.length,
       critical: suspicious.filter((item) => item.severity === "critical").length,
       warning: suspicious.filter((item) => item.severity === "warning").length,
+      review: suspicious.filter((item) => item.severity === "review").length,
       byReason,
     },
+    definiteQueue,
+    reviewQueue,
     tampermonkeyQueue,
     projects: suspicious,
   };
@@ -292,7 +333,9 @@ async function main() {
   console.log("\n=== RootData 详情污染审计（只读）===");
   console.log(`扫描项目数: ${rows.length}`);
   console.log(`疑似异常数: ${suspicious.length}`);
-  console.log(`Critical: ${report.summary.critical}, Warning: ${report.summary.warning}`);
+  console.log(
+    `Critical: ${report.summary.critical}, Warning: ${report.summary.warning}, Review: ${report.summary.review}`
+  );
   console.log("按原因统计:");
   Object.entries(byReason)
     .sort((a, b) => b[1] - a[1])
@@ -300,8 +343,10 @@ async function main() {
   console.log(`\n报告文件: ${outputPath}`);
 
   if (tampermonkeyQueue.length > 0) {
-    const firstChunk = tampermonkeyQueue.slice(0, 30).map(({ projectName, projectLink }) => ({ projectName, projectLink }));
-    console.log("\nTampermonkey 控制台可先重爬前 30 个：");
+    const firstChunk = tampermonkeyQueue
+      .slice(0, 30)
+      .map(({ projectName, projectLink }) => ({ projectName, projectLink }));
+    console.log("\nTampermonkey 控制台可先重爬前 30 个确定污染项：");
     console.log(`await RootDataFundraisingCollector.recrawlDetails(${JSON.stringify(firstChunk)}, { maxInitial: 30, maxSub: 0 })`);
   }
 }

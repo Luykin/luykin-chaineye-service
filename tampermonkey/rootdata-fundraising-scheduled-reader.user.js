@@ -1118,19 +1118,26 @@
     });
   }
 
-  function buildDetailQueueFromRows(rows) {
+  function isRootDataEntityDetailUrl(rawUrl, { allowInvestors = false } = {}) {
+    const link = canonicalRootDataDetailUrl(absoluteUrl(rawUrl || ""));
+    if (/rootdata\.com\/(?:projects|Projects)\/detail\//.test(link)) return true;
+    if (allowInvestors && /rootdata\.com\/(?:investors|Investors)\/detail\//.test(link)) return true;
+    return false;
+  }
+
+  function buildDetailQueueFromRows(rows, { allowInvestors = false } = {}) {
     return uniqueByLink(rows)
-      .filter((item) => /rootdata\.com\/(?:projects|Projects)\/detail\//.test(item.projectLink))
+      .filter((item) => isRootDataEntityDetailUrl(item.projectLink, { allowInvestors }))
       .slice(0, CONFIG.detailMaxProjectsPerRun);
   }
 
-  async function crawlDetailsForRows(rows, job) {
+  async function crawlDetailsForRows(rows, job, options = {}) {
     if (!CONFIG.detailEnabled) {
       return { enabled: false, initialSuccess: 0, initialFailed: 0, subSuccess: 0, subFailed: 0 };
     }
 
     const frame = ensureDetailFrame();
-    const initialQueue = buildDetailQueueFromRows(rows);
+    const initialQueue = buildDetailQueueFromRows(rows, options);
     const subDetailMap = new Map();
     const stats = {
       enabled: true,
@@ -1579,7 +1586,7 @@
         };
 
         try {
-          return await crawlDetailsForRows(data, job);
+          return await crawlDetailsForRows(data, job, { allowInvestors: true });
         } finally {
           CONFIG.detailMaxProjectsPerRun = oldMaxInitial;
           CONFIG.subDetailMaxProjectsPerRun = oldMaxSub;
