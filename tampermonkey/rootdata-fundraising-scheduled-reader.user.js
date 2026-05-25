@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.4.9
+// @version      0.5.3
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -440,6 +440,7 @@
     frame.src = url;
 
     const start = Date.now();
+    const isMemberDetail = isRootDataMemberUrl(url);
     let lastDetails = null;
     let loadedAt = 0;
     let readyAt = 0;
@@ -457,14 +458,15 @@
       }
 
       lastDetails = parseDetailDocument(doc, url, { isInitial: true, dryRun: true });
+      const hasSocialLinks = (lastDetails.debug?.socialLinkKeys || []).length > 0;
       if (lastDetails.ready) {
-        const hasSocialLinks = (lastDetails.debug?.socialLinkKeys || []).length > 0;
         if (hasSocialLinks) return doc;
 
         // 不能一看到 logo 就立刻返回；member / 新版详情页的 X 链接经常比头像晚渲染。
-        // 没有 socialLinks 时多等一小段时间，避免把可解析的官方 X 漏成空对象。
+        // member 页这次实测 2 秒仍可能只有头像没有 X，所以 member 等更久一点。
         if (!readyAt) readyAt = Date.now();
-        if (Date.now() - readyAt > 1800) return doc;
+        const socialWaitMs = isMemberDetail ? 5000 : 2500;
+        if (Date.now() - readyAt > socialWaitMs) return doc;
       }
       if (
         !loadedAt &&
@@ -474,8 +476,8 @@
         loadedAt = Date.now();
       }
       // RootData 详情页现在 class 变化较频繁，不能一直死等旧 class；
-      // 页面 complete 后给 React/Next 再渲染 2 秒，然后交给通用解析器兜底。
-      if (loadedAt && Date.now() - loadedAt > 2000) return doc;
+      // 但如果已经 ready 只是 socialLinks 还没出来，不要被 loadedAt 的 2 秒兜底提前截断。
+      if (loadedAt && Date.now() - loadedAt > 2000 && !(lastDetails?.ready && !hasSocialLinks)) return doc;
 
       await sleep(CONFIG.detailFramePollIntervalMs);
     }
@@ -656,6 +658,140 @@
     const link = Array.from(doc.querySelectorAll('#base-info-header a[href*="x.com"], #base-info-header a[href*="twitter.com"]'))
       .find((anchor) => normalizeXUrl(anchor.href));
     return link ? normalizeXUrl(link.href) : "";
+  }
+
+  function normalizeHandleText(value) {
+    return String(value || "").toLowerCase().replace(/^@/, "").replace(/[^a-z0-9_]/g, "");
+  }
+
+  function getXHandleFromUrl(rawUrl) {
+    try {
+      const url = new URL(rawUrl);
+      const normalized = normalizeXUrl(url.toString());
+      if (!normalized) return "";
+      return normalizeHandleText(new URL(normalized).pathname.split("/").filter(Boolean)[0] || "");
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function findTitleMatchedXUrl(doc, detailUrl) {
+    const titleHandle = normalizeHandleText(normalizeEntityName(getDetailTitle(doc), detailUrl));
+    if (!titleHandle) return "";
+
+    const links = Array.from(doc.querySelectorAll('a[href*="x.com"], a[href*="twitter.com"]'))
+      .map((anchor) => ({ anchor, url: normalizeXUrl(anchor.href), handle: getXHandleFromUrl(anchor.href) }))
+      .filter((item) => item.url && item.handle && item.handle !== "rootdatacrypto");
+
+    const matched = links.find((item) => item.handle === titleHandle);
+    return matched ? matched.url : "";
+  }
+
+  function decodeHtmlAttribute(value) {
+    return String(value || "")
+      .replace(/&amp;/g, "&")
+      .replace(/&#x2F;/gi, "/")
+      .replace(/\\u002[fF]/g, "/")
+      .replace(/\\\//g, "/")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+  }
+
+  function findRawHtmlTitleMatchedXUrl(doc, detailUrl) {
+    const titleHandle = normalizeHandleText(normalizeEntityName(getDetailTitle(doc), detailUrl));
+    if (!titleHandle) return "";
+
+    const html = decodeHtmlAttribute(doc.documentElement?.outerHTML || "");
+    const regex = /https?:\/\/(?:www\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,32})/gi;
+    let match;
+    while ((match = regex.exec(html))) {
+      const rawUrl = decodeHtmlAttribute(match[0]);
+      const handle = normalizeHandleText(match[1]);
+      if (!handle || handle === "rootdatacrypto") continue;
+      if (handle === titleHandle) return normalizeXUrl(rawUrl) || `https://x.com/${match[1]}`;
+    }
+
+    return "";
+  }
+
+  function decodeNextFlightText(value) {
+    return decodeHtmlAttribute(value)
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => {
+        try {
+          return String.fromCharCode(parseInt(hex, 16));
+        } catch (_) {
+          return _;
+        }
+      })
+      .replace(/\\(["'\\/])/g, "$1");
+  }
+
+  function getNextFlightText(doc) {
+    return Array.from(doc.querySelectorAll("script"))
+      .map((script) => script.textContent || "")
+      .filter((text) => /self\.__next_f\.push|twitterUrl|headImg|lyingUrl|blogUrl/.test(text))
+      .map(decodeNextFlightText)
+      .join("\n");
+  }
+
+  function findJsonLikeStringField(text, fieldName) {
+    if (!text) return "";
+    const escapedField = fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`"${escapedField}"\\s*:\\s*"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"`);
+    const match = text.match(regex);
+    return match ? decodeNextFlightText(match[1]) : "";
+  }
+
+  function getTopDetailNextFlightSlice(doc) {
+    const text = getNextFlightText(doc);
+    const fieldIndexes = ['"twitterUrl"', '"headImg"', '"lyingUrl"', '"blogUrl"']
+      .map((field) => text.indexOf(field))
+      .filter((index) => index >= 0);
+    const firstUsefulFieldIndex = fieldIndexes.length ? Math.min(...fieldIndexes) : -1;
+    const detailIndex =
+      firstUsefulFieldIndex >= 0
+        ? text.lastIndexOf('"detail":', firstUsefulFieldIndex)
+        : text.indexOf('"detail":');
+    if (detailIndex < 0) return "";
+
+    // children 里面会有 relevantPerson / investProject 等大量关联实体，不能从那里拿 twitterUrl。
+    const childrenIndex = text.indexOf('"children"', detailIndex);
+    const endIndex = childrenIndex > detailIndex ? childrenIndex : detailIndex + 20000;
+    return text.slice(detailIndex, endIndex);
+  }
+
+  function parseNextFlightDetailFields(doc) {
+    const slice = getTopDetailNextFlightSlice(doc);
+    if (!slice) return {};
+
+    return {
+      twitterUrl: normalizeXUrl(findJsonLikeStringField(slice, "twitterUrl")),
+      linkedinUrl: cleanText(findJsonLikeStringField(slice, "lyingUrl")),
+      blogUrl: cleanText(findJsonLikeStringField(slice, "blogUrl")),
+      headImg: cleanText(findJsonLikeStringField(slice, "headImg")),
+    };
+  }
+
+  function findNextFlightOfficialXUrl(doc) {
+    return parseNextFlightDetailFields(doc).twitterUrl || "";
+  }
+
+  function getXLinkDebug(doc, detailUrl) {
+    const links = Array.from(doc.querySelectorAll('a[href*="x.com"], a[href*="twitter.com"]'));
+    return {
+      headerXCount: doc.querySelectorAll('#base-info-header a[href*="x.com"], #base-info-header a[href*="twitter.com"]').length,
+      asideXCount: doc.querySelectorAll('aside a[href*="x.com"], aside a[href*="twitter.com"]').length,
+      allXCount: links.length,
+      rawHtmlTitleMatchedXUrl: findRawHtmlTitleMatchedXUrl(doc, detailUrl),
+      nextFlightDetail: parseNextFlightDetailFields(doc),
+      candidates: links.slice(0, 8).map((anchor) => ({
+        href: anchor.href || anchor.getAttribute("href") || "",
+        text: cleanText(anchor.textContent).slice(0, 80),
+        inHeader: Boolean(anchor.closest("#base-info-header")),
+        inAside: Boolean(anchor.closest("aside")),
+        handle: getXHandleFromUrl(anchor.href || anchor.getAttribute("href") || ""),
+      })),
+    };
   }
 
   function normalizeXUrl(rawUrl) {
@@ -1009,8 +1145,17 @@
 
   function parseBasicDetail(doc, detailUrl) {
     const socialLinks = {};
-    const officialXUrl = findOfficialAsideXUrl(doc, detailUrl) || findHeaderXUrl(doc);
+    const officialXUrl =
+      findOfficialAsideXUrl(doc, detailUrl) ||
+      findHeaderXUrl(doc) ||
+      findTitleMatchedXUrl(doc, detailUrl) ||
+      findNextFlightOfficialXUrl(doc) ||
+      findRawHtmlTitleMatchedXUrl(doc, detailUrl);
     if (officialXUrl) socialLinks.x = officialXUrl;
+
+    const nextFlightDetail = parseNextFlightDetailFields(doc);
+    if (nextFlightDetail.linkedinUrl) socialLinks.linkedin = nextFlightDetail.linkedinUrl;
+    if (nextFlightDetail.blogUrl) socialLinks.website = nextFlightDetail.blogUrl;
 
     const detailRoot = doc.querySelector("main") || doc.body || doc;
     detailRoot.querySelectorAll("a[href]").forEach((link) => {
@@ -1046,7 +1191,7 @@
       cleanText(doc.querySelector('meta[property="og:title"], meta[name="twitter:title"]')?.getAttribute("content")) ||
       cleanText(doc.title).replace(/\s*[-|]\s*RootData.*$/i, "") ||
       parseNameFromDetailUrl(detailUrl);
-    const logo = pickEntityLogo(doc);
+    const logo = pickEntityLogo(doc) || nextFlightDetail.headImg || "";
 
     return {
       socialLinks: safeSocialLinks,
@@ -1093,6 +1238,7 @@
         detailDataFound,
         rootDataEntityLinkCount,
         socialLinkKeys: Object.keys(basic.socialLinks),
+        xLinkDebug: getXLinkDebug(doc, detailUrl),
         teamMembers: basic.teamMembers.length,
         investorItems: doc.querySelectorAll(".investor .item").length,
         investorRows: doc.querySelectorAll(".investor tr").length,
