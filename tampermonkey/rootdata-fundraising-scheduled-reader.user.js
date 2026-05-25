@@ -18,11 +18,11 @@
 
   const CONFIG = {
     // TODO: 部署时改成真实 API 域名，例如 https://api.cryptohunt.ai
-    API_BASE: "https://your-api-domain.com",
+    API_BASE: "https://kb.cryptohunt.ai",
     ALERT_ENDPOINT: "/api/internal/rootdata/fundraising/alert",
     IMPORT_ENDPOINT: "/api/internal/rootdata/fundraising/import",
     PING_ENDPOINT: "/api/internal/rootdata/fundraising/ping",
-    CLIENT_TOKEN: "REPLACE_WITH_LONG_RANDOM_TOKEN",
+    CLIENT_TOKEN: "ct_uWOoKsZ9_MzozUUrVkc9gGnyvBQAp96pVmvLu7R1WE4",
 
     // 北京时间：对应原 scheduler 的 07:10 与 18:10
     scheduleBeijingTimes: ["07:10", "18:10"],
