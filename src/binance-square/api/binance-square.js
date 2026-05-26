@@ -1143,12 +1143,12 @@ function buildUserIntroPrompt(profile, posts) {
 
 参考风格：
 {
-  "zh": "心动公司 CEO、TapTap 和 VeryCD 创始人，常从游戏、产品和创业角度观察 AI。",
-  "en": "CEO of XD, founder of TapTap and VeryCD, viewing AI through games, products, and startups."
+  "zh": "心动公司 CEO、TapTap 和 VeryCD 创始人，常从游戏、产品、创业和平台生态角度观察 AI；像老玩家拿着新地图看版本更新",
+  "en": "CEO of XD and founder of TapTap and VeryCD, reading AI through games, products, startups, and platform ecosystems like a veteran player exploring a new map."
 }
 {
-  "zh": "币圈野生交易员，直爽分享现货、合约、热点项目和套利机会。",
-  "en": "A grassroots crypto trader sharing candid takes on spot, futures, hot projects, and arbitrage chances."
+  "zh": "币圈知名的野生交易员和Web3投资人，以直爽接地气的风格分享现货、合约交易心得、热点项目分析和套利机会，常自称“茁壮的野生交易员”，深受散户欢迎。",
+  "en": "A well-known grassroots crypto trader and Web3 investor, popular with retail traders for candid, down-to-earth takes on spot, futures, hot projects, and arbitrage opportunities."
 }
 
 用户资料：
