@@ -1,11 +1,16 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.6.1
+// @version      0.6.2
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
 // @match        https://www.rootdata.com/Fundraising*
+// @match        https://www.rootdata.com/projects/detail/*
+// @match        https://www.rootdata.com/Projects/detail/*
+// @match        https://www.rootdata.com/investors/detail/*
+// @match        https://www.rootdata.com/Investors/detail/*
+// @match        https://www.rootdata.com/member/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
 // @grant        unsafeWindow
@@ -19,6 +24,7 @@
   const CONFIG = {
     // TODO: 部署时改成真实 API 域名，例如 https://api.cryptohunt.ai
     API_BASE: "https://kb.cryptohunt.ai",
+    FUNDRAISING_URL: "https://www.rootdata.com/fundraising",
     ALERT_ENDPOINT: "/api/internal/rootdata/fundraising/alert",
     IMPORT_ENDPOINT: "/api/internal/rootdata/fundraising/import",
     DETAIL_QUEUE_ENDPOINT: "/api/internal/rootdata/fundraising/details/queue",
@@ -40,6 +46,8 @@
     detailMaxProjectsPerRun: 1000,
     subDetailMaxProjectsPerRun: 3000,
     detailBatchSize: 10,
+    // iframe 在 RootData 新版详情页里不稳定；主流程改为当前标签页逐个跳转详情页抓取。
+    detailLoadMode: "page",
     // RootData 新版详情页在隐藏/离屏 iframe 里容易被浏览器节流，导致 Next 内容不渲染。
     // 因此 iframe 保持在视口内用缩放预览方式加载，并把超时放宽。
     detailFrameTimeoutMs: 45 * 1000,
@@ -121,6 +129,21 @@
 
   function nowIso() {
     return new Date().toISOString();
+  }
+
+  function isFundraisingPage() {
+    return /^\/(?:fundraising|Fundraising)/.test(location.pathname);
+  }
+
+  function isDetailPage() {
+    return /^\/(?:(?:projects|Projects|investors|Investors)\/detail|member)\//.test(location.pathname);
+  }
+
+  function navigateTo(url, reason, delayMs = 600) {
+    console.log("[RootData Reader] navigate:", { reason, url, delayMs });
+    setTimeout(() => {
+      location.href = url;
+    }, delayMs);
   }
 
   function getBeijingParts(date = new Date()) {
@@ -1716,6 +1739,7 @@
       reason: cleanText(job?.reason || "details_batched"),
       nextAction: job?.nextAction === "details_after_reload" ? "details_after_reload" : null,
       queueMode: job?.queueMode === "server" ? "server" : "local",
+      loadMode: job?.loadMode === "iframe" ? "iframe" : "page",
       phase,
       cursor: Math.min(Math.max(0, Number(job?.cursor || 0)), items.length),
       subCursor: Math.min(Math.max(0, Number(job?.subCursor || 0)), subItems.length),
@@ -1758,6 +1782,7 @@
       slot: job.slot,
       phase: job.phase || "initial",
       queueMode: job.queueMode || "local",
+      loadMode: job.loadMode || "page",
       cursor: Number(job.cursor || 0),
       total: Array.isArray(job.items) ? job.items.length : 0,
       subCursor: Number(job.subCursor || 0),
@@ -1986,7 +2011,274 @@
     }
   }
 
+  function getCurrentDetailJobItem(job) {
+    if (!job) return null;
+    if (job.phase === "sub") {
+      const subItems = normalizeSubDetailItems(job.subItems || []);
+      return {
+        item: subItems[Math.max(0, Number(job.subCursor || 0))] || null,
+        index: Math.max(0, Number(job.subCursor || 0)),
+        total: subItems.length,
+        isInitial: false,
+        items: subItems,
+      };
+    }
+
+    const items = normalizeRecrawlItems(job.items || []).slice(0, CONFIG.detailMaxProjectsPerRun);
+    return {
+      item: items[Math.max(0, Number(job.cursor || 0))] || null,
+      index: Math.max(0, Number(job.cursor || 0)),
+      total: items.length,
+      isInitial: true,
+      items,
+    };
+  }
+
+  async function waitForCurrentDetailDocument(detailUrl, { isInitial = true } = {}) {
+    const start = Date.now();
+    let lastDetails = null;
+    let readyAt = 0;
+    const isMemberDetail = isRootDataMemberUrl(detailUrl);
+
+    while (Date.now() - start < CONFIG.detailFrameTimeoutMs) {
+      const blocked = detectBlockedDocument(document, detailUrl);
+      if (blocked.blocked && blocked.reason !== "blank_page") {
+        throw Object.assign(new Error(`详情页异常：${blocked.reason}`), { details: blocked });
+      }
+
+      lastDetails = parseDetailDocument(document, detailUrl, { isInitial, dryRun: true });
+      const hasSocialLinks = (lastDetails.debug?.socialLinkKeys || []).length > 0;
+      if (lastDetails.ready) {
+        if (hasSocialLinks) return document;
+        if (!readyAt) readyAt = Date.now();
+        const socialWaitMs = isMemberDetail ? 5000 : 2500;
+        if (Date.now() - readyAt > socialWaitMs) return document;
+      }
+
+      await sleep(CONFIG.detailFramePollIntervalMs);
+    }
+
+    throw Object.assign(new Error(`详情页等待超时：${detailUrl}`), {
+      details: {
+        reason: "timeout_current_detail_page",
+        url: location.href,
+        title: document.title,
+        bodyText: cleanText(document.body?.innerText || "").slice(0, 1000),
+        htmlLength: (document.documentElement?.outerHTML || "").length,
+        lastDetails,
+      },
+    });
+  }
+
+  async function crawlCurrentDetailPage(item, { isInitial = true } = {}) {
+    const detailUrl = canonicalRootDataDetailUrl(absoluteUrl(item.projectLink));
+    await waitForCurrentDetailDocument(detailUrl, { isInitial });
+
+    clickButtonsByText(document, /expand\s*more/i);
+    await sleep(800);
+
+    const isMemberDetail = isRootDataMemberUrl(detailUrl);
+    if (isInitial && !isMemberDetail) {
+      await clickRoundsTab(document);
+      await sleep(600);
+    }
+
+    const details = parseDetailDocument(document, detailUrl, { isInitial });
+    if (isInitial && !isMemberDetail) {
+      details.investedProjects = await scrapeInvestedProjectsFromDetail(document, detailUrl);
+    }
+
+    if (!details.ready) {
+      throw Object.assign(new Error("详情页未解析到有效数据"), { details: details.debug });
+    }
+
+    return {
+      source: "tampermonkey",
+      projectName: details.projectName || item.projectName || parseNameFromDetailUrl(detailUrl),
+      projectLink: detailUrl,
+      logo: details.logo || item.logo || "",
+      socialLinks: details.socialLinks,
+      teamMembers: details.teamMembers,
+      investors: details.investors,
+      investedProjects: details.investedProjects,
+      isInitial,
+      pageUrl: location.href,
+      detailUrl,
+      scrapedAt: nowIso(),
+      debug: details.debug,
+    };
+  }
+
+  async function runDetailPageJob(job) {
+    if (!CONFIG.detailEnabled) {
+      clearDetailJob();
+      navigateTo(CONFIG.FUNDRAISING_URL, "details_disabled");
+      return { ok: false, error: "details_disabled" };
+    }
+
+    const current = getCurrentDetailJobItem(job);
+    if (!current?.item) {
+      clearDetailJob();
+      navigateTo(CONFIG.FUNDRAISING_URL, "empty_detail_page_job");
+      return { ok: false, error: "empty_detail_page_job" };
+    }
+
+    const targetUrl = canonicalRootDataDetailUrl(absoluteUrl(current.item.projectLink));
+    const currentUrl = canonicalRootDataDetailUrl(location.href);
+    if (!isDetailPage() || currentUrl !== targetUrl) {
+      renderPanel({
+        ok: true,
+        status: `${current.isInitial ? "details" : "sub_details"}_navigate:${current.index + 1}/${current.total}`,
+        retryCount: 0,
+        data: current.items,
+        detailStats: job.stats || null,
+      });
+      navigateTo(targetUrl, "detail_page_job_next_item");
+      return { ok: true, navigating: true, targetUrl };
+    }
+
+    const stats = job.stats || emptyDetailStats({
+      initialTotal: current.isInitial ? current.total : Number(job.stats?.initialTotal || 0),
+      subTotal: current.isInitial ? 0 : current.total,
+    });
+    renderPanel({
+      ok: true,
+      status: `${current.isInitial ? "details_page" : "sub_details_page"}:${current.index + 1}/${current.total}`,
+      retryCount: 0,
+      data: current.items,
+      detailStats: stats,
+    });
+
+    const patchStats = emptyDetailStats({
+      initialTotal: current.isInitial ? 1 : 0,
+      subTotal: current.isInitial ? 0 : 1,
+    });
+    let discoveredSubItems = [];
+
+    try {
+      const detail = await crawlCurrentDetailPage(current.item, { isInitial: current.isInitial });
+      await submitDetailData(detail, job);
+      if (current.isInitial) {
+        patchStats.initialSuccess = 1;
+        discoveredSubItems = normalizeSubDetailItems((detail.investors || []).map((investor) => ({
+          projectName: investor.projectName,
+          projectLink: investor.projectLink,
+        })));
+      } else {
+        patchStats.subSuccess = 1;
+      }
+      console.log(current.isInitial ? "[RootData Reader] ✅ detail imported:" : "[RootData Reader] ✅ sub detail imported:", detail.projectName);
+    } catch (error) {
+      if (current.isInitial) patchStats.initialFailed = 1;
+      else patchStats.subFailed = 1;
+      patchStats.errors.push({
+        projectName: current.item.projectName,
+        projectLink: current.item.projectLink,
+        error: error.message,
+      });
+      console.error(current.isInitial ? "[RootData Reader] detail failed:" : "[RootData Reader] sub detail failed:", current.item, error);
+      try {
+        await submitDetailFailure(current.item, job, error, { isInitial: current.isInitial });
+      } catch (failureError) {
+        console.error("[RootData Reader] detail failure report failed:", failureError);
+      }
+    }
+
+    const nextStats = mergeDetailStats(stats, patchStats);
+
+    if (current.isInitial) {
+      const nextCursor = current.index + 1;
+      nextStats.initialTotal = current.total;
+
+      if (nextCursor < current.total) {
+        const nextJob = {
+          ...job,
+          items: current.items,
+          subItems: job.queueMode === "server" ? [] : normalizeSubDetailItems([...(job.subItems || []), ...discoveredSubItems]),
+          cursor: nextCursor,
+          stats: nextStats,
+          nextAction: "details_after_reload",
+          updatedAt: nowIso(),
+        };
+        setDetailJob(nextJob);
+        if (nextCursor % Math.max(1, Number(job.batchSize || CONFIG.detailBatchSize || 10)) === 0) {
+          navigateTo(CONFIG.FUNDRAISING_URL, "detail_page_batch_refresh");
+        } else {
+          const nextItem = current.items[nextCursor];
+          navigateTo(canonicalRootDataDetailUrl(absoluteUrl(nextItem.projectLink)), "detail_page_next_initial");
+        }
+        return { ok: true, done: false, stats: nextStats };
+      }
+
+      let subItems = [];
+      if (job.queueMode === "server") {
+        try {
+          subItems = await fetchDetailQueue("sub", Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)), job);
+        } catch (error) {
+          console.error("[RootData Reader] fetch sub queue failed after current-tab initial phase, fallback to discovered sub items:", error);
+          subItems = normalizeSubDetailItems([...(job.subItems || []), ...discoveredSubItems]);
+        }
+      } else {
+        subItems = normalizeSubDetailItems([...(job.subItems || []), ...discoveredSubItems]);
+      }
+
+      nextStats.subTotal = subItems.length;
+      if (!subItems.length) {
+        clearDetailJob();
+        renderPanel({ ok: true, status: "details_page_done_reloading", retryCount: 0, data: current.items, detailStats: nextStats });
+        navigateTo(CONFIG.FUNDRAISING_URL, "detail_page_done_no_sub");
+        return { ok: true, done: true, stats: nextStats };
+      }
+
+      const nextJob = {
+        ...job,
+        items: current.items,
+        subItems,
+        phase: "sub",
+        cursor: nextCursor,
+        subCursor: 0,
+        stats: nextStats,
+        nextAction: "details_after_reload",
+        updatedAt: nowIso(),
+      };
+      setDetailJob(nextJob);
+      navigateTo(CONFIG.FUNDRAISING_URL, "detail_page_start_sub_after_refresh");
+      return { ok: true, done: false, phase: "sub", stats: nextStats };
+    }
+
+    const nextSubCursor = current.index + 1;
+    nextStats.subTotal = current.total;
+
+    if (nextSubCursor >= current.total) {
+      clearDetailJob();
+      renderPanel({ ok: true, status: "sub_details_page_done_reloading", retryCount: 0, data: current.items, detailStats: nextStats });
+      navigateTo(CONFIG.FUNDRAISING_URL, "sub_detail_page_done");
+      return { ok: true, done: true, stats: nextStats };
+    }
+
+    const nextJob = {
+      ...job,
+      subItems: current.items,
+      subCursor: nextSubCursor,
+      stats: nextStats,
+      nextAction: "details_after_reload",
+      updatedAt: nowIso(),
+    };
+    setDetailJob(nextJob);
+    if (nextSubCursor % Math.max(1, Number(job.batchSize || CONFIG.detailBatchSize || 10)) === 0) {
+      navigateTo(CONFIG.FUNDRAISING_URL, "sub_detail_page_batch_refresh");
+    } else {
+      const nextItem = current.items[nextSubCursor];
+      navigateTo(canonicalRootDataDetailUrl(absoluteUrl(nextItem.projectLink)), "detail_page_next_sub");
+    }
+    return { ok: true, done: false, stats: nextStats };
+  }
+
   async function runDetailBatchJob(job) {
+    if ((job?.loadMode || CONFIG.detailLoadMode) === "page") {
+      return runDetailPageJob(job);
+    }
+
     if (!CONFIG.detailEnabled) {
       clearDetailJob();
       reloadAfterRelease("details_disabled");
@@ -2431,6 +2723,7 @@
             reason: `${job.reason || "run"}_sub_details_batched`,
             nextAction: "details_after_reload",
             queueMode: "server",
+            loadMode: CONFIG.detailLoadMode,
             phase: "sub",
             cursor: 0,
             subCursor: 0,
@@ -2476,6 +2769,7 @@
       reason: `${job.reason || "run"}_details_batched`,
       nextAction: "details_after_reload",
       queueMode: "server",
+      loadMode: CONFIG.detailLoadMode,
       phase: "initial",
       cursor: 0,
       subCursor: 0,
@@ -2506,7 +2800,8 @@
     clearDetailJob();
     setPendingJob(job);
     renderPanel({ ok: true, status: `refreshing_before_scrape:${slot}`, retryCount: 0, data: [] });
-    location.reload();
+    if (isFundraisingPage()) location.reload();
+    else navigateTo(CONFIG.FUNDRAISING_URL, "start_run_from_detail_page", 100);
   }
 
   async function retryOrAlert(job, error) {
@@ -2631,6 +2926,7 @@
   }
 
   function checkSchedule() {
+    if (!isFundraisingPage()) return;
     const bj = getBeijingParts();
     const lastRunMap = getLastRunMap();
 
@@ -2648,6 +2944,7 @@
   }
 
   function initScheduleLoop() {
+    if (!isFundraisingPage()) return;
     setInterval(checkSchedule, CONFIG.scheduleCheckIntervalMs);
     checkSchedule();
   }
@@ -2879,6 +3176,7 @@
             detailMaxProjectsPerRun: CONFIG.detailMaxProjectsPerRun,
             subDetailMaxProjectsPerRun: CONFIG.subDetailMaxProjectsPerRun,
             detailBatchSize: CONFIG.detailBatchSize,
+            detailLoadMode: CONFIG.detailLoadMode,
             tokenConfigured:
               Boolean(CONFIG.CLIENT_TOKEN) &&
               CONFIG.CLIENT_TOKEN !== "REPLACE_WITH_LONG_RANDOM_TOKEN",
