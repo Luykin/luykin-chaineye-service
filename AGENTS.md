@@ -384,6 +384,16 @@ PG_PASSWORD=xxx
 PG_SSL=false
 ```
 
+#### 5.1.1 远程只读验证库（本地 Mac 数据校验用）
+
+- 用途：仅用于数据验证，禁止写入或迁移操作
+- 地址：`150.5.158.179`
+- 端口：`5432`
+- 数据库：`luykindatabase`
+- 用户名：`readonly`
+- 密码：`readonly.0813`
+- 连接提示：远程连接通常需要 SSL；如遇 `pg_hba.conf` 拒绝，说明当前出口 IP 未被授权
+
 ### 5.2 SQLite（辅助）
 
 用于轻量级数据存储，文件位于项目根目录 `database.sqlite`
