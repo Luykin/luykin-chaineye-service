@@ -1927,10 +1927,79 @@ router.get("/target/list", async (req, res) => {
           raw: true,
         })
       : [];
-    const userMap = new Map(users.map((user) => [user.username.toLowerCase(), user]));
+    const getUserProfileCompletenessScore = (user) => [
+      user?.squareUid,
+      user?.displayName,
+      user?.avatar,
+      user?.biography,
+      user?.totalFollowerCount,
+      user?.totalPostCount,
+      user?.rawData,
+    ].filter((value) => value !== null && value !== undefined && value !== "").length;
+    const userMap = new Map();
+    for (const user of users) {
+      const lowerUsername = user.username.toLowerCase();
+      const existing = userMap.get(lowerUsername);
+      if (!existing || getUserProfileCompletenessScore(user) > getUserProfileCompletenessScore(existing)) {
+        userMap.set(lowerUsername, user);
+      }
+    }
+    const lowerUsernames = Array.from(new Set(usernames.map((username) => username.toLowerCase())));
+
+    // 关注列表接口返回的用户画像里，totalFollowCount / totalLikeCount / totalShareCount
+    // 经常为 0（但页面实际有值）。导出 Top1000 时不要直接把这些“假 0”透出：
+    // - 关注数：优先使用本地已同步的有效关注关系数；
+    // - 获赞数/分享数：当用户画像值为空或 0 时，用已抓取帖子聚合值兜底。
+    const activeFollowingRows = lowerUsernames.length > 0
+      ? await db.sequelize.query(
+          `
+            SELECT LOWER("followerUsername") AS username, COUNT(*)::int AS count
+            FROM "BinanceSquareFollowings"
+            WHERE "isActive" = true AND LOWER("followerUsername") IN (:usernames)
+            GROUP BY LOWER("followerUsername")
+          `,
+          { replacements: { usernames: lowerUsernames }, type: QueryTypes.SELECT }
+        )
+      : [];
+    const activeFollowingCountMap = new Map(
+      activeFollowingRows.map((row) => [row.username, Number(row.count) || 0])
+    );
+
+    const postAggregateRows = lowerUsernames.length > 0
+      ? await db.sequelize.query(
+          `
+            SELECT
+              LOWER("username") AS username,
+              COALESCE(SUM(COALESCE("likeCount", 0)), 0)::bigint AS "likeCount",
+              COALESCE(SUM(COALESCE("shareCount", 0)), 0)::bigint AS "shareCount"
+            FROM "BinanceSquarePosts"
+            WHERE COALESCE("isDeleted", false) = false AND LOWER("username") IN (:usernames)
+            GROUP BY LOWER("username")
+          `,
+          { replacements: { usernames: lowerUsernames }, type: QueryTypes.SELECT }
+        )
+      : [];
+    const postAggregateMap = new Map(
+      postAggregateRows.map((row) => [
+        row.username,
+        {
+          likeCount: Number(row.likeCount) || 0,
+          shareCount: Number(row.shareCount) || 0,
+        },
+      ])
+    );
+    const preferPositiveFallback = (value, fallback) => {
+      const num = Number(value);
+      if (value !== null && value !== undefined && Number.isFinite(num) && num > 0) return value;
+      const fallbackNum = Number(fallback);
+      if (fallback !== null && fallback !== undefined && Number.isFinite(fallbackNum) && fallbackNum > 0) return fallbackNum;
+      return value ?? fallback ?? null;
+    };
 
     const enrichedRanks = rankRows.map((rank) => {
-      const user = userMap.get(rank.username.toLowerCase());
+      const lowerUsername = rank.username.toLowerCase();
+      const user = userMap.get(lowerUsername);
+      const postAggregate = postAggregateMap.get(lowerUsername) || {};
       const introI18n = normalizeIntroI18n(user?.aiOneLineIntroI18n, user?.aiOneLineIntro);
       const hasBilingualIntro = Boolean(introI18n);
       const intro = hasBilingualIntro ? formatBilingualIntroText(introI18n) : null;
@@ -1944,10 +2013,12 @@ router.get("/target/list", async (req, res) => {
         verificationType: user?.verificationType ?? null,
         verificationDescription: user?.verificationDescription || null,
         totalFollowerCount: user?.totalFollowerCount ?? null,
-        totalFollowingCount: user?.totalFollowingCount ?? null,
+        totalFollowingCount: activeFollowingCountMap.has(lowerUsername)
+          ? activeFollowingCountMap.get(lowerUsername)
+          : user?.totalFollowingCount ?? null,
         totalPostCount: user?.totalPostCount ?? null,
-        totalLikeCount: user?.totalLikeCount ?? null,
-        totalShareCount: user?.totalShareCount ?? null,
+        totalLikeCount: preferPositiveFallback(user?.totalLikeCount, postAggregate.likeCount),
+        totalShareCount: preferPositiveFallback(user?.totalShareCount, postAggregate.shareCount),
         accountLang: user?.accountLang || null,
         isKol: user?.isKol ?? null,
         userStatus: user?.userStatus ?? null,
