@@ -229,6 +229,61 @@ function auditRootDataDetailProject(row, options = {}) {
   };
 }
 
+
+async function cleanupRootDataProjectsForRecrawl(projectIds, transaction) {
+  const normalizedIds = Array.from(
+    new Set(
+      (Array.isArray(projectIds) ? projectIds : [])
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    )
+  );
+
+  if (!normalizedIds.length) {
+    return { projectIds: [], resetProjects: 0, deletedInvestmentRelationships: 0 };
+  }
+
+  const deletedInvestmentRelationships = await Fundraising.InvestmentRelationships.destroy({
+    where: {
+      [Op.or]: [
+        { fundedProjectId: { [Op.in]: normalizedIds } },
+        { investorProjectId: { [Op.in]: normalizedIds } },
+      ],
+    },
+    transaction,
+  });
+
+  const [resetProjects] = await Fundraising.Project.update(
+    {
+      socialLinks: null,
+      twitterUrl: null,
+      teamMembers: [],
+      detailFetchedAt: null,
+      detailFailuresNumber: 0,
+      updateProgram: "admin_force_recrawl",
+    },
+    {
+      where: { id: { [Op.in]: normalizedIds } },
+      transaction,
+    }
+  );
+
+  return {
+    projectIds: normalizedIds,
+    resetProjects: resetProjects || 0,
+    deletedInvestmentRelationships,
+  };
+}
+
+function buildRootDataForceRecrawlCommand(items, options = {}) {
+  const queue = (Array.isArray(items) ? items : []).map((item) => ({
+    projectName: item.projectName,
+    projectLink: item.projectLink,
+  }));
+  const batchSize = Math.max(1, Number(options.batchSize || 1));
+  return `await RootDataFundraisingCollector.recrawlDetails(${JSON.stringify(queue)}, { batchSize: ${batchSize}, maxSub: 0, forceRefreshInvestmentRelationships: true, forceRefreshInvestedRelationships: true });`;
+}
+
 async function safeRecordAdminStat(action, payload = {}) {
   try {
     await recordGenericStat({
@@ -429,6 +484,109 @@ router.get("/rootdata/lookup", async (req, res) => {
   } catch (error) {
     console.error("[tampermonkey-admin] RootData 导入验证查询失败:", error);
     res.status(500).json({ success: false, error: "RootData 导入验证查询失败" });
+  }
+});
+
+
+router.post("/rootdata/force-recrawl/prepare", async (req, res) => {
+  const sequelize = Fundraising.Project.sequelize;
+  const transaction = await sequelize.transaction();
+
+  try {
+    const query = cleanText(req.body?.query, 300);
+    const cleanup = req.body?.cleanup !== false;
+
+    if (!query) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "请输入项目名、RootData 详情链接或数据库 ID",
+      });
+    }
+
+    const normalizedUrl = normalizeRootDataUrl(query);
+    const whereItems = [
+      { projectName: { [Op.iLike]: `%${query}%` } },
+      { projectLink: { [Op.iLike]: `%${query}%` } },
+    ];
+
+    if (/^https?:\/\//i.test(normalizedUrl)) {
+      whereItems.unshift({ projectLink: normalizedUrl });
+    }
+
+    if (/^\d+$/.test(query)) {
+      whereItems.unshift({ id: Number(query) });
+    }
+
+    const projects = await Fundraising.Project.findAll({
+      where: { [Op.or]: whereItems },
+      order: [
+        ["updatedAt", "DESC"],
+        ["id", "DESC"],
+      ],
+      limit: 10,
+      transaction,
+    });
+
+    if (!projects.length) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        error: "没有查到对应的 RootData 项目",
+      });
+    }
+
+    const recrawlItems = projects.map((project) => ({
+      id: project.id,
+      projectName: project.projectName,
+      projectLink: project.projectLink,
+    }));
+
+    const cleanupResult = cleanup
+      ? await cleanupRootDataProjectsForRecrawl(
+          recrawlItems.map((item) => item.id),
+          transaction
+        )
+      : { projectIds: recrawlItems.map((item) => item.id), resetProjects: 0, deletedInvestmentRelationships: 0 };
+
+    await transaction.commit();
+
+    const command = buildRootDataForceRecrawlCommand(recrawlItems, { batchSize: recrawlItems.length > 1 ? 10 : 1 });
+
+    await safeRecordAdminStat("prepare_rootdata_force_recrawl", {
+      adminId: req.adminUser?.id,
+      adminEmail: req.adminUser?.email,
+      metrics: {
+        matches: recrawlItems.length,
+        resetProjects: cleanupResult.resetProjects,
+        deletedInvestmentRelationships: cleanupResult.deletedInvestmentRelationships,
+      },
+      meta: {
+        query,
+        cleanup,
+        projectIds: recrawlItems.map((item) => item.id),
+        projectNames: recrawlItems.map((item) => item.projectName),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        query,
+        cleanup,
+        items: recrawlItems,
+        cleanupResult,
+        command,
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("[tampermonkey-admin] RootData 强制重爬准备失败:", error);
+    res.status(500).json({
+      success: false,
+      error: "RootData 强制重爬准备失败",
+      message: error.message,
+    });
   }
 });
 

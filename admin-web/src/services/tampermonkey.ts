@@ -1,5 +1,4 @@
 import { apiRequest } from "./apiClient";
-import type { RootdataDetailPollutionAuditResponse } from "@/types/stats";
 
 export interface CollectorTokenItem {
   id: number;
@@ -94,6 +93,26 @@ export interface RootDataLookupItem {
   investmentsGiven: RootDataInvestmentRelationship[];
 }
 
+
+export interface RootDataForceRecrawlPrepareResponse {
+  success: boolean;
+  data: {
+    query: string;
+    cleanup: boolean;
+    items: Array<{
+      id: number;
+      projectName: string;
+      projectLink: string;
+    }>;
+    cleanupResult: {
+      projectIds: number[];
+      resetProjects: number;
+      deletedInvestmentRelationships: number;
+    };
+    command: string;
+  };
+}
+
 export interface RootDataLookupResponse {
   success: boolean;
   data: {
@@ -138,14 +157,13 @@ export async function lookupRootDataProject(query: string) {
   );
 }
 
-export async function fetchRootdataDetailPollutionAudit(params?: {
-  recentHours?: number;
-  limit?: number;
-}) {
-  const query = new URLSearchParams();
-  if (params?.recentHours) query.set("recentHours", String(params.recentHours));
-  if (params?.limit) query.set("limit", String(params.limit));
-  return apiRequest<RootdataDetailPollutionAuditResponse>(
-    `/api/admin/tampermonkey/rootdata/detail-pollution-audit${query.toString() ? `?${query.toString()}` : ""}`
+
+export async function prepareRootDataForceRecrawl(params: { query: string; cleanup?: boolean }) {
+  return apiRequest<RootDataForceRecrawlPrepareResponse>(
+    "/api/admin/tampermonkey/rootdata/force-recrawl/prepare",
+    {
+      method: "POST",
+      body: { query: params.query, cleanup: params.cleanup ?? true },
+    }
   );
 }

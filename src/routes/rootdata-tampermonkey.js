@@ -858,8 +858,20 @@ function truncateJson(value, maxLength = 6000) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}\n... [truncated]` : text;
 }
 
+const COLLECTOR_DETAIL_STAT_ACTIONS = new Set(["detail_success", "detail_failure"]);
+
 async function safeRecordCollectorStat(req, action, payload = {}) {
   try {
+    // 详情页是一项目一条请求，逐条记录会把 collector.tampermonkey.crawl 刷屏，
+    // 导致看不清真正的定时触发/列表导入/告警事件。默认跳过逐详情统计；
+    // 如需临时排查详情成功率，可设置 ROOTDATA_RECORD_DETAIL_STATS=1。
+    if (
+      COLLECTOR_DETAIL_STAT_ACTIONS.has(action) &&
+      process.env.ROOTDATA_RECORD_DETAIL_STATS !== "1"
+    ) {
+      return;
+    }
+
     await recordGenericStat({
       type: "collector.tampermonkey.crawl",
       source: "tampermonkey",
@@ -1275,6 +1287,20 @@ router.post("/details/cleanup", requireClientToken, async (req, res) => {
       resetProjects,
       deletedInvestmentRelationships,
       scheduleSlot,
+    });
+
+    await safeRecordCollectorStat(req, "details_cleanup", {
+      scheduleSlot,
+      numericValue: resetProjects,
+      metrics: {
+        requested: normalizedItems.length,
+        matchedProjects: projectIds.length,
+        resetProjects,
+        deletedInvestmentRelationships,
+      },
+      meta: {
+        projectNames: normalizedItems.map((item) => item.projectName).slice(0, 50),
+      },
     });
 
     return res.json({
