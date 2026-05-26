@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.7.1
+// @version      0.7.2
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -3081,7 +3081,9 @@
     updateIdleCountdown(panel);
   }
 
-  function updateIdleCountdown(panel = createPanel()) {
+  function updateIdleCountdown(panel = document.getElementById(CONFIG.panelId)) {
+    // 只更新已渲染出来的面板；不要在 setInterval 里 createPanel()，否则会生成没有内容的黑色空条。
+    if (!panel) return;
     const countdown = panel.querySelector("#rd-fr-countdown");
     if (!countdown) return;
     const triggerTime = Number(countdown.getAttribute("data-next-trigger") || 0);
