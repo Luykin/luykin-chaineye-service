@@ -20,6 +20,7 @@ const genericStatsRouter = require("./stats-routes/generic-stats");
 const adminAuditRouter = require("./stats-routes/admin-audit");
 const vipListsRouter = require("./stats-routes/vip-lists");
 const { logAdminAction } = require("./stats-routes/shared");
+const { XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
 const {
   sanitizePlainText,
   sanitizeSafeUrl,
@@ -3473,11 +3474,51 @@ router.get("/pro-users", adminAuth, async (req, res) => {
   }
 });
 
+
+function getBackupRestoreReauthKey(adminId) {
+  return `admin:webauthn:reauth:backup-restore:${adminId}`;
+}
+
+async function requireBackupRestoreWebAuthn(req, res, next) {
+  try {
+    res.set("Cache-Control", "no-store");
+    const admin = req.adminUser;
+    if (!admin?.id) {
+      return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "请先登录" });
+    }
+
+    const credentialCount = await XhuntAdminWebAuthnCredential.count({ where: { adminId: admin.id } });
+    if (credentialCount <= 0) {
+      return res.status(403).json({
+        success: false,
+        error: "需要先录入生物识别",
+        code: "WEBAUTHN_NOT_ENROLLED",
+        message: "备份恢复必须先录入指纹 / Face ID / 通行密钥",
+      });
+    }
+
+    const verified = await req.redisClient.get(getBackupRestoreReauthKey(admin.id));
+    if (verified !== "1") {
+      return res.status(403).json({
+        success: false,
+        error: "需要生物识别二次验证",
+        code: "WEBAUTHN_REAUTH_REQUIRED",
+        message: "请先完成指纹 / Face ID 二次验证后再进入备份恢复",
+      });
+    }
+
+    return next();
+  } catch (error) {
+    console.error("[备份恢复二次验证] ❌ 检查失败:", error);
+    return res.status(500).json({ success: false, error: "备份恢复二次验证检查失败" });
+  }
+}
+
 /**
  * GET /backup-status
  * 获取 PostgreSQL 备份状态（需要认证，仅 luykin 用户）
  */
-router.get("/backup-status", adminAuth, async (req, res) => {
+router.get("/backup-status", adminAuth, requireBackupRestoreWebAuthn, async (req, res) => {
   try {
     // 权限检查：只有 luykin 用户可以查看备份状态
     if (!req.user || req.user.role !== "super") {
@@ -3532,6 +3573,7 @@ router.post(
   "/trigger-backup",
   adminAuth,
   requirePermission("backup:operate"),
+  requireBackupRestoreWebAuthn,
   async (req, res) => {
     try {
       console.log(`[执行命令] ✅ 权限验证通过: 用户=${req.user.username}`);
@@ -3575,6 +3617,7 @@ router.post(
   "/restore-backup-tables",
   adminAuth,
   requirePermission("backup:operate"),
+  requireBackupRestoreWebAuthn,
   async (req, res) => {
     try {
       const { backupName, groupKey, confirmText } = req.body || {};

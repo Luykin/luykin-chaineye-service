@@ -84,6 +84,34 @@ function assertValidBlobPath(pathname) {
   return value;
 }
 
+
+function getCredentialKeyFromAssertion(assertion) {
+  if (typeof assertion?.id === "string") return assertion.id;
+  if (typeof assertion?.rawId === "string") return assertion.rawId;
+  return null;
+}
+
+function buildAuthenticatorFromCredential(row) {
+  return {
+    credentialID: base64url.toBuffer(row.credentialId),
+    credentialPublicKey: base64url.toBuffer(row.publicKey),
+    counter: Number(row.counter || 0),
+  };
+}
+
+function getBackupRestoreReauthKey(adminId) {
+  return `admin:webauthn:reauth:backup-restore:${adminId}`;
+}
+
+async function getLoggedInAdminForJson(req, res) {
+  const admin = await getAdminFromRequest(req);
+  if (!admin) {
+    res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "请先登录" });
+    return null;
+  }
+  return admin;
+}
+
 function parseClientPayload(payload) {
   if (!payload) return {};
   try {
@@ -268,20 +296,9 @@ router.post("/webauthn/authentication/verify", express.json(), async (req, res) 
       expectedRPID: RP_ID,
       authenticator: (function () {
         // SimpleWebAuthn Browser 返回的 assertion.id 通常为 base64url 字符串，与我们存储的一致
-        let credKey = null;
-        if (typeof assertion?.id === 'string') {
-          credKey = assertion.id;
-        } else if (typeof assertion?.rawId === 'string') {
-          // 兼容某些实现可能提供 rawId(base64url)
-          credKey = assertion.rawId;
-        }
+        const credKey = getCredentialKeyFromAssertion(assertion);
         const found = credKey ? credentialLookup.get(credKey) : null;
-        if (!found) return null;
-        return {
-          credentialID: base64url.toBuffer(found.credentialId),
-          credentialPublicKey: base64url.toBuffer(found.publicKey),
-          counter: Number(found.counter || 0),
-        };
+        return found ? buildAuthenticatorFromCredential(found) : null;
       })(),
     });
 
@@ -305,6 +322,121 @@ router.post("/webauthn/authentication/verify", express.json(), async (req, res) 
   } catch (e) {
     try { await XhuntAdminAuditLog.create({ adminId: null, email: null, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: e.message }); } catch (_) {}
     res.status(500).json({ success: false, error: "验证失败" });
+  }
+});
+
+
+// ========== WebAuthn 二次验证：备份恢复高危入口 ==========
+router.get("/webauthn/backup-restore/options", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const admin = await getLoggedInAdminForJson(req, res);
+    if (!admin) return;
+
+    const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    if (!creds.length) {
+      return res.status(403).json({
+        success: false,
+        error: "需要先录入生物识别",
+        code: "WEBAUTHN_NOT_ENROLLED",
+        message: "备份恢复必须先在当前管理员账号录入指纹 / Face ID / 通行密钥",
+      });
+    }
+
+    const allowCredentials = creds.map((credential) => ({
+      id: base64url.toBuffer(credential.credentialId),
+      type: "public-key",
+    }));
+    const options = await generateAuthenticationOptions({
+      rpID: RP_ID,
+      userVerification: "required",
+      allowCredentials,
+    });
+    const challengeKey = `webauthn:backup-restore:challenge:${admin.id}`;
+    await req.redisClient.set(challengeKey, options.challenge, { EX: 300 });
+    res.json({ success: true, options });
+  } catch (e) {
+    console.error("[webauthn backup restore options] error:", e);
+    res.status(500).json({ success: false, error: "生成备份恢复验证参数失败" });
+  }
+});
+
+router.post("/webauthn/backup-restore/verify", express.json(), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const admin = await getLoggedInAdminForJson(req, res);
+    if (!admin) return;
+
+    const { assertion } = req.body || {};
+    if (!assertion) return res.status(400).json({ success: false, error: "缺少验证结果" });
+
+    const challengeKey = `webauthn:backup-restore:challenge:${admin.id}`;
+    const expectedChallenge = await req.redisClient.get(challengeKey);
+    if (!expectedChallenge) return res.status(400).json({ success: false, error: "认证超时，请重新验证" });
+
+    const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    if (!creds.length) {
+      return res.status(403).json({
+        success: false,
+        error: "需要先录入生物识别",
+        code: "WEBAUTHN_NOT_ENROLLED",
+      });
+    }
+
+    const credentialLookup = new Map(creds.map((credential) => [credential.credentialId, credential]));
+    const credKey = getCredentialKeyFromAssertion(assertion);
+    const credential = credKey ? credentialLookup.get(credKey) : null;
+    if (!credential) return res.status(401).json({ success: false, error: "未识别的生物识别凭证" });
+
+    const verification = await verifyAuthenticationResponse({
+      response: assertion,
+      expectedChallenge,
+      expectedOrigin: ORIGIN,
+      expectedRPID: RP_ID,
+      authenticator: buildAuthenticatorFromCredential(credential),
+      requireUserVerification: true,
+    });
+
+    const { verified, authenticationInfo } = verification;
+    if (!verified || !authenticationInfo) return res.status(401).json({ success: false, error: "验证失败" });
+
+    credential.counter = Number(authenticationInfo.newCounter || authenticationInfo.counter || 0);
+    credential.lastUsedAt = new Date();
+    await credential.save();
+
+    await req.redisClient.del(challengeKey);
+    await req.redisClient.set(getBackupRestoreReauthKey(admin.id), "1", { EX: 10 * 60 });
+
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: admin.id,
+        email: admin.email,
+        action: "webauthn-backup-restore-reauth",
+        route: "/admin/webauthn/backup-restore/verify",
+        method: "POST",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: true,
+      });
+    } catch (e) {}
+
+    res.json({ success: true, expiresInSeconds: 10 * 60 });
+  } catch (e) {
+    console.error("[webauthn backup restore verify] error:", e);
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser?.id || null,
+        email: req.adminUser?.email || null,
+        action: "webauthn-backup-restore-reauth",
+        route: "/admin/webauthn/backup-restore/verify",
+        method: "POST",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: false,
+        message: e.message,
+      });
+    } catch (_) {}
+    res.status(500).json({ success: false, error: "备份恢复二次验证失败" });
   }
 });
 

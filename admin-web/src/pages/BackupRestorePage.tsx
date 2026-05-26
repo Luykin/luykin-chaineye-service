@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -21,6 +21,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
+import { buildApiUrl } from "@/services/apiClient";
 import { PageSection } from "@/components/ui/PageSection";
 import {
   fetchBackupStatus,
@@ -40,11 +41,87 @@ export function BackupRestorePage() {
   const [selectedBackupName, setSelectedBackupName] = useState<string>();
   const [selectedGroupKey, setSelectedGroupKey] = useState<string>();
   const [confirmText, setConfirmText] = useState("");
+  const [reauthVerified, setReauthVerified] = useState(false);
+  const [reauthing, setReauthing] = useState(false);
+  const [reauthError, setReauthError] = useState<string | null>(null);
+
+  const performBackupReauth = async () => {
+    try {
+      setReauthing(true);
+      setReauthError(null);
+      const browserApi = window.SimpleWebAuthnBrowser;
+      const supports = browserApi
+        ? await browserApi.browserSupportsWebAuthn()
+        : typeof window.PublicKeyCredential !== "undefined";
+
+      if (!supports || !browserApi) {
+        throw new Error("当前环境不支持生物识别，请使用支持指纹 / Face ID / 通行密钥的设备");
+      }
+
+      const optionsResponse = await fetch(buildApiUrl(`/admin/webauthn/backup-restore/options?_ts=${Date.now()}`), {
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      });
+      const optionsData = await optionsResponse.json().catch(() => ({ success: false, error: "获取验证参数失败" }));
+      if (!optionsResponse.ok || !optionsData.success) {
+        throw new Error(optionsData.message || optionsData.error || "获取验证参数失败");
+      }
+
+      const assertion = await browserApi.startAuthentication(optionsData.options);
+      const verifyResponse = await fetch(buildApiUrl("/admin/webauthn/backup-restore/verify"), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify({ assertion }),
+      });
+      const verifyData = await verifyResponse.json().catch(() => ({ success: false, error: "验证失败" }));
+      if (!verifyResponse.ok || !verifyData.success) {
+        throw new Error(verifyData.message || verifyData.error || "验证失败");
+      }
+
+      setReauthVerified(true);
+      messageApi.success("生物识别验证通过，可以进入备份恢复");
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "生物识别验证失败";
+      setReauthVerified(false);
+      setReauthError(message);
+      messageApi.error(message);
+      return false;
+    } finally {
+      setReauthing(false);
+    }
+  };
 
   const backupQuery = useQuery({
     queryKey: ["backup-status"],
     queryFn: fetchBackupStatus,
+    enabled: reauthVerified,
+    retry: false,
   });
+
+  useEffect(() => {
+    void performBackupReauth();
+    // 进入备份恢复页必须立即二次验证；不放依赖避免重复弹出生物识别窗口。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
+  const handleProtectedMutationError = (error: Error, fallbackMessage: string) => {
+    const text = error.message || fallbackMessage;
+    if (text.includes("生物识别") || text.includes("二次验证")) {
+      setReauthVerified(false);
+      setReauthError(text);
+    }
+    messageApi.error(text || fallbackMessage);
+  };
 
   const triggerBackupMutation = useMutation({
     mutationFn: triggerBackup,
@@ -53,7 +130,7 @@ export function BackupRestorePage() {
       window.setTimeout(() => backupQuery.refetch(), 1500);
     },
     onError: (error: Error) => {
-      messageApi.error(error.message || "触发备份失败");
+      handleProtectedMutationError(error, "触发备份失败");
     },
   });
 
@@ -65,7 +142,7 @@ export function BackupRestorePage() {
       void backupQuery.refetch();
     },
     onError: (error: Error) => {
-      messageApi.error(error.message || "表恢复失败");
+      handleProtectedMutationError(error, "表恢复失败");
     },
   });
 
@@ -137,21 +214,45 @@ export function BackupRestorePage() {
           title="数据库备份恢复"
           description="查看 PostgreSQL 定时备份，并把白名单表组恢复到某个备份时间点。"
           extra={
-            <Space wrap>
-              <Button onClick={() => backupQuery.refetch()} loading={backupQuery.isFetching}>
-                刷新
-              </Button>
-              <Button
-                type="primary"
-                loading={triggerBackupMutation.isPending}
-                onClick={() => triggerBackupMutation.mutate()}
-              >
-                立即备份
-              </Button>
-            </Space>
+            reauthVerified ? (
+              <Space wrap>
+                <Button
+                  onClick={() => {
+                    void backupQuery.refetch();
+                  }}
+                  loading={backupQuery.isFetching}
+                >
+                  刷新
+                </Button>
+                <Button
+                  type="primary"
+                  loading={triggerBackupMutation.isPending}
+                  onClick={() => triggerBackupMutation.mutate()}
+                >
+                  立即备份
+                </Button>
+              </Space>
+            ) : null
           }
         >
-          {backupQuery.isError ? (
+          {!reauthVerified ? (
+            <Card>
+              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <Alert
+                  type="error"
+                  showIcon
+                  message="进入备份恢复前必须完成生物识别二次验证"
+                  description={
+                    reauthError ||
+                    "如果当前账号没有录入指纹 / Face ID / 通行密钥，将无法进入该页面，也不能执行备份或恢复。"
+                  }
+                />
+                <Button type="primary" loading={reauthing} onClick={() => void performBackupReauth()}>
+                  重新进行生物识别验证
+                </Button>
+              </Space>
+            </Card>
+          ) : backupQuery.isError ? (
             <Alert type="error" showIcon message="加载备份状态失败" />
           ) : (
             <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -237,10 +338,11 @@ export function BackupRestorePage() {
                           confirmText !== "RESTORE" ||
                           restoreMutation.isPending
                         }
-                        onConfirm={() => {
+                        onConfirm={async () => {
                           if (!selectedBackupName || !selectedGroupKey) {
                             return messageApi.warning("请选择备份时间点和表组");
                           }
+                          if (!reauthVerified && !(await performBackupReauth())) return;
                           restoreMutation.mutate({
                             backupName: selectedBackupName,
                             groupKey: selectedGroupKey,
