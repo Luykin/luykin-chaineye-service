@@ -1179,10 +1179,35 @@ class RootdataDataFixService {
   }
 }
 
+const INVESTMENT_ROUND_MERGE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+function normalizeInvestmentRound(value) {
+  const text = String(value || "--").replace(/\s+/g, " ").trim();
+  return text || "--";
+}
+
+function normalizeInvestmentAmountForGrouping(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num === 0) return "empty";
+  return String(num);
+}
+
+function shouldUseInvestmentAmount(candidate, currentGroup) {
+  const candidateAmount = Number(candidate.formattedAmount);
+  const currentAmount = Number(currentGroup.formattedAmount);
+
+  if (Number.isFinite(candidateAmount) && candidateAmount > 0) {
+    if (!Number.isFinite(currentAmount) || currentAmount <= 0) return true;
+    return candidateAmount > currentAmount;
+  }
+
+  return !currentGroup.amount && Boolean(candidate.amount);
+}
+
 /**
- * 辅助函数：按日期分组投资记录
- * 使用天数作为分组key，避免时区差异导致同一天的融资被分到不同组
- * 差距在24小时内的时间戳会被分到相邻的组（相差小于0.5天会被分到同一组）
+ * 辅助函数：按融资轮次分组投资记录
+ * - 有日期：同 round 且时间相差 7 天以内，视为同一融资轮次（兼容时区/RootData 展示日期差异）。
+ * - 无日期：按 round + amount 分组；null/0 金额统一视为一个空金额分组，避免 "---null" / "---0" 重复。
  */
 const groupInvestmentsByDate = (investmentsReceived) => {
   // 先按时间戳排序
@@ -1191,23 +1216,49 @@ const groupInvestmentsByDate = (investmentsReceived) => {
   );
 
   const groups = [];
-  let currentGroup = null;
 
   sorted.forEach((investment) => {
-    const timestamp = investment.date;
+    const timestamp = Number(investment.date) || null;
+    const round = normalizeInvestmentRound(investment.round);
+    const amountKey = normalizeInvestmentAmountForGrouping(
+      investment.formattedAmount
+    );
 
-    // 如果时间存在，按时间分组；如果时间不存在，按 round+amount 分组
-    const groupKey = timestamp || `${investment.round}-${investment.formattedAmount}`;
+    let currentGroup = null;
+    if (timestamp) {
+      currentGroup = groups.find((group) => {
+        return (
+          group.hasTimestamp &&
+          group.normalizedRound === round.toLowerCase() &&
+          Math.abs(timestamp - group.minTimestamp) <=
+            INVESTMENT_ROUND_MERGE_WINDOW_MS
+        );
+      });
+    } else {
+      currentGroup = groups.find((group) => {
+        return (
+          !group.hasTimestamp &&
+          group.normalizedRound === round.toLowerCase() &&
+          group.amountKey === amountKey
+        );
+      });
+    }
 
-    // 如果是第一条记录，或者与当前组的 key 不同，创建新组
-    if (!currentGroup || currentGroup.key !== groupKey) {
+    if (!currentGroup) {
       currentGroup = {
-        key: groupKey,
-        round: investment.round,
-        amount: investment.amount,
-        valuation: investment.valuation,
-        formattedAmount: investment.formattedAmount,
-        formattedValuation: investment.formattedValuation,
+        key: timestamp || `${round}-${amountKey}`,
+        normalizedRound: round.toLowerCase(),
+        amountKey,
+        hasTimestamp: Boolean(timestamp),
+        round,
+        amount: investment.amount || null,
+        valuation: investment.valuation || null,
+        formattedAmount: Number.isFinite(Number(investment.formattedAmount))
+          ? Number(investment.formattedAmount)
+          : null,
+        formattedValuation: Number.isFinite(Number(investment.formattedValuation))
+          ? Number(investment.formattedValuation)
+          : null,
         investors: [],
         minTimestamp: timestamp,
         maxTimestamp: timestamp,
@@ -1216,10 +1267,34 @@ const groupInvestmentsByDate = (investmentsReceived) => {
     } else {
       // 更新时间戳范围
       if (timestamp) {
-        currentGroup.maxTimestamp = Math.max(
-          currentGroup.maxTimestamp,
+        currentGroup.minTimestamp = Math.min(
+          currentGroup.minTimestamp || timestamp,
           timestamp
         );
+        currentGroup.maxTimestamp = Math.max(
+          currentGroup.maxTimestamp || timestamp,
+          timestamp
+        );
+      }
+
+      if (shouldUseInvestmentAmount(investment, currentGroup)) {
+        currentGroup.amount = investment.amount || currentGroup.amount;
+        currentGroup.formattedAmount = Number.isFinite(
+          Number(investment.formattedAmount)
+        )
+          ? Number(investment.formattedAmount)
+          : currentGroup.formattedAmount;
+      }
+
+      if (!currentGroup.valuation && investment.valuation) {
+        currentGroup.valuation = investment.valuation;
+      }
+      if (
+        (!Number.isFinite(Number(currentGroup.formattedValuation)) ||
+          Number(currentGroup.formattedValuation) <= 0) &&
+        Number.isFinite(Number(investment.formattedValuation))
+      ) {
+        currentGroup.formattedValuation = Number(investment.formattedValuation);
       }
     }
 
@@ -1235,6 +1310,11 @@ const groupInvestmentsByDate = (investmentsReceived) => {
         socialLinks: investment.investorProject?.socialLinks,
         logo: investment.investorProject?.logo,
       });
+    } else if (
+      !currentGroup.investors[existingIndex].lead &&
+      investment.lead
+    ) {
+      currentGroup.investors[existingIndex].lead = true;
     }
   });
 
@@ -1335,7 +1415,7 @@ router.get("/search", async (req, res) => {
     // }
 
     const sanitizedKeyword = String(keyword.trim()).toLowerCase();
-    const cacheKey = `rootdata_search_${sanitizedKeyword}_1030_2`;
+    const cacheKey = `rootdata_search_${sanitizedKeyword}_1030_3`;
 
     // 2. 从 Redis 获取缓存
     let cachedData;
