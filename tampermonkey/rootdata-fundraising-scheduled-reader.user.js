@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.6.6
+// @version      0.6.7
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -255,6 +255,8 @@
       cursor: Math.min(Math.max(0, Number(job?.cursor || 0)), items.length),
       batchSize: Math.max(1, Number(job?.batchSize || 10)),
       maxSub: Math.max(0, Number(job?.maxSub || 0)),
+      forceRefreshInvestedRelationships: job?.forceRefreshInvestedRelationships === true,
+      cleanupWindowStart: job?.cleanupWindowStart ? String(job.cleanupWindowStart).slice(0, 80) : null,
       items,
       stats: compactStatsForStorage(job?.stats, items.length),
       lastBatchStats: compactStatsForStorage(job?.lastBatchStats, 0),
@@ -1734,6 +1736,8 @@
       body: {
         ...detail,
         scheduleSlot: job?.slot || null,
+        forceRefreshInvestedRelationships: job?.forceRefreshInvestedRelationships === true,
+        cleanupWindowStart: job?.cleanupWindowStart || null,
       },
     });
 
@@ -1915,6 +1919,8 @@
       total: Array.isArray(job.items) ? job.items.length : 0,
       batchSize: job.batchSize,
       maxSub: job.maxSub,
+      forceRefreshInvestedRelationships: job.forceRefreshInvestedRelationships === true,
+      cleanupWindowStart: job.cleanupWindowStart || null,
       stats: job.stats || null,
       updatedAt: job.updatedAt || null,
       createdAt: job.createdAt || null,
@@ -1957,6 +1963,8 @@
       createdAt: nowIso(),
       batchNo,
       batchTotal,
+      forceRefreshInvestedRelationships: job.forceRefreshInvestedRelationships === true,
+      cleanupWindowStart: job.cleanupWindowStart || null,
     };
 
     renderPanel({
@@ -3149,11 +3157,15 @@
       /**
        * 按审计脚本输出的项目清单重爬详情并提交服务端。
        * 控制台调用：await RootDataFundraisingCollector.recrawlDetails([{ projectName, projectLink }], { batchSize: 10, maxSub: 0 })
+       * 清理并重建“对外投资”关系：
+       * await RootDataFundraisingCollector.recrawlDetails(items, { batchSize: 10, maxSub: 0, forceRefreshInvestedRelationships: true, cleanupWindowStart: "2026-05-24T16:00:00.000Z" })
        */
       async recrawlDetails(items, options = {}) {
         const data = normalizeRecrawlItems(items);
         const batchSize = Math.max(1, Number(options.batchSize || options.reloadEvery || 10));
         const shouldBatch = options.reloadBetweenBatches !== false && data.length > batchSize;
+        const forceRefreshInvestedRelationships = options.forceRefreshInvestedRelationships === true;
+        const cleanupWindowStart = options.cleanupWindowStart ? String(options.cleanupWindowStart) : null;
 
         if (shouldBatch) {
           const job = {
@@ -3164,6 +3176,8 @@
             cursor: 0,
             batchSize,
             maxSub: Number.isFinite(Number(options.maxSub)) ? Number(options.maxSub) : 0,
+            forceRefreshInvestedRelationships,
+            cleanupWindowStart,
             items: data,
             stats: {
               enabled: true,
@@ -3195,6 +3209,8 @@
           slot: options.slot || "manual-console-recrawl-details",
           reason: "manual_console_recrawl_details",
           retryCount: 0,
+          forceRefreshInvestedRelationships,
+          cleanupWindowStart,
           createdAt: nowIso(),
         };
 

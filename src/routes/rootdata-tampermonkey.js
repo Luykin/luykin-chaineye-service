@@ -621,17 +621,35 @@ async function upsertInvestmentRelationships(project, investors, program = "auto
   }
 }
 
-async function upsertInvestedRelationships(investorProject, investedProjects, program = "auto_crawler") {
+async function upsertInvestedRelationships(investorProject, investedProjects, program = "auto_crawler", options = {}) {
   const normalizedProjects = (investedProjects || [])
     .map(normalizeDetailEntity)
     .filter(Boolean);
-
-  if (normalizedProjects.length === 0) return 0;
 
   const sequelize = Fundraising.Project.sequelize;
   const transaction = await sequelize.transaction();
 
   try {
+    let deleted = 0;
+    if (options.forceRefresh === true) {
+      const cleanupWhere = {
+        investorProjectId: investorProject.id,
+        round: "--",
+        amount: { [Op.is]: null },
+        formattedAmount: { [Op.is]: null },
+        date: { [Op.is]: null },
+      };
+
+      if (options.cleanupWindowStart instanceof Date && !Number.isNaN(options.cleanupWindowStart.getTime())) {
+        cleanupWhere.createdAt = { [Op.gte]: options.cleanupWindowStart };
+      }
+
+      deleted = await Fundraising.InvestmentRelationships.destroy({
+        where: cleanupWhere,
+        transaction,
+      });
+    }
+
     const records = [];
 
     for (const project of normalizedProjects) {
@@ -670,7 +688,10 @@ async function upsertInvestedRelationships(investorProject, investedProjects, pr
     }
 
     await transaction.commit();
-    return records.length;
+    return {
+      inserted: records.length,
+      deleted,
+    };
   } catch (error) {
     await transaction.rollback();
     throw error;
@@ -1214,6 +1235,13 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     : [];
   const isInitial = payload.isInitial !== false;
   const isMemberDetail = isRootDataMemberUrl(projectLink);
+  const forceRefreshInvestedRelationships = payload.forceRefreshInvestedRelationships === true;
+  const cleanupWindowStartMs = payload.cleanupWindowStart
+    ? Date.parse(payload.cleanupWindowStart)
+    : NaN;
+  const cleanupWindowStart = Number.isFinite(cleanupWindowStartMs)
+    ? new Date(cleanupWindowStartMs)
+    : null;
   const debugTarget = isDebugDetailTarget({ projectName, projectLink, detailUrl: payload.detailUrl });
   const hasUsefulDetails =
     Boolean(projectName) &&
@@ -1237,6 +1265,8 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       seriesA50M: investors.filter((item) => /series\s*a/i.test(item.round || "") && /\b50\s*M\b/i.test(item.amount || "")),
       investedProjectsCount: investedProjects.length,
       ignoredInvestedProjectsCount: investedProjects.length - acceptedInvestedProjects.length,
+      forceRefreshInvestedRelationships,
+      cleanupWindowStart: cleanupWindowStart ? cleanupWindowStart.toISOString() : null,
       scheduleSlot,
       scrapedAt: payload.scrapedAt || null,
       debug: payload.debug || null,
@@ -1294,9 +1324,14 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     const investmentRelationships = isInitial && !isMemberDetail
       ? await upsertInvestmentRelationships(project, investors, program)
       : 0;
-    const investedRelationships = !isMemberDetail
-      ? await upsertInvestedRelationships(project, acceptedInvestedProjects, program)
-      : 0;
+    const investedRelationshipResult = !isMemberDetail
+      ? await upsertInvestedRelationships(project, acceptedInvestedProjects, program, {
+          forceRefresh: forceRefreshInvestedRelationships,
+          cleanupWindowStart,
+        })
+      : { inserted: 0, deleted: 0 };
+    const investedRelationships = Number(investedRelationshipResult?.inserted || 0);
+    const deletedInvestedRelationships = Number(investedRelationshipResult?.deleted || 0);
 
     let debugStoredRelationships = null;
     if (debugTarget) {
@@ -1353,6 +1388,9 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       ignoredInvestedProjects: investedProjects.length - acceptedInvestedProjects.length,
       investmentRelationships,
       investedRelationships,
+      deletedInvestedRelationships,
+      forceRefreshInvestedRelationships,
+      cleanupWindowStart: cleanupWindowStart ? cleanupWindowStart.toISOString() : null,
       scheduleSlot,
     });
 
@@ -1368,12 +1406,15 @@ router.post("/details/import", requireClientToken, async (req, res) => {
         ignoredInvestedProjects: investedProjects.length - acceptedInvestedProjects.length,
         investmentRelationships,
         investedRelationships,
+        deletedInvestedRelationships,
       },
       meta: {
         projectName,
         projectLink,
         pageUrl: payload.pageUrl || null,
         scrapedAt: payload.scrapedAt || null,
+        forceRefreshInvestedRelationships,
+        cleanupWindowStart: cleanupWindowStart ? cleanupWindowStart.toISOString() : null,
       },
     });
 
@@ -1386,6 +1427,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
         isInitial,
         investmentRelationships,
         investedRelationships,
+        deletedInvestedRelationships,
         debug: debugTarget
           ? {
               receivedInvestors: summarizeInvestorsForDebug(investors),
