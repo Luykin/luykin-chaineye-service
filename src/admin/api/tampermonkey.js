@@ -260,7 +260,9 @@ async function cleanupRootDataProjectsForRecrawl(projectIds, transaction) {
       teamMembers: [],
       detailFetchedAt: null,
       detailFailuresNumber: 0,
-      updateProgram: "admin_force_recrawl",
+      // updateProgram 是 PostgreSQL ENUM；生产库目前只允许 models/fundraising.js 中定义的值。
+      // 这里不能写 admin_force_recrawl，否则 Project.update 会因 enum 值非法失败。
+      updateProgram: "manual_crawler",
     },
     {
       where: { id: { [Op.in]: normalizedIds } },
