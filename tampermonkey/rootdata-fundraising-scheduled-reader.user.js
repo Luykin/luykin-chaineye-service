@@ -21,6 +21,12 @@
 (function () {
   "use strict";
 
+  // ============================================================================
+  // SECTION 1: CONFIG AND GLOBAL STATE
+  // - Tampermonkey endpoints, schedules, limits, storage keys
+  // - PAGE_WINDOW bootstrap and initial load logging
+  // ============================================================================
+
   const CONFIG = {
     // TODO: 部署时改成真实 API 域名，例如 https://api.cryptohunt.ai
     API_BASE: "https://kb.cryptohunt.ai",
@@ -87,6 +93,12 @@
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+
+  // ============================================================================
+  // SECTION 2: COMMON UTILITIES
+  // - Text cleanup, URL canonicalization, time helpers, localStorage primitives
+  // ============================================================================
 
   function cleanText(value) {
     return String(value || "").replace(/\s+/g, " ").trim();
@@ -224,6 +236,12 @@
     return Boolean(time && Date.now() - time > ttlMs);
   }
 
+
+  // ============================================================================
+  // SECTION 3: JOB STORAGE AND COMPACTION HELPERS
+  // - Pending jobs, detail jobs, recrawl jobs, compact stats for localStorage
+  // ============================================================================
+
   function compactStatsForStorage(stats, total = 0) {
     if (!stats) return null;
     return {
@@ -321,6 +339,13 @@
       clearDetailJob();
     }
   }
+
+
+  // ============================================================================
+  // SECTION 4: FUNDRAISING LIST PARSER
+  // - Parse /fundraising table rows into project records
+  // - Investor cell parsing and list-page block detection
+  // ============================================================================
 
   function parseEntityIdFromK(rawUrl) {
     try {
@@ -1104,6 +1129,13 @@
     return candidates.slice(0, 8);
   }
 
+
+  // ============================================================================
+  // SECTION 5: DETAIL PAGE FUNDRAISING / INVESTMENT PARSERS
+  // - Investors tab, Rounds tab, Lead marker merge
+  // - Portfolio / Investment sections and entity-link collection
+  // ============================================================================
+
   function hasExplicitLeadMarker(scope) {
     if (!scope) return false;
     if (scope.querySelector?.(".status_icon.status_position")) return true;
@@ -1453,6 +1485,12 @@
     return false;
   }
 
+
+  // ============================================================================
+  // SECTION 6: DETAIL BASIC PROFILE PARSER
+  // - Social links, title/name, logo, team members, ready-state debug info
+  // ============================================================================
+
   function parseBasicDetail(doc, detailUrl) {
     const socialLinks = {};
     const officialXUrl =
@@ -1701,6 +1739,12 @@
     }
   }
 
+
+  // ============================================================================
+  // SECTION 7: API CLIENT / SERVER SUBMISSION
+  // - GM_xmlhttpRequest wrapper and submit/failure/cleanup endpoints
+  // ============================================================================
+
   async function submitData(data, job) {
     return requestJson({
       url: `${CONFIG.API_BASE}${CONFIG.IMPORT_ENDPOINT}`,
@@ -1903,6 +1947,12 @@
       lastError: job?.lastError ? String(job.lastError).slice(0, 500) : null,
     };
   }
+
+
+  // ============================================================================
+  // SECTION 8: DETAIL / RECRAWL JOB ORCHESTRATION
+  // - Current-tab and iframe detail crawl loops, batch resume, sub-detail crawl
+  // ============================================================================
 
   function getDetailJob() {
     return safeJsonParse(localStorage.getItem(CONFIG.storageKeys.detailJob), null);
@@ -2814,6 +2864,12 @@
     return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+
+  // ============================================================================
+  // SECTION 9: PANEL UI AND PAGE-LEVEL WORKFLOWS
+  // - Floating status panel, scrape current page, scheduler loop, bootstrap
+  // ============================================================================
+
   function renderPanel(state) {
     const panel = createPanel();
     const data = state.data || [];
@@ -3171,6 +3227,12 @@
     const lastResult = safeJsonParse(localStorage.getItem(CONFIG.storageKeys.lastResult), null);
     renderPanel({ ok: true, status: "idle", retryCount: 0, data: lastResult?.data || [] });
   }
+
+
+  // ============================================================================
+  // SECTION 10: DEBUG / CONSOLE API
+  // - RootDataFundraisingCollector public methods for manual operations
+  // ============================================================================
 
   function exposeDebugApi() {
     const debugApi = {
