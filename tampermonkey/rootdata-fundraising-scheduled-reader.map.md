@@ -53,7 +53,11 @@ Use when logo, X/Twitter, website, LinkedIn, team members, or project title pars
 - Section: 6
 - Main functions:
   - `parseBasicDetail`
+  - `parseTeamMembers`
+  - `parseLegacyTeamMembers`
+  - `parseModernTeamMembers`
   - `parseDetailDocument`
+- Team parsing supports both old `.team_member/.team-member` cards and new `section` blocks with `h2=Team` plus `/member/` links.
 
 
 ### Idle countdown in floating panel

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.7.0
+// @version      0.7.1
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -1492,6 +1492,107 @@
   // - Social links, title/name, logo, team members, ready-state debug info
   // ============================================================================
 
+
+  function normalizeTeamMember(member) {
+    const profileLink = absoluteUrl(member?.profileLink || "");
+    const name = cleanText(member?.name) || parseNameFromDetailUrl(profileLink);
+    const position = cleanText(member?.position);
+    const avatar = member?.avatar ? absoluteUrl(member.avatar) : "";
+    const twitterUrl = member?.twitterUrl ? absoluteUrl(member.twitterUrl) : "";
+    const linkedinUrl = member?.linkedinUrl ? absoluteUrl(member.linkedinUrl) : "";
+
+    if (!name && !profileLink) return null;
+
+    return {
+      name,
+      position,
+      avatar,
+      profileLink,
+      ...(twitterUrl ? { twitterUrl } : {}),
+      ...(linkedinUrl ? { linkedinUrl } : {}),
+    };
+  }
+
+  function mergeTeamMembers(...groups) {
+    const byKey = new Map();
+    groups.flat().forEach((rawMember) => {
+      const member = normalizeTeamMember(rawMember);
+      if (!member) return;
+      const key = (member.profileLink || member.name).toLowerCase();
+      const existing = byKey.get(key) || {};
+      byKey.set(key, { ...existing, ...member });
+    });
+    return Array.from(byKey.values()).slice(0, 200);
+  }
+
+  function parseLegacyTeamMembers(doc) {
+    return Array.from(doc.querySelectorAll(".team_member .item, .team-member .item"))
+      .map((member) => ({
+        name: cleanText(member.querySelector(".content h2, h2")?.textContent),
+        position: cleanText(member.querySelector(".content p, p")?.textContent),
+        avatar: member.querySelector(".logo-wraper img, img")?.src || member.querySelector("img")?.src || "",
+        profileLink: member.querySelector('a[href*="/member/"]')?.getAttribute("href") || member.querySelector("a.card, a[href]")?.getAttribute("href") || "",
+      }));
+  }
+
+  function isTeamSectionTitle(text) {
+    return /^(team|team members?|core team|founders?|团队|团队成员|核心团队|创始人)$/i.test(cleanText(text));
+  }
+
+  function findModernTeamSections(doc) {
+    return Array.from(doc.querySelectorAll("section, [id*='team' i], [class*='team' i]"))
+      .filter((section) => {
+        if (!section.querySelector('a[href*="/member/"]')) return false;
+        const title = cleanText(section.querySelector("h2, h3")?.textContent);
+        const idClass = `${section.id || ""} ${section.className || ""}`;
+        return isTeamSectionTitle(title) || /team/i.test(idClass);
+      });
+  }
+
+  function parseModernTeamMembers(doc) {
+    const sections = findModernTeamSections(doc);
+    const roots = sections.length ? sections : [];
+
+    return roots.flatMap((section) =>
+      Array.from(section.querySelectorAll('a[href*="/member/"]')).map((link) => {
+        const card = link.closest(".card-warp, [class*='card' i], li, article") || link.parentElement || link;
+        const socialRoot = card;
+        const name =
+          cleanText(link.querySelector("p.truncate")?.textContent) ||
+          cleanText(Array.from(link.querySelectorAll("p")).find((item) => /font-medium/.test(String(item.className || "")))?.textContent) ||
+          cleanText(link.querySelector("h3, h4")?.textContent) ||
+          cleanText(link.querySelector("img[alt]")?.getAttribute("alt")) ||
+          parseNameFromDetailUrl(link.href);
+        const position =
+          cleanText(link.querySelector("p.line-clamp-2")?.textContent) ||
+          cleanText(Array.from(link.querySelectorAll("p")).find((item) => cleanText(item.textContent) !== name)?.textContent);
+        const avatar = link.querySelector("img[alt]")?.src || link.querySelector("img")?.src || "";
+        let twitterUrl = "";
+        let linkedinUrl = "";
+
+        socialRoot.querySelectorAll('a[href^="http"]').forEach((socialLink) => {
+          if (socialLink === link || socialLink.href.includes("/member/")) return;
+          const type = inferSocialType(socialLink);
+          if (type === "x" && !twitterUrl) twitterUrl = socialLink.href;
+          if (type === "linkedin" && !linkedinUrl) linkedinUrl = socialLink.href;
+        });
+
+        return {
+          name,
+          position,
+          avatar,
+          profileLink: link.getAttribute("href") || link.href || "",
+          twitterUrl,
+          linkedinUrl,
+        };
+      })
+    );
+  }
+
+  function parseTeamMembers(doc) {
+    return mergeTeamMembers(parseLegacyTeamMembers(doc), parseModernTeamMembers(doc));
+  }
+
   function parseBasicDetail(doc, detailUrl) {
     const socialLinks = {};
     const officialXUrl =
@@ -1525,14 +1626,7 @@
 
     const safeSocialLinks = sanitizeParsedSocialLinks(socialLinks);
 
-    const teamMembers = Array.from(doc.querySelectorAll(".team_member .item, .team-member .item"))
-      .map((member) => ({
-        name: cleanText(member.querySelector(".content h2, h2")?.textContent),
-        position: cleanText(member.querySelector(".content p, p")?.textContent),
-        avatar: member.querySelector(".logo-wraper img, img")?.src || "",
-        profileLink: absoluteUrl(member.querySelector("a.card, a[href]")?.getAttribute("href") || ""),
-      }))
-      .filter((member) => member.name || member.profileLink);
+    const teamMembers = parseTeamMembers(doc);
 
     const projectName =
       getDetailTitle(doc) ||

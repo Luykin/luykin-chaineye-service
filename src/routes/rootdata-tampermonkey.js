@@ -483,6 +483,8 @@ function sanitizeTeamMembers(value) {
       position: cleanText(member?.position, 255),
       avatar: cleanText(member?.avatar, 2000),
       profileLink: absoluteRootDataUrl(member?.profileLink || ""),
+      twitterUrl: cleanText(member?.twitterUrl, 2000),
+      linkedinUrl: cleanText(member?.linkedinUrl, 2000),
     }))
     .filter((member) => member.name || member.profileLink);
 }
