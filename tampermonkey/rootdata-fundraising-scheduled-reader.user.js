@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.5.7
+// @version      0.5.9
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -35,8 +35,10 @@
     maxRetries: 3,
     retryDelayMs: 10 * 1000,
     detailEnabled: true,
-    detailMaxProjectsPerRun: 30,
-    subDetailMaxProjectsPerRun: 80,
+    // 日常 run 也会按 detailBatchSize 分批刷新，所以这里可以放大，避免当前列表/衍生投资方被截断。
+    detailMaxProjectsPerRun: 1000,
+    subDetailMaxProjectsPerRun: 3000,
+    detailBatchSize: 10,
     detailFrameTimeoutMs: 20 * 1000,
     detailFramePollIntervalMs: 500,
     detailBetweenMs: 1200,
@@ -44,7 +46,8 @@
     // localStorage 空间有限：批量任务只存最小必要字段，并定期清理。
     recrawlJobTtlMs: 24 * 60 * 60 * 1000,
     pendingJobTtlMs: 2 * 60 * 60 * 1000,
-    maxStoredRecrawlItems: 1200,
+    maxStoredRecrawlItems: 3000,
+    maxStoredDetailItems: 5000,
     maxStoredRecrawlErrors: 40,
     maxStoredLastRunDays: 14,
     maxStoredLastResultRows: 50,
@@ -54,6 +57,7 @@
     storageKeys: {
       pendingJob: "rd_fr_pending_job_v3",
       recrawlJob: "rd_fr_recrawl_job_v3",
+      detailJob: "rd_fr_detail_job_v3",
       lastRunMap: "rd_fr_last_run_map_v3",
       lastResult: "rd_fr_last_result_v3",
     },
@@ -279,6 +283,12 @@
     if (recrawlJob && isOlderThan(recrawlJob.updatedAt || recrawlJob.createdAt, CONFIG.recrawlJobTtlMs)) {
       console.warn("[RootData Reader] stale recrawl job cleared:", summarizeRecrawlJob(recrawlJob));
       clearRecrawlJob();
+    }
+
+    const detailJob = getDetailJob();
+    if (detailJob && isOlderThan(detailJob.updatedAt || detailJob.createdAt, CONFIG.recrawlJobTtlMs)) {
+      console.warn("[RootData Reader] stale detail job cleared:", summarizeDetailJob(detailJob));
+      clearDetailJob();
     }
   }
 
@@ -1620,6 +1630,104 @@
     );
   }
 
+  function emptyDetailStats({ initialTotal = 0, subTotal = 0 } = {}) {
+    return {
+      enabled: true,
+      initialTotal,
+      initialSuccess: 0,
+      initialFailed: 0,
+      subTotal,
+      subSuccess: 0,
+      subFailed: 0,
+      errors: [],
+    };
+  }
+
+  function mergeDetailStats(base, patch) {
+    return {
+      enabled: true,
+      initialTotal: Math.max(Number(base?.initialTotal || 0), Number(patch?.initialTotal || 0)),
+      initialSuccess: Number(base?.initialSuccess || 0) + Number(patch?.initialSuccess || 0),
+      initialFailed: Number(base?.initialFailed || 0) + Number(patch?.initialFailed || 0),
+      subTotal: Math.max(Number(base?.subTotal || 0), Number(patch?.subTotal || 0)),
+      subSuccess: Number(base?.subSuccess || 0) + Number(patch?.subSuccess || 0),
+      subFailed: Number(base?.subFailed || 0) + Number(patch?.subFailed || 0),
+      errors: [
+        ...(base?.errors || []),
+        ...(patch?.errors || []),
+      ].slice(-CONFIG.maxStoredRecrawlErrors),
+    };
+  }
+
+  function normalizeSubDetailItems(items) {
+    return normalizeRecrawlItems(items)
+      .filter((item) => isRootDataEntityDetailUrl(item.projectLink, { allowInvestors: true }))
+      .slice(0, CONFIG.subDetailMaxProjectsPerRun);
+  }
+
+  function compactDetailJobForStorage(job) {
+    const items = normalizeRecrawlItems(job?.items || []).slice(0, CONFIG.maxStoredDetailItems);
+    const subItems = normalizeSubDetailItems(job?.subItems || []).slice(0, CONFIG.maxStoredDetailItems);
+    const phase = job?.phase === "sub" ? "sub" : "initial";
+    return {
+      id: String(job?.id || `details-${Date.now()}`),
+      slot: cleanText(job?.slot || "manual-console-details-batched"),
+      reason: cleanText(job?.reason || "details_batched"),
+      nextAction: job?.nextAction === "details_after_reload" ? "details_after_reload" : null,
+      phase,
+      cursor: Math.min(Math.max(0, Number(job?.cursor || 0)), items.length),
+      subCursor: Math.min(Math.max(0, Number(job?.subCursor || 0)), subItems.length),
+      batchSize: Math.max(1, Number(job?.batchSize || CONFIG.detailBatchSize || 10)),
+      maxSub: Math.max(0, Number(job?.maxSub || CONFIG.subDetailMaxProjectsPerRun || 0)),
+      items,
+      subItems,
+      stats: compactStatsForStorage(job?.stats, items.length) || emptyDetailStats({ initialTotal: items.length }),
+      createdAt: job?.createdAt || nowIso(),
+      updatedAt: job?.updatedAt || nowIso(),
+      lastError: job?.lastError ? String(job.lastError).slice(0, 500) : null,
+    };
+  }
+
+  function getDetailJob() {
+    return safeJsonParse(localStorage.getItem(CONFIG.storageKeys.detailJob), null);
+  }
+
+  function setDetailJob(job) {
+    const compactJob = compactDetailJobForStorage(job);
+    try {
+      localStorage.setItem(CONFIG.storageKeys.detailJob, JSON.stringify(compactJob));
+    } catch (error) {
+      // 详情任务只保存最小队列和统计；配额满时丢弃最近预览缓存与错误列表再重试。
+      console.warn("[RootData Reader] detail job storage failed, pruning caches:", error);
+      localStorage.removeItem(CONFIG.storageKeys.lastResult);
+      compactJob.stats = compactStatsForStorage({ ...compactJob.stats, errors: [] }, compactJob.items.length);
+      localStorage.setItem(CONFIG.storageKeys.detailJob, JSON.stringify(compactJob));
+    }
+  }
+
+  function clearDetailJob() {
+    localStorage.removeItem(CONFIG.storageKeys.detailJob);
+  }
+
+  function summarizeDetailJob(job) {
+    if (!job) return null;
+    return {
+      id: job.id,
+      slot: job.slot,
+      phase: job.phase || "initial",
+      cursor: Number(job.cursor || 0),
+      total: Array.isArray(job.items) ? job.items.length : 0,
+      subCursor: Number(job.subCursor || 0),
+      subTotal: Array.isArray(job.subItems) ? job.subItems.length : 0,
+      batchSize: job.batchSize,
+      maxSub: job.maxSub,
+      stats: job.stats || null,
+      updatedAt: job.updatedAt || null,
+      createdAt: job.createdAt || null,
+      lastError: job.lastError || null,
+    };
+  }
+
   function summarizeRecrawlJob(job) {
     if (!job) return null;
     return {
@@ -1762,6 +1870,269 @@
     return { ok: true, done: false, nextCursor, total, stats };
   }
 
+  async function crawlDetailItemsBatch(items, job, {
+    isInitial = true,
+    rowsForPanel = items,
+    stats = emptyDetailStats(),
+    globalOffset = 0,
+    globalTotal = items.length,
+    statusPrefix = isInitial ? "details_batch" : "sub_details_batch",
+  } = {}) {
+    const frame = ensureDetailFrame();
+    const batchStats = emptyDetailStats({
+      initialTotal: isInitial ? items.length : 0,
+      subTotal: isInitial ? 0 : items.length,
+    });
+    const discoveredSubItems = [];
+
+    try {
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
+        renderPanel({
+          ok: true,
+          status: `${statusPrefix}:${globalOffset + index + 1}/${globalTotal}`,
+          retryCount: job.retryCount || 0,
+          data: rowsForPanel,
+          detailStats: stats,
+        });
+
+        try {
+          const detail = await crawlDetailPage(frame, item, { isInitial });
+          await submitDetailData(detail, job);
+
+          if (isInitial) {
+            batchStats.initialSuccess += 1;
+            for (const investor of detail.investors || []) {
+              if (!investor.projectLink) continue;
+              discoveredSubItems.push({
+                projectName: investor.projectName,
+                projectLink: investor.projectLink,
+              });
+            }
+          } else {
+            batchStats.subSuccess += 1;
+          }
+
+          console.log(isInitial ? "[RootData Reader] ✅ detail imported:" : "[RootData Reader] ✅ sub detail imported:", {
+            projectName: detail.projectName,
+            investors: detail.investors.length,
+            investedProjects: detail.investedProjects.length,
+          });
+        } catch (error) {
+          if (isInitial) batchStats.initialFailed += 1;
+          else batchStats.subFailed += 1;
+
+          batchStats.errors.push({ projectName: item.projectName, projectLink: item.projectLink, error: error.message });
+          console.error(isInitial ? "[RootData Reader] detail failed:" : "[RootData Reader] sub detail failed:", item, error);
+          try {
+            await submitDetailFailure(item, job, error, { isInitial });
+          } catch (failureError) {
+            console.error("[RootData Reader] detail failure report failed:", failureError);
+          }
+        }
+
+        await sleep(CONFIG.detailBetweenMs);
+      }
+
+      return {
+        stats: batchStats,
+        discoveredSubItems: normalizeSubDetailItems(discoveredSubItems),
+      };
+    } finally {
+      removeDetailFrame();
+    }
+  }
+
+  async function runDetailBatchJob(job) {
+    if (!CONFIG.detailEnabled) {
+      clearDetailJob();
+      reloadAfterRelease("details_disabled");
+      return { ok: false, error: "details_disabled" };
+    }
+
+    if (!job || !Array.isArray(job.items) || !job.items.length) {
+      clearDetailJob();
+      reloadAfterRelease("empty_detail_job");
+      return { ok: false, error: "empty_detail_job" };
+    }
+
+    const batchSize = Math.max(1, Number(job.batchSize || CONFIG.detailBatchSize || 10));
+    const initialItems = normalizeRecrawlItems(job.items).slice(0, CONFIG.detailMaxProjectsPerRun);
+    const phase = job.phase === "sub" ? "sub" : "initial";
+    const stats = job.stats || emptyDetailStats({ initialTotal: initialItems.length });
+
+    if (phase === "initial") {
+      const cursor = Math.max(0, Number(job.cursor || 0));
+      const batch = initialItems.slice(cursor, cursor + batchSize);
+      const batchNo = Math.floor(cursor / batchSize) + 1;
+      const batchTotal = Math.ceil(initialItems.length / batchSize);
+
+      if (batch.length) {
+        const batchJob = {
+          ...job,
+          id: `${job.id}-initial-${batchNo}`,
+          batchNo,
+          batchTotal,
+          retryCount: 0,
+        };
+        const result = await crawlDetailItemsBatch(batch, batchJob, {
+          isInitial: true,
+          rowsForPanel: initialItems,
+          stats,
+          globalOffset: cursor,
+          globalTotal: initialItems.length,
+          statusPrefix: `details_batch:${batchNo}/${batchTotal}`,
+        });
+
+        const nextCursor = cursor + batch.length;
+        const subItems = normalizeSubDetailItems([...(job.subItems || []), ...result.discoveredSubItems])
+          .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
+        const nextStats = mergeDetailStats(stats, result.stats);
+        nextStats.initialTotal = initialItems.length;
+
+        if (nextCursor < initialItems.length) {
+          const nextJob = {
+            ...job,
+            items: initialItems,
+            subItems,
+            cursor: nextCursor,
+            stats: nextStats,
+            nextAction: "details_after_reload",
+            updatedAt: nowIso(),
+          };
+          setDetailJob(nextJob);
+          renderPanel({
+            ok: true,
+            status: `details_batch_done_reloading:${nextCursor}/${initialItems.length}`,
+            retryCount: 0,
+            data: batch,
+            detailStats: nextStats,
+          });
+          console.log("[RootData Reader] details initial batch done, reload to continue:", summarizeDetailJob(nextJob));
+          reloadAfterRelease("details_initial_batch_continue");
+          return { ok: true, done: false, phase: "initial", nextCursor, total: initialItems.length, stats: nextStats };
+        }
+
+        nextStats.subTotal = subItems.length;
+        const nextJob = {
+          ...job,
+          items: initialItems,
+          subItems,
+          phase: "sub",
+          cursor: nextCursor,
+          subCursor: 0,
+          stats: nextStats,
+          nextAction: "details_after_reload",
+          updatedAt: nowIso(),
+        };
+
+        if (!subItems.length) {
+          clearDetailJob();
+          renderPanel({
+            ok: true,
+            status: "details_batched_done_reloading",
+            retryCount: 0,
+            data: initialItems,
+            detailStats: nextStats,
+          });
+          console.log("[RootData Reader] ✅ details batched done without sub queue:", nextStats);
+          reloadAfterRelease("details_batched_done_no_sub");
+          return { ok: true, done: true, stats: nextStats };
+        }
+
+        setDetailJob(nextJob);
+        renderPanel({
+          ok: true,
+          status: `details_initial_done_reloading_sub_queue:${subItems.length}`,
+          retryCount: 0,
+          data: batch,
+          detailStats: nextStats,
+        });
+        console.log("[RootData Reader] details initial phase done, reload for sub details:", summarizeDetailJob(nextJob));
+        reloadAfterRelease("details_initial_done_start_sub");
+        return { ok: true, done: false, phase: "sub", stats: nextStats };
+      }
+    }
+
+    const subItems = normalizeSubDetailItems(job.subItems || [])
+      .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
+    const subCursor = Math.max(0, Number(job.subCursor || 0));
+    const subBatch = subItems.slice(subCursor, subCursor + batchSize);
+
+    if (!subBatch.length) {
+      clearDetailJob();
+      const finalStats = { ...stats, initialTotal: initialItems.length, subTotal: subItems.length };
+      renderPanel({
+        ok: true,
+        status: "details_batched_done_reloading",
+        retryCount: 0,
+        data: initialItems,
+        detailStats: finalStats,
+      });
+      console.log("[RootData Reader] ✅ details batched done:", finalStats);
+      reloadAfterRelease("details_batched_done");
+      return { ok: true, done: true, stats: finalStats };
+    }
+
+    const subBatchNo = Math.floor(subCursor / batchSize) + 1;
+    const subBatchTotal = Math.ceil(subItems.length / batchSize);
+    const subJob = {
+      ...job,
+      id: `${job.id}-sub-${subBatchNo}`,
+      batchNo: subBatchNo,
+      batchTotal: subBatchTotal,
+      retryCount: 0,
+    };
+    const subResult = await crawlDetailItemsBatch(subBatch, subJob, {
+      isInitial: false,
+      rowsForPanel: subBatch,
+      stats,
+      globalOffset: subCursor,
+      globalTotal: subItems.length,
+      statusPrefix: `sub_details_batch:${subBatchNo}/${subBatchTotal}`,
+    });
+    const nextSubCursor = subCursor + subBatch.length;
+    const nextStats = mergeDetailStats(stats, subResult.stats);
+    nextStats.initialTotal = initialItems.length;
+    nextStats.subTotal = subItems.length;
+
+    if (nextSubCursor >= subItems.length) {
+      clearDetailJob();
+      renderPanel({
+        ok: true,
+        status: "details_batched_done_reloading",
+        retryCount: 0,
+        data: initialItems,
+        detailStats: nextStats,
+      });
+      console.log("[RootData Reader] ✅ details batched done:", nextStats);
+      reloadAfterRelease("details_batched_done");
+      return { ok: true, done: true, stats: nextStats };
+    }
+
+    const nextJob = {
+      ...job,
+      items: initialItems,
+      subItems,
+      phase: "sub",
+      subCursor: nextSubCursor,
+      stats: nextStats,
+      nextAction: "details_after_reload",
+      updatedAt: nowIso(),
+    };
+    setDetailJob(nextJob);
+    renderPanel({
+      ok: true,
+      status: `sub_details_batch_done_reloading:${nextSubCursor}/${subItems.length}`,
+      retryCount: 0,
+      data: subBatch,
+      detailStats: nextStats,
+    });
+    console.log("[RootData Reader] sub details batch done, reload to continue:", summarizeDetailJob(nextJob));
+    reloadAfterRelease("details_sub_batch_continue");
+    return { ok: true, done: false, phase: "sub", nextSubCursor, total: subItems.length, stats: nextStats };
+  }
+
   async function crawlDetailsForRows(rows, job, options = {}) {
     if (!CONFIG.detailEnabled) {
       return { enabled: false, initialSuccess: 0, initialFailed: 0, subSuccess: 0, subFailed: 0 };
@@ -1824,7 +2195,7 @@
         await sleep(CONFIG.detailBetweenMs);
       }
 
-      const subQueue = Array.from(subDetailMap.values()).slice(0, CONFIG.subDetailMaxProjectsPerRun);
+      const subQueue = normalizeSubDetailItems(Array.from(subDetailMap.values())).slice(0, CONFIG.subDetailMaxProjectsPerRun);
       stats.subTotal = subQueue.length;
 
       for (let index = 0; index < subQueue.length; index += 1) {
@@ -1971,6 +2342,30 @@
     }
   }
 
+  function startBatchedDetailsForRows(rows, job) {
+    const items = buildDetailQueueFromRows(rows);
+    const detailJob = {
+      id: `${job.id || job.slot || "run"}-details-${Date.now()}`,
+      slot: job.slot || "manual-console-details-batched",
+      reason: `${job.reason || "run"}_details_batched`,
+      nextAction: "details_after_reload",
+      phase: "initial",
+      cursor: 0,
+      subCursor: 0,
+      batchSize: Math.max(1, Number(CONFIG.detailBatchSize || 10)),
+      maxSub: Math.max(0, Number(CONFIG.subDetailMaxProjectsPerRun || 0)),
+      items,
+      subItems: [],
+      stats: emptyDetailStats({ initialTotal: items.length }),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+
+    setDetailJob(detailJob);
+    console.log("[RootData Reader] details batched job started:", summarizeDetailJob(detailJob));
+    return runDetailBatchJob(detailJob);
+  }
+
   function startRefreshThenScrape({ slot, reason }) {
     const job = {
       id: `${slot}-${Date.now()}`,
@@ -1981,6 +2376,7 @@
       nextAction: "scrape_after_reload",
     };
 
+    clearDetailJob();
     setPendingJob(job);
     renderPanel({ ok: true, status: `refreshing_before_scrape:${slot}`, retryCount: 0, data: [] });
     location.reload();
@@ -2064,15 +2460,7 @@
         const importResult = await submitData(data, job);
         console.log("[RootData Reader] import result:", importResult);
         renderPanel({ ok: true, status: "success_imported_crawling_details", retryCount: job.retryCount || 0, data });
-        const detailStats = await crawlDetailsForRows(data, job);
-        console.log("[RootData Reader] detail crawl result:", detailStats);
-        renderPanel({
-          ok: true,
-          status: "success_imported_with_details",
-          retryCount: job.retryCount || 0,
-          data,
-          detailStats,
-        });
+        await startBatchedDetailsForRows(data, job);
       } catch (submitError) {
         console.error("[RootData Reader] import failed:", submitError);
         await sendAlert({
@@ -2132,6 +2520,13 @@
       return;
     }
 
+    const detailJob = getDetailJob();
+    if (detailJob?.nextAction === "details_after_reload") {
+      console.log("[RootData Reader] detail job found after reload:", summarizeDetailJob(detailJob));
+      await runDetailBatchJob(detailJob);
+      return;
+    }
+
     const pendingJob = getPendingJob();
 
     if (pendingJob?.nextAction === "scrape_after_reload") {
@@ -2187,7 +2582,7 @@
       },
 
       /**
-       * 只跑详情页采集：会用隐藏 iframe 顺序打开第一页项目详情，不会跳走当前列表页。
+       * 只跑详情页采集：会按 detailBatchSize 分批打开详情，批次之间刷新页面并自动续跑。
        * 控制台调用：await RootDataFundraisingCollector.crawlDetailsNow()
        */
       async crawlDetailsNow() {
@@ -2199,7 +2594,7 @@
           retryCount: 0,
           createdAt: nowIso(),
         };
-        return crawlDetailsForRows(data, job);
+        return startBatchedDetailsForRows(data, job);
       },
 
       /**
@@ -2340,12 +2735,14 @@
             detailEnabled: CONFIG.detailEnabled,
             detailMaxProjectsPerRun: CONFIG.detailMaxProjectsPerRun,
             subDetailMaxProjectsPerRun: CONFIG.subDetailMaxProjectsPerRun,
+            detailBatchSize: CONFIG.detailBatchSize,
             tokenConfigured:
               Boolean(CONFIG.CLIENT_TOKEN) &&
               CONFIG.CLIENT_TOKEN !== "REPLACE_WITH_LONG_RANDOM_TOKEN",
           },
           pendingJob: getPendingJob(),
           recrawlJob: summarizeRecrawlJob(getRecrawlJob()),
+          detailJob: summarizeDetailJob(getDetailJob()),
           lastResult: safeJsonParse(localStorage.getItem(CONFIG.storageKeys.lastResult), null),
           beijingTime: getBeijingParts().full,
         };
@@ -2353,6 +2750,7 @@
 
       clearPendingJob,
       clearRecrawlJob,
+      clearDetailJob,
     };
 
     window.RootDataFundraisingCollector = debugApi;
