@@ -1,6 +1,6 @@
 const express = require("express");
 const crypto = require("crypto");
-const { Op } = require("sequelize");
+const { Op, literal } = require("sequelize");
 const { Fundraising } = require("../models/postgres-fundraising");
 const { XhuntAdminManager, CollectorClientToken } = require("../models/postgres-start");
 const { sendEmail } = require("../services/emailService");

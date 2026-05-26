@@ -2559,13 +2559,11 @@
       clearPendingJob();
       console.log("[RootData Reader] parsed rows:", data.length, data);
 
+      let importResult = null;
       try {
-        const importResult = await submitData(data, job);
-        console.log("[RootData Reader] import result:", importResult);
-        renderPanel({ ok: true, status: "success_imported_crawling_details", retryCount: job.retryCount || 0, data });
-        await startBatchedDetailsForRows(data, job);
+        importResult = await submitData(data, job);
       } catch (submitError) {
-        console.error("[RootData Reader] import failed:", submitError);
+        console.error("[RootData Reader] list import failed:", submitError);
         await sendAlert({
           scheduleSlot: job.slot,
           reason: `import_failed: ${submitError.message}`,
@@ -2583,6 +2581,23 @@
           status: "success_but_import_failed",
           retryCount: job.retryCount || 0,
           error: submitError.message,
+          data,
+        });
+        return;
+      }
+
+      console.log("[RootData Reader] import result:", importResult);
+      renderPanel({ ok: true, status: "success_imported_crawling_details", retryCount: job.retryCount || 0, data });
+
+      try {
+        await startBatchedDetailsForRows(data, job);
+      } catch (detailError) {
+        console.error("[RootData Reader] detail queue/crawl failed:", detailError);
+        renderPanel({
+          ok: false,
+          status: "success_imported_but_detail_failed",
+          retryCount: job.retryCount || 0,
+          error: detailError.message,
           data,
         });
       }
