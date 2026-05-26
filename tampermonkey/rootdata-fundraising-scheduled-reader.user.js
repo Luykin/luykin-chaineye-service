@@ -2021,19 +2021,8 @@
         });
 
         const nextCursor = cursor + batch.length;
-        let subItems = [];
-        if (job.queueMode === "server") {
-          try {
-            subItems = await fetchDetailQueue("sub", Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)), job);
-          } catch (error) {
-            console.error("[RootData Reader] fetch sub queue failed, fallback to discovered sub items:", error);
-            subItems = normalizeSubDetailItems(result.discoveredSubItems)
-              .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
-          }
-        } else {
-          subItems = normalizeSubDetailItems([...(job.subItems || []), ...result.discoveredSubItems])
-            .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
-        }
+        const discoveredSubItems = normalizeSubDetailItems([...(job.subItems || []), ...result.discoveredSubItems])
+          .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
         const nextStats = mergeDetailStats(stats, result.stats);
         nextStats.initialTotal = initialItems.length;
 
@@ -2041,7 +2030,9 @@
           const nextJob = {
             ...job,
             items: initialItems,
-            subItems,
+            // server queue 模式下第三步 subDetailsCrawl 必须等 initial 全部跑完后再从接口取；
+            // 本地模式才需要跨批次累积页面中发现的投资方。
+            subItems: job.queueMode === "server" ? [] : discoveredSubItems,
             cursor: nextCursor,
             stats: nextStats,
             nextAction: "details_after_reload",
@@ -2060,6 +2051,17 @@
           return { ok: true, done: false, phase: "initial", nextCursor, total: initialItems.length, stats: nextStats };
         }
 
+        let subItems = [];
+        if (job.queueMode === "server") {
+          try {
+            subItems = await fetchDetailQueue("sub", Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)), job);
+          } catch (error) {
+            console.error("[RootData Reader] fetch sub queue failed after initial phase, fallback to discovered sub items:", error);
+            subItems = discoveredSubItems;
+          }
+        } else {
+          subItems = discoveredSubItems;
+        }
         nextStats.subTotal = subItems.length;
         const nextJob = {
           ...job,
@@ -2433,6 +2435,15 @@
         }
       } catch (error) {
         console.error("[RootData Reader] fetch sub detail queue failed after empty initial queue:", error);
+        await sendAlert({
+          scheduleSlot: job?.slot,
+          reason: `sub_detail_queue_failed: ${error.message}`,
+          retryCount: job?.retryCount || 0,
+          maxRetries: CONFIG.maxRetries,
+          details: { phase: "sub", error: error.message },
+          job,
+        });
+        throw error;
       }
 
       clearDetailJob();
