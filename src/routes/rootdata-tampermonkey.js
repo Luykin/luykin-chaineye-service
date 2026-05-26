@@ -487,7 +487,7 @@ function sanitizeTeamMembers(value) {
     .filter((member) => member.name || member.profileLink);
 }
 
-async function upsertInvestmentRelationships(project, investors, program = "auto_crawler") {
+async function upsertInvestmentRelationships(project, investors, program = "auto_crawler", options = {}) {
   const normalizedInvestors = (investors || [])
     .map(normalizeDetailEntity)
     .filter(Boolean);
@@ -508,12 +508,22 @@ async function upsertInvestmentRelationships(project, investors, program = "auto
     });
   }
 
-  if (normalizedInvestors.length === 0) return 0;
-
   const sequelize = Fundraising.Project.sequelize;
   const transaction = await sequelize.transaction();
 
   try {
+    if (options.forceRefresh === true) {
+      await Fundraising.InvestmentRelationships.destroy({
+        where: { fundedProjectId: project.id },
+        transaction,
+      });
+    }
+
+    if (normalizedInvestors.length === 0) {
+      await transaction.commit();
+      return 0;
+    }
+
     const records = [];
 
     for (const investor of normalizedInvestors) {
@@ -1193,6 +1203,105 @@ router.get("/details/queue", requireClientToken, async (req, res) => {
   }
 });
 
+router.post("/details/cleanup", requireClientToken, async (req, res) => {
+  const { items, scheduleSlot } = req.body || {};
+  const normalizedItems = Array.isArray(items)
+    ? items
+        .map((item) => ({
+          projectName: cleanText(item?.projectName, 255) || parseNameFromRootDataDetailUrl(item?.projectLink || ""),
+          projectLink: canonicalRootDataDetailUrl(item?.projectLink || ""),
+        }))
+        .filter((item) => item.projectName && isRootDataDetailUrl(item.projectLink))
+    : [];
+
+  if (!normalizedItems.length) {
+    return res.status(400).json({
+      success: false,
+      error: "NO_VALID_CLEANUP_ITEMS",
+      message: "没有可清理的详情项目",
+    });
+  }
+
+  const sequelize = Fundraising.Project.sequelize;
+  const transaction = await sequelize.transaction();
+
+  try {
+    const candidateLinks = Array.from(
+      new Set(normalizedItems.flatMap((item) => rootDataDetailUrlCandidates(item.projectLink)))
+    );
+    const projects = await Fundraising.Project.findAll({
+      where: { projectLink: { [Op.in]: candidateLinks } },
+      attributes: ["id", "projectName", "projectLink"],
+      transaction,
+    });
+    const projectIds = projects.map((project) => project.id);
+
+    let deletedInvestmentRelationships = 0;
+    let resetProjects = 0;
+
+    if (projectIds.length > 0) {
+      deletedInvestmentRelationships = await Fundraising.InvestmentRelationships.destroy({
+        where: {
+          [Op.or]: [
+            { fundedProjectId: { [Op.in]: projectIds } },
+            { investorProjectId: { [Op.in]: projectIds } },
+          ],
+        },
+        transaction,
+      });
+
+      const [updatedCount] = await Fundraising.Project.update(
+        {
+          socialLinks: null,
+          twitterUrl: null,
+          teamMembers: [],
+          detailFetchedAt: null,
+          detailFailuresNumber: 0,
+          updateProgram: "auto_crawler_fix",
+        },
+        {
+          where: { id: { [Op.in]: projectIds } },
+          transaction,
+        }
+      );
+      resetProjects = updatedCount || 0;
+    }
+
+    await transaction.commit();
+
+    console.log("[rootdata-tampermonkey] 详情清理完成:", {
+      requested: normalizedItems.length,
+      matchedProjects: projectIds.length,
+      resetProjects,
+      deletedInvestmentRelationships,
+      scheduleSlot,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        requested: normalizedItems.length,
+        matchedProjects: projectIds.length,
+        resetProjects,
+        deletedInvestmentRelationships,
+        projects: projects.map((project) => ({
+          id: project.id,
+          projectName: project.projectName,
+          projectLink: project.projectLink,
+        })),
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("[rootdata-tampermonkey] 详情清理失败:", error);
+    return res.status(500).json({
+      success: false,
+      error: "DETAIL_CLEANUP_FAILED",
+      message: error.message,
+    });
+  }
+});
+
 router.post("/details/import", requireClientToken, async (req, res) => {
   const payload = req.body || {};
   const projectLink = canonicalRootDataDetailUrl(payload.projectLink);
@@ -1235,6 +1344,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     : [];
   const isInitial = payload.isInitial !== false;
   const isMemberDetail = isRootDataMemberUrl(projectLink);
+  const forceRefreshInvestmentRelationships = payload.forceRefreshInvestmentRelationships === true;
   const forceRefreshInvestedRelationships = payload.forceRefreshInvestedRelationships === true;
   const cleanupWindowStartMs = payload.cleanupWindowStart
     ? Date.parse(payload.cleanupWindowStart)
@@ -1265,6 +1375,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       seriesA50M: investors.filter((item) => /series\s*a/i.test(item.round || "") && /\b50\s*M\b/i.test(item.amount || "")),
       investedProjectsCount: investedProjects.length,
       ignoredInvestedProjectsCount: investedProjects.length - acceptedInvestedProjects.length,
+      forceRefreshInvestmentRelationships,
       forceRefreshInvestedRelationships,
       cleanupWindowStart: cleanupWindowStart ? cleanupWindowStart.toISOString() : null,
       scheduleSlot,
@@ -1322,7 +1433,9 @@ router.post("/details/import", requireClientToken, async (req, res) => {
 
     // member 人物页只修基础资料；不能把人物页里的 Work History / 相关项目写成融资关系。
     const investmentRelationships = isInitial && !isMemberDetail
-      ? await upsertInvestmentRelationships(project, investors, program)
+      ? await upsertInvestmentRelationships(project, investors, program, {
+          forceRefresh: forceRefreshInvestmentRelationships,
+        })
       : 0;
     const investedRelationshipResult = !isMemberDetail
       ? await upsertInvestedRelationships(project, acceptedInvestedProjects, program, {
@@ -1390,6 +1503,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       investedRelationships,
       deletedInvestedRelationships,
       forceRefreshInvestedRelationships,
+      forceRefreshInvestmentRelationships,
       cleanupWindowStart: cleanupWindowStart ? cleanupWindowStart.toISOString() : null,
       scheduleSlot,
     });
@@ -1414,6 +1528,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
         pageUrl: payload.pageUrl || null,
         scrapedAt: payload.scrapedAt || null,
         forceRefreshInvestedRelationships,
+        forceRefreshInvestmentRelationships,
         cleanupWindowStart: cleanupWindowStart ? cleanupWindowStart.toISOString() : null,
       },
     });

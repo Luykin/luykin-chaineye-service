@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.6.9
+// @version      0.7.0
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -28,6 +28,7 @@
     ALERT_ENDPOINT: "/api/internal/rootdata/fundraising/alert",
     IMPORT_ENDPOINT: "/api/internal/rootdata/fundraising/import",
     DETAIL_QUEUE_ENDPOINT: "/api/internal/rootdata/fundraising/details/queue",
+    DETAIL_CLEANUP_ENDPOINT: "/api/internal/rootdata/fundraising/details/cleanup",
     DETAIL_IMPORT_ENDPOINT: "/api/internal/rootdata/fundraising/details/import",
     DETAIL_FAILURE_ENDPOINT: "/api/internal/rootdata/fundraising/details/failure",
     PING_ENDPOINT: "/api/internal/rootdata/fundraising/ping",
@@ -256,6 +257,7 @@
       batchSize: Math.max(1, Number(job?.batchSize || 10)),
       maxSub: Math.max(0, Number(job?.maxSub || 0)),
       forceRefreshInvestedRelationships: job?.forceRefreshInvestedRelationships === true,
+      forceRefreshInvestmentRelationships: job?.forceRefreshInvestmentRelationships === true,
       cleanupWindowStart: job?.cleanupWindowStart ? String(job.cleanupWindowStart).slice(0, 80) : null,
       items,
       stats: compactStatsForStorage(job?.stats, items.length),
@@ -1713,6 +1715,19 @@
     });
   }
 
+  async function submitDetailCleanup(items, job) {
+    return requestJson({
+      url: `${CONFIG.API_BASE}${CONFIG.DETAIL_CLEANUP_ENDPOINT}`,
+      body: {
+        source: "tampermonkey",
+        scheduleSlot: job?.slot || null,
+        pageUrl: location.href,
+        items: normalizeRecrawlItems(items),
+        scrapedAt: nowIso(),
+      },
+    });
+  }
+
   async function fetchDetailQueue(phase, limit, job) {
     const url = buildUrlWithQuery(`${CONFIG.API_BASE}${CONFIG.DETAIL_QUEUE_ENDPOINT}`, {
       phase,
@@ -1742,6 +1757,7 @@
         ...detail,
         scheduleSlot: job?.slot || null,
         forceRefreshInvestedRelationships: job?.forceRefreshInvestedRelationships === true,
+        forceRefreshInvestmentRelationships: job?.forceRefreshInvestmentRelationships === true,
         cleanupWindowStart: job?.cleanupWindowStart || null,
       },
     });
@@ -1877,6 +1893,7 @@
       batchSize: Math.max(1, Number(job?.batchSize || CONFIG.detailBatchSize || 10)),
       maxSub: getJobMaxSub(job),
       forceRefreshInvestedRelationships: job?.forceRefreshInvestedRelationships === true,
+      forceRefreshInvestmentRelationships: job?.forceRefreshInvestmentRelationships === true,
       cleanupWindowStart: job?.cleanupWindowStart ? String(job.cleanupWindowStart).slice(0, 80) : null,
       items,
       subItems,
@@ -1923,6 +1940,7 @@
       batchSize: job.batchSize,
       maxSub: job.maxSub,
       forceRefreshInvestedRelationships: job.forceRefreshInvestedRelationships === true,
+      forceRefreshInvestmentRelationships: job.forceRefreshInvestmentRelationships === true,
       cleanupWindowStart: job.cleanupWindowStart || null,
       stats: job.stats || null,
       updatedAt: job.updatedAt || null,
@@ -1941,6 +1959,7 @@
       batchSize: job.batchSize,
       maxSub: job.maxSub,
       forceRefreshInvestedRelationships: job.forceRefreshInvestedRelationships === true,
+      forceRefreshInvestmentRelationships: job.forceRefreshInvestmentRelationships === true,
       cleanupWindowStart: job.cleanupWindowStart || null,
       stats: job.stats || null,
       updatedAt: job.updatedAt || null,
@@ -1969,6 +1988,7 @@
         batchSize: Math.max(1, Number(job.batchSize || CONFIG.detailBatchSize || 10)),
         maxSub: getJobMaxSub(job),
         forceRefreshInvestedRelationships: job.forceRefreshInvestedRelationships === true,
+        forceRefreshInvestmentRelationships: job.forceRefreshInvestmentRelationships === true,
         cleanupWindowStart: job.cleanupWindowStart || null,
         items: normalizeRecrawlItems(job.items || []),
         subItems: [],
@@ -2012,6 +2032,7 @@
       batchNo,
       batchTotal,
       forceRefreshInvestedRelationships: job.forceRefreshInvestedRelationships === true,
+      forceRefreshInvestmentRelationships: job.forceRefreshInvestmentRelationships === true,
       cleanupWindowStart: job.cleanupWindowStart || null,
     };
 
@@ -2134,7 +2155,7 @@
           const detail = await crawlDetailPage(frame, item, { isInitial });
           const submitJob = isInitial
             ? job
-            : { ...job, forceRefreshInvestedRelationships: false, cleanupWindowStart: null };
+            : { ...job, forceRefreshInvestedRelationships: false, forceRefreshInvestmentRelationships: false, cleanupWindowStart: null };
           await submitDetailData(detail, submitJob);
 
           if (isInitial) {
@@ -2331,7 +2352,7 @@
       const detail = await crawlCurrentDetailPage(current.item, { isInitial: current.isInitial });
       const submitJob = current.isInitial
         ? job
-        : { ...job, forceRefreshInvestedRelationships: false, cleanupWindowStart: null };
+        : { ...job, forceRefreshInvestedRelationships: false, forceRefreshInvestmentRelationships: false, cleanupWindowStart: null };
       await submitDetailData(detail, submitJob);
       if (current.isInitial) {
         patchStats.initialSuccess = 1;
@@ -2737,7 +2758,7 @@
 
         try {
           const detail = await crawlDetailPage(frame, item, { isInitial: false });
-          await submitDetailData(detail, { ...job, forceRefreshInvestedRelationships: false, cleanupWindowStart: null });
+          await submitDetailData(detail, { ...job, forceRefreshInvestedRelationships: false, forceRefreshInvestmentRelationships: false, cleanupWindowStart: null });
           stats.subSuccess += 1;
           console.log("[RootData Reader] ✅ sub detail imported:", detail.projectName);
         } catch (error) {
@@ -3178,6 +3199,55 @@
       },
 
       /**
+       * 清理当前 Fundraising 首页前 N 个项目的详情字段和投融资关系，然后导入首页列表并重爬详情。
+       * 控制台调用：await RootDataFundraisingCollector.cleanAndRecrawlHomepageTop(30)
+       */
+      async cleanAndRecrawlHomepageTop(limit = 30, options = {}) {
+        if (!isFundraisingPage()) {
+          throw new Error("请先打开 https://www.rootdata.com/fundraising 页面");
+        }
+
+        const count = Math.max(1, Math.min(Number(limit) || 30, 100));
+        const data = parseFundraisingRows().slice(0, count);
+        if (!data.length) throw new Error("当前首页没有解析到 Fundraising 项目");
+
+        const job = {
+          id: `manual-clean-homepage-top-${count}-${Date.now()}`,
+          slot: options.slot || `manual-clean-homepage-top-${count}`,
+          reason: "manual_clean_homepage_top_and_recrawl",
+          retryCount: 0,
+          createdAt: nowIso(),
+        };
+
+        console.log("[RootData Reader] clean homepage top projects:", {
+          count,
+          items: data.map((item) => ({ projectName: item.projectName, projectLink: item.projectLink })),
+        });
+
+        const cleanupResult = await submitDetailCleanup(data, job);
+        const importResult = await submitData(data, job);
+
+        const recrawlResult = await this.recrawlDetails(data, {
+          batchSize: options.batchSize || CONFIG.detailBatchSize || 10,
+          maxSub: Number.isFinite(Number(options.maxSub)) ? Number(options.maxSub) : 0,
+          loadMode: options.loadMode || CONFIG.detailLoadMode,
+          forceRefreshInvestmentRelationships: true,
+          forceRefreshInvestedRelationships: true,
+          cleanupWindowStart: null,
+          slot: job.slot,
+          reloadOnDone: options.reloadOnDone,
+        });
+
+        return {
+          ok: true,
+          count,
+          cleanupResult,
+          importResult,
+          recrawlResult,
+        };
+      },
+
+      /**
        * 只解析当前 DOM，不提交服务端。
        * 控制台调用：RootDataFundraisingCollector.parse()
        */
@@ -3213,13 +3283,20 @@
        * 按审计脚本输出的项目清单重爬详情并提交服务端。
        * 控制台调用：await RootDataFundraisingCollector.recrawlDetails([{ projectName, projectLink }], { batchSize: 10, maxSub: 0 })
        * 清理并重建“对外投资”关系：
-       * await RootDataFundraisingCollector.recrawlDetails(items, { batchSize: 10, maxSub: 0, forceRefreshInvestedRelationships: true, cleanupWindowStart: "2026-05-24T16:00:00.000Z" })
+       * await RootDataFundraisingCollector.recrawlDetails(items, {
+       *   batchSize: 10,
+       *   maxSub: 0,
+       *   forceRefreshInvestmentRelationships: true,
+       *   forceRefreshInvestedRelationships: true,
+       *   cleanupWindowStart: "2026-05-24T16:00:00.000Z"
+       * })
        */
       async recrawlDetails(items, options = {}) {
         const data = normalizeRecrawlItems(items);
         const batchSize = Math.max(1, Number(options.batchSize || options.reloadEvery || 10));
         const shouldBatch = options.reloadBetweenBatches !== false && data.length > batchSize;
         const maxSub = Number.isFinite(Number(options.maxSub)) ? Math.max(0, Number(options.maxSub)) : 0;
+        const forceRefreshInvestmentRelationships = options.forceRefreshInvestmentRelationships === true;
         const forceRefreshInvestedRelationships = options.forceRefreshInvestedRelationships === true;
         const cleanupWindowStart = options.cleanupWindowStart ? String(options.cleanupWindowStart) : null;
 
@@ -3237,6 +3314,7 @@
             batchSize,
             maxSub,
             forceRefreshInvestedRelationships,
+            forceRefreshInvestmentRelationships,
             cleanupWindowStart,
             items: data,
             subItems: [],
@@ -3261,6 +3339,7 @@
             batchSize,
             maxSub,
             forceRefreshInvestedRelationships,
+            forceRefreshInvestmentRelationships,
             cleanupWindowStart,
             items: data,
             stats: {
@@ -3294,6 +3373,7 @@
           reason: "manual_console_recrawl_details",
           retryCount: 0,
           forceRefreshInvestedRelationships,
+          forceRefreshInvestmentRelationships,
           cleanupWindowStart,
           createdAt: nowIso(),
         };
@@ -3412,7 +3492,7 @@
     PAGE_WINDOW.RootDataFundraisingCollector = debugApi;
 
     console.log(
-      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), parse(), crawlDetailsNow(), recrawlDetails(items), resumeRecrawlDetails(), recrawlStatus(), debugDetail(url), testConnection(), sendTestAlert(), status()"
+      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), cleanAndRecrawlHomepageTop(30), parse(), crawlDetailsNow(), recrawlDetails(items), resumeRecrawlDetails(), recrawlStatus(), debugDetail(url), testConnection(), sendTestAlert(), status()"
     );
   }
 
