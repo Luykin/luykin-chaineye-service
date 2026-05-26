@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.6.8
+// @version      0.6.9
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -1509,11 +1509,13 @@
     };
   }
 
-  function parseDetailDocument(doc, detailUrl, { isInitial = true, dryRun = false } = {}) {
+  function parseDetailDocument(doc, detailUrl, { isInitial = true, dryRun = false, initialInvestors: preloadedInitialInvestors = null } = {}) {
     const basic = parseBasicDetail(doc, detailUrl);
     const isMemberDetail = isRootDataMemberUrl(detailUrl);
     // member 人物页只修基础资料（头像 / 官方 X），不能把 Work History / 相关项目误当成融资关系。
-    const initialInvestors = isInitial && !isMemberDetail ? parseInitialInvestors(doc, detailUrl) : [];
+    const initialInvestors = isInitial && !isMemberDetail
+      ? (Array.isArray(preloadedInitialInvestors) ? preloadedInitialInvestors : parseInitialInvestors(doc, detailUrl))
+      : [];
     const roundsInvestors = isInitial && !isMemberDetail ? parseRoundsInvestors(doc, detailUrl) : [];
     const investors = isInitial && !isMemberDetail ? mergeInvestorData(initialInvestors, roundsInvestors) : [];
     const bodyText = cleanText(doc.body?.innerText || "");
@@ -1566,12 +1568,15 @@
     await sleep(800);
 
     const isMemberDetail = isRootDataMemberUrl(detailUrl);
+    // 新版 RootData 的 Lead 标记只在 Fundraising -> Investors tab 的卡片上，
+    // Rounds tab 表格里通常没有 Lead 信息；切换 Rounds 前先缓存 Investors tab。
+    const investorsTabInvestors = isInitial && !isMemberDetail ? parseInitialInvestors(doc, detailUrl) : [];
     if (isInitial && !isMemberDetail) {
       await clickRoundsTab(doc);
       await sleep(600);
     }
 
-    const details = parseDetailDocument(doc, detailUrl, { isInitial });
+    const details = parseDetailDocument(doc, detailUrl, { isInitial, initialInvestors: investorsTabInvestors });
     if (!isMemberDetail) {
       details.investedProjects = await scrapeInvestedProjectsFromDetail(doc, detailUrl);
     }
@@ -2242,12 +2247,15 @@
     await sleep(800);
 
     const isMemberDetail = isRootDataMemberUrl(detailUrl);
+    // 新版 RootData 的 Lead 标记只在 Fundraising -> Investors tab 的卡片上，
+    // Rounds tab 表格里通常没有 Lead 信息；切换 Rounds 前先缓存 Investors tab。
+    const investorsTabInvestors = isInitial && !isMemberDetail ? parseInitialInvestors(document, detailUrl) : [];
     if (isInitial && !isMemberDetail) {
       await clickRoundsTab(document);
       await sleep(600);
     }
 
-    const details = parseDetailDocument(document, detailUrl, { isInitial });
+    const details = parseDetailDocument(document, detailUrl, { isInitial, initialInvestors: investorsTabInvestors });
     if (!isMemberDetail) {
       details.investedProjects = await scrapeInvestedProjectsFromDetail(document, detailUrl);
     }
