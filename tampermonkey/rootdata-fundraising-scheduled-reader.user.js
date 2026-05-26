@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.7.2
+// @version      0.7.4
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -3004,16 +3004,13 @@
     return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
   }
 
-  function isIdlePanelState(state) {
-    const status = String(state?.status || "");
-    return status === "idle" || status === "copied" || status === "copy_failed";
-  }
-
   function renderPanel(state) {
     const panel = createPanel();
     const data = state.data || [];
     const preview = data.slice(0, 5);
-    const nextSchedule = isIdlePanelState(state) ? getNextScheduleInfo() : null;
+    // 坤哥要求空闲时看倒计时；实际运行中状态可能不是 idle（例如上次成功、详情队列残留等），
+    // 所以这里改为面板常驻显示下一次自动抓取时间，避免看不到定时任务是否还在工作。
+    const nextSchedule = getNextScheduleInfo();
 
     panel.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
@@ -3024,14 +3021,14 @@
       <div style="margin-bottom:6px;color:#cbd5e1;">Status:
         <span style="color:${state.ok ? "#86efac" : "#fca5a5"}">${escapeHtml(state.status || "-")}</span>
       </div>
-      ${
-        nextSchedule
-          ? `<div style="margin-bottom:6px;color:#cbd5e1;">Next Auto Run:
-              <strong id="rd-fr-countdown" data-next-trigger="${nextSchedule.triggerTime}" style="color:#38bdf8;">${escapeHtml(formatDuration(nextSchedule.remainingMs))}</strong>
-              <span style="color:#94a3b8;">(${escapeHtml(nextSchedule.triggerBeijing)} BJT)</span>
-            </div>`
-          : ""
-      }
+      <div style="margin-bottom:6px;color:#cbd5e1;">Next Auto Run:
+        ${
+          nextSchedule
+            ? `<strong id="rd-fr-countdown" data-next-trigger="${nextSchedule.triggerTime}" style="color:#38bdf8;">${escapeHtml(formatDuration(nextSchedule.remainingMs))}</strong>
+               <span style="color:#94a3b8;">(${escapeHtml(nextSchedule.triggerBeijing)} BJT · slot ${escapeHtml(nextSchedule.slot)})</span>`
+            : `<strong style="color:#fca5a5;">unavailable</strong>`
+        }
+      </div>
       <div style="margin-bottom:6px;color:#cbd5e1;">Rows:
         <strong style="color:#facc15;">${data.length}</strong>
       </div>
@@ -3355,9 +3352,12 @@
   }
 
   function initScheduleLoop() {
+    // 倒计时面板在 fundraising / detail / member 页面都可能出现；
+    // 定时触发只允许在 fundraising 首页执行，但倒计时刷新不应该被页面类型挡住。
+    setInterval(() => updateIdleCountdown(), CONFIG.idleCountdownRefreshMs);
+
     if (!isFundraisingPage()) return;
     setInterval(checkSchedule, CONFIG.scheduleCheckIntervalMs);
-    setInterval(() => updateIdleCountdown(), CONFIG.idleCountdownRefreshMs);
     checkSchedule();
   }
 
@@ -3675,6 +3675,17 @@
       },
 
       /**
+       * 强制重新渲染面板，方便确认 Tampermonkey 是否已加载最新版倒计时 UI。
+       * 控制台调用：RootDataFundraisingCollector.showPanel()
+       */
+      showPanel() {
+        document.getElementById(CONFIG.panelId)?.remove();
+        const lastResult = safeJsonParse(localStorage.getItem(CONFIG.storageKeys.lastResult), null);
+        renderPanel({ ok: true, status: "idle", retryCount: 0, data: lastResult?.data || [] });
+        return { ok: true, nextSchedule: getNextScheduleInfo(), version: "0.7.4" };
+      },
+
+      /**
        * 查看当前配置、pending job、最近结果。
        * 控制台调用：RootDataFundraisingCollector.status()
        */
@@ -3703,6 +3714,7 @@
           recrawlJob: summarizeRecrawlJob(getRecrawlJob()),
           detailJob: summarizeDetailJob(getDetailJob()),
           lastResult: safeJsonParse(localStorage.getItem(CONFIG.storageKeys.lastResult), null),
+          nextSchedule: getNextScheduleInfo(),
           beijingTime: getBeijingParts().full,
         };
       },
@@ -3716,7 +3728,7 @@
     PAGE_WINDOW.RootDataFundraisingCollector = debugApi;
 
     console.log(
-      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), cleanAndRecrawlHomepageTop(30), parse(), crawlDetailsNow(), recrawlDetails(items), resumeRecrawlDetails(), recrawlStatus(), debugDetail(url), testConnection(), sendTestAlert(), status()"
+      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), cleanAndRecrawlHomepageTop(30), parse(), crawlDetailsNow(), recrawlDetails(items), resumeRecrawlDetails(), recrawlStatus(), debugDetail(url), testConnection(), sendTestAlert(), showPanel(), status()"
     );
   }
 
