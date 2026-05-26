@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.6.7
+// @version      0.6.8
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -1843,9 +1843,21 @@
       .slice(0, CONFIG.subDetailMaxProjectsPerRun);
   }
 
+  function getJobMaxSub(job) {
+    const value = Number(job?.maxSub);
+    if (Number.isFinite(value)) return Math.max(0, value);
+    return Math.max(0, Number(CONFIG.subDetailMaxProjectsPerRun || 0));
+  }
+
+  function normalizeSubDetailItemsForJob(items, job) {
+    const maxSub = getJobMaxSub(job);
+    if (maxSub <= 0) return [];
+    return normalizeSubDetailItems(items).slice(0, maxSub);
+  }
+
   function compactDetailJobForStorage(job) {
     const items = normalizeRecrawlItems(job?.items || []).slice(0, CONFIG.maxStoredDetailItems);
-    const subItems = normalizeSubDetailItems(job?.subItems || []).slice(0, CONFIG.maxStoredDetailItems);
+    const subItems = normalizeSubDetailItemsForJob(job?.subItems || [], job).slice(0, CONFIG.maxStoredDetailItems);
     const phase = job?.phase === "sub" ? "sub" : "initial";
     return {
       id: String(job?.id || `details-${Date.now()}`),
@@ -1858,7 +1870,9 @@
       cursor: Math.min(Math.max(0, Number(job?.cursor || 0)), items.length),
       subCursor: Math.min(Math.max(0, Number(job?.subCursor || 0)), subItems.length),
       batchSize: Math.max(1, Number(job?.batchSize || CONFIG.detailBatchSize || 10)),
-      maxSub: Math.max(0, Number(job?.maxSub || CONFIG.subDetailMaxProjectsPerRun || 0)),
+      maxSub: getJobMaxSub(job),
+      forceRefreshInvestedRelationships: job?.forceRefreshInvestedRelationships === true,
+      cleanupWindowStart: job?.cleanupWindowStart ? String(job.cleanupWindowStart).slice(0, 80) : null,
       items,
       subItems,
       stats: compactStatsForStorage(job?.stats, items.length) || emptyDetailStats({ initialTotal: items.length }),
@@ -1903,6 +1917,8 @@
       subTotal: Array.isArray(job.subItems) ? job.subItems.length : 0,
       batchSize: job.batchSize,
       maxSub: job.maxSub,
+      forceRefreshInvestedRelationships: job.forceRefreshInvestedRelationships === true,
+      cleanupWindowStart: job.cleanupWindowStart || null,
       stats: job.stats || null,
       updatedAt: job.updatedAt || null,
       createdAt: job.createdAt || null,
@@ -1932,6 +1948,33 @@
     if (!job || !Array.isArray(job.items) || !job.items.length) {
       clearRecrawlJob();
       return { ok: false, error: "empty_recrawl_job" };
+    }
+
+    if ((job.loadMode || CONFIG.detailLoadMode) === "page") {
+      const detailJob = {
+        id: `${job.id || "recrawl"}-page`,
+        slot: job.slot || "manual-console-recrawl-details-page",
+        reason: "manual_console_recrawl_details_page",
+        nextAction: "details_after_reload",
+        queueMode: "local",
+        loadMode: "page",
+        phase: "initial",
+        cursor: Math.max(0, Number(job.cursor || 0)),
+        subCursor: 0,
+        batchSize: Math.max(1, Number(job.batchSize || CONFIG.detailBatchSize || 10)),
+        maxSub: getJobMaxSub(job),
+        forceRefreshInvestedRelationships: job.forceRefreshInvestedRelationships === true,
+        cleanupWindowStart: job.cleanupWindowStart || null,
+        items: normalizeRecrawlItems(job.items || []),
+        subItems: [],
+        stats: job.stats || emptyDetailStats({ initialTotal: job.items.length }),
+        createdAt: job.createdAt || nowIso(),
+        updatedAt: nowIso(),
+      };
+      clearRecrawlJob();
+      setDetailJob(detailJob);
+      console.log("[RootData Reader] recrawl job converted to current-tab detail job:", summarizeDetailJob(detailJob));
+      return runDetailBatchJob(detailJob);
     }
 
     const total = job.items.length;
@@ -2084,7 +2127,10 @@
 
         try {
           const detail = await crawlDetailPage(frame, item, { isInitial });
-          await submitDetailData(detail, job);
+          const submitJob = isInitial
+            ? job
+            : { ...job, forceRefreshInvestedRelationships: false, cleanupWindowStart: null };
+          await submitDetailData(detail, submitJob);
 
           if (isInitial) {
             batchStats.initialSuccess += 1;
@@ -2122,7 +2168,7 @@
 
       return {
         stats: batchStats,
-        discoveredSubItems: normalizeSubDetailItems(discoveredSubItems),
+        discoveredSubItems: normalizeSubDetailItemsForJob(discoveredSubItems, job),
       };
     } finally {
       removeDetailFrame();
@@ -2132,7 +2178,7 @@
   function getCurrentDetailJobItem(job) {
     if (!job) return null;
     if (job.phase === "sub") {
-      const subItems = normalizeSubDetailItems(job.subItems || []);
+      const subItems = normalizeSubDetailItemsForJob(job.subItems || [], job);
       return {
         item: subItems[Math.max(0, Number(job.subCursor || 0))] || null,
         index: Math.max(0, Number(job.subCursor || 0)),
@@ -2275,13 +2321,16 @@
 
     try {
       const detail = await crawlCurrentDetailPage(current.item, { isInitial: current.isInitial });
-      await submitDetailData(detail, job);
+      const submitJob = current.isInitial
+        ? job
+        : { ...job, forceRefreshInvestedRelationships: false, cleanupWindowStart: null };
+      await submitDetailData(detail, submitJob);
       if (current.isInitial) {
         patchStats.initialSuccess = 1;
-        discoveredSubItems = normalizeSubDetailItems((detail.investors || []).map((investor) => ({
+        discoveredSubItems = normalizeSubDetailItemsForJob((detail.investors || []).map((investor) => ({
           projectName: investor.projectName,
           projectLink: investor.projectLink,
-        })));
+        })), job);
       } else {
         patchStats.subSuccess = 1;
       }
@@ -2312,7 +2361,7 @@
         const nextJob = {
           ...job,
           items: current.items,
-          subItems: job.queueMode === "server" ? [] : normalizeSubDetailItems([...(job.subItems || []), ...discoveredSubItems]),
+          subItems: job.queueMode === "server" ? [] : normalizeSubDetailItemsForJob([...(job.subItems || []), ...discoveredSubItems], job),
           cursor: nextCursor,
           stats: nextStats,
           nextAction: "details_after_reload",
@@ -2331,13 +2380,13 @@
       let subItems = [];
       if (job.queueMode === "server") {
         try {
-          subItems = await fetchDetailQueue("sub", Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)), job);
+          subItems = await fetchDetailQueue("sub", getJobMaxSub(job), job);
         } catch (error) {
           console.error("[RootData Reader] fetch sub queue failed after current-tab initial phase, fallback to discovered sub items:", error);
-          subItems = normalizeSubDetailItems([...(job.subItems || []), ...discoveredSubItems]);
+          subItems = normalizeSubDetailItemsForJob([...(job.subItems || []), ...discoveredSubItems], job);
         }
       } else {
-        subItems = normalizeSubDetailItems([...(job.subItems || []), ...discoveredSubItems]);
+        subItems = normalizeSubDetailItemsForJob([...(job.subItems || []), ...discoveredSubItems], job);
       }
 
       nextStats.subTotal = subItems.length;
@@ -2444,8 +2493,7 @@
         });
 
         const nextCursor = cursor + batch.length;
-        const discoveredSubItems = normalizeSubDetailItems([...(job.subItems || []), ...result.discoveredSubItems])
-          .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
+        const discoveredSubItems = normalizeSubDetailItemsForJob([...(job.subItems || []), ...result.discoveredSubItems], job);
         const nextStats = mergeDetailStats(stats, result.stats);
         nextStats.initialTotal = initialItems.length;
 
@@ -2477,7 +2525,7 @@
         let subItems = [];
         if (job.queueMode === "server") {
           try {
-            subItems = await fetchDetailQueue("sub", Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)), job);
+            subItems = await fetchDetailQueue("sub", getJobMaxSub(job), job);
           } catch (error) {
             console.error("[RootData Reader] fetch sub queue failed after initial phase, fallback to discovered sub items:", error);
             subItems = discoveredSubItems;
@@ -2526,8 +2574,7 @@
       }
     }
 
-    const subItems = normalizeSubDetailItems(job.subItems || [])
-      .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
+    const subItems = normalizeSubDetailItemsForJob(job.subItems || [], job);
     const subCursor = Math.max(0, Number(job.subCursor || 0));
     const subBatch = subItems.slice(subCursor, subCursor + batchSize);
 
@@ -2682,7 +2729,7 @@
 
         try {
           const detail = await crawlDetailPage(frame, item, { isInitial: false });
-          await submitDetailData(detail, job);
+          await submitDetailData(detail, { ...job, forceRefreshInvestedRelationships: false, cleanupWindowStart: null });
           stats.subSuccess += 1;
           console.log("[RootData Reader] ✅ sub detail imported:", detail.projectName);
         } catch (error) {
@@ -3164,8 +3211,37 @@
         const data = normalizeRecrawlItems(items);
         const batchSize = Math.max(1, Number(options.batchSize || options.reloadEvery || 10));
         const shouldBatch = options.reloadBetweenBatches !== false && data.length > batchSize;
+        const maxSub = Number.isFinite(Number(options.maxSub)) ? Math.max(0, Number(options.maxSub)) : 0;
         const forceRefreshInvestedRelationships = options.forceRefreshInvestedRelationships === true;
         const cleanupWindowStart = options.cleanupWindowStart ? String(options.cleanupWindowStart) : null;
+
+        if ((options.loadMode || CONFIG.detailLoadMode) === "page") {
+          const job = {
+            id: `manual-console-recrawl-details-page-${Date.now()}`,
+            slot: options.slot || "manual-console-recrawl-details-page",
+            reason: "manual_console_recrawl_details_page",
+            nextAction: "details_after_reload",
+            queueMode: "local",
+            loadMode: "page",
+            phase: "initial",
+            cursor: 0,
+            subCursor: 0,
+            batchSize,
+            maxSub,
+            forceRefreshInvestedRelationships,
+            cleanupWindowStart,
+            items: data,
+            subItems: [],
+            stats: emptyDetailStats({ initialTotal: data.length }),
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+          };
+
+          clearRecrawlJob();
+          setDetailJob(job);
+          console.log("[RootData Reader] recrawl current-tab job started:", summarizeDetailJob(job));
+          return runDetailBatchJob(job);
+        }
 
         if (shouldBatch) {
           const job = {
@@ -3175,7 +3251,7 @@
             nextAction: "recrawl_after_reload",
             cursor: 0,
             batchSize,
-            maxSub: Number.isFinite(Number(options.maxSub)) ? Number(options.maxSub) : 0,
+            maxSub,
             forceRefreshInvestedRelationships,
             cleanupWindowStart,
             items: data,
@@ -3202,7 +3278,7 @@
         const oldMaxSub = CONFIG.subDetailMaxProjectsPerRun;
         if (Number.isFinite(Number(options.maxInitial))) CONFIG.detailMaxProjectsPerRun = Number(options.maxInitial);
         else CONFIG.detailMaxProjectsPerRun = data.length;
-        if (Number.isFinite(Number(options.maxSub))) CONFIG.subDetailMaxProjectsPerRun = Number(options.maxSub);
+        CONFIG.subDetailMaxProjectsPerRun = maxSub;
 
         const job = {
           id: `manual-console-recrawl-details-${Date.now()}`,
@@ -3231,12 +3307,16 @@
        */
       async resumeRecrawlDetails() {
         const job = getRecrawlJob();
-        if (!job) return { ok: false, error: "no_recrawl_job" };
+        if (!job) {
+          const detailJob = getDetailJob();
+          if (detailJob?.nextAction === "details_after_reload") return runDetailBatchJob(detailJob);
+          return { ok: false, error: "no_recrawl_job" };
+        }
         return runRecrawlBatchJob(job);
       },
 
       recrawlStatus() {
-        return summarizeRecrawlJob(getRecrawlJob());
+        return summarizeRecrawlJob(getRecrawlJob()) || summarizeDetailJob(getDetailJob());
       },
 
       /**
