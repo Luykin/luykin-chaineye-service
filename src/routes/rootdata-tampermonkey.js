@@ -591,6 +591,9 @@ async function syncTeamPositionRelationships(project, teamMembers, program = "au
         projectName: project.projectName,
         projectLink: project.projectLink,
         source,
+        scheduleSlot: options.scheduleSlot || null,
+        isInitial: options.isInitial !== false,
+        trigger: options.trigger || "detail_import",
         ...result,
         members: normalizedMembers.map((member) => ({
           name: member.name,
@@ -607,6 +610,9 @@ async function syncTeamPositionRelationships(project, teamMembers, program = "au
     console.error("[rootdata-tampermonkey] 职位关系同步失败:", {
       projectId: project?.id,
       projectName: project?.projectName,
+      scheduleSlot: options.scheduleSlot || null,
+      isInitial: options.isInitial !== false,
+      trigger: options.trigger || "detail_import",
       received: result.received,
       normalized: result.normalized,
       error: error.message,
@@ -1592,8 +1598,13 @@ router.post("/details/import", requireClientToken, async (req, res) => {
 
     await project.update(updateValues);
 
+    // 正常定时任务和手动重爬都会走 /details/import，所以在这里统一同步职位关系。
     const positionRelationshipResult = !isMemberDetail
-      ? await syncTeamPositionRelationships(project, teamMembers, program)
+      ? await syncTeamPositionRelationships(project, teamMembers, program, {
+          scheduleSlot,
+          isInitial,
+          trigger: "detail_import",
+        })
       : { received: teamMembers.length, normalized: 0, deleted: 0, upserted: 0, skipped: teamMembers.length };
 
     // member 人物页只修基础资料；不能把人物页里的 Work History / 相关项目写成融资关系。
