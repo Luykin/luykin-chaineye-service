@@ -86,6 +86,40 @@ function cleanText(value, maxLength = 2000) {
   return text.length > maxLength ? text.slice(0, maxLength) : text;
 }
 
+function isDebugDetailTarget(value) {
+  if (process.env.ROOTDATA_TAMPERMONKEY_DEBUG === "1") return true;
+  const text =
+    typeof value === "string"
+      ? value
+      : [
+          value?.projectName,
+          value?.name,
+          value?.projectLink,
+          value?.detailUrl,
+        ].filter(Boolean).join(" ");
+  return /Variational/i.test(String(text || ""));
+}
+
+function debugLog(label, payload) {
+  console.log(`[rootdata-tampermonkey][DEBUG] ${label}:`, payload);
+}
+
+function summarizeInvestorsForDebug(items = []) {
+  return (items || []).map((item) => ({
+    projectName: item?.projectName || item?.name,
+    projectLink: item?.projectLink || item?.link,
+    round: item?.round,
+    amount: item?.amount,
+    formattedAmount: item?.formattedAmount,
+    valuation: item?.valuation,
+    formattedValuation: item?.formattedValuation,
+    date: item?.date,
+    timestamp: item?.timestamp,
+    lead: item?.lead,
+    source: item?.source,
+  }));
+}
+
 function absoluteRootDataUrl(value) {
   if (!value) return "";
   try {
@@ -448,6 +482,22 @@ async function upsertInvestmentRelationships(project, investors, program = "auto
   const normalizedInvestors = (investors || [])
     .map(normalizeDetailEntity)
     .filter(Boolean);
+  const debugTarget = isDebugDetailTarget(project);
+
+  if (debugTarget) {
+    debugLog("upsertInvestmentRelationships.normalized", {
+      fundedProjectId: project?.id,
+      fundedProjectName: project?.projectName,
+      fundedProjectLink: project?.projectLink,
+      rawCount: Array.isArray(investors) ? investors.length : 0,
+      normalizedCount: normalizedInvestors.length,
+      rawInvestors: summarizeInvestorsForDebug(investors),
+      normalizedInvestors: summarizeInvestorsForDebug(normalizedInvestors),
+      seriesA50M: normalizedInvestors.filter(
+        (item) => /series\s*a/i.test(item.round || "") && Number(item.formattedAmount) === 50000000
+      ),
+    });
+  }
 
   if (normalizedInvestors.length === 0) return 0;
 
@@ -490,6 +540,19 @@ async function upsertInvestmentRelationships(project, investors, program = "auto
     }
 
     if (records.length > 0) {
+      if (debugTarget) {
+        debugLog("upsertInvestmentRelationships.records.beforeBulkCreate", {
+          fundedProjectId: project.id,
+          records: records.map((record) => ({
+            ...record,
+            dateIso: record.date ? new Date(Number(record.date)).toISOString() : null,
+          })),
+          seriesA50MRecords: records.filter(
+            (record) => /series\s*a/i.test(record.round || "") && Number(record.formattedAmount) === 50000000
+          ),
+        });
+      }
+
       await Fundraising.InvestmentRelationships.bulkCreate(records, {
         transaction,
         updateOnDuplicate: [
@@ -503,6 +566,42 @@ async function upsertInvestmentRelationships(project, investors, program = "auto
           "updateProgram",
         ],
       });
+
+      if (debugTarget) {
+        const storedRows = await Fundraising.InvestmentRelationships.findAll({
+          where: { fundedProjectId: project.id },
+          include: [
+            {
+              model: Fundraising.Project,
+              as: "investorProject",
+              attributes: ["id", "projectName", "projectLink"],
+            },
+          ],
+          order: [["round", "ASC"], ["formattedAmount", "DESC"], ["updatedAt", "DESC"]],
+          transaction,
+        });
+
+        debugLog("upsertInvestmentRelationships.storedRows.afterBulkCreate", {
+          fundedProjectId: project.id,
+          count: storedRows.length,
+          rows: storedRows.map((row) => ({
+            id: row.id,
+            investorProjectId: row.investorProjectId,
+            investorName: row.investorProject?.projectName,
+            investorLink: row.investorProject?.projectLink,
+            fundedProjectId: row.fundedProjectId,
+            round: row.round,
+            amount: row.amount,
+            formattedAmount: row.formattedAmount,
+            valuation: row.valuation,
+            formattedValuation: row.formattedValuation,
+            date: row.date,
+            dateIso: row.date ? new Date(Number(row.date)).toISOString() : null,
+            lead: row.lead,
+            updateProgram: row.updateProgram,
+          })),
+        });
+      }
     }
 
     await transaction.commit();
@@ -953,6 +1052,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     : [];
   const isInitial = payload.isInitial !== false;
   const isMemberDetail = isRootDataMemberUrl(projectLink);
+  const debugTarget = isDebugDetailTarget({ projectName, projectLink, detailUrl: payload.detailUrl });
   const hasUsefulDetails =
     Boolean(projectName) &&
     (Boolean(payload.logo) ||
@@ -960,6 +1060,25 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       teamMembers.length > 0 ||
       investors.length > 0 ||
       investedProjects.length > 0);
+
+  if (debugTarget) {
+    debugLog("details.import.receivedPayload", {
+      projectName,
+      projectLink,
+      detailUrl: payload.detailUrl || null,
+      isInitial,
+      isMemberDetail,
+      logo: payload.logo || null,
+      socialLinks: payload.socialLinks || null,
+      investorsCount: investors.length,
+      investors: summarizeInvestorsForDebug(investors),
+      seriesA50M: investors.filter((item) => /series\s*a/i.test(item.round || "") && /\b50\s*M\b/i.test(item.amount || "")),
+      investedProjectsCount: investedProjects.length,
+      scheduleSlot,
+      scrapedAt: payload.scrapedAt || null,
+      debug: payload.debug || null,
+    });
+  }
 
   try {
     const [project] = await findOrCreateProjectByDetailLink(projectLink, {
@@ -1016,6 +1135,50 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       ? await upsertInvestedRelationships(project, investedProjects, program)
       : 0;
 
+    let debugStoredRelationships = null;
+    if (debugTarget) {
+      const storedRows = await Fundraising.InvestmentRelationships.findAll({
+        where: { fundedProjectId: project.id },
+        include: [
+          {
+            model: Fundraising.Project,
+            as: "investorProject",
+            attributes: ["id", "projectName", "projectLink"],
+          },
+        ],
+        order: [["round", "ASC"], ["formattedAmount", "DESC"], ["updatedAt", "DESC"]],
+      });
+
+      debugStoredRelationships = storedRows.map((row) => ({
+        id: row.id,
+        investorProjectId: row.investorProjectId,
+        investorName: row.investorProject?.projectName,
+        investorLink: row.investorProject?.projectLink,
+        fundedProjectId: row.fundedProjectId,
+        round: row.round,
+        amount: row.amount,
+        formattedAmount: row.formattedAmount,
+        valuation: row.valuation,
+        formattedValuation: row.formattedValuation,
+        date: row.date,
+        dateIso: row.date ? new Date(Number(row.date)).toISOString() : null,
+        lead: row.lead,
+        updateProgram: row.updateProgram,
+        updatedAt: row.updatedAt,
+      }));
+
+      debugLog("details.import.storedRelationships.final", {
+        projectId: project.id,
+        projectName,
+        projectLink: project.projectLink,
+        count: debugStoredRelationships.length,
+        seriesA50M: debugStoredRelationships.filter(
+          (row) => /series\s*a/i.test(row.round || "") && Number(row.formattedAmount) === 50000000
+        ),
+        rows: debugStoredRelationships,
+      });
+    }
+
     console.log("[rootdata-tampermonkey] 导入详情数据成功:", {
       projectName,
       projectLink,
@@ -1058,6 +1221,12 @@ router.post("/details/import", requireClientToken, async (req, res) => {
         isInitial,
         investmentRelationships,
         investedRelationships,
+        debug: debugTarget
+          ? {
+              receivedInvestors: summarizeInvestorsForDebug(investors),
+              storedRelationships: debugStoredRelationships,
+            }
+          : undefined,
       },
     });
   } catch (error) {

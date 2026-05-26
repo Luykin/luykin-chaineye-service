@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.5.6
+// @version      0.5.7
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -667,6 +667,35 @@
     const href = String(link?.href || "");
     const text = cleanText(link?.textContent || link?.getAttribute("aria-label") || "").toLowerCase();
     return isRootDataOwnedExternalUrl(text, href);
+  }
+
+  function isDebugDetailTarget(value) {
+    return /Variational/i.test(String(value?.projectName || value?.name || value?.projectLink || value?.detailUrl || value || ""));
+  }
+
+  function summarizeDetailForDebug(detail) {
+    const investors = Array.isArray(detail?.investors) ? detail.investors : [];
+    return {
+      projectName: detail?.projectName,
+      projectLink: detail?.projectLink,
+      detailUrl: detail?.detailUrl,
+      isInitial: detail?.isInitial,
+      socialLinks: detail?.socialLinks,
+      investorsCount: investors.length,
+      investors: investors.map((item) => ({
+        projectName: item.projectName,
+        projectLink: item.projectLink,
+        round: item.round,
+        amount: item.amount,
+        valuation: item.valuation,
+        date: item.date,
+        lead: item.lead,
+        source: item.source,
+      })),
+      seriesA50M: investors.filter((item) => /series\s*a/i.test(item.round || "") && /50\s*M/i.test(item.amount || "")),
+      investedProjectsCount: Array.isArray(detail?.investedProjects) ? detail.investedProjects.length : 0,
+      debug: detail?.debug,
+    };
   }
 
   function isNonEntityDetailScope(element) {
@@ -1512,13 +1541,23 @@
   }
 
   async function submitDetailData(detail, job) {
-    return requestJson({
+    if (isDebugDetailTarget(detail)) {
+      console.log("[RootData Reader][DEBUG Variational] submit detail payload:", summarizeDetailForDebug(detail));
+    }
+
+    const result = await requestJson({
       url: `${CONFIG.API_BASE}${CONFIG.DETAIL_IMPORT_ENDPOINT}`,
       body: {
         ...detail,
         scheduleSlot: job?.slot || null,
       },
     });
+
+    if (isDebugDetailTarget(detail)) {
+      console.log("[RootData Reader][DEBUG Variational] detail import response:", result);
+    }
+
+    return result;
   }
 
   async function submitDetailFailure(item, job, error, { isInitial = true } = {}) {
