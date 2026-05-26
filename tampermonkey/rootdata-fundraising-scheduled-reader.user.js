@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.6.5
+// @version      0.6.6
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -1100,6 +1100,63 @@
     return candidates.slice(0, 8);
   }
 
+  function hasExplicitLeadMarker(scope) {
+    if (!scope) return false;
+    if (scope.querySelector?.(".status_icon.status_position")) return true;
+    return Array.from(scope.querySelectorAll?.("span, div, em, strong, i") || [])
+      .some((node) => /^lead$/i.test(cleanText(node.textContent)));
+  }
+
+  function isLeadInvestorElement(element, text = "") {
+    const localText = cleanText(text || element?.textContent || "");
+    // RootData 旧版会在投资人名字后加 * 表示 Lead；只看当前链接/当前单元，不看整个 section。
+    if (/\*/.test(localText)) return true;
+
+    const card = element?.closest?.(
+      [
+        "a.card",
+        "a.card-warp",
+        ".card-warp",
+        ".item",
+        "tr",
+        "td",
+      ].join(", ")
+    ) || element;
+
+    return hasExplicitLeadMarker(card);
+  }
+
+  function findFundraisingInvestorScopes(doc) {
+    const scopes = [];
+    const pushScope = (scope) => {
+      if (!scope || scopes.some((existing) => existing === scope || existing.contains(scope))) return;
+      for (let index = scopes.length - 1; index >= 0; index -= 1) {
+        if (scope.contains(scopes[index])) scopes.splice(index, 1);
+      }
+      scopes.push(scope);
+    };
+
+    Array.from(doc.querySelectorAll(".investor, #detail_section_financials_fundraising")).forEach(pushScope);
+
+    Array.from(doc.querySelectorAll("section")).forEach((section) => {
+      const heading = cleanText(section.querySelector("h1, h2, h3, h4, [role='heading']")?.textContent);
+      if (!/^(Fundraising|Financing|Funding)$/i.test(heading)) return;
+
+      const hasInvestorSignal = Array.from(section.querySelectorAll("button, [role='tab'], th"))
+        .some((node) => /^(Investors?|Rounds?)$/i.test(cleanText(node.textContent)));
+      if (!hasInvestorSignal) return;
+
+      const hasEntityLinks = section.querySelector(
+        'a[href*="/investors/detail/"], a[href*="/Investors/detail/"], a[href*="/projects/detail/"], a[href*="/Projects/detail/"]'
+      );
+      if (!hasEntityLinks) return;
+
+      pushScope(section);
+    });
+
+    return scopes;
+  }
+
   function parseInitialInvestors(doc, detailUrl) {
     let items = Array.from(doc.querySelectorAll(".investor .row .item"));
     if (!items.length) items = Array.from(doc.querySelectorAll(".investor .item"));
@@ -1112,32 +1169,33 @@
           if (!entity) return null;
           return {
             ...entity,
-            lead: !!item.querySelector(".status_icon.status_position") || /\*/.test(cleanText(item.textContent)),
+            lead: isLeadInvestorElement(item),
             source: "initial",
           };
         })
         .filter(Boolean);
     }
 
-    const sections = findSectionElementsByKeywords(doc, [
-      "investor",
-      "investors",
-      "funding",
-      "financing",
-      "round",
-      "backers",
-      "投资",
-      "融资",
-    ]);
+    const links = findFundraisingInvestorScopes(doc).flatMap((section) =>
+      Array.from(
+        section.querySelectorAll(
+          'a[href*="/investors/detail/"], a[href*="/Investors/detail/"], a[href*="/projects/detail/"], a[href*="/Projects/detail/"]'
+        )
+      )
+    );
 
     return uniqueByLink(
-      sections.flatMap((section) =>
-        collectEntityLinks(section, detailUrl).map((entity) => ({
-          ...entity,
-          lead: /\*/.test(cleanText(section.textContent)),
-          source: "section",
-        }))
-      )
+      links
+        .map((anchor) => {
+          const entity = readEntityLink(anchor);
+          if (!entity || (detailUrl && isCurrentDetailLink(entity.projectLink, detailUrl))) return null;
+          return {
+            ...entity,
+            lead: isLeadInvestorElement(anchor, anchor.textContent),
+            source: "section",
+          };
+        })
+        .filter(Boolean)
     );
   }
 
@@ -1197,16 +1255,16 @@
           ).filter((element) => !element.closest("a"));
 
           const investorEntities = [
-            ...anchors.map((anchor) => ({ entity: readEntityLink(anchor), text: cleanText(anchor.textContent) })),
-            ...plainInvestorElements.map((element) => ({ entity: readPlainInvestorEntity(element), text: cleanText(element.textContent) })),
+            ...anchors.map((anchor) => ({ entity: readEntityLink(anchor), element: anchor, text: cleanText(anchor.textContent) })),
+            ...plainInvestorElements.map((element) => ({ entity: readPlainInvestorEntity(element), element, text: cleanText(element.textContent) })),
           ];
 
           investorEntities
-            .map(({ entity, text }) => {
+            .map(({ entity, element, text }) => {
               if (!entity || (detailUrl && isCurrentDetailLink(entity.projectLink, detailUrl))) return null;
               return {
                 ...entity,
-                lead: text.includes("*"),
+                lead: isLeadInvestorElement(element, text),
                 round: cleanText(cells[idxRound]?.textContent) || "--",
                 amount: cleanText(cells[idxAmount]?.textContent) || null,
                 valuation: cleanText(cells[idxValuation]?.textContent) || null,
@@ -1231,11 +1289,24 @@
   function mergeInvestorData(initial, rounds) {
     const resultMap = new Map();
     const roundNames = new Set();
+    const initialLeadByLink = new Map();
+    const initialLeadByName = new Map();
+
+    for (const item of initial || []) {
+      if (!item?.lead) continue;
+      if (item.projectLink) initialLeadByLink.set(item.projectLink, true);
+      if (item.projectName) initialLeadByName.set(item.projectName, true);
+    }
 
     for (const item of rounds || []) {
       roundNames.add(item.projectName);
       const key = `${item.projectLink}|${item.round || "--"}`;
-      if (!resultMap.has(key)) resultMap.set(key, item);
+      const mergedItem = {
+        ...item,
+        lead: Boolean(item.lead || initialLeadByLink.get(item.projectLink) || initialLeadByName.get(item.projectName)),
+      };
+      if (!resultMap.has(key)) resultMap.set(key, mergedItem);
+      else if (!resultMap.get(key).lead && mergedItem.lead) resultMap.set(key, mergedItem);
     }
 
     for (const item of initial || []) {
