@@ -118,6 +118,21 @@ export async function generateBinanceSquareUserIntros(params: {
   });
 }
 
+export async function refreshBinanceSquareUserProfiles(params: {
+  rankSet?: BinanceSquareRankSet;
+  limit?: number;
+  concurrency?: number;
+} = {}) {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(`${BASE}/users/refresh-profiles`, {
+    method: "POST",
+    body: {
+      rankSet: params.rankSet || "top1000",
+      limit: params.limit || 100,
+      concurrency: params.concurrency || 3,
+    },
+  });
+}
+
 export async function fetchBinanceSquareUserIntroProgress() {
   return apiRequest<BinanceSquareApiResponse<BinanceSquareUserIntroProgress>>(`${BASE}/users/generate-intros/progress`);
 }

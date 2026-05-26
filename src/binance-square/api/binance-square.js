@@ -552,6 +552,8 @@ async function syncSingleUserFollowing(targetUsername, options = {}) {
     try {
       if (userRecords.length > 0) {
         // 写入/更新用户（不覆盖isSeedUser/isTargetUser/followScore）
+        // following 接口返回的 totalFollowCount / totalLikeCount / totalShareCount 经常是 0，
+        // 不能用这些不可靠的 0 覆盖已有数据；关注数由同步目标用户自身关注列表后单独更新。
         await db.BinanceSquareUser.bulkCreate(userRecords, {
           updateOnDuplicate: [
             "displayName",
@@ -562,10 +564,7 @@ async function syncSingleUserFollowing(targetUsername, options = {}) {
             "verificationType",
             "verificationDescription",
             "totalFollowerCount",
-            "totalFollowingCount",
             "totalPostCount",
-            "totalLikeCount",
-            "totalShareCount",
             "accountLang",
             "isKol",
             "userStatus",
@@ -2013,9 +2012,10 @@ router.get("/target/list", async (req, res) => {
         verificationType: user?.verificationType ?? null,
         verificationDescription: user?.verificationDescription || null,
         totalFollowerCount: user?.totalFollowerCount ?? null,
-        totalFollowingCount: activeFollowingCountMap.has(lowerUsername)
-          ? activeFollowingCountMap.get(lowerUsername)
-          : user?.totalFollowingCount ?? null,
+        totalFollowingCount: preferPositiveFallback(
+          user?.totalFollowingCount,
+          activeFollowingCountMap.get(lowerUsername)
+        ),
         totalPostCount: user?.totalPostCount ?? null,
         totalLikeCount: preferPositiveFallback(user?.totalLikeCount, postAggregate.likeCount),
         totalShareCount: preferPositiveFallback(user?.totalShareCount, postAggregate.shareCount),
@@ -2082,6 +2082,107 @@ router.get("/target/progress", async (req, res) => {
     }));
   } catch (error) {
     console.error("[target/progress] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+async function refreshUserProfileByUsername(username) {
+  const profile = await apiClient.fetchUserProfile(username);
+  const updateData = {
+    username: profile.username || username,
+    squareUid: profile.squareUid ?? null,
+    displayName: profile.displayName ?? null,
+    avatar: profile.avatar ?? null,
+    biography: profile.biography ?? null,
+    role: profile.role ?? null,
+    verificationType: profile.verificationType ?? null,
+    verificationDescription: profile.verificationDescription ?? null,
+    totalFollowerCount: profile.totalFollowerCount ?? null,
+    totalFollowingCount: profile.totalFollowCount ?? null,
+    totalPostCount: profile.totalListedPostCount ?? profile.totalPostCount ?? null,
+    totalLikeCount: profile.totalLikeCount ?? null,
+    totalShareCount: profile.totalShareCount ?? null,
+    accountLang: profile.accountLang ?? null,
+    isKol: profile.isKol ?? null,
+    userStatus: profile.userStatus ?? null,
+    level: profile.level ?? null,
+    rawData: profile,
+  };
+
+  const [updatedCount] = await db.BinanceSquareUser.update(updateData, {
+    where: db.sequelize.where(
+      db.sequelize.fn("LOWER", db.sequelize.col("username")),
+      String(username).toLowerCase()
+    ),
+  });
+
+  if (!updatedCount) {
+    await db.BinanceSquareUser.create({
+      ...updateData,
+      username: profile.username || username,
+    });
+  }
+
+  return {
+    username: profile.username || username,
+    totalFollowerCount: profile.totalFollowerCount ?? null,
+    totalFollowingCount: profile.totalFollowCount ?? null,
+    totalPostCount: profile.totalListedPostCount ?? profile.totalPostCount ?? null,
+    totalLikeCount: profile.totalLikeCount ?? null,
+    totalShareCount: profile.totalShareCount ?? null,
+  };
+}
+
+/**
+ * POST /users/refresh-profiles
+ * 刷新目标用户个人主页统计数据。导出前调用，避免 Excel 导出 following 接口里的假 0。
+ */
+router.post("/users/refresh-profiles", async (req, res) => {
+  try {
+    const rankSet = normalizeRankSet(req.body?.rankSet || "top1000");
+    const limit = Math.min(parsePositiveInt(req.body?.limit, 100), 1000);
+    const concurrency = Math.max(1, Math.min(parsePositiveInt(req.body?.concurrency, 3), 8));
+
+    const ranks = await db.BinanceSquareTargetRank.findAll({
+      where: RANK_STAGE_CONFIG[rankSet] ? { rankSet } : {},
+      attributes: ["username", "rank"],
+      order: [["rankSet", "ASC"], ["rank", "ASC"]],
+      limit,
+      raw: true,
+    });
+    const usernames = Array.from(new Set(ranks.map((rank) => rank.username).filter(Boolean)));
+    const results = [];
+    const failed = [];
+    let cursor = 0;
+
+    const worker = async () => {
+      while (cursor < usernames.length) {
+        const index = cursor++;
+        const username = usernames[index];
+        try {
+          const profile = await refreshUserProfileByUsername(username);
+          results.push(profile);
+        } catch (error) {
+          console.warn(`[users/refresh-profiles] ${username} 刷新失败:`, error.message);
+          failed.push({ username, error: error.message });
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, usernames.length) }, () => worker()));
+
+    res.json(success({
+      message: `已刷新 ${results.length}/${usernames.length} 个用户 profile 数据`,
+      rankSet,
+      requested: limit,
+      total: usernames.length,
+      refreshed: results.length,
+      failed: failed.length,
+      failedDetails: failed.slice(0, 20),
+      sample: results.slice(0, 5),
+    }));
+  } catch (error) {
+    console.error("[users/refresh-profiles] error:", error);
     res.status(500).json(fail(error.message));
   }
 });

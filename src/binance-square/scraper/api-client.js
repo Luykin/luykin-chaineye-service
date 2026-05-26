@@ -211,6 +211,42 @@ async function fetchFollowingList(targetUsername, options = {}) {
 }
 
 /**
+ * 获取用户个人主页资料（profile页使用的接口）
+ * @param {string} username - 用户名（如 "CZ"）
+ * @returns {Promise<Object>}
+ */
+async function fetchUserProfile(username, options = {}) {
+  const res = await withRetry(
+    () =>
+      withLinkedSignal(options.signal, (requestSignal) =>
+        axios.post(
+          `${BASE_URL}/bapi/composite/v3/friendly/pgc/user/client`,
+          { username },
+          buildRequestConfig({
+            proxyUrl: options.proxyUrl,
+            signal: requestSignal,
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json, text/plain, */*",
+              "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+              "Referer": `${BASE_URL}/zh-CN/square/profile/${encodeURIComponent(username)}`,
+              "clienttype": "web",
+            },
+          })
+        )
+      ),
+    `fetchUserProfile(${username})`,
+    { signal: options.signal }
+  );
+
+  if (!res.data?.success || !res.data.data?.username) {
+    throw new Error(`用户Profile返回异常: ${JSON.stringify(res.data).slice(0, 300)}`);
+  }
+
+  return res.data.data;
+}
+
+/**
  * 获取用户帖子列表
  * @param {string} squareUid - 用户的squareUid
  * @param {string} filterType - "ALL" | "REPLY" | "QUOTE"
@@ -327,6 +363,7 @@ async function fetchPostDetail(postId, options = {}) {
 
 module.exports = {
   fetchFollowingList,
+  fetchUserProfile,
   fetchUserPosts,
   fetchPostDetail,
 };

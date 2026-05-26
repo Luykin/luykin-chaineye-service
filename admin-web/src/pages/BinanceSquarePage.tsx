@@ -50,6 +50,7 @@ import {
   pauseBinanceSquareScheduler,
   purgeBinanceSquareSnapshots,
   recalculateBinanceSquarePostScores,
+  refreshBinanceSquareUserProfiles,
   resetBinanceSquareRunningTasks,
   removeBinanceSquareSeed,
   startBinanceSquareScheduler,
@@ -605,10 +606,14 @@ export function BinanceSquarePage() {
   const exportTop1000Mutation = useMutation({
     mutationFn: async (limit: number) => {
       const exportLimit = normalizeExportLimit(limit);
+      await refreshBinanceSquareUserProfiles({ rankSet: "top1000", limit: exportLimit, concurrency: 3 });
       const result = await fetchBinanceSquareTargets("top1000", exportLimit);
       return downloadTop1000TargetsExcel(result.data || [], exportLimit);
     },
-    onSuccess: (count) => messageApi.success(`已导出 Top${count} 用户 Excel`),
+    onSuccess: (count) => {
+      messageApi.success(`已刷新并导出 Top${count} 用户 Excel`);
+      void targetsQuery.refetch();
+    },
     onError: (error: Error) => messageApi.error(error.message || "导出失败"),
   });
 
