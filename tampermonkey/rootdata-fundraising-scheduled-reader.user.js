@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.6.0
+// @version      0.6.1
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -40,7 +40,9 @@
     detailMaxProjectsPerRun: 1000,
     subDetailMaxProjectsPerRun: 3000,
     detailBatchSize: 10,
-    detailFrameTimeoutMs: 20 * 1000,
+    // RootData 新版详情页在隐藏/离屏 iframe 里容易被浏览器节流，导致 Next 内容不渲染。
+    // 因此 iframe 保持在视口内用缩放预览方式加载，并把超时放宽。
+    detailFrameTimeoutMs: 45 * 1000,
     detailFramePollIntervalMs: 500,
     detailBetweenMs: 1200,
 
@@ -516,24 +518,35 @@
 
     frame = document.createElement("iframe");
     frame.id = CONFIG.detailFrameId;
-    frame.setAttribute("aria-hidden", "true");
+    frame.setAttribute("title", "RootData detail crawler frame");
+    frame.loading = "eager";
     frame.style.cssText = [
       "position: fixed",
-      "left: -10000px",
-      "top: 0",
+      "left: 8px",
+      "top: 8px",
       "width: 1280px",
       "height: 900px",
-      "opacity: 0.01",
+      "transform: scale(0.08)",
+      "transform-origin: top left",
+      "opacity: 0.96",
       "pointer-events: none",
-      "border: 0",
-      "z-index: -1",
+      "border: 1px solid rgba(37,99,235,.45)",
+      "border-radius: 10px",
+      "background: #fff",
+      "box-shadow: 0 8px 28px rgba(15,23,42,.18)",
+      "z-index: 999998",
     ].join(";");
     document.body.appendChild(frame);
     return frame;
   }
 
   function removeDetailFrame() {
-    document.getElementById(CONFIG.detailFrameId)?.remove();
+    const frame = document.getElementById(CONFIG.detailFrameId);
+    if (!frame) return;
+    try {
+      frame.src = "about:blank";
+    } catch (_) {}
+    frame.remove();
   }
 
   function getFrameDocument(frame) {
