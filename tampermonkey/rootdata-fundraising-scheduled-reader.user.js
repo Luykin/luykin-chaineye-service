@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.6.2
+// @version      0.6.5
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -1255,24 +1255,48 @@
     return Array.from(resultMap.values());
   }
 
+  function findInvestmentProjectScopes(doc) {
+    const scopes = [];
+    const pushScope = (scope) => {
+      if (!scope || scopes.some((existing) => existing === scope || existing.contains(scope))) return;
+      for (let index = scopes.length - 1; index >= 0; index -= 1) {
+        if (scope.contains(scopes[index])) scopes.splice(index, 1);
+      }
+      scopes.push(scope);
+    };
+
+    // 旧版 RootData 投资模块。
+    Array.from(doc.querySelectorAll(".investment")).forEach(pushScope);
+
+    // 新版 Project 页：Financials -> Investment 模块，例如 Coinbase。
+    Array.from(doc.querySelectorAll("#detail_section_financials_investment")).forEach(pushScope);
+
+    // 新版 Investor 页：Overview 内的明确 Investment/Portfolio 区块，例如 YZi Labs。
+    Array.from(doc.querySelectorAll("section")).forEach((section) => {
+      const heading = cleanText(section.querySelector("h1, h2, h3, h4, [role='heading']")?.textContent);
+      if (!/^Investment$/i.test(heading)) return;
+
+      const hasPortfolioTab = Array.from(section.querySelectorAll("button, [role='tab']"))
+        .some((button) => /^Portfolio$/i.test(cleanText(button.textContent)));
+      if (!hasPortfolioTab) return;
+
+      const hasProjectLinks = section.querySelector(
+        'a[href*="/projects/detail/"], a[href*="/Projects/detail/"]'
+      );
+      if (!hasProjectLinks) return;
+
+      pushScope(section);
+    });
+
+    return scopes;
+  }
+
   function parseInvestmentItems(doc, detailUrl) {
-    const oldItems = Array.from(doc.querySelectorAll(".investment .row.list .item a.card, .investment a.card"))
-      .map(readEntityLink)
-      .filter(Boolean);
-    if (oldItems.length) return uniqueByLink(oldItems);
-
-    const sections = findSectionElementsByKeywords(doc, [
-      "portfolio",
-      "investments",
-      "investment",
-      "invested",
-      "投资组合",
-      "对外投资",
-    ]);
-
+    // 对外投资只读 RootData 明确的投资模块；不要用关键词兜底扫描。
+    // 否则融资表/新闻/翻译字典里出现 Investment、Portfolio 等词时，很容易把投资方误写成“对外投资项目”。
     return uniqueByLink(
-      sections.flatMap((section) =>
-        collectEntityLinks(section, detailUrl, { allowProjects: true, allowInvestors: false })
+      findInvestmentProjectScopes(doc).flatMap((scope) =>
+        collectEntityLinks(scope, detailUrl, { allowProjects: true, allowInvestors: false })
       )
     );
   }
@@ -1295,6 +1319,18 @@
     });
   }
 
+  async function expandInvestmentProjectScopes(doc) {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const buttons = findInvestmentProjectScopes(doc).flatMap((scope) =>
+        Array.from(scope.querySelectorAll("button"))
+          .filter((button) => /show\s*more/i.test(cleanText(button.textContent)))
+      );
+      if (!buttons.length) return;
+      buttons.forEach((button) => dispatchUserClick(doc, button));
+      await sleep(900);
+    }
+  }
+
   async function clickRoundsTab(doc) {
     const candidates = Array.from(doc.querySelectorAll("button, [role='tab']"));
     const roundsTab = candidates.find((button) => /^rounds$/i.test(cleanText(button.textContent)));
@@ -1314,16 +1350,18 @@
   }
 
   async function scrapeInvestedProjectsFromDetail(doc, detailUrl) {
-    if (doc.querySelector(".investment")) {
+    if (findInvestmentProjectScopes(doc).length > 0) {
       clickButtonsByText(doc, /portfolio/i);
       await sleep(1800);
+      await expandInvestmentProjectScopes(doc);
     }
     const portfolio = parseInvestmentItems(doc, detailUrl);
 
     let vc = [];
-    if (doc.querySelector(".investment") && /\/(?:investors|Investors)\/detail\//.test(detailUrl)) {
+    if (findInvestmentProjectScopes(doc).length > 0 && /\/(?:investors|Investors)\/detail\//.test(detailUrl)) {
       clickButtonsByText(doc, /\bvc\b/i);
       await sleep(1800);
+      await expandInvestmentProjectScopes(doc);
       vc = parseInvestmentItems(doc, detailUrl);
     }
 
@@ -1442,6 +1480,7 @@
         roundTables: findFundraisingRoundTables(doc).length,
         roundsInvestors: roundsInvestors.length,
         investmentItems: doc.querySelectorAll(".investment .item").length,
+        investmentSections: findInvestmentProjectScopes(doc).length,
       },
     };
   }
@@ -1460,7 +1499,7 @@
     }
 
     const details = parseDetailDocument(doc, detailUrl, { isInitial });
-    if (isInitial && !isMemberDetail) {
+    if (!isMemberDetail) {
       details.investedProjects = await scrapeInvestedProjectsFromDetail(doc, detailUrl);
     }
 
@@ -2084,7 +2123,7 @@
     }
 
     const details = parseDetailDocument(document, detailUrl, { isInitial });
-    if (isInitial && !isMemberDetail) {
+    if (!isMemberDetail) {
       details.investedProjects = await scrapeInvestedProjectsFromDetail(document, detailUrl);
     }
 

@@ -124,6 +124,11 @@ function summarizeInvestorsForDebug(items = []) {
   }));
 }
 
+function hasInvestedProjectsEvidence(payload) {
+  const debug = payload?.debug || {};
+  return Number(debug.investmentItems || 0) > 0 || Number(debug.investmentSections || 0) > 0;
+}
+
 function absoluteRootDataUrl(value) {
   if (!value) return "";
   try {
@@ -1204,6 +1209,9 @@ router.post("/details/import", requireClientToken, async (req, res) => {
   const investedProjects = Array.isArray(payload.investedProjects)
     ? payload.investedProjects
     : [];
+  const acceptedInvestedProjects = hasInvestedProjectsEvidence(payload)
+    ? investedProjects
+    : [];
   const isInitial = payload.isInitial !== false;
   const isMemberDetail = isRootDataMemberUrl(projectLink);
   const debugTarget = isDebugDetailTarget({ projectName, projectLink, detailUrl: payload.detailUrl });
@@ -1213,7 +1221,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       Boolean(socialLinks) ||
       teamMembers.length > 0 ||
       investors.length > 0 ||
-      investedProjects.length > 0);
+      acceptedInvestedProjects.length > 0);
 
   if (debugTarget) {
     debugLog("details.import.receivedPayload", {
@@ -1228,6 +1236,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       investors: summarizeInvestorsForDebug(investors),
       seriesA50M: investors.filter((item) => /series\s*a/i.test(item.round || "") && /\b50\s*M\b/i.test(item.amount || "")),
       investedProjectsCount: investedProjects.length,
+      ignoredInvestedProjectsCount: investedProjects.length - acceptedInvestedProjects.length,
       scheduleSlot,
       scrapedAt: payload.scrapedAt || null,
       debug: payload.debug || null,
@@ -1285,8 +1294,8 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     const investmentRelationships = isInitial && !isMemberDetail
       ? await upsertInvestmentRelationships(project, investors, program)
       : 0;
-    const investedRelationships = isInitial && !isMemberDetail
-      ? await upsertInvestedRelationships(project, investedProjects, program)
+    const investedRelationships = !isMemberDetail
+      ? await upsertInvestedRelationships(project, acceptedInvestedProjects, program)
       : 0;
 
     let debugStoredRelationships = null;
@@ -1341,6 +1350,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       teamMembers: teamMembers.length,
       investors: investors.length,
       investedProjects: investedProjects.length,
+      ignoredInvestedProjects: investedProjects.length - acceptedInvestedProjects.length,
       investmentRelationships,
       investedRelationships,
       scheduleSlot,
@@ -1355,6 +1365,7 @@ router.post("/details/import", requireClientToken, async (req, res) => {
         teamMembers: teamMembers.length,
         investors: investors.length,
         investedProjects: investedProjects.length,
+        ignoredInvestedProjects: investedProjects.length - acceptedInvestedProjects.length,
         investmentRelationships,
         investedRelationships,
       },
