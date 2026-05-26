@@ -1315,17 +1315,17 @@ router.get("/search", authenticateTokenOptional, async (req, res) => {
         message: "No keyword provided or keyword too short",
       });
     }
-    const username = String(req.get("x-user-id") || req?.user?.username || "")
-      .trim()
-      .toLowerCase();
-    if (username !== "luykinai") {
-      // TODO 修复后恢复
-      return res.json({
-        invested: null,
-        investor: null,
-        message: `1No keyword provided or keyword too short. ${username}`,
-      });
-    }
+    // const username = String(req.get("x-user-id") || req?.user?.username || "")
+    //   .trim()
+    //   .toLowerCase();
+    // if (username !== "luykinai") {
+    //   // TODO 修复后恢复
+    //   return res.json({
+    //     invested: null,
+    //     investor: null,
+    //     message: `1No keyword provided or keyword too short. ${username}`,
+    //   });
+    // }
 
     // const lowerKeyword = String(keyword).toLowerCase();
 
