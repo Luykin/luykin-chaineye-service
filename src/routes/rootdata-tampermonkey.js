@@ -489,6 +489,132 @@ function sanitizeTeamMembers(value) {
     .filter((member) => member.name || member.profileLink);
 }
 
+function normalizeTeamMemberForPosition(member) {
+  const name = cleanText(member?.name, 255) || parseNameFromRootDataDetailUrl(member?.profileLink || "");
+  const profileLink = canonicalRootDataDetailUrl(member?.profileLink || "");
+  const twitterUrl = normalizeXUrl(member?.twitterUrl || "");
+  const socialLinks = twitterUrl ? { x: twitterUrl } : null;
+
+  if (!name || !profileLink || !isRootDataMemberUrl(profileLink)) return null;
+
+  return {
+    name,
+    profileLink,
+    position: cleanText(member?.position, 255) || null,
+    avatar: cleanText(member?.avatar, 2000) || null,
+    socialLinks,
+    twitterUrl: twitterUrl || null,
+  };
+}
+
+async function syncTeamPositionRelationships(project, teamMembers, program = "auto_crawler", options = {}) {
+  const normalizedMembers = (teamMembers || [])
+    .map(normalizeTeamMemberForPosition)
+    .filter(Boolean);
+  const debugTarget = isDebugDetailTarget(project);
+  const source = /\/(?:investors|Investors)\/detail\//.test(project?.projectLink || "") ? "vc" : "project";
+  const sequelize = Fundraising.Project.sequelize;
+  const transaction = await sequelize.transaction();
+
+  const result = {
+    received: Array.isArray(teamMembers) ? teamMembers.length : 0,
+    normalized: normalizedMembers.length,
+    deleted: 0,
+    upserted: 0,
+    skipped: Math.max(0, (Array.isArray(teamMembers) ? teamMembers.length : 0) - normalizedMembers.length),
+  };
+
+  try {
+    // 只要详情页这次明确解析到了成员，就以最新成员列表为准重建该对象的职位关系。
+    // 如果没解析到成员，则不删除旧关系，避免页面渲染异常时误清空。
+    if (normalizedMembers.length > 0 || options.forceRefresh === true) {
+      result.deleted = await Fundraising.PositionRelationships.destroy({
+        where: { objectProjectId: project.id },
+        transaction,
+      });
+    }
+
+    for (const member of normalizedMembers) {
+      const [memberProject, created] = await findOrCreateProjectByDetailLink(
+        member.profileLink,
+        {
+          projectName: member.name,
+          projectLink: member.profileLink,
+          logo: member.avatar,
+          description: member.name,
+          isInitial: true,
+          socialLinks: member.socialLinks,
+          twitterUrl: member.twitterUrl,
+          detailFailuresNumber: 0,
+          detailFetchedAt: null,
+          updateProgram: program,
+        },
+        transaction
+      );
+
+      const memberUpdates = {
+        projectName: member.name,
+        updateProgram: program,
+      };
+      if (member.avatar) memberUpdates.logo = member.avatar;
+      if (member.socialLinks) {
+        memberUpdates.socialLinks = member.socialLinks;
+        memberUpdates.twitterUrl = member.twitterUrl;
+      }
+      if (created || member.avatar || member.socialLinks) {
+        await memberProject.update(memberUpdates, { transaction });
+      }
+
+      await Fundraising.PositionRelationships.findOrCreate({
+        where: {
+          subjectProjectId: memberProject.id,
+          objectProjectId: project.id,
+          position: member.position,
+        },
+        defaults: {
+          subjectProjectId: memberProject.id,
+          objectProjectId: project.id,
+          position: member.position,
+          source,
+          updateProgram: program,
+        },
+        transaction,
+      });
+      result.upserted += 1;
+    }
+
+    await transaction.commit();
+
+    if (debugTarget || result.received > 0) {
+      console.log("[rootdata-tampermonkey] 职位关系同步完成:", {
+        projectId: project.id,
+        projectName: project.projectName,
+        projectLink: project.projectLink,
+        source,
+        ...result,
+        members: normalizedMembers.map((member) => ({
+          name: member.name,
+          position: member.position,
+          profileLink: member.profileLink,
+          twitterUrl: member.twitterUrl,
+        })),
+      });
+    }
+
+    return result;
+  } catch (error) {
+    await transaction.rollback();
+    console.error("[rootdata-tampermonkey] 职位关系同步失败:", {
+      projectId: project?.id,
+      projectName: project?.projectName,
+      received: result.received,
+      normalized: result.normalized,
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
 async function upsertInvestmentRelationships(project, investors, program = "auto_crawler", options = {}) {
   const normalizedInvestors = (investors || [])
     .map(normalizeDetailEntity)
@@ -1398,6 +1524,13 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       isMemberDetail,
       logo: payload.logo || null,
       socialLinks: payload.socialLinks || null,
+      teamMembersCount: teamMembers.length,
+      teamMembers: teamMembers.map((member) => ({
+        name: member.name,
+        position: member.position,
+        profileLink: member.profileLink,
+        twitterUrl: member.twitterUrl,
+      })),
       investorsCount: investors.length,
       investors: summarizeInvestorsForDebug(investors),
       seriesA50M: investors.filter((item) => /series\s*a/i.test(item.round || "") && /\b50\s*M\b/i.test(item.amount || "")),
@@ -1458,6 +1591,10 @@ router.post("/details/import", requireClientToken, async (req, res) => {
     }
 
     await project.update(updateValues);
+
+    const positionRelationshipResult = !isMemberDetail
+      ? await syncTeamPositionRelationships(project, teamMembers, program)
+      : { received: teamMembers.length, normalized: 0, deleted: 0, upserted: 0, skipped: teamMembers.length };
 
     // member 人物页只修基础资料；不能把人物页里的 Work History / 相关项目写成融资关系。
     const investmentRelationships = isInitial && !isMemberDetail
@@ -1530,6 +1667,9 @@ router.post("/details/import", requireClientToken, async (req, res) => {
       investmentRelationships,
       investedRelationships,
       deletedInvestedRelationships,
+      positionRelationships: positionRelationshipResult.upserted,
+      deletedPositionRelationships: positionRelationshipResult.deleted,
+      skippedPositionMembers: positionRelationshipResult.skipped,
       forceRefreshInvestedRelationships,
       forceRefreshInvestmentRelationships,
       cleanupWindowStart: cleanupWindowStart ? cleanupWindowStart.toISOString() : null,
@@ -1549,6 +1689,9 @@ router.post("/details/import", requireClientToken, async (req, res) => {
         investmentRelationships,
         investedRelationships,
         deletedInvestedRelationships,
+        positionRelationships: positionRelationshipResult.upserted,
+        deletedPositionRelationships: positionRelationshipResult.deleted,
+        skippedPositionMembers: positionRelationshipResult.skipped,
       },
       meta: {
         projectName,
@@ -1571,6 +1714,9 @@ router.post("/details/import", requireClientToken, async (req, res) => {
         investmentRelationships,
         investedRelationships,
         deletedInvestedRelationships,
+        positionRelationships: positionRelationshipResult.upserted,
+        deletedPositionRelationships: positionRelationshipResult.deleted,
+        skippedPositionMembers: positionRelationshipResult.skipped,
         debug: debugTarget
           ? {
               receivedInvestors: summarizeInvestorsForDebug(investors),
@@ -1608,6 +1754,19 @@ router.post("/details/failure", requireClientToken, async (req, res) => {
     parseNameFromRootDataDetailUrl(projectLink) ||
     "Unknown";
   const scheduleSlot = payload.scheduleSlot || null;
+  const debugTarget = isDebugDetailTarget({ projectName, projectLink, detailUrl: payload.detailUrl });
+
+  if (debugTarget) {
+    console.warn("[rootdata-tampermonkey][DEBUG] details.failure.received:", {
+      projectName,
+      projectLink,
+      isInitial: payload.isInitial !== false,
+      error: payload.error || null,
+      details: payload.details || null,
+      pageUrl: payload.pageUrl || null,
+      scrapedAt: payload.scrapedAt || null,
+    });
+  }
 
   if (!projectLink || !isRootDataDetailUrl(projectLink)) {
     return res.status(400).json({

@@ -240,7 +240,7 @@ async function cleanupRootDataProjectsForRecrawl(projectIds, transaction) {
   );
 
   if (!normalizedIds.length) {
-    return { projectIds: [], resetProjects: 0, deletedInvestmentRelationships: 0 };
+    return { projectIds: [], resetProjects: 0, deletedInvestmentRelationships: 0, deletedPositionRelationships: 0 };
   }
 
   const deletedInvestmentRelationships = await Fundraising.InvestmentRelationships.destroy({
@@ -248,6 +248,16 @@ async function cleanupRootDataProjectsForRecrawl(projectIds, transaction) {
       [Op.or]: [
         { fundedProjectId: { [Op.in]: normalizedIds } },
         { investorProjectId: { [Op.in]: normalizedIds } },
+      ],
+    },
+    transaction,
+  });
+
+  const deletedPositionRelationships = await Fundraising.PositionRelationships.destroy({
+    where: {
+      [Op.or]: [
+        { objectProjectId: { [Op.in]: normalizedIds } },
+        { subjectProjectId: { [Op.in]: normalizedIds } },
       ],
     },
     transaction,
@@ -274,6 +284,7 @@ async function cleanupRootDataProjectsForRecrawl(projectIds, transaction) {
     projectIds: normalizedIds,
     resetProjects: resetProjects || 0,
     deletedInvestmentRelationships,
+    deletedPositionRelationships,
   };
 }
 
@@ -549,7 +560,7 @@ router.post("/rootdata/force-recrawl/prepare", async (req, res) => {
           recrawlItems.map((item) => item.id),
           transaction
         )
-      : { projectIds: recrawlItems.map((item) => item.id), resetProjects: 0, deletedInvestmentRelationships: 0 };
+      : { projectIds: recrawlItems.map((item) => item.id), resetProjects: 0, deletedInvestmentRelationships: 0, deletedPositionRelationships: 0 };
 
     await transaction.commit();
 
@@ -562,6 +573,7 @@ router.post("/rootdata/force-recrawl/prepare", async (req, res) => {
         matches: recrawlItems.length,
         resetProjects: cleanupResult.resetProjects,
         deletedInvestmentRelationships: cleanupResult.deletedInvestmentRelationships,
+        deletedPositionRelationships: cleanupResult.deletedPositionRelationships,
       },
       meta: {
         query,
