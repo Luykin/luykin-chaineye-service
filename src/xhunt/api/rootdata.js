@@ -1303,7 +1303,7 @@ async function batchUpdateProjectLogos(avatarMap, Fundraising) {
  * GET /api/rootdata/search
  * 根据 Twitter 用户名搜索项目信息
  */
-router.get("/search", authenticateTokenOptional, async (req, res) => {
+router.get("/search", async (req, res) => {
   try {
     // 1. 参数验证和清理
     let { keyword } = req.query;
