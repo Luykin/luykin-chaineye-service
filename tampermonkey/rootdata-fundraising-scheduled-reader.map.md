@@ -20,7 +20,7 @@ It is intentionally documentation-only: the userscript remains a single Tampermo
 | SECTION 6: DETAIL BASIC PROFILE PARSER | ~1490 | Parse detail page basic fields and assemble final detail payload | `parseBasicDetail`, `parseDetailDocument`, `crawlDetailPage`, `crawlCurrentDetailPage` |
 | SECTION 7: API CLIENT / SERVER SUBMISSION | ~1744 | Backend submission endpoints and request wrapper | `requestJson`, `submitData`, `submitDetailCleanup`, `submitDetailData`, `submitDetailFailure`, `fetchDetailQueue` |
 | SECTION 8: DETAIL / RECRAWL JOB ORCHESTRATION | ~1953 | Detail queue execution, recrawl batching, current-tab continuation, sub-detail crawl | `runRecrawlBatchJob`, `runDetailBatchJob`, `crawlDetailsForRows`, `startBatchedDetailsForRows` |
-| SECTION 9: PANEL UI AND PAGE-LEVEL WORKFLOWS | ~2869 | Floating status panel, manual scrape workflow, scheduled loop, bootstrapping | `renderPanel`, `startRefreshThenScrape`, `scrapeCurrentPage`, `initScheduleLoop`, `bootstrap` |
+| SECTION 9: PANEL UI AND PAGE-LEVEL WORKFLOWS | ~2869 | Floating status panel, idle countdown, manual scrape workflow, scheduled loop, bootstrapping | `getNextScheduleInfo`, `formatDuration`, `renderPanel`, `updateIdleCountdown`, `startRefreshThenScrape`, `scrapeCurrentPage`, `initScheduleLoop`, `bootstrap` |
 | SECTION 10: DEBUG / CONSOLE API | ~3233 | Public console API exposed as `RootDataFundraisingCollector` | `exposeDebugApi`, `cleanAndRecrawlHomepageTop`, `recrawlDetails`, `resumeRecrawlDetails`, `debugDetail`, `status` |
 
 ## Common edit targets
@@ -54,6 +54,22 @@ Use when logo, X/Twitter, website, LinkedIn, team members, or project title pars
 - Main functions:
   - `parseBasicDetail`
   - `parseDetailDocument`
+
+
+### Idle countdown in floating panel
+
+Use when changing how the panel displays the next scheduled auto run.
+
+- Section: 9
+- Main functions:
+  - `getNextScheduleInfo`
+  - `formatDuration`
+  - `renderPanel`
+  - `updateIdleCountdown`
+- Config:
+  - `CONFIG.scheduleBeijingTimes`
+  - `CONFIG.idleCountdownRefreshMs`
+- Behavior: countdown appears only for idle-like panel states (`idle`, `copied`, `copy_failed`) and updates every second while on the Fundraising page.
 
 ### Cleanup + recrawl current homepage top projects
 

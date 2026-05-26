@@ -43,6 +43,7 @@
     // 北京时间：对应原 scheduler 的 07:10 与 18:10
     scheduleBeijingTimes: ["07:10", "18:10"],
     scheduleCheckIntervalMs: 30 * 1000,
+    idleCountdownRefreshMs: 1000,
 
     maxWaitMs: 30 * 1000,
     pollIntervalMs: 500,
@@ -2870,10 +2871,55 @@
   // - Floating status panel, scrape current page, scheduler loop, bootstrap
   // ============================================================================
 
+  function getNextScheduleInfo(date = new Date()) {
+    const bj = getBeijingParts(date);
+    const [year, month, day] = bj.date.split("-").map(Number);
+    const nowTime = date.getTime();
+    const candidates = [];
+
+    for (const dayOffset of [0, 1]) {
+      for (const slot of CONFIG.scheduleBeijingTimes) {
+        const [hour, minute] = String(slot).split(":").map(Number);
+        if (!Number.isFinite(hour) || !Number.isFinite(minute)) continue;
+        // Beijing is UTC+8. Date.UTC creates UTC time, so subtract 8 hours.
+        const triggerTime = Date.UTC(year, month - 1, day + dayOffset, hour - 8, minute, 0, 0);
+        if (triggerTime > nowTime) candidates.push({ slot, triggerTime });
+      }
+    }
+
+    candidates.sort((a, b) => a.triggerTime - b.triggerTime);
+    const next = candidates[0] || null;
+    if (!next) return null;
+
+    const triggerDate = new Date(next.triggerTime);
+    const triggerBeijing = getBeijingParts(triggerDate);
+    return {
+      slot: next.slot,
+      triggerTime: next.triggerTime,
+      triggerBeijing: triggerBeijing.full,
+      remainingMs: Math.max(0, next.triggerTime - nowTime),
+    };
+  }
+
+  function formatDuration(ms) {
+    const totalSeconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const pad = (value) => String(value).padStart(2, "0");
+    return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+  }
+
+  function isIdlePanelState(state) {
+    const status = String(state?.status || "");
+    return status === "idle" || status === "copied" || status === "copy_failed";
+  }
+
   function renderPanel(state) {
     const panel = createPanel();
     const data = state.data || [];
     const preview = data.slice(0, 5);
+    const nextSchedule = isIdlePanelState(state) ? getNextScheduleInfo() : null;
 
     panel.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
@@ -2884,6 +2930,14 @@
       <div style="margin-bottom:6px;color:#cbd5e1;">Status:
         <span style="color:${state.ok ? "#86efac" : "#fca5a5"}">${escapeHtml(state.status || "-")}</span>
       </div>
+      ${
+        nextSchedule
+          ? `<div style="margin-bottom:6px;color:#cbd5e1;">Next Auto Run:
+              <strong id="rd-fr-countdown" data-next-trigger="${nextSchedule.triggerTime}" style="color:#38bdf8;">${escapeHtml(formatDuration(nextSchedule.remainingMs))}</strong>
+              <span style="color:#94a3b8;">(${escapeHtml(nextSchedule.triggerBeijing)} BJT)</span>
+            </div>`
+          : ""
+      }
       <div style="margin-bottom:6px;color:#cbd5e1;">Rows:
         <strong style="color:#facc15;">${data.length}</strong>
       </div>
@@ -2929,6 +2983,17 @@
         renderPanel({ ...state, status: "copy_failed", error: error.message });
       }
     });
+
+    updateIdleCountdown(panel);
+  }
+
+  function updateIdleCountdown(panel = createPanel()) {
+    const countdown = panel.querySelector("#rd-fr-countdown");
+    if (!countdown) return;
+    const triggerTime = Number(countdown.getAttribute("data-next-trigger") || 0);
+    if (!Number.isFinite(triggerTime) || triggerTime <= 0) return;
+    const remainingMs = Math.max(0, triggerTime - Date.now());
+    countdown.textContent = formatDuration(remainingMs);
   }
 
   function saveLastResult(result) {
@@ -3196,6 +3261,7 @@
   function initScheduleLoop() {
     if (!isFundraisingPage()) return;
     setInterval(checkSchedule, CONFIG.scheduleCheckIntervalMs);
+    setInterval(() => updateIdleCountdown(), CONFIG.idleCountdownRefreshMs);
     checkSchedule();
   }
 
