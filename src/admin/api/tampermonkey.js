@@ -524,7 +524,7 @@ router.post("/rootdata/force-recrawl/prepare", async (req, res) => {
         ["updatedAt", "DESC"],
         ["id", "DESC"],
       ],
-      limit: 10,
+      limit: 1,
       transaction,
     });
 

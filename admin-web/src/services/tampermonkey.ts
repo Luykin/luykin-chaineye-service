@@ -93,7 +93,6 @@ export interface RootDataLookupItem {
   investmentsGiven: RootDataInvestmentRelationship[];
 }
 
-
 export interface RootDataForceRecrawlPrepareResponse {
   success: boolean;
   data: {
@@ -156,7 +155,6 @@ export async function lookupRootDataProject(query: string) {
     `/api/admin/tampermonkey/rootdata/lookup?${params.toString()}`
   );
 }
-
 
 export async function prepareRootDataForceRecrawl(params: { query: string; cleanup?: boolean }) {
   return apiRequest<RootDataForceRecrawlPrepareResponse>(

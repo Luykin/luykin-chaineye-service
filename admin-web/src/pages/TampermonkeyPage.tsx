@@ -3,15 +3,12 @@ import {
   Alert,
   Button,
   Card,
-  Col,
   Descriptions,
   Empty,
   Form,
   Input,
   Modal,
-  Row,
   Space,
-  Statistic,
   Table,
   Tag,
   Tooltip,
@@ -37,18 +34,16 @@ import {
   fetchCollectorTokens,
   fetchTampermonkeyScriptContent,
   fetchTampermonkeyScripts,
-  fetchRootdataDetailPollutionAudit,
   lookupRootDataProject,
+  prepareRootDataForceRecrawl,
   revokeCollectorToken,
   type CollectorTokenItem,
   type RootDataInvestmentRelationship,
   type TampermonkeyScriptItem,
 } from "@/services/tampermonkey";
-import type { RootdataDetailPollutionProject } from "@/types/stats";
 
 const COLLECTOR_STATS_HASH =
   "#/generic-stats?type=collector.tampermonkey.crawl&subjectId=rootdata-fundraising";
-const TABLE_MAX_HEIGHT = 480;
 
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
@@ -87,15 +82,12 @@ export function TampermonkeyPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<{ name: string }>();
   const [lookupForm] = Form.useForm<{ query: string }>();
+  const [forceRecrawlForm] = Form.useForm<{ query: string }>();
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [previewFileName, setPreviewFileName] = useState<string | null>(null);
 
   const tokensQuery = useQuery({ queryKey: ["tampermonkey", "tokens"], queryFn: fetchCollectorTokens });
   const scriptsQuery = useQuery({ queryKey: ["tampermonkey", "scripts"], queryFn: fetchTampermonkeyScripts });
-  const pollutionAuditQuery = useQuery({
-    queryKey: ["tampermonkey", "rootdata-detail-pollution-audit"],
-    queryFn: () => fetchRootdataDetailPollutionAudit({ limit: 100 }),
-  });
   const scriptContentQuery = useQuery({
     queryKey: ["tampermonkey", "script", previewFileName],
     queryFn: () => fetchTampermonkeyScriptContent(previewFileName!),
@@ -134,12 +126,27 @@ export function TampermonkeyPage() {
     onError: (error: Error) => messageApi.error(error.message || "查询 RootData 导入数据失败"),
   });
 
+  const forceRecrawlMutation = useMutation({
+    mutationFn: (query: string) => prepareRootDataForceRecrawl({ query, cleanup: true }),
+    onSuccess: async (resp) => {
+      try {
+        await copyText(resp.data.command);
+        messageApi.success(
+          `已清理 ${resp.data.cleanupResult.resetProjects} 个项目、${resp.data.cleanupResult.deletedInvestmentRelationships} 条关系，并复制强制重爬命令`
+        );
+      } catch (_) {
+        messageApi.warning("已完成清理，请手动复制下方强制重爬命令");
+      }
+    },
+    onError: (error: Error) => messageApi.error(error.message || "准备 RootData 强制重爬失败"),
+  });
+
   const tokenRows = tokensQuery.data?.data || [];
   const activeTokenCount = tokenRows.filter((item) => item.isActive && !item.expired).length;
   const scriptRows = scriptsQuery.data?.data || [];
   const previewContent = scriptContentQuery.data?.data.content || "";
   const lookupItems = lookupMutation.data?.data.items || [];
-  const pollutionAudit = pollutionAuditQuery.data?.data;
+  const forceRecrawlResult = forceRecrawlMutation.data?.data;
 
   const tokenColumns: ColumnsType<CollectorTokenItem> = useMemo(
     () => [
@@ -335,70 +342,6 @@ export function TampermonkeyPage() {
     []
   );
 
-  const pollutionColumns: ColumnsType<RootdataDetailPollutionProject> = useMemo(
-    () => [
-      {
-        title: "等级",
-        dataIndex: "severity",
-        key: "severity",
-        width: 100,
-        render: (value: RootdataDetailPollutionProject["severity"]) => {
-          const color = value === "critical" ? "red" : value === "warning" ? "orange" : "blue";
-          return <Tag color={color}>{value}</Tag>;
-        },
-      },
-      {
-        title: "项目",
-        key: "projectName",
-        width: 260,
-        render: (_, record) => (
-          <Space direction="vertical" size={0}>
-            <Typography.Link href={record.projectLink || undefined} target="_blank">
-              {record.projectName || "-"}
-            </Typography.Link>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {record.entityType || "-"} · ID: {record.id}
-            </Typography.Text>
-          </Space>
-        ),
-      },
-      {
-        title: "原因",
-        key: "reasons",
-        render: (_, record) => (
-          <Space wrap size={[4, 4]}>
-            {[...record.reasons, ...record.reviewReasons.map((item) => `review:${item}`)].map((reason) => (
-              <Tag key={reason}>{reason}</Tag>
-            ))}
-          </Space>
-        ),
-      },
-      {
-        title: "Twitter",
-        dataIndex: "twitterUrl",
-        key: "twitterUrl",
-        width: 220,
-        ellipsis: true,
-        render: (value: string | null | undefined) =>
-          value ? (
-            <Typography.Link href={value} target="_blank">
-              {value}
-            </Typography.Link>
-          ) : (
-            "-"
-          ),
-      },
-      {
-        title: "更新时间",
-        dataIndex: "updatedAt",
-        key: "updatedAt",
-        width: 170,
-        render: (value: string | null | undefined) => formatDateTime(value),
-      },
-    ],
-    []
-  );
-
   return (
     <PermissionGuard permission="tampermonkey">
       {contextHolder}
@@ -422,9 +365,8 @@ export function TampermonkeyPage() {
               onClick={() => {
                 void tokensQuery.refetch();
                 void scriptsQuery.refetch();
-                void pollutionAuditQuery.refetch();
               }}
-              loading={tokensQuery.isFetching || scriptsQuery.isFetching || pollutionAuditQuery.isFetching}
+              loading={tokensQuery.isFetching || scriptsQuery.isFetching}
             >
               刷新
             </Button>
@@ -508,79 +450,77 @@ export function TampermonkeyPage() {
         </PageSection>
 
         <PageSection
-          title="RootData 详情污染验证"
-          description="重爬后在这里刷新验证剩余污染项；复制命令会包含所有确定污染项，不只前 30 个。"
+          title="RootData 强制重爬项目"
+          description="输入项目名、RootData 详情链接或数据库 ID；后台会先清空匹配到的第一个项目详情字段并删除它的被投/对外投资关系，然后复制 Tampermonkey 强制重爬命令。"
         >
-          <Card
-            extra={
-              <Space wrap>
-                <Button onClick={() => pollutionAuditQuery.refetch()} loading={pollutionAuditQuery.isFetching}>
-                  刷新验证
-                </Button>
-                <Button
-                  disabled={!pollutionAudit?.tampermonkeyQueue.length}
-                  icon={<CopyOutlined />}
-                  onClick={async () => {
-                    if (!pollutionAudit?.tampermonkeyQueue.length) return;
-                    const queue = pollutionAudit.tampermonkeyQueue.map(({ projectName, projectLink }) => ({
-                      projectName,
-                      projectLink,
-                    }));
-                    const command = `await RootDataFundraisingCollector.recrawlDetails(${JSON.stringify(queue)}, { maxInitial: ${queue.length}, maxSub: 0 })`;
-                    await copyText(command);
-                    messageApi.success(`已复制 ${queue.length} 个确定污染项的全量重爬命令`);
-                  }}
-                >
-                  复制全量重爬命令
-                </Button>
-              </Space>
-            }
-          >
-            {pollutionAuditQuery.isError ? (
+          <Card>
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
               <Alert
-                type="error"
+                type="warning"
                 showIcon
-                message="加载详情污染验证失败"
-                description={pollutionAuditQuery.error instanceof Error ? pollutionAuditQuery.error.message : undefined}
+                message="注意：点击后会立即删除匹配项目的投资关系和详情字段"
+                description="删除完成后，请到 RootData 页面打开浏览器控制台，粘贴已复制的命令执行重爬；详情提交时会再次带 forceRefresh 参数，确保关系重建。"
               />
-            ) : pollutionAudit ? (
-              <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                <Alert
-                  type={pollutionAudit.summary.definite > 0 ? "warning" : "success"}
-                  showIcon
-                  message={
-                    pollutionAudit.tampermonkeyQueue.length > 0
-                      ? `还有 ${pollutionAudit.tampermonkeyQueue.length} 个项目/机构污染项可重爬`
-                      : "当前没有确定污染项"
-                  }
-                  description={`扫描 ${pollutionAudit.summary.scanned} 个项目，生成时间：${formatDateTime(pollutionAudit.generatedAt)}。确定污染 ${pollutionAudit.summary.definite} 个，其中 ${pollutionAudit.summary.unsupported || 0} 个不是 Projects/Investors，复制命令只包含可重爬项。`}
-                />
-                <Row gutter={[16, 16]}>
-                  <Col xs={12} md={6}>
-                    <Card size="small"><Statistic title="Critical" value={pollutionAudit.summary.critical} valueStyle={{ color: "#cf1322" }} /></Card>
-                  </Col>
-                  <Col xs={12} md={6}>
-                    <Card size="small"><Statistic title="Warning" value={pollutionAudit.summary.warning} valueStyle={{ color: "#d46b08" }} /></Card>
-                  </Col>
-                  <Col xs={12} md={6}>
-                    <Card size="small"><Statistic title="Review" value={pollutionAudit.summary.review} /></Card>
-                  </Col>
-                  <Col xs={12} md={6}>
-                    <Card size="small"><Statistic title="可重爬" value={pollutionAudit.tampermonkeyQueue.length} /></Card>
-                  </Col>
-                </Row>
-                <Table
-                  rowKey={(record) => String(record.id)}
-                  columns={pollutionColumns}
-                  dataSource={pollutionAudit.projects}
-                  scroll={{ y: TABLE_MAX_HEIGHT, x: 980 }}
-                  pagination={{ pageSize: 20 }}
-                  locale={{ emptyText: <Empty description="暂无异常项目" /> }}
-                />
-              </Space>
-            ) : (
-              <Empty description="暂无验证数据" />
-            )}
+              <Form
+                form={forceRecrawlForm}
+                layout="inline"
+                className="tm-lookup-form"
+                onFinish={(values) => {
+                  const query = values.query.trim();
+                  Modal.confirm({
+                    title: "确认强制清理并重爬这个项目？",
+                    content: "后台会立即删除匹配项目的被投/对外投资关系，并清空详情字段。确认后会复制 Tampermonkey 重爬命令。",
+                    okText: "确认清理",
+                    okButtonProps: { danger: true },
+                    cancelText: "取消",
+                    onOk: () => forceRecrawlMutation.mutate(query),
+                  });
+                }}
+              >
+                <Form.Item
+                  name="query"
+                  rules={[{ required: true, message: "请输入项目名、RootData 详情链接或数据库 ID" }]}
+                  style={{ minWidth: 420, flex: 1 }}
+                >
+                  <Input
+                    allowClear
+                    prefix={<ReloadOutlined />}
+                    placeholder="例如 MegaETH 或 https://www.rootdata.com/projects/detail/MegaETH?k=..."
+                  />
+                </Form.Item>
+                <Form.Item>
+                  <Button danger type="primary" htmlType="submit" loading={forceRecrawlMutation.isPending}>
+                    清理关系并复制重爬命令
+                  </Button>
+                </Form.Item>
+              </Form>
+
+              {forceRecrawlResult ? (
+                <Card size="small" title="强制重爬命令" extra={
+                  <Button
+                    size="small"
+                    icon={<CopyOutlined />}
+                    onClick={() => copyText(forceRecrawlResult.command).then(() => messageApi.success("命令已复制"))}
+                  >
+                    复制命令
+                  </Button>
+                }>
+                  <Descriptions bordered size="small" column={{ xs: 1, md: 3 }} style={{ marginBottom: 12 }}>
+                    <Descriptions.Item label="匹配项目">{forceRecrawlResult.items.length}</Descriptions.Item>
+                    <Descriptions.Item label="重置项目">{forceRecrawlResult.cleanupResult.resetProjects}</Descriptions.Item>
+                    <Descriptions.Item label="删除关系">{forceRecrawlResult.cleanupResult.deletedInvestmentRelationships}</Descriptions.Item>
+                  </Descriptions>
+                  <Space wrap style={{ marginBottom: 12 }}>
+                    {forceRecrawlResult.items.map((item) => (
+                      <Tag key={item.id} color="blue">{item.projectName} · ID:{item.id}</Tag>
+                    ))}
+                  </Space>
+                  <Typography.Paragraph className="tm-token-value" copyable={{ text: forceRecrawlResult.command }}>
+                    {forceRecrawlResult.command}
+                  </Typography.Paragraph>
+                </Card>
+              ) : null}
+            </Space>
           </Card>
         </PageSection>
 
