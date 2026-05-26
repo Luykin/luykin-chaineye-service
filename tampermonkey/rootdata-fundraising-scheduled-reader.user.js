@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.5.3
+// @version      0.5.6
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -41,10 +41,19 @@
     detailFramePollIntervalMs: 500,
     detailBetweenMs: 1200,
 
+    // localStorage 空间有限：批量任务只存最小必要字段，并定期清理。
+    recrawlJobTtlMs: 24 * 60 * 60 * 1000,
+    pendingJobTtlMs: 2 * 60 * 60 * 1000,
+    maxStoredRecrawlItems: 1200,
+    maxStoredRecrawlErrors: 40,
+    maxStoredLastRunDays: 14,
+    maxStoredLastResultRows: 50,
+
     panelId: "rd-fundraising-reader-panel-v3",
     detailFrameId: "rd-fundraising-detail-frame-v3",
     storageKeys: {
       pendingJob: "rd_fr_pending_job_v3",
+      recrawlJob: "rd_fr_recrawl_job_v3",
       lastRunMap: "rd_fr_last_run_map_v3",
       lastResult: "rd_fr_last_result_v3",
     },
@@ -147,6 +156,19 @@
     const map = getLastRunMap();
     map[slotKey] = value;
     localStorage.setItem(CONFIG.storageKeys.lastRunMap, JSON.stringify(map));
+    pruneLastRunMap();
+  }
+
+  function pruneLastRunMap() {
+    const map = getLastRunMap();
+    const keys = Object.keys(map).sort();
+    const maxKeys = Math.max(1, Number(CONFIG.maxStoredLastRunDays || 14) * CONFIG.scheduleBeijingTimes.length);
+    if (keys.length <= maxKeys) return;
+
+    for (const key of keys.slice(0, keys.length - maxKeys)) {
+      delete map[key];
+    }
+    localStorage.setItem(CONFIG.storageKeys.lastRunMap, JSON.stringify(map));
   }
 
   function getPendingJob() {
@@ -159,6 +181,105 @@
 
   function clearPendingJob() {
     localStorage.removeItem(CONFIG.storageKeys.pendingJob);
+  }
+
+  function getTimeMs(value) {
+    const time = Date.parse(value || "");
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  function isOlderThan(value, ttlMs) {
+    const time = getTimeMs(value);
+    return Boolean(time && Date.now() - time > ttlMs);
+  }
+
+  function compactStatsForStorage(stats, total = 0) {
+    if (!stats) return null;
+    return {
+      enabled: stats.enabled !== false,
+      initialTotal: Number(stats.initialTotal || total || 0),
+      initialSuccess: Number(stats.initialSuccess || 0),
+      initialFailed: Number(stats.initialFailed || 0),
+      subTotal: Number(stats.subTotal || 0),
+      subSuccess: Number(stats.subSuccess || 0),
+      subFailed: Number(stats.subFailed || 0),
+      errors: Array.isArray(stats.errors)
+        ? stats.errors
+            .slice(-CONFIG.maxStoredRecrawlErrors)
+            .map((item) => ({
+              projectName: cleanText(item.projectName).slice(0, 160),
+              projectLink: String(item.projectLink || "").slice(0, 1000),
+              error: String(item.error || "").slice(0, 500),
+            }))
+        : [],
+    };
+  }
+
+  function compactRecrawlJobForStorage(job) {
+    const items = normalizeRecrawlItems(job?.items || []).slice(0, CONFIG.maxStoredRecrawlItems);
+    return {
+      id: String(job?.id || `recrawl-${Date.now()}`),
+      slot: cleanText(job?.slot || "manual-console-recrawl-details-batched"),
+      reason: cleanText(job?.reason || "manual_console_recrawl_details_batched"),
+      nextAction: job?.nextAction === "recrawl_after_reload" ? "recrawl_after_reload" : null,
+      cursor: Math.min(Math.max(0, Number(job?.cursor || 0)), items.length),
+      batchSize: Math.max(1, Number(job?.batchSize || 10)),
+      maxSub: Math.max(0, Number(job?.maxSub || 0)),
+      items,
+      stats: compactStatsForStorage(job?.stats, items.length),
+      lastBatchStats: compactStatsForStorage(job?.lastBatchStats, 0),
+      createdAt: job?.createdAt || nowIso(),
+      updatedAt: job?.updatedAt || nowIso(),
+      lastError: job?.lastError ? String(job.lastError).slice(0, 500) : null,
+    };
+  }
+
+  function getRecrawlJob() {
+    return safeJsonParse(localStorage.getItem(CONFIG.storageKeys.recrawlJob), null);
+  }
+
+  function setRecrawlJob(job) {
+    const compactJob = compactRecrawlJobForStorage(job);
+    try {
+      localStorage.setItem(CONFIG.storageKeys.recrawlJob, JSON.stringify(compactJob));
+    } catch (error) {
+      // localStorage 配额满时，优先清掉非关键缓存，再用更小的错误列表重试。
+      console.warn("[RootData Reader] recrawl job storage failed, pruning caches:", error);
+      localStorage.removeItem(CONFIG.storageKeys.lastResult);
+      compactJob.stats = compactStatsForStorage({ ...compactJob.stats, errors: [] }, compactJob.items.length);
+      compactJob.lastBatchStats = null;
+      localStorage.setItem(CONFIG.storageKeys.recrawlJob, JSON.stringify(compactJob));
+    }
+  }
+
+  function clearRecrawlJob() {
+    localStorage.removeItem(CONFIG.storageKeys.recrawlJob);
+  }
+
+  function releaseDetailResources() {
+    removeDetailFrame();
+  }
+
+  function reloadAfterRelease(reason, delayMs = 1500) {
+    releaseDetailResources();
+    console.log("[RootData Reader] release resources and reload:", { reason, delayMs });
+    setTimeout(() => location.reload(), delayMs);
+  }
+
+  function cleanupLocalStorageState() {
+    pruneLastRunMap();
+
+    const pendingJob = getPendingJob();
+    if (pendingJob && isOlderThan(pendingJob.updatedAt || pendingJob.createdAt, CONFIG.pendingJobTtlMs)) {
+      console.warn("[RootData Reader] stale pending job cleared:", pendingJob);
+      clearPendingJob();
+    }
+
+    const recrawlJob = getRecrawlJob();
+    if (recrawlJob && isOlderThan(recrawlJob.updatedAt || recrawlJob.createdAt, CONFIG.recrawlJobTtlMs)) {
+      console.warn("[RootData Reader] stale recrawl job cleared:", summarizeRecrawlJob(recrawlJob));
+      clearRecrawlJob();
+    }
   }
 
   function parseEntityIdFromK(rawUrl) {
@@ -1437,6 +1558,171 @@
       .slice(0, CONFIG.detailMaxProjectsPerRun);
   }
 
+  function normalizeRecrawlItems(items) {
+    const list = Array.isArray(items) ? items : [items];
+    return uniqueByLink(
+      list
+        .map((item) => {
+          const rawLink = typeof item === "string" ? item : item?.projectLink || item?.link || "";
+          const projectLink = canonicalRootDataDetailUrl(absoluteUrl(rawLink));
+          return {
+            projectName:
+              (typeof item === "object" && cleanText(item.projectName || item.name)) ||
+              parseNameFromDetailUrl(projectLink),
+            projectLink,
+          };
+        })
+        .filter(
+          (item) =>
+            item.projectName &&
+            (/rootdata\.com\/(?:projects|Projects|investors|Investors)\/detail\//.test(item.projectLink) ||
+              /rootdata\.com\/member\//.test(item.projectLink))
+        )
+    );
+  }
+
+  function summarizeRecrawlJob(job) {
+    if (!job) return null;
+    return {
+      id: job.id,
+      slot: job.slot,
+      cursor: Number(job.cursor || 0),
+      total: Array.isArray(job.items) ? job.items.length : 0,
+      batchSize: job.batchSize,
+      maxSub: job.maxSub,
+      stats: job.stats || null,
+      updatedAt: job.updatedAt || null,
+      createdAt: job.createdAt || null,
+      lastError: job.lastError || null,
+    };
+  }
+
+  async function runRecrawlBatchJob(job) {
+    if (!job || !Array.isArray(job.items) || !job.items.length) {
+      clearRecrawlJob();
+      return { ok: false, error: "empty_recrawl_job" };
+    }
+
+    const total = job.items.length;
+    const cursor = Math.max(0, Number(job.cursor || 0));
+    const batchSize = Math.max(1, Number(job.batchSize || 10));
+    const batch = job.items.slice(cursor, cursor + batchSize);
+
+    if (!batch.length) {
+      clearRecrawlJob();
+      releaseDetailResources();
+      renderPanel({
+        ok: true,
+        status: "recrawl_batched_done_reloading",
+        retryCount: 0,
+        data: job.items,
+        detailStats: job.stats || null,
+      });
+      reloadAfterRelease("recrawl_batched_done_empty_batch");
+      return { ok: true, done: true, stats: job.stats || null };
+    }
+
+    const batchNo = Math.floor(cursor / batchSize) + 1;
+    const batchTotal = Math.ceil(total / batchSize);
+    const batchJob = {
+      id: `${job.id}-batch-${batchNo}`,
+      slot: job.slot || "manual-console-recrawl-details-batched",
+      reason: "manual_console_recrawl_details_batched",
+      retryCount: 0,
+      createdAt: nowIso(),
+      batchNo,
+      batchTotal,
+    };
+
+    renderPanel({
+      ok: true,
+      status: `recrawl_batch:${batchNo}/${batchTotal} items:${cursor + 1}-${cursor + batch.length}/${total}`,
+      retryCount: 0,
+      data: batch,
+      detailStats: job.stats || null,
+    });
+
+    const oldMaxInitial = CONFIG.detailMaxProjectsPerRun;
+    const oldMaxSub = CONFIG.subDetailMaxProjectsPerRun;
+    CONFIG.detailMaxProjectsPerRun = batch.length;
+    CONFIG.subDetailMaxProjectsPerRun = Math.max(0, Number(job.maxSub || 0));
+
+    let batchStats = null;
+    try {
+      batchStats = await crawlDetailsForRows(batch, batchJob, { allowInvestors: true });
+    } catch (error) {
+      batchStats = {
+        enabled: true,
+        initialTotal: batch.length,
+        initialSuccess: 0,
+        initialFailed: batch.length,
+        subTotal: 0,
+        subSuccess: 0,
+        subFailed: 0,
+        errors: batch.map((item) => ({
+          projectName: item.projectName,
+          projectLink: item.projectLink,
+          error: error.message,
+        })),
+      };
+      console.error("[RootData Reader] recrawl batch crashed:", error);
+    } finally {
+      CONFIG.detailMaxProjectsPerRun = oldMaxInitial;
+      CONFIG.subDetailMaxProjectsPerRun = oldMaxSub;
+    }
+
+    const stats = {
+      enabled: true,
+      initialTotal: total,
+      initialSuccess: Number(job.stats?.initialSuccess || 0) + Number(batchStats?.initialSuccess || 0),
+      initialFailed: Number(job.stats?.initialFailed || 0) + Number(batchStats?.initialFailed || 0),
+      subTotal: Number(job.stats?.subTotal || 0) + Number(batchStats?.subTotal || 0),
+      subSuccess: Number(job.stats?.subSuccess || 0) + Number(batchStats?.subSuccess || 0),
+      subFailed: Number(job.stats?.subFailed || 0) + Number(batchStats?.subFailed || 0),
+      errors: [
+        ...(job.stats?.errors || []),
+        ...(batchStats?.errors || []),
+      ].slice(-CONFIG.maxStoredRecrawlErrors),
+    };
+
+    const nextCursor = cursor + batch.length;
+    const nextJob = {
+      ...job,
+      cursor: nextCursor,
+      stats,
+      lastBatchStats: batchStats,
+      nextAction: "recrawl_after_reload",
+      updatedAt: nowIso(),
+    };
+
+    if (nextCursor >= total) {
+      clearRecrawlJob();
+      releaseDetailResources();
+      renderPanel({
+        ok: true,
+        status: "recrawl_batched_done_reloading",
+        retryCount: 0,
+        data: job.items,
+        detailStats: stats,
+      });
+      console.log("[RootData Reader] ✅ recrawl batched done:", stats);
+      reloadAfterRelease("recrawl_batched_done");
+      return { ok: true, done: true, stats };
+    }
+
+    setRecrawlJob(nextJob);
+    renderPanel({
+      ok: true,
+      status: `recrawl_batch_done_reloading:${nextCursor}/${total}`,
+      retryCount: 0,
+      data: batch,
+      detailStats: stats,
+    });
+    console.log("[RootData Reader] recrawl batch done, reload to continue:", summarizeRecrawlJob(nextJob));
+    reloadAfterRelease("recrawl_batch_continue");
+    return { ok: true, done: false, nextCursor, total, stats };
+  }
+
   async function crawlDetailsForRows(rows, job, options = {}) {
     if (!CONFIG.detailEnabled) {
       return { enabled: false, initialSuccess: 0, initialFailed: 0, subSuccess: 0, subFailed: 0 };
@@ -1632,7 +1918,18 @@
   }
 
   function saveLastResult(result) {
-    localStorage.setItem(CONFIG.storageKeys.lastResult, JSON.stringify(result));
+    const compactResult = {
+      ...result,
+      data: Array.isArray(result?.data) ? result.data.slice(0, CONFIG.maxStoredLastResultRows) : [],
+      rowsCount: Number(result?.rowsCount || result?.data?.length || 0),
+    };
+
+    try {
+      localStorage.setItem(CONFIG.storageKeys.lastResult, JSON.stringify(compactResult));
+    } catch (error) {
+      console.warn("[RootData Reader] last result storage failed, dropping cached result:", error);
+      localStorage.removeItem(CONFIG.storageKeys.lastResult);
+    }
   }
 
   function startRefreshThenScrape({ slot, reason }) {
@@ -1787,6 +2084,15 @@
   }
 
   async function bootstrap() {
+    cleanupLocalStorageState();
+
+    const recrawlJob = getRecrawlJob();
+    if (recrawlJob?.nextAction === "recrawl_after_reload") {
+      console.log("[RootData Reader] recrawl job found after reload:", summarizeRecrawlJob(recrawlJob));
+      await runRecrawlBatchJob(recrawlJob);
+      return;
+    }
+
     const pendingJob = getPendingJob();
 
     if (pendingJob?.nextAction === "scrape_after_reload") {
@@ -1859,28 +2165,46 @@
 
       /**
        * 按审计脚本输出的项目清单重爬详情并提交服务端。
-       * 控制台调用：await RootDataFundraisingCollector.recrawlDetails([{ projectName, projectLink }], { maxInitial: 30, maxSub: 0 })
+       * 控制台调用：await RootDataFundraisingCollector.recrawlDetails([{ projectName, projectLink }], { batchSize: 10, maxSub: 0 })
        */
       async recrawlDetails(items, options = {}) {
-        const list = Array.isArray(items) ? items : [items];
-        const data = uniqueByLink(
-          list
-            .map((item) => {
-              const rawLink = typeof item === "string" ? item : item?.projectLink || item?.link || "";
-              const projectLink = canonicalRootDataDetailUrl(absoluteUrl(rawLink));
-              return {
-                projectName:
-                  (typeof item === "object" && cleanText(item.projectName || item.name)) ||
-                  parseNameFromDetailUrl(projectLink),
-                projectLink,
-              };
-            })
-            .filter((item) => item.projectName && (/rootdata\.com\/(?:projects|Projects|investors|Investors)\/detail\//.test(item.projectLink) || /rootdata\.com\/member\//.test(item.projectLink)))
-        );
+        const data = normalizeRecrawlItems(items);
+        const batchSize = Math.max(1, Number(options.batchSize || options.reloadEvery || 10));
+        const shouldBatch = options.reloadBetweenBatches !== false && data.length > batchSize;
+
+        if (shouldBatch) {
+          const job = {
+            id: `manual-console-recrawl-details-batched-${Date.now()}`,
+            slot: options.slot || "manual-console-recrawl-details-batched",
+            reason: "manual_console_recrawl_details_batched",
+            nextAction: "recrawl_after_reload",
+            cursor: 0,
+            batchSize,
+            maxSub: Number.isFinite(Number(options.maxSub)) ? Number(options.maxSub) : 0,
+            items: data,
+            stats: {
+              enabled: true,
+              initialTotal: data.length,
+              initialSuccess: 0,
+              initialFailed: 0,
+              subTotal: 0,
+              subSuccess: 0,
+              subFailed: 0,
+              errors: [],
+            },
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+          };
+
+          setRecrawlJob(job);
+          console.log("[RootData Reader] recrawl batched job started:", summarizeRecrawlJob(job));
+          return runRecrawlBatchJob(job);
+        }
 
         const oldMaxInitial = CONFIG.detailMaxProjectsPerRun;
         const oldMaxSub = CONFIG.subDetailMaxProjectsPerRun;
         if (Number.isFinite(Number(options.maxInitial))) CONFIG.detailMaxProjectsPerRun = Number(options.maxInitial);
+        else CONFIG.detailMaxProjectsPerRun = data.length;
         if (Number.isFinite(Number(options.maxSub))) CONFIG.subDetailMaxProjectsPerRun = Number(options.maxSub);
 
         const job = {
@@ -1896,7 +2220,24 @@
         } finally {
           CONFIG.detailMaxProjectsPerRun = oldMaxInitial;
           CONFIG.subDetailMaxProjectsPerRun = oldMaxSub;
+          if (options.reloadOnDone !== false) {
+            clearRecrawlJob();
+            reloadAfterRelease("recrawl_direct_done");
+          }
         }
+      },
+
+      /**
+       * 继续/查看/清理批量重爬任务。
+       */
+      async resumeRecrawlDetails() {
+        const job = getRecrawlJob();
+        if (!job) return { ok: false, error: "no_recrawl_job" };
+        return runRecrawlBatchJob(job);
+      },
+
+      recrawlStatus() {
+        return summarizeRecrawlJob(getRecrawlJob());
       },
 
       /**
@@ -1965,19 +2306,21 @@
               CONFIG.CLIENT_TOKEN !== "REPLACE_WITH_LONG_RANDOM_TOKEN",
           },
           pendingJob: getPendingJob(),
+          recrawlJob: summarizeRecrawlJob(getRecrawlJob()),
           lastResult: safeJsonParse(localStorage.getItem(CONFIG.storageKeys.lastResult), null),
           beijingTime: getBeijingParts().full,
         };
       },
 
       clearPendingJob,
+      clearRecrawlJob,
     };
 
     window.RootDataFundraisingCollector = debugApi;
     PAGE_WINDOW.RootDataFundraisingCollector = debugApi;
 
     console.log(
-      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), parse(), crawlDetailsNow(), recrawlDetails(items), debugDetail(url), testConnection(), sendTestAlert(), status()"
+      "[RootData Reader] debug api ready: RootDataFundraisingCollector.run(), scrapeNow(), parse(), crawlDetailsNow(), recrawlDetails(items), resumeRecrawlDetails(), recrawlStatus(), debugDetail(url), testConnection(), sendTestAlert(), status()"
     );
   }
 
