@@ -12,6 +12,10 @@ const MAX_IMPORT_ROWS = parseInt(
   process.env.COLLECTOR_MAX_IMPORT_ROWS || "100",
   10
 );
+const MAX_DETAIL_QUEUE_LIMIT = parseInt(
+  process.env.COLLECTOR_MAX_DETAIL_QUEUE_LIMIT || "5000",
+  10
+);
 
 function safeEqual(leftValue, rightValue) {
   const left = Buffer.from(String(leftValue || ""));
@@ -700,6 +704,105 @@ function sanitizeImportRow(row, page) {
   };
 }
 
+function clampDetailQueueLimit(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 10;
+  return Math.min(Math.max(1, Math.floor(num)), MAX_DETAIL_QUEUE_LIMIT);
+}
+
+function buildInitialDetailQueueOptions(limit) {
+  const now = Date.now();
+  const daysAgo1 = now - 2.5 * 24 * 60 * 60 * 1000;
+  const daysAgo2 = now - 2 * 24 * 60 * 60 * 1000;
+
+  return {
+    attributes: [
+      "id",
+      "projectName",
+      "projectLink",
+      "isInitial",
+      "detailFetchedAt",
+      "detailFailuresNumber",
+      "fundedAt",
+      "originalPageNumber",
+    ],
+    where: {
+      isInitial: true,
+      [Op.or]: [
+        { "$investmentsReceived.id$": null },
+        { socialLinks: { [Op.eq]: null } },
+        { fundedAt: { [Op.gte]: daysAgo1 } },
+      ],
+      detailFailuresNumber: { [Op.lte]: 8 },
+      projectLink: { [Op.like]: "http%" },
+      detailFetchedAt: {
+        [Op.or]: [
+          { [Op.is]: null },
+          { [Op.lt]: daysAgo2 },
+        ],
+      },
+    },
+    include: [
+      {
+        model: Fundraising.InvestmentRelationships,
+        as: "investmentsReceived",
+        required: false,
+        attributes: ["id"],
+      },
+    ],
+    order: [
+      [
+        literal('CASE WHEN "Project"."originalPageNumber" IS NULL THEN 1 ELSE 0 END'),
+        "ASC",
+      ],
+      ["originalPageNumber", "ASC"],
+      ["updatedAt", "ASC"],
+      ["id", "ASC"],
+    ],
+    subQuery: false,
+    limit,
+  };
+}
+
+function buildSubDetailQueueOptions(limit) {
+  return {
+    attributes: [
+      "id",
+      "projectName",
+      "projectLink",
+      "isInitial",
+      "detailFetchedAt",
+      "detailFailuresNumber",
+      "originalPageNumber",
+    ],
+    where: {
+      isInitial: false,
+      detailFailuresNumber: { [Op.lte]: 8 },
+      socialLinks: null,
+      projectLink: { [Op.like]: "http%" },
+    },
+    order: [
+      ["detailFailuresNumber", "ASC"],
+      ["updatedAt", "ASC"],
+      ["id", "ASC"],
+    ],
+    limit,
+  };
+}
+
+function serializeDetailQueueItem(project) {
+  return {
+    id: project.id,
+    projectName: project.projectName,
+    projectLink: canonicalRootDataDetailUrl(project.projectLink),
+    isInitial: project.isInitial,
+    detailFetchedAt: project.detailFetchedAt,
+    detailFailuresNumber: project.detailFailuresNumber,
+    fundedAt: project.fundedAt || null,
+    originalPageNumber: project.originalPageNumber || null,
+  };
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -1011,6 +1114,57 @@ router.post("/import", requireClientToken, async (req, res) => {
       skippedItems: skipped,
     },
   });
+});
+
+router.get("/details/queue", requireClientToken, async (req, res) => {
+  const phase = String(req.query.phase || "initial").toLowerCase() === "sub"
+    ? "sub"
+    : "initial";
+  const limit = clampDetailQueueLimit(req.query.limit);
+  const scheduleSlot = req.query.scheduleSlot || null;
+
+  try {
+    const options = phase === "sub"
+      ? buildSubDetailQueueOptions(limit)
+      : buildInitialDetailQueueOptions(limit);
+    const rows = await Fundraising.Project.findAll(options);
+    const items = rows.map(serializeDetailQueueItem);
+
+    console.log("[rootdata-tampermonkey] details queue fetched:", {
+      phase,
+      requestedLimit: req.query.limit || null,
+      limit,
+      count: items.length,
+      scheduleSlot,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        phase,
+        limit,
+        count: items.length,
+        items,
+        serverTime: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("[rootdata-tampermonkey] 获取详情队列失败:", error);
+    await safeRecordCollectorStat(req, "detail_queue_failure", {
+      scheduleSlot,
+      meta: {
+        phase,
+        limit,
+        error: error.message,
+      },
+    });
+
+    return res.status(500).json({
+      success: false,
+      error: "DETAIL_QUEUE_FAILED",
+      message: error.message,
+    });
+  }
 });
 
 router.post("/details/import", requireClientToken, async (req, res) => {

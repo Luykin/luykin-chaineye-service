@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RootData Fundraising Scheduled Reader
 // @namespace    https://cryptohunt.ai/
-// @version      0.5.9
+// @version      0.6.0
 // @description  Scheduled RootData fundraising reader with refresh, retry, import and alert.
 // @author       luykin
 // @match        https://www.rootdata.com/fundraising*
@@ -21,6 +21,7 @@
     API_BASE: "https://kb.cryptohunt.ai",
     ALERT_ENDPOINT: "/api/internal/rootdata/fundraising/alert",
     IMPORT_ENDPOINT: "/api/internal/rootdata/fundraising/import",
+    DETAIL_QUEUE_ENDPOINT: "/api/internal/rootdata/fundraising/details/queue",
     DETAIL_IMPORT_ENDPOINT: "/api/internal/rootdata/fundraising/details/import",
     DETAIL_FAILURE_ENDPOINT: "/api/internal/rootdata/fundraising/details/failure",
     PING_ENDPOINT: "/api/internal/rootdata/fundraising/ping",
@@ -1478,6 +1479,15 @@
     });
   }
 
+  function buildUrlWithQuery(url, query = {}) {
+    const target = new URL(url, location.origin);
+    for (const [key, value] of Object.entries(query || {})) {
+      if (value === null || value === undefined || value === "") continue;
+      target.searchParams.set(key, String(value));
+    }
+    return target.toString();
+  }
+
   async function sendAlert(payload) {
     const url = `${CONFIG.API_BASE}${CONFIG.ALERT_ENDPOINT}`;
     console.warn("[RootData Reader] sending alert:", payload);
@@ -1548,6 +1558,24 @@
         scrapedAt: nowIso(),
       },
     });
+  }
+
+  async function fetchDetailQueue(phase, limit, job) {
+    const url = buildUrlWithQuery(`${CONFIG.API_BASE}${CONFIG.DETAIL_QUEUE_ENDPOINT}`, {
+      phase,
+      limit,
+      scheduleSlot: job?.slot || null,
+    });
+    const result = await requestJson({ url, method: "GET" });
+    const items = normalizeRecrawlItems(result?.data?.items || []);
+    console.log("[RootData Reader] detail queue fetched:", {
+      phase,
+      limit,
+      count: items.length,
+      serverCount: result?.data?.count,
+      serverTime: result?.data?.serverTime,
+    });
+    return items;
   }
 
   async function submitDetailData(detail, job) {
@@ -1674,6 +1702,7 @@
       slot: cleanText(job?.slot || "manual-console-details-batched"),
       reason: cleanText(job?.reason || "details_batched"),
       nextAction: job?.nextAction === "details_after_reload" ? "details_after_reload" : null,
+      queueMode: job?.queueMode === "server" ? "server" : "local",
       phase,
       cursor: Math.min(Math.max(0, Number(job?.cursor || 0)), items.length),
       subCursor: Math.min(Math.max(0, Number(job?.subCursor || 0)), subItems.length),
@@ -1715,6 +1744,7 @@
       id: job.id,
       slot: job.slot,
       phase: job.phase || "initial",
+      queueMode: job.queueMode || "local",
       cursor: Number(job.cursor || 0),
       total: Array.isArray(job.items) ? job.items.length : 0,
       subCursor: Number(job.subCursor || 0),
@@ -1950,7 +1980,14 @@
       return { ok: false, error: "details_disabled" };
     }
 
-    if (!job || !Array.isArray(job.items) || !job.items.length) {
+    const phase = job?.phase === "sub" ? "sub" : "initial";
+    if (
+      !job ||
+      (
+        phase !== "sub" &&
+        (!Array.isArray(job.items) || !job.items.length)
+      )
+    ) {
       clearDetailJob();
       reloadAfterRelease("empty_detail_job");
       return { ok: false, error: "empty_detail_job" };
@@ -1958,7 +1995,6 @@
 
     const batchSize = Math.max(1, Number(job.batchSize || CONFIG.detailBatchSize || 10));
     const initialItems = normalizeRecrawlItems(job.items).slice(0, CONFIG.detailMaxProjectsPerRun);
-    const phase = job.phase === "sub" ? "sub" : "initial";
     const stats = job.stats || emptyDetailStats({ initialTotal: initialItems.length });
 
     if (phase === "initial") {
@@ -1985,8 +2021,19 @@
         });
 
         const nextCursor = cursor + batch.length;
-        const subItems = normalizeSubDetailItems([...(job.subItems || []), ...result.discoveredSubItems])
-          .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
+        let subItems = [];
+        if (job.queueMode === "server") {
+          try {
+            subItems = await fetchDetailQueue("sub", Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)), job);
+          } catch (error) {
+            console.error("[RootData Reader] fetch sub queue failed, fallback to discovered sub items:", error);
+            subItems = normalizeSubDetailItems(result.discoveredSubItems)
+              .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
+          }
+        } else {
+          subItems = normalizeSubDetailItems([...(job.subItems || []), ...result.discoveredSubItems])
+            .slice(0, Math.max(0, Number(job.maxSub || CONFIG.subDetailMaxProjectsPerRun)));
+        }
         const nextStats = mergeDetailStats(stats, result.stats);
         nextStats.initialTotal = initialItems.length;
 
@@ -2342,13 +2389,69 @@
     }
   }
 
-  function startBatchedDetailsForRows(rows, job) {
-    const items = buildDetailQueueFromRows(rows);
+  async function startBatchedDetailsForRows(rows, job) {
+    let items = [];
+    try {
+      items = await fetchDetailQueue("initial", CONFIG.detailMaxProjectsPerRun, job);
+    } catch (error) {
+      console.error("[RootData Reader] fetch initial detail queue failed:", error);
+      await sendAlert({
+        scheduleSlot: job?.slot,
+        reason: `detail_queue_failed: ${error.message}`,
+        retryCount: job?.retryCount || 0,
+        maxRetries: CONFIG.maxRetries,
+        details: { phase: "initial", error: error.message },
+        job,
+      });
+      throw error;
+    }
+
+    if (!items.length) {
+      try {
+        const subItems = await fetchDetailQueue("sub", CONFIG.subDetailMaxProjectsPerRun, job);
+        if (subItems.length) {
+          const subOnlyJob = {
+            id: `${job.id || job.slot || "run"}-details-${Date.now()}`,
+            slot: job.slot || "manual-console-details-batched",
+            reason: `${job.reason || "run"}_sub_details_batched`,
+            nextAction: "details_after_reload",
+            queueMode: "server",
+            phase: "sub",
+            cursor: 0,
+            subCursor: 0,
+            batchSize: Math.max(1, Number(CONFIG.detailBatchSize || 10)),
+            maxSub: Math.max(0, Number(CONFIG.subDetailMaxProjectsPerRun || 0)),
+            items: [],
+            subItems,
+            stats: emptyDetailStats({ initialTotal: 0, subTotal: subItems.length }),
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+          };
+          setDetailJob(subOnlyJob);
+          console.log("[RootData Reader] sub details batched job started:", summarizeDetailJob(subOnlyJob));
+          return runDetailBatchJob(subOnlyJob);
+        }
+      } catch (error) {
+        console.error("[RootData Reader] fetch sub detail queue failed after empty initial queue:", error);
+      }
+
+      clearDetailJob();
+      renderPanel({
+        ok: true,
+        status: "detail_queue_empty_reloading",
+        retryCount: job.retryCount || 0,
+        data: rows,
+      });
+      reloadAfterRelease("detail_queue_empty");
+      return { ok: true, done: true, stats: emptyDetailStats() };
+    }
+
     const detailJob = {
       id: `${job.id || job.slot || "run"}-details-${Date.now()}`,
       slot: job.slot || "manual-console-details-batched",
       reason: `${job.reason || "run"}_details_batched`,
       nextAction: "details_after_reload",
+      queueMode: "server",
       phase: "initial",
       cursor: 0,
       subCursor: 0,
@@ -2727,6 +2830,7 @@
             apiBase: CONFIG.API_BASE,
             alertEndpoint: CONFIG.ALERT_ENDPOINT,
             importEndpoint: CONFIG.IMPORT_ENDPOINT,
+            detailQueueEndpoint: CONFIG.DETAIL_QUEUE_ENDPOINT,
             detailImportEndpoint: CONFIG.DETAIL_IMPORT_ENDPOINT,
             detailFailureEndpoint: CONFIG.DETAIL_FAILURE_ENDPOINT,
             pingEndpoint: CONFIG.PING_ENDPOINT,
