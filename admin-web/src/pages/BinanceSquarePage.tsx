@@ -175,7 +175,8 @@ function downloadTop1000TargetsExcel(records: BinanceSquareTargetRankItem[], lim
   const exportLimit = normalizeExportLimit(limit);
   const rows = records
     .filter((record) => record.rankSet === "top1000" || !record.rankSet)
-    .sort((a, b) => (a.rank || Number.MAX_SAFE_INTEGER) - (b.rank || Number.MAX_SAFE_INTEGER))
+    // 保持和网页目标用户列表完全一致的顺序：Table 不做前端排序，直接使用 /target/list 返回顺序。
+    // 后端会按 rankSet、来源关注次数 followerCount、原始 rank 排序后重新生成展示 rank。
     .slice(0, exportLimit);
 
   if (rows.length === 0) {
