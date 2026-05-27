@@ -2159,6 +2159,38 @@ async function refreshUserProfileByUsername(username) {
 }
 
 /**
+ * POST /users/refresh-profile
+ * 刷新单个目标用户个人主页统计数据。用于人工检查发现异常后单独拉取。
+ */
+router.post("/users/refresh-profile", async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").trim();
+    if (!username) {
+      return res.status(400).json(fail("username必填"));
+    }
+
+    const startedAt = Date.now();
+    console.log(`[users/refresh-profile] start username=${username}`);
+    const profile = await refreshUserProfileByUsername(username);
+    console.log(
+      `[users/refresh-profile] success username=${profile.username || username} durationMs=${Date.now() - startedAt} ` +
+        `followers=${profile.totalFollowerCount ?? "null"} following=${profile.totalFollowingCount ?? "null"} ` +
+        `posts=${profile.totalPostCount ?? "null"} likes=${profile.totalLikeCount ?? "null"} shares=${profile.totalShareCount ?? "null"}`
+    );
+
+    res.json(success({
+      message: `已刷新 ${profile.username || username} 的 profile 数据`,
+      username: profile.username || username,
+      durationMs: Date.now() - startedAt,
+      profile,
+    }));
+  } catch (error) {
+    console.error("[users/refresh-profile] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
  * POST /users/refresh-profiles
  * 刷新目标用户个人主页统计数据。导出前调用，避免 Excel 导出 following 接口里的假 0。
  */

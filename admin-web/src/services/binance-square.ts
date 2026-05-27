@@ -135,6 +135,13 @@ export async function refreshBinanceSquareUserProfiles(params: {
   });
 }
 
+export async function refreshBinanceSquareUserProfile(username: string) {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(`${BASE}/users/refresh-profile`, {
+    method: "POST",
+    body: { username },
+  });
+}
+
 export async function fetchBinanceSquareUserIntroProgress() {
   return apiRequest<BinanceSquareApiResponse<BinanceSquareUserIntroProgress>>(`${BASE}/users/generate-intros/progress`);
 }

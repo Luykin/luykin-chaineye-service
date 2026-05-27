@@ -50,7 +50,7 @@ import {
   pauseBinanceSquareScheduler,
   purgeBinanceSquareSnapshots,
   recalculateBinanceSquarePostScores,
-  refreshBinanceSquareUserProfiles,
+  refreshBinanceSquareUserProfile,
   resetBinanceSquareRunningTasks,
   removeBinanceSquareSeed,
   startBinanceSquareScheduler,
@@ -440,6 +440,7 @@ export function BinanceSquarePage() {
   const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
   const [cleanupRetentionDays, setCleanupRetentionDays] = useState(30);
   const [top1000ExportLimit, setTop1000ExportLimit] = useState(TOP1000_EXPORT_DEFAULT);
+  const [refreshingProfileUsername, setRefreshingProfileUsername] = useState<string | null>(null);
 
   const statsQuery = useQuery({ queryKey: ["binance-square", "stats"], queryFn: fetchBinanceSquareStats, refetchInterval: 30_000 });
   const statusQuery = useQuery({ queryKey: ["binance-square", "status"], queryFn: fetchBinanceSquareStatus, refetchInterval: 15_000 });
@@ -603,16 +604,24 @@ export function BinanceSquarePage() {
     },
     onError: (error: Error) => messageApi.error(error.message || "配置更新失败"),
   });
+  const refreshUserProfileMutation = useMutation({
+    mutationFn: refreshBinanceSquareUserProfile,
+    onMutate: (username) => setRefreshingProfileUsername(username),
+    onSuccess: (result) => {
+      messageApi.success(result.data?.message || "用户 Profile 已刷新");
+      void targetsQuery.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "刷新 Profile 失败"),
+    onSettled: () => setRefreshingProfileUsername(null),
+  });
   const exportTop1000Mutation = useMutation({
     mutationFn: async (limit: number) => {
       const exportLimit = normalizeExportLimit(limit);
-      await refreshBinanceSquareUserProfiles({ rankSet: "top1000", limit: exportLimit, concurrency: 1, delayMs: 1500 });
       const result = await fetchBinanceSquareTargets("top1000", exportLimit);
       return downloadTop1000TargetsExcel(result.data || [], exportLimit);
     },
     onSuccess: (count) => {
-      messageApi.success(`已刷新并导出 Top${count} 用户 Excel`);
-      void targetsQuery.refetch();
+      messageApi.success(`已导出 Top${count} 用户 Excel`);
     },
     onError: (error: Error) => messageApi.error(error.message || "导出失败"),
   });
@@ -788,6 +797,45 @@ export function BinanceSquarePage() {
       render: (value) => value || "-",
     },
     {
+      title: "粉丝数",
+      dataIndex: "totalFollowerCount",
+      key: "totalFollowerCount",
+      width: 105,
+      render: (value) => <Tooltip title={value ?? "-"}>{formatCompactNumber(value)}</Tooltip>,
+    },
+    {
+      title: "关注数",
+      dataIndex: "totalFollowingCount",
+      key: "totalFollowingCount",
+      width: 105,
+      render: (value) => <Tooltip title={value ?? "-"}>{formatCompactNumber(value)}</Tooltip>,
+    },
+    {
+      title: "帖子数",
+      dataIndex: "totalPostCount",
+      key: "totalPostCount",
+      width: 105,
+      render: (value) => <Tooltip title={value ?? "-"}>{formatCompactNumber(value)}</Tooltip>,
+    },
+    {
+      title: "获赞数",
+      dataIndex: "totalLikeCount",
+      key: "totalLikeCount",
+      width: 115,
+      render: (value) => (
+        <Tooltip title={value ?? "-"}>
+          <strong style={{ color: value == null ? "#ef4444" : "#334155" }}>{formatCompactNumber(value)}</strong>
+        </Tooltip>
+      ),
+    },
+    {
+      title: "分享数",
+      dataIndex: "totalShareCount",
+      key: "totalShareCount",
+      width: 105,
+      render: (value) => <Tooltip title={value ?? "-"}>{formatCompactNumber(value)}</Tooltip>,
+    },
+    {
       title: "双语介绍",
       dataIndex: "aiOneLineIntro",
       key: "aiOneLineIntro",
@@ -849,9 +897,19 @@ export function BinanceSquarePage() {
     {
       title: "操作",
       key: "actions",
-      width: 180,
+      width: 260,
       render: (_, record) => (
         <div className="bs-table-actions">
+          <LegacyActionButton
+            size="small"
+            compact
+            variant="sync"
+            loading={refreshUserProfileMutation.isPending && refreshingProfileUsername === record.username}
+            disabled={refreshUserProfileMutation.isPending && refreshingProfileUsername !== record.username}
+            onClick={() => refreshUserProfileMutation.mutate(record.username)}
+          >
+            拉Profile
+          </LegacyActionButton>
           {[
             ["帖子", "article"],
             ["回复", "reply"],
@@ -1313,7 +1371,7 @@ export function BinanceSquarePage() {
                       columns={targetColumns}
                       dataSource={targets}
                       pagination={false}
-                      scroll={{ y: TABLE_MAX_HEIGHT, x: 1400 }}
+                      scroll={{ y: TABLE_MAX_HEIGHT, x: 2200 }}
                       loading={targetsQuery.isFetching}
                     />
                   </div>
