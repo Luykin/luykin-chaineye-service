@@ -1887,7 +1887,6 @@ router.get("/target/list", async (req, res) => {
       where,
       order: [["rankSet", "ASC"], ["rank", "ASC"]],
     };
-    if (limit) findOptions.limit = limit;
     const ranks = await db.BinanceSquareTargetRank.findAll(findOptions);
 
     const rankRows = ranks.map((rank) => rank.toJSON());
@@ -2062,7 +2061,9 @@ router.get("/target/list", async (req, res) => {
       return { ...rank, rank: nextRank };
     });
 
-    res.json(success(displayRanks));
+    // limit 必须在“网页展示排序 + 重新编号”之后再截断。
+    // 否则导出 Top100 时会先按历史 rank 截断，再按 followerCount 重排，导致 Excel 第 N 名和网页第 N 名不一致。
+    res.json(success(limit ? displayRanks.slice(0, limit) : displayRanks));
   } catch (error) {
     console.error("[target/list] error:", error);
     res.status(500).json(fail(error.message));
