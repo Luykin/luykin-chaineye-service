@@ -122,13 +122,15 @@ export async function refreshBinanceSquareUserProfiles(params: {
   rankSet?: BinanceSquareRankSet;
   limit?: number;
   concurrency?: number;
+  delayMs?: number;
 } = {}) {
   return apiRequest<BinanceSquareApiResponse<BinanceSquareActionResult>>(`${BASE}/users/refresh-profiles`, {
     method: "POST",
     body: {
       rankSet: params.rankSet || "top1000",
       limit: params.limit || 100,
-      concurrency: params.concurrency || 3,
+      concurrency: params.concurrency || 1,
+      delayMs: params.delayMs || 1500,
     },
   });
 }

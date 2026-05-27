@@ -2,8 +2,11 @@ const axios = require("axios");
 const { HttpsProxyAgent } = require("https-proxy-agent");
 
 const BASE_URL = "https://www.binance.com";
-const REQUEST_DELAY_MIN = 500;
-const REQUEST_DELAY_MAX = 1200;
+const REQUEST_DELAY_MIN = Math.max(0, Number(process.env.BINANCE_SQUARE_REQUEST_DELAY_MIN || 500));
+const REQUEST_DELAY_MAX = Math.max(
+  REQUEST_DELAY_MIN,
+  Number(process.env.BINANCE_SQUARE_REQUEST_DELAY_MAX || 1200)
+);
 const REQUEST_TIMEOUT = 10000;
 const MAX_RETRIES = 3;
 const DEFAULT_MAX_PAGES = 30;

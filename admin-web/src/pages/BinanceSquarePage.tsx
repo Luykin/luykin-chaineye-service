@@ -606,7 +606,7 @@ export function BinanceSquarePage() {
   const exportTop1000Mutation = useMutation({
     mutationFn: async (limit: number) => {
       const exportLimit = normalizeExportLimit(limit);
-      await refreshBinanceSquareUserProfiles({ rankSet: "top1000", limit: exportLimit, concurrency: 3 });
+      await refreshBinanceSquareUserProfiles({ rankSet: "top1000", limit: exportLimit, concurrency: 1, delayMs: 1500 });
       const result = await fetchBinanceSquareTargets("top1000", exportLimit);
       return downloadTop1000TargetsExcel(result.data || [], exportLimit);
     },

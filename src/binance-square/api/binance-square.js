@@ -45,6 +45,10 @@ function parsePositiveInt(value, defaultValue) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function getBinanceSquareAuditAction(req) {
   const routePath = req.route?.path || req.path || req.originalUrl || "";
   const normalizedPath = String(routePath)
@@ -1925,15 +1929,20 @@ router.get("/target/list", async (req, res) => {
           raw: true,
         })
       : [];
-    const getUserProfileCompletenessScore = (user) => [
-      user?.squareUid,
-      user?.displayName,
-      user?.avatar,
-      user?.biography,
-      user?.totalFollowerCount,
-      user?.totalPostCount,
-      user?.rawData,
-    ].filter((value) => value !== null && value !== undefined && value !== "").length;
+    const getUserProfileCompletenessScore = (user) => {
+      const introI18n = normalizeIntroI18n(user?.aiOneLineIntroI18n, user?.aiOneLineIntro);
+      const profileScore = [
+        user?.squareUid,
+        user?.displayName,
+        user?.avatar,
+        user?.biography,
+        user?.totalFollowerCount,
+        user?.totalPostCount,
+      ].filter((value) => value !== null && value !== undefined && value !== "").length;
+      // 同一 username 出现历史重复行时，导出/展示必须优先选择已经生成过 AI 介绍的记录；
+      // 否则导出前刷新 profile 后可能选中画像更完整但没有介绍的重复行，导致 Excel 介绍列为空。
+      return profileScore + (introI18n ? 100 : 0) + (user?.aiIntroStatus === "success" ? 10 : 0);
+    };
     const userMap = new Map();
     for (const user of users) {
       const lowerUsername = user.username.toLowerCase();
@@ -2087,6 +2096,22 @@ router.get("/target/progress", async (req, res) => {
 
 async function refreshUserProfileByUsername(username) {
   const profile = await apiClient.fetchUserProfile(username);
+  const existingUser = await db.BinanceSquareUser.findOne({
+    where: db.sequelize.where(
+      db.sequelize.fn("LOWER", db.sequelize.col("username")),
+      String(username).toLowerCase()
+    ),
+    attributes: ["totalFollowingCount", "totalLikeCount", "totalShareCount"],
+    order: [["id", "DESC"]],
+    raw: true,
+  });
+  const keepPositiveWhenMissing = (incoming, existing) => {
+    const incomingNum = Number(incoming);
+    if (incoming !== null && incoming !== undefined && Number.isFinite(incomingNum) && incomingNum > 0) return incoming;
+    const existingNum = Number(existing);
+    if (existing !== null && existing !== undefined && Number.isFinite(existingNum) && existingNum > 0) return existing;
+    return incoming ?? existing ?? null;
+  };
   const updateData = {
     username: profile.username || username,
     squareUid: profile.squareUid ?? null,
@@ -2097,10 +2122,11 @@ async function refreshUserProfileByUsername(username) {
     verificationType: profile.verificationType ?? null,
     verificationDescription: profile.verificationDescription ?? null,
     totalFollowerCount: profile.totalFollowerCount ?? null,
-    totalFollowingCount: profile.totalFollowCount ?? null,
+    totalFollowingCount: keepPositiveWhenMissing(profile.totalFollowCount, existingUser?.totalFollowingCount),
     totalPostCount: profile.totalListedPostCount ?? profile.totalPostCount ?? null,
-    totalLikeCount: profile.totalLikeCount ?? null,
-    totalShareCount: profile.totalShareCount ?? null,
+    // 币安 profile 接口在高频/异常返回时可能把统计值置空或置 0；不要用这类值覆盖已有有效值。
+    totalLikeCount: keepPositiveWhenMissing(profile.totalLikeCount, existingUser?.totalLikeCount),
+    totalShareCount: keepPositiveWhenMissing(profile.totalShareCount, existingUser?.totalShareCount),
     accountLang: profile.accountLang ?? null,
     isKol: profile.isKol ?? null,
     userStatus: profile.userStatus ?? null,
@@ -2140,7 +2166,8 @@ router.post("/users/refresh-profiles", async (req, res) => {
   try {
     const rankSet = normalizeRankSet(req.body?.rankSet || "top1000");
     const limit = Math.min(parsePositiveInt(req.body?.limit, 100), 1000);
-    const concurrency = Math.max(1, Math.min(parsePositiveInt(req.body?.concurrency, 3), 8));
+    const concurrency = Math.max(1, Math.min(parsePositiveInt(req.body?.concurrency, 1), 8));
+    const delayMs = Math.max(0, Math.min(parsePositiveInt(req.body?.delayMs, 1500), 10000));
 
     const ranks = await db.BinanceSquareTargetRank.findAll({
       where: RANK_STAGE_CONFIG[rankSet] ? { rankSet } : {},
@@ -2164,6 +2191,10 @@ router.post("/users/refresh-profiles", async (req, res) => {
         } catch (error) {
           console.warn(`[users/refresh-profiles] ${username} 刷新失败:`, error.message);
           failed.push({ username, error: error.message });
+        } finally {
+          if (delayMs > 0 && cursor < usernames.length) {
+            await sleep(delayMs);
+          }
         }
       }
     };
@@ -2177,6 +2208,8 @@ router.post("/users/refresh-profiles", async (req, res) => {
       total: usernames.length,
       refreshed: results.length,
       failed: failed.length,
+      concurrency,
+      delayMs,
       failedDetails: failed.slice(0, 20),
       sample: results.slice(0, 5),
     }));
