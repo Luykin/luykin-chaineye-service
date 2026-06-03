@@ -12,6 +12,8 @@ const { getRedisClient } = require("../../lib/redisClient");
 
 const XHUNT_VIP = new Set();
 const INTERNAL_TEST_USERS = new Set();
+const XHUNT_VIP_IDS = new Set();
+const INTERNAL_TEST_USER_IDS = new Set();
 
 let loaded = false;
 let subscriberClient = null;
@@ -22,20 +24,25 @@ const REFRESH_CHANNEL = "xhunt:vip:refresh";
 async function loadVipLists() {
   try {
     const rows = await XhuntVipTestUser.findAll({
-      attributes: ["username", "listType"],
+      attributes: ["username", "twitterId", "listType"],
       raw: true,
     });
 
     XHUNT_VIP.clear();
     INTERNAL_TEST_USERS.clear();
+    XHUNT_VIP_IDS.clear();
+    INTERNAL_TEST_USER_IDS.clear();
 
     for (const row of rows) {
       const name = String(row.username || "").toLowerCase().trim();
-      if (!name) continue;
+      const twitterId = String(row.twitterId || "").trim();
+      if (!name && !twitterId) continue;
       if (row.listType === "vip") {
-        XHUNT_VIP.add(name);
+        if (name) XHUNT_VIP.add(name);
+        if (twitterId) XHUNT_VIP_IDS.add(twitterId);
       } else if (row.listType === "internal_test") {
-        INTERNAL_TEST_USERS.add(name);
+        if (name) INTERNAL_TEST_USERS.add(name);
+        if (twitterId) INTERNAL_TEST_USER_IDS.add(twitterId);
       }
     }
 
@@ -120,21 +127,48 @@ function startFallbackTimer() {
   console.log("[xhuntVip] 已启动兜底定时刷新，间隔:", FALLBACK_INTERVAL_MS, "ms");
 }
 
+function normalizeIdentifier(value) {
+  if (Array.isArray(value)) return normalizeIdentifier(value[0]);
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
 function isXHuntVipHandle(handle) {
-  if (!handle || typeof handle !== "string") return false;
-  return XHUNT_VIP.has(handle.toLowerCase().trim());
+  const raw = normalizeIdentifier(handle);
+  if (!raw) return false;
+  // 优先兼容 Twitter ID，其次兼容旧的 username 判断
+  if (XHUNT_VIP_IDS.has(raw)) return true;
+  return XHUNT_VIP.has(raw.toLowerCase());
 }
 
 function isInternalTestUserHandle(handle) {
-  if (!handle || typeof handle !== "string") return false;
-  return INTERNAL_TEST_USERS.has(handle.toLowerCase().trim());
+  const raw = normalizeIdentifier(handle);
+  if (!raw) return false;
+  if (INTERNAL_TEST_USER_IDS.has(raw)) return true;
+  return INTERNAL_TEST_USERS.has(raw.toLowerCase());
+}
+
+function extractTwitterIdFromRequestId(value) {
+  const raw = normalizeIdentifier(value);
+  if (!raw) return "";
+  const match = raw.match(/(?:^|-)twid(\d+)(?:$|[^\d])/i);
+  return match ? match[1] : "";
+}
+
+function getRequestIdentifiers(req) {
+  const headers = req && req.headers ? req.headers : {};
+  return [
+    // 优先使用登录态中的 Twitter ID
+    req?.user?.twitterId,
+    // 其次使用 x-request-id 中的 twid，例如: xxx-twid1300679567988801536
+    extractTwitterIdFromRequestId(headers["x-request-id"]),
+  ].map(normalizeIdentifier).filter(Boolean);
 }
 
 function isRequestXHuntVip(req) {
   try {
-    const raw = req && req.headers ? req.headers["x-user-id"] : null;
-    if (!raw || typeof raw !== "string") return false;
-    return isXHuntVipHandle(raw);
+    // 只按 Twitter ID 判断：优先 req.user.twitterId，其次 x-request-id 中的 twid
+    return getRequestIdentifiers(req).some(isXHuntVipHandle);
   } catch (_) {
     return false;
   }
@@ -142,20 +176,14 @@ function isRequestXHuntVip(req) {
 
 function isRequestInternalTestUser(req) {
   try {
-    const raw = req && req.headers ? req.headers["x-user-id"] : null;
-    if (!raw || typeof raw !== "string") return false;
-    return isInternalTestUserHandle(raw);
+    return getRequestIdentifiers(req).some(isInternalTestUserHandle);
   } catch (_) {
     return false;
   }
 }
 
 module.exports = {
-  XHUNT_VIP,
-  INTERNAL_TEST_USERS,
-  isXHuntVipHandle,
   isRequestXHuntVip,
-  isInternalTestUserHandle,
   isRequestInternalTestUser,
   loadVipLists,
   startRefreshSubscriber,

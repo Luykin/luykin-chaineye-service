@@ -4,7 +4,7 @@ const axios = require("axios");
 const { validateRequest } = require("../middleware/validate-request");
 const { authenticateToken } = require("../middleware/auth");
 const { checkProStatusRequired } = require("../middleware/pro-status");
-const {  isXHuntVipHandle } = require("../constants/xhuntVip");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 
 const router = express.Router();
 
@@ -499,7 +499,7 @@ router.post(
   async (req, res) => {
     try {
       const userId = req.user.id;
-      const isVip = isXHuntVipHandle(req.user?.username);
+      const isVip = isRequestXHuntVip(req);
       const { user_id, handle } = req.body;
       const redisClient = req.redisClient || global.__xhuntRedis;
 
@@ -664,7 +664,7 @@ router.get(
   async (req, res) => {
     try {
       const userId = req.user.id;// Pro 状态（用于权限检查）
-      const isVip = isXHuntVipHandle(req.user?.username);  // VIP 状态（用于额度计算）
+      const isVip = isRequestXHuntVip(req);  // VIP 状态（用于额度计算）
       const redisClient = req.redisClient || global.__xhuntRedis;
 
       if (!redisClient) {

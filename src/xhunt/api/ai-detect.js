@@ -155,7 +155,7 @@ const express = require("express");
 const { body } = require("express-validator");
 const { validateRequest } = require("../middleware/validate-request");
 const { authenticateToken } = require("../middleware/auth");
-const { isRequestXHuntVip, isXHuntVipHandle } = require("../constants/xhuntVip");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const { structuredChat } = require("../../lib/llm/structured");
 const router = express.Router();
 
@@ -316,7 +316,7 @@ async function checkRateLimit(req, res) {
   }
 
   // 判断是否是VIP
-  const isVip = isXHuntVipHandle(xUserId);
+  const isVip = isRequestXHuntVip(req);
   
   // 检查是否是无限调用用户
   const isUnlimited = req.user && req.user.id && UNLIMITED_USERS.includes(req.user.id);
@@ -515,7 +515,7 @@ router.get(
       }
 
       // 判断是否是VIP
-      const isVip = isXHuntVipHandle(xUserId);
+      const isVip = isRequestXHuntVip(req);
 
       // 获取用户标识
       let userKey;

@@ -1,8 +1,15 @@
-import { Button, Card, Empty, Input, Modal, Space, Typography, message } from "antd";
+import { Button, Card, Empty, Input, Modal, Space, Tag, Typography, message } from "antd";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
-import { addVipListUser, deleteVipListUser, fetchFeatureFlagsConfig, fetchVipLists, publishFeatureFlagsConfig } from "@/services/feature-flags";
+import {
+  addVipListUser,
+  deleteVipListUser,
+  fetchFeatureFlagsConfig,
+  fetchVipLists,
+  publishFeatureFlagsConfig,
+  syncVipTwitterIds,
+} from "@/services/feature-flags";
 import type { VipListItem } from "@/types/feature-flags";
 
 function VipListCard({ title, items, onAdd, onDelete, loading }: {
@@ -21,7 +28,15 @@ function VipListCard({ title, items, onAdd, onDelete, loading }: {
         <Button type="primary" loading={loading} onClick={() => { if (value.trim()) { onAdd(value.trim()); setValue(""); } }}>添加</Button>
       </div>
       <div className="vip-list">
-        {items.length ? items.map((item) => <div className="vip-list-item" key={item.id}><span>{item.username}</span><Button size="small" danger onClick={() => onDelete(item.id)}>删除</Button></div>) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无用户" />}
+        {items.length ? items.map((item) => (
+          <div className="vip-list-item" key={item.id}>
+            <span>
+              {item.username}
+              {item.twitterId ? <Tag color="blue" style={{ marginLeft: 8 }}>ID: {item.twitterId}</Tag> : <Tag style={{ marginLeft: 8 }}>未同步ID</Tag>}
+            </span>
+            <Button size="small" danger onClick={() => onDelete(item.id)}>删除</Button>
+          </div>
+        )) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无用户" />}
       </div>
     </div>
   );
@@ -45,6 +60,16 @@ export function VipManagementPage() {
     onError: (error: Error) => messageApi.error(error.message || "删除失败"),
   });
 
+  const syncIdMutation = useMutation({
+    mutationFn: () => syncVipTwitterIds(true),
+    onSuccess: (result) => {
+      const data = result.data;
+      messageApi.success(`ID同步完成：更新 ${data.updated}，跳过 ${data.skipped}，失败 ${data.failed}`);
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "同步ID失败"),
+  });
+
   const syncMutation = useMutation({
     mutationFn: async () => {
       const read = await fetchFeatureFlagsConfig();
@@ -62,6 +87,7 @@ export function VipManagementPage() {
   });
 
   const empty = useMemo(() => vip.length === 0 && internalTest.length === 0, [vip.length, internalTest.length]);
+  const missingIdCount = useMemo(() => [...vip, ...internalTest].filter((item) => !item.twitterId).length, [vip, internalTest]);
 
   return (
     <PermissionGuard permission="vip-management">
@@ -72,6 +98,13 @@ export function VipManagementPage() {
           <VipListCard title="VIP 名单" items={vip} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "vip", username })} onDelete={(id) => deleteMutation.mutate(id)} />
           <VipListCard title="内测名单" items={internalTest} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "internal_test", username })} onDelete={(id) => deleteMutation.mutate(id)} />
         </div>
+        <Card size="small" className="vip-sync-section">
+          <Space direction="vertical" size={8}>
+            <Typography.Text strong>同步ID信息</Typography.Text>
+            <Typography.Text type="secondary">根据 username 调用 data.cryptohunt.ai 查询 Twitter ID，并写入数据库。当前待同步 {missingIdCount} 人。</Typography.Text>
+            <Button disabled={empty} loading={syncIdMutation.isPending} onClick={() => Modal.confirm({ title: "确认同步ID信息？", content: `将为 VIP ${vip.length} 人、内测 ${internalTest.length} 人刷新 Twitter ID 信息`, onOk: () => syncIdMutation.mutate() })}>同步id信息</Button>
+          </Space>
+        </Card>
         <Card size="small" className="vip-sync-section">
           <Space direction="vertical" size={8}>
             <Typography.Text strong>同步到功能开关</Typography.Text>

@@ -14,6 +14,11 @@ module.exports = (sequelize) => {
         allowNull: false,
         comment: "Twitter 用户名（小写存储）",
       },
+      twitterId: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        comment: "Twitter 用户 ID（同步自 data.cryptohunt.ai）",
+      },
       listType: {
         type: DataTypes.ENUM("vip", "internal_test"),
         allowNull: false,
@@ -31,6 +36,10 @@ module.exports = (sequelize) => {
         {
           fields: ["listType"],
           name: "idx_xhunt_vip_test_users_list_type",
+        },
+        {
+          fields: ["twitterId", "listType"],
+          name: "idx_xhunt_vip_test_users_twitter_id_list_type",
         },
       ],
     }

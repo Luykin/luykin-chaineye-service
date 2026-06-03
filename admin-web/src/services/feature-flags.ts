@@ -4,6 +4,7 @@ import type {
   FeatureFlagsPublishResponse,
   FeatureFlagsResponse,
   VipListsResponse,
+  VipTwitterIdSyncResponse,
 } from "@/types/feature-flags";
 
 export async function fetchFeatureFlagsConfig() {
@@ -57,5 +58,12 @@ export async function addVipListUser(listType: "vip" | "internal_test", username
 export async function deleteVipListUser(id: number) {
   return apiRequest<{ success: boolean; error?: string }>(`/api/xhunt/stats/vip-lists/${id}`, {
     method: "DELETE",
+  });
+}
+
+export async function syncVipTwitterIds(force = true) {
+  return apiRequest<VipTwitterIdSyncResponse>("/api/xhunt/stats/vip-lists/sync-twitter-ids", {
+    method: "POST",
+    body: { force },
   });
 }

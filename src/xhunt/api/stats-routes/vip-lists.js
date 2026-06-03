@@ -1,4 +1,5 @@
 const express = require("express");
+const axios = require("axios");
 const {
   adminAuth,
   requirePermission,
@@ -8,6 +9,7 @@ const { loadVipLists, notifyRefresh } = require("../../constants/xhuntVip");
 const { logAdminAction } = require("./shared");
 
 const router = express.Router();
+const TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
 
 function normalizeUsername(value) {
   return String(value || "")
@@ -20,7 +22,25 @@ function serializeVipUser(row) {
   return {
     id: row.id,
     username: row.username,
+    twitterId: row.twitterId || null,
   };
+}
+
+function extractTwitterId(payload) {
+  return String(
+    payload?.data?.data?.id ||
+      payload?.data?.id ||
+      payload?.id ||
+      ""
+  ).trim();
+}
+
+async function fetchTwitterIdByUsername(username) {
+  const response = await axios.get(TWITTER_USER_LOOKUP_URL, {
+    params: { username },
+    timeout: 8000,
+  });
+  return extractTwitterId(response.data);
 }
 
 async function refreshVipCache() {
@@ -35,7 +55,7 @@ router.get(
   async (req, res) => {
     try {
       const rows = await XhuntVipTestUser.findAll({
-        attributes: ["id", "username", "listType"],
+        attributes: ["id", "username", "twitterId", "listType"],
         order: [
           ["listType", "ASC"],
           ["username", "ASC"],
@@ -54,6 +74,89 @@ router.get(
     } catch (error) {
       console.error("[vip-lists] 获取失败:", error);
       res.status(500).json({ success: false, error: error.message || "获取 VIP 名单失败" });
+    }
+  }
+);
+
+router.post(
+  "/vip-lists/sync-twitter-ids",
+  adminAuth,
+  requirePermission("vip-management"),
+  async (req, res) => {
+    const { force = true } = req.body || {};
+    try {
+      const rows = await XhuntVipTestUser.findAll({
+        order: [
+          ["listType", "ASC"],
+          ["username", "ASC"],
+        ],
+      });
+
+      const results = [];
+      let updated = 0;
+      let skipped = 0;
+      let failed = 0;
+
+      for (const row of rows) {
+        if (!force && row.twitterId) {
+          skipped += 1;
+          results.push({ id: row.id, username: row.username, status: "skipped", twitterId: row.twitterId });
+          continue;
+        }
+
+        try {
+          const twitterId = await fetchTwitterIdByUsername(row.username);
+          if (!twitterId) {
+            failed += 1;
+            results.push({ id: row.id, username: row.username, status: "failed", error: "未获取到 twitter id" });
+            continue;
+          }
+
+          if (row.twitterId !== twitterId) {
+            row.twitterId = twitterId;
+            await row.save();
+            updated += 1;
+          } else {
+            skipped += 1;
+          }
+
+          results.push({ id: row.id, username: row.username, status: "success", twitterId });
+        } catch (error) {
+          failed += 1;
+          results.push({
+            id: row.id,
+            username: row.username,
+            status: "failed",
+            error: error.message || "同步失败",
+          });
+        }
+      }
+
+      await refreshVipCache();
+      await logAdminAction(req, {
+        action: "vip-list-sync-twitter-ids",
+        success: true,
+        message: `total=${rows.length} updated=${updated} skipped=${skipped} failed=${failed}`,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          total: rows.length,
+          updated,
+          skipped,
+          failed,
+          results,
+        },
+      });
+    } catch (error) {
+      console.error("[vip-lists/sync-twitter-ids] 同步失败:", error);
+      await logAdminAction(req, {
+        action: "vip-list-sync-twitter-ids",
+        success: false,
+        message: error.message || "同步失败",
+      });
+      res.status(500).json({ success: false, error: error.message || "同步失败" });
     }
   }
 );

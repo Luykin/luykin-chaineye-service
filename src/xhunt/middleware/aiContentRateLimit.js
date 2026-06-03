@@ -5,7 +5,7 @@ const AI_CONTENT_RATE_LIMIT_FLAG = Symbol.for("xhunt.aiContentRateLimitExecuted"
 // - 200次/日名单（保留）
 const AI_CONTENT_WHITELIST_200 = ["luoyukun4", "alpha_gege"];
 // - 20次/日名单：使用全局 XHunt VIP 名单
-const { isXHuntVipHandle } = require("../constants/xhuntVip");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 
 // 获取到明天00:00的秒数
 function getSecondsUntilMidnight(beijingTime) {
@@ -52,7 +52,7 @@ async function aiContentRateLimit(req, res, next) {
         String(xUserId).toLocaleLowerCase() === String(id).toLocaleLowerCase()
       );
     });
-    const isWhitelist20 = !isWhitelist200 && isXHuntVipHandle(xUserId);
+    const isWhitelist20 = !isWhitelist200 && isRequestXHuntVip(req);
 
     // 获取用户标识
     let userKey;

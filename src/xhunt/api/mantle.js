@@ -16,7 +16,7 @@ const axios = require("axios");
 const { Op } = require("sequelize");
 
 const router = express.Router();
-const { XHUNT_VIP } = require("../constants/xhuntVip");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 
 function generateInviteCode(length = 10) {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -40,7 +40,6 @@ async function ensureUniqueInviteCode() {
 
 // 特殊邀请码与允许用户
 const SPECIAL_INVITE_CODE = "XHuntAI";
-const SPECIAL_ALLOWED_USERNAMES = XHUNT_VIP;
 
 // 1) Mantle 活动报名接口（受限：指纹/浏览器/安全中间件）
 router.post(
@@ -124,9 +123,7 @@ router.post(
 
       // 提前校验邀请码合法性
       let inviter = null;
-      // 计算用户handle，避免重复计算
-      const userHandle = (user.username || "").toLowerCase();
-      const isSpecialUser = SPECIAL_ALLOWED_USERNAMES.has(userHandle);
+      const isSpecialUser = isRequestXHuntVip(req);
 
       if (typeof invitedByCode === "string" && invitedByCode.trim()) {
         const code = invitedByCode.trim();

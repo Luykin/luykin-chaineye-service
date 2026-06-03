@@ -47,6 +47,25 @@ export interface FeatureFlagsPublishResponse {
 export interface VipListItem {
   id: number;
   username: string;
+  twitterId?: string | null;
+}
+
+export interface VipTwitterIdSyncResponse {
+  success: boolean;
+  data: {
+    total: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+    results: Array<{
+      id: number;
+      username: string;
+      status: "success" | "skipped" | "failed";
+      twitterId?: string | null;
+      error?: string;
+    }>;
+  };
+  error?: string;
 }
 
 export interface VipListsResponse {

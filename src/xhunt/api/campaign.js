@@ -15,7 +15,7 @@ const {
   CampaignRegistration,
   XHuntUser,
 } = require("../../models/postgres-start");
-const { XHUNT_VIP } = require("../constants/xhuntVip");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
 
@@ -42,7 +42,6 @@ async function ensureUniqueInviteCode() {
 }
 
 const SPECIAL_INVITE_CODE = "XHuntAI";
-const SPECIAL_ALLOWED_USERNAMES = XHUNT_VIP;
 
 function normalizeCampaign(raw) {
   if (!raw || typeof raw !== "string") return null;
@@ -260,10 +259,7 @@ router.post(
       }
 
       let inviter = null;
-      const userHandle = (user.username || "").toLowerCase();
-      const isSpecialUser = SPECIAL_ALLOWED_USERNAMES.has(userHandle);
-      if (isSpecialUser) {
-      }
+      const isSpecialUser = isRequestXHuntVip(req);
 
       // if (typeof invitedByCode === "string" && invitedByCode.trim()) {
       //   const code = invitedByCode.trim();
