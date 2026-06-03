@@ -19,6 +19,7 @@ const overviewStatsRouter = require("./stats-routes/overview");
 const genericStatsRouter = require("./stats-routes/generic-stats");
 const adminAuditRouter = require("./stats-routes/admin-audit");
 const vipListsRouter = require("./stats-routes/vip-lists");
+const userTagsRouter = require("./stats-routes/user-tags");
 const { logAdminAction } = require("./stats-routes/shared");
 const { XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
 const {
@@ -380,6 +381,7 @@ router.get("/", async (req, res) => {
 router.use(overviewStatsRouter);
 router.use(adminAuditRouter);
 router.use(vipListsRouter);
+router.use(userTagsRouter);
 router.use(genericStatsRouter);
 
 /**

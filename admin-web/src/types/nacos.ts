@@ -44,3 +44,44 @@ export interface WebsiteCampaignSyncResponse {
   data?: unknown;
   error?: string;
 }
+
+export interface UserTagItem {
+  id: number;
+  username: string;
+  twitterId?: string | null;
+  tagsZh: string[];
+  tagsEn: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface UserTagsResponse {
+  success: boolean;
+  data: UserTagItem[];
+  error?: string;
+}
+
+export interface UserTagMutationResponse {
+  success: boolean;
+  data?: UserTagItem;
+  error?: string;
+}
+
+export interface UserTagSyncResponse {
+  success: boolean;
+  data: {
+    total: number;
+    updated?: number;
+    skipped: number;
+    failed?: number;
+    created?: number;
+    results?: Array<{
+      id: number;
+      username: string;
+      status: "success" | "skipped" | "failed";
+      twitterId?: string | null;
+      error?: string;
+    }>;
+  };
+  error?: string;
+}

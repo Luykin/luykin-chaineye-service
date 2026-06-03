@@ -6,7 +6,7 @@ import {
   Input,
   Modal,
   Popconfirm,
-  Segmented,
+  Select,
   Space,
   Tag,
   message,
@@ -16,602 +16,279 @@ import {
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
-  SendOutlined,
+  SaveOutlined,
+  SyncOutlined,
 } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
-import { fetchNacosConfig, publishNacosConfig } from "@/services/nacos";
+import {
+  deleteUserTag,
+  fetchUserTags,
+  importUserTagsFromNacos,
+  syncUserTagTwitterIds,
+  upsertUserTag,
+} from "@/services/nacos";
+import type { UserTagItem } from "@/types/nacos";
 
-type TagLang = "zh" | "en";
-type TagConfig = Record<string, string[]>;
-
-const DATA_IDS: Record<TagLang, string> = {
-  zh: "xhunt_built_in_tag",
-  en: "xhunt_built_in_tag_en",
+type DraftTag = {
+  id?: number;
+  username: string;
+  twitterId?: string | null;
+  tagsZh: string[];
+  tagsEn: string[];
 };
 
-function cloneConfig(config: TagConfig): TagConfig {
-  return JSON.parse(JSON.stringify(config)) as TagConfig;
+function emptyDraft(): DraftTag {
+  return { username: "", twitterId: null, tagsZh: [], tagsEn: [] };
 }
 
-function normalizeConfig(value: unknown): TagConfig {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-
-  return Object.entries(value as Record<string, unknown>).reduce<TagConfig>(
-    (result, [handle, tags]) => {
-      const normalizedHandle = String(handle || "").trim();
-      if (!normalizedHandle) return result;
-
-      result[normalizedHandle] = Array.isArray(tags)
-        ? tags.map((tag) => String(tag ?? "").trim()).filter(Boolean)
-        : [];
-      return result;
-    },
-    {},
-  );
+function toDraft(item?: UserTagItem | null): DraftTag {
+  if (!item) return emptyDraft();
+  return {
+    id: item.id,
+    username: item.username || "",
+    twitterId: item.twitterId || null,
+    tagsZh: Array.isArray(item.tagsZh) ? item.tagsZh : [],
+    tagsEn: Array.isArray(item.tagsEn) ? item.tagsEn : [],
+  };
 }
 
-function parseConfig(content?: string): TagConfig {
-  if (!content) return {};
-  return normalizeConfig(JSON.parse(content));
+function normalizeUsername(value: string) {
+  return value.trim().replace(/^@+/, "").toLowerCase();
 }
 
-function sanitizeConfig(config: TagConfig): TagConfig {
-  return Object.entries(config).reduce<TagConfig>((result, [handle, tags]) => {
-    const normalizedHandle = handle.trim();
-    if (!normalizedHandle) return result;
-    result[normalizedHandle] = (Array.isArray(tags) ? tags : [])
-      .map((tag) => String(tag ?? "").trim())
-      .filter(Boolean);
-    return result;
-  }, {});
+function normalizeTags(tags: string[]) {
+  return Array.from(new Set((tags || []).map((tag) => String(tag || "").trim()).filter(Boolean)));
 }
 
-function stringifyConfig(config: TagConfig) {
-  return JSON.stringify(sanitizeConfig(config), null, 2);
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function buildDiffHtml(originalConfig: TagConfig, config: TagConfig) {
-  const oldJson = stringifyConfig(originalConfig || {});
-  const newJson = stringifyConfig(config || {});
-
-  if (!window.Diff?.createPatch) return escapeHtml(newJson);
-
-  return window.Diff.createPatch("config.json", oldJson, newJson, "原始", "新")
-    .split("\n")
-    .slice(4)
-    .map((line) => {
-      const escaped = escapeHtml(line);
-      if (line.startsWith("+"))
-        return `<span class="ff-diff-added">${escaped}</span>`;
-      if (line.startsWith("-"))
-        return `<span class="ff-diff-removed">${escaped}</span>`;
-      return escaped;
-    })
-    .join("\n");
-}
-
-function getDiffSummary(originalConfig: TagConfig, config: TagConfig) {
-  const oldKeys = Object.keys(originalConfig || {});
-  const newKeys = Object.keys(config || {});
-  const added = newKeys.filter((key) => !oldKeys.includes(key)).length;
-  const removed = oldKeys.filter((key) => !newKeys.includes(key)).length;
-  const pieces = [];
-  if (added) pieces.push(`+${added} handle`);
-  if (removed) pieces.push(`-${removed} handle`);
-  return pieces.length
-    ? `（${pieces.join("，")}）`
-    : stringifyConfig(originalConfig) === stringifyConfig(config)
-      ? "（无变更）"
-      : "（有变更）";
+function isSameDraft(a: DraftTag, b: DraftTag) {
+  return JSON.stringify({ ...a, tagsZh: normalizeTags(a.tagsZh), tagsEn: normalizeTags(a.tagsEn) }) ===
+    JSON.stringify({ ...b, tagsZh: normalizeTags(b.tagsZh), tagsEn: normalizeTags(b.tagsEn) });
 }
 
 export function NacosTagsPage() {
   const [messageApi, contextHolder] = message.useMessage();
-  const [lang, setLang] = useState<TagLang>("zh");
   const [search, setSearch] = useState("");
-  const [config, setConfig] = useState<TagConfig>({});
-  const [originalConfig, setOriginalConfig] = useState<TagConfig>({});
-  const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
-  const [handleValue, setHandleValue] = useState("");
-  const [dirty, setDirty] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [diffHtml, setDiffHtml] = useState("");
-  const [diffSummary, setDiffSummary] = useState("");
+  const [selectedId, setSelectedId] = useState<number | "new" | null>(null);
+  const [draft, setDraft] = useState<DraftTag>(emptyDraft());
+  const [baseline, setBaseline] = useState<DraftTag>(emptyDraft());
 
-  const query = useQuery({
-    queryKey: ["nacos-tags", lang],
-    queryFn: () => fetchNacosConfig({ dataId: DATA_IDS[lang] }),
-  });
+  const query = useQuery({ queryKey: ["user-tags-db"], queryFn: fetchUserTags });
+  const items = query.data?.data || [];
+  const selectedItem = typeof selectedId === "number" ? items.find((item) => item.id === selectedId) || null : null;
+  const dirty = !isSameDraft(draft, baseline);
 
   useEffect(() => {
     if (dirty) return;
-    try {
-      const parsed = parseConfig(query.data?.data.content || "{}");
-      setConfig(parsed);
-      setOriginalConfig(cloneConfig(parsed));
-      setSelectedHandle((current) =>
-        current && Object.prototype.hasOwnProperty.call(parsed, current)
-          ? current
-          : null,
-      );
-      setHandleValue((current) =>
-        current && Object.prototype.hasOwnProperty.call(parsed, current)
-          ? current
-          : "",
-      );
-    } catch (error) {
-      setConfig({});
-      setOriginalConfig({});
-      setSelectedHandle(null);
-      setHandleValue("");
-      if (query.data?.data.content) {
-        messageApi.error(
-          error instanceof Error
-            ? `标签配置解析失败：${error.message}`
-            : "标签配置解析失败",
-        );
-      }
-    }
-  }, [dirty, lang, messageApi, query.data?.data.content]);
+    if (selectedId === "new") return;
+    const nextSelected = typeof selectedId === "number" && items.some((item) => item.id === selectedId)
+      ? selectedId
+      : items[0]?.id || null;
+    setSelectedId(nextSelected);
+    const nextDraft = toDraft(items.find((item) => item.id === nextSelected));
+    setDraft(nextDraft);
+    setBaseline(nextDraft);
+  }, [dirty, items, selectedId]);
 
-  const hasChanges =
-    dirty || stringifyConfig(config) !== stringifyConfig(originalConfig);
-  const selectedTags = selectedHandle ? config[selectedHandle] || [] : [];
-  const totalHandles = Object.keys(config).length;
-  const totalTags = Object.values(config).reduce(
-    (sum, tags) =>
-      sum + (Array.isArray(tags) ? tags.filter(Boolean).length : 0),
-    0,
-  );
-
-  const filteredEntries = useMemo(() => {
+  const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    return Object.entries(config)
-      .filter(([handle]) => !keyword || handle.toLowerCase().includes(keyword))
-      .sort((a, b) => a[0].localeCompare(b[0]));
-  }, [config, search]);
+    return items
+      .filter((item) => {
+        if (!keyword) return true;
+        return item.username.toLowerCase().includes(keyword) || String(item.twitterId || "").includes(keyword);
+      })
+      .sort((a, b) => a.username.localeCompare(b.username));
+  }, [items, search]);
 
-  const selectedPreview = useMemo(() => {
-    if (!selectedHandle) return "";
-    return JSON.stringify({ [selectedHandle]: selectedTags }, null, 2);
-  }, [selectedHandle, selectedTags]);
+  const totalTags = items.reduce((sum, item) => sum + (item.tagsZh?.length || 0) + (item.tagsEn?.length || 0), 0);
+  const missingIdCount = items.filter((item) => !item.twitterId).length;
 
-  const publishMutation = useMutation({
-    mutationFn: () =>
-      publishNacosConfig({
-        dataId: DATA_IDS[lang],
-        content: JSON.stringify(sanitizeConfig(config)),
-        source: "nacos-tags",
-      }),
-    onSuccess: () => {
-      const nextOriginal = sanitizeConfig(config);
-      setOriginalConfig(cloneConfig(nextOriginal));
-      setConfig(nextOriginal);
-      setDirty(false);
-      setPreviewOpen(false);
-      messageApi.success("标签配置已发布");
-      void query.refetch();
-    },
-    onError: (error: Error) => {
-      messageApi.error(error.message || "标签配置发布失败");
-    },
-  });
+  function selectRecord(id: number) {
+    if (dirty && !window.confirm("当前有未保存修改，确认切换并丢弃修改吗？")) return;
+    const item = items.find((record) => record.id === id);
+    const nextDraft = toDraft(item);
+    setSelectedId(id);
+    setDraft(nextDraft);
+    setBaseline(nextDraft);
+  }
 
-  function selectHandle(handle: string | null) {
-    setSelectedHandle(handle);
-    setHandleValue(handle || "");
+  function addRecord() {
+    if (dirty && !window.confirm("当前有未保存修改，确认新建并丢弃修改吗？")) return;
+    const nextDraft = emptyDraft();
+    setSelectedId("new");
+    setDraft(nextDraft);
+    setBaseline(nextDraft);
   }
 
   function reload() {
-    if (
-      hasChanges &&
-      !window.confirm("当前有未发布修改，确认重新加载并丢弃修改吗？")
-    )
-      return;
-    setDirty(false);
+    if (dirty && !window.confirm("当前有未保存修改，确认重新加载并丢弃修改吗？")) return;
+    setSelectedId(null);
+    setDraft(emptyDraft());
+    setBaseline(emptyDraft());
     void query.refetch();
   }
 
-  function switchLang(nextLang: TagLang) {
-    if (nextLang === lang) return;
-    if (
-      hasChanges &&
-      !window.confirm("当前有未发布修改，切换语言会丢弃修改，确认继续吗？")
-    )
-      return;
-    setDirty(false);
-    setSearch("");
-    setConfig({});
-    setOriginalConfig({});
-    selectHandle(null);
-    setLang(nextLang);
-  }
+  const saveMutation = useMutation({
+    mutationFn: () => upsertUserTag({
+      id: draft.id,
+      username: normalizeUsername(draft.username),
+      twitterId: draft.twitterId || null,
+      tagsZh: normalizeTags(draft.tagsZh),
+      tagsEn: normalizeTags(draft.tagsEn),
+    }),
+    onSuccess: (result) => {
+      messageApi.success("标签已保存到数据库");
+      const saved = result.data;
+      if (saved) {
+        const nextDraft = toDraft(saved);
+        setSelectedId(saved.id);
+        setDraft(nextDraft);
+        setBaseline(nextDraft);
+      }
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "保存失败"),
+  });
 
-  function addHandle() {
-    let index = 1;
-    let nextHandle = `_new_handle_${index}`;
-    while (Object.prototype.hasOwnProperty.call(config, nextHandle)) {
-      index += 1;
-      nextHandle = `_new_handle_${index}`;
-    }
+  const deleteMutation = useMutation({
+    mutationFn: deleteUserTag,
+    onSuccess: () => {
+      messageApi.success("已删除");
+      setSelectedId(null);
+      setDraft(emptyDraft());
+      setBaseline(emptyDraft());
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "删除失败"),
+  });
 
-    setConfig((current) => ({ ...current, [nextHandle]: [] }));
-    selectHandle(nextHandle);
-    setDirty(true);
-  }
+  const syncIdMutation = useMutation({
+    mutationFn: () => syncUserTagTwitterIds(true),
+    onSuccess: (result) => {
+      const data = result.data;
+      messageApi.success(`ID同步完成：更新 ${data.updated || 0}，跳过 ${data.skipped}，失败 ${data.failed || 0}`);
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "同步ID失败"),
+  });
 
-  function deleteSelectedHandle() {
-    if (!selectedHandle) return;
-    setConfig((current) => {
-      const next = { ...current };
-      delete next[selectedHandle];
-      const nextSelected =
-        Object.keys(next).sort((a, b) => a.localeCompare(b))[0] || null;
-      selectHandle(nextSelected);
-      return next;
-    });
-    setDirty(true);
-    messageApi.success("已删除，记得点击发布");
-  }
+  const importMutation = useMutation({
+    mutationFn: (overwrite: boolean) => importUserTagsFromNacos(overwrite),
+    onSuccess: (result) => {
+      const data = result.data;
+      messageApi.success(`导入完成：新增 ${data.created || 0}，更新 ${data.updated || 0}，跳过 ${data.skipped}`);
+      setSelectedId(null);
+      setDraft(emptyDraft());
+      setBaseline(emptyDraft());
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "导入失败"),
+  });
 
-  function renameSelectedHandle(rawValue: string) {
-    setHandleValue(rawValue);
-    if (!selectedHandle) return;
-
-    const nextHandle = rawValue.trim();
-    if (!nextHandle || nextHandle === selectedHandle) return;
-
-    if (Object.prototype.hasOwnProperty.call(config, nextHandle)) {
-      return;
-    }
-
-    setConfig((current) => {
-      const next = { ...current, [nextHandle]: current[selectedHandle] || [] };
-      delete next[selectedHandle];
-      return next;
-    });
-    setSelectedHandle(nextHandle);
-    setDirty(true);
-  }
-
-  function restoreInvalidHandle() {
-    const nextHandle = handleValue.trim();
-    if (!selectedHandle) return;
-    if (!nextHandle) {
-      setHandleValue(selectedHandle);
-      return;
-    }
-    if (
-      nextHandle !== selectedHandle &&
-      Object.prototype.hasOwnProperty.call(config, nextHandle)
-    ) {
-      messageApi.warning(`Handle "${nextHandle}" 已存在`);
-      setHandleValue(selectedHandle);
-    }
-  }
-
-  function updateTag(index: number, value: string) {
-    if (!selectedHandle) return;
-    setConfig((current) => {
-      const tags = [...(current[selectedHandle] || [])];
-      tags[index] = value;
-      return { ...current, [selectedHandle]: tags };
-    });
-    setDirty(true);
-  }
-
-  function addTag() {
-    if (!selectedHandle) return;
-    setConfig((current) => ({
-      ...current,
-      [selectedHandle]: [...(current[selectedHandle] || []), ""],
-    }));
-    setDirty(true);
-  }
-
-  function removeTag(index: number) {
-    if (!selectedHandle) return;
-    setConfig((current) => ({
-      ...current,
-      [selectedHandle]: (current[selectedHandle] || []).filter(
-        (_, tagIndex) => tagIndex !== index,
-      ),
-    }));
-    setDirty(true);
-  }
-
-  function openPublishPreview() {
-    if (!hasChanges) {
-      messageApi.info("当前没有需要发布的修改");
-      return;
-    }
-    setDiffHtml(buildDiffHtml(originalConfig, config));
-    setDiffSummary(getDiffSummary(originalConfig, config));
-    setPreviewOpen(true);
-  }
+  const canSave = normalizeUsername(draft.username).length > 0 && dirty;
+  const selectedPreview = JSON.stringify({
+    username: normalizeUsername(draft.username),
+    twitterId: draft.twitterId || null,
+    tagsZh: normalizeTags(draft.tagsZh),
+    tagsEn: normalizeTags(draft.tagsEn),
+  }, null, 2);
 
   return (
     <PermissionGuard permission="nacos-tags">
       {contextHolder}
       <ConfigWorkbench
         className="nacos-tags-container"
-        title="内置标签配置"
-        meta={
-          <Tag
-            color={hasChanges ? "orange" : "green"}
-            className="nacos-tags-status-tag"
-          >
-            {hasChanges ? "有未发布修改" : "已同步"}
-          </Tag>
-        }
+        title="用户标签配置（数据库版）"
+        meta={<Tag color={dirty ? "orange" : "green"}>{dirty ? "有未保存修改" : "已保存"}</Tag>}
         toolbar={
-          <>
-            <div className="nacos-tags-toolbar-left">
-              <Segmented
-                size="small"
-                value={lang}
-                options={[
-                  { label: "中文", value: "zh" },
-                  { label: "English", value: "en" },
-                ]}
-                onChange={(value) => switchLang(value as TagLang)}
-              />
-            </div>
-            <Space wrap size={6}>
-              <Button
-                icon={<ReloadOutlined />}
-                onClick={reload}
-                loading={query.isFetching}
-              >
-                刷新
-              </Button>
-              <Button icon={<PlusOutlined />} onClick={addHandle}>
-                新增 Handle
-              </Button>
-              <Popconfirm
-                title={`确认删除 handle "${selectedHandle || ""}"？`}
-                disabled={!selectedHandle}
-                onConfirm={deleteSelectedHandle}
-              >
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
-                  disabled={!selectedHandle}
-                >
-                  删除
-                </Button>
-              </Popconfirm>
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                disabled={!hasChanges}
-                loading={publishMutation.isPending}
-                onClick={openPublishPreview}
-              >
-                发布
-              </Button>
-            </Space>
-          </>
+          <Space wrap size={6}>
+            <Button icon={<ReloadOutlined />} onClick={reload} loading={query.isFetching}>刷新</Button>
+            <Button icon={<PlusOutlined />} onClick={addRecord}>新增用户</Button>
+            <Button icon={<SyncOutlined />} loading={syncIdMutation.isPending} disabled={!items.length} onClick={() => Modal.confirm({ title: "确认同步ID信息？", content: `将为 ${items.length} 个用户刷新 Twitter ID，当前待同步 ${missingIdCount} 个`, onOk: () => syncIdMutation.mutate() })}>同步ID信息</Button>
+            <Button loading={importMutation.isPending} onClick={() => Modal.confirm({ title: "从旧 Nacos 导入？", content: "默认只新增数据库中不存在的用户，不覆盖已有标签。", onOk: () => importMutation.mutate(false) })}>从旧Nacos导入</Button>
+            <Button danger loading={importMutation.isPending} onClick={() => Modal.confirm({ title: "覆盖导入旧 Nacos？", content: "会用旧 Nacos 的中文/英文标签覆盖数据库中同名用户的标签。", okButtonProps: { danger: true }, onOk: () => importMutation.mutate(true) })}>覆盖导入</Button>
+            <Popconfirm title={`确认删除 ${selectedItem?.username || "当前用户"}？`} disabled={!draft.id} onConfirm={() => draft.id && deleteMutation.mutate(draft.id)}>
+              <Button danger icon={<DeleteOutlined />} disabled={!draft.id} loading={deleteMutation.isPending}>删除</Button>
+            </Popconfirm>
+            <Button type="primary" icon={<SaveOutlined />} disabled={!canSave} loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>保存到数据库</Button>
+          </Space>
         }
-        sidebarTitle={<span>Handle 列表</span>}
-        sidebarMeta={`${filteredEntries.length}/${totalHandles}`}
+        sidebarTitle={<span>用户列表</span>}
+        sidebarMeta={`${filteredItems.length}/${items.length}`}
         sidebar={
           <>
             <div className="nacos-tags-search">
               <SearchOutlined />
-              <Input
-                variant="borderless"
-                size="small"
-                placeholder="搜索 handle..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
+              <Input variant="borderless" size="small" placeholder="搜索 username / twitterId..." value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
             <div className="nacos-tags-list config-workbench-list">
-              {filteredEntries.length ? (
-                filteredEntries.map(([handle, tags]) => {
-                  const tagList = Array.isArray(tags) ? tags : [];
-                  const previewTags = tagList.slice(0, 3);
-                  const active = handle === selectedHandle;
-                  return (
-                    <button
-                      key={handle}
-                      type="button"
-                      className={
-                        active
-                          ? "config-workbench-list-item nacos-tags-item is-active active"
-                          : "config-workbench-list-item nacos-tags-item"
-                      }
-                      onClick={() => selectHandle(handle)}
-                    >
-                      <span className="nacos-tags-item-count">
-                        {tagList.length}
+              {filteredItems.length ? filteredItems.map((item) => {
+                const active = item.id === selectedId;
+                const tagCount = (item.tagsZh?.length || 0) + (item.tagsEn?.length || 0);
+                const previewTags = [...(item.tagsZh || []), ...(item.tagsEn || [])].slice(0, 3);
+                return (
+                  <button key={item.id} type="button" className={active ? "config-workbench-list-item nacos-tags-item is-active active" : "config-workbench-list-item nacos-tags-item"} onClick={() => selectRecord(item.id)}>
+                    <span className="nacos-tags-item-count">{tagCount}</span>
+                    <span className="nacos-tags-item-main">
+                      <span className="nacos-tags-item-handle">{item.username}</span>
+                      <span className="nacos-tags-item-preview">
+                        {item.twitterId ? <span className="nacos-tags-mini-chip">ID</span> : <span className="nacos-tags-mini-chip">未同步ID</span>}
+                        {previewTags.length ? previewTags.map((tag) => <span className="nacos-tags-mini-chip" key={`${item.id}-${tag}`}>{tag}</span>) : "无标签"}
                       </span>
-                      <span className="nacos-tags-item-main">
-                        <span className="nacos-tags-item-handle">{handle}</span>
-                        <span className="nacos-tags-item-preview">
-                          {previewTags.length
-                            ? previewTags.map((item) => (
-                                <span
-                                  className="nacos-tags-mini-chip"
-                                  key={`${handle}-${item}`}
-                                >
-                                  {item}
-                                </span>
-                              ))
-                            : "无标签"}
-                          {tagList.length > 3 ? (
-                            <span className="nacos-tags-more-chip">
-                              +{tagList.length - 3}
-                            </span>
-                          ) : null}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })
-              ) : (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="暂无数据，点击「新增 Handle」创建"
-                />
-              )}
+                    </span>
+                  </button>
+                );
+              }) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据，可从旧Nacos导入或新增" />}
             </div>
           </>
         }
-        editorTitle="编辑标签"
-        editorMeta={
-          selectedHandle
-            ? `${selectedTags.length} 个标签`
-            : "选择左侧 handle 开始编辑"
-        }
+        editorTitle="编辑用户标签"
+        editorMeta={draft.username ? `${normalizeTags(draft.tagsZh).length} 中文 / ${normalizeTags(draft.tagsEn).length} 英文` : "选择左侧用户或新增"}
       >
-        {query.isError ? (
-          <Alert
-            style={{ marginBottom: 12 }}
-            type="error"
-            showIcon
-            message="加载标签配置失败"
-          />
-        ) : null}
+        {query.isError ? <Alert style={{ marginBottom: 12 }} type="error" showIcon message="加载数据库标签失败" /> : null}
+        <Alert style={{ marginBottom: 12 }} type="info" showIcon message="旧版 Nacos 配置仍保留在原 dataId 中；当前页面只读写数据库，不再发布到 Nacos。" />
 
         <div className="nacos-tags-stats">
-          <div className="nacos-tags-stat-card">
-            <span>Handle 总数</span>
-            <strong>{totalHandles}</strong>
-          </div>
-          <div className="nacos-tags-stat-card">
-            <span>标签总数</span>
-            <strong>{totalTags}</strong>
-          </div>
-          <div className="nacos-tags-stat-card">
-            <span>当前语言</span>
-            <strong>{lang === "zh" ? "中文" : "EN"}</strong>
-          </div>
+          <div className="nacos-tags-stat-card"><span>用户总数</span><strong>{items.length}</strong></div>
+          <div className="nacos-tags-stat-card"><span>标签总数</span><strong>{totalTags}</strong></div>
+          <div className="nacos-tags-stat-card"><span>待同步ID</span><strong>{missingIdCount}</strong></div>
         </div>
 
-        {!selectedHandle ? (
-          <div className="nacos-tags-editor-empty editor-empty">
-            <div className="nacos-tags-empty-title empty-title">
-              请选择一个 Handle
-            </div>
-            <div className="nacos-tags-empty-desc empty-desc">
-              从左侧列表选择，或点击「新增 Handle」创建
+        <div className="nacos-tags-editor-body">
+          <div className="nacos-tags-field-row">
+            <label>Username（推特账号，不带 @）</label>
+            <Input value={draft.username} placeholder="例如：defiteddy2020" onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value }))} onBlur={() => setDraft((current) => ({ ...current, username: normalizeUsername(current.username) }))} />
+          </div>
+
+          <div className="nacos-tags-field-row">
+            <label>Twitter ID（可通过“同步ID信息”批量写入）</label>
+            <Input value={draft.twitterId || ""} placeholder="例如：1300679567988801536" onChange={(event) => setDraft((current) => ({ ...current, twitterId: event.target.value.trim() || null }))} />
+          </div>
+
+          <div className="nacos-tags-field-row">
+            <label>中文标签</label>
+            <Select mode="tags" tokenSeparators={[",", "，", "\n"]} value={draft.tagsZh} placeholder="输入中文标签，回车添加" style={{ width: "100%" }} onChange={(value) => setDraft((current) => ({ ...current, tagsZh: normalizeTags(value) }))} />
+          </div>
+
+          <div className="nacos-tags-field-row">
+            <label>英文标签</label>
+            <Select mode="tags" tokenSeparators={[",", "，", "\n"]} value={draft.tagsEn} placeholder="Input English tags, press Enter" style={{ width: "100%" }} onChange={(value) => setDraft((current) => ({ ...current, tagsEn: normalizeTags(value) }))} />
+          </div>
+
+          <div className="nacos-tags-chip-preview-section">
+            <div className="nacos-tags-preview-header">标签效果预览</div>
+            <div className="nacos-tags-chip-preview">
+              {[...normalizeTags(draft.tagsZh), ...normalizeTags(draft.tagsEn)].length ? [...normalizeTags(draft.tagsZh), ...normalizeTags(draft.tagsEn)].map((tag, index) => <span className="nacos-tags-preview-chip" key={`${tag}-${index}`}>{tag}</span>) : <span className="nacos-tags-preview-empty-text">暂无可预览标签</span>}
             </div>
           </div>
-        ) : (
-          <div className="nacos-tags-editor-body">
-            <div className="nacos-tags-field-row">
-              <label>Handle（推特账号，不带 @）</label>
-              <Input
-                value={handleValue}
-                placeholder="例如：anishagnihotri"
-                onChange={(event) => renameSelectedHandle(event.target.value)}
-                onBlur={restoreInvalidHandle}
-                onPressEnter={restoreInvalidHandle}
-              />
-            </div>
 
-            <div className="nacos-tags-field-row">
-              <label>标签列表</label>
-              <div className="nacos-tags-list-editor">
-                {selectedTags.length ? (
-                  selectedTags.map((tag, index) => (
-                    <div
-                      className="nacos-tags-input-row"
-                      key={`${selectedHandle}-${index}`}
-                    >
-                      <span className="nacos-tags-input-index">
-                        {index + 1}
-                      </span>
-                      <Input
-                        value={tag}
-                        placeholder="输入标签内容..."
-                        onChange={(event) =>
-                          updateTag(index, event.target.value)
-                        }
-                      />
-                      <Button
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() => removeTag(index)}
-                      />
-                    </div>
-                  ))
-                ) : (
-                  <div className="nacos-tags-tag-empty">
-                    暂无标签，点击下方按钮添加
-                  </div>
-                )}
-              </div>
-              <Button
-                className="nacos-tags-add-tag-btn"
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={addTag}
-              >
-                添加标签
-              </Button>
-            </div>
-
-            <div className="nacos-tags-chip-preview-section">
-              <div className="nacos-tags-preview-header">标签效果预览</div>
-              <div className="nacos-tags-chip-preview">
-                {selectedTags.filter(Boolean).length ? (
-                  selectedTags.filter(Boolean).map((tag, index) => (
-                    <span
-                      className="nacos-tags-preview-chip"
-                      key={`${tag}-${index}`}
-                    >
-                      {tag}
-                    </span>
-                  ))
-                ) : (
-                  <span className="nacos-tags-preview-empty-text">
-                    暂无可预览标签
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="nacos-tags-preview-section">
-              <div className="nacos-tags-preview-header">JSON 预览</div>
-              <pre className="nacos-tags-preview-pre">{selectedPreview}</pre>
-            </div>
+          <div className="nacos-tags-preview-section">
+            <div className="nacos-tags-preview-header">JSON 预览</div>
+            <pre className="nacos-tags-preview-pre">{selectedPreview}</pre>
           </div>
-        )}
+        </div>
       </ConfigWorkbench>
-
-      <Modal
-        title="预览 JSON 配置"
-        open={previewOpen}
-        width={900}
-        confirmLoading={publishMutation.isPending}
-        okText="确认发布"
-        cancelText="取消"
-        onCancel={() => setPreviewOpen(false)}
-        onOk={() => publishMutation.mutate()}
-      >
-        <p className="nacos-tags-preview-legend">
-          即将发布到 Nacos
-          <span className="nacos-tags-diff-summary">{diffSummary}</span>
-          <span className="nacos-tags-legend-removed">删除</span> |{" "}
-          <span className="nacos-tags-legend-added">新增</span>
-        </p>
-        <pre
-          className="ff-diff-output"
-          dangerouslySetInnerHTML={{ __html: diffHtml }}
-        />
-      </Modal>
     </PermissionGuard>
   );
 }

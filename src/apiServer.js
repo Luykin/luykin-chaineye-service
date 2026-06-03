@@ -45,6 +45,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/user-entry',
   './xhunt/api/ai-detect',
   './xhunt/api/kol-chat',
+  './xhunt/api/tags',
   
   // Admin API
   './admin/api/admin',
@@ -175,6 +176,7 @@ const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
 const xHuntAIDetectRoutes = require("./xhunt/api/ai-detect");
 const xHuntKolChatRoutes = require("./xhunt/api/kol-chat");
+const xHuntTagsRoutes = require("./xhunt/api/tags");
 const internalQueryRoutes = require("./api/internal-query");
 const { initPerfMonitor } = require("./lib/perf-monitor"); // 性能监控模块
 const {
@@ -512,6 +514,15 @@ async function initializeAndStartServer() {
 
   // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
   app.use("/api/rootdata", xHuntRootdataRoutes);
+
+  // 用户标签查询接口 - 数据库版标签，优先按 Twitter ID 查询
+  app.use(
+    "/api/xhunt/tags",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntTagsRoutes
+  );
 
   // AI 探测功能接口 - 推文内容分析和评分
   app.use(

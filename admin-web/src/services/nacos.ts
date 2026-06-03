@@ -65,3 +65,40 @@ export async function saveWebsiteCampaignConfig(nacosCampaignId: string, payload
     }
   );
 }
+
+export async function fetchUserTags() {
+  return apiRequest<import("@/types/nacos").UserTagsResponse>("/api/xhunt/stats/user-tags");
+}
+
+export async function upsertUserTag(payload: {
+  id?: number;
+  username: string;
+  twitterId?: string | null;
+  tagsZh: string[];
+  tagsEn: string[];
+}) {
+  return apiRequest<import("@/types/nacos").UserTagMutationResponse>("/api/xhunt/stats/user-tags/upsert", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function deleteUserTag(id: number) {
+  return apiRequest<{ success: boolean; error?: string }>(`/api/xhunt/stats/user-tags/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function syncUserTagTwitterIds(force = true) {
+  return apiRequest<import("@/types/nacos").UserTagSyncResponse>("/api/xhunt/stats/user-tags/sync-twitter-ids", {
+    method: "POST",
+    body: { force },
+  });
+}
+
+export async function importUserTagsFromNacos(overwrite = false) {
+  return apiRequest<import("@/types/nacos").UserTagSyncResponse>("/api/xhunt/stats/user-tags/import-from-nacos", {
+    method: "POST",
+    body: { overwrite },
+  });
+}

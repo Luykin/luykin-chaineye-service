@@ -22,6 +22,7 @@ const XhuntAdminManagerModel = require("../xhunt/models/XhuntAdminManager");
 const XhuntAdminAuditLogModel = require("../xhunt/models/XhuntAdminAuditLog");
 const XhuntAdminWebAuthnCredentialModel = require("../xhunt/models/XhuntAdminWebAuthnCredential");
 const XhuntVipTestUserModel = require("../xhunt/models/XhuntVipTestUser");
+const XhuntUserTagModel = require("../xhunt/models/XhuntUserTag");
 const CollectorClientTokenModel = require("../xhunt/models/CollectorClientToken");
 const XHuntWebUserModel = require("../xhunt/models/XHuntWebUser");
 const XHuntWebUserTokenModel = require("../xhunt/models/XHuntWebUserToken");
@@ -88,6 +89,7 @@ const XhuntAdminManager = XhuntAdminManagerModel(pgInstance);
 const XhuntAdminAuditLog = XhuntAdminAuditLogModel(pgInstance);
 const XhuntAdminWebAuthnCredential = XhuntAdminWebAuthnCredentialModel(pgInstance);
 const XhuntVipTestUser = XhuntVipTestUserModel(pgInstance);
+const XhuntUserTag = XhuntUserTagModel(pgInstance);
 const CollectorClientToken = CollectorClientTokenModel(pgInstance);
 const XHuntWebUser = XHuntWebUserModel(pgInstance);
 const XHuntWebUserToken = XHuntWebUserTokenModel(pgInstance);
@@ -299,6 +301,7 @@ module.exports = {
   XhuntAdminAuditLog,
   XhuntAdminWebAuthnCredential,
   XhuntVipTestUser,
+  XhuntUserTag,
   CollectorClientToken,
 
   // XHunt Web 用户数据表
