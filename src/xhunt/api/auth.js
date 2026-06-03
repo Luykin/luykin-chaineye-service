@@ -4,7 +4,6 @@ const {
   XHuntUserToken,
   XHuntUser,
   XPointRecord,
-  XHuntUserProSubscription,
 } = require("../../models/postgres-start");
 const {
   generateTwitterAuthUrl,
@@ -14,10 +13,9 @@ const {
 const { validateRequest } = require("../middleware/validate-request");
 const { body, param } = require("express-validator");
 const { authenticateToken } = require("../middleware/auth");
-const { Op } = require("sequelize");
 const axios = require("axios");
 const retry = require("async-retry");
-const { getXUserId, checkLegacyPro } = require("../utils/legacy-pro");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const {
   sanitizePlainText,
   sanitizeSafeUrl,
@@ -349,43 +347,7 @@ router.get("/me", authenticateToken, async (req, res) => {
     // 缓存策略：前端缓存
     res.set("Cache-Control", "private, max-age=240"); // 4分钟
 
-    // 查询用户当前有效的 Pro 订阅
-    // 使用复合索引 idx_pro_subscription_user_end_time 优化查询
-    // 查询条件：userId = ? AND endTime > NOW()，按 endTime DESC 排序取最新的一条
-    const activeProSubscription = await XHuntUserProSubscription.findOne({
-      where: {
-        userId: req.user.id,
-        endTime: {
-          [Op.gt]: new Date(), // endTime > 当前时间，表示未过期
-        },
-      },
-      order: [["endTime", "DESC"]], // 按过期时间降序，取最新的
-      attributes: ["endTime", "planType"], // 只返回需要的字段
-    });
-
-    // 如果有有效的 Pro 订阅，直接使用
-    let isPro = !!activeProSubscription;
-    let proExpiryTime = activeProSubscription?.endTime || null;
-    let isLegacyPro = false; // 标识是否是老用户 Pro（非数据库订阅）
-
-    // 如果没有有效的 Pro 订阅，检查是否是老用户 Pro
-    // 老用户 Pro：在活跃用户名单中且在 2025-12-29 之前
-    // 优先使用 req.user.username（已验证的用户名），如果没有则使用 x-user-id
-    if (!isPro) {
-      const username = req.user?.username || getXUserId(req);
-      const legacyProCheck = checkLegacyPro(username);
-
-      if (legacyProCheck.isLegacyPro) {
-        isPro = true;
-        proExpiryTime = legacyProCheck.proExpiryTime;
-        isLegacyPro = true; // 标记为老用户 Pro
-        console.log(
-          `[auth /me] ✅ 用户 ${
-            req.user.username || req.user.id
-          } 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
-        );
-      }
-    }
+    const isVip = isRequestXHuntVip(req);
 
     res.json({
       username: req.user.username,
@@ -394,15 +356,65 @@ router.get("/me", authenticateToken, async (req, res) => {
       twitterId: req.user.twitterId,
       evmAddresses: req.user.evmAddresses || [],
       xPoints: -1,
-      isPro,
-      proExpiryTime,
-      isLegacyPro, // 标识是否是老用户 Pro（true 表示是老用户 Pro，false 表示是数据库订阅的 Pro 或非 Pro）
+      isVip,
+      isPro: false,
+      proExpiryTime: null,
+      isLegacyPro: false,
     });
   } catch (error) {
     console.error("Failed to fetch user info:", error);
     res.status(500).json({ error: "获取用户信息失败" });
   }
 });
+
+/**
+ * TODO: Pro 逻辑暂时废弃，保留旧代码方便后续恢复参考。
+ *
+ * 如需恢复，需要同步恢复顶部 import：
+ * const { Op } = require("sequelize");
+ * const { getXUserId, checkLegacyPro } = require("../utils/legacy-pro");
+ * const { XHuntUserProSubscription } = require("../../models/postgres-start");
+ *
+ * 旧逻辑：
+ *
+ * // 查询用户当前有效的 Pro 订阅
+ * // 使用复合索引 idx_pro_subscription_user_end_time 优化查询
+ * // 查询条件：userId = ? AND endTime > NOW()，按 endTime DESC 排序取最新的一条
+ * const activeProSubscription = await XHuntUserProSubscription.findOne({
+ *   where: {
+ *     userId: req.user.id,
+ *     endTime: {
+ *       [Op.gt]: new Date(), // endTime > 当前时间，表示未过期
+ *     },
+ *   },
+ *   order: [["endTime", "DESC"]], // 按过期时间降序，取最新的
+ *   attributes: ["endTime", "planType"], // 只返回需要的字段
+ * });
+ *
+ * // 如果有有效的 Pro 订阅，直接使用
+ * let isPro = !!activeProSubscription;
+ * let proExpiryTime = activeProSubscription?.endTime || null;
+ * let isLegacyPro = false; // 标识是否是老用户 Pro（非数据库订阅）
+ *
+ * // 如果没有有效的 Pro 订阅，检查是否是老用户 Pro
+ * // 老用户 Pro：在活跃用户名单中且在 2025-12-29 之前
+ * // 优先使用 req.user.username（已验证的用户名），如果没有则使用 x-user-id
+ * if (!isPro) {
+ *   const username = req.user?.username || getXUserId(req);
+ *   const legacyProCheck = checkLegacyPro(username);
+ *
+ *   if (legacyProCheck.isLegacyPro) {
+ *     isPro = true;
+ *     proExpiryTime = legacyProCheck.proExpiryTime;
+ *     isLegacyPro = true; // 标记为老用户 Pro
+ *     console.log(
+ *       `[auth /me] ✅ 用户 ${
+ *         req.user.username || req.user.id
+ *       } 是老用户 Pro，过期时间: ${legacyProCheck.proExpiryTime.toISOString()}`
+ *     );
+ *   }
+ * }
+ */
 
 /**
  * POST /logout
