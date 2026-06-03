@@ -25,7 +25,6 @@ import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import {
   deleteUserTag,
   fetchUserTags,
-  importUserTagsFromNacos,
   syncUserTagTwitterIds,
   upsertUserTag,
 } from "@/services/nacos";
@@ -173,19 +172,6 @@ export function NacosTagsPage() {
     onError: (error: Error) => messageApi.error(error.message || "同步ID失败"),
   });
 
-  const importMutation = useMutation({
-    mutationFn: (overwrite: boolean) => importUserTagsFromNacos(overwrite),
-    onSuccess: (result) => {
-      const data = result.data;
-      messageApi.success(`导入完成：新增 ${data.created || 0}，更新 ${data.updated || 0}，跳过 ${data.skipped}`);
-      setSelectedId(null);
-      setDraft(emptyDraft());
-      setBaseline(emptyDraft());
-      void query.refetch();
-    },
-    onError: (error: Error) => messageApi.error(error.message || "导入失败"),
-  });
-
   const canSave = normalizeUsername(draft.username).length > 0 && dirty;
   const selectedPreview = JSON.stringify({
     username: normalizeUsername(draft.username),
@@ -206,10 +192,8 @@ export function NacosTagsPage() {
             <Button icon={<ReloadOutlined />} onClick={reload} loading={query.isFetching}>刷新</Button>
             <Button icon={<PlusOutlined />} onClick={addRecord}>新增用户</Button>
             <Button icon={<SyncOutlined />} loading={syncIdMutation.isPending} disabled={!items.length} onClick={() => Modal.confirm({ title: "确认同步ID信息？", content: `将为 ${items.length} 个用户刷新 Twitter ID，当前待同步 ${missingIdCount} 个`, onOk: () => syncIdMutation.mutate() })}>同步ID信息</Button>
-            <Button loading={importMutation.isPending} onClick={() => Modal.confirm({ title: "从旧 Nacos 导入？", content: "默认只新增数据库中不存在的用户，不覆盖已有标签。", onOk: () => importMutation.mutate(false) })}>从旧Nacos导入</Button>
-            <Button danger loading={importMutation.isPending} onClick={() => Modal.confirm({ title: "覆盖导入旧 Nacos？", content: "会用旧 Nacos 的中文/英文标签覆盖数据库中同名用户的标签。", okButtonProps: { danger: true }, onOk: () => importMutation.mutate(true) })}>覆盖导入</Button>
-            <Popconfirm title={`确认删除 ${selectedItem?.username || "当前用户"}？`} disabled={!draft.id} onConfirm={() => draft.id && deleteMutation.mutate(draft.id)}>
-              <Button danger icon={<DeleteOutlined />} disabled={!draft.id} loading={deleteMutation.isPending}>删除</Button>
+            <Popconfirm title={`确认删除 ${selectedItem?.username || "当前用户"}？`} disabled={!selectedItem?.id} onConfirm={() => selectedItem?.id && deleteMutation.mutate(selectedItem.id)}>
+              <Button danger icon={<DeleteOutlined />} disabled={!selectedItem?.id} loading={deleteMutation.isPending}>删除</Button>
             </Popconfirm>
             <Button type="primary" icon={<SaveOutlined />} disabled={!canSave} loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>保存到数据库</Button>
           </Space>
@@ -225,21 +209,20 @@ export function NacosTagsPage() {
             <div className="nacos-tags-list config-workbench-list">
               {filteredItems.length ? filteredItems.map((item) => {
                 const active = item.id === selectedId;
-                const tagCount = (item.tagsZh?.length || 0) + (item.tagsEn?.length || 0);
-                const previewTags = [...(item.tagsZh || []), ...(item.tagsEn || [])].slice(0, 3);
+                const firstZhTag = (item.tagsZh || []).find(Boolean) || "无中文标签";
                 return (
                   <button key={item.id} type="button" className={active ? "config-workbench-list-item nacos-tags-item is-active active" : "config-workbench-list-item nacos-tags-item"} onClick={() => selectRecord(item.id)}>
-                    <span className="nacos-tags-item-count">{tagCount}</span>
+                    <span className="nacos-tags-item-count">{item.twitterId ? "ID" : "--"}</span>
                     <span className="nacos-tags-item-main">
                       <span className="nacos-tags-item-handle">{item.username}</span>
                       <span className="nacos-tags-item-preview">
-                        {item.twitterId ? <span className="nacos-tags-mini-chip">ID</span> : <span className="nacos-tags-mini-chip">未同步ID</span>}
-                        {previewTags.length ? previewTags.map((tag) => <span className="nacos-tags-mini-chip" key={`${item.id}-${tag}`}>{tag}</span>) : "无标签"}
+                        <span className="nacos-tags-mini-chip">{item.twitterId || "未同步ID"}</span>
+                        <span className="nacos-tags-mini-chip">{firstZhTag}</span>
                       </span>
                     </span>
                   </button>
                 );
-              }) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据，可从旧Nacos导入或新增" />}
+              }) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据，点击「新增用户」创建" />}
             </div>
           </>
         }
