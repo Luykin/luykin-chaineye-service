@@ -20,8 +20,9 @@ function extractTwitterIdFromRequestId(value) {
 function setCacheHeaders(req, res, etag) {
   const quotedEtag = `"${etag}"`;
   res.set("ETag", quotedEtag);
-  // 浏览器侧走协商缓存；服务端数据由 Redis 长缓存承接，管理后台更新时主动刷新 Redis。
-  res.set("Cache-Control", "public, max-age=0, must-revalidate");
+  // 浏览器侧 5 分钟绝对缓存：有效期内不请求后端；过期后再用 ETag 协商。
+  // 服务端数据由 Redis 长缓存承接，管理后台更新时主动刷新 Redis。
+  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
   res.set("Vary", "Accept-Encoding");
 
   const ifNoneMatch = String(req.headers["if-none-match"] || "");
@@ -36,9 +37,10 @@ router.get(["/", "/all"], async (req, res) => {
       return res.status(304).end();
     }
 
+    const { etag, ...data } = payload;
     res.json({
       success: true,
-      data: payload,
+      data,
     });
   } catch (error) {
     console.error("[xhunt/tags] 查询失败:", error);

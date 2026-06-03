@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const { XhuntUserTag } = require("../../models/postgres-start");
 const { getRedisClient } = require("../../lib/redisClient");
 
-const USER_TAGS_CACHE_KEY = "xhunt:user-tags:all:v1";
+const USER_TAGS_CACHE_KEY = "xhunt:user-tags:all:v2";
 const USER_TAGS_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 function normalizeTags(value) {
@@ -27,19 +27,13 @@ function buildPayload(items) {
   const byTwitterId = {};
 
   for (const item of sortedItems) {
-    byUsername[item.username] = {
-      twitterId: item.twitterId,
+    const compactTags = {
       tagsZh: item.tagsZh,
       tagsEn: item.tagsEn,
-      updatedAt: item.updatedAt,
     };
+    byUsername[item.username] = compactTags;
     if (item.twitterId) {
-      byTwitterId[item.twitterId] = {
-        username: item.username,
-        tagsZh: item.tagsZh,
-        tagsEn: item.tagsEn,
-        updatedAt: item.updatedAt,
-      };
+      byTwitterId[item.twitterId] = compactTags;
     }
   }
 
@@ -48,17 +42,16 @@ function buildPayload(items) {
     return Math.max(latest, Number.isFinite(time) ? time : 0);
   }, 0);
 
+  // 响应体只保留前端消费必需字段；ETag 仅通过响应头返回。
   const payload = {
     version: maxUpdatedAt || Date.now(),
     count: sortedItems.length,
-    generatedAt: new Date().toISOString(),
-    items: sortedItems,
     byUsername,
     byTwitterId,
   };
   const etag = crypto
     .createHash("sha1")
-    .update(JSON.stringify({ items: sortedItems }))
+    .update(JSON.stringify(payload))
     .digest("hex");
 
   return { ...payload, etag };
