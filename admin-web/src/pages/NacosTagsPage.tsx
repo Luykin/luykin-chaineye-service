@@ -97,7 +97,12 @@ export function NacosTagsPage() {
         if (!keyword) return true;
         return item.username.toLowerCase().includes(keyword) || String(item.twitterId || "").includes(keyword);
       })
-      .sort((a, b) => a.username.localeCompare(b.username));
+      .sort((a, b) => {
+        const aMissingId = !a.twitterId;
+        const bMissingId = !b.twitterId;
+        if (aMissingId !== bMissingId) return aMissingId ? 1 : -1;
+        return a.username.localeCompare(b.username);
+      });
   }, [items, search]);
 
   const totalTags = items.reduce((sum, item) => sum + (item.tagsZh?.length || 0) + (item.tagsEn?.length || 0), 0);
@@ -216,7 +221,11 @@ export function NacosTagsPage() {
                     <span className="nacos-tags-item-main">
                       <span className="nacos-tags-item-handle">{item.username}</span>
                       <span className="nacos-tags-item-preview">
-                        <span className="nacos-tags-mini-chip">{item.twitterId || "未同步ID"}</span>
+                        {item.twitterId ? (
+                          <span className="nacos-tags-mini-chip">{item.twitterId}</span>
+                        ) : (
+                          <span className="nacos-tags-mini-chip" style={{ color: "#ff4d4f", borderColor: "rgba(255, 77, 79, 0.45)", background: "rgba(255, 77, 79, 0.08)" }}>未同步ID</span>
+                        )}
                         <span className="nacos-tags-mini-chip">{firstZhTag}</span>
                       </span>
                     </span>
