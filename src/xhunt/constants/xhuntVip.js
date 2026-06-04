@@ -148,26 +148,19 @@ function isInternalTestUserHandle(handle) {
   return INTERNAL_TEST_USERS.has(raw.toLowerCase());
 }
 
-// function extractTwitterIdFromRequestId(value) {
-//   const raw = normalizeIdentifier(value);
-//   if (!raw) return "";
-//   const match = raw.match(/(?:^|-)twid(\d+)(?:$|[^\d])/i);
-//   return match ? match[1] : "";
-// }
-
 function getRequestIdentifiers(req) {
-  // const headers = req && req.headers ? req.headers : {};
+  const headers = req && req.headers ? req.headers : {};
   return [
-    // 优先使用登录态中的 Twitter ID
+    // 优先使用已登录态中的 Twitter ID
     req?.user?.twitterId,
-    // // 其次使用 x-request-id 中的 twid，例如: xxx-twid1300679567988801536
-    // extractTwitterIdFromRequestId(headers["x-request-id"]),
+    // 其次兼容 x-user-id 中的 username
+    headers["x-user-id"],
   ].map(normalizeIdentifier).filter(Boolean);
 }
 
 function isRequestXHuntVip(req) {
   try {
-    // 只按 Twitter ID 判断：优先 req.user.twitterId，其次 x-request-id 中的 twid
+    // 优先按 req.user.twitterId 判断，未登录/旧请求再按 x-user-id(username) 判断
     return getRequestIdentifiers(req).some(isXHuntVipHandle);
   } catch (_) {
     return false;
