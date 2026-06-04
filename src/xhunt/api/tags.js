@@ -67,9 +67,6 @@ router.get("/lookup", async (req, res) => {
     if (twitterId && payload.byTwitterId[twitterId]) {
       data = { twitterId, ...payload.byTwitterId[twitterId] };
       matchedBy = "twitterId";
-    } else if (username && payload.byUsername[username]) {
-      data = { username, ...payload.byUsername[username] };
-      matchedBy = "username";
     }
 
     res.json({ success: true, data, matchedBy, version: payload.version });

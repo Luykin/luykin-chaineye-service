@@ -22,12 +22,7 @@ GET /api/xhunt/tags/all
   "data": {
     "version": 1780000000000,
     "count": 2,
-    "byUsername": {
-      "defiteddy2020": {
-        "tagsZh": ["KOL", "DeFi"],
-        "tagsEn": ["KOL", "DeFi"]
-      }
-    },
+    "byUsername": {},
     "byTwitterId": {
       "1300679567988801536": {
         "tagsZh": ["KOL", "DeFi"],
@@ -44,7 +39,7 @@ GET /api/xhunt/tags/all
 |---|---|
 | `version` | 数据版本，数据变化时会变 |
 | `count` | 用户数量 |
-| `byUsername` | username -> tags 映射 |
+| `byUsername` | 固定返回空对象 `{}`，仅兼容字段 |
 | `byTwitterId` | twitterId -> tags 映射，前端优先用这个 |
 | `tagsZh` | 中文标签 |
 | `tagsEn` | 英文标签 |
@@ -57,11 +52,6 @@ function getTags(data, twitterId?: string, username?: string, lang: 'zh' | 'en' 
 
   if (twitterId && data.byTwitterId?.[twitterId]) {
     return data.byTwitterId[twitterId][key] || [];
-  }
-
-  const name = String(username || '').trim().replace(/^@+/, '').toLowerCase();
-  if (name && data.byUsername?.[name]) {
-    return data.byUsername[name][key] || [];
   }
 
   return [];
@@ -89,7 +79,7 @@ ETag: "xxxx"
 export interface XHuntUserTagsPayload {
   version: number;
   count: number;
-  byUsername: Record<string, { tagsZh: string[]; tagsEn: string[] }>;
+  byUsername: {};
   byTwitterId: Record<string, { tagsZh: string[]; tagsEn: string[] }>;
 }
 

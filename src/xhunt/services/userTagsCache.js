@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const { XhuntUserTag } = require("../../models/postgres-start");
 const { getRedisClient } = require("../../lib/redisClient");
 
-const USER_TAGS_CACHE_KEY = "xhunt:user-tags:all:v2";
+const USER_TAGS_CACHE_KEY = "xhunt:user-tags:all:v3";
 const USER_TAGS_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 function normalizeTags(value) {
@@ -23,18 +23,15 @@ function serialize(row) {
 
 function buildPayload(items) {
   const sortedItems = [...items].sort((a, b) => a.username.localeCompare(b.username));
-  const byUsername = {};
+  const byUsername = {}; // 保留字段兼容旧前端类型，后续统一按 twitterId 查询
   const byTwitterId = {};
 
   for (const item of sortedItems) {
-    const compactTags = {
+    if (!item.twitterId) continue;
+    byTwitterId[item.twitterId] = {
       tagsZh: item.tagsZh,
       tagsEn: item.tagsEn,
     };
-    byUsername[item.username] = compactTags;
-    if (item.twitterId) {
-      byTwitterId[item.twitterId] = compactTags;
-    }
   }
 
   const maxUpdatedAt = sortedItems.reduce((latest, item) => {
