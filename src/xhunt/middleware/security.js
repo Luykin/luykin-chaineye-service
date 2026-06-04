@@ -686,8 +686,14 @@ const isBrowserEnvironment = (userAgent, windowLocationHref) => {
   return hasBrowserUA && !hasScriptUA && isValidUrl;
 };
 
+function normalizeOptionalSignedValue(value) {
+  if (Array.isArray(value)) return normalizeOptionalSignedValue(value[0]);
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
 // 生成签名
-const generateSignature = (method, path, timestamp, body, fingerprint) => {
+const generateSignature = (method, path, timestamp, body, fingerprint, twId = "") => {
   // 处理 path：去掉末尾的斜杠
   const normalizedPath = path.endsWith("/") ? path.slice(0, -1) : path;
 
@@ -696,13 +702,21 @@ const generateSignature = (method, path, timestamp, body, fingerprint) => {
   const bodyString =
     body === null || body === undefined ? "" : JSON.stringify(body);
 
-  const payload = [
+  const payloadParts = [
     method.toUpperCase(),
     normalizedPath,
     timestamp,
     fingerprint,
     bodyString,
-  ].join("|");
+  ];
+
+  const normalizedTwId = normalizeOptionalSignedValue(twId);
+  // 老版本兼容：没有 x-tw-id 时保持原签名串；有 x-tw-id 时纳入签名。
+  if (normalizedTwId) {
+    payloadParts.push(normalizedTwId);
+  }
+
+  const payload = payloadParts.join("|");
 
   return crypto
     .createHmac("sha256", process.env.XHUNT_API_SECRET)
@@ -769,10 +783,15 @@ const generateSSESignature = (
   timestamp,
   fingerprint,
   method,
-  path
+  path,
+  twId = ""
 ) => {
   // 按照固定顺序组合参数：timestamp|fingerprint|method|path|requestId
-  const input = `${timestamp}|${fingerprint}|${method}|${path}|${requestId}`;
+  // 老版本兼容：没有 x-tw-id 时保持原签名串；有 x-tw-id 时追加。
+  const normalizedTwId = normalizeOptionalSignedValue(twId);
+  const input = normalizedTwId
+    ? `${timestamp}|${fingerprint}|${method}|${path}|${requestId}|${normalizedTwId}`
+    : `${timestamp}|${fingerprint}|${method}|${path}|${requestId}`;
 
   // 使用FNV-1a哈希算法生成主哈希值
   const hash1 = fnv1aHash(input);
@@ -1280,6 +1299,9 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
   );
   const signature = getRequestParam(req, "request-signature", allowQueryParams);
   const version = getRequestParam(req, "extension-version", allowQueryParams);
+  const twId = normalizeOptionalSignedValue(
+    getRequestParam(req, "tw-id", allowQueryParams)
+  );
 
   // 验证请求头是否存在
   if (!requestId || !timestamp || !fingerprint || !signature || !version) {
@@ -1333,7 +1355,8 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
       timestamp.toString(),
       fingerprint,
       req.method.toUpperCase(),
-      path
+      path,
+      twId
     );
 
     if (signature !== expectedSignature) {
@@ -1352,7 +1375,8 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
       path,
       timestamp,
       body,
-      fingerprint
+      fingerprint,
+      twId
     );
     if (signature !== expectedSignature) {
       console.error("web validateSecurityParams signature error:", {
@@ -1383,6 +1407,7 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
       fingerprint,
       version,
       signature,
+      twId: twId || null,
     },
   };
 };

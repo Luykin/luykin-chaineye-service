@@ -228,6 +228,7 @@ async function initializeAndStartServer() {
         fingerprint: ["headers", "x-device-fingerprint"],
         version: ["headers", "x-extension-version"],
         location: ["headers", "x-window-location-href"],
+        twId: ["headers", "x-tw-id"],
         ua: ["get", "user-agent"],
       },
       // --- Operational Config ---
@@ -313,6 +314,7 @@ async function initializeAndStartServer() {
       "x-request-signature",
       "x-extension-version",
       "x-user-id",
+      "x-tw-id",
       "x-window-location-href",
       "x-collector-client-token",
       "x-admin",
@@ -376,11 +378,12 @@ async function initializeAndStartServer() {
   morgan.token("xhunt-identity", (req) => {
     const requestId = req.headers["x-request-id"] || "no-request-id";
     const userId = req.headers["x-user-id"] || "anonymous";
+    const twId = req.headers["x-tw-id"] || "no-tw-id";
     const fingerprint = req.headers["x-device-fingerprint"] || "no-fingerprint";
     const version = req.headers["x-extension-version"] || "no-version";
     const windowLocationHref =
       req.headers["x-window-location-href"] || "no-location";
-    return `request_id=${requestId} user_id=${userId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref}`;
+    return `request_id=${requestId} user_id=${userId} tw_id=${twId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref}`;
   });
 
   // 错误信息 token（仅在错误处理中设置，默认 "-"）

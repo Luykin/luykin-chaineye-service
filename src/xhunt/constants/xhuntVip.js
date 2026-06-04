@@ -153,14 +153,16 @@ function getRequestIdentifiers(req) {
   return [
     // 优先使用已登录态中的 Twitter ID
     req?.user?.twitterId,
-    // 其次兼容 x-user-id 中的 username
+    // 其次使用新版本请求头中的 Twitter ID
+    headers["x-tw-id"],
+    // 最后兼容老版本 x-user-id 中的 username
     headers["x-user-id"],
   ].map(normalizeIdentifier).filter(Boolean);
 }
 
 function isRequestXHuntVip(req) {
   try {
-    // 优先按 req.user.twitterId 判断，未登录/旧请求再按 x-user-id(username) 判断
+    // 优先按 req.user.twitterId / x-tw-id 判断，老版本再按 x-user-id(username) 判断
     return getRequestIdentifiers(req).some(isXHuntVipHandle);
   } catch (_) {
     return false;
