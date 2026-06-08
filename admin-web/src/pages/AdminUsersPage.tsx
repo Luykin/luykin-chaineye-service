@@ -26,6 +26,7 @@ const PERMISSION_OPTIONS = [
   { label: "采集脚本", value: "tampermonkey" },
   { label: "公告配置", value: "nacos-messages" },
   { label: "活动配置", value: "nacos_config" },
+  { label: "翻译配置", value: "nacos-i18n" },
   { label: "标签配置", value: "nacos-tags" },
   { label: "功能开关", value: "feature_flags_config" },
   { label: "Banner配置", value: "banner-config" },

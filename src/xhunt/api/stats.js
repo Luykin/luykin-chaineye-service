@@ -1972,7 +1972,7 @@ router.get("/rootdata-detail-pollution-audit", adminAuth, async (req, res) => {
 router.get(
   "/nacos/config",
   adminAuth,
-  requirePermission(["nacos_config", "nacos-messages", "nacos-tags"]),
+  requirePermission(["nacos_config", "nacos-messages", "nacos-tags", "nacos-i18n"]),
   async (req, res) => {
     try {
       const { dataId, group = "DEFAULT_GROUP", tenant } = req.query;
@@ -2017,7 +2017,7 @@ router.get(
 router.post(
   "/nacos/config",
   adminAuth,
-  requirePermission(["nacos_config", "nacos-messages", "nacos-tags"]),
+  requirePermission(["nacos_config", "nacos-messages", "nacos-tags", "nacos-i18n"]),
   async (req, res) => {
     const auditAction = (req.body && req.body.source)
       ? `${req.body.source}-publish`
@@ -2135,7 +2135,7 @@ const XHUNT_I18N_REFERENCE_LOCALE_URLS = {
 router.get(
   "/nacos/i18n/reference",
   adminAuth,
-  requirePermission("nacos_config"),
+  requirePermission("nacos-i18n"),
   async (req, res) => {
     try {
       const entries = await Promise.all(

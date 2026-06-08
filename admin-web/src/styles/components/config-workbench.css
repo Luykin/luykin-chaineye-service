@@ -1055,3 +1055,51 @@
     justify-content: flex-start;
   }
 }
+
+.config-workbench.nacos-i18n-container .nacos-tags-item.is-new {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.config-workbench.nacos-i18n-container .nacos-tags-item.is-modified {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.config-workbench.nacos-i18n-container .nacos-tags-item.is-active.is-new {
+  background: #ecfdf5;
+  border-color: #86efac;
+  box-shadow: inset 3px 0 0 #22c55e;
+}
+
+.config-workbench.nacos-i18n-container .nacos-tags-item.is-active.is-modified {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.config-workbench.nacos-i18n-container .nacos-tags-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-status-chip {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-status-chip.is-new {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-status-chip.is-modified {
+  background: #fef3c7;
+  color: #b45309;
+}

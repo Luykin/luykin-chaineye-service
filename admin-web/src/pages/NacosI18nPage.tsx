@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -27,7 +27,10 @@ const DATA_ID = "xhunt_i18n";
 const GROUP = "DEFAULT_GROUP";
 const DISPLAY_NAMESPACE = "public";
 const DEFAULT_LANGS = ["zh", "en"];
+const DRAFT_STORAGE_KEY = "xhunt-admin:nacos-i18n:draft";
 type I18nConfig = Record<string, Record<string, string>>;
+type KeyStatus = "new" | "modified" | "clean";
+type I18nDraft = { config: I18nConfig; selectedKey?: string | null; savedAt?: number };
 
 function stableStringify(value: I18nConfig) {
   const sortedLangs = Object.keys(value).sort();
@@ -91,12 +94,64 @@ function buildPublishContent(config: I18nConfig) {
   return JSON.stringify(next, null, 2);
 }
 
+function keyExists(config: I18nConfig, key: string) {
+  return Object.values(config).some((langMap) => Object.prototype.hasOwnProperty.call(langMap || {}, key));
+}
+
+function getKeyValues(config: I18nConfig, key: string) {
+  const langs = Object.keys(config).sort();
+  const values: Record<string, string> = {};
+  langs.forEach((lang) => {
+    values[lang] = config[lang]?.[key] ?? "";
+  });
+  return JSON.stringify(values);
+}
+
+function getKeyStatus(config: I18nConfig, baseline: I18nConfig, key: string): KeyStatus {
+  if (!keyExists(baseline, key)) return "new";
+  return getKeyValues(config, key) === getKeyValues(baseline, key) ? "clean" : "modified";
+}
+
+function readSavedDraft(): I18nDraft | null {
+  try {
+    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<I18nDraft>;
+    if (!parsed || !parsed.config) return null;
+    return {
+      config: parseI18nContent(JSON.stringify(parsed.config)),
+      selectedKey: parsed.selectedKey || null,
+      savedAt: Number(parsed.savedAt || 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function removeSavedDraft() {
+  try {
+    window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    // ignore localStorage errors
+  }
+}
+
+function formatDraftTime(value?: number) {
+  if (!value) return "未知时间";
+  try {
+    return new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+  } catch {
+    return String(value);
+  }
+}
+
 export function NacosI18nPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [search, setSearch] = useState("");
   const [config, setConfig] = useState<I18nConfig>(() => parseI18nContent("{}"));
   const [baseline, setBaseline] = useState<I18nConfig>(() => parseI18nContent("{}"));
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const draftPromptedRef = useRef(false);
 
   const query = useQuery({
     queryKey: ["nacos-i18n", DATA_ID, GROUP],
@@ -119,13 +174,28 @@ export function NacosI18nPage() {
   const allKeys = useMemo(() => getAllKeys(config), [config]);
   const referenceConfig = parseI18nContent(JSON.stringify(referenceQuery.data?.data?.config || {}));
   const referenceKeys = useMemo(() => getAllKeys(referenceConfig), [referenceConfig]);
+  const keyStatusMap = useMemo(() => {
+    return Object.fromEntries(allKeys.map((key) => [key, getKeyStatus(config, baseline, key)])) as Record<string, KeyStatus>;
+  }, [allKeys, baseline, config]);
+  const pendingKeyCount = allKeys.filter((key) => keyStatusMap[key] !== "clean").length;
 
   useEffect(() => {
     if (query.data?.data?.content == null || dirty) return;
     try {
       const next = parseI18nContent(query.data.data.content);
+      const nextBaseline = cloneConfig(next);
+      setBaseline(nextBaseline);
+
+      const savedDraft = draftPromptedRef.current ? null : readSavedDraft();
+      draftPromptedRef.current = true;
+      if (savedDraft && window.confirm(`检测到未发布草稿（${formatDraftTime(savedDraft.savedAt)}），是否恢复？`)) {
+        const draftKeys = getAllKeys(savedDraft.config);
+        setConfig(savedDraft.config);
+        setSelectedKey(savedDraft.selectedKey && draftKeys.includes(savedDraft.selectedKey) ? savedDraft.selectedKey : draftKeys[0] || null);
+        return;
+      }
+
       setConfig(next);
-      setBaseline(cloneConfig(next));
       const keys = getAllKeys(next);
       setSelectedKey((current) => current && keys.includes(current) ? current : keys[0] || null);
     } catch {
@@ -180,9 +250,10 @@ export function NacosI18nPage() {
     }
     setConfig((current) => {
       const next = cloneConfig(current);
-      langs.forEach((lang) => {
+      const seedLangs = Array.from(new Set([...langs, ...DEFAULT_LANGS, ...Object.keys(referenceConfig)]));
+      seedLangs.forEach((lang) => {
         next[lang] = next[lang] || {};
-        next[lang][key] = "";
+        next[lang][key] = referenceConfig[lang]?.[key] || "";
       });
       return next;
     });
@@ -210,6 +281,15 @@ export function NacosI18nPage() {
     });
   }
 
+  function saveDraft() {
+    try {
+      window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ config, selectedKey, savedAt: Date.now() }));
+      messageApi.success("草稿已保存，可继续编辑多个 key 后统一发布");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "草稿保存失败");
+    }
+  }
+
   const saveMutation = useMutation({
     mutationFn: () => publishNacosConfig({
       dataId: DATA_ID,
@@ -221,14 +301,15 @@ export function NacosI18nPage() {
     onSuccess: () => {
       const nextBaseline = cloneConfig(config);
       setBaseline(nextBaseline);
-      messageApi.success("翻译配置已发布到 Nacos");
+      removeSavedDraft();
+      messageApi.success("翻译配置已发布到 Nacos，草稿已清除");
       void query.refetch();
     },
     onError: (error: Error) => messageApi.error(error.message || "发布失败"),
   });
 
   return (
-    <PermissionGuard permission="nacos_config">
+    <PermissionGuard permission="nacos-i18n">
       {contextHolder}
       <ConfigWorkbench
         className="nacos-i18n-container"
@@ -239,6 +320,7 @@ export function NacosI18nPage() {
           <Space wrap size={6}>
             <Button icon={<ReloadOutlined />} onClick={reload} loading={query.isFetching}>刷新</Button>
             <Button icon={<PlusOutlined />} onClick={addKey}>添加 key</Button>
+            <Button icon={<SaveOutlined />} disabled={!dirty} onClick={saveDraft}>保存草稿</Button>
             <Popconfirm title={`确认删除 ${selectedKey || "当前 key"}？`} disabled={!selectedKey} onConfirm={() => selectedKey && deleteKey(selectedKey)}>
               <Button danger icon={<DeleteOutlined />} disabled={!selectedKey}>删除</Button>
             </Popconfirm>
@@ -251,17 +333,28 @@ export function NacosI18nPage() {
           <>
             <div className="nacos-tags-search nacos-i18n-search">
               <SearchOutlined />
-              <Input variant="borderless" size="small" placeholder="搜索 key / 翻译内容..." value={search} onChange={(event) => setSearch(event.target.value)} />
+              <Input allowClear variant="borderless" size="small" placeholder="搜索 key / 翻译内容..." value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
             <div className="nacos-tags-list config-workbench-list">
               {filteredKeys.length ? filteredKeys.map((key) => {
                 const active = key === selectedKey;
                 const zh = config.zh?.[key] || "";
+                const status = keyStatusMap[key] || "clean";
+                const statusText = status === "new" ? "新建" : status === "modified" ? "已修改" : "";
+                const className = [
+                  "config-workbench-list-item",
+                  "nacos-tags-item",
+                  active ? "is-active active" : "",
+                  status !== "clean" ? `is-${status}` : "",
+                ].filter(Boolean).join(" ");
                 return (
-                  <button key={key} type="button" className={active ? "config-workbench-list-item nacos-tags-item is-active active" : "config-workbench-list-item nacos-tags-item"} onClick={() => setSelectedKey(key)}>
+                  <button key={key} type="button" className={className} onClick={() => setSelectedKey(key)}>
                     <span className="nacos-tags-item-count">K</span>
                     <span className="nacos-tags-item-main">
-                      <span className="nacos-tags-item-handle">{key}</span>
+                      <span className="nacos-tags-item-title-row">
+                        <span className="nacos-tags-item-handle">{key}</span>
+                        {statusText ? <span className={`nacos-i18n-status-chip is-${status}`}>{statusText}</span> : null}
+                      </span>
                       <span className="nacos-tags-item-preview">
                         <span className="nacos-tags-mini-chip">{zh || "未配置中文"}</span>
                       </span>
@@ -273,7 +366,7 @@ export function NacosI18nPage() {
           </>
         }
         editorTitle={selectedKey || "选择一个翻译 key"}
-        editorMeta={selectedKey ? `${langs.length} 个语言字段` : "可搜索、添加、删除 key"}
+        editorMeta={selectedKey ? `${langs.length} 个语言字段${keyStatusMap[selectedKey] === "new" ? " · 新建未发布" : keyStatusMap[selectedKey] === "modified" ? " · 修改未发布" : ""}` : "可搜索、添加、删除 key"}
       >
         {query.isError ? <Alert style={{ marginBottom: 12 }} type="error" showIcon message="加载 Nacos 翻译配置失败" /> : null}
         {parseError ? <Alert style={{ marginBottom: 12 }} type="error" showIcon message="Nacos 内容不是合法的翻译 JSON" description={parseError} /> : null}
@@ -282,6 +375,7 @@ export function NacosI18nPage() {
           <div className="nacos-tags-stat-card"><span>Key 总数</span><strong>{allKeys.length}</strong></div>
           <div className="nacos-tags-stat-card"><span>语言</span><strong>{langs.join(" / ")}</strong></div>
           <div className="nacos-tags-stat-card"><span>空翻译</span><strong>{missingCount}</strong></div>
+          <div className="nacos-tags-stat-card"><span>未发布 key</span><strong>{pendingKeyCount}</strong></div>
         </div>
 
         {selectedKey ? (
