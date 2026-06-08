@@ -948,3 +948,110 @@
     grid-template-columns: 1fr;
   }
 }
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-section {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #e9d5ff;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fdfcff 0%, #faf5ff 100%);
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-kicker {
+  color: #7c3aed;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-header h3 {
+  margin: 2px 0 6px;
+  color: #1f1633;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-header p {
+  max-width: 760px;
+  margin: 0;
+  color: #5b516b;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-metrics span {
+  padding: 5px 9px;
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  background: #fff;
+  color: #5b21b6;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid #e9d5ff;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-table th,
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #f1edf8;
+  text-align: left;
+  vertical-align: top;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fbf8ff;
+  color: #6d28d9;
+  font-weight: 750;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-reference-key {
+  color: #4c1d95;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .config-workbench.nacos-i18n-container .nacos-i18n-reference-header {
+    flex-direction: column;
+  }
+
+  .config-workbench.nacos-i18n-container .nacos-i18n-reference-metrics {
+    justify-content: flex-start;
+  }
+}

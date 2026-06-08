@@ -27,8 +27,13 @@ const DATA_ID = "xhunt_i18n";
 const GROUP = "DEFAULT_GROUP";
 const DISPLAY_NAMESPACE = "public";
 const DEFAULT_LANGS = ["zh", "en"];
+const OPEN_SOURCE_LOCALE_URLS: Record<string, string> = {
+  zh: "https://raw.githubusercontent.com/AlphaHunt3/tweet-hunt-extension/main/src/locales/zh.json",
+  en: "https://raw.githubusercontent.com/AlphaHunt3/tweet-hunt-extension/main/src/locales/en.json",
+};
 
 type I18nConfig = Record<string, Record<string, string>>;
+type ReferenceLocaleResult = { config: I18nConfig; urls: Record<string, string> };
 
 function stableStringify(value: I18nConfig) {
   const sortedLangs = Object.keys(value).sort();
@@ -81,6 +86,22 @@ function cloneConfig(config: I18nConfig): I18nConfig {
   return JSON.parse(JSON.stringify(config || {})) as I18nConfig;
 }
 
+async function fetchOpenSourceLocaleReference(): Promise<ReferenceLocaleResult> {
+  const entries = await Promise.all(
+    Object.entries(OPEN_SOURCE_LOCALE_URLS).map(async ([lang, url]) => {
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) throw new Error(`${lang}.json 读取失败 (${resp.status})`);
+      const json = await resp.json() as Record<string, unknown>;
+      const langConfig: Record<string, string> = {};
+      Object.entries(json || {}).forEach(([key, value]) => {
+        langConfig[key] = toText(value);
+      });
+      return [lang, langConfig] as const;
+    }),
+  );
+  return { config: Object.fromEntries(entries), urls: OPEN_SOURCE_LOCALE_URLS };
+}
+
 function buildPublishContent(config: I18nConfig) {
   const next: I18nConfig = {};
   Object.keys(config).sort().forEach((lang) => {
@@ -103,6 +124,11 @@ export function NacosI18nPage() {
     queryKey: ["nacos-i18n", DATA_ID, GROUP],
     queryFn: () => fetchNacosConfig({ dataId: DATA_ID, group: GROUP }),
   });
+  const referenceQuery = useQuery({
+    queryKey: ["open-source-i18n-reference"],
+    queryFn: fetchOpenSourceLocaleReference,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const dirty = stableStringify(config) !== stableStringify(baseline);
   const langs = useMemo(() => {
@@ -113,6 +139,8 @@ export function NacosI18nPage() {
     return names;
   }, [config]);
   const allKeys = useMemo(() => getAllKeys(config), [config]);
+  const referenceConfig = referenceQuery.data?.config || {};
+  const referenceKeys = useMemo(() => getAllKeys(referenceConfig), [referenceConfig]);
 
   useEffect(() => {
     if (query.data?.data?.content == null || dirty) return;
@@ -251,15 +279,13 @@ export function NacosI18nPage() {
               {filteredKeys.length ? filteredKeys.map((key) => {
                 const active = key === selectedKey;
                 const zh = config.zh?.[key] || "";
-                const en = config.en?.[key] || "";
                 return (
                   <button key={key} type="button" className={active ? "config-workbench-list-item nacos-tags-item is-active active" : "config-workbench-list-item nacos-tags-item"} onClick={() => setSelectedKey(key)}>
                     <span className="nacos-tags-item-count">K</span>
                     <span className="nacos-tags-item-main">
                       <span className="nacos-tags-item-handle">{key}</span>
                       <span className="nacos-tags-item-preview">
-                        <span className="nacos-tags-mini-chip">zh: {zh || "未配置"}</span>
-                        <span className="nacos-tags-mini-chip">en: {en || "未配置"}</span>
+                        <span className="nacos-tags-mini-chip">{zh || "未配置中文"}</span>
                       </span>
                     </span>
                   </button>
@@ -313,6 +339,53 @@ export function NacosI18nPage() {
             <div className="nacos-tags-empty-desc">左侧支持按 key 和翻译内容搜索；修改后点击「发布到 Nacos」一次性覆盖写入。</div>
           </div>
         )}
+
+        <div className="nacos-i18n-reference-section">
+          <div className="nacos-i18n-reference-header">
+            <div>
+              <div className="nacos-i18n-reference-kicker">开源库已有 key 参考</div>
+              <h3>包内 locales 参考表</h3>
+              <p>来自开源库 tweet-hunt-extension 的 zh.json / en.json。Nacos 配置里的同名 key 会覆盖包内已有 key；Nacos 不需要配置全量 key，缺失时可参考包内默认文案。</p>
+            </div>
+            <div className="nacos-i18n-reference-metrics">
+              <span>{referenceKeys.length} keys</span>
+            </div>
+          </div>
+
+          {referenceQuery.isError ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="开源库 locales 参考读取失败"
+              description={referenceQuery.error instanceof Error ? referenceQuery.error.message : "请检查 GitHub raw 地址或网络/CORS 状态"}
+            />
+          ) : (
+            <div className="nacos-i18n-reference-table-wrap">
+              <table className="nacos-i18n-reference-table">
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th>zh.json</th>
+                    <th>en.json</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {referenceQuery.isLoading ? (
+                    <tr><td colSpan={3}>正在读取开源库已有 key...</td></tr>
+                  ) : referenceKeys.length ? referenceKeys.map((key) => (
+                    <tr key={key}>
+                      <td className="nacos-i18n-reference-key">{key}</td>
+                      <td>{referenceConfig.zh?.[key] || ""}</td>
+                      <td>{referenceConfig.en?.[key] || ""}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={3}>暂无开源库参考 key</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </ConfigWorkbench>
     </PermissionGuard>
   );
