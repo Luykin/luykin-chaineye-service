@@ -2,9 +2,15 @@ import { apiRequest } from "./apiClient";
 import type {
   NacosConfigResponse,
   NacosPublishResponse,
+  NacosI18nReferenceResponse,
   WebsiteCampaignListResponse,
   WebsiteCampaignSyncResponse,
 } from "@/types/nacos";
+
+
+export async function fetchNacosI18nReference() {
+  return apiRequest<NacosI18nReferenceResponse>("/api/xhunt/stats/nacos/i18n/reference");
+}
 
 export async function fetchNacosConfig(params: {
   dataId: string;

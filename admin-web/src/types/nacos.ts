@@ -85,3 +85,13 @@ export interface UserTagSyncResponse {
   };
   error?: string;
 }
+
+export interface NacosI18nReferenceResponse {
+  success: boolean;
+  data: {
+    source: string;
+    urls: Record<string, string>;
+    config: Record<string, Record<string, unknown>>;
+  };
+  error?: string;
+}

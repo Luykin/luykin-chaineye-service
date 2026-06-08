@@ -2126,6 +2126,50 @@ router.post(
   }
 );
 
+
+const XHUNT_I18N_REFERENCE_LOCALE_URLS = {
+  zh: "https://raw.githubusercontent.com/AlphaHunt3/tweet-hunt-extension/main/src/locales/zh.json",
+  en: "https://raw.githubusercontent.com/AlphaHunt3/tweet-hunt-extension/main/src/locales/en.json",
+};
+
+router.get(
+  "/nacos/i18n/reference",
+  adminAuth,
+  requirePermission("nacos_config"),
+  async (req, res) => {
+    try {
+      const entries = await Promise.all(
+        Object.entries(XHUNT_I18N_REFERENCE_LOCALE_URLS).map(async ([lang, url]) => {
+          const resp = await axios.get(url, {
+            timeout: 10000,
+            responseType: "json",
+            headers: {
+              Accept: "application/json,text/plain,*/*",
+              "User-Agent": "xhunt-admin-i18n-reference/1.0",
+            },
+          });
+          const body = resp && resp.data && typeof resp.data === "object" && !Array.isArray(resp.data)
+            ? resp.data
+            : {};
+          return [lang, body];
+        })
+      );
+
+      res.json({
+        success: true,
+        data: {
+          source: "tweet-hunt-extension/src/locales",
+          urls: XHUNT_I18N_REFERENCE_LOCALE_URLS,
+          config: Object.fromEntries(entries),
+        },
+      });
+    } catch (e) {
+      console.error("[nacos_i18n_reference] read error:", e);
+      res.status(500).json({ success: false, error: e.message || "读取开源库 locales 参考失败" });
+    }
+  }
+);
+
 /**
  * GET /health
  * 健康检查接口（无需认证）

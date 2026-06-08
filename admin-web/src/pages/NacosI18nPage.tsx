@@ -19,7 +19,7 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
-import { fetchNacosConfig, publishNacosConfig } from "@/services/nacos";
+import { fetchNacosConfig, fetchNacosI18nReference, publishNacosConfig } from "@/services/nacos";
 
 const { TextArea } = Input;
 
@@ -27,13 +27,7 @@ const DATA_ID = "xhunt_i18n";
 const GROUP = "DEFAULT_GROUP";
 const DISPLAY_NAMESPACE = "public";
 const DEFAULT_LANGS = ["zh", "en"];
-const OPEN_SOURCE_LOCALE_URLS: Record<string, string> = {
-  zh: "https://raw.githubusercontent.com/AlphaHunt3/tweet-hunt-extension/main/src/locales/zh.json",
-  en: "https://raw.githubusercontent.com/AlphaHunt3/tweet-hunt-extension/main/src/locales/en.json",
-};
-
 type I18nConfig = Record<string, Record<string, string>>;
-type ReferenceLocaleResult = { config: I18nConfig; urls: Record<string, string> };
 
 function stableStringify(value: I18nConfig) {
   const sortedLangs = Object.keys(value).sort();
@@ -86,22 +80,6 @@ function cloneConfig(config: I18nConfig): I18nConfig {
   return JSON.parse(JSON.stringify(config || {})) as I18nConfig;
 }
 
-async function fetchOpenSourceLocaleReference(): Promise<ReferenceLocaleResult> {
-  const entries = await Promise.all(
-    Object.entries(OPEN_SOURCE_LOCALE_URLS).map(async ([lang, url]) => {
-      const resp = await fetch(url, { cache: "no-store" });
-      if (!resp.ok) throw new Error(`${lang}.json 读取失败 (${resp.status})`);
-      const json = await resp.json() as Record<string, unknown>;
-      const langConfig: Record<string, string> = {};
-      Object.entries(json || {}).forEach(([key, value]) => {
-        langConfig[key] = toText(value);
-      });
-      return [lang, langConfig] as const;
-    }),
-  );
-  return { config: Object.fromEntries(entries), urls: OPEN_SOURCE_LOCALE_URLS };
-}
-
 function buildPublishContent(config: I18nConfig) {
   const next: I18nConfig = {};
   Object.keys(config).sort().forEach((lang) => {
@@ -126,7 +104,7 @@ export function NacosI18nPage() {
   });
   const referenceQuery = useQuery({
     queryKey: ["open-source-i18n-reference"],
-    queryFn: fetchOpenSourceLocaleReference,
+    queryFn: fetchNacosI18nReference,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -139,7 +117,7 @@ export function NacosI18nPage() {
     return names;
   }, [config]);
   const allKeys = useMemo(() => getAllKeys(config), [config]);
-  const referenceConfig = referenceQuery.data?.config || {};
+  const referenceConfig = parseI18nContent(JSON.stringify(referenceQuery.data?.data?.config || {}));
   const referenceKeys = useMemo(() => getAllKeys(referenceConfig), [referenceConfig]);
 
   useEffect(() => {
@@ -357,7 +335,7 @@ export function NacosI18nPage() {
               type="warning"
               showIcon
               message="开源库 locales 参考读取失败"
-              description={referenceQuery.error instanceof Error ? referenceQuery.error.message : "请检查 GitHub raw 地址或网络/CORS 状态"}
+              description={referenceQuery.error instanceof Error ? referenceQuery.error.message : "请检查后端转发接口或 GitHub raw 网络状态"}
             />
           ) : (
             <div className="nacos-i18n-reference-table-wrap">
