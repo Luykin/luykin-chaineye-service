@@ -38,6 +38,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/nacos-messages", icon: <LegacySidebarIcon name="megaphone" />, label: "公告配置", permission: "nacos-messages", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-campaigns", icon: <LegacySidebarIcon name="target" />, label: "活动配置", permission: "nacos_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/nacos-tags", icon: <LegacySidebarIcon name="tag" />, label: "标签配置", permission: "nacos-tags", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
+  { key: "/nacos-i18n", icon: <LegacySidebarIcon name="file-text" />, label: "翻译配置", permission: "nacos_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/feature-flags", icon: <LegacySidebarIcon name="toggle" />, label: "功能开关", permission: "feature_flags_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/banner-config", icon: <LegacySidebarIcon name="square" />, label: "Banner配置", permission: "banner-config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/redis-management", icon: <LegacySidebarIcon name="database" />, label: "Redis管理", permission: "redis-management", group: "main", sidebarGroup: "dev", implemented: true, section: "system", superOnly: true },

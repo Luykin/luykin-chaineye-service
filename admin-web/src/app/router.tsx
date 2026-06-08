@@ -24,6 +24,7 @@ import { PerfMonitorPage } from "@/pages/PerfMonitorPage";
 import { NacosMessagesPage } from "@/pages/NacosMessagesPage";
 import { NacosCampaignsPage } from "@/pages/NacosCampaignsPage";
 import { NacosTagsPage } from "@/pages/NacosTagsPage";
+import { NacosI18nPage } from "@/pages/NacosI18nPage";
 import { FeatureFlagsPage } from "@/pages/FeatureFlagsPage";
 import { BannerConfigPage } from "@/pages/BannerConfigPage";
 import { RedisManagementPage } from "@/pages/RedisManagementPage";
@@ -57,6 +58,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "nacos-messages": <NacosMessagesPage />,
   "nacos-campaigns": <NacosCampaignsPage />,
   "nacos-tags": <NacosTagsPage />,
+  "nacos-i18n": <NacosI18nPage />,
   "feature-flags": <FeatureFlagsPage />,
   "banner-config": <BannerConfigPage />,
   "redis-management": <RedisManagementPage />,

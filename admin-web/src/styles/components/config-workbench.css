@@ -847,3 +847,104 @@
     grid-template-columns: 1fr;
   }
 }
+
+.config-workbench.nacos-i18n-container .config-workbench-sidebar-content {
+  padding: 10px;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-search {
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+
+.config-workbench.nacos-i18n-container .nacos-tags-list {
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  gap: 7px;
+}
+
+.config-workbench.nacos-i18n-container .nacos-tags-item {
+  margin: 0;
+  padding: 10px 11px;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.config-workbench.nacos-i18n-container .nacos-tags-item.is-active {
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+  box-shadow: inset 3px 0 0 #7c3aed;
+}
+
+.config-workbench.nacos-i18n-container .nacos-tags-item-count {
+  background: #f3e8ff;
+  color: #6d28d9;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-stats {
+  margin-bottom: 14px;
+}
+
+.config-workbench.nacos-i18n-container .nacos-tags-stat-card,
+.config-workbench.nacos-i18n-container .nacos-i18n-key-card,
+.config-workbench.nacos-i18n-container .nacos-i18n-lang-card,
+.config-workbench.nacos-i18n-container .nacos-i18n-preview-section,
+.config-workbench.nacos-i18n-container .nacos-tags-preview-pre {
+  border-radius: 13px;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-key-card,
+.config-workbench.nacos-i18n-container .nacos-i18n-lang-card,
+.config-workbench.nacos-i18n-container .nacos-i18n-preview-section {
+  padding: 12px;
+  border: 1px solid #e6eaf0;
+  background: #fff;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-key-card {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-key-card label,
+.config-workbench.nacos-i18n-container .nacos-i18n-lang-card label {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-key-card span {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-lang-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-lang-card {
+  margin: 0;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-lang-card textarea {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.config-workbench.nacos-i18n-container .nacos-i18n-preview-section {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .config-workbench.nacos-i18n-container .nacos-i18n-stats,
+  .config-workbench.nacos-i18n-container .nacos-i18n-lang-grid {
+    grid-template-columns: 1fr;
+  }
+}
