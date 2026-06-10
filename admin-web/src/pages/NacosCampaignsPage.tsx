@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, Input, InputNumber, Modal, Segmented, Select, Switch, Tabs } from "antd";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
+import { useAuth } from "@/app/auth";
 import {
   fetchAllWebsiteCampaigns,
   fetchWebsiteCampaignByNacosId,
@@ -501,11 +502,20 @@ export function NacosCampaignsPage() {
   const [jsonPreviewOpen, setJsonPreviewOpen] = useState(false);
   const [jsonPreviewHtml, setJsonPreviewHtml] = useState("");
   const [jsonDiffHint, setJsonDiffHint] = useState("");
+  const [newCampaignOpen, setNewCampaignOpen] = useState(false);
+  const [newCampaignMode, setNewCampaignMode] = useState<"blank" | "copy">(
+    "blank",
+  );
+  const [newCampaignSourceIndex, setNewCampaignSourceIndex] = useState<
+    number | null
+  >(null);
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [listCollapsed, setListCollapsed] = useState(
     () => localStorage.getItem("nacos-campaigns-list-collapsed") === "1",
   );
+  const { user } = useAuth();
+  const canEditCampaignId = user?.role === "super";
 
   const selectedCampaign =
     selection?.type === "nacos" ? config.campaigns[selection.index] : null;
@@ -771,7 +781,7 @@ export function NacosCampaignsPage() {
     return { nacosItems, websiteOnly };
   }, [config.campaigns, websiteRecords, search]);
 
-  function newCampaign() {
+  function openNewCampaignModal() {
     if (!confirmDiscardWebsite()) return;
     if (
       dirty &&
@@ -780,13 +790,44 @@ export function NacosCampaignsPage() {
       )
     )
       return;
-    const c = makeNewCampaign();
+    setNewCampaignMode("blank");
+    setNewCampaignSourceIndex(
+      selection?.type === "nacos" ? selection.index : null,
+    );
+    setNewCampaignOpen(true);
+  }
+
+  function makeCampaignFromTemplate(index: number | null) {
+    if (index == null) return makeNewCampaign();
+    const source = config.campaigns[index];
+    if (!source) return makeNewCampaign();
+    const copy = clone(source);
+    copy.id = "";
+    copy.campaignKey = "";
+    copy.hotTweetsKey = "";
+    copy.enabled = false;
+    copy.testingPhase = true;
+    copy.sortWeight = 0;
+    return normalizeCampaign(copy);
+  }
+
+  function confirmNewCampaign() {
+    const c =
+      newCampaignMode === "copy"
+        ? makeCampaignFromTemplate(newCampaignSourceIndex)
+        : makeNewCampaign();
     setConfig((prev) => ({ ...prev, campaigns: [c, ...prev.campaigns] }));
     setSelection({ type: "nacos", index: 0 });
     setDirty(true);
     setWebsiteForm(makeWebsiteForm(null, c));
     setWebsiteMeta("新活动尚未发布到数据库");
-    showToast("已新增一条活动（未发布）", "info");
+    setNewCampaignOpen(false);
+    showToast(
+      newCampaignMode === "copy"
+        ? "已从模板新增一条活动（未发布）"
+        : "已新增一条活动（未发布）",
+      "info",
+    );
   }
 
   function duplicateCampaign() {
@@ -1298,7 +1339,7 @@ export function NacosCampaignsPage() {
               </Button>
               <Button
                 className="config-action config-action-primary"
-                onClick={newCampaign}
+                onClick={openNewCampaignModal}
               >
                 新增
               </Button>
@@ -1451,6 +1492,7 @@ export function NacosCampaignsPage() {
             {c ? (
               <CampaignEditor
                 c={c}
+                canEditCampaignId={canEditCampaignId}
                 setCampaignPath={setCampaignPath}
                 updateSelectedCampaign={updateSelectedCampaign}
                 changeThreshold={changeThreshold}
@@ -1491,6 +1533,68 @@ export function NacosCampaignsPage() {
           {toast.message}
         </div>
       ) : null}
+
+      <Modal
+        open={newCampaignOpen}
+        title="新增活动"
+        okText="创建"
+        cancelText="取消"
+        onCancel={() => setNewCampaignOpen(false)}
+        onOk={confirmNewCampaign}
+        okButtonProps={{
+          disabled: newCampaignMode === "copy" && newCampaignSourceIndex == null,
+        }}
+      >
+        <div className="field-row field-row-1">
+          <Field label="创建方式">
+            <Segmented
+              value={newCampaignMode}
+              onChange={(value) => {
+                const mode = String(value) as "blank" | "copy";
+                setNewCampaignMode(mode);
+                if (mode === "copy" && newCampaignSourceIndex == null) {
+                  setNewCampaignSourceIndex(config.campaigns.length ? 0 : null);
+                }
+              }}
+              options={[
+                { value: "blank", label: "完全新建" },
+                {
+                  value: "copy",
+                  label: "从活动复制",
+                  disabled: !config.campaigns.length,
+                },
+              ]}
+            />
+          </Field>
+        </div>
+        {newCampaignMode === "copy" ? (
+          <div className="field-row field-row-1">
+            <Field
+              label="选择模板活动"
+              hint="会复制活动内容，但清空活动ID，并默认关闭展示。"
+            >
+              <Select
+                value={newCampaignSourceIndex ?? undefined}
+                onChange={(value) => setNewCampaignSourceIndex(Number(value))}
+                placeholder="请选择要复制的活动"
+                options={config.campaigns.map((item, index) => ({
+                  value: index,
+                  label:
+                    item.displayName?.zh ||
+                    item.displayName?.en ||
+                    item.campaignKey ||
+                    item.id ||
+                    `活动 #${index + 1}`,
+                }))}
+              />
+            </Field>
+          </div>
+        ) : (
+          <div className="muted" style={{ lineHeight: 1.6 }}>
+            将创建一条空白活动，带默认任务、Logo 和基础文案。
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={jsonPreviewOpen}
@@ -1600,6 +1704,7 @@ function ListGroup({
 
 function CampaignEditor(props: {
   c: AnyObj;
+  canEditCampaignId: boolean;
   setCampaignPath: (path: string, value: any) => void;
   updateSelectedCampaign: (fn: (c: AnyObj) => void) => void;
   changeThreshold: (value: string) => void;
@@ -1617,6 +1722,7 @@ function CampaignEditor(props: {
 }) {
   const {
     c,
+    canEditCampaignId,
     setCampaignPath,
     updateSelectedCampaign,
     changeThreshold,
@@ -1628,6 +1734,7 @@ function CampaignEditor(props: {
     removeArrayItem,
   } = props;
   const saved = !!c.id?.trim();
+  const campaignIdDisabled = saved && !canEditCampaignId;
   const switchLabel = (
     text: React.ReactNode,
     checked: boolean,
@@ -1661,10 +1768,17 @@ function CampaignEditor(props: {
         </div>
       </div>
       <div className="field-row field-row-basic">
-        <Field label="活动ID" hint="例如：mantle3,bybit2，可找技术确认">
+        <Field
+          label="活动ID"
+          hint={
+            campaignIdDisabled
+              ? "已保存活动仅超级管理员可修改 ID"
+              : "例如：mantle3,bybit2，可找技术确认"
+          }
+        >
           <Input
             value={c.campaignKey || ""}
-            disabled={saved}
+            disabled={campaignIdDisabled}
             onChange={(e) => setCampaignPath("campaignKey", e.target.value)}
             placeholder="例如：mantle"
           />
