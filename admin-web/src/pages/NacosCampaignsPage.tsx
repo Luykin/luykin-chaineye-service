@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Input, InputNumber, Modal, Segmented, Select, Switch } from "antd";
+import { Button, Card, Col, Collapse, Input, InputNumber, Modal, Row, Segmented, Select, Space, Switch, Tag, Tooltip } from "antd";
+import { QuestionCircleOutlined } from "@ant-design/icons";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { useAuth } from "@/app/auth";
@@ -413,6 +414,25 @@ function buildDiffHtml(oldConfig: unknown, nextConfig: unknown) {
   return div.innerHTML;
 }
 
+function InfoLabel({
+  children,
+  info,
+}: {
+  children: React.ReactNode;
+  info?: React.ReactNode;
+}) {
+  return (
+    <Space size={4}>
+      <span>{children}</span>
+      {info ? (
+        <Tooltip title={info}>
+          <QuestionCircleOutlined style={{ color: "#8c8c8c", fontSize: 12 }} />
+        </Tooltip>
+      ) : null}
+    </Space>
+  );
+}
+
 function formatCampaignTime(value: string) {
   if (!value) return "未设置";
   const d = new Date(value);
@@ -480,17 +500,15 @@ function Field({
 function Section({
   title,
   children,
-  compact = true,
 }: {
   title: React.ReactNode;
   children: React.ReactNode;
   compact?: boolean;
 }) {
   return (
-    <div className={`section ${compact ? "section-compact" : ""}`}>
-      <div className="section-title">{title}</div>
+    <Card size="small" title={title} style={{ marginBottom: 12 }}>
       {children}
-    </div>
+    </Card>
   );
 }
 
@@ -503,23 +521,13 @@ function CollapsibleSection({
   children: React.ReactNode;
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className={`section section-collapsible ${open ? "expanded" : ""}`}>
-      <div
-        className="section-title section-title-collapsible"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span>{title}</span>
-        <span className="section-toggle">▼</span>
-      </div>
-      <div
-        className="section-content"
-        style={{ display: open ? "block" : "none" }}
-      >
-        {children}
-      </div>
-    </div>
+    <Collapse
+      size="small"
+      style={{ marginBottom: 12 }}
+      defaultActiveKey={defaultOpen ? ["main"] : []}
+      items={[{ key: "main", label: title, children }]}
+    />
   );
 }
 
@@ -1347,7 +1355,7 @@ export function NacosCampaignsPage() {
     <PermissionGuard permission="nacos_config">
       <ConfigWorkbench
         id="nacos-campaigns"
-        className="campaigns-container campaigns-react-page"
+        className="nacos-campaigns-admin"
         title="Xhunt Earn 活动配置"
         collapsed={listCollapsed}
         toolbar={
@@ -1769,547 +1777,9 @@ function ListGroup({
       ) : (
         <div className="list-group-empty">{emptyText}</div>
       )}
-    </div>
+    </Card>
   );
 }
-
-function CampaignBrief({
-  c,
-  dirty,
-  websiteDirty,
-  websiteStatus,
-}: {
-  c: AnyObj;
-  dirty: boolean;
-  websiteDirty: boolean;
-  websiteStatus: string;
-}) {
-  const stage = getCampaignStage(c);
-  const taskCount = Array.isArray(c.tasks) ? c.tasks.length : 0;
-  const logoCount = Array.isArray(c.logos) ? c.logos.length : 0;
-  const targetCount = Array.isArray(c.targetUserIds) ? c.targetUserIds.length : 0;
-  return (
-    <div className="campaign-brief">
-      <div className="campaign-brief-main">
-        <div className="campaign-brief-eyebrow">
-          <span className={`campaign-stage ${stage.className}`}>
-            {stage.label}
-          </span>
-          <span>{c.leaderboardMode === "custom" ? "自定义榜单" : "传统榜单"}</span>
-          {dirty ? <span className="is-dirty">主配置未发布</span> : null}
-          {websiteDirty ? <span className="is-dirty">网站未保存</span> : null}
-        </div>
-        <div className="campaign-brief-title">
-          {c.displayName?.zh ||
-            c.displayName?.en ||
-            c.copy?.shortTitle?.zh ||
-            c.campaignKey ||
-            "未命名活动"}
-        </div>
-        <div className="campaign-brief-sub">
-          <span>{c.id || "未生成 ID"}</span>
-          <span>网站：{websiteStatus || "draft"}</span>
-        </div>
-      </div>
-      <div className="campaign-brief-metrics">
-        <div className="brief-metric">
-          <span>活动时间</span>
-          <strong>
-            {formatCampaignTime(c.enrollmentWindow?.startAt)} →{" "}
-            {formatCampaignTime(c.enrollmentWindow?.endAt)}
-          </strong>
-        </div>
-        <div className="brief-metric">
-          <span>奖励</span>
-          <strong>{getRewardSummary(c)}</strong>
-        </div>
-        <div className="brief-metric">
-          <span>素材 / 任务 / 投放</span>
-          <strong>
-            {logoCount} Logo · {taskCount} Task · {targetCount} 账号
-          </strong>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CampaignEditor(props: {
-  c: AnyObj;
-  canEditCampaignId: boolean;
-  setCampaignPath: (path: string, value: any) => void;
-  updateSelectedCampaign: (fn: (c: AnyObj) => void) => void;
-  changeThreshold: (value: string) => void;
-  thresholdValue: string;
-  changeRiskConfirm: (checked: boolean) => void;
-  addArrayItem: (kind: any) => void;
-  updateArrayItem: (
-    kind: string,
-    index: number,
-    path: string,
-    value: any,
-  ) => void;
-  moveArrayItem: (kind: string, index: number, delta: number) => void;
-  removeArrayItem: (kind: string, index: number) => void;
-}) {
-  const {
-    c,
-    canEditCampaignId,
-    setCampaignPath,
-    updateSelectedCampaign,
-    changeThreshold,
-    thresholdValue,
-    changeRiskConfirm,
-    addArrayItem,
-    updateArrayItem,
-    moveArrayItem,
-    removeArrayItem,
-  } = props;
-  const saved = !!c.id?.trim();
-  const campaignIdDisabled = saved && !canEditCampaignId;
-  const switchLabel = (
-    text: React.ReactNode,
-    checked: boolean,
-    onChange: (checked: boolean) => void,
-    primary = false,
-  ) => (
-    <>
-      <label
-        className={`switch-label ${primary ? "switch-label-primary" : ""}`}
-      >
-        {text}
-      </label>
-      <Switch checked={checked} onChange={onChange} />
-    </>
-  );
-  return (
-    <>
-      <div className="campaign-setup-panel">
-        <div className="campaign-setup-title">基础设置</div>
-        <div className="campaign-quick-controls">
-        <div className="quick-switch quick-switch-primary">
-          {switchLabel(
-            "展示活动",
-            !!c.enabled,
-            (v) => setCampaignPath("enabled", v),
-            true,
-          )}
-        </div>
-        <div className="quick-switch">
-          {switchLabel("测试模式", !!c.testingPhase, (v) =>
-            setCampaignPath("testingPhase", v),
-          )}
-          <span className="quick-switch-note">仅内部可见</span>
-        </div>
-      </div>
-      <div className="field-row field-row-basic campaign-id-row">
-        <Field
-          label="活动ID"
-          hint={
-            campaignIdDisabled
-              ? "已保存活动仅超级管理员可修改 ID"
-              : "例如：mantle3,bybit2，可找技术确认"
-          }
-        >
-          <Input
-            value={c.campaignKey || ""}
-            disabled={campaignIdDisabled}
-            onChange={(e) => setCampaignPath("campaignKey", e.target.value)}
-            placeholder="例如：mantle"
-          />
-        </Field>
-        <Field label="排序权重" hint="0-10000，数值越大越靠前">
-          <InputNumber
-            min={0}
-            max={10000}
-            step={1}
-            value={Number(c.sortWeight) || 0}
-            onChange={(v) =>
-              setCampaignPath(
-                "sortWeight",
-                Math.min(10000, Math.max(0, Number(v) || 0)),
-              )
-            }
-          />
-        </Field>
-      </div>
-      <div className="campaign-options">
-        <div className="option-item">
-          <label className="switch-label">
-            <span>早期项目风险提示</span>
-            <span
-              className="risk-preview-trigger"
-              title="中文预览：重要提示：该项目为 Early-stage 项目，信息由项目方提供，请在参与前自行判断。"
-            >
-              ℹ️
-            </span>
-          </label>
-          <Switch checked={!!c.riskConfirmHtml} onChange={changeRiskConfirm} />
-          <div className="field-hint">在活动页面显示早期项目风险提示</div>
-        </div>
-        <div className="option-item">
-          <label className="switch-label">显示付费推广政策</label>
-          <Switch
-            checked={c.showSponsoredPolicy === true}
-            onChange={(v) => setCampaignPath("showSponsoredPolicy", v)}
-          />
-          <div className="field-hint">
-            在报名按钮上方显示「付费推广政策」提示
-          </div>
-        </div>
-        <div className="option-item option-item-email-mode">
-          <div className="option-switch-row">
-            <label className="switch-label">允许 Email 注册</label>
-            <Switch
-              checked={c.allowEmailRegistration === true}
-              onChange={(v) => setCampaignPath("allowEmailRegistration", v)}
-            />
-          </div>
-          <div className="mode-toggle-row">
-            <span>活动模式</span>
-            <Segmented
-              size="small"
-              value={c.leaderboardMode || "traditional"}
-              onChange={(value) => setCampaignPath("leaderboardMode", String(value))}
-              options={[
-                { value: "traditional", label: "传统" },
-                { value: "custom", label: "自定义" },
-              ]}
-            />
-          </div>
-          <div className="field-hint">开启 Email 注册；右侧切换奖励配置模式</div>
-        </div>
-      </div>
-      </div>
-      <Section title="活动信息">
-        <div className="field-row field-row-2">
-          <Field label="标题（中文）">
-            <Input
-              value={c.displayName?.zh || ""}
-              onChange={(e) =>
-                setCampaignPath("displayName.zh", e.target.value)
-              }
-            />
-          </Field>
-          <Field label="标题（English）">
-            <Input
-              value={c.displayName?.en || ""}
-              onChange={(e) =>
-                setCampaignPath("displayName.en", e.target.value)
-              }
-            />
-          </Field>
-        </div>
-        <div className="field-row field-row-2">
-          <Field label="短标题（中文）">
-            <Input
-              value={c.copy?.shortTitle?.zh || ""}
-              onChange={(e) =>
-                setCampaignPath("copy.shortTitle.zh", e.target.value)
-              }
-            />
-          </Field>
-          <Field label="短标题（English）">
-            <Input
-              value={c.copy?.shortTitle?.en || ""}
-              onChange={(e) =>
-                setCampaignPath("copy.shortTitle.en", e.target.value)
-              }
-            />
-          </Field>
-        </div>
-        <div className="section-block">
-          <div className="field-row field-row-2">
-            <Field label="项目介绍（中文）">
-              <TextArea
-                rows={2}
-                value={c.projectIntroduction?.zh || ""}
-                onChange={(e) =>
-                  setCampaignPath("projectIntroduction.zh", e.target.value)
-                }
-                placeholder="纯文本介绍..."
-              />
-            </Field>
-            <Field label="项目介绍（English）">
-              <TextArea
-                rows={2}
-                value={c.projectIntroduction?.en || ""}
-                onChange={(e) =>
-                  setCampaignPath("projectIntroduction.en", e.target.value)
-                }
-                placeholder="Plain text introduction..."
-              />
-            </Field>
-          </div>
-        </div>
-        <div className="writing-themes-block">
-          <RepeaterHeader
-            title="写作主题"
-            onAdd={() => addArrayItem("writingThemes")}
-          />
-          <WritingThemes
-            items={c.writingThemes || []}
-            update={updateArrayItem}
-            move={moveArrayItem}
-            remove={removeArrayItem}
-          />
-        </div>
-      </Section>
-      <Section title="时间、奖励与门槛">
-        <div className="section-sub">
-          <div className="section-title-sm">⏰ 活动时间</div>
-          <div className="field-row field-row-2">
-            <Field label="开始时间">
-              <Input
-                type="datetime-local"
-                value={toDatetimeLocal(c.enrollmentWindow?.startAt)}
-                onChange={(e) =>
-                  setCampaignPath(
-                    "enrollmentWindow.startAt",
-                    fromDatetimeLocalToIsoZ(e.target.value),
-                  )
-                }
-              />
-            </Field>
-            <Field label="结束时间">
-              <Input
-                type="datetime-local"
-                value={toDatetimeLocal(c.enrollmentWindow?.endAt)}
-                onChange={(e) =>
-                  setCampaignPath(
-                    "enrollmentWindow.endAt",
-                    fromDatetimeLocalToIsoZ(e.target.value),
-                  )
-                }
-              />
-            </Field>
-          </div>
-        </div>
-        <div className="section-sub reward-mode-content">
-          {(c.leaderboardMode || "traditional") === "custom" ? (
-            <CustomLeaderboards
-              apiUrl={c.leaderboardApiUrl || ""}
-              items={c.customLeaderboards || []}
-              setCampaignPath={setCampaignPath}
-              add={() => addArrayItem("customLeaderboards")}
-              update={updateArrayItem}
-              move={moveArrayItem}
-              remove={removeArrayItem}
-            />
-          ) : (
-            <>
-              <div className="section-sub reward-tier reward-tier-primary">
-                <div className="reward-tier-header">
-                  <span className="reward-tier-title">🎯 POI 基础奖励</span>
-                  <span className="reward-tier-badge">核心</span>
-                </div>
-                <div className="field-row field-row-3">
-                  <Field label="奖励金额">
-                    <InputNumber
-                      min={1}
-                      max={99999999}
-                      value={c.rewardAmount}
-                      onChange={(v) => setCampaignPath("rewardAmount", v)}
-                      placeholder="1-99999999"
-                    />
-                  </Field>
-                  <Field label="人数">
-                    <InputNumber
-                      min={10}
-                      max={1000}
-                      value={c.rewardParticipantCount}
-                      onChange={(v) =>
-                        setCampaignPath("rewardParticipantCount", v)
-                      }
-                      placeholder="10-1000"
-                    />
-                  </Field>
-                  <Field label="分配机制">
-                    <Select
-                      value={c.rewardDistributionType || ""}
-                      onChange={(v) =>
-                        setCampaignPath("rewardDistributionType", v)
-                      }
-                      options={[
-                        { value: "", label: "请选择" },
-                        { value: "equal", label: "平分" },
-                        { value: "mindshare", label: "mindshare" },
-                        { value: "workshare", label: "workshare" },
-                      ]}
-                    />
-                  </Field>
-                </div>
-                <div className="field-row field-row-2">
-                  <Field label="奖励单位">
-                    <Input
-                      value={c.rewardUnit || ""}
-                      onChange={(e) =>
-                        setCampaignPath("rewardUnit", e.target.value)
-                      }
-                      placeholder="USDT"
-                    />
-                  </Field>
-                </div>
-              </div>
-              <RewardOptional
-                c={c}
-                type="pow"
-                enabled={!!c.enablePowLeaderboard}
-                setCampaignPath={setCampaignPath}
-                updateSelectedCampaign={updateSelectedCampaign}
-              />
-              <RewardOptional
-                c={c}
-                type="essay"
-                enabled={!!c.enableEssayContest}
-                setCampaignPath={setCampaignPath}
-                updateSelectedCampaign={updateSelectedCampaign}
-                addWinner={() => addArrayItem("essayContestWinners")}
-                update={updateArrayItem}
-                move={moveArrayItem}
-                remove={removeArrayItem}
-              />
-            </>
-          )}
-        </div>
-        <div className="section-sub">
-          <div className="section-title-sm">🚪 报名门槛</div>
-          <div className="field-row">
-            <Field>
-              <Select
-                value={thresholdValue}
-                onChange={changeThreshold}
-                options={[
-                  { value: "", label: "请选择" },
-                  { value: "50k", label: "50k" },
-                  { value: "100k", label: "100k" },
-                  { value: "200k", label: "200k" },
-                  { value: "200k+creator", label: "200k+creator" },
-                ]}
-              />
-              <div className="muted" style={{ marginTop: 3, fontSize: 11 }}>
-                硬性条件：注册早于1个月且分数≥50
-              </div>
-            </Field>
-          </div>
-        </div>
-      </Section>
-      <Section title="链接 · 名单">
-        <div className="section-sub">
-          <div className="section-title-sm">相关链接</div>
-          <div className="field-row field-row-2">
-            <Field label="A.推特活动指南链接">
-              <Input
-                value={c.links?.guideUrl || ""}
-                onChange={(e) =>
-                  setCampaignPath("links.guideUrl", e.target.value)
-                }
-                placeholder="https://..."
-              />
-            </Field>
-            <Field label="B.官网活动页面链接">
-              <Input
-                value={c.links?.activeUrl || ""}
-                onChange={(e) =>
-                  setCampaignPath("links.activeUrl", e.target.value)
-                }
-                placeholder="https://..."
-              />
-            </Field>
-          </div>
-          <div className="field-row">
-            <Field label="插件榜单底部显示「查看官方排行榜」（跳转到 B.官网活动页面链接）">
-              <Switch
-                checked={!!c.links?.showLeaderboardLink}
-                onChange={(v) =>
-                  setCampaignPath("links.showLeaderboardLink", v)
-                }
-              />
-            </Field>
-          </div>
-        </div>
-        <div className="section-sub">
-          <div className="section-title-sm">相关名单（每行一个）</div>
-          <div className="field-row field-row-2">
-            <Field label="内部测试人员（测试阶段可见的人）">
-              <TextArea
-                rows={2}
-                value={listToLines(c.testList)}
-                onChange={(e) =>
-                  setCampaignPath("testList", splitLinesToList(e.target.value))
-                }
-                placeholder="luoyukun4"
-              />
-            </Field>
-            <Field label="‼️在插件里面哪些推特号右侧展示本活动">
-              <TextArea
-                rows={2}
-                value={listToLines(c.targetUserIds)}
-                onChange={(e) =>
-                  setCampaignPath(
-                    "targetUserIds",
-                    splitLinesToList(e.target.value),
-                  )
-                }
-                placeholder={"bybit_web3\nBybit__Alpha"}
-              />
-            </Field>
-          </div>
-        </div>
-      </Section>
-      <Section title="Logo · 任务 · Tags">
-        <div className="section-sub">
-          <RepeaterHeader
-            title="活动方 logo"
-            onAdd={() => addArrayItem("logos")}
-          />
-          <Logos
-            items={c.logos || []}
-            update={updateArrayItem}
-            move={moveArrayItem}
-            remove={removeArrayItem}
-          />
-        </div>
-        <div className="section-sub">
-          <RepeaterHeader
-            title="报名前需完成的任务"
-            onAdd={() => addArrayItem("tasks")}
-          />
-          <Tasks
-            items={c.tasks || []}
-            update={updateArrayItem}
-            move={moveArrayItem}
-            remove={removeArrayItem}
-          />
-        </div>
-        <div className="section-sub">
-          <RepeaterHeader
-            title="活动 Tags（可选）"
-            onAdd={() => addArrayItem("tags")}
-          />
-          <div className="tag-notice">
-            <span className="tag-notice-icon">ℹ️</span>
-            <span className="tag-notice-text">
-              如果配置了自定义
-              Tag，前端本身会自动生成的【按贡献】【征文大赛】【TOP200】都将被替换
-            </span>
-          </div>
-          <Tags
-            items={c.tags || []}
-            update={updateArrayItem}
-            move={moveArrayItem}
-            remove={removeArrayItem}
-          />
-        </div>
-      </Section>
-
-
-
-    </>
-  );
-}
-
-
 
 function CampaignAdvancedSection({ c }: { c: AnyObj }) {
   return (
@@ -2419,12 +1889,12 @@ function RepeaterHeader({
   onAdd: () => void;
 }) {
   return (
-    <div className="section-title-inline">
-      <span>{title}</span>
+    <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }}>
+      <strong>{title}</strong>
       <Button size="small" onClick={onAdd}>
-        +添加
+        + 添加
       </Button>
-    </div>
+    </Space>
   );
 }
 function RepActions({
@@ -2437,17 +1907,17 @@ function RepActions({
   onRemove: () => void;
 }) {
   return (
-    <div className="rep-actions">
+    <Space size={4}>
       <Button size="small" onClick={onUp}>
-        ←
+        ↑
       </Button>
       <Button size="small" onClick={onDown}>
-        →
+        ↓
       </Button>
       <Button size="small" danger onClick={onRemove}>
         删除
       </Button>
-    </div>
+    </Space>
   );
 }
 function Logos({ items, update, move, remove }: any) {
@@ -3048,16 +2518,23 @@ function WebsiteSection({
     jsonValid = false;
   }
   return (
-    <div className="section section-compact campaigns-website-section">
-      <div className="website-section-head">
-        <div>
-          <div className="section-title">网站专属配置</div>
-          <div className="website-meta">{meta}</div>
-        </div>
-        <Button className="website-save-btn" disabled={!enabled} onClick={onSave}>
+    <Card
+      size="small"
+      title={
+        <Space size={6}>
+          <span>网站专属配置</span>
+          <Tooltip title={meta}>
+            <QuestionCircleOutlined style={{ color: "#8c8c8c", fontSize: 12 }} />
+          </Tooltip>
+        </Space>
+      }
+      extra={
+        <Button size="small" disabled={!enabled} onClick={onSave}>
           保存网站配置
         </Button>
-      </div>
+      }
+      style={{ marginBottom: 12 }}
+    >
       <div className="field-row field-row-3">
         <Field label="网站状态">
           <Select
