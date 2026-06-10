@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Input, InputNumber, Modal, Segmented, Select, Switch, Tabs } from "antd";
+import { Button, Input, InputNumber, Modal, Segmented, Select, Switch } from "antd";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { useAuth } from "@/app/auth";
@@ -964,13 +964,15 @@ export function NacosCampaignsPage() {
         errors.push(
           `${prefix}: 写作相关主题（writingThemes）至少需要添加一个主题`,
         );
-      const hasNewFields = [
-        "rewardAmount",
-        "rewardParticipantCount",
-        "rewardDistributionType",
-        "threshold",
-        "includeCreator",
-      ].some((key) => key in c);
+      const hasNewFields =
+        (c.leaderboardMode || "traditional") === "traditional" &&
+        [
+          "rewardAmount",
+          "rewardParticipantCount",
+          "rewardDistributionType",
+          "threshold",
+          "includeCreator",
+        ].some((key) => key in c);
       if (hasNewFields) {
         if (
           !Number.isFinite(Number(c.rewardAmount)) ||
@@ -989,12 +991,12 @@ export function NacosCampaignsPage() {
             `${prefix}: rewardParticipantCount（人数）必须填写，范围：10-1000 人`,
           );
         if (
-          !["equal", "mindshare"].includes(
+          !["equal", "mindshare", "workshare"].includes(
             String(c.rewardDistributionType || ""),
           )
         )
           errors.push(
-            `${prefix}: rewardDistributionType（分配机制）必须选择：平分 或 mindshare分`,
+            `${prefix}: rewardDistributionType（分配机制）必须选择：平分 / mindshare / workshare`,
           );
         if (![50000, 100000, 200000].includes(Number(c.threshold)))
           errors.push(
@@ -1569,6 +1571,10 @@ export function NacosCampaignsPage() {
               essayEnabled={essayEnabled}
               onSave={() => void saveWebsiteConfig()}
             />
+            {c ? <CampaignAdvancedSection c={c} /> : null}
+            {c ? (
+              <CampaignCopySection c={c} setCampaignPath={setCampaignPath} />
+            ) : null}
           </div>
         )}
       </ConfigWorkbench>
@@ -1956,6 +1962,19 @@ function CampaignEditor(props: {
           />
           <div className="field-hint">开启后活动允许用户通过 Email 注册</div>
         </div>
+        <div className="option-item option-item-mode">
+          <label className="switch-label">活动模式</label>
+          <Segmented
+            size="small"
+            value={c.leaderboardMode || "traditional"}
+            onChange={(value) => setCampaignPath("leaderboardMode", String(value))}
+            options={[
+              { value: "traditional", label: "传统" },
+              { value: "custom", label: "自定义" },
+            ]}
+          />
+          <div className="field-hint">决定下方使用传统奖励还是自定义榜单</div>
+        </div>
       </div>
       <Section title="活动信息">
         <div className="field-row field-row-2">
@@ -2059,126 +2078,92 @@ function CampaignEditor(props: {
             </Field>
           </div>
         </div>
-        <div className="section-sub">
-          <div className="field-row field-row-1">
-            <Field
-              label="活动模式"
-              hint="该字段决定下方展示哪套榜单配置；下方 Tab 只跟随这里，不支持手动切换。"
-            >
-              <Segmented
-                value={c.leaderboardMode || "traditional"}
-                onChange={(value) =>
-                  setCampaignPath("leaderboardMode", String(value))
-                }
-                options={[
-                  { value: "traditional", label: "传统模式" },
-                  { value: "custom", label: "自定义模式" },
-                ]}
+        <div className="section-sub reward-mode-content">
+          {(c.leaderboardMode || "traditional") === "custom" ? (
+            <CustomLeaderboards
+              apiUrl={c.leaderboardApiUrl || ""}
+              items={c.customLeaderboards || []}
+              setCampaignPath={setCampaignPath}
+              add={() => addArrayItem("customLeaderboards")}
+              update={updateArrayItem}
+              move={moveArrayItem}
+              remove={removeArrayItem}
+            />
+          ) : (
+            <>
+              <div className="section-sub reward-tier reward-tier-primary">
+                <div className="reward-tier-header">
+                  <span className="reward-tier-title">🎯 POI 基础奖励</span>
+                  <span className="reward-tier-badge">核心</span>
+                </div>
+                <div className="field-row field-row-3">
+                  <Field label="奖励金额">
+                    <InputNumber
+                      min={1}
+                      max={99999999}
+                      value={c.rewardAmount}
+                      onChange={(v) => setCampaignPath("rewardAmount", v)}
+                      placeholder="1-99999999"
+                    />
+                  </Field>
+                  <Field label="人数">
+                    <InputNumber
+                      min={10}
+                      max={1000}
+                      value={c.rewardParticipantCount}
+                      onChange={(v) =>
+                        setCampaignPath("rewardParticipantCount", v)
+                      }
+                      placeholder="10-1000"
+                    />
+                  </Field>
+                  <Field label="分配机制">
+                    <Select
+                      value={c.rewardDistributionType || ""}
+                      onChange={(v) =>
+                        setCampaignPath("rewardDistributionType", v)
+                      }
+                      options={[
+                        { value: "", label: "请选择" },
+                        { value: "equal", label: "平分" },
+                        { value: "mindshare", label: "mindshare" },
+                        { value: "workshare", label: "workshare" },
+                      ]}
+                    />
+                  </Field>
+                </div>
+                <div className="field-row field-row-2">
+                  <Field label="奖励单位">
+                    <Input
+                      value={c.rewardUnit || ""}
+                      onChange={(e) =>
+                        setCampaignPath("rewardUnit", e.target.value)
+                      }
+                      placeholder="USDT"
+                    />
+                  </Field>
+                </div>
+              </div>
+              <RewardOptional
+                c={c}
+                type="pow"
+                enabled={!!c.enablePowLeaderboard}
+                setCampaignPath={setCampaignPath}
+                updateSelectedCampaign={updateSelectedCampaign}
               />
-            </Field>
-          </div>
-          <Tabs
-            activeKey={c.leaderboardMode || "traditional"}
-            onChange={() => undefined}
-            items={[
-              {
-                key: "traditional",
-                label: "传统模式",
-                disabled: (c.leaderboardMode || "traditional") !== "traditional",
-                children: (
-                  <>
-                    <div className="section-sub reward-tier reward-tier-primary">
-                      <div className="reward-tier-header">
-                        <span className="reward-tier-title">🎯 POI 基础奖励</span>
-                        <span className="reward-tier-badge">核心</span>
-                      </div>
-                      <div className="field-row field-row-3">
-                        <Field label="奖励金额">
-                          <InputNumber
-                            min={1}
-                            max={99999999}
-                            value={c.rewardAmount}
-                            onChange={(v) => setCampaignPath("rewardAmount", v)}
-                            placeholder="1-99999999"
-                          />
-                        </Field>
-                        <Field label="人数">
-                          <InputNumber
-                            min={10}
-                            max={1000}
-                            value={c.rewardParticipantCount}
-                            onChange={(v) =>
-                              setCampaignPath("rewardParticipantCount", v)
-                            }
-                            placeholder="10-1000"
-                          />
-                        </Field>
-                        <Field label="分配机制">
-                          <Select
-                            value={c.rewardDistributionType || ""}
-                            onChange={(v) =>
-                              setCampaignPath("rewardDistributionType", v)
-                            }
-                            options={[
-                              { value: "", label: "请选择" },
-                              { value: "equal", label: "平分" },
-                              { value: "mindshare", label: "mindshare" },
-                              { value: "workshare", label: "workshare" },
-                            ]}
-                          />
-                        </Field>
-                      </div>
-                      <div className="field-row field-row-2">
-                        <Field label="奖励单位">
-                          <Input
-                            value={c.rewardUnit || ""}
-                            onChange={(e) =>
-                              setCampaignPath("rewardUnit", e.target.value)
-                            }
-                            placeholder="USDT"
-                          />
-                        </Field>
-                      </div>
-                    </div>
-                    <RewardOptional
-                      c={c}
-                      type="pow"
-                      enabled={!!c.enablePowLeaderboard}
-                      setCampaignPath={setCampaignPath}
-                      updateSelectedCampaign={updateSelectedCampaign}
-                    />
-                    <RewardOptional
-                      c={c}
-                      type="essay"
-                      enabled={!!c.enableEssayContest}
-                      setCampaignPath={setCampaignPath}
-                      updateSelectedCampaign={updateSelectedCampaign}
-                      addWinner={() => addArrayItem("essayContestWinners")}
-                      update={updateArrayItem}
-                      move={moveArrayItem}
-                      remove={removeArrayItem}
-                    />
-                  </>
-                ),
-              },
-              {
-                key: "custom",
-                label: "自定义模式",
-                disabled: (c.leaderboardMode || "traditional") !== "custom",
-                children: (
-                  <CustomLeaderboards
-                    apiUrl={c.leaderboardApiUrl || ""}
-                    items={c.customLeaderboards || []}
-                    setCampaignPath={setCampaignPath}
-                    add={() => addArrayItem("customLeaderboards")}
-                    update={updateArrayItem}
-                    move={moveArrayItem}
-                    remove={removeArrayItem}
-                  />
-                ),
-              },
-            ]}
-          />
+              <RewardOptional
+                c={c}
+                type="essay"
+                enabled={!!c.enableEssayContest}
+                setCampaignPath={setCampaignPath}
+                updateSelectedCampaign={updateSelectedCampaign}
+                addWinner={() => addArrayItem("essayContestWinners")}
+                update={updateArrayItem}
+                move={moveArrayItem}
+                remove={removeArrayItem}
+              />
+            </>
+          )}
         </div>
         <div className="section-sub">
           <div className="section-title-sm">🚪 报名门槛</div>
@@ -2202,7 +2187,7 @@ function CampaignEditor(props: {
           </div>
         </div>
       </Section>
-      <Section title="链接 · 名单 · 报名文案">
+      <Section title="链接 · 名单">
         <div className="section-sub">
           <div className="section-title-sm">相关链接</div>
           <div className="field-row field-row-2">
@@ -2264,7 +2249,97 @@ function CampaignEditor(props: {
             </Field>
           </div>
         </div>
-        <CollapsibleSection title="报名按钮文案（通常不改)">
+      </Section>
+      <Section title="Logo · 任务 · Tags">
+        <div className="section-sub">
+          <RepeaterHeader
+            title="活动方 logo"
+            onAdd={() => addArrayItem("logos")}
+          />
+          <Logos
+            items={c.logos || []}
+            update={updateArrayItem}
+            move={moveArrayItem}
+            remove={removeArrayItem}
+          />
+        </div>
+        <div className="section-sub">
+          <RepeaterHeader
+            title="报名前需完成的任务"
+            onAdd={() => addArrayItem("tasks")}
+          />
+          <Tasks
+            items={c.tasks || []}
+            update={updateArrayItem}
+            move={moveArrayItem}
+            remove={removeArrayItem}
+          />
+        </div>
+        <div className="section-sub">
+          <RepeaterHeader
+            title="活动 Tags（可选）"
+            onAdd={() => addArrayItem("tags")}
+          />
+          <div className="tag-notice">
+            <span className="tag-notice-icon">ℹ️</span>
+            <span className="tag-notice-text">
+              如果配置了自定义
+              Tag，前端本身会自动生成的【按贡献】【征文大赛】【TOP200】都将被替换
+            </span>
+          </div>
+          <Tags
+            items={c.tags || []}
+            update={updateArrayItem}
+            move={moveArrayItem}
+            remove={removeArrayItem}
+          />
+        </div>
+      </Section>
+
+
+
+    </>
+  );
+}
+
+
+
+function CampaignAdvancedSection({ c }: { c: AnyObj }) {
+  return (
+      <CollapsibleSection title="高级配置（id / campaignKey / hotTweetsKey）">
+        <div className="field-row">
+          <Field
+            label="id（唯一）"
+            hint="内部索引使用，无需手动维护（自动生成：campaignKey + '-hunter'）"
+          >
+            <Input value={c.id || ""} disabled />
+          </Field>
+          <Field
+            label="campaignKey"
+            hint="需要后端协商一致，一般也是投放者推特号，用于存储报名数据和排名数据"
+          >
+            <Input value={c.campaignKey || ""} disabled />
+          </Field>
+          <Field
+            label="hotTweetsKey"
+            hint="建议填写投放者的推特号，目的是获取热门推文数据 hot?project=hotTweetsKey"
+          >
+            <Input value={c.hotTweetsKey || ""} disabled />
+          </Field>
+        </div>
+      </CollapsibleSection>
+  );
+}
+
+function CampaignCopySection({
+  c,
+  setCampaignPath,
+}: {
+  c: AnyObj;
+  setCampaignPath: (path: string, value: any) => void;
+}) {
+  return (
+      <CollapsibleSection title="报名按钮文案（通常不改)">
           <div className="field-row field-row-3">
             <Field label="emoji">
               <Input
@@ -2326,75 +2401,6 @@ function CampaignEditor(props: {
             </Field>
           </div>
         </CollapsibleSection>
-      </Section>
-      <Section title="Logo · 任务 · Tags">
-        <div className="section-sub">
-          <RepeaterHeader
-            title="活动方 logo"
-            onAdd={() => addArrayItem("logos")}
-          />
-          <Logos
-            items={c.logos || []}
-            update={updateArrayItem}
-            move={moveArrayItem}
-            remove={removeArrayItem}
-          />
-        </div>
-        <div className="section-sub">
-          <RepeaterHeader
-            title="报名前需完成的任务"
-            onAdd={() => addArrayItem("tasks")}
-          />
-          <Tasks
-            items={c.tasks || []}
-            update={updateArrayItem}
-            move={moveArrayItem}
-            remove={removeArrayItem}
-          />
-        </div>
-        <div className="section-sub">
-          <RepeaterHeader
-            title="活动 Tags（可选）"
-            onAdd={() => addArrayItem("tags")}
-          />
-          <div className="tag-notice">
-            <span className="tag-notice-icon">ℹ️</span>
-            <span className="tag-notice-text">
-              如果配置了自定义
-              Tag，前端本身会自动生成的【按贡献】【征文大赛】【TOP200】都将被替换
-            </span>
-          </div>
-          <Tags
-            items={c.tags || []}
-            update={updateArrayItem}
-            move={moveArrayItem}
-            remove={removeArrayItem}
-          />
-        </div>
-      </Section>
-      <CollapsibleSection title="高级配置（id / campaignKey / hotTweetsKey）">
-        <div className="field-row">
-          <Field
-            label="id（唯一）"
-            hint="内部索引使用，无需手动维护（自动生成：campaignKey + '-hunter'）"
-          >
-            <Input value={c.id || ""} disabled />
-          </Field>
-          <Field
-            label="campaignKey"
-            hint="需要后端协商一致，一般也是投放者推特号，用于存储报名数据和排名数据"
-          >
-            <Input value={c.campaignKey || ""} disabled />
-          </Field>
-          <Field
-            label="hotTweetsKey"
-            hint="建议填写投放者的推特号，目的是获取热门推文数据 hot?project=hotTweetsKey"
-          >
-            <Input value={c.hotTweetsKey || ""} disabled />
-          </Field>
-        </div>
-      </CollapsibleSection>
-    </>
   );
 }
 

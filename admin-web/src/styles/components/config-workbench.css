@@ -1654,3 +1654,39 @@
 .campaigns-react-page.config-workbench-collapsed .config-workbench-body {
   grid-template-columns: 42px minmax(0, 1fr);
 }
+
+.campaigns-react-page .campaign-options {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.campaigns-react-page .option-item-mode .ant-segmented {
+  width: 100%;
+  padding: 2px;
+  border: 1px solid #dce4ee;
+  border-radius: 999px;
+  background: #f8fafc;
+}
+
+.campaigns-react-page .option-item-mode .ant-segmented-item {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.campaigns-react-page .reward-mode-content {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+@media (max-width: 1280px) {
+  .campaigns-react-page .campaign-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .campaigns-react-page .campaign-options {
+    grid-template-columns: 1fr;
+  }
+}
