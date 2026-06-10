@@ -8,9 +8,11 @@ import {
   LockOutlined,
   LogoutOutlined,
   MenuOutlined,
+  MoonOutlined,
   MonitorOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
+  SunOutlined,
   TeamOutlined,
   UserOutlined,
 } from "@ant-design/icons";
@@ -37,6 +39,7 @@ import type { ReactNode } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
+import { useAdminTheme } from "@/app/theme";
 import { buildApiUrl } from "@/services/apiClient";
 import { adminMainNavItems, adminShortcutNavItems, type AdminNavItem } from "@/config/admin-navigation";
 
@@ -136,6 +139,7 @@ export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, hasPermission, refresh } = useAuth();
+  const adminTheme = useAdminTheme();
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
   const [messageApi, contextHolder] = message.useMessage();
@@ -522,6 +526,16 @@ export function AdminLayout() {
           />
         )}
 
+        <Space size={8} className="admin-top-actions">
+          <Button
+            type="text"
+            className="admin-top-theme-button"
+            icon={adminTheme.effectiveMode === "dark" ? <SunOutlined /> : <MoonOutlined />}
+            onClick={adminTheme.toggleMode}
+            title={adminTheme.effectiveMode === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+            aria-label={adminTheme.effectiveMode === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+          />
+
         <Dropdown
           trigger={["hover", "click"]}
           menu={{
@@ -593,6 +607,7 @@ export function AdminLayout() {
             </Space>
           </Button>
         </Dropdown>
+        </Space>
       </Header>
 
       <div className="admin-page-title-bar">

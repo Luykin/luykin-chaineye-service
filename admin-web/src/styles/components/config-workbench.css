@@ -1,12 +1,12 @@
 .config-workbench {
-  --cw-border: #e5e7eb;
-  --cw-border-strong: #d1d5db;
-  --cw-bg: #f6f7f9;
-  --cw-panel: #ffffff;
-  --cw-text: #111827;
-  --cw-muted: #6b7280;
-  --cw-soft: #f9fafb;
-  --cw-primary: #1f2937;
+  --cw-border: light-dark(#e5e7eb, #253246);
+  --cw-border-strong: light-dark(#d1d5db, #334155);
+  --cw-bg: light-dark(#f6f7f9, #0f172a);
+  --cw-panel: light-dark(#ffffff, #111827);
+  --cw-text: light-dark(#111827, #e5edf8);
+  --cw-muted: light-dark(#6b7280, #94a3b8);
+  --cw-soft: light-dark(#f9fafb, #1e293b);
+  --cw-primary: light-dark(#1f2937, #f8fafc);
 
   width: min(100%, 1600px);
   margin: 0 auto;
@@ -423,8 +423,8 @@
 }
 
 .config-workbench.nacos-campaigns-admin {
-  --campaign-brief-border: #e7eaf0;
-  --campaign-brief-muted: #697386;
+  --campaign-brief-border: light-dark(#e7eaf0, #253246);
+  --campaign-brief-muted: light-dark(#697386, #94a3b8);
 }
 
 .config-workbench.nacos-campaigns-admin .campaign-brief {
