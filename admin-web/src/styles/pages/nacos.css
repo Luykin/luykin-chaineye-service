@@ -484,8 +484,8 @@
 .nacos-tags-preview-pre {
   margin: 0;
   padding: 10px;
-  background: var(--admin-text-strong);
-  border: 1px solid var(--admin-text-strong);
+  background: var(--admin-inverse-surface);
+  border: 1px solid var(--admin-inverse-surface);
   border-radius: 10px;
   font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 12px;

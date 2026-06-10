@@ -227,7 +227,7 @@
   padding: 14px;
   border: 1px solid #dbe3ee;
   border-radius: 12px;
-  background: var(--admin-text-strong);
+  background: var(--admin-inverse-surface);
   color: #dbeafe;
   font-size: 12px;
   line-height: 1.62;

@@ -877,28 +877,28 @@
 .config-workbench-toolbar .nacos-btn-primary {
   background: var(--admin-primary);
   border-color: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-inverse-text);
 }
 
 .config-workbench-toolbar .config-action-primary:not(:disabled):hover,
 .config-workbench-toolbar .nacos-btn-primary:not(:disabled):hover {
   background: var(--admin-primary);
   border-color: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-inverse-text);
 }
 
 .config-workbench-toolbar .config-action-success,
 .config-workbench-toolbar .nacos-btn-success {
   background: var(--admin-primary);
   border-color: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-inverse-text);
 }
 
 .config-workbench-toolbar .config-action-success:not(:disabled):hover,
 .config-workbench-toolbar .nacos-btn-success:not(:disabled):hover {
   background: var(--admin-primary);
   border-color: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-inverse-text);
 }
 
 .config-workbench-toolbar .config-action-danger,

@@ -14,6 +14,9 @@
   --admin-primary: light-dark(#2563eb, #60a5fa);
   --admin-primary-strong: light-dark(#1d4ed8, #93c5fd);
   --admin-primary-soft: light-dark(#eff6ff, color-mix(in srgb, #60a5fa 18%, #111827));
+  --admin-on-primary: #ffffff;
+  --admin-inverse-surface: light-dark(#111827, #020617);
+  --admin-inverse-text: #ffffff;
   --admin-danger-soft: light-dark(#fee2e2, color-mix(in srgb, #ef4444 20%, #111827));
   --admin-danger: light-dark(#dc2626, #f87171);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",

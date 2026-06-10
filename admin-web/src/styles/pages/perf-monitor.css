@@ -333,7 +333,7 @@
   overflow: auto;
   padding: 16px;
   border-radius: 10px;
-  background: var(--admin-text-strong);
+  background: var(--admin-inverse-surface);
   color: #dbeafe;
   font-size: 12px;
   line-height: 1.55;

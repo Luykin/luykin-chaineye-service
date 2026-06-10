@@ -141,14 +141,14 @@
 }
 
 .nacos-btn-primary {
-    background: var(--admin-text);
-    color: var(--admin-surface);
-    border-color: var(--admin-text);
+    background: var(--admin-inverse-surface);
+    color: var(--admin-inverse-text);
+    border-color: var(--admin-inverse-surface);
 }
 
 .nacos-btn-primary:hover:not(:disabled) {
-    background: var(--admin-text);
-    border-color: var(--admin-text);
+    background: var(--admin-inverse-surface);
+    border-color: var(--admin-inverse-surface);
 }
 
 .nacos-btn-danger {
@@ -163,7 +163,7 @@
 
 .nacos-btn-success {
     background: #059669;
-    color: var(--admin-surface);
+    color: var(--admin-inverse-text);
     border-color: #059669;
 }
 
@@ -441,8 +441,8 @@
     right: 20px;
     bottom: 20px;
     padding: 12px 18px;
-    background: var(--admin-text-strong);
-    color: var(--admin-surface);
+    background: var(--admin-inverse-surface);
+    color: var(--admin-inverse-text);
     border-radius: 8px;
     font-size: 0.8125rem;
     font-weight: 500;

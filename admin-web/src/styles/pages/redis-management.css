@@ -184,12 +184,12 @@
 }
 
 .redis-btn-primary {
-  background: var(--admin-text);
-  color: var(--admin-surface);
+  background: var(--admin-inverse-surface);
+  color: var(--admin-inverse-text);
 }
 
 .redis-btn-primary:hover:not(:disabled) {
-  background: var(--admin-text);
+  background: var(--admin-inverse-surface);
 }
 
 .redis-btn-secondary {

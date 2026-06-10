@@ -222,7 +222,7 @@
   padding: 2px 8px;
   border-radius: 10px;
   background: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-inverse-text);
   font-size: 10px;
   font-weight: 700;
   line-height: 1.35;

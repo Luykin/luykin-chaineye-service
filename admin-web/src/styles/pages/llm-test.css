@@ -29,7 +29,7 @@
 
   .llm-test-container .btn-clear-history:hover {
     background: #ef4444;
-    color: var(--admin-surface);
+    color: var(--admin-inverse-text);
   }
 
   .llm-test-container .history-list {
@@ -388,7 +388,7 @@
 
   .llm-test-container .btn-primary {
     background: var(--accent, var(--admin-primary));
-    color: var(--admin-surface);
+    color: var(--admin-inverse-text);
   }
 
   .llm-test-container .btn-primary:hover:not(:disabled) {
@@ -617,7 +617,7 @@
   }
 
   .code-example {
-    background: var(--admin-text-strong);
+    background: var(--admin-inverse-surface);
     color: var(--admin-border-soft);
     padding: 12px;
     border-radius: 6px;

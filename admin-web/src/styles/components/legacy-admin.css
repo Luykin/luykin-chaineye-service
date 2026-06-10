@@ -74,50 +74,50 @@
 .legacy-action-btn--primary.ant-btn {
   border-color: var(--admin-primary);
   background: var(--admin-primary);
-  color: var(--admin-surface);
+  color: var(--admin-inverse-text);
 }
 
 .legacy-action-btn--primary.ant-btn:hover {
   border-color: var(--admin-primary-strong) !important;
   background: var(--admin-primary-strong) !important;
-  color: var(--admin-surface) !important;
+  color: var(--admin-inverse-text) !important;
   opacity: 1;
 }
 
 .legacy-action-btn--success.ant-btn {
   border-color: #059669;
   background: #059669;
-  color: var(--admin-surface);
+  color: var(--admin-inverse-text);
 }
 
 .legacy-action-btn--success.ant-btn:hover {
   border-color: #047857 !important;
   background: #047857 !important;
-  color: var(--admin-surface) !important;
+  color: var(--admin-inverse-text) !important;
 }
 
 .legacy-action-btn--warning.ant-btn {
   border-color: #f59e0b;
   background: #f59e0b;
-  color: var(--admin-surface);
+  color: var(--admin-inverse-text);
 }
 
 .legacy-action-btn--warning.ant-btn:hover {
   border-color: #d97706 !important;
   background: #d97706 !important;
-  color: var(--admin-surface) !important;
+  color: var(--admin-inverse-text) !important;
 }
 
 .legacy-action-btn--danger.ant-btn {
   border-color: #dc2626;
   background: #dc2626;
-  color: var(--admin-surface);
+  color: var(--admin-inverse-text);
 }
 
 .legacy-action-btn--danger.ant-btn:hover {
   border-color: #b91c1c !important;
   background: #b91c1c !important;
-  color: var(--admin-surface) !important;
+  color: var(--admin-inverse-text) !important;
 }
 
 .legacy-action-btn--neutral.ant-btn {

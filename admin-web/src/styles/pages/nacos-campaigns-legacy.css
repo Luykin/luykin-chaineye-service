@@ -59,7 +59,7 @@
   .campaigns-toolbar .right .btn.primary {
     background: var(--admin-primary);
     border-color: var(--admin-primary);
-    color: var(--admin-surface);
+    color: var(--admin-inverse-text);
   }
   .campaigns-toolbar .right .btn.primary:hover {
     background: var(--admin-primary);
@@ -67,7 +67,7 @@
   .campaigns-toolbar .right .btn.success {
     background: #10b981;
     border-color: #059669;
-    color: var(--admin-surface);
+    color: var(--admin-inverse-text);
   }
   .campaigns-toolbar .right .btn.success:hover {
     background: #059669;
@@ -75,7 +75,7 @@
   .campaigns-toolbar .right .btn.danger {
     background: #ef4444;
     border-color: #dc2626;
-    color: var(--admin-surface);
+    color: var(--admin-inverse-text);
   }
   .campaigns-toolbar .right .btn.danger:hover {
     background: #dc2626;
@@ -735,7 +735,7 @@
     padding: 2px 8px;
     border-radius: 4px;
     background: #0ea5e9;
-    color: var(--admin-surface);
+    color: var(--admin-inverse-text);
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
@@ -1177,8 +1177,8 @@
     right: 16px;
     bottom: 16px;
     max-width: 400px;
-    background: var(--admin-text);
-    color: var(--admin-surface);
+    background: var(--admin-inverse-surface);
+    color: var(--admin-inverse-text);
     padding: 10px 14px;
     border-radius: 4px;
     font-size: 13px;
