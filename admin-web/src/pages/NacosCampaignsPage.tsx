@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Card, Col, Collapse, Input, InputNumber, Modal, Row, Segmented, Select, Space, Switch, Tag, Tooltip } from "antd";
+import { Button, Card, Col, Collapse, Input, InputNumber, Modal, Row, Segmented, Select, Space, Switch, Tag as AntTag, Tooltip } from "antd";
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -1777,34 +1777,152 @@ function ListGroup({
       ) : (
         <div className="list-group-empty">{emptyText}</div>
       )}
+    </div>
+  );
+}
+
+function CampaignBrief({
+  c,
+  dirty,
+  websiteDirty,
+  websiteStatus,
+}: {
+  c: AnyObj;
+  dirty: boolean;
+  websiteDirty: boolean;
+  websiteStatus: string;
+}) {
+  const stage = getCampaignStage(c);
+  const taskCount = Array.isArray(c.tasks) ? c.tasks.length : 0;
+  const logoCount = Array.isArray(c.logos) ? c.logos.length : 0;
+  const targetCount = Array.isArray(c.targetUserIds) ? c.targetUserIds.length : 0;
+  return (
+    <Card size="small" style={{ marginBottom: 12 }}>
+      <Row gutter={[16, 12]} align="middle">
+        <Col xs={24} lg={9}>
+          <Space size={[6, 6]} wrap>
+            <AntTag>{stage.label}</AntTag>
+            <AntTag>{c.leaderboardMode === "custom" ? "自定义榜单" : "传统榜单"}</AntTag>
+            {dirty ? <AntTag color="red">主配置未发布</AntTag> : null}
+            {websiteDirty ? <AntTag color="orange">网站未保存</AntTag> : null}
+          </Space>
+          <div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>
+            {c.displayName?.zh || c.displayName?.en || c.copy?.shortTitle?.zh || c.campaignKey || "未命名活动"}
+          </div>
+          <Space size={8} style={{ marginTop: 4, color: "#8c8c8c" }} wrap>
+            <span>{c.id || "未生成 ID"}</span>
+            <span>网站：{websiteStatus || "draft"}</span>
+          </Space>
+        </Col>
+        <Col xs={24} lg={15}>
+          <Row gutter={[12, 12]}>
+            <Col xs={24} md={8}><Card size="small" title="活动时间">{formatCampaignTime(c.enrollmentWindow?.startAt)} → {formatCampaignTime(c.enrollmentWindow?.endAt)}</Card></Col>
+            <Col xs={24} md={8}><Card size="small" title="奖励">{getRewardSummary(c)}</Card></Col>
+            <Col xs={24} md={8}><Card size="small" title="素材 / 任务 / 投放">{logoCount} Logo · {taskCount} Task · {targetCount} 账号</Card></Col>
+          </Row>
+        </Col>
+      </Row>
     </Card>
+  );
+}
+
+function CampaignEditor(props: {
+  c: AnyObj;
+  canEditCampaignId: boolean;
+  setCampaignPath: (path: string, value: any) => void;
+  updateSelectedCampaign: (fn: (c: AnyObj) => void) => void;
+  changeThreshold: (value: string) => void;
+  thresholdValue: string;
+  changeRiskConfirm: (checked: boolean) => void;
+  addArrayItem: (kind: any) => void;
+  updateArrayItem: (kind: string, index: number, path: string, value: any) => void;
+  moveArrayItem: (kind: string, index: number, delta: number) => void;
+  removeArrayItem: (kind: string, index: number) => void;
+}) {
+  const { c, canEditCampaignId, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem } = props;
+  const campaignIdDisabled = !!c.id?.trim() && !canEditCampaignId;
+  return (
+    <>
+      <Card size="small" title="基础设置" style={{ marginBottom: 12 }}>
+        <Row gutter={[12, 12]} align="top">
+          <Col xs={24} sm={12} md={8} lg={6}><Field label={<InfoLabel info="活动唯一短标识，例如 mantle3、bybit2。保存时会自动生成完整 nacos id。">活动ID</InfoLabel>}><Input value={c.campaignKey || ""} disabled={campaignIdDisabled} onChange={(e) => setCampaignPath("campaignKey", e.target.value)} /></Field></Col>
+          <Col xs={12} sm={8} md={5} lg={4}><Field label={<InfoLabel info="0-10000，数值越大越靠前。">排序权重</InfoLabel>}><InputNumber min={0} max={10000} value={Number(c.sortWeight) || 0} onChange={(v) => setCampaignPath("sortWeight", Math.min(10000, Math.max(0, Number(v) || 0)))} /></Field></Col>
+          <Col xs={24} lg={14}>
+            <Space size={[16, 8]} wrap style={{ paddingTop: 24 }}>
+              <Space><Switch checked={!!c.enabled} onChange={(v) => setCampaignPath("enabled", v)} /><InfoLabel info="关闭后插件列表不展示，报名接口也会拒绝。">展示活动</InfoLabel></Space>
+              <Space><Switch checked={!!c.testingPhase} onChange={(v) => setCampaignPath("testingPhase", v)} /><InfoLabel info="仅内部测试用户可见。">测试模式</InfoLabel></Space>
+              <Space><Switch checked={!!c.riskConfirmHtml} onChange={changeRiskConfirm} /><InfoLabel info="在活动页面弹出 Early-stage 风险确认提示。">风险提示</InfoLabel></Space>
+              <Space><Switch checked={c.showSponsoredPolicy === true} onChange={(v) => setCampaignPath("showSponsoredPolicy", v)} /><InfoLabel info="在报名按钮附近展示付费推广政策说明。">推广政策</InfoLabel></Space>
+              <Space><Switch checked={c.allowEmailRegistration === true} onChange={(v) => setCampaignPath("allowEmailRegistration", v)} /><InfoLabel info="开启后 EVM 和 Email 二选一报名。">Email 注册</InfoLabel></Space>
+              <Space><InfoLabel info="传统模式配置 POI/POW/征文；自定义模式配置多个榜单。">活动模式</InfoLabel><Segmented size="small" value={c.leaderboardMode || "traditional"} onChange={(value) => setCampaignPath("leaderboardMode", String(value))} options={[{ value: "traditional", label: "传统" }, { value: "custom", label: "自定义" }]} /></Space>
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+
+      <Section title="活动信息">
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={12}><Field label="标题（中文）"><Input value={c.displayName?.zh || ""} onChange={(e) => setCampaignPath("displayName.zh", e.target.value)} /></Field></Col>
+          <Col xs={24} md={12}><Field label="标题（English）"><Input value={c.displayName?.en || ""} onChange={(e) => setCampaignPath("displayName.en", e.target.value)} /></Field></Col>
+          <Col xs={24} md={12}><Field label="短标题（中文）"><Input value={c.copy?.shortTitle?.zh || ""} onChange={(e) => setCampaignPath("copy.shortTitle.zh", e.target.value)} /></Field></Col>
+          <Col xs={24} md={12}><Field label="短标题（English）"><Input value={c.copy?.shortTitle?.en || ""} onChange={(e) => setCampaignPath("copy.shortTitle.en", e.target.value)} /></Field></Col>
+          <Col xs={24} md={12}><Field label="项目介绍（中文）"><TextArea rows={2} value={c.projectIntroduction?.zh || ""} onChange={(e) => setCampaignPath("projectIntroduction.zh", e.target.value)} /></Field></Col>
+          <Col xs={24} md={12}><Field label="项目介绍（English）"><TextArea rows={2} value={c.projectIntroduction?.en || ""} onChange={(e) => setCampaignPath("projectIntroduction.en", e.target.value)} /></Field></Col>
+        </Row>
+        <div style={{ marginTop: 16 }}><RepeaterHeader title="写作主题" onAdd={() => addArrayItem("writingThemes")} /><WritingThemes items={c.writingThemes || []} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></div>
+      </Section>
+
+      <Section title="时间、奖励与门槛">
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={8}><Field label="开始时间"><Input type="datetime-local" value={toDatetimeLocal(c.enrollmentWindow?.startAt)} onChange={(e) => setCampaignPath("enrollmentWindow.startAt", fromDatetimeLocalToIsoZ(e.target.value))} /></Field></Col>
+          <Col xs={24} md={8}><Field label="结束时间"><Input type="datetime-local" value={toDatetimeLocal(c.enrollmentWindow?.endAt)} onChange={(e) => setCampaignPath("enrollmentWindow.endAt", fromDatetimeLocalToIsoZ(e.target.value))} /></Field></Col>
+          <Col xs={24} md={8}><Field label="报名门槛"><Select value={thresholdValue} onChange={changeThreshold} options={[{ value: "", label: "请选择" }, { value: "50k", label: "50k" }, { value: "100k", label: "100k" }, { value: "200k", label: "200k" }, { value: "200k+creator", label: "200k+creator" }]} /></Field></Col>
+        </Row>
+        <div style={{ marginTop: 12 }}>
+          {(c.leaderboardMode || "traditional") === "custom" ? <CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
+        </div>
+      </Section>
+
+      <Section title="链接 · 名单">
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={12}><Field label="推特活动指南"><Input value={c.links?.guideUrl || ""} onChange={(e) => setCampaignPath("links.guideUrl", e.target.value)} /></Field></Col>
+          <Col xs={24} md={12}><Field label="官网活动页面"><Input value={c.links?.activeUrl || ""} onChange={(e) => setCampaignPath("links.activeUrl", e.target.value)} /></Field></Col>
+          <Col xs={24}><Space><Switch checked={!!c.links?.showLeaderboardLink} onChange={(v) => setCampaignPath("links.showLeaderboardLink", v)} /><InfoLabel info="跳转到官网活动页面链接。">插件榜单底部显示官方排行榜入口</InfoLabel></Space></Col>
+          <Col xs={24} md={12}><Field label="内部测试人员"><TextArea rows={2} value={listToLines(c.testList)} onChange={(e) => setCampaignPath("testList", splitLinesToList(e.target.value))} /></Field></Col>
+          <Col xs={24} md={12}><Field label="插件右侧展示账号"><TextArea rows={2} value={listToLines(c.targetUserIds)} onChange={(e) => setCampaignPath("targetUserIds", splitLinesToList(e.target.value))} /></Field></Col>
+        </Row>
+      </Section>
+
+      <Section title="Logo · 任务 · Tags">
+        <RepeaterHeader title="活动方 Logo" onAdd={() => addArrayItem("logos")} /><Logos items={c.logos || []} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} />
+        <div style={{ marginTop: 16 }}><RepeaterHeader title="报名前任务" onAdd={() => addArrayItem("tasks")} /><Tasks items={c.tasks || []} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></div>
+        <div style={{ marginTop: 16 }}><RepeaterHeader title={<InfoLabel info="配置自定义 Tag 后，前端自动生成的按贡献 / 征文大赛 / TOP200 标签会被替换。">活动 Tags</InfoLabel>} onAdd={() => addArrayItem("tags")} /><Tags items={c.tags || []} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></div>
+      </Section>
+    </>
   );
 }
 
 function CampaignAdvancedSection({ c }: { c: AnyObj }) {
   return (
-      <CollapsibleSection title="高级配置（id / campaignKey / hotTweetsKey）">
-        <div className="field-row">
-          <Field
-            label="id（唯一）"
-            hint="内部索引使用，无需手动维护（自动生成：campaignKey + '-hunter'）"
-          >
+    <CollapsibleSection title="高级配置（id / campaignKey / hotTweetsKey）">
+      <Row gutter={[12, 12]}>
+        <Col xs={24} md={8}>
+          <Field label={<InfoLabel info="内部索引使用，会由 campaignKey 自动生成。">id</InfoLabel>}>
             <Input value={c.id || ""} disabled />
           </Field>
-          <Field
-            label="campaignKey"
-            hint="需要后端协商一致，一般也是投放者推特号，用于存储报名数据和排名数据"
-          >
+        </Col>
+        <Col xs={24} md={8}>
+          <Field label={<InfoLabel info="需要和后端约定一致，通常也是投放者推特号。">campaignKey</InfoLabel>}>
             <Input value={c.campaignKey || ""} disabled />
           </Field>
-          <Field
-            label="hotTweetsKey"
-            hint="建议填写投放者的推特号，目的是获取热门推文数据 hot?project=hotTweetsKey"
-          >
+        </Col>
+        <Col xs={24} md={8}>
+          <Field label={<InfoLabel info="用于获取热门推文数据 hot?project=hotTweetsKey。">hotTweetsKey</InfoLabel>}>
             <Input value={c.hotTweetsKey || ""} disabled />
           </Field>
-        </div>
-      </CollapsibleSection>
+        </Col>
+      </Row>
+    </CollapsibleSection>
   );
 }
 
@@ -1816,68 +1934,41 @@ function CampaignCopySection({
   setCampaignPath: (path: string, value: any) => void;
 }) {
   return (
-      <CollapsibleSection title="报名按钮文案（通常不改)">
-          <div className="field-row field-row-3">
-            <Field label="emoji">
-              <Input
-                value={c.copy?.emoji || ""}
-                onChange={(e) => setCampaignPath("copy.emoji", e.target.value)}
-              />
-            </Field>
-            <Field label="ctaText（zh）">
-              <Input
-                value={c.copy?.ctaText?.zh || ""}
-                onChange={(e) =>
-                  setCampaignPath("copy.ctaText.zh", e.target.value)
-                }
-              />
-            </Field>
-            <Field label="ctaText（en）">
-              <Input
-                value={c.copy?.ctaText?.en || ""}
-                onChange={(e) =>
-                  setCampaignPath("copy.ctaText.en", e.target.value)
-                }
-              />
-            </Field>
-          </div>
-          <div className="field-row field-row-2">
-            <Field label="去官方（zh/en）">
-              <Input
-                value={c.copy?.goToOfficialText?.zh || ""}
-                onChange={(e) =>
-                  setCampaignPath("copy.goToOfficialText.zh", e.target.value)
-                }
-                placeholder="zh"
-                style={{ marginBottom: 4 }}
-              />
-              <Input
-                value={c.copy?.goToOfficialText?.en || ""}
-                onChange={(e) =>
-                  setCampaignPath("copy.goToOfficialText.en", e.target.value)
-                }
-                placeholder="en"
-              />
-            </Field>
-            <Field label="查看指南（zh/en）">
-              <Input
-                value={c.copy?.viewGuideText?.zh || ""}
-                onChange={(e) =>
-                  setCampaignPath("copy.viewGuideText.zh", e.target.value)
-                }
-                placeholder="zh"
-                style={{ marginBottom: 4 }}
-              />
-              <Input
-                value={c.copy?.viewGuideText?.en || ""}
-                onChange={(e) =>
-                  setCampaignPath("copy.viewGuideText.en", e.target.value)
-                }
-                placeholder="en"
-              />
-            </Field>
-          </div>
-        </CollapsibleSection>
+    <CollapsibleSection title="报名按钮文案（通常不改）">
+      <Row gutter={[12, 12]}>
+        <Col xs={12} md={4}>
+          <Field label="emoji">
+            <Input value={c.copy?.emoji || ""} onChange={(e) => setCampaignPath("copy.emoji", e.target.value)} />
+          </Field>
+        </Col>
+        <Col xs={24} md={10}>
+          <Field label="CTA 中文">
+            <Input value={c.copy?.ctaText?.zh || ""} onChange={(e) => setCampaignPath("copy.ctaText.zh", e.target.value)} />
+          </Field>
+        </Col>
+        <Col xs={24} md={10}>
+          <Field label="CTA English">
+            <Input value={c.copy?.ctaText?.en || ""} onChange={(e) => setCampaignPath("copy.ctaText.en", e.target.value)} />
+          </Field>
+        </Col>
+        <Col xs={24} md={12}>
+          <Field label="去官方 zh / en">
+            <Space direction="vertical" size={6} style={{ width: "100%" }}>
+              <Input value={c.copy?.goToOfficialText?.zh || ""} onChange={(e) => setCampaignPath("copy.goToOfficialText.zh", e.target.value)} placeholder="zh" />
+              <Input value={c.copy?.goToOfficialText?.en || ""} onChange={(e) => setCampaignPath("copy.goToOfficialText.en", e.target.value)} placeholder="en" />
+            </Space>
+          </Field>
+        </Col>
+        <Col xs={24} md={12}>
+          <Field label="查看指南 zh / en">
+            <Space direction="vertical" size={6} style={{ width: "100%" }}>
+              <Input value={c.copy?.viewGuideText?.zh || ""} onChange={(e) => setCampaignPath("copy.viewGuideText.zh", e.target.value)} placeholder="zh" />
+              <Input value={c.copy?.viewGuideText?.en || ""} onChange={(e) => setCampaignPath("copy.viewGuideText.en", e.target.value)} placeholder="en" />
+            </Space>
+          </Field>
+        </Col>
+      </Row>
+    </CollapsibleSection>
   );
 }
 
@@ -1920,343 +2011,194 @@ function RepActions({
     </Space>
   );
 }
+function EmptyHint({ children }: { children: React.ReactNode }) {
+  return <div style={{ color: "#8c8c8c", padding: "8px 0" }}>{children}</div>;
+}
+
 function Logos({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无 Logo，可点击上方添加。</EmptyHint>;
   return (
-    <div className="repeaters">
-      {items.length ? (
-        items.map((it: AnyObj, i: number) => (
-          <div className="rep-card" key={i}>
-            <div className="rep-header">
-              <div className="rep-title">#{i + 1} Logo</div>
-              <RepActions
-                onUp={() => move("logos", i, -1)}
-                onDown={() => move("logos", i, 1)}
-                onRemove={() => remove("logos", i)}
-              />
-            </div>
-            <div className="field-row">
-              <Field label="图片（必填）">
-                <Input
-                  value={it.image || ""}
-                  onChange={(e) => update("logos", i, "image", e.target.value)}
-                />
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {items.map((it: AnyObj, i: number) => (
+        <Card
+          size="small"
+          key={i}
+          title={`Logo #${i + 1}`}
+          extra={
+            <RepActions
+              onUp={() => move("logos", i, -1)}
+              onDown={() => move("logos", i, 1)}
+              onRemove={() => remove("logos", i)}
+            />
+          }
+        >
+          <Row gutter={[12, 12]}>
+            <Col xs={24} md={10}>
+              <Field label="图片 URL">
+                <Input value={it.image || ""} onChange={(e) => update("logos", i, "image", e.target.value)} />
               </Field>
-              <Field label="推特链接（必填）">
-                <Input
-                  value={it.url || ""}
-                  onChange={(e) => update("logos", i, "url", e.target.value)}
-                />
+            </Col>
+            <Col xs={24} md={10}>
+              <Field label="跳转链接">
+                <Input value={it.url || ""} onChange={(e) => update("logos", i, "url", e.target.value)} />
               </Field>
-              <Field label="推特账号（必填）">
-                <Input
-                  value={it.label || ""}
-                  onChange={(e) => update("logos", i, "label", e.target.value)}
-                />
+            </Col>
+            <Col xs={24} md={4}>
+              <Field label="账号名">
+                <Input value={it.label || ""} onChange={(e) => update("logos", i, "label", e.target.value)} />
               </Field>
-            </div>
-          </div>
-        ))
-      ) : (
-        <div className="muted campaigns-react-empty-inline">
-          暂无 logos，可点击上方“添加 Logo”。
-        </div>
-      )}
-    </div>
+            </Col>
+          </Row>
+        </Card>
+      ))}
+    </Space>
   );
 }
+
 function WritingThemes({ items, update, move, remove }: any) {
   return (
-    <div className="repeaters-horizontal">
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
       {items.map((it: AnyObj, i: number) => (
-        <div className="rep-card" key={i}>
-          <div className="rep-header">
-            <div className="rep-title">主题 #{i + 1}</div>
+        <Card
+          size="small"
+          key={i}
+          title={`主题 #${i + 1}`}
+          extra={
             <RepActions
               onUp={() => move("writingThemes", i, -1)}
               onDown={() => move("writingThemes", i, 1)}
               onRemove={() => remove("writingThemes", i)}
             />
-          </div>
-          <div className="field-row field-row-2">
-            <Field label="主题内容（中文）">
-              <TextArea
-                rows={3}
-                value={it.zh || ""}
-                onChange={(e) =>
-                  update("writingThemes", i, "zh", e.target.value)
-                }
-                placeholder="输入本活动的写作主题描述..."
-              />
-            </Field>
-            <Field label="主题内容（English）">
-              <TextArea
-                rows={3}
-                value={it.en || ""}
-                onChange={(e) =>
-                  update("writingThemes", i, "en", e.target.value)
-                }
-                placeholder="Writing theme description..."
-              />
-            </Field>
-          </div>
-        </div>
+          }
+        >
+          <Row gutter={[12, 12]}>
+            <Col xs={24} md={12}>
+              <Field label="中文">
+                <TextArea rows={3} value={it.zh || ""} onChange={(e) => update("writingThemes", i, "zh", e.target.value)} />
+              </Field>
+            </Col>
+            <Col xs={24} md={12}>
+              <Field label="English">
+                <TextArea rows={3} value={it.en || ""} onChange={(e) => update("writingThemes", i, "en", e.target.value)} />
+              </Field>
+            </Col>
+          </Row>
+        </Card>
       ))}
-    </div>
+    </Space>
   );
 }
+
 function Tasks({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无 Task，可点击上方添加。</EmptyHint>;
   return (
-    <div className="repeaters">
-      {items.length ? (
-        items.map((it: AnyObj, i: number) => {
-          const isCustom = (it.type || "twitter") === "custom";
-          return (
-            <div className="rep-card task-card" key={i}>
-              <div className="rep-header">
-                <div className="rep-title">#{i + 1} Task</div>
-                <RepActions
-                  onUp={() => move("tasks", i, -1)}
-                  onDown={() => move("tasks", i, 1)}
-                  onRemove={() => remove("tasks", i)}
-                />
-              </div>
-              <div className="task-grid">
-                <div className="task-field task-field-id">
-                  <label>
-                    ID <span className="task-label-note">自动生成</span>
-                  </label>
-                  <Input
-                    value={it.id || ""}
-                    disabled
-                    className="task-input-id"
-                  />
-                </div>
-                <div className="task-field task-field-type">
-                  <label>Type</label>
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {items.map((it: AnyObj, i: number) => {
+        const isCustom = (it.type || "twitter") === "custom";
+        return (
+          <Card
+            size="small"
+            key={i}
+            title={`Task #${i + 1}`}
+            extra={
+              <RepActions
+                onUp={() => move("tasks", i, -1)}
+                onDown={() => move("tasks", i, 1)}
+                onRemove={() => remove("tasks", i)}
+              />
+            }
+          >
+            <Row gutter={[12, 12]} align="middle">
+              <Col xs={24} md={8}>
+                <Field label={<InfoLabel info="根据活动ID、类型和链接自动生成。">ID</InfoLabel>}>
+                  <Input value={it.id || ""} disabled />
+                </Field>
+              </Col>
+              <Col xs={12} md={4}>
+                <Field label="类型">
                   <Select
                     value={it.type || "twitter"}
                     onChange={(v) => update("tasks", i, "type", v)}
-                    options={["twitter", "telegram", "other", "custom"].map(
-                      (v) => ({
-                        value: v,
-                        label: v === "custom" ? "backend-custom" : v,
-                      }),
-                    )}
+                    options={["twitter", "telegram", "other", "custom"].map((v) => ({ value: v, label: v === "custom" ? "backend-custom" : v }))}
                   />
-                </div>
-                <div
-                  className={`task-field task-field-autocomplete ${isCustom ? "is-disabled" : ""}`}
-                >
-                  <label>Auto Complete</label>
-                  <div className="task-autocomplete-wrapper">
-                    <Switch
-                      disabled={isCustom}
-                      checked={!isCustom && !!it.autoComplete}
-                      onChange={(v) => update("tasks", i, "autoComplete", v)}
-                    />
-                    <span className="task-autocomplete-hint">
-                      点击链接即完成任务
-                    </span>
-                  </div>
-                </div>
-                <div className="task-field task-field-title">
-                  <label>任务标题（中文）</label>
-                  <Input
-                    value={it.title?.zh || ""}
-                    onChange={(e) =>
-                      update("tasks", i, "title.zh", e.target.value)
-                    }
-                    placeholder="输入中文标题..."
-                  />
-                </div>
-                <div className="task-field task-field-title">
-                  <label>任务标题（English）</label>
-                  <Input
-                    value={it.title?.en || ""}
-                    onChange={(e) =>
-                      update("tasks", i, "title.en", e.target.value)
-                    }
-                    placeholder="Enter English title..."
-                  />
-                </div>
-                <div className="task-field task-field-url">
-                  <label>跳转链接</label>
-                  <Input
-                    value={isCustom ? "https://" : it.url || ""}
-                    readOnly={isCustom}
-                    onChange={(e) => update("tasks", i, "url", e.target.value)}
-                    placeholder="https://..."
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })
-      ) : (
-        <div className="muted campaigns-react-empty-inline">
-          暂无 tasks，可点击上方“添加 Task”。
-        </div>
-      )}
-    </div>
+                </Field>
+              </Col>
+              <Col xs={12} md={4}>
+                <Field label={<InfoLabel info="开启后用户点击链接即视为完成。custom 类型不可开启。">自动完成</InfoLabel>}>
+                  <Switch disabled={isCustom} checked={!isCustom && !!it.autoComplete} onChange={(v) => update("tasks", i, "autoComplete", v)} />
+                </Field>
+              </Col>
+              <Col xs={24} md={12}>
+                <Field label="标题（中文）">
+                  <Input value={it.title?.zh || ""} onChange={(e) => update("tasks", i, "title.zh", e.target.value)} />
+                </Field>
+              </Col>
+              <Col xs={24} md={12}>
+                <Field label="标题（English）">
+                  <Input value={it.title?.en || ""} onChange={(e) => update("tasks", i, "title.en", e.target.value)} />
+                </Field>
+              </Col>
+              <Col xs={24}>
+                <Field label="跳转链接">
+                  <Input value={isCustom ? "https://" : it.url || ""} readOnly={isCustom} onChange={(e) => update("tasks", i, "url", e.target.value)} />
+                </Field>
+              </Col>
+            </Row>
+          </Card>
+        );
+      })}
+    </Space>
   );
 }
+
 function Winners({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无获奖者，可点击上方添加。</EmptyHint>;
   return (
-    <div className="repeaters">
-      {items.length ? (
-        items.map((it: AnyObj, i: number) => (
-          <div className="rep-card" key={i}>
-            <div className="rep-header">
-              <div className="rep-title">#{i + 1} 获奖者</div>
-              <RepActions
-                onUp={() => move("essayContestWinners", i, -1)}
-                onDown={() => move("essayContestWinners", i, 1)}
-                onRemove={() => remove("essayContestWinners", i)}
-              />
-            </div>
-            <div className="field-row field-row-2">
-              <Field label="姓名（name）">
-                <Input
-                  value={it.name || ""}
-                  onChange={(e) =>
-                    update("essayContestWinners", i, "name", e.target.value)
-                  }
-                />
-              </Field>
-              <Field label="推特账号（handler）">
-                <Input
-                  value={it.handler || ""}
-                  onChange={(e) =>
-                    update("essayContestWinners", i, "handler", e.target.value)
-                  }
-                />
-              </Field>
-            </div>
-            <div className="field-row field-row-2">
-              <Field label="头像地址（avatar）">
-                <Input
-                  value={it.avatar || ""}
-                  onChange={(e) =>
-                    update("essayContestWinners", i, "avatar", e.target.value)
-                  }
-                  placeholder="https://..."
-                />
-              </Field>
-              <Field label="奖励金额（reward）">
-                <Input
-                  value={it.reward || ""}
-                  onChange={(e) =>
-                    update("essayContestWinners", i, "reward", e.target.value)
-                  }
-                  placeholder="例如：1000"
-                />
-              </Field>
-            </div>
-          </div>
-        ))
-      ) : (
-        <div className="muted campaigns-react-empty-inline">
-          暂无获奖者，可点击上方“添加获奖者”。
-        </div>
-      )}
-    </div>
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {items.map((it: AnyObj, i: number) => (
+        <Card
+          size="small"
+          key={i}
+          title={`获奖者 #${i + 1}`}
+          extra={<RepActions onUp={() => move("essayContestWinners", i, -1)} onDown={() => move("essayContestWinners", i, 1)} onRemove={() => remove("essayContestWinners", i)} />}
+        >
+          <Row gutter={[12, 12]}>
+            <Col xs={24} md={6}><Field label="姓名"><Input value={it.name || ""} onChange={(e) => update("essayContestWinners", i, "name", e.target.value)} /></Field></Col>
+            <Col xs={24} md={6}><Field label="推特账号"><Input value={it.handler || ""} onChange={(e) => update("essayContestWinners", i, "handler", e.target.value)} /></Field></Col>
+            <Col xs={24} md={8}><Field label="头像 URL"><Input value={it.avatar || ""} onChange={(e) => update("essayContestWinners", i, "avatar", e.target.value)} /></Field></Col>
+            <Col xs={24} md={4}><Field label="奖励"><Input value={it.reward || ""} onChange={(e) => update("essayContestWinners", i, "reward", e.target.value)} /></Field></Col>
+          </Row>
+        </Card>
+      ))}
+    </Space>
   );
 }
+
 function Tags({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无 Tags，可点击上方添加。</EmptyHint>;
   return (
-    <div className="repeaters">
-      {items.length ? (
-        items.map((it: AnyObj, i: number) => {
-          const scheme =
-            TAG_COLOR_SCHEMES.find(
-              (s) => s.value === (it.colorScheme || "blue"),
-            ) || TAG_COLOR_SCHEMES[3];
-          return (
-            <div className={`rep-card tag-card ${scheme.className}`} key={i}>
-              <div className="rep-header">
-                <div className="rep-title">Tag #{i + 1}</div>
-                <RepActions
-                  onUp={() => move("tags", i, -1)}
-                  onDown={() => move("tags", i, 1)}
-                  onRemove={() => remove("tags", i)}
-                />
-              </div>
-              <div className="tag-preview">
-                <span className="tag-preview-badge">
-                  <span className="tag-preview-icon">{it.icon || "Tag"}</span>
-                  <span className="tag-preview-label">
-                    {it.label || "未命名"}
-                  </span>
-                </span>
-              </div>
-              <div className="tag-fields">
-                <div className="tag-field">
-                  <label>颜色系</label>
-                  <Select
-                    value={it.colorScheme || "blue"}
-                    onChange={(v) => update("tags", i, "colorScheme", v)}
-                    options={TAG_COLOR_SCHEMES.map(({ value, label }) => ({
-                      value,
-                      label,
-                    }))}
-                  />
-                </div>
-                <div className="tag-field">
-                  <label>图标</label>
-                  <Select
-                    value={it.icon || "Tag"}
-                    onChange={(v) => update("tags", i, "icon", v)}
-                    options={LUCIDE_ICONS}
-                  />
-                </div>
-                <div className="tag-field tag-field-full">
-                  <label>标签文本（中文）</label>
-                  <Input
-                    value={it.label || ""}
-                    onChange={(e) => update("tags", i, "label", e.target.value)}
-                  />
-                </div>
-                <div className="tag-field tag-field-full">
-                  <label>标签文本（English）</label>
-                  <Input
-                    value={it.label_en || ""}
-                    onChange={(e) =>
-                      update("tags", i, "label_en", e.target.value)
-                    }
-                  />
-                </div>
-                <div className="tag-field tag-field-full">
-                  <label>Hover 提示（中文，支持 HTML）</label>
-                  <TextArea
-                    rows={2}
-                    value={it.hoverTips || ""}
-                    onChange={(e) =>
-                      update("tags", i, "hoverTips", e.target.value)
-                    }
-                  />
-                </div>
-                <div className="tag-field tag-field-full">
-                  <label>Hover 提示（English，支持 HTML）</label>
-                  <TextArea
-                    rows={2}
-                    value={it.hoverTips_en || ""}
-                    onChange={(e) =>
-                      update("tags", i, "hoverTips_en", e.target.value)
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })
-      ) : (
-        <div className="muted campaigns-react-empty-inline">
-          暂无 tags，可点击上方“添加”
-        </div>
-      )}
-    </div>
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {items.map((it: AnyObj, i: number) => (
+        <Card
+          size="small"
+          key={i}
+          title={<Space>Tag #{i + 1}<AntTag color={it.colorScheme || "blue"}>{it.icon || "Tag"} {it.label || "未命名"}</AntTag></Space>}
+          extra={<RepActions onUp={() => move("tags", i, -1)} onDown={() => move("tags", i, 1)} onRemove={() => remove("tags", i)} />}
+        >
+          <Row gutter={[12, 12]}>
+            <Col xs={12} md={4}><Field label="颜色"><Select value={it.colorScheme || "blue"} onChange={(v) => update("tags", i, "colorScheme", v)} options={TAG_COLOR_SCHEMES.map(({ value, label }) => ({ value, label }))} /></Field></Col>
+            <Col xs={12} md={4}><Field label="图标"><Select value={it.icon || "Tag"} onChange={(v) => update("tags", i, "icon", v)} options={LUCIDE_ICONS} /></Field></Col>
+            <Col xs={24} md={8}><Field label="中文标签"><Input value={it.label || ""} onChange={(e) => update("tags", i, "label", e.target.value)} /></Field></Col>
+            <Col xs={24} md={8}><Field label="English 标签"><Input value={it.label_en || ""} onChange={(e) => update("tags", i, "label_en", e.target.value)} /></Field></Col>
+            <Col xs={24} md={12}><Field label="Hover 中文（支持 HTML）"><TextArea rows={2} value={it.hoverTips || ""} onChange={(e) => update("tags", i, "hoverTips", e.target.value)} /></Field></Col>
+            <Col xs={24} md={12}><Field label="Hover English（支持 HTML）"><TextArea rows={2} value={it.hoverTips_en || ""} onChange={(e) => update("tags", i, "hoverTips_en", e.target.value)} /></Field></Col>
+          </Row>
+        </Card>
+      ))}
+    </Space>
   );
 }
+
 function CustomLeaderboards({
   apiUrl,
   items,
@@ -2267,102 +2209,36 @@ function CustomLeaderboards({
   remove,
 }: any) {
   return (
-    <div className="reward-tier-content">
-      <div className="field-row field-row-1">
-        <Field
-          label="榜单接口 URL"
-          hint="可填写完整 URL，也可填写 /x/api 这种相对路径；会原样保存到数据库。"
-        >
-          <Input
-            value={apiUrl}
-            onChange={(e) => setCampaignPath("leaderboardApiUrl", e.target.value)}
-            placeholder="/x/api"
-          />
-        </Field>
-      </div>
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      <Field label={<InfoLabel info="可填写完整 URL，也可填写 /x/api 相对路径；会原样保存到数据库。">榜单接口 URL</InfoLabel>}>
+        <Input value={apiUrl} onChange={(e) => setCampaignPath("leaderboardApiUrl", e.target.value)} placeholder="/x/api" />
+      </Field>
       <RepeaterHeader title="自定义榜单" onAdd={add} />
-      <div className="repeaters">
-        {items.length ? (
-          items.map((it: AnyObj, i: number) => (
-            <div className="rep-card" key={i}>
-              <div className="rep-header">
-                <div className="rep-title">榜单 #{i + 1}</div>
-                <RepActions
-                  onUp={() => move("customLeaderboards", i, -1)}
-                  onDown={() => move("customLeaderboards", i, 1)}
-                  onRemove={() => remove("customLeaderboards", i)}
-                />
-              </div>
-              <div className="field-row field-row-2">
-                <Field label="榜单名字（中文）">
-                  <Input
-                    value={it.name?.zh || ""}
-                    onChange={(e) =>
-                      update("customLeaderboards", i, "name.zh", e.target.value)
-                    }
-                  />
-                </Field>
-                <Field label="榜单名字（English）">
-                  <Input
-                    value={it.name?.en || ""}
-                    onChange={(e) =>
-                      update("customLeaderboards", i, "name.en", e.target.value)
-                    }
-                  />
-                </Field>
-              </div>
-              <div className="field-row field-row-2">
-                <Field label="金额">
-                  <InputNumber
-                    min={0}
-                    value={it.amount}
-                    onChange={(v) => update("customLeaderboards", i, "amount", v)}
-                  />
-                </Field>
-                <Field label="人数">
-                  <InputNumber
-                    min={1}
-                    value={it.participantCount}
-                    onChange={(v) =>
-                      update("customLeaderboards", i, "participantCount", v)
-                    }
-                  />
-                </Field>
-                <Field label="分配机制">
-                  <Select
-                    value={it.distributionType || ""}
-                    onChange={(v) =>
-                      update("customLeaderboards", i, "distributionType", v)
-                    }
-                    options={[
-                      { value: "", label: "请选择" },
-                      { value: "equal", label: "平分" },
-                      { value: "mindshare", label: "mindshare" },
-                      { value: "workshare", label: "workshare" },
-                    ]}
-                  />
-                </Field>
-                <Field label="奖励单位">
-                  <Input
-                    value={it.unit || ""}
-                    onChange={(e) =>
-                      update("customLeaderboards", i, "unit", e.target.value)
-                    }
-                    placeholder="USDT"
-                  />
-                </Field>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="muted campaigns-react-empty-inline">
-            暂无自定义榜单，可点击上方“添加”
-          </div>
-        )}
-      </div>
-    </div>
+      {items.length ? (
+        items.map((it: AnyObj, i: number) => (
+          <Card
+            size="small"
+            key={i}
+            title={`榜单 #${i + 1}`}
+            extra={<RepActions onUp={() => move("customLeaderboards", i, -1)} onDown={() => move("customLeaderboards", i, 1)} onRemove={() => remove("customLeaderboards", i)} />}
+          >
+            <Row gutter={[12, 12]}>
+              <Col xs={24} md={8}><Field label="中文名"><Input value={it.name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "name.zh", e.target.value)} /></Field></Col>
+              <Col xs={24} md={8}><Field label="English"><Input value={it.name?.en || ""} onChange={(e) => update("customLeaderboards", i, "name.en", e.target.value)} /></Field></Col>
+              <Col xs={12} md={4}><Field label="金额"><InputNumber min={0} value={it.amount} onChange={(v) => update("customLeaderboards", i, "amount", v)} /></Field></Col>
+              <Col xs={12} md={4}><Field label="人数"><InputNumber min={1} value={it.participantCount} onChange={(v) => update("customLeaderboards", i, "participantCount", v)} /></Field></Col>
+              <Col xs={12} md={4}><Field label="机制"><Select value={it.distributionType || ""} onChange={(v) => update("customLeaderboards", i, "distributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
+              <Col xs={12} md={4}><Field label="单位"><Input value={it.unit || ""} onChange={(e) => update("customLeaderboards", i, "unit", e.target.value)} placeholder="USDT" /></Field></Col>
+            </Row>
+          </Card>
+        ))
+      ) : (
+        <EmptyHint>暂无自定义榜单，可点击上方添加。</EmptyHint>
+      )}
+    </Space>
   );
 }
+
 function RewardOptional({
   c,
   type,
@@ -2376,18 +2252,12 @@ function RewardOptional({
 }: any) {
   const isPow = type === "pow";
   return (
-    <div className="section-sub reward-tier reward-tier-optional">
-      <div className="reward-tier-header">
-        <div className="reward-tier-title-wrapper">
-          <span className="reward-tier-title">
-            {isPow ? "⛏️ POW 榜单" : "✍️ 征文大赛"}
-          </span>
-          <span className="reward-tier-desc">
-            {isPow ? "按工作量证明排名发奖" : "高质量内容创作奖励"}
-          </span>
-        </div>
-        <div className="field field-inline" style={{ margin: 0 }}>
-          <label className="switch-label">开启</label>
+    <Card
+      size="small"
+      title={isPow ? "POW 榜单" : "征文大赛"}
+      extra={
+        <Space>
+          <span>开启</span>
           <Switch
             checked={enabled}
             onChange={(v) =>
@@ -2397,110 +2267,43 @@ function RewardOptional({
               })
             }
           />
-        </div>
-      </div>
+        </Space>
+      }
+      style={{ marginTop: 8 }}
+    >
       {enabled ? (
-        <div className="reward-tier-content">
-          {isPow ? (
-            <>
-              <div className="field-row field-row-3">
-                <Field label="POW奖励金额">
-                  <InputNumber
-                    min={0}
-                    value={c.powAmount}
-                    onChange={(v) => setCampaignPath("powAmount", v)}
-                  />
-                </Field>
-                <Field label="POW获奖人数">
-                  <InputNumber
-                    min={1}
-                    value={c.powWinnerCount}
-                    onChange={(v) => setCampaignPath("powWinnerCount", v)}
-                  />
-                </Field>
-                <Field label="POW分配机制">
-                  <Select
-                    value={c.powDistributionType || ""}
-                    onChange={(v) => setCampaignPath("powDistributionType", v)}
-                    options={[
-                      { value: "", label: "请选择" },
-                      { value: "equal", label: "平分" },
-                      { value: "mindshare", label: "mindshare" },
-                      { value: "workshare", label: "workshare" },
-                    ]}
-                  />
-                </Field>
-              </div>
-              <div className="field-row field-row-2">
-                <Field label="POW奖励单位">
-                  <Input
-                    value={c.powUnit || ""}
-                    onChange={(e) => setCampaignPath("powUnit", e.target.value)}
-                    placeholder="USDT"
-                  />
-                </Field>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="field-row field-row-3">
-                <Field label="征文大赛金额">
-                  <InputNumber
-                    min={0}
-                    value={c.essayContestAmount}
-                    onChange={(v) => setCampaignPath("essayContestAmount", v)}
-                  />
-                </Field>
-                <Field label="获奖人数">
-                  <InputNumber
-                    min={1}
-                    value={c.essayContestWinnerCount}
-                    onChange={(v) =>
-                      setCampaignPath("essayContestWinnerCount", v)
-                    }
-                  />
-                </Field>
-                <Field label="奖励单位（选填）">
-                  <Input
-                    value={c.essayContestUnit || ""}
-                    onChange={(e) =>
-                      setCampaignPath("essayContestUnit", e.target.value)
-                    }
-                    placeholder="USDT"
-                  />
-                </Field>
-              </div>
-              <CollapsibleSection
-                title={
-                  <>
-                    <span>征文大赛获奖名单</span>
-                    <Button
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addWinner();
-                      }}
-                      style={{ marginLeft: 8 }}
-                    >
-                      +添加
-                    </Button>
-                  </>
-                }
-              >
-                <Winners
-                  items={c.essayContestWinners || []}
-                  update={update}
-                  move={move}
-                  remove={remove}
-                />
-              </CollapsibleSection>
-            </>
-          )}
-        </div>
-      ) : null}
-    </div>
+        isPow ? (
+          <Row gutter={[12, 12]}>
+            <Col xs={12} md={6}><Field label="金额"><InputNumber min={0} value={c.powAmount} onChange={(v) => setCampaignPath("powAmount", v)} /></Field></Col>
+            <Col xs={12} md={6}><Field label="人数"><InputNumber min={1} value={c.powWinnerCount} onChange={(v) => setCampaignPath("powWinnerCount", v)} /></Field></Col>
+            <Col xs={12} md={6}><Field label="机制"><Select value={c.powDistributionType || ""} onChange={(v) => setCampaignPath("powDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
+            <Col xs={12} md={6}><Field label="单位"><Input value={c.powUnit || ""} onChange={(e) => setCampaignPath("powUnit", e.target.value)} placeholder="USDT" /></Field></Col>
+          </Row>
+        ) : (
+          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+            <Row gutter={[12, 12]}>
+              <Col xs={12} md={6}><Field label="金额"><InputNumber min={0} value={c.essayContestAmount} onChange={(v) => setCampaignPath("essayContestAmount", v)} /></Field></Col>
+              <Col xs={12} md={6}><Field label="获奖人数"><InputNumber min={1} value={c.essayContestWinnerCount} onChange={(v) => setCampaignPath("essayContestWinnerCount", v)} /></Field></Col>
+              <Col xs={12} md={6}><Field label="单位"><Input value={c.essayContestUnit || ""} onChange={(e) => setCampaignPath("essayContestUnit", e.target.value)} placeholder="USDT" /></Field></Col>
+            </Row>
+            <Collapse
+              size="small"
+              items={[{
+                key: "winners",
+                label: "获奖名单",
+                extra: <Button size="small" onClick={(e) => { e.stopPropagation(); addWinner(); }}>+ 添加</Button>,
+                children: <Winners items={c.essayContestWinners || []} update={update} move={move} remove={remove} />,
+              }]}
+            />
+          </Space>
+        )
+      ) : (
+        <EmptyHint>{isPow ? "开启后配置 POW 奖励。" : "开启后配置征文奖励。"}</EmptyHint>
+      )}
+    </Card>
   );
 }
+
 function WebsiteSection({
   form,
   update,
@@ -2517,6 +2320,18 @@ function WebsiteSection({
   } catch {
     jsonValid = false;
   }
+
+  const assetPreview = (label: string, src: string) => (
+    <Space size={6} key={label}>
+      {src ? (
+        <img src={src} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover" }} />
+      ) : (
+        <span style={{ width: 24, height: 24, borderRadius: 12, background: "#f5f5f5", display: "inline-block" }} />
+      )}
+      <span style={{ color: "#8c8c8c" }}>{label}</span>
+    </Space>
+  );
+
   return (
     <Card
       size="small"
@@ -2528,231 +2343,103 @@ function WebsiteSection({
           </Tooltip>
         </Space>
       }
-      extra={
-        <Button size="small" disabled={!enabled} onClick={onSave}>
-          保存网站配置
-        </Button>
-      }
+      extra={<Button size="small" disabled={!enabled} onClick={onSave}>保存网站配置</Button>}
       style={{ marginBottom: 12 }}
     >
-      <div className="field-row field-row-3">
-        <Field label="网站状态">
-          <Select
-            disabled={!enabled}
-            value={form.webStatus}
-            onChange={(v) => update({ webStatus: v })}
-            options={[
-              { value: "draft", label: "draft · 草稿" },
-              { value: "coming_soon", label: "coming_soon · 预热" },
-              { value: "live", label: "live · 进行中" },
-              { value: "claim", label: "claim · 领奖" },
-              { value: "ended", label: "ended · 结束" },
-              { value: "archived", label: "archived · 归档" },
-            ]}
-          />
-        </Field>
-        <Field label="详情页 slug">
-          <Input
-            disabled={!enabled}
-            value={form.slug}
-            onChange={(e) => update({ slug: e.target.value })}
-            placeholder="默认等于 campaignKey"
-          />
-        </Field>
-        <Field label="页面模板">
-          <Input
-            disabled={!enabled}
-            value={form.pageTemplate}
-            onChange={(e) => update({ pageTemplate: e.target.value })}
-            placeholder="standard"
-          />
-        </Field>
-      </div>
-      <div className="field-row field-row-2">
-        <Field label="网站公告（中文）">
-          <TextArea
-            disabled={!enabled}
-            rows={2}
-            value={form.webAnnouncementZh}
-            onChange={(e) => update({ webAnnouncementZh: e.target.value })}
-          />
-        </Field>
-        <Field label="Website Announcement (English)">
-          <TextArea
-            disabled={!enabled}
-            rows={2}
-            value={form.webAnnouncementEn}
-            onChange={(e) => update({ webAnnouncementEn: e.target.value })}
-          />
-        </Field>
-      </div>
-      <div className="field-row field-row-2">
-        <Field label="奖励文案（中文）">
-          <TextArea
-            disabled={!enabled}
-            rows={2}
-            value={form.webRewardTextZh}
-            onChange={(e) => update({ webRewardTextZh: e.target.value })}
-          />
-        </Field>
-        <Field label="Reward Text (English)">
-          <TextArea
-            disabled={!enabled}
-            rows={2}
-            value={form.webRewardTextEn}
-            onChange={(e) => update({ webRewardTextEn: e.target.value })}
-          />
-        </Field>
-      </div>
-      <div className="field-row field-row-2">
-        <Field label="备注（中文）">
-          <TextArea
-            disabled={!enabled}
-            rows={2}
-            value={form.webNoteZh}
-            onChange={(e) => update({ webNoteZh: e.target.value })}
-          />
-        </Field>
-        <Field label="Note (English)">
-          <TextArea
-            disabled={!enabled}
-            rows={2}
-            value={form.webNoteEn}
-            onChange={(e) => update({ webNoteEn: e.target.value })}
-          />
-        </Field>
-      </div>
-      <div className="section-sub">
-        <div className="section-title-sm">列表卡片图片</div>
-        <div className="website-assets-preview">
-          {[
-            ["XHunt", form.listLeftLogo],
-            ["活动方", form.listRightLogo],
-            ["奖励图", form.listChestImage],
-          ].map(([label, src]) => (
-            <div className="asset-preview" key={label}>
-              {src ? <img src={src} alt="" /> : <span>空</span>}
-              <em>{label}</em>
-            </div>
-          ))}
-        </div>
-        <div className="field-row field-row-3">
-          <Field
-            label="XHunt 图标 URL"
-            hint="列表卡片左侧图标；不填则使用同步过来的第 1 个 logo"
-          >
-            <Input
-              disabled={!enabled}
-              value={form.listLeftLogo}
-              onChange={(e) => update({ listLeftLogo: e.target.value })}
-            />
-          </Field>
-          <Field
-            label="活动方 Logo URL"
-            hint="列表卡片右侧 logo；不填则使用同步过来的第 2 个 logo"
-          >
-            <Input
-              disabled={!enabled}
-              value={form.listRightLogo}
-              onChange={(e) => update({ listRightLogo: e.target.value })}
-            />
-          </Field>
-          <Field
-            label="奖励图片 URL"
-            hint="旧网站列表中间展示的奖池图片 / 宝箱图"
-          >
-            <Input
-              disabled={!enabled}
-              value={form.listChestImage}
-              onChange={(e) => update({ listChestImage: e.target.value })}
-            />
-          </Field>
-        </div>
-      </div>
-      {claimVisible ? (
-        <div className="section-sub">
-          <div className="section-title-sm">领奖配置（claim 状态必填校验）</div>
-          <div className="muted" style={{ marginBottom: 10, lineHeight: 1.6 }}>
-            claim 状态下需要填写领奖相关字段
-            {powEnabled ? "；当前活动已开启 POW" : ""}
-            {essayEnabled ? "；当前活动已开启征文大赛" : ""}
-          </div>
-          <div className="field-row field-row-1">
-            <Field label="POI 合约地址（必填）">
-              <Input
+      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={8}>
+            <Field label="网站状态">
+              <Select
                 disabled={!enabled}
-                value={form.claimPoiContractAddress}
-                onChange={(e) =>
-                  update({ claimPoiContractAddress: e.target.value })
-                }
-                placeholder="0x..."
+                value={form.webStatus}
+                onChange={(v) => update({ webStatus: v })}
+                options={[
+                  { value: "draft", label: "draft · 草稿" },
+                  { value: "coming_soon", label: "coming_soon · 预热" },
+                  { value: "live", label: "live · 进行中" },
+                  { value: "claim", label: "claim · 领奖" },
+                  { value: "ended", label: "ended · 结束" },
+                  { value: "archived", label: "archived · 归档" },
+                ]}
               />
             </Field>
-          </div>
-          <div className="field-row field-row-2">
-            <Field label="POW 合约地址（按活动开关校验）">
-              <Input
-                disabled={!enabled}
-                value={form.claimPowContractAddress}
-                onChange={(e) =>
-                  update({ claimPowContractAddress: e.target.value })
-                }
-                placeholder="0x..."
-              />
+          </Col>
+          <Col xs={24} md={8}>
+            <Field label="详情页 slug">
+              <Input disabled={!enabled} value={form.slug} onChange={(e) => update({ slug: e.target.value })} />
             </Field>
-            <Field label="征文大赛合约地址（按活动开关校验）">
-              <Input
-                disabled={!enabled}
-                value={form.claimEssayContractAddress}
-                onChange={(e) =>
-                  update({ claimEssayContractAddress: e.target.value })
-                }
-                placeholder="0x..."
-              />
+          </Col>
+          <Col xs={24} md={8}>
+            <Field label="页面模板">
+              <Input disabled={!enabled} value={form.pageTemplate} onChange={(e) => update({ pageTemplate: e.target.value })} placeholder="standard" />
             </Field>
-          </div>
-        </div>
-      ) : null}
-      <div className="section-sub">
-        <div className="section-title-inline">
-          <span>模板配置（JSON）</span>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <Button
-              size="small"
-              disabled={!enabled}
-              onClick={() => {
-                const parsed = JSON.parse(form.templateConfig || "{}");
-                update({ templateConfig: JSON.stringify(parsed, null, 2) });
-              }}
-            >
-              格式化 JSON
-            </Button>
-            <Button
-              size="small"
-              disabled={!enabled}
-              onClick={() =>
-                navigator.clipboard.writeText(form.templateConfig || "{}")
-              }
-            >
-              复制 JSON
-            </Button>
-          </div>
-        </div>
-        <div className="field-row field-row-1">
-          <Field hint="建议填写合法 JSON。保存前会自动校验；可先点“格式化 JSON”检查结构。">
-            <TextArea
-              disabled={!enabled}
-              rows={10}
-              value={form.templateConfig}
-              onChange={(e) => update({ templateConfig: e.target.value })}
-              placeholder='{"claimStatusBadge":"Claim is live"}'
-            />
-            <div className={`json-status-pill ${jsonValid ? "ok" : "error"}`}>
-              JSON 状态：{jsonValid ? "合法" : "有错误"}
-            </div>
-          </Field>
-        </div>
-      </div>
-    </div>
+          </Col>
+        </Row>
+
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={12}><Field label="网站公告（中文）"><TextArea disabled={!enabled} rows={2} value={form.webAnnouncementZh} onChange={(e) => update({ webAnnouncementZh: e.target.value })} /></Field></Col>
+          <Col xs={24} md={12}><Field label="Website Announcement"><TextArea disabled={!enabled} rows={2} value={form.webAnnouncementEn} onChange={(e) => update({ webAnnouncementEn: e.target.value })} /></Field></Col>
+          <Col xs={24} md={12}><Field label="奖励文案（中文）"><TextArea disabled={!enabled} rows={2} value={form.webRewardTextZh} onChange={(e) => update({ webRewardTextZh: e.target.value })} /></Field></Col>
+          <Col xs={24} md={12}><Field label="Reward Text"><TextArea disabled={!enabled} rows={2} value={form.webRewardTextEn} onChange={(e) => update({ webRewardTextEn: e.target.value })} /></Field></Col>
+          <Col xs={24} md={12}><Field label="备注（中文）"><TextArea disabled={!enabled} rows={2} value={form.webNoteZh} onChange={(e) => update({ webNoteZh: e.target.value })} /></Field></Col>
+          <Col xs={24} md={12}><Field label="Note"><TextArea disabled={!enabled} rows={2} value={form.webNoteEn} onChange={(e) => update({ webNoteEn: e.target.value })} /></Field></Col>
+        </Row>
+
+        <Collapse
+          size="small"
+          items={[
+            {
+              key: "assets",
+              label: "列表卡片图片",
+              children: (
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Space size={[16, 8]} wrap>
+                    {assetPreview("XHunt", form.listLeftLogo)}
+                    {assetPreview("活动方", form.listRightLogo)}
+                    {assetPreview("奖励图", form.listChestImage)}
+                  </Space>
+                  <Row gutter={[12, 12]}>
+                    <Col xs={24} md={8}><Field label={<InfoLabel info="列表卡片左侧图标。">XHunt 图标 URL</InfoLabel>}><Input disabled={!enabled} value={form.listLeftLogo} onChange={(e) => update({ listLeftLogo: e.target.value })} /></Field></Col>
+                    <Col xs={24} md={8}><Field label={<InfoLabel info="列表卡片右侧 Logo。">活动方 Logo URL</InfoLabel>}><Input disabled={!enabled} value={form.listRightLogo} onChange={(e) => update({ listRightLogo: e.target.value })} /></Field></Col>
+                    <Col xs={24} md={8}><Field label={<InfoLabel info="旧网站列表中间展示的奖池图片 / 宝箱图。">奖励图片 URL</InfoLabel>}><Input disabled={!enabled} value={form.listChestImage} onChange={(e) => update({ listChestImage: e.target.value })} /></Field></Col>
+                  </Row>
+                </Space>
+              ),
+            },
+            ...(claimVisible
+              ? [
+                  {
+                    key: "claim",
+                    label: "领奖配置",
+                    children: (
+                      <Row gutter={[12, 12]}>
+                        <Col xs={24}><div style={{ color: "#8c8c8c", marginBottom: 8 }}>claim 状态必填{powEnabled ? "；当前活动已开启 POW" : ""}{essayEnabled ? "；当前活动已开启征文大赛" : ""}</div></Col>
+                        <Col xs={24}><Field label="POI 合约地址"><Input disabled={!enabled} value={form.claimPoiContractAddress} onChange={(e) => update({ claimPoiContractAddress: e.target.value })} placeholder="0x..." /></Field></Col>
+                        <Col xs={24} md={12}><Field label="POW 合约地址"><Input disabled={!enabled} value={form.claimPowContractAddress} onChange={(e) => update({ claimPowContractAddress: e.target.value })} placeholder="0x..." /></Field></Col>
+                        <Col xs={24} md={12}><Field label="征文合约地址"><Input disabled={!enabled} value={form.claimEssayContractAddress} onChange={(e) => update({ claimEssayContractAddress: e.target.value })} placeholder="0x..." /></Field></Col>
+                      </Row>
+                    ),
+                  },
+                ]
+              : []),
+            {
+              key: "template",
+              label: "模板配置（JSON）",
+              extra: <AntTag color={jsonValid ? "green" : "red"}>{jsonValid ? "合法" : "有错误"}</AntTag>,
+              children: (
+                <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                  <Space>
+                    <Button size="small" disabled={!enabled} onClick={() => { const parsed = JSON.parse(form.templateConfig || "{}"); update({ templateConfig: JSON.stringify(parsed, null, 2) }); }}>格式化 JSON</Button>
+                    <Button size="small" disabled={!enabled} onClick={() => navigator.clipboard.writeText(form.templateConfig || "{}")}>复制 JSON</Button>
+                  </Space>
+                  <TextArea disabled={!enabled} rows={10} value={form.templateConfig} onChange={(e) => update({ templateConfig: e.target.value })} placeholder='{"claimStatusBadge":"Claim is live"}' />
+                </Space>
+              ),
+            },
+          ]}
+        />
+      </Space>
+    </Card>
   );
 }
