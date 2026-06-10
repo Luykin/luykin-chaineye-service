@@ -8,11 +8,9 @@ import {
   LockOutlined,
   LogoutOutlined,
   MenuOutlined,
-  MoonOutlined,
   MonitorOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
-  SunOutlined,
   TeamOutlined,
   UserOutlined,
 } from "@ant-design/icons";
@@ -526,16 +524,6 @@ export function AdminLayout() {
           />
         )}
 
-        <Space size={8} className="admin-top-actions">
-          <Button
-            type="text"
-            className="admin-top-theme-button"
-            icon={adminTheme.effectiveMode === "dark" ? <SunOutlined /> : <MoonOutlined />}
-            onClick={adminTheme.toggleMode}
-            title={adminTheme.effectiveMode === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-            aria-label={adminTheme.effectiveMode === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-          />
-
         <Dropdown
           trigger={["hover", "click"]}
           menu={{
@@ -583,6 +571,11 @@ export function AdminLayout() {
                   void openWebAuthnModal();
                 },
               },
+              {
+                key: "toggle-theme",
+                label: adminTheme.effectiveMode === "dark" ? "切换浅色模式" : "切换深色模式",
+                onClick: adminTheme.toggleMode,
+              },
               { type: "divider" },
               {
                 key: "logout",
@@ -607,7 +600,6 @@ export function AdminLayout() {
             </Space>
           </Button>
         </Dropdown>
-        </Space>
       </Header>
 
       <div className="admin-page-title-bar">

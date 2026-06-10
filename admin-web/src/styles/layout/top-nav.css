@@ -155,25 +155,6 @@
   background: var(--admin-surface-soft);
 }
 
-.admin-top-actions {
-  justify-content: flex-end;
-}
-
-.admin-top-theme-button.ant-btn {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--admin-border-soft);
-  border-radius: 10px;
-  background: var(--admin-surface-soft);
-  color: var(--admin-text-muted);
-}
-
-.admin-top-theme-button.ant-btn:hover {
-  color: var(--admin-primary) !important;
-  border-color: color-mix(in srgb, var(--admin-primary) 42%, var(--admin-border-soft)) !important;
-  background: var(--admin-primary-soft) !important;
-}
-
 .admin-top-user-icon {
   color: var(--admin-text-muted);
   font-size: 15px;
