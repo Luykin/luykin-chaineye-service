@@ -62,14 +62,34 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function normalizeTesterHandle(value) {
+  if (Array.isArray(value)) return normalizeTesterHandle(value[0]);
+  if (value === null || value === undefined) return "";
+  return String(value).trim().replace(/^@+/, "").toLowerCase();
+}
+
+function isCampaignTester(campaign, requestHandle) {
+  if (!campaign || !requestHandle) return false;
+  const list = Array.isArray(campaign.testList) ? campaign.testList : [];
+  return list.some((item) => normalizeTesterHandle(item) === requestHandle);
+}
+
 const INITIALIZE_CAMPAIGN_URL =
   "https://data.cryptohunt.ai/pro/api/initialize_campaign";
 const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400; // 1 天
 
 router.get("/config", authenticateTokenOptional, async (req, res) => {
   try {
-    const includeTesting = isRequestInternalTestUser(req);
-    const campaigns = await listPluginCampaigns({ includeTesting });
+    const requestHandle = normalizeTesterHandle(req.headers["x-user-id"]);
+    const allCampaigns = await listPluginCampaigns({ includeTesting: true });
+    let includeTesting = false;
+    const campaigns = allCampaigns.filter((campaign) => {
+      if (!campaign.testingPhase) return true;
+      const allowed = isCampaignTester(campaign, requestHandle);
+      if (allowed) includeTesting = true;
+      return allowed;
+    });
+
     return res.json({
       success: true,
       version: 3,
