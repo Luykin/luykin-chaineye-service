@@ -44,6 +44,20 @@ function normalizeWebsiteStatus(value) {
   return WEBSITE_STATUS_VALUES.has(normalized) ? normalized : "draft";
 }
 
+function normalizeDisplayDomains(value) {
+  const allowed = new Set(["web3", "ai"]);
+  const list = Array.isArray(value) ? value : ["web3"];
+  const domains = Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim().toLowerCase())
+        .filter((item) => allowed.has(item))
+    )
+  );
+  return domains.length ? domains : ["web3"];
+}
+
+
 function parseDateOrNull(value) {
   if (!value) return null;
   const d = new Date(value);
@@ -575,6 +589,7 @@ function buildPluginCampaign(record) {
     tags: toSafeArray(payload.tags).length ? toSafeArray(payload.tags) : toSafeArray(record.tags),
     targetUserIds: toSafeArray(payload.targetUserIds),
     testList: toSafeArray(payload.testList),
+    displayDomains: normalizeDisplayDomains(payload.displayDomains),
     hotTweetsKey: payload.hotTweetsKey || record.campaignKey,
     includeCreator: !!payload.includeCreator,
     threshold: payload.threshold,

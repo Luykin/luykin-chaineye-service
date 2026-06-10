@@ -64,6 +64,26 @@ const LUCIDE_ICONS = [
   "Share2 🔄",
 ].map((label) => ({ value: label.split(" ")[0], label }));
 
+const CAMPAIGN_DISPLAY_DOMAIN_OPTIONS = [
+  { value: "web3", label: "Web3" },
+  { value: "ai", label: "AI" },
+];
+const CAMPAIGN_DISPLAY_DOMAIN_VALUES = new Set(
+  CAMPAIGN_DISPLAY_DOMAIN_OPTIONS.map((item) => item.value),
+);
+
+function normalizeDisplayDomains(value: unknown) {
+  const list = Array.isArray(value) ? value : ["web3"];
+  const domains = Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim().toLowerCase())
+        .filter((item) => CAMPAIGN_DISPLAY_DOMAIN_VALUES.has(item)),
+    ),
+  );
+  return domains.length ? domains : ["web3"];
+}
+
 type AnyObj = Record<string, any>;
 type CampaignConfig = {
   version: number;
@@ -172,6 +192,7 @@ function normalizeCampaign(input: AnyObj): AnyObj {
     : [{ zh: "", en: "" }];
   c.testList = Array.isArray(c.testList) ? c.testList : [];
   c.targetUserIds = Array.isArray(c.targetUserIds) ? c.targetUserIds : [];
+  c.displayDomains = normalizeDisplayDomains(c.displayDomains);
   c.logos = Array.isArray(c.logos) ? c.logos : [];
   c.tasks = Array.isArray(c.tasks) ? c.tasks : [];
   c.essayContestWinners = Array.isArray(c.essayContestWinners)
@@ -266,6 +287,7 @@ function makeNewCampaign(): AnyObj {
     campaignKey: "",
     sortWeight: 0,
     enabled: false,
+    displayDomains: ["web3"],
     testList: ["luoyukun4"],
     testingPhase: true,
     enrollmentWindow: { startAt: "", endAt: "" },
@@ -972,6 +994,9 @@ export function NacosCampaignsPage() {
         errors.push(
           `${prefix}: 写作相关主题（writingThemes）至少需要添加一个主题`,
         );
+      c.displayDomains = normalizeDisplayDomains(c.displayDomains);
+      if (!Array.isArray(c.displayDomains) || !c.displayDomains.length)
+        errors.push(`${prefix}: 展示领域至少需要选择一个`);
       const hasNewFields =
         (c.leaderboardMode || "traditional") === "traditional" &&
         [
@@ -1475,6 +1500,7 @@ export function NacosCampaignsPage() {
                 chips: [
                   item.enabled ? "展示" : "隐藏",
                   item.testingPhase ? "testing" : "",
+                  normalizeDisplayDomains(item.displayDomains).join("+").toUpperCase(),
                   Number(item.sortWeight) ? `权重 ${item.sortWeight}` : "",
                 ].filter(Boolean),
                 logos: Array.isArray(item.logos) ? item.logos : [],
@@ -1860,7 +1886,24 @@ function CampaignEditor(props: {
         <Row gutter={[12, 12]} align="top">
           <Col xs={24} sm={12} md={8} lg={6}><Field label={<InfoLabel info="活动唯一短标识，例如 mantle3、bybit2。保存时会自动生成完整 nacos id。">活动ID</InfoLabel>}><Input value={c.campaignKey || ""} disabled={campaignIdDisabled} onChange={(e) => setCampaignPath("campaignKey", e.target.value)} /></Field></Col>
           <Col xs={12} sm={8} md={5} lg={4}><Field label={<InfoLabel info="0-10000，数值越大越靠前。">排序权重</InfoLabel>}><InputNumber min={0} max={10000} value={Number(c.sortWeight) || 0} onChange={(v) => setCampaignPath("sortWeight", Math.min(10000, Math.max(0, Number(v) || 0)))} /></Field></Col>
-          <Col xs={24} lg={14}>
+          <Col xs={24} sm={12} md={8} lg={6}>
+            <Field label={<InfoLabel info="控制活动在哪些业务领域展示。默认 Web3；可同时选择 Web3 和 AI。">展示领域</InfoLabel>}>
+              <Select
+                mode="multiple"
+                allowClear={false}
+                maxTagCount="responsive"
+                value={normalizeDisplayDomains(c.displayDomains)}
+                onChange={(values) =>
+                  setCampaignPath(
+                    "displayDomains",
+                    normalizeDisplayDomains(values),
+                  )
+                }
+                options={CAMPAIGN_DISPLAY_DOMAIN_OPTIONS}
+              />
+            </Field>
+          </Col>
+          <Col xs={24} lg={8}>
             <Space size={[16, 8]} wrap style={{ paddingTop: 24 }}>
               <Space><Switch checked={!!c.enabled} onChange={(v) => setCampaignPath("enabled", v)} /><InfoLabel info="关闭后插件列表不展示，报名接口也会拒绝。">展示活动</InfoLabel></Space>
               <Space><Switch checked={!!c.testingPhase} onChange={(v) => setCampaignPath("testingPhase", v)} /><InfoLabel info="仅内部测试用户可见。">测试模式</InfoLabel></Space>
