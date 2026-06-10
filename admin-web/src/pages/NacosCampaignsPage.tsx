@@ -1884,8 +1884,8 @@ function CampaignEditor(props: {
   );
   return (
     <>
-      <div className="campaign-status-control">
-        <div className="status-control-primary">
+      <div className="campaign-quick-controls">
+        <div className="quick-switch quick-switch-primary">
           {switchLabel(
             "展示活动",
             !!c.enabled,
@@ -1893,13 +1893,14 @@ function CampaignEditor(props: {
             true,
           )}
         </div>
-        <div className="status-control-secondary">
-          {switchLabel("测试模式（仅内部可见）", !!c.testingPhase, (v) =>
+        <div className="quick-switch">
+          {switchLabel("测试模式", !!c.testingPhase, (v) =>
             setCampaignPath("testingPhase", v),
           )}
+          <span className="quick-switch-note">仅内部可见</span>
         </div>
       </div>
-      <div className="field-row field-row-basic">
+      <div className="field-row field-row-basic campaign-id-row">
         <Field
           label="活动ID"
           hint={
@@ -1954,26 +1955,27 @@ function CampaignEditor(props: {
             在报名按钮上方显示「付费推广政策」提示
           </div>
         </div>
-        <div className="option-item">
-          <label className="switch-label">允许 Email 注册</label>
-          <Switch
-            checked={c.allowEmailRegistration === true}
-            onChange={(v) => setCampaignPath("allowEmailRegistration", v)}
-          />
-          <div className="field-hint">开启后活动允许用户通过 Email 注册</div>
-        </div>
-        <div className="option-item option-item-mode">
-          <label className="switch-label">活动模式</label>
-          <Segmented
-            size="small"
-            value={c.leaderboardMode || "traditional"}
-            onChange={(value) => setCampaignPath("leaderboardMode", String(value))}
-            options={[
-              { value: "traditional", label: "传统" },
-              { value: "custom", label: "自定义" },
-            ]}
-          />
-          <div className="field-hint">决定下方使用传统奖励还是自定义榜单</div>
+        <div className="option-item option-item-email-mode">
+          <div className="option-switch-row">
+            <label className="switch-label">允许 Email 注册</label>
+            <Switch
+              checked={c.allowEmailRegistration === true}
+              onChange={(v) => setCampaignPath("allowEmailRegistration", v)}
+            />
+          </div>
+          <div className="mode-toggle-row">
+            <span>活动模式</span>
+            <Segmented
+              size="small"
+              value={c.leaderboardMode || "traditional"}
+              onChange={(value) => setCampaignPath("leaderboardMode", String(value))}
+              options={[
+                { value: "traditional", label: "传统" },
+                { value: "custom", label: "自定义" },
+              ]}
+            />
+          </div>
+          <div className="field-hint">开启 Email 注册；右侧切换奖励配置模式</div>
         </div>
       </div>
       <Section title="活动信息">
@@ -2037,16 +2039,18 @@ function CampaignEditor(props: {
             </Field>
           </div>
         </div>
-        <RepeaterHeader
-          title="写作主题"
-          onAdd={() => addArrayItem("writingThemes")}
-        />
-        <WritingThemes
-          items={c.writingThemes || []}
-          update={updateArrayItem}
-          move={moveArrayItem}
-          remove={removeArrayItem}
-        />
+        <div className="writing-themes-block">
+          <RepeaterHeader
+            title="写作主题"
+            onAdd={() => addArrayItem("writingThemes")}
+          />
+          <WritingThemes
+            items={c.writingThemes || []}
+            update={updateArrayItem}
+            move={moveArrayItem}
+            remove={removeArrayItem}
+          />
+        </div>
       </Section>
       <Section title="时间、奖励与门槛">
         <div className="section-sub">

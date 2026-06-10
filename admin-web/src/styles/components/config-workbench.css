@@ -1690,3 +1690,214 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Activity config refinements: compact mode switch, sidebar rhythm, writing theme emphasis */
+.campaigns-react-page .campaign-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.campaigns-react-page .option-item-email-mode {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 6px;
+}
+
+.campaigns-react-page .option-switch-row,
+.campaigns-react-page .mode-toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.campaigns-react-page .option-switch-row .switch-label {
+  flex: 0 1 auto;
+}
+
+.campaigns-react-page .mode-toggle-row {
+  justify-content: flex-end;
+}
+
+.campaigns-react-page .mode-toggle-row > span {
+  color: #536072;
+  font-size: 11px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.campaigns-react-page .mode-toggle-row .ant-segmented {
+  padding: 2px;
+  border: 1px solid #d8e1ec;
+  border-radius: 10px;
+  background: #eef3f8;
+}
+
+.campaigns-react-page .mode-toggle-row .ant-segmented-item {
+  min-width: 44px;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.campaigns-react-page .mode-toggle-row .ant-segmented-item-selected {
+  color: #1d4ed8;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(30, 64, 175, 0.13);
+}
+
+.campaigns-react-page .option-item-email-mode .field-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.campaigns-react-page .config-workbench-sidebar-content {
+  padding: 10px 12px 12px;
+}
+
+.campaigns-react-page .list-items {
+  gap: 12px;
+}
+
+.campaigns-react-page .list-group-heading {
+  padding: 8px 2px 7px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,255,255,0.88));
+}
+
+.campaigns-react-page .item {
+  padding: 9px 10px;
+  border-radius: 13px;
+}
+
+.campaigns-react-page .item.active {
+  box-shadow: inset 3px 0 0 var(--campaign-blue), 0 8px 20px rgba(37, 99, 235, 0.07);
+}
+
+.campaigns-react-page .item-logos {
+  margin-left: 0;
+  min-width: 26px;
+}
+
+.campaigns-react-page .item-logo,
+.campaigns-react-page .item-logo:first-child {
+  margin-left: 0;
+}
+
+.campaigns-react-page .item-logo + .item-logo {
+  margin-left: -8px;
+}
+
+.campaigns-react-page .writing-themes-block {
+  margin-top: 18px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(239, 246, 255, 0.82), rgba(248, 250, 252, 0.96)),
+    #eff6ff;
+}
+
+.campaigns-react-page .writing-themes-block .section-title-inline {
+  margin-bottom: 10px;
+}
+
+.campaigns-react-page .writing-themes-block .rep-card {
+  border-color: #cfe0f5;
+  background: #ffffff;
+}
+
+@media (max-width: 1280px) {
+  .campaigns-react-page .campaign-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .campaigns-react-page .option-item-email-mode {
+    grid-template-columns: 1fr;
+  }
+
+  .campaigns-react-page .mode-toggle-row {
+    justify-content: space-between;
+  }
+}
+
+/* Compact campaign header controls */
+.campaigns-react-page .campaign-quick-controls {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid #e7ecf3;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.campaigns-react-page .quick-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #e6edf5;
+  border-radius: 999px;
+  background: #fbfcff;
+}
+
+.campaigns-react-page .quick-switch-primary {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.campaigns-react-page .quick-switch .switch-label {
+  color: #253247;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.campaigns-react-page .quick-switch-primary .switch-label {
+  color: #1d4ed8;
+}
+
+.campaigns-react-page .quick-switch-note {
+  color: #8793a4;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.campaigns-react-page .campaign-id-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 420px) minmax(120px, 180px) 1fr;
+  align-items: start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.campaigns-react-page .campaign-id-row .field:nth-child(1),
+.campaigns-react-page .campaign-id-row .field:nth-child(2) {
+  max-width: none;
+}
+
+.campaigns-react-page .campaign-id-row::after {
+  content: "ID 会自动生成完整 nacos id；排序只影响列表展示优先级";
+  align-self: center;
+  color: #8a96a8;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .campaigns-react-page .campaign-id-row {
+    grid-template-columns: 1fr;
+  }
+
+  .campaigns-react-page .campaign-id-row::after {
+    display: none;
+  }
+}
