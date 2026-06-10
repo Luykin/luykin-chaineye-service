@@ -183,6 +183,8 @@ function normalizeCampaign(input: AnyObj): AnyObj {
       : "traditional";
   c.leaderboardApiUrl =
     typeof c.leaderboardApiUrl === "string" ? c.leaderboardApiUrl : "";
+  c.userActivityApiUrl =
+    typeof c.userActivityApiUrl === "string" ? c.userActivityApiUrl : "";
   c.customLeaderboards = Array.isArray(c.customLeaderboards)
     ? c.customLeaderboards
     : [];
@@ -308,6 +310,7 @@ function makeNewCampaign(): AnyObj {
     allowEmailRegistration: false,
     leaderboardMode: "traditional",
     leaderboardApiUrl: "",
+    userActivityApiUrl: "",
     customLeaderboards: [],
     enableEssayContest: false,
     enablePowLeaderboard: false,
@@ -1016,6 +1019,8 @@ export function NacosCampaignsPage() {
       if (c.leaderboardMode === "custom") {
         if (!String(c.leaderboardApiUrl || "").trim())
           errors.push(`${prefix}: 自定义模式下榜单接口 URL 不能为空`);
+        if (!String(c.userActivityApiUrl || "").trim())
+          errors.push(`${prefix}: 自定义模式下用户活动信息接口 URL 不能为空`);
         if (
           !Array.isArray(c.customLeaderboards) ||
           !c.customLeaderboards.length
@@ -1887,7 +1892,7 @@ function CampaignEditor(props: {
           <Col xs={24} md={8}><Field label="报名门槛"><Select value={thresholdValue} onChange={changeThreshold} options={[{ value: "", label: "请选择" }, { value: "50k", label: "50k" }, { value: "100k", label: "100k" }, { value: "200k", label: "200k" }, { value: "200k+creator", label: "200k+creator" }]} /></Field></Col>
         </Row>
         <div style={{ marginTop: 12 }}>
-          {(c.leaderboardMode || "traditional") === "custom" ? <CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
+          {(c.leaderboardMode || "traditional") === "custom" ? <CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} userActivityApiUrl={c.userActivityApiUrl || ""} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
         </div>
       </Section>
 
@@ -2209,6 +2214,7 @@ function Tags({ items, update, move, remove }: any) {
 
 function CustomLeaderboards({
   apiUrl,
+  userActivityApiUrl,
   items,
   setCampaignPath,
   add,
@@ -2218,9 +2224,18 @@ function CustomLeaderboards({
 }: any) {
   return (
     <Space direction="vertical" size={8} style={{ width: "100%" }}>
-      <Field label={<InfoLabel info="可填写完整 URL，也可填写 /x/api 相对路径；会原样保存到数据库。">榜单接口 URL</InfoLabel>}>
-        <Input value={apiUrl} onChange={(e) => setCampaignPath("leaderboardApiUrl", e.target.value)} placeholder="/x/api" />
-      </Field>
+      <Row gutter={[12, 12]}>
+        <Col xs={24} md={12}>
+          <Field label={<InfoLabel info="可填写完整 URL，也可填写 /x/api 相对路径；会原样保存到数据库。">榜单接口 URL</InfoLabel>}>
+            <Input value={apiUrl} onChange={(e) => setCampaignPath("leaderboardApiUrl", e.target.value)} placeholder="/x/api" />
+          </Field>
+        </Col>
+        <Col xs={24} md={12}>
+          <Field label={<InfoLabel info="查询当前登录用户在该活动里的状态 / 分数 / 完成信息。可填写完整 URL，也可填写 /x/api 相对路径。">用户活动信息接口 URL</InfoLabel>}>
+            <Input value={userActivityApiUrl} onChange={(e) => setCampaignPath("userActivityApiUrl", e.target.value)} placeholder="/x/api" />
+          </Field>
+        </Col>
+      </Row>
       <RepeaterHeader title="自定义榜单" onAdd={add} />
       {items.length ? (
         items.map((it: AnyObj, i: number) => (

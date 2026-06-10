@@ -589,6 +589,7 @@ function buildPluginCampaign(record) {
     return {
       ...common,
       leaderboardApiUrl: typeof payload.leaderboardApiUrl === "string" ? payload.leaderboardApiUrl : "",
+      userActivityApiUrl: typeof payload.userActivityApiUrl === "string" ? payload.userActivityApiUrl : "",
       customLeaderboards: toSafeArray(payload.customLeaderboards),
     };
   }
