@@ -422,6 +422,124 @@
   gap: 14px;
 }
 
+.config-workbench.nacos-campaigns-admin {
+  --campaign-brief-border: #e7eaf0;
+  --campaign-brief-muted: #697386;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(520px, 1.55fr);
+  gap: 14px;
+  align-items: stretch;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--campaign-brief-border);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(250, 251, 253, 0.98) 100%),
+    #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-main {
+  min-width: 0;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-tags {
+  min-height: 22px;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-tags .ant-tag {
+  margin-inline-end: 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-title {
+  margin-top: 8px;
+  overflow: hidden;
+  color: #1f2937;
+  font-size: 18px;
+  font-weight: 760;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 6px;
+  color: var(--campaign-brief-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-stat {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #edf0f4;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-stat span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--campaign-brief-muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.config-workbench.nacos-campaigns-admin .campaign-brief-stat strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #303948;
+  font-size: 14px;
+  font-weight: 680;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.config-workbench.nacos-campaigns-admin .task-auto-complete-col .field {
+  align-items: flex-start;
+}
+
+.config-workbench.nacos-campaigns-admin .task-auto-complete-col .ant-switch,
+.config-workbench.nacos-campaigns-admin .ant-switch {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+}
+
+.config-workbench.nacos-campaigns-admin .ant-switch.ant-switch-small {
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+}
+
 .config-workbench .editor-form {
   padding: 0;
 }
@@ -453,6 +571,14 @@
   .config-workbench,
   .campaigns-container.config-workbench {
     padding: 12px;
+  }
+
+  .config-workbench.nacos-campaigns-admin .campaign-brief {
+    grid-template-columns: 1fr;
+  }
+
+  .config-workbench.nacos-campaigns-admin .campaign-brief-stats {
+    grid-template-columns: 1fr;
   }
 
   .config-workbench-header,

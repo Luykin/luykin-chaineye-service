@@ -440,6 +440,13 @@ function formatCampaignTime(value: string) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+function formatCampaignTimeRange(c?: AnyObj | null) {
+  const start = formatCampaignTime(c?.enrollmentWindow?.startAt || "");
+  const end = formatCampaignTime(c?.enrollmentWindow?.endAt || "");
+  if (start === "未设置" && end === "未设置") return "未设置活动时间";
+  return `${start} → ${end}`;
+}
+
 function getCampaignStage(c?: AnyObj | null) {
   if (!c) return { label: "未选择", className: "muted" };
   if (!c.enabled) return { label: "隐藏", className: "is-off" };
@@ -454,27 +461,17 @@ function getCampaignStage(c?: AnyObj | null) {
   return { label: "进行中", className: "is-live" };
 }
 
-function getRewardSummary(c?: AnyObj | null) {
+function getCompactRewardSummary(c?: AnyObj | null) {
   if (!c) return "-";
   if (c.leaderboardMode === "custom") {
     const items = Array.isArray(c.customLeaderboards) ? c.customLeaderboards : [];
-    const amount = items.reduce((sum: number, item: AnyObj) => {
-      const n = Number(item.amount);
-      return Number.isFinite(n) ? sum + n : sum;
-    }, 0);
-    return items.length
-      ? `${items.length} 个榜单 · ${amount || "-"} ${items[0]?.unit || ""}`.trim()
-      : "自定义榜单未配置";
+    return items.length ? `${items.length} 个自定义榜单` : "自定义榜单未配置";
   }
   const unit = c.rewardUnit || c.powUnit || c.essayContestUnit || "USDT";
-  const amount =
-    safeNumber(c.rewardAmount, 0) +
-    safeNumber(c.powAmount, 0) +
-    safeNumber(c.essayContestAmount, 0);
   const parts = [`POI ${c.rewardAmount ?? "-"}`];
   if (c.enablePowLeaderboard) parts.push(`POW ${c.powAmount ?? "-"}`);
   if (c.enableEssayContest) parts.push(`征文 ${c.essayContestAmount ?? "-"}`);
-  return `${amount || "-"} ${unit} · ${parts.join(" / ")}`;
+  return `${parts.join(" / ")} ${unit}`;
 }
 
 function Field({
@@ -1796,33 +1793,44 @@ function CampaignBrief({
   const taskCount = Array.isArray(c.tasks) ? c.tasks.length : 0;
   const logoCount = Array.isArray(c.logos) ? c.logos.length : 0;
   const targetCount = Array.isArray(c.targetUserIds) ? c.targetUserIds.length : 0;
+  const title =
+    c.displayName?.zh ||
+    c.displayName?.en ||
+    c.copy?.shortTitle?.zh ||
+    c.campaignKey ||
+    "未命名活动";
   return (
-    <Card size="small" style={{ marginBottom: 12 }}>
-      <Row gutter={[16, 12]} align="middle">
-        <Col xs={24} lg={9}>
-          <Space size={[6, 6]} wrap>
-            <AntTag>{stage.label}</AntTag>
-            <AntTag>{c.leaderboardMode === "custom" ? "自定义榜单" : "传统榜单"}</AntTag>
-            {dirty ? <AntTag color="red">主配置未发布</AntTag> : null}
-            {websiteDirty ? <AntTag color="orange">网站未保存</AntTag> : null}
-          </Space>
-          <div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>
-            {c.displayName?.zh || c.displayName?.en || c.copy?.shortTitle?.zh || c.campaignKey || "未命名活动"}
-          </div>
-          <Space size={8} style={{ marginTop: 4, color: "#8c8c8c" }} wrap>
-            <span>{c.id || "未生成 ID"}</span>
-            <span>网站：{websiteStatus || "draft"}</span>
-          </Space>
-        </Col>
-        <Col xs={24} lg={15}>
-          <Row gutter={[12, 12]}>
-            <Col xs={24} md={8}><Card size="small" title="活动时间">{formatCampaignTime(c.enrollmentWindow?.startAt)} → {formatCampaignTime(c.enrollmentWindow?.endAt)}</Card></Col>
-            <Col xs={24} md={8}><Card size="small" title="奖励">{getRewardSummary(c)}</Card></Col>
-            <Col xs={24} md={8}><Card size="small" title="素材 / 任务 / 投放">{logoCount} Logo · {taskCount} Task · {targetCount} 账号</Card></Col>
-          </Row>
-        </Col>
-      </Row>
-    </Card>
+    <div className="campaign-brief">
+      <div className="campaign-brief-main">
+        <Space size={[6, 6]} wrap className="campaign-brief-tags">
+          <AntTag>{stage.label}</AntTag>
+          <AntTag>{c.leaderboardMode === "custom" ? "自定义榜单" : "传统榜单"}</AntTag>
+          {dirty ? <AntTag color="red">主配置未发布</AntTag> : null}
+          {websiteDirty ? <AntTag color="orange">网站未保存</AntTag> : null}
+        </Space>
+        <div className="campaign-brief-title" title={title}>
+          {title}
+        </div>
+        <div className="campaign-brief-meta">
+          <span>{c.id || "未生成 ID"}</span>
+          <span>网站 {websiteStatus || "draft"}</span>
+        </div>
+      </div>
+      <div className="campaign-brief-stats">
+        <div className="campaign-brief-stat">
+          <span>时间</span>
+          <strong>{formatCampaignTimeRange(c)}</strong>
+        </div>
+        <div className="campaign-brief-stat">
+          <span>奖励</span>
+          <strong>{getCompactRewardSummary(c)}</strong>
+        </div>
+        <div className="campaign-brief-stat">
+          <span>配置</span>
+          <strong>{logoCount} Logo · {taskCount} 任务 · {targetCount} 账号</strong>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2123,9 +2131,9 @@ function Tasks({ items, update, move, remove }: any) {
                   />
                 </Field>
               </Col>
-              <Col xs={12} md={4}>
+              <Col xs={12} md={4} className="task-auto-complete-col">
                 <Field label={<InfoLabel info="开启后用户点击链接即视为完成。custom 类型不可开启。">自动完成</InfoLabel>}>
-                  <Switch disabled={isCustom} checked={!isCustom && !!it.autoComplete} onChange={(v) => update("tasks", i, "autoComplete", v)} />
+                  <Switch size="small" disabled={isCustom} checked={!isCustom && !!it.autoComplete} onChange={(v) => update("tasks", i, "autoComplete", v)} />
                 </Field>
               </Col>
               <Col xs={24} md={12}>
