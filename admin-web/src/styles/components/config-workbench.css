@@ -1901,3 +1901,152 @@
     display: none;
   }
 }
+
+/* Final compact pass for campaign base settings */
+.campaigns-react-page .campaign-setup-panel {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 10px 14px;
+  align-items: start;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #e5edf6;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.campaigns-react-page .campaign-setup-title {
+  align-self: center;
+  color: #182438;
+  font-size: 13px;
+  font-weight: 840;
+  letter-spacing: -0.01em;
+}
+
+.campaigns-react-page .campaign-quick-controls {
+  justify-self: end;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.campaigns-react-page .quick-switch {
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.campaigns-react-page .quick-switch-primary {
+  background: #eff6ff;
+}
+
+.campaigns-react-page .quick-switch .ant-switch {
+  transform: scale(0.9);
+  transform-origin: center;
+}
+
+.campaigns-react-page .campaign-id-row {
+  grid-template-columns: minmax(180px, 240px) 118px;
+  gap: 8px;
+  margin: 0;
+}
+
+.campaigns-react-page .campaign-id-row::after {
+  display: none;
+}
+
+.campaigns-react-page .campaign-id-row .field {
+  margin: 0;
+}
+
+.campaigns-react-page .campaign-id-row .field-hint {
+  min-height: 14px;
+  white-space: nowrap;
+}
+
+.campaigns-react-page .campaign-options {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(190px, 0.9fr) minmax(300px, 1.25fr);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.campaigns-react-page .campaign-options .option-item {
+  min-height: 54px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #f9fbfe;
+}
+
+.campaigns-react-page .campaign-options .switch-label {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaigns-react-page .campaign-options .field-hint {
+  margin-top: 2px;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+
+.campaigns-react-page .option-item-email-mode {
+  grid-template-columns: minmax(126px, auto) 1fr;
+  column-gap: 10px;
+}
+
+.campaigns-react-page .mode-toggle-row .ant-segmented {
+  height: 28px;
+}
+
+.campaigns-react-page .mode-toggle-row .ant-segmented-item {
+  min-width: 42px;
+  line-height: 24px;
+}
+
+.campaigns-react-page .campaign-brief {
+  padding: 10px;
+  gap: 10px;
+}
+
+.campaigns-react-page .campaign-brief-title {
+  margin: 5px 0 3px;
+  font-size: 15.5px;
+}
+
+.campaigns-react-page .brief-metric {
+  padding: 7px 8px;
+  border-radius: 10px;
+}
+
+@media (max-width: 1360px) {
+  .campaigns-react-page .campaign-setup-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .campaigns-react-page .campaign-quick-controls {
+    justify-self: start;
+  }
+
+  .campaigns-react-page .campaign-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .campaigns-react-page .campaign-options,
+  .campaigns-react-page .campaign-id-row {
+    grid-template-columns: 1fr;
+  }
+
+  .campaigns-react-page .field-hint {
+    white-space: normal;
+  }
+}

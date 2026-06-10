@@ -1884,7 +1884,9 @@ function CampaignEditor(props: {
   );
   return (
     <>
-      <div className="campaign-quick-controls">
+      <div className="campaign-setup-panel">
+        <div className="campaign-setup-title">基础设置</div>
+        <div className="campaign-quick-controls">
         <div className="quick-switch quick-switch-primary">
           {switchLabel(
             "展示活动",
@@ -1977,6 +1979,7 @@ function CampaignEditor(props: {
           </div>
           <div className="field-hint">开启 Email 注册；右侧切换奖励配置模式</div>
         </div>
+      </div>
       </div>
       <Section title="活动信息">
         <div className="field-row field-row-2">
