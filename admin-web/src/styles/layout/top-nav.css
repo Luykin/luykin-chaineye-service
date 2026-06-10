@@ -1,6 +1,8 @@
 .admin-shell--top-nav {
   min-height: 100vh;
-  background: var(--admin-bg);
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--admin-bg-accent) 72%, transparent) 0, transparent 36rem),
+    var(--admin-bg);
 }
 
 .admin-top-header {
@@ -14,9 +16,10 @@
   height: 58px;
   padding: 0 18px;
   line-height: 1;
-  background: var(--admin-surface);
+  background: color-mix(in srgb, var(--admin-header) 94%, transparent);
   border-bottom: 1px solid var(--admin-border);
-  box-shadow: 0 1px 8px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 12px light-dark(rgba(15, 23, 42, 0.05), rgba(0, 0, 0, 0.32));
+  backdrop-filter: blur(12px);
 }
 
 .admin-top-header-brand {
@@ -74,6 +77,14 @@
   color: var(--admin-text-muted);
   font-size: 14px;
   font-weight: 500;
+}
+
+.admin-top-nav-menu.ant-menu-horizontal > .ant-menu-submenu-selected,
+.admin-top-nav-menu.ant-menu-horizontal > .ant-menu-item-selected,
+.admin-top-nav-menu.ant-menu-horizontal > .ant-menu-submenu:hover,
+.admin-top-nav-menu.ant-menu-horizontal > .ant-menu-item:hover {
+  color: var(--admin-primary-strong) !important;
+  background: var(--admin-primary-soft);
 }
 
 .admin-top-nav-menu.ant-menu-horizontal > .ant-menu-submenu::after,
@@ -155,6 +166,12 @@
   background: var(--admin-surface-soft);
 }
 
+.admin-top-user-button.ant-btn:hover {
+  color: var(--admin-primary-strong) !important;
+  border-color: color-mix(in srgb, var(--admin-primary) 42%, var(--admin-border-soft)) !important;
+  background: var(--admin-surface-hover) !important;
+}
+
 .admin-top-user-icon {
   color: var(--admin-text-muted);
   font-size: 15px;
@@ -195,6 +212,7 @@
   min-height: calc(100vh - 58px);
   padding: 18px 20px 24px;
   overflow: auto;
+  color: var(--admin-text);
 }
 
 @media (max-width: 991px) {

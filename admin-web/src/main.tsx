@@ -65,10 +65,20 @@ function AdminThemeProviders() {
         theme={{
           algorithm: effectiveMode === "dark" ? theme.darkAlgorithm : theme.defaultAlgorithm,
           token: {
-            colorPrimary: "#2563eb",
+            colorPrimary: effectiveMode === "dark" ? "#60a5fa" : "#2563eb",
             borderRadius: 10,
-            colorBgLayout: effectiveMode === "dark" ? "#0f172a" : "#f5f8fc",
+            colorBgLayout: effectiveMode === "dark" ? "#070b14" : "#f5f8fc",
+            colorBgContainer: effectiveMode === "dark" ? "#111827" : "#ffffff",
+            colorBgElevated: effectiveMode === "dark" ? "#182235" : "#ffffff",
+            colorBgSpotlight: effectiveMode === "dark" ? "#1f2a44" : "#ffffff",
+            colorBorder: effectiveMode === "dark" ? "#334155" : "#e5e7eb",
+            colorSplit: effectiveMode === "dark" ? "#253246" : "#eef2f7",
+            colorFillAlter: effectiveMode === "dark" ? "#172033" : "#f8fafc",
+            colorFillSecondary: effectiveMode === "dark" ? "#1e293b" : "#f1f5f9",
             colorTextBase: effectiveMode === "dark" ? "#e5edf8" : "#1f2937",
+            colorText: effectiveMode === "dark" ? "#e5edf8" : "#1f2937",
+            colorTextSecondary: effectiveMode === "dark" ? "#a8b3c7" : "#64748b",
+            colorTextTertiary: effectiveMode === "dark" ? "#7f8da3" : "#94a3b8",
             fontSize: 14,
           },
         }}

@@ -1,15 +1,19 @@
 :root {
   color-scheme: light dark;
-  --admin-bg: light-dark(#f5f8fc, #0f172a);
+  --admin-bg: light-dark(#f5f8fc, #070b14);
+  --admin-bg-accent: light-dark(#eaf2ff, #0d1b33);
+  --admin-header: light-dark(#ffffff, #0b1220);
   --admin-surface: light-dark(#ffffff, #111827);
-  --admin-surface-soft: light-dark(#f8fafc, #1e293b);
+  --admin-surface-soft: light-dark(#f8fafc, #172033);
+  --admin-surface-hover: light-dark(#f1f5f9, #1e293b);
   --admin-border: light-dark(#e5e7eb, #253246);
   --admin-border-soft: light-dark(#e2e8f0, #334155);
   --admin-text: light-dark(#1f2937, #e5edf8);
   --admin-text-strong: light-dark(#1e293b, #f8fafc);
   --admin-text-muted: light-dark(#64748b, #94a3b8);
-  --admin-primary: #2563eb;
-  --admin-primary-soft: light-dark(#eff6ff, color-mix(in srgb, #2563eb 18%, #111827));
+  --admin-primary: light-dark(#2563eb, #60a5fa);
+  --admin-primary-strong: light-dark(#1d4ed8, #93c5fd);
+  --admin-primary-soft: light-dark(#eff6ff, color-mix(in srgb, #60a5fa 18%, #111827));
   --admin-danger-soft: light-dark(#fee2e2, color-mix(in srgb, #ef4444 20%, #111827));
   --admin-danger: light-dark(#dc2626, #f87171);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
@@ -38,7 +42,9 @@ body,
 }
 
 body {
-  background: var(--admin-bg);
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--admin-bg-accent) 70%, transparent) 0, transparent 34rem),
+    var(--admin-bg);
 }
 
 a {
