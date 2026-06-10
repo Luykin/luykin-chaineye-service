@@ -8,20 +8,20 @@
   justify-content: space-between;
   margin-bottom: 24px;
   padding-bottom: 20px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--admin-border);
 }
 
 .redis-header-title h2 {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #111827;
+  color: var(--admin-text-strong);
   margin: 0 0 4px;
   letter-spacing: -0.01em;
 }
 
 .redis-header-title p {
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--admin-text-muted);
   margin: 0;
 }
 
@@ -30,8 +30,8 @@
   align-items: center;
   gap: 4px;
   padding: 16px 20px;
-  background: #fafafa;
-  border: 1px solid #e5e7eb;
+  background: var(--admin-surface-soft);
+  border: 1px solid var(--admin-border);
   border-radius: 10px;
   margin-bottom: 24px;
   overflow-x: auto;
@@ -52,7 +52,7 @@
 .redis-info-bar .info-label {
   font-size: 0.6875rem;
   font-weight: 500;
-  color: #9ca3af;
+  color: var(--admin-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -60,7 +60,7 @@
 .redis-info-bar .info-value {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--admin-text);
 }
 
 .redis-info-bar .info-value-mono,
@@ -75,7 +75,7 @@
 .redis-info-bar .info-divider {
   width: 1px;
   height: 28px;
-  background: #e5e7eb;
+  background: var(--admin-border);
   flex-shrink: 0;
 }
 
@@ -87,8 +87,8 @@
 }
 
 .redis-panel {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -98,14 +98,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid #f3f4f6;
-  background: #fafafa;
+  border-bottom: 1px solid var(--admin-surface-hover);
+  background: var(--admin-surface-soft);
 }
 
 .redis-section .panel-header h3 {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--admin-text);
   margin: 0;
 }
 
@@ -127,11 +127,11 @@
   flex: 1;
   height: 38px;
   padding: 0 12px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 6px;
   font-size: 0.875rem;
-  color: #374151;
-  background: #fff;
+  color: var(--admin-text);
+  background: var(--admin-surface);
   transition: border-color 0.15s, box-shadow 0.15s;
   min-width: 0;
 }
@@ -139,7 +139,7 @@
 .redis-input:focus,
 .redis-textarea:focus {
   outline: none;
-  border-color: #6b7280;
+  border-color: var(--admin-text-muted);
   box-shadow: 0 0 0 3px rgba(107, 114, 128, 0.08);
 }
 
@@ -153,13 +153,13 @@
   display: block;
   margin-top: 6px;
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--admin-text-muted);
 }
 
 .redis-section .scan-section {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--admin-surface-hover);
 }
 
 .redis-btn {
@@ -184,27 +184,27 @@
 }
 
 .redis-btn-primary {
-  background: #374151;
-  color: #fff;
+  background: var(--admin-text);
+  color: var(--admin-surface);
 }
 
 .redis-btn-primary:hover:not(:disabled) {
-  background: #1f2937;
+  background: var(--admin-text);
 }
 
 .redis-btn-secondary {
-  background: #fff;
-  color: #374151;
-  border-color: #d1d5db;
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  border-color: var(--admin-border-soft);
 }
 
 .redis-btn-secondary:hover:not(:disabled) {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: var(--admin-surface-soft);
+  border-color: var(--admin-text-muted);
 }
 
 .redis-btn-danger {
-  background: #fff;
+  background: var(--admin-surface);
   color: #dc2626;
   border-color: #fecaca;
 }
@@ -222,18 +222,18 @@
 .redis-section .btn-text {
   background: none;
   border: none;
-  color: #9ca3af;
+  color: var(--admin-text-muted);
   font-size: 0.75rem;
   cursor: pointer;
   padding: 4px 8px;
 }
 
 .redis-section .btn-text:hover {
-  color: #6b7280;
+  color: var(--admin-text-muted);
 }
 
 .redis-section .keys-list {
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--admin-surface-hover);
   max-height: 240px;
   overflow-y: auto;
 }
@@ -248,9 +248,9 @@
   padding: 10px 16px;
   text-align: left;
   font-weight: 500;
-  color: #6b7280;
-  background: #fafafa;
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--admin-text-muted);
+  background: var(--admin-surface-soft);
+  border-bottom: 1px solid var(--admin-border);
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -258,12 +258,12 @@
 
 .redis-table td {
   padding: 10px 16px;
-  border-bottom: 1px solid #f3f4f6;
-  color: #374151;
+  border-bottom: 1px solid var(--admin-surface-hover);
+  color: var(--admin-text);
 }
 
 .redis-table tr:hover td {
-  background: #fafafa;
+  background: var(--admin-surface-soft);
 }
 
 .redis-table .col-action {
@@ -277,7 +277,7 @@
 }
 
 .redis-section .history-section {
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--admin-surface-hover);
   padding: 16px 20px;
 }
 
@@ -291,7 +291,7 @@
 .redis-section .section-subheader span {
   font-size: 0.8125rem;
   font-weight: 500;
-  color: #374151;
+  color: var(--admin-text);
 }
 
 .redis-section .history-list {
@@ -311,12 +311,12 @@
 }
 
 .redis-section .history-item:hover {
-  background: #f3f4f6;
+  background: var(--admin-surface-hover);
 }
 
 .redis-section .history-item-key {
   font-size: 0.75rem;
-  color: #374151;
+  color: var(--admin-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -331,7 +331,7 @@
 
 .redis-section .empty-text {
   font-size: 0.8125rem;
-  color: #9ca3af;
+  color: var(--admin-text-muted);
   padding: 12px 0;
 }
 
@@ -345,7 +345,7 @@
   grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   padding: 20px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--admin-surface-hover);
 }
 
 .redis-section .meta-item {
@@ -359,14 +359,14 @@
 .redis-section .form-row label {
   font-size: 0.6875rem;
   font-weight: 500;
-  color: #9ca3af;
+  color: var(--admin-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
 .redis-section .meta-value {
   font-size: 0.8125rem;
-  color: #374151;
+  color: var(--admin-text);
 }
 
 .redis-section .meta-value-mono {
@@ -390,12 +390,12 @@
 }
 
 .redis-section .badge-type {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--admin-surface-hover);
+  color: var(--admin-text);
 }
 
 .redis-section .badge-json {
-  background: #eff6ff;
+  background: var(--admin-primary-soft);
   color: #1e40af;
 }
 
@@ -421,13 +421,13 @@
   width: 100%;
   min-height: 200px;
   padding: 14px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-border);
   border-radius: 8px;
   font-family: 'SF Mono', ui-monospace, monospace;
   font-size: 0.8125rem;
   line-height: 1.6;
-  color: #374151;
-  background: #fafafa;
+  color: var(--admin-text);
+  background: var(--admin-surface-soft);
   resize: vertical;
   transition: border-color 0.15s;
 }
@@ -436,8 +436,8 @@
   display: flex;
   gap: 8px;
   padding: 16px 20px;
-  border-top: 1px solid #f3f4f6;
-  background: #fafafa;
+  border-top: 1px solid var(--admin-surface-hover);
+  background: var(--admin-surface-soft);
 }
 
 .redis-panel-empty {
@@ -449,7 +449,7 @@
 
 .redis-section .empty-state-content {
   text-align: center;
-  color: #9ca3af;
+  color: var(--admin-text-muted);
 }
 
 .redis-section .empty-state-content svg {
@@ -461,7 +461,7 @@
 
 .redis-section .empty-state-content p {
   font-size: 0.9375rem;
-  color: #6b7280;
+  color: var(--admin-text-muted);
   margin: 0 0 4px;
 }
 
@@ -480,10 +480,10 @@
 
 .redis-section .form-static {
   padding: 10px 12px;
-  background: #f3f4f6;
+  background: var(--admin-surface-hover);
   border-radius: 6px;
   font-size: 0.8125rem;
-  color: #374151;
+  color: var(--admin-text);
   word-break: break-all;
 }
 
@@ -557,7 +557,7 @@
 .redis-config-console .config-eyebrow {
   display: inline-flex;
   margin-bottom: 8px;
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -566,14 +566,14 @@
 
 .redis-config-console h3 {
   margin: 0 0 6px;
-  color: #0f172a;
+  color: var(--admin-text-strong);
   font-size: 1.15rem;
   letter-spacing: -0.02em;
 }
 
 .redis-config-console h4 {
   margin: 0 0 4px;
-  color: #111827;
+  color: var(--admin-text-strong);
   font-size: 0.92rem;
   font-weight: 700;
 }
@@ -583,7 +583,7 @@
 }
 
 .redis-config-console .config-hero p {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.82rem;
   line-height: 1.7;
 }
@@ -603,7 +603,7 @@
 
 .redis-config-console .config-scoreboard strong {
   display: block;
-  color: #0f172a;
+  color: var(--admin-text-strong);
   font-size: 1rem;
   line-height: 1.2;
 }
@@ -612,7 +612,7 @@
 .redis-config-console .runtime-pill span,
 .redis-config-console .config-current-line span,
 .redis-config-console .config-recommendation span {
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -642,12 +642,12 @@
   min-width: 0;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-soft);
 }
 
 .redis-config-console .runtime-pill strong {
-  color: #334155;
+  color: var(--admin-text);
   font-size: 0.84rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -681,7 +681,7 @@
 
 .redis-config-console .diagnostics-head p {
   max-width: 680px;
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.8rem;
   line-height: 1.7;
 }
@@ -689,16 +689,16 @@
 .redis-config-console .diagnostics-status {
   min-width: 150px;
   padding: 12px 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 14px;
-  background: #ffffff;
+  background: var(--admin-surface);
 }
 
 .redis-config-console .diagnostics-status span,
 .redis-config-console .diagnostic-metric span,
 .redis-config-console .diagnostics-card-head span {
   display: block;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -708,7 +708,7 @@
 .redis-config-console .diagnostics-status strong {
   display: block;
   margin-top: 4px;
-  color: #334155;
+  color: var(--admin-text);
   font-size: 0.92rem;
 }
 
@@ -764,7 +764,7 @@
 .redis-config-console .diagnostic-metric strong {
   display: block;
   margin-top: 5px;
-  color: #0f172a;
+  color: var(--admin-text-strong);
   font-size: 0.9rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -779,9 +779,9 @@
 
 .redis-config-console .diagnostics-card {
   min-width: 0;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 15px;
-  background: #ffffff;
+  background: var(--admin-surface);
   overflow: hidden;
 }
 
@@ -796,7 +796,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 13px 15px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--admin-surface-hover);
   background: #fbfdff;
 }
 
@@ -815,24 +815,24 @@
 
 .redis-config-console .finding-item {
   padding: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 13px;
-  background: #f8fafc;
+  background: var(--admin-surface-soft);
 }
 
 .redis-config-console .finding-item-danger {
   border-color: #fecaca;
-  background: linear-gradient(180deg, #fff7f7, #ffffff);
+  background: linear-gradient(180deg, #fff7f7, var(--admin-surface));
 }
 
 .redis-config-console .finding-item-warning {
   border-color: #fde68a;
-  background: linear-gradient(180deg, #fffbeb, #ffffff);
+  background: linear-gradient(180deg, #fffbeb, var(--admin-surface));
 }
 
 .redis-config-console .finding-item-safe {
   border-color: #bbf7d0;
-  background: linear-gradient(180deg, #f0fdf4, #ffffff);
+  background: linear-gradient(180deg, #f0fdf4, var(--admin-surface));
 }
 
 .redis-config-console .finding-title-line {
@@ -843,19 +843,19 @@
 }
 
 .redis-config-console .finding-title-line strong {
-  color: #0f172a;
+  color: var(--admin-text-strong);
   font-size: 0.86rem;
 }
 
 .redis-config-console .finding-title-line span {
   flex: 0 0 auto;
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.68rem;
   font-weight: 700;
 }
 
 .redis-config-console .finding-item p {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.76rem;
   line-height: 1.6;
 }
@@ -863,7 +863,7 @@
 .redis-config-console .finding-item em {
   display: block;
   margin-top: 7px;
-  color: #334155;
+  color: var(--admin-text);
   font-size: 0.76rem;
   font-style: normal;
   line-height: 1.6;
@@ -887,22 +887,22 @@
 
 .redis-config-console .queue-item {
   padding: 11px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--admin-surface);
 }
 
 .redis-config-console .queue-line {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  color: #334155;
+  color: var(--admin-text);
   font-size: 0.8rem;
 }
 
 .redis-config-console .queue-key {
   margin: 4px 0 8px;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 0.68rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -913,7 +913,7 @@
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
-  background: #f1f5f9;
+  background: var(--admin-surface-hover);
 }
 
 .redis-config-console .queue-bar i {
@@ -933,9 +933,9 @@
 
 .redis-config-console .slowlog-item {
   padding: 11px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--admin-surface);
 }
 
 .redis-config-console .slowlog-meta {
@@ -947,7 +947,7 @@
 }
 
 .redis-config-console .slowlog-meta strong {
-  color: #0f172a;
+  color: var(--admin-text-strong);
   font-size: 0.75rem;
 }
 
@@ -958,14 +958,14 @@
 }
 
 .redis-config-console .slowlog-meta time {
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 0.7rem;
   text-align: right;
 }
 
 .redis-config-console .slowlog-item code {
   display: block;
-  color: #475569;
+  color: var(--admin-text-muted);
   font-size: 0.72rem;
   line-height: 1.55;
   word-break: break-all;
@@ -973,13 +973,13 @@
 
 .redis-config-console .slowlog-client {
   margin-top: 6px;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 0.68rem;
 }
 
 .redis-config-console .diagnostics-empty {
   padding: 18px;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 0.8rem;
   text-align: center;
 }
@@ -995,7 +995,7 @@
   padding: 7px 10px;
   border-radius: 999px;
   background: rgba(241, 245, 249, 0.9);
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.72rem;
 }
 
@@ -1017,7 +1017,7 @@
 
 .redis-config-console .systemd-head p {
   max-width: 720px;
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.8rem;
   line-height: 1.7;
 }
@@ -1025,7 +1025,7 @@
 .redis-config-console .systemd-service-picker label {
   display: block;
   margin-bottom: 6px;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1082,7 +1082,7 @@
 .redis-config-console .systemd-runtime span,
 .redis-config-console .systemd-current span {
   display: block;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1093,7 +1093,7 @@
 .redis-config-console .systemd-current strong {
   display: block;
   margin-top: 4px;
-  color: #334155;
+  color: var(--admin-text);
   font-size: 0.78rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1113,9 +1113,9 @@
   gap: 10px;
   min-width: 0;
   padding: 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 14px;
-  background: #ffffff;
+  background: var(--admin-surface);
 }
 
 .redis-config-console .systemd-card-head {
@@ -1134,7 +1134,7 @@
 }
 
 .redis-config-console .systemd-card code {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.7rem;
 }
 
@@ -1143,7 +1143,7 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: #2563eb;
+  color: var(--admin-primary);
   cursor: pointer;
   font-size: 0.7rem;
   white-space: nowrap;
@@ -1151,7 +1151,7 @@
 
 .redis-config-console .systemd-card p,
 .redis-config-console .systemd-card em {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.75rem;
   font-style: normal;
   line-height: 1.6;
@@ -1160,7 +1160,7 @@
 .redis-config-console .systemd-card em {
   padding: 9px 10px;
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--admin-surface-soft);
 }
 
 .redis-config-console .systemd-dirty {
@@ -1185,19 +1185,19 @@
   gap: 12px;
   min-height: 310px;
   padding: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 14px;
-  background: #ffffff;
+  background: var(--admin-surface);
 }
 
 .redis-config-console .config-card-warning {
   border-color: #fde68a;
-  background: linear-gradient(180deg, #fffbeb, #ffffff 46%);
+  background: linear-gradient(180deg, #fffbeb, var(--admin-surface) 46%);
 }
 
 .redis-config-console .config-card-danger {
   border-color: #fecaca;
-  background: linear-gradient(180deg, #fff7f7, #ffffff 46%);
+  background: linear-gradient(180deg, #fff7f7, var(--admin-surface) 46%);
 }
 
 .redis-config-console .config-card-head,
@@ -1217,7 +1217,7 @@
 }
 
 .redis-config-console .config-card code {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.72rem;
 }
 
@@ -1246,7 +1246,7 @@
 
 .redis-config-console .config-description,
 .redis-config-console .config-note {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 0.78rem;
   line-height: 1.65;
 }
@@ -1255,12 +1255,12 @@
   min-height: 58px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--admin-surface-soft);
 }
 
 .redis-config-console .config-current-line strong {
   min-width: 0;
-  color: #334155;
+  color: var(--admin-text);
   font-size: 0.8rem;
   overflow: hidden;
   text-align: right;
@@ -1277,7 +1277,7 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: #2563eb;
+  color: var(--admin-primary);
   cursor: pointer;
   font-size: 0.76rem;
   overflow: hidden;
@@ -1286,7 +1286,7 @@
 }
 
 .redis-config-console .config-recommend-value:hover {
-  color: #1d4ed8;
+  color: var(--admin-primary-strong);
   text-decoration: underline;
 }
 
@@ -1361,7 +1361,7 @@
 
 .redis-config-console .config-collapsed-note {
   padding: 14px 24px 18px;
-  color: #64748b;
+  color: var(--admin-text-muted);
   background: rgba(255, 255, 255, 0.58);
   border-top: 1px solid rgba(148, 163, 184, 0.2);
   font-size: 0.82rem;

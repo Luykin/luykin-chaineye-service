@@ -3,11 +3,11 @@
   --device-warn: #d97706;
   --device-danger: #dc2626;
   --device-ink: #172033;
-  --device-muted: #64748b;
+  --device-muted: var(--admin-text-muted);
 }
 
 .device-overview {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-border);
   box-shadow: none;
   overflow: hidden;
 }
@@ -65,21 +65,21 @@
 }
 
 .device-health-card {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-border);
   box-shadow: none;
   min-height: 196px;
 }
 
 .device-health-card.is-warn { border-color: #fbbf24; background: #fffbeb; }
 .device-health-card.is-danger { border-color: #fca5a5; background: #fef2f2; }
-.device-health-card.is-ok { background: #ffffff; }
+.device-health-card.is-ok { background: var(--admin-surface); }
 
 .device-health-card-topline {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #334155;
+  color: var(--admin-text);
   font-size: 13px;
   font-weight: 700;
 }
@@ -100,7 +100,7 @@
 
 .device-health-detail {
   margin-top: 10px;
-  color: #334155;
+  color: var(--admin-text);
   font-size: 13px;
   font-weight: 600;
 }
@@ -116,7 +116,7 @@
 }
 
 .device-panel {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-border);
   box-shadow: none;
 }
 
@@ -128,7 +128,7 @@
 .device-panel .ant-card-head-title {
   font-size: 14px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--admin-text);
 }
 
 .device-db-panel .ant-card-body {
@@ -143,7 +143,7 @@
   justify-content: space-between;
   gap: 12px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--admin-text);
 }
 
 .device-db-meta {

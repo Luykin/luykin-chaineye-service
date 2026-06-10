@@ -10,7 +10,7 @@
 
 .request-stat-card.ant-card,
 .request-stats-card.ant-card {
-  border-color: #e2e8f0;
+  border-color: var(--admin-border-soft);
   border-radius: 12px;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
 }
@@ -21,19 +21,19 @@
 
 .request-stat-card .ant-statistic-title {
   margin-bottom: 3px;
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 12px;
 }
 
 .request-stat-card .ant-statistic-content {
-  color: #111827;
+  color: var(--admin-text-strong);
   font-size: 24px;
   font-weight: 650;
 }
 
 .request-stat-card--blue {
   border-color: #bfdbfe !important;
-  background: #eff6ff !important;
+  background: var(--admin-primary-soft) !important;
 }
 
 .request-stat-card--green {
@@ -53,7 +53,7 @@
 
 .request-stats-card > .ant-card-head .ant-card-head-title {
   padding: 12px 0;
-  color: #1f2937;
+  color: var(--admin-text);
   font-size: 14px;
   font-weight: 650;
 }
@@ -75,8 +75,8 @@
   width: 28px;
   height: 24px;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--admin-surface-hover);
+  color: var(--admin-text-muted);
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -88,8 +88,8 @@
 }
 
 .request-rank--2 {
-  background: #e5e7eb;
-  color: #374151;
+  background: var(--admin-border);
+  color: var(--admin-text);
 }
 
 .request-rank--3 {
@@ -99,13 +99,13 @@
 
 .url-stats-path.ant-typography {
   max-width: 100%;
-  color: #1e293b;
+  color: var(--admin-text-strong);
   font-size: 12px;
   font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .url-stats-percent-text.ant-typography {
-  color: #475569;
+  color: var(--admin-text-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -140,6 +140,6 @@
   min-height: 320px;
   display: grid;
   place-items: center;
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 13px;
 }

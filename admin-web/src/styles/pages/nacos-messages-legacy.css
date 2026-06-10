@@ -14,20 +14,20 @@
     justify-content: space-between;
     margin-bottom: 24px;
     padding-bottom: 20px;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--admin-border);
 }
 
 .nacos-header-title h2 {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #111827;
+    color: var(--admin-text-strong);
     margin: 0 0 4px 0;
     letter-spacing: -0.01em;
 }
 
 .nacos-header-title p {
     font-size: 0.8125rem;
-    color: #6b7280;
+    color: var(--admin-text-muted);
     margin: 0;
 }
 
@@ -38,8 +38,8 @@
     justify-content: space-between;
     gap: 16px;
     padding: 14px 16px;
-    background: #fafafa;
-    border: 1px solid #e5e7eb;
+    background: var(--admin-surface-soft);
+    border: 1px solid var(--admin-border);
     border-radius: 10px;
     margin-bottom: 20px;
     flex-wrap: wrap;
@@ -56,7 +56,7 @@
     display: flex;
     gap: 4px;
     padding: 4px;
-    background: #e5e7eb;
+    background: var(--admin-border);
     border-radius: 8px;
 }
 
@@ -64,7 +64,7 @@
     padding: 6px 14px;
     border: none;
     background: transparent;
-    color: #6b7280;
+    color: var(--admin-text-muted);
     font-size: 0.8125rem;
     font-weight: 500;
     border-radius: 6px;
@@ -73,25 +73,25 @@
 }
 
 .lang-tab:hover {
-    color: #374151;
+    color: var(--admin-text);
 }
 
 .lang-tab.active {
-    background: #ffffff;
-    color: #111827;
+    background: var(--admin-surface);
+    color: var(--admin-text-strong);
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .dataid-label {
     font-size: 0.8125rem;
-    color: #6b7280;
+    color: var(--admin-text-muted);
 }
 
 .dataid-label code {
     font-family: 'SF Mono', ui-monospace, monospace;
     font-size: 0.75rem;
-    color: #374151;
-    background: #f3f4f6;
+    color: var(--admin-text);
+    background: var(--admin-surface-hover);
     padding: 2px 6px;
     border-radius: 4px;
 }
@@ -117,8 +117,8 @@
     transition: all 0.15s;
     border: 1px solid transparent;
     white-space: nowrap;
-    background: #ffffff;
-    color: #374151;
+    background: var(--admin-surface);
+    color: var(--admin-text);
 }
 
 .nacos-btn svg {
@@ -132,23 +132,23 @@
 }
 
 .nacos-btn-secondary {
-    border-color: #d1d5db;
+    border-color: var(--admin-border-soft);
 }
 
 .nacos-btn-secondary:hover:not(:disabled) {
-    background: #f3f4f6;
-    border-color: #9ca3af;
+    background: var(--admin-surface-hover);
+    border-color: var(--admin-text-muted);
 }
 
 .nacos-btn-primary {
-    background: #374151;
-    color: #ffffff;
-    border-color: #374151;
+    background: var(--admin-text);
+    color: var(--admin-surface);
+    border-color: var(--admin-text);
 }
 
 .nacos-btn-primary:hover:not(:disabled) {
-    background: #1f2937;
-    border-color: #1f2937;
+    background: var(--admin-text);
+    border-color: var(--admin-text);
 }
 
 .nacos-btn-danger {
@@ -163,7 +163,7 @@
 
 .nacos-btn-success {
     background: #059669;
-    color: #ffffff;
+    color: var(--admin-surface);
     border-color: #059669;
 }
 
@@ -188,8 +188,8 @@
 
 /* ---------- 面板 ---------- */
 .nacos-panel {
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
     border-radius: 10px;
     overflow: hidden;
     display: flex;
@@ -201,18 +201,18 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px;
-    background: #fafafa;
-    border-bottom: 1px solid #f3f4f6;
+    background: var(--admin-surface-soft);
+    border-bottom: 1px solid var(--admin-surface-hover);
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: var(--admin-text);
 }
 
 .count-badge {
     font-size: 0.75rem;
     font-weight: 500;
-    color: #6b7280;
-    background: #f3f4f6;
+    color: var(--admin-text-muted);
+    background: var(--admin-surface-hover);
     padding: 2px 8px;
     border-radius: 10px;
 }
@@ -220,7 +220,7 @@
 .editor-hint {
     font-size: 0.75rem;
     font-weight: 400;
-    color: #9ca3af;
+    color: var(--admin-text-muted);
 }
 
 /* ---------- 列表 ---------- */
@@ -233,7 +233,7 @@
 .empty-state {
     padding: 40px 20px;
     text-align: center;
-    color: #9ca3af;
+    color: var(--admin-text-muted);
     font-size: 0.875rem;
 }
 
@@ -246,18 +246,18 @@
 }
 
 .nacos-msg-item:hover {
-    background: #f9fafb;
+    background: var(--admin-surface-soft);
 }
 
 .nacos-msg-item.active {
-    background: #f3f4f6;
-    box-shadow: inset 2px 0 0 #6b7280;
+    background: var(--admin-surface-hover);
+    box-shadow: inset 2px 0 0 var(--admin-text-muted);
 }
 
 .msg-item-title {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #111827;
+    color: var(--admin-text-strong);
     margin-bottom: 4px;
     line-height: 1.4;
     white-space: nowrap;
@@ -267,7 +267,7 @@
 
 .msg-item-meta {
     font-size: 0.6875rem;
-    color: #9ca3af;
+    color: var(--admin-text-muted);
     font-family: 'SF Mono', ui-monospace, monospace;
 }
 
@@ -288,7 +288,7 @@
 .form-field label {
     font-size: 0.6875rem;
     font-weight: 600;
-    color: #6b7280;
+    color: var(--admin-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
@@ -296,23 +296,23 @@
 .nacos-input {
     height: 40px;
     padding: 0 12px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--admin-border-soft);
     border-radius: 8px;
     font-size: 0.9375rem;
-    color: #374151;
-    background: #ffffff;
+    color: var(--admin-text);
+    background: var(--admin-surface);
     transition: all 0.15s;
 }
 
 .nacos-input:focus {
     outline: none;
-    border-color: #6b7280;
+    border-color: var(--admin-text-muted);
     box-shadow: 0 0 0 3px rgba(107, 114, 128, 0.08);
 }
 
 .nacos-input:disabled {
-    background: #f9fafb;
-    color: #9ca3af;
+    background: var(--admin-surface-soft);
+    color: var(--admin-text-muted);
 }
 
 /* ---------- RTE 工具栏 ---------- */
@@ -321,8 +321,8 @@
     align-items: center;
     gap: 4px;
     padding: 8px;
-    background: #fafafa;
-    border: 1px solid #e5e7eb;
+    background: var(--admin-surface-soft);
+    border: 1px solid var(--admin-border);
     border-bottom: none;
     border-radius: 8px 8px 0 0;
 }
@@ -338,13 +338,13 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.875rem;
-    color: #374151;
+    color: var(--admin-text);
     transition: all 0.15s;
 }
 
 .rte-toolbar button:hover:not(:disabled) {
-    background: #f3f4f6;
-    border-color: #d1d5db;
+    background: var(--admin-surface-hover);
+    border-color: var(--admin-border-soft);
 }
 
 .rte-toolbar button:disabled {
@@ -355,57 +355,57 @@
 .toolbar-hint {
     margin-left: auto;
     font-size: 0.6875rem;
-    color: #9ca3af;
+    color: var(--admin-text-muted);
 }
 
 .rte-editor {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--admin-border);
     border-radius: 0 0 8px 8px;
     padding: 16px;
     min-height: 200px;
     font-size: 0.9375rem;
     line-height: 1.6;
-    color: #374151;
+    color: var(--admin-text);
     outline: none;
-    background: #ffffff;
+    background: var(--admin-surface);
 }
 
 .rte-editor:focus {
-    border-color: #d1d5db;
+    border-color: var(--admin-border-soft);
 }
 
 .rte-editor[contenteditable="false"] {
-    background: #f9fafb;
-    color: #9ca3af;
+    background: var(--admin-surface-soft);
+    color: var(--admin-text-muted);
 }
 
 .rte-editor:empty:before {
     content: attr(data-placeholder);
-    color: #9ca3af;
+    color: var(--admin-text-muted);
 }
 
 /* ---------- 预览区域 ---------- */
 .preview-section {
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid var(--admin-surface-hover);
     padding-top: 20px;
 }
 
 .preview-header {
     font-size: 0.6875rem;
     font-weight: 600;
-    color: #6b7280;
+    color: var(--admin-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.03em;
     margin-bottom: 10px;
 }
 
 .preview-box {
-    border: 1px dashed #d1d5db;
+    border: 1px dashed var(--admin-border-soft);
     border-radius: 8px;
     padding: 20px;
     min-height: 120px;
-    background: #fafafa;
-    color: #374151;
+    background: var(--admin-surface-soft);
+    color: var(--admin-text);
     font-size: 0.9375rem;
     line-height: 1.6;
 }
@@ -415,15 +415,15 @@
     display: flex;
     gap: 10px;
     padding: 14px;
-    background: #f9fafb;
+    background: var(--admin-surface-soft);
     border-radius: 8px;
-    border: 1px solid #f3f4f6;
+    border: 1px solid var(--admin-surface-hover);
 }
 
 .help-section svg {
     width: 16px;
     height: 16px;
-    color: #6b7280;
+    color: var(--admin-text-muted);
     flex-shrink: 0;
     margin-top: 2px;
 }
@@ -431,7 +431,7 @@
 .help-section p {
     margin: 0;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: var(--admin-text-muted);
     line-height: 1.5;
 }
 
@@ -441,8 +441,8 @@
     right: 20px;
     bottom: 20px;
     padding: 12px 18px;
-    background: #111827;
-    color: #ffffff;
+    background: var(--admin-text-strong);
+    color: var(--admin-surface);
     border-radius: 8px;
     font-size: 0.8125rem;
     font-weight: 500;
@@ -490,7 +490,7 @@
     width: 90%;
     max-width: 700px;
     max-height: 90vh;
-    background: #ffffff;
+    background: var(--admin-surface);
     border-radius: 12px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
     display: flex;
@@ -507,13 +507,13 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--admin-surface-hover);
 }
 
 .modal-header h3 {
     font-size: 1rem;
     font-weight: 600;
-    color: #111827;
+    color: var(--admin-text-strong);
     margin: 0;
 }
 
@@ -521,7 +521,7 @@
     background: none;
     border: none;
     font-size: 1.5rem;
-    color: #9ca3af;
+    color: var(--admin-text-muted);
     cursor: pointer;
     width: 32px;
     height: 32px;
@@ -533,8 +533,8 @@
 }
 
 .modal-close:hover {
-    background: #f3f4f6;
-    color: #374151;
+    background: var(--admin-surface-hover);
+    color: var(--admin-text);
 }
 
 .modal-body {
@@ -548,8 +548,8 @@
     justify-content: flex-end;
     gap: 10px;
     padding: 14px 20px;
-    border-top: 1px solid #f3f4f6;
-    background: #fafafa;
+    border-top: 1px solid var(--admin-surface-hover);
+    background: var(--admin-surface-soft);
 }
 
 /* HTML 编辑 textarea */
@@ -557,19 +557,19 @@
     width: 100%;
     min-height: 300px;
     padding: 16px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--admin-border);
     border-radius: 8px;
     font-family: 'SF Mono', ui-monospace, monospace;
     font-size: 0.8125rem;
     line-height: 1.6;
     resize: vertical;
     outline: none;
-    background: #fafafa;
+    background: var(--admin-surface-soft);
 }
 
 #nacos-html-source:focus {
-    border-color: #d1d5db;
-    background: #ffffff;
+    border-color: var(--admin-border-soft);
+    background: var(--admin-surface);
 }
 
 /* JSON 预览 */
@@ -583,14 +583,14 @@
 
 .preview-info span {
     font-size: 0.8125rem;
-    color: #6b7280;
+    color: var(--admin-text-muted);
 }
 
 .preview-info code {
     font-family: 'SF Mono', ui-monospace, monospace;
     font-size: 0.75rem;
-    color: #374151;
-    background: #f3f4f6;
+    color: var(--admin-text);
+    background: var(--admin-surface-hover);
     padding: 2px 6px;
     border-radius: 4px;
 }
@@ -616,8 +616,8 @@
 #nacos-msg-json-preview-content {
     margin: 0;
     padding: 16px;
-    background: #fafafa;
-    border: 1px solid #f3f4f6;
+    background: var(--admin-surface-soft);
+    border: 1px solid var(--admin-surface-hover);
     border-radius: 8px;
     font-family: 'SF Mono', ui-monospace, monospace;
     font-size: 0.75rem;
@@ -642,13 +642,13 @@
 /* ---------- Quill 适配 ---------- */
 #nacos-quill-toolbar {
     border-radius: 8px 8px 0 0;
-    border-color: #e5e7eb;
-    background: #fafafa;
+    border-color: var(--admin-border);
+    background: var(--admin-surface-soft);
 }
 
 #nacos-msg-content {
     border-radius: 0 0 8px 8px;
-    border-color: #e5e7eb;
+    border-color: var(--admin-border);
     min-height: 200px;
 }
 
@@ -677,11 +677,11 @@
     border-radius: 8px;
     cursor: default;
     transition: background 0.15s;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--admin-surface-hover);
 }
 
 .history-item:hover {
-    background: #f9fafb;
+    background: var(--admin-surface-soft);
 }
 
 .history-item:last-child {
@@ -691,7 +691,7 @@
 .history-item-key {
     font-family: 'SF Mono', ui-monospace, monospace;
     font-size: 0.8125rem;
-    color: #374151;
+    color: var(--admin-text);
     cursor: pointer;
     transition: color 0.15s;
     word-break: break-all;
@@ -699,7 +699,7 @@
 }
 
 .history-item-key:hover {
-    color: #2563eb;
+    color: var(--admin-primary);
 }
 
 .history-item-actions {
@@ -715,7 +715,7 @@
 }
 
 .history-item-actions .btn-text:hover {
-    background: #f3f4f6;
+    background: var(--admin-surface-hover);
 }
 
 @keyframes fadeIn {
@@ -730,13 +730,13 @@
 }
 
 .nacos-section-react .nacos-react-toolbar-actions .nacos-btn-primary {
-    background: #2563eb;
-    border-color: #2563eb;
+    background: var(--admin-primary);
+    border-color: var(--admin-primary);
 }
 
 .nacos-section-react .nacos-react-toolbar-actions .nacos-btn-primary:hover:not(:disabled) {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
+    background: var(--admin-primary-strong);
+    border-color: var(--admin-primary-strong);
 }
 
 .nacos-section-react .nacos-react-toolbar-actions .nacos-btn-success {
@@ -776,12 +776,12 @@
 .nacos-section-react .nacos-select .ant-select-selector {
   min-height: 40px;
   border-radius: 8px;
-  border-color: #d1d5db;
+  border-color: var(--admin-border-soft);
   align-items: center;
 }
 
 .nacos-section-react .nacos-select.ant-select-focused .ant-select-selector {
-  border-color: #6b7280 !important;
+  border-color: var(--admin-text-muted) !important;
   box-shadow: 0 0 0 3px rgba(107, 114, 128, 0.08) !important;
 }
 
@@ -804,26 +804,26 @@
   flex-shrink: 0;
   width: 20px;
   height: 20px;
-  color: #3b82f6;
+  color: var(--admin-primary);
   margin-top: 1px;
 }
 
 .editor-color-notice strong {
-  color: #3b82f6;
+  color: var(--admin-primary);
   font-weight: 600;
 }
 
 /* Quill 编辑器工具条优化 */
 .nacos-section-react .ql-toolbar.ql-snow {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-border);
   border-bottom: none;
   border-radius: 8px 8px 0 0;
   padding: 10px 12px;
-  background: #fafafa;
+  background: var(--admin-surface-soft);
 }
 
 .nacos-section-react .ql-container.ql-snow {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-border);
   border-radius: 0 0 8px 8px;
   min-height: 200px;
 }
@@ -855,7 +855,7 @@
 }
 
 .nacos-section-react .ql-snow .ql-color-picker .ql-picker-item:hover {
-  border-color: #3b82f6;
+  border-color: var(--admin-primary);
 }
 
 .nacos-section-react .ql-snow .ql-toolbar button,
@@ -866,13 +866,13 @@
 }
 
 .nacos-section-react .ql-toolbar.ql-snow button:hover {
-  color: #2563eb;
+  color: var(--admin-primary);
   background-color: rgba(59, 130, 246, 0.1);
   transform: scale(1.08);
 }
 
 .nacos-section-react .ql-toolbar.ql-snow button.ql-active {
-  color: #2563eb;
+  color: var(--admin-primary);
   background-color: rgba(59, 130, 246, 0.15);
 }
 
@@ -912,7 +912,7 @@
 
 .nacos-section-react .ql-snow .ql-picker:hover,
 .nacos-section-react .ql-snow .ql-picker-label:hover {
-  color: #2563eb;
+  color: var(--admin-primary);
 }
 
 .msg-type-tag {
@@ -925,7 +925,7 @@
 }
 
 .msg-type-tag.type-all {
-  color: #4b5563;
+  color: var(--admin-text);
   background: rgba(75, 85, 99, 0.12);
 }
 

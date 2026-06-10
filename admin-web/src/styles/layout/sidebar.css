@@ -10,7 +10,7 @@
 }
 
 .admin-no-permission-menu .ant-menu-item .ant-menu-item-icon {
-  color: #94a3b8;
+  color: var(--admin-text-muted);
 }
 
 .ant-menu .admin-legacy-sidebar-icon,
@@ -60,7 +60,7 @@
 
 .admin-sidebar-menu {
   background: transparent !important;
-  color: #64748b;
+  color: var(--admin-text-muted);
 }
 
 .admin-sidebar-menu.ant-menu-inline {
@@ -76,7 +76,7 @@
   padding-inline: 20px !important;
   border-radius: 0;
   border-left: 3px solid transparent;
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 14px;
   font-weight: 500;
   display: flex;
@@ -93,7 +93,7 @@
   width: 18px;
   height: 18px;
   margin-inline-end: 0 !important;
-  color: #64748b;
+  color: var(--admin-text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -121,8 +121,8 @@
 
 .admin-sidebar-menu .ant-menu-item:hover,
 .admin-sidebar-menu .ant-menu-submenu-title:hover {
-  color: #334155 !important;
-  background: #f8fafc !important;
+  color: var(--admin-text) !important;
+  background: var(--admin-surface-soft) !important;
 }
 
 .admin-sidebar-menu .ant-menu-item:hover .ant-menu-item-icon,
@@ -131,20 +131,20 @@
 }
 
 .admin-sidebar-menu .ant-menu-item-selected {
-  color: #3b82f6 !important;
-  background: #eff6ff !important;
-  border-left-color: #3b82f6;
+  color: var(--admin-primary) !important;
+  background: var(--admin-primary-soft) !important;
+  border-left-color: var(--admin-primary);
   font-weight: 500;
 }
 
 .admin-sidebar-menu .ant-menu-item-selected .ant-menu-item-icon {
-  color: #3b82f6 !important;
+  color: var(--admin-primary) !important;
 }
 
 .admin-sidebar-menu .admin-sidebar-external-icon {
   margin-left: 6px;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   opacity: 0.6;
   flex: 0 0 auto;
 }
@@ -189,11 +189,11 @@
   padding-left: 44px !important;
   font-size: 13px;
   opacity: 0.5;
-  color: #64748b !important;
+  color: var(--admin-text-muted) !important;
 }
 
 .admin-no-permission-menu .ant-menu-item .ant-menu-item-icon {
-  color: #64748b !important;
+  color: var(--admin-text-muted) !important;
 }
 
 .admin-no-permission-menu .ant-menu-item:hover {
@@ -218,14 +218,14 @@
 .admin-sidebar-groups .ant-collapse-header {
   min-height: 28px;
   align-items: center !important;
-  color: #94a3b8 !important;
+  color: var(--admin-text-muted) !important;
   border-radius: 0;
 }
 
 .admin-sidebar-groups .ant-collapse-expand-icon {
   height: 18px !important;
   padding-inline-end: 5px !important;
-  color: #cbd5e1;
+  color: var(--admin-border-soft);
 }
 
 .admin-sidebar-group-label {
@@ -233,7 +233,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -241,7 +241,7 @@
 }
 
 .admin-sidebar-group-count {
-  color: #cbd5e1;
+  color: var(--admin-border-soft);
   font-size: 10px;
   font-weight: 600;
 }
@@ -256,7 +256,7 @@
 
 .admin-sidebar-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: var(--admin-border-soft) transparent;
 }
 
 .admin-sidebar-scroll::-webkit-scrollbar {
@@ -268,21 +268,21 @@
 }
 
 .admin-sidebar-scroll::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--admin-border-soft);
   border-radius: 999px;
 }
 
 .admin-sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--admin-text-muted);
 }
 
 .admin-sidebar-menu.ant-menu-inline-collapsed > .ant-menu-submenu > .ant-menu-submenu-title {
-  color: #64748b;
+  color: var(--admin-text-muted);
 }
 
 .admin-sidebar-menu.ant-menu-inline-collapsed > .ant-menu-submenu-selected > .ant-menu-submenu-title {
-  color: #3b82f6 !important;
-  background: #eff6ff !important;
+  color: var(--admin-primary) !important;
+  background: var(--admin-primary-soft) !important;
 }
 
 .admin-sidebar-collapsed-popup .ant-menu-item,

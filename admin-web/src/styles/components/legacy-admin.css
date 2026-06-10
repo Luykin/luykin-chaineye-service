@@ -5,14 +5,14 @@
   justify-content: space-between;
   overflow: hidden;
   padding: 16px 16px 16px 20px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 10px;
-  background: #fff;
+  background: var(--admin-surface);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .legacy-metric-card:hover {
-  border-color: #cbd5e1;
+  border-color: var(--admin-border-soft);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
@@ -24,7 +24,7 @@
 }
 
 .legacy-metric-card__label {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.05em;
@@ -34,7 +34,7 @@
 
 .legacy-metric-card__value {
   overflow: hidden;
-  color: #0f172a;
+  color: var(--admin-text-strong);
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -48,7 +48,7 @@
   height: 40px;
   margin-left: 12px;
   border-radius: 2px;
-  background: var(--indicator-color, #94a3b8);
+  background: var(--indicator-color, var(--admin-text-muted));
   flex-shrink: 0;
 }
 
@@ -72,71 +72,71 @@
 }
 
 .legacy-action-btn--primary.ant-btn {
-  border-color: #2563eb;
-  background: #2563eb;
-  color: #fff;
+  border-color: var(--admin-primary);
+  background: var(--admin-primary);
+  color: var(--admin-surface);
 }
 
 .legacy-action-btn--primary.ant-btn:hover {
-  border-color: #1d4ed8 !important;
-  background: #1d4ed8 !important;
-  color: #fff !important;
+  border-color: var(--admin-primary-strong) !important;
+  background: var(--admin-primary-strong) !important;
+  color: var(--admin-surface) !important;
   opacity: 1;
 }
 
 .legacy-action-btn--success.ant-btn {
   border-color: #059669;
   background: #059669;
-  color: #fff;
+  color: var(--admin-surface);
 }
 
 .legacy-action-btn--success.ant-btn:hover {
   border-color: #047857 !important;
   background: #047857 !important;
-  color: #fff !important;
+  color: var(--admin-surface) !important;
 }
 
 .legacy-action-btn--warning.ant-btn {
   border-color: #f59e0b;
   background: #f59e0b;
-  color: #fff;
+  color: var(--admin-surface);
 }
 
 .legacy-action-btn--warning.ant-btn:hover {
   border-color: #d97706 !important;
   background: #d97706 !important;
-  color: #fff !important;
+  color: var(--admin-surface) !important;
 }
 
 .legacy-action-btn--danger.ant-btn {
   border-color: #dc2626;
   background: #dc2626;
-  color: #fff;
+  color: var(--admin-surface);
 }
 
 .legacy-action-btn--danger.ant-btn:hover {
   border-color: #b91c1c !important;
   background: #b91c1c !important;
-  color: #fff !important;
+  color: var(--admin-surface) !important;
 }
 
 .legacy-action-btn--neutral.ant-btn {
-  border-color: #e2e8f0;
-  background: #f8fafc;
-  color: #475569;
+  border-color: var(--admin-border-soft);
+  background: var(--admin-surface-soft);
+  color: var(--admin-text-muted);
 }
 
 .legacy-action-btn--neutral.ant-btn:hover {
-  border-color: #cbd5e1 !important;
-  background: #f1f5f9 !important;
-  color: #334155 !important;
+  border-color: var(--admin-border-soft) !important;
+  background: var(--admin-surface-hover) !important;
+  color: var(--admin-text) !important;
 }
 
 .legacy-action-btn--compact.ant-btn {
   height: 24px;
   padding: 0 9px;
   border-radius: 4px;
-  background: #fff;
+  background: var(--admin-surface);
   box-shadow: none;
   font-size: 12px;
   line-height: 22px;
@@ -144,12 +144,12 @@
 
 .legacy-action-btn--sync.ant-btn {
   border-color: #bfdbfe;
-  color: #2563eb;
+  color: var(--admin-primary);
 }
 
 .legacy-action-btn--sync.ant-btn:hover {
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
+  background: var(--admin-primary-soft) !important;
+  color: var(--admin-primary-strong) !important;
 }
 
 .legacy-action-btn--remove.ant-btn {

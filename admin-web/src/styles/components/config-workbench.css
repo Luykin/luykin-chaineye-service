@@ -52,10 +52,10 @@
 .config-workbench-toolbar code,
 .dataid-label code {
   padding: 2px 7px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-border);
   border-radius: 999px;
-  background: #fff;
-  color: #374151;
+  background: var(--admin-surface);
+  color: var(--admin-text);
   font-size: 12px;
   font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
 }
@@ -69,7 +69,7 @@
   padding: 8px 10px;
   border: 1px solid var(--cw-border);
   border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfbfc 100%);
+  background: linear-gradient(180deg, var(--admin-surface) 0%, #fbfbfc 100%);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
@@ -132,7 +132,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #1f2937;
+  color: var(--admin-text);
   font-size: 13px;
   font-weight: 650;
 }
@@ -152,8 +152,8 @@
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  background: #f3f4f6;
-  color: #4b5563;
+  background: var(--admin-surface-hover);
+  color: var(--admin-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -163,7 +163,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #6b7280;
+  color: var(--admin-text-muted);
   font-size: 12px;
   font-weight: 400;
 }
@@ -205,7 +205,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 8px !important;
-  color: #6b7280;
+  color: var(--admin-text-muted);
 }
 
 .config-workbench-collapsed .config-workbench-collapse-button svg {
@@ -228,21 +228,21 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #6b7280;
+  color: var(--admin-text-muted);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .config-workbench .lang-tab.active {
-  background: #fff;
-  color: #111827;
+  background: var(--admin-surface);
+  color: var(--admin-text-strong);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 
 .config-workbench .dataid-label,
 .config-workbench .muted {
-  color: #6b7280;
+  color: var(--admin-text-muted);
   font-size: 12px;
 }
 
@@ -272,8 +272,8 @@
 
 .config-workbench-list-item:hover,
 .config-workbench .item:hover {
-  background: #f8fafc;
-  border-color: #e5e7eb;
+  background: var(--admin-surface-soft);
+  border-color: var(--admin-border);
 }
 
 .config-workbench-list-item.active,
@@ -289,7 +289,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--admin-text-strong);
   font-size: 13px;
   font-weight: 650;
 }
@@ -297,7 +297,7 @@
 .config-workbench-list-meta,
 .config-workbench .item-meta {
   margin-top: 4px;
-  color: #6b7280;
+  color: var(--admin-text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -309,7 +309,7 @@
   border: 1px dashed #d8dee8;
   border-radius: 12px;
   background: #fafbfc;
-  color: #6b7280;
+  color: var(--admin-text-muted);
   text-align: center;
   font-size: 13px;
 }
@@ -324,7 +324,7 @@
 
 .config-workbench .list-group-title {
   margin: 6px 8px 4px;
-  color: #6b7280;
+  color: var(--admin-text-muted);
   font-size: 12px;
   font-weight: 700;
 }
@@ -357,7 +357,7 @@
   height: 24px;
   object-fit: cover;
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 2px solid var(--admin-surface);
   background: #eef0f3;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
 }
@@ -384,8 +384,8 @@
   height: 20px;
   padding: 0 7px;
   border-radius: 999px;
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--admin-surface-hover);
+  color: var(--admin-text-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -401,8 +401,8 @@
 }
 
 .config-workbench .chip-weight {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--admin-primary-soft);
+  color: var(--admin-primary-strong);
 }
 
 .config-workbench .campaigns-search {
@@ -412,7 +412,7 @@
   padding: 0 10px;
   border-radius: 10px;
   border: 1px solid #d8dee8;
-  background: #fff;
+  background: var(--admin-surface);
 }
 
 .config-workbench .editor-form,
@@ -438,7 +438,7 @@
   border-radius: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(250, 251, 253, 0.98) 100%),
-    #fff;
+    var(--admin-surface);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
@@ -461,7 +461,7 @@
 .config-workbench.nacos-campaigns-admin .campaign-brief-title {
   margin-top: 8px;
   overflow: hidden;
-  color: #1f2937;
+  color: var(--admin-text);
   font-size: 18px;
   font-weight: 760;
   letter-spacing: -0.025em;
@@ -498,7 +498,7 @@
   padding: 10px 12px;
   border: 1px solid #edf0f4;
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--admin-surface);
 }
 
 .config-workbench.nacos-campaigns-admin .campaign-brief-stat span {
@@ -556,14 +556,14 @@
 }
 
 .config-workbench .empty-title {
-  color: #111827;
+  color: var(--admin-text-strong);
   font-size: 15px;
   font-weight: 650;
 }
 
 .config-workbench .empty-desc {
   margin-top: 6px;
-  color: #6b7280;
+  color: var(--admin-text-muted);
   font-size: 13px;
 }
 
@@ -630,7 +630,7 @@
 .config-workbench .field > label,
 .config-workbench .task-field > label,
 .config-workbench .tag-field > label {
-  color: #4b5563;
+  color: var(--admin-text);
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -651,7 +651,7 @@
 
 .config-workbench .section {
   padding: 14px;
-  background: #fff;
+  background: var(--admin-surface);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
@@ -664,7 +664,7 @@
 .config-workbench .section-title,
 .config-workbench .section-title-inline,
 .config-workbench .section-title-sm {
-  color: #111827;
+  color: var(--admin-text-strong);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -688,7 +688,7 @@
 .config-workbench .rep-card {
   border-color: #e6eaf0;
   border-radius: 13px;
-  background: #fff;
+  background: var(--admin-surface);
 }
 
 .config-workbench .rep-card {
@@ -700,7 +700,7 @@
 }
 
 .config-workbench .preview-section {
-  background: #fff;
+  background: var(--admin-surface);
   overflow: hidden;
 }
 
@@ -714,7 +714,7 @@
 }
 
 .config-workbench .help-section {
-  background: #f8fafc;
+  background: var(--admin-surface-soft);
 }
 
 .config-workbench .editor-color-notice {
@@ -754,13 +754,13 @@
 .config-workbench.nacos-tags-container .nacos-tags-item.is-active {
   background: #f2f7ff;
   border-color: #bfdbfe;
-  box-shadow: inset 3px 0 0 #3b82f6;
+  box-shadow: inset 3px 0 0 var(--admin-primary);
 }
 
 .config-workbench.nacos-tags-container .nacos-tags-item-count,
 .config-workbench.nacos-tags-container .nacos-tags-input-index {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--admin-primary-soft);
+  color: var(--admin-primary-strong);
 }
 
 .config-workbench.nacos-tags-container .nacos-tags-editor-body {
@@ -784,7 +784,7 @@
 }
 
 .config-workbench.nacos-tags-container .nacos-tags-field-row label {
-  color: #4b5563;
+  color: var(--admin-text);
   font-size: 12px;
   font-weight: 650;
 }
@@ -800,7 +800,7 @@
   padding: 12px;
   border: 1px solid #e6eaf0;
   border-radius: 14px;
-  background: #fff;
+  background: var(--admin-surface);
 }
 
 .config-workbench.nacos-tags-container .nacos-tags-chip-preview-section {
@@ -861,49 +861,49 @@
 
 .config-workbench-toolbar .config-action-secondary,
 .config-workbench-toolbar .nacos-btn-secondary {
-  background: #ffffff;
+  background: var(--admin-surface);
   border-color: #d8dee8;
-  color: #374151;
+  color: var(--admin-text);
 }
 
 .config-workbench-toolbar .config-action-secondary:not(:disabled):hover,
 .config-workbench-toolbar .nacos-btn-secondary:not(:disabled):hover {
-  background: #f8fafc;
+  background: var(--admin-surface-soft);
   border-color: #b8c2cf;
-  color: #111827;
+  color: var(--admin-text-strong);
 }
 
 .config-workbench-toolbar .config-action-primary,
 .config-workbench-toolbar .nacos-btn-primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  color: #ffffff;
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: var(--admin-surface);
 }
 
 .config-workbench-toolbar .config-action-primary:not(:disabled):hover,
 .config-workbench-toolbar .nacos-btn-primary:not(:disabled):hover {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: var(--admin-surface);
 }
 
 .config-workbench-toolbar .config-action-success,
 .config-workbench-toolbar .nacos-btn-success {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  color: #ffffff;
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: var(--admin-surface);
 }
 
 .config-workbench-toolbar .config-action-success:not(:disabled):hover,
 .config-workbench-toolbar .nacos-btn-success:not(:disabled):hover {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  background: var(--admin-primary);
+  border-color: var(--admin-primary);
+  color: var(--admin-surface);
 }
 
 .config-workbench-toolbar .config-action-danger,
 .config-workbench-toolbar .nacos-btn-danger {
-  background: #ffffff;
+  background: var(--admin-surface);
   border-color: #fecaca;
   color: #dc2626;
 }
@@ -1027,7 +1027,7 @@
 .config-workbench.nacos-i18n-container .nacos-i18n-preview-section {
   padding: 12px;
   border: 1px solid #e6eaf0;
-  background: #fff;
+  background: var(--admin-surface);
 }
 
 .config-workbench.nacos-i18n-container .nacos-i18n-key-card {
@@ -1038,13 +1038,13 @@
 
 .config-workbench.nacos-i18n-container .nacos-i18n-key-card label,
 .config-workbench.nacos-i18n-container .nacos-i18n-lang-card label {
-  color: #4b5563;
+  color: var(--admin-text);
   font-size: 12px;
   font-weight: 650;
 }
 
 .config-workbench.nacos-i18n-container .nacos-i18n-key-card span {
-  color: #6b7280;
+  color: var(--admin-text-muted);
   font-size: 12px;
 }
 
@@ -1125,7 +1125,7 @@
   padding: 5px 9px;
   border: 1px solid #ddd6fe;
   border-radius: 999px;
-  background: #fff;
+  background: var(--admin-surface);
   color: #5b21b6;
   font-size: 12px;
   font-weight: 650;
@@ -1136,7 +1136,7 @@
   overflow: auto;
   border: 1px solid #e9d5ff;
   border-radius: 13px;
-  background: #fff;
+  background: var(--admin-surface);
 }
 
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-table {

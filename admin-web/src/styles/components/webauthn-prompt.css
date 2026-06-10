@@ -1,16 +1,16 @@
 .admin-webauthn-prompt-modal .ant-modal-content {
   overflow: hidden;
   padding: 0;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 16px;
-  background: #ffffff;
+  background: var(--admin-surface);
   box-shadow: 0 20px 48px rgba(15, 23, 42, 0.16);
 }
 
 .admin-webauthn-prompt-modal .ant-modal-close {
   top: 14px;
   right: 14px;
-  color: #64748b;
+  color: var(--admin-text-muted);
 }
 
 .admin-webauthn-prompt {
@@ -26,8 +26,8 @@
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--admin-primary-soft);
+  color: var(--admin-primary);
   font-size: 22px;
 }
 
@@ -38,7 +38,7 @@
 
 .admin-webauthn-prompt-title.ant-typography {
   margin: 0;
-  color: #0f172a;
+  color: var(--admin-text-strong);
   font-size: 22px;
   font-weight: 700;
   line-height: 1.25;
@@ -47,7 +47,7 @@
 
 .admin-webauthn-prompt-copy.ant-typography {
   margin: 0;
-  color: #475569;
+  color: var(--admin-text-muted);
   font-size: 14px;
   line-height: 1.7;
 }
@@ -62,7 +62,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #334155;
+  color: var(--admin-text);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -80,11 +80,11 @@
   gap: 12px;
   margin-top: 4px;
   padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--admin-border-soft);
 }
 
 .admin-webauthn-prompt-actions .ant-checkbox-wrapper {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 13px;
 }
 

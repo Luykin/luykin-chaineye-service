@@ -16,17 +16,17 @@
 .nacos-list-item {
   cursor: pointer;
   padding: 10px 12px !important;
-  border-bottom: 1px solid #f1f5f9 !important;
+  border-bottom: 1px solid var(--admin-surface-hover) !important;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .nacos-list-item:hover {
-  background: #f8fafc;
+  background: var(--admin-surface-soft);
 }
 
 .nacos-list-item.is-active {
-  background: #eff6ff;
-  border-left: 3px solid #3b82f6;
+  background: var(--admin-primary-soft);
+  border-left: 3px solid var(--admin-primary);
   padding-left: 9px !important;
 }
 
@@ -39,10 +39,10 @@
 .nacos-message-preview {
   min-height: 96px;
   padding: 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-border);
   border-radius: 6px;
-  background: #f8fafc;
-  color: #1f2937;
+  background: var(--admin-surface-soft);
+  color: var(--admin-text);
   line-height: 1.6;
 }
 
@@ -51,9 +51,9 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   padding: 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-border);
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--admin-surface-soft);
 }
 
 @media (max-width: 768px) {
@@ -99,8 +99,8 @@
 
 .nacos-tags-toolbar .ant-segmented {
   padding: 2px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1px solid var(--admin-border-soft);
+  background: var(--admin-surface-soft);
 }
 
 .nacos-tags-meta-pill {
@@ -108,10 +108,10 @@
   align-items: center;
   min-height: 26px;
   padding: 0 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 999px;
-  background: #fff;
-  color: #64748b;
+  background: var(--admin-surface);
+  color: var(--admin-text-muted);
   font-size: 12px;
   line-height: 1;
 }
@@ -144,19 +144,19 @@
   justify-content: space-between;
   min-height: 48px;
   padding: 9px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 12px;
-  background: #fff;
+  background: var(--admin-surface);
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.035);
 }
 
 .nacos-tags-stat-card span {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 12px;
 }
 
 .nacos-tags-stat-card strong {
-  color: #0f172a;
+  color: var(--admin-text-strong);
   font-size: 20px;
   line-height: 1;
 }
@@ -169,8 +169,8 @@
 }
 
 .nacos-tags-panel {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-soft);
   border-radius: 14px;
   overflow: hidden;
   min-width: 0;
@@ -183,9 +183,9 @@
   align-items: center;
   min-height: 48px;
   padding: 9px 12px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  color: #0f172a;
+  background: var(--admin-surface-soft);
+  border-bottom: 1px solid var(--admin-border-soft);
+  color: var(--admin-text-strong);
   font-size: 13px;
   font-weight: 700;
   gap: 8px;
@@ -198,9 +198,9 @@
   flex: 1;
   padding: 3px 8px;
   border-radius: 999px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  color: #94a3b8;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-soft);
+  color: var(--admin-text-muted);
   min-width: 0;
 }
 
@@ -228,7 +228,7 @@
   overflow: auto;
   padding: 6px;
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: var(--admin-border-soft) transparent;
 }
 
 .nacos-tags-list .ant-empty {
@@ -240,7 +240,7 @@
   padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: 10px;
-  background: #fff;
+  background: var(--admin-surface);
   cursor: pointer;
   transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
   display: flex;
@@ -250,14 +250,14 @@
 }
 
 .nacos-tags-item:hover {
-  background: #f8fafc;
-  border-color: #e2e8f0;
+  background: var(--admin-surface-soft);
+  border-color: var(--admin-border-soft);
 }
 
 .nacos-tags-item.is-active {
-  background: linear-gradient(135deg, #eff6ff, #f8fbff);
+  background: linear-gradient(135deg, var(--admin-primary-soft), #f8fbff);
   border-color: #93c5fd;
-  box-shadow: inset 3px 0 0 #3b82f6;
+  box-shadow: inset 3px 0 0 var(--admin-primary);
 }
 
 .nacos-tags-item-count {
@@ -283,7 +283,7 @@
 .nacos-tags-item-handle {
   font-weight: 600;
   font-size: 13px;
-  color: #111827;
+  color: var(--admin-text-strong);
   word-break: break-all;
 }
 
@@ -293,7 +293,7 @@
   gap: 4px;
   max-width: 100%;
   font-size: 11px;
-  color: #64748b;
+  color: var(--admin-text-muted);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -308,8 +308,8 @@
   height: 20px;
   padding: 0 6px;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--admin-surface-hover);
+  color: var(--admin-text-muted);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -323,7 +323,7 @@
 }
 
 .nacos-tags-editor-hint {
-  color: #6b7280;
+  color: var(--admin-text-muted);
   font-size: 12px;
   font-weight: 400;
   min-width: 0;
@@ -335,8 +335,8 @@
 .nacos-tags-editor-empty {
   padding: 56px 20px;
   text-align: center;
-  border: 1px dashed #cbd5e1;
-  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  border: 1px dashed var(--admin-border-soft);
+  background: linear-gradient(135deg, var(--admin-surface), var(--admin-surface-soft));
   border-radius: 12px;
   margin: 14px;
 }
@@ -344,13 +344,13 @@
 .nacos-tags-empty-title {
   font-size: 14px;
   font-weight: 500;
-  color: #374151;
+  color: var(--admin-text);
   margin-bottom: 6px;
 }
 
 .nacos-tags-empty-desc {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--admin-text-muted);
 }
 
 .nacos-tags-editor-body {
@@ -366,7 +366,7 @@
 
 .nacos-tags-field-row label {
   font-weight: 700;
-  color: #334155;
+  color: var(--admin-text);
   font-size: 12px;
 }
 
@@ -386,9 +386,9 @@
   align-items: center;
   gap: 8px;
   padding: 6px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--admin-surface-soft);
 }
 
 .nacos-tags-input-index {
@@ -406,7 +406,7 @@
 }
 
 .nacos-tags-input-row .ant-input {
-  background: #fff;
+  background: var(--admin-surface);
 }
 
 .nacos-tags-input-row .ant-btn {
@@ -419,10 +419,10 @@
 
 .nacos-tags-tag-empty {
   padding: 14px 12px;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed var(--admin-border-soft);
   border-radius: 10px;
-  background: #f8fafc;
-  color: #94a3b8;
+  background: var(--admin-surface-soft);
+  color: var(--admin-text-muted);
   font-size: 12px;
   text-align: center;
 }
@@ -431,9 +431,9 @@
   align-self: flex-start;
   border-radius: 999px;
   border-style: dashed;
-  color: #2563eb;
+  color: var(--admin-primary);
   border-color: #bfdbfe;
-  background: #eff6ff;
+  background: var(--admin-primary-soft);
 }
 
 .nacos-tags-chip-preview-section {
@@ -446,9 +446,9 @@
   gap: 6px;
   min-height: 40px;
   padding: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-border-soft);
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--admin-surface-soft);
 }
 
 .nacos-tags-preview-chip {
@@ -458,15 +458,15 @@
   padding: 3px 10px;
   border: 1px solid #bfdbfe;
   border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--admin-primary-soft);
+  color: var(--admin-primary-strong);
   font-size: 12px;
   font-weight: 700;
 }
 
 .nacos-tags-preview-empty-text {
   align-self: center;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 12px;
 }
 
@@ -477,15 +477,15 @@
 .nacos-tags-preview-header {
   font-size: 12px;
   font-weight: 700;
-  color: #334155;
+  color: var(--admin-text);
   margin-bottom: 6px;
 }
 
 .nacos-tags-preview-pre {
   margin: 0;
   padding: 10px;
-  background: #0f172a;
-  border: 1px solid #1e293b;
+  background: var(--admin-text-strong);
+  border: 1px solid var(--admin-text-strong);
   border-radius: 10px;
   font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 12px;
@@ -494,18 +494,18 @@
   max-height: 240px;
   white-space: pre-wrap;
   word-break: break-all;
-  color: #e2e8f0;
+  color: var(--admin-border-soft);
 }
 
 .nacos-tags-preview-legend {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--admin-text-muted);
   margin: 0 0 10px;
 }
 
 .nacos-tags-diff-summary {
   margin-left: 8px;
-  color: #3b82f6;
+  color: var(--admin-primary);
   font-weight: 600;
 }
 
@@ -554,14 +554,14 @@
 }
 
 .nacos-quill-wrap .ql-toolbar.ql-snow {
-  border-color: #e5e7eb;
+  border-color: var(--admin-border);
   border-radius: 6px 6px 0 0;
-  background: #f9fafb;
+  background: var(--admin-surface-soft);
 }
 
 .nacos-quill-wrap .ql-container.ql-snow {
   min-height: 220px;
-  border-color: #e5e7eb;
+  border-color: var(--admin-border);
   border-radius: 0 0 6px 6px;
   font-size: 14px;
 }
@@ -577,21 +577,21 @@
 
 .campaigns-website-section .ant-card-head {
   min-height: 42px;
-  background: #fafafa;
-  border-bottom-color: #e5e7eb;
+  background: var(--admin-surface-soft);
+  border-bottom-color: var(--admin-border);
 }
 
 .campaigns-website-section .ant-card-head-title {
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: var(--admin-text);
 }
 
 .campaigns-website-section .ant-typography strong,
 .campaigns-section-title-sm {
   display: inline-block;
   margin-bottom: 5px;
-  color: #4b5563;
+  color: var(--admin-text);
   font-size: 12px;
   font-weight: 600;
 }

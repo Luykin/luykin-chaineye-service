@@ -260,7 +260,7 @@
   padding: 8px !important;
   border: 1px solid rgba(226, 232, 240, 0.9) !important;
   border-radius: 12px !important;
-  background: #fff !important;
+  background: var(--admin-surface) !important;
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.13) !important;
 }
 
@@ -276,7 +276,7 @@
   padding: 0 10px !important;
   line-height: 36px !important;
   border-radius: 8px !important;
-  color: #475569 !important;
+  color: var(--admin-text-muted) !important;
   font-size: 13px !important;
   font-weight: 500 !important;
 }
@@ -284,14 +284,14 @@
 .ant-menu-submenu-popup.admin-top-nav-popup .ant-menu-item:hover,
 .admin-top-nav-popup.ant-menu-submenu-popup .ant-menu-item:hover,
 .ant-menu-submenu-popup .admin-top-nav-popup.ant-menu .ant-menu-item:hover {
-  color: #1d4ed8 !important;
-  background: #eff6ff !important;
+  color: var(--admin-primary-strong) !important;
+  background: var(--admin-primary-soft) !important;
 }
 
 .ant-menu-submenu-popup.admin-top-nav-popup .ant-menu-item-selected,
 .admin-top-nav-popup.ant-menu-submenu-popup .ant-menu-item-selected,
 .ant-menu-submenu-popup .admin-top-nav-popup.ant-menu .ant-menu-item-selected {
-  color: #2563eb !important;
+  color: var(--admin-primary) !important;
   background: #eef5ff !important;
   font-weight: 600 !important;
 }

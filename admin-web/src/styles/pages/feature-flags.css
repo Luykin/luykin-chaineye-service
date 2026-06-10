@@ -1,9 +1,9 @@
 .feature-flags-page {
-  --ff-border: #e2e8f0;
-  --ff-muted: #64748b;
+  --ff-border: var(--admin-border-soft);
+  --ff-muted: var(--admin-text-muted);
   --ff-ink: #172033;
-  --ff-blue: #2563eb;
-  --ff-blue-soft: #eff6ff;
+  --ff-blue: var(--admin-primary);
+  --ff-blue-soft: var(--admin-primary-soft);
   --ff-green-soft: #f0fdf4;
   --ff-orange-soft: #fff7ed;
 }
@@ -38,11 +38,11 @@
 .ff-summary-card.ant-card {
   height: 100%;
   overflow: hidden;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  background: linear-gradient(180deg, var(--admin-surface) 0%, #f8fbff 100%);
 }
 
 .ff-summary-card--flex.ant-card {
-  border-top: 3px solid #2563eb;
+  border-top: 3px solid var(--admin-primary);
 }
 
 .ff-summary-card--test.ant-card {
@@ -76,7 +76,7 @@
 }
 
 .ff-summary-name.ant-typography {
-  color: #334155;
+  color: var(--admin-text);
   font-size: 13px;
 }
 
@@ -85,7 +85,7 @@
   border: 0;
   border-radius: 999px;
   background: #dbeafe;
-  color: #1d4ed8;
+  color: var(--admin-primary-strong);
   font-size: 11px;
   font-weight: 700;
 }
@@ -108,18 +108,18 @@
 
 .ff-rule-card.ant-card {
   height: 100%;
-  background: #fff;
+  background: var(--admin-surface);
 }
 
 .ff-rule-card .ant-card-head {
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  background: linear-gradient(180deg, var(--admin-surface) 0%, #fbfdff 100%);
 }
 
 .ff-rule-title-input.ant-input {
   height: 30px;
   border-color: transparent;
   background: transparent;
-  color: #1e293b;
+  color: var(--admin-text-strong);
   font-size: 13px;
   font-weight: 700;
 }
@@ -127,18 +127,18 @@
 .ff-rule-title-input.ant-input:hover,
 .ff-rule-title-input.ant-input:focus {
   border-color: #bfdbfe;
-  background: #fff;
+  background: var(--admin-surface);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .ff-rule-desc.ant-typography {
   min-height: 18px;
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 12px;
 }
 
 .ff-editor-card.ant-card {
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  background: linear-gradient(180deg, var(--admin-surface) 0%, #fbfdff 100%);
 }
 
 .ff-field-block + .ff-field-block {
@@ -166,11 +166,11 @@
   min-height: 36px;
   border-color: #dbe3ee !important;
   border-radius: 10px;
-  background: #f8fafc !important;
+  background: var(--admin-surface-soft) !important;
 }
 
 .ff-tag-editor.ant-select-focused .ant-select-selector {
-  border-color: #2563eb !important;
+  border-color: var(--admin-primary) !important;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
 }
 
@@ -178,7 +178,7 @@
   border: 0;
   border-radius: 999px;
   background: #e0ecff;
-  color: #1d4ed8;
+  color: var(--admin-primary-strong);
   font-size: 12px;
   font-weight: 600;
 }
@@ -192,14 +192,14 @@
   border-style: dashed;
   border-color: #bfdbfe;
   border-radius: 12px;
-  color: #1d4ed8;
+  color: var(--admin-primary-strong);
   font-weight: 700;
-  background: #eff6ff;
+  background: var(--admin-primary-soft);
 }
 
 .ff-add-rule-button.ant-btn:hover {
-  border-color: #2563eb !important;
-  color: #1d4ed8 !important;
+  border-color: var(--admin-primary) !important;
+  color: var(--admin-primary-strong) !important;
   background: #dbeafe !important;
 }
 
@@ -207,7 +207,7 @@
   margin-top: 16px;
   border-color: rgba(226, 232, 240, 0.9);
   border-radius: 14px;
-  background: #fff;
+  background: var(--admin-surface);
 }
 
 .ff-key-card.ant-card {
@@ -216,7 +216,7 @@
 }
 
 .ff-key-card code {
-  color: #1d4ed8;
+  color: var(--admin-primary-strong);
   font-size: 12px;
 }
 
@@ -227,7 +227,7 @@
   padding: 14px;
   border: 1px solid #dbe3ee;
   border-radius: 12px;
-  background: #0f172a;
+  background: var(--admin-text-strong);
   color: #dbeafe;
   font-size: 12px;
   line-height: 1.62;

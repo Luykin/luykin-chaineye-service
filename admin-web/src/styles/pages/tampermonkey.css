@@ -1,6 +1,6 @@
 .tampermonkey-page {
   --tm-ink: #172033;
-  --tm-muted: #64748b;
+  --tm-muted: var(--admin-text-muted);
   --tm-line: rgba(23, 32, 51, 0.1);
   --tm-accent: #b45309;
 }
@@ -134,8 +134,8 @@
   overflow: auto;
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 16px;
-  background: #111827;
-  color: #e5e7eb;
+  background: var(--admin-text-strong);
+  color: var(--admin-border);
   font-size: 12px;
   line-height: 1.65;
   white-space: pre-wrap;

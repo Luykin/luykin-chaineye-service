@@ -29,7 +29,7 @@
 }
 
 .legacy-stats-section-icon--blue {
-  color: #2563eb;
+  color: var(--admin-primary);
   background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
 }
 
@@ -67,7 +67,7 @@
   margin: 0;
   padding: 0;
   border: 0;
-  color: #1e293b;
+  color: var(--admin-text-strong);
   font-size: 20px;
   font-weight: 700;
   line-height: 1.25;
@@ -79,8 +79,8 @@
   gap: 6px;
   padding: 6px 12px;
   border-radius: 20px;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--admin-surface-hover);
+  color: var(--admin-text-muted);
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
@@ -149,7 +149,7 @@
 .legacy-stat-card {
   position: relative;
   border-radius: 12px;
-  background: #fff;
+  background: var(--admin-surface);
   padding: 24px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -167,8 +167,8 @@
 }
 
 .legacy-stat-card--highlighted {
-  border: 2px solid #3b82f6;
-  background: linear-gradient(135deg, #eff6ff 0%, #fff 100%);
+  border: 2px solid var(--admin-primary);
+  background: linear-gradient(135deg, var(--admin-primary-soft) 0%, var(--admin-surface) 100%);
   box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
 }
 
@@ -190,7 +190,7 @@
   left: 0;
   height: 3px;
   border-radius: 3px 3px 0 0;
-  background: var(--legacy-card-accent, #e2e8f0);
+  background: var(--legacy-card-accent, var(--admin-border-soft));
   content: "";
 }
 
@@ -207,22 +207,22 @@
 }
 
 .legacy-stat-card__title {
-  color: #64748b;
+  color: var(--admin-text-muted);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
 }
 
 .legacy-stat-card--centered .legacy-stat-card__title {
-  color: #374151;
+  color: var(--admin-text);
   font-size: 14px;
 }
 
 .legacy-stat-card__badge {
   padding: 2px 8px;
   border-radius: 10px;
-  background: #3b82f6;
-  color: #fff;
+  background: var(--admin-primary);
+  color: var(--admin-surface);
   font-size: 10px;
   font-weight: 700;
   line-height: 1.35;
@@ -231,7 +231,7 @@
 
 .legacy-stat-card__value {
   margin: 0;
-  color: #1e293b;
+  color: var(--admin-text-strong);
   font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -245,7 +245,7 @@
 
 .legacy-stat-card__meta {
   margin-top: 8px;
-  color: #9ca3af;
+  color: var(--admin-text-muted);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -257,7 +257,7 @@
   gap: 4px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--admin-surface-hover);
   font-size: 12px;
   font-weight: 600;
 }
@@ -283,7 +283,7 @@
 }
 
 .legacy-stat-card__icon--blue {
-  color: #2563eb;
+  color: var(--admin-primary);
   background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
 }
 
