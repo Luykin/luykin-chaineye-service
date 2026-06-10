@@ -74,6 +74,11 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: "可选：EVM 地址",
       },
+      email: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: "可选：Email 报名地址（允许 Email 报名的活动可填写）",
+      },
       registrationUrl: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -102,6 +107,10 @@ module.exports = (sequelize) => {
         {
           name: "idx_campaign_reg_campaign_evm",
           fields: ["campaign", "evmAddress"],
+        },
+        {
+          name: "idx_campaign_reg_campaign_email",
+          fields: ["campaign", "email"],
         },
         { name: "idx_campaign_reg_invite_code", fields: ["invitedByCode"] },
         { name: "idx_campaign_reg_invite_user", fields: ["invitedByUserId"] },

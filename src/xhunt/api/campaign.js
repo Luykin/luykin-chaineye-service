@@ -25,7 +25,7 @@ const { isVersionGreaterOrEqual } = require("../utils/version");
 
 const router = express.Router();
 
-const MIN_EXTENSION_VERSION = "0.2.16";
+const MIN_EXTENSION_VERSION = "0.3.0";
 
 function generateInviteCode(length = 10) {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -50,6 +50,16 @@ const SPECIAL_INVITE_CODE = "XHuntAI";
 function normalizeCampaign(raw) {
   if (!raw || typeof raw !== "string") return null;
   return raw.trim();
+}
+
+function normalizeEmail(raw) {
+  if (raw === undefined || raw === null) return "";
+  return String(raw).trim().toLowerCase();
+}
+
+function isValidEmail(value) {
+  if (!value || value.length > 254) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 const INITIALIZE_CAMPAIGN_URL =
@@ -109,12 +119,14 @@ router.post(
   authenticateToken,
   securityMiddleware,
   async (req, res) => {
+    let LOG = "[CampaignRegister]";
     try {
       const authedUserId = req.user && req.user.id;
-      const { campaign, evmAddress, registrationUrl } =
+      const { campaign, evmAddress, email, emil, registrationUrl } =
         req.body || {};
+      const rawEmail = email !== undefined ? email : emil;
 
-      const LOG = `[CampaignRegister] user_id=${authedUserId} campaign=${campaign} evmAddress=${evmAddress}`;
+      LOG = `[CampaignRegister] user_id=${authedUserId} campaign=${campaign} evmAddress=${evmAddress} email=${rawEmail ? "<provided>" : ""}`;
 
       const extVersion = req.headers["x-extension-version"];
       if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
@@ -122,17 +134,8 @@ router.post(
         const isZh = (req.query.x_language || "").toLowerCase() === "zh";
         return res.status(400).json({
           error: isZh
-            ? "请升级插件到 0.2.16 及以上版本再试"
-            : "Please upgrade the extension to version 0.2.16 or above and try again",
-        });
-      }
-      if (campaign === 'realgo' && !isVersionGreaterOrEqual(extVersion, "0.2.18")) {
-        console.log(LOG, "reject: extension version too low", { version: extVersion });
-        const isZh = (req.query.x_language || "").toLowerCase() === "zh";
-        return res.status(400).json({
-          error: isZh
-            ? "请升级插件到 0.2.18 及以上版本再试"
-            : "Please upgrade the extension to version 0.2.18 or above and try again",
+            ? "请升级插件到 0.3.0 及以上版本再试"
+            : "Please upgrade the extension to version 0.3.0 or above and try again",
         });
       }
 
@@ -150,25 +153,8 @@ router.post(
           includeTesting: isInternalTester,
         });
         if (!found) {
-          const cfgResp = await axios.get(
-            "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_campaigns&group=DEFAULT_GROUP",
-            { timeout: 7000 }
-          );
-          const cfg = cfgResp && cfgResp.data ? cfgResp.data : null;
-          if (!cfg || !Array.isArray(cfg.campaigns)) {
-            console.log(LOG, "reject: campaign config incomplete");
-            return res.status(502).json({ error: "Failed to fetch campaigns config: incomplete data" });
-          }
-          found = cfg.campaigns.find(
-            (c) => c && c.campaignKey === normalizedCampaign
-          );
-          if (found && found.testingPhase && !isInternalTester) {
-            found = null;
-          }
-          if (!found) {
-            console.log(LOG, "reject: campaign not found", { campaign: normalizedCampaign });
-            return res.status(400).json({ error: "Invalid campaign identifier" });
-          }
+          console.log(LOG, "reject: campaign not found in database", { campaign: normalizedCampaign });
+          return res.status(400).json({ error: "Invalid campaign identifier" });
         }
         if (!found.enabled) {
           console.log(LOG, "reject: campaign not enabled", { campaign: normalizedCampaign });
@@ -203,15 +189,42 @@ router.post(
         return res.status(404).json({ error: "对应的用户不存在" });
       }
 
-      if (!evmAddress || typeof evmAddress !== "string" || !evmAddress.trim()) {
-        console.log(LOG, "reject: evm address missing");
-        return res.status(400).json({ error: "EVM address is required" });
-      }
-      const trimmedAddress = evmAddress.trim();
+      const allowEmailRegistration = found && found.allowEmailRegistration === true;
+      const trimmedAddress =
+        typeof evmAddress === "string" && evmAddress.trim()
+          ? evmAddress.trim()
+          : null;
+      const normalizedEmail = normalizeEmail(rawEmail);
+      const hasEmail = !!normalizedEmail;
       const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
-      if (!evmAddressRegex.test(trimmedAddress)) {
+
+      if (trimmedAddress && !evmAddressRegex.test(trimmedAddress)) {
         console.log(LOG, "reject: invalid evm format", { len: trimmedAddress.length });
         return res.status(400).json({ error: "Invalid EVM address format" });
+      }
+
+      if (!allowEmailRegistration) {
+        if (hasEmail) {
+          console.log(LOG, "reject: email registration not allowed");
+          return res.status(400).json({ error: "Email registration is not allowed for this campaign" });
+        }
+        if (!trimmedAddress) {
+          console.log(LOG, "reject: evm address missing");
+          return res.status(400).json({ error: "EVM address is required" });
+        }
+      } else {
+        if (!trimmedAddress && !hasEmail) {
+          console.log(LOG, "reject: registration contact missing");
+          return res.status(400).json({ error: "EVM address or email is required" });
+        }
+        if (trimmedAddress && hasEmail) {
+          console.log(LOG, "reject: both evm and email provided");
+          return res.status(400).json({ error: "Please provide either EVM address or email, not both" });
+        }
+        if (hasEmail && !isValidEmail(normalizedEmail)) {
+          console.log(LOG, "reject: invalid email format");
+          return res.status(400).json({ error: "Invalid email format" });
+        }
       }
 
       if (req.redisClient) {
@@ -275,17 +288,34 @@ router.post(
         }
       }
 
-      const existingEVM = await CampaignRegistration.findOne({
-        where: {
-          campaign: normalizedCampaign,
-          evmAddress: trimmedAddress,
-        },
-      });
-      if (existingEVM) {
-        console.log(LOG, "reject: evm already used", { campaign: normalizedCampaign });
-        return res
-          .status(409)
-          .json({ error: "This EVM address is already in use" });
+      if (trimmedAddress) {
+        const existingEVM = await CampaignRegistration.findOne({
+          where: {
+            campaign: normalizedCampaign,
+            evmAddress: trimmedAddress,
+          },
+        });
+        if (existingEVM) {
+          console.log(LOG, "reject: evm already used", { campaign: normalizedCampaign });
+          return res
+            .status(409)
+            .json({ error: "This EVM address is already in use" });
+        }
+      }
+
+      if (hasEmail) {
+        const existingEmail = await CampaignRegistration.findOne({
+          where: {
+            campaign: normalizedCampaign,
+            email: normalizedEmail,
+          },
+        });
+        if (existingEmail) {
+          console.log(LOG, "reject: email already used", { campaign: normalizedCampaign });
+          return res
+            .status(409)
+            .json({ error: "This email is already in use" });
+        }
       }
 
       let inviter = null;
@@ -413,6 +443,7 @@ router.post(
           }
           : null,
         evmAddress: trimmedAddress,
+        email: hasEmail ? normalizedEmail : null,
         registrationUrl:
           typeof registrationUrl === "string" ? registrationUrl : fallbackUrl,
       });
