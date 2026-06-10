@@ -36,3 +36,10 @@ export function updateAdminPermissions(id: number, permissions: string[]) {
     body: { permissions },
   });
 }
+
+export function resetAdminRandomPassword(id: number) {
+  return apiRequest<{ success: boolean; data: Pick<AdminUserItem, "id" | "email"> & { password: string } }>(
+    `/admin/users/${id}/password/reset-random`,
+    { method: "POST" },
+  );
+}

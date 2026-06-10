@@ -11,7 +11,7 @@ const {
   verifyAuthenticationResponse,
 } = require("@simplewebauthn/server");
 const { adminAuth, requireRole, requirePermission, setSessionCookie } = require("../middleware/adminAuth");
-const { randomUUID } = require("crypto");
+const { randomBytes, randomUUID } = require("crypto");
 const { handleUpload } = require("@vercel/blob/client");
 
 const router = express.Router();
@@ -101,6 +101,16 @@ function buildAuthenticatorFromCredential(row) {
 
 function getBackupRestoreReauthKey(adminId) {
   return `admin:webauthn:reauth:backup-restore:${adminId}`;
+}
+
+function generateAdminLoginPassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  let password = "";
+  const bytes = randomBytes(18);
+  for (const byte of bytes) {
+    password += alphabet[byte % alphabet.length];
+  }
+  return password;
 }
 
 async function getLoggedInAdminForJson(req, res) {
@@ -821,6 +831,54 @@ router.patch("/users/:id", adminAuth, async (req, res) => {
     res.json({ success: true, data: { id: target.id, receivesDailyReport: target.receivesDailyReport } });
   } catch (e) {
     res.status(500).json({ success: false, error: "更新失败" });
+  }
+});
+
+// 重置其他管理员登录密码（需要 admin:manage-permissions 权限）
+router.post("/users/:id/password/reset-random", adminAuth, requirePermission("admin:manage-permissions"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const target = await XhuntAdminManager.findByPk(id);
+    if (!target) return res.status(404).json({ success: false, error: "未找到" });
+    if (Number(req.adminUser.id) === Number(target.id)) {
+      return res.status(400).json({ success: false, error: "不能重置自己的密码" });
+    }
+
+    const password = generateAdminLoginPassword();
+    target.passwordHash = await bcrypt.hash(password, 10);
+    target.canLogin = true;
+    await target.save();
+
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser.id,
+        email: req.adminUser.email,
+        action: "reset-admin-password",
+        route: `/admin/users/${id}/password/reset-random`,
+        method: "POST",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: true,
+        message: JSON.stringify({ targetId: target.id, targetEmail: target.email }),
+      });
+    } catch (e) {}
+
+    res.json({ success: true, data: { id: target.id, email: target.email, password } });
+  } catch (e) {
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser?.id,
+        email: req.adminUser?.email,
+        action: "reset-admin-password",
+        route: `/admin/users/${req.params.id}/password/reset-random`,
+        method: "POST",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: false,
+        message: e.message,
+      });
+    } catch (_) {}
+    res.status(500).json({ success: false, error: "重置失败" });
   }
 });
 

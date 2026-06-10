@@ -4,7 +4,8 @@ import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
-import { createAdminUser, fetchAdminUsers, updateAdminDailyReport, updateAdminPermissions, type AdminUserItem } from "@/services/admin-users";
+import { useAuth } from "@/app/auth";
+import { createAdminUser, fetchAdminUsers, resetAdminRandomPassword, updateAdminDailyReport, updateAdminPermissions, type AdminUserItem } from "@/services/admin-users";
 
 const PERMISSION_OPTIONS = [
   { label: "数据概览", value: "overview" },
@@ -43,8 +44,10 @@ export function AdminUsersPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUserItem | null>(null);
+  const [resetResult, setResetResult] = useState<{ email: string; password: string } | null>(null);
   const [form] = Form.useForm();
   const [permForm] = Form.useForm();
+  const { user } = useAuth();
 
   const query = useQuery({ queryKey: ["admin-users"], queryFn: fetchAdminUsers });
   const rows = query.data?.data || [];
@@ -67,6 +70,34 @@ export function AdminUsersPage() {
     onError: (error: Error) => messageApi.error(error.message || "权限更新失败"),
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: (row: AdminUserItem) => resetAdminRandomPassword(row.id),
+    onSuccess: (response) => {
+      messageApi.success("密码已重置");
+      setResetResult({
+        email: response.data.email,
+        password: response.data.password,
+      });
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "重置失败"),
+  });
+
+  function confirmResetPassword(row: AdminUserItem) {
+    if (Number(user?.id) === Number(row.id)) {
+      messageApi.warning("不能重置自己的密码");
+      return;
+    }
+    Modal.confirm({
+      title: "重置管理员密码",
+      content: `确定要将 ${row.email} 的登录密码重置为随机密码吗？新密码只会显示一次。`,
+      okText: "重置",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: () => resetPasswordMutation.mutateAsync(row),
+    });
+  }
+
   const columns = useMemo(() => [
     { title: "ID", dataIndex: "id", width: 64 },
     { title: "邮箱", dataIndex: "email", render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
@@ -75,8 +106,28 @@ export function AdminUsersPage() {
     { title: "生物识别", dataIndex: "webauthnCount", width: 100, render: (value: number) => `${value || 0} 个` },
     { title: "接收日报", width: 100, render: (_: unknown, row: AdminUserItem) => <Switch size="small" checked={row.receivesDailyReport} loading={dailyMutation.isPending} onChange={(checked) => dailyMutation.mutate({ id: row.id, checked })} /> },
     { title: "权限", dataIndex: "permissions", render: (values: string[]) => <Space wrap size={[4, 4]} className="admin-users-perm-tags">{(values || []).slice(0, 8).map((item) => <Tag key={item}>{item}</Tag>)}{(values || []).length > 8 ? <Tag>+{values.length - 8}</Tag> : null}</Space> },
-    { title: "操作", width: 100, render: (_: unknown, row: AdminUserItem) => <Button size="small" onClick={() => { setEditingUser(row); permForm.setFieldsValue({ permissions: row.permissions || [] }); }}>权限</Button> },
-  ], [dailyMutation, permForm]);
+    {
+      title: "操作",
+      width: 180,
+      render: (_: unknown, row: AdminUserItem) => {
+        const isSelf = Number(user?.id) === Number(row.id);
+        return (
+          <Space size={6}>
+            <Button size="small" onClick={() => { setEditingUser(row); permForm.setFieldsValue({ permissions: row.permissions || [] }); }}>权限</Button>
+            <Button
+              size="small"
+              danger
+              disabled={isSelf}
+              loading={resetPasswordMutation.isPending}
+              onClick={() => confirmResetPassword(row)}
+            >
+              重置密码
+            </Button>
+          </Space>
+        );
+      },
+    },
+  ], [dailyMutation, permForm, resetPasswordMutation.isPending, user?.id]);
 
   return (
     <PermissionGuard permission="admin-users">
@@ -102,6 +153,21 @@ export function AdminUsersPage() {
         <Form form={permForm} onFinish={(values) => editingUser && permMutation.mutate({ id: editingUser.id, permissions: values.permissions || [] })}>
           <Form.Item name="permissions"><Checkbox.Group options={PERMISSION_OPTIONS} className="admin-users-perm-grid" /></Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="随机密码已生成"
+        open={!!resetResult}
+        onCancel={() => setResetResult(null)}
+        footer={<Button type="primary" onClick={() => setResetResult(null)}>我已保存</Button>}
+      >
+        <Typography.Paragraph>
+          管理员：<Typography.Text strong>{resetResult?.email}</Typography.Text>
+        </Typography.Paragraph>
+        <Typography.Paragraph copyable={{ text: resetResult?.password || "" }}>
+          <Typography.Text code>{resetResult?.password}</Typography.Text>
+        </Typography.Paragraph>
+        <Typography.Text type="secondary">该随机密码只在此处显示一次，请立即复制给对应管理员。</Typography.Text>
       </Modal>
     </PermissionGuard>
   );

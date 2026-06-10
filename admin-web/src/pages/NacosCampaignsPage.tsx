@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Input, InputNumber, Modal, Select, Switch } from "antd";
+import { Button, Input, InputNumber, Modal, Select, Switch, Tabs } from "antd";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import {
@@ -179,6 +179,25 @@ function normalizeCampaign(input: AnyObj): AnyObj {
   c.essayContestWinners = Array.isArray(c.essayContestWinners)
     ? c.essayContestWinners
     : [];
+  c.leaderboardMode =
+    c.leaderboardMode === "custom" || c.leaderboardMode === "traditional"
+      ? c.leaderboardMode
+      : "traditional";
+  c.leaderboardApiUrl =
+    typeof c.leaderboardApiUrl === "string" ? c.leaderboardApiUrl : "";
+  c.customLeaderboards = Array.isArray(c.customLeaderboards)
+    ? c.customLeaderboards
+    : [];
+  c.customLeaderboards = c.customLeaderboards.map((it: AnyObj) => ({
+    name:
+      it?.name && typeof it.name === "object"
+        ? { zh: String(it.name.zh || ""), en: String(it.name.en || "") }
+        : { zh: String(it?.name || ""), en: "" },
+    amount: it?.amount,
+    participantCount: it?.participantCount,
+    distributionType: it?.distributionType || "",
+    unit: it?.unit || "",
+  }));
   c.logos.forEach((logo: AnyObj) => {
     if (!logo.ringClassName) logo.ringClassName = DEFAULT_RING;
   });
@@ -288,6 +307,10 @@ function makeNewCampaign(): AnyObj {
     hotTweetsKey: "",
     includeCreator: false,
     showSponsoredPolicy: true,
+    allowEmailRegistration: false,
+    leaderboardMode: "traditional",
+    leaderboardApiUrl: "",
+    customLeaderboards: [],
     enableEssayContest: false,
     enablePowLeaderboard: false,
   });
@@ -863,6 +886,42 @@ export function NacosCampaignsPage() {
         )
           errors.push(`${prefix}: includeCreator 必须是布尔值（true/false）`);
       }
+      if (c.leaderboardMode === "custom") {
+        if (!String(c.leaderboardApiUrl || "").trim())
+          errors.push(`${prefix}: 自定义模式下榜单接口 URL 不能为空`);
+        if (
+          !Array.isArray(c.customLeaderboards) ||
+          !c.customLeaderboards.length
+        )
+          errors.push(`${prefix}: 自定义模式下至少需要添加一个榜单`);
+        (Array.isArray(c.customLeaderboards) ? c.customLeaderboards : []).forEach(
+          (item: AnyObj, leaderboardIdx: number) => {
+            const label = `${prefix}: 自定义榜单 #${leaderboardIdx + 1}`;
+            if (!item.name?.zh?.trim() && !item.name?.en?.trim())
+              errors.push(`${label} 名字至少需要填写中文或英文`);
+            if (
+              !Number.isFinite(Number(item.amount)) ||
+              Number(item.amount) < 0
+            )
+              errors.push(`${label} 金额必须填写，且不能小于 0`);
+            if (
+              !Number.isFinite(Number(item.participantCount)) ||
+              Number(item.participantCount) < 1
+            )
+              errors.push(`${label} 人数必须填写，且不能小于 1`);
+            if (
+              !["equal", "mindshare", "workshare"].includes(
+                String(item.distributionType || ""),
+              )
+            )
+              errors.push(
+                `${label} 分配机制必须选择：平分 / mindshare / workshare`,
+              );
+            if (!String(item.unit || "").trim())
+              errors.push(`${label} 奖励单位不能为空`);
+          },
+        );
+      }
       if (!Array.isArray(c.tasks) || !c.tasks.length)
         errors.push(`${prefix}: 至少需要配置一个 task`);
       else
@@ -1054,7 +1113,13 @@ export function NacosCampaignsPage() {
   }
 
   function addArrayItem(
-    kind: "logos" | "tasks" | "essayContestWinners" | "writingThemes" | "tags",
+    kind:
+      | "logos"
+      | "tasks"
+      | "essayContestWinners"
+      | "writingThemes"
+      | "tags"
+      | "customLeaderboards",
   ) {
     updateSelectedCampaign((c) => {
       c[kind] = Array.isArray(c[kind]) ? c[kind] : [];
@@ -1076,6 +1141,14 @@ export function NacosCampaignsPage() {
       if (kind === "essayContestWinners")
         c[kind].push({ name: "", handler: "", avatar: "", reward: "" });
       if (kind === "writingThemes") c[kind].push({ zh: "", en: "" });
+      if (kind === "customLeaderboards")
+        c[kind].push({
+          name: { zh: "", en: "" },
+          amount: undefined,
+          participantCount: undefined,
+          distributionType: "equal",
+          unit: "USDT",
+        });
       if (kind === "tags")
         c[kind].push({
           colorScheme: "blue",
@@ -1603,6 +1676,14 @@ function CampaignEditor(props: {
             在报名按钮上方显示「付费推广政策」提示
           </div>
         </div>
+        <div className="option-item">
+          <label className="switch-label">允许 Email 注册</label>
+          <Switch
+            checked={c.allowEmailRegistration === true}
+            onChange={(v) => setCampaignPath("allowEmailRegistration", v)}
+          />
+          <div className="field-hint">开启后活动允许用户通过 Email 注册</div>
+        </div>
       </div>
       <Section title="活动信息">
         <div className="field-row field-row-2">
@@ -1706,71 +1787,108 @@ function CampaignEditor(props: {
             </Field>
           </div>
         </div>
-        <div className="section-sub reward-tier reward-tier-primary">
-          <div className="reward-tier-header">
-            <span className="reward-tier-title">🎯 POI 基础奖励</span>
-            <span className="reward-tier-badge">核心</span>
-          </div>
-          <div className="field-row field-row-3">
-            <Field label="奖励金额">
-              <InputNumber
-                min={1}
-                max={99999999}
-                value={c.rewardAmount}
-                onChange={(v) => setCampaignPath("rewardAmount", v)}
-                placeholder="1-99999999"
-              />
-            </Field>
-            <Field label="人数">
-              <InputNumber
-                min={10}
-                max={1000}
-                value={c.rewardParticipantCount}
-                onChange={(v) => setCampaignPath("rewardParticipantCount", v)}
-                placeholder="10-1000"
-              />
-            </Field>
-            <Field label="分配机制">
-              <Select
-                value={c.rewardDistributionType || ""}
-                onChange={(v) => setCampaignPath("rewardDistributionType", v)}
-                options={[
-                  { value: "", label: "请选择" },
-                  { value: "equal", label: "平分" },
-                  { value: "mindshare", label: "mindshare" },
-                  { value: "workshare", label: "workshare" },
-                ]}
-              />
-            </Field>
-          </div>
-          <div className="field-row field-row-2">
-            <Field label="奖励单位">
-              <Input
-                value={c.rewardUnit || ""}
-                onChange={(e) => setCampaignPath("rewardUnit", e.target.value)}
-                placeholder="USDT"
-              />
-            </Field>
-          </div>
+        <div className="section-sub">
+          <Tabs
+            activeKey={c.leaderboardMode || "traditional"}
+            onChange={(key) => setCampaignPath("leaderboardMode", key)}
+            items={[
+              {
+                key: "traditional",
+                label: "传统模式",
+                children: (
+                  <>
+                    <div className="section-sub reward-tier reward-tier-primary">
+                      <div className="reward-tier-header">
+                        <span className="reward-tier-title">🎯 POI 基础奖励</span>
+                        <span className="reward-tier-badge">核心</span>
+                      </div>
+                      <div className="field-row field-row-3">
+                        <Field label="奖励金额">
+                          <InputNumber
+                            min={1}
+                            max={99999999}
+                            value={c.rewardAmount}
+                            onChange={(v) => setCampaignPath("rewardAmount", v)}
+                            placeholder="1-99999999"
+                          />
+                        </Field>
+                        <Field label="人数">
+                          <InputNumber
+                            min={10}
+                            max={1000}
+                            value={c.rewardParticipantCount}
+                            onChange={(v) =>
+                              setCampaignPath("rewardParticipantCount", v)
+                            }
+                            placeholder="10-1000"
+                          />
+                        </Field>
+                        <Field label="分配机制">
+                          <Select
+                            value={c.rewardDistributionType || ""}
+                            onChange={(v) =>
+                              setCampaignPath("rewardDistributionType", v)
+                            }
+                            options={[
+                              { value: "", label: "请选择" },
+                              { value: "equal", label: "平分" },
+                              { value: "mindshare", label: "mindshare" },
+                              { value: "workshare", label: "workshare" },
+                            ]}
+                          />
+                        </Field>
+                      </div>
+                      <div className="field-row field-row-2">
+                        <Field label="奖励单位">
+                          <Input
+                            value={c.rewardUnit || ""}
+                            onChange={(e) =>
+                              setCampaignPath("rewardUnit", e.target.value)
+                            }
+                            placeholder="USDT"
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                    <RewardOptional
+                      c={c}
+                      type="pow"
+                      enabled={!!c.enablePowLeaderboard}
+                      setCampaignPath={setCampaignPath}
+                      updateSelectedCampaign={updateSelectedCampaign}
+                    />
+                    <RewardOptional
+                      c={c}
+                      type="essay"
+                      enabled={!!c.enableEssayContest}
+                      setCampaignPath={setCampaignPath}
+                      updateSelectedCampaign={updateSelectedCampaign}
+                      addWinner={() => addArrayItem("essayContestWinners")}
+                      update={updateArrayItem}
+                      move={moveArrayItem}
+                      remove={removeArrayItem}
+                    />
+                  </>
+                ),
+              },
+              {
+                key: "custom",
+                label: "自定义模式",
+                children: (
+                  <CustomLeaderboards
+                    apiUrl={c.leaderboardApiUrl || ""}
+                    items={c.customLeaderboards || []}
+                    setCampaignPath={setCampaignPath}
+                    add={() => addArrayItem("customLeaderboards")}
+                    update={updateArrayItem}
+                    move={moveArrayItem}
+                    remove={removeArrayItem}
+                  />
+                ),
+              },
+            ]}
+          />
         </div>
-        <RewardOptional
-          c={c}
-          type="pow"
-          enabled={!!c.enablePowLeaderboard}
-          setCampaignPath={setCampaignPath}
-          updateSelectedCampaign={updateSelectedCampaign}
-        />
-        <RewardOptional
-          c={c}
-          type="essay"
-          enabled={!!c.enableEssayContest}
-          setCampaignPath={setCampaignPath}
-          updateSelectedCampaign={updateSelectedCampaign}
-          addWinner={() => addArrayItem("essayContestWinners")}
-          update={updateArrayItem}
-          move={moveArrayItem}
-          remove={removeArrayItem}
-        />
         <div className="section-sub">
           <div className="section-title-sm">🚪 报名门槛</div>
           <div className="field-row">
@@ -2362,6 +2480,112 @@ function Tags({ items, update, move, remove }: any) {
           暂无 tags，可点击上方“添加”
         </div>
       )}
+    </div>
+  );
+}
+function CustomLeaderboards({
+  apiUrl,
+  items,
+  setCampaignPath,
+  add,
+  update,
+  move,
+  remove,
+}: any) {
+  return (
+    <div className="reward-tier-content">
+      <div className="field-row field-row-1">
+        <Field
+          label="榜单接口 URL"
+          hint="可填写完整 URL，也可填写 /x/api 这种相对路径；会原样保存到 Nacos。"
+        >
+          <Input
+            value={apiUrl}
+            onChange={(e) => setCampaignPath("leaderboardApiUrl", e.target.value)}
+            placeholder="/x/api"
+          />
+        </Field>
+      </div>
+      <RepeaterHeader title="自定义榜单" onAdd={add} />
+      <div className="repeaters">
+        {items.length ? (
+          items.map((it: AnyObj, i: number) => (
+            <div className="rep-card" key={i}>
+              <div className="rep-header">
+                <div className="rep-title">榜单 #{i + 1}</div>
+                <RepActions
+                  onUp={() => move("customLeaderboards", i, -1)}
+                  onDown={() => move("customLeaderboards", i, 1)}
+                  onRemove={() => remove("customLeaderboards", i)}
+                />
+              </div>
+              <div className="field-row field-row-2">
+                <Field label="榜单名字（中文）">
+                  <Input
+                    value={it.name?.zh || ""}
+                    onChange={(e) =>
+                      update("customLeaderboards", i, "name.zh", e.target.value)
+                    }
+                  />
+                </Field>
+                <Field label="榜单名字（English）">
+                  <Input
+                    value={it.name?.en || ""}
+                    onChange={(e) =>
+                      update("customLeaderboards", i, "name.en", e.target.value)
+                    }
+                  />
+                </Field>
+              </div>
+              <div className="field-row field-row-2">
+                <Field label="金额">
+                  <InputNumber
+                    min={0}
+                    value={it.amount}
+                    onChange={(v) => update("customLeaderboards", i, "amount", v)}
+                  />
+                </Field>
+                <Field label="人数">
+                  <InputNumber
+                    min={1}
+                    value={it.participantCount}
+                    onChange={(v) =>
+                      update("customLeaderboards", i, "participantCount", v)
+                    }
+                  />
+                </Field>
+                <Field label="分配机制">
+                  <Select
+                    value={it.distributionType || ""}
+                    onChange={(v) =>
+                      update("customLeaderboards", i, "distributionType", v)
+                    }
+                    options={[
+                      { value: "", label: "请选择" },
+                      { value: "equal", label: "平分" },
+                      { value: "mindshare", label: "mindshare" },
+                      { value: "workshare", label: "workshare" },
+                    ]}
+                  />
+                </Field>
+                <Field label="奖励单位">
+                  <Input
+                    value={it.unit || ""}
+                    onChange={(e) =>
+                      update("customLeaderboards", i, "unit", e.target.value)
+                    }
+                    placeholder="USDT"
+                  />
+                </Field>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="muted campaigns-react-empty-inline">
+            暂无自定义榜单，可点击上方“添加”
+          </div>
+        )}
+      </div>
     </div>
   );
 }
