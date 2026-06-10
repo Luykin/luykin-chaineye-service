@@ -72,6 +72,16 @@ export async function saveWebsiteCampaignConfig(nacosCampaignId: string, payload
   );
 }
 
+export async function saveManagedWebsiteCampaignsConfig(payload: Record<string, unknown>) {
+  return apiRequest<{ success: boolean; summary?: Record<string, number>; error?: string }>(
+    "/api/xhunt/website/campaigns/internal/managed-config",
+    {
+      method: "PUT",
+      body: payload,
+    }
+  );
+}
+
 export async function fetchUserTags() {
   return apiRequest<import("@/types/nacos").UserTagsResponse>("/api/xhunt/stats/user-tags");
 }

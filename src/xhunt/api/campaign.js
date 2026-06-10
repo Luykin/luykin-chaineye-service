@@ -15,7 +15,11 @@ const {
   CampaignRegistration,
   XHuntUser,
 } = require("../../models/postgres-start");
-const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { isRequestXHuntVip, isRequestInternalTestUser } = require("../constants/xhuntVip");
+const {
+  getManagedCampaignPayloadByKey,
+  listPluginCampaigns,
+} = require("../services/websiteCampaignService");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
 
@@ -51,6 +55,23 @@ function normalizeCampaign(raw) {
 const INITIALIZE_CAMPAIGN_URL =
   "https://data.cryptohunt.ai/pro/api/initialize_campaign";
 const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400; // 1 天
+
+router.get("/config", authenticateTokenOptional, async (req, res) => {
+  try {
+    const includeTesting = isRequestInternalTestUser(req);
+    const campaigns = await listPluginCampaigns({ includeTesting });
+    return res.json({
+      success: true,
+      version: 3,
+      source: "database",
+      includeTesting,
+      campaigns,
+    });
+  } catch (error) {
+    console.error("[CampaignConfig] error:", error.message || error);
+    return res.status(500).json({ success: false, error: "获取活动配置失败" });
+  }
+});
 
 /**
  * 报名成功后通知 data.cryptohunt.ai 初始化 campaign；Redis 缓存 1 天内不重复调用。
@@ -124,21 +145,30 @@ router.post(
 
       let found = null;
       try {
-        const cfgResp = await axios.get(
-          "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_campaigns&group=DEFAULT_GROUP",
-          { timeout: 7000 }
-        );
-        const cfg = cfgResp && cfgResp.data ? cfgResp.data : null;
-        if (!cfg || !Array.isArray(cfg.campaigns)) {
-          console.log(LOG, "reject: nacos config incomplete");
-          return res.status(502).json({ error: "Failed to fetch campaigns config: incomplete data" });
-        }
-        found = cfg.campaigns.find(
-          (c) => c && c.campaignKey === normalizedCampaign
-        );
+        const isInternalTester = isRequestInternalTestUser(req);
+        found = await getManagedCampaignPayloadByKey(normalizedCampaign, {
+          includeTesting: isInternalTester,
+        });
         if (!found) {
-          console.log(LOG, "reject: campaign not found", { campaign: normalizedCampaign });
-          return res.status(400).json({ error: "Invalid campaign identifier" });
+          const cfgResp = await axios.get(
+            "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_campaigns&group=DEFAULT_GROUP",
+            { timeout: 7000 }
+          );
+          const cfg = cfgResp && cfgResp.data ? cfgResp.data : null;
+          if (!cfg || !Array.isArray(cfg.campaigns)) {
+            console.log(LOG, "reject: campaign config incomplete");
+            return res.status(502).json({ error: "Failed to fetch campaigns config: incomplete data" });
+          }
+          found = cfg.campaigns.find(
+            (c) => c && c.campaignKey === normalizedCampaign
+          );
+          if (found && found.testingPhase && !isInternalTester) {
+            found = null;
+          }
+          if (!found) {
+            console.log(LOG, "reject: campaign not found", { campaign: normalizedCampaign });
+            return res.status(400).json({ error: "Invalid campaign identifier" });
+          }
         }
         if (!found.enabled) {
           console.log(LOG, "reject: campaign not enabled", { campaign: normalizedCampaign });

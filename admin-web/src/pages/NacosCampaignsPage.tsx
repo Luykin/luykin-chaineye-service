@@ -1,20 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Input, InputNumber, Modal, Select, Switch, Tabs } from "antd";
+import { Button, Input, InputNumber, Modal, Segmented, Select, Switch, Tabs } from "antd";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import {
   fetchAllWebsiteCampaigns,
-  fetchNacosConfig,
   fetchWebsiteCampaignByNacosId,
-  publishNacosConfig,
+  saveManagedWebsiteCampaignsConfig,
   saveWebsiteCampaignConfig,
-  syncWebsiteCampaignsFromNacos,
 } from "@/services/nacos";
 import type { WebsiteCampaignRecord } from "@/types/nacos";
 
 const { TextArea } = Input;
-const DATA_ID = "xhunt_campaigns";
-const GROUP = "DEFAULT_GROUP";
 const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
 const DEFAULT_WEBSITE_LIST_LEFT_LOGO = "https://xhunt.ai/whitexhunt.png";
 const DEFAULT_WEBSITE_LIST_RIGHT_LOGO = "https://xhunt.ai/whitexhunt.png";
@@ -316,6 +312,50 @@ function makeNewCampaign(): AnyObj {
   });
 }
 
+function campaignFromWebsiteRecord(record: AnyObj): AnyObj {
+  const payload =
+    record?.nacosPayload && typeof record.nacosPayload === "object"
+      ? clone(record.nacosPayload)
+      : {};
+  return normalizeCampaign({
+    id: payload.id || record.nacosCampaignId || "",
+    campaignKey: payload.campaignKey || record.campaignKey || "",
+    sortWeight: payload.sortWeight ?? record.sortWeight ?? 0,
+    enabled: payload.enabled ?? record.enabled ?? false,
+    testingPhase: payload.testingPhase ?? record.testingPhase ?? false,
+    enrollmentWindow: payload.enrollmentWindow || {
+      startAt: record.startAt || "",
+      endAt: record.endAt || "",
+    },
+    displayName: payload.displayName || {
+      zh: record.displayNameZh || "",
+      en: record.displayNameEn || "",
+    },
+    projectIntroduction: payload.projectIntroduction || {
+      zh: record.projectIntroductionZh || "",
+      en: record.projectIntroductionEn || "",
+    },
+    links: payload.links || {
+      guideUrl: record.guideUrl || "",
+      activeUrl: record.activeUrl || "",
+      showLeaderboardLink: false,
+    },
+    logos: payload.logos || record.logos || [],
+    tags: payload.tags || record.tags || [],
+    writingThemes: payload.writingThemes || record.writingThemes || [],
+    ...payload,
+  });
+}
+
+function configFromWebsiteRecords(records: AnyObj[]): CampaignConfig {
+  return normalizeConfig({
+    version: 3,
+    campaigns: records
+      .filter((record) => !record?.isDeleted)
+      .map(campaignFromWebsiteRecord),
+  });
+}
+
 function getWebsiteListAssets(record: AnyObj | null) {
   const listAssets =
     record?.websiteExtra?.listAssets &&
@@ -560,7 +600,7 @@ export function NacosCampaignsPage() {
     });
   }
 
-  async function loadFromNacos() {
+  async function loadFromDatabase() {
     if (!confirmDiscardWebsite()) return;
     if (
       dirty &&
@@ -571,15 +611,13 @@ export function NacosCampaignsPage() {
       return;
     setLoading(true);
     try {
-      showToast("正在从 Nacos 加载...", "info");
-      const [nacos, records] = await Promise.all([
-        fetchNacosConfig({ dataId: DATA_ID, group: GROUP }),
-        fetchAllWebsiteCampaigns(),
-      ]);
-      const parsed = normalizeConfig(JSON.parse(nacos.data.content || "{}"));
+      showToast("正在从数据库加载...", "info");
+      const records = await fetchAllWebsiteCampaigns();
+      const recordList = Array.isArray(records.data) ? records.data : [];
+      const parsed = configFromWebsiteRecords(recordList as AnyObj[]);
       setConfig(parsed);
       setOriginalConfig(clone(parsed));
-      setWebsiteRecords(Array.isArray(records.data) ? records.data : []);
+      setWebsiteRecords(recordList);
       setSelection(null);
       setDirty(false);
       setWebsiteDirty(false);
@@ -597,7 +635,7 @@ export function NacosCampaignsPage() {
   }
 
   useEffect(() => {
-    void loadFromNacos();
+    void loadFromDatabase();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -616,7 +654,7 @@ export function NacosCampaignsPage() {
         : target.id || target.nacosCampaignId;
     if (!key) {
       setWebsiteForm(makeWebsiteForm(null, target));
-      setWebsiteMeta("请先发布活动并同步到网站数据库");
+      setWebsiteMeta("请先发布活动保存到数据库");
       return;
     }
     try {
@@ -624,7 +662,7 @@ export function NacosCampaignsPage() {
       const record = resp.data as AnyObj | null;
       if (!record) {
         setWebsiteForm(makeWebsiteForm(null, target));
-        setWebsiteMeta("该活动尚未同步到网站数据库，请先点击“同步到网站”");
+        setWebsiteMeta("该活动尚未保存到数据库，请先点击“发布”");
         return;
       }
       setWebsiteRecords((prev) => {
@@ -747,7 +785,7 @@ export function NacosCampaignsPage() {
     setSelection({ type: "nacos", index: 0 });
     setDirty(true);
     setWebsiteForm(makeWebsiteForm(null, c));
-    setWebsiteMeta("新活动尚未发布并同步到网站数据库");
+    setWebsiteMeta("新活动尚未发布到数据库");
     showToast("已新增一条活动（未发布）", "info");
   }
 
@@ -781,13 +819,13 @@ export function NacosCampaignsPage() {
       return;
     if (
       !window.confirm(
-        `确认删除该活动？\n\nid=${selectedCampaign.id || ""}\n\n提示：删除后将立即发布到 Nacos 生效。`,
+        `确认删除该活动？\n\nid=${selectedCampaign.id || ""}\n\n提示：删除后将立即保存到数据库。`,
       )
     )
       return;
     if (
       !window.confirm(
-        "确定删除该活动？\n\n此操作将立即发布到 Nacos，无法恢复。",
+        "确定删除该活动？\n\n此操作将立即保存到数据库，并将该活动软删除。",
       )
     )
       return;
@@ -797,19 +835,16 @@ export function NacosCampaignsPage() {
     setSelection(null);
     setDirty(true);
     try {
-      showToast("正在删除并发布到 Nacos...", "info");
-      await publishNacosConfig({
-        dataId: DATA_ID,
-        group: GROUP,
-        content: JSON.stringify(nextConfig, null, 2),
-        source: "nacos-campaigns",
-      });
+      showToast("正在删除并保存到数据库...", "info");
+      await saveManagedWebsiteCampaignsConfig(nextConfig);
+      const records = await fetchAllWebsiteCampaigns();
+      setWebsiteRecords(records.data || []);
       setOriginalConfig(clone(nextConfig));
       setDirty(false);
-      showToast("删除已生效（已发布）", "success");
+      showToast("删除已生效（已保存）", "success");
     } catch (error) {
       showToast(
-        `删除未能发布：${error instanceof Error ? error.message : "未知错误"}（可点击「发布」重试）`,
+        `删除未能保存：${error instanceof Error ? error.message : "未知错误"}（可点击「发布」重试）`,
         "error",
       );
     }
@@ -967,7 +1002,7 @@ export function NacosCampaignsPage() {
     const next = clone(config);
     setJsonPreviewHtml(buildDiffHtml(originalConfig || {}, next));
     setJsonDiffHint(
-      originalConfig ? "（与当前 Nacos 对比）" : "（首次发布，无原始配置）",
+      originalConfig ? "（与当前数据库配置对比）" : "（首次保存，无原始配置）",
     );
     setJsonPreviewOpen(true);
   }
@@ -975,19 +1010,16 @@ export function NacosCampaignsPage() {
   async function confirmPublish() {
     setPublishing(true);
     try {
-      await publishNacosConfig({
-        dataId: DATA_ID,
-        group: GROUP,
-        content: JSON.stringify(config, null, 2),
-        source: "nacos-campaigns",
-      });
+      await saveManagedWebsiteCampaignsConfig(config);
+      const records = await fetchAllWebsiteCampaigns();
+      setWebsiteRecords(records.data || []);
       setOriginalConfig(clone(config));
       setDirty(false);
       setJsonPreviewOpen(false);
-      showToast("发布成功", "success");
+      showToast("保存成功", "success");
     } catch (error) {
       showToast(
-        `发布失败：${error instanceof Error ? error.message : "未知错误"}`,
+        `保存失败：${error instanceof Error ? error.message : "未知错误"}`,
         "error",
       );
     } finally {
@@ -995,22 +1027,22 @@ export function NacosCampaignsPage() {
     }
   }
 
-  async function syncWebsite() {
+  async function refreshWebsiteRecords() {
     try {
-      showToast("正在同步到网站数据库...", "info");
-      const result = await syncWebsiteCampaignsFromNacos(false);
+      showToast("正在刷新数据库活动...", "info");
       const records = await fetchAllWebsiteCampaigns();
+      const recordList = (records.data || []) as AnyObj[];
+      const parsed = configFromWebsiteRecords(recordList);
+      setConfig(parsed);
+      setOriginalConfig(clone(parsed));
       setWebsiteRecords(records.data || []);
-      const summary = result.summary || {};
-      showToast(
-        `同步完成：新增 ${summary.created || 0}，更新 ${summary.updated || 0}，本次从 Nacos 删除 ${summary.softDeleted || 0}`,
-        "success",
-      );
+      setDirty(false);
+      showToast("刷新完成", "success");
       if (websiteTarget)
         await loadWebsiteConfig(websiteTarget, selection?.type || "nacos");
     } catch (error) {
       showToast(
-        `同步失败：${error instanceof Error ? error.message : "未知错误"}`,
+        `刷新失败：${error instanceof Error ? error.message : "未知错误"}`,
         "error",
       );
     }
@@ -1029,7 +1061,7 @@ export function NacosCampaignsPage() {
 
   async function saveWebsiteConfig() {
     if (!websiteConfigKey) {
-      showToast("请先选择已保存活动并同步到网站", "error");
+      showToast("请先选择已保存活动", "error");
       return;
     }
     try {
@@ -1259,7 +1291,7 @@ export function NacosCampaignsPage() {
             <div className="right">
               <Button
                 className="config-action config-action-secondary"
-                onClick={() => void loadFromNacos()}
+                onClick={() => void loadFromDatabase()}
                 loading={loading}
               >
                 刷新
@@ -1294,9 +1326,9 @@ export function NacosCampaignsPage() {
               </Button>
               <Button
                 className="config-action config-action-secondary"
-                onClick={() => void syncWebsite()}
+                onClick={() => void refreshWebsiteRecords()}
               >
-                同步到网站
+                从数据库刷新
               </Button>
             </div>
           </>
@@ -1410,8 +1442,8 @@ export function NacosCampaignsPage() {
                     }}
                   >
                     ℹ️ 当前正在编辑“网页独有数据 /
-                    插件已下架数据”。这类活动已不在 Nacos
-                    中，所以只支持网站数据库配置，不展示 Nacos 配置部分。
+                    插件已下架数据”。这类活动已从主活动配置中移除，
+                    所以只支持网站数据库配置，不展示活动主配置部分。
                   </div>
                 </div>
               </div>
@@ -1484,7 +1516,7 @@ export function NacosCampaignsPage() {
           style={{ padding: 0, maxHeight: "70vh" }}
         >
           <p className="json-preview-legend">
-            即将发布到 Nacos
+            即将保存到数据库
             <span style={{ marginLeft: 8, color: "#3b82f6", fontWeight: 600 }}>
               {jsonDiffHint}
             </span>{" "}
@@ -1788,13 +1820,31 @@ function CampaignEditor(props: {
           </div>
         </div>
         <div className="section-sub">
+          <div className="field-row field-row-1">
+            <Field
+              label="活动模式"
+              hint="该字段决定下方展示哪套榜单配置；下方 Tab 只跟随这里，不支持手动切换。"
+            >
+              <Segmented
+                value={c.leaderboardMode || "traditional"}
+                onChange={(value) =>
+                  setCampaignPath("leaderboardMode", String(value))
+                }
+                options={[
+                  { value: "traditional", label: "传统模式" },
+                  { value: "custom", label: "自定义模式" },
+                ]}
+              />
+            </Field>
+          </div>
           <Tabs
             activeKey={c.leaderboardMode || "traditional"}
-            onChange={(key) => setCampaignPath("leaderboardMode", key)}
+            onChange={() => undefined}
             items={[
               {
                 key: "traditional",
                 label: "传统模式",
+                disabled: (c.leaderboardMode || "traditional") !== "traditional",
                 children: (
                   <>
                     <div className="section-sub reward-tier reward-tier-primary">
@@ -1874,6 +1924,7 @@ function CampaignEditor(props: {
               {
                 key: "custom",
                 label: "自定义模式",
+                disabled: (c.leaderboardMode || "traditional") !== "custom",
                 children: (
                   <CustomLeaderboards
                     apiUrl={c.leaderboardApiUrl || ""}
@@ -2497,7 +2548,7 @@ function CustomLeaderboards({
       <div className="field-row field-row-1">
         <Field
           label="榜单接口 URL"
-          hint="可填写完整 URL，也可填写 /x/api 这种相对路径；会原样保存到 Nacos。"
+          hint="可填写完整 URL，也可填写 /x/api 这种相对路径；会原样保存到数据库。"
         >
           <Input
             value={apiUrl}
@@ -2883,7 +2934,7 @@ function WebsiteSection({
             </Field>
           </div>
           <div className="field-row field-row-2">
-            <Field label="POW 合约地址（按 Nacos 开关校验）">
+            <Field label="POW 合约地址（按活动开关校验）">
               <Input
                 disabled={!enabled}
                 value={form.claimPowContractAddress}
@@ -2893,7 +2944,7 @@ function WebsiteSection({
                 placeholder="0x..."
               />
             </Field>
-            <Field label="征文大赛合约地址（按 Nacos 开关校验）">
+            <Field label="征文大赛合约地址（按活动开关校验）">
               <Input
                 disabled={!enabled}
                 value={form.claimEssayContractAddress}

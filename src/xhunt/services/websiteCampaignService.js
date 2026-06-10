@@ -88,6 +88,10 @@ function normalizeNacosCampaign(campaign) {
   };
 }
 
+function normalizeManagedCampaign(campaign) {
+  return normalizeNacosCampaign(campaign);
+}
+
 function getSyncedPayload(recordLike) {
   return {
     nacosCampaignId: recordLike.nacosCampaignId,
@@ -263,6 +267,78 @@ async function syncCampaignsFromNacos({ dryRun = false } = {}) {
   }
 
   return { summary, items };
+}
+
+async function saveManagedCampaignsConfig(configLike) {
+  const config = toSafeObject(configLike, {});
+  const campaigns = toSafeArray(config.campaigns)
+    .map(normalizeManagedCampaign)
+    .filter((item) => item.nacosCampaignId && item.campaignKey);
+
+  const incomingIds = new Set(campaigns.map((item) => String(item.nacosCampaignId)));
+  const existingRecords = await XHuntWebsiteCampaign.findAll();
+  const existingMap = new Map(
+    existingRecords.map((item) => [String(item.nacosCampaignId), item])
+  );
+
+  const summary = {
+    total: campaigns.length,
+    created: 0,
+    updated: 0,
+    restored: 0,
+    softDeleted: 0,
+  };
+
+  await pgInstance.transaction(async (transaction) => {
+    for (const campaign of campaigns) {
+      const existing = existingMap.get(String(campaign.nacosCampaignId));
+      if (!existing) {
+        await XHuntWebsiteCampaign.create(
+          {
+            ...campaign,
+            webStatus: "draft",
+            pageTemplate: "standard",
+            templateConfig: {},
+            websiteExtra: {},
+            isDeleted: false,
+            deletedAt: null,
+            lastSyncedAt: new Date(),
+          },
+          { transaction }
+        );
+        summary.created += 1;
+        continue;
+      }
+
+      const wasDeleted = !!existing.isDeleted;
+      await existing.update(
+        {
+          ...campaign,
+          isDeleted: false,
+          deletedAt: null,
+          lastSyncedAt: new Date(),
+        },
+        { transaction }
+      );
+      summary.updated += 1;
+      if (wasDeleted) summary.restored += 1;
+    }
+
+    for (const existing of existingRecords) {
+      if (incomingIds.has(String(existing.nacosCampaignId)) || existing.isDeleted) continue;
+      await existing.update(
+        {
+          isDeleted: true,
+          deletedAt: new Date(),
+          lastSyncedAt: new Date(),
+        },
+        { transaction }
+      );
+      summary.softDeleted += 1;
+    }
+  });
+
+  return summary;
 }
 
 function formatRewardText(record, lang = "zh-CN") {
@@ -463,6 +539,121 @@ function buildCampaignDetail(record, lang = "zh-CN") {
     templateConfig: toSafeObject(record.templateConfig, {}),
     websiteExtra: mergeListAssets(record),
     nacosPayload: toSafeObject(record.nacosPayload, {}),
+  };
+}
+
+function buildPluginCampaign(record) {
+  const payload = toSafeObject(record.nacosPayload, {});
+  const common = {
+    id: payload.id || record.nacosCampaignId,
+    campaignKey: payload.campaignKey || record.campaignKey,
+    enabled: !!record.enabled,
+    testingPhase: !!record.testingPhase,
+    sortWeight: Number(record.sortWeight || 0),
+    enrollmentWindow: toSafeObject(payload.enrollmentWindow, {
+      startAt: record.startAt ? new Date(record.startAt).toISOString() : "",
+      endAt: record.endAt ? new Date(record.endAt).toISOString() : "",
+    }),
+    displayName: toSafeObject(payload.displayName, {
+      zh: record.displayNameZh || "",
+      en: record.displayNameEn || "",
+    }),
+    copy: toSafeObject(payload.copy, {}),
+    links: toSafeObject(payload.links, {
+      guideUrl: record.guideUrl || "",
+      activeUrl: record.activeUrl || "",
+    }),
+    projectIntroduction: toSafeObject(payload.projectIntroduction, {
+      zh: record.projectIntroductionZh || "",
+      en: record.projectIntroductionEn || "",
+    }),
+    writingThemes: toSafeArray(payload.writingThemes).length
+      ? toSafeArray(payload.writingThemes)
+      : toSafeArray(record.writingThemes),
+    logos: toSafeArray(payload.logos).length ? toSafeArray(payload.logos) : toSafeArray(record.logos),
+    tasks: toSafeArray(payload.tasks),
+    tags: toSafeArray(payload.tags).length ? toSafeArray(payload.tags) : toSafeArray(record.tags),
+    targetUserIds: toSafeArray(payload.targetUserIds),
+    testList: toSafeArray(payload.testList),
+    hotTweetsKey: payload.hotTweetsKey || record.campaignKey,
+    includeCreator: !!payload.includeCreator,
+    threshold: payload.threshold,
+    allowEmailRegistration: payload.allowEmailRegistration === true,
+    showExtraComponents: payload.showExtraComponents !== false,
+    showSponsoredPolicy: payload.showSponsoredPolicy !== false,
+    riskConfirmHtml: payload.riskConfirmHtml || null,
+    leaderboardMode: payload.leaderboardMode === "custom" ? "custom" : "traditional",
+  };
+
+  if (common.leaderboardMode === "custom") {
+    return {
+      ...common,
+      leaderboardApiUrl: typeof payload.leaderboardApiUrl === "string" ? payload.leaderboardApiUrl : "",
+      customLeaderboards: toSafeArray(payload.customLeaderboards),
+    };
+  }
+
+  return {
+    ...common,
+    rewardAmount: payload.rewardAmount ?? record.rewardAmount,
+    rewardParticipantCount: payload.rewardParticipantCount ?? record.rewardParticipantCount,
+    rewardDistributionType: payload.rewardDistributionType || "",
+    rewardUnit: payload.rewardUnit || record.rewardUnit || "",
+    enablePowLeaderboard: payload.enablePowLeaderboard === true,
+    powAmount: payload.powAmount,
+    powWinnerCount: payload.powWinnerCount,
+    powDistributionType: payload.powDistributionType || "",
+    powUnit: payload.powUnit || "",
+    enableEssayContest: payload.enableEssayContest === true,
+    essayContestAmount: payload.essayContestAmount,
+    essayContestWinnerCount: payload.essayContestWinnerCount,
+    essayContestUnit: payload.essayContestUnit || "",
+    essayContestWinners: toSafeArray(payload.essayContestWinners),
+  };
+}
+
+async function listPluginCampaigns({ includeTesting = false } = {}) {
+  const where = {
+    isDeleted: false,
+    enabled: true,
+  };
+  if (!includeTesting) {
+    where.testingPhase = false;
+  }
+  const records = await XHuntWebsiteCampaign.findAll({ where });
+  return records
+    .map(buildPluginCampaign)
+    .sort((a, b) =>
+      (Number(b.sortWeight) || 0) - (Number(a.sortWeight) || 0) ||
+      (Date.parse(b.enrollmentWindow?.startAt || "") || 0) -
+        (Date.parse(a.enrollmentWindow?.startAt || "") || 0)
+    );
+}
+
+async function getManagedCampaignPayloadByKey(campaignKey, { includeTesting = false } = {}) {
+  const key = String(campaignKey || "").trim();
+  if (!key) return null;
+  const where = {
+    isDeleted: false,
+    enabled: true,
+    campaignKey: key,
+  };
+  if (!includeTesting) {
+    where.testingPhase = false;
+  }
+  const record = await XHuntWebsiteCampaign.findOne({ where });
+  if (!record) return null;
+  const payload = toSafeObject(record.nacosPayload, {});
+  return {
+    ...payload,
+    id: payload.id || record.nacosCampaignId,
+    campaignKey: payload.campaignKey || record.campaignKey,
+    enabled: record.enabled,
+    testingPhase: record.testingPhase,
+    enrollmentWindow: toSafeObject(payload.enrollmentWindow, {
+      startAt: record.startAt ? new Date(record.startAt).toISOString() : "",
+      endAt: record.endAt ? new Date(record.endAt).toISOString() : "",
+    }),
   };
 }
 
@@ -722,7 +913,10 @@ module.exports = {
   normalizeWebsiteStatus,
   fetchNacosCampaigns,
   syncCampaignsFromNacos,
+  saveManagedCampaignsConfig,
   listPublicCampaigns,
+  listPluginCampaigns,
+  getManagedCampaignPayloadByKey,
   getPublicCampaignDetailBySlug,
   getWebsiteCampaignAdminByNacosId,
   saveWebsiteCampaignConfig,

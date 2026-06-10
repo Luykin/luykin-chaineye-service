@@ -6,6 +6,7 @@ const {
   listPublicCampaigns,
   getPublicCampaignDetailBySlug,
   getWebsiteCampaignAdminByNacosId,
+  saveManagedCampaignsConfig,
   saveWebsiteCampaignConfig,
   listAllWebsiteCampaignsAdmin,
   importLegacyWebsiteCampaigns,
@@ -90,6 +91,25 @@ router.post("/internal/sync-from-nacos", adminAuth, requirePermission("nacos_con
       message: error.message || "同步失败",
     });
     return res.status(500).json({ success: false, error: error.message || "同步失败" });
+  }
+});
+
+router.put("/internal/managed-config", adminAuth, requirePermission("nacos_config"), async (req, res) => {
+  try {
+    const summary = await saveManagedCampaignsConfig(req.body || {});
+    await logAdminAction(req, {
+      action: "website-campaign-save-managed-config",
+      success: true,
+      message: JSON.stringify(summary),
+    });
+    return res.json({ success: true, summary });
+  } catch (error) {
+    await logAdminAction(req, {
+      action: "website-campaign-save-managed-config",
+      success: false,
+      message: error.message || "保存失败",
+    });
+    return res.status(500).json({ success: false, error: error.message || "保存失败" });
   }
 });
 
