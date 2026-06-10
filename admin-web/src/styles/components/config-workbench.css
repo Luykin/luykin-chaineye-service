@@ -1103,3 +1103,554 @@
   background: #fef3c7;
   color: #b45309;
 }
+
+/* React 活动配置 2026 精致紧凑版：面向活动运营的高信息密度布局 */
+.campaigns-react-page.config-workbench {
+  --campaign-ink: #142033;
+  --campaign-muted: #657184;
+  --campaign-line: #e7ecf3;
+  --campaign-soft: #f6f8fb;
+  --campaign-blue: #2563eb;
+  --campaign-green: #059669;
+  --campaign-amber: #d97706;
+  max-width: 1760px;
+  padding: 12px;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.06), transparent 28%),
+    linear-gradient(180deg, #f8fafc 0%, #f4f7fb 100%);
+}
+
+.campaigns-react-page .config-workbench-header,
+.campaigns-react-page .config-workbench-toolbar,
+.campaigns-react-page .config-workbench-panel {
+  border-color: rgba(203, 213, 225, 0.76);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.campaigns-react-page .config-workbench-title {
+  color: var(--campaign-ink);
+  letter-spacing: -0.025em;
+}
+
+.campaigns-react-page .config-workbench-body {
+  gap: 10px;
+}
+
+.campaigns-react-page .config-workbench-sidebar {
+  width: 318px;
+}
+
+.campaigns-react-page .config-workbench-sidebar-content {
+  padding: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+}
+
+.campaigns-react-page .campaigns-search {
+  height: 30px;
+  min-width: 220px;
+  max-width: 280px;
+  border-radius: 999px;
+  background: #fff;
+  border-color: #dbe3ee;
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.campaigns-react-page .list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.campaigns-react-page .list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.campaigns-react-page .list-group-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 5px;
+  color: #7c8797;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.campaigns-react-page .list-group-warning .list-group-heading {
+  color: #b45309;
+}
+
+.campaigns-react-page .item {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 8px;
+  background: transparent;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.campaigns-react-page .item:hover {
+  background: #f8fbff;
+  border-color: #dbeafe;
+  transform: translateY(-1px);
+}
+
+.campaigns-react-page .item.active {
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 70%);
+  border-color: #bfdbfe;
+  box-shadow: inset 3px 0 0 var(--campaign-blue), 0 8px 18px rgba(37, 99, 235, 0.08);
+}
+
+.campaigns-react-page .item-content {
+  gap: 8px;
+}
+
+.campaigns-react-page .item-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: none;
+}
+
+.campaigns-react-page .item-title-text {
+  color: var(--campaign-ink);
+  font-size: 12.5px;
+  font-weight: 760;
+}
+
+.campaigns-react-page .item-meta {
+  margin-top: 1px;
+  color: #7a8698;
+  font-size: 10.5px;
+}
+
+.campaigns-react-page .chips {
+  margin-top: 5px;
+  gap: 4px;
+}
+
+.campaigns-react-page .chip {
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.campaigns-react-page .chip.on {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.campaigns-react-page .chip.testing {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.campaigns-react-page #campaigns-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.campaigns-react-page .campaign-brief {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(420px, 1.9fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(255, 255, 255, 0.94) 62%),
+    radial-gradient(circle at 96% 12%, rgba(251, 191, 36, 0.14), transparent 34%);
+  box-shadow: 0 12px 30px rgba(30, 64, 175, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.campaigns-react-page .campaign-brief-eyebrow,
+.campaigns-react-page .campaign-brief-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #69778a;
+  font-size: 11px;
+}
+
+.campaigns-react-page .campaign-stage,
+.campaigns-react-page .campaign-brief-eyebrow > span {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #475569;
+  font-weight: 750;
+}
+
+.campaigns-react-page .campaign-stage.is-live {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.campaigns-react-page .campaign-stage.is-testing,
+.campaigns-react-page .campaign-stage.is-upcoming {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.campaigns-react-page .campaign-stage.is-ended,
+.campaigns-react-page .campaign-stage.is-off {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.campaigns-react-page .campaign-brief-eyebrow .is-dirty {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.campaigns-react-page .campaign-brief-title {
+  margin: 7px 0 4px;
+  color: var(--campaign-ink);
+  font-size: 17px;
+  font-weight: 820;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.campaigns-react-page .campaign-brief-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.campaigns-react-page .brief-metric {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.campaigns-react-page .brief-metric span {
+  display: block;
+  color: #7a8698;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.campaigns-react-page .brief-metric strong {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #1f2a3d;
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaigns-react-page .section,
+.campaigns-react-page .campaign-options,
+.campaigns-react-page .campaign-status-control,
+.campaigns-react-page .section-sub,
+.campaigns-react-page .rep-card,
+.campaigns-react-page .reward-tier {
+  border-color: var(--campaign-line);
+  box-shadow: none;
+}
+
+.campaigns-react-page .section {
+  padding: 12px;
+  border-radius: 16px;
+}
+
+.campaigns-react-page .section-title {
+  margin-bottom: 10px;
+  color: var(--campaign-ink);
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.campaigns-react-page .section-title::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 13px;
+  margin-right: 7px;
+  border-radius: 999px;
+  background: var(--campaign-blue);
+  vertical-align: -2px;
+}
+
+.campaigns-react-page .section-title-inline,
+.campaigns-react-page .section-title-sm {
+  margin-bottom: 8px;
+  color: #253247;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.campaigns-react-page .section-sub {
+  padding: 10px;
+  border-radius: 13px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f8fafc 100%);
+}
+
+.campaigns-react-page .field-row {
+  gap: 9px;
+  margin-bottom: 9px;
+}
+
+.campaigns-react-page .field {
+  gap: 5px;
+}
+
+.campaigns-react-page .field > label,
+.campaigns-react-page .task-field > label,
+.campaigns-react-page .tag-field > label {
+  color: #536072;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.campaigns-react-page .field-hint,
+.campaigns-react-page .muted {
+  color: #7b8798;
+  font-size: 11px;
+}
+
+.campaigns-react-page :where(.ant-input, .ant-input-number, .ant-select-selector) {
+  border-color: #dce4ee !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.campaigns-react-page .ant-input:hover,
+.campaigns-react-page .ant-input-number:hover,
+.campaigns-react-page .ant-select-selector:hover {
+  border-color: #b7c6db !important;
+}
+
+.campaigns-react-page .ant-input:focus,
+.campaigns-react-page .ant-input-focused,
+.campaigns-react-page .ant-input-number-focused,
+.campaigns-react-page .ant-select-focused .ant-select-selector {
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12) !important;
+}
+
+.campaigns-react-page .ant-btn {
+  border-radius: 9px;
+  font-weight: 700;
+}
+
+.campaigns-react-page .campaign-status-control {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 8px;
+  padding: 9px;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.campaigns-react-page .status-control-primary,
+.campaigns-react-page .status-control-secondary,
+.campaigns-react-page .option-item {
+  border: 1px solid #e8edf4;
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 9px;
+}
+
+.campaigns-react-page .campaign-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 9px;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.campaigns-react-page .rep-card {
+  padding: 9px;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.campaigns-react-page .rep-header {
+  margin: -2px 0 7px;
+  padding-bottom: 6px;
+}
+
+.campaigns-react-page .rep-title {
+  color: #263349;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.campaigns-react-page .rep-actions .ant-btn {
+  height: 23px;
+  padding: 0 7px;
+}
+
+.campaigns-react-page .task-grid,
+.campaigns-react-page .tag-fields {
+  gap: 8px;
+}
+
+.campaigns-react-page .campaigns-website-section {
+  border-color: #fed7aa;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.55), rgba(255, 255, 255, 0.95) 42%),
+    #fff;
+}
+
+.campaigns-react-page .website-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.campaigns-react-page .website-section-head .section-title {
+  margin-bottom: 4px;
+}
+
+.campaigns-react-page .website-section-head .section-title::before {
+  background: var(--campaign-amber);
+}
+
+.campaigns-react-page .website-meta {
+  max-width: 980px;
+  color: #8a5a18;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.campaigns-react-page .website-save-btn {
+  flex: 0 0 auto;
+  border-color: #f59e0b;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.campaigns-react-page .website-assets-preview {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.campaigns-react-page .asset-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid #e8edf4;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.campaigns-react-page .asset-preview img,
+.campaigns-react-page .asset-preview span {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #eef2f7;
+  color: #94a3b8;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.campaigns-react-page .asset-preview em {
+  color: #667085;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.campaigns-react-page .json-status-pill {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.campaigns-react-page .json-status-pill.ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.campaigns-react-page .json-status-pill.error {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.campaigns-react-page .campaigns-toast {
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.24);
+}
+
+@media (max-width: 1280px) {
+  .campaigns-react-page .campaign-brief {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .campaigns-react-page .config-workbench-sidebar {
+    width: auto;
+  }
+
+  .campaigns-react-page .campaign-brief-metrics,
+  .campaigns-react-page .campaign-options,
+  .campaigns-react-page .campaign-status-control {
+    grid-template-columns: 1fr;
+  }
+
+  .campaigns-react-page .campaign-brief {
+    position: static;
+  }
+}
+
+.campaigns-react-page .config-workbench-body {
+  grid-template-columns: 318px minmax(0, 1fr);
+}
+
+.campaigns-react-page.config-workbench-collapsed .config-workbench-body {
+  grid-template-columns: 42px minmax(0, 1fr);
+}

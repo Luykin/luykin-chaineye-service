@@ -413,6 +413,50 @@ function buildDiffHtml(oldConfig: unknown, nextConfig: unknown) {
   return div.innerHTML;
 }
 
+function formatCampaignTime(value: string) {
+  if (!value) return "未设置";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "时间异常";
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function getCampaignStage(c?: AnyObj | null) {
+  if (!c) return { label: "未选择", className: "muted" };
+  if (!c.enabled) return { label: "隐藏", className: "is-off" };
+  if (c.testingPhase) return { label: "内测中", className: "is-testing" };
+  const now = Date.now();
+  const start = Date.parse(c.enrollmentWindow?.startAt || "");
+  const end = Date.parse(c.enrollmentWindow?.endAt || "");
+  if (Number.isFinite(start) && now < start)
+    return { label: "待开始", className: "is-upcoming" };
+  if (Number.isFinite(end) && now > end)
+    return { label: "已结束", className: "is-ended" };
+  return { label: "进行中", className: "is-live" };
+}
+
+function getRewardSummary(c?: AnyObj | null) {
+  if (!c) return "-";
+  if (c.leaderboardMode === "custom") {
+    const items = Array.isArray(c.customLeaderboards) ? c.customLeaderboards : [];
+    const amount = items.reduce((sum: number, item: AnyObj) => {
+      const n = Number(item.amount);
+      return Number.isFinite(n) ? sum + n : sum;
+    }, 0);
+    return items.length
+      ? `${items.length} 个榜单 · ${amount || "-"} ${items[0]?.unit || ""}`.trim()
+      : "自定义榜单未配置";
+  }
+  const unit = c.rewardUnit || c.powUnit || c.essayContestUnit || "USDT";
+  const amount =
+    safeNumber(c.rewardAmount, 0) +
+    safeNumber(c.powAmount, 0) +
+    safeNumber(c.essayContestAmount, 0);
+  const parts = [`POI ${c.rewardAmount ?? "-"}`];
+  if (c.enablePowLeaderboard) parts.push(`POW ${c.powAmount ?? "-"}`);
+  if (c.enableEssayContest) parts.push(`征文 ${c.essayContestAmount ?? "-"}`);
+  return `${amount || "-"} ${unit} · ${parts.join(" / ")}`;
+}
+
 function Field({
   label,
   hint,
@@ -1403,6 +1447,7 @@ export function NacosCampaignsPage() {
         sidebar={
           <div className="list-items">
             <ListGroup
+              title="主活动配置"
               emptyText="暂无活动"
               items={listData.nacosItems.map(({ c: item, idx }) => ({
                 key: `nacos-${idx}`,
@@ -1424,6 +1469,8 @@ export function NacosCampaignsPage() {
               }))}
             />
             <ListGroup
+              title="网站独有"
+              tone="warning"
               emptyText="暂无网页独有数据"
               items={listData.websiteOnly.map((item: AnyObj) => ({
                 key: `web-${item.nacosCampaignId}`,
@@ -1490,19 +1537,27 @@ export function NacosCampaignsPage() {
               </div>
             ) : null}
             {c ? (
-              <CampaignEditor
-                c={c}
-                canEditCampaignId={canEditCampaignId}
-                setCampaignPath={setCampaignPath}
-                updateSelectedCampaign={updateSelectedCampaign}
-                changeThreshold={changeThreshold}
-                thresholdValue={thresholdValue(c)}
-                changeRiskConfirm={changeRiskConfirm}
-                addArrayItem={addArrayItem}
-                updateArrayItem={updateArrayItem}
-                moveArrayItem={moveArrayItem}
-                removeArrayItem={removeArrayItem}
-              />
+              <>
+                <CampaignBrief
+                  c={c}
+                  dirty={dirty}
+                  websiteDirty={websiteDirty}
+                  websiteStatus={websiteForm.webStatus}
+                />
+                <CampaignEditor
+                  c={c}
+                  canEditCampaignId={canEditCampaignId}
+                  setCampaignPath={setCampaignPath}
+                  updateSelectedCampaign={updateSelectedCampaign}
+                  changeThreshold={changeThreshold}
+                  thresholdValue={thresholdValue(c)}
+                  changeRiskConfirm={changeRiskConfirm}
+                  addArrayItem={addArrayItem}
+                  updateArrayItem={updateArrayItem}
+                  moveArrayItem={moveArrayItem}
+                  removeArrayItem={removeArrayItem}
+                />
+              </>
             ) : null}
             <WebsiteSection
               form={websiteForm}
@@ -1635,9 +1690,13 @@ export function NacosCampaignsPage() {
 }
 
 function ListGroup({
+  title,
+  tone = "default",
   emptyText,
   items,
 }: {
+  title?: React.ReactNode;
+  tone?: "default" | "warning";
   emptyText: string;
   items: Array<{
     key: string;
@@ -1650,7 +1709,13 @@ function ListGroup({
   }>;
 }) {
   return (
-    <div className="list-group">
+    <div className={`list-group list-group-${tone}`}>
+      {title ? (
+        <div className="list-group-heading">
+          <span>{title}</span>
+          <span>{items.length}</span>
+        </div>
+      ) : null}
       {items.length ? (
         items.map((item) => (
           <div
@@ -1698,6 +1763,67 @@ function ListGroup({
       ) : (
         <div className="list-group-empty">{emptyText}</div>
       )}
+    </div>
+  );
+}
+
+function CampaignBrief({
+  c,
+  dirty,
+  websiteDirty,
+  websiteStatus,
+}: {
+  c: AnyObj;
+  dirty: boolean;
+  websiteDirty: boolean;
+  websiteStatus: string;
+}) {
+  const stage = getCampaignStage(c);
+  const taskCount = Array.isArray(c.tasks) ? c.tasks.length : 0;
+  const logoCount = Array.isArray(c.logos) ? c.logos.length : 0;
+  const targetCount = Array.isArray(c.targetUserIds) ? c.targetUserIds.length : 0;
+  return (
+    <div className="campaign-brief">
+      <div className="campaign-brief-main">
+        <div className="campaign-brief-eyebrow">
+          <span className={`campaign-stage ${stage.className}`}>
+            {stage.label}
+          </span>
+          <span>{c.leaderboardMode === "custom" ? "自定义榜单" : "传统榜单"}</span>
+          {dirty ? <span className="is-dirty">主配置未发布</span> : null}
+          {websiteDirty ? <span className="is-dirty">网站未保存</span> : null}
+        </div>
+        <div className="campaign-brief-title">
+          {c.displayName?.zh ||
+            c.displayName?.en ||
+            c.copy?.shortTitle?.zh ||
+            c.campaignKey ||
+            "未命名活动"}
+        </div>
+        <div className="campaign-brief-sub">
+          <span>{c.id || "未生成 ID"}</span>
+          <span>网站：{websiteStatus || "draft"}</span>
+        </div>
+      </div>
+      <div className="campaign-brief-metrics">
+        <div className="brief-metric">
+          <span>活动时间</span>
+          <strong>
+            {formatCampaignTime(c.enrollmentWindow?.startAt)} →{" "}
+            {formatCampaignTime(c.enrollmentWindow?.endAt)}
+          </strong>
+        </div>
+        <div className="brief-metric">
+          <span>奖励</span>
+          <strong>{getRewardSummary(c)}</strong>
+        </div>
+        <div className="brief-metric">
+          <span>素材 / 任务 / 投放</span>
+          <strong>
+            {logoCount} Logo · {taskCount} Task · {targetCount} 账号
+          </strong>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2902,9 +3028,23 @@ function WebsiteSection({
   essayEnabled,
   onSave,
 }: any) {
+  let jsonValid = true;
+  try {
+    JSON.parse(form.templateConfig || "{}");
+  } catch {
+    jsonValid = false;
+  }
   return (
     <div className="section section-compact campaigns-website-section">
-      <div className="section-title">网站专属配置</div>
+      <div className="website-section-head">
+        <div>
+          <div className="section-title">网站专属配置</div>
+          <div className="website-meta">{meta}</div>
+        </div>
+        <Button className="website-save-btn" disabled={!enabled} onClick={onSave}>
+          保存网站配置
+        </Button>
+      </div>
       <div className="field-row field-row-3">
         <Field label="网站状态">
           <Select
@@ -2912,13 +3052,13 @@ function WebsiteSection({
             value={form.webStatus}
             onChange={(v) => update({ webStatus: v })}
             options={[
-              "draft",
-              "coming_soon",
-              "live",
-              "claim",
-              "ended",
-              "archived",
-            ].map((v) => ({ value: v, label: v }))}
+              { value: "draft", label: "draft · 草稿" },
+              { value: "coming_soon", label: "coming_soon · 预热" },
+              { value: "live", label: "live · 进行中" },
+              { value: "claim", label: "claim · 领奖" },
+              { value: "ended", label: "ended · 结束" },
+              { value: "archived", label: "archived · 归档" },
+            ]}
           />
         </Field>
         <Field label="详情页 slug">
@@ -2994,6 +3134,18 @@ function WebsiteSection({
       </div>
       <div className="section-sub">
         <div className="section-title-sm">列表卡片图片</div>
+        <div className="website-assets-preview">
+          {[
+            ["XHunt", form.listLeftLogo],
+            ["活动方", form.listRightLogo],
+            ["奖励图", form.listChestImage],
+          ].map(([label, src]) => (
+            <div className="asset-preview" key={label}>
+              {src ? <img src={src} alt="" /> : <span>空</span>}
+              <em>{label}</em>
+            </div>
+          ))}
+        </div>
         <div className="field-row field-row-3">
           <Field
             label="XHunt 图标 URL"
@@ -3105,32 +3257,11 @@ function WebsiteSection({
               onChange={(e) => update({ templateConfig: e.target.value })}
               placeholder='{"claimStatusBadge":"Claim is live"}'
             />
-            <div className="muted" style={{ marginTop: 6, lineHeight: 1.5 }}>
-              JSON 状态：
-              {(() => {
-                try {
-                  JSON.parse(form.templateConfig || "{}");
-                  return "合法";
-                } catch {
-                  return "有错误";
-                }
-              })()}
+            <div className={`json-status-pill ${jsonValid ? "ok" : "error"}`}>
+              JSON 状态：{jsonValid ? "合法" : "有错误"}
             </div>
           </Field>
         </div>
-      </div>
-      <div className="field-row field-row-1">
-        <Field>
-          <div className="muted">{meta}</div>
-        </Field>
-      </div>
-      <div
-        className="section-actions"
-        style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
-      >
-        <Button disabled={!enabled} onClick={onSave}>
-          保存网站配置
-        </Button>
       </div>
     </div>
   );
