@@ -138,7 +138,7 @@ function normalizeConfig(obj: unknown): CampaignConfig {
       : ({ version: 3, campaigns: [] } as CampaignConfig);
   if (!Array.isArray(out.campaigns)) out.campaigns = [];
   out.version = safeNumber(out.version, 3);
-  out.campaigns = out.campaigns.map(normalizeCampaign);
+  out.campaigns = out.campaigns.map((campaign) => normalizeCampaign(campaign));
   return out;
 }
 
