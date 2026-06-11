@@ -20,6 +20,9 @@ const {
   getManagedCampaignPayloadByKey,
   listPluginCampaigns,
 } = require("../services/websiteCampaignService");
+const {
+  getCachedPluginCampaigns,
+} = require("../utils/campaign-config-cache");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
 
@@ -101,12 +104,15 @@ function matchesDisplayDomain(campaign, domain) {
 const INITIALIZE_CAMPAIGN_URL =
   "https://data.cryptohunt.ai/pro/api/initialize_campaign";
 const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400; // 1 天
-const CAMPAIGN_CONFIG_CACHE_TTL = 300; // 5 分钟
+const CAMPAIGN_CONFIG_BROWSER_CACHE_TTL = 300; // 5 分钟
 
 function setCampaignConfigCacheHeaders(res) {
   // 按 x-user-id 可能返回测试活动，使用 private 避免共享缓存串用户；浏览器仍会 5 分钟强缓存。
-  res.set("Cache-Control", `private, max-age=${CAMPAIGN_CONFIG_CACHE_TTL}`);
-  res.set("Expires", new Date(Date.now() + CAMPAIGN_CONFIG_CACHE_TTL * 1000).toUTCString());
+  res.set("Cache-Control", `private, max-age=${CAMPAIGN_CONFIG_BROWSER_CACHE_TTL}`);
+  res.set(
+    "Expires",
+    new Date(Date.now() + CAMPAIGN_CONFIG_BROWSER_CACHE_TTL * 1000).toUTCString(),
+  );
   res.set("Vary", "x-user-id, Authorization");
 }
 
@@ -123,25 +129,9 @@ router.get("/config", authenticateTokenOptional, async (req, res) => {
       });
     }
 
-    const cacheKey = [
-      "xhunt:campaign-config:v2",
-      `domain:${requestedDomain || "all"}`,
-      `user:${requestHandle || "anonymous"}`,
-    ].join(":");
-
-    if (req.redisClient?.get) {
-      try {
-        const cached = await req.redisClient.get(cacheKey);
-        if (cached) {
-          setCampaignConfigCacheHeaders(res);
-          return res.json(JSON.parse(cached));
-        }
-      } catch (cacheErr) {
-        console.warn("[CampaignConfig] redis get warn:", cacheErr.message || cacheErr);
-      }
-    }
-
-    const allCampaigns = await listPluginCampaigns({ includeTesting: true });
+    const allCampaigns = await getCachedPluginCampaigns(req.redisClient, () =>
+      listPluginCampaigns({ includeTesting: true })
+    );
     let includeTesting = false;
     const campaigns = allCampaigns.filter((campaign) => {
       if (!matchesDisplayDomain(campaign, requestedDomain)) return false;
@@ -159,18 +149,6 @@ router.get("/config", authenticateTokenOptional, async (req, res) => {
       includeTesting,
       campaigns,
     };
-
-    if (req.redisClient?.setEx) {
-      try {
-        await req.redisClient.setEx(
-          cacheKey,
-          CAMPAIGN_CONFIG_CACHE_TTL,
-          JSON.stringify(payload),
-        );
-      } catch (cacheErr) {
-        console.warn("[CampaignConfig] redis set warn:", cacheErr.message || cacheErr);
-      }
-    }
 
     setCampaignConfigCacheHeaders(res);
     return res.json(payload);

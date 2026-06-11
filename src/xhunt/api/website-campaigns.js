@@ -12,6 +12,9 @@ const {
   importLegacyWebsiteCampaigns,
   serializeWebsiteCampaignAdmin,
 } = require("../services/websiteCampaignService");
+const {
+  invalidateCampaignConfigCache,
+} = require("../utils/campaign-config-cache");
 
 const router = express.Router();
 
@@ -36,6 +39,14 @@ async function logAdminAction(req, { action, success, message }) {
   } catch (_) {}
 }
 
+async function invalidatePluginCampaignConfigCache(req) {
+  try {
+    await invalidateCampaignConfigCache(req.redisClient);
+  } catch (error) {
+    console.warn("[WebsiteCampaigns] invalidate campaign config cache warn:", error.message || error);
+  }
+}
+
 
 router.get("/internal/list-all", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
@@ -49,6 +60,7 @@ router.get("/internal/list-all", adminAuth, requirePermission("nacos_config"), a
 router.post("/internal/import-legacy", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
     const summary = await importLegacyWebsiteCampaigns();
+    await invalidatePluginCampaignConfigCache(req);
     await logAdminAction(req, {
       action: "website-campaign-import-legacy",
       success: true,
@@ -78,6 +90,9 @@ router.post("/internal/sync-from-nacos", adminAuth, requirePermission("nacos_con
   try {
     const dryRun = !!(req.body && req.body.dryRun);
     const result = await syncCampaignsFromNacos({ dryRun });
+    if (!dryRun) {
+      await invalidatePluginCampaignConfigCache(req);
+    }
     await logAdminAction(req, {
       action: dryRun ? "website-campaign-sync-dry-run" : "website-campaign-sync",
       success: true,
@@ -97,6 +112,7 @@ router.post("/internal/sync-from-nacos", adminAuth, requirePermission("nacos_con
 router.put("/internal/managed-config", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
     const summary = await saveManagedCampaignsConfig(req.body || {});
+    await invalidatePluginCampaignConfigCache(req);
     await logAdminAction(req, {
       action: "website-campaign-save-managed-config",
       success: true,
@@ -116,6 +132,7 @@ router.put("/internal/managed-config", adminAuth, requirePermission("nacos_confi
 router.put("/internal/:nacosCampaignId/web-config", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
     const record = await saveWebsiteCampaignConfig(req.params.nacosCampaignId, req.body || {});
+    await invalidatePluginCampaignConfigCache(req);
     await logAdminAction(req, {
       action: "website-campaign-save-config",
       success: true,
