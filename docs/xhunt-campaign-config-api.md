@@ -7,7 +7,7 @@
 | 项目 | 说明 |
 |------|------|
 | Method | `GET` |
-| Path | `/api/xhunt/campaign/config` |
+| Path | `/api/xhunt/campaigns/config` |
 | Auth | 可选 JWT；未登录也可访问 |
 | Content-Type | `application/json` |
 
@@ -30,11 +30,11 @@
 ## 请求示例
 
 ```http
-GET /api/xhunt/campaign/config?domain=web3
+GET /api/xhunt/campaigns/config?domain=web3
 ```
 
 ```http
-GET /api/xhunt/campaign/config?domain=ai
+GET /api/xhunt/campaigns/config?domain=ai
 ```
 
 ## 成功响应
@@ -155,6 +155,7 @@ GET /api/xhunt/campaign/config?domain=ai
 ```json
 [
   {
+    "id": "poi leaderboard",
     "name": {
       "zh": "POI 榜单",
       "en": "POI Leaderboard"
@@ -171,6 +172,7 @@ GET /api/xhunt/campaign/config?domain=ai
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
+| `id` | string | 榜单唯一 key，推荐填写；榜单接口和用户排名接口需使用同一个 key。 |
 | `name.zh` | string | 榜单中文名；`zh` 和 `en` 至少填写一个。 |
 | `name.en` | string | 榜单英文名；`zh` 和 `en` 至少填写一个。 |
 | `amount` | number | 该榜单奖励总额，不能小于 `0`。 |

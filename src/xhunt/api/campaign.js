@@ -116,6 +116,42 @@ function setCampaignConfigCacheHeaders(res) {
   res.set("Vary", "x-user-id, Authorization");
 }
 
+function getCustomLeaderboardKey(item, index) {
+  const candidates = [
+    item && item.id,
+    item && item.name && item.name.en,
+    item && item.name && item.name.zh,
+    item && item.distributionType,
+  ];
+  for (const value of candidates) {
+    if (value !== undefined && value !== null && String(value).trim()) {
+      return String(value).trim().toLowerCase();
+    }
+  }
+  return String(index);
+}
+
+function getCustomLeaderboardsFromCampaign(campaignConfig) {
+  if (campaignConfig?.leaderboardMode !== "custom") return [];
+  return Array.isArray(campaignConfig.customLeaderboards)
+    ? campaignConfig.customLeaderboards
+    : [];
+}
+
+async function getCustomCampaignConfig(campaign, req) {
+  const found = await getManagedCampaignPayloadByKey(campaign, {
+    includeTesting: true,
+  });
+  if (!found || !found.enabled) return null;
+  if (found.testingPhase) {
+    const requestHandle = normalizeTesterHandle(req?.headers?.["x-user-id"]);
+    const allowed =
+      isRequestInternalTestUser(req) || isCampaignTester(found, requestHandle);
+    if (!allowed) return null;
+  }
+  return found;
+}
+
 router.get("/config", authenticateTokenOptional, async (req, res) => {
   try {
     const requestHandle = normalizeTesterHandle(req.headers["x-user-id"]);
@@ -155,6 +191,98 @@ router.get("/config", authenticateTokenOptional, async (req, res) => {
   } catch (error) {
     console.error("[CampaignConfig] error:", error.message || error);
     return res.status(500).json({ success: false, error: "获取活动配置失败" });
+  }
+});
+
+router.get("/custom-leaderboard", async (req, res) => {
+  try {
+    const normalizedCampaign = normalizeCampaign(req.query.campaign);
+    if (!normalizedCampaign) {
+      return res.status(400).json({ success: false, error: "campaign is required" });
+    }
+
+    const campaignConfig = await getCustomCampaignConfig(normalizedCampaign, req);
+    if (!campaignConfig) {
+      return res.status(404).json({ success: false, error: "Campaign not found" });
+    }
+
+    const customLeaderboards = getCustomLeaderboardsFromCampaign(campaignConfig);
+    if (!customLeaderboards.length) {
+      return res.status(400).json({
+        success: false,
+        error: "Campaign is not configured with custom leaderboards",
+      });
+    }
+
+    // TODO: 新的自定义活动榜单数据源确定后，在这里按 campaign 拉取真实榜单数据。
+    // 当前先按配置返回空榜单，保证插件可以完成 custom leaderboard 对接联调。
+    const leaderboards = {};
+    customLeaderboards.forEach((item, index) => {
+      const key = getCustomLeaderboardKey(item, index);
+      leaderboards[key] = [];
+    });
+
+    res.set("Cache-Control", "public, max-age=300");
+    return res.json({
+      success: true,
+      campaign: normalizedCampaign,
+      updatedAt: new Date().toISOString(),
+      leaderboards,
+    });
+  } catch (err) {
+    console.error("[CustomLeaderboard] error:", err.message || err);
+    return res.status(502).json({
+      success: false,
+      error: "Failed to fetch custom leaderboard",
+    });
+  }
+});
+
+router.get("/custom-user-activity", async (req, res) => {
+  try {
+    const normalizedCampaign = normalizeCampaign(req.query.campaign);
+    const userId = req.query.userid || req.query.userId;
+    if (!normalizedCampaign) {
+      return res.status(400).json({ success: false, error: "campaign is required" });
+    }
+    if (!userId) {
+      return res.status(400).json({ success: false, error: "userid is required" });
+    }
+
+    const campaignConfig = await getCustomCampaignConfig(normalizedCampaign, req);
+    if (!campaignConfig) {
+      return res.status(404).json({ success: false, error: "Campaign not found" });
+    }
+
+    const customLeaderboards = getCustomLeaderboardsFromCampaign(campaignConfig);
+    if (!customLeaderboards.length) {
+      return res.status(400).json({
+        success: false,
+        error: "Campaign is not configured with custom leaderboards",
+      });
+    }
+
+    // TODO: 新的用户自定义榜单排名接口确定后，在这里按 campaign + userid 拉取真实排名。
+    // 当前先返回 null rank，前端会按约定展示 999+。
+    const leaderboards = {};
+    customLeaderboards.forEach((item, index) => {
+      const key = getCustomLeaderboardKey(item, index);
+      leaderboards[key] = { rank: null };
+    });
+
+    res.set("Cache-Control", "private, max-age=300");
+    return res.json({
+      success: true,
+      campaign: normalizedCampaign,
+      userid: String(userId),
+      leaderboards,
+    });
+  } catch (err) {
+    console.error("[CustomUserActivity] error:", err.message || err);
+    return res.status(502).json({
+      success: false,
+      error: "Failed to fetch custom user activity",
+    });
   }
 });
 

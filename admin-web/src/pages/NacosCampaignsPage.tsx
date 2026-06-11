@@ -17,6 +17,10 @@ const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
 const DEFAULT_WEBSITE_LIST_LEFT_LOGO = "https://xhunt.ai/whitexhunt.png";
 const DEFAULT_WEBSITE_LIST_RIGHT_LOGO = "https://xhunt.ai/whitexhunt.png";
 const DEFAULT_WEBSITE_LIST_CHEST_IMAGE = "https://xhunt.ai/usdc2.png";
+const DEFAULT_CUSTOM_LEADERBOARD_API_URL =
+  "/api/xhunt/campaigns/custom-leaderboard";
+const DEFAULT_CUSTOM_USER_ACTIVITY_API_URL =
+  "/api/xhunt/campaigns/custom-user-activity";
 
 const TAG_COLOR_SCHEMES = [
   { value: "green", label: "绿色", className: "tag-green" },
@@ -203,13 +207,18 @@ function normalizeCampaign(input: AnyObj): AnyObj {
       ? c.leaderboardMode
       : "traditional";
   c.leaderboardApiUrl =
-    typeof c.leaderboardApiUrl === "string" ? c.leaderboardApiUrl : "";
+    typeof c.leaderboardApiUrl === "string" && c.leaderboardApiUrl.trim()
+      ? c.leaderboardApiUrl
+      : DEFAULT_CUSTOM_LEADERBOARD_API_URL;
   c.userActivityApiUrl =
-    typeof c.userActivityApiUrl === "string" ? c.userActivityApiUrl : "";
+    typeof c.userActivityApiUrl === "string" && c.userActivityApiUrl.trim()
+      ? c.userActivityApiUrl
+      : DEFAULT_CUSTOM_USER_ACTIVITY_API_URL;
   c.customLeaderboards = Array.isArray(c.customLeaderboards)
     ? c.customLeaderboards
     : [];
   c.customLeaderboards = c.customLeaderboards.map((it: AnyObj) => ({
+    id: String(it?.id || ""),
     name:
       it?.name && typeof it.name === "object"
         ? { zh: String(it.name.zh || ""), en: String(it.name.en || "") }
@@ -331,8 +340,8 @@ function makeNewCampaign(): AnyObj {
     showSponsoredPolicy: true,
     allowEmailRegistration: false,
     leaderboardMode: "traditional",
-    leaderboardApiUrl: "",
-    userActivityApiUrl: "",
+    leaderboardApiUrl: DEFAULT_CUSTOM_LEADERBOARD_API_URL,
+    userActivityApiUrl: DEFAULT_CUSTOM_USER_ACTIVITY_API_URL,
     customLeaderboards: [],
     enableEssayContest: false,
     enablePowLeaderboard: false,
@@ -1297,6 +1306,7 @@ export function NacosCampaignsPage() {
       if (kind === "writingThemes") c[kind].push({ zh: "", en: "" });
       if (kind === "customLeaderboards")
         c[kind].push({
+          id: "",
           name: { zh: "", en: "" },
           amount: undefined,
           participantCount: undefined,
@@ -2289,6 +2299,7 @@ function CustomLeaderboards({
             extra={<RepActions onUp={() => move("customLeaderboards", i, -1)} onDown={() => move("customLeaderboards", i, 1)} onRemove={() => remove("customLeaderboards", i)} />}
           >
             <Row gutter={[12, 12]}>
+              <Col xs={24} md={8}><Field label={<InfoLabel info="榜单唯一 key，建议填写；榜单接口和用户排名接口会按这个 key 返回数据。">榜单 ID</InfoLabel>}><Input value={it.id || ""} onChange={(e) => update("customLeaderboards", i, "id", e.target.value)} placeholder="poi leaderboard" /></Field></Col>
               <Col xs={24} md={8}><Field label="中文名"><Input value={it.name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "name.zh", e.target.value)} /></Field></Col>
               <Col xs={24} md={8}><Field label="English"><Input value={it.name?.en || ""} onChange={(e) => update("customLeaderboards", i, "name.en", e.target.value)} /></Field></Col>
               <Col xs={12} md={4}><Field label="金额"><InputNumber min={0} value={it.amount} onChange={(v) => update("customLeaderboards", i, "amount", v)} /></Field></Col>
