@@ -138,6 +138,59 @@ function getCustomLeaderboardsFromCampaign(campaignConfig) {
     : [];
 }
 
+function buildFakeCustomLeaderboardRows(leaderboardKey, leaderboardIndex) {
+  const sampleUsers = [
+    {
+      username: "luykin",
+      name: "Luykin",
+      image: "https://pbs.twimg.com/profile_images/1967482817262329856/6aqnKCtd.jpg",
+      isVerified: true,
+    },
+    {
+      username: "captain_kent",
+      name: "Captain Kent",
+      image: "https://pbs.twimg.com/profile_images/1720296579406667776/placeholder.jpg",
+      isVerified: false,
+    },
+    {
+      username: "xhunt_ai",
+      name: "XHunt",
+      image: "https://xhunt.ai/whitexhunt.png",
+      isVerified: true,
+    },
+    {
+      username: "web3_hunter",
+      name: "Web3 Hunter",
+      image: "https://xhunt.ai/whitexhunt.png",
+      isVerified: false,
+    },
+    {
+      username: "ai_researcher",
+      name: "AI Researcher",
+      image: "https://xhunt.ai/whitexhunt.png",
+      isVerified: false,
+    },
+  ];
+  const unit = leaderboardKey.includes("pow") || leaderboardIndex === 1 ? "XP" : "USDT";
+  return sampleUsers.map((user, index) => {
+    const rank = index + 1;
+    const baseScore = (leaderboardIndex + 1) * 10000;
+    const score = baseScore - index * 1375;
+    const reward = Math.max(0, 500 - index * 70);
+    return {
+      rank,
+      username: user.username,
+      name: user.name,
+      image: user.image,
+      share: Number((0.185 - index * 0.026 - leaderboardIndex * 0.008).toFixed(4)),
+      score,
+      reward: `${reward} ${unit}`,
+      isVerified: user.isVerified,
+      change: index === 0 ? 1 : index === 1 ? -1 : 0,
+    };
+  });
+}
+
 async function getCustomCampaignConfig(campaign, req) {
   const found = await getManagedCampaignPayloadByKey(campaign, {
     includeTesting: true,
@@ -215,11 +268,11 @@ router.get("/custom-leaderboard", async (req, res) => {
     }
 
     // TODO: 新的自定义活动榜单数据源确定后，在这里按 campaign 拉取真实榜单数据。
-    // 当前先按配置返回空榜单，保证插件可以完成 custom leaderboard 对接联调。
+    // 当前先按配置返回假榜单，方便插件验证 custom leaderboard 展示效果。
     const leaderboards = {};
     customLeaderboards.forEach((item, index) => {
       const key = getCustomLeaderboardKey(item, index);
-      leaderboards[key] = [];
+      leaderboards[key] = buildFakeCustomLeaderboardRows(key, index);
     });
 
     res.set("Cache-Control", "public, max-age=300");
@@ -263,11 +316,11 @@ router.get("/custom-user-activity", async (req, res) => {
     }
 
     // TODO: 新的用户自定义榜单排名接口确定后，在这里按 campaign + userid 拉取真实排名。
-    // 当前先返回 null rank，前端会按约定展示 999+。
+    // 当前先返回假排名，方便插件验证已报名状态卡片展示效果。
     const leaderboards = {};
     customLeaderboards.forEach((item, index) => {
       const key = getCustomLeaderboardKey(item, index);
-      leaderboards[key] = { rank: null };
+      leaderboards[key] = { rank: index * 11 + 7 };
     });
 
     res.set("Cache-Control", "private, max-age=300");

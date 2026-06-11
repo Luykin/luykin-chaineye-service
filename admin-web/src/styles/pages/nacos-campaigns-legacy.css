@@ -1284,11 +1284,21 @@
     white-space: pre-wrap;
     word-break: break-all;
   }
+  .json-preview-modal-body pre span.diff-path {
+    display: inline-block;
+    margin: 8px 0 4px;
+    color: #475569;
+    font-weight: 700;
+  }
   .json-preview-modal-body pre span.added {
+    display: inline-block;
+    width: 100%;
     color: #166534;
     background: #dcfce7;
   }
   .json-preview-modal-body pre span.removed {
+    display: inline-block;
+    width: 100%;
     color: #991b1b;
     background: #fee2e2;
     text-decoration: line-through;

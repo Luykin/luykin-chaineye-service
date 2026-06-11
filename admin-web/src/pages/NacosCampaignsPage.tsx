@@ -142,7 +142,11 @@ function normalizeConfig(obj: unknown): CampaignConfig {
   return out;
 }
 
-function normalizeCampaign(input: AnyObj): AnyObj {
+function normalizeCampaign(
+  input: AnyObj,
+  options: { fillDefaultApiUrls?: boolean } = {},
+): AnyObj {
+  const { fillDefaultApiUrls = true } = options;
   const c = input && typeof input === "object" ? input : {};
   c.enrollmentWindow =
     c.enrollmentWindow && typeof c.enrollmentWindow === "object"
@@ -207,13 +211,23 @@ function normalizeCampaign(input: AnyObj): AnyObj {
       ? c.leaderboardMode
       : "traditional";
   c.leaderboardApiUrl =
-    typeof c.leaderboardApiUrl === "string" && c.leaderboardApiUrl.trim()
+    typeof c.leaderboardApiUrl === "string"
       ? c.leaderboardApiUrl
-      : DEFAULT_CUSTOM_LEADERBOARD_API_URL;
+      : fillDefaultApiUrls
+        ? DEFAULT_CUSTOM_LEADERBOARD_API_URL
+        : "";
+  if (fillDefaultApiUrls && !c.leaderboardApiUrl.trim()) {
+    c.leaderboardApiUrl = DEFAULT_CUSTOM_LEADERBOARD_API_URL;
+  }
   c.userActivityApiUrl =
-    typeof c.userActivityApiUrl === "string" && c.userActivityApiUrl.trim()
+    typeof c.userActivityApiUrl === "string"
       ? c.userActivityApiUrl
-      : DEFAULT_CUSTOM_USER_ACTIVITY_API_URL;
+      : fillDefaultApiUrls
+        ? DEFAULT_CUSTOM_USER_ACTIVITY_API_URL
+        : "";
+  if (fillDefaultApiUrls && !c.userActivityApiUrl.trim()) {
+    c.userActivityApiUrl = DEFAULT_CUSTOM_USER_ACTIVITY_API_URL;
+  }
   c.customLeaderboards = Array.isArray(c.customLeaderboards)
     ? c.customLeaderboards
     : [];
@@ -430,22 +444,103 @@ function makeWebsiteForm(
   };
 }
 
-function buildDiffHtml(oldConfig: unknown, nextConfig: unknown) {
-  if (window.Diff?.diffJson) {
-    return window.Diff.diffJson(oldConfig || {}, nextConfig || {})
-      .map((part) => {
-        const cls = part.added ? "added" : part.removed ? "removed" : "";
-        const text = document.createElement("div");
-        text.textContent = part.value;
-        return cls
-          ? `<span class="${cls}">${text.innerHTML}</span>`
-          : text.innerHTML;
-      })
-      .join("");
-  }
+function escapeHtml(value: string) {
   const div = document.createElement("div");
-  div.textContent = JSON.stringify(nextConfig, null, 2);
+  div.textContent = value;
   return div.innerHTML;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function formatDiffValue(value: unknown) {
+  if (value === undefined) return "undefined";
+  const formatted = JSON.stringify(value, null, 2);
+  return formatted === undefined ? String(value) : formatted;
+}
+
+function isSameJsonValue(a: unknown, b: unknown) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+type DiffLine = {
+  path: string;
+  type: "added" | "removed" | "changed";
+  before?: unknown;
+  after?: unknown;
+};
+
+function collectDiffLines(
+  oldValue: unknown,
+  nextValue: unknown,
+  path = "root",
+  lines: DiffLine[] = [],
+) {
+  if (isSameJsonValue(oldValue, nextValue)) return lines;
+
+  if (oldValue === undefined) {
+    lines.push({ path, type: "added", after: nextValue });
+    return lines;
+  }
+  if (nextValue === undefined) {
+    lines.push({ path, type: "removed", before: oldValue });
+    return lines;
+  }
+
+  if (isPlainObject(oldValue) && isPlainObject(nextValue)) {
+    const keys = Array.from(
+      new Set([...Object.keys(oldValue), ...Object.keys(nextValue)]),
+    ).sort();
+    keys.forEach((key) => {
+      collectDiffLines(oldValue[key], nextValue[key], `${path}.${key}`, lines);
+    });
+    return lines;
+  }
+
+  if (Array.isArray(oldValue) && Array.isArray(nextValue)) {
+    const max = Math.max(oldValue.length, nextValue.length);
+    for (let i = 0; i < max; i += 1) {
+      collectDiffLines(oldValue[i], nextValue[i], `${path}[${i}]`, lines);
+    }
+    return lines;
+  }
+
+  lines.push({ path, type: "changed", before: oldValue, after: nextValue });
+  return lines;
+}
+
+function renderDiffBlock(prefix: string, value: unknown, className: string) {
+  const formatted = formatDiffValue(value);
+  return formatted
+    .split("\n")
+    .map((line, index) => {
+      const marker = index === 0 ? prefix : " ";
+      return `<span class="${className}">${escapeHtml(`${marker} ${line}`)}</span>`;
+    })
+    .join("\n");
+}
+
+function buildDiffHtml(oldConfig: unknown, nextConfig: unknown) {
+  const lines = collectDiffLines(oldConfig || {}, nextConfig || {});
+  if (!lines.length) return escapeHtml("无改动");
+
+  return lines
+    .map((line) => {
+      const header = `<span class="diff-path">@@ ${escapeHtml(line.path)}</span>`;
+      if (line.type === "added") {
+        return `${header}\n${renderDiffBlock("+", line.after, "added")}`;
+      }
+      if (line.type === "removed") {
+        return `${header}\n${renderDiffBlock("-", line.before, "removed")}`;
+      }
+      return [
+        header,
+        renderDiffBlock("-", line.before, "removed"),
+        renderDiffBlock("+", line.after, "added"),
+      ].join("\n");
+    })
+    .join("\n\n");
 }
 
 function InfoLabel({
@@ -636,7 +731,7 @@ export function NacosCampaignsPage() {
       const campaign = next.campaigns[selection.index];
       if (!campaign) return prev;
       mutator(campaign);
-      normalizeCampaign(campaign);
+      normalizeCampaign(campaign, { fillDefaultApiUrls: false });
       return next;
     });
     setDirty(true);
@@ -1893,35 +1988,69 @@ function CampaignEditor(props: {
   return (
     <>
       <Card size="small" title="基础设置" style={{ marginBottom: 12 }}>
-        <Row gutter={[12, 12]} align="top">
-          <Col xs={24} sm={12} md={8} lg={6}><Field label={<InfoLabel info="活动唯一短标识，例如 mantle3、bybit2。保存时会自动生成完整 nacos id。">活动ID</InfoLabel>}><Input value={c.campaignKey || ""} disabled={campaignIdDisabled} onChange={(e) => setCampaignPath("campaignKey", e.target.value)} /></Field></Col>
-          <Col xs={12} sm={8} md={5} lg={4}><Field label={<InfoLabel info="0-10000，数值越大越靠前。">排序权重</InfoLabel>}><InputNumber min={0} max={10000} value={Number(c.sortWeight) || 0} onChange={(v) => setCampaignPath("sortWeight", Math.min(10000, Math.max(0, Number(v) || 0)))} /></Field></Col>
-          <Col xs={24} sm={12} md={8} lg={6}>
-            <Field label={<InfoLabel info="控制活动在哪些业务领域展示。默认 Web3；可同时选择 Web3 和 AI。">展示领域</InfoLabel>}>
-              <Select
-                mode="multiple"
-                allowClear={false}
-                maxTagCount="responsive"
-                value={normalizeDisplayDomains(c.displayDomains)}
-                onChange={(values) =>
-                  setCampaignPath(
-                    "displayDomains",
-                    normalizeDisplayDomains(values),
-                  )
-                }
-                options={CAMPAIGN_DISPLAY_DOMAIN_OPTIONS}
-              />
-            </Field>
+        <Row gutter={[20, 18]} align="top">
+          <Col xs={24} xl={14}>
+            <div style={{ marginBottom: 10, fontSize: 13, fontWeight: 700, color: "#475569" }}>
+              基础信息
+            </div>
+            <Row gutter={[12, 12]}>
+              <Col xs={24} md={12}>
+                <Field label={<InfoLabel info="活动唯一短标识，例如 mantle3、bybit2。保存时会自动生成完整 nacos id。">活动ID</InfoLabel>}>
+                  <Input value={c.campaignKey || ""} disabled={campaignIdDisabled} onChange={(e) => setCampaignPath("campaignKey", e.target.value)} />
+                </Field>
+              </Col>
+              <Col xs={12} md={6}>
+                <Field label={<InfoLabel info="0-10000，数值越大越靠前。">排序权重</InfoLabel>}>
+                  <InputNumber min={0} max={10000} style={{ width: "100%" }} value={Number(c.sortWeight) || 0} onChange={(v) => setCampaignPath("sortWeight", Math.min(10000, Math.max(0, Number(v) || 0)))} />
+                </Field>
+              </Col>
+              <Col xs={24} md={18}>
+                <Field label={<InfoLabel info="控制活动在哪些业务领域展示。默认 Web3；可同时选择 Web3 和 AI。">展示领域</InfoLabel>}>
+                  <Select
+                    mode="multiple"
+                    allowClear={false}
+                    maxTagCount="responsive"
+                    value={normalizeDisplayDomains(c.displayDomains)}
+                    onChange={(values) =>
+                      setCampaignPath(
+                        "displayDomains",
+                        normalizeDisplayDomains(values),
+                      )
+                    }
+                    options={CAMPAIGN_DISPLAY_DOMAIN_OPTIONS}
+                  />
+                </Field>
+              </Col>
+            </Row>
           </Col>
-          <Col xs={24} lg={8}>
-            <Space size={[16, 8]} wrap style={{ paddingTop: 24 }}>
-              <Space><Switch checked={!!c.enabled} onChange={(v) => setCampaignPath("enabled", v)} /><InfoLabel info="关闭后插件列表不展示，报名接口也会拒绝。">展示活动</InfoLabel></Space>
-              <Space><Switch checked={!!c.testingPhase} onChange={(v) => setCampaignPath("testingPhase", v)} /><InfoLabel info="仅内部测试用户可见。">测试模式</InfoLabel></Space>
-              <Space><Switch checked={!!c.riskConfirmHtml} onChange={changeRiskConfirm} /><InfoLabel info="在活动页面弹出 Early-stage 风险确认提示。">风险提示</InfoLabel></Space>
-              <Space><Switch checked={c.showSponsoredPolicy === true} onChange={(v) => setCampaignPath("showSponsoredPolicy", v)} /><InfoLabel info="在报名按钮附近展示付费推广政策说明。">推广政策</InfoLabel></Space>
-              <Space><Switch checked={c.allowEmailRegistration === true} onChange={(v) => setCampaignPath("allowEmailRegistration", v)} /><InfoLabel info="开启后 EVM 和 Email 二选一报名。">Email 注册</InfoLabel></Space>
-              <Space><InfoLabel info="传统模式配置 POI/POW/征文；自定义模式配置多个榜单。">活动模式</InfoLabel><Segmented size="small" value={c.leaderboardMode || "traditional"} onChange={(value) => setCampaignPath("leaderboardMode", String(value))} options={[{ value: "traditional", label: "传统" }, { value: "custom", label: "自定义" }]} /></Space>
-            </Space>
+
+          <Col xs={24} xl={10}>
+            <div style={{ marginBottom: 10, fontSize: 13, fontWeight: 700, color: "#475569" }}>
+              发布与规则
+            </div>
+            <Row gutter={[12, 12]} align="middle">
+              <Col xs={24} sm={12} md={8} xl={12}>
+                <Space><Switch checked={!!c.enabled} onChange={(v) => setCampaignPath("enabled", v)} /><InfoLabel info="关闭后插件列表不展示，报名接口也会拒绝。">展示活动</InfoLabel></Space>
+              </Col>
+              <Col xs={24} sm={12} md={8} xl={12}>
+                <Space><Switch checked={!!c.testingPhase} onChange={(v) => setCampaignPath("testingPhase", v)} /><InfoLabel info="仅内部测试用户可见。">测试模式</InfoLabel></Space>
+              </Col>
+              <Col xs={24} sm={12} md={8} xl={12}>
+                <Space><Switch checked={!!c.riskConfirmHtml} onChange={changeRiskConfirm} /><InfoLabel info="在活动页面弹出 Early-stage 风险确认提示。">风险提示</InfoLabel></Space>
+              </Col>
+              <Col xs={24} sm={12} md={8} xl={12}>
+                <Space><Switch checked={c.showSponsoredPolicy === true} onChange={(v) => setCampaignPath("showSponsoredPolicy", v)} /><InfoLabel info="在报名按钮附近展示付费推广政策说明。">推广政策</InfoLabel></Space>
+              </Col>
+              <Col xs={24} sm={12} md={8} xl={12}>
+                <Space><Switch checked={c.allowEmailRegistration === true} onChange={(v) => setCampaignPath("allowEmailRegistration", v)} /><InfoLabel info="开启后 EVM 和 Email 二选一报名。">Email 注册</InfoLabel></Space>
+              </Col>
+              <Col xs={24} sm={12} md={8} xl={12}>
+                <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                  <InfoLabel info="传统模式配置 POI/POW/征文；自定义模式配置多个榜单。">活动模式</InfoLabel>
+                  <Segmented size="small" block value={c.leaderboardMode || "traditional"} onChange={(value) => setCampaignPath("leaderboardMode", String(value))} options={[{ value: "traditional", label: "传统" }, { value: "custom", label: "自定义" }]} />
+                </Space>
+              </Col>
+            </Row>
           </Col>
         </Row>
       </Card>
