@@ -45,7 +45,7 @@ async function ensureUniqueInviteCode() {
   throw new Error("Failed to generate unique invite code");
 }
 
-const SPECIAL_INVITE_CODE = "XHuntAI";
+// const SPECIAL_INVITE_CODE = "XHuntAI";
 
 function normalizeCampaign(raw) {
   if (!raw || typeof raw !== "string") return null;
@@ -74,29 +74,106 @@ function isCampaignTester(campaign, requestHandle) {
   return list.some((item) => normalizeTesterHandle(item) === requestHandle);
 }
 
+const CAMPAIGN_DISPLAY_DOMAINS = new Set(["web3", "ai"]);
+
+function normalizeDisplayDomain(value) {
+  if (Array.isArray(value)) return normalizeDisplayDomain(value[0]);
+  if (value === null || value === undefined || value === "") return "";
+  const normalized = String(value).trim().toLowerCase();
+  return CAMPAIGN_DISPLAY_DOMAINS.has(normalized) ? normalized : null;
+}
+
+function getCampaignDisplayDomains(campaign) {
+  const list = Array.isArray(campaign?.displayDomains)
+    ? campaign.displayDomains
+    : ["web3"];
+  const domains = list
+    .map((item) => normalizeDisplayDomain(item))
+    .filter(Boolean);
+  return domains.length ? domains : ["web3"];
+}
+
+function matchesDisplayDomain(campaign, domain) {
+  if (!domain) return true;
+  return getCampaignDisplayDomains(campaign).includes(domain);
+}
+
 const INITIALIZE_CAMPAIGN_URL =
   "https://data.cryptohunt.ai/pro/api/initialize_campaign";
 const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400; // 1 天
+const CAMPAIGN_CONFIG_CACHE_TTL = 300; // 5 分钟
+
+function setCampaignConfigCacheHeaders(res) {
+  // 按 x-user-id 可能返回测试活动，使用 private 避免共享缓存串用户；浏览器仍会 5 分钟强缓存。
+  res.set("Cache-Control", `private, max-age=${CAMPAIGN_CONFIG_CACHE_TTL}`);
+  res.set("Expires", new Date(Date.now() + CAMPAIGN_CONFIG_CACHE_TTL * 1000).toUTCString());
+  res.set("Vary", "x-user-id, Authorization");
+}
 
 router.get("/config", authenticateTokenOptional, async (req, res) => {
   try {
     const requestHandle = normalizeTesterHandle(req.headers["x-user-id"]);
+    const requestedDomain = normalizeDisplayDomain(
+      req.query.domain || req.query.displayDomain,
+    );
+    if (requestedDomain === null) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid domain. Supported values: web3, ai",
+      });
+    }
+
+    const cacheKey = [
+      "xhunt:campaign-config:v2",
+      `domain:${requestedDomain || "all"}`,
+      `user:${requestHandle || "anonymous"}`,
+    ].join(":");
+
+    if (req.redisClient?.get) {
+      try {
+        const cached = await req.redisClient.get(cacheKey);
+        if (cached) {
+          setCampaignConfigCacheHeaders(res);
+          return res.json(JSON.parse(cached));
+        }
+      } catch (cacheErr) {
+        console.warn("[CampaignConfig] redis get warn:", cacheErr.message || cacheErr);
+      }
+    }
+
     const allCampaigns = await listPluginCampaigns({ includeTesting: true });
     let includeTesting = false;
     const campaigns = allCampaigns.filter((campaign) => {
+      if (!matchesDisplayDomain(campaign, requestedDomain)) return false;
       if (!campaign.testingPhase) return true;
       const allowed = isCampaignTester(campaign, requestHandle);
       if (allowed) includeTesting = true;
       return allowed;
     });
 
-    return res.json({
+    const payload = {
       success: true,
       version: 3,
       source: "database",
+      domain: requestedDomain || null,
       includeTesting,
       campaigns,
-    });
+    };
+
+    if (req.redisClient?.setEx) {
+      try {
+        await req.redisClient.setEx(
+          cacheKey,
+          CAMPAIGN_CONFIG_CACHE_TTL,
+          JSON.stringify(payload),
+        );
+      } catch (cacheErr) {
+        console.warn("[CampaignConfig] redis set warn:", cacheErr.message || cacheErr);
+      }
+    }
+
+    setCampaignConfigCacheHeaders(res);
+    return res.json(payload);
   } catch (error) {
     console.error("[CampaignConfig] error:", error.message || error);
     return res.status(500).json({ success: false, error: "获取活动配置失败" });
