@@ -5,7 +5,7 @@
 .messages-page .admin-page-section > .ant-card-body {
   background:
     radial-gradient(circle at 100% 0, rgba(59, 130, 246, 0.05), transparent 28%),
-    linear-gradient(180deg, var(--admin-surface) 0%, #fbfdff 100%);
+    linear-gradient(180deg, var(--admin-surface) 0%, light-dark(#fbfdff, #111827) 100%);
 }
 
 .messages-hero {
@@ -15,10 +15,14 @@
   gap: 16px;
   margin-bottom: 16px;
   padding: 16px 18px;
-  border: 1px solid #dbeafe;
+  border: 1px solid light-dark(#dbeafe, rgba(96, 165, 250, 0.32));
   border-radius: 12px;
   background:
-    linear-gradient(135deg, rgba(239, 246, 255, 0.9), rgba(255, 255, 255, 0.86)),
+    linear-gradient(
+      135deg,
+      light-dark(rgba(239, 246, 255, 0.9), rgba(37, 99, 235, 0.13)),
+      light-dark(rgba(255, 255, 255, 0.86), rgba(17, 24, 39, 0.9))
+    ),
     radial-gradient(circle at 92% 18%, rgba(99, 102, 241, 0.12), transparent 28%);
 }
 
@@ -33,7 +37,7 @@
 
 .messages-hero__title.ant-typography {
   margin: 0 0 4px;
-  color: #172033;
+  color: var(--admin-text-strong);
   font-size: 18px;
   line-height: 1.35;
 }
@@ -48,7 +52,7 @@
 
 .messages-hero__desc code {
   padding: 1px 5px;
-  border: 1px solid #dbeafe;
+  border: 1px solid light-dark(#dbeafe, rgba(96, 165, 250, 0.34));
   border-radius: 5px;
   background: var(--admin-surface);
   color: var(--admin-primary-strong);
@@ -75,12 +79,12 @@
 .messages-card.ant-card {
   border-color: var(--admin-border-soft);
   border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 8px 20px light-dark(rgba(15, 23, 42, 0.04), rgba(0, 0, 0, 0.2));
 }
 
 .messages-card > .ant-card-head {
   min-height: 44px;
-  border-bottom-color: #eef2f7;
+  border-bottom-color: var(--admin-border);
 }
 
 .messages-card > .ant-card-head .ant-card-head-title {
@@ -117,14 +121,14 @@
 
 .messages-composer-card .ant-input,
 .messages-composer-card .ant-input-affix-wrapper {
-  border-color: #dbe3ee;
+  border-color: var(--admin-border-soft);
   border-radius: 8px;
   font-size: 13px;
 }
 
 .messages-composer-card .ant-input:hover,
 .messages-composer-card .ant-input-affix-wrapper:hover {
-  border-color: #bfdbfe;
+  border-color: light-dark(#bfdbfe, rgba(96, 165, 250, 0.42));
 }
 
 .messages-composer-card .ant-input:focus,
@@ -151,8 +155,8 @@
 
 .messages-count-tag.ant-tag {
   margin-inline-end: 0;
-  border-color: #e0ecff;
-  background: #f8fbff;
+  border-color: light-dark(#e0ecff, rgba(96, 165, 250, 0.34));
+  background: light-dark(#f8fbff, rgba(96, 165, 250, 0.12));
   color: var(--admin-primary);
   font-size: 11px;
   font-weight: 600;
@@ -189,18 +193,18 @@
 }
 
 .messages-stat--users {
-  border-color: #bfdbfe;
+  border-color: light-dark(#bfdbfe, rgba(96, 165, 250, 0.42));
   background: var(--admin-primary-soft);
 }
 
 .messages-stat--links {
-  border-color: #c7d2fe;
-  background: #eef2ff;
+  border-color: light-dark(#c7d2fe, rgba(129, 140, 248, 0.38));
+  background: light-dark(#eef2ff, rgba(99, 102, 241, 0.14));
 }
 
 .messages-result-stat--success {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
+  border-color: light-dark(#bbf7d0, rgba(74, 222, 128, 0.36));
+  background: light-dark(#f0fdf4, rgba(16, 185, 129, 0.14));
 }
 
 .messages-result-stat--missing {
@@ -209,18 +213,18 @@
 }
 
 .messages-result-stat--repeat {
-  border-color: #fde68a;
-  background: #fffbeb;
+  border-color: light-dark(#fde68a, rgba(251, 191, 36, 0.38));
+  background: light-dark(#fffbeb, rgba(245, 158, 11, 0.14));
 }
 
 .messages-result-stat--error {
-  border-color: #fecaca;
-  background: #fef2f2;
+  border-color: light-dark(#fecaca, rgba(248, 113, 113, 0.38));
+  background: light-dark(#fef2f2, rgba(239, 68, 68, 0.14));
 }
 
 .messages-divider.ant-divider {
   margin: 14px 0;
-  border-color: #eef2f7;
+  border-color: var(--admin-border);
 }
 
 .messages-current-title .ant-typography-secondary {
@@ -269,7 +273,7 @@
 .messages-preview-message__title.ant-typography {
   display: block;
   margin-bottom: 6px;
-  color: #172033;
+  color: var(--admin-text-strong);
   font-size: 13px;
 }
 

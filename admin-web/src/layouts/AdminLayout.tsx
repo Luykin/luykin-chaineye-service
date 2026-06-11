@@ -1,6 +1,7 @@
 import {
   AppstoreOutlined,
   BarChartOutlined,
+  BulbOutlined,
   CaretRightOutlined,
   CheckCircleFilled,
   CodeOutlined,
@@ -9,6 +10,7 @@ import {
   LogoutOutlined,
   MenuOutlined,
   MonitorOutlined,
+  MoonOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
@@ -574,6 +576,7 @@ export function AdminLayout() {
               {
                 key: "toggle-theme",
                 label: adminTheme.effectiveMode === "dark" ? "切换浅色模式" : "切换深色模式",
+                icon: adminTheme.effectiveMode === "dark" ? <BulbOutlined /> : <MoonOutlined />,
                 onClick: adminTheme.toggleMode,
               },
               { type: "divider" },
