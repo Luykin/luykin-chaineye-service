@@ -104,7 +104,7 @@
 .admin-top-nav-popup.ant-menu-submenu-popup .ant-menu {
   padding: 6px;
   border-radius: 10px;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 14px 34px light-dark(rgba(15, 23, 42, 0.14), rgba(0, 0, 0, 0.36));
 }
 
 .admin-top-nav-popup .ant-menu-item,
@@ -258,10 +258,10 @@
 .ant-menu-submenu-popup .admin-top-nav-popup.ant-menu {
   min-width: 188px !important;
   padding: 8px !important;
-  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  border: 1px solid light-dark(rgba(226, 232, 240, 0.9), rgba(148, 163, 184, 0.34)) !important;
   border-radius: 12px !important;
-  background: var(--admin-surface) !important;
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.13) !important;
+  background: light-dark(var(--admin-surface), #0f172a) !important;
+  box-shadow: 0 16px 36px light-dark(rgba(15, 23, 42, 0.13), rgba(0, 0, 0, 0.42)) !important;
 }
 
 .ant-menu-submenu-popup.admin-top-nav-popup .ant-menu-item,
@@ -292,7 +292,7 @@
 .admin-top-nav-popup.ant-menu-submenu-popup .ant-menu-item-selected,
 .ant-menu-submenu-popup .admin-top-nav-popup.ant-menu .ant-menu-item-selected {
   color: var(--admin-primary) !important;
-  background: #eef5ff !important;
+  background: light-dark(#eef5ff, color-mix(in srgb, var(--admin-primary) 18%, #0f172a)) !important;
   font-weight: 600 !important;
 }
 

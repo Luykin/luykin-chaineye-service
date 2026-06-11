@@ -33,11 +33,11 @@
 }
 
 .overview-trend-up {
-  color: #15803d;
+  color: light-dark(#15803d, #4ade80);
 }
 
 .overview-trend-down {
-  color: #b91c1c;
+  color: light-dark(#b91c1c, #f87171);
 }
 
 /* 覆盖统计组件在数据概览页里的强视觉效果：少渐变、少阴影、少动效。 */
@@ -103,8 +103,8 @@
 }
 
 .overview-stats-section .legacy-stat-card--highlighted {
-  border: 1px solid #93c5fd;
-  background: #f8fbff;
+  border: 1px solid light-dark(#93c5fd, rgba(96, 165, 250, 0.46));
+  background: light-dark(#f8fbff, color-mix(in srgb, var(--admin-primary) 9%, var(--admin-surface)));
   box-shadow: none;
 }
 
@@ -141,7 +141,7 @@
 .overview-stats-section .legacy-stat-card__badge {
   padding: 1px 6px;
   border-radius: 999px;
-  background: #dbeafe;
+  background: light-dark(#dbeafe, color-mix(in srgb, var(--admin-primary) 18%, var(--admin-surface)));
   color: var(--admin-primary-strong);
   font-size: 10px;
   font-weight: 600;
@@ -356,8 +356,8 @@
 
 .overview-stats-section .legacy-stat-card--highlighted {
   --overview-card-accent: var(--admin-primary);
-  border-color: #bfdbfe;
-  background: #f8fbff;
+  border-color: light-dark(#bfdbfe, rgba(96, 165, 250, 0.46));
+  background: light-dark(#f8fbff, color-mix(in srgb, var(--admin-primary) 9%, var(--admin-surface)));
 }
 
 .overview-stats-section .legacy-stat-card--with-icon:nth-child(1) {
@@ -367,41 +367,41 @@
 
 .overview-stats-section .legacy-stat-card--with-icon:nth-child(2) {
   --overview-card-accent: #10b981;
-  background: linear-gradient(180deg, #ecfdf5 0%, var(--admin-surface) 42%);
+  background: linear-gradient(180deg, light-dark(#ecfdf5, rgba(16, 185, 129, 0.13)) 0%, var(--admin-surface) 42%);
 }
 
 .overview-stats-section .legacy-stat-card--with-icon:nth-child(3) {
   --overview-card-accent: #f59e0b;
-  background: linear-gradient(180deg, #fffbeb 0%, var(--admin-surface) 42%);
+  background: linear-gradient(180deg, light-dark(#fffbeb, rgba(245, 158, 11, 0.13)) 0%, var(--admin-surface) 42%);
 }
 
 .overview-stats-section .legacy-stat-card--with-icon:nth-child(4) {
   --overview-card-accent: #ec4899;
-  background: linear-gradient(180deg, #fdf2f8 0%, var(--admin-surface) 42%);
+  background: linear-gradient(180deg, light-dark(#fdf2f8, rgba(236, 72, 153, 0.13)) 0%, var(--admin-surface) 42%);
 }
 
 .overview-stats-section .legacy-stat-card__icon--blue {
-  border-color: #bfdbfe;
+  border-color: light-dark(#bfdbfe, rgba(96, 165, 250, 0.42));
   background: var(--admin-primary-soft) !important;
   color: var(--admin-primary) !important;
 }
 
 .overview-stats-section .legacy-stat-card__icon--green {
-  border-color: #bbf7d0;
-  background: #f0fdf4 !important;
-  color: #16a34a !important;
+  border-color: light-dark(#bbf7d0, rgba(74, 222, 128, 0.36));
+  background: light-dark(#f0fdf4, rgba(16, 185, 129, 0.14)) !important;
+  color: light-dark(#16a34a, #4ade80) !important;
 }
 
 .overview-stats-section .legacy-stat-card__icon--orange {
-  border-color: #fed7aa;
-  background: #fff7ed !important;
-  color: #ea580c !important;
+  border-color: light-dark(#fed7aa, rgba(251, 146, 60, 0.38));
+  background: light-dark(#fff7ed, rgba(249, 115, 22, 0.14)) !important;
+  color: light-dark(#ea580c, #fb923c) !important;
 }
 
 .overview-stats-section .legacy-stat-card__icon--pink {
-  border-color: #fbcfe8;
-  background: #fdf2f8 !important;
-  color: #db2777 !important;
+  border-color: light-dark(#fbcfe8, rgba(244, 114, 182, 0.36));
+  background: light-dark(#fdf2f8, rgba(236, 72, 153, 0.14)) !important;
+  color: light-dark(#db2777, #f472b6) !important;
 }
 
 .overview-stat-card-kol,
@@ -426,23 +426,23 @@
 }
 
 .overview-period-card-weekly {
-  border-color: #bbf7d0;
-  background: linear-gradient(180deg, #f0fdf4 0%, var(--admin-surface) 45%);
+  border-color: light-dark(#bbf7d0, rgba(74, 222, 128, 0.36));
+  background: linear-gradient(180deg, light-dark(#f0fdf4, rgba(16, 185, 129, 0.13)) 0%, var(--admin-surface) 45%);
 }
 
 .overview-period-card-monthly {
-  border-color: #bfdbfe;
+  border-color: light-dark(#bfdbfe, rgba(96, 165, 250, 0.42));
   background: linear-gradient(180deg, var(--admin-primary-soft) 0%, var(--admin-surface) 45%);
 }
 
 .overview-period-card-weekly .overview-period-icon {
-  border-color: #bbf7d0;
-  background: #f0fdf4 !important;
-  color: #16a34a !important;
+  border-color: light-dark(#bbf7d0, rgba(74, 222, 128, 0.36));
+  background: light-dark(#f0fdf4, rgba(16, 185, 129, 0.14)) !important;
+  color: light-dark(#16a34a, #4ade80) !important;
 }
 
 .overview-period-card-monthly .overview-period-icon {
-  border-color: #bfdbfe;
+  border-color: light-dark(#bfdbfe, rgba(96, 165, 250, 0.42));
   background: var(--admin-primary-soft) !important;
   color: var(--admin-primary) !important;
 }

@@ -69,8 +69,8 @@
   padding: 8px 10px;
   border: 1px solid var(--cw-border);
   border-radius: 14px;
-  background: linear-gradient(180deg, var(--admin-surface) 0%, #fbfbfc 100%);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  background: linear-gradient(180deg, var(--admin-surface) 0%, light-dark(#fbfbfc, #151f31) 100%);
+  box-shadow: 0 1px 2px light-dark(rgba(15, 23, 42, 0.04), rgba(0, 0, 0, 0.2));
 }
 
 .config-workbench-toolbar .toolbar-right,
@@ -100,7 +100,7 @@
   border: 1px solid var(--cw-border);
   border-radius: 16px;
   background: var(--cw-panel);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 10px 30px light-dark(rgba(15, 23, 42, 0.05), rgba(0, 0, 0, 0.24));
   overflow: hidden;
 }
 
@@ -123,8 +123,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-bottom: 1px solid #eef0f3;
-  background: #fbfbfc;
+  border-bottom: 1px solid var(--cw-border);
+  background: light-dark(#fbfbfc, #151f31);
 }
 
 .config-workbench-panel-title {
@@ -219,7 +219,7 @@
 .config-workbench .lang-tabs {
   padding: 3px;
   border-radius: 10px;
-  background: #eef0f3;
+  background: light-dark(#eef0f3, #1e293b);
 }
 
 .config-workbench .lang-tab {
@@ -278,8 +278,8 @@
 
 .config-workbench-list-item.active,
 .config-workbench .item.active {
-  background: #f2f5f9;
-  border-color: #cfd8e3;
+  background: light-dark(#f2f5f9, color-mix(in srgb, var(--admin-primary) 10%, var(--admin-surface)));
+  border-color: light-dark(#cfd8e3, rgba(96, 165, 250, 0.32));
 }
 
 .config-workbench-list-title,
@@ -306,9 +306,9 @@
 .config-workbench .list-group-empty {
   margin: 8px;
   padding: 18px 12px;
-  border: 1px dashed #d8dee8;
+  border: 1px dashed light-dark(#d8dee8, #334155);
   border-radius: 12px;
-  background: #fafbfc;
+  background: light-dark(#fafbfc, #151f31);
   color: var(--admin-text-muted);
   text-align: center;
   font-size: 13px;
@@ -358,8 +358,8 @@
   object-fit: cover;
   border-radius: 50%;
   border: 2px solid var(--admin-surface);
-  background: #eef0f3;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+  background: light-dark(#eef0f3, #1e293b);
+  box-shadow: 0 1px 4px light-dark(rgba(15, 23, 42, 0.12), rgba(0, 0, 0, 0.28));
 }
 
 .config-workbench .item-logo + .item-logo {
@@ -391,13 +391,13 @@
 }
 
 .config-workbench .chip.on {
-  background: #ecfdf5;
-  color: #047857;
+  background: light-dark(#ecfdf5, rgba(16, 185, 129, 0.14));
+  color: light-dark(#047857, #4ade80);
 }
 
 .config-workbench .chip.testing {
-  background: #fff7ed;
-  color: #c2410c;
+  background: light-dark(#fff7ed, rgba(249, 115, 22, 0.14));
+  color: light-dark(#c2410c, #fb923c);
 }
 
 .config-workbench .chip-weight {
@@ -437,9 +437,13 @@
   border: 1px solid var(--campaign-brief-border);
   border-radius: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(250, 251, 253, 0.98) 100%),
+    linear-gradient(
+      180deg,
+      light-dark(rgba(255, 255, 255, 0.96), rgba(21, 31, 49, 0.94)) 0%,
+      light-dark(rgba(250, 251, 253, 0.98), rgba(17, 24, 39, 0.98)) 100%
+    ),
     var(--admin-surface);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px light-dark(rgba(15, 23, 42, 0.04), rgba(0, 0, 0, 0.22));
 }
 
 .config-workbench.nacos-campaigns-admin .campaign-brief-main {
@@ -496,7 +500,7 @@
 .config-workbench.nacos-campaigns-admin .campaign-brief-stat {
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid #edf0f4;
+  border: 1px solid var(--cw-border);
   border-radius: 12px;
   background: var(--admin-surface);
 }
@@ -513,7 +517,7 @@
 .config-workbench.nacos-campaigns-admin .campaign-brief-stat strong {
   display: -webkit-box;
   overflow: hidden;
-  color: #303948;
+  color: var(--admin-text-strong);
   font-size: 14px;
   font-weight: 680;
   line-height: 1.45;
@@ -550,9 +554,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 1px dashed #d8dee8;
+  border: 1px dashed light-dark(#d8dee8, #334155);
   border-radius: 14px;
-  background: #fafbfc;
+  background: light-dark(#fafbfc, #151f31);
 }
 
 .config-workbench .empty-title {
@@ -645,7 +649,7 @@
 .config-workbench .preview-section,
 .config-workbench .help-section,
 .config-workbench .editor-color-notice {
-  border-color: #e6eaf0;
+  border-color: var(--cw-border);
   border-radius: 14px;
 }
 
@@ -670,23 +674,23 @@
 }
 
 .config-workbench .section-sub {
-  border: 1px solid #eef0f3;
+  border: 1px solid var(--cw-border);
   border-radius: 12px;
-  background: #fbfcfd;
+  background: light-dark(#fbfcfd, #151f31);
   padding: 12px;
 }
 
 .config-workbench .campaign-status-control {
-  border: 1px solid #e6eaf0;
+  border: 1px solid var(--cw-border);
   border-radius: 14px;
-  background: #fbfcfd;
+  background: light-dark(#fbfcfd, #151f31);
   padding: 12px 14px;
 }
 
 .config-workbench .campaign-options,
 .config-workbench .reward-tier,
 .config-workbench .rep-card {
-  border-color: #e6eaf0;
+  border-color: var(--cw-border);
   border-radius: 13px;
   background: var(--admin-surface);
 }
@@ -696,7 +700,7 @@
 }
 
 .config-workbench .rep-header {
-  border-bottom-color: #eef0f3;
+  border-bottom-color: var(--cw-border);
 }
 
 .config-workbench .preview-section {
@@ -705,8 +709,8 @@
 }
 
 .config-workbench .preview-header {
-  background: #fbfcfd;
-  border-bottom-color: #eef0f3;
+  background: light-dark(#fbfcfd, #151f31);
+  border-bottom-color: var(--cw-border);
 }
 
 .config-workbench .preview-box {
@@ -718,8 +722,8 @@
 }
 
 .config-workbench .editor-color-notice {
-  background: #fff7ed;
-  color: #9a3412;
+  background: light-dark(#fff7ed, rgba(249, 115, 22, 0.13));
+  color: light-dark(#9a3412, #fdba74);
 }
 
 .config-workbench :where(.ant-input, .ant-input-number, .ant-select-selector) {
@@ -733,7 +737,7 @@
 .config-workbench.nacos-tags-container .nacos-tags-search {
   margin-bottom: 10px;
   border-radius: 10px;
-  background: #fbfcfd;
+  background: light-dark(#fbfcfd, #151f31);
 }
 
 .config-workbench.nacos-tags-container .nacos-tags-list {
@@ -752,8 +756,8 @@
 }
 
 .config-workbench.nacos-tags-container .nacos-tags-item.is-active {
-  background: #f2f7ff;
-  border-color: #bfdbfe;
+  background: light-dark(#f2f7ff, color-mix(in srgb, var(--admin-primary) 12%, var(--admin-surface)));
+  border-color: light-dark(#bfdbfe, rgba(96, 165, 250, 0.42));
   box-shadow: inset 3px 0 0 var(--admin-primary);
 }
 
@@ -790,15 +794,15 @@
 }
 
 .config-workbench.nacos-tags-container .nacos-tags-input-row {
-  background: #fbfcfd;
-  border-color: #e6eaf0;
+  background: light-dark(#fbfcfd, #151f31);
+  border-color: var(--cw-border);
   border-radius: 12px;
 }
 
 .config-workbench.nacos-tags-container .nacos-tags-chip-preview-section,
 .config-workbench.nacos-tags-container .nacos-tags-preview-section {
   padding: 12px;
-  border: 1px solid #e6eaf0;
+  border: 1px solid var(--cw-border);
   border-radius: 14px;
   background: var(--admin-surface);
 }
@@ -904,15 +908,15 @@
 .config-workbench-toolbar .config-action-danger,
 .config-workbench-toolbar .nacos-btn-danger {
   background: var(--admin-surface);
-  border-color: #fecaca;
-  color: #dc2626;
+  border-color: light-dark(#fecaca, rgba(248, 113, 113, 0.38));
+  color: light-dark(#dc2626, #f87171);
 }
 
 .config-workbench-toolbar .config-action-danger:not(:disabled):hover,
 .config-workbench-toolbar .nacos-btn-danger:not(:disabled):hover {
-  background: #fef2f2;
+  background: light-dark(#fef2f2, rgba(239, 68, 68, 0.14));
   border-color: #f87171;
-  color: #b91c1c;
+  color: light-dark(#b91c1c, #fca5a5);
 }
 
 .config-workbench-toolbar .config-action:disabled,
@@ -981,7 +985,7 @@
 .config-workbench.nacos-i18n-container .nacos-i18n-search {
   margin-bottom: 10px;
   border-radius: 10px;
-  background: #fbfcfd;
+  background: light-dark(#fbfcfd, #151f31);
 }
 
 .config-workbench.nacos-i18n-container .nacos-tags-list {
@@ -1000,14 +1004,14 @@
 }
 
 .config-workbench.nacos-i18n-container .nacos-tags-item.is-active {
-  background: #f5f3ff;
-  border-color: #c4b5fd;
+  background: light-dark(#f5f3ff, rgba(124, 58, 237, 0.14));
+  border-color: light-dark(#c4b5fd, rgba(167, 139, 250, 0.38));
   box-shadow: inset 3px 0 0 #7c3aed;
 }
 
 .config-workbench.nacos-i18n-container .nacos-tags-item-count {
-  background: #f3e8ff;
-  color: #6d28d9;
+  background: light-dark(#f3e8ff, rgba(124, 58, 237, 0.16));
+  color: light-dark(#6d28d9, #c4b5fd);
 }
 
 .config-workbench.nacos-i18n-container .nacos-i18n-stats {
@@ -1026,7 +1030,7 @@
 .config-workbench.nacos-i18n-container .nacos-i18n-lang-card,
 .config-workbench.nacos-i18n-container .nacos-i18n-preview-section {
   padding: 12px;
-  border: 1px solid #e6eaf0;
+  border: 1px solid var(--cw-border);
   background: var(--admin-surface);
 }
 
@@ -1078,9 +1082,9 @@
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-section {
   margin-top: 18px;
   padding: 14px;
-  border: 1px solid #e9d5ff;
+  border: 1px solid light-dark(#e9d5ff, rgba(167, 139, 250, 0.34));
   border-radius: 16px;
-  background: linear-gradient(180deg, #fdfcff 0%, #faf5ff 100%);
+  background: linear-gradient(180deg, light-dark(#fdfcff, rgba(124, 58, 237, 0.12)) 0%, light-dark(#faf5ff, #151f31) 100%);
 }
 
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-header {
@@ -1092,7 +1096,7 @@
 }
 
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-kicker {
-  color: #7c3aed;
+  color: light-dark(#7c3aed, #c4b5fd);
   font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.04em;
@@ -1100,7 +1104,7 @@
 
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-header h3 {
   margin: 2px 0 6px;
-  color: #1f1633;
+  color: var(--admin-text-strong);
   font-size: 17px;
   line-height: 1.25;
 }
@@ -1108,7 +1112,7 @@
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-header p {
   max-width: 760px;
   margin: 0;
-  color: #5b516b;
+  color: var(--admin-text-muted);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -1123,10 +1127,10 @@
 
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-metrics span {
   padding: 5px 9px;
-  border: 1px solid #ddd6fe;
+  border: 1px solid light-dark(#ddd6fe, rgba(167, 139, 250, 0.34));
   border-radius: 999px;
   background: var(--admin-surface);
-  color: #5b21b6;
+  color: light-dark(#5b21b6, #c4b5fd);
   font-size: 12px;
   font-weight: 650;
 }
@@ -1134,7 +1138,7 @@
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-table-wrap {
   max-height: 360px;
   overflow: auto;
-  border: 1px solid #e9d5ff;
+  border: 1px solid light-dark(#e9d5ff, rgba(167, 139, 250, 0.34));
   border-radius: 13px;
   background: var(--admin-surface);
 }
@@ -1148,7 +1152,7 @@
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-table th,
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-table td {
   padding: 9px 10px;
-  border-bottom: 1px solid #f1edf8;
+  border-bottom: 1px solid light-dark(#f1edf8, rgba(167, 139, 250, 0.2));
   text-align: left;
   vertical-align: top;
 }
@@ -1157,8 +1161,8 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #fbf8ff;
-  color: #6d28d9;
+  background: light-dark(#fbf8ff, #151f31);
+  color: light-dark(#6d28d9, #c4b5fd);
   font-weight: 750;
 }
 
@@ -1167,7 +1171,7 @@
 }
 
 .config-workbench.nacos-i18n-container .nacos-i18n-reference-key {
-  color: #4c1d95;
+  color: light-dark(#4c1d95, #ddd6fe);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1183,23 +1187,23 @@
 }
 
 .config-workbench.nacos-i18n-container .nacos-tags-item.is-new {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
+  background: light-dark(#f0fdf4, rgba(16, 185, 129, 0.13));
+  border-color: light-dark(#bbf7d0, rgba(74, 222, 128, 0.36));
 }
 
 .config-workbench.nacos-i18n-container .nacos-tags-item.is-modified {
-  background: #fff7ed;
-  border-color: #fed7aa;
+  background: light-dark(#fff7ed, rgba(249, 115, 22, 0.13));
+  border-color: light-dark(#fed7aa, rgba(251, 146, 60, 0.38));
 }
 
 .config-workbench.nacos-i18n-container .nacos-tags-item.is-active.is-new {
-  background: #ecfdf5;
+  background: light-dark(#ecfdf5, rgba(16, 185, 129, 0.17));
   border-color: #86efac;
   box-shadow: inset 3px 0 0 #22c55e;
 }
 
 .config-workbench.nacos-i18n-container .nacos-tags-item.is-active.is-modified {
-  background: #fffbeb;
+  background: light-dark(#fffbeb, rgba(245, 158, 11, 0.17));
   border-color: #fcd34d;
   box-shadow: inset 3px 0 0 #f59e0b;
 }
@@ -1221,11 +1225,11 @@
 }
 
 .config-workbench.nacos-i18n-container .nacos-i18n-status-chip.is-new {
-  background: #dcfce7;
-  color: #15803d;
+  background: light-dark(#dcfce7, rgba(34, 197, 94, 0.18));
+  color: light-dark(#15803d, #4ade80);
 }
 
 .config-workbench.nacos-i18n-container .nacos-i18n-status-chip.is-modified {
-  background: #fef3c7;
-  color: #b45309;
+  background: light-dark(#fef3c7, rgba(245, 158, 11, 0.18));
+  color: light-dark(#b45309, #fbbf24);
 }

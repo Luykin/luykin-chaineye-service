@@ -70,7 +70,7 @@ function AdminThemeProviders() {
             colorBgLayout: effectiveMode === "dark" ? "#070b14" : "#f5f8fc",
             colorBgContainer: effectiveMode === "dark" ? "#111827" : "#ffffff",
             colorBgElevated: effectiveMode === "dark" ? "#182235" : "#ffffff",
-            colorBgSpotlight: effectiveMode === "dark" ? "#1f2a44" : "#ffffff",
+            colorBgSpotlight: effectiveMode === "dark" ? "#1f2a44" : "#1f2937",
             colorBorder: effectiveMode === "dark" ? "#334155" : "#e5e7eb",
             colorSplit: effectiveMode === "dark" ? "#253246" : "#eef2f7",
             colorFillAlter: effectiveMode === "dark" ? "#172033" : "#f8fafc",
