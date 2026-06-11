@@ -146,9 +146,37 @@ GET /api/xhunt/campaign/config?domain=ai
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `leaderboardApiUrl` | string | 自定义榜单接口地址。 |
-| `userActivityApiUrl` | string | 用户活动数据接口地址。 |
-| `customLeaderboards` | array | 自定义榜单配置。 |
+| `leaderboardApiUrl` | string | 自定义榜单接口地址，可为完整 URL 或相对路径。 |
+| `userActivityApiUrl` | string | 当前登录用户活动信息接口地址，可为完整 URL 或相对路径。 |
+| `customLeaderboards` | array | 自定义榜单配置列表，至少 1 项。 |
+
+`customLeaderboards` 数据结构：
+
+```json
+[
+  {
+    "name": {
+      "zh": "POI 榜单",
+      "en": "POI Leaderboard"
+    },
+    "amount": 10000,
+    "participantCount": 100,
+    "distributionType": "mindshare",
+    "unit": "USDT"
+  }
+]
+```
+
+`customLeaderboards[]` 字段说明：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name.zh` | string | 榜单中文名；`zh` 和 `en` 至少填写一个。 |
+| `name.en` | string | 榜单英文名；`zh` 和 `en` 至少填写一个。 |
+| `amount` | number | 该榜单奖励总额，不能小于 `0`。 |
+| `participantCount` | number | 该榜单获奖人数，不能小于 `1`。 |
+| `distributionType` | string | 分配机制，支持：`equal`（平分）、`mindshare`、`workshare`。 |
+| `unit` | string | 奖励单位，例如 `USDT`、`MNT`。 |
 
 ## 错误响应
 
