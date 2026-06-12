@@ -10,7 +10,9 @@ import {
   saveManagedWebsiteCampaignsConfig,
   saveWebsiteCampaignConfig,
 } from "@/services/nacos";
+import { fetchVipLists } from "@/services/feature-flags";
 import type { WebsiteCampaignRecord } from "@/types/nacos";
+import type { VipListItem } from "@/types/feature-flags";
 
 const { TextArea } = Input;
 const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
@@ -254,6 +256,17 @@ function splitLinesToList(text: string) {
     .split(/[\n,]/g)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function normalizeStringList(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim())
+        .filter(Boolean),
+    ),
+  );
 }
 
 function listToLines(arr: unknown) {
@@ -668,6 +681,7 @@ export function NacosCampaignsPage() {
   const [websiteRecords, setWebsiteRecords] = useState<WebsiteCampaignRecord[]>(
     [],
   );
+  const [internalTestUsers, setInternalTestUsers] = useState<VipListItem[]>([]);
   const [selection, setSelection] = useState<Selection>(null);
   const [search, setSearch] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -788,6 +802,18 @@ export function NacosCampaignsPage() {
     });
   }
 
+  async function loadInternalTestUsers() {
+    try {
+      const resp = await fetchVipLists();
+      setInternalTestUsers(resp.data?.internalTest || []);
+    } catch (error) {
+      showToast(
+        `内测用户列表加载失败：${error instanceof Error ? error.message : "未知错误"}`,
+        "error",
+      );
+    }
+  }
+
   async function loadFromDatabase() {
     if (!confirmDiscardWebsite()) return;
     if (
@@ -824,6 +850,7 @@ export function NacosCampaignsPage() {
 
   useEffect(() => {
     void loadFromDatabase();
+    void loadInternalTestUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1690,6 +1717,7 @@ export function NacosCampaignsPage() {
                 <CampaignEditor
                   c={c}
                   canEditCampaignId={canEditCampaignId}
+                  internalTestUsers={internalTestUsers}
                   setCampaignPath={setCampaignPath}
                   updateSelectedCampaign={updateSelectedCampaign}
                   changeThreshold={changeThreshold}
@@ -1973,6 +2001,7 @@ function CampaignBrief({
 function CampaignEditor(props: {
   c: AnyObj;
   canEditCampaignId: boolean;
+  internalTestUsers: VipListItem[];
   setCampaignPath: (path: string, value: any) => void;
   updateSelectedCampaign: (fn: (c: AnyObj) => void) => void;
   changeThreshold: (value: string) => void;
@@ -1983,8 +2012,12 @@ function CampaignEditor(props: {
   moveArrayItem: (kind: string, index: number, delta: number) => void;
   removeArrayItem: (kind: string, index: number) => void;
 }) {
-  const { c, canEditCampaignId, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem } = props;
+  const { c, canEditCampaignId, internalTestUsers, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem } = props;
   const campaignIdDisabled = !!c.id?.trim() && !canEditCampaignId;
+  const internalTestUserOptions = internalTestUsers.map((item) => ({
+    value: item.username,
+    label: item.username,
+  }));
   return (
     <>
       <Card size="small" title="基础设置" style={{ marginBottom: 12 }}>
@@ -2083,7 +2116,23 @@ function CampaignEditor(props: {
           <Col xs={24} md={12}><Field label="推特活动指南"><Input value={c.links?.guideUrl || ""} onChange={(e) => setCampaignPath("links.guideUrl", e.target.value)} /></Field></Col>
           <Col xs={24} md={12}><Field label="官网活动页面"><Input value={c.links?.activeUrl || ""} onChange={(e) => setCampaignPath("links.activeUrl", e.target.value)} /></Field></Col>
           <Col xs={24}><Space><Switch checked={!!c.links?.showLeaderboardLink} onChange={(v) => setCampaignPath("links.showLeaderboardLink", v)} /><InfoLabel info="跳转到官网活动页面链接。">插件榜单底部显示官方排行榜入口</InfoLabel></Space></Col>
-          <Col xs={24} md={12}><Field label="内部测试人员"><TextArea rows={2} value={listToLines(c.testList)} onChange={(e) => setCampaignPath("testList", splitLinesToList(e.target.value))} /></Field></Col>
+          <Col xs={24} md={12}>
+            <Field
+              label="内部测试人员"
+              hint="可从内测名单多选；也可以直接输入用户名并回车添加。"
+            >
+              <Select
+                mode="tags"
+                allowClear
+                maxTagCount="responsive"
+                placeholder="选择或输入用户名，回车添加"
+                value={normalizeStringList(c.testList)}
+                onChange={(values) => setCampaignPath("testList", normalizeStringList(values))}
+                options={internalTestUserOptions}
+                tokenSeparators={[",", "\n"]}
+              />
+            </Field>
+          </Col>
           <Col xs={24} md={12}><Field label="插件右侧展示账号"><TextArea rows={2} value={listToLines(c.targetUserIds)} onChange={(e) => setCampaignPath("targetUserIds", splitLinesToList(e.target.value))} /></Field></Col>
         </Row>
       </Section>
