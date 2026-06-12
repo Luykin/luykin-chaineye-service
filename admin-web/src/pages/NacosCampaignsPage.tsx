@@ -2018,6 +2018,15 @@ function CampaignEditor(props: {
     value: item.username,
     label: item.username,
   }));
+  const changeTestingPhase = (checked: boolean) => {
+    if (!checked && c.testingPhase) {
+      const confirmed = window.confirm(
+        "确认关闭测试模式？\n\n关闭后所有人都能看到此活动，请确认活动内容、时间和奖励配置都已准备好。",
+      );
+      if (!confirmed) return;
+    }
+    setCampaignPath("testingPhase", checked);
+  };
   return (
     <>
       <Card size="small" title="基础设置" style={{ marginBottom: 12 }}>
@@ -2066,7 +2075,7 @@ function CampaignEditor(props: {
                 <Space><Switch checked={!!c.enabled} onChange={(v) => setCampaignPath("enabled", v)} /><InfoLabel info="关闭后插件列表不展示，报名接口也会拒绝。">展示活动</InfoLabel></Space>
               </Col>
               <Col xs={24} sm={12} md={8} xl={12}>
-                <Space><Switch checked={!!c.testingPhase} onChange={(v) => setCampaignPath("testingPhase", v)} /><InfoLabel info="仅内部测试用户可见。">测试模式</InfoLabel></Space>
+                <Space><Switch checked={!!c.testingPhase} onChange={changeTestingPhase} /><InfoLabel info="仅内部测试用户可见。关闭后所有人都能看到此活动。">测试模式</InfoLabel></Space>
               </Col>
               <Col xs={24} sm={12} md={8} xl={12}>
                 <Space><Switch checked={!!c.riskConfirmHtml} onChange={changeRiskConfirm} /><InfoLabel info="在活动页面弹出 Early-stage 风险确认提示。">风险提示</InfoLabel></Space>
