@@ -1580,6 +1580,12 @@ export function NacosCampaignsPage() {
               </Button>
               <Button
                 className="config-action config-action-secondary"
+                onClick={() => { window.location.hash = "#/nacos-campaigns-legacy"; }}
+              >
+                老版 Nacos
+              </Button>
+              <Button
+                className="config-action config-action-secondary"
                 onClick={() => void refreshWebsiteRecords()}
               >
                 从数据库刷新

@@ -23,6 +23,7 @@ import { BinanceSquarePage } from "@/pages/BinanceSquarePage";
 import { PerfMonitorPage } from "@/pages/PerfMonitorPage";
 import { NacosMessagesPage } from "@/pages/NacosMessagesPage";
 import { NacosCampaignsPage } from "@/pages/NacosCampaignsPage";
+import { NacosLegacyCampaignsPage } from "@/pages/NacosLegacyCampaignsPage";
 import { NacosTagsPage } from "@/pages/NacosTagsPage";
 import { NacosI18nPage } from "@/pages/NacosI18nPage";
 import { FeatureFlagsPage } from "@/pages/FeatureFlagsPage";
@@ -57,6 +58,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "perf-monitor": <PerfMonitorPage />,
   "nacos-messages": <NacosMessagesPage />,
   "nacos-campaigns": <NacosCampaignsPage />,
+  "nacos-campaigns-legacy": <NacosLegacyCampaignsPage />,
   "nacos-tags": <NacosTagsPage />,
   "nacos-i18n": <NacosI18nPage />,
   "feature-flags": <FeatureFlagsPage />,
@@ -94,6 +96,10 @@ export const router = createHashRouter([
         element: <Navigate to="/overview" replace />,
       },
       ...generatedAdminRoutes,
+      {
+        path: "nacos-campaigns-legacy",
+        element: <NacosLegacyCampaignsPage />,
+      },
     ],
   },
   {
