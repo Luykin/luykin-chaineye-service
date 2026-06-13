@@ -3,6 +3,8 @@ import { Button, Card, Col, Input, InputNumber, Modal, Row, Select, Space, Switc
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { fetchNacosConfig, publishNacosConfig } from "@/services/nacos";
+import { fetchVipLists } from "@/services/feature-flags";
+import type { VipListItem } from "@/types/feature-flags";
 
 const { TextArea } = Input;
 const DATA_ID = "xhunt_campaigns";
@@ -34,6 +36,17 @@ function splitLinesToList(text: string) {
     .split(/[\n,]/g)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeStringList(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim())
+        .filter(Boolean),
+    ),
+  );
 }
 
 function listToLines(value: unknown) {
@@ -83,6 +96,8 @@ function normalizeCampaign(input: AnyObj): AnyObj {
   c.writingThemes = c.writingThemes.map((item: any) => item && typeof item === "object" ? { zh: String(item.zh || ""), en: String(item.en || "") } : { zh: String(item || ""), en: "" });
   c.testList = Array.isArray(c.testList) ? c.testList : [];
   c.targetUserIds = Array.isArray(c.targetUserIds) ? c.targetUserIds : [];
+  delete c.allowEmailRegistration;
+
   c.logos = Array.isArray(c.logos) ? c.logos : [];
   c.tasks = Array.isArray(c.tasks) ? c.tasks : [];
   c.essayContestWinners = Array.isArray(c.essayContestWinners) ? c.essayContestWinners : [];
@@ -128,7 +143,6 @@ function makeNewCampaign(): AnyObj {
     hotTweetsKey: "",
     includeCreator: false,
     showSponsoredPolicy: true,
-    allowEmailRegistration: false,
     enableEssayContest: false,
     enablePowLeaderboard: false,
   });
@@ -270,6 +284,7 @@ export function NacosLegacyCampaignsPage() {
   const [publishing, setPublishing] = useState(false);
   const [listCollapsed, setListCollapsed] = useState(() => localStorage.getItem("nacos-legacy-campaigns-list-collapsed") === "1");
   const [jsonEdits, setJsonEdits] = useState<Partial<Record<JsonFieldName, string>>>({});
+  const [internalTestUsers, setInternalTestUsers] = useState<VipListItem[]>([]);
 
   const selectedCampaign = selectionIndex == null ? null : config.campaigns[selectionIndex] || null;
   const editorEnabled = !!selectedCampaign;
@@ -326,8 +341,21 @@ export function NacosLegacyCampaignsPage() {
     }
   }
 
+  async function loadInternalTestUsers() {
+    try {
+      const resp = await fetchVipLists();
+      setInternalTestUsers(resp.data?.internalTest || []);
+    } catch (error) {
+      showToast(
+        `内测用户列表加载失败：${error instanceof Error ? error.message : "未知错误"}`,
+        "error",
+      );
+    }
+  }
+
   useEffect(() => {
     void loadFromNacos();
+    void loadInternalTestUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -555,6 +583,7 @@ export function NacosLegacyCampaignsPage() {
               c={c}
               setCampaignPath={setCampaignPath}
               updateSelectedCampaign={updateSelectedCampaign}
+              internalTestUsers={internalTestUsers}
               jsonEdits={jsonEdits}
               updateJsonField={updateJsonField}
               applyJsonEdits={applyJsonEdits}
@@ -605,15 +634,20 @@ function ListGroup({ emptyText, items }: { emptyText: string; items: Array<{ key
   ) : <div className="list-group-empty">{emptyText}</div>;
 }
 
-function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, jsonEdits, updateJsonField, applyJsonEdits }: {
+function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTestUsers, jsonEdits, updateJsonField, applyJsonEdits }: {
   c: AnyObj;
   setCampaignPath: (path: string, value: any) => void;
   updateSelectedCampaign: (fn: (campaign: AnyObj) => void) => void;
+  internalTestUsers: VipListItem[];
   jsonEdits: Partial<Record<JsonFieldName, string>>;
   updateJsonField: (fieldName: JsonFieldName, value: string) => void;
   applyJsonEdits: () => void;
 }) {
   const setJsonArray = (fieldName: JsonFieldName, value: string) => updateJsonField(fieldName, value);
+  const internalTestUserOptions = internalTestUsers.map((item) => ({
+    value: item.username,
+    label: item.username,
+  }));
   const changeThreshold = (value: string) => {
     updateSelectedCampaign((campaign) => {
       if (!value) {
@@ -647,9 +681,8 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, jsonEdits,
             <Space size={[18, 8]} wrap style={{ paddingTop: 28 }}>
               <Space><Switch checked={!!c.enabled} onChange={(value) => setCampaignPath("enabled", value)} />展示活动</Space>
               <Space><Switch checked={!!c.testingPhase} onChange={changeTestingPhase} />测试模式</Space>
-              <Space><Switch checked={c.showExtraComponents !== false} onChange={(value) => setCampaignPath("showExtraComponents", value)} />额外组件</Space>
+              <Space><Switch checked={c.showExtraComponents !== false} onChange={(value) => setCampaignPath("showExtraComponents", value)} />显示写作/榜单扩展区</Space>
               <Space><Switch checked={c.showSponsoredPolicy === true} onChange={(value) => setCampaignPath("showSponsoredPolicy", value)} />推广政策</Space>
-              <Space><Switch checked={c.allowEmailRegistration === true} onChange={(value) => setCampaignPath("allowEmailRegistration", value)} />Email 注册</Space>
             </Space>
           </Col>
         </Row>
@@ -686,7 +719,23 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, jsonEdits,
 
       <Section title="名单与主题">
         <Row gutter={[12, 12]}>
-          <Col xs={24} md={12}><Field label="内部测试人员" hint="一行一个，也支持逗号分隔。"><TextArea rows={3} value={listToLines(c.testList)} onChange={(event) => setCampaignPath("testList", splitLinesToList(event.target.value))} /></Field></Col>
+          <Col xs={24} md={12}>
+            <Field
+              label="内部测试人员"
+              hint="可从内测名单多选；也可以直接输入用户名并回车添加。"
+            >
+              <Select
+                mode="tags"
+                allowClear
+                maxTagCount="responsive"
+                placeholder="选择或输入用户名，回车添加"
+                value={normalizeStringList(c.testList)}
+                onChange={(values) => setCampaignPath("testList", normalizeStringList(values))}
+                options={internalTestUserOptions}
+                tokenSeparators={[",", "\n"]}
+              />
+            </Field>
+          </Col>
           <Col xs={24} md={12}><Field label="插件右侧展示账号" hint="一行一个，也支持逗号分隔。"><TextArea rows={3} value={listToLines(c.targetUserIds)} onChange={(event) => setCampaignPath("targetUserIds", splitLinesToList(event.target.value))} /></Field></Col>
           <Col xs={24} md={12}><Field label="写作主题中文" hint="一行一个主题。"><TextArea rows={4} value={(Array.isArray(c.writingThemes) ? c.writingThemes : []).map((item: AnyObj) => item.zh || "").join("\n")} onChange={(event) => {
             const zh = event.target.value.split("\n");
