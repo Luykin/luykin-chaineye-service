@@ -140,17 +140,97 @@ function escapeHtml(value: string) {
   return div.innerHTML;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function formatDiffValue(value: unknown) {
+  if (value === undefined) return "undefined";
+  const formatted = JSON.stringify(value, null, 2);
+  return formatted === undefined ? String(value) : formatted;
+}
+
+function isSameJsonValue(a: unknown, b: unknown) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+type DiffLine = {
+  path: string;
+  type: "added" | "removed" | "changed";
+  before?: unknown;
+  after?: unknown;
+};
+
+function collectDiffLines(
+  oldValue: unknown,
+  nextValue: unknown,
+  path = "root",
+  lines: DiffLine[] = [],
+) {
+  if (isSameJsonValue(oldValue, nextValue)) return lines;
+
+  if (oldValue === undefined) {
+    lines.push({ path, type: "added", after: nextValue });
+    return lines;
+  }
+  if (nextValue === undefined) {
+    lines.push({ path, type: "removed", before: oldValue });
+    return lines;
+  }
+
+  if (isPlainObject(oldValue) && isPlainObject(nextValue)) {
+    const keys = Array.from(
+      new Set([...Object.keys(oldValue), ...Object.keys(nextValue)]),
+    ).sort();
+    keys.forEach((key) => {
+      collectDiffLines(oldValue[key], nextValue[key], `${path}.${key}`, lines);
+    });
+    return lines;
+  }
+
+  if (Array.isArray(oldValue) && Array.isArray(nextValue)) {
+    const max = Math.max(oldValue.length, nextValue.length);
+    for (let index = 0; index < max; index += 1) {
+      collectDiffLines(oldValue[index], nextValue[index], `${path}[${index}]`, lines);
+    }
+    return lines;
+  }
+
+  lines.push({ path, type: "changed", before: oldValue, after: nextValue });
+  return lines;
+}
+
+function renderDiffBlock(prefix: string, value: unknown, className: string) {
+  const formatted = formatDiffValue(value);
+  return formatted
+    .split("\n")
+    .map((line, index) => {
+      const marker = index === 0 ? prefix : " ";
+      return `<span class="${className}">${escapeHtml(`${marker} ${line}`)}</span>`;
+    })
+    .join("\n");
+}
+
 function buildDiffHtml(oldConfig: unknown, nextConfig: unknown) {
-  const oldText = JSON.stringify(oldConfig || {}, null, 2);
-  const nextText = JSON.stringify(nextConfig || {}, null, 2);
-  if (oldText === nextText) return escapeHtml("无改动");
-  return [
-    '<span class="diff-path">@@ 当前 Nacos</span>',
-    `<span class="removed">- ${escapeHtml(oldText).replace(/\n/g, "\n- ")}</span>`,
-    "",
-    '<span class="diff-path">@@ 即将发布</span>',
-    `<span class="added">+ ${escapeHtml(nextText).replace(/\n/g, "\n+ ")}</span>`,
-  ].join("\n");
+  const lines = collectDiffLines(oldConfig || {}, nextConfig || {});
+  if (!lines.length) return escapeHtml("无改动");
+
+  return lines
+    .map((line) => {
+      const header = `<span class="diff-path">@@ ${escapeHtml(line.path)}</span>`;
+      if (line.type === "added") {
+        return `${header}\n${renderDiffBlock("+", line.after, "added")}`;
+      }
+      if (line.type === "removed") {
+        return `${header}\n${renderDiffBlock("-", line.before, "removed")}`;
+      }
+      return [
+        header,
+        renderDiffBlock("-", line.before, "removed"),
+        renderDiffBlock("+", line.after, "added"),
+      ].join("\n");
+    })
+    .join("\n\n");
 }
 
 function formatJson(value: unknown) {
