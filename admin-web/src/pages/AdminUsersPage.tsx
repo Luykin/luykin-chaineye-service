@@ -34,6 +34,7 @@ const PERMISSION_OPTIONS = [
   { label: "图片上传", value: "assets:upload" },
   { label: "VIP 管理", value: "vip-management" },
   { label: "Redis 管理", value: "redis-management" },
+  { label: "发布上线", value: "deploy:release" },
   { label: "紧急回滚", value: "deploy:rollback" },
   { label: "LLM 测试", value: "llm-test" },
   { label: "管理员列表", value: "admin-users" },

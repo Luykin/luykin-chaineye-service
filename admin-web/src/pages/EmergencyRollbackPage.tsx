@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Alert, Button, Card, Checkbox, Descriptions, Empty, Input, Modal, Segmented, Space, Table, Tag, Typography, message } from "antd";
-import { ExclamationCircleOutlined, ReloadOutlined, RollbackOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { CloudUploadOutlined, ExclamationCircleOutlined, ReloadOutlined, RollbackOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -166,6 +167,9 @@ export function EmergencyRollbackPage() {
         description="super 专用：按提交 message 或 tag 可视化选择版本，一键回滚并重启 PM2。"
         extra={
           <Space wrap>
+            <Button icon={<CloudUploadOutlined />}>
+              <Link to="/release-deploy">去发布上线</Link>
+            </Button>
             <Button icon={<ReloadOutlined />} loading={statusQuery.isFetching} onClick={() => statusQuery.refetch()}>
               刷新状态
             </Button>

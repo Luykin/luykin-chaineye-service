@@ -111,6 +111,34 @@ async function getDeployStatusData() {
   };
 }
 
+async function getReleaseStatusData() {
+  const [currentRaw, remoteRaw, branchRaw, statusRaw, pendingRaw, aheadRaw] = await Promise.all([
+    runDeployCommand("git", ["log", "-1", "--pretty=format:%H%x09%h%x09%an%x09%ar%x09%s"]),
+    runDeployCommand("git", ["log", "-1", "--pretty=format:%H%x09%h%x09%an%x09%ar%x09%s", "origin/main"]).catch(() => ({ stdout: "", stderr: "" })),
+    runDeployCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"]),
+    runDeployCommand("git", ["status", "--porcelain"], { maxBuffer: 512 * 1024 }),
+    runDeployCommand("git", ["log", "--pretty=format:%H%x09%h%x09%an%x09%ar%x09%s", "HEAD..origin/main"], { maxBuffer: 2 * 1024 * 1024 }).catch(() => ({ stdout: "", stderr: "" })),
+    runDeployCommand("git", ["log", "--pretty=format:%H%x09%h%x09%an%x09%ar%x09%s", "origin/main..HEAD"], { maxBuffer: 2 * 1024 * 1024 }).catch(() => ({ stdout: "", stderr: "" })),
+  ]);
+  const current = parseGitCommitLine(currentRaw.stdout);
+  const remote = parseGitCommitLine(remoteRaw.stdout);
+  const pendingCommits = pendingRaw.stdout.split("\n").map(parseGitCommitLine).filter(Boolean);
+  const aheadCommits = aheadRaw.stdout.split("\n").map(parseGitCommitLine).filter(Boolean);
+
+  return {
+    projectRoot: PROJECT_ROOT,
+    branch: branchRaw.stdout || "",
+    dirty: !!statusRaw.stdout,
+    dirtyFiles: statusRaw.stdout ? statusRaw.stdout.split("\n").filter(Boolean).slice(0, 80) : [],
+    current,
+    remote,
+    pendingCommits,
+    aheadCommits,
+    hasUpdate: pendingCommits.length > 0,
+    restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+  };
+}
+
 async function assertGitTarget(target, targetType) {
   const value = String(target || "").trim();
   if (!isSafeGitTarget(value)) {
@@ -931,7 +959,7 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
     }
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback"]);
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = perms.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -1045,7 +1073,7 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
       .filter((p) => p.length > 0);
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback"]);
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = sanitized.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -1130,6 +1158,110 @@ router.get("/deploy/preview", adminAuth, requireRole("super"), async (req, res) 
     return res.json({ success: true, data: { ...verified, lostCommits } });
   } catch (e) {
     return res.status(e.statusCode || 500).json({ success: false, error: e.message || "生成回滚预览失败" });
+  }
+});
+
+router.get("/deploy/release/status", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const data = await getReleaseStatusData();
+    return res.json({ success: true, data });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message || "读取发布状态失败" });
+  }
+});
+
+router.post("/deploy/release/fetch", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const fetchResult = await runDeployCommand("git", ["fetch", "origin", "--tags"], { timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
+    const data = await getReleaseStatusData();
+    await createDeployAudit(req, "deploy-release-fetch", true, {
+      current: data.current?.hash || null,
+      remote: data.remote?.hash || null,
+      pendingCommitCount: data.pendingCommits.length,
+    });
+    return res.json({
+      success: true,
+      data: {
+        ...data,
+        outputs: [{ step: "fetch", stdout: fetchResult.stdout.slice(-4000), stderr: fetchResult.stderr.slice(-4000) }],
+      },
+    });
+  } catch (e) {
+    await createDeployAudit(req, "deploy-release-fetch", false, { error: e.message });
+    return res.status(500).json({ success: false, error: e.message || "刷新远程版本失败" });
+  }
+});
+
+router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), async (req, res) => {
+  try {
+    const { confirmText, rebuildAdminWeb, restartAfterDeploy = true } = req.body || {};
+    if (confirmText !== "DEPLOY") {
+      return res.status(400).json({ success: false, error: "请输入 DEPLOY 确认发布" });
+    }
+
+    const outputs = [];
+    const fetchResult = await runDeployCommand("git", ["fetch", "origin", "--tags"], { timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
+    outputs.push({ step: "fetch", stdout: fetchResult.stdout.slice(-4000), stderr: fetchResult.stderr.slice(-4000) });
+
+    const releaseStatus = await getReleaseStatusData();
+    const before = releaseStatus.current?.hash || (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
+    if (!releaseStatus.remote?.hash) {
+      return res.status(409).json({ success: false, error: "没有找到 origin/main，无法发布" });
+    }
+    if (releaseStatus.aheadCommits.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: "当前线上存在 origin/main 没有的提交，发布会覆盖本地提交，请先确认或使用紧急回滚/终端处理",
+        data: { aheadCommits: releaseStatus.aheadCommits },
+      });
+    }
+    if (releaseStatus.pendingCommits.length === 0 && before === releaseStatus.remote.hash) {
+      return res.status(409).json({ success: false, error: "当前已经是 origin/main 最新版本，无需发布" });
+    }
+
+    if (releaseStatus.dirty) {
+      const stashMessage = `admin-release-${new Date().toISOString()}`;
+      const stash = await runDeployCommand("git", ["stash", "push", "-u", "-m", stashMessage], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+      outputs.push({ step: "stash", stdout: stash.stdout, stderr: stash.stderr });
+    }
+
+    const reset = await runDeployCommand("git", ["reset", "--hard", "origin/main"], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+    outputs.push({ step: "reset", stdout: reset.stdout, stderr: reset.stderr });
+
+    if (rebuildAdminWeb === true) {
+      const build = await runDeployCommand("npm", ["run", "admin-web:build"], { timeout: 180000, maxBuffer: 8 * 1024 * 1024 });
+      outputs.push({ step: "admin-web:build", stdout: build.stdout.slice(-4000), stderr: build.stderr.slice(-4000) });
+    }
+
+    const after = (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
+    await createDeployAudit(req, "deploy-release", true, {
+      before,
+      after,
+      commitCount: releaseStatus.pendingCommits.length,
+      rebuildAdminWeb: rebuildAdminWeb === true,
+      restartAfterDeploy: restartAfterDeploy !== false,
+      restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+    });
+
+    res.json({
+      success: true,
+      data: {
+        before,
+        after,
+        commitCount: releaseStatus.pendingCommits.length,
+        releasedCommits: releaseStatus.pendingCommits,
+        outputs,
+        restartScheduled: restartAfterDeploy !== false,
+        restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+      },
+    });
+    if (restartAfterDeploy !== false) {
+      schedulePm2Restart("release:origin/main");
+    }
+  } catch (e) {
+    await createDeployAudit(req, "deploy-release", false, { error: e.message });
+    return res.status(500).json({ success: false, error: e.message || "发布失败" });
   }
 });
 

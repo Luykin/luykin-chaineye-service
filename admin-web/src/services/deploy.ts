@@ -40,13 +40,39 @@ export interface DeployActionData {
   target?: string;
   resolvedHash?: string;
   lostCommits?: DeployCommit[];
+  releasedCommits?: DeployCommit[];
+  commitCount?: number;
   restartScheduled: boolean;
   restartTarget: string;
   outputs: Array<{ step: string; stdout?: string; stderr?: string }>;
 }
 
+export interface ReleaseStatusData {
+  projectRoot: string;
+  branch: string;
+  dirty: boolean;
+  dirtyFiles: string[];
+  current: DeployCommit | null;
+  remote: DeployCommit | null;
+  pendingCommits: DeployCommit[];
+  aheadCommits: DeployCommit[];
+  hasUpdate: boolean;
+  restartTarget: string;
+}
+
 export function fetchDeployStatus() {
   return apiRequest<{ success: boolean; data: DeployStatusData }>("/admin/deploy/status");
+}
+
+export function fetchReleaseStatus() {
+  return apiRequest<{ success: boolean; data: ReleaseStatusData }>("/admin/deploy/release/status");
+}
+
+export function fetchReleaseRemote() {
+  return apiRequest<{ success: boolean; data: ReleaseStatusData & { outputs?: DeployActionData["outputs"] } }>(
+    "/admin/deploy/release/fetch",
+    { method: "POST" },
+  );
 }
 
 export function fetchDeployPreview(target: string, targetType: "commit" | "tag") {
@@ -68,6 +94,17 @@ export function rollbackDeploy(payload: {
 
 export function recoverDeploy(payload: { confirmText: string; rebuildAdminWeb: boolean }) {
   return apiRequest<{ success: boolean; data: DeployActionData }>("/admin/deploy/recover", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function releaseDeploy(payload: {
+  confirmText: string;
+  rebuildAdminWeb: boolean;
+  restartAfterDeploy: boolean;
+}) {
+  return apiRequest<{ success: boolean; data: DeployActionData }>("/admin/deploy/release", {
     method: "POST",
     body: payload,
   });
