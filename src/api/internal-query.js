@@ -443,11 +443,14 @@ router.get('/MN4KJSH21DC-user-stats', [
 		const userId = user.id;
 		const username = user.username;
 
-		// 2. 查询总共使用天数（DailyActiveUser 中该用户的条目数量）
-		// 注意：DailyActiveUser.userId 存储的是 username
+		// 2. 查询总共使用天数（兼容旧 username 与新 tw:<twitterId> 身份）
+		const dailyActiveUserIds = Array.from(new Set([
+			username,
+			user.twitterId ? `tw:${user.twitterId}` : null
+		].filter(Boolean)));
 		const totalActiveDays = await DailyActiveUser.count({
 			where: {
-				userId: username
+				userId: { [Op.in]: dailyActiveUserIds }
 			}
 		});
 

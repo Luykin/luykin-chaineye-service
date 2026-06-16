@@ -39,19 +39,12 @@ async function aiContentRateLimit(req, res, next) {
     }
     req[AI_CONTENT_RATE_LIMIT_FLAG] = true;
 
-    const xUserId = String(req.headers["x-user-id"]).toLocaleLowerCase();
-    if (!xUserId) {
-      return res.status(400).json({
-        error:
-          "Unable to identify user identity, please refresh the page and try again",
-      });
-    }
+    const authenticatedUsername = String(req.user?.username || "").toLocaleLowerCase();
 
-    // 判断白名单等级：先判200次，再判20次
-    const isWhitelist200 = AI_CONTENT_WHITELIST_200.some((id) => {
-      return (
-        String(xUserId).toLocaleLowerCase() === String(id).toLocaleLowerCase()
-      );
+    // 判断白名单等级：先判200次，再判20次。
+    // 200 次白名单只信任已登录用户身份，避免未签名 x-user-id 被伪造提额。
+    const isWhitelist200 = !!authenticatedUsername && AI_CONTENT_WHITELIST_200.some((id) => {
+      return authenticatedUsername === String(id).toLocaleLowerCase();
     });
     const isWhitelist20 = !isWhitelist200 && isRequestXHuntVip(req);
 

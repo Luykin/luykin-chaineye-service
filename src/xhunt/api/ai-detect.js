@@ -306,8 +306,10 @@ const UNLIMITED_USERS = [
 
 // 检查频率限制
 async function checkRateLimit(req, res) {
-  const xUserId = String(req.headers["x-user-id"]).toLocaleLowerCase();
-  if (!xUserId) {
+  const requestIdentity = req.securityContext?.effectiveIdentity?.key
+    ? req.securityContext.effectiveIdentity
+    : getEffectiveIdentity(req);
+  if (!req.user?.id && !requestIdentity.key) {
     return {
       allowed: false,
       error: {
@@ -326,13 +328,8 @@ async function checkRateLimit(req, res) {
   let userKey;
   if (req.user && req.user.id) {
     userKey = `ai_detect_limit:user:${req.user.id}`;
-  } else {
-    const identity = req.securityContext?.effectiveIdentity?.key
-      ? req.securityContext.effectiveIdentity
-      : getEffectiveIdentity(req);
-    if (identity.key) {
-      userKey = `ai_detect_limit:${identity.key}`;
-    }
+  } else if (requestIdentity.key) {
+    userKey = `ai_detect_limit:${requestIdentity.key}`;
   }
   if (!userKey) {
     return {
@@ -514,8 +511,10 @@ router.get(
   [authenticateToken],
   async (req, res) => {
     try {
-      const xUserId = String(req.headers["x-user-id"]).toLocaleLowerCase();
-      if (!xUserId) {
+      const requestIdentity = req.securityContext?.effectiveIdentity?.key
+        ? req.securityContext.effectiveIdentity
+        : getEffectiveIdentity(req);
+      if (!req.user?.id && !requestIdentity.key) {
         return res.status(400).json({
           error: "Unable to identify user identity"
         });
@@ -528,13 +527,8 @@ router.get(
       let userKey;
       if (req.user && req.user.id) {
         userKey = `ai_detect_limit:user:${req.user.id}`;
-      } else {
-        const identity = req.securityContext?.effectiveIdentity?.key
-          ? req.securityContext.effectiveIdentity
-          : getEffectiveIdentity(req);
-        if (identity.key) {
-          userKey = `ai_detect_limit:${identity.key}`;
-        }
+      } else if (requestIdentity.key) {
+        userKey = `ai_detect_limit:${requestIdentity.key}`;
       }
       if (!userKey) {
         return res.status(400).json({

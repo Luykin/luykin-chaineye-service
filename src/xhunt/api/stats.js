@@ -665,24 +665,43 @@ router.get("/export/active-users/js", adminAuth, async (req, res) => {
     // 获取PostgreSQL模型
     const postgresModels = require("../../models/postgres-start");
     const DailyActiveUser = postgresModels.DailyActiveUser;
+    const XHuntUser = postgresModels.XHuntUser;
+    const { Op } = require("sequelize");
 
-    // 查询所有活跃用户记录并在内存中去重
-    // 注意：DailyActiveUser.userId 存储的直接就是 username，不需要查询 XHuntUser 表
+    // 查询所有活跃记录并在内存中去重。
+    // 兼容新旧 DailyActiveUser.userId：旧 username / 新 tw:<twitterId> / fp:<fingerprint>。
     const allActiveUsers = await DailyActiveUser.findAll({
       attributes: ["userId"],
       raw: true,
     });
 
-    // 直接从 userId 提取用户名并去重（过滤 null/undefined/空字符串）
+    const legacyUsernames = [];
+    const twitterIds = [];
+    allActiveUsers.forEach((record) => {
+      const value = typeof record.userId === "string" ? record.userId.trim() : "";
+      if (!value) return;
+      if (value.startsWith("tw:")) {
+        const twitterId = value.slice(3).trim();
+        if (twitterId) twitterIds.push(twitterId);
+        return;
+      }
+      if (value.startsWith("fp:")) return;
+      legacyUsernames.push(value);
+    });
+
+    const twitterUsers = twitterIds.length
+      ? await XHuntUser.findAll({
+          attributes: ["username"],
+          where: { twitterId: { [Op.in]: Array.from(new Set(twitterIds)) } },
+          raw: true,
+        })
+      : [];
+
     const usernames = [
-      ...new Set(
-        allActiveUsers
-          .map((record) => record.userId)
-          .filter(
-            (username) =>
-              username && typeof username === "string" && username.trim() !== ""
-          )
-      ),
+      ...new Set([
+        ...legacyUsernames,
+        ...twitterUsers.map((record) => record.username).filter(Boolean),
+      ]),
     ].sort(); // 排序以便查看
 
     console.log(
