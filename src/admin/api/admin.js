@@ -45,6 +45,7 @@ const RELEASE_TAG_PREFIX = process.env.ADMIN_DEPLOY_TAG_PREFIX || "prod";
 async function runDeployCommand(command, args, options = {}) {
   const result = await execFileAsync(command, args, {
     cwd: PROJECT_ROOT,
+    env: options.env ? { ...process.env, ...options.env } : process.env,
     timeout: options.timeout || 15000,
     maxBuffer: options.maxBuffer || 1024 * 1024,
   });
@@ -215,6 +216,12 @@ async function createReleaseTag({ commits, beforeHash, afterHash, tagNameOverrid
   const tagResult = await runDeployCommand("git", ["tag", "-a", tagName, afterHash, "-m", tagMessage.message], {
     timeout: 30000,
     maxBuffer: 2 * 1024 * 1024,
+    env: {
+      GIT_AUTHOR_NAME: process.env.ADMIN_DEPLOY_GIT_NAME || "XHunt Admin Deploy",
+      GIT_AUTHOR_EMAIL: process.env.ADMIN_DEPLOY_GIT_EMAIL || "admin@cryptohunt.ai",
+      GIT_COMMITTER_NAME: process.env.ADMIN_DEPLOY_GIT_NAME || "XHunt Admin Deploy",
+      GIT_COMMITTER_EMAIL: process.env.ADMIN_DEPLOY_GIT_EMAIL || "admin@cryptohunt.ai",
+    },
   });
 
   let pushed = false;
