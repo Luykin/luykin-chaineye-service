@@ -1,0 +1,28 @@
+# Cursor AI 规则
+
+## 通用沟通
+- 默认使用简体中文回复。
+- 称呼项目负责人为「坤哥」。
+- 说明代码改动时尽量简洁，列出关键文件和核心逻辑即可。
+
+## Git Commit Message
+生成 Git commit message 时必须使用简体中文。
+
+提交信息要求：
+- 只输出 commit message 本身，不要输出解释。
+- 尽量简洁，建议不超过 50 个中文字符。
+- 优先使用 conventional commits 前缀：
+  - feat: 新增功能
+  - fix: 修复问题
+  - refactor: 重构代码
+  - chore: 工程配置或工具调整
+  - docs: 文档更新
+  - style: 样式调整
+  - test: 测试相关
+- 不要使用英文完整句子。
+- 无论 diff、文件名、历史提交是中文还是英文，commit message 都必须使用简体中文。
+
+示例：
+- fix: 修复日活详情用户名展示
+- feat: 新增后台紧急回滚页面
+- refactor: 优化 DAU 身份统计逻辑
