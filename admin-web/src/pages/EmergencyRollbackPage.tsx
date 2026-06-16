@@ -198,13 +198,6 @@ export function EmergencyRollbackPage() {
                   </Button>
                 </div>
               </div>
-              <div className="deploy-command-card">
-                <div className="deploy-command-card__label">Rollback target</div>
-                <div className="deploy-command-card__row"><span>current</span><span className="deploy-command-card__value">{status?.current?.shortHash || "-"}</span></div>
-                <div className="deploy-command-card__row"><span>selected</span><span className="deploy-command-card__value">{selected?.title || "未选择"}</span></div>
-                <div className="deploy-command-card__row"><span>type</span><span className="deploy-command-card__value">{selected?.type || "-"}</span></div>
-                <div className="deploy-command-card__row"><span>pm2</span><span className="deploy-command-card__value">{status?.restartTarget || "all"}</span></div>
-              </div>
             </div>
           </section>
 
