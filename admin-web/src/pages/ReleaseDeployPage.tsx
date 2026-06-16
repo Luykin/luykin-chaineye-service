@@ -93,7 +93,8 @@ export function ReleaseDeployPage() {
     mutationFn: () => releaseDeploy({ confirmText, rebuildAdminWeb, restartAfterDeploy }),
     onSuccess: (response) => {
       const restartText = response.data.restartScheduled ? "，PM2 即将重启" : "";
-      messageApi.success(`发布完成：${shortHash(response.data.before)} → ${shortHash(response.data.after)}${restartText}`);
+      const tagText = response.data.releaseTag?.tagName ? `，Tag: ${response.data.releaseTag.tagName}` : "";
+      messageApi.success(`发布完成：${shortHash(response.data.before)} → ${shortHash(response.data.after)}${tagText}${restartText}`);
       setDeployOpen(false);
       setConfirmText("");
       setTimeout(() => void statusQuery.refetch(), 3000);
@@ -160,6 +161,16 @@ export function ReleaseDeployPage() {
                 <Descriptions.Item label="待发布">
                   {status?.pendingCommits?.length ? <Tag color="blue">{status.pendingCommits.length} 个提交</Tag> : <Tag color="success">无更新</Tag>}
                 </Descriptions.Item>
+                <Descriptions.Item label="发布 Tag">
+                  {status?.suggestedTagName ? (
+                    <Space direction="vertical" size={2}>
+                      <Typography.Text code>{status.suggestedTagName}</Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        发布时自动生成{status.pushTagsEnabled ? "并推送到远程" : "，仅保存在服务器本地仓库"}
+                      </Typography.Text>
+                    </Space>
+                  ) : "-"}
+                </Descriptions.Item>
                 <Descriptions.Item label="本地超前">
                   {status?.aheadCommits?.length ? <Tag color="error">{status.aheadCommits.length} 个提交</Tag> : <Tag color="success">无</Tag>}
                 </Descriptions.Item>
@@ -221,14 +232,28 @@ export function ReleaseDeployPage() {
             type="warning"
             showIcon
             message="这是生产发布操作"
-            description={`将从 ${shortHash(status?.current?.hash)} 更新到 ${shortHash(status?.remote?.hash)}，共 ${status?.pendingCommits.length || 0} 个提交。`}
+            description={`将从 ${shortHash(status?.current?.hash)} 更新到 ${shortHash(status?.remote?.hash)}，共 ${status?.pendingCommits.length || 0} 个提交，并自动生成发布 tag。`}
           />
+          <Card size="small" title="发布 Tag">
+            <Space direction="vertical" size={4}>
+              <Typography.Text>
+                预计格式：<Typography.Text code>{status?.suggestedTagName || "prod-YYYYMMDD-HHmm-abcdef0"}</Typography.Text>
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                Tag 描述会优先由 AI 根据待发布提交生成；如果 AI 不可用，会自动用提交列表生成兜底描述。
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                {status?.pushTagsEnabled ? "当前已开启远程推送 tag。" : "当前未开启远程推送 tag，只会创建在服务器本地仓库。"}
+              </Typography.Text>
+            </Space>
+          </Card>
           <Timeline
             items={[
               { color: "blue", children: "git fetch origin --tags" },
               { color: status?.dirty ? "orange" : "gray", children: status?.dirty ? "检测到未提交改动，先执行 git stash" : "工作区干净，跳过 stash" },
               { color: "blue", children: "git reset --hard origin/main" },
               { color: rebuildAdminWeb ? "blue" : "gray", children: rebuildAdminWeb ? "npm run admin-web:build" : "跳过 admin-web 构建" },
+              { color: "purple", children: "生成 annotated release tag（AI 描述，失败自动兜底）" },
               { color: restartAfterDeploy ? "green" : "gray", children: restartAfterDeploy ? `pm2 restart ${status?.restartTarget || "all"}` : "跳过 PM2 重启" },
             ]}
           />

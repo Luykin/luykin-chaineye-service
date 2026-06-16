@@ -16,6 +16,7 @@ const {
 const { adminAuth, requireRole, requirePermission, setSessionCookie } = require("../middleware/adminAuth");
 const { randomBytes, randomUUID } = require("crypto");
 const { handleUpload } = require("@vercel/blob/client");
+const { chat: llmChat } = require("../../lib/llm");
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -39,6 +40,7 @@ const PROJECT_ROOT = process.env.PROJECT_ROOT
   ? path.resolve(process.env.PROJECT_ROOT)
   : path.resolve(__dirname, "../../..");
 const GIT_TARGET_RE = /^[0-9A-Za-z._/@+-]{1,160}$/;
+const RELEASE_TAG_PREFIX = process.env.ADMIN_DEPLOY_TAG_PREFIX || "prod";
 
 async function runDeployCommand(command, args, options = {}) {
   const result = await execFileAsync(command, args, {
@@ -73,6 +75,110 @@ function parseGitTagLine(line) {
     shortHash: shortHash || hash.slice(0, 7),
     relativeTime: relativeTime || "",
     message: messageParts.join("\t") || "",
+  };
+}
+
+function getBeijingTimestampForTag(date = new Date()) {
+  const beijingDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  const iso = beijingDate.toISOString();
+  return `${iso.slice(0, 10).replace(/-/g, "")}-${iso.slice(11, 16).replace(":", "")}`;
+}
+
+function buildReleaseTagName(commitHash, date = new Date()) {
+  return `${RELEASE_TAG_PREFIX}-${getBeijingTimestampForTag(date)}-${String(commitHash || "").slice(0, 7)}`;
+}
+
+function buildFallbackReleaseTagMessage(commits, afterHash) {
+  const lines = Array.isArray(commits) && commits.length > 0
+    ? commits.slice(0, 20).map((commit) => `- ${commit.shortHash || String(commit.hash || "").slice(0, 7)} ${commit.message || "(无提交说明)"}`)
+    : [`- 发布 ${String(afterHash || "").slice(0, 12)}`];
+  return [
+    "生产发布",
+    "",
+    `目标提交: ${afterHash}`,
+    `提交数量: ${Array.isArray(commits) ? commits.length : 0}`,
+    "",
+    "变更摘要:",
+    ...lines,
+  ].join("\n").slice(0, 1800);
+}
+
+async function generateReleaseTagMessage(commits, beforeHash, afterHash) {
+  const fallback = buildFallbackReleaseTagMessage(commits, afterHash);
+  if (!process.env.LLM_API_KEY) {
+    return { message: fallback, source: "fallback" };
+  }
+
+  try {
+    const commitText = (commits || [])
+      .slice(0, 30)
+      .map((commit) => `${commit.shortHash || String(commit.hash || "").slice(0, 7)} ${commit.message || ""}`)
+      .join("\n");
+    const content = await llmChat(
+      [
+        `发布前版本: ${beforeHash}`,
+        `发布后版本: ${afterHash}`,
+        "本次发布提交:",
+        commitText || "(无提交列表)",
+      ].join("\n"),
+      {
+        temperature: 0.2,
+        maxTokens: 500,
+        systemPrompt: [
+          "你是生产发布助手。请根据 Git commit 列表生成一段中文 Git annotated tag 描述。",
+          "要求:",
+          "1. 只输出 tag 描述正文，不要 Markdown 代码块。",
+          "2. 第一行是 20 字以内中文标题。",
+          "3. 后面用 3-6 条中文要点总结主要改动。",
+          "4. 不要编造 commit 中没有的信息。",
+        ].join("\n"),
+      }
+    );
+    const message = String(content || "").trim();
+    return { message: message ? message.slice(0, 1800) : fallback, source: message ? "ai" : "fallback" };
+  } catch (e) {
+    console.warn("[admin-deploy] AI tag message generation failed:", e?.message);
+    return { message: fallback, source: "fallback" };
+  }
+}
+
+async function createReleaseTag({ commits, beforeHash, afterHash }) {
+  const baseName = buildReleaseTagName(afterHash);
+  let tagName = baseName;
+  for (let index = 2; index <= 20; index += 1) {
+    const exists = (await runDeployCommand("git", ["tag", "--list", tagName])).stdout.trim();
+    if (!exists) break;
+    tagName = `${baseName}-${index}`;
+  }
+  if ((await runDeployCommand("git", ["tag", "--list", tagName])).stdout.trim()) {
+    throw new Error("无法生成唯一发布 tag");
+  }
+
+  const tagMessage = await generateReleaseTagMessage(commits, beforeHash, afterHash);
+  const tagResult = await runDeployCommand("git", ["tag", "-a", tagName, afterHash, "-m", tagMessage.message], {
+    timeout: 30000,
+    maxBuffer: 2 * 1024 * 1024,
+  });
+
+  let pushed = false;
+  let pushOutput = null;
+  if (process.env.ADMIN_DEPLOY_PUSH_TAGS === "true") {
+    const pushResult = await runDeployCommand("git", ["push", "origin", tagName], {
+      timeout: 60000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    pushed = true;
+    pushOutput = { stdout: pushResult.stdout.slice(-4000), stderr: pushResult.stderr.slice(-4000) };
+  }
+
+  return {
+    tagName,
+    message: tagMessage.message,
+    messageSource: tagMessage.source,
+    pushed,
+    pushOutput,
+    stdout: tagResult.stdout,
+    stderr: tagResult.stderr,
   };
 }
 
@@ -135,6 +241,9 @@ async function getReleaseStatusData() {
     pendingCommits,
     aheadCommits,
     hasUpdate: pendingCommits.length > 0,
+    suggestedTagName: remote?.hash ? buildReleaseTagName(remote.hash) : null,
+    tagPrefix: RELEASE_TAG_PREFIX,
+    pushTagsEnabled: process.env.ADMIN_DEPLOY_PUSH_TAGS === "true",
     restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
   };
 }
@@ -1235,9 +1344,26 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
     }
 
     const after = (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
+    const releaseTag = await createReleaseTag({
+      commits: releaseStatus.pendingCommits,
+      beforeHash: before,
+      afterHash: after,
+    });
+    outputs.push({
+      step: "release-tag",
+      stdout: `tag=${releaseTag.tagName}\nmessageSource=${releaseTag.messageSource}\npushed=${releaseTag.pushed}`,
+      stderr: releaseTag.stderr || "",
+    });
+    if (releaseTag.pushOutput) {
+      outputs.push({ step: "push-tag", stdout: releaseTag.pushOutput.stdout, stderr: releaseTag.pushOutput.stderr });
+    }
+
     await createDeployAudit(req, "deploy-release", true, {
       before,
       after,
+      tagName: releaseTag.tagName,
+      tagMessageSource: releaseTag.messageSource,
+      tagPushed: releaseTag.pushed,
       commitCount: releaseStatus.pendingCommits.length,
       rebuildAdminWeb: rebuildAdminWeb === true,
       restartAfterDeploy: restartAfterDeploy !== false,
@@ -1249,6 +1375,7 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
       data: {
         before,
         after,
+        releaseTag,
         commitCount: releaseStatus.pendingCommits.length,
         releasedCommits: releaseStatus.pendingCommits,
         outputs,

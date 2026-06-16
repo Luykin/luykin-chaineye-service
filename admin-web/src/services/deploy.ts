@@ -37,6 +37,12 @@ export interface DeployPreviewData {
 export interface DeployActionData {
   before: string;
   after: string;
+  releaseTag?: {
+    tagName: string;
+    message: string;
+    messageSource: "ai" | "fallback" | string;
+    pushed: boolean;
+  };
   target?: string;
   resolvedHash?: string;
   lostCommits?: DeployCommit[];
@@ -57,6 +63,9 @@ export interface ReleaseStatusData {
   pendingCommits: DeployCommit[];
   aheadCommits: DeployCommit[];
   hasUpdate: boolean;
+  suggestedTagName?: string | null;
+  tagPrefix?: string;
+  pushTagsEnabled?: boolean;
   restartTarget: string;
 }
 
