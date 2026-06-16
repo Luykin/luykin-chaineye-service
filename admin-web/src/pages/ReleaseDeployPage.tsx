@@ -8,8 +8,10 @@ import type { ColumnsType } from "antd/es/table";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import {
+  createReleaseTag,
   fetchReleaseRemote,
   fetchReleaseStatus,
+  generateReleaseTagMessage,
   releaseDeploy,
   type DeployCommit,
   type ReleaseStatusData,
@@ -83,6 +85,11 @@ export function ReleaseDeployPage() {
   const [confirmText, setConfirmText] = useState("");
   const [rebuildAdminWeb, setRebuildAdminWeb] = useState(true);
   const [restartAfterDeploy, setRestartAfterDeploy] = useState(true);
+  const [tagName, setTagName] = useState("");
+  const [tagMessageText, setTagMessageText] = useState("");
+  const [tagMessageSource, setTagMessageSource] = useState<"ai" | "fallback" | "manual" | string>("");
+  const [tagMessageTagName, setTagMessageTagName] = useState("");
+  const [createdTagName, setCreatedTagName] = useState("");
 
   const statusQuery = useQuery({
     queryKey: ["release-status"],
@@ -101,16 +108,65 @@ export function ReleaseDeployPage() {
   });
 
   const releaseMutation = useMutation({
-    mutationFn: () => releaseDeploy({ confirmText, rebuildAdminWeb, restartAfterDeploy }),
+    mutationFn: () => releaseDeploy({
+      confirmText,
+      rebuildAdminWeb,
+      restartAfterDeploy,
+      tagMessage: tagMessageText.trim() || undefined,
+      tagMessageSource: tagMessageText.trim() ? tagMessageSource || "manual" : undefined,
+      releaseTagName: createdTagName || undefined,
+    }),
     onSuccess: (response) => {
       const restartText = response.data.restartScheduled ? "，PM2 即将重启" : "";
       const tagText = response.data.releaseTag?.tagName ? `，Tag: ${response.data.releaseTag.tagName}` : "";
       messageApi.success(`发布完成：${shortHash(response.data.before)} → ${shortHash(response.data.after)}${tagText}${restartText}`);
       setDeployOpen(false);
       setConfirmText("");
+      setCreatedTagName("");
       setTimeout(() => void statusQuery.refetch(), 3000);
     },
     onError: (error: Error) => messageApi.error(error.message || "发布失败"),
+  });
+
+  const tagMessageMutation = useMutation({
+    mutationFn: generateReleaseTagMessage,
+    onSuccess: (response) => {
+      setTagMessageText(response.data.message);
+      setTagMessageSource(response.data.messageSource);
+      setTagMessageTagName(response.data.suggestedTagName);
+      setTagName((current) => current || response.data.suggestedTagName);
+      setCreatedTagName("");
+      if (response.data.messageSource === "ai") {
+        messageApi.success("AI Tag 描述生成成功");
+      } else {
+        messageApi.warning("AI 不可用，已生成兜底 Tag 描述");
+      }
+    },
+    onError: (error: Error) => {
+      setTagMessageSource("");
+      messageApi.error(error.message || "生成 Tag 描述失败");
+    },
+  });
+
+  const createTagMutation = useMutation({
+    mutationFn: () => createReleaseTag({
+      tagName: tagName.trim(),
+      tagMessage: tagMessageText.trim() || undefined,
+      tagMessageSource: tagMessageText.trim() ? tagMessageSource || "manual" : undefined,
+    }),
+    onSuccess: (response) => {
+      setCreatedTagName(response.data.releaseTag.tagName);
+      setTagName(response.data.releaseTag.tagName);
+      if (!tagMessageText.trim()) {
+        setTagMessageText(response.data.releaseTag.message);
+        setTagMessageSource(response.data.releaseTag.messageSource);
+      }
+      messageApi.success(`发布 Tag 已创建：${response.data.releaseTag.tagName}`);
+    },
+    onError: (error: Error) => {
+      setCreatedTagName("");
+      messageApi.error(error.message || "创建发布 Tag 失败");
+    },
   });
 
   const commitColumns: ColumnsType<DeployCommit> = useMemo(() => [
@@ -153,7 +209,20 @@ export function ReleaseDeployPage() {
                   <Button icon={<ReloadOutlined />} loading={fetchMutation.isPending} onClick={() => fetchMutation.mutate()}>
                     拉取远程状态
                   </Button>
-                  <Button type="primary" icon={<CloudUploadOutlined />} disabled={!canDeploy} onClick={() => { setDeployOpen(true); setConfirmText(""); }}>
+                  <Button
+                    type="primary"
+                    icon={<CloudUploadOutlined />}
+                    disabled={!canDeploy}
+                    onClick={() => {
+                      setDeployOpen(true);
+                      setConfirmText("");
+                      setTagName(status?.suggestedTagName || "");
+                      setTagMessageText("");
+                      setTagMessageSource("");
+                      setTagMessageTagName("");
+                      setCreatedTagName("");
+                    }}
+                  >
                     发布 origin/main
                   </Button>
                 </div>
@@ -279,14 +348,52 @@ export function ReleaseDeployPage() {
               <Typography.Text code>{status?.remote?.shortHash || "-"}</Typography.Text>
             </Space>
           </div>
-          <Card size="small" title="发布 Tag" className="deploy-card">
-            <Space direction="vertical" size={4}>
+          <Card
+            size="small"
+            title="发布 Tag"
+            className="deploy-card"
+            extra={
+              <Button
+                size="small"
+                icon={<RocketOutlined />}
+                loading={tagMessageMutation.isPending}
+                disabled={!canDeploy}
+                onClick={() => tagMessageMutation.mutate()}
+              >
+                生成 AI 描述
+              </Button>
+            }
+          >
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
               <Typography.Text>
-                预计格式：<Typography.Text code>{status?.suggestedTagName || "prod-YYYYMMDD-HHmm-abcdef0"}</Typography.Text>
+                预计格式：<Typography.Text code>{tagMessageTagName || status?.suggestedTagName || "prod-YYYYMMDD-HHmm-abcdef0"}</Typography.Text>
               </Typography.Text>
-              <Typography.Text type="secondary">
-                Tag 描述会优先由 AI 根据待发布提交生成；如果 AI 不可用，会自动用提交列表生成兜底描述。
-              </Typography.Text>
+              {tagMessageSource ? (
+                <Alert
+                  type={tagMessageSource === "ai" ? "success" : "warning"}
+                  showIcon
+                  message={tagMessageSource === "ai" ? "AI 描述已生成" : "已使用兜底描述"}
+                  description={tagMessageSource === "ai" ? "发布时会优先使用下方这段描述创建 annotated tag。" : "AI 未成功返回，发布时会使用下方提交列表兜底描述。"}
+                />
+              ) : (
+                <Alert
+                  type="info"
+                  showIcon
+                  message="建议发布前先生成 Tag 描述"
+                  description="点击右上角按钮可以提前确认 AI 是否可用；不生成也可以发布，后端会自动生成或兜底。"
+                />
+              )}
+              <Input.TextArea
+                value={tagMessageText}
+                onChange={(event) => {
+                  setTagMessageText(event.target.value);
+                  if (event.target.value.trim()) setTagMessageSource("manual");
+                }}
+                autoSize={{ minRows: 4, maxRows: 8 }}
+                maxLength={1800}
+                showCount
+                placeholder="点击「生成 AI 描述」预览 tag 描述；也可以在这里手动编辑。"
+              />
               <Typography.Text type="secondary">
                 {status?.pushTagsEnabled ? "当前已开启远程推送 tag。" : "当前未开启远程推送 tag，只会创建在服务器本地仓库。"}
               </Typography.Text>

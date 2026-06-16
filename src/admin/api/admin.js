@@ -103,6 +103,24 @@ function buildFallbackReleaseTagMessage(commits, afterHash) {
   ].join("\n").slice(0, 1800);
 }
 
+function sanitizeReleaseTagMessage(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .trim()
+    .slice(0, 1800);
+}
+
+function sanitizeReleaseTagName(value) {
+  const tagName = String(value || "").trim();
+  if (!/^[0-9A-Za-z._-]{3,120}$/.test(tagName) || tagName.startsWith("-") || tagName.includes("..")) {
+    const err = new Error("Tag 名称不合法，仅支持字母、数字、点、下划线和中划线");
+    err.statusCode = 400;
+    throw err;
+  }
+  return tagName;
+}
+
 async function generateReleaseTagMessage(commits, beforeHash, afterHash) {
   const fallback = buildFallbackReleaseTagMessage(commits, afterHash);
   if (!process.env.LLM_API_KEY) {
@@ -142,19 +160,33 @@ async function generateReleaseTagMessage(commits, beforeHash, afterHash) {
   }
 }
 
-async function createReleaseTag({ commits, beforeHash, afterHash }) {
-  const baseName = buildReleaseTagName(afterHash);
-  let tagName = baseName;
-  for (let index = 2; index <= 20; index += 1) {
-    const exists = (await runDeployCommand("git", ["tag", "--list", tagName])).stdout.trim();
-    if (!exists) break;
-    tagName = `${baseName}-${index}`;
-  }
-  if ((await runDeployCommand("git", ["tag", "--list", tagName])).stdout.trim()) {
-    throw new Error("无法生成唯一发布 tag");
+async function createReleaseTag({ commits, beforeHash, afterHash, tagNameOverride, tagMessageOverride, tagMessageSource }) {
+  let tagName;
+  if (tagNameOverride) {
+    tagName = sanitizeReleaseTagName(tagNameOverride);
+    if ((await runDeployCommand("git", ["tag", "--list", tagName])).stdout.trim()) {
+      const err = new Error(`Tag 已存在：${tagName}`);
+      err.statusCode = 409;
+      throw err;
+    }
+  } else {
+    const baseName = buildReleaseTagName(afterHash);
+    tagName = baseName;
+    for (let index = 2; index <= 20; index += 1) {
+      const exists = (await runDeployCommand("git", ["tag", "--list", tagName])).stdout.trim();
+      if (!exists) break;
+      tagName = `${baseName}-${index}`;
+    }
+    if ((await runDeployCommand("git", ["tag", "--list", tagName])).stdout.trim()) {
+      throw new Error("无法生成唯一发布 tag");
+    }
   }
 
-  const tagMessage = await generateReleaseTagMessage(commits, beforeHash, afterHash);
+  const sanitizedOverride = sanitizeReleaseTagMessage(tagMessageOverride);
+  const overrideSource = ["ai", "fallback", "manual"].includes(tagMessageSource) ? tagMessageSource : "manual";
+  const tagMessage = sanitizedOverride
+    ? { message: sanitizedOverride, source: overrideSource }
+    : await generateReleaseTagMessage(commits, beforeHash, afterHash);
   const tagResult = await runDeployCommand("git", ["tag", "-a", tagName, afterHash, "-m", tagMessage.message], {
     timeout: 30000,
     maxBuffer: 2 * 1024 * 1024,
@@ -179,6 +211,32 @@ async function createReleaseTag({ commits, beforeHash, afterHash }) {
     pushOutput,
     stdout: tagResult.stdout,
     stderr: tagResult.stderr,
+  };
+}
+
+async function getExistingReleaseTag(tagName, expectedHash) {
+  const sanitizedTagName = sanitizeReleaseTagName(tagName);
+  const exists = (await runDeployCommand("git", ["tag", "--list", sanitizedTagName])).stdout.trim();
+  if (!exists) {
+    const err = new Error(`请先创建发布 Tag：${sanitizedTagName}`);
+    err.statusCode = 409;
+    throw err;
+  }
+  const tagHash = (await runDeployCommand("git", ["rev-parse", `${sanitizedTagName}^{commit}`])).stdout;
+  if (expectedHash && tagHash !== expectedHash) {
+    const err = new Error(`Tag ${sanitizedTagName} 指向 ${tagHash.slice(0, 12)}，不是本次发布目标 ${expectedHash.slice(0, 12)}`);
+    err.statusCode = 409;
+    throw err;
+  }
+  const message = (await runDeployCommand("git", ["tag", "-l", sanitizedTagName, "--format=%(contents)"], { maxBuffer: 1024 * 1024 })).stdout;
+  return {
+    tagName: sanitizedTagName,
+    message,
+    messageSource: "existing",
+    pushed: false,
+    pushOutput: null,
+    stdout: "",
+    stderr: "",
   };
 }
 
@@ -1302,9 +1360,90 @@ router.post("/deploy/release/fetch", adminAuth, requireRole("super"), async (req
   }
 });
 
+router.post("/deploy/release/tag-message", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const releaseStatus = await getReleaseStatusData();
+    const before = releaseStatus.current?.hash || (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
+    const after = releaseStatus.remote?.hash;
+    if (!after) {
+      return res.status(409).json({ success: false, error: "没有找到 origin/main，无法生成 Tag 描述" });
+    }
+    if (releaseStatus.pendingCommits.length === 0 && before === after) {
+      return res.status(409).json({ success: false, error: "当前没有待发布提交，无需生成 Tag 描述" });
+    }
+
+    const tagMessage = await generateReleaseTagMessage(releaseStatus.pendingCommits, before, after);
+    await createDeployAudit(req, "deploy-release-tag-message", true, {
+      before,
+      after,
+      messageSource: tagMessage.source,
+      commitCount: releaseStatus.pendingCommits.length,
+    });
+    return res.json({
+      success: true,
+      data: {
+        suggestedTagName: buildReleaseTagName(after),
+        message: tagMessage.message,
+        messageSource: tagMessage.source,
+        commitCount: releaseStatus.pendingCommits.length,
+        before,
+        after,
+      },
+    });
+  } catch (e) {
+    await createDeployAudit(req, "deploy-release-tag-message", false, { error: e.message });
+    return res.status(500).json({ success: false, error: e.message || "生成 Tag 描述失败" });
+  }
+});
+
+router.post("/deploy/release/tag", adminAuth, requireRole("super"), express.json(), async (req, res) => {
+  try {
+    const { tagName, tagMessage, tagMessageSource } = req.body || {};
+    const releaseStatus = await getReleaseStatusData();
+    const before = releaseStatus.current?.hash || (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
+    const after = releaseStatus.remote?.hash;
+    if (!after) {
+      return res.status(409).json({ success: false, error: "没有找到 origin/main，无法创建发布 Tag" });
+    }
+    if (releaseStatus.pendingCommits.length === 0 && before === after) {
+      return res.status(409).json({ success: false, error: "当前没有待发布提交，无需创建发布 Tag" });
+    }
+
+    const releaseTag = await createReleaseTag({
+      commits: releaseStatus.pendingCommits,
+      beforeHash: before,
+      afterHash: after,
+      tagNameOverride: tagName || buildReleaseTagName(after),
+      tagMessageOverride: tagMessage,
+      tagMessageSource,
+    });
+
+    await createDeployAudit(req, "deploy-release-tag", true, {
+      before,
+      after,
+      tagName: releaseTag.tagName,
+      tagMessageSource: releaseTag.messageSource,
+      tagPushed: releaseTag.pushed,
+      commitCount: releaseStatus.pendingCommits.length,
+    });
+    return res.json({
+      success: true,
+      data: {
+        before,
+        after,
+        releaseTag,
+        commitCount: releaseStatus.pendingCommits.length,
+      },
+    });
+  } catch (e) {
+    await createDeployAudit(req, "deploy-release-tag", false, { error: e.message, tagName: req.body?.tagName });
+    return res.status(e.statusCode || 500).json({ success: false, error: e.message || "创建发布 Tag 失败" });
+  }
+});
+
 router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), async (req, res) => {
   try {
-    const { confirmText, rebuildAdminWeb, restartAfterDeploy = true } = req.body || {};
+    const { confirmText, rebuildAdminWeb, restartAfterDeploy = true, releaseTagName, tagMessage, tagMessageSource } = req.body || {};
     if (confirmText !== "DEPLOY") {
       return res.status(400).json({ success: false, error: "请输入 DEPLOY 确认发布" });
     }
@@ -1344,18 +1483,31 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
     }
 
     const after = (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
-    const releaseTag = await createReleaseTag({
-      commits: releaseStatus.pendingCommits,
-      beforeHash: before,
-      afterHash: after,
-    });
-    outputs.push({
-      step: "release-tag",
-      stdout: `tag=${releaseTag.tagName}\nmessageSource=${releaseTag.messageSource}\npushed=${releaseTag.pushed}`,
-      stderr: releaseTag.stderr || "",
-    });
-    if (releaseTag.pushOutput) {
-      outputs.push({ step: "push-tag", stdout: releaseTag.pushOutput.stdout, stderr: releaseTag.pushOutput.stderr });
+    const releaseTag = releaseTagName
+      ? await getExistingReleaseTag(releaseTagName, after)
+      : await createReleaseTag({
+          commits: releaseStatus.pendingCommits,
+          beforeHash: before,
+          afterHash: after,
+          tagMessageOverride: tagMessage,
+          tagMessageSource,
+        });
+
+    if (releaseTagName) {
+      outputs.push({
+        step: "release-tag",
+        stdout: `using existing tag=${releaseTag.tagName}`,
+        stderr: "",
+      });
+    } else {
+      outputs.push({
+        step: "release-tag",
+        stdout: `tag=${releaseTag.tagName}\nmessageSource=${releaseTag.messageSource}\npushed=${releaseTag.pushed}`,
+        stderr: releaseTag.stderr || "",
+      });
+      if (releaseTag.pushOutput) {
+        outputs.push({ step: "push-tag", stdout: releaseTag.pushOutput.stdout, stderr: releaseTag.pushOutput.stderr });
+      }
     }
 
     await createDeployAudit(req, "deploy-release", true, {

@@ -53,6 +53,22 @@ export interface DeployActionData {
   outputs: Array<{ step: string; stdout?: string; stderr?: string }>;
 }
 
+export interface ReleaseTagMessageData {
+  suggestedTagName: string;
+  message: string;
+  messageSource: "ai" | "fallback" | "manual" | string;
+  commitCount: number;
+  before: string;
+  after: string;
+}
+
+export interface ReleaseTagCreateData {
+  before: string;
+  after: string;
+  releaseTag: NonNullable<DeployActionData["releaseTag"]>;
+  commitCount: number;
+}
+
 export interface ReleaseStatusData {
   projectRoot: string;
   branch: string;
@@ -84,6 +100,23 @@ export function fetchReleaseRemote() {
   );
 }
 
+export function generateReleaseTagMessage() {
+  return apiRequest<{ success: boolean; data: ReleaseTagMessageData }>("/admin/deploy/release/tag-message", {
+    method: "POST",
+  });
+}
+
+export function createReleaseTag(payload: {
+  tagName: string;
+  tagMessage?: string;
+  tagMessageSource?: string;
+}) {
+  return apiRequest<{ success: boolean; data: ReleaseTagCreateData }>("/admin/deploy/release/tag", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export function fetchDeployPreview(target: string, targetType: "commit" | "tag") {
   const params = new URLSearchParams({ target, targetType });
   return apiRequest<{ success: boolean; data: DeployPreviewData }>(`/admin/deploy/preview?${params.toString()}`);
@@ -112,6 +145,9 @@ export function releaseDeploy(payload: {
   confirmText: string;
   rebuildAdminWeb: boolean;
   restartAfterDeploy: boolean;
+  tagMessage?: string;
+  tagMessageSource?: string;
+  releaseTagName?: string;
 }) {
   return apiRequest<{ success: boolean; data: DeployActionData }>("/admin/deploy/release", {
     method: "POST",
