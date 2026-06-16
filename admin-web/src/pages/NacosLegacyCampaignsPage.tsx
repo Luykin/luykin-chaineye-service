@@ -65,8 +65,6 @@ type CampaignConfig = {
 };
 type ToastState = { message: string; type?: "success" | "error" | "info" } | null;
 
-type JsonFieldName = "customLeaderboards";
-
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
@@ -152,8 +150,6 @@ function normalizeCampaign(input: AnyObj): AnyObj {
   c.writingThemes = c.writingThemes.map((item: any) => item && typeof item === "object" ? { zh: String(item.zh || ""), en: String(item.en || "") } : { zh: String(item || ""), en: "" });
   c.testList = Array.isArray(c.testList) ? c.testList : [];
   c.targetUserIds = Array.isArray(c.targetUserIds) ? c.targetUserIds : [];
-  delete c.allowEmailRegistration;
-
   c.logos = Array.isArray(c.logos) ? c.logos : [];
   c.tasks = Array.isArray(c.tasks) ? c.tasks : [];
   c.essayContestWinners = Array.isArray(c.essayContestWinners) ? c.essayContestWinners : [];
@@ -303,16 +299,6 @@ function buildDiffHtml(oldConfig: unknown, nextConfig: unknown) {
     .join("\n\n");
 }
 
-function formatJson(value: unknown) {
-  return JSON.stringify(value ?? [], null, 2);
-}
-
-function parseJsonArray(value: string, fieldName: string) {
-  const parsed = value.trim() ? JSON.parse(value) : [];
-  if (!Array.isArray(parsed)) throw new Error(`${fieldName} 必须是 JSON 数组`);
-  return parsed;
-}
-
 function Field({ label, hint, children }: { label: React.ReactNode; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="field">
@@ -339,7 +325,6 @@ export function NacosLegacyCampaignsPage() {
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [listCollapsed, setListCollapsed] = useState(() => localStorage.getItem("nacos-legacy-campaigns-list-collapsed") === "1");
-  const [jsonEdits, setJsonEdits] = useState<Partial<Record<JsonFieldName, string>>>({});
   const [internalTestUsers, setInternalTestUsers] = useState<VipListItem[]>([]);
 
   const selectedCampaign = selectionIndex == null ? null : config.campaigns[selectionIndex] || null;
@@ -377,6 +362,17 @@ export function NacosLegacyCampaignsPage() {
     });
   }
 
+  function changeRiskConfirm(checked: boolean) {
+    updateSelectedCampaign((campaign) => {
+      campaign.riskConfirmHtml = checked
+        ? {
+            zh: "<p><strong>重要提示：</strong>该项目为 Early-stage 项目，信息由项目方提供，请在参与前自行判断。点击继续即表示理解并接受。</p>",
+            en: "<p><strong>Important Notice:</strong> The project is in its early stage. The information is provided by the project team. Please make an informed decision before participating. Proceeding indicates that you understand and accept this.</p>",
+          }
+        : null;
+    });
+  }
+
   async function loadFromNacos() {
     if (dirty && !window.confirm("你当前有未发布的老版 Nacos 修改，重新加载会丢失这些修改。\n确认重新加载？")) return;
     setLoading(true);
@@ -387,7 +383,6 @@ export function NacosLegacyCampaignsPage() {
       setConfig(parsed);
       setOriginalConfig(clone(parsed));
       setSelectionIndex(null);
-      setJsonEdits({});
       setDirty(false);
       showToast("老版 Nacos 加载完成", "success");
     } catch (error) {
@@ -425,7 +420,6 @@ export function NacosLegacyCampaignsPage() {
 
   function selectCampaign(index: number) {
     setSelectionIndex(index);
-    setJsonEdits({});
   }
 
   function newCampaign() {
@@ -433,7 +427,6 @@ export function NacosLegacyCampaignsPage() {
     const campaign = makeNewCampaign();
     setConfig((prev) => ({ ...prev, campaigns: [campaign, ...prev.campaigns] }));
     setSelectionIndex(0);
-    setJsonEdits({});
     setDirty(true);
     showToast("已新增一条老版 Nacos 活动（未发布）", "info");
   }
@@ -452,7 +445,6 @@ export function NacosLegacyCampaignsPage() {
       return next;
     });
     setSelectionIndex(selectionIndex + 1);
-    setJsonEdits({});
     setDirty(true);
     showToast("已复制活动（未发布）", "info");
   }
@@ -466,7 +458,6 @@ export function NacosLegacyCampaignsPage() {
       return next;
     });
     setSelectionIndex(null);
-    setJsonEdits({});
     setDirty(true);
     showToast("已删除，点击发布后写入 Nacos", "info");
   }
@@ -488,15 +479,7 @@ export function NacosLegacyCampaignsPage() {
   }
 
   function showPublishPreview() {
-    try {
-      applyJsonEdits();
-    } catch (error) {
-      const msg = `JSON 配置解析失败：${error instanceof Error ? error.message : "未知错误"}`;
-      showToast(msg, "error");
-      window.alert(msg);
-      return;
-    }
-    const next = getConfigWithJsonEdits();
+    const next = clone(config);
     const errors = validateCampaigns(next);
     if (errors.length) {
       const msg = `发布失败：以下必填字段未填写完整：\n\n${errors.join("\n")}\n\n请完善后再发布。`;
@@ -505,7 +488,6 @@ export function NacosLegacyCampaignsPage() {
       return;
     }
     setConfig(next);
-    setJsonEdits({});
     setJsonPreviewHtml(buildDiffHtml(originalConfig || {}, next));
     setJsonPreviewOpen(true);
   }
@@ -513,7 +495,7 @@ export function NacosLegacyCampaignsPage() {
   async function confirmPublish() {
     setPublishing(true);
     try {
-      const next = getConfigWithJsonEdits();
+      const next = clone(config);
       await publishNacosConfig({
         dataId: DATA_ID,
         group: GROUP,
@@ -521,7 +503,6 @@ export function NacosLegacyCampaignsPage() {
         source: "nacos-legacy-campaigns",
       });
       setConfig(next);
-      setJsonEdits({});
       setOriginalConfig(clone(next));
       setDirty(false);
       setJsonPreviewOpen(false);
@@ -538,30 +519,6 @@ export function NacosLegacyCampaignsPage() {
     localStorage.setItem("nacos-legacy-campaigns-list-collapsed", value ? "1" : "0");
   }
 
-  function getConfigWithJsonEdits() {
-    const next = clone(config);
-    if (selectionIndex == null) return next;
-    const entries = Object.entries(jsonEdits) as Array<[JsonFieldName, string]>;
-    if (!entries.length) return next;
-    const campaign = next.campaigns[selectionIndex];
-    if (!campaign) return next;
-    entries.forEach(([fieldName, raw]) => {
-      campaign[fieldName] = parseJsonArray(raw, fieldName);
-    });
-    normalizeCampaign(campaign);
-    return next;
-  }
-
-  function applyJsonEdits() {
-    const next = getConfigWithJsonEdits();
-    setConfig(next);
-    setJsonEdits({});
-    setDirty(true);
-  }
-
-  function updateJsonField(fieldName: JsonFieldName, value: string) {
-    setJsonEdits((prev) => ({ ...prev, [fieldName]: value }));
-  }
 
   function addArrayItem(kind: "logos" | "tasks" | "tags" | "writingThemes" | "essayContestWinners") {
     updateSelectedCampaign((campaign) => {
@@ -704,10 +661,8 @@ export function NacosLegacyCampaignsPage() {
               c={c}
               setCampaignPath={setCampaignPath}
               updateSelectedCampaign={updateSelectedCampaign}
+              changeRiskConfirm={changeRiskConfirm}
               internalTestUsers={internalTestUsers}
-              jsonEdits={jsonEdits}
-              updateJsonField={updateJsonField}
-              applyJsonEdits={applyJsonEdits}
               addArrayItem={addArrayItem}
               updateArrayItem={updateArrayItem}
               moveArrayItem={moveArrayItem}
@@ -759,20 +714,17 @@ function ListGroup({ emptyText, items }: { emptyText: string; items: Array<{ key
   ) : <div className="list-group-empty">{emptyText}</div>;
 }
 
-function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTestUsers, jsonEdits, updateJsonField, applyJsonEdits, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem }: {
+function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, changeRiskConfirm, internalTestUsers, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem }: {
   c: AnyObj;
   setCampaignPath: (path: string, value: any) => void;
   updateSelectedCampaign: (fn: (campaign: AnyObj) => void) => void;
+  changeRiskConfirm: (checked: boolean) => void;
   internalTestUsers: VipListItem[];
-  jsonEdits: Partial<Record<JsonFieldName, string>>;
-  updateJsonField: (fieldName: JsonFieldName, value: string) => void;
-  applyJsonEdits: () => void;
   addArrayItem: (kind: "logos" | "tasks" | "tags" | "writingThemes" | "essayContestWinners") => void;
   updateArrayItem: (kind: string, index: number, path: string, value: any) => void;
   moveArrayItem: (kind: string, index: number, delta: number) => void;
   removeArrayItem: (kind: string, index: number) => void;
 }) {
-  const setJsonArray = (fieldName: JsonFieldName, value: string) => updateJsonField(fieldName, value);
   const internalTestUserOptions = internalTestUsers.map((item) => ({
     value: item.username,
     label: item.username,
@@ -810,6 +762,7 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTe
             <Space size={[18, 8]} wrap style={{ paddingTop: 28 }}>
               <Space><Switch checked={!!c.enabled} onChange={(value) => setCampaignPath("enabled", value)} />展示活动</Space>
               <Space><Switch checked={!!c.testingPhase} onChange={changeTestingPhase} />测试模式</Space>
+              <Space><Switch checked={!!c.riskConfirmHtml} onChange={changeRiskConfirm} />早期项目风险提示</Space>
               <Space><Switch checked={c.showExtraComponents !== false} onChange={(value) => setCampaignPath("showExtraComponents", value)} />显示写作/榜单扩展区</Space>
               <Space><Switch checked={c.showSponsoredPolicy === true} onChange={(value) => setCampaignPath("showSponsoredPolicy", value)} />推广政策</Space>
             </Space>
@@ -838,7 +791,7 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTe
           <Col xs={24} md={8}><Field label="报名门槛"><Select value={thresholdValue} onChange={changeThreshold} options={[{ value: "", label: "请选择" }, { value: "50k", label: "50k" }, { value: "100k", label: "100k" }, { value: "200k", label: "200k" }, { value: "200k+creator", label: "200k+creator" }]} /></Field></Col>
           <Col xs={12} md={6}><Field label="POI 金额"><InputNumber min={0} style={{ width: "100%" }} value={c.rewardAmount} onChange={(value) => setCampaignPath("rewardAmount", value)} /></Field></Col>
           <Col xs={12} md={6}><Field label="POI 人数"><InputNumber min={0} style={{ width: "100%" }} value={c.rewardParticipantCount} onChange={(value) => setCampaignPath("rewardParticipantCount", value)} /></Field></Col>
-          <Col xs={12} md={6}><Field label="分配机制"><Select value={c.rewardDistributionType || ""} onChange={(value) => setCampaignPath("rewardDistributionType", value)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }]} /></Field></Col>
+          <Col xs={12} md={6}><Field label="分配机制"><Select value={c.rewardDistributionType || ""} onChange={(value) => setCampaignPath("rewardDistributionType", value)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
           <Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(event) => setCampaignPath("rewardUnit", event.target.value)} placeholder="USDT" /></Field></Col>
           <Col xs={24}>
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
@@ -892,15 +845,6 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTe
         </div>
       </Section>
 
-      <Section title="其他高级 JSON（老结构原样发布）">
-        <Space direction="vertical" size={10} style={{ width: "100%" }}>
-          <Typography.Text type="secondary">自定义榜单等较少改动字段保留 JSON 数组编辑；点击“应用 JSON”后再发布。</Typography.Text>
-          <Button size="small" onClick={() => {
-            try { applyJsonEdits(); } catch (error) { window.alert(error instanceof Error ? error.message : "JSON 解析失败"); }
-          }}>应用 JSON</Button>
-          <JsonArrayField title="customLeaderboards" fieldName="customLeaderboards" value={jsonEdits.customLeaderboards ?? formatJson(c.customLeaderboards || [])} onChange={setJsonArray} />
-        </Space>
-      </Section>
     </>
   );
 }
@@ -1066,7 +1010,7 @@ function RewardOptional({ c, type, enabled, setCampaignPath, updateSelectedCampa
           <Row gutter={[12, 12]}>
             <Col xs={12} md={6}><Field label="金额"><InputNumber min={0} value={c.powAmount} onChange={(value) => setCampaignPath("powAmount", value)} /></Field></Col>
             <Col xs={12} md={6}><Field label="人数"><InputNumber min={1} value={c.powWinnerCount} onChange={(value) => setCampaignPath("powWinnerCount", value)} /></Field></Col>
-            <Col xs={12} md={6}><Field label="机制"><Select value={c.powDistributionType || ""} onChange={(value) => setCampaignPath("powDistributionType", value)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }]} /></Field></Col>
+            <Col xs={12} md={6}><Field label="机制"><Select value={c.powDistributionType || ""} onChange={(value) => setCampaignPath("powDistributionType", value)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
             <Col xs={12} md={6}><Field label="单位"><Input value={c.powUnit || ""} onChange={(e) => setCampaignPath("powUnit", e.target.value)} placeholder="USDT" /></Field></Col>
           </Row>
         ) : (
@@ -1109,13 +1053,5 @@ function Tags({ items, update, move, remove }: any) {
         </Card>
       ))}
     </Space>
-  );
-}
-
-function JsonArrayField({ title, fieldName, value, onChange }: { title: string; fieldName: JsonFieldName; value: string; onChange: (fieldName: JsonFieldName, value: string) => void }) {
-  return (
-    <Field label={title}>
-      <TextArea rows={8} value={value} onChange={(event) => onChange(fieldName, event.target.value)} style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 12 }} />
-    </Field>
   );
 }
