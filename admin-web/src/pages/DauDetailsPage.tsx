@@ -54,7 +54,7 @@ export function DauDetailsPage() {
     const keyword = search.trim().toLowerCase();
     if (!keyword) return details;
     return details.filter((item: DauDetailItem) =>
-      [item.identityType, item.twitterId, item.fingerprint, item.userId]
+      [item.identityType, item.twitterId, item.fingerprint, item.userId, item.username, item.displayName]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(keyword))
     );
@@ -87,11 +87,20 @@ export function DauDetailsPage() {
         value ? <Typography.Text copyable>{value}</Typography.Text> : <Tag color="default">-</Tag>,
     },
     {
-      title: "用户 ID / 兼容字段",
+      title: "用户名 / 兼容字段",
       dataIndex: "userId",
       key: "userId",
-      render: (value: string) =>
-        value === "未知" ? <Tag color="default">未知</Tag> : <Typography.Text copyable>{value}</Typography.Text>,
+      render: (value: string, record: DauDetailItem) =>
+        value === "未知" ? (
+          <Tag color="default">未知</Tag>
+        ) : (
+          <Space direction="vertical" size={0}>
+            <Typography.Text copyable>{value}</Typography.Text>
+            {record.displayName && record.displayName !== value ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>{record.displayName}</Typography.Text>
+            ) : null}
+          </Space>
+        ),
     },
     {
       title: "设备指纹",
@@ -136,7 +145,7 @@ export function DauDetailsPage() {
           extra={
             <Input.Search
               allowClear
-              placeholder="搜索 Twitter ID / 用户 ID / 指纹"
+              placeholder="搜索 Twitter ID / 用户名 / 指纹"
               style={{ width: 280 }}
               onChange={(e) => setSearch(e.target.value)}
             />

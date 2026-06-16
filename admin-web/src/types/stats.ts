@@ -3,6 +3,8 @@ export interface DauDetailItem {
   twitterId?: string | null;
   fingerprint?: string | null;
   userId: string;
+  username?: string | null;
+  displayName?: string | null;
 }
 
 export interface OverviewDailyActiveUserItem {

@@ -416,6 +416,25 @@ router.get(
 
       const dauKey = `dau:${targetDate}`;
       const dauMembers = await req.redisClient.sMembers(dauKey);
+      const dauMetaKey = `dau:meta:${targetDate}`;
+      let dauMetaRaw = {};
+      try {
+        dauMetaRaw = await req.redisClient.hGetAll(dauMetaKey);
+      } catch (e) {
+        dauMetaRaw = {};
+      }
+      const dauMetaMap = new Map(
+        Object.entries(dauMetaRaw || {})
+          .map(([key, value]) => {
+            try {
+              const parsed = JSON.parse(value);
+              return [key, parsed && typeof parsed === "object" ? parsed : null];
+            } catch (e) {
+              return [key, null];
+            }
+          })
+          .filter(([, value]) => !!value)
+      );
 
       // 兼容新旧 DAU member：tw:<twitterId> / fp:<fingerprint> / fingerprint,x-user-id / fingerprint
       const dauDetails = dauMembers
@@ -454,12 +473,89 @@ router.get(
         })
         .filter(Boolean);
 
+      const postgresModels = require("../../models/postgres-start");
+      const XHuntUser = postgresModels.XHuntUser;
+      const XHuntUserToken = postgresModels.XHuntUserToken;
+      const { Op } = require("sequelize");
+
+      const twitterIds = [
+        ...new Set(dauDetails.map((item) => item.twitterId).filter(Boolean)),
+      ];
+      const fingerprints = [
+        ...new Set(dauDetails.map((item) => item.fingerprint).filter(Boolean)),
+      ];
+
+      const usersByTwitterId = new Map();
+      if (twitterIds.length > 0) {
+        const users = await XHuntUser.findAll({
+          where: { twitterId: { [Op.in]: twitterIds } },
+          attributes: ["twitterId", "username", "displayName"],
+        });
+        for (const user of users) {
+          usersByTwitterId.set(String(user.twitterId), {
+            userId: user.username || user.displayName || user.twitterId,
+            username: user.username || null,
+            displayName: user.displayName || null,
+          });
+        }
+      }
+
+      const usersByFingerprint = new Map();
+      if (fingerprints.length > 0) {
+        const tokens = await XHuntUserToken.findAll({
+          where: {
+            fingerprint: { [Op.in]: fingerprints },
+            isRevoked: false,
+          },
+          include: [
+            {
+              model: XHuntUser,
+              as: "user",
+              attributes: ["twitterId", "username", "displayName"],
+            },
+          ],
+          attributes: ["fingerprint", "lastUsed"],
+          order: [["lastUsed", "DESC"]],
+        });
+        for (const token of tokens) {
+          const fingerprint = String(token.fingerprint || "");
+          if (!fingerprint || usersByFingerprint.has(fingerprint) || !token.user) continue;
+          usersByFingerprint.set(fingerprint, {
+            userId: token.user.username || token.user.displayName || token.user.twitterId,
+            username: token.user.username || null,
+            displayName: token.user.displayName || null,
+            twitterId: token.user.twitterId || null,
+          });
+        }
+      }
+
+      const enrichedDetails = dauDetails.map((item) => {
+        const identityKey = item.identityType === "twitterId" && item.twitterId
+          ? `tw:${item.twitterId}`
+          : item.fingerprint
+            ? `fp:${item.fingerprint}`
+            : null;
+        const meta = identityKey ? dauMetaMap.get(identityKey) : null;
+        const dbUser = item.twitterId
+          ? usersByTwitterId.get(String(item.twitterId))
+          : item.fingerprint
+            ? usersByFingerprint.get(String(item.fingerprint))
+            : null;
+        const userId = meta?.userId || meta?.username || dbUser?.userId || item.userId || "未知";
+        return {
+          ...item,
+          userId,
+          username: meta?.username || dbUser?.username || null,
+          displayName: meta?.displayName || dbUser?.displayName || null,
+        };
+      });
+
       res.json({
         success: true,
         data: {
           date: targetDate,
-          totalCount: dauDetails.length,
-          details: dauDetails,
+          totalCount: enrichedDetails.length,
+          details: enrichedDetails,
         },
       });
     } catch (error) {

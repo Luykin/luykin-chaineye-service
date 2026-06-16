@@ -834,6 +834,36 @@ const getRequestParam = (req, paramName, allowQueryParams = true) => {
   return req.headers[headerName];
 };
 
+function normalizeDauMetaValue(value, maxLength = 120) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function getDauUserMeta(req, identity) {
+  const headerUserId = normalizeDauMetaValue(req.headers?.["x-user-id"]);
+  const username = normalizeDauMetaValue(req.user?.username || headerUserId);
+  const displayName = normalizeDauMetaValue(req.user?.displayName || username);
+  const twitterId = normalizeDauMetaValue(req.user?.twitterId || (identity?.type === "twitterId" ? identity.value : ""));
+
+  if (!username && !displayName && !twitterId) {
+    return null;
+  }
+
+  return {
+    userId: username || displayName || twitterId,
+    username: username || null,
+    displayName: displayName || null,
+    twitterId: twitterId || null,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function writeDauUserMeta(redisClient, date, identityKey, meta) {
+  if (!redisClient || !date || !identityKey || !meta?.userId) return;
+  const metaKey = `dau:meta:${date}`;
+  await redisClient.hSet(metaKey, identityKey, JSON.stringify(meta));
+  await redisClient.expire(metaKey, 8 * 24 * 60 * 60);
+}
+
 const SECURITY_ERROR_REASON_MAP = {
   400: {
     reasonCode: "missing_headers",
@@ -1192,10 +1222,6 @@ const handleDAUTracking = (req) => {
     return;
   }
 
-  if (!dauCacheManager.shouldWriteToRedis(identity.key)) {
-    return; // 缓存期内，跳过
-  }
-
   // 使用UTC方法计算北京时间（UTC+8）
   const now = new Date();
   const utcHours = now.getUTCHours();
@@ -1211,6 +1237,20 @@ const handleDAUTracking = (req) => {
   }
 
   const today = beijingDate.toISOString().split("T")[0];
+  const userMeta = getDauUserMeta(req, identity);
+
+  if (!dauCacheManager.shouldWriteToRedis(identity.key)) {
+    if (userMeta?.userId) {
+      setImmediate(async () => {
+        try {
+          await writeDauUserMeta(req.redisClient, today, identity.key, userMeta);
+        } catch (error) {
+          console.error("DAU user meta tracking error:", error);
+        }
+      });
+    }
+    return; // 缓存期内，跳过 DAU 去重写入，但允许补充用户名元信息
+  }
 
   // 异步写入 Redis 和 PostgreSQL（非阻塞）
   setImmediate(async () => {
@@ -1221,6 +1261,7 @@ const handleDAUTracking = (req) => {
       await req.redisClient.sAdd(dauKey, uniqueIdentifier);
       // 设置过期时间（保留8天，确保7天数据完整）
       await req.redisClient.expire(dauKey, 8 * 24 * 60 * 60);
+      await writeDauUserMeta(req.redisClient, today, uniqueIdentifier, userMeta);
 
       // 写入 PostgreSQL（延迟加载模型避免循环依赖）
       if (!DailyActiveUser) {
