@@ -218,12 +218,12 @@ function renderIcon(name: LegacyIconName) {
     case "rocket":
       return (
         <>
-          <path d="M4.5 16.5c-1.2 1-2 2.6-2.3 4.5 1.9-.3 3.5-1.1 4.5-2.3" />
+          <path d="M4.5 16.5c-1.2 1.2-2 2.9-2.5 5.5 2.6-.5 4.3-1.3 5.5-2.5" />
           <path d="M9 15 6.5 17.5a2.1 2.1 0 0 1-3-3L6 12" />
           <path d="m12 18 2.5-2.5a2.1 2.1 0 0 0-3-3L9 15" />
-          <path d="M8 13c2.7-5.7 6.3-9.3 12-11 0 5.7-3.6 9.3-9.3 12" />
-          <path d="M15 4h5v5" />
-          <circle cx="15" cy="9" r="1" fill="currentColor" stroke="none" />
+          <path d="M8.5 13.5c1.8-5.2 5.3-8.7 11-11 .3 5.9-3.2 9.4-8.7 11.3" />
+          <path d="M15 5.2 18.8 9" />
+          <circle cx="14.5" cy="8.5" r="1.5" />
         </>
       );
     case "rotate-ccw":
