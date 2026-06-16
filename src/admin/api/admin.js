@@ -4,6 +4,9 @@ const { Op } = require("sequelize");
 const { XhuntAdminManager, XhuntAdminAuditLog, XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
 const jwt = require("jsonwebtoken");
 const base64url = require("base64url");
+const path = require("path");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
 const {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -15,6 +18,7 @@ const { randomBytes, randomUUID } = require("crypto");
 const { handleUpload } = require("@vercel/blob/client");
 
 const router = express.Router();
+const execFileAsync = promisify(execFile);
 
 // WebAuthn 配置
 const RP_NAME = process.env.WEBAUTHN_RP_NAME || "XHunt Admin";
@@ -30,6 +34,151 @@ const ADMIN_BLOB_ALLOWED_CONTENT_TYPES = (process.env.ADMIN_BLOB_ALLOWED_CONTENT
   .split(",")
   .map((item) => item.trim())
   .filter(Boolean);
+
+const PROJECT_ROOT = process.env.PROJECT_ROOT
+  ? path.resolve(process.env.PROJECT_ROOT)
+  : path.resolve(__dirname, "../../..");
+const GIT_TARGET_RE = /^[0-9A-Za-z._/@+-]{1,160}$/;
+
+async function runDeployCommand(command, args, options = {}) {
+  const result = await execFileAsync(command, args, {
+    cwd: PROJECT_ROOT,
+    timeout: options.timeout || 15000,
+    maxBuffer: options.maxBuffer || 1024 * 1024,
+  });
+  return {
+    stdout: String(result.stdout || "").trim(),
+    stderr: String(result.stderr || "").trim(),
+  };
+}
+
+function parseGitCommitLine(line) {
+  const [hash, shortHash, author, relativeTime, ...messageParts] = String(line || "").split("\t");
+  if (!hash || !shortHash) return null;
+  return {
+    hash,
+    shortHash,
+    author: author || "",
+    relativeTime: relativeTime || "",
+    message: messageParts.join("\t") || "",
+  };
+}
+
+function parseGitTagLine(line) {
+  const [name, hash, shortHash, relativeTime, ...messageParts] = String(line || "").split("\t");
+  if (!name || !hash) return null;
+  return {
+    name,
+    hash,
+    shortHash: shortHash || hash.slice(0, 7),
+    relativeTime: relativeTime || "",
+    message: messageParts.join("\t") || "",
+  };
+}
+
+function isSafeGitTarget(target) {
+  const value = String(target || "").trim();
+  return !!value && !value.startsWith("-") && GIT_TARGET_RE.test(value);
+}
+
+async function getDeployStatusData() {
+  const [currentRaw, branchRaw, statusRaw, commitsRaw, tagsRaw, originMainRaw] = await Promise.all([
+    runDeployCommand("git", ["log", "-1", "--pretty=format:%H%x09%h%x09%an%x09%ar%x09%s"]),
+    runDeployCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"]),
+    runDeployCommand("git", ["status", "--porcelain"], { maxBuffer: 512 * 1024 }),
+    runDeployCommand("git", ["log", "--pretty=format:%H%x09%h%x09%an%x09%ar%x09%s", "-40"], { maxBuffer: 2 * 1024 * 1024 }),
+    runDeployCommand("git", [
+      "for-each-ref",
+      "--sort=-creatordate",
+      "--count=40",
+      "--format=%(refname:short)%09%(objectname)%09%(objectname:short)%09%(creatordate:relative)%09%(subject)",
+      "refs/tags",
+    ], { maxBuffer: 1024 * 1024 }),
+    runDeployCommand("git", ["rev-parse", "--verify", "origin/main"], { timeout: 8000 }).catch(() => ({ stdout: "", stderr: "" })),
+  ]);
+
+  const current = parseGitCommitLine(currentRaw.stdout);
+  return {
+    projectRoot: PROJECT_ROOT,
+    current,
+    branch: branchRaw.stdout || "",
+    dirty: !!statusRaw.stdout,
+    dirtyFiles: statusRaw.stdout ? statusRaw.stdout.split("\n").filter(Boolean).slice(0, 80) : [],
+    recentCommits: commitsRaw.stdout.split("\n").map(parseGitCommitLine).filter(Boolean),
+    tags: tagsRaw.stdout.split("\n").map(parseGitTagLine).filter(Boolean),
+    originMain: originMainRaw.stdout || "",
+    restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+  };
+}
+
+async function assertGitTarget(target, targetType) {
+  const value = String(target || "").trim();
+  if (!isSafeGitTarget(value)) {
+    const err = new Error("回滚目标不合法");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (targetType === "tag") {
+    const tags = (await runDeployCommand("git", ["tag", "--list", value])).stdout.split("\n").filter(Boolean);
+    if (!tags.includes(value)) {
+      const err = new Error("Tag 不存在");
+      err.statusCode = 400;
+      throw err;
+    }
+  } else if (targetType === "commit") {
+    if (!/^[0-9a-fA-F]{7,40}$/.test(value)) {
+      const err = new Error("提交必须使用 7-40 位 commit hash");
+      err.statusCode = 400;
+      throw err;
+    }
+  } else {
+    const err = new Error("targetType 只能是 commit 或 tag");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  await runDeployCommand("git", ["cat-file", "-e", `${value}^{commit}`]);
+  const resolved = (await runDeployCommand("git", ["rev-parse", `${value}^{commit}`])).stdout;
+  return { target: value, resolvedHash: resolved };
+}
+
+async function getLostCommits(target) {
+  const range = `${target}..HEAD`;
+  const raw = await runDeployCommand("git", ["log", "--pretty=format:%H%x09%h%x09%an%x09%ar%x09%s", range], {
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  return raw.stdout.split("\n").map(parseGitCommitLine).filter(Boolean);
+}
+
+function schedulePm2Restart(reason) {
+  const target = process.env.ADMIN_DEPLOY_PM2_TARGET || "all";
+  setTimeout(async () => {
+    try {
+      console.log(`[admin-deploy] restarting pm2 target=${target}, reason=${reason}`);
+      await runDeployCommand("pm2", ["restart", target], { timeout: 60000, maxBuffer: 2 * 1024 * 1024 });
+      console.log(`[admin-deploy] pm2 restart done, target=${target}`);
+    } catch (e) {
+      console.error("[admin-deploy] pm2 restart failed:", e?.message);
+    }
+  }, 1200);
+}
+
+async function createDeployAudit(req, action, success, message) {
+  try {
+    await XhuntAdminAuditLog.create({
+      adminId: req.adminUser?.id,
+      email: req.adminUser?.email,
+      action,
+      route: req.originalUrl || req.path,
+      method: req.method,
+      ip: req.ip || "",
+      userAgent: req.headers["user-agent"] || "",
+      success,
+      message: typeof message === "string" ? message : JSON.stringify(message),
+    });
+  } catch (_) {}
+}
 
 function parseRawCookies(cookieHeader) {
   const out = {};
@@ -782,7 +931,7 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
     }
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read"]);
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = perms.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -896,7 +1045,7 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
       .filter((p) => p.length > 0);
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read"]);
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = sanitized.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -957,6 +1106,134 @@ router.get("/supabase/verify-link", async (req, res) => {
   } catch (e) {
     console.log("[supabase/verify-link] error:", e?.message);
     return res.status(500).json({ success: false });
+  }
+});
+
+// ========== 紧急部署 / 回滚（super only） ==========
+router.get("/deploy/status", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const data = await getDeployStatusData();
+    return res.json({ success: true, data });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message || "读取部署状态失败" });
+  }
+});
+
+router.get("/deploy/preview", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const target = String(req.query.target || "").trim();
+    const targetType = String(req.query.targetType || "commit").trim();
+    const verified = await assertGitTarget(target, targetType);
+    const lostCommits = await getLostCommits(verified.target);
+    return res.json({ success: true, data: { ...verified, lostCommits } });
+  } catch (e) {
+    return res.status(e.statusCode || 500).json({ success: false, error: e.message || "生成回滚预览失败" });
+  }
+});
+
+router.post("/deploy/rollback", adminAuth, requireRole("super"), express.json(), async (req, res) => {
+  try {
+    const { target, targetType, confirmText, rebuildAdminWeb } = req.body || {};
+    if (confirmText !== "ROLLBACK") {
+      return res.status(400).json({ success: false, error: "请输入 ROLLBACK 确认回滚" });
+    }
+
+    const verified = await assertGitTarget(target, targetType);
+    const before = (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
+    const dirty = (await runDeployCommand("git", ["status", "--porcelain"], { maxBuffer: 512 * 1024 })).stdout;
+    const lostCommits = await getLostCommits(verified.target);
+    const outputs = [];
+
+    if (dirty) {
+      const stashMessage = `admin-rollback-${new Date().toISOString()}`;
+      const stash = await runDeployCommand("git", ["stash", "push", "-u", "-m", stashMessage], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+      outputs.push({ step: "stash", stdout: stash.stdout, stderr: stash.stderr });
+    }
+
+    const reset = await runDeployCommand("git", ["reset", "--hard", verified.target], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+    outputs.push({ step: "reset", stdout: reset.stdout, stderr: reset.stderr });
+
+    if (rebuildAdminWeb === true) {
+      const build = await runDeployCommand("npm", ["run", "admin-web:build"], { timeout: 180000, maxBuffer: 8 * 1024 * 1024 });
+      outputs.push({ step: "admin-web:build", stdout: build.stdout.slice(-4000), stderr: build.stderr.slice(-4000) });
+    }
+
+    const after = (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
+    await createDeployAudit(req, "deploy-rollback", true, {
+      before,
+      after,
+      target: verified.target,
+      targetType,
+      resolvedHash: verified.resolvedHash,
+      lostCommitCount: lostCommits.length,
+      rebuildAdminWeb: rebuildAdminWeb === true,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        before,
+        after,
+        target: verified.target,
+        resolvedHash: verified.resolvedHash,
+        lostCommits,
+        outputs,
+        restartScheduled: true,
+        restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+      },
+    });
+    schedulePm2Restart(`rollback:${verified.target}`);
+  } catch (e) {
+    await createDeployAudit(req, "deploy-rollback", false, { error: e.message, target: req.body?.target });
+    return res.status(e.statusCode || 500).json({ success: false, error: e.message || "回滚失败" });
+  }
+});
+
+router.post("/deploy/recover", adminAuth, requireRole("super"), express.json(), async (req, res) => {
+  try {
+    const { confirmText, rebuildAdminWeb } = req.body || {};
+    if (confirmText !== "RECOVER") {
+      return res.status(400).json({ success: false, error: "请输入 RECOVER 确认恢复到 origin/main" });
+    }
+
+    const before = (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
+    const dirty = (await runDeployCommand("git", ["status", "--porcelain"], { maxBuffer: 512 * 1024 })).stdout;
+    const outputs = [];
+    if (dirty) {
+      const stashMessage = `admin-recover-${new Date().toISOString()}`;
+      const stash = await runDeployCommand("git", ["stash", "push", "-u", "-m", stashMessage], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+      outputs.push({ step: "stash", stdout: stash.stdout, stderr: stash.stderr });
+    }
+
+    const fetchResult = await runDeployCommand("git", ["fetch", "origin", "--tags"], { timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
+    outputs.push({ step: "fetch", stdout: fetchResult.stdout.slice(-4000), stderr: fetchResult.stderr.slice(-4000) });
+    const reset = await runDeployCommand("git", ["reset", "--hard", "origin/main"], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+    outputs.push({ step: "reset", stdout: reset.stdout, stderr: reset.stderr });
+
+    if (rebuildAdminWeb === true) {
+      const build = await runDeployCommand("npm", ["run", "admin-web:build"], { timeout: 180000, maxBuffer: 8 * 1024 * 1024 });
+      outputs.push({ step: "admin-web:build", stdout: build.stdout.slice(-4000), stderr: build.stderr.slice(-4000) });
+    }
+
+    const after = (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
+    await createDeployAudit(req, "deploy-recover", true, { before, after, rebuildAdminWeb: rebuildAdminWeb === true });
+
+    res.json({
+      success: true,
+      data: {
+        before,
+        after,
+        outputs,
+        restartScheduled: true,
+        restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+      },
+    });
+    schedulePm2Restart("recover:origin/main");
+  } catch (e) {
+    await createDeployAudit(req, "deploy-recover", false, { error: e.message });
+    return res.status(500).json({ success: false, error: e.message || "恢复失败" });
   }
 });
 

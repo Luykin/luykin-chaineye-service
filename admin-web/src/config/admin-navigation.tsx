@@ -43,6 +43,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/banner-config", icon: <LegacySidebarIcon name="square" />, label: "Banner配置", permission: "banner-config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/redis-management", icon: <LegacySidebarIcon name="database" />, label: "Redis管理", permission: "redis-management", group: "main", sidebarGroup: "dev", implemented: true, section: "system", superOnly: true },
   { key: "/backup-restore", icon: <LegacySidebarIcon name="database" />, label: "备份恢复", permission: "backup:operate", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
+  { key: "/emergency-rollback", icon: <LegacySidebarIcon name="server" />, label: "紧急回滚", permission: "deploy:rollback", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/llm-test", icon: <LegacySidebarIcon name="cpu" />, label: "LLM测试", permission: "llm-test", group: "main", sidebarGroup: "dev", implemented: true, section: "system", superOnly: true },
   { key: "/admin-users", icon: <LegacySidebarIcon name="user" />, label: "管理员列表", permission: "admin-users", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/admin-audit-logs", icon: <LegacySidebarIcon name="clipboard" />, label: "操作记录", permission: "audit-logs:read", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },

@@ -34,6 +34,7 @@ import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import { VipManagementPage } from "@/pages/VipManagementPage";
 import { TampermonkeyPage } from "@/pages/TampermonkeyPage";
 import { BackupRestorePage } from "@/pages/BackupRestorePage";
+import { EmergencyRollbackPage } from "@/pages/EmergencyRollbackPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -69,6 +70,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "vip-management": <VipManagementPage />,
   tampermonkey: <TampermonkeyPage />,
   "backup-restore": <BackupRestorePage />,
+  "emergency-rollback": <EmergencyRollbackPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {
