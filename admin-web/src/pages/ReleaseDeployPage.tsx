@@ -227,13 +227,6 @@ export function ReleaseDeployPage() {
                   </Button>
                 </div>
               </div>
-              <div className="deploy-command-card">
-                <div className="deploy-command-card__label">Release pipeline</div>
-                <div className="deploy-command-card__row"><span>target</span><span className="deploy-command-card__value">origin/main</span></div>
-                <div className="deploy-command-card__row"><span>current</span><span className="deploy-command-card__value">{status?.current?.shortHash || "-"}</span></div>
-                <div className="deploy-command-card__row"><span>remote</span><span className="deploy-command-card__value">{status?.remote?.shortHash || "-"}</span></div>
-                <div className="deploy-command-card__row"><span>tag</span><span className="deploy-command-card__value">{status?.suggestedTagName || "-"}</span></div>
-              </div>
             </div>
           </section>
 
@@ -327,7 +320,7 @@ export function ReleaseDeployPage() {
         open={deployOpen}
         onCancel={() => setDeployOpen(false)}
         okText="确认发布并重启"
-        okButtonProps={{ disabled: confirmText !== "DEPLOY" || !canDeploy, danger: true }}
+        okButtonProps={{ disabled: confirmText !== "DEPLOY" || !canDeploy || !createdTagName, danger: true }}
         confirmLoading={releaseMutation.isPending}
         onOk={() => releaseMutation.mutate()}
         width={780}
@@ -337,7 +330,7 @@ export function ReleaseDeployPage() {
             type="warning"
             showIcon
             message="这是生产发布操作"
-            description={`将从 ${shortHash(status?.current?.hash)} 更新到 ${shortHash(status?.remote?.hash)}，共 ${status?.pendingCommits.length || 0} 个提交，并自动生成发布 tag。`}
+            description={`将从 ${shortHash(status?.current?.hash)} 更新到 ${shortHash(status?.remote?.hash)}，共 ${status?.pendingCommits.length || 0} 个提交。请先创建发布 Tag，成功后再点击发布重启。`}
           />
           <div className="deploy-modal-summary">
             <Space>
@@ -353,34 +346,60 @@ export function ReleaseDeployPage() {
             title="发布 Tag"
             className="deploy-card"
             extra={
-              <Button
-                size="small"
-                icon={<RocketOutlined />}
-                loading={tagMessageMutation.isPending}
-                disabled={!canDeploy}
-                onClick={() => tagMessageMutation.mutate()}
-              >
-                生成 AI 描述
-              </Button>
+              <Space>
+                <Button
+                  size="small"
+                  icon={<RocketOutlined />}
+                  loading={tagMessageMutation.isPending}
+                  disabled={!canDeploy || !!createdTagName}
+                  onClick={() => tagMessageMutation.mutate()}
+                >
+                  生成 AI 描述
+                </Button>
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={createTagMutation.isPending}
+                  disabled={!canDeploy || !tagName.trim() || !!createdTagName}
+                  onClick={() => createTagMutation.mutate()}
+                >
+                  创建 Tag
+                </Button>
+              </Space>
             }
           >
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              <Typography.Text>
-                预计格式：<Typography.Text code>{tagMessageTagName || status?.suggestedTagName || "prod-YYYYMMDD-HHmm-abcdef0"}</Typography.Text>
-              </Typography.Text>
+              <Input
+                addonBefore="Tag"
+                value={tagName}
+                onChange={(event) => {
+                  setTagName(event.target.value);
+                  setCreatedTagName("");
+                }}
+                placeholder={tagMessageTagName || status?.suggestedTagName || "prod-YYYYMMDD-HHmm-abcdef0"}
+                disabled={!!createdTagName}
+              />
+              {createdTagName ? (
+                <Alert
+                  type="success"
+                  showIcon
+                  message={`发布 Tag 已创建：${createdTagName}`}
+                  description="现在可以输入 DEPLOY，然后点击发布重启。发布步骤不会重复创建 Tag，只会校验该 Tag 指向本次发布目标。"
+                />
+              ) : null}
               {tagMessageSource ? (
                 <Alert
                   type={tagMessageSource === "ai" ? "success" : "warning"}
                   showIcon
                   message={tagMessageSource === "ai" ? "AI 描述已生成" : "已使用兜底描述"}
-                  description={tagMessageSource === "ai" ? "发布时会优先使用下方这段描述创建 annotated tag。" : "AI 未成功返回，发布时会使用下方提交列表兜底描述。"}
+                  description={tagMessageSource === "ai" ? "请确认下方描述，然后点击「创建 Tag」。" : "AI 未成功返回，请确认兜底描述，然后点击「创建 Tag」。"}
                 />
               ) : (
                 <Alert
                   type="info"
                   showIcon
-                  message="建议发布前先生成 Tag 描述"
-                  description="点击右上角按钮可以提前确认 AI 是否可用；不生成也可以发布，后端会自动生成或兜底。"
+                  message="第一步：生成或填写 Tag 描述"
+                  description="点击「生成 AI 描述」提前确认 AI 是否可用；也可以直接手动填写描述后创建 Tag。"
                 />
               )}
               <Input.TextArea
@@ -388,10 +407,12 @@ export function ReleaseDeployPage() {
                 onChange={(event) => {
                   setTagMessageText(event.target.value);
                   if (event.target.value.trim()) setTagMessageSource("manual");
+                  setCreatedTagName("");
                 }}
                 autoSize={{ minRows: 4, maxRows: 8 }}
                 maxLength={1800}
                 showCount
+                disabled={!!createdTagName}
                 placeholder="点击「生成 AI 描述」预览 tag 描述；也可以在这里手动编辑。"
               />
               <Typography.Text type="secondary">
@@ -405,7 +426,7 @@ export function ReleaseDeployPage() {
               { color: status?.dirty ? "orange" : "gray", children: status?.dirty ? "检测到未提交改动，先执行 git stash" : "工作区干净，跳过 stash" },
               { color: "blue", children: "git reset --hard origin/main" },
               { color: rebuildAdminWeb ? "blue" : "gray", children: rebuildAdminWeb ? "npm run admin-web:build" : "跳过 admin-web 构建" },
-              { color: "purple", children: "生成 annotated release tag（AI 描述，失败自动兜底）" },
+              { color: createdTagName ? "green" : "purple", children: createdTagName ? `使用已创建 Tag：${createdTagName}` : "等待手动创建 annotated release tag" },
               { color: restartAfterDeploy ? "green" : "gray", children: restartAfterDeploy ? `pm2 restart ${status?.restartTarget || "all"}` : "跳过 PM2 重启" },
             ]}
           />
