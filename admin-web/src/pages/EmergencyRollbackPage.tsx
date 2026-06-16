@@ -205,7 +205,7 @@ export function EmergencyRollbackPage() {
             <DeployMetric label="最近提交" value={status?.recentCommits.length ?? "-"} hint="可选回滚点" />
             <DeployMetric label="Tags" value={status?.tags.length ?? "-"} hint="推荐安全版本" />
             <DeployMetric label="将移除提交" value={preview?.lostCommits.length ?? "-"} hint={selected ? "已根据目标预览" : "选择目标后计算"} />
-            <DeployMetric label="工作区状态" value={status?.dirty ? "Dirty" : "Clean"} hint={status?.dirty ? "回滚前会 stash" : "可直接回滚"} />
+            <DeployMetric label="PM2 目标" value={status?.restartTarget || "all"} hint="回滚后重启" />
           </div>
 
           <Alert
@@ -227,9 +227,6 @@ export function EmergencyRollbackPage() {
                   </Space>
                 </Descriptions.Item>
                 <Descriptions.Item label="PM2 重启目标">{status?.restartTarget || "all"}</Descriptions.Item>
-                <Descriptions.Item label="工作区">
-                  {status?.dirty ? <Tag color="error">有未提交改动，将先 stash</Tag> : <Tag color="success">干净</Tag>}
-                </Descriptions.Item>
               </Descriptions>
             </Card>
 
@@ -249,14 +246,6 @@ export function EmergencyRollbackPage() {
               </Space>
             </Card>
           </div>
-
-          {status?.dirty && (
-            <Card size="small" title="未提交改动" className="deploy-card">
-              <Space wrap size={[4, 4]}>
-                {status.dirtyFiles.map((item) => <Tag key={item}>{item}</Tag>)}
-              </Space>
-            </Card>
-          )}
 
           <Card
             title="选择回滚目标"
@@ -326,7 +315,7 @@ export function EmergencyRollbackPage() {
             type="error"
             showIcon
             message="请确认你知道这会影响线上服务"
-            description="后端会先 stash 未提交改动，再 reset 到目标版本，最后重启 PM2。"
+            description="后端会按所选版本执行 reset，并在响应返回后重启 PM2。"
           />
           <div className="deploy-modal-summary">
             <TargetSummary target={selected} />
@@ -370,7 +359,7 @@ export function EmergencyRollbackPage() {
             type="warning"
             showIcon
             message="恢复会执行 git fetch origin --tags && git reset --hard origin/main"
-            description="如果当前工作区有未提交改动，会先 stash。"
+            description="后端会拉取远程并 reset 到 origin/main。"
           />
           <Checkbox checked={rebuildAdminWeb} onChange={(event) => setRebuildAdminWeb(event.target.checked)}>
             恢复后重新构建 admin-web

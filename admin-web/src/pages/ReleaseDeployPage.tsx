@@ -56,16 +56,6 @@ function DeployStateAlert({ status }: { status?: ReleaseStatusData }) {
       />
     );
   }
-  if (status.dirty) {
-    return (
-      <Alert
-        type="warning"
-        showIcon
-        message="工作区有未提交改动"
-        description="执行发布时会先自动 stash，再 reset 到 origin/main。"
-      />
-    );
-  }
   if (!status.hasUpdate) {
     return <Alert type="success" showIcon message="当前已经是 origin/main 最新版本" />;
   }
@@ -233,7 +223,7 @@ export function ReleaseDeployPage() {
           <div className="deploy-metrics">
             <DeployMetric label="待发布提交" value={status?.pendingCommits.length ?? "-"} hint="HEAD..origin/main" />
             <DeployMetric label="本地超前" value={status?.aheadCommits.length ?? "-"} hint="origin/main..HEAD" />
-            <DeployMetric label="工作区状态" value={status?.dirty ? "Dirty" : "Clean"} hint={status?.dirty ? "发布前会 stash" : "可直接发布"} />
+            <DeployMetric label="发布 Tag" value={status?.suggestedTagName ? "Ready" : "-"} hint={status?.suggestedTagName || "等待远程版本"} />
             <DeployMetric label="PM2 目标" value={status?.restartTarget || "all"} hint="发布后重启" />
           </div>
 
@@ -244,9 +234,6 @@ export function ReleaseDeployPage() {
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label="分支">{status?.branch || "-"}</Descriptions.Item>
                 <Descriptions.Item label="HEAD"><CommitText commit={status?.current} /></Descriptions.Item>
-                <Descriptions.Item label="工作区">
-                  {status?.dirty ? <Tag color="error">有未提交改动</Tag> : <Tag color="success">干净</Tag>}
-                </Descriptions.Item>
                 <Descriptions.Item label="PM2 目标">{status?.restartTarget || "all"}</Descriptions.Item>
               </Descriptions>
             </Card>
@@ -274,14 +261,6 @@ export function ReleaseDeployPage() {
               </Descriptions>
             </Card>
           </div>
-
-          {status?.dirty ? (
-            <Card size="small" title="未提交改动" className="deploy-card">
-              <Space wrap size={[4, 4]}>
-                {status.dirtyFiles.map((item) => <Tag key={item}>{item}</Tag>)}
-              </Space>
-            </Card>
-          ) : null}
 
           {status?.aheadCommits?.length ? (
             <Card size="small" title="origin/main 没有的本地提交" className="deploy-card deploy-table-card">
@@ -423,7 +402,6 @@ export function ReleaseDeployPage() {
           <Timeline
             items={[
               { color: "blue", children: "git fetch origin --tags" },
-              { color: status?.dirty ? "orange" : "gray", children: status?.dirty ? "检测到未提交改动，先执行 git stash" : "工作区干净，跳过 stash" },
               { color: "blue", children: "git reset --hard origin/main" },
               { color: rebuildAdminWeb ? "blue" : "gray", children: rebuildAdminWeb ? "npm run admin-web:build" : "跳过 admin-web 构建" },
               { color: createdTagName ? "green" : "purple", children: createdTagName ? `使用已创建 Tag：${createdTagName}` : "等待手动创建 annotated release tag" },
