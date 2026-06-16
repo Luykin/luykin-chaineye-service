@@ -24,7 +24,9 @@ type LegacyIconName =
   | "toggle"
   | "cpu"
   | "user"
-  | "star";
+  | "star"
+  | "rocket"
+  | "rotate-ccw";
 
 interface LegacySidebarIconProps {
   name: LegacyIconName;
@@ -213,6 +215,25 @@ function renderIcon(name: LegacyIconName) {
       );
     case "star":
       return <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />;
+    case "rocket":
+      return (
+        <>
+          <path d="M4.5 16.5c-1.2 1-2 2.6-2.3 4.5 1.9-.3 3.5-1.1 4.5-2.3" />
+          <path d="M9 15 6.5 17.5a2.1 2.1 0 0 1-3-3L6 12" />
+          <path d="m12 18 2.5-2.5a2.1 2.1 0 0 0-3-3L9 15" />
+          <path d="M8 13c2.7-5.7 6.3-9.3 12-11 0 5.7-3.6 9.3-9.3 12" />
+          <path d="M15 4h5v5" />
+          <circle cx="15" cy="9" r="1" fill="currentColor" stroke="none" />
+        </>
+      );
+    case "rotate-ccw":
+      return (
+        <>
+          <path d="M3 2v6h6" />
+          <path d="M3.5 13a9 9 0 1 0 2.6-6.4L3 8" />
+          <path d="M12 7v5l3 2" />
+        </>
+      );
     default:
       return null;
   }
