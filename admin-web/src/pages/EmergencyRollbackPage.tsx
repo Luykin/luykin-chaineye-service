@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Alert, Button, Card, Checkbox, Descriptions, Empty, Input, Modal, Segmented, Space, Table, Tag, Typography, message } from "antd";
-import { CloudUploadOutlined, ExclamationCircleOutlined, ReloadOutlined, RollbackOutlined, SafetyCertificateOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { CloudUploadOutlined, ReloadOutlined, RollbackOutlined, SafetyCertificateOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -207,14 +207,6 @@ export function EmergencyRollbackPage() {
             <DeployMetric label="将移除提交" value={preview?.lostCommits.length ?? "-"} hint={selected ? "已根据目标预览" : "选择目标后计算"} />
             <DeployMetric label="PM2 目标" value={status?.restartTarget || "all"} hint="回滚后重启" />
           </div>
-
-          <Alert
-            type="warning"
-            showIcon
-            icon={<ExclamationCircleOutlined />}
-            message="这是生产高危操作"
-            description="回滚会执行 git reset --hard，并在响应返回后触发 PM2 restart。若回滚到没有此页面/API 的旧版本，后续恢复需要走终端 yarn emergency:recover。"
-          />
 
           <div className="deploy-version-grid">
             <Card size="small" title="当前版本" className="deploy-card">
