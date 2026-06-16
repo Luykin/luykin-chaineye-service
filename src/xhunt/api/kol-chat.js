@@ -33,6 +33,7 @@ const { body } = require("express-validator");
 const { validateRequest } = require("../middleware/validate-request");
 const { authenticateToken } = require("../middleware/auth");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { getEffectiveIdentity } = require("../utils/request-identity");
 const { recordGenericStat } = require("../services/generic-stats-service");
 
 const router = express.Router();
@@ -70,13 +71,19 @@ function getNextDayResetTime(beijingTime) {
  * @returns {Object} 检查结果 { allowed: boolean, remaining: number, total: number, resetTime: number, error?: Object }
  */
 async function checkRateLimit(req, isVip) {
-  // 获取用户标识
+  // 获取用户标识：登录用户 > x-tw-id > 老版本真实 fingerprint，忽略 deadbeef 占位 fingerprint
   let userKey;
   if (req.user && req.user.id) {
     userKey = `${RATE_LIMIT_CONFIG.REDIS_KEY_PREFIX}:user:${req.user.id}`;
-  } else if (req.securityContext && req.securityContext.fingerprint) {
-    userKey = `${RATE_LIMIT_CONFIG.REDIS_KEY_PREFIX}:fingerprint:${req.securityContext.fingerprint}`;
   } else {
+    const identity = req.securityContext?.effectiveIdentity?.key
+      ? req.securityContext.effectiveIdentity
+      : getEffectiveIdentity(req);
+    if (identity.key) {
+      userKey = `${RATE_LIMIT_CONFIG.REDIS_KEY_PREFIX}:${identity.key}`;
+    }
+  }
+  if (!userKey) {
     return {
       allowed: false,
       total: RATE_LIMIT_CONFIG.FREE_USER_DAILY_LIMIT,
@@ -198,13 +205,19 @@ router.get("/quota", [authenticateToken], async (req, res) => {
   try {
     const isVip = isRequestXHuntVip(req);
 
-    // 获取用户标识
+    // 获取用户标识：登录用户 > x-tw-id > 老版本真实 fingerprint，忽略 deadbeef 占位 fingerprint
     let userKey;
     if (req.user && req.user.id) {
       userKey = `${RATE_LIMIT_CONFIG.REDIS_KEY_PREFIX}:user:${req.user.id}`;
-    } else if (req.securityContext && req.securityContext.fingerprint) {
-      userKey = `${RATE_LIMIT_CONFIG.REDIS_KEY_PREFIX}:fingerprint:${req.securityContext.fingerprint}`;
     } else {
+      const identity = req.securityContext?.effectiveIdentity?.key
+        ? req.securityContext.effectiveIdentity
+        : getEffectiveIdentity(req);
+      if (identity.key) {
+        userKey = `${RATE_LIMIT_CONFIG.REDIS_KEY_PREFIX}:${identity.key}`;
+      }
+    }
+    if (!userKey) {
       return res.status(400).json({
         code: 400,
         message: "无法识别用户身份",

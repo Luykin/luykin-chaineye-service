@@ -1,5 +1,10 @@
 const rateLimit = require("express-rate-limit");
 const crypto = require("crypto");
+const {
+  isDeadFingerprint,
+  getRateLimitIdentity,
+  attachIdentityToSecurityContext,
+} = require("../utils/request-identity");
 // 延迟导入以避免循环依赖
 let DailyActiveUser = null;
 let SecurityViolationLog = null;
@@ -48,9 +53,8 @@ class DAUCacheManager {
   }
 
   // 检查是否需要写入Redis
-  shouldWriteToRedis(fingerprint, xUserId) {
-    // 如果没有 x-user-id，不进行统计
-    if (!xUserId) {
+  shouldWriteToRedis(identityKey) {
+    if (!identityKey) {
       return false;
     }
 
@@ -69,8 +73,7 @@ class DAUCacheManager {
     }
 
     const today = beijingDate.toISOString().split("T")[0];
-    // 使用 fingerprint,x-user-id 组合作为缓存键，提高唯一性
-    const cacheKey = `${today}_${fingerprint}_${xUserId}`;
+    const cacheKey = `${today}_${identityKey}`;
 
     if (!this.recentFingerprints.has(cacheKey)) {
       // 未缓存，标记为已处理
@@ -82,8 +85,8 @@ class DAUCacheManager {
   }
 
   // 从缓存中移除（用于Redis失败时的重试机制）
-  removeFromCache(fingerprint, xUserId) {
-    if (!xUserId) {
+  removeFromCache(identityKey) {
+    if (!identityKey) {
       return;
     }
 
@@ -102,7 +105,7 @@ class DAUCacheManager {
     }
 
     const today = beijingDate.toISOString().split("T")[0];
-    const cacheKey = `${today}_${fingerprint}_${xUserId}`;
+    const cacheKey = `${today}_${identityKey}`;
     this.recentFingerprints.delete(cacheKey);
   }
 
@@ -460,14 +463,7 @@ const fingerprintLimiter = rateLimit({
   max: 1500,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    const fingerprint = req.headers["x-device-fingerprint"];
-    // 如果指纹是特定值，使用IP进行限速；否则使用指纹限速
-    if (fingerprint === "0fa18b367456abdea6060e931e4902b4") {
-      return req.ip;
-    }
-    return fingerprint || req.ip;
-  },
+  keyGenerator: (req) => getRateLimitIdentity(req, { allowQueryParams: false }),
   handler: (req, res) => {
     res.status(429).json({
       error: "设备请求过于频繁，请稍后再试",
@@ -1005,7 +1001,7 @@ class SecurityViolationLogger {
     const fingerprint = this.normalizeIdentifier(
       getRequestParam(req, "device-fingerprint", allowQueryParams)
     );
-    if (fingerprint) {
+    if (fingerprint && !isDeadFingerprint(fingerprint)) {
       identifiers.push(`fp:${fingerprint}`);
     }
     return identifiers;
@@ -1190,8 +1186,13 @@ const securityViolationLogger = new SecurityViolationLogger();
  * @param {string} fingerprint - 设备指纹
  * @param {string} xUserId - 用户ID
  */
-const handleDAUTracking = (req, fingerprint, xUserId) => {
-  if (!dauCacheManager.shouldWriteToRedis(fingerprint, xUserId)) {
+const handleDAUTracking = (req) => {
+  const identity = req.securityContext?.effectiveIdentity;
+  if (!identity?.key) {
+    return;
+  }
+
+  if (!dauCacheManager.shouldWriteToRedis(identity.key)) {
     return; // 缓存期内，跳过
   }
 
@@ -1216,8 +1217,7 @@ const handleDAUTracking = (req, fingerprint, xUserId) => {
     try {
       // 写入 Redis
       const dauKey = `dau:${today}`;
-      // 使用 fingerprint,x-user-id 组合作为唯一标识，提高统计精确性
-      const uniqueIdentifier = `${fingerprint},${xUserId}`;
+      const uniqueIdentifier = identity.key;
       await req.redisClient.sAdd(dauKey, uniqueIdentifier);
       // 设置过期时间（保留8天，确保7天数据完整）
       await req.redisClient.expire(dauKey, 8 * 24 * 60 * 60);
@@ -1228,29 +1228,27 @@ const handleDAUTracking = (req, fingerprint, xUserId) => {
         DailyActiveUser = postgresModels.DailyActiveUser;
       }
 
-      // 注意：此方法只在 shouldWriteToRedis 返回 true 时才调用
-      // 而 shouldWriteToRedis 会确保 xUserId 存在
-      // 使用 xUserId 作为用户标识（只记录登录用户）
+      const dailyUserId = identity.key;
       const [record, created] = await DailyActiveUser.findOrCreate({
         where: {
-          userId: xUserId, // 只使用 xUserId，不fallback到fingerprint
+          userId: dailyUserId,
           date: today,
         },
         defaults: {
-          userId: xUserId,
+          userId: dailyUserId,
           date: today,
         },
       });
 
       // 记录数据库写入日志
       if (created) {
-        console.log(`📊 DAU数据库记录已创建: userId=${xUserId}, date=${today}`);
+        console.log(`📊 DAU数据库记录已创建: userId=${dailyUserId}, date=${today}`);
       }
     } catch (error) {
       // 错误不影响主流程，只记录日志
       console.error("DAU tracking error:", error);
       // 失败时从缓存中移除，允许下次重试
-      dauCacheManager.removeFromCache(fingerprint, xUserId);
+      dauCacheManager.removeFromCache(identity.key);
     }
   });
 };
@@ -1401,14 +1399,14 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
 
   return {
     isValid: true,
-    securityContext: {
+    securityContext: attachIdentityToSecurityContext(req, {
       requestId,
       timestamp,
       fingerprint,
       version,
       signature,
       twId: twId || null,
-    },
+    }, { allowQueryParams }),
   };
 };
 
@@ -1496,8 +1494,7 @@ const securityMiddleware = async (req, res, next) => {
       false
     );
     if (windowLocationHref !== "background-script") {
-      const xUserId = req.headers["x-user-id"];
-      handleDAUTracking(req, validation.securityContext.fingerprint, xUserId);
+      handleDAUTracking(req);
     }
 
     // 🔥 请求统计（版本 + URL）- 异步处理，不阻塞请求

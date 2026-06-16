@@ -6,6 +6,7 @@ const AI_CONTENT_RATE_LIMIT_FLAG = Symbol.for("xhunt.aiContentRateLimitExecuted"
 const AI_CONTENT_WHITELIST_200 = ["luoyukun4", "alpha_gege"];
 // - 20次/日名单：使用全局 XHunt VIP 名单
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { getEffectiveIdentity } = require("../utils/request-identity");
 
 // 获取到明天00:00的秒数
 function getSecondsUntilMidnight(beijingTime) {
@@ -54,16 +55,20 @@ async function aiContentRateLimit(req, res, next) {
     });
     const isWhitelist20 = !isWhitelist200 && isRequestXHuntVip(req);
 
-    // 获取用户标识
+    // 获取用户标识：登录用户 > x-tw-id > 老版本真实 fingerprint，忽略 deadbeef 占位 fingerprint
     let userKey;
     if (req.user && req.user.id) {
-      // 已登录用户：使用用户ID作为key
       userKey = `ai_content_limit:user:${req.user.id}`;
-    } else if (req.securityContext && req.securityContext.fingerprint) {
-      // 未登录用户：使用指纹作为key
-      userKey = `ai_content_limit:fingerprint:${req.securityContext.fingerprint}`;
     } else {
-      // 无法识别用户，拒绝请求
+      const identity = req.securityContext?.effectiveIdentity?.key
+        ? req.securityContext.effectiveIdentity
+        : getEffectiveIdentity(req);
+      if (identity.key) {
+        userKey = `ai_content_limit:${identity.key}`;
+      }
+    }
+
+    if (!userKey) {
       return res.status(400).json({
         error:
           "Unable to identify user identity, please refresh the page and try again",

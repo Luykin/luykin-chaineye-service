@@ -177,12 +177,13 @@ router.post(
     try {
       const reportData = req.body;
       const version = req?.securityContext?.version || "unknown";
-      const fingerprint = req?.securityContext?.fingerprint || "unknown";
+      const identity = req?.securityContext?.effectiveIdentity;
+      const identityTag = identity?.key ? identity.key.replace(":", ":") : "anonymous";
 
-      // 基础标签
+      // 基础标签：使用有效身份，避免 deadbeef 占位 fingerprint 污染聚合
       const baseTags = [
         `version:${version}`,
-        `fingerprint:${fingerprint.slice(0, 8)}`, // 只取前8位
+        `identity:${identityTag}`,
       ];
 
       // 如果有 errors 数组，合并所有错误信息

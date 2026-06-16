@@ -30,7 +30,7 @@ function DailyActiveSection({
   return (
     <div className="overview-section">
       <LegacyStatsSectionHeader
-        title="设备指纹日活统计"
+        title="日活身份统计"
         badge="最近7天"
       />
       <p className="overview-section-desc">

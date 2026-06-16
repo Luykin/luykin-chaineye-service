@@ -2,6 +2,10 @@ const { XHuntUser, DailyActiveUser } = require("../../models/postgres-start");
 const { Sequelize } = require("sequelize");
 const { getRedisClient } = require("../../lib/redisClient");
 
+function buildDailyActiveUserIds({ username, twitterId }) {
+  return Array.from(new Set([username, twitterId ? `tw:${twitterId}` : null].filter(Boolean)));
+}
+
 // 积分赠送 API 配置
 const ADD_CREDITS_API_URL = "https://data.cryptohunt.ai/pro/admin/user/addCredits";
 
@@ -94,7 +98,7 @@ async function calculateGiftCreditsByTwitterId(twitterId) {
       
       activeDaysCount = await DailyActiveUser.count({
         where: {
-          userId: username,
+          userId: { [Sequelize.Op.in]: buildDailyActiveUserIds({ username, twitterId }) },
           date: {
             [Sequelize.Op.gte]: thirtyDaysAgo.toISOString().split('T')[0],
           },

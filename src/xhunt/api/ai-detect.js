@@ -156,6 +156,7 @@ const { body } = require("express-validator");
 const { validateRequest } = require("../middleware/validate-request");
 const { authenticateToken } = require("../middleware/auth");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
+const { getEffectiveIdentity } = require("../utils/request-identity");
 const { structuredChat } = require("../../lib/llm/structured");
 const router = express.Router();
 
@@ -321,13 +322,19 @@ async function checkRateLimit(req, res) {
   // 检查是否是无限调用用户
   const isUnlimited = req.user && req.user.id && UNLIMITED_USERS.includes(req.user.id);
 
-  // 获取用户标识
+  // 获取用户标识：登录用户 > x-tw-id > 老版本真实 fingerprint，忽略 deadbeef 占位 fingerprint
   let userKey;
   if (req.user && req.user.id) {
     userKey = `ai_detect_limit:user:${req.user.id}`;
-  } else if (req.securityContext && req.securityContext.fingerprint) {
-    userKey = `ai_detect_limit:fingerprint:${req.securityContext.fingerprint}`;
   } else {
+    const identity = req.securityContext?.effectiveIdentity?.key
+      ? req.securityContext.effectiveIdentity
+      : getEffectiveIdentity(req);
+    if (identity.key) {
+      userKey = `ai_detect_limit:${identity.key}`;
+    }
+  }
+  if (!userKey) {
     return {
       allowed: false,
       error: {
@@ -517,13 +524,19 @@ router.get(
       // 判断是否是VIP
       const isVip = isRequestXHuntVip(req);
 
-      // 获取用户标识
+      // 获取用户标识：登录用户 > x-tw-id > 老版本真实 fingerprint，忽略 deadbeef 占位 fingerprint
       let userKey;
       if (req.user && req.user.id) {
         userKey = `ai_detect_limit:user:${req.user.id}`;
-      } else if (req.securityContext && req.securityContext.fingerprint) {
-        userKey = `ai_detect_limit:fingerprint:${req.securityContext.fingerprint}`;
       } else {
+        const identity = req.securityContext?.effectiveIdentity?.key
+          ? req.securityContext.effectiveIdentity
+          : getEffectiveIdentity(req);
+        if (identity.key) {
+          userKey = `ai_detect_limit:${identity.key}`;
+        }
+      }
+      if (!userKey) {
         return res.status(400).json({
           error: "Unable to identify user identity"
         });

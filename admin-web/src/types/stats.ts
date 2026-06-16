@@ -1,5 +1,7 @@
 export interface DauDetailItem {
-  fingerprint: string;
+  identityType?: "twitterId" | "fingerprint" | "legacy_pair" | "legacy_fingerprint";
+  twitterId?: string | null;
+  fingerprint?: string | null;
   userId: string;
 }
 

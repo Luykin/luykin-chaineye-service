@@ -27,6 +27,7 @@ const {
   sanitizeSafeUrl,
   sanitizeRichTextHtml,
 } = require("../services/inputValidator");
+const { isDeadFingerprint } = require("../utils/request-identity");
 
 const router = express.Router();
 
@@ -416,22 +417,42 @@ router.get(
       const dauKey = `dau:${targetDate}`;
       const dauMembers = await req.redisClient.sMembers(dauKey);
 
-      // 解析每个成员，提取 fingerprint 和 x-user-id
-      const dauDetails = dauMembers.map((member) => {
-        const parts = member.split(",");
-        if (parts.length === 2) {
+      // 兼容新旧 DAU member：tw:<twitterId> / fp:<fingerprint> / fingerprint,x-user-id / fingerprint
+      const dauDetails = dauMembers
+        .map((member) => {
+          const raw = String(member || "");
+          if (raw.startsWith("tw:")) {
+            const twitterId = raw.slice(3);
+            return {
+              identityType: "twitterId",
+              twitterId,
+              fingerprint: null,
+              userId: twitterId,
+            };
+          }
+
+          if (raw.startsWith("fp:")) {
+            const fingerprint = raw.slice(3);
+            if (isDeadFingerprint(fingerprint)) return null;
+            return {
+              identityType: "fingerprint",
+              twitterId: null,
+              fingerprint,
+              userId: "未知",
+            };
+          }
+
+          const parts = raw.split(",");
+          const fingerprint = parts[0];
+          if (isDeadFingerprint(fingerprint)) return null;
           return {
-            fingerprint: parts[0],
-            userId: parts[1],
+            identityType: parts.length === 2 ? "legacy_pair" : "legacy_fingerprint",
+            twitterId: null,
+            fingerprint,
+            userId: parts.length === 2 ? parts[1] : "未知",
           };
-        } else {
-          // 兼容旧格式（只有fingerprint）
-          return {
-            fingerprint: member,
-            userId: "未知",
-          };
-        }
-      });
+        })
+        .filter(Boolean);
 
       res.json({
         success: true,
