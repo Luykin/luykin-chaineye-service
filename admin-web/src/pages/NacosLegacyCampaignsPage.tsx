@@ -11,6 +11,52 @@ const DATA_ID = "xhunt_campaigns";
 const GROUP = "DEFAULT_GROUP";
 const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
 
+const TAG_COLOR_SCHEMES = [
+  { value: "green", label: "绿色" },
+  { value: "purple", label: "紫色" },
+  { value: "yellow", label: "黄色" },
+  { value: "blue", label: "蓝色" },
+  { value: "gray", label: "灰色" },
+  { value: "gold", label: "金色" },
+  { value: "red", label: "红色" },
+  { value: "pink", label: "粉色" },
+  { value: "cyan", label: "青色" },
+  { value: "orange", label: "橙色" },
+];
+
+const LUCIDE_ICONS = [
+  "FileText 📄",
+  "Gift 🎁",
+  "Trophy 🏆",
+  "Users 👥",
+  "Star ⭐",
+  "Heart ❤️",
+  "Zap ⚡",
+  "Rocket 🚀",
+  "Award 🏅",
+  "Medal 🥇",
+  "Crown 👑",
+  "Sparkles ✨",
+  "Flame 🔥",
+  "Target 🎯",
+  "TrendingUp 📈",
+  "Coins 🪙",
+  "Wallet 👛",
+  "Shield 🛡️",
+  "CheckCircle ✅",
+  "Info ℹ️",
+  "Bell 🔔",
+  "Clock ⏰",
+  "Calendar 📅",
+  "Tag 🏷️",
+  "Bookmark 🔖",
+  "Flag 🚩",
+  "MapPin 📍",
+  "Globe 🌐",
+  "Link 🔗",
+  "Share2 🔄",
+].map((label) => ({ value: label.split(" ")[0], label }));
+
 type AnyObj = Record<string, any>;
 type CampaignConfig = {
   version: number;
@@ -76,6 +122,16 @@ function setByPath(obj: AnyObj, path: string, value: any) {
     cur = cur[part];
   });
   cur[parts[parts.length - 1]] = value;
+}
+
+function generateTaskId(campaignKey: string, type: string, url: string) {
+  if (!campaignKey || !type || !url) return "";
+  try {
+    const base64 = btoa(unescape(encodeURIComponent(url)));
+    return `${campaignKey}-${type}-${base64.substring(0, 6)}-${base64.substring(base64.length - 6)}`;
+  } catch {
+    return "";
+  }
 }
 
 function normalizeCampaign(input: AnyObj): AnyObj {
@@ -507,6 +563,69 @@ export function NacosLegacyCampaignsPage() {
     setJsonEdits((prev) => ({ ...prev, [fieldName]: value }));
   }
 
+  function addArrayItem(kind: "logos" | "tasks" | "tags" | "writingThemes") {
+    updateSelectedCampaign((campaign) => {
+      campaign[kind] = Array.isArray(campaign[kind]) ? campaign[kind] : [];
+      if (kind === "logos") {
+        campaign[kind].push({ image: "", url: "", label: "", ringClassName: DEFAULT_RING });
+      }
+      if (kind === "tasks") {
+        campaign[kind].push({ id: "", title: { zh: "", en: "" }, url: "", type: "twitter", autoComplete: false });
+      }
+      if (kind === "tags") {
+        campaign[kind].push({ colorScheme: "blue", icon: "Tag", label: "", label_en: "", hoverTips: "", hoverTips_en: "" });
+      }
+      if (kind === "writingThemes") {
+        campaign[kind].push({ zh: "", en: "" });
+      }
+    });
+  }
+
+  function updateArrayItem(kind: string, index: number, path: string, value: any) {
+    updateSelectedCampaign((campaign) => {
+      const arr = Array.isArray(campaign[kind]) ? campaign[kind] : [];
+      if (!arr[index]) return;
+      if (kind === "tasks" && path === "type" && value === "custom") {
+        arr[index].url = "https://";
+        arr[index].autoComplete = false;
+      }
+      if (path.includes(".")) setByPath(arr[index], path, value);
+      else arr[index][path] = value;
+      if (kind === "tasks" && ["type", "url"].includes(path)) {
+        const task = arr[index];
+        task.id = generateTaskId(
+          campaign.campaignKey || "",
+          task.type || "",
+          task.type === "custom" ? "https://" : task.url || "",
+        );
+      }
+      if (kind === "tags") {
+        arr[index].colorScheme ||= "blue";
+        arr[index].icon ||= "Tag";
+      }
+    });
+  }
+
+  function moveArrayItem(kind: string, index: number, delta: number) {
+    updateSelectedCampaign((campaign) => {
+      const arr = Array.isArray(campaign[kind]) ? campaign[kind] : [];
+      const to = index + delta;
+      if (index < 0 || to < 0 || index >= arr.length || to >= arr.length) return;
+      const item = arr.splice(index, 1)[0];
+      arr.splice(to, 0, item);
+    });
+  }
+
+  function removeArrayItem(kind: string, index: number) {
+    updateSelectedCampaign((campaign) => {
+      const arr = Array.isArray(campaign[kind]) ? campaign[kind] : [];
+      arr.splice(index, 1);
+      if (kind === "writingThemes" && arr.length <= 1) return;
+      arr.splice(index, 1);
+      if (kind === "tags" && arr.length === 0) delete campaign.tags;
+    });
+  }
+
   const c = selectedCampaign;
 
   return (
@@ -587,6 +706,10 @@ export function NacosLegacyCampaignsPage() {
               jsonEdits={jsonEdits}
               updateJsonField={updateJsonField}
               applyJsonEdits={applyJsonEdits}
+              addArrayItem={addArrayItem}
+              updateArrayItem={updateArrayItem}
+              moveArrayItem={moveArrayItem}
+              removeArrayItem={removeArrayItem}
             />
           </div>
         )}
@@ -634,7 +757,7 @@ function ListGroup({ emptyText, items }: { emptyText: string; items: Array<{ key
   ) : <div className="list-group-empty">{emptyText}</div>;
 }
 
-function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTestUsers, jsonEdits, updateJsonField, applyJsonEdits }: {
+function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTestUsers, jsonEdits, updateJsonField, applyJsonEdits, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem }: {
   c: AnyObj;
   setCampaignPath: (path: string, value: any) => void;
   updateSelectedCampaign: (fn: (campaign: AnyObj) => void) => void;
@@ -642,6 +765,10 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTe
   jsonEdits: Partial<Record<JsonFieldName, string>>;
   updateJsonField: (fieldName: JsonFieldName, value: string) => void;
   applyJsonEdits: () => void;
+  addArrayItem: (kind: "logos" | "tasks" | "tags" | "writingThemes") => void;
+  updateArrayItem: (kind: string, index: number, path: string, value: any) => void;
+  moveArrayItem: (kind: string, index: number, delta: number) => void;
+  removeArrayItem: (kind: string, index: number) => void;
 }) {
   const setJsonArray = (fieldName: JsonFieldName, value: string) => updateJsonField(fieldName, value);
   const internalTestUserOptions = internalTestUsers.map((item) => ({
@@ -737,31 +864,176 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTe
             </Field>
           </Col>
           <Col xs={24} md={12}><Field label="插件右侧展示账号" hint="一行一个，也支持逗号分隔。"><TextArea rows={3} value={listToLines(c.targetUserIds)} onChange={(event) => setCampaignPath("targetUserIds", splitLinesToList(event.target.value))} /></Field></Col>
-          <Col xs={24} md={12}><Field label="写作主题中文" hint="一行一个主题。"><TextArea rows={4} value={(Array.isArray(c.writingThemes) ? c.writingThemes : []).map((item: AnyObj) => item.zh || "").join("\n")} onChange={(event) => {
-            const zh = event.target.value.split("\n");
-            updateSelectedCampaign((campaign) => { campaign.writingThemes = zh.map((text, index) => ({ zh: text.trim(), en: campaign.writingThemes?.[index]?.en || "" })).filter((item: AnyObj) => item.zh || item.en); });
-          }} /></Field></Col>
-          <Col xs={24} md={12}><Field label="Writing Themes EN" hint="一行一个主题，和中文按行对应。"><TextArea rows={4} value={(Array.isArray(c.writingThemes) ? c.writingThemes : []).map((item: AnyObj) => item.en || "").join("\n")} onChange={(event) => {
-            const en = event.target.value.split("\n");
-            updateSelectedCampaign((campaign) => { campaign.writingThemes = en.map((text, index) => ({ zh: campaign.writingThemes?.[index]?.zh || "", en: text.trim() })).filter((item: AnyObj) => item.zh || item.en); });
-          }} /></Field></Col>
+          <Col xs={24}>
+            <RepeaterHeader title="写作主题" onAdd={() => addArrayItem("writingThemes")} />
+            <WritingThemes items={c.writingThemes || []} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} />
+          </Col>
         </Row>
       </Section>
 
-      <Section title="高级 JSON（老结构原样发布）">
+      <Section title="Logo · 任务 · Tags">
+        <RepeaterHeader title="活动方 Logo" onAdd={() => addArrayItem("logos")} />
+        <Logos items={c.logos || []} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} />
+        <div style={{ marginTop: 16 }}>
+          <RepeaterHeader title="报名前任务" onAdd={() => addArrayItem("tasks")} />
+          <Tasks items={c.tasks || []} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} />
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <RepeaterHeader title="活动 Tags" onAdd={() => addArrayItem("tags")} />
+          <Tags items={c.tags || []} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} />
+        </div>
+      </Section>
+
+      <Section title="其他高级 JSON（老结构原样发布）">
         <Space direction="vertical" size={10} style={{ width: "100%" }}>
-          <Typography.Text type="secondary">Logo、任务、Tags、征文获奖者等结构差异较多，这里保留 JSON 数组编辑；点击“应用 JSON”后再发布。</Typography.Text>
+          <Typography.Text type="secondary">征文获奖者、自定义榜单等较少改动字段保留 JSON 数组编辑；点击“应用 JSON”后再发布。</Typography.Text>
           <Button size="small" onClick={() => {
             try { applyJsonEdits(); } catch (error) { window.alert(error instanceof Error ? error.message : "JSON 解析失败"); }
           }}>应用 JSON</Button>
-          <JsonArrayField title="logos" fieldName="logos" value={jsonEdits.logos ?? formatJson(c.logos)} onChange={setJsonArray} />
-          <JsonArrayField title="tasks" fieldName="tasks" value={jsonEdits.tasks ?? formatJson(c.tasks)} onChange={setJsonArray} />
-          <JsonArrayField title="tags" fieldName="tags" value={jsonEdits.tags ?? formatJson(c.tags || [])} onChange={setJsonArray} />
           <JsonArrayField title="essayContestWinners" fieldName="essayContestWinners" value={jsonEdits.essayContestWinners ?? formatJson(c.essayContestWinners || [])} onChange={setJsonArray} />
           <JsonArrayField title="customLeaderboards" fieldName="customLeaderboards" value={jsonEdits.customLeaderboards ?? formatJson(c.customLeaderboards || [])} onChange={setJsonArray} />
         </Space>
       </Section>
     </>
+  );
+}
+
+
+function RepeaterHeader({ title, onAdd }: { title: React.ReactNode; onAdd: () => void }) {
+  return (
+    <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }}>
+      <strong>{title}</strong>
+      <Button size="small" onClick={onAdd}>+ 添加</Button>
+    </Space>
+  );
+}
+
+function RepActions({ onUp, onDown, onRemove }: { onUp: () => void; onDown: () => void; onRemove: () => void }) {
+  return (
+    <Space size={4}>
+      <Button size="small" onClick={onUp}>↑</Button>
+      <Button size="small" onClick={onDown}>↓</Button>
+      <Button size="small" danger onClick={onRemove}>删除</Button>
+    </Space>
+  );
+}
+
+function EmptyHint({ children }: { children: React.ReactNode }) {
+  return <div style={{ color: "#8c8c8c", padding: "8px 0" }}>{children}</div>;
+}
+
+function Logos({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无 Logo，可点击上方添加。</EmptyHint>;
+  return (
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {items.map((it: AnyObj, i: number) => (
+        <Card
+          size="small"
+          key={i}
+          title={`Logo #${i + 1}`}
+          extra={<RepActions onUp={() => move("logos", i, -1)} onDown={() => move("logos", i, 1)} onRemove={() => remove("logos", i)} />}
+        >
+          <Row gutter={[12, 12]}>
+            <Col xs={24} md={10}><Field label="图片 URL"><Input value={it.image || ""} onChange={(e) => update("logos", i, "image", e.target.value)} /></Field></Col>
+            <Col xs={24} md={10}><Field label="跳转链接"><Input value={it.url || ""} onChange={(e) => update("logos", i, "url", e.target.value)} /></Field></Col>
+            <Col xs={24} md={4}><Field label="账号名"><Input value={it.label || ""} onChange={(e) => update("logos", i, "label", e.target.value)} /></Field></Col>
+          </Row>
+        </Card>
+      ))}
+    </Space>
+  );
+}
+
+function WritingThemes({ items, update, move, remove }: any) {
+  return (
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {items.map((it: AnyObj, i: number) => (
+        <Card
+          size="small"
+          key={i}
+          title={`主题 #${i + 1}`}
+          extra={<RepActions onUp={() => move("writingThemes", i, -1)} onDown={() => move("writingThemes", i, 1)} onRemove={() => remove("writingThemes", i)} />}
+        >
+          <Row gutter={[12, 12]}>
+            <Col xs={24} md={12}>
+              <Field label="中文">
+                <TextArea rows={3} value={it.zh || ""} onChange={(e) => update("writingThemes", i, "zh", e.target.value)} />
+              </Field>
+            </Col>
+            <Col xs={24} md={12}>
+              <Field label="English">
+                <TextArea rows={3} value={it.en || ""} onChange={(e) => update("writingThemes", i, "en", e.target.value)} />
+              </Field>
+            </Col>
+          </Row>
+        </Card>
+      ))}
+    </Space>
+  );
+}
+
+function Tasks({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无 Task，可点击上方添加。</EmptyHint>;
+  return (
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {items.map((it: AnyObj, i: number) => {
+        const isCustom = (it.type || "twitter") === "custom";
+        return (
+          <Card
+            size="small"
+            key={i}
+            title={`Task #${i + 1}`}
+            extra={<RepActions onUp={() => move("tasks", i, -1)} onDown={() => move("tasks", i, 1)} onRemove={() => remove("tasks", i)} />}
+          >
+            <Row gutter={[12, 12]} align="middle">
+              <Col xs={24} md={8}><Field label="ID"><Input value={it.id || ""} disabled /></Field></Col>
+              <Col xs={12} md={4}>
+                <Field label="类型">
+                  <Select
+                    value={it.type || "twitter"}
+                    onChange={(value) => update("tasks", i, "type", value)}
+                    options={["twitter", "telegram", "other", "custom"].map((value) => ({ value, label: value === "custom" ? "backend-custom" : value }))}
+                  />
+                </Field>
+              </Col>
+              <Col xs={12} md={4}>
+                <Field label="自动完成">
+                  <Switch size="small" disabled={isCustom} checked={!isCustom && !!it.autoComplete} onChange={(value) => update("tasks", i, "autoComplete", value)} />
+                </Field>
+              </Col>
+              <Col xs={24} md={12}><Field label="标题（中文）"><Input value={it.title?.zh || ""} onChange={(e) => update("tasks", i, "title.zh", e.target.value)} /></Field></Col>
+              <Col xs={24} md={12}><Field label="标题（English）"><Input value={it.title?.en || ""} onChange={(e) => update("tasks", i, "title.en", e.target.value)} /></Field></Col>
+              <Col xs={24}><Field label="跳转链接"><Input value={isCustom ? "https://" : it.url || ""} readOnly={isCustom} onChange={(e) => update("tasks", i, "url", e.target.value)} /></Field></Col>
+            </Row>
+          </Card>
+        );
+      })}
+    </Space>
+  );
+}
+
+function Tags({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无 Tags，可点击上方添加。</EmptyHint>;
+  return (
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {items.map((it: AnyObj, i: number) => (
+        <Card
+          size="small"
+          key={i}
+          title={<Space>Tag #{i + 1}<AntTag color={it.colorScheme || "blue"}>{it.icon || "Tag"} {it.label || "未命名"}</AntTag></Space>}
+          extra={<RepActions onUp={() => move("tags", i, -1)} onDown={() => move("tags", i, 1)} onRemove={() => remove("tags", i)} />}
+        >
+          <Row gutter={[12, 12]}>
+            <Col xs={12} md={4}><Field label="颜色"><Select value={it.colorScheme || "blue"} onChange={(value) => update("tags", i, "colorScheme", value)} options={TAG_COLOR_SCHEMES} /></Field></Col>
+            <Col xs={12} md={4}><Field label="图标"><Select value={it.icon || "Tag"} onChange={(value) => update("tags", i, "icon", value)} options={LUCIDE_ICONS} /></Field></Col>
+            <Col xs={24} md={8}><Field label="中文标签"><Input value={it.label || ""} onChange={(e) => update("tags", i, "label", e.target.value)} /></Field></Col>
+            <Col xs={24} md={8}><Field label="English 标签"><Input value={it.label_en || ""} onChange={(e) => update("tags", i, "label_en", e.target.value)} /></Field></Col>
+            <Col xs={24} md={12}><Field label="Hover 中文（支持 HTML）"><TextArea rows={2} value={it.hoverTips || ""} onChange={(e) => update("tags", i, "hoverTips", e.target.value)} /></Field></Col>
+            <Col xs={24} md={12}><Field label="Hover English（支持 HTML）"><TextArea rows={2} value={it.hoverTips_en || ""} onChange={(e) => update("tags", i, "hoverTips_en", e.target.value)} /></Field></Col>
+          </Row>
+        </Card>
+      ))}
+    </Space>
   );
 }
 
