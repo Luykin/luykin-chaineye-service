@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Alert, Button, Card, Checkbox, Descriptions, Empty, Input, Modal, Space, Table, Tag, Timeline, Typography, message } from "antd";
-import { CloudUploadOutlined, ReloadOutlined, RollbackOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, CloudUploadOutlined, RocketOutlined, ReloadOutlined, RollbackOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ColumnsType } from "antd/es/table";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -22,12 +23,22 @@ function CommitText({ commit }: { commit?: DeployCommit | null }) {
   if (!commit) return <Typography.Text type="secondary">未读取到</Typography.Text>;
   return (
     <Space direction="vertical" size={2}>
-      <Typography.Text code copyable={{ text: commit.hash }}>{commit.shortHash}</Typography.Text>
+      <Typography.Text code copyable={{ text: commit.hash }} className="deploy-hash">{commit.shortHash}</Typography.Text>
       <Typography.Text>{commit.message || "(无提交说明)"}</Typography.Text>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {commit.author} · {commit.relativeTime}
       </Typography.Text>
     </Space>
+  );
+}
+
+function DeployMetric({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+  return (
+    <div className="deploy-metric">
+      <div className="deploy-metric__label">{label}</div>
+      <div className="deploy-metric__value">{value}</div>
+      {hint ? <div className="deploy-metric__hint">{hint}</div> : null}
+    </div>
   );
 }
 
@@ -124,26 +135,50 @@ export function ReleaseDeployPage() {
       {contextHolder}
       <PageSection
         title="发布上线"
-        description="super 专用：从 origin/main 发布新版本，发布前预览提交，发布后重启 PM2。"
-        extra={
-          <Space wrap>
-            <Button icon={<RollbackOutlined />}>
-              <Link to="/emergency-rollback">去紧急回滚</Link>
-            </Button>
-            <Button icon={<ReloadOutlined />} loading={fetchMutation.isPending} onClick={() => fetchMutation.mutate()}>
-              拉取远程状态
-            </Button>
-            <Button type="primary" icon={<CloudUploadOutlined />} disabled={!canDeploy} onClick={() => { setDeployOpen(true); setConfirmText(""); }}>
-              发布 origin/main
-            </Button>
-          </Space>
-        }
+        description="按大厂变更发布台设计：先拉取、再比对、确认后发布，并自动生成发布 Tag。"
       >
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <Space direction="vertical" size={18} style={{ width: "100%" }} className="deploy-workbench deploy-workbench--release">
+          <section className="deploy-hero">
+            <div className="deploy-hero__content">
+              <div>
+                <div className="deploy-kicker"><RocketOutlined /> RELEASE CONTROL</div>
+                <h2 className="deploy-hero__title">把 origin/main 安全发布到生产</h2>
+                <div className="deploy-hero__subtitle">
+                  每次发布都会先展示版本差异和风险状态；确认后固定执行白名单流程，并自动生成可回溯的 annotated tag。
+                </div>
+                <div className="deploy-hero__actions">
+                  <Button icon={<RollbackOutlined />}>
+                    <Link to="/emergency-rollback">去紧急回滚</Link>
+                  </Button>
+                  <Button icon={<ReloadOutlined />} loading={fetchMutation.isPending} onClick={() => fetchMutation.mutate()}>
+                    拉取远程状态
+                  </Button>
+                  <Button type="primary" icon={<CloudUploadOutlined />} disabled={!canDeploy} onClick={() => { setDeployOpen(true); setConfirmText(""); }}>
+                    发布 origin/main
+                  </Button>
+                </div>
+              </div>
+              <div className="deploy-command-card">
+                <div className="deploy-command-card__label">Release pipeline</div>
+                <div className="deploy-command-card__row"><span>target</span><span className="deploy-command-card__value">origin/main</span></div>
+                <div className="deploy-command-card__row"><span>current</span><span className="deploy-command-card__value">{status?.current?.shortHash || "-"}</span></div>
+                <div className="deploy-command-card__row"><span>remote</span><span className="deploy-command-card__value">{status?.remote?.shortHash || "-"}</span></div>
+                <div className="deploy-command-card__row"><span>tag</span><span className="deploy-command-card__value">{status?.suggestedTagName || "-"}</span></div>
+              </div>
+            </div>
+          </section>
+
+          <div className="deploy-metrics">
+            <DeployMetric label="待发布提交" value={status?.pendingCommits.length ?? "-"} hint="HEAD..origin/main" />
+            <DeployMetric label="本地超前" value={status?.aheadCommits.length ?? "-"} hint="origin/main..HEAD" />
+            <DeployMetric label="工作区状态" value={status?.dirty ? "Dirty" : "Clean"} hint={status?.dirty ? "发布前会 stash" : "可直接发布"} />
+            <DeployMetric label="PM2 目标" value={status?.restartTarget || "all"} hint="发布后重启" />
+          </div>
+
           <DeployStateAlert status={status} />
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(280px, 1fr))", gap: 16 }}>
-            <Card size="small" title="当前线上版本">
+          <div className="deploy-version-grid">
+            <Card size="small" title="当前线上版本" className="deploy-card">
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label="分支">{status?.branch || "-"}</Descriptions.Item>
                 <Descriptions.Item label="HEAD"><CommitText commit={status?.current} /></Descriptions.Item>
@@ -154,7 +189,7 @@ export function ReleaseDeployPage() {
               </Descriptions>
             </Card>
 
-            <Card size="small" title="远程目标版本">
+            <Card size="small" title="远程目标版本" className="deploy-card">
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label="目标">origin/main</Descriptions.Item>
                 <Descriptions.Item label="HEAD"><CommitText commit={status?.remote} /></Descriptions.Item>
@@ -179,7 +214,7 @@ export function ReleaseDeployPage() {
           </div>
 
           {status?.dirty ? (
-            <Card size="small" title="未提交改动">
+            <Card size="small" title="未提交改动" className="deploy-card">
               <Space wrap size={[4, 4]}>
                 {status.dirtyFiles.map((item) => <Tag key={item}>{item}</Tag>)}
               </Space>
@@ -187,7 +222,7 @@ export function ReleaseDeployPage() {
           ) : null}
 
           {status?.aheadCommits?.length ? (
-            <Card size="small" title="origin/main 没有的本地提交">
+            <Card size="small" title="origin/main 没有的本地提交" className="deploy-card deploy-table-card">
               <Table
                 rowKey="hash"
                 size="small"
@@ -201,6 +236,7 @@ export function ReleaseDeployPage() {
 
           <Card
             title="待发布提交"
+            className="deploy-card deploy-table-card"
             extra={<Button icon={<ReloadOutlined />} loading={statusQuery.isFetching} onClick={() => statusQuery.refetch()}>刷新页面状态</Button>}
           >
             <Table
@@ -234,7 +270,16 @@ export function ReleaseDeployPage() {
             message="这是生产发布操作"
             description={`将从 ${shortHash(status?.current?.hash)} 更新到 ${shortHash(status?.remote?.hash)}，共 ${status?.pendingCommits.length || 0} 个提交，并自动生成发布 tag。`}
           />
-          <Card size="small" title="发布 Tag">
+          <div className="deploy-modal-summary">
+            <Space>
+              <CheckCircleOutlined style={{ color: "#059669" }} />
+              <Typography.Text strong>发布窗口已锁定：</Typography.Text>
+              <Typography.Text code>{status?.current?.shortHash || "-"}</Typography.Text>
+              <Typography.Text>→</Typography.Text>
+              <Typography.Text code>{status?.remote?.shortHash || "-"}</Typography.Text>
+            </Space>
+          </div>
+          <Card size="small" title="发布 Tag" className="deploy-card">
             <Space direction="vertical" size={4}>
               <Typography.Text>
                 预计格式：<Typography.Text code>{status?.suggestedTagName || "prod-YYYYMMDD-HHmm-abcdef0"}</Typography.Text>
@@ -266,6 +311,7 @@ export function ReleaseDeployPage() {
             </Checkbox>
           </Space>
           <Input
+            className="deploy-confirm-input"
             prefix={<SafetyCertificateOutlined />}
             value={confirmText}
             onChange={(event) => setConfirmText(event.target.value)}

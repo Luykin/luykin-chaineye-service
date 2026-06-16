@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Alert, Button, Card, Checkbox, Descriptions, Empty, Input, Modal, Segmented, Space, Table, Tag, Typography, message } from "antd";
-import { CloudUploadOutlined, ExclamationCircleOutlined, ReloadOutlined, RollbackOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { CloudUploadOutlined, ExclamationCircleOutlined, ReloadOutlined, RollbackOutlined, SafetyCertificateOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -31,9 +32,19 @@ function shortHash(value?: string | null) {
 
 function CommitMessage({ message }: { message?: string }) {
   return (
-    <Typography.Text ellipsis style={{ maxWidth: 520 }}>
+    <Typography.Text ellipsis className="deploy-message">
       {message || "(无提交说明)"}
     </Typography.Text>
+  );
+}
+
+function DeployMetric({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+  return (
+    <div className="deploy-metric">
+      <div className="deploy-metric__label">{label}</div>
+      <div className="deploy-metric__value">{value}</div>
+      {hint ? <div className="deploy-metric__hint">{hint}</div> : null}
+    </div>
   );
 }
 
@@ -164,22 +175,46 @@ export function EmergencyRollbackPage() {
       {contextHolder}
       <PageSection
         title="紧急回滚"
-        description="super 专用：按提交 message 或 tag 可视化选择版本，一键回滚并重启 PM2。"
-        extra={
-          <Space wrap>
-            <Button icon={<CloudUploadOutlined />}>
-              <Link to="/release-deploy">去发布上线</Link>
-            </Button>
-            <Button icon={<ReloadOutlined />} loading={statusQuery.isFetching} onClick={() => statusQuery.refetch()}>
-              刷新状态
-            </Button>
-            <Button danger icon={<ThunderboltOutlined />} onClick={() => { setRecoverOpen(true); setRecoverConfirmText(""); }}>
-              恢复 origin/main
-            </Button>
-          </Space>
-        }
+        description="事故处理台：选择 commit 或 tag 回退，先预览影响范围，再执行 reset 与 PM2 重启。"
       >
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <Space direction="vertical" size={18} style={{ width: "100%" }} className="deploy-workbench deploy-workbench--rollback">
+          <section className="deploy-hero">
+            <div className="deploy-hero__content">
+              <div>
+                <div className="deploy-kicker"><ThunderboltOutlined /> INCIDENT ROLLBACK</div>
+                <h2 className="deploy-hero__title">用可视化差异控制生产回退</h2>
+                <div className="deploy-hero__subtitle">
+                  参考大厂变更控制台的事故流程：先锁定目标版本，再预览将移除的提交，最后通过确认词执行回滚。
+                </div>
+                <div className="deploy-hero__actions">
+                  <Button icon={<CloudUploadOutlined />}>
+                    <Link to="/release-deploy">去发布上线</Link>
+                  </Button>
+                  <Button icon={<ReloadOutlined />} loading={statusQuery.isFetching} onClick={() => statusQuery.refetch()}>
+                    刷新状态
+                  </Button>
+                  <Button danger icon={<ThunderboltOutlined />} onClick={() => { setRecoverOpen(true); setRecoverConfirmText(""); }}>
+                    恢复 origin/main
+                  </Button>
+                </div>
+              </div>
+              <div className="deploy-command-card">
+                <div className="deploy-command-card__label">Rollback target</div>
+                <div className="deploy-command-card__row"><span>current</span><span className="deploy-command-card__value">{status?.current?.shortHash || "-"}</span></div>
+                <div className="deploy-command-card__row"><span>selected</span><span className="deploy-command-card__value">{selected?.title || "未选择"}</span></div>
+                <div className="deploy-command-card__row"><span>type</span><span className="deploy-command-card__value">{selected?.type || "-"}</span></div>
+                <div className="deploy-command-card__row"><span>pm2</span><span className="deploy-command-card__value">{status?.restartTarget || "all"}</span></div>
+              </div>
+            </div>
+          </section>
+
+          <div className="deploy-metrics">
+            <DeployMetric label="最近提交" value={status?.recentCommits.length ?? "-"} hint="可选回滚点" />
+            <DeployMetric label="Tags" value={status?.tags.length ?? "-"} hint="推荐安全版本" />
+            <DeployMetric label="将移除提交" value={preview?.lostCommits.length ?? "-"} hint={selected ? "已根据目标预览" : "选择目标后计算"} />
+            <DeployMetric label="工作区状态" value={status?.dirty ? "Dirty" : "Clean"} hint={status?.dirty ? "回滚前会 stash" : "可直接回滚"} />
+          </div>
+
           <Alert
             type="warning"
             showIcon
@@ -188,13 +223,13 @@ export function EmergencyRollbackPage() {
             description="回滚会执行 git reset --hard，并在响应返回后触发 PM2 restart。若回滚到没有此页面/API 的旧版本，后续恢复需要走终端 yarn emergency:recover。"
           />
 
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1fr) minmax(280px, 1fr)", gap: 16 }}>
-            <Card size="small" title="当前版本">
+          <div className="deploy-version-grid">
+            <Card size="small" title="当前版本" className="deploy-card">
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label="分支">{status?.branch || "-"}</Descriptions.Item>
                 <Descriptions.Item label="HEAD">
                   <Space direction="vertical" size={2}>
-                    <Typography.Text code copyable={{ text: status?.current?.hash || "" }}>{status?.current?.shortHash || "-"}</Typography.Text>
+                    <Typography.Text code copyable={{ text: status?.current?.hash || "" }} className="deploy-hash">{status?.current?.shortHash || "-"}</Typography.Text>
                     <CommitMessage message={status?.current?.message} />
                   </Space>
                 </Descriptions.Item>
@@ -205,7 +240,7 @@ export function EmergencyRollbackPage() {
               </Descriptions>
             </Card>
 
-            <Card size="small" title="已选择目标">
+            <Card size="small" title="已选择目标" className="deploy-card deploy-card--selected">
               <Space direction="vertical" size={10} style={{ width: "100%" }}>
                 <TargetSummary target={selected} />
                 <Button
@@ -223,7 +258,7 @@ export function EmergencyRollbackPage() {
           </div>
 
           {status?.dirty && (
-            <Card size="small" title="未提交改动">
+            <Card size="small" title="未提交改动" className="deploy-card">
               <Space wrap size={[4, 4]}>
                 {status.dirtyFiles.map((item) => <Tag key={item}>{item}</Tag>)}
               </Space>
@@ -232,6 +267,7 @@ export function EmergencyRollbackPage() {
 
           <Card
             title="选择回滚目标"
+            className="deploy-card deploy-table-card"
             extra={
               <Segmented
                 value={mode}
@@ -299,16 +335,20 @@ export function EmergencyRollbackPage() {
             message="请确认你知道这会影响线上服务"
             description="后端会先 stash 未提交改动，再 reset 到目标版本，最后重启 PM2。"
           />
-          <TargetSummary target={selected} />
+          <div className="deploy-modal-summary">
+            <TargetSummary target={selected} />
+          </div>
           <Checkbox checked={rebuildAdminWeb} onChange={(event) => setRebuildAdminWeb(event.target.checked)}>
             回滚后重新构建 admin-web（耗时更长；如果只是服务端紧急回滚，一般不勾）
           </Checkbox>
           <Input
+            className="deploy-confirm-input"
+            prefix={<SafetyCertificateOutlined />}
             value={confirmText}
             onChange={(event) => setConfirmText(event.target.value)}
             placeholder="输入 ROLLBACK 才能执行"
           />
-          <Card size="small" title={`将从当前版本移除的提交（${preview?.lostCommits?.length ?? 0} 条）`}>
+          <Card size="small" title={`将从当前版本移除的提交（${preview?.lostCommits?.length ?? 0} 条）`} className="deploy-card deploy-table-card">
             <Table
               rowKey="hash"
               size="small"
@@ -343,6 +383,8 @@ export function EmergencyRollbackPage() {
             恢复后重新构建 admin-web
           </Checkbox>
           <Input
+            className="deploy-confirm-input"
+            prefix={<SafetyCertificateOutlined />}
             value={recoverConfirmText}
             onChange={(event) => setRecoverConfirmText(event.target.value)}
             placeholder="输入 RECOVER 才能执行"
