@@ -384,16 +384,16 @@ router.post(
 
       LOG = `[CampaignRegister] user_id=${authedUserId} campaign=${campaign} evmAddress=${evmAddress} email=${rawEmail ? "<provided>" : ""}`;
 
-      const extVersion = req.headers["x-extension-version"];
-      if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
-        console.log(LOG, "reject: extension version too low", { version: extVersion });
-        const isZh = (req.query.x_language || "").toLowerCase() === "zh";
-        return res.status(400).json({
-          error: isZh
-            ? "请升级插件到 0.3.0 及以上版本再试"
-            : "Please upgrade the extension to version 0.3.0 or above and try again",
-        });
-      }
+      // const extVersion = req.headers["x-extension-version"];
+      // if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
+      //   console.log(LOG, "reject: extension version too low", { version: extVersion });
+      //   const isZh = (req.query.x_language || "").toLowerCase() === "zh";
+      //   return res.status(400).json({
+      //     error: isZh
+      //       ? "请升级插件到 0.3.0 及以上版本再试"
+      //       : "Please upgrade the extension to version 0.3.0 or above and try again",
+      //   });
+      // }
 
       const normalizedCampaign = normalizeCampaign(campaign);
       if (!normalizedCampaign) {
