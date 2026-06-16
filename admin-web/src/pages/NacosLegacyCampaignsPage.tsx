@@ -65,7 +65,7 @@ type CampaignConfig = {
 };
 type ToastState = { message: string; type?: "success" | "error" | "info" } | null;
 
-type JsonFieldName = "logos" | "tasks" | "tags" | "essayContestWinners" | "customLeaderboards";
+type JsonFieldName = "customLeaderboards";
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
@@ -563,7 +563,7 @@ export function NacosLegacyCampaignsPage() {
     setJsonEdits((prev) => ({ ...prev, [fieldName]: value }));
   }
 
-  function addArrayItem(kind: "logos" | "tasks" | "tags" | "writingThemes") {
+  function addArrayItem(kind: "logos" | "tasks" | "tags" | "writingThemes" | "essayContestWinners") {
     updateSelectedCampaign((campaign) => {
       campaign[kind] = Array.isArray(campaign[kind]) ? campaign[kind] : [];
       if (kind === "logos") {
@@ -577,6 +577,9 @@ export function NacosLegacyCampaignsPage() {
       }
       if (kind === "writingThemes") {
         campaign[kind].push({ zh: "", en: "" });
+      }
+      if (kind === "essayContestWinners") {
+        campaign[kind].push({ name: "", handler: "", avatar: "", reward: "" });
       }
     });
   }
@@ -619,7 +622,6 @@ export function NacosLegacyCampaignsPage() {
   function removeArrayItem(kind: string, index: number) {
     updateSelectedCampaign((campaign) => {
       const arr = Array.isArray(campaign[kind]) ? campaign[kind] : [];
-      arr.splice(index, 1);
       if (kind === "writingThemes" && arr.length <= 1) return;
       arr.splice(index, 1);
       if (kind === "tags" && arr.length === 0) delete campaign.tags;
@@ -765,7 +767,7 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTe
   jsonEdits: Partial<Record<JsonFieldName, string>>;
   updateJsonField: (fieldName: JsonFieldName, value: string) => void;
   applyJsonEdits: () => void;
-  addArrayItem: (kind: "logos" | "tasks" | "tags" | "writingThemes") => void;
+  addArrayItem: (kind: "logos" | "tasks" | "tags" | "writingThemes" | "essayContestWinners") => void;
   updateArrayItem: (kind: string, index: number, path: string, value: any) => void;
   moveArrayItem: (kind: string, index: number, delta: number) => void;
   removeArrayItem: (kind: string, index: number) => void;
@@ -836,8 +838,14 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTe
           <Col xs={24} md={8}><Field label="报名门槛"><Select value={thresholdValue} onChange={changeThreshold} options={[{ value: "", label: "请选择" }, { value: "50k", label: "50k" }, { value: "100k", label: "100k" }, { value: "200k", label: "200k" }, { value: "200k+creator", label: "200k+creator" }]} /></Field></Col>
           <Col xs={12} md={6}><Field label="POI 金额"><InputNumber min={0} style={{ width: "100%" }} value={c.rewardAmount} onChange={(value) => setCampaignPath("rewardAmount", value)} /></Field></Col>
           <Col xs={12} md={6}><Field label="POI 人数"><InputNumber min={0} style={{ width: "100%" }} value={c.rewardParticipantCount} onChange={(value) => setCampaignPath("rewardParticipantCount", value)} /></Field></Col>
-          <Col xs={12} md={6}><Field label="分配机制"><Select value={c.rewardDistributionType || ""} onChange={(value) => setCampaignPath("rewardDistributionType", value)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
+          <Col xs={12} md={6}><Field label="分配机制"><Select value={c.rewardDistributionType || ""} onChange={(value) => setCampaignPath("rewardDistributionType", value)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }]} /></Field></Col>
           <Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(event) => setCampaignPath("rewardUnit", event.target.value)} placeholder="USDT" /></Field></Col>
+          <Col xs={24}>
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} />
+              <RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} />
+            </Space>
+          </Col>
           <Col xs={24} md={12}><Field label="推特活动指南"><Input value={c.links?.guideUrl || ""} onChange={(event) => setCampaignPath("links.guideUrl", event.target.value)} /></Field></Col>
           <Col xs={24} md={12}><Field label="官网活动页面"><Input value={c.links?.activeUrl || ""} onChange={(event) => setCampaignPath("links.activeUrl", event.target.value)} /></Field></Col>
           <Col xs={24}><Space><Switch checked={!!c.links?.showLeaderboardLink} onChange={(value) => setCampaignPath("links.showLeaderboardLink", value)} />插件榜单底部显示官方排行榜入口</Space></Col>
@@ -886,11 +894,10 @@ function CampaignEditor({ c, setCampaignPath, updateSelectedCampaign, internalTe
 
       <Section title="其他高级 JSON（老结构原样发布）">
         <Space direction="vertical" size={10} style={{ width: "100%" }}>
-          <Typography.Text type="secondary">征文获奖者、自定义榜单等较少改动字段保留 JSON 数组编辑；点击“应用 JSON”后再发布。</Typography.Text>
+          <Typography.Text type="secondary">自定义榜单等较少改动字段保留 JSON 数组编辑；点击“应用 JSON”后再发布。</Typography.Text>
           <Button size="small" onClick={() => {
             try { applyJsonEdits(); } catch (error) { window.alert(error instanceof Error ? error.message : "JSON 解析失败"); }
           }}>应用 JSON</Button>
-          <JsonArrayField title="essayContestWinners" fieldName="essayContestWinners" value={jsonEdits.essayContestWinners ?? formatJson(c.essayContestWinners || [])} onChange={setJsonArray} />
           <JsonArrayField title="customLeaderboards" fieldName="customLeaderboards" value={jsonEdits.customLeaderboards ?? formatJson(c.customLeaderboards || [])} onChange={setJsonArray} />
         </Space>
       </Section>
@@ -1009,6 +1016,74 @@ function Tasks({ items, update, move, remove }: any) {
         );
       })}
     </Space>
+  );
+}
+
+function Winners({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无获奖者，可点击上方添加。</EmptyHint>;
+  return (
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {items.map((it: AnyObj, i: number) => (
+        <Card
+          size="small"
+          key={i}
+          title={`获奖者 #${i + 1}`}
+          extra={<RepActions onUp={() => move("essayContestWinners", i, -1)} onDown={() => move("essayContestWinners", i, 1)} onRemove={() => remove("essayContestWinners", i)} />}
+        >
+          <Row gutter={[12, 12]}>
+            <Col xs={24} md={6}><Field label="姓名"><Input value={it.name || ""} onChange={(e) => update("essayContestWinners", i, "name", e.target.value)} /></Field></Col>
+            <Col xs={24} md={6}><Field label="推特账号"><Input value={it.handler || ""} onChange={(e) => update("essayContestWinners", i, "handler", e.target.value)} /></Field></Col>
+            <Col xs={24} md={8}><Field label="头像 URL"><Input value={it.avatar || ""} onChange={(e) => update("essayContestWinners", i, "avatar", e.target.value)} /></Field></Col>
+            <Col xs={24} md={4}><Field label="奖励"><Input value={it.reward || ""} onChange={(e) => update("essayContestWinners", i, "reward", e.target.value)} /></Field></Col>
+          </Row>
+        </Card>
+      ))}
+    </Space>
+  );
+}
+
+function RewardOptional({ c, type, enabled, setCampaignPath, updateSelectedCampaign, addWinner, update, move, remove }: any) {
+  const isPow = type === "pow";
+  return (
+    <Card
+      size="small"
+      title={isPow ? "POW 榜单" : "征文大赛"}
+      extra={
+        <Space>
+          <span>开启</span>
+          <Switch
+            checked={enabled}
+            onChange={(value) => updateSelectedCampaign((campaign: AnyObj) => {
+              if (isPow) campaign.enablePowLeaderboard = value;
+              else campaign.enableEssayContest = value;
+            })}
+          />
+        </Space>
+      }
+    >
+      {enabled ? (
+        isPow ? (
+          <Row gutter={[12, 12]}>
+            <Col xs={12} md={6}><Field label="金额"><InputNumber min={0} value={c.powAmount} onChange={(value) => setCampaignPath("powAmount", value)} /></Field></Col>
+            <Col xs={12} md={6}><Field label="人数"><InputNumber min={1} value={c.powWinnerCount} onChange={(value) => setCampaignPath("powWinnerCount", value)} /></Field></Col>
+            <Col xs={12} md={6}><Field label="机制"><Select value={c.powDistributionType || ""} onChange={(value) => setCampaignPath("powDistributionType", value)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }]} /></Field></Col>
+            <Col xs={12} md={6}><Field label="单位"><Input value={c.powUnit || ""} onChange={(e) => setCampaignPath("powUnit", e.target.value)} placeholder="USDT" /></Field></Col>
+          </Row>
+        ) : (
+          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+            <Row gutter={[12, 12]}>
+              <Col xs={12} md={6}><Field label="金额"><InputNumber min={0} value={c.essayContestAmount} onChange={(value) => setCampaignPath("essayContestAmount", value)} /></Field></Col>
+              <Col xs={12} md={6}><Field label="获奖人数"><InputNumber min={1} value={c.essayContestWinnerCount} onChange={(value) => setCampaignPath("essayContestWinnerCount", value)} /></Field></Col>
+              <Col xs={12} md={6}><Field label="单位"><Input value={c.essayContestUnit || ""} onChange={(e) => setCampaignPath("essayContestUnit", e.target.value)} placeholder="USDT" /></Field></Col>
+            </Row>
+            <RepeaterHeader title="获奖名单" onAdd={addWinner} />
+            <Winners items={c.essayContestWinners || []} update={update} move={move} remove={remove} />
+          </Space>
+        )
+      ) : (
+        <EmptyHint>{isPow ? "开启后配置 POW 奖励。" : "开启后配置征文奖励。"}</EmptyHint>
+      )}
+    </Card>
   );
 }
 
