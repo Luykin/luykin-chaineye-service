@@ -111,6 +111,31 @@ function sanitizeReleaseTagMessage(value) {
     .slice(0, 1800);
 }
 
+function extractLlmTextContent(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          if (typeof item.text === "string") return item.text;
+          if (typeof item.content === "string") return item.content;
+          if (typeof item.output_text === "string") return item.output_text;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (content && typeof content === "object") {
+    if (typeof content.text === "string") return content.text;
+    if (typeof content.content === "string") return content.content;
+    if (typeof content.output_text === "string") return content.output_text;
+    if (Array.isArray(content.blocks)) return extractLlmTextContent(content.blocks);
+  }
+  return "";
+}
+
 function sanitizeReleaseTagName(value) {
   const tagName = String(value || "").trim();
   if (!/^[0-9A-Za-z._-]{3,120}$/.test(tagName) || tagName.startsWith("-") || tagName.includes("..")) {
@@ -152,7 +177,7 @@ async function generateReleaseTagMessage(commits, beforeHash, afterHash) {
         ].join("\n"),
       }
     );
-    const message = String(content || "").trim();
+    const message = extractLlmTextContent(content).trim();
     return { message: message ? message.slice(0, 1800) : fallback, source: message ? "ai" : "fallback" };
   } catch (e) {
     console.warn("[admin-deploy] AI tag message generation failed:", e?.message);
