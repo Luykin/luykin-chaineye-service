@@ -1512,11 +1512,19 @@ const validateBrowserEnvironment = (req, allowQueryParams = false) => {
   );
   const version = getRequestParam(req, "extension-version", allowQueryParams);
 
+  // 插件 background-script 没有真实页面 URL，约定传固定值 background-script。
+  // 无论 legacy 还是 v2，都只保留 0.0.0 / 9.09.09 的 background-script 特例。
+  // 注意：这里只放行 browserOnlyMiddleware，后续仍会经过 securityMiddleware 签名校验。
+  const isLegacyBackgroundScript =
+    windowLocationHref === "background-script" &&
+    (version === "0.0.0" || version === "9.09.09");
+
+  if (isLegacyBackgroundScript) {
+    return true;
+  }
+
   if (!isBrowserEnvironment(userAgent, windowLocationHref)) {
-    const shouldSkipBrowserCheck =
-      windowLocationHref === "background-script" &&
-      (version === "0.0.0" || version === "9.09.09");
-    return shouldSkipBrowserCheck;
+    return false;
   }
 
   return true;
