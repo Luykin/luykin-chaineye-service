@@ -472,11 +472,23 @@ const fingerprintLimiter = rateLimit({
 });
 
 const SECURITY_TIME_WINDOW_MS = 30 * 60 * 1000; // 30分钟窗口，需与 requestId 去重保持一致
+const V2_SIGNATURE_VERSION = "v2";
+const V2_SECURITY_TIME_WINDOW_MS = 5 * 60 * 1000;
+const V2_REQUEST_ID_DEDUP_TTL_MS = 10 * 60 * 1000;
+const V2_REQUEST_ID_DEDUP_TTL_SECONDS = Math.floor(
+  V2_REQUEST_ID_DEDUP_TTL_MS / 1000
+);
 
 // 验证时间戳是否在有效期内（30分钟）
 const isTimestampValid = (timestamp) => {
   const now = Date.now();
   return Math.abs(now - timestamp) <= SECURITY_TIME_WINDOW_MS;
+};
+
+// 验证 v2 时间戳是否在有效期内（5分钟）
+const isV2TimestampValid = (timestamp) => {
+  const now = Date.now();
+  return Number.isFinite(timestamp) && Math.abs(now - timestamp) <= V2_SECURITY_TIME_WINDOW_MS;
 };
 
 // 验证指纹格式
@@ -494,6 +506,11 @@ const isValidRequestId = (requestId) => {
   return uuidV4Regex.test(requestId);
 };
 
+const isValidTwitterId = (twitterId) => {
+  const normalized = normalizeOptionalSignedValue(twitterId);
+  return /^[1-9]\d{4,24}$/.test(normalized);
+};
+
 const REQUEST_ID_DEDUP_TTL_MS = SECURITY_TIME_WINDOW_MS;
 const REQUEST_ID_DEDUP_TTL_SECONDS = Math.floor(REQUEST_ID_DEDUP_TTL_MS / 1000);
 const REQUEST_ID_DEDUP_REDIS_PREFIX = "security:reqid:";
@@ -508,7 +525,18 @@ const BROWSER_ONLY_MIDDLEWARE_FLAG = Symbol.for(
   "xhunt.browserOnlyMiddlewareExecuted"
 );
 
-const buildRequestIdDedupKey = (securityContext = {}) => {
+const buildRequestIdDedupKey = (securityContext = {}, options = {}) => {
+  if (securityContext.signatureVersion === V2_SIGNATURE_VERSION) {
+    if (options.isSSE) {
+      // SSE 允许 EventSource 在时间窗口内使用同一个 URL 自动重连，不做阻断式去重。
+      return null;
+    }
+    if (!securityContext.requestId) {
+      return null;
+    }
+    return `v2:api:${String(securityContext.requestId)}`;
+  }
+
   const { requestId, timestamp, signature, fingerprint } = securityContext;
   if (!requestId || !timestamp || !signature || !fingerprint) {
     return null;
@@ -522,18 +550,32 @@ const buildRequestIdDedupKey = (securityContext = {}) => {
   return crypto.createHash("sha1").update(raw).digest("hex");
 };
 
-const reserveRequestId = async (req, securityContext = {}) => {
-  const dedupKey = buildRequestIdDedupKey(securityContext);
+const reserveRequestId = async (req, securityContext = {}, options = {}) => {
+  if (securityContext.signatureVersion === V2_SIGNATURE_VERSION && options.isSSE) {
+    return { allowed: true, source: "sse-v2-reconnect-allowed" };
+  }
+
+  const dedupKey = buildRequestIdDedupKey(securityContext, options);
   if (!dedupKey) {
     return { allowed: true, source: "skipped" };
   }
+
+  const ttlMs =
+    securityContext.signatureVersion === V2_SIGNATURE_VERSION
+      ? V2_REQUEST_ID_DEDUP_TTL_MS
+      : REQUEST_ID_DEDUP_TTL_MS;
+  const ttlSeconds =
+    securityContext.signatureVersion === V2_SIGNATURE_VERSION
+      ? V2_REQUEST_ID_DEDUP_TTL_SECONDS
+      : REQUEST_ID_DEDUP_TTL_SECONDS;
+
   const redisClient = req.redisClient;
   if (redisClient && typeof redisClient.set === "function") {
     const redisKey = `${REQUEST_ID_DEDUP_REDIS_PREFIX}${dedupKey}`;
     try {
       const result = await redisClient.set(redisKey, "1", {
         NX: true,
-        EX: REQUEST_ID_DEDUP_TTL_SECONDS,
+        EX: ttlSeconds,
       });
       if (result !== null) {
         return { allowed: true, source: "redis" };
@@ -543,14 +585,14 @@ const reserveRequestId = async (req, securityContext = {}) => {
       console.error("[RequestIdDedup] Redis SET failed:", error);
     }
   }
-  return reserveRequestIdInMemory(dedupKey);
+  return reserveRequestIdInMemory(dedupKey, ttlMs);
 };
 
-const reserveRequestIdInMemory = (dedupKey) => {
+const reserveRequestIdInMemory = (dedupKey, ttlMs = REQUEST_ID_DEDUP_TTL_MS) => {
   const now = Date.now();
   pruneLocalRequestIdCache(now);
   const lastUsedAt = requestIdLocalCache.get(dedupKey);
-  if (lastUsedAt && now - lastUsedAt < REQUEST_ID_DEDUP_TTL_MS) {
+  if (lastUsedAt && now - lastUsedAt < ttlMs) {
     return { allowed: false, source: "memory" };
   }
   requestIdLocalCache.set(dedupKey, now);
@@ -823,15 +865,141 @@ const getRequestParam = (req, paramName, allowQueryParams = true) => {
   // 同时支持 x- 和 x_ 格式（query 参数中可能使用下划线）
   const queryNameWithDash = `x-${paramName}`;
   const queryNameWithUnderscore = `x_${paramName}`;
+  const queryNameAllUnderscore = `x_${paramName.replace(/-/g, "_")}`;
 
   if (allowQueryParams) {
     return (
       req.headers[headerName] ||
       req.query[queryNameWithDash] ||
-      req.query[queryNameWithUnderscore]
+      req.query[queryNameWithUnderscore] ||
+      req.query[queryNameAllUnderscore]
     );
   }
   return req.headers[headerName];
+};
+
+const V2_SSE_TRANSPORT_QUERY_KEYS = new Set([
+  "x-signature-version",
+  "x_signature_version",
+  "x-request-id",
+  "x_request_id",
+  "x-request-timestamp",
+  "x_request_timestamp",
+  "x-device-fingerprint",
+  "x_device_fingerprint",
+  "x-request-signature",
+  "x_request_signature",
+  "x-tw-id",
+  "x_tw_id",
+  "x-extension-version",
+  "x_extension_version",
+  "x-user-id",
+  "x_user_id",
+  "token",
+]);
+
+const sanitizeQueryStringForLog = (queryString = "") => {
+  if (!queryString) return "";
+  try {
+    const params = new URLSearchParams(queryString);
+    for (const key of Array.from(params.keys())) {
+      const normalizedKey = String(key).toLowerCase();
+      if (
+        normalizedKey === "token" ||
+        normalizedKey === "x-request-signature" ||
+        normalizedKey === "x_request_signature"
+      ) {
+        params.set(key, "[REDACTED]");
+      }
+    }
+    return params.toString();
+  } catch (_) {
+    return queryString
+      .replace(/((?:^|[?&])token=)[^&]*/gi, "$1[REDACTED]")
+      .replace(/((?:^|[?&])x[-_]request[-_]signature=)[^&]*/gi, "$1[REDACTED]");
+  }
+};
+
+const appendQueryValue = (params, key, value) => {
+  if (value === null || value === undefined) {
+    params.append(key, "");
+    return;
+  }
+  if (typeof value === "object") {
+    throw new Error(`Unsupported nested query parameter: ${key}`);
+  }
+  params.append(key, String(value));
+};
+
+const buildV2PathWithQuery = (req, { isSSE = false, language = "" } = {}) => {
+  const originalUrl = req.originalUrl || req.url || "";
+  const queryStart = originalUrl.indexOf("?");
+  const rawPath = queryStart >= 0 ? originalUrl.slice(0, queryStart) : originalUrl;
+  const rawSearch = queryStart >= 0 ? originalUrl.slice(queryStart + 1) : "";
+  const pathname =
+    rawPath ||
+    `${req.baseUrl || ""}${req.path || ""}` ||
+    req.path ||
+    "/";
+
+  const params = new URLSearchParams(rawSearch || "");
+
+  if (isSSE) {
+    for (const key of Array.from(params.keys())) {
+      if (V2_SSE_TRANSPORT_QUERY_KEYS.has(String(key).toLowerCase())) {
+        params.delete(key);
+      }
+    }
+  }
+
+  const hasLanguage = Array.from(params.keys()).some(
+    (key) => String(key).toLowerCase() === "x-language"
+  );
+  if (!hasLanguage && language !== null && language !== undefined && String(language).trim()) {
+    params.append("x-language", String(language));
+  }
+
+  const sortedEntries = Array.from(params.entries()).sort(([ak, av], [bk, bv]) => {
+    if (ak !== bk) return ak < bk ? -1 : 1;
+    if (av !== bv) return av < bv ? -1 : 1;
+    return 0;
+  });
+
+  const sortedParams = new URLSearchParams();
+  for (const [key, value] of sortedEntries) {
+    appendQueryValue(sortedParams, key, value);
+  }
+
+  const search = sortedParams.toString();
+  return search ? `${pathname}?${search}` : pathname;
+};
+
+const hashBodySha512 = (bodyText = "") =>
+  crypto.createHash("sha512").update(bodyText).digest("hex");
+
+const generateV2Signature = (canonicalPayload, signingKey = process.env.XHUNT_V2_SIGNING_KEY) =>
+  crypto.createHmac("sha512", signingKey).update(canonicalPayload).digest("hex");
+
+const safeCompareHex = (actual, expected) => {
+  if (typeof actual !== "string" || typeof expected !== "string") {
+    return false;
+  }
+  const normalizedActual = actual.trim().toLowerCase();
+  const normalizedExpected = expected.trim().toLowerCase();
+  if (!/^[a-f0-9]+$/.test(normalizedActual)) {
+    return false;
+  }
+  if (normalizedActual.length !== normalizedExpected.length) {
+    return false;
+  }
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(normalizedActual, "hex"),
+      Buffer.from(normalizedExpected, "hex")
+    );
+  } catch (_) {
+    return false;
+  }
 };
 
 function normalizeDauMetaValue(value, maxLength = 120) {
@@ -889,6 +1057,38 @@ const SECURITY_ERROR_REASON_MAP = {
     reasonCode: "invalid_signature",
     message: "请求签名不匹配",
   },
+  MISSING_SIGNATURE_HEADERS: {
+    reasonCode: "missing_signature_headers",
+    message: "缺少 v2 必需的签名请求参数",
+  },
+  MISSING_TWITTER_ID: {
+    reasonCode: "missing_twitter_id",
+    message: "缺少 x-tw-id",
+  },
+  INVALID_TWITTER_ID: {
+    reasonCode: "invalid_twitter_id",
+    message: "x-tw-id 格式不合法",
+  },
+  INVALID_REQUEST_ID: {
+    reasonCode: "invalid_request_id",
+    message: "请求ID格式不合法",
+  },
+  SIGNATURE_EXPIRED: {
+    reasonCode: "signature_expired",
+    message: "请求时间戳超出允许范围",
+  },
+  REPLAY_REQUEST: {
+    reasonCode: "replay_request",
+    message: "重复的请求ID",
+  },
+  INVALID_SIGNATURE: {
+    reasonCode: "invalid_signature",
+    message: "请求签名不匹配",
+  },
+  SIGNING_KEY_NOT_CONFIGURED: {
+    reasonCode: "signing_key_not_configured",
+    message: "v2 签名密钥未配置",
+  },
   default: {
     reasonCode: "unknown",
     message: "安全校验失败",
@@ -900,6 +1100,7 @@ const SENSITIVE_HEADER_KEYS = new Set([
   "cookie",
   "x-api-key",
   "x-access-token",
+  "x-request-signature",
   "proxy-authorization",
   "cf-access-token",
   "x-forwarded-authorization",
@@ -1109,7 +1310,9 @@ class SecurityViolationLogger {
       errorDetail: this.truncate(fullDetail, 2000),
       requestMethod: (req.method || "GET").substring(0, 10),
       requestPath: this.truncate(requestPath, 2000),
-      queryString: queryString ? this.truncate(queryString, 2000) : null,
+      queryString: queryString
+        ? this.truncate(sanitizeQueryStringForLog(queryString), 2000)
+        : null,
       clientIp: clientIp ? this.truncate(clientIp, 64) : null,
       headers: sanitizedHeaders,
       requestBody,
@@ -1325,7 +1528,7 @@ const validateBrowserEnvironment = (req, allowQueryParams = false) => {
  * @param {boolean} allowQueryParams - 是否允许从查询参数读取
  * @returns {{isValid: boolean, error?: string, securityContext?: object}} 验证结果
  */
-const validateSecurityParams = (req, allowQueryParams = false) => {
+const validateLegacySecurityParams = (req, allowQueryParams = false) => {
   // 使用统一的参数读取函数
   const requestId = getRequestParam(req, "request-id", allowQueryParams);
   const timestamp = parseInt(
@@ -1451,6 +1654,176 @@ const validateSecurityParams = (req, allowQueryParams = false) => {
   };
 };
 
+const validateV2SecurityParams = (req, { allowQueryParams = false } = {}) => {
+  const signingKey = process.env.XHUNT_V2_SIGNING_KEY;
+  if (!signingKey) {
+    console.error("validateV2SecurityParams signing key missing");
+    return { isValid: false, error: "SIGNING_KEY_NOT_CONFIGURED" };
+  }
+
+  const signatureVersion = normalizeOptionalSignedValue(
+    getRequestParam(req, "signature-version", allowQueryParams)
+  );
+  const requestId = normalizeOptionalSignedValue(
+    getRequestParam(req, "request-id", allowQueryParams)
+  );
+  const timestampRaw = normalizeOptionalSignedValue(
+    getRequestParam(req, "request-timestamp", allowQueryParams)
+  );
+  const timestamp = Number(timestampRaw);
+  const fingerprint = normalizeOptionalSignedValue(
+    getRequestParam(req, "device-fingerprint", allowQueryParams)
+  );
+  const signature = normalizeOptionalSignedValue(
+    getRequestParam(req, "request-signature", allowQueryParams)
+  );
+  const version = normalizeOptionalSignedValue(
+    getRequestParam(req, "extension-version", allowQueryParams)
+  );
+  const userId = normalizeOptionalSignedValue(
+    getRequestParam(req, "user-id", allowQueryParams)
+  );
+  const language = normalizeOptionalSignedValue(
+    getRequestParam(req, "language", allowQueryParams)
+  );
+  const twId = normalizeOptionalSignedValue(
+    getRequestParam(req, "tw-id", allowQueryParams)
+  );
+
+  if (
+    signatureVersion !== V2_SIGNATURE_VERSION ||
+    !requestId ||
+    !timestampRaw ||
+    !fingerprint ||
+    !signature ||
+    !version ||
+    !userId ||
+    !language
+  ) {
+    console.error("validateV2SecurityParams missing headers:", {
+      signatureVersion,
+      requestId,
+      timestampRaw,
+      fingerprint,
+      hasSignature: !!signature,
+      version,
+      userId,
+      language,
+    });
+    return { isValid: false, error: "MISSING_SIGNATURE_HEADERS" };
+  }
+
+  if (!twId) {
+    return { isValid: false, error: "MISSING_TWITTER_ID" };
+  }
+
+  if (!isValidTwitterId(twId)) {
+    console.error("validateV2SecurityParams twId error:", { twId });
+    return { isValid: false, error: "INVALID_TWITTER_ID" };
+  }
+
+  if (!isValidFingerprint(fingerprint)) {
+    console.error("validateV2SecurityParams fingerprint error:", {
+      fingerprint,
+    });
+    return { isValid: false, error: "400-1" };
+  }
+
+  if (!isValidRequestId(requestId)) {
+    console.error("validateV2SecurityParams requestId error:", { requestId });
+    return { isValid: false, error: "INVALID_REQUEST_ID" };
+  }
+
+  if (!isV2TimestampValid(timestamp)) {
+    console.error("validateV2SecurityParams timestamp error:", {
+      timestampRaw,
+      timestamp,
+      diffMs: Number.isFinite(timestamp) ? Date.now() - timestamp : null,
+    });
+    return { isValid: false, error: "SIGNATURE_EXPIRED" };
+  }
+
+  let pathWithQuery;
+  try {
+    pathWithQuery = buildV2PathWithQuery(req, {
+      isSSE: allowQueryParams,
+      language,
+    });
+  } catch (error) {
+    console.error("validateV2SecurityParams query normalize error:", error);
+    return { isValid: false, error: "INVALID_SIGNATURE" };
+  }
+
+  const bodyText = req.rawBody || "";
+  const bodyHash = hashBodySha512(bodyText);
+  const canonicalPayload = [
+    req.method.toUpperCase(),
+    pathWithQuery,
+    timestampRaw,
+    requestId,
+    fingerprint,
+    bodyHash,
+    twId,
+  ].join("\n");
+
+  const expectedSignature = generateV2Signature(canonicalPayload, signingKey);
+
+  if (!safeCompareHex(signature, expectedSignature)) {
+    console.error("validateV2SecurityParams signature error:", {
+      pathWithQuery,
+      requestId,
+      twId,
+      timestamp,
+      signaturePrefix: signature ? `${signature.slice(0, 8)}...${signature.slice(-8)}` : null,
+      expectedPrefix: `${expectedSignature.slice(0, 8)}...${expectedSignature.slice(-8)}`,
+    });
+    return { isValid: false, error: "INVALID_SIGNATURE" };
+  }
+
+  return {
+    isValid: true,
+    securityContext: attachIdentityToSecurityContext(
+      req,
+      {
+        signatureVersion: V2_SIGNATURE_VERSION,
+        requestId,
+        timestamp,
+        fingerprint,
+        version,
+        signature,
+        twId,
+        userId,
+        language,
+        pathWithQuery,
+      },
+      { allowQueryParams }
+    ),
+  };
+};
+
+const validateSecurityParams = (req, allowQueryParams = false) => {
+  const signatureVersion = normalizeOptionalSignedValue(
+    getRequestParam(req, "signature-version", allowQueryParams)
+  );
+
+  if (signatureVersion === V2_SIGNATURE_VERSION) {
+    return validateV2SecurityParams(req, { allowQueryParams });
+  }
+
+  if (process.env.XHUNT_LEGACY_SIGNATURE_ENABLED === "false") {
+    return { isValid: false, error: "MISSING_SIGNATURE_HEADERS" };
+  }
+
+  return validateLegacySecurityParams(req, allowQueryParams);
+};
+
+const getSecurityErrorHttpStatus = (error) => {
+  if (error === "INVALID_SIGNATURE" || error === "411") return 411;
+  if (error === "REPLAY_REQUEST" || error === "409") return 409;
+  if (error === "SIGNING_KEY_NOT_CONFIGURED") return 500;
+  return 400;
+};
+
 // 浏览器环境检测中间件
 const browserOnlyMiddleware = (req, res, next) => {
   try {
@@ -1504,12 +1877,15 @@ const securityMiddleware = async (req, res, next) => {
       console.error("securityMiddleware validateSecurityParams error:", {
         validation,
       });
-      return res.status(400).json({ error: validation.error });
+      return res
+        .status(getSecurityErrorHttpStatus(validation.error))
+        .json({ error: validation.error });
     }
 
     const requestIdReservation = await reserveRequestId(
       req,
-      validation.securityContext
+      validation.securityContext,
+      { isSSE: false }
     );
     if (!requestIdReservation.allowed) {
       if (!shouldSkipSecurityViolationLog(req)) {
@@ -1522,7 +1898,11 @@ const securityMiddleware = async (req, res, next) => {
       console.error("securityMiddleware requestIdReservation error:", {
         requestIdReservation,
       });
-      return res.status(409).json({ error: "409" });
+      const replayError =
+        validation.securityContext?.signatureVersion === V2_SIGNATURE_VERSION
+          ? "REPLAY_REQUEST"
+          : "409";
+      return res.status(409).json({ error: replayError });
     }
 
     // 将验证后的信息添加到请求对象中
@@ -1577,12 +1957,15 @@ const sseSecurityMiddleware = async (req, res, next) => {
       console.error("sseSecurityMiddleware validateSecurityParams error:", {
         validation,
       });
-      return res.status(400).json({ error: validation.error });
+      return res
+        .status(getSecurityErrorHttpStatus(validation.error))
+        .json({ error: validation.error });
     }
 
     const requestIdReservation = await reserveRequestId(
       req,
-      validation.securityContext
+      validation.securityContext,
+      { isSSE: true }
     );
     if (!requestIdReservation.allowed) {
       if (!shouldSkipSecurityViolationLog(req)) {
@@ -1595,8 +1978,15 @@ const sseSecurityMiddleware = async (req, res, next) => {
       console.error("sseSecurityMiddleware requestIdReservation error:", {
         requestIdReservation,
       });
-      return res.status(409).json({ error: "409" });
+      const replayError =
+        validation.securityContext?.signatureVersion === V2_SIGNATURE_VERSION
+          ? "REPLAY_REQUEST"
+          : "409";
+      return res.status(409).json({ error: replayError });
     }
+
+    // 将验证后的信息添加到请求对象中，供 SSE auth 和后续业务使用。
+    req.securityContext = validation.securityContext;
 
     // 🔥 请求统计（版本 + URL）- 异步处理，不阻塞请求
     requestStatsManager.init();

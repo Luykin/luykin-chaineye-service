@@ -107,6 +107,43 @@ const compression = require("compression");
 const ONE_DAY_SECONDS = 24 * 60 * 60;
 const ONE_YEAR_SECONDS = 365 * ONE_DAY_SECONDS;
 
+function captureRawBody(req, res, buf, encoding) {
+  if (buf && buf.length) {
+    req.rawBody = buf.toString(encoding || "utf8");
+  } else {
+    req.rawBody = "";
+  }
+}
+
+function sanitizeUrlForLog(url = "") {
+  if (!url || typeof url !== "string") {
+    return url || "";
+  }
+  try {
+    const queryStart = url.indexOf("?");
+    const pathOnly = queryStart >= 0 ? url.slice(0, queryStart) : url;
+    const queryString = queryStart >= 0 ? url.slice(queryStart + 1) : "";
+    if (!queryString) return url;
+    const params = new URLSearchParams(queryString);
+    for (const key of Array.from(params.keys())) {
+      const normalizedKey = String(key).toLowerCase();
+      if (
+        normalizedKey === "token" ||
+        normalizedKey === "x-request-signature" ||
+        normalizedKey === "x_request_signature"
+      ) {
+        params.set(key, "[REDACTED]");
+      }
+    }
+    const sanitized = params.toString();
+    return sanitized ? `${pathOnly}?${sanitized}` : pathOnly;
+  } catch (_) {
+    return url
+      .replace(/((?:^|[?&])token=)[^&]*/gi, "$1[REDACTED]")
+      .replace(/((?:^|[?&])x[-_]request[-_]signature=)[^&]*/gi, "$1[REDACTED]");
+  }
+}
+
 function setFrontendStaticCacheHeaders(res, filePath) {
   const normalizedPath = filePath.split(path.sep).join("/");
   const isHtml = /\.html?$/i.test(normalizedPath);
@@ -388,10 +425,11 @@ async function initializeAndStartServer() {
 
   // 错误信息 token（仅在错误处理中设置，默认 "-"）
   morgan.token("error-info", (req, res) => res.locals.errorMessage || "-");
+  morgan.token("safe-url", (req) => sanitizeUrlForLog(req.originalUrl || req.url || ""));
 
   // 打印入口日志（请求刚到达时）
   app.use(
-    morgan('in :xhunt-identity method=:method url=:url ua=":user-agent"', {
+    morgan('in :xhunt-identity method=:method url=:safe-url ua=":user-agent"', {
       immediate: true,
       skip: (req) =>
         req.path === "/api/xhunt/stats/log-search" ||
@@ -402,7 +440,7 @@ async function initializeAndStartServer() {
   // 打印出口日志（响应返回时），包含状态与耗时；如有错误状态，额外标注
   app.use(
     morgan(
-      'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:url err=":error-info"',
+      'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:safe-url err=":error-info"',
       {
         skip: (req) =>
           req.path === "/api/xhunt/stats/log-search" ||
@@ -414,15 +452,12 @@ async function initializeAndStartServer() {
   app.use(helmet.xssFilter());
   app.use(helmet.noSniff());
 
-  // 🆕 针对不同路由设置不同的请求体大小限制
-  // 普通接口：200KB 限制
-  app.use(express.json({ limit: "200kb" }));
-
   // 🆕 为上报接口设置更大的限制（但仍然合理）
   app.use(
     "/api/xhunt/report",
     express.json({
       limit: "1000kb", // 上报接口允许更大的请求体
+      verify: captureRawBody,
     })
   );
 
@@ -430,8 +465,13 @@ async function initializeAndStartServer() {
     "/api/xhunt/stats/nacos/config",
     express.json({
       limit: "2000kb", // Nacos配置管理接口允许更大的请求体
+      verify: captureRawBody,
     })
   );
+
+  // 🆕 针对不同路由设置不同的请求体大小限制
+  // 普通接口：200KB 限制。需放在特殊大 body 路由之后，避免提前按 200KB 拦截。
+  app.use(express.json({ limit: "200kb", verify: captureRawBody }));
 
   // 静态文件服务：新版 admin-web 自带的资源优先，旧 public/static 仅作为历史页面兜底。
   // 缓存策略：HTML no-cache；Vite hashed assets 一年 immutable；未 hash 历史资源短缓存 + ETag/Last-Modified 协商。

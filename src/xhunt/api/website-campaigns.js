@@ -18,7 +18,15 @@ const {
 
 const router = express.Router();
 
-router.use(express.json({ limit: "1mb" }));
+function captureRawBody(req, res, buf, encoding) {
+  if (buf && buf.length) {
+    req.rawBody = buf.toString(encoding || "utf8");
+  } else {
+    req.rawBody = "";
+  }
+}
+
+router.use(express.json({ limit: "1mb", verify: captureRawBody }));
 
 async function logAdminAction(req, { action, success, message }) {
   try {

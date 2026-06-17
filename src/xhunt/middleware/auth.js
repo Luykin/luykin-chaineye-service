@@ -4,6 +4,37 @@ const jwt = require("jsonwebtoken");
 const { XHuntUserToken, XHuntUser } = require("../../models/postgres-start");
 const AUTH_VERIFIED_FLAG = Symbol.for("xhunt.auth.verified");
 
+function enforceV2TwitterIdConsistency(req, res) {
+  const securityContext = req.securityContext;
+  if (securityContext?.signatureVersion !== "v2") {
+    return true;
+  }
+
+  const signedTwId = String(securityContext.twId || "").trim();
+  const tokenTwId = String(req.user?.twitterId || "").trim();
+
+  // 历史用户数据可能存在 twitterId 为空，初期只记录不阻断，避免误伤。
+  if (!tokenTwId) {
+    console.warn("[Auth] v2 token twitterId missing, skip strict match:", {
+      userId: req.user?.id,
+      signedTwId,
+    });
+    return true;
+  }
+
+  if (signedTwId && signedTwId !== tokenTwId) {
+    console.error("[Auth] v2 twitterId mismatch:", {
+      signedTwId,
+      tokenTwId,
+      userId: req.user?.id,
+    });
+    res.status(403).json({ error: "TWITTER_ID_MISMATCH" });
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * 核心认证逻辑（提取为私有函数）
  */
@@ -68,6 +99,11 @@ async function verifyToken(token, req, res, next) {
     // 挂载用户信息到请求对象
     req.user = tokenRecord.user;
     req.tokenRecord = tokenRecord;
+
+    if (!enforceV2TwitterIdConsistency(req, res)) {
+      return;
+    }
+
     // 幂等标记：本次请求已完成认证
     req[AUTH_VERIFIED_FLAG] = true;
 
