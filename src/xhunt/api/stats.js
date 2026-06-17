@@ -2363,7 +2363,7 @@ router.post(
   requirePermission("feature_flags_config"),
   async (req, res) => {
     try {
-      const { content } = req.body || {};
+      let { content } = req.body || {};
       const dataId = "xhunt_config";
       const group = "DEFAULT_GROUP";
       const type = "json";
@@ -2375,7 +2375,11 @@ router.post(
       }
 
       try {
-        JSON.parse(content);
+        const config = JSON.parse(content);
+        if (config && typeof config === "object" && Array.isArray(config.adBanners)) {
+          config.featureSlots = config.adBanners;
+          content = JSON.stringify(config, null, 2);
+        }
       } catch (e) {
         return res.status(400).json({
           success: false,
@@ -2416,8 +2420,9 @@ router.post(
 );
 
 /**
- * -------------------- Banner Config Admin (xhunt_config.adBanners) --------------------
- * 权限：banner-config。只允许读写 xhunt_config.adBanners，避免和 Feature Flags 权限混用。
+ * -------------------- Banner Config Admin (xhunt_config.adBanners / featureSlots) --------------------
+ * 权限：banner-config。只允许读写 xhunt_config.adBanners 和 xhunt_config.featureSlots，避免和 Feature Flags 权限混用。
+ * 兼容策略：老版本插件消费 adBanners，新版本插件消费 featureSlots，两个字段内容保持一致。
  */
 
 router.get(
@@ -2459,6 +2464,7 @@ router.get(
           dataId,
           group,
           adBanners: Array.isArray(config.adBanners) ? config.adBanners : [],
+          featureSlots: Array.isArray(config.featureSlots) ? config.featureSlots : [],
         },
       });
     } catch (e) {
@@ -2508,6 +2514,7 @@ router.post(
       }
 
       nextConfig.adBanners = adBanners;
+      nextConfig.featureSlots = adBanners;
       const content = JSON.stringify(nextConfig, null, 2);
       const form = new URLSearchParams({
         dataId,
@@ -2524,7 +2531,7 @@ router.post(
       if (resp.status !== 200 || (resp.data !== true && resp.data !== "true")) {
         return res.status(resp.status || 500).json({
           success: false,
-          error: "发布 Nacos xhunt_config.adBanners 失败",
+          error: "发布 Nacos xhunt_config.adBanners/featureSlots 失败",
           status: resp.status,
           data: resp.data,
         });
@@ -2533,7 +2540,7 @@ router.post(
       await logAdminAction(req, {
         action: "banner-config-publish",
         success: true,
-        message: `adBanners=${adBanners.length}`,
+        message: `adBanners=${adBanners.length}, featureSlots=${adBanners.length}`,
       });
 
       res.json({

@@ -25,6 +25,7 @@ export async function fetchBannerConfig() {
       dataId: string;
       group: string;
       adBanners: AdBannerConfig[];
+      featureSlots: AdBannerConfig[];
     };
   }>("/api/xhunt/stats/banner-config");
 }

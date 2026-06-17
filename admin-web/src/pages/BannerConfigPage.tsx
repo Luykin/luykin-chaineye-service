@@ -127,7 +127,7 @@ export function BannerConfigPage() {
   const configQuery = useQuery({
     queryKey: ["banner-config", "xhunt_config"],
     queryFn: fetchBannerConfig,
-    select: (data) => ({ adBanners: data.data.adBanners } as FeatureFlagsConfig),
+    select: (data) => ({ adBanners: data.data.adBanners, featureSlots: data.data.featureSlots } as FeatureFlagsConfig),
   });
 
   useEffect(() => {
@@ -283,7 +283,7 @@ export function BannerConfigPage() {
       {contextHolder}
       <PageSection
         title="Banner 配置"
-        description="运营维护 xhunt_config.adBanners。图片建议先压缩后上传，单张限制 3MB。"
+        description="运营维护 xhunt_config.adBanners，并同步写入 featureSlots。图片建议先压缩后上传，单张限制 3MB。"
         extra={
           <Space wrap>
             {dirty ? <Tag color="orange">未发布</Tag> : <Tag color="green">已同步</Tag>}
@@ -297,7 +297,7 @@ export function BannerConfigPage() {
           type="info"
           showIcon
           className="banner-config-alert"
-          message={`自动压缩后上传 · 本页只修改 xhunt_config.adBanners，不覆盖 Feature Flags 其他配置 · 单张最大 ${BANNER_IMAGE_MAX_MB}MB，推荐 webp/png`}
+          message={`自动压缩后上传 · 本页只修改 xhunt_config.adBanners 与 featureSlots，不覆盖 Feature Flags 其他配置 · 单张最大 ${BANNER_IMAGE_MAX_MB}MB，推荐 webp/png`}
         />
 
         <Row gutter={[12, 12]} className="banner-config-summary">

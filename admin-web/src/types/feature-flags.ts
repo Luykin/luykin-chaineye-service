@@ -14,6 +14,7 @@ export interface AdBannerConfig {
 
 export interface FeatureFlagsConfig {
   adBanners?: AdBannerConfig[];
+  featureSlots?: AdBannerConfig[];
   flexibleTesting?: Record<string, string[]>;
   testConfig?: {
     features?: string[];
