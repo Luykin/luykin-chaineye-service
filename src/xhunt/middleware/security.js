@@ -895,6 +895,8 @@ const V2_SSE_TRANSPORT_QUERY_KEYS = new Set([
   "x_extension_version",
   "x-user-id",
   "x_user_id",
+  "x-window-location-href",
+  "x_window_location_href",
   "token",
 ]);
 
