@@ -1511,15 +1511,21 @@ const validateBrowserEnvironment = (req, allowQueryParams = false) => {
     allowQueryParams
   );
   const version = getRequestParam(req, "extension-version", allowQueryParams);
+  const signatureVersion = normalizeOptionalSignedValue(
+    getRequestParam(req, "signature-version", allowQueryParams)
+  );
 
   // 插件 background-script 没有真实页面 URL，约定传固定值 background-script。
-  // 无论 legacy 还是 v2，都只保留 0.0.0 / 9.09.09 的 background-script 特例。
+  // 保留 0.0.0 / 9.09.09 的历史特例；v2 background-script 也视为合法插件运行环境。
   // 注意：这里只放行 browserOnlyMiddleware，后续仍会经过 securityMiddleware 签名校验。
-  const isLegacyBackgroundScript =
+  const isLegacySpecialBackgroundScript =
     windowLocationHref === "background-script" &&
     (version === "0.0.0" || version === "9.09.09");
+  const isV2BackgroundScript =
+    windowLocationHref === "background-script" &&
+    signatureVersion === V2_SIGNATURE_VERSION;
 
-  if (isLegacyBackgroundScript) {
+  if (isLegacySpecialBackgroundScript || isV2BackgroundScript) {
     return true;
   }
 
@@ -1847,10 +1853,12 @@ const browserOnlyMiddleware = (req, res, next) => {
         false
       );
       const version = getRequestParam(req, "extension-version", false);
+      const signatureVersion = getRequestParam(req, "signature-version", false);
       console.error("browserOnlyMiddleware validateBrowserEnvironment error:", {
         userAgent,
         windowLocationHref,
         version,
+        signatureVersion,
       });
       return res.status(403).json({ error: "403" });
     }
