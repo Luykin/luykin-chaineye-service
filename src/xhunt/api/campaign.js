@@ -105,15 +105,11 @@ function matchesDisplayDomain(campaign, domain) {
 const INITIALIZE_CAMPAIGN_URL =
   "https://data.cryptohunt.ai/pro/api/initialize_campaign";
 const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400; // 1 天
-const CAMPAIGN_CONFIG_BROWSER_CACHE_TTL = 300; // 5 分钟
-
 function setCampaignConfigCacheHeaders(res) {
-  // 按 x-user-id 可能返回测试活动，使用 private 避免共享缓存串用户；浏览器仍会 5 分钟强缓存。
-  res.set("Cache-Control", `private, max-age=${CAMPAIGN_CONFIG_BROWSER_CACHE_TTL}`);
-  res.set(
-    "Expires",
-    new Date(Date.now() + CAMPAIGN_CONFIG_BROWSER_CACHE_TTL * 1000).toUTCString(),
-  );
+  // 按 domain / x-user-id / Authorization 可能返回不同活动，不让浏览器强缓存空结果；
+  // 服务端仍通过 Redis 缓存活动列表，避免每次都打数据库。
+  res.set("Cache-Control", "private, no-cache, max-age=0, must-revalidate");
+  res.set("Expires", "0");
   res.set("Vary", "x-user-id, Authorization");
 }
 

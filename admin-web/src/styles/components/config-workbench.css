@@ -294,6 +294,35 @@
   font-weight: 650;
 }
 
+.config-workbench .item-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.config-workbench .item-marker {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.config-workbench .item-marker.website-config {
+  background: light-dark(#eff6ff, rgba(37, 99, 235, 0.16));
+  color: light-dark(#1d4ed8, #93c5fd);
+}
+
+.config-workbench .item-marker.website-only {
+  background: light-dark(#fffbeb, rgba(251, 191, 36, 0.16));
+  color: light-dark(#92400e, #fcd34d);
+}
+
 .config-workbench-list-meta,
 .config-workbench .item-meta {
   margin-top: 4px;
@@ -333,6 +362,54 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+
+.config-workbench .list-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 4px 5px;
+  padding: 0 4px;
+  color: var(--admin-text-muted);
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.02em;
+}
+
+.config-workbench .list-group-heading > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-workbench .list-group-heading > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--admin-surface-hover);
+  color: var(--admin-text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.config-workbench .list-group-warning {
+  margin-top: 6px;
+  padding-top: 9px;
+  border-top: 1px solid var(--admin-border-soft);
+}
+
+.config-workbench .list-group-warning .list-group-heading {
+  color: light-dark(#9a6a17, #fbbf24);
+}
+
+.config-workbench .list-group-warning .list-group-heading > span:last-child {
+  background: light-dark(#fff7ed, rgba(251, 191, 36, 0.13));
+  color: light-dark(#b45309, #fbbf24);
 }
 
 .config-workbench .item {
@@ -403,6 +480,16 @@
 .config-workbench .chip-weight {
   background: var(--admin-primary-soft);
   color: var(--admin-primary-strong);
+}
+
+.config-workbench .chip.website-config {
+  background: light-dark(#eff6ff, rgba(37, 99, 235, 0.16));
+  color: light-dark(#1d4ed8, #93c5fd);
+}
+
+.config-workbench .chip.website-only {
+  background: light-dark(#fffbeb, rgba(251, 191, 36, 0.16));
+  color: light-dark(#92400e, #fcd34d);
 }
 
 .config-workbench .campaigns-search {

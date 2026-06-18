@@ -433,6 +433,52 @@ function getWebsiteListAssets(record: AnyObj | null) {
   };
 }
 
+function hasOwnMeaningfulValue(value: unknown) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return false;
+}
+
+function hasWebsiteCampaignContent(record?: AnyObj | null) {
+  if (!record || record.isDeleted) return false;
+  const websiteExtra =
+    record.websiteExtra && typeof record.websiteExtra === "object"
+      ? (record.websiteExtra as AnyObj)
+      : {};
+  const listAssets =
+    websiteExtra.listAssets && typeof websiteExtra.listAssets === "object"
+      ? (websiteExtra.listAssets as AnyObj)
+      : {};
+  const templateConfig =
+    record.templateConfig && typeof record.templateConfig === "object"
+      ? (record.templateConfig as AnyObj)
+      : {};
+
+  return (
+    (record.webStatus && record.webStatus !== "draft") ||
+    [
+      record.webAnnouncementZh,
+      record.webAnnouncementEn,
+      record.webRewardTextZh,
+      record.webRewardTextEn,
+      record.webNoteZh,
+      record.webNoteEn,
+      record.claimPoiContractAddress,
+      record.claimPowContractAddress,
+      record.claimEssayContractAddress,
+      listAssets.leftLogo,
+      listAssets.rightLogo,
+      listAssets.chestImage,
+    ].some(hasOwnMeaningfulValue) ||
+    (record.pageTemplate && record.pageTemplate !== "standard") ||
+    hasOwnMeaningfulValue(templateConfig)
+  );
+}
+
 function makeWebsiteForm(
   record?: AnyObj | null,
   campaign?: AnyObj | null,
@@ -1513,6 +1559,12 @@ export function NacosCampaignsPage() {
   const c = selectedCampaign;
   const websiteOnlyMode = selection?.type === "website_only";
   const websiteControlsEnabled = !!websiteConfigKey;
+  const websiteRecordByNacosId = new Map(
+    websiteRecords.map((record) => [
+      String(record.nacosCampaignId || record.id || ""),
+      record as AnyObj,
+    ]),
+  );
   const claimVisible = websiteForm.webStatus === "claim";
   const powEnabled = !!(
     websiteTarget?.enablePowLeaderboard ||
@@ -1637,28 +1689,40 @@ export function NacosCampaignsPage() {
             <ListGroup
               title="主活动配置"
               emptyText="暂无活动"
-              items={listData.nacosItems.map(({ c: item, idx }) => ({
-                key: `nacos-${idx}`,
-                active: selection?.type === "nacos" && selection.index === idx,
-                onClick: () => selectCampaign(idx),
-                title:
-                  item.displayName?.zh ||
-                  item.displayName?.en ||
-                  item.copy?.title?.zh ||
-                  item.id ||
-                  "(未命名)",
-                meta: item.id || item.campaignKey || "-",
-                chips: [
-                  item.enabled ? "展示" : "隐藏",
-                  item.testingPhase ? "testing" : "",
-                  normalizeDisplayDomains(item.displayDomains).join("+").toUpperCase(),
-                  Number(item.sortWeight) ? `权重 ${item.sortWeight}` : "",
-                ].filter(Boolean),
-                logos: Array.isArray(item.logos) ? item.logos : [],
-              }))}
+              items={listData.nacosItems.map(({ c: item, idx }) => {
+                const websiteRecord = websiteRecordByNacosId.get(
+                  String(item.id || item.nacosCampaignId || ""),
+                );
+                const hasWebsiteConfig =
+                  hasWebsiteCampaignContent(websiteRecord);
+                return {
+                  key: `nacos-${idx}`,
+                  active:
+                    selection?.type === "nacos" && selection.index === idx,
+                  onClick: () => selectCampaign(idx),
+                  title:
+                    item.displayName?.zh ||
+                    item.displayName?.en ||
+                    item.copy?.title?.zh ||
+                    item.id ||
+                    "(未命名)",
+                  meta: item.id || item.campaignKey || "-",
+                  marker: hasWebsiteConfig ? "website-config" : undefined,
+                  chips: [
+                    item.enabled ? "展示" : "隐藏",
+                    item.testingPhase ? "testing" : "",
+                    hasWebsiteConfig ? "已配网站" : "",
+                    normalizeDisplayDomains(item.displayDomains)
+                      .join("+")
+                      .toUpperCase(),
+                    Number(item.sortWeight) ? `权重 ${item.sortWeight}` : "",
+                  ].filter(Boolean),
+                  logos: Array.isArray(item.logos) ? item.logos : [],
+                };
+              })}
             />
             <ListGroup
-              title="网站独有"
+              title="仅网站留存"
               tone="warning"
               emptyText="暂无网页独有数据"
               items={listData.websiteOnly.map((item: AnyObj) => ({
@@ -1675,10 +1739,11 @@ export function NacosCampaignsPage() {
                   item.nacosCampaignId ||
                   "(未命名)",
                 meta: item.nacosCampaignId || "-",
-                chips: [item.webStatus || "draft", "website-only"].filter(
+                marker: "website-only",
+                chips: [item.webStatus || "draft", "站点留存"].filter(
                   Boolean,
                 ),
-                logos: [],
+                logos: [{ image: getWebsiteListAssets(item).leftLogo }],
               }))}
             />
           </div>
@@ -1912,6 +1977,7 @@ function ListGroup({
     meta: string;
     chips: string[];
     logos: AnyObj[];
+    marker?: "website-config" | "website-only";
   }>;
 }) {
   return (
@@ -1949,13 +2015,18 @@ function ListGroup({
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div className="item-title">
                     <span className="item-title-text">{item.title}</span>
+                    {item.marker ? (
+                      <span className={`item-marker ${item.marker}`}>
+                        {item.marker === "website-config" ? "站点" : "留存"}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="item-meta">{item.meta}</div>
                   <div className="chips">
                     {item.chips.map((chip) => (
                       <span
                         key={chip}
-                        className={`chip ${chip === "展示" ? "on" : chip === "testing" ? "testing" : chip.startsWith("权重") ? "chip-weight" : ""}`}
+                        className={`chip ${chip === "展示" ? "on" : chip === "testing" ? "testing" : chip.startsWith("权重") ? "chip-weight" : chip === "已配网站" ? "website-config" : chip === "站点留存" ? "website-only" : ""}`}
                       >
                         {chip}
                       </span>
