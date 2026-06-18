@@ -76,9 +76,9 @@ export async function fetchLogSearch(params: {
   const search = new URLSearchParams();
   search.set("query", params.query);
   search.set("scope", params.scope || "all");
-  search.set("contextMode", params.contextMode || "around");
-  search.set("contextLines", String(params.contextLines ?? 3));
-  search.set("limit", String(params.limit ?? 5));
+  search.set("contextMode", params.contextMode || "after");
+  search.set("contextLines", String(params.contextLines ?? 5));
+  search.set("limit", String(params.limit ?? 1));
 
   return apiRequest<LogSearchResponse>(`/api/xhunt/stats/log-search?${search.toString()}`);
 }
