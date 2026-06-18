@@ -15,6 +15,13 @@ const {
 const {
   invalidateCampaignConfigCache,
 } = require("../utils/campaign-config-cache");
+const {
+  normalizePublicLang,
+  normalizePublicSlug,
+  getCachedPublicCampaigns,
+  getCachedPublicCampaignDetail,
+  invalidateWebsiteCampaignPublicCache,
+} = require("../utils/website-campaign-public-cache");
 
 const router = express.Router();
 
@@ -55,6 +62,13 @@ async function invalidatePluginCampaignConfigCache(req) {
   }
 }
 
+async function invalidateWebsiteCampaignCaches(req) {
+  await Promise.all([
+    invalidatePluginCampaignConfigCache(req),
+    invalidateWebsiteCampaignPublicCache(req.redisClient),
+  ]);
+}
+
 
 router.get("/internal/list-all", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
@@ -68,7 +82,7 @@ router.get("/internal/list-all", adminAuth, requirePermission("nacos_config"), a
 router.post("/internal/import-legacy", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
     const summary = await importLegacyWebsiteCampaigns();
-    await invalidatePluginCampaignConfigCache(req);
+    await invalidateWebsiteCampaignCaches(req);
     await logAdminAction(req, {
       action: "website-campaign-import-legacy",
       success: true,
@@ -99,7 +113,7 @@ router.post("/internal/sync-from-nacos", adminAuth, requirePermission("nacos_con
     const dryRun = !!(req.body && req.body.dryRun);
     const result = await syncCampaignsFromNacos({ dryRun });
     if (!dryRun) {
-      await invalidatePluginCampaignConfigCache(req);
+      await invalidateWebsiteCampaignCaches(req);
     }
     await logAdminAction(req, {
       action: dryRun ? "website-campaign-sync-dry-run" : "website-campaign-sync",
@@ -120,7 +134,7 @@ router.post("/internal/sync-from-nacos", adminAuth, requirePermission("nacos_con
 router.put("/internal/managed-config", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
     const summary = await saveManagedCampaignsConfig(req.body || {});
-    await invalidatePluginCampaignConfigCache(req);
+    await invalidateWebsiteCampaignCaches(req);
     await logAdminAction(req, {
       action: "website-campaign-save-managed-config",
       success: true,
@@ -140,7 +154,7 @@ router.put("/internal/managed-config", adminAuth, requirePermission("nacos_confi
 router.put("/internal/:nacosCampaignId/web-config", adminAuth, requirePermission("nacos_config"), async (req, res) => {
   try {
     const record = await saveWebsiteCampaignConfig(req.params.nacosCampaignId, req.body || {});
-    await invalidatePluginCampaignConfigCache(req);
+    await invalidateWebsiteCampaignCaches(req);
     await logAdminAction(req, {
       action: "website-campaign-save-config",
       success: true,
@@ -167,8 +181,10 @@ router.put("/internal/:nacosCampaignId/web-config", adminAuth, requirePermission
 
 router.get("/", async (req, res) => {
   try {
-    const lang = String(req.query.lang || "zh-CN");
-    const data = await listPublicCampaigns({ lang });
+    const lang = normalizePublicLang(req.query.lang);
+    const data = await getCachedPublicCampaigns(req.redisClient, lang, () =>
+      listPublicCampaigns({ lang })
+    );
     return res.json({ success: true, data });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message || "获取活动列表失败" });
@@ -177,8 +193,11 @@ router.get("/", async (req, res) => {
 
 router.get("/:slug", async (req, res) => {
   try {
-    const lang = String(req.query.lang || "zh-CN");
-    const data = await getPublicCampaignDetailBySlug(req.params.slug, { lang });
+    const lang = normalizePublicLang(req.query.lang);
+    const slug = normalizePublicSlug(req.params.slug);
+    const data = await getCachedPublicCampaignDetail(req.redisClient, slug, lang, () =>
+      getPublicCampaignDetailBySlug(slug, { lang })
+    );
     if (!data) {
       return res.status(404).json({ success: false, error: "活动不存在" });
     }
