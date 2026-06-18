@@ -64,7 +64,7 @@ function DeployStateAlert({ status }: { status?: ReleaseStatusData }) {
       type="info"
       showIcon
       message={`发现 ${status.pendingCommits.length} 个待发布提交`}
-      description="发布前请确认提交列表，执行时会更新到 origin/main 并重启 PM2。"
+      description="发布前请确认提交列表，执行时会更新到 origin/main，并按所选发布选项执行。"
     />
   );
 }
@@ -74,6 +74,8 @@ export function ReleaseDeployPage() {
   const [deployOpen, setDeployOpen] = useState(false);
   const [rebuildAdminWeb, setRebuildAdminWeb] = useState(true);
   const [restartAfterDeploy, setRestartAfterDeploy] = useState(true);
+  const [runDbMigratePg, setRunDbMigratePg] = useState(false);
+  const [updateNginxConfig, setUpdateNginxConfig] = useState(false);
   const [tagName, setTagName] = useState("");
   const [tagMessageText, setTagMessageText] = useState("");
   const [tagMessageSource, setTagMessageSource] = useState<"ai" | "fallback" | "manual" | string>("");
@@ -100,12 +102,14 @@ export function ReleaseDeployPage() {
     mutationFn: () => releaseDeploy({
       rebuildAdminWeb,
       restartAfterDeploy,
+      runDbMigratePg,
+      updateNginxConfig,
       tagMessage: tagMessageText.trim() || undefined,
       tagMessageSource: tagMessageText.trim() ? tagMessageSource || "manual" : undefined,
       releaseTagName: createdTagName || undefined,
     }),
     onSuccess: (response) => {
-      const restartText = response.data.restartScheduled ? "，PM2 即将重启" : "";
+      const restartText = response.data.restartScheduled ? "，服务即将重启" : "";
       const tagText = response.data.releaseTag?.tagName ? `，Tag: ${response.data.releaseTag.tagName}` : "";
       messageApi.success(`发布完成：${shortHash(response.data.before)} → ${shortHash(response.data.after)}${tagText}${restartText}`);
       setDeployOpen(false);
@@ -207,6 +211,8 @@ export function ReleaseDeployPage() {
                       setTagMessageSource("");
                       setTagMessageTagName("");
                       setCreatedTagName("");
+                      setRunDbMigratePg(false);
+                      setUpdateNginxConfig(false);
                     }}
                   >
                     发布 origin/main
@@ -220,7 +226,7 @@ export function ReleaseDeployPage() {
             <DeployMetric label="待发布提交" value={status?.pendingCommits.length ?? "-"} hint="HEAD..origin/main" />
             <DeployMetric label="本地超前" value={status?.aheadCommits.length ?? "-"} hint="origin/main..HEAD" />
             <DeployMetric label="发布 Tag" value={status?.suggestedTagName ? "Ready" : "-"} hint={status?.suggestedTagName || "等待远程版本"} />
-            <DeployMetric label="PM2 目标" value={status?.restartTarget || "all"} hint="发布后重启" />
+            <DeployMetric label="重启命令" value={status?.restartTarget || "npm run restart"} hint="发布后执行" />
           </div>
 
           <DeployStateAlert status={status} />
@@ -230,7 +236,7 @@ export function ReleaseDeployPage() {
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label="分支">{status?.branch || "-"}</Descriptions.Item>
                 <Descriptions.Item label="HEAD"><CommitText commit={status?.current} /></Descriptions.Item>
-                <Descriptions.Item label="PM2 目标">{status?.restartTarget || "all"}</Descriptions.Item>
+                <Descriptions.Item label="重启命令">{status?.restartTarget || "npm run restart"}</Descriptions.Item>
               </Descriptions>
             </Card>
 
@@ -294,7 +300,7 @@ export function ReleaseDeployPage() {
         title="确认发布 origin/main"
         open={deployOpen}
         onCancel={() => setDeployOpen(false)}
-        okText="确认发布并重启"
+        okText="确认发布"
         okButtonProps={{ disabled: !canDeploy || !createdTagName, danger: true }}
         confirmLoading={releaseMutation.isPending}
         onOk={() => releaseMutation.mutate()}
@@ -401,15 +407,23 @@ export function ReleaseDeployPage() {
               { color: "blue", children: "git reset --hard origin/main" },
               { color: rebuildAdminWeb ? "blue" : "gray", children: rebuildAdminWeb ? "npm run admin-web:build" : "跳过 admin-web 构建" },
               { color: createdTagName ? "green" : "purple", children: createdTagName ? `使用已创建 Tag：${createdTagName}` : "等待手动创建 annotated release tag" },
-              { color: restartAfterDeploy ? "green" : "gray", children: restartAfterDeploy ? `pm2 restart ${status?.restartTarget || "all"}` : "跳过 PM2 重启" },
+              { color: runDbMigratePg ? "blue" : "gray", children: runDbMigratePg ? "npm run db:migrate:pg" : "跳过数据库迁移" },
+              { color: updateNginxConfig ? "blue" : "gray", children: updateNginxConfig ? "node scripts/update-nginx-config.js" : "跳过 Nginx 配置更新" },
+              { color: restartAfterDeploy ? "green" : "gray", children: restartAfterDeploy ? (status?.restartTarget || "npm run restart") : "跳过服务重启" },
             ]}
           />
           <Space direction="vertical" size={8}>
             <Checkbox checked={rebuildAdminWeb} onChange={(event) => setRebuildAdminWeb(event.target.checked)}>
               发布后重新构建 admin-web
             </Checkbox>
+            <Checkbox checked={runDbMigratePg} onChange={(event) => setRunDbMigratePg(event.target.checked)}>
+              发布后运行数据库迁移（npm run db:migrate:pg）
+            </Checkbox>
+            <Checkbox checked={updateNginxConfig} onChange={(event) => setUpdateNginxConfig(event.target.checked)}>
+              发布后更新并重载 Nginx 配置（node scripts/update-nginx-config.js）
+            </Checkbox>
             <Checkbox checked={restartAfterDeploy} onChange={(event) => setRestartAfterDeploy(event.target.checked)}>
-              发布后重启 PM2
+              发布后重启服务（npm run restart）
             </Checkbox>
           </Space>
         </Space>

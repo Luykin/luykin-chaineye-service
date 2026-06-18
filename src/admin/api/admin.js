@@ -55,6 +55,15 @@ async function runDeployCommand(command, args, options = {}) {
   };
 }
 
+const RESTART_COMMAND_LABEL = "npm run restart";
+
+async function runProjectRestartCommand() {
+  return runDeployCommand("npm", ["run", "restart"], {
+    timeout: 60000,
+    maxBuffer: 2 * 1024 * 1024,
+  });
+}
+
 function parseGitCommitLine(line) {
   const [hash, shortHash, author, relativeTime, ...messageParts] = String(line || "").split("\t");
   if (!hash || !shortHash) return null;
@@ -303,7 +312,7 @@ async function getDeployStatusData() {
     recentCommits: commitsRaw.stdout.split("\n").map(parseGitCommitLine).filter(Boolean),
     tags: tagsRaw.stdout.split("\n").map(parseGitTagLine).filter(Boolean),
     originMain: originMainRaw.stdout || "",
-    restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+    restartTarget: RESTART_COMMAND_LABEL,
   };
 }
 
@@ -334,7 +343,7 @@ async function getReleaseStatusData() {
     suggestedTagName: remote?.hash ? buildReleaseTagName(remote.hash) : null,
     tagPrefix: RELEASE_TAG_PREFIX,
     pushTagsEnabled: process.env.ADMIN_DEPLOY_PUSH_TAGS === "true",
-    restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+    restartTarget: RESTART_COMMAND_LABEL,
   };
 }
 
@@ -379,14 +388,13 @@ async function getLostCommits(target) {
 }
 
 function schedulePm2Restart(reason) {
-  const target = process.env.ADMIN_DEPLOY_PM2_TARGET || "all";
   setTimeout(async () => {
     try {
-      console.log(`[admin-deploy] restarting pm2 target=${target}, reason=${reason}`);
-      await runDeployCommand("pm2", ["restart", target], { timeout: 60000, maxBuffer: 2 * 1024 * 1024 });
-      console.log(`[admin-deploy] pm2 restart done, target=${target}`);
+      console.log(`[admin-deploy] restarting services command=${RESTART_COMMAND_LABEL}, reason=${reason}`);
+      await runProjectRestartCommand();
+      console.log(`[admin-deploy] restart done command=${RESTART_COMMAND_LABEL}`);
     } catch (e) {
-      console.error("[admin-deploy] pm2 restart failed:", e?.message);
+      console.error("[admin-deploy] restart failed:", e?.message);
     }
   }, 1200);
 }
@@ -1475,7 +1483,15 @@ router.post("/deploy/release/tag", adminAuth, requireRole("super"), express.json
 
 router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), async (req, res) => {
   try {
-    const { rebuildAdminWeb, restartAfterDeploy = true, releaseTagName, tagMessage, tagMessageSource } = req.body || {};
+    const {
+      rebuildAdminWeb,
+      restartAfterDeploy = true,
+      runDbMigratePg = false,
+      updateNginxConfig = false,
+      releaseTagName,
+      tagMessage,
+      tagMessageSource,
+    } = req.body || {};
 
     const outputs = [];
     const fetchResult = await runDeployCommand("git", ["fetch", "origin", "--tags"], { timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
@@ -1509,6 +1525,16 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
     if (rebuildAdminWeb === true) {
       const build = await runDeployCommand("npm", ["run", "admin-web:build"], { timeout: 180000, maxBuffer: 8 * 1024 * 1024 });
       outputs.push({ step: "admin-web:build", stdout: build.stdout.slice(-4000), stderr: build.stderr.slice(-4000) });
+    }
+
+    if (runDbMigratePg === true) {
+      const migrate = await runDeployCommand("npm", ["run", "db:migrate:pg"], { timeout: 180000, maxBuffer: 8 * 1024 * 1024 });
+      outputs.push({ step: "db:migrate:pg", stdout: migrate.stdout.slice(-4000), stderr: migrate.stderr.slice(-4000) });
+    }
+
+    if (updateNginxConfig === true) {
+      const nginx = await runDeployCommand("node", ["scripts/update-nginx-config.js"], { timeout: 120000, maxBuffer: 8 * 1024 * 1024 });
+      outputs.push({ step: "update-nginx-config", stdout: nginx.stdout.slice(-4000), stderr: nginx.stderr.slice(-4000) });
     }
 
     const after = (await runDeployCommand("git", ["rev-parse", "HEAD"])).stdout;
@@ -1547,8 +1573,10 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
       tagPushed: releaseTag.pushed,
       commitCount: releaseStatus.pendingCommits.length,
       rebuildAdminWeb: rebuildAdminWeb === true,
+      runDbMigratePg: runDbMigratePg === true,
+      updateNginxConfig: updateNginxConfig === true,
       restartAfterDeploy: restartAfterDeploy !== false,
-      restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+      restartTarget: RESTART_COMMAND_LABEL,
     });
 
     res.json({
@@ -1560,8 +1588,10 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
         commitCount: releaseStatus.pendingCommits.length,
         releasedCommits: releaseStatus.pendingCommits,
         outputs,
+        runDbMigratePg: runDbMigratePg === true,
+        updateNginxConfig: updateNginxConfig === true,
         restartScheduled: restartAfterDeploy !== false,
-        restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+        restartTarget: RESTART_COMMAND_LABEL,
       },
     });
     if (restartAfterDeploy !== false) {
@@ -1621,7 +1651,7 @@ router.post("/deploy/rollback", adminAuth, requireRole("super"), express.json(),
         lostCommits,
         outputs,
         restartScheduled: true,
-        restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+        restartTarget: RESTART_COMMAND_LABEL,
       },
     });
     schedulePm2Restart(`rollback:${verified.target}`);
@@ -1667,7 +1697,7 @@ router.post("/deploy/recover", adminAuth, requireRole("super"), express.json(), 
         after,
         outputs,
         restartScheduled: true,
-        restartTarget: process.env.ADMIN_DEPLOY_PM2_TARGET || "all",
+        restartTarget: RESTART_COMMAND_LABEL,
       },
     });
     schedulePm2Restart("recover:origin/main");

@@ -48,6 +48,8 @@ export interface DeployActionData {
   lostCommits?: DeployCommit[];
   releasedCommits?: DeployCommit[];
   commitCount?: number;
+  runDbMigratePg?: boolean;
+  updateNginxConfig?: boolean;
   restartScheduled: boolean;
   restartTarget: string;
   outputs: Array<{ step: string; stdout?: string; stderr?: string }>;
@@ -145,6 +147,8 @@ export function releaseDeploy(payload: {
   confirmText?: string;
   rebuildAdminWeb: boolean;
   restartAfterDeploy: boolean;
+  runDbMigratePg: boolean;
+  updateNginxConfig: boolean;
   tagMessage?: string;
   tagMessageSource?: string;
   releaseTagName?: string;
