@@ -456,6 +456,26 @@ export function LogSearchPage() {
                           ),
                         },
                         {
+                          title: "状态码",
+                          dataIndex: "status",
+                          width: 100,
+                          render: (value: number | null | undefined) => {
+                            if (!value) return <Typography.Text type="secondary">-</Typography.Text>;
+                            const color = value >= 500 ? "error" : value >= 400 ? "warning" : "success";
+                            return <Tag color={color}>{value}</Tag>;
+                          },
+                        },
+                        {
+                          title: "报错",
+                          dataIndex: "error",
+                          width: 260,
+                          render: (value: string | undefined) => value ? (
+                            <Typography.Text type="danger" ellipsis style={{ maxWidth: 240 }} title={value}>
+                              {value}
+                            </Typography.Text>
+                          ) : <Typography.Text type="secondary">-</Typography.Text>,
+                        },
+                        {
                           title: "requestId",
                           dataIndex: "requestId",
                           width: 300,

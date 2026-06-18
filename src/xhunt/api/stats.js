@@ -360,8 +360,59 @@ function parseRequestEntryFromLogLine(line) {
   };
 }
 
+function normalizeLogErrorText(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "-" || text.toLowerCase() === "null" || text.toLowerCase() === "undefined") {
+    return "";
+  }
+  return text.length > 500 ? `${text.slice(0, 500)}...` : text;
+}
+
+function parseRequestExitFromLogLine(line) {
+  const rawLine = String(line || "");
+  if (!rawLine.includes(" request_id=") || !rawLine.includes(" status=")) return null;
+
+  const requestIdMatch = rawLine.match(/(?:^|\s)request_id=([^\s]+)/);
+  const statusMatch = rawLine.match(/(?:^|\s)status=(\d{3})(?:\s|$)/);
+  if (!requestIdMatch || !statusMatch) return null;
+
+  const costMatch = rawLine.match(/(?:^|\s)cost_ms=([^\s]+)/);
+  const errMatch = rawLine.match(/(?:^|\s)err="([^"]*)"/);
+  const durationMs = costMatch ? Number(costMatch[1]) : null;
+  const error = normalizeLogErrorText(errMatch ? errMatch[1] : "");
+
+  return {
+    requestId: requestIdMatch[1],
+    status: Number(statusMatch[1]),
+    durationMs: Number.isFinite(durationMs) ? durationMs : null,
+    error,
+  };
+}
+
+function parseRequestIdTagFromLogLine(line) {
+  const rawLine = String(line || "");
+  const tagMatch = rawLine.match(/\[requestId=([^\]]+)\]/);
+  if (tagMatch) return tagMatch[1];
+
+  const fieldMatch = rawLine.match(/(?:^|\s)request_id=([^\s]+)/);
+  return fieldMatch ? fieldMatch[1] : "";
+}
+
+function extractRelatedErrorFromLogLine(line) {
+  const rawLine = String(line || "");
+  if (!rawLine || rawLine.includes(" in request_id=") || rawLine.includes(" out cost_ms=")) return "";
+  if (!/(error|exception|failed|fail|错误|失败|异常)/i.test(rawLine)) return "";
+
+  const withoutTimestamp = rawLine
+    .replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?:?\s*/, "")
+    .replace(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}\s*/, "")
+    .trim();
+  return normalizeLogErrorText(withoutTimestamp);
+}
+
 async function searchRequestEntriesByHandler(file, { handler, startMs, endMs, limit }) {
   const results = [];
+  const resultsByRequestId = new Map();
   const normalizedHandler = String(handler || "").toLowerCase();
   const stream = createReadStream(file.path, { encoding: "utf8" });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
@@ -369,19 +420,42 @@ async function searchRequestEntriesByHandler(file, { handler, startMs, endMs, li
   let lineNumber = 0;
   for await (const line of rl) {
     lineNumber += 1;
+
+    const exit = parseRequestExitFromLogLine(line);
+    if (exit && resultsByRequestId.has(exit.requestId)) {
+      const current = resultsByRequestId.get(exit.requestId);
+      current.status = exit.status;
+      current.durationMs = exit.durationMs;
+      if (exit.error) current.error = exit.error;
+      continue;
+    }
+
+    const relatedRequestId = parseRequestIdTagFromLogLine(line);
+    if (relatedRequestId && resultsByRequestId.has(relatedRequestId)) {
+      const error = extractRelatedErrorFromLogLine(line);
+      if (error && !resultsByRequestId.get(relatedRequestId).error) {
+        resultsByRequestId.get(relatedRequestId).error = error;
+      }
+    }
+
     const entry = parseRequestEntryFromLogLine(line);
     if (!entry || String(entry.handler).toLowerCase() !== normalizedHandler) continue;
 
     const timestamp = parsePm2LogTimestamp(line);
     if (timestamp === null || timestamp < startMs || timestamp > endMs) continue;
 
-    results.push({
+    const result = {
       ...entry,
+      status: null,
+      durationMs: null,
+      error: "",
       timestamp,
       time: new Date(timestamp).toISOString(),
       file: file.name,
       lineNumber,
-    });
+    };
+    results.push(result);
+    resultsByRequestId.set(result.requestId, result);
   }
 
   results.sort((a, b) => b.timestamp - a.timestamp);

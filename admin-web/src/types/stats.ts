@@ -169,6 +169,9 @@ export interface LogRequestResultItem {
   handler: string;
   method: string;
   url: string;
+  status?: number | null;
+  durationMs?: number | null;
+  error?: string;
   time: string;
   timestamp: number;
   file: string;
