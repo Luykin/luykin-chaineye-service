@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Card, Col, Collapse, Input, InputNumber, Modal, Popconfirm, Row, Segmented, Select, Space, Switch, Table, Tag as AntTag, Tooltip } from "antd";
+import { Button, Card, Col, Collapse, Input, InputNumber, Modal, Row, Segmented, Select, Space, Switch, Tag as AntTag, Tooltip } from "antd";
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -7,14 +7,13 @@ import { useAuth } from "@/app/auth";
 import {
   fetchAllWebsiteCampaigns,
   fetchWebsiteCampaignByNacosId,
-  fetchCampaignRegistrationsAdmin,
-  deleteCampaignRegistrationAdmin,
   saveManagedWebsiteCampaignsConfig,
   saveWebsiteCampaignConfig,
 } from "@/services/nacos";
 import { fetchVipLists } from "@/services/feature-flags";
-import type { CampaignRegistrationItem, WebsiteCampaignRecord } from "@/types/nacos";
+import type { WebsiteCampaignRecord } from "@/types/nacos";
 import type { VipListItem } from "@/types/feature-flags";
+import { CampaignRegistrationsModal, getRegistrationCampaignKey } from "@/components/campaigns/CampaignRegistrationsModal";
 
 const { TextArea } = Input;
 const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
@@ -591,25 +590,6 @@ function formatCampaignTimeRange(c?: AnyObj | null) {
   return `${start} → ${end}`;
 }
 
-function formatFullDateTime(value?: string | null) {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString();
-}
-
-function getRegistrationCampaignKey(target?: AnyObj | null) {
-  const raw =
-    target?.campaignKey ||
-    target?.nacosPayload?.campaignKey ||
-    target?.slug ||
-    target?.id ||
-    target?.nacosCampaignId ||
-    "";
-  const key = String(raw || "").trim();
-  return key.endsWith("-hunter") ? key.slice(0, -7) : key;
-}
-
 function getCampaignStage(c?: AnyObj | null) {
   if (!c) return { label: "未选择", className: "muted" };
   if (!c.enabled) return { label: "隐藏", className: "is-off" };
@@ -728,13 +708,7 @@ export function NacosCampaignsPage() {
     () => localStorage.getItem("nacos-campaigns-list-collapsed") === "1",
   );
   const [registrationsOpen, setRegistrationsOpen] = useState(false);
-  const [registrationsLoading, setRegistrationsLoading] = useState(false);
   const [registrationsCampaign, setRegistrationsCampaign] = useState("");
-  const [registrationUsernameSearch, setRegistrationUsernameSearch] = useState("");
-  const [registrationRows, setRegistrationRows] = useState<CampaignRegistrationItem[]>([]);
-  const [registrationTotal, setRegistrationTotal] = useState(0);
-  const [registrationPage, setRegistrationPage] = useState(1);
-  const [registrationPageSize, setRegistrationPageSize] = useState(20);
   const { user } = useAuth();
   const canEditCampaignId = user?.role === "super";
 
@@ -1421,71 +1395,14 @@ export function NacosCampaignsPage() {
     }
   }
 
-  async function loadCampaignRegistrations(params?: {
-    campaign?: string;
-    page?: number;
-    pageSize?: number;
-    username?: string;
-  }) {
-    const campaign = params?.campaign || registrationsCampaign;
-    if (!campaign) {
-      showToast("当前活动缺少 campaignKey，无法查询报名名单", "error");
-      return;
-    }
-    const page = params?.page || registrationPage;
-    const pageSize = params?.pageSize || registrationPageSize;
-    const username = params?.username ?? registrationUsernameSearch;
-    setRegistrationsLoading(true);
-    try {
-      const resp = await fetchCampaignRegistrationsAdmin({
-        campaign,
-        page,
-        pageSize,
-        username,
-      });
-      setRegistrationsCampaign(campaign);
-      setRegistrationRows(resp.data?.rows || []);
-      setRegistrationTotal(resp.data?.total || 0);
-      setRegistrationPage(resp.data?.page || page);
-      setRegistrationPageSize(resp.data?.pageSize || pageSize);
-    } catch (error) {
-      showToast(
-        `报名名单加载失败：${error instanceof Error ? error.message : "未知错误"}`,
-        "error",
-      );
-    } finally {
-      setRegistrationsLoading(false);
-    }
-  }
-
   function openRegistrationsModal(target?: AnyObj | null) {
     const campaign = getRegistrationCampaignKey(target || websiteTarget);
     if (!campaign) {
       showToast("当前活动缺少 campaignKey，无法查询报名名单", "error");
       return;
     }
-    setRegistrationsOpen(true);
     setRegistrationsCampaign(campaign);
-    setRegistrationUsernameSearch("");
-    setRegistrationPage(1);
-    void loadCampaignRegistrations({ campaign, page: 1, pageSize: registrationPageSize, username: "" });
-  }
-
-  async function deleteRegistrationRecord(record: CampaignRegistrationItem) {
-    try {
-      await deleteCampaignRegistrationAdmin(record.id, registrationsCampaign);
-      showToast("报名记录已删除", "success");
-      const nextPage =
-        registrationRows.length <= 1 && registrationPage > 1
-          ? registrationPage - 1
-          : registrationPage;
-      await loadCampaignRegistrations({ page: nextPage });
-    } catch (error) {
-      showToast(
-        `删除失败：${error instanceof Error ? error.message : "未知错误"}`,
-        "error",
-      );
-    }
+    setRegistrationsOpen(true);
   }
 
   function setListCollapsedAndStore(value: boolean) {
@@ -1932,105 +1849,13 @@ export function NacosCampaignsPage() {
         )}
       </Modal>
 
-      <Modal
+      <CampaignRegistrationsModal
         open={registrationsOpen}
-        title={
-          <Space size={8}>
-            <span>报名名单</span>
-            <AntTag color="blue">{registrationsCampaign || "未选择活动"}</AntTag>
-            <AntTag>{registrationTotal} 条</AntTag>
-          </Space>
-        }
-        width="92%"
-        style={{ maxWidth: 1280 }}
-        footer={<Button onClick={() => setRegistrationsOpen(false)}>关闭</Button>}
-        onCancel={() => setRegistrationsOpen(false)}
-      >
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Space wrap style={{ width: "100%", justifyContent: "space-between" }}>
-            <Input.Search
-              allowClear
-              style={{ width: 280 }}
-              placeholder="按用户名模糊搜索"
-              value={registrationUsernameSearch}
-              onChange={(e) => setRegistrationUsernameSearch(e.target.value)}
-              onSearch={(value) => {
-                setRegistrationUsernameSearch(value);
-                void loadCampaignRegistrations({ page: 1, username: value });
-              }}
-            />
-            <Button onClick={() => void loadCampaignRegistrations()}>刷新</Button>
-          </Space>
-          <Table
-            size="small"
-            rowKey="id"
-            loading={registrationsLoading}
-            dataSource={registrationRows}
-            scroll={{ x: 1180 }}
-            pagination={{
-              current: registrationPage,
-              pageSize: registrationPageSize,
-              total: registrationTotal,
-              showSizeChanger: true,
-              showTotal: (total) => `共 ${total} 条`,
-              onChange: (page, pageSize) =>
-                void loadCampaignRegistrations({ page, pageSize }),
-            }}
-            columns={[
-              {
-                title: "用户",
-                dataIndex: "username",
-                width: 210,
-                fixed: "left",
-                render: (_value, record) => (
-                  <Space size={8}>
-                    {record.avatar ? (
-                      <img
-                        src={record.avatar}
-                        alt=""
-                        style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover" }}
-                      />
-                    ) : null}
-                    <span>
-                      <strong>@{record.username || "-"}</strong>
-                      <br />
-                      <span style={{ color: "#94a3b8" }}>{record.displayName || record.xHuntUser?.displayName || "-"}</span>
-                    </span>
-                  </Space>
-                ),
-              },
-              { title: "Twitter ID", dataIndex: "twitterId", width: 150 },
-              { title: "EVM", dataIndex: "evmAddress", width: 260, ellipsis: true, render: (value) => value || "-" },
-              { title: "Email", dataIndex: "email", width: 220, ellipsis: true, render: (value) => value || "-" },
-              { title: "邀请码", dataIndex: ["xHuntUser", "inviteCode"], width: 120, render: (value) => value || "-" },
-              { title: "邀请人", dataIndex: "invitedByUsername", width: 140, render: (value) => value ? `@${value}` : "-" },
-              { title: "报名时间", dataIndex: "registeredAt", width: 180, render: (value) => formatFullDateTime(value) },
-              { title: "来源 URL", dataIndex: "registrationUrl", width: 260, ellipsis: true, render: (value) => value || "-" },
-              {
-                title: "操作",
-                key: "actions",
-                width: 100,
-                fixed: "right",
-                render: (_value, record) =>
-                  user?.role === "super" ? (
-                    <Popconfirm
-                      title="删除报名记录"
-                      description={`确认删除 @${record.username || record.twitterId || "该用户"} 的报名记录？`}
-                      okText="删除"
-                      cancelText="取消"
-                      okButtonProps={{ danger: true }}
-                      onConfirm={() => void deleteRegistrationRecord(record)}
-                    >
-                      <Button size="small" danger>删除</Button>
-                    </Popconfirm>
-                  ) : (
-                    <AntTag>仅 super 可删</AntTag>
-                  ),
-              },
-            ]}
-          />
-        </Space>
-      </Modal>
+        campaign={registrationsCampaign}
+        onClose={() => setRegistrationsOpen(false)}
+        onToast={showToast}
+      />
+
 
       <Modal
         open={jsonPreviewOpen}

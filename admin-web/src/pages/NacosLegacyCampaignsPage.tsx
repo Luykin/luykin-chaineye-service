@@ -3,6 +3,7 @@ import { Button, Card, Col, Input, InputNumber, Modal, Row, Select, Space, Switc
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { fetchNacosConfig, publishNacosConfig } from "@/services/nacos";
+import { CampaignRegistrationsModal, getRegistrationCampaignKey } from "@/components/campaigns/CampaignRegistrationsModal";
 import { fetchVipLists } from "@/services/feature-flags";
 import type { VipListItem } from "@/types/feature-flags";
 
@@ -326,6 +327,8 @@ export function NacosLegacyCampaignsPage() {
   const [publishing, setPublishing] = useState(false);
   const [listCollapsed, setListCollapsed] = useState(() => localStorage.getItem("nacos-legacy-campaigns-list-collapsed") === "1");
   const [internalTestUsers, setInternalTestUsers] = useState<VipListItem[]>([]);
+  const [registrationsOpen, setRegistrationsOpen] = useState(false);
+  const [registrationsCampaign, setRegistrationsCampaign] = useState("");
 
   const selectedCampaign = selectionIndex == null ? null : config.campaigns[selectionIndex] || null;
   const editorEnabled = !!selectedCampaign;
@@ -514,6 +517,16 @@ export function NacosLegacyCampaignsPage() {
     }
   }
 
+  function openRegistrationsModal(target?: AnyObj | null) {
+    const campaign = getRegistrationCampaignKey(target || selectedCampaign);
+    if (!campaign) {
+      showToast("当前活动缺少 campaignKey，无法查询报名名单", "error");
+      return;
+    }
+    setRegistrationsCampaign(campaign);
+    setRegistrationsOpen(true);
+  }
+
   function setListCollapsedAndStore(value: boolean) {
     setListCollapsed(value);
     localStorage.setItem("nacos-legacy-campaigns-list-collapsed", value ? "1" : "0");
@@ -655,6 +668,11 @@ export function NacosLegacyCampaignsPage() {
                   {dirty ? <AntTag color="red">未发布</AntTag> : null}
                 </Space>
                 <Typography.Text type="secondary">这个页面保留旧结构配置能力，只调用 Nacos 读写接口，和数据库活动配置完全隔离。</Typography.Text>
+                <div>
+                  <Button size="small" onClick={() => openRegistrationsModal(c)}>
+                    查询报名名单
+                  </Button>
+                </div>
               </Space>
             </Card>
             <CampaignEditor
@@ -673,6 +691,13 @@ export function NacosLegacyCampaignsPage() {
       </ConfigWorkbench>
 
       {toast ? <div className="campaigns-toast" style={{ background: toast.type === "error" ? "#991b1b" : toast.type === "success" ? "#065f46" : "#111827" }}>{toast.message}</div> : null}
+
+      <CampaignRegistrationsModal
+        open={registrationsOpen}
+        campaign={registrationsCampaign}
+        onClose={() => setRegistrationsOpen(false)}
+        onToast={showToast}
+      />
 
       <Modal
         open={jsonPreviewOpen}
