@@ -45,6 +45,40 @@ export interface WebsiteCampaignSyncResponse {
   error?: string;
 }
 
+
+export interface CampaignRegistrationItem {
+  id: string;
+  campaign: string;
+  twitterId: string;
+  username?: string | null;
+  displayName?: string | null;
+  avatar?: string | null;
+  evmAddress?: string | null;
+  email?: string | null;
+  registrationUrl?: string | null;
+  invitedByUsername?: string | null;
+  invitedByTwitterId?: string | null;
+  registeredAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  xHuntUser?: {
+    inviteCode?: string | null;
+    displayName?: string | null;
+    classification?: string | null;
+  } | null;
+}
+
+export interface CampaignRegistrationListResponse {
+  success: boolean;
+  data: {
+    total: number;
+    page: number;
+    pageSize: number;
+    rows: CampaignRegistrationItem[];
+  };
+  error?: string;
+}
+
 export interface UserTagItem {
   id: number;
   username: string;

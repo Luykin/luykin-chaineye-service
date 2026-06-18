@@ -25,6 +25,7 @@ const {
 } = require("../utils/campaign-config-cache");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
+const { adminAuth, requirePermission, requireRole } = require("../../admin/middleware/adminAuth");
 
 const router = express.Router();
 
@@ -366,6 +367,110 @@ async function notifyInitializeCampaign(redisClient, campaign) {
     throw e;
   }
 }
+
+
+function serializeCampaignRegistration(record) {
+  if (!record) return null;
+  const json = typeof record.toJSON === "function" ? record.toJSON() : record;
+  const { xHuntUserId: _omit, ...safe } = json;
+  return safe;
+}
+
+// 管理后台：活动报名名单查询
+router.get(
+  "/internal/registrations",
+  adminAuth,
+  requirePermission("nacos_config"),
+  async (req, res) => {
+    try {
+      const normalizedCampaign = normalizeCampaign(req.query.campaign);
+      if (!normalizedCampaign) {
+        return res.status(400).json({ success: false, error: "campaign 为必填字段" });
+      }
+
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const pageSize = Math.min(
+        Math.max(parseInt(req.query.pageSize, 10) || 20, 1),
+        200
+      );
+      const { twitterId, username, startDate, endDate } = req.query || {};
+
+      const where = { campaign: normalizedCampaign };
+      if (twitterId) where.twitterId = String(twitterId).trim();
+      if (username) where.username = { [Op.iLike]: `%${String(username).trim()}%` };
+
+      const startDt = parseUtcDateParam(startDate);
+      const endDt = parseUtcDateParam(endDate);
+      if (startDt || endDt) {
+        const range = {};
+        if (startDt) range[Op.gte] = startDt;
+        if (endDt) range[Op.lte] = endDt;
+        where.registeredAt = range;
+      }
+
+      const offset = (page - 1) * pageSize;
+      const total = await CampaignRegistration.count({ where });
+      const rows = total
+        ? await CampaignRegistration.findAll({
+            where,
+            limit: pageSize,
+            offset,
+            order: [["registeredAt", "DESC"]],
+            attributes: { exclude: ["xHuntUserId"] },
+            include: [
+              {
+                model: XHuntUser,
+                as: "xHuntUser",
+                attributes: ["inviteCode", "displayName", "classification"],
+              },
+            ],
+          })
+        : [];
+
+      return res.json({
+        success: true,
+        data: {
+          total,
+          page,
+          pageSize,
+          rows: rows.map(serializeCampaignRegistration),
+        },
+      });
+    } catch (err) {
+      console.error("Admin campaign registrations query error:", err);
+      return res.status(500).json({ success: false, error: "服务器内部错误（admin campaign registrations）" });
+    }
+  }
+);
+
+// 管理后台：超级管理员删除活动报名记录
+router.delete(
+  "/internal/registrations/:id",
+  adminAuth,
+  requireRole("super"),
+  async (req, res) => {
+    try {
+      const id = String(req.params.id || "").trim();
+      if (!id) return res.status(400).json({ success: false, error: "id 为必填字段" });
+
+      const where = { id };
+      const normalizedCampaign = normalizeCampaign(req.query.campaign);
+      if (normalizedCampaign) where.campaign = normalizedCampaign;
+
+      const record = await CampaignRegistration.findOne({ where });
+      if (!record) {
+        return res.status(404).json({ success: false, error: "报名记录不存在或已删除" });
+      }
+
+      const safeRecord = serializeCampaignRegistration(record);
+      await record.destroy();
+      return res.json({ success: true, data: safeRecord });
+    } catch (err) {
+      console.error("Admin campaign registration delete error:", err);
+      return res.status(500).json({ success: false, error: "服务器内部错误（delete campaign registration）" });
+    }
+  }
+);
 
 // 1) 通用活动报名
 router.post(

@@ -5,6 +5,7 @@ import type {
   NacosI18nReferenceResponse,
   WebsiteCampaignListResponse,
   WebsiteCampaignSyncResponse,
+  CampaignRegistrationListResponse,
 } from "@/types/nacos";
 
 
@@ -79,6 +80,32 @@ export async function saveManagedWebsiteCampaignsConfig(payload: Record<string, 
       method: "PUT",
       body: payload,
     }
+  );
+}
+
+export async function fetchCampaignRegistrationsAdmin(params: {
+  campaign: string;
+  page?: number;
+  pageSize?: number;
+  twitterId?: string;
+  username?: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("campaign", params.campaign);
+  query.set("page", String(params.page || 1));
+  query.set("pageSize", String(params.pageSize || 20));
+  if (params.twitterId?.trim()) query.set("twitterId", params.twitterId.trim());
+  if (params.username?.trim()) query.set("username", params.username.trim());
+  return apiRequest<CampaignRegistrationListResponse>(`/api/xhunt/campaigns/internal/registrations?${query.toString()}`);
+}
+
+export async function deleteCampaignRegistrationAdmin(id: string, campaign?: string) {
+  const query = new URLSearchParams();
+  if (campaign?.trim()) query.set("campaign", campaign.trim());
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiRequest<{ success: boolean; data?: unknown; error?: string }>(
+    `/api/xhunt/campaigns/internal/registrations/${encodeURIComponent(id)}${suffix}`,
+    { method: "DELETE" }
   );
 }
 
