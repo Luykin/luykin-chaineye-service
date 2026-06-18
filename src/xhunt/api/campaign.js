@@ -511,11 +511,25 @@ router.post(
       try {
         const isInternalTester = isRequestInternalTestUser(req);
         found = await getManagedCampaignPayloadByKey(normalizedCampaign, {
-          includeTesting: isInternalTester,
+          includeTesting: true,
         });
         if (!found) {
           console.log(LOG, "reject: campaign not found in database", { campaign: normalizedCampaign });
           return res.status(400).json({ error: "Invalid campaign identifier" });
+        }
+        if (found.testingPhase) {
+          const requestHandle = normalizeTesterHandle(
+            req.headers["x-user-id"] || req.user?.username,
+          );
+          const allowedTester =
+            isInternalTester || isCampaignTester(found, requestHandle);
+          if (!allowedTester) {
+            console.log(LOG, "reject: campaign in testing phase", {
+              campaign: normalizedCampaign,
+              requestHandle,
+            });
+            return res.status(403).json({ error: "Campaign is in testing phase" });
+          }
         }
         if (!found.enabled) {
           console.log(LOG, "reject: campaign not enabled", { campaign: normalizedCampaign });
