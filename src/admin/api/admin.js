@@ -1475,10 +1475,7 @@ router.post("/deploy/release/tag", adminAuth, requireRole("super"), express.json
 
 router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), async (req, res) => {
   try {
-    const { confirmText, rebuildAdminWeb, restartAfterDeploy = true, releaseTagName, tagMessage, tagMessageSource } = req.body || {};
-    if (confirmText !== "DEPLOY") {
-      return res.status(400).json({ success: false, error: "请输入 DEPLOY 确认发布" });
-    }
+    const { rebuildAdminWeb, restartAfterDeploy = true, releaseTagName, tagMessage, tagMessageSource } = req.body || {};
 
     const outputs = [];
     const fetchResult = await runDeployCommand("git", ["fetch", "origin", "--tags"], { timeout: 60000, maxBuffer: 4 * 1024 * 1024 });

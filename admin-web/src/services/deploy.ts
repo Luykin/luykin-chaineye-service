@@ -142,7 +142,7 @@ export function recoverDeploy(payload: { confirmText: string; rebuildAdminWeb: b
 }
 
 export function releaseDeploy(payload: {
-  confirmText: string;
+  confirmText?: string;
   rebuildAdminWeb: boolean;
   restartAfterDeploy: boolean;
   tagMessage?: string;

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Alert, Button, Card, Checkbox, Descriptions, Empty, Input, Modal, Space, Table, Tag, Timeline, Typography, message } from "antd";
-import { CheckCircleOutlined, CloudUploadOutlined, RocketOutlined, ReloadOutlined, RollbackOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, CloudUploadOutlined, RocketOutlined, ReloadOutlined, RollbackOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ColumnsType } from "antd/es/table";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
@@ -72,7 +72,6 @@ function DeployStateAlert({ status }: { status?: ReleaseStatusData }) {
 export function ReleaseDeployPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [deployOpen, setDeployOpen] = useState(false);
-  const [confirmText, setConfirmText] = useState("");
   const [rebuildAdminWeb, setRebuildAdminWeb] = useState(true);
   const [restartAfterDeploy, setRestartAfterDeploy] = useState(true);
   const [tagName, setTagName] = useState("");
@@ -99,7 +98,6 @@ export function ReleaseDeployPage() {
 
   const releaseMutation = useMutation({
     mutationFn: () => releaseDeploy({
-      confirmText,
       rebuildAdminWeb,
       restartAfterDeploy,
       tagMessage: tagMessageText.trim() || undefined,
@@ -111,7 +109,6 @@ export function ReleaseDeployPage() {
       const tagText = response.data.releaseTag?.tagName ? `，Tag: ${response.data.releaseTag.tagName}` : "";
       messageApi.success(`发布完成：${shortHash(response.data.before)} → ${shortHash(response.data.after)}${tagText}${restartText}`);
       setDeployOpen(false);
-      setConfirmText("");
       setCreatedTagName("");
       setTimeout(() => void statusQuery.refetch(), 3000);
     },
@@ -205,7 +202,6 @@ export function ReleaseDeployPage() {
                     disabled={!canDeploy}
                     onClick={() => {
                       setDeployOpen(true);
-                      setConfirmText("");
                       setTagName(status?.suggestedTagName || "");
                       setTagMessageText("");
                       setTagMessageSource("");
@@ -299,7 +295,7 @@ export function ReleaseDeployPage() {
         open={deployOpen}
         onCancel={() => setDeployOpen(false)}
         okText="确认发布并重启"
-        okButtonProps={{ disabled: confirmText !== "DEPLOY" || !canDeploy || !createdTagName, danger: true }}
+        okButtonProps={{ disabled: !canDeploy || !createdTagName, danger: true }}
         confirmLoading={releaseMutation.isPending}
         onOk={() => releaseMutation.mutate()}
         width={780}
@@ -363,7 +359,7 @@ export function ReleaseDeployPage() {
                   type="success"
                   showIcon
                   message={`发布 Tag 已创建：${createdTagName}`}
-                  description="现在可以输入 DEPLOY，然后点击发布重启。发布步骤不会重复创建 Tag，只会校验该 Tag 指向本次发布目标。"
+                  description="现在可以直接点击发布重启。发布步骤不会重复创建 Tag，只会校验该 Tag 指向本次发布目标。"
                 />
               ) : null}
               {tagMessageSource ? (
@@ -416,13 +412,6 @@ export function ReleaseDeployPage() {
               发布后重启 PM2
             </Checkbox>
           </Space>
-          <Input
-            className="deploy-confirm-input"
-            prefix={<SafetyCertificateOutlined />}
-            value={confirmText}
-            onChange={(event) => setConfirmText(event.target.value)}
-            placeholder="输入 DEPLOY 才能执行发布"
-          />
         </Space>
       </Modal>
     </PermissionGuard>
