@@ -370,10 +370,9 @@ function normalizeLogErrorText(value) {
 
 function parseRequestExitFromLogLine(line) {
   const rawLine = String(line || "");
-  if (!rawLine.includes(" request_id=") || !rawLine.includes(" status=")) return null;
 
   const requestIdMatch = rawLine.match(/(?:^|\s)request_id=([^\s]+)/);
-  const statusMatch = rawLine.match(/(?:^|\s)status=(\d{3})(?:\s|$)/);
+  const statusMatch = rawLine.match(/(?:^|\s)status=(\d{3})(?=\s|$)/);
   if (!requestIdMatch || !statusMatch) return null;
 
   const costMatch = rawLine.match(/(?:^|\s)cost_ms=([^\s]+)/);
@@ -410,9 +409,18 @@ function extractRelatedErrorFromLogLine(line) {
   return normalizeLogErrorText(withoutTimestamp);
 }
 
+function applyExitToRequestEntry(entry, exit) {
+  if (!entry || !exit) return;
+  entry.status = exit.status;
+  entry.durationMs = exit.durationMs;
+  if (exit.error) entry.error = exit.error;
+}
+
 async function searchRequestEntriesByHandler(file, { handler, startMs, endMs, limit }) {
   const results = [];
   const resultsByRequestId = new Map();
+  const exitsByRequestId = new Map();
+  const errorsByRequestId = new Map();
   const normalizedHandler = String(handler || "").toLowerCase();
   const stream = createReadStream(file.path, { encoding: "utf8" });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
@@ -422,19 +430,22 @@ async function searchRequestEntriesByHandler(file, { handler, startMs, endMs, li
     lineNumber += 1;
 
     const exit = parseRequestExitFromLogLine(line);
-    if (exit && resultsByRequestId.has(exit.requestId)) {
-      const current = resultsByRequestId.get(exit.requestId);
-      current.status = exit.status;
-      current.durationMs = exit.durationMs;
-      if (exit.error) current.error = exit.error;
+    if (exit) {
+      exitsByRequestId.set(exit.requestId, exit);
+      if (resultsByRequestId.has(exit.requestId)) {
+        applyExitToRequestEntry(resultsByRequestId.get(exit.requestId), exit);
+      }
       continue;
     }
 
     const relatedRequestId = parseRequestIdTagFromLogLine(line);
-    if (relatedRequestId && resultsByRequestId.has(relatedRequestId)) {
+    if (relatedRequestId) {
       const error = extractRelatedErrorFromLogLine(line);
-      if (error && !resultsByRequestId.get(relatedRequestId).error) {
-        resultsByRequestId.get(relatedRequestId).error = error;
+      if (error) {
+        errorsByRequestId.set(relatedRequestId, error);
+        if (resultsByRequestId.has(relatedRequestId) && !resultsByRequestId.get(relatedRequestId).error) {
+          resultsByRequestId.get(relatedRequestId).error = error;
+        }
       }
     }
 
@@ -448,12 +459,13 @@ async function searchRequestEntriesByHandler(file, { handler, startMs, endMs, li
       ...entry,
       status: null,
       durationMs: null,
-      error: "",
+      error: errorsByRequestId.get(entry.requestId) || "",
       timestamp,
       time: new Date(timestamp).toISOString(),
       file: file.name,
       lineNumber,
     };
+    applyExitToRequestEntry(result, exitsByRequestId.get(result.requestId));
     results.push(result);
     resultsByRequestId.set(result.requestId, result);
   }

@@ -39,6 +39,25 @@ const LOG_CONTEXT_MODE_OPTIONS = [
   { label: "仅前", value: "before" },
 ];
 
+
+function getDisplayPath(url: string) {
+  const raw = String(url || "");
+  const withoutQuery = raw.split("?")[0] || raw;
+  return withoutQuery || raw || "-";
+}
+
+function compactText(value: string, head = 8, tail = 6) {
+  const raw = String(value || "");
+  if (raw.length <= head + tail + 3) return raw;
+  return `${raw.slice(0, head)}...${raw.slice(-tail)}`;
+}
+
+function copyText(value: string) {
+  if (typeof navigator !== "undefined" && navigator.clipboard && value) {
+    void navigator.clipboard.writeText(value);
+  }
+}
+
 function highlightText(text: string, keyword: string) {
   if (!keyword) return text;
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -437,40 +456,64 @@ export function LogSearchPage() {
                     <Table<LogRequestResultItem>
                       rowKey={(record) => `${record.file}-${record.lineNumber}-${record.requestId}`}
                       size="small"
+                      tableLayout="fixed"
+                      scroll={{ x: 1160 }}
                       pagination={{ pageSize: 20, showSizeChanger: true }}
                       dataSource={requestResults}
                       columns={[
                         {
                           title: "时间",
                           dataIndex: "time",
-                          width: 190,
-                          render: (value: string) => dayjs(value).format("YYYY-MM-DD HH:mm:ss"),
-                        },
-                        {
-                          title: "请求 URL",
-                          dataIndex: "url",
-                          render: (_value: string, record) => (
-                            <Typography.Text code>
-                              {record.method} {record.url}
+                          width: 170,
+                          ellipsis: true,
+                          render: (value: string) => (
+                            <Typography.Text style={{ whiteSpace: "nowrap" }} title={value}>
+                              {dayjs(value).isValid() ? dayjs(value).format("MM-DD HH:mm:ss") : "-"}
                             </Typography.Text>
                           ),
                         },
                         {
+                          title: "请求URL",
+                          dataIndex: "url",
+                          width: 360,
+                          ellipsis: true,
+                          render: (_value: string, record) => {
+                            const fullUrl = `${record.method} ${record.url}`;
+                            return (
+                              <Typography.Text
+                                code
+                                ellipsis
+                                title={fullUrl}
+                                style={{ display: "inline-block", maxWidth: 330, whiteSpace: "nowrap" }}
+                              >
+                                {record.method} {getDisplayPath(record.url)}
+                              </Typography.Text>
+                            );
+                          },
+                        },
+                        {
                           title: "状态码",
                           dataIndex: "status",
-                          width: 100,
+                          width: 86,
+                          align: "center",
                           render: (value: number | null | undefined) => {
                             if (!value) return <Typography.Text type="secondary">-</Typography.Text>;
                             const color = value >= 500 ? "error" : value >= 400 ? "warning" : "success";
-                            return <Tag color={color}>{value}</Tag>;
+                            return <Tag color={color} style={{ marginInlineEnd: 0 }}>{value}</Tag>;
                           },
                         },
                         {
                           title: "报错",
                           dataIndex: "error",
-                          width: 260,
+                          width: 220,
+                          ellipsis: true,
                           render: (value: string | undefined) => value ? (
-                            <Typography.Text type="danger" ellipsis style={{ maxWidth: 240 }} title={value}>
+                            <Typography.Text
+                              type="danger"
+                              ellipsis
+                              title={value}
+                              style={{ display: "inline-block", maxWidth: 200, whiteSpace: "nowrap" }}
+                            >
                               {value}
                             </Typography.Text>
                           ) : <Typography.Text type="secondary">-</Typography.Text>,
@@ -478,18 +521,26 @@ export function LogSearchPage() {
                         {
                           title: "requestId",
                           dataIndex: "requestId",
-                          width: 300,
+                          width: 220,
+                          ellipsis: true,
                           render: (value: string) => (
-                            <Button type="link" size="small" onClick={() => searchByRequestId(value)}>
-                              {value}
-                            </Button>
+                            <Space size={4} style={{ whiteSpace: "nowrap" }}>
+                              <Button type="link" size="small" style={{ paddingInline: 0 }} title={value} onClick={() => searchByRequestId(value)}>
+                                {compactText(value, 10, 8)}
+                              </Button>
+                              <Button size="small" onClick={() => copyText(value)}>复制</Button>
+                            </Space>
                           ),
                         },
                         {
                           title: "日志文件",
                           dataIndex: "file",
-                          width: 220,
-                          render: (value: string, record) => <Tag>{value}: {record.lineNumber}</Tag>,
+                          width: 260,
+                          ellipsis: true,
+                          render: (value: string, record) => {
+                            const full = `${value}: ${record.lineNumber}`;
+                            return <Tag title={full} style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{compactText(full, 28, 8)}</Tag>;
+                          },
                         },
                       ]}
                     />
