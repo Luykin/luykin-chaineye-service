@@ -155,6 +155,48 @@ export interface LogSearchResponse {
   };
 }
 
+
+
+export interface LogRequestHandlersResponse {
+  success: boolean;
+  data: {
+    internalTest: string[];
+  };
+}
+
+export interface LogRequestResultItem {
+  requestId: string;
+  handler: string;
+  method: string;
+  url: string;
+  time: string;
+  timestamp: number;
+  file: string;
+  lineNumber: number;
+}
+
+export interface LogRequestsResponse {
+  success: boolean;
+  data: {
+    handler: string;
+    scope?: string;
+    startTime: string;
+    endTime: string;
+    availableScopes?: Array<{
+      key: string;
+      label: string;
+    }>;
+    totalMatches: number;
+    results: LogRequestResultItem[];
+    searchedFiles: number;
+    totalFiles: number;
+    fileSizes: Array<{
+      name: string;
+      size: number;
+    }>;
+  };
+}
+
 export interface ErrorLogsResponse {
   success: boolean;
   data: {

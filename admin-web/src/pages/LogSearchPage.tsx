@@ -1,8 +1,11 @@
 import { useState } from "react";
+import dayjs, { type Dayjs } from "dayjs";
 import {
   Alert,
+  AutoComplete,
   Button,
   Card,
+  DatePicker,
   Empty,
   Input,
   InputNumber,
@@ -11,13 +14,14 @@ import {
   Space,
   Tabs,
   Tag,
+  Table,
   Typography,
 } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
-import { fetchErrorLogs, fetchLogSearch } from "@/services/stats";
-import type { LogSearchResultItem } from "@/types/stats";
+import { fetchErrorLogs, fetchLogRequestHandlers, fetchLogRequests, fetchLogSearch } from "@/services/stats";
+import type { LogRequestResultItem, LogSearchResultItem } from "@/types/stats";
 import { useAuth } from "@/app/auth";
 
 const LOG_SEARCH_SCOPE_OPTIONS = [
@@ -59,6 +63,7 @@ export function LogSearchPage() {
   const { hasPermission } = useAuth();
   const canReadErrorLogs = hasPermission("error-logs:read");
 
+  const [activeTab, setActiveTab] = useState("search");
   const [queryText, setQueryText] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [logScope, setLogScope] = useState("all");
@@ -75,6 +80,18 @@ export function LogSearchPage() {
   const [errorLogLines, setErrorLogLines] = useState(1000);
   const [submittedErrorLogLines, setSubmittedErrorLogLines] = useState(1000);
   const [errorLogNonce, setErrorLogNonce] = useState(0);
+  const [requestHandler, setRequestHandler] = useState("");
+  const [submittedRequestHandler, setSubmittedRequestHandler] = useState("");
+  const [requestLogScope, setRequestLogScope] = useState("api");
+  const [submittedRequestLogScope, setSubmittedRequestLogScope] = useState("api");
+  const [requestTimeRange, setRequestTimeRange] = useState<[Dayjs, Dayjs]>([
+    dayjs().subtract(30, "minute"),
+    dayjs(),
+  ]);
+  const [submittedRequestTimeRange, setSubmittedRequestTimeRange] = useState<[Dayjs, Dayjs]>(requestTimeRange);
+  const [requestLimit, setRequestLimit] = useState(200);
+  const [submittedRequestLimit, setSubmittedRequestLimit] = useState(200);
+  const [requestNonce, setRequestNonce] = useState(0);
 
   const submitSearch = () => {
     const keyword = queryText.trim();
@@ -91,6 +108,31 @@ export function LogSearchPage() {
     setSubmittedErrorLogScope(errorLogScope);
     setSubmittedErrorLogLines(errorLogLines);
     setErrorLogNonce((value) => value + 1);
+  };
+
+  const submitRequestSearch = () => {
+    const handler = requestHandler.trim().replace(/^@+/, "");
+    if (!handler) return;
+    setSubmittedRequestHandler(handler);
+    setSubmittedRequestLogScope(requestLogScope);
+    setSubmittedRequestTimeRange(requestTimeRange);
+    setSubmittedRequestLimit(requestLimit);
+    setRequestNonce((value) => value + 1);
+  };
+
+  const searchByRequestId = (requestId: string) => {
+    setActiveTab("search");
+    setQueryText(requestId);
+    setLogScope("api");
+    setContextMode("after");
+    setContextLines(5);
+    setResultLimit(1);
+    setSubmittedQuery(requestId);
+    setSubmittedLogScope("api");
+    setSubmittedContextMode("after");
+    setSubmittedContextLines(5);
+    setSubmittedResultLimit(1);
+    setSearchNonce((value) => value + 1);
   };
 
   const searchQuery = useQuery({
@@ -123,7 +165,41 @@ export function LogSearchPage() {
     refetchOnWindowFocus: false,
   });
 
+  const requestHandlersQuery = useQuery({
+    queryKey: ["log-request-handlers"],
+    queryFn: fetchLogRequestHandlers,
+    refetchOnWindowFocus: false,
+  });
+
+  const requestSearchQuery = useQuery({
+    queryKey: [
+      "log-requests",
+      submittedRequestHandler,
+      submittedRequestLogScope,
+      submittedRequestTimeRange[0]?.valueOf(),
+      submittedRequestTimeRange[1]?.valueOf(),
+      submittedRequestLimit,
+      requestNonce,
+    ],
+    queryFn: () =>
+      fetchLogRequests({
+        handler: submittedRequestHandler,
+        scope: submittedRequestLogScope,
+        startTime: submittedRequestTimeRange[0].toISOString(),
+        endTime: submittedRequestTimeRange[1].toISOString(),
+        limit: submittedRequestLimit,
+      }),
+    enabled: Boolean(submittedRequestHandler.trim()),
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+
   const results = searchQuery.data?.data.results || [];
+  const requestResults = requestSearchQuery.data?.data.results || [];
+  const requestHandlerOptions = (requestHandlersQuery.data?.data.internalTest || []).map((username) => ({
+    value: username,
+    label: username,
+  }));
   const selectedScopeLabel =
     LOG_SEARCH_SCOPE_OPTIONS.find((item) => item.value === submittedLogScope)?.label || "全部服务";
   const selectedErrorLogScopeLabel =
@@ -142,6 +218,8 @@ export function LogSearchPage() {
         description="搜索 PM2 日志，也可以在有权限时查看最新 API 错误日志。"
       >
         <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
           items={[
             {
               key: "search",
@@ -275,6 +353,129 @@ export function LogSearchPage() {
                   ) : (
                     <Empty description="输入关键词开始搜索日志" />
                   )}
+                </Space>
+              ),
+            },
+            {
+              key: "request-search",
+              label: "按用户请求",
+              children: (
+                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                  <Card styles={{ body: { padding: 16 } }}>
+                    <Space wrap style={{ width: "100%" }}>
+                      <Select
+                        value={requestLogScope}
+                        onChange={setRequestLogScope}
+                        style={{ width: 220 }}
+                        options={LOG_SEARCH_SCOPE_OPTIONS}
+                      />
+                      <AutoComplete
+                        value={requestHandler}
+                        onChange={setRequestHandler}
+                        options={requestHandlerOptions}
+                        placeholder="选择内测用户或输入 handler"
+                        style={{ minWidth: 260 }}
+                        filterOption={(inputValue, option) =>
+                          String(option?.value || "").toLowerCase().includes(inputValue.toLowerCase())
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") submitRequestSearch();
+                        }}
+                        allowClear
+                      />
+                      <DatePicker.RangePicker
+                        showTime
+                        allowClear={false}
+                        value={requestTimeRange}
+                        onChange={(values) => {
+                          if (values?.[0] && values?.[1]) {
+                            setRequestTimeRange([values[0], values[1]]);
+                          }
+                        }}
+                        style={{ minWidth: 380 }}
+                      />
+                      <Select
+                        value={requestLimit}
+                        onChange={setRequestLimit}
+                        style={{ width: 120 }}
+                        options={[50, 100, 200, 500, 1000].map((value) => ({
+                          label: `${value} 条`,
+                          value,
+                        }))}
+                      />
+                      <Button
+                        type="primary"
+                        onClick={submitRequestSearch}
+                        loading={requestSearchQuery.isFetching}
+                      >
+                        查询请求
+                      </Button>
+                    </Space>
+                  </Card>
+
+                  {requestSearchQuery.isError ? (
+                    <Alert
+                      type="error"
+                      showIcon
+                      message="请求日志查询失败"
+                      description="请确认时间范围不超过 24 小时，并且 PM2 日志有时间前缀。"
+                    />
+                  ) : null}
+
+                  {requestSearchQuery.data ? (
+                    <Card
+                      size="small"
+                      title={`${submittedRequestHandler}：找到 ${requestSearchQuery.data.data.totalMatches} 条请求，搜索了 ${requestSearchQuery.data.data.searchedFiles} 个文件`}
+                    >
+                      <Typography.Text type="secondary">
+                        点击 requestId 会切换到“日志搜索”，并按默认条件（仅后 / 5行 / 1条）查询该 requestId。
+                      </Typography.Text>
+                    </Card>
+                  ) : null}
+
+                  {requestResults.length ? (
+                    <Table<LogRequestResultItem>
+                      rowKey={(record) => `${record.file}-${record.lineNumber}-${record.requestId}`}
+                      size="small"
+                      pagination={{ pageSize: 20, showSizeChanger: true }}
+                      dataSource={requestResults}
+                      columns={[
+                        {
+                          title: "时间",
+                          dataIndex: "time",
+                          width: 190,
+                          render: (value: string) => dayjs(value).format("YYYY-MM-DD HH:mm:ss"),
+                        },
+                        {
+                          title: "请求 URL",
+                          dataIndex: "url",
+                          render: (_value: string, record) => (
+                            <Typography.Text code>
+                              {record.method} {record.url}
+                            </Typography.Text>
+                          ),
+                        },
+                        {
+                          title: "requestId",
+                          dataIndex: "requestId",
+                          width: 300,
+                          render: (value: string) => (
+                            <Button type="link" size="small" onClick={() => searchByRequestId(value)}>
+                              {value}
+                            </Button>
+                          ),
+                        },
+                        {
+                          title: "日志文件",
+                          dataIndex: "file",
+                          width: 220,
+                          render: (value: string, record) => <Tag>{value}: {record.lineNumber}</Tag>,
+                        },
+                      ]}
+                    />
+                  ) : requestSearchQuery.isFetched && !requestSearchQuery.isFetching ? (
+                    <Empty description="未找到该 handler 在时间范围内的请求" />
+                  ) : null}
                 </Space>
               ),
             },

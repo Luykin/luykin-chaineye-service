@@ -269,6 +269,125 @@ function normalizeLogSearchLimit(value) {
   return Math.min(parsed, 200);
 }
 
+async function getPm2LogFiles(scope = "all") {
+  const homeDir = os.homedir();
+  const pm2LogsDir = path.join(homeDir, ".pm2", "logs");
+
+  await fs.access(pm2LogsDir);
+
+  const files = await fs.readdir(pm2LogsDir);
+  const fileCheckPromises = files
+    .filter((file) => file.endsWith(".log"))
+    .map(async (file) => {
+      const filePath = path.join(pm2LogsDir, file);
+      try {
+        const stats = await fs.stat(filePath);
+        const fileSizeMB = stats.size / (1024 * 1024);
+
+        if (fileSizeMB > 200 || fileSizeMB === 0) {
+          return null;
+        }
+
+        return {
+          name: file,
+          path: filePath,
+          mtime: stats.mtime.getTime(),
+          size: fileSizeMB,
+        };
+      } catch (error) {
+        console.error(`Error checking file ${file}:`, error);
+        return null;
+      }
+    });
+
+  const fileResults = await Promise.all(fileCheckPromises);
+  const allLogFiles = fileResults.filter((file) => file !== null);
+  const logFiles = filterLogFilesByScope(allLogFiles, scope);
+  logFiles.sort((a, b) => b.mtime - a.mtime);
+
+  return { allLogFiles, logFiles, pm2LogsDir };
+}
+
+function normalizeLogRequestLimit(value) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 200;
+  return Math.min(parsed, 1000);
+}
+
+function normalizeLogRequestHandler(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .slice(0, 120);
+}
+
+function normalizeLogRequestTime(value) {
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parsePm2LogTimestamp(line) {
+  const rawLine = String(line || "");
+  const isoMatch = rawLine.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)(?::\s|\s)/);
+  if (isoMatch) {
+    const parsed = Date.parse(isoMatch[1]);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  const dateTimeMatch = rawLine.match(/^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})/);
+  if (dateTimeMatch) {
+    const parsed = Date.parse(dateTimeMatch[1].replace(" ", "T"));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return null;
+}
+
+function parseRequestEntryFromLogLine(line) {
+  const rawLine = String(line || "");
+  if (!rawLine.includes(" request_id=") || !rawLine.includes(" user_id=") || !rawLine.includes(" url=")) {
+    return null;
+  }
+
+  const match = rawLine.match(/(?:^|\s)in\s+request_id=([^\s]+)\s+user_id=([^\s]+).*?\smethod=([^\s]+)\s+url=([^\s]+)(?:\s|$)/);
+  if (!match) return null;
+
+  return {
+    requestId: match[1],
+    handler: match[2],
+    method: match[3],
+    url: match[4],
+  };
+}
+
+async function searchRequestEntriesByHandler(file, { handler, startMs, endMs, limit }) {
+  const results = [];
+  const normalizedHandler = String(handler || "").toLowerCase();
+  const stream = createReadStream(file.path, { encoding: "utf8" });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+  let lineNumber = 0;
+  for await (const line of rl) {
+    lineNumber += 1;
+    const entry = parseRequestEntryFromLogLine(line);
+    if (!entry || String(entry.handler).toLowerCase() !== normalizedHandler) continue;
+
+    const timestamp = parsePm2LogTimestamp(line);
+    if (timestamp === null || timestamp < startMs || timestamp > endMs) continue;
+
+    results.push({
+      ...entry,
+      timestamp,
+      time: new Date(timestamp).toISOString(),
+      file: file.name,
+      lineNumber,
+    });
+  }
+
+  results.sort((a, b) => b.timestamp - a.timestamp);
+  return results.slice(0, limit);
+}
+
 /**
  * 高效搜索日志文件 - 优化版本
  */
@@ -854,6 +973,122 @@ router.get("/export/active-users/js", adminAuth, async (req, res) => {
   }
 });
 
+
+
+/**
+ * GET /log-request-handlers
+ * 获取日志请求查询可选 handler（当前取内测用户名单），同时保留前端自由输入。
+ */
+router.get(
+  "/log-request-handlers",
+  adminAuth,
+  requirePermission("log-search:read"),
+  async (req, res) => {
+    try {
+      const { XhuntVipTestUser } = require("../../models/postgres-start");
+      const rows = await XhuntVipTestUser.findAll({
+        attributes: ["username", "listType"],
+        where: { listType: "internal_test" },
+        order: [["username", "ASC"]],
+        raw: true,
+      });
+
+      const internalTest = rows
+        .map((row) => String(row.username || "").trim())
+        .filter(Boolean);
+
+      res.json({
+        success: true,
+        data: {
+          internalTest,
+        },
+      });
+    } catch (error) {
+      console.error("Error loading log request handlers:", error);
+      res.status(500).json({ success: false, error: "加载可选 handler 失败" });
+    }
+  }
+);
+
+/**
+ * GET /log-requests
+ * 按 handler + 时间范围查询请求入口日志，返回 URL / requestId / 时间。
+ */
+router.get(
+  "/log-requests",
+  adminAuth,
+  requirePermission("log-search:read"),
+  async (req, res) => {
+    try {
+      const handler = normalizeLogRequestHandler(req.query.handler);
+      const scope = normalizeLogSearchScope(req.query.scope || "api");
+      const startMs = normalizeLogRequestTime(req.query.startTime);
+      const endMs = normalizeLogRequestTime(req.query.endTime);
+      const limitNum = normalizeLogRequestLimit(req.query.limit);
+
+      if (!handler) {
+        return res.status(400).json({ success: false, error: "handler 不能为空" });
+      }
+      if (startMs === null || endMs === null || startMs > endMs) {
+        return res.status(400).json({ success: false, error: "时间范围无效" });
+      }
+
+      const maxRangeMs = 24 * 60 * 60 * 1000;
+      if (endMs - startMs > maxRangeMs) {
+        return res.status(400).json({ success: false, error: "查询范围不能超过 24 小时" });
+      }
+
+      let allLogFiles = [];
+      let logFiles = [];
+      try {
+        ({ allLogFiles, logFiles } = await getPm2LogFiles(scope));
+      } catch (error) {
+        return res.status(404).json({
+          success: false,
+          error: "PM2 日志目录不存在",
+        });
+      }
+
+      const results = [];
+      for (const file of logFiles) {
+        if (results.length >= limitNum) break;
+
+        // 文件最后修改时间早于开始时间时，一般不可能包含目标窗口内的新日志；轮转文件仍会通过行级时间二次校验。
+        if (file.mtime < startMs) continue;
+
+        const fileResults = await searchRequestEntriesByHandler(file, {
+          handler,
+          startMs,
+          endMs,
+          limit: limitNum - results.length,
+        });
+        results.push(...fileResults);
+        results.sort((a, b) => b.timestamp - a.timestamp);
+        if (results.length > limitNum) results.length = limitNum;
+      }
+
+      res.json({
+        success: true,
+        data: {
+          handler,
+          scope,
+          startTime: new Date(startMs).toISOString(),
+          endTime: new Date(endMs).toISOString(),
+          availableScopes: LOG_SEARCH_SCOPES,
+          totalMatches: results.length,
+          results,
+          searchedFiles: logFiles.length,
+          totalFiles: allLogFiles.length,
+          fileSizes: logFiles.map((f) => ({ name: f.name, size: f.size })),
+        },
+      });
+    } catch (error) {
+      console.error("Error searching log requests:", error);
+      res.status(500).json({ success: false, error: "请求日志查询失败" });
+    }
+  }
+);
+
 /**
  * GET /log-search
  * 日志搜索接口（需要认证，仅 luykin 用户）- 优化版本
@@ -877,56 +1112,16 @@ router.get(
         });
       }
 
-      // 获取 PM2 日志目录
-      const homeDir = os.homedir();
-      const pm2LogsDir = path.join(homeDir, ".pm2", "logs");
-
-      // 检查日志目录是否存在
+      let allLogFiles = [];
+      let logFiles = [];
       try {
-        await fs.access(pm2LogsDir);
+        ({ allLogFiles, logFiles } = await getPm2LogFiles(scope));
       } catch (error) {
         return res.status(404).json({
           success: false,
           error: "PM2 日志目录不存在",
         });
       }
-
-      // 获取所有日志文件
-      const files = await fs.readdir(pm2LogsDir);
-      const logFiles = [];
-
-      // 并行过滤和检查日志文件
-      const fileCheckPromises = files
-        .filter((file) => file.endsWith(".log"))
-        .map(async (file) => {
-          const filePath = path.join(pm2LogsDir, file);
-          try {
-            const stats = await fs.stat(filePath);
-            const fileSizeMB = stats.size / (1024 * 1024);
-
-            // 跳过大于200MB的文件或0MB的空文件
-            if (fileSizeMB > 200 || fileSizeMB === 0) {
-              return null;
-            }
-
-            return {
-              name: file,
-              path: filePath,
-              mtime: stats.mtime.getTime(),
-              size: fileSizeMB,
-            };
-          } catch (error) {
-            console.error(`Error checking file ${file}:`, error);
-            return null;
-          }
-        });
-
-      const fileResults = await Promise.all(fileCheckPromises);
-      const allLogFiles = fileResults.filter((file) => file !== null);
-      logFiles.push(...filterLogFilesByScope(allLogFiles, scope));
-
-      // 按修改时间排序（最新的在前）
-      logFiles.sort((a, b) => b.mtime - a.mtime);
 
       const results = [];
       const contextLinesNum = normalizeLogContextLines(req.query.contextLines);

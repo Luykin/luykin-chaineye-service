@@ -11,6 +11,8 @@ import type {
   GenericStatsEventsResponse,
   GenericStatsTypesResponse,
   LogSearchResponse,
+  LogRequestsResponse,
+  LogRequestHandlersResponse,
   NotesResponse,
   OnlineUsersResponse,
   OverviewStatsResponse,
@@ -81,6 +83,29 @@ export async function fetchLogSearch(params: {
   search.set("limit", String(params.limit ?? 1));
 
   return apiRequest<LogSearchResponse>(`/api/xhunt/stats/log-search?${search.toString()}`);
+}
+
+
+
+export async function fetchLogRequestHandlers() {
+  return apiRequest<LogRequestHandlersResponse>("/api/xhunt/stats/log-request-handlers");
+}
+
+export async function fetchLogRequests(params: {
+  handler: string;
+  startTime: string;
+  endTime: string;
+  scope?: string;
+  limit?: number;
+}) {
+  const search = new URLSearchParams();
+  search.set("handler", params.handler);
+  search.set("startTime", params.startTime);
+  search.set("endTime", params.endTime);
+  search.set("scope", params.scope || "api");
+  search.set("limit", String(params.limit ?? 200));
+
+  return apiRequest<LogRequestsResponse>(`/api/xhunt/stats/log-requests?${search.toString()}`);
 }
 
 export async function fetchErrorLogs(params?: { scope?: string; lines?: number }) {
