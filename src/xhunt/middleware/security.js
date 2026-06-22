@@ -1150,8 +1150,8 @@ class SecurityViolationLogger {
     try {
       const now = Date.now();
       const { errorCode, allowQueryParams = false } = options;
-      // duplicate_request(409) 类型不写入数据库
-      if (errorCode === "409") {
+      // duplicate_request(409) 和缺少签名头类型不写入数据库
+      if (errorCode === "409" || errorCode === "MISSING_SIGNATURE_HEADERS") {
         return;
       }
       let invalidTimestampIdentifiers = null;
@@ -1716,16 +1716,6 @@ const validateV2SecurityParams = (req, { allowQueryParams = false } = {}) => {
     !userId ||
     !language
   ) {
-    console.error("validateV2SecurityParams missing headers:", {
-      signatureVersion,
-      requestId,
-      timestampRaw,
-      fingerprint,
-      hasSignature: !!signature,
-      version,
-      userId,
-      language,
-    });
     return { isValid: false, error: "MISSING_SIGNATURE_HEADERS" };
   }
 
