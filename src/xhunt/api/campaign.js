@@ -134,7 +134,7 @@ async function getCustomCampaignConfig(campaign, req) {
   return found;
 }
 
-router.get("/config", authenticateTokenOptional, async (req, res) => {
+router.get("/config", securityMiddleware, authenticateTokenOptional, async (req, res) => {
   try {
     const requestHandle = normalizeTesterHandle(req.headers["x-user-id"]);
     const requestedDomain = normalizeDisplayDomain(
@@ -188,7 +188,7 @@ router.get("/config", authenticateTokenOptional, async (req, res) => {
   }
 });
 
-router.get("/custom-leaderboard", async (req, res) => {
+router.get("/custom-leaderboard", securityMiddleware, async (req, res) => {
   try {
     const normalizedCampaign = normalizeCampaign(req.query.campaign);
     if (!normalizedCampaign) {
@@ -224,7 +224,7 @@ router.get("/custom-leaderboard", async (req, res) => {
   }
 });
 
-router.get("/custom-user-activity", async (req, res) => {
+router.get("/custom-user-activity", securityMiddleware, async (req, res) => {
   try {
     const normalizedCampaign = normalizeCampaign(req.query.campaign);
     const userId = req.query.userid || req.query.userId;
