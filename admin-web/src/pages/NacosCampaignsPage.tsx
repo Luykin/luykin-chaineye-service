@@ -1643,12 +1643,16 @@ export function NacosCampaignsPage() {
               >
                 发布
               </Button>
-              <Button
-                className="config-action config-action-secondary"
-                onClick={() => { window.location.hash = "#/nacos-campaigns-legacy"; }}
-              >
-                老版 Nacos
-              </Button>
+              <Tooltip title="插件已经更新到 v0.3.3，老版本弃用。">
+                <span>
+                  <Button
+                    className="config-action config-action-secondary"
+                    disabled
+                  >
+                    老版 Nacos
+                  </Button>
+                </span>
+              </Tooltip>
               <Button
                 className="config-action config-action-secondary"
                 onClick={() => void refreshWebsiteRecords()}
