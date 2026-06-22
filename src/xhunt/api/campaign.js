@@ -147,6 +147,18 @@ router.get("/config", authenticateTokenOptional, async (req, res) => {
       });
     }
 
+    if (!requestHandle) {
+      res.set("Cache-Control", "no-store");
+      return res.json({
+        success: true,
+        version: 3,
+        source: "database",
+        domain: requestedDomain || null,
+        includeTesting: false,
+        campaigns: [],
+      });
+    }
+
     const allCampaigns = await getCachedPluginCampaigns(req.redisClient, () =>
       listPluginCampaigns({ includeTesting: true })
     );
