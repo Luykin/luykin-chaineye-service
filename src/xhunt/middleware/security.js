@@ -1150,8 +1150,15 @@ class SecurityViolationLogger {
     try {
       const now = Date.now();
       const { errorCode, allowQueryParams = false } = options;
-      // duplicate_request(409) 和缺少签名头类型不写入数据库
-      if (errorCode === "409" || errorCode === "MISSING_SIGNATURE_HEADERS") {
+      // duplicate_request(409) 类型不写入数据库；
+      // MISSING_SIGNATURE_HEADERS 仅在 x-user-id 为空时不写入数据库。
+      if (errorCode === "409") {
+        return;
+      }
+      if (
+        errorCode === "MISSING_SIGNATURE_HEADERS" &&
+        !this.normalizeIdentifier(req.headers?.["x-user-id"])
+      ) {
         return;
       }
       let invalidTimestampIdentifiers = null;
