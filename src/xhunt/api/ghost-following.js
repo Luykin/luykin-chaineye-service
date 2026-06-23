@@ -474,6 +474,44 @@ function calculateWaitTime(lastAppliedAt) {
   };
 }
 
+
+function createAnalyzeLogContext(req, user_id, handle) {
+  return {
+    requestId:
+      req.headers["x-request-id"] ||
+      req.headers["x-correlation-id"] ||
+      `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    appUserId: req.user?.id,
+    twitterUserId: user_id,
+    handle,
+  };
+}
+
+function summarizeAxiosError(error) {
+  return {
+    message: error.message,
+    code: error.code,
+    status: error.response?.status,
+    responseCode: error.response?.data?.code,
+    responseMessage: error.response?.data?.message,
+    responseType: error.response?.data ? typeof error.response.data : undefined,
+    responsePreview:
+      typeof error.response?.data === "string"
+        ? error.response.data.slice(0, 200)
+        : undefined,
+  };
+}
+
+function summarizeAnalyzeError(error) {
+  return {
+    message: error.message,
+    code: error.code,
+    statusCode: error.statusCode,
+    stack: error.stack,
+    axios: error.isAxiosError ? summarizeAxiosError(error) : undefined,
+  };
+}
+
 /**
  * POST /api/xhunt/ghost-following/analyze
  * 消费额度接口（自动申请 + 分析）
@@ -498,12 +536,17 @@ router.post(
   ],
   async (req, res) => {
     try {
+      const startedAt = Date.now();
       const userId = req.user.id;
       const isVip = isRequestXHuntVip(req);
       const { user_id, handle } = req.body;
+      const logCtx = createAnalyzeLogContext(req, user_id, handle);
       const redisClient = req.redisClient || global.__xhuntRedis;
 
+      console.info("[ghost-following/analyze] start", { ...logCtx, isVip });
+
       if (!redisClient) {
+        console.error("[ghost-following/analyze] redis unavailable", logCtx);
         return res.status(500).json({
           success: false,
           error: { code: "INTERNAL_ERROR", message: "Service temporarily unavailable" },
@@ -512,6 +555,12 @@ router.post(
 
       // 2. 原子化扣除额度（检查 + 扣除 + 自动申请）
       const quotaResult = await atomicDeductQuota(redisClient, userId, isVip);
+      console.info("[ghost-following/analyze] quota deducted", {
+        ...logCtx,
+        total: quotaResult.total,
+        remaining: quotaResult.remaining,
+        isNewQuota: quotaResult.isNewQuota,
+      });
       
       if (!quotaResult.success) {
         // 额度不足且无法申请新额度
@@ -519,6 +568,14 @@ router.post(
           quotaResult.lastAppliedAt
         );
         const total = isVip ? QUOTA_CONFIG.vip : QUOTA_CONFIG.normal;
+        console.warn("[ghost-following/analyze] quota exhausted", {
+          ...logCtx,
+          total,
+          lastAppliedAt: quotaResult.lastAppliedAt,
+          nextApplyAt,
+          waitDays,
+          waitHours,
+        });
         
         return res.status(200).json({
           success: false,
@@ -547,6 +604,11 @@ router.post(
       // 检查熔断器状态
       const cbCheck = circuitBreaker.canExecute();
       if (!cbCheck.allowed) {
+        console.warn("[ghost-following/analyze] circuit breaker open", {
+          ...logCtx,
+          circuitBreaker: circuitBreaker.getState(),
+          reason: cbCheck.reason,
+        });
         return res.status(200).json({
           success: false,
           error: {
@@ -565,6 +627,7 @@ router.post(
       
       try {
         // 调用 /tweet/kol_tweets 获取推文（使用前端传入的 handle）
+        const firstApiStartedAt = Date.now();
         const response = await axios.post(
           `${PRO_API_CONFIG.baseUrl}/tweet/kol_tweets`,
           {
@@ -583,6 +646,13 @@ router.post(
 
         // API 调用成功，记录成功
         circuitBreaker.recordSuccess();
+        console.info("[ghost-following/analyze] first api success", {
+          ...logCtx,
+          status: response.status,
+          dataType: Array.isArray(response.data) ? "array" : typeof response.data,
+          count: Array.isArray(response.data) ? response.data.length : undefined,
+          durationMs: Date.now() - firstApiStartedAt,
+        });
 
         // 新接口返回格式: 直接是数组 [...]
         if (Array.isArray(response.data)) {
@@ -597,7 +667,12 @@ router.post(
             
             // 如果推文是 28 天前的旧数据，调用第二个接口确认
             if (now - tweetTime > days28Ms) {
-              analysisResult = await verifyEmptyUserWithSecondApi(user_id);
+              console.info("[ghost-following/analyze] first api stale tweet, fallback", {
+                ...logCtx,
+                tweetId: tweet.id,
+                createTime: tweet.create_time,
+              });
+              analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx);
             } else {
               // 数据正常，直接使用
               analysisResult = {
@@ -609,22 +684,40 @@ router.post(
             }
           } else {
             // KOL tweets 返回空，调用第二个接口进行二次确认
-            analysisResult = await verifyEmptyUserWithSecondApi(user_id);
+            console.info("[ghost-following/analyze] first api empty, fallback", logCtx);
+            analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx);
           }
         } else {
-          analysisResult = await verifyEmptyUserWithSecondApi(user_id);
+          console.warn("[ghost-following/analyze] first api invalid format, fallback", {
+            ...logCtx,
+            dataType: typeof response.data,
+          });
+          analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx);
         }
       } catch (apiError) {
         circuitBreaker.recordFailure();
+        console.warn("[ghost-following/analyze] first api failed, fallback", {
+          ...logCtx,
+          error: summarizeAxiosError(apiError),
+          circuitBreaker: circuitBreaker.getState(),
+        });
         
         // 第一个接口失败，尝试第二个接口
         // 如果第二个接口也失败，会抛出带状态码的错误，透传给外层处理
-        analysisResult = await verifyEmptyUserWithSecondApi(user_id);
+        analysisResult = await verifyEmptyUserWithSecondApi(user_id, logCtx);
       }
 
       // 计算过期时间
       const expiresAt = currentQuota.appliedAt + QUOTA_CONFIG.periodDays * 24 * 60 * 60 * 1000;
       const expiresInDays = Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000));
+
+      console.info("[ghost-following/analyze] success", {
+        ...logCtx,
+        remaining: newRemaining,
+        resultSource: analysisResult?.source || "kol_tweets",
+        protected: analysisResult?.protected,
+        durationMs: Date.now() - startedAt,
+      });
 
       return res.json({
         success: true,
@@ -641,8 +734,14 @@ router.post(
         },
       });
     } catch (error) {
+      const logCtx = createAnalyzeLogContext(req, req.body?.user_id, req.body?.handle);
       // 如果有状态码（来自外部API），透传；否则返回500
       const statusCode = error.statusCode || 500;
+      console.error("[ghost-following/analyze] failed", {
+        ...logCtx,
+        statusCode,
+        error: summarizeAnalyzeError(error),
+      });
       return res.status(statusCode).json({
         success: false,
         error: { 
@@ -1027,8 +1126,9 @@ router.post(
  * @param {string} user_id - Twitter 用户 ID
  * @returns {Object} - 分析结果
  */
-async function verifyEmptyUserWithSecondApi(user_id) {
+async function verifyEmptyUserWithSecondApi(user_id, logCtx = {}) {
   try {
+    const secondApiStartedAt = Date.now();
     const response = await axios.post(
       `${PRO_API_CONFIG.baseUrl}/tweet/user_tweets`,
       {
@@ -1046,6 +1146,12 @@ async function verifyEmptyUserWithSecondApi(user_id) {
 
     if (response.data && Array.isArray(response.data.tweets)) {
       const tweets = response.data.tweets;
+      console.info("[ghost-following/analyze] second api success", {
+        ...logCtx,
+        status: response.status,
+        count: tweets.length,
+        durationMs: Date.now() - secondApiStartedAt,
+      });
       
       if (tweets.length > 0) {
         // 按 created_at 时间排序（最新的排在最前面），然后取最新的一条
@@ -1069,15 +1175,24 @@ async function verifyEmptyUserWithSecondApi(user_id) {
         };
       } else {
         // 第二个接口也确认没有推文，调用第三个接口检查是否锁推
-        return await checkUserProtectedStatus(user_id);
+        console.info("[ghost-following/analyze] second api empty, checking profile", logCtx);
+        return await checkUserProtectedStatus(user_id, logCtx);
       }
     } else {
       // 第二个接口返回异常格式
+      console.warn("[ghost-following/analyze] second api invalid format", {
+        ...logCtx,
+        dataType: typeof response.data,
+      });
       const error = new Error("Second API invalid response format");
       error.statusCode = 500;
       throw error;
     }
   } catch (apiError) {
+    console.error("[ghost-following/analyze] second api failed", {
+      ...logCtx,
+      error: summarizeAxiosError(apiError),
+    });
     
     // 外部API返回什么状态码就抛出什么状态码
     if (apiError.response) {
@@ -1099,8 +1214,9 @@ async function verifyEmptyUserWithSecondApi(user_id) {
  * @param {string} apiKey - API Key
  * @returns {Object} - 用户状态信息
  */
-async function checkUserProtectedStatus(user_id) {
+async function checkUserProtectedStatus(user_id, logCtx = {}) {
   try {
+    const profileApiStartedAt = Date.now();
     const response = await axios.post(
       `${PRO_API_CONFIG.baseUrl}/user/profile_by_userid`,
       {
@@ -1118,6 +1234,14 @@ async function checkUserProtectedStatus(user_id) {
     if (response.data) {
       const profile = response.data;
       const isProtected = profile.protected === true;
+      console.info("[ghost-following/analyze] profile api success", {
+        ...logCtx,
+        status: response.status,
+        protected: isProtected,
+        username: profile.username,
+        tweetsCount: profile.tweets_count,
+        durationMs: Date.now() - profileApiStartedAt,
+      });
       
       return {
         id: null,
@@ -1148,11 +1272,16 @@ async function checkUserProtectedStatus(user_id) {
       };
     } else {
       // 第三个接口返回异常
+      console.warn("[ghost-following/analyze] profile api invalid format", logCtx);
       const error = new Error("Third API profile check invalid response format");
       error.statusCode = 500;
       throw error;
     }
   } catch (error) {
+    console.error("[ghost-following/analyze] profile api failed", {
+      ...logCtx,
+      error: summarizeAxiosError(error),
+    });
     
     // 第三个接口失败，透传 API 错误
     if (error.response) {
