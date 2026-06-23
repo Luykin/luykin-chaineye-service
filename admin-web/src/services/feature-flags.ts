@@ -68,3 +68,12 @@ export async function syncVipTwitterIds(force = true) {
     body: { force },
   });
 }
+
+export async function becomeCreator(id: number) {
+  return apiRequest<{ success: boolean; data?: unknown; error?: string }>(
+    `/api/xhunt/stats/vip-lists/${id}/become-creator`,
+    {
+      method: "POST",
+    }
+  );
+}

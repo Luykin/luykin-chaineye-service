@@ -10,6 +10,13 @@ const { logAdminAction } = require("./shared");
 
 const router = express.Router();
 const TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
+const CREATOR_AUTH_URL = "https://data.cryptohunt.ai/front/auth/creator";
+const CREATOR_SUBMIT_URL = "https://data.cryptohunt.ai/front/auth/creator_submit";
+const CREATOR_SUBMIT_AUTH = process.env.XHUNT_CREATOR_SUBMIT_AUTH || "cd3c59e6-451d-44a8-9355-f4ead498b712";
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function normalizeUsername(value) {
   return String(value || "")
@@ -46,6 +53,11 @@ async function fetchTwitterIdByUsername(username) {
 async function refreshVipCache() {
   await loadVipLists();
   await notifyRefresh();
+}
+
+function requireSuperAdmin(req, res, next) {
+  if (req.adminUser?.role === "super") return next();
+  return res.status(403).json({ success: false, error: "仅超级管理员可操作" });
 }
 
 router.get(
@@ -208,6 +220,98 @@ router.post(
         message: error.message || "添加失败",
       });
       res.status(500).json({ success: false, error: error.message || "添加失败" });
+    }
+  }
+);
+
+router.post(
+  "/vip-lists/:id/become-creator",
+  adminAuth,
+  requireSuperAdmin,
+  async (req, res) => {
+    let row;
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ success: false, error: "无效的名单 ID" });
+      }
+
+      row = await XhuntVipTestUser.findByPk(id);
+      if (!row) {
+        return res.status(404).json({ success: false, error: "名单用户不存在" });
+      }
+
+      const userId = String(row.twitterId || "").trim();
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "该用户未同步 Twitter ID，请先同步ID信息" });
+      }
+
+      const creatorResponse = await axios.post(
+        CREATOR_AUTH_URL,
+        { user_id: userId },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          timeout: 10000,
+        }
+      );
+
+      await sleep(1000);
+
+      const submitResponse = await axios.post(
+        CREATOR_SUBMIT_URL,
+        { user_id: userId, status: "2" },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            auth: CREATOR_SUBMIT_AUTH,
+          },
+          timeout: 10000,
+        }
+      );
+
+      await logAdminAction(req, {
+        action: "vip-list-become-creator",
+        success: true,
+        message: `listType=${row.listType} username=${row.username} user_id=${userId}`,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          id: row.id,
+          username: row.username,
+          twitterId: userId,
+          creator: creatorResponse.data,
+          creatorSubmit: submitResponse.data,
+        },
+      });
+    } catch (error) {
+      const upstreamStatus = error.response?.status;
+      const upstreamData = error.response?.data;
+      const message =
+        upstreamData?.message ||
+        upstreamData?.error ||
+        error.message ||
+        "设置认证者失败";
+
+      console.error("[vip-lists/become-creator] 设置失败:", {
+        message,
+        status: upstreamStatus,
+        data: upstreamData,
+      });
+      await logAdminAction(req, {
+        action: "vip-list-become-creator",
+        success: false,
+        message: `username=${row?.username || "-"} error=${message}`,
+      });
+      res.status(upstreamStatus && upstreamStatus >= 400 && upstreamStatus < 500 ? 400 : 500).json({
+        success: false,
+        error: message,
+      });
     }
   }
 );

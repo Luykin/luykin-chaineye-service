@@ -1,9 +1,11 @@
 import { Button, Card, Empty, Input, Modal, Space, Tag, Typography, message } from "antd";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useAuth } from "@/app/auth";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import {
   addVipListUser,
+  becomeCreator,
   deleteVipListUser,
   fetchFeatureFlagsConfig,
   fetchVipLists,
@@ -12,11 +14,23 @@ import {
 } from "@/services/feature-flags";
 import type { VipListItem } from "@/types/feature-flags";
 
-function VipListCard({ title, items, onAdd, onDelete, loading }: {
+function VipListCard({
+  title,
+  items,
+  onAdd,
+  onDelete,
+  onBecomeCreator,
+  creatorLoadingId,
+  showCreatorAction,
+  loading,
+}: {
   title: string;
   items: VipListItem[];
   onAdd: (username: string) => void;
   onDelete: (id: number) => void;
+  onBecomeCreator?: (item: VipListItem) => void;
+  creatorLoadingId?: number | null;
+  showCreatorAction?: boolean;
   loading?: boolean;
 }) {
   const [value, setValue] = useState("");
@@ -34,7 +48,19 @@ function VipListCard({ title, items, onAdd, onDelete, loading }: {
               {item.username}
               {item.twitterId ? <Tag color="blue" style={{ marginLeft: 8 }}>ID: {item.twitterId}</Tag> : <Tag style={{ marginLeft: 8 }}>未同步ID</Tag>}
             </span>
-            <Button size="small" danger onClick={() => onDelete(item.id)}>删除</Button>
+            <Space size={6}>
+              {showCreatorAction ? (
+                <Button
+                  size="small"
+                  disabled={!item.twitterId}
+                  loading={creatorLoadingId === item.id}
+                  onClick={() => onBecomeCreator?.(item)}
+                >
+                  成为认证者
+                </Button>
+              ) : null}
+              <Button size="small" danger onClick={() => onDelete(item.id)}>删除</Button>
+            </Space>
           </div>
         )) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无用户" />}
       </div>
@@ -44,9 +70,11 @@ function VipListCard({ title, items, onAdd, onDelete, loading }: {
 
 export function VipManagementPage() {
   const [messageApi, contextHolder] = message.useMessage();
+  const { user } = useAuth();
   const query = useQuery({ queryKey: ["vip-lists"], queryFn: fetchVipLists });
   const vip = query.data?.data.vip || [];
   const internalTest = query.data?.data.internalTest || [];
+  const isSuperAdmin = user?.role === "super";
 
   const addMutation = useMutation({
     mutationFn: ({ listType, username }: { listType: "vip" | "internal_test"; username: string }) => addVipListUser(listType, username),
@@ -86,6 +114,26 @@ export function VipManagementPage() {
     onError: (error: Error) => messageApi.error(error.message || "同步失败"),
   });
 
+  const creatorMutation = useMutation({
+    mutationFn: becomeCreator,
+    onSuccess: () => messageApi.success("已设置为认证者"),
+    onError: (error: Error) => messageApi.error(error.message || "设置认证者失败"),
+  });
+
+  const confirmBecomeCreator = (item: VipListItem) => {
+    if (!item.twitterId) {
+      messageApi.warning("该用户未同步 Twitter ID，请先同步ID信息");
+      return;
+    }
+    Modal.confirm({
+      title: "确认成为认证者？",
+      content: `将为 @${item.username}（ID: ${item.twitterId}）提交认证并在 1 秒后设置认证成功，是否继续？`,
+      okText: "继续",
+      cancelText: "取消",
+      onOk: () => creatorMutation.mutate(item.id),
+    });
+  };
+
   const empty = useMemo(() => vip.length === 0 && internalTest.length === 0, [vip.length, internalTest.length]);
   const missingIdCount = useMemo(() => [...vip, ...internalTest].filter((item) => !item.twitterId).length, [vip, internalTest]);
 
@@ -95,8 +143,8 @@ export function VipManagementPage() {
       <div className="vip-management-container">
         <div className="vip-management-header"><h2>VIP / 内测名单管理</h2></div>
         <div className="vip-management-grid">
-          <VipListCard title="VIP 名单" items={vip} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "vip", username })} onDelete={(id) => deleteMutation.mutate(id)} />
-          <VipListCard title="内测名单" items={internalTest} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "internal_test", username })} onDelete={(id) => deleteMutation.mutate(id)} />
+          <VipListCard title="VIP 名单" items={vip} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "vip", username })} onDelete={(id) => deleteMutation.mutate(id)} showCreatorAction={isSuperAdmin} onBecomeCreator={confirmBecomeCreator} creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null} />
+          <VipListCard title="内测名单" items={internalTest} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "internal_test", username })} onDelete={(id) => deleteMutation.mutate(id)} showCreatorAction={isSuperAdmin} onBecomeCreator={confirmBecomeCreator} creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null} />
         </div>
         <Card size="small" className="vip-sync-section">
           <Space direction="vertical" size={8}>
