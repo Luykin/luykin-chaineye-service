@@ -120,6 +120,53 @@ function getCustomLeaderboardsFromCampaign(campaignConfig) {
     : [];
 }
 
+const RANK_API_BY_DOMAIN = {
+  web3: "https://data.cryptohunt.ai/fetch/twitter/rank",
+  ai: "https://data.cryptohunt.ai/fetch/ai/rank",
+};
+
+function isRankValid(rank) {
+  return Number.isFinite(rank);
+}
+
+function isCreatorRankData(rankData) {
+  return rankData?.auth_creator?.status === 2;
+}
+
+async function fetchCampaignRankByDomain(domain, twitterId) {
+  const apiBase = RANK_API_BY_DOMAIN[domain];
+  if (!apiBase) {
+    throw new Error(`Unsupported rank domain: ${domain}`);
+  }
+
+  const rankApiUrl = `${apiBase}?user_ids=${encodeURIComponent(twitterId)}`;
+  const rankResponse = await axios.get(rankApiUrl, { timeout: 7000 });
+  const list = rankResponse?.data?.data?.data;
+
+  if (!Array.isArray(list) || list.length === 0) {
+    throw new Error(`Empty ${domain} ranking data`);
+  }
+
+  const userRankData = list[0];
+  return {
+    domain,
+    kolRank: Number(userRankData.kolRank),
+    isCreator: isCreatorRankData(userRankData),
+  };
+}
+
+function rankResultMeetsThreshold(result, threshold, includeCreator) {
+  if (isRankValid(result.kolRank) && result.kolRank <= threshold) {
+    return true;
+  }
+  return !!includeCreator && result.isCreator;
+}
+
+function formatRankForMessage(result) {
+  if (!result) return "unknown";
+  return isRankValid(result.kolRank) ? result.kolRank : "unranked";
+}
+
 async function getCustomCampaignConfig(campaign, req) {
   const found = await getManagedCampaignPayloadByKey(campaign, {
     includeTesting: true,
@@ -541,7 +588,7 @@ router.post(
         }
       }
 
-      // 检查报名门槛：threshold 和 includeCreator
+      // 检查报名门槛：threshold、includeCreator 和活动支持领域
       if (found && Number.isInteger(found.threshold)) {
         try {
           const twitterId = String(user.twitterId);
@@ -550,36 +597,43 @@ router.post(
             return res.status(400).json({ error: "Invalid Twitter ID" });
           }
 
-          const rankApiUrl = `https://data.cryptohunt.ai/fetch/twitter/rank?user_ids=${twitterId}`;
-          const rankResponse = await axios.get(rankApiUrl, { timeout: 7000 });
+          const rankDomains = getCampaignDisplayDomains(found)
+            .filter((domain) => RANK_API_BY_DOMAIN[domain]);
+          const domainsToCheck = rankDomains.length ? rankDomains : ["web3"];
 
-          const rankData = rankResponse?.data;
-          const list = rankData?.data?.data;
-          if (!Array.isArray(list) || list.length === 0) {
-            return res.status(502).json({ error: "Failed to fetch user ranking data" });
-          }
+          const rankResults = await Promise.allSettled(
+            domainsToCheck.map((domain) => fetchCampaignRankByDomain(domain, twitterId))
+          );
 
-          const userRankData = list[0];
-          const kolRank = Number(userRankData.kolRank);
-          const authCreator = userRankData.auth_creator;
+          const fulfilledResults = rankResults
+            .filter((result) => result.status === "fulfilled")
+            .map((result) => result.value);
+          const rejectedResults = rankResults.filter((result) => result.status === "rejected");
 
-          // 检查 threshold 门槛
-          if (found.threshold !== undefined && typeof found.threshold === "number") {
-            const meetsThreshold = kolRank !== undefined && kolRank !== null && kolRank <= found.threshold;
+          const meetsThreshold = fulfilledResults.some((result) =>
+            rankResultMeetsThreshold(result, found.threshold, found.includeCreator)
+          );
 
-            // 如果不满足门槛，检查是否支持创作者
-            if (!meetsThreshold) {
-              const isCreator = found.includeCreator &&
-                authCreator &&
-                authCreator.status === 2;
-
-              if (!isCreator) {
-                console.log(LOG, "reject: threshold not met", { userId: user.id, kolRank, threshold: found.threshold });
-                return res.status(400).json({
-                  error: `Does not meet registration threshold: KOL rank must be less than or equal to ${found.threshold}, current rank is ${kolRank}`
-                });
-              }
+          if (!meetsThreshold) {
+            if (!fulfilledResults.length || rejectedResults.length > 0) {
+              rejectedResults.forEach((result) => {
+                console.error(LOG, "rank domain check error:", result.reason?.message || result.reason);
+              });
+              return res.status(502).json({ error: "Failed to fetch user ranking data" });
             }
+
+            const rankSummary = fulfilledResults
+              .map((result) => `${result.domain}: ${formatRankForMessage(result)}`)
+              .join(", ");
+            console.log(LOG, "reject: threshold not met", {
+              userId: user.id,
+              ranks: fulfilledResults,
+              threshold: found.threshold,
+              domains: domainsToCheck,
+            });
+            return res.status(400).json({
+              error: `Does not meet registration threshold: KOL rank must be less than or equal to ${found.threshold}, current rank is ${rankSummary}`
+            });
           }
         } catch (rankErr) {
           console.error(LOG, "threshold check error:", rankErr.message || rankErr);
