@@ -86,6 +86,7 @@ export function MessagesPage() {
 
   const handlers = splitLines(Form.useWatch("handlers", form) || "");
   const reportUrls = splitLines(Form.useWatch("reportUrls", form) || "");
+  const campaignId = Form.useWatch("campaignId", form) || "";
   const title = Form.useWatch("title", form) || "";
   const content = Form.useWatch("content", form) || "";
 
@@ -106,6 +107,13 @@ export function MessagesPage() {
 
   const hasUrlMismatch = reportUrls.length > 0 && handlers.length > 0 && reportUrls.length !== handlers.length;
   const firstPreview = previewItems[0];
+  const readyChecks = [
+    { label: "Campaign ID", done: Boolean(campaignId.trim()) },
+    { label: "用户列表", done: handlers.length > 0 },
+    { label: "消息标题", done: Boolean(title.trim()) },
+    { label: "消息正文", done: Boolean(content.trim()) },
+  ];
+  const readyCount = readyChecks.filter((item) => item.done).length;
 
   const mutation = useMutation({
     mutationFn: sendBatchMessages,
@@ -144,7 +152,13 @@ export function MessagesPage() {
               <Button icon={<EyeOutlined />} onClick={() => setPreviewOpen(true)} disabled={!handlers.length}>
                 预览
               </Button>
-              <Button icon={<SendOutlined />} type="primary" onClick={() => void submit()} loading={mutation.isPending}>
+              <Button
+                icon={<SendOutlined />}
+                type="primary"
+                className="messages-send-button"
+                onClick={() => void submit()}
+                loading={mutation.isPending}
+              >
                 发送私信
               </Button>
             </Space>
@@ -160,10 +174,15 @@ export function MessagesPage() {
                 使用 <code>{"{{ username }}"}</code> 和 <code>{"{{ reportUrl }}"}</code> 做个性化替换。建议先预览，再发送。
               </Typography.Paragraph>
             </div>
-            <div className="messages-hero__chips">
-              <Tag color="blue">Campaign 去重</Tag>
-              <Tag color="green">逐用户替换</Tag>
-              <Tag color="purple">发送结果追踪</Tag>
+            <div className="messages-hero__panel" aria-label="发送准备状态">
+              <div className="messages-hero__score">
+                <span>{readyCount}</span>
+                <small>/ {readyChecks.length}</small>
+              </div>
+              <div className="messages-hero__panel-copy">
+                <strong>发送前检查</strong>
+                <span>{hasUrlMismatch ? "链接数量需要复核" : "基础字段状态正常"}</span>
+              </div>
             </div>
           </div>
 
@@ -179,7 +198,16 @@ export function MessagesPage() {
 
           <Row gutter={[16, 16]} align="top" className="messages-layout">
             <Col xs={24} xl={15} xxl={16}>
-              <Card className="messages-card messages-composer-card" title="消息内容" bordered>
+              <Card
+                className="messages-card messages-composer-card"
+                title={
+                  <div className="messages-card-title">
+                    <MessageOutlined />
+                    <span>消息内容</span>
+                  </div>
+                }
+                bordered
+              >
                 <Form
                   form={form}
                   layout="vertical"
@@ -268,7 +296,15 @@ export function MessagesPage() {
 
             <Col xs={24} xl={9} xxl={8}>
               <div className="messages-side-stack">
-                <Card className="messages-card messages-overview-card" title="发送概览">
+                <Card
+                  className="messages-card messages-overview-card"
+                  title={
+                    <div className="messages-card-title">
+                      <CheckCircleOutlined />
+                      <span>发送概览</span>
+                    </div>
+                  }
+                >
                   <Row gutter={[10, 10]}>
                     <Col span={12}>
                       <div className="messages-stat messages-stat--users">
@@ -284,6 +320,20 @@ export function MessagesPage() {
 
                   <Divider className="messages-divider" />
 
+                  <div className="messages-checklist">
+                    {readyChecks.map((item) => (
+                      <div
+                        key={item.label}
+                        className={item.done ? "messages-check-row is-ready" : "messages-check-row"}
+                      >
+                        <span>{item.label}</span>
+                        <strong>{item.done ? "已填写" : "待补充"}</strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Divider className="messages-divider" />
+
                   <div className="messages-current-title">
                     <Typography.Text type="secondary">当前标题</Typography.Text>
                     <Typography.Paragraph ellipsis={{ rows: 2 }}>
@@ -292,7 +342,15 @@ export function MessagesPage() {
                   </div>
                 </Card>
 
-                <Card className="messages-card messages-preview-card" title="首条预览">
+                <Card
+                  className="messages-card messages-preview-card"
+                  title={
+                    <div className="messages-card-title">
+                      <EyeOutlined />
+                      <span>首条预览</span>
+                    </div>
+                  }
+                >
                   {firstPreview ? (
                     <PreviewMessage
                       username={firstPreview.username}
@@ -306,7 +364,15 @@ export function MessagesPage() {
                 </Card>
 
                 {result ? (
-                  <Card className="messages-card messages-result-card" title="发送结果">
+                  <Card
+                    className="messages-card messages-result-card"
+                    title={
+                      <div className="messages-card-title">
+                        <SendOutlined />
+                        <span>发送结果</span>
+                      </div>
+                    }
+                  >
                     <Row gutter={[10, 10]}>
                       <Col span={12}>
                         <div className="messages-result-stat messages-result-stat--success">
@@ -336,7 +402,15 @@ export function MessagesPage() {
           </Row>
 
           {result ? (
-            <Card className="messages-card messages-detail-card" title="发送明细">
+            <Card
+              className="messages-card messages-detail-card"
+              title={
+                <div className="messages-card-title">
+                  <MessageOutlined />
+                  <span>发送明细</span>
+                </div>
+              }
+            >
               <Tabs
                 className="messages-result-tabs"
                 items={[
