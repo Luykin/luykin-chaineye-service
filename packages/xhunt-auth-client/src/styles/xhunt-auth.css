@@ -1,0 +1,302 @@
+:root {
+  --xhunt-auth-ink: #162019;
+  --xhunt-auth-muted: #68746b;
+  --xhunt-auth-paper: #f7f3e8;
+  --xhunt-auth-panel: #fffaf0;
+  --xhunt-auth-line: color-mix(in srgb, #162019 14%, transparent);
+  --xhunt-auth-accent: #d96c2c;
+  --xhunt-auth-accent-2: #2f6f55;
+  --xhunt-auth-danger: #a53a2a;
+  --xhunt-auth-shadow: 0 28px 80px rgba(22, 32, 25, 0.24);
+}
+
+.xhunt-auth-shell,
+.xhunt-auth-shell * {
+  box-sizing: border-box;
+}
+
+.xhunt-auth-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--xhunt-auth-ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.xhunt-auth-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(217, 108, 44, 0.28), transparent 30%),
+    radial-gradient(circle at 80% 90%, rgba(47, 111, 85, 0.24), transparent 34%),
+    rgba(15, 20, 16, 0.48);
+  backdrop-filter: blur(12px);
+  cursor: default;
+}
+
+.xhunt-auth-panel {
+  position: relative;
+  width: min(440px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--xhunt-auth-line);
+  border-radius: 28px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.72), rgba(255,250,240,0.94)),
+    var(--xhunt-auth-panel);
+  box-shadow: var(--xhunt-auth-shadow);
+  padding: 28px;
+}
+
+.xhunt-auth-brandline {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  top: 0;
+  height: 5px;
+  background: linear-gradient(90deg, var(--xhunt-auth-accent), #e7b35a, var(--xhunt-auth-accent-2));
+  border-radius: 0 0 999px 999px;
+}
+
+.xhunt-auth-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--xhunt-auth-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--xhunt-auth-ink);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.xhunt-auth-header {
+  margin: 10px 42px 22px 0;
+}
+
+.xhunt-auth-kicker {
+  margin: 0 0 8px;
+  color: var(--xhunt-auth-accent-2);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.xhunt-auth-header h2 {
+  margin: 0;
+  font-size: clamp(28px, 5vw, 42px);
+  line-height: 0.96;
+  letter-spacing: -0.055em;
+}
+
+.xhunt-auth-header p:last-child {
+  margin: 12px 0 0;
+  color: var(--xhunt-auth-muted);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.xhunt-auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.xhunt-auth-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--xhunt-auth-line);
+  border-radius: 999px;
+  background: rgba(22, 32, 25, 0.04);
+}
+
+.xhunt-auth-mode-switch button,
+.xhunt-auth-providers button,
+.xhunt-auth-primary,
+.xhunt-auth-login-button {
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.xhunt-auth-mode-switch button {
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 12px;
+  background: transparent;
+  color: var(--xhunt-auth-muted);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.xhunt-auth-mode-switch button[data-active="true"] {
+  background: var(--xhunt-auth-ink);
+  color: var(--xhunt-auth-paper);
+}
+
+.xhunt-auth-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--xhunt-auth-muted);
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.xhunt-auth-form input {
+  width: 100%;
+  border: 1px solid var(--xhunt-auth-line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--xhunt-auth-ink);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+  padding: 13px 14px;
+}
+
+.xhunt-auth-form input:focus {
+  border-color: color-mix(in srgb, var(--xhunt-auth-accent) 68%, var(--xhunt-auth-line));
+  box-shadow: 0 0 0 4px rgba(217, 108, 44, 0.13);
+}
+
+.xhunt-auth-primary {
+  border: 0;
+  border-radius: 17px;
+  background: var(--xhunt-auth-accent);
+  color: #fffaf0;
+  cursor: pointer;
+  font-weight: 820;
+  padding: 14px 16px;
+}
+
+.xhunt-auth-primary:hover,
+.xhunt-auth-providers button:hover,
+.xhunt-auth-login-button:hover {
+  transform: translateY(-1px);
+}
+
+.xhunt-auth-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: center;
+  margin: 20px 0;
+  color: var(--xhunt-auth-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.xhunt-auth-divider::before,
+.xhunt-auth-divider::after {
+  content: "";
+  height: 1px;
+  background: var(--xhunt-auth-line);
+}
+
+.xhunt-auth-providers {
+  display: grid;
+  gap: 10px;
+}
+
+.xhunt-auth-providers button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--xhunt-auth-line);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--xhunt-auth-ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 780;
+  padding: 13px 14px;
+  text-align: left;
+}
+
+.xhunt-auth-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 5px rgba(22, 32, 25, 0.05);
+}
+
+.xhunt-auth-dot.google { background: #4285f4; }
+.xhunt-auth-dot.twitter { background: #111; }
+.xhunt-auth-dot.wallet { background: var(--xhunt-auth-accent-2); }
+
+.xhunt-auth-error {
+  margin: 16px 0 0;
+  border-radius: 14px;
+  background: rgba(165, 58, 42, 0.09);
+  color: var(--xhunt-auth-danger);
+  font-size: 13px;
+  font-weight: 740;
+  padding: 11px 12px;
+}
+
+.xhunt-auth-login-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--xhunt-auth-line);
+  border-radius: 999px;
+  background: var(--xhunt-auth-panel);
+  color: var(--xhunt-auth-ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 9px 14px;
+}
+
+.xhunt-auth-login-button img {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+.xhunt-auth-callback {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--xhunt-auth-paper);
+  color: var(--xhunt-auth-ink);
+}
+
+.xhunt-auth-callback-card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  border: 1px solid var(--xhunt-auth-line);
+  border-radius: 24px;
+  background: var(--xhunt-auth-panel);
+  box-shadow: var(--xhunt-auth-shadow);
+  padding: 30px;
+  font-weight: 780;
+}
+
+.xhunt-auth-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(22, 32, 25, 0.12);
+  border-top-color: var(--xhunt-auth-accent);
+  border-radius: 999px;
+  animation: xhunt-auth-spin 850ms linear infinite;
+}
+
+@keyframes xhunt-auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xhunt-auth-spinner { animation: none; }
+  .xhunt-auth-mode-switch button,
+  .xhunt-auth-providers button,
+  .xhunt-auth-primary,
+  .xhunt-auth-login-button { transition: none; }
+}
