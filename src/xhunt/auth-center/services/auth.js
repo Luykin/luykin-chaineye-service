@@ -14,6 +14,7 @@ const PROVIDERS = {
 };
 
 const ACCOUNT_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{2,31}$/;
+const ACCOUNT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESERVED_ACCOUNT_NAMES = new Set([
   "admin",
   "root",
@@ -27,10 +28,12 @@ const RESERVED_ACCOUNT_NAMES = new Set([
 function validateAccountName(accountName) {
   const normalized = normalizeAccountName(accountName);
   const lower = normalized.toLowerCase();
-  if (!ACCOUNT_NAME_PATTERN.test(normalized)) {
+  const isEmail = ACCOUNT_EMAIL_PATTERN.test(normalized) && normalized.length <= 255;
+  const isPlainAccountName = ACCOUNT_NAME_PATTERN.test(normalized);
+  if (!isEmail && !isPlainAccountName) {
     return "INVALID_ACCOUNT_NAME";
   }
-  if (RESERVED_ACCOUNT_NAMES.has(lower)) {
+  if (!isEmail && RESERVED_ACCOUNT_NAMES.has(lower)) {
     return "ACCOUNT_NAME_RESERVED";
   }
   return null;

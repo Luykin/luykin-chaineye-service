@@ -25,6 +25,13 @@ function toAuthError(error: unknown): XHuntAuthError {
   return new XHuntAuthError("UNKNOWN_ERROR");
 }
 
+function resolveThemeConfig(config: XHuntAuthConfig) {
+  const rawTheme = config.ui?.theme;
+  const theme = rawTheme === "light" || rawTheme === "dark" ? "xhunt" : rawTheme || "xhunt";
+  const mode = config.ui?.mode || (rawTheme === "light" || rawTheme === "dark" ? rawTheme : "dark");
+  return { theme, mode, tokens: config.ui?.tokens || {} };
+}
+
 export function XHuntAuthProvider({ config, children }: XHuntAuthProviderProps) {
   const client = useMemo(() => new XHuntAuthClient(config), [config]);
   const [isLoginModalOpen, setLoginModalOpen] = useState(false);
@@ -93,6 +100,43 @@ export function XHuntAuthProvider({ config, children }: XHuntAuthProviderProps) 
     if (!client.getStoredToken()?.accessToken) return;
     reloadUser().catch(() => undefined);
   }, [client, config.autoLoadUser, reloadUser]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    const { theme, mode, tokens } = resolveThemeConfig(config);
+    const previousTheme = root.getAttribute("data-xhunt-auth-theme");
+    const previousMode = root.getAttribute("data-xhunt-auth-mode");
+    const tokenMap: Record<keyof typeof tokens, string> = {
+      accent: "--xhunt-auth-accent",
+      accent2: "--xhunt-auth-accent-2",
+      background: "--xhunt-auth-bg",
+      panel: "--xhunt-auth-panel",
+      text: "--xhunt-auth-text",
+      muted: "--xhunt-auth-muted",
+      border: "--xhunt-auth-border",
+      danger: "--xhunt-auth-danger",
+    };
+    const touched: string[] = [];
+
+    root.setAttribute("data-xhunt-auth-theme", theme);
+    root.setAttribute("data-xhunt-auth-mode", mode);
+
+    Object.entries(tokens).forEach(([key, value]) => {
+      const cssVar = tokenMap[key as keyof typeof tokens];
+      if (!cssVar || !value) return;
+      root.style.setProperty(cssVar, value);
+      touched.push(cssVar);
+    });
+
+    return () => {
+      if (previousTheme) root.setAttribute("data-xhunt-auth-theme", previousTheme);
+      else root.removeAttribute("data-xhunt-auth-theme");
+      if (previousMode) root.setAttribute("data-xhunt-auth-mode", previousMode);
+      else root.removeAttribute("data-xhunt-auth-mode");
+      touched.forEach((item) => root.style.removeProperty(item));
+    };
+  }, [config]);
 
   useEffect(() => {
     function onStorage(event: StorageEvent) {

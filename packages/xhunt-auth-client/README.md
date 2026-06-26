@@ -151,7 +151,7 @@ xhunt_auth_token
 ```ts
 const auth = useXHuntAuth();
 
-await auth.loginWithPassword({ accountName, password });
+await auth.loginWithPassword({ accountName, password }); // accountName 支持普通账户名或邮箱
 await auth.registerWithPassword({ accountName, password });
 await auth.loginWithGoogle();
 await auth.loginWithTwitter();
@@ -184,3 +184,61 @@ npm run build
 ```
 
 当前项目里不要自动运行构建，交给项目负责人控制。
+
+## 8. 主题配置
+
+默认主题是接近 XHunt 官网的黑底青绿色科技风：
+
+```tsx
+<XHuntAuthProvider
+  config={{
+    apiBaseUrl: "https://api.cryptohunt.ai",
+    clientKey: "xhunt-web",
+    ui: {
+      theme: "xhunt",
+      mode: "dark",
+    },
+  }}
+>
+  <App />
+</XHuntAuthProvider>
+```
+
+内置 3 套主题：
+
+```ts
+theme: "xhunt" | "aqua" | "mono"
+```
+
+支持明暗模式：
+
+```ts
+mode: "dark" | "light" | "auto"
+```
+
+也可以自定义颜色：
+
+```tsx
+<XHuntAuthProvider
+  config={{
+    apiBaseUrl: "https://api.cryptohunt.ai",
+    clientKey: "xhunt-web",
+    ui: {
+      theme: "xhunt",
+      mode: "dark",
+      tokens: {
+        accent: "#12e3cf",
+        accent2: "#19b7d3",
+        background: "#000706",
+        panel: "#06110f",
+        text: "#edf7f4",
+        muted: "#8c9898",
+        border: "rgba(124, 154, 168, 0.28)",
+        danger: "#ff6b63",
+      },
+    },
+  }}
+>
+  <App />
+</XHuntAuthProvider>
+```

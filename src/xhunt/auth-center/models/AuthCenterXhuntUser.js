@@ -16,15 +16,15 @@ module.exports = (sequelize) => {
         comment: "认证中心用户 ID",
       },
       accountName: {
-        type: DataTypes.STRING(64),
+        type: DataTypes.STRING(255),
         allowNull: true,
-        comment: "用户自己设置的账户名",
+        comment: "用户自己设置的账户名或邮箱",
       },
       accountNameLower: {
-        type: DataTypes.STRING(64),
+        type: DataTypes.STRING(255),
         allowNull: true,
         unique: true,
-        comment: "小写账户名，用于登录和唯一索引",
+        comment: "小写账户名或邮箱，用于登录和唯一索引",
       },
       displayName: {
         type: DataTypes.STRING(255),

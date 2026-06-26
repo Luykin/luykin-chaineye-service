@@ -1,4 +1,17 @@
 export type XHuntAuthProviderName = "password" | "google" | "evm" | "twitter";
+export type XHuntAuthThemeName = "xhunt" | "aqua" | "mono";
+export type XHuntAuthThemeMode = "dark" | "light" | "auto";
+
+export interface XHuntAuthThemeTokens {
+  accent?: string;
+  accent2?: string;
+  background?: string;
+  panel?: string;
+  text?: string;
+  muted?: string;
+  border?: string;
+  danger?: string;
+}
 
 export interface XHuntAuthConfig {
   apiBaseUrl: string;
@@ -8,7 +21,12 @@ export interface XHuntAuthConfig {
   autoLoadUser?: boolean;
   oauthCallbackPath?: string;
   ui?: {
-    theme?: "light" | "dark";
+    /** Theme palette. Default is xhunt. Legacy values "light"/"dark" are treated as mode. */
+    theme?: XHuntAuthThemeName | "light" | "dark";
+    /** Color mode. Default is dark. */
+    mode?: XHuntAuthThemeMode;
+    /** Override CSS color tokens for brand customization. */
+    tokens?: XHuntAuthThemeTokens;
     defaultProvider?: XHuntAuthProviderName;
     enabledProviders?: XHuntAuthProviderName[];
     title?: string;

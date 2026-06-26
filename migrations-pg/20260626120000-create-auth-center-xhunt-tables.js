@@ -5,8 +5,8 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("AuthCenterXhuntUsers", {
       id: { type: Sequelize.UUID, primaryKey: true, defaultValue: Sequelize.UUIDV4 },
-      accountName: { type: Sequelize.STRING(64), allowNull: true, comment: "用户自己设置的账户名" },
-      accountNameLower: { type: Sequelize.STRING(64), allowNull: true, comment: "小写账户名" },
+      accountName: { type: Sequelize.STRING(255), allowNull: true, comment: "用户自己设置的账户名或邮箱" },
+      accountNameLower: { type: Sequelize.STRING(255), allowNull: true, comment: "小写账户名或邮箱" },
       displayName: { type: Sequelize.STRING(255), allowNull: true },
       avatar: { type: Sequelize.STRING(2048), allowNull: true },
       primaryTwitterId: { type: Sequelize.STRING(64), allowNull: true },
@@ -80,7 +80,7 @@ module.exports = {
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      usernameLower: { type: Sequelize.STRING(64), allowNull: false },
+      usernameLower: { type: Sequelize.STRING(255), allowNull: false },
       passwordHash: { type: Sequelize.TEXT, allowNull: false },
       passwordAlgo: { type: Sequelize.STRING(32), allowNull: false, defaultValue: "bcrypt" },
       passwordVersion: { type: Sequelize.INTEGER, allowNull: false, defaultValue: 1 },

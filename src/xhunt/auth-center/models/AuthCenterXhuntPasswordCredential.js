@@ -22,10 +22,10 @@ module.exports = (sequelize) => {
         comment: "关联 AuthCenterXhuntUsers.id",
       },
       usernameLower: {
-        type: DataTypes.STRING(64),
+        type: DataTypes.STRING(255),
         allowNull: false,
         unique: true,
-        comment: "登录账户名小写",
+        comment: "登录账户名或邮箱小写",
       },
       passwordHash: {
         type: DataTypes.TEXT,
