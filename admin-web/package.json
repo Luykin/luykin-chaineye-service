@@ -17,7 +17,8 @@
     "dayjs": "^1.11.13",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.6.1"
+    "react-router-dom": "^7.6.1",
+    "@xhunt/auth-client": "file:../packages/xhunt-auth-client"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

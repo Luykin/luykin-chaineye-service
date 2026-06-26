@@ -36,6 +36,7 @@ import { TampermonkeyPage } from "@/pages/TampermonkeyPage";
 import { BackupRestorePage } from "@/pages/BackupRestorePage";
 import { EmergencyRollbackPage } from "@/pages/EmergencyRollbackPage";
 import { ReleaseDeployPage } from "@/pages/ReleaseDeployPage";
+import { AuthCenterTestPage } from "@/pages/AuthCenterTestPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -73,6 +74,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "backup-restore": <BackupRestorePage />,
   "emergency-rollback": <EmergencyRollbackPage />,
   "release-deploy": <ReleaseDeployPage />,
+  "auth-center-test": <AuthCenterTestPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {

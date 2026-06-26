@@ -2,7 +2,11 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "Bundler",
@@ -14,8 +18,24 @@
     "strict": true,
     "baseUrl": "./src",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ],
+      "@xhunt/auth-client": [
+        "../../packages/xhunt-auth-client/src/index.ts"
+      ],
+      "react": [
+        "../node_modules/@types/react/index.d.ts"
+      ],
+      "react-dom": [
+        "../node_modules/@types/react-dom/index.d.ts"
+      ],
+      "react/jsx-runtime": [
+        "../node_modules/@types/react/jsx-runtime.d.ts"
+      ]
     }
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
