@@ -27,6 +27,13 @@ const CollectorClientTokenModel = require("../xhunt/models/CollectorClientToken"
 const XHuntWebUserModel = require("../xhunt/models/XHuntWebUser");
 const XHuntWebUserTokenModel = require("../xhunt/models/XHuntWebUserToken");
 const XHuntWebsiteCampaignModel = require("../xhunt/models/XHuntWebsiteCampaign");
+const AuthCenterXhuntUserModel = require("../xhunt/auth-center/models/AuthCenterXhuntUser");
+const AuthCenterXhuntIdentityModel = require("../xhunt/auth-center/models/AuthCenterXhuntIdentity");
+const AuthCenterXhuntPasswordCredentialModel = require("../xhunt/auth-center/models/AuthCenterXhuntPasswordCredential");
+const AuthCenterXhuntClientModel = require("../xhunt/auth-center/models/AuthCenterXhuntClient");
+const AuthCenterXhuntSessionModel = require("../xhunt/auth-center/models/AuthCenterXhuntSession");
+const AuthCenterXhuntAuthorizationCodeModel = require("../xhunt/auth-center/models/AuthCenterXhuntAuthorizationCode");
+const AuthCenterXhuntAuditLogModel = require("../xhunt/auth-center/models/AuthCenterXhuntAuditLog");
 
 const pgDialect = process.env.PG_DIALECT || "postgres";
 const pgHost = process.env.PG_HOST;
@@ -94,6 +101,13 @@ const CollectorClientToken = CollectorClientTokenModel(pgInstance);
 const XHuntWebUser = XHuntWebUserModel(pgInstance);
 const XHuntWebUserToken = XHuntWebUserTokenModel(pgInstance);
 const XHuntWebsiteCampaign = XHuntWebsiteCampaignModel(pgInstance);
+const AuthCenterXhuntUser = AuthCenterXhuntUserModel(pgInstance);
+const AuthCenterXhuntIdentity = AuthCenterXhuntIdentityModel(pgInstance);
+const AuthCenterXhuntPasswordCredential = AuthCenterXhuntPasswordCredentialModel(pgInstance);
+const AuthCenterXhuntClient = AuthCenterXhuntClientModel(pgInstance);
+const AuthCenterXhuntSession = AuthCenterXhuntSessionModel(pgInstance);
+const AuthCenterXhuntAuthorizationCode = AuthCenterXhuntAuthorizationCodeModel(pgInstance);
+const AuthCenterXhuntAuditLog = AuthCenterXhuntAuditLogModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -254,6 +268,77 @@ XHuntWebUserToken.belongsTo(XHuntWebUser, {
   as: "user",
 });
 
+// Auth Center XHunt 认证中心关系
+AuthCenterXhuntUser.hasMany(AuthCenterXhuntIdentity, {
+  foreignKey: "userId",
+  as: "identities",
+});
+
+AuthCenterXhuntIdentity.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "userId",
+  as: "user",
+});
+
+AuthCenterXhuntUser.hasOne(AuthCenterXhuntPasswordCredential, {
+  foreignKey: "userId",
+  as: "passwordCredential",
+});
+
+AuthCenterXhuntPasswordCredential.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "userId",
+  as: "user",
+});
+
+AuthCenterXhuntUser.hasMany(AuthCenterXhuntSession, {
+  foreignKey: "userId",
+  as: "sessions",
+});
+
+AuthCenterXhuntSession.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "userId",
+  as: "user",
+});
+
+AuthCenterXhuntClient.hasMany(AuthCenterXhuntSession, {
+  foreignKey: "clientId",
+  as: "sessions",
+});
+
+AuthCenterXhuntSession.belongsTo(AuthCenterXhuntClient, {
+  foreignKey: "clientId",
+  as: "client",
+});
+
+AuthCenterXhuntClient.hasMany(AuthCenterXhuntAuthorizationCode, {
+  foreignKey: "clientId",
+  as: "authorizationCodes",
+});
+
+AuthCenterXhuntAuthorizationCode.belongsTo(AuthCenterXhuntClient, {
+  foreignKey: "clientId",
+  as: "client",
+});
+
+AuthCenterXhuntUser.hasMany(AuthCenterXhuntAuthorizationCode, {
+  foreignKey: "userId",
+  as: "authorizationCodes",
+});
+
+AuthCenterXhuntAuthorizationCode.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "userId",
+  as: "user",
+});
+
+AuthCenterXhuntUser.hasMany(AuthCenterXhuntAuditLog, {
+  foreignKey: "userId",
+  as: "authCenterAuditLogs",
+});
+
+AuthCenterXhuntAuditLog.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "userId",
+  as: "user",
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 async function setupPostgres() {
@@ -308,4 +393,11 @@ module.exports = {
   XHuntWebUser,
   XHuntWebUserToken,
   XHuntWebsiteCampaign,
+  AuthCenterXhuntUser,
+  AuthCenterXhuntIdentity,
+  AuthCenterXhuntPasswordCredential,
+  AuthCenterXhuntClient,
+  AuthCenterXhuntSession,
+  AuthCenterXhuntAuthorizationCode,
+  AuthCenterXhuntAuditLog,
 };

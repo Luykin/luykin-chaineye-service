@@ -29,6 +29,7 @@ const MODULES_TO_PRELOAD = [
   // XHunt API 路由
   './xhunt/api/auth',
   './xhunt/api/web-auth',
+  './xhunt/auth-center/api/auth-center',
   './xhunt/api/proxy',
   './xhunt/api/reviews',
   './xhunt/api/notes',
@@ -190,6 +191,7 @@ const generalRoutes = require("./routes/general");
 const rootdataTampermonkeyRoutes = require("./routes/rootdata-tampermonkey");
 const xHuntAuthRoutes = require("./xhunt/api/auth");
 const xHuntWebAuthRoutes = require("./xhunt/api/web-auth");
+const xHuntAuthCenterRoutes = require("./xhunt/auth-center/api/auth-center");
 const xHuntProxyRoutes = require("./xhunt/api/proxy");
 const xHuntReviewsRoutes = require("./xhunt/api/reviews");
 const xHuntNotesRoutes = require("./xhunt/api/notes");
@@ -495,6 +497,9 @@ async function initializeAndStartServer() {
 
   // XHunt Web 用户认证接口（周边网站登录）
   app.use("/api/xhunt/web/auth", xHuntWebAuthRoutes);
+
+  // XHunt 登录认证中心接口（多 Web 端统一登录）
+  app.use("/api/xhunt/auth-center", xHuntAuthCenterRoutes);
 
   app.use(
     "/api/xhunt/proxy",
