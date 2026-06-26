@@ -424,8 +424,8 @@ export function GenericStatsPage() {
               pageSize: eventsQuery.data?.data?.pagination.pageSize || EVENT_PAGE_SIZE,
               total: eventsQuery.data?.data?.pagination.total || 0,
               showSizeChanger: false,
-              showTotal: (total) => `共 ${total} 条`,
-              onChange: (nextPage) => setPage(nextPage),
+              showTotal: (total: number) => `共 ${total} 条`,
+              onChange: (nextPage: number) => setPage(nextPage),
             }}
             onChange={(pagination: TablePaginationConfig) => {
               if (pagination.current) {

@@ -148,7 +148,7 @@ export function UrlStatsPage() {
               columns={columns}
               dataSource={dataSource}
               loading={query.isLoading || query.isFetching}
-              pagination={{ pageSize: 50, showSizeChanger: false, showTotal: (total) => `共 ${total} 条接口` }}
+              pagination={{ pageSize: 50, showSizeChanger: false, showTotal: (total: number) => `共 ${total} 条接口` }}
               scroll={{ x: 900, y: 560 }}
               locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search.trim() ? "未找到匹配接口" : "暂无接口统计数据"} /> }}
             />

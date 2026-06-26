@@ -190,8 +190,8 @@ export function AuditLogsPage() {
               pageSize: query.data?.pagination.limit || PAGE_SIZE,
               total: query.data?.pagination.total || 0,
               showSizeChanger: false,
-              showTotal: (total) => `共 ${total} 条`,
-              onChange: (nextPage) => setPage(nextPage),
+              showTotal: (total: number) => `共 ${total} 条`,
+              onChange: (nextPage: number) => setPage(nextPage),
             }}
             onChange={(pagination: TablePaginationConfig) => {
               if (pagination.current) {

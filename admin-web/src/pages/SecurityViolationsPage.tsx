@@ -201,7 +201,7 @@ export function SecurityViolationsPage() {
                 pageSize={pagination.limit}
                 total={pagination.total}
                 showSizeChanger={false}
-                onChange={(nextPage) => setPage(nextPage)}
+                onChange={(nextPage: number) => setPage(nextPage)}
               />
             </div>
           ) : null}

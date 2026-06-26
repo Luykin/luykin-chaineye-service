@@ -131,7 +131,7 @@ export function OnlineUsersPage() {
               total: pagination?.totalCount ?? 0,
               pageSize: pagination?.pageSize ?? 100,
               showSizeChanger: false,
-              onChange: (nextPage) => setPage(nextPage),
+              onChange: (nextPage: number) => setPage(nextPage),
             }}
             onChange={(nextPagination: TablePaginationConfig) => {
               if (nextPagination.current) {

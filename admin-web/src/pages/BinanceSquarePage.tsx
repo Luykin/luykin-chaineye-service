@@ -1458,7 +1458,7 @@ export function BinanceSquarePage() {
                         pageSize={posts?.pageSize || 20}
                         total={posts?.total || 0}
                         showSizeChanger={false}
-                        onChange={(page) => setPostsPage(page)}
+                        onChange={(page: number) => setPostsPage(page)}
                       />
                     </div>
                   </div>
@@ -1503,7 +1503,7 @@ export function BinanceSquarePage() {
                         pageSize={logs?.pageSize || 20}
                         total={logs?.total || 0}
                         showSizeChanger={false}
-                        onChange={(page) => setLogsPage(page)}
+                        onChange={(page: number) => setLogsPage(page)}
                       />
                     </div>
                   </div>
@@ -1543,7 +1543,7 @@ export function BinanceSquarePage() {
               pageSize={followingData?.pageSize || 20}
               total={followingData?.total || 0}
               showSizeChanger={false}
-              onChange={(page) => setFollowingPage(page)}
+              onChange={(page: number) => setFollowingPage(page)}
             />
           </div>
         </Drawer>

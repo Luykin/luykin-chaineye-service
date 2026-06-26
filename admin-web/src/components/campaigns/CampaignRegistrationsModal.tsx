@@ -141,8 +141,8 @@ export function CampaignRegistrationsModal({
             pageSize,
             total,
             showSizeChanger: true,
-            showTotal: (value) => `共 ${value} 条`,
-            onChange: (nextPage, nextPageSize) =>
+            showTotal: (value: number) => `共 ${value} 条`,
+            onChange: (nextPage: number, nextPageSize: number) =>
               void load({ page: nextPage, pageSize: nextPageSize }),
           }}
           columns={[

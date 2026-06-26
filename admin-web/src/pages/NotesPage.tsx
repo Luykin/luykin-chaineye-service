@@ -184,7 +184,7 @@ export function NotesPage() {
               current: query.data?.data.pagination.currentPage || page,
               pageSize: query.data?.data.pagination.pageSize || 50,
               total: query.data?.data.pagination.totalCount || 0,
-              onChange: (nextPage) => setPage(nextPage),
+              onChange: (nextPage: number) => setPage(nextPage),
               showSizeChanger: false,
             }}
           />
