@@ -13,15 +13,6 @@ export interface XHuntAuthThemeTokens {
   danger?: string;
 }
 
-export interface XHuntAuthWebSignatureConfig {
-  /** Enable Web request signing. Default is true when publicSalt is provided. */
-  enabled?: boolean;
-  /** Web signature version. Default is w1. */
-  version?: "w1";
-  /** Public signing salt shared with the backend. */
-  publicSalt?: string;
-}
-
 export interface XHuntAuthConfig {
   apiBaseUrl: string;
   authBasePath?: string;
@@ -29,7 +20,6 @@ export interface XHuntAuthConfig {
   storage?: "localStorage";
   autoLoadUser?: boolean;
   oauthCallbackPath?: string;
-  webSignature?: XHuntAuthWebSignatureConfig;
   ui?: {
     /** Theme palette. Default is xhunt. Legacy values "light"/"dark" are treated as mode. */
     theme?: XHuntAuthThemeName | "light" | "dark";

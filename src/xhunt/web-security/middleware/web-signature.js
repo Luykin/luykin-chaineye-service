@@ -148,7 +148,7 @@ function webSignatureMiddleware() {
     }
 
     const allowedOrigins = normalizeAllowedOrigins(client?.allowedOrigins);
-    const enforceOrigin = process.env.XHUNT_WEB_SIGN_ENFORCE_ORIGIN === "true";
+    const enforceOrigin = false;
     if (enforceOrigin && !isOriginAllowed(headers.origin, allowedOrigins)) {
       return fail(req, res, next, "WEB_SIGNATURE_ORIGIN_DENIED", 403, { context: { clientKey: headers.clientKey, requestId: headers.requestId } });
     }

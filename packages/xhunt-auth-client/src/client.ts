@@ -30,6 +30,7 @@ function parseOAuthInput(input?: OAuthCallbackInput) {
 
 const WEB_SIGN_VERSION = "w1";
 const AUTH_CLIENT_SDK_VERSION = "0.1.0";
+const WEB_PUBLIC_SIGN_SALT = "xhunt-web-sign-w1-fixed-lite-20260626";
 
 function bytesToHex(bytes: ArrayBuffer) {
   return Array.from(new Uint8Array(bytes))
@@ -161,13 +162,7 @@ export class XHuntAuthClient {
   }
 
   private async applyWebSignature(endpoint: string, init: RequestInit, headers: Headers) {
-    const signatureConfig = this.config.webSignature;
-    const publicSalt = signatureConfig?.publicSalt || "";
-    const enabled = signatureConfig?.enabled ?? Boolean(publicSalt);
-    if (!enabled) return;
-    if (!publicSalt) {
-      throw new XHuntAuthError("WEB_SIGNATURE_SALT_MISSING", "Web signature publicSalt is required");
-    }
+    const publicSalt = WEB_PUBLIC_SIGN_SALT;
 
     const requestId = randomRequestId();
     const timestamp = String(Date.now());
@@ -189,7 +184,7 @@ export class XHuntAuthClient {
     const signingKey = await derivePublicSigningKey(this.config.clientKey, publicSalt);
     const signature = await hmacSha256Hex(signingKey, canonicalPayload);
 
-    headers.set("x-xhunt-web-sign-version", signatureConfig?.version || WEB_SIGN_VERSION);
+    headers.set("x-xhunt-web-sign-version", WEB_SIGN_VERSION);
     headers.set("x-xhunt-web-client-key", this.config.clientKey);
     headers.set("x-xhunt-web-request-id", requestId);
     headers.set("x-xhunt-web-timestamp", timestamp);

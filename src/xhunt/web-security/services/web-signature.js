@@ -4,6 +4,7 @@ const WEB_SIGN_VERSION = "w1";
 const HEADER_PREFIX = "x-xhunt-web-";
 const DEFAULT_TIME_WINDOW_SECONDS = 300;
 const DEFAULT_REQUEST_ID_TTL_SECONDS = 600;
+const WEB_PUBLIC_SIGN_SALT = "xhunt-web-sign-w1-fixed-lite-20260626";
 const REQUEST_ID_PREFIX = "websign:reqid:";
 const localRequestIds = new Map();
 let lastLocalPruneAt = 0;
@@ -46,18 +47,15 @@ function getWebSignHeaders(req) {
 }
 
 function getMode() {
-  const mode = String(process.env.XHUNT_WEB_SIGN_MODE || "off").trim().toLowerCase();
-  return ["off", "report", "enforce"].includes(mode) ? mode : "off";
+  return "enforce";
 }
 
 function getTimeWindowSeconds() {
-  const parsed = parseInt(process.env.XHUNT_WEB_SIGN_TIME_WINDOW_SECONDS || "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIME_WINDOW_SECONDS;
+  return DEFAULT_TIME_WINDOW_SECONDS;
 }
 
 function getRequestIdTtlSeconds() {
-  const parsed = parseInt(process.env.XHUNT_WEB_SIGN_REQUEST_ID_TTL_SECONDS || "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_REQUEST_ID_TTL_SECONDS;
+  return DEFAULT_REQUEST_ID_TTL_SECONDS;
 }
 
 function normalizePathWithQuery(req) {
@@ -103,7 +101,7 @@ function derivePublicSigningKey(clientKey, publicSalt) {
 }
 
 function getClientSalt(client) {
-  return client?.webPublicSignSalt || process.env.XHUNT_WEB_PUBLIC_SIGN_SALT || "";
+  return WEB_PUBLIC_SIGN_SALT;
 }
 
 function normalizeAllowedOrigins(value) {
