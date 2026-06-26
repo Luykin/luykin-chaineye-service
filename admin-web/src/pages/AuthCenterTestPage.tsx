@@ -198,8 +198,8 @@ function AuthCenterWorkbench() {
       </Card>
 
       <XHuntLoginModal
-        title="测试登录认证中心"
-        subtitle="登录后可在本页面检查 token、用户信息和身份绑定状态。"
+        title="认证中心联调"
+        subtitle="验证登录、Token 与身份绑定。"
         enabledProviders={["password", "google", "twitter", "evm"] as XHuntAuthProviderName[]}
       />
     </div>

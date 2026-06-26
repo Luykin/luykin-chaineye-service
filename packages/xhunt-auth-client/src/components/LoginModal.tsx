@@ -1,6 +1,6 @@
 import React, { FormEvent, useMemo, useState } from "react";
 import { useXHuntAuth } from "../react/hooks";
-import type { XHuntAuthProviderName } from "../types";
+import type { XHuntAuthError, XHuntAuthProviderName } from "../types";
 import "../styles/xhunt-auth.css";
 
 export interface XHuntLoginModalProps {
@@ -41,6 +41,81 @@ function WalletIcon() {
   );
 }
 
+function EyeIcon({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      {open ? (
+        <>
+          <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M2.5 12s3.4-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.4 6.5-9.5 6.5S2.5 12 2.5 12Z" />
+          <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M12 9.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z" />
+        </>
+      ) : (
+        <>
+          <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M3 3l18 18" />
+          <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M10.6 5.6c.46-.07.93-.1 1.4-.1 6.1 0 9.5 6.5 9.5 6.5a16.7 16.7 0 0 1-2.68 3.44M6.44 6.92C3.9 8.7 2.5 12 2.5 12s3.4 6.5 9.5 6.5c1.7 0 3.2-.5 4.46-1.2" />
+          <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M9.9 9.9a2.8 2.8 0 0 0 3.96 3.96" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
+  INVALID_ACCOUNT_OR_PASSWORD: "账号或密码不正确，请重新输入。",
+  INVALID_ACCOUNT_NAME: "账号格式不正确，请输入邮箱，或 3-32 位字母、数字、下划线、短横线。",
+  INVALID_PASSWORD_LENGTH: "密码长度需要在 8-128 位之间。",
+  ACCOUNT_NAME_ALREADY_EXISTS: "这个账号已经被注册，请直接登录或换一个账号。",
+  ACCOUNT_NAME_RESERVED: "这个账号名称暂不可使用，请换一个。",
+  USER_DISABLED: "当前账号已被禁用，请联系管理员。",
+  ACCOUNT_LOCKED: "密码错误次数过多，账号已临时锁定，请 15 分钟后再试。",
+  INVALID_EVM_ADDRESS: "钱包地址格式不正确，请检查后重试。",
+  CHALLENGE_NOT_FOUND_OR_EXPIRED: "钱包验证已过期，请重新发起登录。",
+  MESSAGE_MISMATCH: "钱包签名消息不匹配，请重新发起登录。",
+  ADDRESS_MISMATCH: "签名钱包地址不一致，请切换到正确的钱包。",
+  INVALID_OR_EXPIRED_STATE: "登录状态已过期，请重新发起第三方登录。",
+  GOOGLE_OAUTH_NOT_CONFIGURED: "Google 登录暂未配置，请稍后再试。",
+  TOKEN_REQUIRED: "登录状态不存在，请重新登录。",
+  TOKEN_INVALID: "登录状态无效，请重新登录。",
+  TOKEN_EXPIRED: "登录已过期，请重新登录。",
+  TOKEN_REPLACED: "你的账号已在其他地方重新登录，请刷新后重试。",
+  REFRESH_TOKEN_INVALID: "登录状态已失效，请重新登录。",
+  PROVIDER_ALREADY_BOUND_TO_USER: "当前账号已经绑定过这种登录方式。",
+  IDENTITY_ALREADY_BOUND: "这个登录方式已经绑定到其他账号。",
+  PASSWORD_ALREADY_SET: "当前账号已经设置过密码。",
+  CANNOT_UNBIND_LAST_IDENTITY: "至少需要保留一种登录方式，不能解绑最后一个身份。",
+  IDENTITY_NOT_FOUND: "没有找到对应的绑定身份。",
+  MISSING_API_BASE_URL: "认证服务地址未配置。",
+  MISSING_CLIENT_KEY: "应用 Client Key 未配置。",
+  NETWORK_ERROR: "网络连接失败，请检查网络后重试。",
+  UNKNOWN_ERROR: "操作失败，请稍后重试。",
+  AUTH_CENTER_ERROR: "认证服务异常，请稍后重试。",
+  PASSWORD_LOGIN_FAILED: "登录失败，请检查账号密码后重试。",
+  PASSWORD_REGISTER_FAILED: "注册失败，请检查账号和密码后重试。",
+  WALLET_LOGIN_FAILED: "钱包登录失败，请重新签名后重试。",
+  GOOGLE_LOGIN_FAILED: "Google 登录失败，请重新授权后重试。",
+  TWITTER_LOGIN_FAILED: "Twitter / X 登录失败，请重新授权后重试。",
+  HTTP_429: "操作太频繁，请稍后再试。",
+  HTTP_500: "服务暂时异常，请稍后再试。",
+  HTTP_502: "服务暂时不可用，请稍后再试。",
+  HTTP_503: "服务暂时不可用，请稍后再试。",
+};
+
+function isAuthError(error: unknown): error is XHuntAuthError {
+  return !!error && typeof error === "object" && "code" in error;
+}
+
+function formatAuthError(error: unknown) {
+  if (!error) return "操作失败，请稍后重试。";
+  if (typeof error === "string") return FRIENDLY_ERROR_MESSAGES[error] || error;
+  if (isAuthError(error)) {
+    return FRIENDLY_ERROR_MESSAGES[error.code] || error.payload?.message || error.message || "操作失败，请稍后重试。";
+  }
+  if (error instanceof Error) {
+    return FRIENDLY_ERROR_MESSAGES[error.message] || error.message || "操作失败，请稍后重试。";
+  }
+  return "操作失败，请稍后重试。";
+}
+
 export function XHuntLoginModal(props: XHuntLoginModalProps) {
   const auth = useXHuntAuth();
   const open = props.open ?? auth.isLoginModalOpen;
@@ -49,6 +124,7 @@ export function XHuntLoginModal(props: XHuntLoginModalProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [accountName, setAccountName] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const title = props.title || "Sign in to XHunt";
@@ -68,7 +144,7 @@ export function XHuntLoginModal(props: XHuntLoginModalProps) {
         await auth.registerWithPassword({ accountName, password });
       }
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Login failed");
+      setLocalError(formatAuthError(error));
     }
   }
 
@@ -77,7 +153,7 @@ export function XHuntLoginModal(props: XHuntLoginModalProps) {
     try {
       await action();
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Login failed");
+      setLocalError(formatAuthError(error));
     }
   }
 
@@ -117,13 +193,24 @@ export function XHuntLoginModal(props: XHuntLoginModalProps) {
             </label>
             <label>
               <span>Password</span>
-              <input
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                type="password"
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-                placeholder="••••••••"
-              />
+              <div className="xhunt-auth-password-field">
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  type={passwordVisible ? "text" : "password"}
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  className="xhunt-auth-password-toggle"
+                  aria-label={passwordVisible ? "Hide password" : "Show password"}
+                  aria-pressed={passwordVisible}
+                  onClick={() => setPasswordVisible((value) => !value)}
+                >
+                  <EyeIcon open={passwordVisible} />
+                </button>
+              </div>
             </label>
             <button className="xhunt-auth-primary" disabled={auth.isLoading} type="submit">
               {mode === "login" ? "Continue" : "Create account"}
@@ -153,7 +240,7 @@ export function XHuntLoginModal(props: XHuntLoginModalProps) {
           )}
         </div>
 
-        {(localError || auth.error) && <p className="xhunt-auth-error">{localError || auth.error?.message}</p>}
+        {(localError || auth.error) && <p className="xhunt-auth-error">{localError || formatAuthError(auth.error)}</p>}
       </section>
     </div>
   );

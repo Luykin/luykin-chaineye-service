@@ -51,7 +51,7 @@
   z-index: 9999;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   padding: clamp(18px, 3vw, 34px);
   color: var(--xhunt-auth-text);
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -64,7 +64,7 @@
   background:
     radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--xhunt-auth-accent) 18%, transparent), transparent 24%),
     radial-gradient(circle at 82% 78%, color-mix(in srgb, var(--xhunt-auth-accent-2) 12%, transparent), transparent 26%),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.1), color-mix(in srgb, var(--xhunt-auth-bg) 34%, transparent) 70%, color-mix(in srgb, var(--xhunt-auth-bg) 48%, transparent));
+    linear-gradient(180deg, color-mix(in srgb, var(--xhunt-auth-bg) 28%, transparent), color-mix(in srgb, var(--xhunt-auth-bg) 38%, transparent));
   backdrop-filter: blur(5px) saturate(1.04);
   -webkit-backdrop-filter: blur(5px) saturate(1.04);
   cursor: default;
@@ -80,7 +80,7 @@
     linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
   background-size: 44px 44px;
-  mask-image: linear-gradient(90deg, transparent, #000 58%, #000);
+  mask-image: radial-gradient(circle at center, #000 0 58%, transparent 78%);
 }
 
 .xhunt-auth-panel {
@@ -254,6 +254,48 @@
 .xhunt-auth-form input:focus {
   border-color: color-mix(in srgb, var(--xhunt-auth-accent) 62%, var(--xhunt-auth-border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--xhunt-auth-accent) 12%, transparent), 0 0 16px color-mix(in srgb, var(--xhunt-auth-glow) 66%, transparent);
+}
+
+.xhunt-auth-password-field {
+  position: relative;
+  display: grid;
+}
+
+.xhunt-auth-password-field input {
+  padding-right: 48px;
+}
+
+.xhunt-auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--xhunt-auth-muted) 86%, transparent);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.xhunt-auth-password-toggle:hover,
+.xhunt-auth-password-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--xhunt-auth-accent) 12%, transparent);
+  color: var(--xhunt-auth-accent);
+}
+
+.xhunt-auth-password-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--xhunt-auth-accent) 66%, transparent);
+  outline-offset: 2px;
+}
+
+.xhunt-auth-password-toggle svg {
+  width: 19px;
+  height: 19px;
 }
 
 .xhunt-auth-primary {
