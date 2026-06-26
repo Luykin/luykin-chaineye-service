@@ -1,6 +1,7 @@
 node_modules
 admin-web/node_modules
 admin-web/package-lock.json
+packages/xhunt-auth-client/package-lock.json
 admin-web/dist
 admin-web/.vite
 admin-web/.cache
