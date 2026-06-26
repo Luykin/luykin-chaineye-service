@@ -30,6 +30,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/auth',
   './xhunt/api/web-auth',
   './xhunt/auth-center/api/auth-center',
+  './xhunt/web-security/middleware/web-signature',
   './xhunt/api/proxy',
   './xhunt/api/reviews',
   './xhunt/api/notes',
@@ -192,6 +193,7 @@ const rootdataTampermonkeyRoutes = require("./routes/rootdata-tampermonkey");
 const xHuntAuthRoutes = require("./xhunt/api/auth");
 const xHuntWebAuthRoutes = require("./xhunt/api/web-auth");
 const xHuntAuthCenterRoutes = require("./xhunt/auth-center/api/auth-center");
+const { webSignatureMiddleware } = require("./xhunt/web-security/middleware/web-signature");
 const xHuntProxyRoutes = require("./xhunt/api/proxy");
 const xHuntReviewsRoutes = require("./xhunt/api/reviews");
 const xHuntNotesRoutes = require("./xhunt/api/notes");
@@ -355,6 +357,15 @@ async function initializeAndStartServer() {
       "x-user-id",
       "x-tw-id",
       "x-window-location-href",
+      "x-xhunt-web-sign-version",
+      "x-xhunt-web-client-key",
+      "x-xhunt-web-request-id",
+      "x-xhunt-web-timestamp",
+      "x-xhunt-web-body-sha256",
+      "x-xhunt-web-signature",
+      "x-xhunt-web-sdk-version",
+      "x-xhunt-web-page-url",
+      "x-xhunt-web-origin",
       "x-collector-client-token",
       "x-admin",
       "admin",
@@ -425,13 +436,24 @@ async function initializeAndStartServer() {
     return `request_id=${requestId} user_id=${userId} tw_id=${twId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref}`;
   });
 
+  morgan.token("xhunt-web", (req) => {
+    const web = req.xhuntWeb;
+    const clientKey = web?.clientKey || req.headers["x-xhunt-web-client-key"] || "-";
+    const requestId = web?.requestId || req.headers["x-xhunt-web-request-id"] || "-";
+    const signResult = web?.signResult || (req.headers["x-xhunt-web-signature"] ? "pending" : "-");
+    const reason = web?.signFailReason ? ` reason=${web.signFailReason}` : "";
+    const authCenterUserId = web?.authCenterUserId ? ` acu=${web.authCenterUserId}` : "";
+    const xhuntUserId = web?.xhuntUserId ? ` xu=${web.xhuntUserId}` : "";
+    return `web_client=${clientKey} web_rid=${requestId} web_sign=${signResult}${reason}${authCenterUserId}${xhuntUserId}`;
+  });
+
   // 错误信息 token（仅在错误处理中设置，默认 "-"）
   morgan.token("error-info", (req, res) => res.locals.errorMessage || "-");
   morgan.token("safe-url", (req) => sanitizeUrlForLog(req.originalUrl || req.url || ""));
 
   // 打印入口日志（请求刚到达时）
   app.use(
-    morgan('in :xhunt-identity method=:method url=:safe-url ua=":user-agent"', {
+    morgan('in :xhunt-identity :xhunt-web method=:method url=:safe-url ua=":user-agent"', {
       immediate: true,
       skip: (req) =>
         req.path === "/api/xhunt/stats/log-search" ||
@@ -442,7 +464,7 @@ async function initializeAndStartServer() {
   // 打印出口日志（响应返回时），包含状态与耗时；如有错误状态，额外标注
   app.use(
     morgan(
-      'out cost_ms=:response-time[3] status=:status :xhunt-identity method=:method url=:safe-url err=":error-info"',
+      'out cost_ms=:response-time[3] status=:status :xhunt-identity :xhunt-web method=:method url=:safe-url err=":error-info"',
       {
         skip: (req) =>
           req.path === "/api/xhunt/stats/log-search" ||
@@ -499,7 +521,7 @@ async function initializeAndStartServer() {
   app.use("/api/xhunt/web/auth", xHuntWebAuthRoutes);
 
   // XHunt 登录认证中心接口（多 Web 端统一登录）
-  app.use("/api/xhunt/auth-center", xHuntAuthCenterRoutes);
+  app.use("/api/xhunt/auth-center", webSignatureMiddleware(), xHuntAuthCenterRoutes);
 
   app.use(
     "/api/xhunt/proxy",

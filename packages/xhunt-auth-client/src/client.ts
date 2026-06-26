@@ -28,6 +28,94 @@ function parseOAuthInput(input?: OAuthCallbackInput) {
   };
 }
 
+const WEB_SIGN_VERSION = "w1";
+const AUTH_CLIENT_SDK_VERSION = "0.1.0";
+
+function bytesToHex(bytes: ArrayBuffer) {
+  return Array.from(new Uint8Array(bytes))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function getCrypto() {
+  const cryptoLike = globalThis.crypto;
+  if (!cryptoLike?.subtle) {
+    throw new XHuntAuthError("WEB_SIGNATURE_CRYPTO_UNAVAILABLE", "Web Crypto is not available");
+  }
+  return cryptoLike;
+}
+
+async function sha256Hex(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  return bytesToHex(await getCrypto().subtle.digest("SHA-256", bytes));
+}
+
+async function hmacSha256Hex(key: string, payload: string) {
+  const cryptoLike = getCrypto();
+  const cryptoKey = await cryptoLike.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await cryptoLike.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(payload));
+  return bytesToHex(signature);
+}
+
+function randomRequestId() {
+  const cryptoLike = globalThis.crypto;
+  if (cryptoLike?.randomUUID) return cryptoLike.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    const next = char === "x" ? value : (value & 0x3) | 0x8;
+    return next.toString(16);
+  });
+}
+
+function getBodyText(body: BodyInit | null | undefined) {
+  if (!body) return "";
+  if (typeof body === "string") return body;
+  return String(body);
+}
+
+function normalizePathWithQuery(url: string) {
+  const parsed = new URL(url);
+  const entries: Array<[string, string]> = [];
+  parsed.searchParams.forEach((value, key) => {
+    if (key.toLowerCase().startsWith("x-xhunt-web-")) return;
+    entries.push([key, value]);
+  });
+  entries.sort((a, b) => (a[0] === b[0] ? a[1].localeCompare(b[1]) : a[0].localeCompare(b[0])));
+  if (!entries.length) return parsed.pathname;
+  const search = new URLSearchParams();
+  entries.forEach(([key, value]) => search.append(key, value));
+  return `${parsed.pathname}?${search.toString()}`;
+}
+
+function getOrigin() {
+  if (typeof window === "undefined") return "";
+  return window.location.origin || "";
+}
+
+function getPageUrl() {
+  if (typeof window === "undefined") return "";
+  return window.location.href || "";
+}
+
+function resolveFetchUrl(input: RequestInfo | URL) {
+  if (input instanceof URL) return input.toString();
+  if (typeof input === "string") {
+    if (typeof window === "undefined") return input;
+    return new URL(input, window.location.origin).toString();
+  }
+  return input.url;
+}
+
+async function derivePublicSigningKey(clientKey: string, publicSalt: string) {
+  return sha256Hex(`${clientKey}:${publicSalt}:xhunt-web-w1`);
+}
+
 async function parseErrorResponse(response: Response): Promise<XHuntAuthError> {
   let payload: XHuntAuthErrorPayload | undefined;
   try {
@@ -72,6 +160,46 @@ export class XHuntAuthClient {
     return joinUrl(this.config.apiBaseUrl, `${this.config.authBasePath}${path}`);
   }
 
+  private async applyWebSignature(endpoint: string, init: RequestInit, headers: Headers) {
+    const signatureConfig = this.config.webSignature;
+    const publicSalt = signatureConfig?.publicSalt || "";
+    const enabled = signatureConfig?.enabled ?? Boolean(publicSalt);
+    if (!enabled) return;
+    if (!publicSalt) {
+      throw new XHuntAuthError("WEB_SIGNATURE_SALT_MISSING", "Web signature publicSalt is required");
+    }
+
+    const requestId = randomRequestId();
+    const timestamp = String(Date.now());
+    const bodyText = getBodyText(init.body as BodyInit | null | undefined);
+    const bodyHash = await sha256Hex(bodyText);
+    const authHeader = headers.get("Authorization") || "";
+    const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const accessTokenHash = tokenMatch ? await sha256Hex(tokenMatch[1]) : "";
+    const canonicalPayload = [
+      (init.method || "GET").toUpperCase(),
+      normalizePathWithQuery(endpoint),
+      timestamp,
+      requestId,
+      this.config.clientKey,
+      getOrigin(),
+      bodyHash,
+      accessTokenHash,
+    ].join("\n");
+    const signingKey = await derivePublicSigningKey(this.config.clientKey, publicSalt);
+    const signature = await hmacSha256Hex(signingKey, canonicalPayload);
+
+    headers.set("x-xhunt-web-sign-version", signatureConfig?.version || WEB_SIGN_VERSION);
+    headers.set("x-xhunt-web-client-key", this.config.clientKey);
+    headers.set("x-xhunt-web-request-id", requestId);
+    headers.set("x-xhunt-web-timestamp", timestamp);
+    headers.set("x-xhunt-web-body-sha256", bodyHash);
+    headers.set("x-xhunt-web-signature", signature);
+    headers.set("x-xhunt-web-sdk-version", AUTH_CLIENT_SDK_VERSION);
+    headers.set("x-xhunt-web-page-url", getPageUrl());
+    headers.set("x-xhunt-web-origin", getOrigin());
+  }
+
   private async request<T>(path: string, init: RequestInit = {}, withAuth = false): Promise<T> {
     const headers = new Headers(init.headers || {});
     if (!headers.has("Content-Type") && init.body) {
@@ -82,7 +210,10 @@ export class XHuntAuthClient {
       if (token) headers.set("Authorization", `Bearer ${token}`);
     }
 
-    const response = await fetch(this.endpoint(path), {
+    const endpoint = this.endpoint(path);
+    await this.applyWebSignature(endpoint, init, headers);
+
+    const response = await fetch(endpoint, {
       ...init,
       headers,
     });
@@ -324,11 +455,13 @@ export class XHuntAuthClient {
     const headers = new Headers(init.headers || {});
     const token = await this.getAccessToken();
     if (token) headers.set("Authorization", `Bearer ${token}`);
+    await this.applyWebSignature(resolveFetchUrl(input), init, headers);
     let response = await fetch(input, { ...init, headers });
     if (response.status === 401 || response.status === 419) {
       const refreshed = await this.refreshToken();
       if (refreshed?.accessToken) {
         headers.set("Authorization", `Bearer ${refreshed.accessToken}`);
+        await this.applyWebSignature(resolveFetchUrl(input), init, headers);
         response = await fetch(input, { ...init, headers });
       }
     }

@@ -120,7 +120,8 @@ function createPerfMiddleware(config) {
     const start = process.hrtime.bigint();
 
     res.on("finish", () => {
-      const requestId = extractValue(req, requestIdFrom);
+      const webContext = req.xhuntWeb || null;
+      const requestId = webContext?.requestId || extractValue(req, requestIdFrom);
       if (!requestId) {
         return; // Request ID is mandatory
       }
@@ -142,7 +143,9 @@ function createPerfMiddleware(config) {
       const shouldTrace =
         isError || isSlow || Math.random() < traceConfig.sampleRate;
 
-      const userId = extractValue(req, userIdFrom);
+      const authCenterUserId = webContext?.authCenterUserId || req.authCenter?.user?.id || null;
+      const xhuntUserId = webContext?.xhuntUserId || req.authCenter?.user?.xhuntUserId || null;
+      const userId = authCenterUserId || xhuntUserId || extractValue(req, userIdFrom);
 
       // 记录 IP 链路（Cloudflare / Nginx / 多层反代场景下建议保留原始链路）
       const cfConnectingIp = req.headers["cf-connecting-ip"];
@@ -171,6 +174,17 @@ function createPerfMiddleware(config) {
       const event = {
         requestId,
         userId,
+        source: webContext ? "web" : "legacy",
+        webRequestId: webContext?.requestId || null,
+        webClientKey: webContext?.clientKey || null,
+        webSignVersion: webContext?.signVersion || null,
+        webSignResult: webContext?.signResult || null,
+        webSignFailReason: webContext?.signFailReason || null,
+        webSdkVersion: webContext?.sdkVersion || null,
+        authCenterUserId,
+        xhuntUserId,
+        pageUrl: webContext?.pageUrl || null,
+        origin: webContext?.origin || req.headers.origin || null,
         ts: Date.now(),
         durationMs,
         status,

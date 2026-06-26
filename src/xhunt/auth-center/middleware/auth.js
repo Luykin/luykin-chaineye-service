@@ -77,6 +77,10 @@ function authenticateAuthCenterToken(options = {}) {
       const result = await verifyAuthCenterToken(token);
       req.authCenter = result;
       req.user = result.user;
+      if (req.xhuntWeb) {
+        req.xhuntWeb.authCenterUserId = result.user?.id || null;
+        req.xhuntWeb.xhuntUserId = result.user?.xhuntUserId || null;
+      }
       req[AUTH_CENTER_VERIFIED_FLAG] = true;
       next();
     } catch (error) {

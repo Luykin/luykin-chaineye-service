@@ -38,6 +38,11 @@ export interface PerfTracePoint {
   path?: string;
   userId?: string;
   ip?: string;
+  source?: string;
+  webClientKey?: string;
+  webSignResult?: string;
+  webSignFailReason?: string;
+  pageUrl?: string;
 }
 
 export interface PerfTraceDetail {

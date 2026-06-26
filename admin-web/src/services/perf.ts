@@ -42,12 +42,20 @@ export async function fetchPerfTraces(params: {
   startTime: number;
   endTime: number;
   limit?: number;
+  source?: string;
+  webClientKey?: string;
+  webSignResult?: string;
+  webSignFailReason?: string;
 }) {
   const query = new URLSearchParams({
     startTime: String(params.startTime),
     endTime: String(params.endTime),
     limit: String(params.limit || 15000),
   });
+  if (params.source && params.source !== "all") query.set("source", params.source);
+  if (params.webClientKey) query.set("webClientKey", params.webClientKey);
+  if (params.webSignResult && params.webSignResult !== "all") query.set("webSignResult", params.webSignResult);
+  if (params.webSignFailReason) query.set("webSignFailReason", params.webSignFailReason);
   return apiRequest<PerfTracePoint[]>(`${BASE}/traces?${query.toString()}`);
 }
 

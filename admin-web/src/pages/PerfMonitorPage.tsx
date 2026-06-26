@@ -11,6 +11,7 @@ import {
   Modal,
   Pagination,
   Row,
+  Select,
   Space,
   Table,
   Tag,
@@ -174,7 +175,7 @@ function getScatterSeriesData(data: PerfTracePoint[]) {
 
   data.forEach((d) => {
     const point = {
-      value: [d.ts, d.durationMs, d.status, d.hasDetail ? 1 : 0, d.requestId, d.path, d.userId, d.ip],
+      value: [d.ts, d.durationMs, d.status, d.hasDetail ? 1 : 0, d.requestId, d.path, d.userId, d.ip, d.source, d.webClientKey, d.webSignResult, d.webSignFailReason, d.pageUrl],
     };
 
     if (d.status >= 500) {
@@ -203,9 +204,17 @@ export function PerfMonitorPage() {
   const [filterUserIdInput, setFilterUserIdInput] = useState("");
   const [filterPathInput, setFilterPathInput] = useState("");
   const [filterIpInput, setFilterIpInput] = useState("");
+  const [filterSourceInput, setFilterSourceInput] = useState("all");
+  const [filterWebClientInput, setFilterWebClientInput] = useState("");
+  const [filterWebSignInput, setFilterWebSignInput] = useState("all");
+  const [filterWebSignReasonInput, setFilterWebSignReasonInput] = useState("");
   const [filterUserId, setFilterUserId] = useState("");
   const [filterPath, setFilterPath] = useState("");
   const [filterIp, setFilterIp] = useState("");
+  const [filterSource, setFilterSource] = useState("all");
+  const [filterWebClient, setFilterWebClient] = useState("");
+  const [filterWebSign, setFilterWebSign] = useState("all");
+  const [filterWebSignReason, setFilterWebSignReason] = useState("");
   const [tracePage, setTracePage] = useState(1);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailRequestId, setDetailRequestId] = useState("");
@@ -241,8 +250,16 @@ export function PerfMonitorPage() {
         queryFn: () => fetchPerfMetrics({ startTime: startMs, endTime: endMs, intervalSecs }),
       },
       {
-        queryKey: ["perf", "traces", startMs, endMs],
-        queryFn: () => fetchPerfTraces({ startTime: startMs, endTime: endMs, limit: 15000 }),
+        queryKey: ["perf", "traces", startMs, endMs, filterSource, filterWebClient, filterWebSign, filterWebSignReason],
+        queryFn: () => fetchPerfTraces({
+          startTime: startMs,
+          endTime: endMs,
+          limit: 15000,
+          source: filterSource,
+          webClientKey: filterWebClient,
+          webSignResult: filterWebSign,
+          webSignFailReason: filterWebSignReason,
+        }),
       },
     ],
   });
@@ -259,17 +276,25 @@ export function PerfMonitorPage() {
     const userNeedle = filterUserId.trim().toLowerCase();
     const pathNeedle = filterPath.trim().toLowerCase();
     const ipNeedle = filterIp.trim().toLowerCase();
+    const sourceNeedle = filterSource;
+    const webClientNeedle = filterWebClient.trim().toLowerCase();
+    const webSignNeedle = filterWebSign;
+    const webSignReasonNeedle = filterWebSignReason.trim().toLowerCase();
     return traces.filter((item) => {
       const userOk = !userNeedle || String(item.userId || "").toLowerCase().includes(userNeedle);
       const pathOk = !pathNeedle || String(item.path || "").toLowerCase().includes(pathNeedle);
       const ipOk = !ipNeedle || String(item.ip || "").toLowerCase().includes(ipNeedle);
-      return userOk && pathOk && ipOk;
+      const sourceOk = sourceNeedle === "all" || String(item.source || "legacy") === sourceNeedle;
+      const webClientOk = !webClientNeedle || String(item.webClientKey || "").toLowerCase().includes(webClientNeedle);
+      const webSignOk = webSignNeedle === "all" || String(item.webSignResult || "") === webSignNeedle;
+      const webSignReasonOk = !webSignReasonNeedle || String(item.webSignFailReason || "").toLowerCase().includes(webSignReasonNeedle);
+      return userOk && pathOk && ipOk && sourceOk && webClientOk && webSignOk && webSignReasonOk;
     });
-  }, [tracesQuery.data, filterUserId, filterPath, filterIp]);
+  }, [tracesQuery.data, filterUserId, filterPath, filterIp, filterSource, filterWebClient, filterWebSign, filterWebSignReason]);
 
   useEffect(() => {
     setTracePage(1);
-  }, [filterUserId, filterPath, filterIp, startMs, endMs]);
+  }, [filterUserId, filterPath, filterIp, filterSource, filterWebClient, filterWebSign, filterWebSignReason, startMs, endMs]);
 
   const pagedTraces = useMemo(() => {
     const start = (tracePage - 1) * TRACE_PAGE_SIZE;
@@ -430,7 +455,11 @@ export function PerfMonitorPage() {
             const ip = v[7] || "";
             const ipTruncated = ip.length > 40 ? `${ip.slice(0, 40)}...` : ip;
             const hasDetail = v[3] === 1;
-            return `<b>requestId:</b> ${escapeHtml(v[4] || "")}<br/><b>path:</b> <span title="${escapeHtml(path)}">${escapeHtml(truncatedPath)}</span><br/><b>userId:</b> ${escapeHtml(v[6] || "")}<br/>${ip ? `<b>ip:</b> <span title="${escapeHtml(ip)}">${escapeHtml(ipTruncated)}</span><br/>` : ""}<b>status:</b> ${v[2]}<br/><b>duration:</b> ${Number(v[1]).toFixed(2)} ms<br/>${hasDetail ? "<b>点击查看详情</b>" : "无详情（未采样）"}`;
+            const source = v[8] || "legacy";
+            const client = v[9] || "";
+            const sign = v[10] || "";
+            const reason = v[11] || "";
+            return `<b>requestId:</b> ${escapeHtml(v[4] || "")}<br/><b>source:</b> ${escapeHtml(source)}${client ? ` / ${escapeHtml(client)}` : ""}${sign ? ` / sign=${escapeHtml(sign)}` : ""}${reason ? ` / ${escapeHtml(reason)}` : ""}<br/><b>path:</b> <span title="${escapeHtml(path)}">${escapeHtml(truncatedPath)}</span><br/><b>userId:</b> ${escapeHtml(v[6] || "")}<br/>${ip ? `<b>ip:</b> <span title="${escapeHtml(ip)}">${escapeHtml(ipTruncated)}</span><br/>` : ""}<b>status:</b> ${v[2]}<br/><b>duration:</b> ${Number(v[1]).toFixed(2)} ms<br/>${hasDetail ? "<b>点击查看详情</b>" : "无详情（未采样）"}`;
           },
         },
         xAxis: { type: "time", name: "Time", scale: true, axisLabel: { color: "#64748b" }, nameTextStyle: { color: "#64748b" } },
@@ -540,6 +569,10 @@ export function PerfMonitorPage() {
     },
     { title: "userId", dataIndex: "userId", key: "userId", width: 180, render: (value: string) => value || "-" },
     { title: "IP", dataIndex: "ip", key: "ip", width: 180, render: (value: string) => value || "-" },
+    { title: "来源", dataIndex: "source", key: "source", width: 100, render: (value: string) => <Tag color={value === "web" ? "geekblue" : "default"}>{value || "legacy"}</Tag> },
+    { title: "Client", dataIndex: "webClientKey", key: "webClientKey", width: 170, render: (value: string) => value || "-" },
+    { title: "签名", dataIndex: "webSignResult", key: "webSignResult", width: 100, render: (value: string) => value ? <Tag color={value === "pass" ? "success" : value === "fail" ? "error" : "default"}>{value}</Tag> : "-" },
+    { title: "失败原因", dataIndex: "webSignFailReason", key: "webSignFailReason", width: 190, render: (value: string) => value || "-" },
     {
       title: "requestId",
       dataIndex: "requestId",
@@ -638,6 +671,27 @@ export function PerfMonitorPage() {
                       <Input allowClear value={filterUserIdInput} onChange={(event) => setFilterUserIdInput(event.target.value)} placeholder="userId" />
                       <Input allowClear value={filterPathInput} onChange={(event) => setFilterPathInput(event.target.value)} placeholder="path，例如 /api/xhunt" />
                       <Input allowClear value={filterIpInput} onChange={(event) => setFilterIpInput(event.target.value)} placeholder="IP" />
+                      <Select
+                        value={filterSourceInput}
+                        onChange={setFilterSourceInput}
+                        options={[
+                          { value: "all", label: "全部来源" },
+                          { value: "legacy", label: "插件/旧接口" },
+                          { value: "web", label: "Web" },
+                        ]}
+                      />
+                      <Input allowClear value={filterWebClientInput} onChange={(event) => setFilterWebClientInput(event.target.value)} placeholder="Web clientKey" />
+                      <Select
+                        value={filterWebSignInput}
+                        onChange={setFilterWebSignInput}
+                        options={[
+                          { value: "all", label: "全部签名" },
+                          { value: "pass", label: "签名通过" },
+                          { value: "fail", label: "签名失败" },
+                          { value: "skipped", label: "未启用/跳过" },
+                        ]}
+                      />
+                      <Input allowClear value={filterWebSignReasonInput} onChange={(event) => setFilterWebSignReasonInput(event.target.value)} placeholder="签名失败原因" />
                       <div className="perf-filter-actions">
                         <Button
                           type="primary"
@@ -646,6 +700,10 @@ export function PerfMonitorPage() {
                             setFilterUserId(filterUserIdInput);
                             setFilterPath(filterPathInput);
                             setFilterIp(filterIpInput);
+                            setFilterSource(filterSourceInput);
+                            setFilterWebClient(filterWebClientInput);
+                            setFilterWebSign(filterWebSignInput);
+                            setFilterWebSignReason(filterWebSignReasonInput);
                           }}
                         >
                           筛选
@@ -656,9 +714,17 @@ export function PerfMonitorPage() {
                             setFilterUserIdInput("");
                             setFilterPathInput("");
                             setFilterIpInput("");
+                            setFilterSourceInput("all");
+                            setFilterWebClientInput("");
+                            setFilterWebSignInput("all");
+                            setFilterWebSignReasonInput("");
                             setFilterUserId("");
                             setFilterPath("");
                             setFilterIp("");
+                            setFilterSource("all");
+                            setFilterWebClient("");
+                            setFilterWebSign("all");
+                            setFilterWebSignReason("");
                           }}
                         >
                           清除
@@ -752,7 +818,7 @@ export function PerfMonitorPage() {
                 dataSource={pagedTraces}
                 loading={tracesQuery.isFetching}
                 pagination={false}
-                scroll={{ y: TABLE_MAX_HEIGHT, x: 1300 }}
+                scroll={{ y: TABLE_MAX_HEIGHT, x: 1680 }}
                 locale={{ emptyText: <Empty description="当前时间范围暂无追踪数据" /> }}
               />
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>

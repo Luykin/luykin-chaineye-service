@@ -98,6 +98,17 @@ const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
   HTTP_500: "服务暂时异常，请稍后再试。",
   HTTP_502: "服务暂时不可用，请稍后再试。",
   HTTP_503: "服务暂时不可用，请稍后再试。",
+  WEB_SIGNATURE_REQUIRED: "请求签名缺失，请刷新页面后重试。",
+  WEB_SIGNATURE_VERSION_UNSUPPORTED: "认证组件版本不匹配，请刷新页面后重试。",
+  WEB_SIGNATURE_EXPIRED: "请求已过期，请刷新页面后重试。",
+  WEB_SIGNATURE_REPLAYED: "请求已处理，请刷新后重试。",
+  WEB_SIGNATURE_BODY_HASH_MISMATCH: "请求内容校验失败，请刷新后重试。",
+  WEB_SIGNATURE_INVALID: "请求签名无效，请刷新页面后重试。",
+  WEB_SIGNATURE_CLIENT_INVALID: "当前应用未授权访问认证中心。",
+  WEB_SIGNATURE_ORIGIN_DENIED: "当前页面来源不允许访问认证中心。",
+  WEB_SIGNATURE_CONFIG_MISSING: "认证中心签名配置缺失，请联系管理员。",
+  WEB_SIGNATURE_SALT_MISSING: "认证组件签名配置缺失，请联系管理员。",
+  WEB_SIGNATURE_CRYPTO_UNAVAILABLE: "当前浏览器不支持安全签名，请更换浏览器后重试。",
 };
 
 function isAuthError(error: unknown): error is XHuntAuthError {

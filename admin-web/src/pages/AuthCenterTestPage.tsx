@@ -215,6 +215,9 @@ export function AuthCenterTestPage() {
         apiBaseUrl,
         authBasePath: "/api/xhunt/auth-center",
         clientKey: "xhunt-admin-web-test",
+        webSignature: {
+          publicSalt: import.meta.env.VITE_XHUNT_WEB_PUBLIC_SIGN_SALT || "",
+        },
         storage: "localStorage",
         autoLoadUser: true,
         onError(error) {

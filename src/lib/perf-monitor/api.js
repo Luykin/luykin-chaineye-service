@@ -2,6 +2,19 @@
 
 const express = require("express");
 
+function matchesTraceFilters(point, query) {
+  const source = String(query.source || "").trim();
+  const webClientKey = String(query.webClientKey || "").trim();
+  const webSignResult = String(query.webSignResult || "").trim();
+  const webSignFailReason = String(query.webSignFailReason || "").trim();
+  if (source && source !== "all" && String(point.source || "legacy") !== source) return false;
+  if (webClientKey && !String(point.webClientKey || "").includes(webClientKey)) return false;
+  if (webSignResult && webSignResult !== "all" && String(point.webSignResult || "") !== webSignResult) return false;
+  if (webSignFailReason && !String(point.webSignFailReason || "").includes(webSignFailReason)) return false;
+  return true;
+}
+
+
 /**
  * Creates the API router for the performance monitor.
  * @param {object} config - The configuration object.
@@ -264,7 +277,9 @@ function createApiRouter(config) {
         for (const member of rangeResult) {
           try {
             const pointData = JSON.parse(member.value);
-            allTraces.push({ ...pointData, ts: member.score });
+            if (matchesTraceFilters(pointData, req.query)) {
+              allTraces.push({ ...pointData, ts: member.score });
+            }
           } catch (e) {
             // Ignore parse errors
           }
