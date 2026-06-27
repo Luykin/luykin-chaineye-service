@@ -1,0 +1,10 @@
+#!/bin/sh
+# Keep local release tags bounded before pushing code.
+# Set SKIP_RELEASE_TAG_SYNC=1 to bypass in emergencies.
+
+if [ "$SKIP_RELEASE_TAG_SYNC" = "1" ]; then
+  echo "[release-tags] SKIP_RELEASE_TAG_SYNC=1，跳过本地 tag 同步。"
+  exit 0
+fi
+
+node scripts/sync-local-release-tags.js
