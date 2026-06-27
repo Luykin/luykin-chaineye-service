@@ -28,6 +28,35 @@ function parseOAuthInput(input?: OAuthCallbackInput) {
   };
 }
 
+function getUrlParamFromSearchOrHash(name: string) {
+  if (typeof window === "undefined") return "";
+  const url = new URL(window.location.href);
+  const fromSearch = url.searchParams.get(name);
+  if (fromSearch) return fromSearch;
+  const hash = url.hash || "";
+  const queryIndex = hash.indexOf("?");
+  if (queryIndex < 0) return "";
+  const hashParams = new URLSearchParams(hash.slice(queryIndex + 1));
+  return hashParams.get(name) || "";
+}
+
+function removeUrlParams(names: string[]) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  names.forEach((name) => url.searchParams.delete(name));
+  if (url.hash) {
+    const queryIndex = url.hash.indexOf("?");
+    if (queryIndex >= 0) {
+      const hashPath = url.hash.slice(0, queryIndex);
+      const hashParams = new URLSearchParams(url.hash.slice(queryIndex + 1));
+      names.forEach((name) => hashParams.delete(name));
+      const nextHashQuery = hashParams.toString();
+      url.hash = nextHashQuery ? `${hashPath}?${nextHashQuery}` : hashPath;
+    }
+  }
+  window.history.replaceState({}, document.title, url.toString());
+}
+
 const WEB_SIGN_VERSION = "w1";
 const AUTH_CLIENT_SDK_VERSION = "0.1.0";
 const WEB_PUBLIC_SIGN_SALT = "xhunt-web-sign-w1-fixed-lite-20260626";
@@ -262,14 +291,14 @@ export class XHuntAuthClient {
   async getGoogleUrl() {
     return this.request<{ url: string; clientKey: string }>("/google/url", {
       method: "POST",
-      body: JSON.stringify({ clientKey: this.config.clientKey }),
+      body: JSON.stringify({ clientKey: this.config.clientKey, returnUrl: getPageUrl() }),
     });
   }
 
   async getTwitterUrl() {
     return this.request<{ url: string; clientKey: string }>("/twitter/url", {
       method: "POST",
-      body: JSON.stringify({ clientKey: this.config.clientKey }),
+      body: JSON.stringify({ clientKey: this.config.clientKey, returnUrl: getPageUrl() }),
     });
   }
 
@@ -294,6 +323,36 @@ export class XHuntAuthClient {
     });
     this.setToken(result.token, result.user);
     return result;
+  }
+
+  async handleOAuthCallbackAuto(input?: OAuthCallbackInput): Promise<XHuntLoginResult> {
+    const url = input?.url || (typeof window !== "undefined" ? window.location.href : "");
+    const provider = url ? new URL(url).searchParams.get("provider") || new URL(url).searchParams.get("auth_provider") : "";
+    if (provider === "google" || provider === "twitter") {
+      return this.handleOAuthCallback(provider, input);
+    }
+    try {
+      return await this.handleOAuthCallback("google", input);
+    } catch (error) {
+      if (error instanceof XHuntAuthError && error.code !== "INVALID_OR_EXPIRED_STATE") {
+        throw error;
+      }
+      return this.handleOAuthCallback("twitter", input);
+    }
+  }
+
+  async exchangeTransferCode(transferCode: string): Promise<XHuntLoginResult> {
+    const result = await this.request<XHuntLoginResult>("/token/exchange", {
+      method: "POST",
+      body: JSON.stringify({ transferCode }),
+    });
+    this.setToken(result.token, result.user);
+    removeUrlParams(["authTransferCode", "transferCode"]);
+    return result;
+  }
+
+  getTransferCodeFromUrl() {
+    return getUrlParamFromSearchOrHash("authTransferCode") || getUrlParamFromSearchOrHash("transferCode");
   }
 
   async getWalletNonce(address: string): Promise<XHuntWalletChallenge> {

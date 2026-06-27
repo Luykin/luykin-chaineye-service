@@ -102,6 +102,22 @@ export function XHuntAuthProvider({ config, children }: XHuntAuthProviderProps) 
   }, [client, config.autoLoadUser, reloadUser]);
 
   useEffect(() => {
+    if (config.autoLoadUser === false) return;
+    const transferCode = client.getTransferCodeFromUrl();
+    if (!transferCode) return;
+    client
+      .exchangeTransferCode(transferCode)
+      .then((result) => {
+        updateState({ token: result.token, user: result.user, isLoading: false, error: null });
+      })
+      .catch((error) => {
+        const authError = toAuthError(error);
+        updateState({ isLoading: false, error: authError });
+        config.onError?.(authError);
+      });
+  }, [client, config, updateState]);
+
+  useEffect(() => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
     const { theme, mode, tokens } = resolveThemeConfig(config);
@@ -185,7 +201,16 @@ export function XHuntAuthProvider({ config, children }: XHuntAuthProviderProps) 
       handleOAuthCallback: async (provider = "google", input?: OAuthCallbackInput) => {
         try {
           updateState({ isLoading: true, error: null });
-          return applyLoginResult(await client.handleOAuthCallback(provider, input));
+          const result = provider ? await client.handleOAuthCallback(provider, input) : await client.handleOAuthCallbackAuto(input);
+          return applyLoginResult(result);
+        } catch (error) {
+          return handleError(error);
+        }
+      },
+      exchangeTransferCode: async (transferCode: string) => {
+        try {
+          updateState({ isLoading: true, error: null });
+          return applyLoginResult(await client.exchangeTransferCode(transferCode));
         } catch (error) {
           return handleError(error);
         }

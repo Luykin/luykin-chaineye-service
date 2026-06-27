@@ -1557,3 +1557,45 @@ export interface XHuntLoginResult {
 - 用户可以绑定最多 4 类登录身份，每类一个；绑定后任意身份都能登录同一个主账号。
 - Twitter 身份通过 `twitterId` 与旧 `XHuntUsers` 建立关联，既保留旧插件体系，又支持新 Web 登录中心独立演进。
 - 多个 XHunt Web 端后续通过统一 Token/UserInfo/OAuth2 能力接入认证中心。
+
+---
+
+## 17. 统一 OAuth 回调与 transferCode 方案（当前实现）
+
+Google / Twitter 登录统一回调到认证中心页面，例如：
+
+```txt
+https://xhunt.ai/auth-center
+```
+
+业务网站发起 OAuth 登录时，`@xhunt/auth-client` 会自动把当前页面作为 `returnUrl` 发送给后端。后端将 `clientKey + returnUrl` 写入 Redis state。
+
+OAuth 回调完成后，后端不会把 token 放进 URL，而是生成一次性 `transferCode`：
+
+```txt
+auth_center_transfer_code:{transferCode}
+```
+
+TTL：2 分钟。
+
+统一回调页拿到 callback 结果后跳回业务网站：
+
+```txt
+{returnUrl}?authTransferCode=xxx
+```
+
+如果业务网站使用 hash 路由，则追加到 hash query：
+
+```txt
+{returnUrl}?...#/path?authTransferCode=xxx
+```
+
+业务网站上的 `@xhunt/auth-client` 会自动识别 `authTransferCode`，调用：
+
+```txt
+POST /api/xhunt/auth-center/token/exchange
+```
+
+兑换 token + user，写入 localStorage，并清理 URL 里的 `authTransferCode`。
+
+这样 Google / Twitter 后台只需要配置统一回调地址，不需要为每个业务网站配置 redirect URI。

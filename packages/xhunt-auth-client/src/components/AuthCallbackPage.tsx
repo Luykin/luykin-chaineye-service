@@ -16,6 +16,21 @@ function inferProvider() {
   return provider === "twitter" ? "twitter" : "google";
 }
 
+function appendTransferCode(returnUrl: string, transferCode: string) {
+  const url = new URL(returnUrl);
+  if (url.hash) {
+    const queryIndex = url.hash.indexOf("?");
+    const hashPath = queryIndex >= 0 ? url.hash.slice(0, queryIndex) : url.hash;
+    const hashQuery = queryIndex >= 0 ? url.hash.slice(queryIndex + 1) : "";
+    const hashParams = new URLSearchParams(hashQuery);
+    hashParams.set("authTransferCode", transferCode);
+    url.hash = `${hashPath}?${hashParams.toString()}`;
+  } else {
+    url.searchParams.set("authTransferCode", transferCode);
+  }
+  return url.toString();
+}
+
 export function XHuntAuthCallbackPage({ provider, bindMode = false, onSuccess, onError }: XHuntAuthCallbackPageProps) {
   const auth = useXHuntAuth();
   const [status, setStatus] = useState("Completing secure handoff…");
@@ -30,9 +45,13 @@ export function XHuntAuthCallbackPage({ provider, bindMode = false, onSuccess, o
           onSuccess?.({ user });
           return;
         }
-        const result = await auth.handleOAuthCallback(actualProvider);
+        const result = provider ? await auth.handleOAuthCallback(actualProvider) : await auth.client.handleOAuthCallbackAuto();
         setStatus("Signed in.");
         onSuccess?.(result);
+        if (result.transferCode && result.returnUrl && typeof window !== "undefined") {
+          setStatus("Returning to app…");
+          window.location.replace(appendTransferCode(result.returnUrl, result.transferCode));
+        }
       } catch (error) {
         setStatus("Authentication failed.");
         onError?.(error);

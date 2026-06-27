@@ -54,6 +54,45 @@ function sendError(res, error, fallback = "AUTH_CENTER_ERROR") {
   });
 }
 
+function normalizeReturnUrl(returnUrl) {
+  const value = String(returnUrl || "").trim();
+  if (!value) return null;
+  if (value.length > 2048) return null;
+  try {
+    const parsed = new URL(value);
+    if (!["http:", "https:"].includes(parsed.protocol)) return null;
+    return parsed.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
+function getRequestReturnUrl(req) {
+  return normalizeReturnUrl(req.body?.returnUrl || req.headers["x-xhunt-web-page-url"]);
+}
+
+async function attachTransferCode(req, payload, returnUrl) {
+  const normalizedReturnUrl = normalizeReturnUrl(returnUrl);
+  if (!normalizedReturnUrl) return payload;
+  const transferCode = randomToken(32);
+  await req.redisClient.setEx(
+    `auth_center_transfer_code:${transferCode}`,
+    2 * 60,
+    JSON.stringify({
+      token: payload.token,
+      user: payload.user,
+      isNewUser: !!payload.isNewUser,
+      returnUrl: normalizedReturnUrl,
+      createdAt: Date.now(),
+    })
+  );
+  return {
+    ...payload,
+    transferCode,
+    returnUrl: normalizedReturnUrl,
+  };
+}
+
 async function buildLoginResponse(req, { user, identities, isNewUser, clientKey, transaction }) {
   const client = await findActiveClient(models, clientKey);
   const { token } = await createSessionAndToken({
@@ -225,6 +264,32 @@ router.post(
   }
 );
 
+router.post(
+  "/token/exchange",
+  [body("transferCode").isString().trim().notEmpty(), validateRequest],
+  async (req, res) => {
+    try {
+      const transferCode = String(req.body.transferCode || "").trim();
+      const cacheKey = `auth_center_transfer_code:${transferCode}`;
+      const raw = await req.redisClient.get(cacheKey);
+      const cached = raw ? JSON.parse(raw) : null;
+      if (!cached?.token?.accessToken || !cached?.user) {
+        const err = new Error("TRANSFER_CODE_INVALID");
+        err.status = 419;
+        throw err;
+      }
+      await req.redisClient.del(cacheKey);
+      return res.json({
+        token: cached.token,
+        user: cached.user,
+        isNewUser: !!cached.isNewUser,
+      });
+    } catch (error) {
+      return sendError(res, error, "TRANSFER_CODE_EXCHANGE_FAILED");
+    }
+  }
+);
+
 router.post("/logout", authenticateAuthCenterToken(), async (req, res) => {
   try {
     await req.authCenter.session.update({
@@ -384,15 +449,20 @@ router.post(
 
 router.post(
   "/twitter/url",
-  [body("clientKey").optional().isString().trim(), validateRequest],
+  [
+    body("clientKey").optional().isString().trim(),
+    body("returnUrl").optional().isString().trim().isLength({ max: 2048 }),
+    validateRequest,
+  ],
   async (req, res) => {
     try {
       const clientKey = req.body.clientKey || "xhunt-web";
+      const returnUrl = getRequestReturnUrl(req);
       const url = await generateTwitterAuthUrl(async (state, codeVerifier) => {
         await req.redisClient.setEx(
           `auth_center_twitter_oauth_state:${state}`,
           8 * 60,
-          JSON.stringify({ codeVerifier, clientKey, createdAt: Date.now() })
+          JSON.stringify({ codeVerifier, clientKey, returnUrl, createdAt: Date.now() })
         );
       }, clientKey);
       return res.json({ url, clientKey });
@@ -445,7 +515,11 @@ router.post(
         provider: PROVIDERS.TWITTER,
         success: true,
       });
-      const responsePayload = await buildLoginResponse(req, { ...result, clientKey: cached.clientKey, transaction });
+      const responsePayload = await attachTransferCode(
+        req,
+        await buildLoginResponse(req, { ...result, clientKey: cached.clientKey, transaction }),
+        cached.returnUrl
+      );
       await transaction.commit();
       return res.json(responsePayload);
     } catch (error) {
@@ -463,16 +537,21 @@ router.post(
 
 router.post(
   "/google/url",
-  [body("clientKey").optional().isString().trim(), validateRequest],
+  [
+    body("clientKey").optional().isString().trim(),
+    body("returnUrl").optional().isString().trim().isLength({ max: 2048 }),
+    validateRequest,
+  ],
   async (req, res) => {
     try {
       const { clientId, redirectUri } = getGoogleConfig();
       const state = randomToken(24);
       const clientKey = req.body.clientKey || "xhunt-web";
+      const returnUrl = getRequestReturnUrl(req);
       await req.redisClient.setEx(
         `auth_center_google_oauth_state:${state}`,
         8 * 60,
-        JSON.stringify({ clientKey, createdAt: Date.now() })
+        JSON.stringify({ clientKey, returnUrl, createdAt: Date.now() })
       );
       const params = new URLSearchParams({
         client_id: clientId,
@@ -522,7 +601,11 @@ router.post(
         provider: PROVIDERS.GOOGLE,
         success: true,
       });
-      const responsePayload = await buildLoginResponse(req, { ...result, clientKey: cached.clientKey, transaction });
+      const responsePayload = await attachTransferCode(
+        req,
+        await buildLoginResponse(req, { ...result, clientKey: cached.clientKey, transaction }),
+        cached.returnUrl
+      );
       await transaction.commit();
       return res.json(responsePayload);
     } catch (error) {

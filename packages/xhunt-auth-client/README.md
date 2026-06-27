@@ -242,3 +242,57 @@ mode: "dark" | "light" | "auto"
   <App />
 </XHuntAuthProvider>
 ```
+
+## 9. 多语言配置
+
+默认语言是英文，不传 `locale` 时会展示英文。内置支持：
+
+```ts
+locale: "en" | "zh-CN" | "zh-TW"
+```
+
+业务侧可以在 Provider 里统一指定：
+
+```tsx
+<XHuntAuthProvider
+  config={{
+    apiBaseUrl: "https://api.cryptohunt.ai",
+    clientKey: "xhunt-web",
+    ui: {
+      locale: "zh-CN",
+    },
+  }}
+>
+  <App />
+</XHuntAuthProvider>
+```
+
+也可以只给某个弹窗指定：
+
+```tsx
+<XHuntLoginModal locale="zh-TW" />
+```
+
+如果业务侧有其他语言，可以通过 `texts` 覆盖文案和错误提示：
+
+```tsx
+<XHuntAuthProvider
+  config={{
+    apiBaseUrl: "https://api.cryptohunt.ai",
+    clientKey: "xhunt-web",
+    ui: {
+      locale: "ja",
+      texts: {
+        title: "XHunt にログイン",
+        continueButton: "続行",
+        errors: {
+          INVALID_ACCOUNT_OR_PASSWORD: "アカウントまたはパスワードが正しくありません。",
+        },
+      },
+    },
+  }}
+>
+  <App />
+</XHuntAuthProvider>
+```
+

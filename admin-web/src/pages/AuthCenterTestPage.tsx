@@ -217,6 +217,9 @@ export function AuthCenterTestPage() {
         clientKey: "xhunt-admin-web-test",
         storage: "localStorage",
         autoLoadUser: true,
+        ui: {
+          locale: "zh-CN",
+        },
         onError(error) {
           // eslint-disable-next-line no-console
           console.warn("[AuthCenterTest]", error);

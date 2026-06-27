@@ -1,6 +1,30 @@
 export type XHuntAuthProviderName = "password" | "google" | "evm" | "twitter";
 export type XHuntAuthThemeName = "xhunt" | "aqua" | "mono";
 export type XHuntAuthThemeMode = "dark" | "light" | "auto";
+export type XHuntAuthLocale = "en" | "zh-CN" | "zh-TW" | string;
+
+export interface XHuntAuthTextOverrides {
+  authCenterKicker?: string;
+  title?: string;
+  subtitle?: string;
+  loginTab?: string;
+  createTab?: string;
+  accountLabel?: string;
+  accountPlaceholder?: string;
+  passwordLabel?: string;
+  passwordPlaceholder?: string;
+  continueButton?: string;
+  createAccountButton?: string;
+  divider?: string;
+  googleButton?: string;
+  twitterButton?: string;
+  walletButton?: string;
+  closeLabel?: string;
+  showPasswordLabel?: string;
+  hidePasswordLabel?: string;
+  genericError?: string;
+  errors?: Record<string, string>;
+}
 
 export interface XHuntAuthThemeTokens {
   accent?: string;
@@ -27,6 +51,10 @@ export interface XHuntAuthConfig {
     mode?: XHuntAuthThemeMode;
     /** Override CSS color tokens for brand customization. */
     tokens?: XHuntAuthThemeTokens;
+    /** UI language. Built-ins: en, zh-CN, zh-TW. Default is en. */
+    locale?: XHuntAuthLocale;
+    /** Custom text overrides for built-in or custom languages. */
+    texts?: XHuntAuthTextOverrides;
     defaultProvider?: XHuntAuthProviderName;
     enabledProviders?: XHuntAuthProviderName[];
     title?: string;
@@ -74,6 +102,8 @@ export interface XHuntLoginResult {
   token: XHuntTokenSet;
   user: XHuntAuthUser;
   isNewUser?: boolean;
+  transferCode?: string;
+  returnUrl?: string;
 }
 
 export interface XHuntAuthState {
@@ -130,6 +160,7 @@ export interface XHuntAuthContextValue extends XHuntAuthState {
   loginWithTwitter(): Promise<void>;
   loginWithWallet(): Promise<XHuntLoginResult>;
   handleOAuthCallback(provider?: "google" | "twitter", input?: OAuthCallbackInput): Promise<XHuntLoginResult>;
+  exchangeTransferCode(transferCode: string): Promise<XHuntLoginResult>;
   refresh(): Promise<XHuntTokenSet | null>;
   reloadUser(): Promise<XHuntAuthUser | null>;
   logout(options?: { allDevices?: boolean }): Promise<void>;
