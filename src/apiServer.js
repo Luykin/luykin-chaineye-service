@@ -30,6 +30,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/auth',
   './xhunt/api/web-auth',
   './xhunt/auth-center/api/auth-center',
+  './xhunt/auth-center/api/internal',
   './xhunt/web-security/middleware/web-signature',
   './xhunt/api/proxy',
   './xhunt/api/reviews',
@@ -193,6 +194,7 @@ const rootdataTampermonkeyRoutes = require("./routes/rootdata-tampermonkey");
 const xHuntAuthRoutes = require("./xhunt/api/auth");
 const xHuntWebAuthRoutes = require("./xhunt/api/web-auth");
 const xHuntAuthCenterRoutes = require("./xhunt/auth-center/api/auth-center");
+const xHuntAuthCenterInternalRoutes = require("./xhunt/auth-center/api/internal");
 const { webSignatureMiddleware } = require("./xhunt/web-security/middleware/web-signature");
 const xHuntProxyRoutes = require("./xhunt/api/proxy");
 const xHuntReviewsRoutes = require("./xhunt/api/reviews");
@@ -519,6 +521,9 @@ async function initializeAndStartServer() {
 
   // XHunt Web 用户认证接口（周边网站登录）
   app.use("/api/xhunt/web/auth", xHuntWebAuthRoutes);
+
+  // XHunt 登录认证中心内部接口（服务端校验 token，不走 Web 签名）
+  app.use("/api/xhunt/auth-center/internal", xHuntAuthCenterInternalRoutes);
 
   // XHunt 登录认证中心接口（多 Web 端统一登录）
   app.use("/api/xhunt/auth-center", webSignatureMiddleware(), xHuntAuthCenterRoutes);
