@@ -347,12 +347,29 @@ export class XHuntAuthClient {
       body: JSON.stringify({ transferCode }),
     });
     this.setToken(result.token, result.user);
-    removeUrlParams(["authTransferCode", "transferCode"]);
+    this.clearReturnParamsFromUrl();
     return result;
   }
 
   getTransferCodeFromUrl() {
     return getUrlParamFromSearchOrHash("authTransferCode") || getUrlParamFromSearchOrHash("transferCode");
+  }
+
+  getReturnErrorFromUrl() {
+    const code = getUrlParamFromSearchOrHash("authError");
+    if (!code) return null;
+    return {
+      code,
+      message: getUrlParamFromSearchOrHash("authErrorMessage") || code,
+    };
+  }
+
+  getBindSuccessFromUrl() {
+    return getUrlParamFromSearchOrHash("authBindSuccess") || "";
+  }
+
+  clearReturnParamsFromUrl() {
+    removeUrlParams(["authTransferCode", "transferCode", "authError", "authErrorMessage", "authBindSuccess", "authBindProvider"]);
   }
 
   async getWalletNonce(address: string): Promise<XHuntWalletChallenge> {
@@ -459,7 +476,7 @@ export class XHuntAuthClient {
   async getIdentityBindUrl(provider: Extract<XHuntAuthProviderName, "google" | "twitter">) {
     return this.request<{ url: string; clientKey: string }>(
       `/identities/${provider}/url`,
-      { method: "POST", body: JSON.stringify({ clientKey: this.config.clientKey }) },
+      { method: "POST", body: JSON.stringify({ clientKey: this.config.clientKey, returnUrl: getPageUrl() }) },
       true
     );
   }

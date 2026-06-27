@@ -46,11 +46,12 @@ const models = {
   XHuntUser,
 };
 
-function sendError(res, error, fallback = "AUTH_CENTER_ERROR") {
+function sendError(res, error, fallback = "AUTH_CENTER_ERROR", extra = {}) {
   const status = error.status || 500;
   return res.status(status).json({
     error: error.message || fallback,
     message: error.publicMessage || undefined,
+    ...extra,
   });
 }
 
@@ -650,7 +651,12 @@ router.post(
       });
       const userPayload = buildPublicUser(result.user, result.identities);
       await transaction.commit();
-      return res.json({ success: true, user: userPayload });
+      return res.json({
+        success: true,
+        user: userPayload,
+        provider: PROVIDERS.TWITTER,
+        returnUrl: normalizeReturnUrl(cached.returnUrl),
+      });
     } catch (error) {
       await transaction.rollback();
       await createAuditLog(models, req, {
@@ -722,7 +728,12 @@ router.post(
       });
       const userPayload = buildPublicUser(result.user, result.identities);
       await transaction.commit();
-      return res.json({ success: true, user: userPayload });
+      return res.json({
+        success: true,
+        user: userPayload,
+        provider: PROVIDERS.GOOGLE,
+        returnUrl: normalizeReturnUrl(cached.returnUrl),
+      });
     } catch (error) {
       await transaction.rollback();
       await createAuditLog(models, req, {
@@ -741,10 +752,15 @@ router.post(
 router.post(
   "/identities/twitter/url",
   authenticateAuthCenterToken(),
-  [body("clientKey").optional().isString().trim(), validateRequest],
+  [
+    body("clientKey").optional().isString().trim(),
+    body("returnUrl").optional().isString().trim().isLength({ max: 2048 }),
+    validateRequest,
+  ],
   async (req, res) => {
     try {
       const clientKey = req.body.clientKey || req.authCenter.session.clientKey || "xhunt-web";
+      const returnUrl = getRequestReturnUrl(req);
       const url = await generateTwitterAuthUrl(async (state, codeVerifier) => {
         await req.redisClient.setEx(
           `auth_center_twitter_bind_state:${state}`,
@@ -752,6 +768,7 @@ router.post(
           JSON.stringify({
             codeVerifier,
             clientKey,
+            returnUrl,
             userId: req.authCenter.user.id,
             sessionId: req.authCenter.session.id,
             createdAt: Date.now(),
@@ -770,10 +787,11 @@ router.post(
   [body("code").isString().trim().notEmpty(), body("state").isString().trim().notEmpty(), validateRequest],
   async (req, res) => {
     const transaction = await pgInstance.transaction();
+    let cached = null;
     try {
       const cacheKey = `auth_center_twitter_bind_state:${req.body.state}`;
       const raw = await req.redisClient.get(cacheKey);
-      const cached = raw ? JSON.parse(raw) : null;
+      cached = raw ? JSON.parse(raw) : null;
       if (!cached?.codeVerifier || !cached?.userId) {
         const err = new Error("INVALID_OR_EXPIRED_STATE");
         err.status = 400;
@@ -818,7 +836,12 @@ router.post(
       });
       const userPayload = buildPublicUser(result.user, result.identities);
       await transaction.commit();
-      return res.json({ success: true, user: userPayload });
+      return res.json({
+        success: true,
+        user: userPayload,
+        provider: PROVIDERS.TWITTER,
+        returnUrl: normalizeReturnUrl(cached.returnUrl),
+      });
     } catch (error) {
       await transaction.rollback();
       await createAuditLog(models, req, {
@@ -827,7 +850,7 @@ router.post(
         success: false,
         reason: error.message,
       });
-      return sendError(res, error, "TWITTER_BIND_FAILED");
+      return sendError(res, error, "TWITTER_BIND_FAILED", { returnUrl: normalizeReturnUrl(cached?.returnUrl) });
     }
   }
 );
@@ -835,17 +858,23 @@ router.post(
 router.post(
   "/identities/google/url",
   authenticateAuthCenterToken(),
-  [body("clientKey").optional().isString().trim(), validateRequest],
+  [
+    body("clientKey").optional().isString().trim(),
+    body("returnUrl").optional().isString().trim().isLength({ max: 2048 }),
+    validateRequest,
+  ],
   async (req, res) => {
     try {
       const { clientId, redirectUri } = getGoogleConfig();
       const state = randomToken(24);
       const clientKey = req.body.clientKey || req.authCenter.session.clientKey || "xhunt-web";
+      const returnUrl = getRequestReturnUrl(req);
       await req.redisClient.setEx(
         `auth_center_google_bind_state:${state}`,
         8 * 60,
         JSON.stringify({
           clientKey,
+          returnUrl,
           userId: req.authCenter.user.id,
           sessionId: req.authCenter.session.id,
           createdAt: Date.now(),
@@ -875,10 +904,11 @@ router.post(
   [body("code").isString().trim().notEmpty(), body("state").isString().trim().notEmpty(), validateRequest],
   async (req, res) => {
     const transaction = await pgInstance.transaction();
+    let cached = null;
     try {
       const cacheKey = `auth_center_google_bind_state:${req.body.state}`;
       const raw = await req.redisClient.get(cacheKey);
-      const cached = raw ? JSON.parse(raw) : null;
+      cached = raw ? JSON.parse(raw) : null;
       if (!cached?.userId) {
         const err = new Error("INVALID_OR_EXPIRED_STATE");
         err.status = 400;
@@ -909,7 +939,12 @@ router.post(
       });
       const userPayload = buildPublicUser(result.user, result.identities);
       await transaction.commit();
-      return res.json({ success: true, user: userPayload });
+      return res.json({
+        success: true,
+        user: userPayload,
+        provider: PROVIDERS.GOOGLE,
+        returnUrl: normalizeReturnUrl(cached.returnUrl),
+      });
     } catch (error) {
       await transaction.rollback();
       await createAuditLog(models, req, {
@@ -918,7 +953,7 @@ router.post(
         success: false,
         reason: error.message,
       });
-      return sendError(res, error, "GOOGLE_BIND_FAILED");
+      return sendError(res, error, "GOOGLE_BIND_FAILED", { returnUrl: normalizeReturnUrl(cached?.returnUrl) });
     }
   }
 );

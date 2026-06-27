@@ -102,6 +102,23 @@ export function XHuntAuthProvider({ config, children }: XHuntAuthProviderProps) 
   }, [client, config.autoLoadUser, reloadUser]);
 
   useEffect(() => {
+    const returnedError = client.getReturnErrorFromUrl();
+    if (returnedError) {
+      client.clearReturnParamsFromUrl();
+      const authError = new XHuntAuthError(returnedError.code, returnedError.message);
+      updateState({ isLoading: false, error: authError });
+      config.onError?.(authError);
+      return;
+    }
+
+    const bindSuccess = client.getBindSuccessFromUrl();
+    if (!bindSuccess) return;
+    client.clearReturnParamsFromUrl();
+    if (!client.getStoredToken()?.accessToken) return;
+    reloadUser().catch(() => undefined);
+  }, [client, config, reloadUser, updateState]);
+
+  useEffect(() => {
     if (config.autoLoadUser === false) return;
     const transferCode = client.getTransferCodeFromUrl();
     if (!transferCode) return;
