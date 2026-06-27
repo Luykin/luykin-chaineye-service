@@ -18,7 +18,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.6.1",
-    "@xhunt/auth-client": "file:../packages/xhunt-auth-client"
+    "@xhunt/auth-client": "https://oaewcvliegq6wyvp.public.blob.vercel-storage.com/xhunt-auth-client-0.1.0.tgz"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

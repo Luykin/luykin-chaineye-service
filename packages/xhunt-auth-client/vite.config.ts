@@ -9,6 +9,7 @@ export default defineConfig({
       name: "XHuntAuthClient",
       formats: ["es", "cjs"],
       fileName: (format) => (format === "es" ? "index.js" : "index.cjs"),
+      cssFileName: "style",
     },
     rollupOptions: {
       external: ["react", "react-dom", "react/jsx-runtime"],

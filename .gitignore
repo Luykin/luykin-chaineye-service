@@ -19,3 +19,5 @@ backups/
 /src/rootdatapro/scraper/examplehtml/
 .cursor/
 .idea
+packages/xhunt-auth-client/dist
+packages/xhunt-auth-client/release

@@ -47,7 +47,80 @@ github.com/your-org/xhunt-auth-client
 
 如果包仍然放在当前大仓库的 `packages/xhunt-auth-client` 子目录，普通 npm/yarn 从 GitHub 安装时不一定能直接安装子目录包。为了让其他项目稳定安装，最好后续拆成独立私有仓库，并让这个包位于仓库根目录。
 
-## 3. 接入示例
+
+## 3. CDN tarball 安装方式（推荐给内部项目）
+
+如果不想上传源码，也不想使用 npm 私有包，可以只发布构建后的 `.tgz` 到 CDN。
+
+### 3.1 生成 CDN 包
+
+在本包目录执行：
+
+```bash
+cd packages/xhunt-auth-client
+npm install
+npm run pack:cdn
+```
+
+生成文件会在：
+
+```text
+packages/xhunt-auth-client/release/xhunt-auth-client-0.1.0.tgz
+```
+
+这个 tarball 只包含：
+
+```text
+dist/
+README.md
+package.json
+```
+
+不会包含 `src/`、`node_modules/`、`vite.config.ts`、`tsconfig.json` 等源码和构建配置。
+
+### 3.2 上传 CDN
+
+例如上传到：
+
+```text
+https://cdn.xhunt.ai/npm/xhunt-auth-client/xhunt-auth-client-0.1.0.tgz
+```
+
+业务项目直接在 `package.json` 使用 HTTP 链接：
+
+```json
+{
+  "dependencies": {
+    "@xhunt/auth-client": "https://cdn.xhunt.ai/npm/xhunt-auth-client/xhunt-auth-client-0.1.0.tgz"
+  }
+}
+```
+
+然后正常安装：
+
+```bash
+npm install
+```
+
+### 3.3 版本升级
+
+每次发新版建议修改 `package.json` 里的 `version`，重新执行：
+
+```bash
+npm run pack:cdn
+```
+
+CDN 路径带版本号，不要覆盖旧包，例如：
+
+```text
+xhunt-auth-client-0.1.0.tgz
+xhunt-auth-client-0.1.1.tgz
+xhunt-auth-client-0.2.0.tgz
+```
+
+业务项目升级时只改依赖 URL 的版本号即可。
+
+## 4. 接入示例
 
 ```tsx
 import {
@@ -90,7 +163,7 @@ function Header() {
 }
 ```
 
-## 4. OAuth 回调页
+## 5. OAuth 回调页
 
 Google / Twitter 登录回调页可以使用：
 
@@ -121,7 +194,7 @@ Twitter：
 <XHuntAuthCallbackPage provider="google" bindMode />
 ```
 
-## 5. Token localStorage 约定
+## 6. Token localStorage 约定
 
 默认 key：
 
@@ -146,7 +219,7 @@ xhunt_auth_token
 
 业务侧不要直接读写这个 key，统一通过 hooks / client 操作。
 
-## 6. 常用 API
+## 7. 常用 API
 
 ```ts
 const auth = useXHuntAuth();
@@ -176,16 +249,28 @@ const token = await client.getAccessToken();
 const res = await client.authorizedFetch("/api/your-service");
 ```
 
-## 7. 构建
+## 8. 构建
 
 ```bash
 npm install
 npm run build
 ```
 
+生成 CDN 安装包：
+
+```bash
+npm run pack:cdn
+```
+
+检查最终 tarball 会包含哪些文件：
+
+```bash
+npm run pack:check
+```
+
 当前项目里不要自动运行构建，交给项目负责人控制。
 
-## 8. 主题配置
+## 9. 主题配置
 
 默认主题是接近 XHunt 官网的黑底青绿色科技风：
 
@@ -243,7 +328,7 @@ mode: "dark" | "light" | "auto"
 </XHuntAuthProvider>
 ```
 
-## 9. 多语言配置
+## 10. 多语言配置
 
 默认语言是英文，不传 `locale` 时会展示英文。内置支持：
 

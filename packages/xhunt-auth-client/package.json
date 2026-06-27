@@ -11,8 +11,11 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && vite build",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "vite build && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist release",
+    "pack:cdn": "npm run clean && npm run build && mkdir -p release && npm pack --pack-destination release",
+    "pack:check": "npm run clean && npm run build && npm pack --dry-run"
   },
   "peerDependencies": {
     "react": ">=18.0.0",

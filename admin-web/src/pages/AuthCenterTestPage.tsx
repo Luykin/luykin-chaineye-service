@@ -8,6 +8,7 @@ import {
   type XHuntAuthProviderName,
 } from "@xhunt/auth-client";
 import { getApiBaseUrl } from "@/services/apiClient";
+import "@xhunt/auth-client/dist/style.css";
 import "@/styles/pages/auth-center-test.css";
 
 const { Paragraph, Text, Title } = Typography;
