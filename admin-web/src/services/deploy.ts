@@ -43,6 +43,17 @@ export interface DeployActionData {
     messageSource: "ai" | "fallback" | string;
     pushed: boolean;
   };
+  tagCleanup?: {
+    prefix: string;
+    keepLimit: number;
+    totalBefore: number;
+    totalAfter: number;
+    protectedTagName?: string | null;
+    remotePruneEnabled: boolean;
+    deletedLocal: string[];
+    deletedRemote: string[];
+    errors: Array<{ tagName: string; scope: string; error: string }>;
+  };
   target?: string;
   resolvedHash?: string;
   lostCommits?: DeployCommit[];
@@ -68,6 +79,7 @@ export interface ReleaseTagCreateData {
   before: string;
   after: string;
   releaseTag: NonNullable<DeployActionData["releaseTag"]>;
+  tagCleanup?: DeployActionData["tagCleanup"];
   commitCount: number;
 }
 
@@ -83,6 +95,8 @@ export interface ReleaseStatusData {
   hasUpdate: boolean;
   suggestedTagName?: string | null;
   tagPrefix?: string;
+  tagKeepLimit?: number;
+  pruneRemoteTagsEnabled?: boolean;
   pushTagsEnabled?: boolean;
   restartTarget: string;
 }

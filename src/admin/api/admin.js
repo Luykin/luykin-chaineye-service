@@ -41,6 +41,10 @@ const PROJECT_ROOT = process.env.PROJECT_ROOT
   : path.resolve(__dirname, "../../..");
 const GIT_TARGET_RE = /^[0-9A-Za-z._/@+-]{1,160}$/;
 const RELEASE_TAG_PREFIX = process.env.ADMIN_DEPLOY_TAG_PREFIX || "prod";
+const RELEASE_TAG_KEEP_LIMIT = Math.max(1, parseInt(process.env.ADMIN_DEPLOY_TAG_KEEP_LIMIT || "10", 10));
+const RELEASE_TAG_PRUNE_REMOTE = process.env.ADMIN_DEPLOY_PRUNE_REMOTE_TAGS === "true" || (
+  process.env.ADMIN_DEPLOY_PRUNE_REMOTE_TAGS !== "false" && process.env.ADMIN_DEPLOY_PUSH_TAGS === "true"
+);
 
 async function runDeployCommand(command, args, options = {}) {
   const result = await execFileAsync(command, args, {
@@ -86,6 +90,109 @@ function parseGitTagLine(line) {
     relativeTime: relativeTime || "",
     message: messageParts.join("\t") || "",
   };
+}
+
+
+function parseReleaseTagCleanupLine(line) {
+  const [name, hash, createdAtUnix] = String(line || "").split("\t");
+  if (!name || !hash) return null;
+  return {
+    name,
+    hash,
+    createdAtUnix: Number(createdAtUnix || 0) || 0,
+  };
+}
+
+async function listReleaseTagsForCleanup() {
+  const pattern = `refs/tags/${RELEASE_TAG_PREFIX}-*`;
+  const raw = await runDeployCommand("git", [
+    "for-each-ref",
+    "--sort=-creatordate",
+    "--format=%(refname:short)%09%(objectname)%09%(creatordate:unix)",
+    pattern,
+  ], { maxBuffer: 2 * 1024 * 1024 });
+  return raw.stdout
+    .split("\n")
+    .map(parseReleaseTagCleanupLine)
+    .filter(Boolean)
+    .filter((tag) => tag.name.startsWith(`${RELEASE_TAG_PREFIX}-`));
+}
+
+async function remoteTagExists(tagName) {
+  try {
+    const result = await runDeployCommand("git", ["ls-remote", "--tags", "origin", `refs/tags/${tagName}`], {
+      timeout: 30000,
+      maxBuffer: 512 * 1024,
+    });
+    return !!result.stdout;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function cleanupReleaseTags(options = {}) {
+  const keepLimit = Math.max(1, Number(options.keepLimit || RELEASE_TAG_KEEP_LIMIT));
+  const protectedTagName = options.protectedTagName ? sanitizeReleaseTagName(options.protectedTagName) : null;
+  const deleteRemote = options.deleteRemote ?? RELEASE_TAG_PRUNE_REMOTE;
+  const tags = await listReleaseTagsForCleanup();
+  const keepNames = new Set(tags.slice(0, keepLimit).map((tag) => tag.name));
+  if (protectedTagName) keepNames.add(protectedTagName);
+
+  const candidates = tags.filter((tag) => !keepNames.has(tag.name));
+  const deletedLocal = [];
+  const deletedRemote = [];
+  const errors = [];
+
+  for (const tag of candidates) {
+    if (deleteRemote && await remoteTagExists(tag.name)) {
+      try {
+        await runDeployCommand("git", ["push", "origin", `:refs/tags/${tag.name}`], {
+          timeout: 60000,
+          maxBuffer: 2 * 1024 * 1024,
+        });
+        deletedRemote.push(tag.name);
+      } catch (error) {
+        errors.push({ tagName: tag.name, scope: "remote", error: error.message || String(error) });
+      }
+    }
+
+    try {
+      await runDeployCommand("git", ["tag", "-d", tag.name], {
+        timeout: 30000,
+        maxBuffer: 1024 * 1024,
+      });
+      deletedLocal.push(tag.name);
+    } catch (error) {
+      errors.push({ tagName: tag.name, scope: "local", error: error.message || String(error) });
+    }
+  }
+
+  return {
+    prefix: RELEASE_TAG_PREFIX,
+    keepLimit,
+    totalBefore: tags.length,
+    totalAfter: Math.max(0, tags.length - deletedLocal.length),
+    protectedTagName,
+    remotePruneEnabled: !!deleteRemote,
+    deletedLocal,
+    deletedRemote,
+    errors,
+  };
+}
+
+function formatTagCleanupOutput(cleanup) {
+  if (!cleanup) return "";
+  return [
+    `prefix=${cleanup.prefix}`,
+    `keepLimit=${cleanup.keepLimit}`,
+    `totalBefore=${cleanup.totalBefore}`,
+    `totalAfter=${cleanup.totalAfter}`,
+    `remotePruneEnabled=${cleanup.remotePruneEnabled}`,
+    cleanup.protectedTagName ? `protected=${cleanup.protectedTagName}` : "",
+    cleanup.deletedLocal.length ? `deletedLocal=${cleanup.deletedLocal.join(", ")}` : "deletedLocal=none",
+    cleanup.deletedRemote.length ? `deletedRemote=${cleanup.deletedRemote.join(", ")}` : "deletedRemote=none",
+    cleanup.errors.length ? `errors=${JSON.stringify(cleanup.errors).slice(0, 1200)}` : "errors=none",
+  ].filter(Boolean).join("\n");
 }
 
 function getBeijingTimestampForTag(date = new Date()) {
@@ -342,6 +449,8 @@ async function getReleaseStatusData() {
     hasUpdate: pendingCommits.length > 0,
     suggestedTagName: remote?.hash ? buildReleaseTagName(remote.hash) : null,
     tagPrefix: RELEASE_TAG_PREFIX,
+    tagKeepLimit: RELEASE_TAG_KEEP_LIMIT,
+    pruneRemoteTagsEnabled: RELEASE_TAG_PRUNE_REMOTE,
     pushTagsEnabled: process.env.ADMIN_DEPLOY_PUSH_TAGS === "true",
     restartTarget: RESTART_COMMAND_LABEL,
   };
@@ -1381,17 +1490,27 @@ router.get("/deploy/release/status", adminAuth, requireRole("super"), async (req
 router.post("/deploy/release/fetch", adminAuth, requireRole("super"), async (req, res) => {
   try {
     const fetchResult = await runDeployCommand("git", ["fetch", "origin", "--tags"], { timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
+    const tagCleanup = await cleanupReleaseTags();
     const data = await getReleaseStatusData();
     await createDeployAudit(req, "deploy-release-fetch", true, {
       current: data.current?.hash || null,
       remote: data.remote?.hash || null,
       pendingCommitCount: data.pendingCommits.length,
+      tagCleanup: {
+        keepLimit: tagCleanup.keepLimit,
+        deletedLocalCount: tagCleanup.deletedLocal.length,
+        deletedRemoteCount: tagCleanup.deletedRemote.length,
+        errorCount: tagCleanup.errors.length,
+      },
     });
     return res.json({
       success: true,
       data: {
         ...data,
-        outputs: [{ step: "fetch", stdout: fetchResult.stdout.slice(-4000), stderr: fetchResult.stderr.slice(-4000) }],
+        outputs: [
+          { step: "fetch", stdout: fetchResult.stdout.slice(-4000), stderr: fetchResult.stderr.slice(-4000) },
+          { step: "release-tag-cleanup", stdout: formatTagCleanupOutput(tagCleanup), stderr: "" },
+        ],
       },
     });
   } catch (e) {
@@ -1457,6 +1576,7 @@ router.post("/deploy/release/tag", adminAuth, requireRole("super"), express.json
       tagMessageOverride: tagMessage,
       tagMessageSource,
     });
+    const tagCleanup = await cleanupReleaseTags({ protectedTagName: releaseTag.tagName });
 
     await createDeployAudit(req, "deploy-release-tag", true, {
       before,
@@ -1465,6 +1585,12 @@ router.post("/deploy/release/tag", adminAuth, requireRole("super"), express.json
       tagMessageSource: releaseTag.messageSource,
       tagPushed: releaseTag.pushed,
       commitCount: releaseStatus.pendingCommits.length,
+      tagCleanup: {
+        keepLimit: tagCleanup.keepLimit,
+        deletedLocalCount: tagCleanup.deletedLocal.length,
+        deletedRemoteCount: tagCleanup.deletedRemote.length,
+        errorCount: tagCleanup.errors.length,
+      },
     });
     return res.json({
       success: true,
@@ -1472,6 +1598,7 @@ router.post("/deploy/release/tag", adminAuth, requireRole("super"), express.json
         before,
         after,
         releaseTag,
+        tagCleanup,
         commitCount: releaseStatus.pendingCommits.length,
       },
     });
@@ -1547,6 +1674,7 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
           tagMessageOverride: tagMessage,
           tagMessageSource,
         });
+    const tagCleanup = await cleanupReleaseTags({ protectedTagName: releaseTag.tagName });
 
     if (releaseTagName) {
       outputs.push({
@@ -1564,6 +1692,7 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
         outputs.push({ step: "push-tag", stdout: releaseTag.pushOutput.stdout, stderr: releaseTag.pushOutput.stderr });
       }
     }
+    outputs.push({ step: "release-tag-cleanup", stdout: formatTagCleanupOutput(tagCleanup), stderr: "" });
 
     await createDeployAudit(req, "deploy-release", true, {
       before,
@@ -1572,6 +1701,12 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
       tagMessageSource: releaseTag.messageSource,
       tagPushed: releaseTag.pushed,
       commitCount: releaseStatus.pendingCommits.length,
+      tagCleanup: {
+        keepLimit: tagCleanup.keepLimit,
+        deletedLocalCount: tagCleanup.deletedLocal.length,
+        deletedRemoteCount: tagCleanup.deletedRemote.length,
+        errorCount: tagCleanup.errors.length,
+      },
       rebuildAdminWeb: rebuildAdminWeb === true,
       runDbMigratePg: runDbMigratePg === true,
       updateNginxConfig: updateNginxConfig === true,
@@ -1585,6 +1720,7 @@ router.post("/deploy/release", adminAuth, requireRole("super"), express.json(), 
         before,
         after,
         releaseTag,
+        tagCleanup,
         commitCount: releaseStatus.pendingCommits.length,
         releasedCommits: releaseStatus.pendingCommits,
         outputs,

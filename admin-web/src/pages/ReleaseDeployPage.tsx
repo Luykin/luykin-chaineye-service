@@ -91,8 +91,9 @@ export function ReleaseDeployPage() {
 
   const fetchMutation = useMutation({
     mutationFn: fetchReleaseRemote,
-    onSuccess: () => {
-      messageApi.success("远程版本已刷新");
+    onSuccess: (response) => {
+      const cleanup = response.data.outputs?.find((item) => item.step === "release-tag-cleanup")?.stdout;
+      messageApi.success(cleanup?.includes("deletedLocal=none") ? "远程版本已刷新" : "远程版本已刷新，旧发布 Tag 已清理");
       void statusQuery.refetch();
     },
     onError: (error: Error) => messageApi.error(error.message || "刷新失败"),
@@ -152,7 +153,10 @@ export function ReleaseDeployPage() {
         setTagMessageText(response.data.releaseTag.message);
         setTagMessageSource(response.data.releaseTag.messageSource);
       }
-      messageApi.success(`发布 Tag 已创建：${response.data.releaseTag.tagName}`);
+      const cleanupText = response.data.tagCleanup?.deletedLocal?.length
+        ? `，已清理旧 Tag ${response.data.tagCleanup.deletedLocal.length} 个`
+        : "";
+      messageApi.success(`发布 Tag 已创建：${response.data.releaseTag.tagName}${cleanupText}`);
     },
     onError: (error: Error) => {
       setCreatedTagName("");
@@ -398,6 +402,7 @@ export function ReleaseDeployPage() {
               />
               <Typography.Text type="secondary">
                 {status?.pushTagsEnabled ? "当前已开启远程推送 tag。" : "当前未开启远程推送 tag，只会创建在服务器本地仓库。"}
+                {` 发布 Tag 仅保留最近 ${status?.tagKeepLimit || 10} 个${status?.pruneRemoteTagsEnabled ? "，会同步清理远程旧 Tag" : "。"}`}
               </Typography.Text>
             </Space>
           </Card>
