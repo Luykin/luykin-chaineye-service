@@ -399,6 +399,7 @@ router.get(
   adminAuth,
   requireRole("super"),
   async (req, res) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.json({
       success: true,
       data: {
@@ -416,6 +417,7 @@ router.get(
   adminAuth,
   requireRole("super"),
   async (req, res) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     try {
       const dataId = validateIdentifier(normalizeDataId(req.query.dataId), "dataId");
       const group = validateIdentifier(normalizeGroup(req.query.group), "group");
@@ -444,6 +446,7 @@ router.get(
   adminAuth,
   requireRole("super"),
   async (req, res) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     try {
       const nid = validateIdentifier(req.params.nid, "nid");
       const dataId = validateIdentifier(normalizeDataId(req.query.dataId), "dataId");

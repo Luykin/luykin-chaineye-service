@@ -471,11 +471,12 @@ export function NacosAdminPage() {
                   <Empty description="请选择配置" />
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.92fr)", gap: 12 }}>
-                    <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                    <Space direction="vertical" size={10} style={{ width: "100%", minHeight: 0 }}>
                       <Space wrap style={{ justifyContent: "space-between", width: "100%" }}>
                         <Typography.Text strong>Nacos 原生历史</Typography.Text>
                         <Tag color="blue">{nativeHistoryQuery.data?.data.source || "native"}</Tag>
                       </Space>
+                      <div style={{ maxHeight: 520, overflowY: "auto", overscrollBehavior: "contain", paddingRight: 4 }}>
                       {nativeHistoryQuery.isFetching && !nativeHistory.length ? (
                         <Spin />
                       ) : nativeHistory.length ? (
@@ -488,6 +489,7 @@ export function NacosAdminPage() {
                                 border: "1px solid var(--ant-color-border)",
                                 borderRadius: 12,
                                 padding: 10,
+                                marginBottom: 10,
                                 background: "var(--ant-color-bg-container)",
                               }}
                             >
@@ -523,13 +525,15 @@ export function NacosAdminPage() {
                       ) : (
                         <Empty description="Nacos 未返回历史记录" />
                       )}
+                      </div>
                     </Space>
 
-                    <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                    <Space direction="vertical" size={10} style={{ width: "100%", minHeight: 0 }}>
                       <Space wrap style={{ justifyContent: "space-between", width: "100%" }}>
                         <Typography.Text strong>后台快照</Typography.Text>
                         <Tag>审计备份</Tag>
                       </Space>
+                      <div style={{ maxHeight: 520, overflowY: "auto", overscrollBehavior: "contain", paddingRight: 4 }}>
                       {snapshotHistoryQuery.isFetching && !snapshotHistory.length ? (
                         <Spin />
                       ) : snapshotHistory.length ? (
@@ -542,6 +546,7 @@ export function NacosAdminPage() {
                                 border: "1px solid var(--ant-color-border)",
                                 borderRadius: 12,
                                 padding: 10,
+                                marginBottom: 10,
                                 background: "var(--ant-color-bg-container)",
                               }}
                             >
@@ -581,6 +586,7 @@ export function NacosAdminPage() {
                       ) : (
                         <Empty description="暂无后台快照" />
                       )}
+                      </div>
                     </Space>
                   </div>
                 )}
