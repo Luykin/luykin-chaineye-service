@@ -92,6 +92,15 @@ function normalizeDisplayDomains(value: unknown) {
 }
 
 type AnyObj = Record<string, any>;
+export interface CustomLeaderboardConfig {
+  id?: string;
+  name: string | { zh?: string; en?: string };
+  amount?: number | string | null;
+  participantCount?: number | null;
+  distributionType?: "equal" | "mindshare" | "workshare" | string;
+  unit?: string;
+  short_name?: string | { zh?: string; en?: string };
+}
 type CampaignConfig = {
   version: number;
   campaigns: AnyObj[];
@@ -132,6 +141,14 @@ function clone<T>(value: T): T {
 function safeNumber(value: unknown, fallback: number) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeI18nText(value: unknown) {
+  if (value && typeof value === "object") {
+    const obj = value as { zh?: unknown; en?: unknown };
+    return { zh: String(obj.zh || ""), en: String(obj.en || "") };
+  }
+  return { zh: String(value || ""), en: "" };
 }
 
 function normalizeConfig(obj: unknown): CampaignConfig {
@@ -236,10 +253,8 @@ function normalizeCampaign(
     : [];
   c.customLeaderboards = c.customLeaderboards.map((it: AnyObj) => ({
     id: String(it?.id || ""),
-    name:
-      it?.name && typeof it.name === "object"
-        ? { zh: String(it.name.zh || ""), en: String(it.name.en || "") }
-        : { zh: String(it?.name || ""), en: "" },
+    name: normalizeI18nText(it?.name),
+    short_name: normalizeI18nText(it?.short_name),
     amount: it?.amount,
     participantCount: it?.participantCount,
     distributionType: it?.distributionType || "",
@@ -1489,6 +1504,7 @@ export function NacosCampaignsPage() {
         c[kind].push({
           id: "",
           name: { zh: "", en: "" },
+          short_name: { zh: "", en: "" },
           amount: undefined,
           participantCount: undefined,
           distributionType: "equal",
@@ -2602,6 +2618,8 @@ function CustomLeaderboards({
               <Col xs={24} md={8}><Field label={<InfoLabel info="榜单唯一 key，建议填写；榜单接口和用户排名接口会按这个 key 返回数据。">榜单 ID</InfoLabel>}><Input value={it.id || ""} onChange={(e) => update("customLeaderboards", i, "id", e.target.value)} placeholder="poi leaderboard" /></Field></Col>
               <Col xs={24} md={8}><Field label="中文名"><Input value={it.name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "name.zh", e.target.value)} /></Field></Col>
               <Col xs={24} md={8}><Field label="English"><Input value={it.name?.en || ""} onChange={(e) => update("customLeaderboards", i, "name.en", e.target.value)} /></Field></Col>
+              <Col xs={24} md={8}><Field label={<InfoLabel info="可选短名称；前端空间较小时可以优先展示 short_name，不填则使用完整名称。">中文短名</InfoLabel>}><Input value={it.short_name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "short_name.zh", e.target.value)} placeholder="可选" /></Field></Col>
+              <Col xs={24} md={8}><Field label={<InfoLabel info="Optional short name for compact leaderboard display. If empty, frontend can fallback to full English name.">English Short Name</InfoLabel>}><Input value={it.short_name?.en || ""} onChange={(e) => update("customLeaderboards", i, "short_name.en", e.target.value)} placeholder="Optional" /></Field></Col>
               <Col xs={12} md={4}><Field label="金额"><InputNumber min={0} value={it.amount} onChange={(v) => update("customLeaderboards", i, "amount", v)} /></Field></Col>
               <Col xs={12} md={4}><Field label="人数"><InputNumber min={1} value={it.participantCount} onChange={(v) => update("customLeaderboards", i, "participantCount", v)} /></Field></Col>
               <Col xs={12} md={4}><Field label="机制"><Select value={it.distributionType || ""} onChange={(v) => update("customLeaderboards", i, "distributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>

@@ -11,6 +11,7 @@ const { XhuntNacosConfigSnapshot } = require("../../../models/postgres-start");
 const router = express.Router();
 const DEFAULT_GROUP = "DEFAULT_GROUP";
 const DEFAULT_TYPE = "json";
+const NACOS_ADMIN_HISTORY_IMPL_VERSION = "nacos-history-v3-only-20260629-01";
 
 const NACOS_CONFIG_CATALOG = [
   {
@@ -386,9 +387,27 @@ router.get(
         success: false,
         error: error.message || "读取配置失败",
         required: error.required,
+        implVersion: NACOS_ADMIN_HISTORY_IMPL_VERSION,
         data: error.data,
       });
     }
+  }
+);
+
+router.get(
+  "/nacos/admin/config/native-history-version",
+  adminAuth,
+  requireRole("super"),
+  async (req, res) => {
+    res.json({
+      success: true,
+      data: {
+        implVersion: NACOS_ADMIN_HISTORY_IMPL_VERSION,
+        listApis: ["/nacos/v3/admin/cs/history/list", "/nacos/v1/cs/history"],
+        detailApis: ["/nacos/v3/admin/cs/history", "/nacos/v1/cs/history"],
+        v2Disabled: true,
+      },
+    });
   }
 );
 
@@ -406,13 +425,14 @@ router.get(
       assertConfigPermission(req, dataId);
 
       const data = await fetchNacosNativeHistoryList({ dataId, group, tenant, pageNo, pageSize });
-      res.json({ success: true, data });
+      res.json({ success: true, data: { ...data, implVersion: NACOS_ADMIN_HISTORY_IMPL_VERSION } });
     } catch (error) {
       console.error("[nacos-admin/config/native-history] failed:", error);
       res.status(error.status || 500).json({
         success: false,
         error: error.message || "获取 Nacos 原生历史失败",
         required: error.required,
+        implVersion: NACOS_ADMIN_HISTORY_IMPL_VERSION,
         data: error.data,
       });
     }
@@ -433,13 +453,14 @@ router.get(
       assertConfigPermission(req, dataId);
 
       const data = await fetchNacosNativeHistoryDetail({ dataId, group, tenant, nid, source });
-      res.json({ success: true, data });
+      res.json({ success: true, data: { ...data, implVersion: NACOS_ADMIN_HISTORY_IMPL_VERSION } });
     } catch (error) {
       console.error("[nacos-admin/config/native-history/:nid] failed:", error);
       res.status(error.status || 500).json({
         success: false,
         error: error.message || "获取 Nacos 原生历史详情失败",
         required: error.required,
+        implVersion: NACOS_ADMIN_HISTORY_IMPL_VERSION,
         data: error.data,
       });
     }
