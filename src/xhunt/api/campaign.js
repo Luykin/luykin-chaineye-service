@@ -30,6 +30,26 @@ const { adminAuth, requirePermission, requireRole } = require("../../admin/middl
 const router = express.Router();
 
 const MIN_EXTENSION_VERSION = "0.3.0";
+const XHUNT_EXTENSION_UPDATE_URL =
+  "https://chromewebstore.google.com/detail/xhunt-%E2%80%93-your-ai-co-pilot/gonmfafjcdkngkbhcpmcphlgfhabkeji";
+
+function buildExtensionUpdateRequiredResponse({
+  minVersion = MIN_EXTENSION_VERSION,
+  updateUrl = XHUNT_EXTENSION_UPDATE_URL,
+  message,
+} = {}) {
+  return {
+    success: false,
+    code: "EXTENSION_UPDATE_REQUIRED",
+    force_update: true,
+    min_version: minVersion,
+    update_url: updateUrl,
+    message: message || {
+      zh: "当前插件版本过低，请更新 XHunt 插件后再报名。",
+      en: "Your XHunt extension is out of date. Please update it before signing up.",
+    },
+  };
+}
 
 function generateInviteCode(length = 10) {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -460,7 +480,26 @@ router.post(
 
       LOG = `[CampaignRegister] user_id=${authedUserId} campaign=${campaign} evmAddress=${evmAddress} email=${rawEmail ? "<provided>" : ""}`;
 
-      const extVersion = req.headers["x-extension-version"];
+      const extVersion = req.headers["x-extension-version"] || req.headers["x-xhunt-extension-version"] || req.body?.extension_version;
+
+      // 强制升级插件返回结构模板：后续需要启用时，取消下面注释即可。
+      // 注意：该结构会被前端识别为“必须更新插件后才能继续报名”。
+      if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
+        console.log(LOG, "reject: extension update required", {
+          version: extVersion,
+          minVersion: MIN_EXTENSION_VERSION,
+        });
+        return res.status(400).json(
+          buildExtensionUpdateRequiredResponse({
+            minVersion: MIN_EXTENSION_VERSION,
+            message: {
+              zh: "当前插件版本过低，请更新 XHunt 插件后再报名。",
+              en: "Your XHunt extension is out of date. Please update it before signing up.",
+            },
+          }),
+        );
+      }
+
       if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
         console.log(LOG, "reject: extension version too low", { version: extVersion });
         const isZh = (req.query.x_language || "").toLowerCase() === "zh";
