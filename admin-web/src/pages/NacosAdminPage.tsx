@@ -86,6 +86,57 @@ function getNativeActionMeta(opType?: string) {
   return { label: opType || "变更", color: "default" };
 }
 
+type DiffRow = {
+  type: "same" | "add" | "remove";
+  oldLine?: number;
+  newLine?: number;
+  text: string;
+};
+
+function buildLineDiff(oldText: string, newText: string): DiffRow[] {
+  const oldLines = String(oldText || "").split("
+");
+  const newLines = String(newText || "").split("
+");
+  const m = oldLines.length;
+  const n = newLines.length;
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+
+  for (let i = m - 1; i >= 0; i -= 1) {
+    for (let j = n - 1; j >= 0; j -= 1) {
+      dp[i][j] = oldLines[i] === newLines[j]
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const rows: DiffRow[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (oldLines[i] === newLines[j]) {
+      rows.push({ type: "same", oldLine: i + 1, newLine: j + 1, text: oldLines[i] });
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      rows.push({ type: "remove", oldLine: i + 1, text: oldLines[i] });
+      i += 1;
+    } else {
+      rows.push({ type: "add", newLine: j + 1, text: newLines[j] });
+      j += 1;
+    }
+  }
+  while (i < m) {
+    rows.push({ type: "remove", oldLine: i + 1, text: oldLines[i] });
+    i += 1;
+  }
+  while (j < n) {
+    rows.push({ type: "add", newLine: j + 1, text: newLines[j] });
+    j += 1;
+  }
+  return rows;
+}
+
 function ConfigItem({ item, active, onClick }: { item: NacosAdminConfigMeta; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -127,6 +178,10 @@ export function NacosAdminPage() {
   const [reason, setReason] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [loadingSnapshotId, setLoadingSnapshotId] = useState<number | null>(null);
+  const [diffLoadingKey, setDiffLoadingKey] = useState<string | null>(null);
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffTitle, setDiffTitle] = useState("");
+  const [diffRows, setDiffRows] = useState<DiffRow[]>([]);
   const [createForm] = Form.useForm<{ dataId: string; group: string; type: string; content: string; reason?: string }>();
 
   const listQuery = useQuery({
@@ -212,6 +267,54 @@ export function NacosAdminPage() {
     },
     onError: (error: Error) => messageApi.error(error.message || "删除失败"),
   });
+
+  function openContentDiff(title: string, historicalContent: string) {
+    const currentContent = detail?.content || "";
+    if (!detail) {
+      messageApi.warning("当前配置还未加载完成，暂时不能查看差异");
+      return;
+    }
+    setDiffTitle(title);
+    setDiffRows(buildLineDiff(historicalContent, currentContent));
+    setDiffOpen(true);
+  }
+
+  async function handleDiffNativeHistory(item: NacosNativeHistoryItem) {
+    if (!selected) return;
+    const key = `native-${item.id}`;
+    try {
+      setDiffLoadingKey(key);
+      const resp = await fetchNacosAdminNativeHistoryDetail({
+        id: item.id,
+        dataId: selected.dataId,
+        group: selected.group,
+        tenant: selected.tenant,
+        source: item.source,
+      });
+      if (typeof resp.data.content !== "string") {
+        messageApi.warning("该 Nacos 历史详情没有返回内容，无法对比");
+        return;
+      }
+      openContentDiff(`Nacos 原生历史 #${resp.data.id} vs 当前版本`, resp.data.content);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "查看 Nacos 历史差异失败");
+    } finally {
+      setDiffLoadingKey(null);
+    }
+  }
+
+  async function handleDiffSnapshot(snapshot: NacosAdminConfigSnapshot) {
+    const key = `snapshot-${snapshot.id}`;
+    try {
+      setDiffLoadingKey(key);
+      const resp = await fetchNacosAdminConfigSnapshot(snapshot.id);
+      openContentDiff(`后台快照 #${resp.data.id} vs 当前版本`, resp.data.content || "");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "查看快照差异失败");
+    } finally {
+      setDiffLoadingKey(null);
+    }
+  }
 
   async function handleLoadNativeHistory(item: NacosNativeHistoryItem) {
     if (!selected) return;
@@ -508,16 +611,26 @@ export function NacosAdminPage() {
                                   {item.srcUser ? <Tag>{item.srcUser}</Tag> : null}
                                   {item.srcIp ? <Tag>{item.srcIp}</Tag> : null}
                                 </Space>
-                                <Button
-                                  size="small"
-                                  icon={<RollbackOutlined />}
-                                  onClick={() => void handleLoadNativeHistory(item)}
-                                  loading={loadingSnapshotId === (Number(item.id) || -1)}
-                                  disabled={!canWriteSelected}
-                                  block
-                                >
-                                  载入此版本
-                                </Button>
+                                <Space.Compact style={{ width: "100%" }}>
+                                  <Button
+                                    size="small"
+                                    icon={<RollbackOutlined />}
+                                    onClick={() => void handleLoadNativeHistory(item)}
+                                    loading={loadingSnapshotId === (Number(item.id) || -1)}
+                                    disabled={!canWriteSelected}
+                                    style={{ width: "50%" }}
+                                  >
+                                    载入
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    onClick={() => void handleDiffNativeHistory(item)}
+                                    loading={diffLoadingKey === `native-${item.id}`}
+                                    style={{ width: "50%" }}
+                                  >
+                                    查看 Diff
+                                  </Button>
+                                </Space.Compact>
                               </Space>
                             </div>
                           );
@@ -569,16 +682,26 @@ export function NacosAdminPage() {
                                     {snapshot.reason}
                                   </Typography.Text>
                                 ) : null}
-                                <Button
-                                  size="small"
-                                  icon={<RollbackOutlined />}
-                                  onClick={() => void handleLoadSnapshot(snapshot)}
-                                  loading={loadingSnapshotId === snapshot.id}
-                                  disabled={!canWriteSelected}
-                                  block
-                                >
-                                  载入快照
-                                </Button>
+                                <Space.Compact style={{ width: "100%" }}>
+                                  <Button
+                                    size="small"
+                                    icon={<RollbackOutlined />}
+                                    onClick={() => void handleLoadSnapshot(snapshot)}
+                                    loading={loadingSnapshotId === snapshot.id}
+                                    disabled={!canWriteSelected}
+                                    style={{ width: "50%" }}
+                                  >
+                                    载入
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    onClick={() => void handleDiffSnapshot(snapshot)}
+                                    loading={diffLoadingKey === `snapshot-${snapshot.id}`}
+                                    style={{ width: "50%" }}
+                                  >
+                                    查看 Diff
+                                  </Button>
+                                </Space.Compact>
                               </Space>
                             </div>
                           );
@@ -614,6 +737,63 @@ export function NacosAdminPage() {
           </div>
         </PageSection>
       </Space>
+
+      <Modal
+        title={diffTitle || "配置差异"}
+        open={diffOpen}
+        onCancel={() => setDiffOpen(false)}
+        footer={null}
+        width="min(1100px, 92vw)"
+        destroyOnHidden
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Diff 方向：历史版本 → 当前版本"
+          description="红色表示历史版本中存在、当前版本已删除的行；绿色表示当前版本新增的行。"
+        />
+        <div
+          style={{
+            border: "1px solid var(--ant-color-border)",
+            borderRadius: 12,
+            overflow: "hidden",
+            maxHeight: "62vh",
+            overflowY: "auto",
+            background: "var(--ant-color-bg-container)",
+          }}
+        >
+          {diffRows.map((row, index) => {
+            const isAdd = row.type === "add";
+            const isRemove = row.type === "remove";
+            return (
+              <div
+                key={`${row.type}-${index}-${row.oldLine || ""}-${row.newLine || ""}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "56px 56px 28px minmax(0, 1fr)",
+                  gap: 8,
+                  padding: "2px 10px",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  fontSize: 12,
+                  lineHeight: 1.65,
+                  background: isAdd ? "rgba(22, 163, 74, 0.12)" : isRemove ? "rgba(220, 38, 38, 0.12)" : "transparent",
+                  color: "var(--ant-color-text)",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+              >
+                <span style={{ color: "var(--ant-color-text-tertiary)", textAlign: "right" }}>{row.oldLine || ""}</span>
+                <span style={{ color: "var(--ant-color-text-tertiary)", textAlign: "right" }}>{row.newLine || ""}</span>
+                <span style={{ color: isAdd ? "#16a34a" : isRemove ? "#dc2626" : "var(--ant-color-text-tertiary)", fontWeight: 700 }}>
+                  {isAdd ? "+" : isRemove ? "-" : " "}
+                </span>
+                <span>{row.text || " "}</span>
+              </div>
+            );
+          })}
+        </div>
+      </Modal>
 
       <Modal
         title="新建 Nacos 配置"
