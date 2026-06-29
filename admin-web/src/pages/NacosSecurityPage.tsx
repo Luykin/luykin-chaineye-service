@@ -218,12 +218,13 @@ export function NacosSecurityPage() {
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <div
           style={{
-            background: "linear-gradient(135deg, #111827 0%, #1f2937 52%, #3f1d1d 100%)",
+            background: "linear-gradient(135deg, #111827 0%, #182033 58%, #3b1111 100%)",
             borderRadius: 22,
             padding: 28,
-            color: "#f9fafb",
+            color: "#ffffff",
             overflow: "hidden",
             position: "relative",
+            boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12), 0 18px 44px rgba(15,23,42,0.22)",
           }}
         >
           <div
@@ -234,16 +235,24 @@ export function NacosSecurityPage() {
               width: 280,
               height: 280,
               borderRadius: "50%",
-              background: "rgba(248,113,113,0.22)",
-              filter: "blur(4px)",
+              background: "rgba(220,38,38,0.28)",
+              filter: "blur(10px)",
             }}
           />
           <Space direction="vertical" size={16} style={{ width: "100%", position: "relative" }}>
             <Space size={12} wrap>
-              <Tag color="red" icon={<SafetyCertificateOutlined />}>
+              <Tag color="red" icon={<SafetyCertificateOutlined />} style={{ fontWeight: 700 }}>
                 Nacos Exposure Audit
               </Tag>
-              <Tag color="gold" icon={<ExperimentOutlined />}>
+              <Tag
+                icon={<ExperimentOutlined />}
+                style={{
+                  color: "#7c2d12",
+                  background: "#ffedd5",
+                  borderColor: "#fed7aa",
+                  fontWeight: 700,
+                }}
+              >
                 只检测，不写真实配置
               </Tag>
             </Space>
@@ -251,7 +260,7 @@ export function NacosSecurityPage() {
               <Typography.Title level={2} style={{ color: "#fff", margin: 0 }}>
                 Nacos 暴露面检查
               </Typography.Title>
-              <Typography.Paragraph style={{ color: "rgba(255,255,255,0.74)", maxWidth: 820, marginTop: 8, marginBottom: 0 }}>
+              <Typography.Paragraph style={{ color: "#e5e7eb", maxWidth: 820, marginTop: 8, marginBottom: 0, fontWeight: 500 }}>
                 从管理后台触发服务端探测：检查 /nacos-configs、/nacos/v1 原生 API、Basic Auth 绕过和 Nginx 配置风险。响应内容只保留 hash、长度和脱敏摘要。
               </Typography.Paragraph>
             </div>
@@ -281,26 +290,31 @@ export function NacosSecurityPage() {
           >
             <Space direction="vertical" size={18} style={{ width: "100%" }}>
               <Space wrap size={16} style={{ width: "100%" }}>
-                <Card style={{ minWidth: 260, flex: 1 }}>
+                <Card style={{ minWidth: 260, flex: 1, background: "#fff7ed", borderColor: "#fed7aa" }}>
                   <Space direction="vertical" style={{ width: "100%" }}>
-                    <Typography.Text type="secondary">风险水位</Typography.Text>
-                    <Progress percent={meta.score} showInfo={false} strokeColor={meta.color === "green" ? "#16a34a" : "#dc2626"} />
-                    <Typography.Title level={3} style={{ margin: 0 }}>
+                    <Typography.Text style={{ color: "#7c2d12", fontWeight: 700 }}>风险水位</Typography.Text>
+                    <Progress
+                      percent={meta.score}
+                      showInfo={false}
+                      trailColor="#fed7aa"
+                      strokeColor={meta.color === "green" ? "#15803d" : "#b91c1c"}
+                    />
+                    <Typography.Title level={3} style={{ margin: 0, color: "#431407" }}>
                       {meta.label} · {meta.tone}
                     </Typography.Title>
                   </Space>
                 </Card>
-                <Card style={{ minWidth: 150 }}>
-                  <Statistic title="Critical" value={summary.critical} valueStyle={{ color: "#dc2626" }} />
+                <Card style={{ minWidth: 150, background: "#fef2f2", borderColor: "#fecaca" }}>
+                  <Statistic title={<span style={{ color: "#7f1d1d", fontWeight: 700 }}>Critical</span>} value={summary.critical} valueStyle={{ color: "#991b1b", fontWeight: 800 }} />
                 </Card>
-                <Card style={{ minWidth: 150 }}>
-                  <Statistic title="High" value={summary.high} valueStyle={{ color: "#ea580c" }} />
+                <Card style={{ minWidth: 150, background: "#fff7ed", borderColor: "#fed7aa" }}>
+                  <Statistic title={<span style={{ color: "#7c2d12", fontWeight: 700 }}>High</span>} value={summary.high} valueStyle={{ color: "#c2410c", fontWeight: 800 }} />
                 </Card>
-                <Card style={{ minWidth: 150 }}>
-                  <Statistic title="Medium" value={summary.medium} valueStyle={{ color: "#d97706" }} />
+                <Card style={{ minWidth: 150, background: "#fffbeb", borderColor: "#fde68a" }}>
+                  <Statistic title={<span style={{ color: "#713f12", fontWeight: 700 }}>Medium</span>} value={summary.medium} valueStyle={{ color: "#a16207", fontWeight: 800 }} />
                 </Card>
-                <Card style={{ minWidth: 150 }}>
-                  <Statistic title="耗时" value={summary.durationMs} suffix="ms" />
+                <Card style={{ minWidth: 150, background: "#f8fafc", borderColor: "#cbd5e1" }}>
+                  <Statistic title={<span style={{ color: "#334155", fontWeight: 700 }}>耗时</span>} value={summary.durationMs} suffix="ms" valueStyle={{ color: "#0f172a", fontWeight: 800 }} />
                 </Card>
               </Space>
               <Alert
