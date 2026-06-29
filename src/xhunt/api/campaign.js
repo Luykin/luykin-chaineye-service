@@ -484,21 +484,21 @@ router.post(
 
       // 强制升级插件返回结构模板：后续需要启用时，取消下面注释即可。
       // 注意：该结构会被前端识别为“必须更新插件后才能继续报名”。
-      if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
-        console.log(LOG, "reject: extension update required", {
-          version: extVersion,
-          minVersion: MIN_EXTENSION_VERSION,
-        });
-        return res.status(200).json(
-          buildExtensionUpdateRequiredResponse({
-            minVersion: MIN_EXTENSION_VERSION,
-            message: {
-              zh: "当前插件版本过低，请更新 XHunt 插件后再报名。",
-              en: "Your XHunt extension is out of date. Please update it before signing up.",
-            },
-          }),
-        );
-      }
+      // if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
+      //   console.log(LOG, "reject: extension update required", {
+      //     version: extVersion,
+      //     minVersion: MIN_EXTENSION_VERSION,
+      //   });
+      //   return res.status(200).json(
+      //     buildExtensionUpdateRequiredResponse({
+      //       minVersion: MIN_EXTENSION_VERSION,
+      //       message: {
+      //         zh: "当前插件版本过低，请更新 XHunt 插件后再报名。",
+      //         en: "Your XHunt extension is out of date. Please update it before signing up.",
+      //       },
+      //     }),
+      //   );
+      // }
 
       if (!isVersionGreaterOrEqual(extVersion, MIN_EXTENSION_VERSION)) {
         console.log(LOG, "reject: extension version too low", { version: extVersion });
