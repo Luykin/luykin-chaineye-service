@@ -29,7 +29,7 @@ const { adminAuth, requirePermission, requireRole } = require("../../admin/middl
 
 const router = express.Router();
 
-const MIN_EXTENSION_VERSION = "0.3.6";
+const MIN_EXTENSION_VERSION = "0.3.0";
 const XHUNT_EXTENSION_UPDATE_URL =
   "https://chromewebstore.google.com/detail/xhunt-%E2%80%93-your-ai-co-pilot/gonmfafjcdkngkbhcpmcphlgfhabkeji";
 
