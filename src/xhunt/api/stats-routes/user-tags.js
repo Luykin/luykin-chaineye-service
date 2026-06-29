@@ -7,10 +7,10 @@ const {
 const { XhuntUserTag } = require("../../../models/postgres-start");
 const { logAdminAction } = require("./shared");
 const { refreshUserTagsCache } = require("../../services/userTagsCache");
+const { getNacosConfigContent } = require("../../services/nacosConfigClient");
 
 const router = express.Router();
 const TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
-const NACOS_PUBLIC_CONFIG_URL = "https://kb.cryptohunt.ai/nacos-configs";
 const TAG_DATA_IDS = {
   zh: "xhunt_built_in_tag",
   en: "xhunt_built_in_tag_en",
@@ -78,12 +78,12 @@ function normalizeNacosTagConfig(value) {
 }
 
 async function fetchNacosTagConfig(lang) {
-  const response = await axios.get(NACOS_PUBLIC_CONFIG_URL, {
-    params: { dataId: TAG_DATA_IDS[lang], group: "DEFAULT_GROUP" },
+  const content = await getNacosConfigContent({
+    dataId: TAG_DATA_IDS[lang],
+    group: "DEFAULT_GROUP",
     timeout: 10000,
   });
-  const content = response.data?.data?.content ?? response.data?.content ?? response.data;
-  const parsed = typeof content === "string" ? JSON.parse(content || "{}") : content;
+  const parsed = JSON.parse(content || "{}");
   return normalizeNacosTagConfig(parsed);
 }
 

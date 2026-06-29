@@ -2702,6 +2702,44 @@ router.post(
   }
 );
 
+router.get(
+  "/feature-flags/translations",
+  adminAuth,
+  requirePermission("feature_flags_config"),
+  async (req, res) => {
+    try {
+      const resp = await nacosRequest("GET", "/nacos/v1/cs/configs", {
+        params: { dataId: "xhunt_i18n", group: "DEFAULT_GROUP" },
+      });
+
+      if (resp.status !== 200) {
+        return res.status(resp.status).json({
+          success: false,
+          error: "读取 Nacos xhunt_i18n 失败",
+          status: resp.status,
+          data: resp.data,
+        });
+      }
+
+      const content = typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data || {});
+      let config = {};
+      try {
+        config = JSON.parse(content || "{}");
+      } catch (e) {
+        return res.status(500).json({
+          success: false,
+          error: "xhunt_i18n 不是合法 JSON",
+        });
+      }
+
+      res.json(config);
+    } catch (e) {
+      console.error("[feature_flags_translations] read error:", e);
+      res.status(500).json({ success: false, error: e.message || "读取失败" });
+    }
+  }
+);
+
 /**
  * -------------------- Banner Config Admin (xhunt_config.adBanners / featureSlots) --------------------
  * 权限：banner-config。只允许读写 xhunt_config.adBanners 和 xhunt_config.featureSlots，避免和 Feature Flags 权限混用。

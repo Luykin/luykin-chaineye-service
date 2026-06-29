@@ -1,10 +1,7 @@
-const axios = require("axios");
 const { Op } = require("sequelize");
 const { XHuntWebsiteCampaign, pgInstance } = require("../../models/postgres-start");
 const LEGACY_WEBSITE_CAMPAIGNS = require("../constants/legacyWebsiteCampaigns");
-
-const CAMPAIGN_CONFIG_URL =
-  "https://kb.xhunt.ai/nacos-configs?dataId=xhunt_campaigns&group=DEFAULT_GROUP";
+const { getNacosConfigContent } = require("./nacosConfigClient");
 
 const WEBSITE_STATUS_VALUES = new Set([
   "draft",
@@ -133,8 +130,12 @@ function getSyncedPayload(recordLike) {
 }
 
 async function fetchNacosCampaigns() {
-  const resp = await axios.get(CAMPAIGN_CONFIG_URL, { timeout: 10000 });
-  const data = resp?.data;
+  const content = await getNacosConfigContent({
+    dataId: "xhunt_campaigns",
+    group: "DEFAULT_GROUP",
+    timeout: 10000,
+  });
+  const data = JSON.parse(content || "{}");
   const campaigns = Array.isArray(data?.campaigns) ? data.campaigns : null;
   if (!campaigns) {
     throw new Error("Nacos campaigns config is incomplete");

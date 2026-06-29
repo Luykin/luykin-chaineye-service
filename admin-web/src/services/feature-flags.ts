@@ -42,11 +42,7 @@ export async function fetchVipLists() {
 }
 
 export async function fetchFeatureTranslations() {
-  const response = await fetch(
-    "https://kb.cryptohunt.ai/nacos-configs?dataId=xhunt_i18n&group=DEFAULT_GROUP"
-  );
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json() as Promise<{ zh?: Record<string, string> }>;
+  return apiRequest<{ zh?: Record<string, string> }>("/api/xhunt/stats/feature-flags/translations");
 }
 
 export async function addVipListUser(listType: "vip" | "internal_test", username: string) {

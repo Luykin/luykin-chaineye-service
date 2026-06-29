@@ -246,8 +246,9 @@ function classifyRuntimeResult(check, response) {
 
   if (check.id === "nacos-configs-options") {
     const exposesWrite = /POST|PUT|DELETE/i.test(allowMethods);
-    const exposesWildcardOrigin = allowOrigin === "*";
-    if (exposesWrite || exposesWildcardOrigin) {
+    const allowCredentials = String(response.headers?.["access-control-allow-credentials"] || "").toLowerCase() === "true";
+    const wildcardWithCredentials = allowOrigin === "*" && allowCredentials;
+    if (exposesWrite || wildcardWithCredentials) {
       return {
         severity: "high",
         passed: false,
@@ -431,18 +432,22 @@ async function scanNginxConfig() {
     const nacosConfigsProxy = getLineInBlock(nacosConfigsBlock, /proxy_pass\s+http:\/\/127\.0\.0\.1:8848\/nacos\/v1\/cs\/configs/);
     const allowWriteMethods = getLineInBlock(nacosConfigsBlock, /Access-Control-Allow-Methods.*(?:POST|PUT|DELETE)/i);
     const wildcardCors = getLineInBlock(nacosConfigsBlock, /Access-Control-Allow-Origin\s+"?\*"?/i);
+    const allowCredentials = getLineInBlock(nacosConfigsBlock, /Access-Control-Allow-Credentials\s+"?true"?/i);
+    const readOnlyMethodGuard = getLineInBlock(nacosConfigsBlock, /\$request_method\s+!~\s+\^\(GET\|HEAD\)\$/);
+    const dataIdWhitelist = getLineInBlock(nacosConfigsBlock, /\$arg_dataId\s+!~\s+\^\([^)]*xhunt_config/);
+    const groupWhitelist = getLineInBlock(nacosConfigsBlock, /\$arg_group\s+!=\s+"DEFAULT_GROUP"/);
     const exactNacosAuth = getLine(content, /location\s+=\s+\/nacos\//);
     const unauthNacosApi = getLine(content, /location\s+~\s+\^\/nacos\/\(v1\|v2\|v3\|console/);
     const unauthNacosPrefix = getLine(content, /location\s+\/nacos\//);
 
-    if (nacosConfigsLine && nacosConfigsProxy) {
+    if (nacosConfigsLine && nacosConfigsProxy && (!readOnlyMethodGuard || !dataIdWhitelist || !groupWhitelist)) {
       findings.push({
         id: "nginx-nacos-configs-public-proxy",
         severity: "critical",
         title: "Nginx 暴露 /nacos-configs 到 Nacos 原生配置接口",
-        evidence: [nacosConfigsLine, nacosConfigsProxy].filter(Boolean),
-        conclusion: "/nacos-configs 直接反代到 /nacos/v1/cs/configs，未在该 location 内看到认证控制。",
-        recommendation: "优先删除该 location 或返回 404；若必须保留，应加认证、IP 白名单，并限制 dataId 白名单。",
+        evidence: [nacosConfigsLine, nacosConfigsProxy, readOnlyMethodGuard, dataIdWhitelist, groupWhitelist].filter(Boolean),
+        conclusion: "/nacos-configs 直接反代到 /nacos/v1/cs/configs，但未同时发现只读方法限制、dataId 白名单和 group 白名单。",
+        recommendation: "公网只读入口必须同时限制 GET/HEAD、dataId 白名单和 group 白名单；写配置只能走后端鉴权接口。",
       });
     }
 
@@ -457,14 +462,14 @@ async function scanNginxConfig() {
       });
     }
 
-    if (wildcardCors) {
+    if (wildcardCors && (allowCredentials || allowWriteMethods)) {
       findings.push({
         id: "nginx-nacos-configs-wildcard-cors",
         severity: "high",
         title: "Nginx 对配置中心接口返回 Access-Control-Allow-Origin:*",
-        evidence: [wildcardCors],
-        conclusion: "配置中心接口不应该允许任意来源跨域访问。",
-        recommendation: "移除该接口 CORS，或只允许后台域名且不能与凭证/写方法组合。",
+        evidence: [wildcardCors, allowCredentials, allowWriteMethods].filter(Boolean),
+        conclusion: "配置中心接口使用通配 CORS 时，不应同时允许 credentials 或写入类方法。",
+        recommendation: "公开只读配置可使用 Origin:*，但必须仅允许 GET/HEAD/OPTIONS，且不能返回 Access-Control-Allow-Credentials:true。",
       });
     }
 
