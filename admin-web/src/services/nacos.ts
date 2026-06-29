@@ -196,3 +196,18 @@ export async function deleteNacosAdminConfig(params: { dataId: string; group?: s
     method: "DELETE",
   });
 }
+
+export async function fetchNacosAdminConfigHistory(params: { dataId: string; group?: string; tenant?: string; limit?: number }) {
+  const query = new URLSearchParams();
+  query.set("dataId", params.dataId);
+  query.set("group", params.group || "DEFAULT_GROUP");
+  query.set("limit", String(params.limit || 30));
+  if (params.tenant) query.set("tenant", params.tenant);
+  return apiRequest<import("@/types/nacos").NacosAdminConfigHistoryResponse>(`/api/xhunt/stats/nacos/admin/config/history?${query.toString()}`);
+}
+
+export async function fetchNacosAdminConfigSnapshot(id: number) {
+  return apiRequest<import("@/types/nacos").NacosAdminConfigHistoryDetailResponse>(
+    `/api/xhunt/stats/nacos/admin/config/history/${encodeURIComponent(String(id))}`
+  );
+}

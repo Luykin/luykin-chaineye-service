@@ -21,6 +21,7 @@ const UnregisteredUserRegistrationModel = require("../xhunt/models/UnregisteredU
 const XhuntAdminManagerModel = require("../xhunt/models/XhuntAdminManager");
 const XhuntAdminAuditLogModel = require("../xhunt/models/XhuntAdminAuditLog");
 const XhuntAdminWebAuthnCredentialModel = require("../xhunt/models/XhuntAdminWebAuthnCredential");
+const XhuntNacosConfigSnapshotModel = require("../xhunt/models/XhuntNacosConfigSnapshot");
 const XhuntVipTestUserModel = require("../xhunt/models/XhuntVipTestUser");
 const XhuntUserTagModel = require("../xhunt/models/XhuntUserTag");
 const CollectorClientTokenModel = require("../xhunt/models/CollectorClientToken");
@@ -95,6 +96,7 @@ const UnregisteredUserRegistration = UnregisteredUserRegistrationModel(pgInstanc
 const XhuntAdminManager = XhuntAdminManagerModel(pgInstance);
 const XhuntAdminAuditLog = XhuntAdminAuditLogModel(pgInstance);
 const XhuntAdminWebAuthnCredential = XhuntAdminWebAuthnCredentialModel(pgInstance);
+const XhuntNacosConfigSnapshot = XhuntNacosConfigSnapshotModel(pgInstance);
 const XhuntVipTestUser = XhuntVipTestUserModel(pgInstance);
 const XhuntUserTag = XhuntUserTagModel(pgInstance);
 const CollectorClientToken = CollectorClientTokenModel(pgInstance);
@@ -385,6 +387,7 @@ module.exports = {
   XhuntAdminManager,
   XhuntAdminAuditLog,
   XhuntAdminWebAuthnCredential,
+  XhuntNacosConfigSnapshot,
   XhuntVipTestUser,
   XhuntUserTag,
   CollectorClientToken,

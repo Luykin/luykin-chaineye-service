@@ -253,3 +253,32 @@ export interface NacosAdminConfigMutationResponse {
   };
   error?: string;
 }
+
+export interface NacosAdminConfigSnapshot {
+  id: number;
+  dataId: string;
+  group: string;
+  tenant: string | null;
+  type: string;
+  contentSha256: string;
+  contentLength: number;
+  action: string;
+  reason: string;
+  operatorId: number | null;
+  operatorEmail: string;
+  createdAt: string;
+  updatedAt: string;
+  content?: string;
+}
+
+export interface NacosAdminConfigHistoryResponse {
+  success: boolean;
+  data: NacosAdminConfigSnapshot[];
+  error?: string;
+}
+
+export interface NacosAdminConfigHistoryDetailResponse {
+  success: boolean;
+  data: NacosAdminConfigSnapshot;
+  error?: string;
+}

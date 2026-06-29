@@ -6,6 +6,7 @@ const {
 } = require("../../../admin/middleware/adminAuth");
 const { logAdminAction } = require("./shared");
 const { nacosRequest } = require("../../services/nacosConfigClient");
+const { XhuntNacosConfigSnapshot } = require("../../../models/postgres-start");
 
 const router = express.Router();
 const DEFAULT_GROUP = "DEFAULT_GROUP";
@@ -152,6 +153,55 @@ async function readConfig({ dataId, group = DEFAULT_GROUP, tenant }) {
   return typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data);
 }
 
+function serializeSnapshot(row, includeContent = false) {
+  const json = row.toJSON ? row.toJSON() : row;
+  const data = {
+    id: json.id,
+    dataId: json.dataId,
+    group: json.group,
+    tenant: json.tenant || null,
+    type: json.type,
+    contentSha256: json.contentSha256,
+    contentLength: json.contentLength,
+    action: json.action,
+    reason: json.reason || "",
+    operatorId: json.operatorId || null,
+    operatorEmail: json.operatorEmail || "",
+    createdAt: json.createdAt,
+    updatedAt: json.updatedAt,
+  };
+  if (includeContent) data.content = json.content;
+  return data;
+}
+
+async function saveSnapshot(req, { dataId, group, tenant, type, content, action, reason }) {
+  if (typeof content !== "string") return null;
+  return XhuntNacosConfigSnapshot.create({
+    dataId,
+    group,
+    tenant: tenant || null,
+    type: type || DEFAULT_TYPE,
+    content,
+    contentSha256: sha256(content),
+    contentLength: Buffer.byteLength(content, "utf8"),
+    action,
+    reason: reason || null,
+    operatorId: req.adminUser?.id || null,
+    operatorEmail: req.adminUser?.email || req.user?.username || null,
+  });
+}
+
+async function saveSnapshotIfChanged(req, { dataId, group, tenant, type, content, action, reason }) {
+  if (typeof content !== "string") return null;
+  const contentSha256 = sha256(content);
+  const latest = await XhuntNacosConfigSnapshot.findOne({
+    where: { dataId, group, tenant: tenant || null },
+    order: [["createdAt", "DESC"], ["id", "DESC"]],
+  });
+  if (latest?.contentSha256 === contentSha256) return latest;
+  return saveSnapshot(req, { dataId, group, tenant, type, content, action, reason });
+}
+
 router.get(
   "/nacos/admin/configs",
   adminAuth,
@@ -193,6 +243,18 @@ router.get(
       const type = inferType(rawContent, catalog?.type || DEFAULT_TYPE);
       const content = type === "json" ? formatContent(rawContent, type) : rawContent;
 
+      await saveSnapshotIfChanged(req, {
+        dataId,
+        group,
+        tenant,
+        type,
+        content: rawContent,
+        action: "sync_current",
+        reason: "打开配置中心时同步当前版本",
+      }).catch((snapshotError) => {
+        console.warn("[nacos-admin/config] sync snapshot failed:", snapshotError.message || snapshotError);
+      });
+
       res.json({
         success: true,
         data: {
@@ -215,6 +277,67 @@ router.get(
         required: error.required,
         data: error.data,
       });
+    }
+  }
+);
+
+router.get(
+  "/nacos/admin/config/history",
+  adminAuth,
+  requireRole("super"),
+  async (req, res) => {
+    try {
+      const dataId = validateIdentifier(normalizeDataId(req.query.dataId), "dataId");
+      const group = validateIdentifier(normalizeGroup(req.query.group), "group");
+      const tenant = req.query.tenant ? validateIdentifier(req.query.tenant, "tenant") : undefined;
+      const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
+      assertConfigPermission(req, dataId);
+
+      const rows = await XhuntNacosConfigSnapshot.findAll({
+        where: {
+          dataId,
+          group,
+          tenant: tenant || null,
+        },
+        order: [["createdAt", "DESC"], ["id", "DESC"]],
+        limit,
+      });
+
+      res.json({
+        success: true,
+        data: rows.map((row) => serializeSnapshot(row)),
+      });
+    } catch (error) {
+      console.error("[nacos-admin/config/history] failed:", error);
+      res.status(error.status || 500).json({ success: false, error: error.message || "获取历史版本失败", required: error.required });
+    }
+  }
+);
+
+router.get(
+  "/nacos/admin/config/history/:id",
+  adminAuth,
+  requireRole("super"),
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id || 0);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ success: false, error: "无效历史版本 ID" });
+      }
+
+      const row = await XhuntNacosConfigSnapshot.findByPk(id);
+      if (!row) {
+        return res.status(404).json({ success: false, error: "历史版本不存在" });
+      }
+      assertConfigPermission(req, row.dataId);
+
+      res.json({
+        success: true,
+        data: serializeSnapshot(row, true),
+      });
+    } catch (error) {
+      console.error("[nacos-admin/config/history/:id] failed:", error);
+      res.status(error.status || 500).json({ success: false, error: error.message || "获取历史版本详情失败", required: error.required });
     }
   }
 );
@@ -256,6 +379,18 @@ router.post(
       const form = new URLSearchParams({ dataId, group, content, type });
       if (tenant) form.set("tenant", tenant);
 
+      if (beforeContent) {
+        await saveSnapshotIfChanged(req, {
+          dataId,
+          group,
+          tenant,
+          type: inferType(beforeContent, type),
+          content: beforeContent,
+          action: "backup_before_publish",
+          reason: reason || "发布前自动备份",
+        });
+      }
+
       const resp = await nacosRequest("POST", "/nacos/v1/cs/configs", {
         data: form.toString(),
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -272,6 +407,16 @@ router.post(
       }
 
       const afterSha256 = sha256(content);
+      await saveSnapshotIfChanged(req, {
+        dataId,
+        group,
+        tenant,
+        type,
+        content,
+        action: "publish",
+        reason,
+      });
+
       await logAdminAction(req, {
         action: "nacos-admin-config-publish",
         success: true,
@@ -315,9 +460,10 @@ router.delete(
       const reason = String(req.query.reason || req.body?.reason || "").trim().slice(0, 500);
       assertConfigPermission(req, dataId);
 
+      let beforeContent = "";
       let beforeSha256 = null;
       try {
-        const beforeContent = await readConfig({ dataId, group, tenant });
+        beforeContent = await readConfig({ dataId, group, tenant });
         beforeSha256 = sha256(beforeContent);
       } catch (e) {
         beforeSha256 = null;
@@ -334,6 +480,19 @@ router.delete(
           error: "删除 Nacos 配置失败",
           status: resp.status,
           data: resp.data,
+        });
+      }
+
+      if (beforeContent) {
+        const catalog = CATALOG_MAP.get(dataId);
+        await saveSnapshotIfChanged(req, {
+          dataId,
+          group,
+          tenant,
+          type: inferType(beforeContent, catalog?.type || DEFAULT_TYPE),
+          content: beforeContent,
+          action: "delete_backup",
+          reason: reason || "删除前自动备份",
         });
       }
 

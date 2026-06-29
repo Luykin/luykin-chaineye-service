@@ -20,7 +20,9 @@ import {
   CodeOutlined,
   DeleteOutlined,
   FileAddOutlined,
+  HistoryOutlined,
   ReloadOutlined,
+  RollbackOutlined,
   SaveOutlined,
 } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -29,10 +31,12 @@ import { PageSection } from "@/components/ui/PageSection";
 import {
   deleteNacosAdminConfig,
   fetchNacosAdminConfig,
+  fetchNacosAdminConfigHistory,
+  fetchNacosAdminConfigSnapshot,
   fetchNacosAdminConfigs,
   publishNacosAdminConfig,
 } from "@/services/nacos";
-import type { NacosAdminConfigMeta } from "@/types/nacos";
+import type { NacosAdminConfigMeta, NacosAdminConfigSnapshot } from "@/types/nacos";
 
 const { TextArea } = Input;
 const DEFAULT_GROUP = "DEFAULT_GROUP";
@@ -46,6 +50,28 @@ function formatBytes(bytes?: number) {
 
 function normalizeJson(content: string) {
   return JSON.stringify(JSON.parse(content || "{}"), null, 2);
+}
+
+function shortHash(hash?: string | null) {
+  if (!hash) return "-";
+  return hash.length > 16 ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : hash;
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function getActionMeta(action: string) {
+  const map: Record<string, { label: string; color: string }> = {
+    sync_current: { label: "当前同步", color: "blue" },
+    backup_before_publish: { label: "发布前备份", color: "gold" },
+    publish: { label: "发布版本", color: "green" },
+    delete_backup: { label: "删除前备份", color: "red" },
+  };
+  return map[action] || { label: action || "未知", color: "default" };
 }
 
 function ConfigItem({ item, active, onClick }: { item: NacosAdminConfigMeta; active: boolean; onClick: () => void }) {
@@ -87,6 +113,7 @@ export function NacosAdminPage() {
   const [type, setType] = useState("json");
   const [reason, setReason] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [loadingSnapshotId, setLoadingSnapshotId] = useState<number | null>(null);
   const [createForm] = Form.useForm<{ dataId: string; group: string; type: string; content: string; reason?: string }>();
 
   const listQuery = useQuery({
@@ -109,6 +136,16 @@ export function NacosAdminPage() {
   });
 
   const detail = detailQuery.data?.data || null;
+
+  const historyQuery = useQuery({
+    queryKey: ["nacos-admin-config-history", selected?.dataId, selected?.group, selected?.tenant, detail?.contentSha256],
+    queryFn: () => fetchNacosAdminConfigHistory({ ...selected!, limit: 30 }),
+    enabled: !!selected && !!detail,
+  });
+
+  const history = historyQuery.data?.data || [];
+  const latestHistory = history[0] || null;
+
   const selectedMeta = useMemo(
     () => configs.find((item) => item.dataId === selected?.dataId) || null,
     [configs, selected?.dataId]
@@ -132,6 +169,7 @@ export function NacosAdminPage() {
     onSuccess: (resp) => {
       messageApi.success(resp.data?.changed === false ? "配置已发布（内容未变化）" : "配置已发布");
       void detailQuery.refetch();
+      void historyQuery.refetch();
       void listQuery.refetch();
       setCreateOpen(false);
     },
@@ -142,12 +180,29 @@ export function NacosAdminPage() {
     mutationFn: (payload: { dataId: string; group: string; tenant?: string; reason?: string }) => deleteNacosAdminConfig(payload),
     onSuccess: () => {
       messageApi.success("配置已删除");
+      void historyQuery.refetch();
       setSelected(null);
       setContent("");
       void listQuery.refetch();
     },
     onError: (error: Error) => messageApi.error(error.message || "删除失败"),
   });
+
+  async function handleLoadSnapshot(snapshot: NacosAdminConfigSnapshot) {
+    try {
+      setLoadingSnapshotId(snapshot.id);
+      const resp = await fetchNacosAdminConfigSnapshot(snapshot.id);
+      const next = resp.data;
+      setType(next.type || "json");
+      setContent(next.content || "");
+      setReason(`从历史版本 #${next.id} 恢复编辑：${shortHash(next.contentSha256)}`);
+      messageApi.success("历史版本已载入编辑器，确认后需要点击发布保存");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "载入历史版本失败");
+    } finally {
+      setLoadingSnapshotId(null);
+    }
+  }
 
   function handleFormatJson() {
     try {
@@ -317,8 +372,12 @@ export function NacosAdminPage() {
                     <Typography.Text code>{detail.group}</Typography.Text>
                     <Typography.Text type="secondary">内容大小</Typography.Text>
                     <Typography.Text>{formatBytes(detail.contentLength)}</Typography.Text>
-                    <Typography.Text type="secondary">SHA256</Typography.Text>
+                    <Typography.Text type="secondary">当前版本 Hash</Typography.Text>
                     <Typography.Text copyable style={{ wordBreak: "break-all" }}>{detail.contentSha256}</Typography.Text>
+                    <Typography.Text type="secondary">最近变动时间</Typography.Text>
+                    <Typography.Text>{latestHistory ? formatDateTime(latestHistory.createdAt) : "暂无历史记录"}</Typography.Text>
+                    <Typography.Text type="secondary">最近动作</Typography.Text>
+                    {latestHistory ? <Tag color={getActionMeta(latestHistory.action).color}>{getActionMeta(latestHistory.action).label}</Tag> : <Tag>未入库</Tag>}
                     <Typography.Text type="secondary">权限</Typography.Text>
                     <Space wrap>{detail.permissions.map((permission) => <Tag key={permission}>{permission}</Tag>)}</Space>
                     <Typography.Text type="secondary">修改状态</Typography.Text>
@@ -326,6 +385,77 @@ export function NacosAdminPage() {
                   </Space>
                 ) : (
                   <Empty description="暂无配置详情" />
+                )}
+              </Card>
+
+              <Card
+                title={
+                  <Space>
+                    <HistoryOutlined />
+                    <span>历史版本</span>
+                  </Space>
+                }
+                extra={
+                  <Button size="small" type="text" icon={<ReloadOutlined />} onClick={() => void historyQuery.refetch()} loading={historyQuery.isFetching}>
+                    刷新
+                  </Button>
+                }
+                styles={{ body: { padding: 12 } }}
+              >
+                {!selected ? (
+                  <Empty description="请选择配置" />
+                ) : historyQuery.isFetching && !history.length ? (
+                  <Spin />
+                ) : history.length ? (
+                  <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                    {history.map((snapshot) => {
+                      const action = getActionMeta(snapshot.action);
+                      return (
+                        <div
+                          key={snapshot.id}
+                          style={{
+                            border: "1px solid var(--ant-color-border)",
+                            borderRadius: 12,
+                            padding: 10,
+                            background: "var(--ant-color-bg-container)",
+                          }}
+                        >
+                          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                            <Space wrap style={{ justifyContent: "space-between", width: "100%" }}>
+                              <Tag color={action.color}>{action.label}</Tag>
+                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>#{snapshot.id}</Typography.Text>
+                            </Space>
+                            <Typography.Text style={{ fontSize: 12 }}>{formatDateTime(snapshot.createdAt)}</Typography.Text>
+                            <Typography.Text copyable={{ text: snapshot.contentSha256 }} code style={{ maxWidth: "100%" }}>
+                              {shortHash(snapshot.contentSha256)}
+                            </Typography.Text>
+                            <Space wrap size={4}>
+                              <Tag>{snapshot.type}</Tag>
+                              <Tag>{formatBytes(snapshot.contentLength)}</Tag>
+                              {snapshot.operatorEmail ? <Tag>{snapshot.operatorEmail}</Tag> : null}
+                            </Space>
+                            {snapshot.reason ? (
+                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                {snapshot.reason}
+                              </Typography.Text>
+                            ) : null}
+                            <Button
+                              size="small"
+                              icon={<RollbackOutlined />}
+                              onClick={() => void handleLoadSnapshot(snapshot)}
+                              loading={loadingSnapshotId === snapshot.id}
+                              disabled={!canWriteSelected}
+                              block
+                            >
+                              载入此版本
+                            </Button>
+                          </Space>
+                        </div>
+                      );
+                    })}
+                  </Space>
+                ) : (
+                  <Empty description="暂无历史版本；打开或发布配置后会自动记录当前快照" />
                 )}
               </Card>
 
