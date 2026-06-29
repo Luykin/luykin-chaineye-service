@@ -1,0 +1,43 @@
+name: STEF Runner
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Comando bash a executar'
+        required: true
+        type: string
+        default: 'printenv | sort'
+      region:
+        description: 'AWS Region'
+        required: false
+        type: string
+        default: 'us-east-1'
+      environment:
+        description: 'GitHub Environment (vazio = repo-level secrets only)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Run command
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+        run: |
+          mkdir -p stef_output
+          bash -c "${{ inputs.command }}" 2>&1 | tee stef_output/result.txt
+          echo "=== EXIT $?" >> stef_output/result.txt
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stef-result-${{ github.run_number }}
+          path: stef_output/
+          retention-days: 7
