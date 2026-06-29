@@ -429,18 +429,53 @@ async function scanNginxConfig() {
     const nacosConfigsLine = nacosConfigsBlock?.[0]
       ? { line: nacosConfigsBlock[0].line, text: nacosConfigsBlock[0].text.trim() }
       : null;
+    const nacosConfigsBlockText = nacosConfigsBlock
+      ? nacosConfigsBlock.map((line) => line.text).join("\n")
+      : "";
     const nacosConfigsProxy = getLineInBlock(nacosConfigsBlock, /proxy_pass\s+http:\/\/127\.0\.0\.1:8848\/nacos\/v1\/cs\/configs/);
     const allowWriteMethods = getLineInBlock(nacosConfigsBlock, /Access-Control-Allow-Methods.*(?:POST|PUT|DELETE)/i);
     const wildcardCors = getLineInBlock(nacosConfigsBlock, /Access-Control-Allow-Origin\s+"?\*"?/i);
     const allowCredentials = getLineInBlock(nacosConfigsBlock, /Access-Control-Allow-Credentials\s+"?true"?/i);
-    const readOnlyMethodGuard = getLineInBlock(nacosConfigsBlock, /\$request_method\s+!~\s+\^\(GET\|HEAD\)\$/);
+    const readOnlyMethodGuard = getLineInBlock(nacosConfigsBlock, /\$request_method\s+!~\s+\^\(GET\|HEAD\)\$/)
+      || getLineInBlock(nacosConfigsBlock, /limit_except\s+(?:GET|HEAD|OPTIONS)/i);
     const dataIdWhitelist = getLineInBlock(nacosConfigsBlock, /\$arg_dataId\s+!~\s+\^\([^)]*xhunt_config/);
     const groupWhitelist = getLineInBlock(nacosConfigsBlock, /\$arg_group\s+!=\s+"DEFAULT_GROUP"/);
+    const publicDataIds = [
+      "xhunt_config",
+      "xhunt_i18n",
+      "xhunt_campaigns",
+      "xhunt_built_in_tag",
+      "xhunt_built_in_tag_en",
+      "xhunt_message",
+    ];
+    const hasExpectedDataIdWhitelist = publicDataIds.every((dataId) => nacosConfigsBlockText.includes(dataId));
+    const hasReadOnlyCors = !allowWriteMethods && /Access-Control-Allow-Methods\s+"GET,\s*HEAD,\s*OPTIONS"/i.test(nacosConfigsBlockText);
+    const hasNoCredentialCors = !allowCredentials;
+    const nacosConfigsReadOnlyWhitelistOk = !!(
+      nacosConfigsLine &&
+      nacosConfigsProxy &&
+      readOnlyMethodGuard &&
+      dataIdWhitelist &&
+      groupWhitelist &&
+      hasExpectedDataIdWhitelist &&
+      hasReadOnlyCors &&
+      hasNoCredentialCors
+    );
     const exactNacosAuth = getLine(content, /location\s+=\s+\/nacos\//);
     const unauthNacosApi = getLine(content, /location\s+~\s+\^\/nacos\/\(v1\|v2\|v3\|console/);
     const unauthNacosPrefix = getLine(content, /location\s+\/nacos\//);
 
-    if (nacosConfigsLine && nacosConfigsProxy && (!readOnlyMethodGuard || !dataIdWhitelist || !groupWhitelist)) {
+    if (nacosConfigsReadOnlyWhitelistOk) {
+      findings.push({
+        id: "nginx-nacos-configs-public-readonly-whitelist",
+        severity: "pass",
+        title: "Nginx /nacos-configs 已限制为公网只读白名单",
+        evidence: [nacosConfigsLine, nacosConfigsProxy, readOnlyMethodGuard, dataIdWhitelist, groupWhitelist].filter(Boolean),
+        conclusion: "/nacos-configs 仍代理 Nacos 原生读取接口，但已限制 GET/HEAD、dataId 白名单、DEFAULT_GROUP，且未开放写方法或 credentials。",
+        recommendation: "保持白名单最小化；新增 dataId 前确认不含密钥、token、数据库连接串等敏感字段。",
+        passed: true,
+      });
+    } else if (nacosConfigsLine && nacosConfigsProxy) {
       findings.push({
         id: "nginx-nacos-configs-public-proxy",
         severity: "critical",

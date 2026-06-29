@@ -111,7 +111,10 @@ export function NacosSecurityPage() {
   }
 
   async function copyReport() {
-    if (!result) return;
+    if (!result) {
+      messageApi.info("请先完成一次检查，再复制报告");
+      return;
+    }
     await navigator.clipboard.writeText(buildReport(result));
     messageApi.success("检查报告已复制");
   }
@@ -260,7 +263,7 @@ export function NacosSecurityPage() {
               <Typography.Title level={2} style={{ color: "#fff", margin: 0 }}>
                 Nacos 暴露面检查
               </Typography.Title>
-              <Typography.Paragraph style={{ color: "#e5e7eb", maxWidth: 820, marginTop: 8, marginBottom: 0, fontWeight: 500 }}>
+              <Typography.Paragraph style={{ color: "#e5e7eb", maxWidth: 780, marginTop: 8, marginBottom: 0, fontWeight: 500, lineHeight: 1.7 }}>
                 从管理后台触发服务端探测：检查 /nacos-configs、/nacos/v1 原生 API、Basic Auth 绕过和 Nginx 配置风险。响应内容只保留 hash、长度和脱敏摘要。
               </Typography.Paragraph>
             </div>
@@ -268,8 +271,18 @@ export function NacosSecurityPage() {
               <Button type="primary" danger size="large" loading={loading} onClick={runCheck} icon={<ApiOutlined />}>
                 开始检查
               </Button>
-              <Button size="large" disabled={!result} onClick={copyReport} icon={<CopyOutlined />}>
-                复制报告
+              <Button
+                size="large"
+                onClick={copyReport}
+                icon={<CopyOutlined />}
+                style={{
+                  color: "#f8fafc",
+                  borderColor: "rgba(248,250,252,0.82)",
+                  background: result ? "rgba(248,250,252,0.14)" : "rgba(248,250,252,0.08)",
+                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)",
+                }}
+              >
+                {result ? "复制报告" : "先检查后复制"}
               </Button>
             </Space>
           </Space>
