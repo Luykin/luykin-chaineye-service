@@ -152,3 +152,47 @@ export async function runNacosSecurityCheck() {
     body: {},
   });
 }
+
+export async function fetchNacosAdminConfigs() {
+  return apiRequest<import("@/types/nacos").NacosAdminConfigListResponse>("/api/xhunt/stats/nacos/admin/configs");
+}
+
+export async function fetchNacosAdminConfig(params: { dataId: string; group?: string; tenant?: string }) {
+  const query = new URLSearchParams();
+  query.set("dataId", params.dataId);
+  query.set("group", params.group || "DEFAULT_GROUP");
+  if (params.tenant) query.set("tenant", params.tenant);
+  return apiRequest<import("@/types/nacos").NacosAdminConfigDetailResponse>(`/api/xhunt/stats/nacos/admin/config?${query.toString()}`);
+}
+
+export async function publishNacosAdminConfig(params: {
+  dataId: string;
+  group?: string;
+  tenant?: string;
+  type?: string;
+  content: string;
+  reason?: string;
+}) {
+  return apiRequest<import("@/types/nacos").NacosAdminConfigMutationResponse>("/api/xhunt/stats/nacos/admin/config", {
+    method: "POST",
+    body: {
+      dataId: params.dataId,
+      group: params.group || "DEFAULT_GROUP",
+      tenant: params.tenant,
+      type: params.type || "json",
+      content: params.content,
+      reason: params.reason,
+    },
+  });
+}
+
+export async function deleteNacosAdminConfig(params: { dataId: string; group?: string; tenant?: string; reason?: string }) {
+  const query = new URLSearchParams();
+  query.set("dataId", params.dataId);
+  query.set("group", params.group || "DEFAULT_GROUP");
+  if (params.tenant) query.set("tenant", params.tenant);
+  if (params.reason) query.set("reason", params.reason);
+  return apiRequest<import("@/types/nacos").NacosAdminConfigMutationResponse>(`/api/xhunt/stats/nacos/admin/config?${query.toString()}`, {
+    method: "DELETE",
+  });
+}

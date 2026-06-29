@@ -27,6 +27,7 @@ import { NacosLegacyCampaignsPage } from "@/pages/NacosLegacyCampaignsPage";
 import { NacosTagsPage } from "@/pages/NacosTagsPage";
 import { NacosI18nPage } from "@/pages/NacosI18nPage";
 import { NacosSecurityPage } from "@/pages/NacosSecurityPage";
+import { NacosAdminPage } from "@/pages/NacosAdminPage";
 import { FeatureFlagsPage } from "@/pages/FeatureFlagsPage";
 import { BannerConfigPage } from "@/pages/BannerConfigPage";
 import { RedisManagementPage } from "@/pages/RedisManagementPage";
@@ -66,6 +67,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "nacos-tags": <NacosTagsPage />,
   "nacos-i18n": <NacosI18nPage />,
   "nacos-security": <NacosSecurityPage />,
+  "nacos-admin": <NacosAdminPage />,
   "feature-flags": <FeatureFlagsPage />,
   "banner-config": <BannerConfigPage />,
   "redis-management": <RedisManagementPage />,

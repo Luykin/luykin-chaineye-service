@@ -194,3 +194,57 @@ export interface NacosSecurityCheckResponse {
   };
   error?: string;
 }
+
+export interface NacosAdminConfigMeta {
+  dataId: string;
+  label: string;
+  group: string;
+  type: string;
+  publicReadable: boolean;
+  permissions: string[];
+  writable: boolean;
+}
+
+export interface NacosAdminConfigListResponse {
+  success: boolean;
+  data: {
+    configs: NacosAdminConfigMeta[];
+    canCreateCustom: boolean;
+    defaultGroup: string;
+  };
+  error?: string;
+}
+
+export interface NacosAdminConfigDetail {
+  dataId: string;
+  group: string;
+  tenant: string | null;
+  type: string;
+  content: string;
+  contentSha256: string;
+  contentLength: number;
+  publicReadable: boolean;
+  permissions: string[];
+}
+
+export interface NacosAdminConfigDetailResponse {
+  success: boolean;
+  data: NacosAdminConfigDetail;
+  error?: string;
+}
+
+export interface NacosAdminConfigMutationResponse {
+  success: boolean;
+  data?: {
+    dataId: string;
+    group: string;
+    tenant: string | null;
+    type?: string;
+    published?: boolean;
+    deleted?: boolean;
+    beforeSha256?: string | null;
+    afterSha256?: string;
+    changed?: boolean;
+  };
+  error?: string;
+}
