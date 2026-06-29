@@ -129,3 +129,68 @@ export interface NacosI18nReferenceResponse {
   };
   error?: string;
 }
+
+export type NacosSecuritySeverity = "pass" | "low" | "medium" | "high" | "critical";
+
+export interface NacosSecurityEvidenceLine {
+  line: number;
+  text: string;
+}
+
+export interface NacosSecurityStaticFinding {
+  id: string;
+  severity: NacosSecuritySeverity;
+  title: string;
+  evidence?: NacosSecurityEvidenceLine[];
+  conclusion: string;
+  recommendation: string;
+  passed?: boolean;
+}
+
+export interface NacosSecurityRuntimeCheck {
+  id: string;
+  title: string;
+  method: string;
+  path: string;
+  url: string;
+  category: string;
+  status: number | null;
+  durationMs: number;
+  severity: NacosSecuritySeverity;
+  passed: boolean;
+  conclusion: string;
+  recommendation: string;
+  headers?: Record<string, string | undefined>;
+  bodySummary?: {
+    contentLength: number;
+    bodySha256: string | null;
+    detectedSensitiveKeys: string[];
+    sample: string;
+  };
+  error?: string;
+}
+
+export interface NacosSecurityCheckResponse {
+  success: boolean;
+  data: {
+    summary: {
+      severity: NacosSecuritySeverity;
+      checkedAt: string;
+      origin: string;
+      durationMs: number;
+      total: number;
+      failed: number;
+      critical: number;
+      high: number;
+      medium: number;
+    };
+    nginx: {
+      path: string;
+      exists: boolean;
+      findings: NacosSecurityStaticFinding[];
+    };
+    runtimeChecks: NacosSecurityRuntimeCheck[];
+    notes: string[];
+  };
+  error?: string;
+}

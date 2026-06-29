@@ -1,6 +1,7 @@
 const os = require("os");
 const { exec, execFile } = require("child_process");
 const { promisify } = require("util");
+const { pushAlertNotification } = require("../alertPushService");
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -473,6 +474,7 @@ function createBackendHealthChecker({
           emailService.sendEmail(to, subject, html, html.replace(/<[^>]*>/g, ""))
         )
       );
+      const alertPushResult = await pushAlertNotification("backend-health-checker");
       const sentRecipients = recipients.filter(
         (_, index) => sendResults[index]?.status === "fulfilled"
       );
@@ -493,6 +495,7 @@ function createBackendHealthChecker({
             ...meta,
             recipients,
             failedRecipients,
+            alertPushResult,
           },
         });
         return;
@@ -508,6 +511,7 @@ function createBackendHealthChecker({
           ...meta,
           recipients: sentRecipients,
           failedRecipients,
+          alertPushResult,
         },
       });
     } catch (error) {

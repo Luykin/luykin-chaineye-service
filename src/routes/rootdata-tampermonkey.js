@@ -4,6 +4,7 @@ const { Op, literal } = require("sequelize");
 const { Fundraising } = require("../models/postgres-fundraising");
 const { XhuntAdminManager, CollectorClientToken } = require("../models/postgres-start");
 const { sendEmail } = require("../services/emailService");
+const { pushAlertNotification } = require("../services/alertPushService");
 const { recordGenericStat } = require("../xhunt/services/generic-stats-service");
 
 const router = express.Router();
@@ -1120,10 +1121,13 @@ async function sendAlertEmail(payload) {
     );
   }
 
+  const pushResult = await pushAlertNotification("rootdata-tampermonkey-alert");
+
   return {
     recipients,
     sent: results.length - failedItems.length,
     failed: failedItems.length,
+    push: pushResult,
   };
 }
 

@@ -145,3 +145,10 @@ export async function importUserTagsFromNacos(overwrite = false) {
     body: { overwrite },
   });
 }
+
+export async function runNacosSecurityCheck() {
+  return apiRequest<import("@/types/nacos").NacosSecurityCheckResponse>("/api/xhunt/stats/security/nacos/check", {
+    method: "POST",
+    body: {},
+  });
+}
