@@ -14,7 +14,7 @@ const DEFAULT_PM2_APPS = [
 ];
 
 const DEFAULT_THRESHOLDS = {
-  count5xx: 20,
+  count5xx: 500,
   rate5xx: 0.05,
   minRequestsFor5xxRate: 100,
   perfQueueLength: 5000,
