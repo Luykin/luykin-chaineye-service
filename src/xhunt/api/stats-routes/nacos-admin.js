@@ -245,87 +245,72 @@ function normalizeNativeHistoryItem(item, source = "v1") {
 }
 
 async function fetchNacosNativeHistoryList({ dataId, group, tenant, pageNo, pageSize }) {
-  const attempts = [
-    {
-      source: "v3",
-      path: "/nacos/v3/admin/cs/history/list",
-      params: { dataId, groupName: group, namespaceId: tenant || "public", pageNo, pageSize },
-      unwrap: true,
-    },
-    {
-      source: "v1",
-      path: "/nacos/v1/cs/history",
-      params: { search: "accurate", dataId, group, pageNo, pageSize, ...(tenant ? { tenant } : {}) },
-      unwrap: false,
-    },
-    {
-      source: "v2",
-      path: "/nacos/v2/cs/history/list",
-      params: { dataId, group, namespaceId: tenant || "", pageNo, pageSize },
-      unwrap: true,
-    },
-  ];
+  const v3Namespaces = tenant ? [tenant] : ["public", ""];
+  let v3Error = null;
 
-  let lastError = null;
-  for (const attempt of attempts) {
-    const resp = await nacosRequest("GET", attempt.path, { params: attempt.params });
+  for (const namespaceId of v3Namespaces) {
+    const resp = await nacosRequest("GET", "/nacos/v3/admin/cs/history/list", {
+      params: { dataId, groupName: group, namespaceId, pageNo, pageSize },
+    });
     try {
-      if (attempt.unwrap) {
-        const data = unwrapNacosV2Response(resp, "查询 Nacos 原生历史");
-        return {
-          source: attempt.source,
-          totalCount: Number(data?.totalCount || 0),
-          pageNumber: Number(data?.pageNumber || pageNo),
-          pagesAvailable: Number(data?.pagesAvailable || 0),
-          pageItems: (data?.pageItems || []).map((item) => normalizeNativeHistoryItem(item, attempt.source)),
-        };
-      }
-      if (resp.status === 200 && resp.data && !resp.data.code) {
-        return {
-          source: attempt.source,
-          totalCount: Number(resp.data.totalCount || 0),
-          pageNumber: Number(resp.data.pageNumber || pageNo),
-          pagesAvailable: Number(resp.data.pagesAvailable || 0),
-          pageItems: (resp.data.pageItems || []).map((item) => normalizeNativeHistoryItem(item, attempt.source)),
-        };
-      }
-      lastError = new Error(`查询 Nacos 原生历史失败: status=${resp.status}`);
-      lastError.status = resp.status;
-      lastError.data = resp.data;
+      const data = unwrapNacosV2Response(resp, "查询 Nacos 原生历史");
+      return {
+        source: "v3",
+        totalCount: Number(data?.totalCount || 0),
+        pageNumber: Number(data?.pageNumber || pageNo),
+        pagesAvailable: Number(data?.pagesAvailable || 0),
+        pageItems: (data?.pageItems || []).map((item) => normalizeNativeHistoryItem(item, "v3")),
+      };
     } catch (error) {
-      lastError = error;
+      v3Error = error;
     }
   }
-  throw lastError || new Error("查询 Nacos 原生历史失败");
+
+  const v1Resp = await nacosRequest("GET", "/nacos/v1/cs/history", {
+    params: { search: "accurate", dataId, group, pageNo, pageSize, ...(tenant ? { tenant } : {}) },
+  });
+  if (v1Resp.status === 200 && v1Resp.data && !v1Resp.data.code) {
+    return {
+      source: "v1",
+      totalCount: Number(v1Resp.data.totalCount || 0),
+      pageNumber: Number(v1Resp.data.pageNumber || pageNo),
+      pagesAvailable: Number(v1Resp.data.pagesAvailable || 0),
+      pageItems: (v1Resp.data.pageItems || []).map((item) => normalizeNativeHistoryItem(item, "v1")),
+    };
+  }
+
+  const error = v3Error || new Error(`查询 Nacos 原生历史失败: status=${v1Resp.status}`);
+  if (!error.status) error.status = v1Resp.status;
+  if (!error.data) error.data = v1Resp.data;
+  throw error;
 }
 
 async function fetchNacosNativeHistoryDetail({ dataId, group, tenant, nid, source }) {
-  const tryV1First = source !== "v2";
-  const attempts = tryV1First
-    ? [
-        { source: "v3", path: "/nacos/v3/admin/cs/history", params: { nid, dataId, groupName: group, namespaceId: tenant || "public" } },
-        { source: "v1", path: "/nacos/v1/cs/history", params: { nid, dataId, group, ...(tenant ? { tenant } : {}) } },
-        { source: "v2", path: "/nacos/v2/cs/history", params: { nid, dataId, group, namespaceId: tenant || "" } },
-      ]
-    : [
-        { source: "v3", path: "/nacos/v3/admin/cs/history", params: { nid, dataId, groupName: group, namespaceId: tenant || "public" } },
-        { source: "v2", path: "/nacos/v2/cs/history", params: { nid, dataId, group, namespaceId: tenant || "" } },
-        { source: "v1", path: "/nacos/v1/cs/history", params: { nid, dataId, group, ...(tenant ? { tenant } : {}) } },
-      ];
-
-  let lastError = null;
-  for (const attempt of attempts) {
-    const resp = await nacosRequest("GET", attempt.path, { params: attempt.params });
+  const v3Namespaces = tenant ? [tenant] : ["public", ""];
+  let v3Error = null;
+  for (const namespaceId of v3Namespaces) {
+    const resp = await nacosRequest("GET", "/nacos/v3/admin/cs/history", {
+      params: { nid, dataId, groupName: group, namespaceId },
+    });
     try {
-      const data = attempt.source === "v2" || attempt.source === "v3" ? unwrapNacosV2Response(resp, "查询 Nacos 原生历史详情") : resp.data;
-      if (resp.status === 200 && data && !data.code) {
-        return normalizeNativeHistoryItem(data, attempt.source);
-      }
+      const data = unwrapNacosV2Response(resp, "查询 Nacos 原生历史详情");
+      if (data) return normalizeNativeHistoryItem(data, "v3");
     } catch (error) {
-      lastError = error;
+      v3Error = error;
     }
   }
-  throw lastError || new Error("查询 Nacos 原生历史详情失败");
+
+  const v1Resp = await nacosRequest("GET", "/nacos/v1/cs/history", {
+    params: { nid, dataId, group, ...(tenant ? { tenant } : {}) },
+  });
+  if (v1Resp.status === 200 && v1Resp.data && !v1Resp.data.code) {
+    return normalizeNativeHistoryItem(v1Resp.data, "v1");
+  }
+
+  const error = v3Error || new Error(`查询 Nacos 原生历史详情失败: status=${v1Resp.status}`);
+  if (!error.status) error.status = v1Resp.status;
+  if (!error.data) error.data = v1Resp.data;
+  throw error;
 }
 
 router.get(
