@@ -34,9 +34,11 @@ import {
   fetchNacosAdminConfigHistory,
   fetchNacosAdminConfigSnapshot,
   fetchNacosAdminConfigs,
+  fetchNacosAdminNativeHistory,
+  fetchNacosAdminNativeHistoryDetail,
   publishNacosAdminConfig,
 } from "@/services/nacos";
-import type { NacosAdminConfigMeta, NacosAdminConfigSnapshot } from "@/types/nacos";
+import type { NacosAdminConfigMeta, NacosAdminConfigSnapshot, NacosNativeHistoryItem } from "@/types/nacos";
 
 const { TextArea } = Input;
 const DEFAULT_GROUP = "DEFAULT_GROUP";
@@ -57,7 +59,7 @@ function shortHash(hash?: string | null) {
   return hash.length > 16 ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : hash;
 }
 
-function formatDateTime(value?: string) {
+function formatDateTime(value?: number | string | null) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -72,6 +74,14 @@ function getActionMeta(action: string) {
     delete_backup: { label: "删除前备份", color: "red" },
   };
   return map[action] || { label: action || "未知", color: "default" };
+}
+
+function getNativeActionMeta(opType?: string) {
+  const normalized = String(opType || "").toUpperCase();
+  if (normalized === "I") return { label: "新增", color: "green" };
+  if (normalized === "U") return { label: "更新", color: "blue" };
+  if (normalized === "D") return { label: "删除", color: "red" };
+  return { label: opType || "变更", color: "default" };
 }
 
 function ConfigItem({ item, active, onClick }: { item: NacosAdminConfigMeta; active: boolean; onClick: () => void }) {
@@ -137,14 +147,24 @@ export function NacosAdminPage() {
 
   const detail = detailQuery.data?.data || null;
 
-  const historyQuery = useQuery({
+  const nativeHistoryQuery = useQuery({
+    queryKey: ["nacos-admin-native-history", selected?.dataId, selected?.group, selected?.tenant, detail?.contentSha256],
+    queryFn: () => fetchNacosAdminNativeHistory({ ...selected!, pageNo: 1, pageSize: 20 }),
+    enabled: !!selected && !!detail,
+  });
+
+  const snapshotHistoryQuery = useQuery({
     queryKey: ["nacos-admin-config-history", selected?.dataId, selected?.group, selected?.tenant, detail?.contentSha256],
     queryFn: () => fetchNacosAdminConfigHistory({ ...selected!, limit: 30 }),
     enabled: !!selected && !!detail,
   });
 
-  const history = historyQuery.data?.data || [];
-  const latestHistory = history[0] || null;
+  const nativeHistory = nativeHistoryQuery.data?.data.pageItems || [];
+  const snapshotHistory = snapshotHistoryQuery.data?.data || [];
+  const latestNativeHistory = nativeHistory[0] || null;
+  const latestSnapshot = snapshotHistory[0] || null;
+  const latestChangeTime = latestNativeHistory?.lastModifiedTime || latestNativeHistory?.createdTime || latestSnapshot?.createdAt || null;
+  const latestAction = latestNativeHistory ? getNativeActionMeta(latestNativeHistory.opType) : latestSnapshot ? getActionMeta(latestSnapshot.action) : null;
 
   const selectedMeta = useMemo(
     () => configs.find((item) => item.dataId === selected?.dataId) || null,
@@ -169,7 +189,8 @@ export function NacosAdminPage() {
     onSuccess: (resp) => {
       messageApi.success(resp.data?.changed === false ? "配置已发布（内容未变化）" : "配置已发布");
       void detailQuery.refetch();
-      void historyQuery.refetch();
+      void nativeHistoryQuery.refetch();
+      void snapshotHistoryQuery.refetch();
       void listQuery.refetch();
       setCreateOpen(false);
     },
@@ -180,13 +201,42 @@ export function NacosAdminPage() {
     mutationFn: (payload: { dataId: string; group: string; tenant?: string; reason?: string }) => deleteNacosAdminConfig(payload),
     onSuccess: () => {
       messageApi.success("配置已删除");
-      void historyQuery.refetch();
+      void nativeHistoryQuery.refetch();
+      void snapshotHistoryQuery.refetch();
       setSelected(null);
       setContent("");
       void listQuery.refetch();
     },
     onError: (error: Error) => messageApi.error(error.message || "删除失败"),
   });
+
+  async function handleLoadNativeHistory(item: NacosNativeHistoryItem) {
+    if (!selected) return;
+    try {
+      setLoadingSnapshotId(Number(item.id) || -1);
+      const resp = await fetchNacosAdminNativeHistoryDetail({
+        id: item.id,
+        dataId: selected.dataId,
+        group: selected.group,
+        tenant: selected.tenant,
+        source: item.source,
+      });
+      const next = resp.data;
+      if (typeof next.content !== "string") {
+        messageApi.warning("该 Nacos 历史详情没有返回内容，无法载入编辑器");
+        return;
+      }
+      const nextType = next.content?.trim().startsWith("{") || next.content?.trim().startsWith("[") ? "json" : type;
+      setType(nextType || "json");
+      setContent(next.content);
+      setReason(`从 Nacos 原生历史 #${next.id} 恢复编辑：${next.md5 || shortHash(next.contentSha256)}`);
+      messageApi.success("Nacos 原生历史已载入编辑器，确认后需要点击发布保存");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "载入 Nacos 历史失败");
+    } finally {
+      setLoadingSnapshotId(null);
+    }
+  }
 
   async function handleLoadSnapshot(snapshot: NacosAdminConfigSnapshot) {
     try {
@@ -289,7 +339,7 @@ export function NacosAdminPage() {
             description="当前列表默认展示项目白名单配置；新建任意 dataId 需要 nacos-admin 权限。发布和删除会记录后台操作日志。"
           />
 
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) minmax(0, 1fr) 300px", gap: 16, alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 320px) minmax(0, 1fr) minmax(420px, 520px)", gap: 16, alignItems: "start" }}>
             <Card title="配置列表" styles={{ body: { padding: 12 } }}>
               {listQuery.isLoading ? (
                 <Spin />
@@ -375,9 +425,9 @@ export function NacosAdminPage() {
                     <Typography.Text type="secondary">当前版本 Hash</Typography.Text>
                     <Typography.Text copyable style={{ wordBreak: "break-all" }}>{detail.contentSha256}</Typography.Text>
                     <Typography.Text type="secondary">最近变动时间</Typography.Text>
-                    <Typography.Text>{latestHistory ? formatDateTime(latestHistory.createdAt) : "暂无历史记录"}</Typography.Text>
+                    <Typography.Text>{latestChangeTime ? formatDateTime(latestChangeTime) : "暂无历史记录"}</Typography.Text>
                     <Typography.Text type="secondary">最近动作</Typography.Text>
-                    {latestHistory ? <Tag color={getActionMeta(latestHistory.action).color}>{getActionMeta(latestHistory.action).label}</Tag> : <Tag>未入库</Tag>}
+                    {latestAction ? <Tag color={latestAction.color}>{latestAction.label}</Tag> : <Tag>未入库</Tag>}
                     <Typography.Text type="secondary">权限</Typography.Text>
                     <Space wrap>{detail.permissions.map((permission) => <Tag key={permission}>{permission}</Tag>)}</Space>
                     <Typography.Text type="secondary">修改状态</Typography.Text>
@@ -396,7 +446,16 @@ export function NacosAdminPage() {
                   </Space>
                 }
                 extra={
-                  <Button size="small" type="text" icon={<ReloadOutlined />} onClick={() => void historyQuery.refetch()} loading={historyQuery.isFetching}>
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<ReloadOutlined />}
+                    onClick={() => {
+                      void nativeHistoryQuery.refetch();
+                      void snapshotHistoryQuery.refetch();
+                    }}
+                    loading={nativeHistoryQuery.isFetching || snapshotHistoryQuery.isFetching}
+                  >
                     刷新
                   </Button>
                 }
@@ -404,58 +463,120 @@ export function NacosAdminPage() {
               >
                 {!selected ? (
                   <Empty description="请选择配置" />
-                ) : historyQuery.isFetching && !history.length ? (
-                  <Spin />
-                ) : history.length ? (
-                  <Space direction="vertical" size={10} style={{ width: "100%" }}>
-                    {history.map((snapshot) => {
-                      const action = getActionMeta(snapshot.action);
-                      return (
-                        <div
-                          key={snapshot.id}
-                          style={{
-                            border: "1px solid var(--ant-color-border)",
-                            borderRadius: 12,
-                            padding: 10,
-                            background: "var(--ant-color-bg-container)",
-                          }}
-                        >
-                          <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                            <Space wrap style={{ justifyContent: "space-between", width: "100%" }}>
-                              <Tag color={action.color}>{action.label}</Tag>
-                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>#{snapshot.id}</Typography.Text>
-                            </Space>
-                            <Typography.Text style={{ fontSize: 12 }}>{formatDateTime(snapshot.createdAt)}</Typography.Text>
-                            <Typography.Text copyable={{ text: snapshot.contentSha256 }} code style={{ maxWidth: "100%" }}>
-                              {shortHash(snapshot.contentSha256)}
-                            </Typography.Text>
-                            <Space wrap size={4}>
-                              <Tag>{snapshot.type}</Tag>
-                              <Tag>{formatBytes(snapshot.contentLength)}</Tag>
-                              {snapshot.operatorEmail ? <Tag>{snapshot.operatorEmail}</Tag> : null}
-                            </Space>
-                            {snapshot.reason ? (
-                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                {snapshot.reason}
-                              </Typography.Text>
-                            ) : null}
-                            <Button
-                              size="small"
-                              icon={<RollbackOutlined />}
-                              onClick={() => void handleLoadSnapshot(snapshot)}
-                              loading={loadingSnapshotId === snapshot.id}
-                              disabled={!canWriteSelected}
-                              block
-                            >
-                              载入此版本
-                            </Button>
-                          </Space>
-                        </div>
-                      );
-                    })}
-                  </Space>
                 ) : (
-                  <Empty description="暂无历史版本；打开或发布配置后会自动记录当前快照" />
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.92fr)", gap: 12 }}>
+                    <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                      <Space wrap style={{ justifyContent: "space-between", width: "100%" }}>
+                        <Typography.Text strong>Nacos 原生历史</Typography.Text>
+                        <Tag color="blue">{nativeHistoryQuery.data?.data.source || "native"}</Tag>
+                      </Space>
+                      {nativeHistoryQuery.isFetching && !nativeHistory.length ? (
+                        <Spin />
+                      ) : nativeHistory.length ? (
+                        nativeHistory.map((item) => {
+                          const action = getNativeActionMeta(item.opType);
+                          return (
+                            <div
+                              key={`${item.source}-${item.id}`}
+                              style={{
+                                border: "1px solid var(--ant-color-border)",
+                                borderRadius: 12,
+                                padding: 10,
+                                background: "var(--ant-color-bg-container)",
+                              }}
+                            >
+                              <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                <Space wrap style={{ justifyContent: "space-between", width: "100%" }}>
+                                  <Tag color={action.color}>{action.label}</Tag>
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>#{item.id}</Typography.Text>
+                                </Space>
+                                <Typography.Text style={{ fontSize: 12 }}>
+                                  {formatDateTime(item.lastModifiedTime || item.createdTime)}
+                                </Typography.Text>
+                                <Typography.Text copyable={item.md5 ? { text: item.md5 } : false} code style={{ maxWidth: "100%" }}>
+                                  MD5 {shortHash(item.md5)}
+                                </Typography.Text>
+                                <Space wrap size={4}>
+                                  {item.srcUser ? <Tag>{item.srcUser}</Tag> : null}
+                                  {item.srcIp ? <Tag>{item.srcIp}</Tag> : null}
+                                </Space>
+                                <Button
+                                  size="small"
+                                  icon={<RollbackOutlined />}
+                                  onClick={() => void handleLoadNativeHistory(item)}
+                                  loading={loadingSnapshotId === (Number(item.id) || -1)}
+                                  disabled={!canWriteSelected}
+                                  block
+                                >
+                                  载入此版本
+                                </Button>
+                              </Space>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <Empty description="Nacos 未返回历史记录" />
+                      )}
+                    </Space>
+
+                    <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                      <Space wrap style={{ justifyContent: "space-between", width: "100%" }}>
+                        <Typography.Text strong>后台快照</Typography.Text>
+                        <Tag>审计备份</Tag>
+                      </Space>
+                      {snapshotHistoryQuery.isFetching && !snapshotHistory.length ? (
+                        <Spin />
+                      ) : snapshotHistory.length ? (
+                        snapshotHistory.map((snapshot) => {
+                          const action = getActionMeta(snapshot.action);
+                          return (
+                            <div
+                              key={snapshot.id}
+                              style={{
+                                border: "1px solid var(--ant-color-border)",
+                                borderRadius: 12,
+                                padding: 10,
+                                background: "var(--ant-color-bg-container)",
+                              }}
+                            >
+                              <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                <Space wrap style={{ justifyContent: "space-between", width: "100%" }}>
+                                  <Tag color={action.color}>{action.label}</Tag>
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>#{snapshot.id}</Typography.Text>
+                                </Space>
+                                <Typography.Text style={{ fontSize: 12 }}>{formatDateTime(snapshot.createdAt)}</Typography.Text>
+                                <Typography.Text copyable={{ text: snapshot.contentSha256 }} code style={{ maxWidth: "100%" }}>
+                                  {shortHash(snapshot.contentSha256)}
+                                </Typography.Text>
+                                <Space wrap size={4}>
+                                  <Tag>{snapshot.type}</Tag>
+                                  <Tag>{formatBytes(snapshot.contentLength)}</Tag>
+                                  {snapshot.operatorEmail ? <Tag>{snapshot.operatorEmail}</Tag> : null}
+                                </Space>
+                                {snapshot.reason ? (
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    {snapshot.reason}
+                                  </Typography.Text>
+                                ) : null}
+                                <Button
+                                  size="small"
+                                  icon={<RollbackOutlined />}
+                                  onClick={() => void handleLoadSnapshot(snapshot)}
+                                  loading={loadingSnapshotId === snapshot.id}
+                                  disabled={!canWriteSelected}
+                                  block
+                                >
+                                  载入快照
+                                </Button>
+                              </Space>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <Empty description="暂无后台快照" />
+                      )}
+                    </Space>
+                  </div>
                 )}
               </Card>
 

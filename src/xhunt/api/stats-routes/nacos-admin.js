@@ -202,6 +202,115 @@ async function saveSnapshotIfChanged(req, { dataId, group, tenant, type, content
   return saveSnapshot(req, { dataId, group, tenant, type, content, action, reason });
 }
 
+function unwrapNacosV2Response(resp, label) {
+  if (resp.status !== 200) {
+    const error = new Error(`${label}失败: status=${resp.status}`);
+    error.status = resp.status;
+    error.data = resp.data;
+    throw error;
+  }
+  if (resp.data && typeof resp.data === "object" && Object.prototype.hasOwnProperty.call(resp.data, "code")) {
+    if (Number(resp.data.code) !== 0) {
+      const error = new Error(`${label}失败: ${resp.data.message || resp.data.code}`);
+      error.status = 502;
+      error.data = resp.data;
+      throw error;
+    }
+    return resp.data.data;
+  }
+  return resp.data;
+}
+
+function normalizeNativeHistoryItem(item, source = "v1") {
+  const content = typeof item.content === "string" ? item.content : undefined;
+  return {
+    id: String(item.id || item.nid || ""),
+    lastId: item.lastId ?? null,
+    dataId: item.dataId || "",
+    group: item.group || item.groupName || DEFAULT_GROUP,
+    tenant: item.tenant || item.namespaceId || null,
+    appName: item.appName || "",
+    md5: item.md5 || null,
+    content: content || undefined,
+    contentSha256: content ? sha256(content) : null,
+    contentLength: content ? Buffer.byteLength(content, "utf8") : null,
+    srcIp: item.srcIp || "",
+    srcUser: item.srcUser || "",
+    opType: String(item.opType || "").trim(),
+    createdTime: item.createdTime || null,
+    lastModifiedTime: item.lastModifiedTime || item.lastModified || null,
+    source,
+  };
+}
+
+async function fetchNacosNativeHistoryList({ dataId, group, tenant, pageNo, pageSize }) {
+  const v1Resp = await nacosRequest("GET", "/nacos/v1/cs/history", {
+    params: {
+      search: "accurate",
+      dataId,
+      group,
+      pageNo,
+      pageSize,
+      ...(tenant ? { tenant } : {}),
+    },
+  });
+
+  if (v1Resp.status === 200 && v1Resp.data && !v1Resp.data.code) {
+    return {
+      source: "v1",
+      totalCount: Number(v1Resp.data.totalCount || 0),
+      pageNumber: Number(v1Resp.data.pageNumber || pageNo),
+      pagesAvailable: Number(v1Resp.data.pagesAvailable || 0),
+      pageItems: (v1Resp.data.pageItems || []).map((item) => normalizeNativeHistoryItem(item, "v1")),
+    };
+  }
+
+  const v2Resp = await nacosRequest("GET", "/nacos/v2/cs/history/list", {
+    params: {
+      dataId,
+      group,
+      namespaceId: tenant || "",
+      pageNo,
+      pageSize,
+    },
+  });
+  const data = unwrapNacosV2Response(v2Resp, "查询 Nacos 原生历史");
+  return {
+    source: "v2",
+    totalCount: Number(data?.totalCount || 0),
+    pageNumber: Number(data?.pageNumber || pageNo),
+    pagesAvailable: Number(data?.pagesAvailable || 0),
+    pageItems: (data?.pageItems || []).map((item) => normalizeNativeHistoryItem(item, "v2")),
+  };
+}
+
+async function fetchNacosNativeHistoryDetail({ dataId, group, tenant, nid, source }) {
+  const tryV1First = source !== "v2";
+  const attempts = tryV1First
+    ? [
+        { source: "v1", path: "/nacos/v1/cs/history", params: { nid, dataId, group, ...(tenant ? { tenant } : {}) } },
+        { source: "v2", path: "/nacos/v2/cs/history", params: { nid, dataId, group, namespaceId: tenant || "" } },
+      ]
+    : [
+        { source: "v2", path: "/nacos/v2/cs/history", params: { nid, dataId, group, namespaceId: tenant || "" } },
+        { source: "v1", path: "/nacos/v1/cs/history", params: { nid, dataId, group, ...(tenant ? { tenant } : {}) } },
+      ];
+
+  let lastError = null;
+  for (const attempt of attempts) {
+    const resp = await nacosRequest("GET", attempt.path, { params: attempt.params });
+    try {
+      const data = attempt.source === "v2" ? unwrapNacosV2Response(resp, "查询 Nacos 原生历史详情") : resp.data;
+      if (resp.status === 200 && data && !data.code) {
+        return normalizeNativeHistoryItem(data, attempt.source);
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("查询 Nacos 原生历史详情失败");
+}
+
 router.get(
   "/nacos/admin/configs",
   adminAuth,
@@ -274,6 +383,60 @@ router.get(
       res.status(error.status || 500).json({
         success: false,
         error: error.message || "读取配置失败",
+        required: error.required,
+        data: error.data,
+      });
+    }
+  }
+);
+
+router.get(
+  "/nacos/admin/config/native-history",
+  adminAuth,
+  requireRole("super"),
+  async (req, res) => {
+    try {
+      const dataId = validateIdentifier(normalizeDataId(req.query.dataId), "dataId");
+      const group = validateIdentifier(normalizeGroup(req.query.group), "group");
+      const tenant = req.query.tenant ? validateIdentifier(req.query.tenant, "tenant") : undefined;
+      const pageNo = Math.max(Number(req.query.pageNo || 1), 1);
+      const pageSize = Math.min(Math.max(Number(req.query.pageSize || 20), 1), 100);
+      assertConfigPermission(req, dataId);
+
+      const data = await fetchNacosNativeHistoryList({ dataId, group, tenant, pageNo, pageSize });
+      res.json({ success: true, data });
+    } catch (error) {
+      console.error("[nacos-admin/config/native-history] failed:", error);
+      res.status(error.status || 500).json({
+        success: false,
+        error: error.message || "获取 Nacos 原生历史失败",
+        required: error.required,
+        data: error.data,
+      });
+    }
+  }
+);
+
+router.get(
+  "/nacos/admin/config/native-history/:nid",
+  adminAuth,
+  requireRole("super"),
+  async (req, res) => {
+    try {
+      const nid = validateIdentifier(req.params.nid, "nid");
+      const dataId = validateIdentifier(normalizeDataId(req.query.dataId), "dataId");
+      const group = validateIdentifier(normalizeGroup(req.query.group), "group");
+      const tenant = req.query.tenant ? validateIdentifier(req.query.tenant, "tenant") : undefined;
+      const source = req.query.source ? String(req.query.source) : undefined;
+      assertConfigPermission(req, dataId);
+
+      const data = await fetchNacosNativeHistoryDetail({ dataId, group, tenant, nid, source });
+      res.json({ success: true, data });
+    } catch (error) {
+      console.error("[nacos-admin/config/native-history/:nid] failed:", error);
+      res.status(error.status || 500).json({
+        success: false,
+        error: error.message || "获取 Nacos 原生历史详情失败",
         required: error.required,
         data: error.data,
       });

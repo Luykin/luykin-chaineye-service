@@ -254,6 +254,44 @@ export interface NacosAdminConfigMutationResponse {
   error?: string;
 }
 
+
+export interface NacosNativeHistoryItem {
+  id: string;
+  lastId: number | null;
+  dataId: string;
+  group: string;
+  tenant: string | null;
+  appName: string;
+  md5: string | null;
+  content?: string;
+  contentSha256: string | null;
+  contentLength: number | null;
+  srcIp: string;
+  srcUser: string;
+  opType: string;
+  createdTime: number | string | null;
+  lastModifiedTime: number | string | null;
+  source: string;
+}
+
+export interface NacosNativeHistoryResponse {
+  success: boolean;
+  data: {
+    source: string;
+    totalCount: number;
+    pageNumber: number;
+    pagesAvailable: number;
+    pageItems: NacosNativeHistoryItem[];
+  };
+  error?: string;
+}
+
+export interface NacosNativeHistoryDetailResponse {
+  success: boolean;
+  data: NacosNativeHistoryItem;
+  error?: string;
+}
+
 export interface NacosAdminConfigSnapshot {
   id: number;
   dataId: string;

@@ -197,6 +197,28 @@ export async function deleteNacosAdminConfig(params: { dataId: string; group?: s
   });
 }
 
+
+export async function fetchNacosAdminNativeHistory(params: { dataId: string; group?: string; tenant?: string; pageNo?: number; pageSize?: number }) {
+  const query = new URLSearchParams();
+  query.set("dataId", params.dataId);
+  query.set("group", params.group || "DEFAULT_GROUP");
+  query.set("pageNo", String(params.pageNo || 1));
+  query.set("pageSize", String(params.pageSize || 20));
+  if (params.tenant) query.set("tenant", params.tenant);
+  return apiRequest<import("@/types/nacos").NacosNativeHistoryResponse>(`/api/xhunt/stats/nacos/admin/config/native-history?${query.toString()}`);
+}
+
+export async function fetchNacosAdminNativeHistoryDetail(params: { id: string; dataId: string; group?: string; tenant?: string; source?: string }) {
+  const query = new URLSearchParams();
+  query.set("dataId", params.dataId);
+  query.set("group", params.group || "DEFAULT_GROUP");
+  if (params.tenant) query.set("tenant", params.tenant);
+  if (params.source) query.set("source", params.source);
+  return apiRequest<import("@/types/nacos").NacosNativeHistoryDetailResponse>(
+    `/api/xhunt/stats/nacos/admin/config/native-history/${encodeURIComponent(params.id)}?${query.toString()}`
+  );
+}
+
 export async function fetchNacosAdminConfigHistory(params: { dataId: string; group?: string; tenant?: string; limit?: number }) {
   const query = new URLSearchParams();
   query.set("dataId", params.dataId);
