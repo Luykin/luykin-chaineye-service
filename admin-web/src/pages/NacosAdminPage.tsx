@@ -94,10 +94,8 @@ type DiffRow = {
 };
 
 function buildLineDiff(oldText: string, newText: string): DiffRow[] {
-  const oldLines = String(oldText || "").split("
-");
-  const newLines = String(newText || "").split("
-");
+  const oldLines = String(oldText || "").split("\n");
+  const newLines = String(newText || "").split("\n");
   const m = oldLines.length;
   const n = newLines.length;
   const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
