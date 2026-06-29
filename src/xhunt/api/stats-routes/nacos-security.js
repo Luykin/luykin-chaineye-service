@@ -162,24 +162,6 @@ function getRuntimeChecks() {
       recommendation: "关闭 /nacos-configs，或改为后端白名单只读代理并增加 adminAuth / 内部签名。",
     }),
     makeCheck({
-      id: "nacos-configs-write-post",
-      title: "/nacos-configs 写入入口探测（无效 payload，不写真实配置）",
-      method: "POST",
-      path: "/nacos-configs",
-      category: "public_proxy",
-      riskWhenReachable: "critical",
-      recommendation: "禁止公网直连 Nacos 写接口；至少在 Nginx 层拒绝 POST/PUT/DELETE。",
-    }),
-    makeCheck({
-      id: "nacos-configs-delete",
-      title: "/nacos-configs 删除入口探测（不存在 dataId）",
-      method: "DELETE",
-      path: `/nacos-configs?${query}`,
-      category: "public_proxy",
-      riskWhenReachable: "critical",
-      recommendation: "禁止公网直连 Nacos 删除接口；写操作只允许后端管理接口在鉴权后执行。",
-    }),
-    makeCheck({
       id: "nacos-configs-options",
       title: "/nacos-configs CORS 与方法暴露检查",
       method: "OPTIONS",
@@ -225,6 +207,29 @@ function getRuntimeChecks() {
       riskWhenReachable: "high",
       recommendation: "禁止未授权访问 Nacos console/server/state 等状态接口。",
     }),
+  ];
+}
+
+function getExistingConfigMutationChecks() {
+  return [
+    {
+      id: "nacos-configs-real-xhunt-i18n-post",
+      title: "真实 xhunt_i18n 覆盖写入攻击探测",
+      method: "POST",
+      dataId: "xhunt_i18n",
+      group: DEFAULT_GROUP,
+      category: "real_mutation_probe",
+      recommendation: "公网 /nacos-configs 必须在 Nginx 层对真实配置的 POST 覆盖写入返回 405。",
+    },
+    {
+      id: "nacos-configs-real-xhunt-i18n-delete",
+      title: "真实 xhunt_i18n 删除攻击探测",
+      method: "DELETE",
+      dataId: "xhunt_i18n",
+      group: DEFAULT_GROUP,
+      category: "real_mutation_probe",
+      recommendation: "公网 /nacos-configs 必须在 Nginx 层对真实配置的 DELETE 删除返回 405。",
+    },
   ];
 }
 
@@ -374,6 +379,231 @@ async function runHttpCheck(origin, check) {
       passed: false,
       conclusion: message,
       error: message,
+    };
+  }
+}
+
+function buildMutationProbeContent(originalContent) {
+  const marker = `__nacos_security_probe_${Date.now()}__`;
+  try {
+    const parsed = JSON.parse(originalContent || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      parsed[marker] = "blocked-write-probe-should-not-persist";
+      return { content: JSON.stringify(parsed, null, 2), marker, type: "json" };
+    }
+    if (Array.isArray(parsed)) {
+      parsed.push({ [marker]: "blocked-write-probe-should-not-persist" });
+      return { content: JSON.stringify(parsed, null, 2), marker, type: "json" };
+    }
+  } catch (error) {
+    // 非 JSON 配置降级按文本探测。
+  }
+
+  return {
+    content: `${originalContent || ""}\n${marker}=blocked-write-probe-should-not-persist\n`,
+    marker,
+    type: "text",
+  };
+}
+
+function pickResponseHeaders(headers = {}) {
+  return {
+    "content-type": headers?.["content-type"],
+    "www-authenticate": headers?.["www-authenticate"],
+    "access-control-allow-origin": headers?.["access-control-allow-origin"],
+    "access-control-allow-methods": headers?.["access-control-allow-methods"],
+    "access-control-allow-credentials": headers?.["access-control-allow-credentials"],
+    location: headers?.location,
+    server: headers?.server,
+  };
+}
+
+async function publicReadConfig(origin, dataId, group) {
+  const path = `/nacos-configs?dataId=${encodeURIComponent(dataId)}&group=${encodeURIComponent(group)}`;
+  const resp = await axios({
+    method: "GET",
+    url: `${origin}${path}`,
+    headers: {
+      Accept: "application/json,text/plain,*/*",
+      "User-Agent": "XHunt-Admin-Nacos-Security-Check/1.0",
+    },
+    timeout: CHECK_TIMEOUT_MS,
+    maxRedirects: 0,
+    maxContentLength: MAX_RESPONSE_BYTES,
+    validateStatus: () => true,
+    transformResponse: [(body) => body],
+  });
+  return {
+    status: resp.status,
+    content: typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data || ""),
+    headers: pickResponseHeaders(resp.headers || {}),
+  };
+}
+
+async function restorePublicConfig(origin, dataId, group, content, type) {
+  const path = `/nacos-configs?dataId=${encodeURIComponent(dataId)}&group=${encodeURIComponent(group)}`;
+  const form = new URLSearchParams({ dataId, group, content, type: type || "json" });
+  const resp = await axios({
+    method: "POST",
+    url: `${origin}${path}`,
+    data: form.toString(),
+    headers: {
+      Accept: "application/json,text/plain,*/*",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "XHunt-Admin-Nacos-Security-Check/1.0",
+    },
+    timeout: CHECK_TIMEOUT_MS,
+    maxRedirects: 0,
+    maxContentLength: MAX_RESPONSE_BYTES,
+    validateStatus: () => true,
+    transformResponse: [(body) => body],
+  });
+  return { status: resp.status, body: typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data || "") };
+}
+
+function classifyExistingMutationResult(check, mutationStatus, originalSha256, afterSha256, finalSha256, restoreStatus) {
+  const unchangedAfter = afterSha256 === originalSha256;
+  const restored = finalSha256 ? finalSha256 === originalSha256 : null;
+
+  if ([401, 403, 404, 405].includes(mutationStatus)) {
+    return {
+      severity: "pass",
+      passed: true,
+      conclusion: `${check.dataId} 真实 ${check.method} 攻击被 ${mutationStatus} 阻断；配置 hash ${unchangedAfter ? "未变化" : "发生变化，请立即确认" }。`,
+    };
+  }
+
+  if (mutationStatus >= 200 && mutationStatus < 300) {
+    return {
+      severity: "critical",
+      passed: false,
+      conclusion: `${check.dataId} 真实 ${check.method} 攻击返回 ${mutationStatus}，配置可能被公网修改/删除；自动恢复状态=${restoreStatus || "-"}，恢复结果=${restored === null ? "未执行" : restored ? "已恢复" : "恢复后仍不一致"}。`,
+    };
+  }
+
+  if ([400, 422].includes(mutationStatus) || mutationStatus >= 500) {
+    return {
+      severity: "high",
+      passed: false,
+      conclusion: `${check.dataId} 真实 ${check.method} 攻击返回 ${mutationStatus}，说明请求可能已绕过方法层限制并触达上游逻辑；hash ${unchangedAfter ? "未变化" : "已变化" }。`,
+    };
+  }
+
+  return {
+    severity: "medium",
+    passed: false,
+    conclusion: `${check.dataId} 真实 ${check.method} 攻击返回 ${mutationStatus}，需要人工确认；hash ${unchangedAfter ? "未变化" : "已变化" }。`,
+  };
+}
+
+async function runExistingConfigMutationCheck(origin, check) {
+  const path = `/nacos-configs?dataId=${encodeURIComponent(check.dataId)}&group=${encodeURIComponent(check.group)}`;
+  const startedAt = Date.now();
+
+  try {
+    const before = await publicReadConfig(origin, check.dataId, check.group);
+    if (before.status !== 200) {
+      return {
+        ...check,
+        path,
+        url: path,
+        status: before.status,
+        durationMs: Date.now() - startedAt,
+        headers: before.headers,
+        bodySummary: summarizeBody(""),
+        severity: "medium",
+        passed: false,
+        conclusion: `读取 ${check.dataId} 原始内容失败，status=${before.status}，未执行真实写/删探测。`,
+      };
+    }
+
+    const originalContent = before.content;
+    const originalSha256 = sha256(originalContent);
+    const probe = buildMutationProbeContent(originalContent);
+    const headers = {
+      Accept: "application/json,text/plain,*/*",
+      "User-Agent": "XHunt-Admin-Nacos-Security-Check/1.0",
+    };
+    let data;
+
+    if (check.method === "POST" || check.method === "PUT") {
+      data = new URLSearchParams({
+        dataId: check.dataId,
+        group: check.group,
+        type: probe.type,
+        content: probe.content,
+      }).toString();
+      headers["Content-Type"] = "application/x-www-form-urlencoded";
+    }
+
+    const mutationResp = await axios({
+      method: check.method,
+      url: `${origin}${path}`,
+      data,
+      headers,
+      timeout: CHECK_TIMEOUT_MS,
+      maxRedirects: 0,
+      maxContentLength: MAX_RESPONSE_BYTES,
+      validateStatus: () => true,
+      transformResponse: [(body) => body],
+    });
+
+    const after = await publicReadConfig(origin, check.dataId, check.group).catch((error) => ({
+      status: error.response?.status || null,
+      content: "",
+      headers: {},
+    }));
+    const afterSha256 = after.status === 200 ? sha256(after.content) : null;
+    let restoreStatus = null;
+    let finalSha256 = null;
+
+    if ((mutationResp.status >= 200 && mutationResp.status < 300) || afterSha256 !== originalSha256) {
+      const restoreResp = await restorePublicConfig(origin, check.dataId, check.group, originalContent, probe.type).catch((error) => ({
+        status: error.response?.status || null,
+        body: error.message || "restore failed",
+      }));
+      restoreStatus = restoreResp.status;
+      const finalRead = await publicReadConfig(origin, check.dataId, check.group).catch(() => null);
+      finalSha256 = finalRead && finalRead.status === 200 ? sha256(finalRead.content) : null;
+    }
+
+    const classified = classifyExistingMutationResult(
+      check,
+      mutationResp.status,
+      originalSha256,
+      afterSha256,
+      finalSha256,
+      restoreStatus
+    );
+
+    return {
+      ...check,
+      path,
+      url: path,
+      status: mutationResp.status,
+      durationMs: Date.now() - startedAt,
+      headers: pickResponseHeaders(mutationResp.headers || {}),
+      bodySummary: summarizeBody(mutationResp.data),
+      originalSha256,
+      afterSha256,
+      finalSha256,
+      restoreStatus,
+      probeMarkerSha256: sha256(probe.marker),
+      ...classified,
+    };
+  } catch (error) {
+    return {
+      ...check,
+      path,
+      url: path,
+      status: error.response?.status || null,
+      durationMs: Date.now() - startedAt,
+      headers: pickResponseHeaders(error.response?.headers || {}),
+      bodySummary: summarizeBody(error.response?.data || ""),
+      severity: "low",
+      passed: false,
+      conclusion: error.message || "真实写/删探测失败",
+      error: error.message || "真实写/删探测失败",
     };
   }
 }
@@ -556,7 +786,10 @@ router.post(
 
       const [nginxScan, runtimeChecks] = await Promise.all([
         scanNginxConfig(),
-        Promise.all(getRuntimeChecks().map((check) => runHttpCheck(origin, check))),
+        Promise.all([
+          ...getRuntimeChecks().map((check) => runHttpCheck(origin, check)),
+          ...getExistingConfigMutationChecks().map((check) => runExistingConfigMutationCheck(origin, check)),
+        ]),
       ]);
 
       const allFindings = [...(nginxScan.findings || []), ...runtimeChecks];
@@ -587,7 +820,7 @@ router.post(
           runtimeChecks,
           notes: [
             "运行时探测只请求固定路径，不允许前端传任意 URL。",
-            "POST/DELETE 使用无效或不存在 dataId，不写入真实配置。",
+            "运行时探测会读取 xhunt_i18n 原始内容并计算 hash，然后对真实 dataId 发起覆盖/删除攻击请求；如异常成功会立即尝试恢复原内容。",
             "响应内容仅保留长度、hash、敏感键摘要和脱敏 sample。",
           ],
         },

@@ -292,7 +292,7 @@ export function NacosSecurityPage() {
           type="warning"
           showIcon
           message="安全边界说明"
-          description="该页面不允许输入任意 URL；后端只请求固定路径。POST/DELETE 探测使用无效参数或不存在 dataId，用于确认是否先被鉴权挡住，不会发布真实 Nacos 配置。"
+          description="该页面不允许输入任意 URL；后端只请求固定路径。运行时探测会读取 xhunt_i18n 原始内容并计算 hash，再对真实 dataId 发起覆盖/删除攻击请求；如果异常成功会立即尝试恢复原内容。"
         />
 
         {summary ? (
@@ -397,6 +397,22 @@ export function NacosSecurityPage() {
                       <Descriptions.Item label="Body SHA256" span={2}>
                         <Typography.Text copyable>{record.bodySummary?.bodySha256 || "-"}</Typography.Text>
                       </Descriptions.Item>
+                      {record.originalSha256 || record.afterSha256 || record.finalSha256 ? (
+                        <>
+                          <Descriptions.Item label="原始配置 SHA256" span={2}>
+                            <Typography.Text copyable>{record.originalSha256 || "-"}</Typography.Text>
+                          </Descriptions.Item>
+                          <Descriptions.Item label="攻击后 SHA256" span={2}>
+                            <Typography.Text copyable>{record.afterSha256 || "-"}</Typography.Text>
+                          </Descriptions.Item>
+                          <Descriptions.Item label="恢复后 SHA256" span={2}>
+                            <Typography.Text copyable>{record.finalSha256 || "未触发恢复"}</Typography.Text>
+                          </Descriptions.Item>
+                          <Descriptions.Item label="自动恢复状态" span={2}>
+                            {record.restoreStatus ?? "未触发恢复"}
+                          </Descriptions.Item>
+                        </>
+                      ) : null}
                     </Descriptions>
                     <Collapse
                       size="small"

@@ -167,6 +167,11 @@ export interface NacosSecurityRuntimeCheck {
     detectedSensitiveKeys: string[];
     sample: string;
   };
+  originalSha256?: string | null;
+  afterSha256?: string | null;
+  finalSha256?: string | null;
+  restoreStatus?: number | null;
+  probeMarkerSha256?: string | null;
   error?: string;
 }
 
