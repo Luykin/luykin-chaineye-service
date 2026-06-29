@@ -489,7 +489,7 @@ router.post(
           version: extVersion,
           minVersion: MIN_EXTENSION_VERSION,
         });
-        return res.status(400).json(
+        return res.status(200).json(
           buildExtensionUpdateRequiredResponse({
             minVersion: MIN_EXTENSION_VERSION,
             message: {
