@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Alert,
   Button,
@@ -23,6 +24,7 @@ import {
   HistoryOutlined,
   ReloadOutlined,
   RollbackOutlined,
+  SafetyCertificateOutlined,
   SaveOutlined,
 } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -117,6 +119,7 @@ function ConfigItem({ item, active, onClick }: { item: NacosAdminConfigMeta; act
 }
 
 export function NacosAdminPage() {
+  const navigate = useNavigate();
   const [messageApi, contextHolder] = message.useMessage();
   const [selected, setSelected] = useState<{ dataId: string; group: string; tenant?: string } | null>(null);
   const [content, setContent] = useState("");
@@ -316,6 +319,9 @@ export function NacosAdminPage() {
             <Space wrap>
               <Button icon={<ReloadOutlined />} onClick={() => { void listQuery.refetch(); void detailQuery.refetch(); }} loading={listQuery.isFetching || detailQuery.isFetching}>
                 刷新
+              </Button>
+              <Button icon={<SafetyCertificateOutlined />} danger onClick={() => navigate("/nacos-security")}>
+                安全检查
               </Button>
               <Button
                 type="primary"

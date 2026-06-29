@@ -107,6 +107,10 @@ export const router = createHashRouter([
       },
       ...generatedAdminRoutes,
       {
+        path: "nacos-security",
+        element: <NacosSecurityPage />,
+      },
+      {
         path: "nacos-campaigns-legacy",
         element: <NacosLegacyCampaignsPage />,
       },
