@@ -1419,10 +1419,12 @@ router.post("/supabase/link-token", adminAuth, requirePermission("supabase"), as
       return res.status(403).json({ success: false, error: "需要先录入生物识别" });
     }
     const jti = randomUUID();
-    const token = jwt.sign({ aid: admin.id, purpose: "supabase", jti }, LINK_SECRET, { expiresIn: 600 });
-    const targetIP = process.env.SUPABASE_IP || "150.5.158.179";
-    const url = `http://${targetIP}:8388/project/default?token=${encodeURIComponent(token)}`;
-    return res.json({ success: true, token, url, ttl: 300 });
+    const ttl = 600;
+    const token = jwt.sign({ aid: admin.id, purpose: "supabase", jti }, LINK_SECRET, { expiresIn: ttl });
+    const studioEntryUrl = (process.env.SUPABASE_STUDIO_ENTRY_URL || "https://supabase-studio.cryptohunt.ai/project/default").trim();
+    const separator = studioEntryUrl.includes("?") ? "&" : "?";
+    const url = `${studioEntryUrl}${separator}token=${encodeURIComponent(token)}`;
+    return res.json({ success: true, token, url, ttl });
   } catch (e) {
     return res.status(500).json({ success: false, error: "生成票据失败" });
   }

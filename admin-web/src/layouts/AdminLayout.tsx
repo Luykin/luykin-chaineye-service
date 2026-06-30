@@ -246,10 +246,6 @@ export function AdminLayout() {
       messageApi.warning("当前账号暂无此功能权限");
       return;
     }
-    if (itemKey === "shortcut-supabase") {
-      void openSupabase();
-      return;
-    }
     if (itemKey.startsWith("/")) {
       navigate(itemKey);
     }
@@ -258,34 +254,6 @@ export function AdminLayout() {
   const openLoginPage = () => {
     window.location.href = `${ADMIN_ENTRY_PATH}${ADMIN_LOGIN_HASH}?next=${encodeURIComponent(ADMIN_HOME_PATH)}`;
   };
-
-  const openSupabase = async () => {
-    try {
-      const response = await fetch(buildApiUrl("/admin/supabase/link-token"), {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          Accept: "application/json",
-          "X-Requested-With": "XMLHttpRequest",
-        },
-      });
-      const data = await response.json().catch(() => ({ success: false, error: "生成票据失败" }));
-
-      if (response.status === 403 && data?.error === "需要先录入生物识别") {
-        messageApi.warning('请先在「生物识别」中录入指纹 / Face ID，再使用 Supabase 入口。');
-        return;
-      }
-
-      if (!response.ok || !data?.success || !data?.url) {
-        throw new Error(data?.error || "生成票据失败");
-      }
-
-      window.open(data.url, "_blank", "noopener");
-    } catch (error) {
-      messageApi.error(`打开失败：${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-
 
   const handleLogout = async () => {
     await fetch(buildApiUrl("/admin/logout"), {

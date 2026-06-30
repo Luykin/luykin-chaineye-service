@@ -36,6 +36,7 @@ import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import { VipManagementPage } from "@/pages/VipManagementPage";
 import { TampermonkeyPage } from "@/pages/TampermonkeyPage";
 import { BackupRestorePage } from "@/pages/BackupRestorePage";
+import { SupabaseStudioPage } from "@/pages/SupabaseStudioPage";
 import { EmergencyRollbackPage } from "@/pages/EmergencyRollbackPage";
 import { ReleaseDeployPage } from "@/pages/ReleaseDeployPage";
 import { AuthCenterTestPage } from "@/pages/AuthCenterTestPage";
@@ -76,6 +77,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "vip-management": <VipManagementPage />,
   tampermonkey: <TampermonkeyPage />,
   "backup-restore": <BackupRestorePage />,
+  "supabase-studio": <SupabaseStudioPage />,
   "emergency-rollback": <EmergencyRollbackPage />,
   "release-deploy": <ReleaseDeployPage />,
   "auth-center-test": <AuthCenterTestPage />,
