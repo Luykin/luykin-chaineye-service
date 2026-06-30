@@ -1285,11 +1285,11 @@ router.post("/logout", adminAuth, async (req, res) => {
 // 管理员列表（用于配置是否接收日报）
 router.get("/users", adminAuth, async (req, res) => {
   try {
-    const rows = await XhuntAdminManager.findAll({ attributes: ["id", "email", "role", "receivesDailyReport", "isActive", "canLogin", "lastLoginAt", "permissions"], order: [["id", "ASC"]] });
+    const rows = await XhuntAdminManager.findAll({ attributes: ["id", "email", "role", "receivesDailyReport", "isActive", "canLogin", "failedLoginAttempts", "loginLockedUntil", "lastLoginAt", "permissions"], order: [["id", "ASC"]] });
     const creds = await XhuntAdminWebAuthnCredential.findAll({ attributes: ["adminId"] });
     const counts = {};
     for (const c of creds) { const aid = c.adminId; counts[aid] = (counts[aid] || 0) + 1; }
-    res.json({ success: true, data: rows.map(r => ({ id: r.id, email: r.email, role: r.role, receivesDailyReport: r.receivesDailyReport, isActive: r.isActive, canLogin: r.canLogin, lastLoginAt: r.lastLoginAt, permissions: r.permissions, webauthnCount: counts[r.id] || 0 })) });
+    res.json({ success: true, data: rows.map(r => ({ id: r.id, email: r.email, role: r.role, receivesDailyReport: r.receivesDailyReport, isActive: r.isActive, canLogin: r.canLogin, failedLoginAttempts: r.failedLoginAttempts, loginLockedUntil: r.loginLockedUntil, lastLoginAt: r.lastLoginAt, permissions: r.permissions, webauthnCount: counts[r.id] || 0 })) });
   } catch (e) {
     res.status(500).json({ success: false, error: "加载失败" });
   }
@@ -1336,7 +1336,7 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
       role,
       isActive: true,
       canLogin: true,
-      receivesDailyReport: true,
+      receivesDailyReport: false,
       permissions: perms,
     });
 
@@ -1415,6 +1415,64 @@ router.post("/users/:id/password/reset-random", adminAuth, requirePermission("ad
       });
     } catch (_) {}
     res.status(500).json({ success: false, error: "重置失败" });
+  }
+});
+
+
+// 解锁管理员账号：仅 super 可操作
+router.post("/users/:id/unlock", adminAuth, requireRole("super"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const target = await XhuntAdminManager.findByPk(id);
+    if (!target) return res.status(404).json({ success: false, error: "未找到" });
+    if (Number(req.adminUser.id) === Number(target.id)) {
+      return res.status(400).json({ success: false, error: "不能解锁自己的账号" });
+    }
+
+    target.canLogin = true;
+    target.failedLoginAttempts = 0;
+    target.loginLockedUntil = null;
+    await target.save();
+
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser.id,
+        email: req.adminUser.email,
+        action: "unlock-admin",
+        route: `/admin/users/${id}/unlock`,
+        method: "POST",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: true,
+        message: JSON.stringify({ targetId: target.id, targetEmail: target.email }),
+      });
+    } catch (e) {}
+
+    return res.json({
+      success: true,
+      data: {
+        id: target.id,
+        email: target.email,
+        canLogin: target.canLogin,
+        failedLoginAttempts: target.failedLoginAttempts,
+        loginLockedUntil: target.loginLockedUntil,
+      },
+    });
+  } catch (e) {
+    try {
+      await XhuntAdminAuditLog.create({
+        adminId: req.adminUser?.id,
+        email: req.adminUser?.email,
+        action: "unlock-admin",
+        route: `/admin/users/${req.params.id}/unlock`,
+        method: "POST",
+        ip: req.ip || "",
+        userAgent: req.headers["user-agent"] || "",
+        success: false,
+        message: e.message,
+      });
+    } catch (_) {}
+    return res.status(500).json({ success: false, error: "解锁失败" });
   }
 });
 

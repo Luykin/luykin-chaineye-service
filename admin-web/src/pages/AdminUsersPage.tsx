@@ -1,11 +1,21 @@
 import { useMemo, useState } from "react";
-import { Button, Card, Checkbox, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Checkbox, Form, Input, Modal, Select, Space, Table, Tag, Typography, message } from "antd";
 import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { useAuth } from "@/app/auth";
-import { createAdminUser, fetchAdminUsers, resetAdminRandomPassword, updateAdminDailyReport, updateAdminPermissions, type AdminUserItem } from "@/services/admin-users";
+import { createAdminUser, fetchAdminUsers, resetAdminRandomPassword, unlockAdminUser, updateAdminPermissions, type AdminUserItem } from "@/services/admin-users";
+
+
+function isAdminUserLocked(row: AdminUserItem) {
+  if (!row.canLogin) return true;
+  if (row.loginLockedUntil) {
+    const lockedUntil = new Date(row.loginLockedUntil).getTime();
+    if (Number.isFinite(lockedUntil) && lockedUntil > Date.now()) return true;
+  }
+  return false;
+}
 
 const PERMISSION_OPTIONS = [
   { label: "数据概览", value: "overview" },
@@ -62,12 +72,6 @@ export function AdminUsersPage() {
     onError: (error: Error) => messageApi.error(error.message || "创建失败"),
   });
 
-  const dailyMutation = useMutation({
-    mutationFn: ({ id, checked }: { id: number; checked: boolean }) => updateAdminDailyReport(id, checked),
-    onSuccess: () => { messageApi.success("日报配置已更新"); void query.refetch(); },
-    onError: (error: Error) => messageApi.error(error.message || "更新失败"),
-  });
-
   const permMutation = useMutation({
     mutationFn: ({ id, permissions }: { id: number; permissions: string[] }) => updateAdminPermissions(id, permissions),
     onSuccess: () => { messageApi.success("权限已更新"); setEditingUser(null); void query.refetch(); },
@@ -86,6 +90,25 @@ export function AdminUsersPage() {
     },
     onError: (error: Error) => messageApi.error(error.message || "重置失败"),
   });
+
+  const unlockMutation = useMutation({
+    mutationFn: (row: AdminUserItem) => unlockAdminUser(row.id),
+    onSuccess: () => {
+      messageApi.success("账号已解锁");
+      void query.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "解锁失败"),
+  });
+
+  function confirmUnlock(row: AdminUserItem) {
+    Modal.confirm({
+      title: "解锁管理员账号",
+      content: `确定要解锁 ${row.email} 吗？将恢复登录并清空失败次数。`,
+      okText: "解锁",
+      cancelText: "取消",
+      onOk: () => unlockMutation.mutateAsync(row),
+    });
+  }
 
   function confirmResetPassword(row: AdminUserItem) {
     if (Number(user?.id) === Number(row.id)) {
@@ -106,18 +129,37 @@ export function AdminUsersPage() {
     { title: "ID", dataIndex: "id", width: 64 },
     { title: "邮箱", dataIndex: "email", render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
     { title: "角色", dataIndex: "role", width: 110, render: (value: string) => <Tag color={value === "super" ? "gold" : "blue"}>{value}</Tag> },
-    { title: "状态", width: 120, render: (_: unknown, row: AdminUserItem) => <Space size={4}><Tag color={row.isActive ? "success" : "default"}>{row.isActive ? "启用" : "停用"}</Tag>{!row.canLogin ? <Tag color="error">锁定</Tag> : null}</Space> },
+    { title: "状态", width: 150, render: (_: unknown, row: AdminUserItem) => {
+      const locked = isAdminUserLocked(row);
+      return (
+        <Space size={4} wrap>
+          <Tag color={row.isActive ? "success" : "default"}>{row.isActive ? "启用" : "停用"}</Tag>
+          {locked ? <Tag color="error">锁定</Tag> : null}
+        </Space>
+      );
+    } },
     { title: "生物识别", dataIndex: "webauthnCount", width: 100, render: (value: number) => `${value || 0} 个` },
-    { title: "接收日报", width: 100, render: (_: unknown, row: AdminUserItem) => <Switch size="small" checked={row.receivesDailyReport} loading={dailyMutation.isPending} onChange={(checked) => dailyMutation.mutate({ id: row.id, checked })} /> },
     { title: "权限", dataIndex: "permissions", render: (values: string[]) => <Space wrap size={[4, 4]} className="admin-users-perm-tags">{(values || []).slice(0, 8).map((item) => <Tag key={item}>{item}</Tag>)}{(values || []).length > 8 ? <Tag>+{values.length - 8}</Tag> : null}</Space> },
     {
       title: "操作",
       width: 180,
       render: (_: unknown, row: AdminUserItem) => {
         const isSelf = Number(user?.id) === Number(row.id);
+        const canUnlock = user?.role === "super";
         return (
           <Space size={6}>
             <Button size="small" onClick={() => { setEditingUser(row); permForm.setFieldsValue({ permissions: row.permissions || [] }); }}>权限</Button>
+            {canUnlock && isAdminUserLocked(row) ? (
+              <Button
+                size="small"
+                type="primary"
+                disabled={isSelf}
+                loading={unlockMutation.isPending}
+                onClick={() => confirmUnlock(row)}
+              >
+                解锁
+              </Button>
+            ) : null}
             <Button
               size="small"
               danger
@@ -131,7 +173,7 @@ export function AdminUsersPage() {
         );
       },
     },
-  ], [dailyMutation, permForm, resetPasswordMutation.isPending, user?.id]);
+  ], [permForm, resetPasswordMutation.isPending, unlockMutation.isPending, user?.id, user?.role]);
 
   return (
     <PermissionGuard permission="admin-users">

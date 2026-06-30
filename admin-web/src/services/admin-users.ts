@@ -7,6 +7,8 @@ export interface AdminUserItem {
   receivesDailyReport: boolean;
   isActive: boolean;
   canLogin: boolean;
+  failedLoginAttempts?: number;
+  loginLockedUntil?: string | null;
   lastLoginAt?: string | null;
   permissions?: string[];
   webauthnCount?: number;
@@ -40,6 +42,13 @@ export function updateAdminPermissions(id: number, permissions: string[]) {
 export function resetAdminRandomPassword(id: number) {
   return apiRequest<{ success: boolean; data: Pick<AdminUserItem, "id" | "email"> & { password: string } }>(
     `/admin/users/${id}/password/reset-random`,
+    { method: "POST" },
+  );
+}
+
+export function unlockAdminUser(id: number) {
+  return apiRequest<{ success: boolean; data: Pick<AdminUserItem, "id" | "email" | "canLogin" | "failedLoginAttempts" | "loginLockedUntil"> }>(
+    `/admin/users/${id}/unlock`,
     { method: "POST" },
   );
 }
