@@ -172,8 +172,10 @@
   background: var(--admin-primary-soft) !important;
 }
 
-.admin-top-chrome-button .anticon {
-  font-size: 18px;
+.admin-top-chrome-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
 }
 
 .admin-top-user-button.ant-btn {

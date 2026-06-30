@@ -4,7 +4,6 @@ import {
   BulbOutlined,
   CaretRightOutlined,
   CheckCircleFilled,
-  ChromeOutlined,
   CodeOutlined,
   LockOutlined,
   LogoutOutlined,
@@ -42,6 +41,7 @@ import { useAuth } from "@/app/auth";
 import { useAdminTheme } from "@/app/theme";
 import { buildApiUrl } from "@/services/apiClient";
 import { adminMainNavItems, type AdminNavItem } from "@/config/admin-navigation";
+import chromeStoreIcon from "@/assets/icons/chrome-store.svg";
 
 const { Header, Content } = Layout;
 const ADMIN_ENTRY_PATH = "/api/xhunt/stats";
@@ -477,8 +477,9 @@ export function AdminLayout() {
             title="Chrome 应用商店开发者控制台"
             aria-label="Chrome 应用商店开发者控制台"
             className="admin-top-chrome-button"
-            icon={<ChromeOutlined />}
-          />
+          >
+            <img src={chromeStoreIcon} alt="" className="admin-top-chrome-icon" />
+          </Button>
 
           <Dropdown
             trigger={["hover", "click"]}
