@@ -224,6 +224,41 @@ function DbAdminEditorDrawer({ open, mode, table, row, saving, onClose, onSubmit
   );
 }
 
+const TABLE_GROUPS = [
+  { key: "xhunt-core", label: "XHunt 核心", patterns: [/xhunt.*user/i, /^xaccounts?$/i, /review/i, /note/i, /message/i, /point/i] },
+  { key: "campaign", label: "活动 / 运营", patterns: [/campaign/i, /registration/i, /mantle/i, /vip/i, /tag/i, /banner/i] },
+  { key: "auth", label: "认证中心", patterns: [/authcenter/i, /auth_center/i, /credential/i, /identity/i, /session/i, /client/i] },
+  { key: "web", label: "网站业务", patterns: [/website/i, /webuser/i, /cryptohunt/i, /tg/i] },
+  { key: "stats", label: "统计 / 日志", patterns: [/stats/i, /stat/i, /active/i, /audit/i, /log/i, /violation/i, /snapshot/i] },
+  { key: "admin", label: "后台 / 系统", patterns: [/admin/i, /config/i, /collector/i, /token/i] },
+  { key: "other", label: "其他", patterns: [] },
+];
+
+function getTableGroup(table: DbAdminTableMeta) {
+  const name = `${table.table || table.key || table.label}`;
+  return TABLE_GROUPS.find((group) => group.patterns.some((pattern) => pattern.test(name))) || TABLE_GROUPS[TABLE_GROUPS.length - 1];
+}
+
+function sortTablesForSidebar(tables: DbAdminTableMeta[]) {
+  return [...tables].sort((a, b) => {
+    const groupA = getTableGroup(a);
+    const groupB = getTableGroup(b);
+    const groupDiff = TABLE_GROUPS.findIndex((item) => item.key === groupA.key) - TABLE_GROUPS.findIndex((item) => item.key === groupB.key);
+    if (groupDiff !== 0) return groupDiff;
+    return String(a.label || a.table).localeCompare(String(b.label || b.table), "zh-CN");
+  });
+}
+
+function groupTablesForSidebar(tables: DbAdminTableMeta[]) {
+  const grouped = new Map<string, { key: string; label: string; items: DbAdminTableMeta[] }>();
+  for (const table of sortTablesForSidebar(tables)) {
+    const group = getTableGroup(table);
+    if (!grouped.has(group.key)) grouped.set(group.key, { key: group.key, label: group.label, items: [] });
+    grouped.get(group.key)!.items.push(table);
+  }
+  return Array.from(grouped.values()).filter((group) => group.items.length);
+}
+
 async function browserSupportsWebAuthn() {
   const browserApi = window.SimpleWebAuthnBrowser;
   if (browserApi) {
@@ -336,10 +371,12 @@ export function DbAdminPage() {
     enabled: canRead && reauthVerified,
   });
   const tables = tablesQuery.data?.data || [];
+  const groupedTables = useMemo(() => groupTablesForSidebar(tables), [tables]);
+  const sortedTables = useMemo(() => groupedTables.flatMap((group) => group.items), [groupedTables]);
 
   useEffect(() => {
-    if (!selectedKey && tables.length) setSelectedKey(tables[0].key);
-  }, [selectedKey, tables]);
+    if (!selectedKey && sortedTables.length) setSelectedKey(sortedTables[0].key);
+  }, [selectedKey, sortedTables]);
 
   const schemaQuery = useQuery({
     queryKey: ["db-admin", "schema", selectedKey],
@@ -538,29 +575,37 @@ export function DbAdminPage() {
       </section>
 
       <div className="db-admin-workbench">
-        <Card className="db-admin-sidebar" title="白名单表" loading={tablesQuery.isLoading}>
-          {tables.length ? (
-            <List
-              dataSource={tables}
-              renderItem={(item) => (
-                <List.Item
-                  className={item.key === selectedKey ? "db-admin-table-item db-admin-table-item--active" : "db-admin-table-item"}
-                  onClick={() => {
-                    setSelectedKey(item.key);
-                    setPage(1);
-                    setAppliedSearch("");
-                    setSearchText("");
-                    setSortBy(undefined);
-                    setSortOrder("DESC");
-                  }}
-                >
-                  <List.Item.Meta
-                    title={<Space><span>{item.label}</span>{item.allowDelete ? <Tag color="red">可删</Tag> : null}</Space>}
+        <Card className="db-admin-sidebar" title="数据表" loading={tablesQuery.isLoading}>
+          {groupedTables.length ? (
+            <div className="db-admin-table-groups">
+              {groupedTables.map((group) => (
+                <div className="db-admin-table-group" key={group.key}>
+                  <div className="db-admin-table-group-title">
+                    <span>{group.label}</span>
+                    <span>{group.items.length}</span>
+                  </div>
+                  <List
+                    dataSource={group.items}
+                    renderItem={(item) => (
+                      <List.Item
+                        className={item.key === selectedKey ? "db-admin-table-item db-admin-table-item--active" : "db-admin-table-item"}
+                        onClick={() => {
+                          setSelectedKey(item.key);
+                          setPage(1);
+                          setAppliedSearch("");
+                          setSearchText("");
+                          setSortBy(undefined);
+                          setSortOrder("DESC");
+                        }}
+                      >
+                        <List.Item.Meta title={<Tooltip title={item.label}><span>{item.label}</span></Tooltip>} />
+                      </List.Item>
+                    )}
                   />
-                </List.Item>
-              )}
-            />
-          ) : <Empty description="暂无配置表" />}
+                </div>
+              ))}
+            </div>
+          ) : <Empty description="暂无数据表" />}
         </Card>
 
         <Card
