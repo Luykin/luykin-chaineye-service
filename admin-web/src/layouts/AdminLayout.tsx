@@ -204,18 +204,12 @@ export function AdminLayout() {
             children: adminShortcutNavItems.map((item) => ({
               key: item.key,
               icon: item.icon,
-              label:
-                item.action === "supabase" ? (
-                  <span className="admin-top-nav-external-link" role="button">
-                    <span>{item.label}</span>
-                    <ExportOutlined />
-                  </span>
-                ) : (
-                  <a href={item.href} target="_blank" rel="noreferrer" className="admin-top-nav-external-link">
-                    <span>{item.label}</span>
-                    <ExportOutlined />
-                  </a>
-                ),
+              label: (
+                <a href={item.href} target="_blank" rel="noreferrer" className="admin-top-nav-external-link">
+                  <span>{item.label}</span>
+                  <ExportOutlined />
+                </a>
+              ),
             })),
           },
         ]
