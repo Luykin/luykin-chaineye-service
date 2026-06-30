@@ -1,6 +1,6 @@
 const { QueryTypes } = require("sequelize");
 const { pgInstance } = require("../../models/postgres-start");
-const { tables, SENSITIVE_COLUMN_PATTERN } = require("./config");
+const { DEFAULT_READONLY_COLUMNS, SENSITIVE_COLUMN_PATTERN, tableOverrides } = require("./config");
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 20;
@@ -19,10 +19,76 @@ function tableSql(config) {
   return `${quoteIdentifier(config.schema)}.${quoteIdentifier(config.table)}`;
 }
 
-function getTableConfig(key) {
-  const config = tables[key];
-  if (!config) throw createHttpError(404, "表不在 DB Admin 白名单中");
-  return config;
+function getDefaultConfig(tableName, primaryKey = null) {
+  const override = tableOverrides[tableName] || {};
+  const hasSinglePrimaryKey = !!primaryKey;
+  return {
+    key: tableName,
+    label: tableName,
+    description: "",
+    schema: "public",
+    table: tableName,
+    primaryKey,
+    hasSinglePrimaryKey,
+    allowCreate: override.allowCreate ?? true,
+    allowUpdate: override.allowUpdate ?? hasSinglePrimaryKey,
+    allowDelete: override.allowDelete ?? hasSinglePrimaryKey,
+    searchableColumns: override.searchableColumns || [],
+    readonlyColumns: override.readonlyColumns || DEFAULT_READONLY_COLUMNS,
+    hiddenColumns: override.hiddenColumns || [],
+    enumOptions: override.enumOptions || {},
+  };
+}
+
+async function loadPrimaryKeys(tableName) {
+  const rows = await pgInstance.query(
+    `
+      SELECT kcu.column_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
+       AND tc.table_name = kcu.table_name
+      WHERE tc.table_schema = 'public'
+        AND tc.table_name = :table
+        AND tc.constraint_type = 'PRIMARY KEY'
+      ORDER BY kcu.ordinal_position ASC
+    `,
+    { type: QueryTypes.SELECT, replacements: { table: tableName } }
+  );
+  return rows.map((row) => row.column_name).filter(Boolean);
+}
+
+async function getTableConfig(key) {
+  const tableName = String(key || "").trim();
+  if (!tableName) throw createHttpError(404, "表不存在");
+
+  const [tableRow] = await pgInstance.query(
+    `
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        AND table_name = :table
+      LIMIT 1
+    `,
+    { type: QueryTypes.SELECT, replacements: { table: tableName } }
+  );
+  if (!tableRow) throw createHttpError(404, "表不存在或不在 public schema 中");
+
+  const primaryKeys = await loadPrimaryKeys(tableName);
+  return getDefaultConfig(tableName, primaryKeys.length === 1 ? primaryKeys[0] : null);
+}
+
+function inferSearchableColumns(columns) {
+  return columns
+    .filter((column) => !column.hidden)
+    .filter((column) => {
+      const type = `${column.dataType || ""} ${column.udtName || ""}`.toLowerCase();
+      return /char|text|uuid|integer|bigint|smallint|numeric/.test(type);
+    })
+    .slice(0, 8)
+    .map((column) => column.name);
 }
 
 function isSensitiveColumn(columnName, config) {
@@ -85,8 +151,12 @@ async function loadRawColumns(config) {
 async function getColumns(config) {
   const rawColumns = await loadRawColumns(config);
   const columns = rawColumns.map((row) => normalizeColumn(row, config));
-  if (!columns.some((column) => column.name === config.primaryKey)) {
-    throw createHttpError(500, `白名单配置错误：未找到主键 ${config.primaryKey}`);
+  if (!config.primaryKey) {
+    const firstVisibleColumn = columns.find((column) => !column.hidden) || columns[0];
+    if (firstVisibleColumn) config.primaryKey = firstVisibleColumn.name;
+  }
+  if (!config.searchableColumns?.length) {
+    config.searchableColumns = inferSearchableColumns(columns);
   }
   return columns;
 }
@@ -102,6 +172,7 @@ function publicTable(config, columns) {
     description: config.description || "",
     table: config.table,
     primaryKey: config.primaryKey,
+    hasSinglePrimaryKey: !!config.hasSinglePrimaryKey,
     allowCreate: !!config.allowCreate,
     allowUpdate: !!config.allowUpdate,
     allowDelete: !!config.allowDelete,
@@ -111,15 +182,34 @@ function publicTable(config, columns) {
 }
 
 async function listTables() {
-  const result = [];
-  for (const config of Object.values(tables)) {
-    result.push(publicTable(config));
-  }
-  return result;
+  const rows = await pgInstance.query(
+    `
+      SELECT t.table_name, pk.primary_key
+      FROM information_schema.tables t
+      LEFT JOIN (
+        SELECT
+          kcu.table_name,
+          CASE WHEN COUNT(*) = 1 THEN MIN(kcu.column_name) ELSE NULL END AS primary_key
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+         AND tc.table_schema = kcu.table_schema
+         AND tc.table_name = kcu.table_name
+        WHERE tc.table_schema = 'public'
+          AND tc.constraint_type = 'PRIMARY KEY'
+        GROUP BY kcu.table_name
+      ) pk ON pk.table_name = t.table_name
+      WHERE t.table_schema = 'public'
+        AND t.table_type = 'BASE TABLE'
+      ORDER BY t.table_name ASC
+    `,
+    { type: QueryTypes.SELECT }
+  );
+  return rows.map((row) => publicTable(getDefaultConfig(row.table_name, row.primary_key || null)));
 }
 
 async function getTableSchema(key) {
-  const config = getTableConfig(key);
+  const config = await getTableConfig(key);
   const columns = await getColumns(config);
   return publicTable(config, columns);
 }
@@ -143,17 +233,19 @@ function buildSearchSql(config, columns, queryText, replacements) {
 }
 
 function buildOrderSql(config, columns, query = {}) {
-  const requestedSortBy = String(query.sortBy || config.primaryKey || "").trim();
+  const fallbackColumn = config.primaryKey || columns.find((column) => !column.hidden)?.name || columns[0]?.name;
+  const requestedSortBy = String(query.sortBy || fallbackColumn || "").trim();
   const columnMap = new Map(columns.map((column) => [column.name, column]));
   const sortBy = columnMap.has(requestedSortBy) && !columnMap.get(requestedSortBy).hidden
     ? requestedSortBy
-    : config.primaryKey;
+    : fallbackColumn;
+  if (!sortBy) return "";
   const sortOrder = String(query.sortOrder || "DESC").toUpperCase() === "ASC" ? "ASC" : "DESC";
   return `ORDER BY ${quoteIdentifier(sortBy)} ${sortOrder}`;
 }
 
 async function listRows(key, query = {}) {
-  const config = getTableConfig(key);
+  const config = await getTableConfig(key);
   const columns = await getColumns(config);
   const publicColumns = visibleColumns(columns);
   const selectColumns = publicColumns.map((column) => quoteIdentifier(column.name)).join(", ");
@@ -299,7 +391,7 @@ function buildWritePayload(config, columns, body = {}, mode) {
 }
 
 async function createRow(key, body = {}) {
-  const config = getTableConfig(key);
+  const config = await getTableConfig(key);
   if (!config.allowCreate) throw createHttpError(403, "该表未开放新增能力");
   const columns = await getColumns(config);
   const values = buildWritePayload(config, columns, body, "create");
@@ -317,7 +409,8 @@ async function createRow(key, body = {}) {
 }
 
 async function updateRow(key, id, body = {}) {
-  const config = getTableConfig(key);
+  const config = await getTableConfig(key);
+  if (!config.hasSinglePrimaryKey) throw createHttpError(403, "该表没有单字段主键，暂不支持更新");
   if (!config.allowUpdate) throw createHttpError(403, "该表未开放更新能力");
   const columns = await getColumns(config);
   const before = await getRowByPrimaryKey(config, columns, id);
@@ -337,7 +430,8 @@ async function updateRow(key, id, body = {}) {
 }
 
 async function deleteRow(key, id) {
-  const config = getTableConfig(key);
+  const config = await getTableConfig(key);
+  if (!config.hasSinglePrimaryKey) throw createHttpError(403, "该表没有单字段主键，暂不支持删除");
   if (!config.allowDelete) throw createHttpError(403, "该表未开放删除能力");
   const columns = await getColumns(config);
   const before = await getRowByPrimaryKey(config, columns, id);

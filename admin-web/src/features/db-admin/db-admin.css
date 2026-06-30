@@ -145,3 +145,36 @@
 .db-admin-lock-actions {
   margin-top: 18px;
 }
+
+.db-admin-hero--compact {
+  min-height: 96px;
+  padding: 22px 28px;
+  align-items: center;
+}
+
+.db-admin-hero--compact h2.ant-typography {
+  margin-bottom: 0;
+}
+
+.db-admin-cell-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.db-admin-cell-text--null {
+  color: #94a3b8;
+}
+
+.db-admin-data-card .ant-table-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.db-admin-data-card .ant-table-tbody > tr > td {
+  max-width: 280px;
+}

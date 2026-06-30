@@ -63,16 +63,20 @@ function isLongTextColumn(column: DbAdminColumn) {
   return type.includes("text") || isJsonColumn(column) || (column.maxLength || 0) > 300;
 }
 
+function valueToText(value: unknown) {
+  if (value === null || value === undefined || value === "") return "NULL";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 function formatValue(value: unknown) {
-  if (value === null || value === undefined || value === "") return <Text type="secondary">NULL</Text>;
-  if (typeof value === "boolean") return <Tag color={value ? "green" : "default"}>{value ? "true" : "false"}</Tag>;
-  if (typeof value === "object") {
-    const text = JSON.stringify(value);
-    return <Text code ellipsis={{ tooltip: text }}>{text}</Text>;
-  }
-  const text = String(value);
-  if (text.length > 80) return <Text ellipsis={{ tooltip: text }}>{text}</Text>;
-  return text;
+  const text = valueToText(value);
+  const content = (
+    <span className={value === null || value === undefined || value === "" ? "db-admin-cell-text db-admin-cell-text--null" : "db-admin-cell-text"}>
+      {text}
+    </span>
+  );
+  return text === "NULL" ? content : <Tooltip title={text}>{content}</Tooltip>;
 }
 
 function toFormValue(column: DbAdminColumn, value: unknown) {
@@ -398,6 +402,7 @@ export function DbAdminPage() {
       dataIndex: column.name,
       key: column.name,
       sorter: true,
+      ellipsis: true,
       width: column.primaryKey ? 120 : isLongTextColumn(column) ? 260 : 180,
       render: (value: unknown) => formatValue(value),
     }));
@@ -522,28 +527,15 @@ export function DbAdminPage() {
   return (
     <div className="db-admin-page">
       {contextHolder}
-      <section className="db-admin-hero">
+      <section className="db-admin-hero db-admin-hero--compact">
         <div>
-          <Text className="db-admin-eyebrow">PostgreSQL CRUD · Super Admin</Text>
+          <Text className="db-admin-eyebrow">PostgreSQL</Text>
           <Title level={2}>数据表管理</Title>
-          <Text type="secondary">第一版仅开放白名单表，按 db-admin:read / db-admin:write 分离权限，不提供任意 SQL。</Text>
         </div>
-        <Space wrap>
-          <Tag color="blue">db-admin:read</Tag>
-          <Tag color={canWrite ? "green" : "default"}>db-admin:write</Tag>
-          <Button icon={<ReloadOutlined />} onClick={() => { void tablesQuery.refetch(); void schemaQuery.refetch(); void rowsQuery.refetch(); }}>
-            刷新
-          </Button>
-        </Space>
+        <Button icon={<ReloadOutlined />} onClick={() => { void tablesQuery.refetch(); void schemaQuery.refetch(); void rowsQuery.refetch(); }}>
+          刷新
+        </Button>
       </section>
-
-      <Alert
-        className="db-admin-safety"
-        type="info"
-        showIcon
-        message="安全边界"
-        description="这里只有白名单表；敏感字段默认隐藏；写操作会审计。新增表请先在后端 src/admin/db-admin/config.js 显式配置。"
-      />
 
       <div className="db-admin-workbench">
         <Card className="db-admin-sidebar" title="白名单表" loading={tablesQuery.isLoading}>
@@ -564,7 +556,6 @@ export function DbAdminPage() {
                 >
                   <List.Item.Meta
                     title={<Space><span>{item.label}</span>{item.allowDelete ? <Tag color="red">可删</Tag> : null}</Space>}
-                    description={item.description || item.table}
                   />
                 </List.Item>
               )}

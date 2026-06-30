@@ -20,7 +20,8 @@ export interface DbAdminTableMeta {
   label: string;
   description?: string;
   table: string;
-  primaryKey: string;
+  primaryKey: string | null;
+  hasSinglePrimaryKey?: boolean;
   allowCreate: boolean;
   allowUpdate: boolean;
   allowDelete: boolean;
