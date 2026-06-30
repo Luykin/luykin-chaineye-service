@@ -4,8 +4,8 @@ import {
   BulbOutlined,
   CaretRightOutlined,
   CheckCircleFilled,
+  ChromeOutlined,
   CodeOutlined,
-  ExportOutlined,
   LockOutlined,
   LogoutOutlined,
   MenuOutlined,
@@ -41,13 +41,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth";
 import { useAdminTheme } from "@/app/theme";
 import { buildApiUrl } from "@/services/apiClient";
-import { adminMainNavItems, adminShortcutNavItems, type AdminNavItem } from "@/config/admin-navigation";
+import { adminMainNavItems, type AdminNavItem } from "@/config/admin-navigation";
 
 const { Header, Content } = Layout;
 const ADMIN_ENTRY_PATH = "/api/xhunt/stats";
 const ADMIN_HOME_PATH = "/overview";
 const ADMIN_LOGIN_HASH = "#/login";
 const ADMIN_TITLE = "数据统计面板";
+const CHROME_DEV_CONSOLE_URL = "https://chrome.google.com/webstore/devconsole/9d25eceb-fe8d-401a-a54e-08499569b9a3";
 const WEBAUTHN_PROMPT_MIN_PERMISSION_COUNT = 10;
 const WEBAUTHN_PROMPT_SUPPRESS_DAYS = 7;
 const { useBreakpoint } = Grid;
@@ -194,27 +195,6 @@ export function AdminLayout() {
       })
       .filter(Boolean) as NonNullable<MenuProps["items"]>;
 
-    const shortcutGroup = adminShortcutNavItems.length
-      ? [
-          {
-            key: "group-shortcut",
-            icon: <ExportOutlined />,
-            label: "快捷入口",
-            popupClassName: "admin-top-nav-popup",
-            children: adminShortcutNavItems.map((item) => ({
-              key: item.key,
-              icon: item.icon,
-              label: (
-                <a href={item.href} target="_blank" rel="noreferrer" className="admin-top-nav-external-link">
-                  <span>{item.label}</span>
-                  <ExportOutlined />
-                </a>
-              ),
-            })),
-          },
-        ]
-      : [];
-
     const noPermissionGroup = noPermissionNavItems.length
       ? [
           {
@@ -231,7 +211,7 @@ export function AdminLayout() {
         ]
       : [];
 
-    return [...groupedItems, ...shortcutGroup, ...noPermissionGroup];
+    return [...groupedItems, ...noPermissionGroup];
   }, [noPermissionNavItems, permittedNavItems]);
 
   const handleNavigationClick: MenuProps["onClick"] = ({ key }) => {
@@ -488,83 +468,96 @@ export function AdminLayout() {
           />
         )}
 
-        <Dropdown
-          trigger={["hover", "click"]}
-          menu={{
-            items: [
-              {
-                key: "email",
-                disabled: true,
-                label: (
-                  <Space direction="vertical" size={0}>
-                    <Typography.Text strong>{user?.email || "管理员"}</Typography.Text>
-                  </Space>
-                ),
-              },
-              {
-                key: "role",
-                disabled: true,
-                label: (
-                  <Space size={8}>
-                    <Tag color={user?.role === "super" ? "gold" : "blue"}>
-                      {user?.role === "super" ? "Super Admin" : "Admin"}
-                    </Tag>
-                  </Space>
-                ),
-              },
-              { type: "divider" },
-              {
-                key: "refresh-session",
-                label: "刷新会话",
-                icon: <ReloadOutlined />,
-                onClick: async () => {
-                  await refresh();
+        <div className="admin-top-header-actions">
+          <Button
+            type="text"
+            href={CHROME_DEV_CONSOLE_URL}
+            target="_blank"
+            rel="noreferrer"
+            title="Chrome 应用商店开发者控制台"
+            aria-label="Chrome 应用商店开发者控制台"
+            className="admin-top-chrome-button"
+            icon={<ChromeOutlined />}
+          />
+
+          <Dropdown
+            trigger={["hover", "click"]}
+            menu={{
+              items: [
+                {
+                  key: "email",
+                  disabled: true,
+                  label: (
+                    <Space direction="vertical" size={0}>
+                      <Typography.Text strong>{user?.email || "管理员"}</Typography.Text>
+                    </Space>
+                  ),
                 },
-              },
-              {
-                key: "change-password",
-                label: "修改密码",
-                icon: <LockOutlined />,
-                onClick: () => setPasswordModalOpen(true),
-              },
-              {
-                key: "webauthn",
-                label: "生物识别",
-                icon: <SafetyCertificateOutlined />,
-                onClick: () => {
-                  void openWebAuthnModal();
+                {
+                  key: "role",
+                  disabled: true,
+                  label: (
+                    <Space size={8}>
+                      <Tag color={user?.role === "super" ? "gold" : "blue"}>
+                        {user?.role === "super" ? "Super Admin" : "Admin"}
+                      </Tag>
+                    </Space>
+                  ),
                 },
-              },
-              {
-                key: "toggle-theme",
-                label: adminTheme.effectiveMode === "dark" ? "切换浅色模式" : "切换深色模式",
-                icon: adminTheme.effectiveMode === "dark" ? <BulbOutlined /> : <MoonOutlined />,
-                onClick: adminTheme.toggleMode,
-              },
-              { type: "divider" },
-              {
-                key: "logout",
-                label: "退出登录",
-                icon: <LogoutOutlined />,
-                onClick: async () => {
-                  await handleLogout();
+                { type: "divider" },
+                {
+                  key: "refresh-session",
+                  label: "刷新会话",
+                  icon: <ReloadOutlined />,
+                  onClick: async () => {
+                    await refresh();
+                  },
                 },
-              },
-            ],
-          }}
-        >
-          <Button type="text" className="admin-top-user-button">
-            <Space size={8} wrap={false}>
-              <UserOutlined className="admin-top-user-icon" />
-              {!isMobile ? (
-                <Typography.Text ellipsis className="admin-top-user-email">
-                  {user?.email || "管理员"}
-                </Typography.Text>
-              ) : null}
-              <CaretRightOutlined className="admin-top-user-caret" />
-            </Space>
-          </Button>
-        </Dropdown>
+                {
+                  key: "change-password",
+                  label: "修改密码",
+                  icon: <LockOutlined />,
+                  onClick: () => setPasswordModalOpen(true),
+                },
+                {
+                  key: "webauthn",
+                  label: "生物识别",
+                  icon: <SafetyCertificateOutlined />,
+                  onClick: () => {
+                    void openWebAuthnModal();
+                  },
+                },
+                {
+                  key: "toggle-theme",
+                  label: adminTheme.effectiveMode === "dark" ? "切换浅色模式" : "切换深色模式",
+                  icon: adminTheme.effectiveMode === "dark" ? <BulbOutlined /> : <MoonOutlined />,
+                  onClick: adminTheme.toggleMode,
+                },
+                { type: "divider" },
+                {
+                  key: "logout",
+                  label: "退出登录",
+                  icon: <LogoutOutlined />,
+                  onClick: async () => {
+                    await handleLogout();
+                  },
+                },
+              ],
+            }}
+          >
+            <Button type="text" className="admin-top-user-button">
+              <Space size={8} wrap={false}>
+                <UserOutlined className="admin-top-user-icon" />
+                {!isMobile ? (
+                  <Typography.Text ellipsis className="admin-top-user-email">
+                    {user?.email || "管理员"}
+                  </Typography.Text>
+                ) : null}
+                <CaretRightOutlined className="admin-top-user-caret" />
+              </Space>
+            </Button>
+          </Dropdown>
+        </div>
       </Header>
 
       <div className="admin-page-title-bar">

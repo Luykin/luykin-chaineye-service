@@ -123,15 +123,6 @@
   vertical-align: -0.125em;
 }
 
-.admin-top-nav-external-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 132px;
-  color: inherit;
-}
-
 .admin-top-nav-no-permission-item {
   display: inline-flex;
   align-items: center;
@@ -155,6 +146,34 @@
   font-size: 10px;
   font-weight: 600;
   line-height: 1.35;
+}
+
+.admin-top-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-top-chrome-button.ant-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--admin-text-muted);
+  background: transparent;
+}
+
+.admin-top-chrome-button.ant-btn:hover {
+  color: var(--admin-primary-strong) !important;
+  border-color: color-mix(in srgb, var(--admin-primary) 32%, transparent) !important;
+  background: var(--admin-primary-soft) !important;
+}
+
+.admin-top-chrome-button .anticon {
+  font-size: 18px;
 }
 
 .admin-top-user-button.ant-btn {
@@ -243,6 +262,10 @@
   .admin-top-user-button.ant-btn {
     max-width: 46px;
     padding-inline: 8px;
+  }
+
+  .admin-top-header-actions {
+    gap: 6px;
   }
 }
 

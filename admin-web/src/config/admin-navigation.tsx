@@ -6,9 +6,7 @@ export interface AdminNavItem {
   icon: ReactNode;
   label: string;
   permission?: string | string[];
-  external?: boolean;
-  href?: string;
-  group: "main" | "shortcut";
+  group: "main";
   implemented?: boolean;
   superOnly?: boolean;
   section?: "primary" | "system";
@@ -50,10 +48,6 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/llm-test", icon: <LegacySidebarIcon name="cpu" />, label: "LLM测试", permission: "llm-test", group: "main", sidebarGroup: "dev", implemented: true, section: "system", superOnly: true },
   { key: "/admin-users", icon: <LegacySidebarIcon name="user" />, label: "管理员列表", permission: "admin-users", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/admin-audit-logs", icon: <LegacySidebarIcon name="clipboard" />, label: "操作记录", permission: "audit-logs:read", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
-  { key: "shortcut-chrome", icon: <LegacySidebarIcon name="monitor" />, label: "Chrome 控制台", group: "shortcut", external: true, href: "https://chrome.google.com/webstore/devconsole/9d25eceb-fe8d-401a-a54e-08499569b9a3" },
-  { key: "shortcut-doc", icon: <LegacySidebarIcon name="file-text" />, label: "需求文档", group: "shortcut", external: true, href: "https://docs.google.com/document/d/1W4URRutiCIxtYy8oLgEp8wy9yAzRDbNpIbNeXB2oors/edit?tab=t.0" },
-  { key: "shortcut-nacos", icon: <LegacySidebarIcon name="target" />, label: "Nacos 配置", group: "shortcut", external: true, href: "https://kb.cryptohunt.ai/nacos/" },
 ];
 
-export const adminMainNavItems = adminNavItems.filter((item) => item.group === "main");
-export const adminShortcutNavItems = adminNavItems.filter((item) => item.group === "shortcut");
+export const adminMainNavItems = adminNavItems;

@@ -1421,7 +1421,7 @@ router.post("/supabase/link-token", adminAuth, requirePermission("supabase"), as
     const jti = randomUUID();
     const ttl = 600;
     const token = jwt.sign({ aid: admin.id, purpose: "supabase", jti }, LINK_SECRET, { expiresIn: ttl });
-    const studioEntryUrl = (process.env.SUPABASE_STUDIO_ENTRY_URL || "https://supabase-studio.cryptohunt.ai/project/default").trim();
+    const studioEntryUrl = (process.env.SUPABASE_STUDIO_ENTRY_URL || "/project/default").trim();
     const separator = studioEntryUrl.includes("?") ? "&" : "?";
     const url = `${studioEntryUrl}${separator}token=${encodeURIComponent(token)}`;
     return res.json({ success: true, token, url, ttl });
