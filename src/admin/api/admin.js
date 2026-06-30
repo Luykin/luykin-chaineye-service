@@ -14,7 +14,7 @@ const {
   verifyAuthenticationResponse,
 } = require("@simplewebauthn/server");
 const { adminAuth, requireRole, requirePermission, setSessionCookie } = require("../middleware/adminAuth");
-const { randomBytes, randomUUID } = require("crypto");
+const { randomBytes } = require("crypto");
 const { handleUpload } = require("@vercel/blob/client");
 const { chat: llmChat } = require("../../lib/llm");
 
@@ -26,7 +26,6 @@ const RP_NAME = process.env.WEBAUTHN_RP_NAME || "XHunt Admin";
 const RP_ID = process.env.WEBAUTHN_RP_ID || (process.env.ADMIN_COOKIE_DOMAIN || "localhost");
 const ORIGIN = process.env.WEBAUTHN_ORIGIN || `https://${RP_ID}`;
 const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
-const LINK_SECRET = process.env.SUPABASE_LINK_SECRET || "change-me-link";
 
 const ADMIN_BLOB_PREFIX = (process.env.ADMIN_BLOB_PREFIX || "admin-images")
   .replace(/^\/+|\/+$/g, "") || "admin-images";
@@ -1406,52 +1405,6 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
     res.json({ success: true, data: { id: target.id, permissions: target.permissions } });
   } catch (e) {
     res.status(500).json({ success: false, error: "更新失败" });
-  }
-});
-
-// 生成一次性 Supabase 访问票据（后台已登录）
-router.post("/supabase/link-token", adminAuth, requirePermission("supabase"), async (req, res) => {
-  try {
-    const admin = req.adminUser;
-    // 需要已录入至少一个 WebAuthn 凭证
-    const credCount = await XhuntAdminWebAuthnCredential.count({ where: { adminId: admin.id } });
-    if (!credCount || credCount <= 0) {
-      return res.status(403).json({ success: false, error: "需要先录入生物识别" });
-    }
-    const jti = randomUUID();
-    const ttl = 600;
-    const token = jwt.sign({ aid: admin.id, purpose: "supabase", jti }, LINK_SECRET, { expiresIn: ttl });
-    const studioEntryUrl = (process.env.SUPABASE_STUDIO_ENTRY_URL || "/__supabase-studio/project/default").trim();
-    const separator = studioEntryUrl.includes("?") ? "&" : "?";
-    const url = `${studioEntryUrl}${separator}token=${encodeURIComponent(token)}`;
-    return res.json({ success: true, token, url, ttl });
-  } catch (e) {
-    return res.status(500).json({ success: false, error: "生成票据失败" });
-  }
-});
-
-// 校验一次性票据（用于 Nginx auth_request）
-router.get("/supabase/verify-link", async (req, res) => {
-  try {
-    const token = req.headers["x-request-signature"];
-    if (!token) {
-      console.log("[supabase/verify-link] missing token");
-      return res.status(401).json({ success: false });
-    }
-    let decoded;
-    try {
-      decoded = jwt.verify(String(token), LINK_SECRET);
-    } catch (e) {
-      return res.status(401).json({ success: false });
-    }
-    if (decoded.purpose !== "supabase" || !decoded.jti) {
-      return res.status(401).json({ success: false });
-    }
-    res.set("Cache-Control","no-store");
-    return res.status(204).end();
-  } catch (e) {
-    console.log("[supabase/verify-link] error:", e?.message);
-    return res.status(500).json({ success: false });
   }
 });
 
