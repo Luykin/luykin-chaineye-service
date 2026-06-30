@@ -39,6 +39,7 @@ import { BackupRestorePage } from "@/pages/BackupRestorePage";
 import { EmergencyRollbackPage } from "@/pages/EmergencyRollbackPage";
 import { ReleaseDeployPage } from "@/pages/ReleaseDeployPage";
 import { AuthCenterTestPage } from "@/pages/AuthCenterTestPage";
+import { DbAdminPage } from "@/features/db-admin/DbAdminPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
 import { adminMainNavItems } from "@/config/admin-navigation";
 
@@ -79,6 +80,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "emergency-rollback": <EmergencyRollbackPage />,
   "release-deploy": <ReleaseDeployPage />,
   "auth-center-test": <AuthCenterTestPage />,
+  "db-admin": <DbAdminPage />,
 };
 
 const generatedAdminRoutes = adminMainNavItems.map((item) => {

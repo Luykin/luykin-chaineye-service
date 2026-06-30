@@ -1316,7 +1316,7 @@ router.post("/users", adminAuth, requirePermission("admin:manage-permissions"), 
     }
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release"]);
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release", "db-admin:read", "db-admin:write"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = perms.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -1432,7 +1432,7 @@ router.patch("/users/:id/permissions", adminAuth, requirePermission("admin:manag
       .filter((p) => p.length > 0);
 
     // 仅 super 可分配 管理员列表/操作记录 相关权限
-    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release"]);
+    const RESTRICTED = new Set(["admin-users", "admin-audit-logs", "admin:manage-permissions", "audit-logs:read", "deploy:rollback", "deploy:release", "db-admin:read", "db-admin:write"]);
     if (req.adminUser.role !== "super") {
       const containsRestricted = sanitized.some((p) => RESTRICTED.has(p));
       if (containsRestricted) {
@@ -1864,5 +1864,9 @@ router.get("/logo", async (req, res) => {
 // ========== Redis 管理路由 ==========
 const redisRoutes = require("./redis");
 router.use("/system/redis", redisRoutes);
+
+// ========== 轻量 PostgreSQL CRUD（super only + db-admin 权限） ==========
+const dbAdminRoutes = require("../db-admin/router");
+router.use("/db-admin", dbAdminRoutes);
 
 module.exports = router;

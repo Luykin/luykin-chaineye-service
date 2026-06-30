@@ -1,0 +1,147 @@
+.db-admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.db-admin-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px;
+  border: 1px solid #dbe5f4;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 92% 18%, rgba(30, 64, 175, 0.14), transparent 28%),
+    linear-gradient(135deg, #f8fbff 0%, #eef4ff 48%, #fffaf0 100%);
+}
+
+.db-admin-hero h2.ant-typography {
+  margin: 4px 0 6px;
+  color: #16213d;
+  letter-spacing: -0.04em;
+}
+
+.db-admin-eyebrow {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.db-admin-safety.ant-alert {
+  border-radius: 16px;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.db-admin-workbench {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.db-admin-sidebar.ant-card,
+.db-admin-data-card.ant-card {
+  border-radius: 20px;
+  border-color: #e2e8f0;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.06);
+}
+
+.db-admin-sidebar .ant-card-body {
+  padding: 8px;
+}
+
+.db-admin-table-item {
+  cursor: pointer;
+  padding: 12px 14px !important;
+  border-radius: 14px;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.db-admin-table-item:hover {
+  background: #f8fafc;
+  transform: translateX(2px);
+}
+
+.db-admin-table-item--active {
+  background: #eef4ff;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.db-admin-table-item .ant-list-item-meta-title {
+  margin-bottom: 2px;
+  font-weight: 700;
+}
+
+.db-admin-search {
+  width: min(420px, 42vw);
+}
+
+.db-admin-table-desc {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.db-admin-data-card .ant-table-cell {
+  vertical-align: top;
+}
+
+.db-admin-data-card .ant-typography code {
+  max-width: 220px;
+  display: inline-block;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.db-admin-editor-alert.ant-alert {
+  margin-bottom: 16px;
+  border-radius: 14px;
+}
+
+.db-admin-editor-form .ant-form-item-label > label {
+  width: 100%;
+}
+
+.db-admin-full-input {
+  width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .db-admin-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .db-admin-search {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .db-admin-hero {
+    padding: 20px;
+    flex-direction: column;
+  }
+}
+
+.db-admin-hero--locked {
+  background:
+    radial-gradient(circle at 90% 12%, rgba(217, 119, 6, 0.16), transparent 30%),
+    linear-gradient(135deg, #fffaf0 0%, #f8fbff 54%, #eef4ff 100%);
+}
+
+.db-admin-lock-card.ant-card {
+  max-width: 860px;
+  border-radius: 20px;
+  border-color: #fed7aa;
+  box-shadow: 0 18px 44px rgba(146, 64, 14, 0.08);
+}
+
+.db-admin-lock-actions {
+  margin-top: 18px;
+}

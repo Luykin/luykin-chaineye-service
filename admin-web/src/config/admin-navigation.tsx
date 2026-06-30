@@ -41,6 +41,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/feature-flags", icon: <LegacySidebarIcon name="toggle" />, label: "功能开关", permission: "feature_flags_config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/banner-config", icon: <LegacySidebarIcon name="square" />, label: "Banner配置", permission: "banner-config", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/redis-management", icon: <LegacySidebarIcon name="database" />, label: "Redis管理", permission: "redis-management", group: "main", sidebarGroup: "dev", implemented: true, section: "system", superOnly: true },
+  { key: "/db-admin", icon: <LegacySidebarIcon name="database" />, label: "数据表管理", permission: ["db-admin:read", "db-admin:write"], group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/backup-restore", icon: <LegacySidebarIcon name="database" />, label: "备份恢复", permission: "backup:operate", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/release-deploy", icon: <LegacySidebarIcon name="rocket" />, label: "发布上线", permission: "deploy:release", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
   { key: "/emergency-rollback", icon: <LegacySidebarIcon name="rotate-ccw" />, label: "紧急回滚", permission: "deploy:rollback", group: "main", sidebarGroup: "system", implemented: true, section: "system", superOnly: true },
