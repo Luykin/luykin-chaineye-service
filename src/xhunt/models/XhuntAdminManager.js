@@ -12,6 +12,8 @@ module.exports = (sequelize) => {
       canLogin: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       receivesDailyReport: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       permissions: { type: DataTypes.JSONB, allowNull: true },
+      failedLoginAttempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      loginLockedUntil: { type: DataTypes.DATE, allowNull: true },
       lastLoginAt: { type: DataTypes.DATE, allowNull: true },
     },
     {
@@ -20,6 +22,7 @@ module.exports = (sequelize) => {
         { unique: true, fields: ["email"] },
         { fields: ["role"] },
         { fields: ["isActive", "canLogin"] },
+        { fields: ["loginLockedUntil"] },
       ],
     }
   );

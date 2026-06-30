@@ -27,6 +27,22 @@ const RP_ID = process.env.WEBAUTHN_RP_ID || (process.env.ADMIN_COOKIE_DOMAIN || 
 const ORIGIN = process.env.WEBAUTHN_ORIGIN || `https://${RP_ID}`;
 const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 
+const ADMIN_LOGIN_MAX_FAILED_ATTEMPTS = 5;
+const ADMIN_LOGIN_LOCK_MINUTES = 20;
+const ADMIN_LOGIN_LOCK_MS = ADMIN_LOGIN_LOCK_MINUTES * 60 * 1000;
+
+function getAdminLoginLockRemainingMinutes(admin) {
+  if (!admin?.loginLockedUntil) return 0;
+  const lockedUntil = new Date(admin.loginLockedUntil).getTime();
+  if (!Number.isFinite(lockedUntil)) return 0;
+  return Math.max(0, Math.ceil((lockedUntil - Date.now()) / (60 * 1000)));
+}
+
+function buildAdminLoginLockError(remainingMinutes) {
+  const minutes = Math.max(1, remainingMinutes || ADMIN_LOGIN_LOCK_MINUTES);
+  return `账号已冻结，剩余登录尝试 0 次，请 ${minutes} 分钟后再试`;
+}
+
 const ADMIN_BLOB_PREFIX = (process.env.ADMIN_BLOB_PREFIX || "admin-images")
   .replace(/^\/+|\/+$/g, "") || "admin-images";
 const ADMIN_BLOB_MAX_SIZE_MB = Math.max(1, Number(process.env.ADMIN_BLOB_MAX_SIZE_MB || 10));
@@ -1068,6 +1084,8 @@ router.post("/password/reset", adminAuth, express.json(), async (req, res) => {
     if (!adminRow) return res.status(404).json({ success: false, error: "管理员不存在" });
     const hash = await bcrypt.hash(newPassword, 10);
     adminRow.passwordHash = hash;
+    adminRow.failedLoginAttempts = 0;
+    adminRow.loginLockedUntil = null;
     await adminRow.save();
     await req.redisClient.del(key);
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email, action: "password-reset", route: "/admin/password/reset", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
@@ -1092,22 +1110,45 @@ router.post("/login", express.json(), async (req, res) => {
       return res.status(423).json({ success: false, error: "账号已被锁定，请联系管理员" });
     }
 
+    const lockRemainingMinutes = getAdminLoginLockRemainingMinutes(admin);
+    if (lockRemainingMinutes > 0) {
+      return res.status(423).json({
+        success: false,
+        error: buildAdminLoginLockError(lockRemainingMinutes),
+        remainingAttempts: 0,
+        locked: true,
+        lockRemainingMinutes,
+      });
+    }
+
+    if (admin.loginLockedUntil || admin.failedLoginAttempts >= ADMIN_LOGIN_MAX_FAILED_ATTEMPTS) {
+      await admin.update({ failedLoginAttempts: 0, loginLockedUntil: null });
+    }
+
     const ok = await bcrypt.compare(password, admin.passwordHash);
     if (!ok) {
-      try {
-        const key = `admin:loginfail:${email}`;
-        const count = await req.redisClient.incr(key);
-        if (count === 1) {
-          await req.redisClient.expire(key, 12 * 60 * 60);
-        }
-        if (count >= 6) {
-          await admin.update({ canLogin: false });
-          await req.redisClient.del(key);
-          try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "account-lock", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: `failed attempts: ${count}` }); } catch (e) {}
-          return res.status(423).json({ success: false, error: "账号已被锁定，请联系管理员" });
-        }
-      } catch (e) {}
-      return res.status(401).json({ success: false, error: "邮箱或密码错误" });
+      const failedLoginAttempts = Number(admin.failedLoginAttempts || 0) + 1;
+      const remainingAttempts = Math.max(0, ADMIN_LOGIN_MAX_FAILED_ATTEMPTS - failedLoginAttempts);
+
+      if (failedLoginAttempts >= ADMIN_LOGIN_MAX_FAILED_ATTEMPTS) {
+        const loginLockedUntil = new Date(Date.now() + ADMIN_LOGIN_LOCK_MS);
+        await admin.update({ failedLoginAttempts: ADMIN_LOGIN_MAX_FAILED_ATTEMPTS, loginLockedUntil });
+        try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "account-temp-lock", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: false, message: `failed attempts: ${failedLoginAttempts}; locked ${ADMIN_LOGIN_LOCK_MINUTES} minutes` }); } catch (e) {}
+        return res.status(423).json({
+          success: false,
+          error: `邮箱或密码错误，还剩余 ${remainingAttempts} 次。账号已冻结 ${ADMIN_LOGIN_LOCK_MINUTES} 分钟`,
+          remainingAttempts,
+          locked: true,
+          lockRemainingMinutes: ADMIN_LOGIN_LOCK_MINUTES,
+        });
+      }
+
+      await admin.update({ failedLoginAttempts, loginLockedUntil: null });
+      return res.status(401).json({
+        success: false,
+        error: `邮箱或密码错误，还剩余 ${remainingAttempts} 次`,
+        remainingAttempts,
+      });
     }
 
     // 判断是否存在 WebAuthn 凭证
@@ -1118,6 +1159,7 @@ router.post("/login", express.json(), async (req, res) => {
     if (credCount > 0) {
       // 需要二次验证：签发一个临时 token（5 分钟有效），不下发会话
       const tempToken = jwt.sign({ aid: admin.id, email: admin.email, step: "pwd-ok" }, TEMP_JWT_SECRET, { expiresIn: 300 });
+      await admin.update({ failedLoginAttempts: 0, loginLockedUntil: null });
       try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login-password-ok", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: `credCount=${credCount}` }); } catch (e) {}
       res.set('Cache-Control','no-store');
       res.type('application/json');
@@ -1125,7 +1167,7 @@ router.post("/login", express.json(), async (req, res) => {
     }
 
     // 无凭证：直接登录
-    await admin.update({ lastLoginAt: new Date() });
+    await admin.update({ failedLoginAttempts: 0, loginLockedUntil: null, lastLoginAt: new Date() });
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: `credCount=${credCount}` }); } catch (e) {}
     setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
     res.set('Cache-Control','no-store');
@@ -1339,6 +1381,8 @@ router.post("/users/:id/password/reset-random", adminAuth, requirePermission("ad
     const password = generateAdminLoginPassword();
     target.passwordHash = await bcrypt.hash(password, 10);
     target.canLogin = true;
+    target.failedLoginAttempts = 0;
+    target.loginLockedUntil = null;
     await target.save();
 
     try {
