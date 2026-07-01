@@ -585,7 +585,7 @@ async function initializeAndStartServer() {
   app.use("/api/xhunt/ghost-following", xHuntGhostFollowingRoutes);
 
   // Pro API Credits 接口 - 积分领取和查询（封装目标服务）
-  app.use("/api/xhunt/pro-api", xHuntProApiCreditsRoutes);
+  // app.use("/api/xhunt/pro-api", xHuntProApiCreditsRoutes);
 
   // Rootdata 搜索接口 - 基于 PostgreSQL 的 Fundraising 数据 内部使用
   app.use("/api/rootdata", xHuntRootdataRoutes);
