@@ -566,7 +566,7 @@ async function initializeAndStartServer() {
   );
 
   // Mantle 活动接口 内部有安全中间件
-  app.use("/api/xhunt/mantle", xHuntMantleRoutes);
+  // app.use("/api/xhunt/mantle", xHuntMantleRoutes);
 
   app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
   app.use("/api/xhunt/website/campaigns", xHuntWebsiteCampaignRoutes);
@@ -618,7 +618,7 @@ async function initializeAndStartServer() {
   );
 
   // RootdataPro: 触发爬虫并入库
-  app.use("/api/rootdatapro/internal", adminAuth, rootdataProRoutes);
+  // app.use("/api/rootdatapro/internal", adminAuth, rootdataProRoutes);
 
   // RootData Fundraising Tampermonkey 采集入口（独立 token 校验，不使用 admin JWT）
   app.use("/api/internal/rootdata/fundraising", rootdataTampermonkeyRoutes);
