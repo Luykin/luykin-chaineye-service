@@ -1,16 +1,18 @@
 const jwt = require("jsonwebtoken");
 const { randomToken, sha256, getFingerprint, getIpHash } = require("./utils");
 
+const DEFAULT_SESSION_TTL_DAYS = 7;
+
 function getAccessTokenTtlSeconds() {
   const raw = process.env.AUTH_CENTER_ACCESS_TOKEN_TTL_SECONDS;
   const parsed = raw ? parseInt(raw, 10) : null;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60 * 60;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SESSION_TTL_DAYS * 24 * 60 * 60;
 }
 
 function getRefreshTokenTtlDays() {
   const raw = process.env.AUTH_CENTER_REFRESH_TOKEN_TTL_DAYS;
   const parsed = raw ? parseInt(raw, 10) : null;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SESSION_TTL_DAYS;
 }
 
 function getIssuer() {
