@@ -231,9 +231,11 @@ async function updateEvmAddressOnUser(user, evmAddress) {
 async function findCampaignRecord(identifier) {
   const key = normalizeCampaign(identifier);
   if (!key) return null;
+  // EchoHunt 详情/榜单要兼容原网站活动接口的数据口径：
+  // 只排除 draft/archived，不额外按 isDeleted 过滤，避免历史网站专属活动被漏掉。
   return XHuntWebsiteCampaign.findOne({
     where: {
-      isDeleted: false,
+      webStatus: { [Op.notIn]: ["draft", "archived"] },
       [Op.or]: [{ campaignKey: key }, { slug: key }, { nacosCampaignId: key }],
     },
   });
@@ -731,9 +733,11 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
     const viewer = twitterIdentity ? { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId } : null;
     let hasTesting = false;
 
+    // 对齐 /api/xhunt/website/campaigns 的公开活动口径：
+    // 返回所有非 draft/archived 的网站活动，再在 EchoHunt 层额外处理 testingPhase 可见性。
+    // 这里不加 isDeleted=false，避免旧的“网站专属/历史活动”因历史字段状态被漏掉。
     const records = await XHuntWebsiteCampaign.findAll({
       where: {
-        isDeleted: false,
         webStatus: { [Op.notIn]: ["draft", "archived"] },
       },
     });
