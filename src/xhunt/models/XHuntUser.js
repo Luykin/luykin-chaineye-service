@@ -58,6 +58,27 @@ module.exports = (sequelize) => {
         defaultValue: [],
         comment: "用户绑定的多个 EVM 地址（数组格式）",
       },
+      userSource: {
+        type: DataTypes.STRING(32),
+        allowNull: false,
+        defaultValue: "extension",
+        comment: "用户来源：extension / echohunt_web / mixed",
+      },
+      createdFromClient: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        comment: "首次创建来源客户端，例如 xhunt_extension / echohunt",
+      },
+      lastLoginClient: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        comment: "最近登录来源客户端",
+      },
+      sourceMetadata: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        comment: "来源相关扩展信息",
+      },
     },
     {
       tableName: "XHuntUsers", // 显式指定表名（可选）
@@ -74,6 +95,7 @@ module.exports = (sequelize) => {
           unique: true,
         },
         { name: "idx_kol_rank", fields: ["kolRank20W"] },
+        { name: "idx_xhunt_users_user_source", fields: ["userSource"] },
       ],
     }
   );

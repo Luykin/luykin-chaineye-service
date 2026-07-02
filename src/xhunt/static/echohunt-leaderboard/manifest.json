@@ -1,0 +1,320 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-02T03:00:53.085Z",
+  "campaigns": [
+    {
+      "key": "mantle",
+      "title": "Mantle Season 1",
+      "project": "Mantle",
+      "status": "ended",
+      "prize": "Reward: 30,000 $MNT",
+      "announcement": "We are excited to launch the Season 1 of Hunter leaderboard!",
+      "note": null,
+      "startAt": null,
+      "endAt": null,
+      "logo": "https://xhunt.ai//MANTLE.png",
+      "logoAlt": "Mantle Logo",
+      "guideUrl": null,
+      "sourcePage": "/leaderboard/mantle",
+      "sourceCampaignId": "mantle",
+      "dataUrl": "/leaderboard-static/campaigns/mantle.json",
+      "summary": {
+        "participants": 1245,
+        "tweets": 2629,
+        "views": 13052936,
+        "engagement": 79081,
+        "bridges": 7220,
+        "updatedAt": "Wed, 24 Sep 2025 23:34:18 GMT"
+      },
+      "tracks": [
+        {
+          "id": "poi",
+          "type": "leaderboard",
+          "title": "Proof of Influence",
+          "shortTitle": "POI",
+          "sourceKey": "mindshare",
+          "winnerKey": null,
+          "reward": "Top KOLs by mindshare",
+          "counts": {
+            "all": 100,
+            "7d": 100
+          }
+        },
+        {
+          "id": "pow",
+          "type": "leaderboard",
+          "title": "Proof of Work",
+          "shortTitle": "POW",
+          "sourceKey": "workshare",
+          "winnerKey": null,
+          "reward": "Top contributors by workshare",
+          "counts": {
+            "all": 300,
+            "7d": 300
+          }
+        }
+      ]
+    },
+    {
+      "key": "mantle2",
+      "title": "Mantle Season 2",
+      "project": "Mantle",
+      "status": "ended",
+      "prize": "Reward: 20,000 $USDC",
+      "announcement": "Hunter Gala Season 2 is back - and we've leveled up!",
+      "note": null,
+      "startAt": null,
+      "endAt": null,
+      "logo": "/MANTLE.png",
+      "logoAlt": "Mantle Logo",
+      "guideUrl": null,
+      "sourcePage": "/leaderboard/mantle2",
+      "sourceCampaignId": "mantle2",
+      "dataUrl": "/leaderboard-static/campaigns/mantle2.json",
+      "summary": {
+        "participants": 824,
+        "tweets": 2922,
+        "views": 13696407,
+        "engagement": 60221,
+        "bridges": null,
+        "updatedAt": "Fri, 05 Dec 2025 00:09:00 GMT"
+      },
+      "tracks": [
+        {
+          "id": "poi",
+          "type": "leaderboard",
+          "title": "Proof of Influence",
+          "shortTitle": "POI",
+          "sourceKey": "mindshare",
+          "winnerKey": null,
+          "reward": "15,000 USDC",
+          "counts": {
+            "all": 150,
+            "7d": 150
+          }
+        }
+      ]
+    },
+    {
+      "key": "mantle3",
+      "title": "Mantle Hunter S3($10K)",
+      "project": "Mantle",
+      "status": "ended",
+      "prize": "Reward: 10,000 $USDC",
+      "announcement": "Partnering with @0xMantleCN again!",
+      "note": null,
+      "startAt": "2026-03-03T10:00:00.000Z",
+      "endAt": "2026-03-24T10:00:00.000Z",
+      "logo": "/MANTLE.png",
+      "logoAlt": "Campaign Logo",
+      "guideUrl": null,
+      "sourcePage": "/leaderboard/mantle3",
+      "sourceCampaignId": "mantle3-hunter",
+      "dataUrl": "/leaderboard-static/campaigns/mantle3.json",
+      "summary": {
+        "participants": 187,
+        "tweets": 666,
+        "views": 4033399,
+        "engagement": 24208,
+        "bridges": null,
+        "updatedAt": "Fri, 27 Mar 2026 04:44:11 GMT"
+      },
+      "tracks": [
+        {
+          "id": "poi",
+          "type": "leaderboard",
+          "title": "Proof of Influence",
+          "shortTitle": "POI",
+          "sourceKey": "mindshare",
+          "winnerKey": null,
+          "reward": "5,000 USDC",
+          "counts": {
+            "all": 100,
+            "7d": 100
+          }
+        },
+        {
+          "id": "content",
+          "type": "winners",
+          "title": "Content Contest",
+          "shortTitle": "Content",
+          "sourceKey": null,
+          "winnerKey": "content",
+          "reward": "5,000 USDC",
+          "counts": {
+            "winners": 10
+          }
+        }
+      ]
+    },
+    {
+      "key": "realgo",
+      "title": "Let’s RealGo($80K)",
+      "project": "RealGo",
+      "status": "ended",
+      "prize": "Reward:10,000 USDT + $70,000 RT + 20 Genesis Mini Harvester",
+      "announcement": "We're excited to launch the @RealGoOfficial Leaderboard! Let’s RealGo！",
+      "note": "$RT based on $100M FDV",
+      "startAt": "2026-03-19T02:00:00.000Z",
+      "endAt": "2026-04-16T02:00:00.000Z",
+      "logo": "/realgologo.PNG",
+      "logoAlt": "Campaign Logo",
+      "guideUrl": null,
+      "sourcePage": "/realgo",
+      "sourceCampaignId": "realgo-hunter",
+      "dataUrl": "/leaderboard-static/campaigns/realgo.json",
+      "summary": {
+        "participants": 274,
+        "tweets": 1695,
+        "views": 10548680,
+        "engagement": 41956,
+        "bridges": null,
+        "updatedAt": "Fri, 17 Apr 2026 05:50:13 GMT"
+      },
+      "tracks": [
+        {
+          "id": "poi",
+          "type": "leaderboard",
+          "title": "Proof of Influence",
+          "shortTitle": "POI",
+          "sourceKey": "mindshare",
+          "winnerKey": null,
+          "reward": "35,000 equivalent $RT",
+          "counts": {
+            "all": 100,
+            "7d": 100
+          }
+        },
+        {
+          "id": "pow",
+          "type": "leaderboard",
+          "title": "Proof of Work",
+          "shortTitle": "POW",
+          "sourceKey": "workshare",
+          "winnerKey": null,
+          "reward": "35,000 equivalent $RT",
+          "counts": {
+            "all": 252,
+            "7d": 198
+          }
+        },
+        {
+          "id": "content",
+          "type": "winners",
+          "title": "Content Contest",
+          "shortTitle": "Content",
+          "sourceKey": null,
+          "winnerKey": "content",
+          "reward": "10,000 equivalent $RT + 20 Genesis Mining Harvesters",
+          "counts": {
+            "winners": 20
+          }
+        }
+      ]
+    },
+    {
+      "key": "bybit",
+      "title": "Hunter Gala Season 3",
+      "project": "Bybit",
+      "status": "ended",
+      "prize": "Reward: 20,000 $USDC",
+      "announcement": "Hunter Gala Season 3 is back - and we've leveled up!",
+      "note": null,
+      "startAt": null,
+      "endAt": null,
+      "logo": "/bybit.jpg",
+      "logoAlt": "Bybit Alpha Logo",
+      "guideUrl": null,
+      "sourcePage": "/leaderboard/bybit",
+      "sourceCampaignId": "bybit",
+      "dataUrl": "/leaderboard-static/campaigns/bybit.json",
+      "summary": {
+        "participants": 468,
+        "tweets": 1746,
+        "views": 11587304,
+        "engagement": 35866,
+        "bridges": null,
+        "updatedAt": "Thu, 08 Jan 2026 08:00:36 GMT"
+      },
+      "tracks": [
+        {
+          "id": "poi",
+          "type": "leaderboard",
+          "title": "Proof of Influence",
+          "shortTitle": "POI",
+          "sourceKey": "mindshare",
+          "winnerKey": null,
+          "reward": "15,000 USDC",
+          "counts": {
+            "all": 100,
+            "7d": 100
+          }
+        },
+        {
+          "id": "article",
+          "type": "winners",
+          "title": "Article Contest",
+          "shortTitle": "Article",
+          "sourceKey": null,
+          "winnerKey": "article",
+          "reward": "5,000 USDC",
+          "counts": {
+            "winners": 10
+          }
+        }
+      ]
+    },
+    {
+      "key": "bybit2",
+      "title": "Bybit Hunter Gala($20K)",
+      "project": "Bybit",
+      "status": "ended",
+      "prize": "Reward: 20,000 $USDC",
+      "announcement": "Bybit Hunter Gala Season 2 is back!",
+      "note": null,
+      "startAt": "2026-04-16T02:00:00.000Z",
+      "endAt": "2026-04-30T02:00:00.000Z",
+      "logo": "/bybit.jpg",
+      "logoAlt": "Campaign Logo",
+      "guideUrl": null,
+      "sourcePage": "/leaderboard/bybit2",
+      "sourceCampaignId": "bybit2-hunter",
+      "dataUrl": "/leaderboard-static/campaigns/bybit2.json",
+      "summary": {
+        "participants": 213,
+        "tweets": 800,
+        "views": 4043896,
+        "engagement": 20790,
+        "bridges": null,
+        "updatedAt": "Fri, 01 May 2026 04:08:07 GMT"
+      },
+      "tracks": [
+        {
+          "id": "poi",
+          "type": "leaderboard",
+          "title": "Proof of Influence",
+          "shortTitle": "POI",
+          "sourceKey": "mindshare",
+          "winnerKey": null,
+          "reward": "15,000 USDC",
+          "counts": {
+            "all": 100,
+            "7d": 100
+          }
+        },
+        {
+          "id": "content",
+          "type": "winners",
+          "title": "Content Contest",
+          "shortTitle": "Content",
+          "sourceKey": null,
+          "winnerKey": "content",
+          "reward": "5,000 USDC",
+          "counts": {
+            "winners": 10
+          }
+        }
+      ]
+    }
+  ]
+}

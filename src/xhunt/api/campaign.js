@@ -838,6 +838,14 @@ router.post(
         email: hasEmail ? normalizedEmail : null,
         registrationUrl:
           typeof registrationUrl === "string" ? registrationUrl : fallbackUrl,
+        registrationSource: "extension",
+        registrationClient: "xhunt_extension",
+        registrationMetadata: {
+          extensionVersion: extVersion || null,
+          userAgent: req.headers["user-agent"] || null,
+          pageUrl: typeof registrationUrl === "string" ? registrationUrl : fallbackUrl,
+          source: "extension",
+        },
       });
 
       if (inviter && inviter.id && req.redisClient) {

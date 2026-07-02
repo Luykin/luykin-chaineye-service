@@ -40,6 +40,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/mantle',
   './xhunt/api/campaign',
   './xhunt/api/website-campaigns',
+  './xhunt/api/echohunt',
   './xhunt/api/private-messages',
   './xhunt/api/rootdata',
   './xhunt/api/ghost-following',
@@ -204,6 +205,7 @@ const xHuntStatsRoutes = require("./xhunt/api/stats");
 const xHuntMantleRoutes = require("./xhunt/api/mantle");
 const xHuntCampaignRoutes = require("./xhunt/api/campaign");
 const xHuntWebsiteCampaignRoutes = require("./xhunt/api/website-campaigns");
+const xHuntEchohuntRoutes = require("./xhunt/api/echohunt");
 const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const xHuntGhostFollowingRoutes = require("./xhunt/api/ghost-following");
@@ -331,6 +333,8 @@ async function initializeAndStartServer() {
         "http://kb.xhunt.ai",
         "https://xhunt.ai",
         "http://xhunt.ai",
+        "https://app.echohunt.ai",
+        "http://localhost:3002",
       ];
 
       // 允许 chrome-extension:// 来源（任何插件）
@@ -404,6 +408,8 @@ async function initializeAndStartServer() {
             "ws:",
             "wss:",
             "https://kb.cryptohunt.ai",
+            "https://kb.xhunt.ai",
+            "https://app.echohunt.ai",
             "https://vercel.com",
             "https://*.vercel-storage.com",
             "https://*.blob.vercel-storage.com",
@@ -570,6 +576,7 @@ async function initializeAndStartServer() {
 
   app.use("/api/xhunt/campaigns", xHuntCampaignRoutes);
   app.use("/api/xhunt/website/campaigns", xHuntWebsiteCampaignRoutes);
+  app.use("/api/xhunt/echohunt", xHuntEchohuntRoutes);
 
   // 未注册用户登记接口
   app.use("/api/xhunt/user-entry", xHuntUserEntryRoutes);

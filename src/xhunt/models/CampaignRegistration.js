@@ -24,6 +24,11 @@ module.exports = (sequelize) => {
         allowNull: false,
         comment: "关联的 XHuntUser.id",
       },
+      authCenterUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: "EchoHunt/Auth Center 用户 ID，插件报名为空",
+      },
       twitterId: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -84,6 +89,22 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: "报名当时的网址",
       },
+      registrationSource: {
+        type: DataTypes.STRING(32),
+        allowNull: false,
+        defaultValue: "extension",
+        comment: "报名来源：extension / echohunt_web / admin / other",
+      },
+      registrationClient: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        comment: "报名客户端标识，例如 xhunt_extension / echohunt",
+      },
+      registrationMetadata: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        comment: "来源相关元数据",
+      },
       registeredAt: {
         type: DataTypes.DATE,
         allowNull: false,
@@ -105,6 +126,11 @@ module.exports = (sequelize) => {
           fields: ["campaign", "twitterId"],
         },
         {
+          name: "ux_campaign_reg_campaign_twitter",
+          fields: ["campaign", "twitterId"],
+          unique: true,
+        },
+        {
           name: "idx_campaign_reg_campaign_evm",
           fields: ["campaign", "evmAddress"],
         },
@@ -123,6 +149,14 @@ module.exports = (sequelize) => {
           fields: ["invitedByUsername"],
         },
         { name: "idx_campaign_reg_registered_at", fields: ["registeredAt"] },
+        {
+          name: "idx_campaign_reg_campaign_source",
+          fields: ["campaign", "registrationSource"],
+        },
+        {
+          name: "idx_campaign_reg_campaign_auth_center_user",
+          fields: ["campaign", "authCenterUserId"],
+        },
       ],
     }
   );

@@ -1,0 +1,992 @@
+const express = require("express");
+const axios = require("axios");
+const { Op } = require("sequelize");
+const {
+  pgInstance,
+  XHuntUser,
+  CampaignRegistration,
+  XHuntWebsiteCampaign,
+  AuthCenterXhuntUser,
+  AuthCenterXhuntIdentity,
+  AuthCenterXhuntPasswordCredential,
+  AuthCenterXhuntClient,
+  AuthCenterXhuntSession,
+  AuthCenterXhuntAuditLog,
+} = require("../../models/postgres-start");
+const {
+  PROVIDERS,
+  findActiveClient,
+  upsertOAuthIdentityLogin,
+  loadUserIdentities,
+  createAuditLog,
+} = require("../auth-center/services/auth");
+const { createSessionAndToken, refreshSessionToken } = require("../auth-center/services/token");
+const { buildPublicUser } = require("../auth-center/services/display-name");
+const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth");
+const {
+  generateEchohuntTwitterAuthUrl,
+  getEchohuntTwitterTokens,
+  getEchohuntTwitterUserInfo,
+} = require("../services/twitter-echohunt");
+const {
+  buildCampaignListItem,
+  buildCampaignDetail,
+  buildPluginCampaign,
+  getManagedCampaignPayloadByKey,
+} = require("../services/websiteCampaignService");
+const {
+  getStaticLeaderboardManifest,
+  getStaticLeaderboardBundle,
+  emptyLeaderboardBundle,
+  findUserHistoricalCampaigns,
+} = require("../services/echohuntLeaderboardService");
+const { isRequestInternalTestUser, isRequestXHuntVip } = require("../constants/xhuntVip");
+
+const router = express.Router();
+
+const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";
+const ECHOHUNT_OAUTH_STATE_TTL_SECONDS = 8 * 60;
+const INITIALIZE_CAMPAIGN_URL = "https://data.cryptohunt.ai/pro/api/initialize_campaign";
+const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400;
+const RANK_API_BY_DOMAIN = {
+  web3: "https://data.cryptohunt.ai/fetch/twitter/rank",
+  ai: "https://data.cryptohunt.ai/fetch/ai/rank",
+};
+
+const authModels = {
+  pgInstance,
+  AuthCenterXhuntUser,
+  AuthCenterXhuntIdentity,
+  AuthCenterXhuntPasswordCredential,
+  AuthCenterXhuntClient,
+  AuthCenterXhuntSession,
+  AuthCenterXhuntAuditLog,
+  XHuntUser,
+};
+
+function sendError(res, error, fallback = "ECHOHUNT_ERROR", extra = {}) {
+  const status = error.status || 500;
+  return res.status(status).json({
+    success: false,
+    error: error.message || fallback,
+    message: error.publicMessage || undefined,
+    ...extra,
+  });
+}
+
+function publicError(message, status = 400, publicMessage) {
+  const err = new Error(message);
+  err.status = status;
+  if (publicMessage) err.publicMessage = publicMessage;
+  return err;
+}
+
+function normalizeLang(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "en" || raw === "en-us") return "en";
+  if (raw === "zh" || raw === "zh-cn" || raw === "cn") return "zh-CN";
+  return "zh-CN";
+}
+
+function normalizeUpstreamLang(value) {
+  return normalizeLang(value) === "en" ? "en" : "zh";
+}
+
+function normalizeCampaign(raw) {
+  if (!raw || typeof raw !== "string") return "";
+  return raw.trim();
+}
+
+function normalizeEmail(raw) {
+  if (raw === undefined || raw === null) return "";
+  return String(raw).trim().toLowerCase();
+}
+
+function isValidEmail(value) {
+  if (!value || value.length > 254) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function normalizeTesterHandle(value) {
+  if (Array.isArray(value)) return normalizeTesterHandle(value[0]);
+  if (value === null || value === undefined) return "";
+  return String(value).trim().replace(/^@+/, "").toLowerCase();
+}
+
+function isCampaignTester(campaign, requestHandle) {
+  if (!campaign || !requestHandle) return false;
+  const list = Array.isArray(campaign.testList) ? campaign.testList : [];
+  return list.some((item) => normalizeTesterHandle(item) === requestHandle);
+}
+
+function getTwitterIdentityFromAuth(req) {
+  const identities = req.authCenter?.identities || [];
+  const twitter = identities.find((item) => item.provider === PROVIDERS.TWITTER);
+  if (!twitter) return null;
+  return {
+    twitterId: String(twitter.providerSubject || "").trim(),
+    username: twitter.username || null,
+    displayName: twitter.displayName || twitter.username || null,
+    avatar: twitter.avatar || null,
+  };
+}
+
+function serializeRegistration(record) {
+  if (!record) return null;
+  const json = typeof record.toJSON === "function" ? record.toJSON() : record;
+  const { xHuntUserId: _omit, authCenterUserId: _auth, registrationMetadata: metadata, ...safe } = json;
+  return {
+    ...safe,
+    authCenterUserId: _auth || null,
+    registrationMetadata: metadata || null,
+  };
+}
+
+function buildEchohuntUserPayload(authUser, xhuntUser, twitterIdentity = null) {
+  return {
+    id: authUser?.id || null,
+    xhuntUserId: xhuntUser?.id || authUser?.xhuntUserId || null,
+    twitterId: twitterIdentity?.twitterId || authUser?.primaryTwitterId || xhuntUser?.twitterId || null,
+    username: twitterIdentity?.username || xhuntUser?.username || null,
+    displayName: twitterIdentity?.displayName || xhuntUser?.displayName || null,
+    avatar: twitterIdentity?.avatar || xhuntUser?.avatar || authUser?.avatar || null,
+    userSource: xhuntUser?.userSource || null,
+  };
+}
+
+function mergeSourceMetadata(current, patch) {
+  const base = current && typeof current === "object" && !Array.isArray(current) ? current : {};
+  return {
+    ...base,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function ensureXHuntUserForEchohunt(twitterProfile, options = {}) {
+  const twitterId = String(twitterProfile?.id || twitterProfile?.twitterId || "").trim();
+  if (!twitterId) throw publicError("TWITTER_ID_REQUIRED", 400);
+
+  const username = twitterProfile.username || null;
+  const displayName = twitterProfile.name || twitterProfile.displayName || username || null;
+  const avatar = twitterProfile.profile_image_url || twitterProfile.avatar || null;
+  const transaction = options.transaction || null;
+
+  let user = await XHuntUser.findOne({ where: { twitterId }, transaction });
+  if (!user) {
+    try {
+      user = await XHuntUser.create(
+        {
+          twitterId,
+          username,
+          displayName,
+          avatar,
+          userSource: "echohunt_web",
+          createdFromClient: "echohunt",
+          lastLoginClient: "echohunt",
+          sourceMetadata: {
+            firstEchohuntLoginAt: new Date().toISOString(),
+            echohuntAuthCenterUserId: options.authCenterUserId || null,
+          },
+        },
+        { transaction }
+      );
+      return user;
+    } catch (error) {
+      // 并发登录时可能已由另一个请求创建，回读即可。
+      user = await XHuntUser.findOne({ where: { twitterId }, transaction });
+      if (!user) throw error;
+    }
+  }
+
+  const currentSource = user.userSource || "extension";
+  const nextSource = currentSource === "echohunt_web" ? "echohunt_web" : "mixed";
+  await user.update(
+    {
+      username: username || user.username,
+      displayName: displayName || user.displayName,
+      avatar: avatar || user.avatar,
+      userSource: nextSource,
+      lastLoginClient: "echohunt",
+      sourceMetadata: mergeSourceMetadata(user.sourceMetadata, {
+        lastEchohuntLoginAt: new Date().toISOString(),
+        echohuntAuthCenterUserId: options.authCenterUserId || null,
+      }),
+    },
+    { transaction }
+  );
+  return user;
+}
+
+async function updateEvmAddressOnUser(user, evmAddress) {
+  if (!user || !evmAddress) return;
+  const normalized = String(evmAddress).trim();
+  const list = Array.isArray(user.evmAddresses) ? user.evmAddresses : [];
+  const exists = list.some((addr) => String(addr).toLowerCase() === normalized.toLowerCase());
+  if (!exists) {
+    await user.update({ evmAddresses: [...list, normalized] });
+  }
+}
+
+async function findCampaignRecord(identifier) {
+  const key = normalizeCampaign(identifier);
+  if (!key) return null;
+  return XHuntWebsiteCampaign.findOne({
+    where: {
+      isDeleted: false,
+      [Op.or]: [{ campaignKey: key }, { slug: key }, { nacosCampaignId: key }],
+    },
+  });
+}
+
+function isViewerAllowedForTesting(pluginCampaign, viewer, req) {
+  if (!pluginCampaign?.testingPhase) return true;
+  if (isRequestInternalTestUser(req)) return true;
+  return isCampaignTester(pluginCampaign, viewer?.username);
+}
+
+function localizeTaskTitle(title, lang) {
+  if (!title) return "";
+  if (typeof title === "string") return title;
+  if (lang === "en") return title.en || title.zh || "";
+  return title.zh || title.en || "";
+}
+
+function summarizeCustomLeaderboards(list) {
+  return (Array.isArray(list) ? list : []).map((item, index) => ({
+    id: item.id || `custom-${index}`,
+    name: item.name || null,
+    short_name: item.short_name || null,
+    amount: item.amount ?? null,
+    participantCount: item.participantCount ?? null,
+    distributionType: item.distributionType || null,
+    unit: item.unit || null,
+  }));
+}
+
+function buildRewardSummary(pluginCampaign) {
+  return {
+    poi: {
+      amount: pluginCampaign.rewardAmount ?? null,
+      unit: pluginCampaign.rewardUnit || null,
+      participantCount: pluginCampaign.rewardParticipantCount ?? null,
+      distributionType: pluginCampaign.rewardDistributionType || null,
+    },
+    pow: pluginCampaign.enablePowLeaderboard
+      ? {
+          amount: pluginCampaign.powAmount ?? null,
+          unit: pluginCampaign.powUnit || null,
+          participantCount: pluginCampaign.powWinnerCount ?? null,
+          distributionType: pluginCampaign.powDistributionType || null,
+        }
+      : null,
+    content: pluginCampaign.enableEssayContest
+      ? {
+          amount: pluginCampaign.essayContestAmount ?? null,
+          unit: pluginCampaign.essayContestUnit || null,
+          participantCount: pluginCampaign.essayContestWinnerCount ?? null,
+        }
+      : null,
+    custom: summarizeCustomLeaderboards(pluginCampaign.customLeaderboards),
+  };
+}
+
+function buildEchohuntCampaignListItem(record, lang, viewer, req) {
+  const base = buildCampaignListItem(record, lang);
+  const plugin = buildPluginCampaign(record);
+  return {
+    ...base,
+    testingPhase: !!plugin.testingPhase,
+    viewerCanSeeTesting: !!plugin.testingPhase && isViewerAllowedForTesting(plugin, viewer, req),
+    displayDomains: plugin.displayDomains || ["web3"],
+    tags: Array.isArray(plugin.tags) ? plugin.tags : [],
+    registrationConfig: {
+      allowEmailRegistration: plugin.allowEmailRegistration === true,
+      threshold: plugin.threshold ?? null,
+      includeCreator: !!plugin.includeCreator,
+    },
+    leaderboardConfig: {
+      leaderboardMode: plugin.leaderboardMode || "traditional",
+      enablePowLeaderboard: !!plugin.enablePowLeaderboard,
+      enableEssayContest: !!plugin.enableEssayContest,
+      customLeaderboards: summarizeCustomLeaderboards(plugin.customLeaderboards),
+    },
+    rewardSummary: buildRewardSummary(plugin),
+    tasksSummary: (Array.isArray(plugin.tasks) ? plugin.tasks : []).map((task) => ({
+      id: task.id,
+      type: task.type,
+      title: localizeTaskTitle(task.title, lang),
+      url: task.url || null,
+      autoComplete: !!task.autoComplete,
+    })),
+  };
+}
+
+function buildEchohuntCampaignDetail(record, lang) {
+  const detail = buildCampaignDetail(record, lang);
+  const plugin = buildPluginCampaign(record);
+  return {
+    ...detail,
+    testingPhase: !!plugin.testingPhase,
+    displayDomains: plugin.displayDomains || ["web3"],
+    tags: Array.isArray(plugin.tags) ? plugin.tags : [],
+    tasks: (Array.isArray(plugin.tasks) ? plugin.tasks : []).map((task) => ({
+      id: task.id,
+      type: task.type,
+      title: localizeTaskTitle(task.title, lang),
+      url: task.url || null,
+      autoComplete: !!task.autoComplete,
+    })),
+    registration: {
+      open: detail.webStatus === "live",
+      allowEmailRegistration: plugin.allowEmailRegistration === true,
+      threshold: plugin.threshold ?? null,
+      includeCreator: !!plugin.includeCreator,
+    },
+    leaderboardConfig: {
+      leaderboardMode: plugin.leaderboardMode || "traditional",
+      enablePowLeaderboard: !!plugin.enablePowLeaderboard,
+      enableEssayContest: !!plugin.enableEssayContest,
+      customLeaderboards: summarizeCustomLeaderboards(plugin.customLeaderboards),
+    },
+    rewardSummary: buildRewardSummary(plugin),
+  };
+}
+
+function getCampaignDisplayDomains(campaign) {
+  const list = Array.isArray(campaign?.displayDomains) ? campaign.displayDomains : ["web3"];
+  const domains = list
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter((item) => RANK_API_BY_DOMAIN[item]);
+  return domains.length ? domains : ["web3"];
+}
+
+function isRankValid(rank) {
+  return Number.isFinite(rank);
+}
+
+function isCreatorRankData(rankData) {
+  return rankData?.auth_creator?.status === 2;
+}
+
+async function fetchCampaignRankByDomain(domain, twitterId) {
+  const apiBase = RANK_API_BY_DOMAIN[domain];
+  if (!apiBase) throw new Error(`Unsupported rank domain: ${domain}`);
+  const rankApiUrl = `${apiBase}?user_ids=${encodeURIComponent(twitterId)}`;
+  const rankResponse = await axios.get(rankApiUrl, { timeout: 7000 });
+  const list = rankResponse?.data?.data?.data;
+  if (!Array.isArray(list) || list.length === 0) throw new Error(`Empty ${domain} ranking data`);
+  const userRankData = list[0];
+  return {
+    domain,
+    kolRank: Number(userRankData.kolRank),
+    isCreator: isCreatorRankData(userRankData),
+  };
+}
+
+function rankResultMeetsThreshold(result, threshold, includeCreator) {
+  if (isRankValid(result.kolRank) && result.kolRank <= threshold) return true;
+  return !!includeCreator && result.isCreator;
+}
+
+function formatRankForMessage(result) {
+  if (!result) return "unknown";
+  return isRankValid(result.kolRank) ? result.kolRank : "unranked";
+}
+
+async function validateCampaignThreshold(campaign, twitterId) {
+  if (!campaign || !Number.isInteger(campaign.threshold)) return;
+  const domainsToCheck = getCampaignDisplayDomains(campaign);
+  const rankResults = await Promise.allSettled(domainsToCheck.map((domain) => fetchCampaignRankByDomain(domain, twitterId)));
+  const fulfilledResults = rankResults.filter((result) => result.status === "fulfilled").map((result) => result.value);
+  const rejectedResults = rankResults.filter((result) => result.status === "rejected");
+  const meetsThreshold = fulfilledResults.some((result) => rankResultMeetsThreshold(result, campaign.threshold, campaign.includeCreator));
+
+  if (!meetsThreshold) {
+    if (!fulfilledResults.length || rejectedResults.length > 0) {
+      const err = publicError("RANK_DATA_UNAVAILABLE", 502, "Failed to fetch user ranking data");
+      err.details = rejectedResults.map((item) => item.reason?.message || String(item.reason));
+      throw err;
+    }
+    const rankSummary = fulfilledResults.map((result) => `${result.domain}: ${formatRankForMessage(result)}`).join(", ");
+    const err = publicError("THRESHOLD_NOT_MET", 400, `Does not meet registration threshold: KOL rank must be <= ${campaign.threshold}, current rank is ${rankSummary}`);
+    err.details = { threshold: campaign.threshold, ranks: fulfilledResults };
+    throw err;
+  }
+}
+
+async function validateTwitterProfileQuality(req, twitterId) {
+  if (isRequestXHuntVip(req)) return;
+  const response = await axios.post(
+    "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid",
+    { user_id: String(twitterId) },
+    { timeout: 7000 }
+  );
+  const data = response?.data || null;
+  if (!data || !data.created_at || typeof data.followers_count !== "number") {
+    throw publicError("PROFILE_DATA_INCOMPLETE", 502, "External profile data is incomplete");
+  }
+  const createdAt = new Date(data.created_at);
+  if (Number.isNaN(createdAt.getTime())) {
+    throw publicError("PROFILE_CREATED_AT_INVALID", 502, "External profile created_at is invalid");
+  }
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  if (createdAt > oneMonthAgo) {
+    throw publicError("ACCOUNT_TOO_NEW", 400, "X account must be older than 1 month");
+  }
+  if (data.followers_count < 50) {
+    throw publicError("FOLLOWERS_TOO_LOW", 400, "X account must have at least 50 followers");
+  }
+}
+
+async function notifyInitializeCampaign(redisClient, campaign) {
+  if (!redisClient || !campaign) return;
+  const cacheKey = `campaign:initialize_campaign:${campaign}`;
+  try {
+    const cached = await redisClient.get(cacheKey);
+    if (cached) return;
+  } catch (_) {}
+  try {
+    const resp = await axios.post(INITIALIZE_CAMPAIGN_URL, { campaign }, { timeout: 10000 });
+    if (resp?.data?.status === true) {
+      try {
+        await redisClient.setEx(cacheKey, INITIALIZE_CAMPAIGN_CACHE_TTL, "1");
+      } catch (_) {}
+    }
+  } catch (error) {
+    console.warn("[EchoHunt] initialize_campaign notify warn:", error.message || error);
+  }
+}
+
+async function fetchTwitterProfile(twitterId, lang) {
+  if (!twitterId) return null;
+  const response = await axios.get("https://data.cryptohunt.ai/fetch/twitter/user", {
+    params: { user_id: twitterId, "x-language": normalizeUpstreamLang(lang) },
+    timeout: 8000,
+  });
+  return response?.data?.data?.data || null;
+}
+
+async function fetchSoulProfile(twitterId, lang) {
+  if (!twitterId) return null;
+  const response = await axios.get("https://data.cryptohunt.ai/pro/api/soul_by_user_id", {
+    params: { user_id: twitterId, "x-language": normalizeUpstreamLang(lang) },
+    timeout: 8000,
+  });
+  return response?.data || null;
+}
+
+function normalizeProfilePayload(raw) {
+  if (!raw) return null;
+  return {
+    classification: raw.ai?.classification || null,
+    isKol: raw.isKol ?? null,
+    isCn: raw.ai?.is_cn ?? null,
+    rank: raw.feature?.rank || null,
+    rankAi: raw.feature?.rank_ai || null,
+    raw,
+  };
+}
+
+function normalizeSoulPayload(raw) {
+  if (!raw || raw.score === undefined) return null;
+  return {
+    score: raw.score,
+    contentAnalysis: raw.content_analysis ?? null,
+    engagementAnalysis: raw.engagement_analysis ?? null,
+    kolInteraction: raw.kol_interaction ?? null,
+    profileAnalysis: raw.profile_analysis ?? null,
+    xhuntAnalysis: raw.xhunt_analysis ?? null,
+    reason: raw.reason || null,
+    reasonEn: raw.reason_en || null,
+    handle: raw.handle || null,
+    name: raw.name || null,
+  };
+}
+
+function buildSummaryFromHistorical(joinedCampaigns, historicalCampaigns) {
+  const estimatedRewards = historicalCampaigns.flatMap((item) =>
+    (item.estimatedRewards || []).map((reward) => ({
+      ...reward,
+      campaignKey: item.campaignKey,
+      title: item.title,
+      project: item.project,
+    }))
+  );
+  return {
+    joinedCampaigns,
+    historicalCampaignRanks: historicalCampaigns.filter((item) => (item.tracks || []).length > 0).length,
+    historicalWinnerCount: historicalCampaigns.reduce((sum, item) => sum + ((item.winners || []).length), 0),
+    estimatedRewards,
+  };
+}
+
+router.post("/auth/x/url", async (req, res) => {
+  try {
+    const returnUrl = typeof req.body?.returnUrl === "string" ? req.body.returnUrl.trim() : "";
+    const { url, state } = await generateEchohuntTwitterAuthUrl(async (state, codeVerifier) => {
+      await req.redisClient.setEx(
+        `echohunt:x_oauth_state:${state}`,
+        ECHOHUNT_OAUTH_STATE_TTL_SECONDS,
+        JSON.stringify({
+          codeVerifier,
+          returnUrl,
+          clientKey: ECHOHUNT_CLIENT_KEY,
+          createdAt: Date.now(),
+        })
+      );
+    });
+    return res.json({ success: true, url, state });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_X_AUTH_URL_FAILED");
+  }
+});
+
+router.post("/auth/x/callback", async (req, res) => {
+  const transaction = await pgInstance.transaction();
+  try {
+    const { code, state } = req.body || {};
+    if (!code || !state) throw publicError("CODE_AND_STATE_REQUIRED", 400);
+
+    const cacheKey = `echohunt:x_oauth_state:${state}`;
+    const raw = await req.redisClient.get(cacheKey);
+    const cached = raw ? JSON.parse(raw) : null;
+    if (!cached?.codeVerifier) throw publicError("INVALID_OR_EXPIRED_STATE", 400);
+    await req.redisClient.del(cacheKey);
+
+    const { accessToken, refreshToken, expiresIn } = await getEchohuntTwitterTokens(code, cached.codeVerifier);
+    const twitterUser = await getEchohuntTwitterUserInfo(accessToken);
+
+    const result = await upsertOAuthIdentityLogin(
+      authModels,
+      PROVIDERS.TWITTER,
+      {
+        providerSubject: twitterUser.id,
+        providerSubjectLower: twitterUser.id,
+        username: twitterUser.username,
+        displayName: twitterUser.name,
+        avatar: twitterUser.profile_image_url,
+        accessToken,
+        refreshToken,
+        tokenExpiry: expiresIn ? new Date(Date.now() + expiresIn * 1000) : null,
+      },
+      transaction
+    );
+
+    const xhuntUser = await ensureXHuntUserForEchohunt(twitterUser, {
+      transaction,
+      authCenterUserId: result.user.id,
+    });
+
+    await result.user.update(
+      {
+        xhuntUserId: xhuntUser.id,
+        primaryTwitterId: String(twitterUser.id),
+        avatar: twitterUser.profile_image_url || result.user.avatar,
+      },
+      { transaction }
+    );
+    result.user.xhuntUserId = xhuntUser.id;
+
+    await createAuditLog(authModels, req, {
+      userId: result.user.id,
+      clientKey: ECHOHUNT_CLIENT_KEY,
+      eventType: "login_success",
+      provider: PROVIDERS.TWITTER,
+      success: true,
+      metadata: { source: "echohunt" },
+    });
+
+    const client = await findActiveClient(authModels, ECHOHUNT_CLIENT_KEY);
+    const tokenPayload = await createSessionAndToken({
+      models: authModels,
+      user: result.user,
+      client,
+      clientKey: ECHOHUNT_CLIENT_KEY,
+      req,
+      transaction,
+    });
+    const identities = await loadUserIdentities(authModels, result.user.id, transaction);
+
+    await transaction.commit();
+    return res.json({
+      success: true,
+      token: tokenPayload.token,
+      user: {
+        ...buildPublicUser(result.user, identities),
+        ...buildEchohuntUserPayload(result.user, xhuntUser, {
+          twitterId: twitterUser.id,
+          username: twitterUser.username,
+          displayName: twitterUser.name,
+          avatar: twitterUser.profile_image_url,
+        }),
+        isNewUser: !!result.isNewUser,
+      },
+      isNewUser: !!result.isNewUser,
+    });
+  } catch (error) {
+    await transaction.rollback();
+    await createAuditLog(authModels, req, {
+      clientKey: ECHOHUNT_CLIENT_KEY,
+      eventType: "login_failed",
+      provider: PROVIDERS.TWITTER,
+      success: false,
+      reason: error.message,
+      metadata: { source: "echohunt" },
+    });
+    return sendError(res, error, "ECHOHUNT_X_CALLBACK_FAILED");
+  }
+});
+
+router.post("/auth/token/refresh", async (req, res) => {
+  try {
+    const refreshToken = req.body?.refreshToken;
+    if (!refreshToken) throw publicError("REFRESH_TOKEN_REQUIRED", 400);
+    const result = await refreshSessionToken({ models: authModels, refreshToken, req });
+    const twitterIdentity = (result.identities || []).find((item) => item.provider === PROVIDERS.TWITTER);
+    const xhuntUser = result.user?.xhuntUserId ? await XHuntUser.findByPk(result.user.xhuntUserId) : null;
+    return res.json({
+      success: true,
+      token: result.token,
+      user: {
+        ...buildPublicUser(result.user, result.identities),
+        ...buildEchohuntUserPayload(result.user, xhuntUser, twitterIdentity ? {
+          twitterId: twitterIdentity.providerSubject,
+          username: twitterIdentity.username,
+          displayName: twitterIdentity.displayName,
+          avatar: twitterIdentity.avatar,
+        } : null),
+      },
+    });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_TOKEN_REFRESH_FAILED");
+  }
+});
+
+router.post("/auth/logout", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    await req.authCenter.session.update({ revokedAt: new Date(), revokeReason: "echohunt_logout" });
+    return res.json({ success: true });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_LOGOUT_FAILED");
+  }
+});
+
+router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    const lang = normalizeLang(req.query.lang || req.query["x-language"]);
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400);
+
+    let xhuntUser = req.authCenter.user.xhuntUserId ? await XHuntUser.findByPk(req.authCenter.user.xhuntUserId) : null;
+    if (!xhuntUser) {
+      xhuntUser = await ensureXHuntUserForEchohunt({
+        id: twitterIdentity.twitterId,
+        username: twitterIdentity.username,
+        name: twitterIdentity.displayName,
+        profile_image_url: twitterIdentity.avatar,
+      }, { authCenterUserId: req.authCenter.user.id });
+      await req.authCenter.user.update({ xhuntUserId: xhuntUser.id });
+    }
+
+    const [profileResult, soulResult, historicalResult, joinedCountResult] = await Promise.allSettled([
+      fetchTwitterProfile(twitterIdentity.twitterId, lang),
+      fetchSoulProfile(twitterIdentity.twitterId, lang),
+      findUserHistoricalCampaigns(twitterIdentity),
+      CampaignRegistration.count({ where: { twitterId: twitterIdentity.twitterId } }),
+    ]);
+
+    const rawProfile = profileResult.status === "fulfilled" ? profileResult.value : null;
+    const rawSoul = soulResult.status === "fulfilled" ? soulResult.value : null;
+    const historicalCampaigns = historicalResult.status === "fulfilled" ? historicalResult.value : [];
+    const joinedCampaigns = joinedCountResult.status === "fulfilled" ? joinedCountResult.value : 0;
+    const profile = normalizeProfilePayload(rawProfile);
+    const soul = normalizeSoulPayload(rawSoul);
+
+    if (profile?.rank?.kolRank || profile?.classification) {
+      xhuntUser.update({
+        kolRank20W: profile.rank?.kolRank && Number(profile.rank.kolRank) > 0 ? parseInt(profile.rank.kolRank, 10) : xhuntUser.kolRank20W,
+        classification: profile.classification || xhuntUser.classification,
+      }).catch(() => {});
+    }
+
+    res.set("Cache-Control", "private, max-age=120");
+    return res.json({
+      success: true,
+      user: buildEchohuntUserPayload(req.authCenter.user, xhuntUser, twitterIdentity),
+      profile: profile ? { ...profile, soul } : { soul },
+      historicalCampaigns,
+      summary: buildSummaryFromHistorical(joinedCampaigns, historicalCampaigns),
+    });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_ME_FAILED");
+  }
+});
+
+router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async (req, res) => {
+  try {
+    const lang = normalizeLang(req.query.lang || req.query["x-language"]);
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    const viewer = twitterIdentity ? { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId } : null;
+    let hasTesting = false;
+
+    const records = await XHuntWebsiteCampaign.findAll({
+      where: {
+        isDeleted: false,
+        webStatus: { [Op.notIn]: ["draft", "archived"] },
+      },
+    });
+
+    const data = records
+      .map((record) => ({ record, plugin: buildPluginCampaign(record) }))
+      .filter(({ plugin }) => {
+        if (!plugin.testingPhase) return true;
+        const allowed = !!viewer && isViewerAllowedForTesting(plugin, viewer, req);
+        if (allowed) hasTesting = true;
+        return allowed;
+      })
+      .map(({ record }) => buildEchohuntCampaignListItem(record, lang, viewer, req))
+      .sort((a, b) => Number(b.sortOrder || 0) - Number(a.sortOrder || 0));
+
+    return res.json({
+      success: true,
+      data,
+      viewer: {
+        loggedIn: !!viewer,
+        isTester: hasTesting,
+      },
+    });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_CAMPAIGNS_FAILED");
+  }
+});
+
+router.get("/leaderboard/manifest", async (req, res) => {
+  try {
+    const data = await getStaticLeaderboardManifest();
+    res.set("Cache-Control", "public, max-age=300");
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_LEADERBOARD_MANIFEST_FAILED");
+  }
+});
+
+router.get("/campaigns/:campaignKey/leaderboard", async (req, res) => {
+  try {
+    const campaignKey = normalizeCampaign(req.params.campaignKey);
+    const bundle = await getStaticLeaderboardBundle(campaignKey);
+    if (bundle) {
+      res.set("Cache-Control", "public, max-age=300");
+      return res.json({ success: true, source: "static", data: bundle });
+    }
+
+    const record = await findCampaignRecord(campaignKey);
+    const fallbackCampaign = record ? buildEchohuntCampaignListItem(record, normalizeLang(req.query.lang), null, req) : { campaignKey };
+    return res.json({ success: true, source: "empty", data: emptyLeaderboardBundle(fallbackCampaign) });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_LEADERBOARD_FAILED");
+  }
+});
+
+router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional: true }), async (req, res) => {
+  try {
+    const campaignKey = normalizeCampaign(req.params.campaignKey);
+    const record = await findCampaignRecord(campaignKey);
+    const normalizedCampaign = record?.campaignKey || campaignKey;
+    if (!normalizedCampaign) throw publicError("CAMPAIGN_REQUIRED", 400);
+
+    const totalRegistrations = await CampaignRegistration.count({ where: { campaign: normalizedCampaign } }).catch(() => 0);
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    if (!twitterIdentity?.twitterId) {
+      return res.json({ success: true, registered: false, totalRegistrations, user: null, registration: null, rank: null });
+    }
+
+    const registration = await CampaignRegistration.findOne({
+      where: { campaign: normalizedCampaign, twitterId: twitterIdentity.twitterId },
+      order: [["registeredAt", "DESC"]],
+      include: [{ model: XHuntUser, as: "xHuntUser", attributes: ["id", "inviteCode", "displayName", "classification", "userSource"] }],
+    });
+
+    const historicalCampaigns = await findUserHistoricalCampaigns(twitterIdentity).catch(() => []);
+    const campaignHistory = historicalCampaigns.find((item) => item.campaignKey === normalizedCampaign || item.campaignKey === campaignKey) || null;
+
+    if (!registration) {
+      return res.json({
+        success: true,
+        registered: false,
+        totalRegistrations,
+        user: twitterIdentity,
+        registration: null,
+        rank: campaignHistory,
+      });
+    }
+
+    res.set("Cache-Control", "private, max-age=80");
+    return res.json({
+      success: true,
+      registered: true,
+      totalRegistrations,
+      user: twitterIdentity,
+      registration: serializeRegistration(registration),
+      rank: campaignHistory,
+    });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_CAMPAIGN_ME_FAILED");
+  }
+});
+
+router.get("/campaigns/:campaignKey", authenticateAuthCenterToken({ optional: true }), async (req, res) => {
+  try {
+    const record = await findCampaignRecord(req.params.campaignKey);
+    if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
+    const lang = normalizeLang(req.query.lang || req.query["x-language"]);
+    return res.json({ success: true, data: buildEchohuntCampaignDetail(record, lang) });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_CAMPAIGN_DETAIL_FAILED");
+  }
+});
+
+router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    const record = await findCampaignRecord(req.params.campaignKey);
+    const normalizedCampaign = record?.campaignKey || normalizeCampaign(req.params.campaignKey);
+    if (!normalizedCampaign) throw publicError("CAMPAIGN_REQUIRED", 400);
+
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400);
+
+    const xhuntUser = await ensureXHuntUserForEchohunt(
+      {
+        id: twitterIdentity.twitterId,
+        username: twitterIdentity.username,
+        name: twitterIdentity.displayName,
+        profile_image_url: twitterIdentity.avatar,
+      },
+      { authCenterUserId: req.authCenter.user.id }
+    );
+    if (!req.authCenter.user.xhuntUserId || req.authCenter.user.xhuntUserId !== xhuntUser.id) {
+      req.authCenter.user.update({ xhuntUserId: xhuntUser.id }).catch(() => {});
+    }
+
+    const existingByTwitter = await CampaignRegistration.findOne({
+      where: { campaign: normalizedCampaign, twitterId: twitterIdentity.twitterId },
+      order: [["registeredAt", "DESC"]],
+    });
+    if (existingByTwitter) {
+      return res.status(409).json({
+        success: false,
+        error: "ALREADY_REGISTERED",
+        message: "You have already registered for this campaign",
+        registration: serializeRegistration(existingByTwitter),
+      });
+    }
+
+    let found = null;
+    try {
+      found = await getManagedCampaignPayloadByKey(normalizedCampaign, { includeTesting: true });
+      if (!found) throw publicError("INVALID_CAMPAIGN", 400, "Invalid campaign identifier");
+      if (!found.enabled) throw publicError("CAMPAIGN_NOT_ENABLED", 400, "Campaign is not enabled");
+      if (found.testingPhase && !isViewerAllowedForTesting(found, { username: twitterIdentity.username }, req)) {
+        throw publicError("CAMPAIGN_IN_TESTING", 403, "Campaign is in testing phase");
+      }
+      const now = new Date();
+      const startAt = found.enrollmentWindow?.startAt ? new Date(found.enrollmentWindow.startAt) : null;
+      const endAt = found.enrollmentWindow?.endAt ? new Date(found.enrollmentWindow.endAt) : null;
+      if (!startAt || !endAt || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+        throw publicError("INVALID_ENROLLMENT_WINDOW", 502, "Invalid enrollment window in config");
+      }
+      const startAtWithGrace = new Date(startAt.getTime() - 60 * 60 * 1000);
+      if (now < startAtWithGrace || now > endAt) {
+        throw publicError("OUTSIDE_ENROLLMENT_WINDOW", 400, "Not within the enrollment window");
+      }
+    } catch (error) {
+      if (error.status) throw error;
+      throw publicError("CAMPAIGN_CONFIG_UNAVAILABLE", 502, "Campaign configuration service unavailable");
+    }
+
+    const rawEmail = req.body?.email !== undefined ? req.body.email : req.body?.emil;
+    const normalizedEmail = normalizeEmail(rawEmail);
+    const hasEmail = !!normalizedEmail;
+    const trimmedAddress = typeof req.body?.evmAddress === "string" && req.body.evmAddress.trim() ? req.body.evmAddress.trim() : null;
+    const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
+    const allowEmailRegistration = found?.allowEmailRegistration === true;
+
+    if (trimmedAddress && !evmAddressRegex.test(trimmedAddress)) {
+      throw publicError("INVALID_EVM_ADDRESS", 400, "Invalid EVM address format");
+    }
+    if (!allowEmailRegistration) {
+      if (hasEmail) throw publicError("EMAIL_NOT_ALLOWED", 400, "Email registration is not allowed for this campaign");
+      if (!trimmedAddress) throw publicError("EVM_ADDRESS_REQUIRED", 400, "EVM address is required");
+    } else {
+      if (!trimmedAddress && !hasEmail) throw publicError("CONTACT_REQUIRED", 400, "EVM address or email is required");
+      if (trimmedAddress && hasEmail) throw publicError("CONTACT_CONFLICT", 400, "Please provide either EVM address or email, not both");
+      if (hasEmail && !isValidEmail(normalizedEmail)) throw publicError("INVALID_EMAIL", 400, "Invalid email format");
+    }
+
+    if (req.body?.agreements && (req.body.agreements.terms === false || req.body.agreements.disclosure === false)) {
+      throw publicError("AGREEMENT_REQUIRED", 400, "Please accept campaign terms and disclosure policy");
+    }
+
+    if (req.redisClient) {
+      const cooldownKey = `echohunt:campaign:${normalizedCampaign}:register:cd:${req.authCenter.user.id}`;
+      const ttl = await req.redisClient.ttl(cooldownKey).catch(() => 0);
+      if (typeof ttl === "number" && ttl > 0) {
+        return res.status(429).json({ success: false, error: "TOO_FREQUENT", message: `Too frequent requests, please try again in ${ttl}s` });
+      }
+      await req.redisClient.setEx(cooldownKey, 10, "1").catch(() => {});
+    }
+
+    await validateCampaignThreshold(found, twitterIdentity.twitterId);
+    await validateTwitterProfileQuality(req, twitterIdentity.twitterId);
+
+    if (trimmedAddress) {
+      const existingEVM = await CampaignRegistration.findOne({ where: { campaign: normalizedCampaign, evmAddress: trimmedAddress } });
+      if (existingEVM) throw publicError("EVM_ALREADY_USED", 409, "This EVM address is already in use");
+    }
+    if (hasEmail) {
+      const existingEmail = await CampaignRegistration.findOne({ where: { campaign: normalizedCampaign, email: normalizedEmail } });
+      if (existingEmail) throw publicError("EMAIL_ALREADY_USED", 409, "This email is already in use");
+    }
+
+    const registrationUrl = typeof req.body?.registrationUrl === "string" ? req.body.registrationUrl : (req.headers["x-xhunt-web-page-url"] || req.headers.referer || null);
+    const recordPayload = await CampaignRegistration.create({
+      campaign: normalizedCampaign,
+      xHuntUserId: xhuntUser.id,
+      authCenterUserId: req.authCenter.user.id,
+      twitterId: twitterIdentity.twitterId,
+      username: twitterIdentity.username,
+      displayName: twitterIdentity.displayName,
+      avatar: twitterIdentity.avatar,
+      invitedByCode: null,
+      invitedByUserId: null,
+      invitedByTwitterId: null,
+      invitedByUsername: null,
+      invitedByUserInfo: null,
+      evmAddress: trimmedAddress,
+      email: hasEmail ? normalizedEmail : null,
+      registrationUrl,
+      registrationSource: "echohunt_web",
+      registrationClient: "echohunt",
+      registrationMetadata: {
+        agreements: req.body?.agreements || null,
+        taskState: req.body?.taskState || null,
+        userAgent: req.headers["user-agent"] || null,
+        pageUrl: registrationUrl,
+        source: "echohunt_web",
+      },
+    });
+
+    await updateEvmAddressOnUser(xhuntUser, trimmedAddress);
+    notifyInitializeCampaign(req.redisClient, normalizedCampaign).catch(() => {});
+
+    return res.json({ success: true, registration: serializeRegistration(recordPayload) });
+  } catch (error) {
+    if (error.details) {
+      return sendError(res, error, "ECHOHUNT_REGISTER_FAILED", { details: error.details });
+    }
+    return sendError(res, error, "ECHOHUNT_REGISTER_FAILED");
+  }
+});
+
+module.exports = router;

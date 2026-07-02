@@ -225,6 +225,12 @@ router.post(
           username: sanitizedUsername,
           displayName: sanitizedDisplayName,
           avatar: sanitizedAvatar,
+          userSource: "extension",
+          createdFromClient: "xhunt_extension",
+          lastLoginClient: "xhunt_extension",
+          sourceMetadata: {
+            firstExtensionLoginAt: new Date().toISOString(),
+          },
         },
       });
       console.log(`[TwitterCallback] Step 5: 用户${created ? '创建' : '更新'}成功, userId=${user.id}`);
@@ -235,6 +241,12 @@ router.post(
           username: sanitizedUsername,
           displayName: sanitizedDisplayName,
           avatar: sanitizedAvatar,
+          userSource: user.userSource === "echohunt_web" ? "mixed" : (user.userSource || "extension"),
+          lastLoginClient: "xhunt_extension",
+          sourceMetadata: {
+            ...(user.sourceMetadata || {}),
+            lastExtensionLoginAt: new Date().toISOString(),
+          },
         });
       }
 
