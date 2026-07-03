@@ -2017,7 +2017,7 @@ export function NacosCampaignsPage() {
       >
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <div style={{ color: "#64748b", lineHeight: 1.6 }}>
-            仅超级管理员可用。生成内容是浏览器 localStorage 里
+            仅超级管理员可用。可从 XHuntUser 旧用户表里选人；若该用户还没有 EchoHunt / 认证中心账号，生成时会按 Twitter 身份补一条登录映射，相当于模拟登录一次。生成内容是浏览器 localStorage 里
             <AntTag style={{ marginLeft: 6, marginRight: 6 }}>
               echohunt_auth_session_v1
             </AntTag>
@@ -2028,7 +2028,7 @@ export function NacosCampaignsPage() {
               <Field label="搜索用户">
                 <Input.Search
                   allowClear
-                  placeholder="用户名 / 邮箱 / Twitter ID / Auth User ID"
+                  placeholder="用户名 / 显示名 / Twitter ID / XHuntUser ID"
                   value={echohuntTokenKeyword}
                   onChange={(e) => setEchohuntTokenKeyword(e.target.value)}
                   onSearch={(value) => void searchEchohuntUsers(value)}
@@ -2042,7 +2042,7 @@ export function NacosCampaignsPage() {
                 <Select
                   showSearch
                   allowClear
-                  placeholder="先搜索，然后选择要模拟登录的用户"
+                  placeholder="先搜索，然后选择 XHuntUser 用户"
                   value={echohuntTokenUserId}
                   loading={echohuntTokenSearching}
                   onChange={(value) => {
@@ -2080,8 +2080,11 @@ export function NacosCampaignsPage() {
                 {selectedEchohuntTokenUser.accountName ? (
                   <AntTag>{selectedEchohuntTokenUser.accountName}</AntTag>
                 ) : null}
-                <AntTag color={selectedEchohuntTokenUser.status === "active" ? "green" : "red"}>
-                  {selectedEchohuntTokenUser.status || "-"}
+                {selectedEchohuntTokenUser.authCenterUserId ? (
+                  <AntTag>auth: {selectedEchohuntTokenUser.authCenterUserId}</AntTag>
+                ) : null}
+                <AntTag color={selectedEchohuntTokenUser.status === "active" ? "green" : "gold"}>
+                  {selectedEchohuntTokenUser.status === "xhunt_only" ? "未生成 EchoHunt 登录" : selectedEchohuntTokenUser.status || "-"}
                 </AntTag>
               </Space>
             </Card>

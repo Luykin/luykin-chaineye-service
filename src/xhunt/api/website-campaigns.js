@@ -8,8 +8,13 @@ const {
   AuthCenterXhuntClient,
   AuthCenterXhuntSession,
   XHuntUser,
+  pgInstance,
 } = require("../../models/postgres-start");
 const { adminAuth, requirePermission, requireRole } = require("../../admin/middleware/adminAuth");
+const {
+  PROVIDERS,
+  upsertOAuthIdentityLogin,
+} = require("../auth-center/services/auth");
 const { buildPublicUser } = require("../auth-center/services/display-name");
 const { getIssuer } = require("../auth-center/services/token");
 const { randomToken, sha256, getFingerprint, getIpHash } = require("../auth-center/services/utils");
@@ -106,67 +111,113 @@ function buildEchohuntUserPayload(authUser, xhuntUser, twitterIdentity = null) {
   };
 }
 
-function serializeEchohuntTokenUser(user, identities = []) {
-  const publicUser = buildPublicUser(user, identities);
+function serializeEchohuntTokenUser(xhuntUser, authUser = null, identities = []) {
   const twitter = pickIdentity(identities, "twitter");
   return {
-    id: user.id,
-    username: publicUser.username,
-    displayName: twitter?.displayName || publicUser.displayName || publicUser.username,
-    avatar: publicUser.avatar,
-    accountName: user.accountName || null,
-    providers: publicUser.providers,
-    xhuntUserId: user.xhuntUserId || null,
-    twitterId: twitter?.providerSubject || user.primaryTwitterId || null,
-    twitterUsername: twitter?.username || null,
-    status: user.status,
-    lastLoginAt: user.lastLoginAt,
-    createdAt: user.createdAt,
+    id: xhuntUser.id,
+    xhuntUserId: xhuntUser.id,
+    authCenterUserId: authUser?.id || null,
+    username: xhuntUser.username || twitter?.username || null,
+    displayName: xhuntUser.displayName || twitter?.displayName || xhuntUser.username || null,
+    avatar: xhuntUser.avatar || twitter?.avatar || authUser?.avatar || null,
+    twitterId: xhuntUser.twitterId,
+    twitterUsername: xhuntUser.username || twitter?.username || null,
+    accountName: authUser?.accountName || null,
+    providers: identities.map((item) => item.provider),
+    status: authUser?.status || "xhunt_only",
+    userSource: xhuntUser.userSource || null,
+    lastLoginAt: authUser?.lastLoginAt || null,
+    createdAt: xhuntUser.createdAt,
   };
+}
+
+async function mapAuthUsersForXHuntUsers(xhuntUsers) {
+  const ids = xhuntUsers.map((item) => item.id).filter(Boolean);
+  const twitterIds = xhuntUsers.map((item) => item.twitterId).filter(Boolean).map(String);
+  if (!ids.length && !twitterIds.length) return new Map();
+
+  const authUsers = await AuthCenterXhuntUser.findAll({
+    where: {
+      [Op.or]: [
+        ids.length ? { xhuntUserId: { [Op.in]: ids } } : null,
+        twitterIds.length ? { primaryTwitterId: { [Op.in]: twitterIds } } : null,
+      ].filter(Boolean),
+    },
+    include: [{ model: AuthCenterXhuntIdentity, as: "identities" }],
+  });
+
+  const map = new Map();
+  authUsers.forEach((authUser) => {
+    if (authUser.xhuntUserId && !map.has(String(authUser.xhuntUserId))) {
+      map.set(String(authUser.xhuntUserId), authUser);
+    }
+    if (authUser.primaryTwitterId) {
+      const xhuntUser = xhuntUsers.find((item) => String(item.twitterId) === String(authUser.primaryTwitterId));
+      if (xhuntUser && !map.has(String(xhuntUser.id))) {
+        map.set(String(xhuntUser.id), authUser);
+      }
+    }
+  });
+  return map;
+}
+
+async function serializeXHuntTokenUsers(xhuntUsers) {
+  const authMap = await mapAuthUsersForXHuntUsers(xhuntUsers);
+  return xhuntUsers.map((xhuntUser) => {
+    const authUser = authMap.get(String(xhuntUser.id)) || null;
+    return serializeEchohuntTokenUser(xhuntUser, authUser, authUser?.identities || []);
+  });
 }
 
 async function loadEchohuntTokenUsers(userIds) {
   const ids = Array.from(new Set((userIds || []).filter(Boolean).map(String))).slice(0, 20);
   if (!ids.length) return [];
-  const users = await AuthCenterXhuntUser.findAll({
-    where: { id: { [Op.in]: ids }, status: "active" },
-    include: [{ model: AuthCenterXhuntIdentity, as: "identities" }],
+  const users = await XHuntUser.findAll({
+    where: { id: { [Op.in]: ids } },
   });
   const order = new Map(ids.map((id, index) => [id, index]));
-  return users
-    .sort((a, b) => (order.get(String(a.id)) ?? 999) - (order.get(String(b.id)) ?? 999))
-    .map((user) => serializeEchohuntTokenUser(user, user.identities || []));
+  users.sort((a, b) => (order.get(String(a.id)) ?? 999) - (order.get(String(b.id)) ?? 999));
+  return serializeXHuntTokenUsers(users);
 }
 
 async function searchEchohuntTokenUsers(keyword) {
   const q = String(keyword || "").trim();
   if (!q) {
-    const recentUsers = await AuthCenterXhuntUser.findAll({
-      where: { status: "active" },
-      order: [["lastLoginAt", "DESC"], ["createdAt", "DESC"]],
+    const recentUsers = await XHuntUser.findAll({
+      order: [["updatedAt", "DESC"], ["createdAt", "DESC"]],
       limit: 20,
-      include: [{ model: AuthCenterXhuntIdentity, as: "identities" }],
     });
-    return recentUsers.map((user) => serializeEchohuntTokenUser(user, user.identities || []));
+    return serializeXHuntTokenUsers(recentUsers);
   }
 
   const exactUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q);
-  const userOr = [
-    { accountName: { [Op.iLike]: `%${q}%` } },
-    { accountNameLower: { [Op.iLike]: `%${q.toLowerCase()}%` } },
+  const xhuntOr = [
+    { twitterId: { [Op.iLike]: `%${q}%` } },
+    { username: { [Op.iLike]: `%${q}%` } },
     { displayName: { [Op.iLike]: `%${q}%` } },
-    { primaryTwitterId: { [Op.iLike]: `%${q}%` } },
+    { inviteCode: { [Op.iLike]: `%${q}%` } },
   ];
   if (exactUuid) {
-    userOr.push({ id: q }, { xhuntUserId: q });
+    xhuntOr.push({ id: q });
   }
 
-  const matchedUsers = await AuthCenterXhuntUser.findAll({
+  const matchedXHuntUsers = await XHuntUser.findAll({
+    where: { [Op.or]: xhuntOr },
+    order: [["updatedAt", "DESC"], ["createdAt", "DESC"]],
+    limit: 20,
+  });
+
+  const matchedAuthUsers = await AuthCenterXhuntUser.findAll({
     where: {
-      status: "active",
-      [Op.or]: userOr,
+      [Op.or]: [
+        { accountName: { [Op.iLike]: `%${q}%` } },
+        { accountNameLower: { [Op.iLike]: `%${q.toLowerCase()}%` } },
+        { displayName: { [Op.iLike]: `%${q}%` } },
+        { primaryTwitterId: { [Op.iLike]: `%${q}%` } },
+        exactUuid ? { id: q } : null,
+        exactUuid ? { xhuntUserId: q } : null,
+      ].filter(Boolean),
     },
-    order: [["lastLoginAt", "DESC"], ["createdAt", "DESC"]],
     limit: 20,
   });
 
@@ -183,90 +234,174 @@ async function searchEchohuntTokenUsers(keyword) {
     limit: 30,
   });
 
-  const ids = [
-    ...matchedUsers.map((item) => item.id),
-    ...matchedIdentities.map((item) => item.userId),
-  ];
-  return loadEchohuntTokenUsers(ids);
+  const linkedAuthIds = Array.from(new Set([
+    ...matchedAuthUsers.map((item) => item.xhuntUserId).filter(Boolean),
+  ]));
+  const linkedTwitterIds = Array.from(new Set([
+    ...matchedAuthUsers.map((item) => item.primaryTwitterId).filter(Boolean),
+    ...matchedIdentities
+      .filter((item) => item.provider === PROVIDERS.TWITTER)
+      .map((item) => item.providerSubject)
+      .filter(Boolean),
+  ].map(String)));
+
+  const linkedXHuntUsers = linkedAuthIds.length || linkedTwitterIds.length
+    ? await XHuntUser.findAll({
+        where: {
+          [Op.or]: [
+            linkedAuthIds.length ? { id: { [Op.in]: linkedAuthIds } } : null,
+            linkedTwitterIds.length ? { twitterId: { [Op.in]: linkedTwitterIds } } : null,
+          ].filter(Boolean),
+        },
+        limit: 20,
+      })
+    : [];
+
+  const idSet = new Set();
+  const combined = [];
+  [...matchedXHuntUsers, ...linkedXHuntUsers].forEach((item) => {
+    if (idSet.has(String(item.id))) return;
+    idSet.add(String(item.id));
+    combined.push(item);
+  });
+  return serializeXHuntTokenUsers(combined.slice(0, 20));
 }
 
-async function createEchohuntDebugSession(req, user) {
-  const identities = await AuthCenterXhuntIdentity.findAll({
-    where: { userId: user.id },
-    order: [["createdAt", "ASC"]],
-  });
-  const providers = identities.map((item) => item.provider);
-  const twitter = pickIdentity(identities, "twitter");
-  const xhuntUser = user.xhuntUserId
-    ? await XHuntUser.findByPk(user.xhuntUserId)
-    : twitter?.providerSubject
-      ? await XHuntUser.findOne({ where: { twitterId: twitter.providerSubject } })
-      : null;
-  const client = await AuthCenterXhuntClient.findOne({
-    where: { clientKey: ECHOHUNT_CLIENT_KEY, isActive: true },
-  });
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + ECHOHUNT_DEBUG_TOKEN_TTL_SECONDS * 1000);
-  const refreshToken = randomToken(48);
-  const accessTokenJti = randomToken(16);
-  const session = await AuthCenterXhuntSession.create({
-    userId: user.id,
-    clientId: client?.id || null,
-    clientKey: client?.clientKey || ECHOHUNT_CLIENT_KEY,
-    refreshTokenHash: sha256(refreshToken),
-    accessTokenJti,
-    fingerprint: getFingerprint(req),
-    userAgent: req.headers["user-agent"] || null,
-    ipHash: getIpHash(req),
-    lastUsedAt: now,
-    expiresAt,
-  });
+async function ensureAuthCenterUserForXHuntUser(xhuntUser, transaction) {
+  if (!xhuntUser?.twitterId) {
+    const err = new Error("XHuntUser 缺少 twitterId，无法创建 EchoHunt 登录态");
+    err.status = 400;
+    throw err;
+  }
 
-  const accessToken = jwt.sign(
+  const authModels = {
+    AuthCenterXhuntUser,
+    AuthCenterXhuntIdentity,
+    XHuntUser,
+  };
+  const result = await upsertOAuthIdentityLogin(
+    authModels,
+    PROVIDERS.TWITTER,
     {
-      sub: user.id,
-      sid: session.id,
-      jti: accessTokenJti,
-      aud: client?.clientKey || ECHOHUNT_CLIENT_KEY,
-      iss: getIssuer(),
-      xhuntUserId: user.xhuntUserId || xhuntUser?.id || null,
-      providers,
+      providerSubject: String(xhuntUser.twitterId),
+      providerSubjectLower: String(xhuntUser.twitterId).toLowerCase(),
+      username: xhuntUser.username || null,
+      displayName: xhuntUser.displayName || xhuntUser.username || null,
+      avatar: xhuntUser.avatar || null,
     },
-    getJwtSecret(),
-    { expiresIn: ECHOHUNT_DEBUG_TOKEN_TTL_SECONDS }
+    transaction
   );
 
-  const twitterPayload = twitter
-    ? {
-        twitterId: twitter.providerSubject,
-        username: twitter.username,
-        displayName: twitter.displayName,
-        avatar: twitter.avatar,
-      }
-    : null;
-  const publicUser = buildPublicUser(user, identities);
-  const storageValue = {
-    token: {
-      accessToken,
-      refreshToken,
-      expiresAt: expiresAt.getTime(),
-      tokenType: "Bearer",
+  await result.user.update(
+    {
+      xhuntUserId: xhuntUser.id,
+      primaryTwitterId: String(xhuntUser.twitterId),
+      avatar: xhuntUser.avatar || result.user.avatar,
     },
-    user: {
-      ...publicUser,
-      ...buildEchohuntUserPayload(user, xhuntUser, twitterPayload),
-      isNewUser: false,
-    },
-  };
-
-  return {
-    storageKey: "echohunt_auth_session_v1",
-    storageValue,
-    expiresAt: expiresAt.toISOString(),
-    ttlSeconds: ECHOHUNT_DEBUG_TOKEN_TTL_SECONDS,
-  };
+    { transaction }
+  );
+  result.user.xhuntUserId = xhuntUser.id;
+  return result;
 }
 
+async function createEchohuntDebugSession(req, xhuntUser) {
+  return pgInstance.transaction(async (transaction) => {
+    const result = await ensureAuthCenterUserForXHuntUser(xhuntUser, transaction);
+    const user = result.user;
+    const identities = await AuthCenterXhuntIdentity.findAll({
+      where: { userId: user.id },
+      order: [["createdAt", "ASC"]],
+      transaction,
+    });
+    const providers = identities.map((item) => item.provider);
+    const twitter = pickIdentity(identities, "twitter");
+    const client = await AuthCenterXhuntClient.findOne({
+      where: { clientKey: ECHOHUNT_CLIENT_KEY, isActive: true },
+      transaction,
+    });
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + ECHOHUNT_DEBUG_TOKEN_TTL_SECONDS * 1000);
+    const refreshToken = randomToken(48);
+    const accessTokenJti = randomToken(16);
+    const session = await AuthCenterXhuntSession.create(
+      {
+        userId: user.id,
+        clientId: client?.id || null,
+        clientKey: client?.clientKey || ECHOHUNT_CLIENT_KEY,
+        refreshTokenHash: sha256(refreshToken),
+        accessTokenJti,
+        fingerprint: getFingerprint(req),
+        userAgent: req.headers["user-agent"] || null,
+        ipHash: getIpHash(req),
+        lastUsedAt: now,
+        expiresAt,
+      },
+      { transaction }
+    );
+
+    await xhuntUser.update(
+      {
+        lastLoginClient: "echohunt",
+        userSource: xhuntUser.userSource === "echohunt_web" ? "echohunt_web" : "mixed",
+        sourceMetadata: {
+          ...(xhuntUser.sourceMetadata && typeof xhuntUser.sourceMetadata === "object" ? xhuntUser.sourceMetadata : {}),
+          lastEchohuntDebugTokenAt: now.toISOString(),
+          echohuntAuthCenterUserId: user.id,
+        },
+      },
+      { transaction }
+    );
+
+    const accessToken = jwt.sign(
+      {
+        sub: user.id,
+        sid: session.id,
+        jti: accessTokenJti,
+        aud: client?.clientKey || ECHOHUNT_CLIENT_KEY,
+        iss: getIssuer(),
+        xhuntUserId: xhuntUser.id,
+        providers,
+      },
+      getJwtSecret(),
+      { expiresIn: ECHOHUNT_DEBUG_TOKEN_TTL_SECONDS }
+    );
+
+    const twitterPayload = twitter
+      ? {
+          twitterId: twitter.providerSubject,
+          username: twitter.username,
+          displayName: twitter.displayName,
+          avatar: twitter.avatar,
+        }
+      : {
+          twitterId: xhuntUser.twitterId,
+          username: xhuntUser.username,
+          displayName: xhuntUser.displayName,
+          avatar: xhuntUser.avatar,
+        };
+    const publicUser = buildPublicUser(user, identities);
+    const storageValue = {
+      token: {
+        accessToken,
+        refreshToken,
+        expiresAt: expiresAt.getTime(),
+        tokenType: "Bearer",
+      },
+      user: {
+        ...publicUser,
+        ...buildEchohuntUserPayload(user, xhuntUser, twitterPayload),
+        isNewUser: !!result.isNewUser,
+      },
+    };
+
+    return {
+      storageKey: "echohunt_auth_session_v1",
+      storageValue,
+      expiresAt: expiresAt.toISOString(),
+      ttlSeconds: ECHOHUNT_DEBUG_TOKEN_TTL_SECONDS,
+    };
+  });
+}
 
 router.get(
   "/internal/echohunt-token/users",
@@ -288,22 +423,22 @@ router.post(
   requireRole("super"),
   async (req, res) => {
     try {
-      const userId = String(req.body?.userId || "").trim();
+      const userId = String(req.body?.xhuntUserId || req.body?.userId || "").trim();
       if (!userId) {
-        return res.status(400).json({ success: false, error: "userId 为必填字段" });
+        return res.status(400).json({ success: false, error: "xhuntUserId 为必填字段" });
       }
-      const user = await AuthCenterXhuntUser.findByPk(userId);
-      if (!user) {
+      const xhuntUser = await XHuntUser.findByPk(userId);
+      if (!xhuntUser) {
         return res.status(404).json({ success: false, error: "用户不存在" });
       }
-      if (user.status !== "active") {
-        return res.status(400).json({ success: false, error: "只能为 active 用户生成调试 token" });
+      if (!xhuntUser.twitterId) {
+        return res.status(400).json({ success: false, error: "XHuntUser 缺少 twitterId，无法生成 EchoHunt token" });
       }
-      const data = await createEchohuntDebugSession(req, user);
+      const data = await createEchohuntDebugSession(req, xhuntUser);
       await logAdminAction(req, {
         action: "echohunt-debug-token-generate",
         success: true,
-        message: `authCenterUserId=${user.id}`,
+        message: `xhuntUserId=${xhuntUser.id};twitterId=${xhuntUser.twitterId}`,
       });
       return res.json({ success: true, data });
     } catch (error) {

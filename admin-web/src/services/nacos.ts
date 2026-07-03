@@ -111,6 +111,7 @@ export async function deleteCampaignRegistrationAdmin(id: string, campaign?: str
 
 export type EchohuntDebugTokenUser = {
   id: string;
+  authCenterUserId?: string | null;
   username?: string | null;
   displayName?: string | null;
   avatar?: string | null;
@@ -152,7 +153,7 @@ export async function generateEchohuntDebugToken(userId: string) {
     "/api/xhunt/website/campaigns/internal/echohunt-token/generate",
     {
       method: "POST",
-      body: { userId },
+      body: { xhuntUserId: userId },
     }
   );
 }
