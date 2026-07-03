@@ -150,12 +150,21 @@ function isInternalTestUserHandle(handle) {
 
 function getRequestIdentifiers(req) {
   const headers = req && req.headers ? req.headers : {};
+  const authCenterTwitterIdentity = Array.isArray(req?.authCenter?.identities)
+    ? req.authCenter.identities.find((item) => item && item.provider === "twitter")
+    : null;
+
   return [
-    // 优先使用已登录态中的 Twitter ID
+    // 旧插件登录态中的 Twitter ID
     req?.user?.twitterId,
-    // 其次使用新版本请求头中的 Twitter ID
+    // AuthCenter / EchoHunt 登录态中的 Twitter ID
+    req?.authCenter?.user?.primaryTwitterId,
+    authCenterTwitterIdentity?.providerSubject,
+    // AuthCenter / EchoHunt 登录态中的 username
+    authCenterTwitterIdentity?.username,
+    // 新版本请求头中的 Twitter ID
     headers["x-tw-id"],
-    // 最后兼容老版本 x-user-id 中的 username
+    // 兼容老版本 x-user-id 中的 username
     headers["x-user-id"],
   ].map(normalizeIdentifier).filter(Boolean);
 }

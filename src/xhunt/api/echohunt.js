@@ -52,6 +52,7 @@ const RANK_API_BY_DOMAIN = {
   web3: "https://data.cryptohunt.ai/fetch/twitter/rank",
   ai: "https://data.cryptohunt.ai/fetch/ai/rank",
 };
+const SPECIAL_AUTHORED_RANK = 9999999;
 
 const authModels = {
   pgInstance,
@@ -113,10 +114,14 @@ function normalizeTesterHandle(value) {
   return String(value).trim().replace(/^@+/, "").toLowerCase();
 }
 
-function isCampaignTester(campaign, requestHandle) {
-  if (!campaign || !requestHandle) return false;
+function isCampaignTester(campaign, viewer) {
+  if (!campaign || !viewer) return false;
   const list = Array.isArray(campaign.testList) ? campaign.testList : [];
-  return list.some((item) => normalizeTesterHandle(item) === requestHandle);
+  const requestIdentifiers = [viewer.username, viewer.twitterId]
+    .map(normalizeTesterHandle)
+    .filter(Boolean);
+  if (!requestIdentifiers.length) return false;
+  return list.some((item) => requestIdentifiers.includes(normalizeTesterHandle(item)));
 }
 
 function getTwitterIdentityFromAuth(req) {
@@ -243,8 +248,11 @@ async function findCampaignRecord(identifier) {
 
 function isViewerAllowedForTesting(pluginCampaign, viewer, req) {
   if (!pluginCampaign?.testingPhase) return true;
-  if (isRequestInternalTestUser(req)) return true;
-  return isCampaignTester(pluginCampaign, viewer?.username);
+  // EchoHunt 测试活动需要同时满足：
+  // 1. 当前登录用户是后端内测用户 internal_test；
+  // 2. 当前登录用户也在该活动 testList 中。
+  // 不能仅因为是内测用户就看到所有测试活动，也不能仅因为在 testList 但不是内测用户就看到。
+  return isRequestInternalTestUser(req) && isCampaignTester(pluginCampaign, viewer);
 }
 
 function localizeTaskTitle(title, lang) {
@@ -367,8 +375,23 @@ function isRankValid(rank) {
   return Number.isFinite(rank);
 }
 
+function normalizeCreatorAuthPayload(rankData) {
+  const authCreator = rankData?.auth_creator || null;
+  const statusNumber = Number(authCreator?.status);
+  const kolRank = Number(rankData?.kolRank);
+  const hasStatus = Number.isFinite(statusNumber);
+  const isCreatorAuthed = statusNumber === 2 || kolRank === SPECIAL_AUTHORED_RANK;
+
+  return {
+    status: hasStatus ? statusNumber : null,
+    recordTime: authCreator?.record_time || authCreator?.recordTime || null,
+    twitterId: authCreator?.twitter_id || authCreator?.twitterId || null,
+    isCreatorAuthed,
+  };
+}
+
 function isCreatorRankData(rankData) {
-  return rankData?.auth_creator?.status === 2;
+  return normalizeCreatorAuthPayload(rankData).isCreatorAuthed;
 }
 
 async function fetchCampaignRankByDomain(domain, twitterId) {
@@ -379,10 +402,43 @@ async function fetchCampaignRankByDomain(domain, twitterId) {
   const list = rankResponse?.data?.data?.data;
   if (!Array.isArray(list) || list.length === 0) throw new Error(`Empty ${domain} ranking data`);
   const userRankData = list[0];
+  const creatorAuth = normalizeCreatorAuthPayload(userRankData);
   return {
     domain,
     kolRank: Number(userRankData.kolRank),
-    isCreator: isCreatorRankData(userRankData),
+    isCreator: creatorAuth.isCreatorAuthed,
+    isCreatorAuthed: creatorAuth.isCreatorAuthed,
+    creatorAuth,
+  };
+}
+
+async function fetchEchohuntRankSummary(twitterId) {
+  const domains = ["web3", "ai"];
+  const settled = await Promise.allSettled(domains.map((domain) => fetchCampaignRankByDomain(domain, twitterId)));
+  const byDomain = {};
+  const errors = [];
+
+  settled.forEach((result, index) => {
+    const domain = domains[index];
+    if (result.status === "fulfilled") {
+      byDomain[domain] = result.value;
+    } else {
+      byDomain[domain] = null;
+      errors.push({ domain, message: result.reason?.message || String(result.reason) });
+    }
+  });
+
+  const creatorDomain = domains.find((domain) => byDomain[domain]?.isCreatorAuthed) || null;
+  const creatorAuth = creatorDomain ? byDomain[creatorDomain].creatorAuth : null;
+
+  return {
+    domains: byDomain,
+    web3: byDomain.web3 || null,
+    ai: byDomain.ai || null,
+    isCreatorAuthed: !!creatorDomain,
+    creatorDomain,
+    creatorAuth,
+    errors,
   };
 }
 
@@ -692,11 +748,12 @@ router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
       await req.authCenter.user.update({ xhuntUserId: xhuntUser.id });
     }
 
-    const [profileResult, soulResult, historicalResult, joinedCountResult] = await Promise.allSettled([
+    const [profileResult, soulResult, historicalResult, joinedCountResult, rankSummaryResult] = await Promise.allSettled([
       fetchTwitterProfile(twitterIdentity.twitterId, lang),
       fetchSoulProfile(twitterIdentity.twitterId, lang),
       findUserHistoricalCampaigns(twitterIdentity),
       CampaignRegistration.count({ where: { twitterId: twitterIdentity.twitterId } }),
+      fetchEchohuntRankSummary(twitterIdentity.twitterId),
     ]);
 
     const rawProfile = profileResult.status === "fulfilled" ? profileResult.value : null;
@@ -705,6 +762,7 @@ router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
     const joinedCampaigns = joinedCountResult.status === "fulfilled" ? joinedCountResult.value : 0;
     const profile = normalizeProfilePayload(rawProfile);
     const soul = normalizeSoulPayload(rawSoul);
+    const rankSummary = rankSummaryResult.status === "fulfilled" ? rankSummaryResult.value : null;
 
     if (profile?.rank?.kolRank || profile?.classification) {
       xhuntUser.update({
@@ -717,7 +775,21 @@ router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
     return res.json({
       success: true,
       user: buildEchohuntUserPayload(req.authCenter.user, xhuntUser, twitterIdentity),
-      profile: profile ? { ...profile, soul } : { soul },
+      profile: profile
+        ? {
+            ...profile,
+            soul,
+            ranks: rankSummary?.domains || null,
+            isCreatorAuthed: !!rankSummary?.isCreatorAuthed,
+            creatorAuth: rankSummary?.creatorAuth || null,
+          }
+        : {
+            soul,
+            ranks: rankSummary?.domains || null,
+            isCreatorAuthed: !!rankSummary?.isCreatorAuthed,
+            creatorAuth: rankSummary?.creatorAuth || null,
+          },
+      ranks: rankSummary,
       historicalCampaigns,
       summary: buildSummaryFromHistorical(joinedCampaigns, historicalCampaigns),
     });
@@ -733,13 +805,20 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
     const viewer = twitterIdentity ? { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId } : null;
     let hasTesting = false;
 
-    // 对齐 /api/xhunt/website/campaigns 的公开活动口径：
-    // 返回所有非 draft/archived 的网站活动，再在 EchoHunt 层额外处理 testingPhase 可见性。
-    // 这里不加 isDeleted=false，避免旧的“网站专属/历史活动”因历史字段状态被漏掉。
+    // 匿名用户对齐 /api/xhunt/website/campaigns：只返回非 draft/archived 的公开活动。
+    // 已登录用户需要先取出 testingPhase 活动，再在 JS 层判断 internal_test / testList，
+    // 否则 webStatus=draft 的测试活动会在 SQL 层被提前过滤掉。
     const records = await XHuntWebsiteCampaign.findAll({
-      where: {
-        webStatus: { [Op.notIn]: ["draft", "archived"] },
-      },
+      where: viewer
+        ? {
+            [Op.or]: [
+              { webStatus: { [Op.notIn]: ["draft", "archived"] } },
+              { testingPhase: true },
+            ],
+          }
+        : {
+            webStatus: { [Op.notIn]: ["draft", "archived"] },
+          },
     });
 
     const data = records
