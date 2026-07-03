@@ -1501,6 +1501,12 @@ export function NacosCampaignsPage() {
     localStorage.setItem("nacos-campaigns-list-collapsed", value ? "1" : "0");
   }
 
+  function scrollToEchohuntConfig() {
+    const el = document.getElementById("echohunt-config-section");
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function addArrayItem(
     kind:
       | "logos"
@@ -1689,6 +1695,13 @@ export function NacosCampaignsPage() {
                 onClick={showPublishPreview}
               >
                 发布
+              </Button>
+              <Button
+                className="config-action config-action-secondary"
+                disabled={!c && !websiteOnlyMode}
+                onClick={scrollToEchohuntConfig}
+              >
+                EchoHunt 配置
               </Button>
               <Tooltip title="插件已经更新到 v0.3.3，老版本弃用。">
                 <span>
@@ -2779,16 +2792,17 @@ function WebsiteSection({
 
   return (
     <Card
+      id="echohunt-config-section"
       size="small"
       title={
         <Space size={6}>
-          <span>网站专属配置</span>
+          <span>EchoHunt 配置</span>
           <Tooltip title={meta}>
             <QuestionCircleOutlined style={{ color: "#8c8c8c", fontSize: 12 }} />
           </Tooltip>
         </Space>
       }
-      extra={<Button size="small" disabled={!enabled} onClick={onSave}>保存网站配置</Button>}
+      extra={<Button size="small" disabled={!enabled} onClick={onSave}>保存 EchoHunt 配置</Button>}
       style={{ marginBottom: 12 }}
     >
       <Space direction="vertical" size={12} style={{ width: "100%" }}>
