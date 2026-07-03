@@ -7,9 +7,12 @@ import { useAuth } from "@/app/auth";
 import {
   fetchAllWebsiteCampaigns,
   fetchWebsiteCampaignByNacosId,
+  generateEchohuntDebugToken,
   saveManagedWebsiteCampaignsConfig,
   saveWebsiteCampaignConfig,
+  searchEchohuntDebugTokenUsers,
 } from "@/services/nacos";
+import type { EchohuntDebugTokenPayload, EchohuntDebugTokenUser } from "@/services/nacos";
 import { fetchVipLists } from "@/services/feature-flags";
 import type { WebsiteCampaignRecord } from "@/types/nacos";
 import type { VipListItem } from "@/types/feature-flags";
@@ -797,8 +800,16 @@ export function NacosCampaignsPage() {
   );
   const [registrationsOpen, setRegistrationsOpen] = useState(false);
   const [registrationsCampaign, setRegistrationsCampaign] = useState("");
+  const [echohuntTokenOpen, setEchohuntTokenOpen] = useState(false);
+  const [echohuntTokenKeyword, setEchohuntTokenKeyword] = useState("");
+  const [echohuntTokenUsers, setEchohuntTokenUsers] = useState<EchohuntDebugTokenUser[]>([]);
+  const [echohuntTokenUserId, setEchohuntTokenUserId] = useState<string>();
+  const [echohuntTokenSearching, setEchohuntTokenSearching] = useState(false);
+  const [echohuntTokenGenerating, setEchohuntTokenGenerating] = useState(false);
+  const [echohuntTokenResult, setEchohuntTokenResult] = useState<EchohuntDebugTokenPayload | null>(null);
   const { user } = useAuth();
   const canEditCampaignId = user?.role === "super";
+  const isSuperAdmin = user?.role === "super";
 
   const selectedCampaign =
     selection?.type === "nacos" ? config.campaigns[selection.index] : null;
@@ -1507,6 +1518,63 @@ export function NacosCampaignsPage() {
     el.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function openEchohuntTokenModal() {
+    setEchohuntTokenOpen(true);
+    setEchohuntTokenKeyword("");
+    setEchohuntTokenUsers([]);
+    setEchohuntTokenUserId(undefined);
+    setEchohuntTokenResult(null);
+  }
+
+  async function searchEchohuntUsers(keyword = echohuntTokenKeyword) {
+    setEchohuntTokenSearching(true);
+    try {
+      const resp = await searchEchohuntDebugTokenUsers(keyword);
+      setEchohuntTokenUsers(resp.data || []);
+      if (!(resp.data || []).some((item) => item.id === echohuntTokenUserId)) {
+        setEchohuntTokenUserId(undefined);
+      }
+    } catch (error) {
+      showToast(
+        `搜索 EchoHunt 用户失败：${error instanceof Error ? error.message : "未知错误"}`,
+        "error",
+      );
+    } finally {
+      setEchohuntTokenSearching(false);
+    }
+  }
+
+  async function generateSelectedEchohuntToken() {
+    if (!echohuntTokenUserId) {
+      showToast("请先选择一个用户", "error");
+      return;
+    }
+    setEchohuntTokenGenerating(true);
+    try {
+      const resp = await generateEchohuntDebugToken(echohuntTokenUserId);
+      setEchohuntTokenResult(resp.data);
+      showToast("EchoHunt 调试 token 已生成，有效期 6 小时", "success");
+    } catch (error) {
+      showToast(
+        `生成 EchoHunt token 失败：${error instanceof Error ? error.message : "未知错误"}`,
+        "error",
+      );
+    } finally {
+      setEchohuntTokenGenerating(false);
+    }
+  }
+
+  async function copyEchohuntTokenJson() {
+    if (!echohuntTokenResult) return;
+    const text = JSON.stringify(echohuntTokenResult.storageValue, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("已复制 echohunt_auth_session_v1 内容", "success");
+    } catch {
+      showToast("复制失败，请手动复制文本框内容", "error");
+    }
+  }
+
   function addArrayItem(
     kind:
       | "logos"
@@ -1627,6 +1695,19 @@ export function NacosCampaignsPage() {
     websiteTarget?.enableEssayContest ||
     websiteTarget?.nacosPayload?.enableEssayContest
   );
+  const selectedEchohuntTokenUser = echohuntTokenUsers.find(
+    (item) => item.id === echohuntTokenUserId,
+  );
+  const echohuntTokenJson = echohuntTokenResult
+    ? JSON.stringify(echohuntTokenResult.storageValue, null, 2)
+    : "";
+  const echohuntTokenSetItemScript = echohuntTokenResult
+    ? `localStorage.setItem("${echohuntTokenResult.storageKey}", ${JSON.stringify(JSON.stringify(echohuntTokenResult.storageValue))});`
+    : "";
+  const echohuntTokenUserOptions = echohuntTokenUsers.map((item) => ({
+    value: item.id,
+    label: `${item.username || item.displayName || item.accountName || item.id}${item.twitterUsername ? ` (@${item.twitterUsername})` : ""}${item.accountName ? ` · ${item.accountName}` : ""}`,
+  }));
 
   return (
     <PermissionGuard permission="nacos_config">
@@ -1703,6 +1784,14 @@ export function NacosCampaignsPage() {
               >
                 EchoHunt 配置
               </Button>
+              {isSuperAdmin ? (
+                <Button
+                  className="config-action config-action-secondary"
+                  onClick={openEchohuntTokenModal}
+                >
+                  生成 EchoHunt Token
+                </Button>
+              ) : null}
               <Tooltip title="插件已经更新到 v0.3.3，老版本弃用。">
                 <span>
                   <Button
@@ -1899,6 +1988,128 @@ export function NacosCampaignsPage() {
           </div>
         )}
       </ConfigWorkbench>
+
+      <Modal
+        title="生成 EchoHunt 调试 Token"
+        open={echohuntTokenOpen}
+        onCancel={() => setEchohuntTokenOpen(false)}
+        width={900}
+        destroyOnClose
+        footer={
+          <>
+            <Button onClick={() => setEchohuntTokenOpen(false)}>关闭</Button>
+            <Button
+              type="primary"
+              loading={echohuntTokenGenerating}
+              disabled={!echohuntTokenUserId}
+              onClick={() => void generateSelectedEchohuntToken()}
+            >
+              生成 6 小时 Token
+            </Button>
+            <Button
+              disabled={!echohuntTokenResult}
+              onClick={() => void copyEchohuntTokenJson()}
+            >
+              复制 JSON
+            </Button>
+          </>
+        }
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <div style={{ color: "#64748b", lineHeight: 1.6 }}>
+            仅超级管理员可用。生成内容是浏览器 localStorage 里
+            <AntTag style={{ marginLeft: 6, marginRight: 6 }}>
+              echohunt_auth_session_v1
+            </AntTag>
+            对应的 JSON 值，有效期 6 小时。
+          </div>
+          <Row gutter={[12, 12]} align="bottom">
+            <Col xs={24} md={10}>
+              <Field label="搜索用户">
+                <Input.Search
+                  allowClear
+                  placeholder="用户名 / 邮箱 / Twitter ID / Auth User ID"
+                  value={echohuntTokenKeyword}
+                  onChange={(e) => setEchohuntTokenKeyword(e.target.value)}
+                  onSearch={(value) => void searchEchohuntUsers(value)}
+                  loading={echohuntTokenSearching}
+                  enterButton="搜索"
+                />
+              </Field>
+            </Col>
+            <Col xs={24} md={14}>
+              <Field label="选择用户">
+                <Select
+                  showSearch
+                  allowClear
+                  placeholder="先搜索，然后选择要模拟登录的用户"
+                  value={echohuntTokenUserId}
+                  loading={echohuntTokenSearching}
+                  onChange={(value) => {
+                    setEchohuntTokenUserId(value);
+                    setEchohuntTokenResult(null);
+                  }}
+                  options={echohuntTokenUserOptions}
+                  filterOption={(input, option) =>
+                    String(option?.label || "").toLowerCase().includes(input.toLowerCase())
+                  }
+                />
+              </Field>
+            </Col>
+          </Row>
+
+          {selectedEchohuntTokenUser ? (
+            <Card size="small" title="已选择用户">
+              <Space size={[12, 8]} wrap>
+                {selectedEchohuntTokenUser.avatar ? (
+                  <img
+                    src={selectedEchohuntTokenUser.avatar}
+                    alt=""
+                    style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }}
+                  />
+                ) : null}
+                <AntTag color="blue">
+                  {selectedEchohuntTokenUser.username || selectedEchohuntTokenUser.displayName || "-"}
+                </AntTag>
+                {selectedEchohuntTokenUser.twitterUsername ? (
+                  <AntTag>@{selectedEchohuntTokenUser.twitterUsername}</AntTag>
+                ) : null}
+                {selectedEchohuntTokenUser.twitterId ? (
+                  <AntTag>twitterId: {selectedEchohuntTokenUser.twitterId}</AntTag>
+                ) : null}
+                {selectedEchohuntTokenUser.accountName ? (
+                  <AntTag>{selectedEchohuntTokenUser.accountName}</AntTag>
+                ) : null}
+                <AntTag color={selectedEchohuntTokenUser.status === "active" ? "green" : "red"}>
+                  {selectedEchohuntTokenUser.status || "-"}
+                </AntTag>
+              </Space>
+            </Card>
+          ) : null}
+
+          {echohuntTokenResult ? (
+            <Card
+              size="small"
+              title={`生成结果 · 过期时间 ${new Date(echohuntTokenResult.expiresAt).toLocaleString()}`}
+              extra={
+                <Button size="small" onClick={() => void copyEchohuntTokenJson()}>
+                  复制 JSON
+                </Button>
+              }
+            >
+              <Field
+                label="localStorage value"
+                hint="手动放入浏览器时，key 使用 echohunt_auth_session_v1；下面文本框内容作为 value。"
+              >
+                <TextArea rows={10} value={echohuntTokenJson} readOnly />
+              </Field>
+              <Field label="可选控制台脚本" hint="也可以在 EchoHunt 页面控制台执行这行脚本后刷新页面。">
+                <TextArea rows={3} value={echohuntTokenSetItemScript} readOnly />
+              </Field>
+            </Card>
+          ) : null}
+        </Space>
+      </Modal>
 
       {toast ? (
         <div

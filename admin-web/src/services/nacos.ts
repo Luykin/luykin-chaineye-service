@@ -109,6 +109,54 @@ export async function deleteCampaignRegistrationAdmin(id: string, campaign?: str
   );
 }
 
+export type EchohuntDebugTokenUser = {
+  id: string;
+  username?: string | null;
+  displayName?: string | null;
+  avatar?: string | null;
+  accountName?: string | null;
+  providers?: string[];
+  xhuntUserId?: string | null;
+  twitterId?: string | null;
+  twitterUsername?: string | null;
+  status?: string;
+  lastLoginAt?: string | null;
+  createdAt?: string | null;
+};
+
+export type EchohuntDebugTokenPayload = {
+  storageKey: string;
+  storageValue: {
+    token: {
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: number;
+      tokenType: string;
+    };
+    user: Record<string, unknown>;
+  };
+  expiresAt: string;
+  ttlSeconds: number;
+};
+
+export async function searchEchohuntDebugTokenUsers(keyword: string) {
+  const query = new URLSearchParams();
+  if (keyword.trim()) query.set("keyword", keyword.trim());
+  return apiRequest<{ success: boolean; data: EchohuntDebugTokenUser[] }>(
+    `/api/xhunt/website/campaigns/internal/echohunt-token/users?${query.toString()}`
+  );
+}
+
+export async function generateEchohuntDebugToken(userId: string) {
+  return apiRequest<{ success: boolean; data: EchohuntDebugTokenPayload }>(
+    "/api/xhunt/website/campaigns/internal/echohunt-token/generate",
+    {
+      method: "POST",
+      body: { userId },
+    }
+  );
+}
+
 export async function fetchUserTags() {
   return apiRequest<import("@/types/nacos").UserTagsResponse>("/api/xhunt/stats/user-tags");
 }
