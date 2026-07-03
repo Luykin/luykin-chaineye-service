@@ -38,6 +38,7 @@ const {
   getStaticLeaderboardManifest,
   getStaticLeaderboardBundle,
   emptyLeaderboardBundle,
+  fetchCustomLeaderboardBundle,
   findUserHistoricalCampaigns,
 } = require("../services/echohuntLeaderboardService");
 const { isRequestInternalTestUser, isRequestXHuntVip } = require("../constants/xhuntVip");
@@ -319,6 +320,8 @@ function buildEchohuntCampaignListItem(record, lang, viewer, req) {
       leaderboardMode: plugin.leaderboardMode || "traditional",
       enablePowLeaderboard: !!plugin.enablePowLeaderboard,
       enableEssayContest: !!plugin.enableEssayContest,
+      leaderboardApiUrl: plugin.leaderboardApiUrl || null,
+      userActivityApiUrl: plugin.userActivityApiUrl || null,
       customLeaderboards: summarizeCustomLeaderboards(plugin.customLeaderboards),
     },
     rewardSummary: buildRewardSummary(plugin),
@@ -357,6 +360,8 @@ function buildEchohuntCampaignDetail(record, lang) {
       leaderboardMode: plugin.leaderboardMode || "traditional",
       enablePowLeaderboard: !!plugin.enablePowLeaderboard,
       enableEssayContest: !!plugin.enableEssayContest,
+      leaderboardApiUrl: plugin.leaderboardApiUrl || null,
+      userActivityApiUrl: plugin.userActivityApiUrl || null,
       customLeaderboards: summarizeCustomLeaderboards(plugin.customLeaderboards),
     },
     rewardSummary: buildRewardSummary(plugin),
@@ -860,6 +865,17 @@ router.get("/campaigns/:campaignKey/leaderboard", async (req, res) => {
     const lang = normalizeLang(req.query.lang);
     const record = await findCampaignRecord(campaignKey);
     const fallbackCampaign = record ? { ...buildEchohuntCampaignListItem(record, lang, null, req), lang } : { campaignKey, lang };
+    if (fallbackCampaign?.leaderboardConfig?.leaderboardMode === "custom") {
+      try {
+        const customBundle = await fetchCustomLeaderboardBundle(fallbackCampaign);
+        if (customBundle) {
+          res.set("Cache-Control", "public, max-age=120");
+          return res.json({ success: true, source: "configured_custom", data: customBundle });
+        }
+      } catch (customError) {
+        console.warn("[EchoHunt] custom leaderboard fetch warn:", customError.message || customError);
+      }
+    }
     return res.json({ success: true, source: "empty", data: emptyLeaderboardBundle(fallbackCampaign) });
   } catch (error) {
     return sendError(res, error, "ECHOHUNT_LEADERBOARD_FAILED");

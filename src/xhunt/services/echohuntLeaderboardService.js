@@ -1,9 +1,11 @@
 const fs = require("fs/promises");
 const path = require("path");
+const axios = require("axios");
 
 const STATIC_ROOT = path.join(__dirname, "../static/echohunt-leaderboard");
 const STATIC_CAMPAIGNS_DIR = path.join(STATIC_ROOT, "campaigns");
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const CUSTOM_LEADERBOARD_TIMEOUT_MS = 10000;
 
 const cache = new Map();
 
@@ -90,8 +92,6 @@ function buildCustomLeaderboardTracks(campaign) {
       columns: [
         { key: "rank", label: "Rank", type: "rank" },
         { key: "hunter", label: "Hunter", type: "user" },
-        { key: "score", label: "Score", type: "text" },
-        { key: "share", label: "Share", type: "percent" },
       ],
     };
   });
@@ -102,6 +102,156 @@ function buildCustomLeaderboardTracks(campaign) {
       all: Object.fromEntries(tracks.map((track) => [track.sourceKey, []])),
     },
   };
+}
+
+function resolveConfiguredLeaderboardUrl(apiUrl, campaignKey) {
+  const raw = String(apiUrl || "").trim();
+  if (!raw) return "";
+  const replaced = campaignKey ? raw.replace(/\{campaign\}/g, encodeURIComponent(campaignKey)) : raw;
+  const base = /^https?:\/\//i.test(replaced)
+    ? replaced
+    : `${process.env.ECHOHUNT_CUSTOM_API_BASE_URL || process.env.XHUNT_PUBLIC_API_BASE_URL || "https://kb.cryptohunt.ai"}${replaced.startsWith("/") ? "" : "/"}${replaced}`;
+
+  if (!campaignKey || /[?&]campaign=/.test(base) || raw.includes("{campaign}")) return base;
+  return `${base}${base.includes("?") ? "&" : "?"}campaign=${encodeURIComponent(campaignKey)}`;
+}
+
+function getCustomLeaderboardKey(item) {
+  const rawName = typeof item?.name === "string" ? item.name : item?.name?.en || item?.name?.zh || "";
+  return String(rawName || "").trim().toLowerCase();
+}
+
+function getCustomTrackId(item, index) {
+  return String(item?.id || getCustomLeaderboardKey(item) || item?.distributionType || `custom-${index}`).trim() || `custom-${index}`;
+}
+
+function normalizeRawLeaderboards(raw) {
+  const source = raw?.leaderboards || raw?.data?.leaderboards || raw?.data?.data?.leaderboards || {};
+  const map = {};
+
+  if (Array.isArray(source)) {
+    source.forEach((leaderboard) => {
+      if (!leaderboard?.id) return;
+      const items = Array.isArray(leaderboard.items) ? leaderboard.items : Array.isArray(leaderboard.rows) ? leaderboard.rows : [];
+      map[String(leaderboard.id)] = items;
+    });
+    return map;
+  }
+
+  if (source && typeof source === "object") {
+    Object.entries(source).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        map[key] = value;
+      } else if (value && typeof value === "object" && Array.isArray(value.items)) {
+        map[key] = value.items;
+      } else if (value && typeof value === "object" && Array.isArray(value.rows)) {
+        map[key] = value.rows;
+      } else {
+        map[key] = [];
+      }
+    });
+  }
+
+  return map;
+}
+
+function getRowsForCustomConfig(rawMap, item, index) {
+  const id = getCustomTrackId(item, index);
+  const key = getCustomLeaderboardKey(item);
+  const distributionType = item?.distributionType ? String(item.distributionType) : "";
+  return rawMap[id] || rawMap[key] || (distributionType ? rawMap[distributionType] : undefined) || rawMap[String(index)] || [];
+}
+
+function normalizeCustomLeaderboardRow(item, index, sourceKey) {
+  const username = normalizeHandle(item?.username || item?.handler || item?.handle || item?.screen_name);
+  const handle = item?.handle ? String(item.handle) : username ? `@${username}` : "";
+  const shareValue = item?.share ?? item?.mindshare ?? item?.workshare;
+  const scoreValue = item?.score ?? item?.result ?? item?.value ?? item?.points;
+  return {
+    ...item,
+    sourceKey,
+    rank: Number.isFinite(Number(item?.rank)) ? Number(item.rank) : index + 1,
+    username,
+    handle,
+    twitterId: item?.twitterId || item?.twitter_id || item?.user_id || null,
+    name: item?.displayName || item?.name || item?.nickname || username || "Unknown",
+    avatar: item?.avatar || item?.image || item?.profile_image_url || null,
+    share: shareValue === undefined || shareValue === null || shareValue === "" ? null : Number(shareValue),
+    shareText: item?.shareText || null,
+    score: scoreValue ?? null,
+    reward: item?.reward || item?.prize || null,
+    tweets: item?.tweets ?? item?.tweet_count ?? null,
+    views: item?.views ?? item?.view_count ?? null,
+    likes: item?.likes ?? item?.like_count ?? null,
+    raw: item,
+  };
+}
+
+function buildColumnsFromRows(rows) {
+  const has = (keys) => rows.some((row) => keys.some((key) => row[key] !== null && row[key] !== undefined && row[key] !== ""));
+  const columns = [
+    { key: "rank", label: "Rank", type: "rank" },
+    { key: "hunter", label: "Hunter", type: "user" },
+  ];
+  if (has(["score"])) columns.push({ key: "score", label: "Score", type: "text" });
+  if (has(["share"])) columns.push({ key: "share", label: "Share", type: "percent" });
+  if (has(["tweets"])) columns.push({ key: "tweets", label: "Tweets", type: "number" });
+  if (has(["views"])) columns.push({ key: "views", label: "Views", type: "number" });
+  if (has(["likes"])) columns.push({ key: "likes", label: "Likes", type: "number" });
+  if (has(["reward"])) columns.push({ key: "reward", label: "Reward", type: "text" });
+  return columns;
+}
+
+function buildCustomLeaderboardBundle(campaign = {}, rawResponse = {}) {
+  const config = campaign?.leaderboardConfig || {};
+  const customLeaderboards = Array.isArray(config.customLeaderboards) ? config.customLeaderboards : [];
+  const lang = campaign?.lang || "en";
+  const rawMap = normalizeRawLeaderboards(rawResponse);
+  const baseBundle = emptyLeaderboardBundle(campaign);
+
+  if (config.leaderboardMode !== "custom" || !customLeaderboards.length) return baseBundle;
+
+  const leaderboards = {};
+  const tracks = customLeaderboards.map((item, index) => {
+    const id = getCustomTrackId(item, index);
+    const title = pickLocalizedText(item?.name, id, lang);
+    const shortTitle = pickLocalizedText(item?.short_name, title, lang);
+    const rows = getRowsForCustomConfig(rawMap, item, index).map((row, rowIndex) => normalizeCustomLeaderboardRow(row, rowIndex, id));
+    leaderboards[id] = rows;
+    return {
+      id,
+      type: "leaderboard",
+      title,
+      shortTitle,
+      sourceKey: id,
+      ranges: ["all"],
+      reward: formatCustomReward(item),
+      counts: { all: rows.length },
+      customConfig: {
+        distributionType: item?.distributionType || null,
+        amount: item?.amount ?? null,
+        participantCount: item?.participantCount ?? null,
+        unit: item?.unit || null,
+      },
+      columns: buildColumnsFromRows(rows),
+    };
+  });
+
+  return {
+    ...baseBundle,
+    generatedAt: rawResponse?.updatedAt || rawResponse?.data?.updatedAt || new Date().toISOString(),
+    tracks,
+    leaderboards: { all: leaderboards },
+  };
+}
+
+async function fetchCustomLeaderboardBundle(campaign = {}) {
+  const config = campaign?.leaderboardConfig || {};
+  if (config.leaderboardMode !== "custom") return null;
+  const url = resolveConfiguredLeaderboardUrl(config.leaderboardApiUrl, campaign.campaignKey || campaign.key || campaign.slug);
+  if (!url) return null;
+  const response = await axios.get(url, { timeout: CUSTOM_LEADERBOARD_TIMEOUT_MS });
+  return buildCustomLeaderboardBundle(campaign, response?.data || {});
 }
 
 function emptyLeaderboardBundle(campaign = {}) {
@@ -324,5 +474,7 @@ module.exports = {
   getStaticLeaderboardManifest,
   getStaticLeaderboardBundle,
   emptyLeaderboardBundle,
+  buildCustomLeaderboardBundle,
+  fetchCustomLeaderboardBundle,
   findUserHistoricalCampaigns,
 };
