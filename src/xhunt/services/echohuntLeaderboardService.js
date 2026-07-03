@@ -47,11 +47,69 @@ async function getStaticLeaderboardBundle(campaignKey) {
   }
 }
 
+function pickLocalizedText(value, fallback = "", lang = "en") {
+  if (!value) return fallback;
+  if (typeof value === "string") return value || fallback;
+  if (typeof value === "object") return lang === "zh-CN" || lang === "zh" ? value.zh || value.en || fallback : value.en || value.zh || fallback;
+  return fallback;
+}
+
+function formatCustomReward(item) {
+  const amount = item?.amount;
+  const unit = item?.unit;
+  if (amount === null || amount === undefined || amount === "") return null;
+  return `${amount}${unit ? ` ${unit}` : ""}`;
+}
+
+function buildCustomLeaderboardTracks(campaign) {
+  const config = campaign?.leaderboardConfig || {};
+  const lang = campaign?.lang || "en";
+  if (config.leaderboardMode !== "custom") return null;
+  const customLeaderboards = Array.isArray(config.customLeaderboards) ? config.customLeaderboards : [];
+  if (!customLeaderboards.length) return null;
+
+  const tracks = customLeaderboards.map((item, index) => {
+    const id = String(item?.id || item?.distributionType || `custom-${index}`).trim() || `custom-${index}`;
+    const title = pickLocalizedText(item?.name, id, lang);
+    const shortTitle = pickLocalizedText(item?.short_name, title, lang);
+    return {
+      id,
+      type: "leaderboard",
+      title,
+      shortTitle,
+      sourceKey: id,
+      ranges: ["all"],
+      reward: formatCustomReward(item),
+      counts: { all: 0 },
+      customConfig: {
+        distributionType: item?.distributionType || null,
+        amount: item?.amount ?? null,
+        participantCount: item?.participantCount ?? null,
+        unit: item?.unit || null,
+      },
+      columns: [
+        { key: "rank", label: "Rank", type: "rank" },
+        { key: "hunter", label: "Hunter", type: "user" },
+        { key: "score", label: "Score", type: "text" },
+        { key: "share", label: "Share", type: "percent" },
+      ],
+    };
+  });
+
+  return {
+    tracks,
+    leaderboards: {
+      all: Object.fromEntries(tracks.map((track) => [track.sourceKey, []])),
+    },
+  };
+}
+
 function emptyLeaderboardBundle(campaign = {}) {
   const key = String(campaign.campaignKey || campaign.key || campaign.slug || "unknown");
   const title = String(campaign.title || campaign.campaignName || key || "Campaign");
   const project = String(campaign.project || campaign.projectName || title || key);
   const prize = String(campaign.prize || campaign.rewardText || campaign.reward?.text || "Reward TBD");
+  const custom = buildCustomLeaderboardTracks(campaign);
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -78,7 +136,7 @@ function emptyLeaderboardBundle(campaign = {}) {
       bridges: null,
       updatedAt: null,
     },
-    tracks: [
+    tracks: custom?.tracks || [
       {
         id: "poi",
         type: "leaderboard",
@@ -93,7 +151,7 @@ function emptyLeaderboardBundle(campaign = {}) {
         ],
       },
     ],
-    leaderboards: {
+    leaderboards: custom?.leaderboards || {
       all: {
         mindshare: [],
       },

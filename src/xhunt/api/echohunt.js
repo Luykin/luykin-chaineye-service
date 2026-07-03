@@ -805,20 +805,13 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
     const viewer = twitterIdentity ? { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId } : null;
     let hasTesting = false;
 
-    // 匿名用户对齐 /api/xhunt/website/campaigns：只返回非 draft/archived 的公开活动。
-    // 已登录用户需要先取出 testingPhase 活动，再在 JS 层判断 internal_test / testList，
-    // 否则 webStatus=draft 的测试活动会在 SQL 层被提前过滤掉。
+    // EchoHunt 活动列表永远不返回 draft/archived。
+    // 预热/进行中/领奖/已结束可以返回；测试活动在 JS 层继续判断 internal_test + testList。
+    // 注意：即使是测试活动，只要仍是 draft，也不应该对 EchoHunt 前端返回。
     const records = await XHuntWebsiteCampaign.findAll({
-      where: viewer
-        ? {
-            [Op.or]: [
-              { webStatus: { [Op.notIn]: ["draft", "archived"] } },
-              { testingPhase: true },
-            ],
-          }
-        : {
-            webStatus: { [Op.notIn]: ["draft", "archived"] },
-          },
+      where: {
+        webStatus: { [Op.notIn]: ["draft", "archived"] },
+      },
     });
 
     const data = records
@@ -864,8 +857,9 @@ router.get("/campaigns/:campaignKey/leaderboard", async (req, res) => {
       return res.json({ success: true, source: "static", data: bundle });
     }
 
+    const lang = normalizeLang(req.query.lang);
     const record = await findCampaignRecord(campaignKey);
-    const fallbackCampaign = record ? buildEchohuntCampaignListItem(record, normalizeLang(req.query.lang), null, req) : { campaignKey };
+    const fallbackCampaign = record ? { ...buildEchohuntCampaignListItem(record, lang, null, req), lang } : { campaignKey, lang };
     return res.json({ success: true, source: "empty", data: emptyLeaderboardBundle(fallbackCampaign) });
   } catch (error) {
     return sendError(res, error, "ECHOHUNT_LEADERBOARD_FAILED");
@@ -933,6 +927,7 @@ router.get("/campaigns/:campaignKey", authenticateAuthCenterToken({ optional: tr
 router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), async (req, res) => {
   try {
     const record = await findCampaignRecord(req.params.campaignKey);
+    if (!record) throw publicError("CAMPAIGN_NOT_FOUND", 404, "Campaign not found");
     const normalizedCampaign = record?.campaignKey || normalizeCampaign(req.params.campaignKey);
     if (!normalizedCampaign) throw publicError("CAMPAIGN_REQUIRED", 400);
 
@@ -970,7 +965,7 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
       found = await getManagedCampaignPayloadByKey(normalizedCampaign, { includeTesting: true, channel: "echohunt" });
       if (!found) throw publicError("INVALID_CAMPAIGN", 400, "Invalid campaign identifier");
       if (!found.enabled) throw publicError("CAMPAIGN_NOT_ENABLED", 400, "Campaign is not enabled");
-      if (found.testingPhase && !isViewerAllowedForTesting(found, { username: twitterIdentity.username }, req)) {
+      if (found.testingPhase && !isViewerAllowedForTesting(found, { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId }, req)) {
         throw publicError("CAMPAIGN_IN_TESTING", 403, "Campaign is in testing phase");
       }
       const now = new Date();
