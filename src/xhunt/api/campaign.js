@@ -190,6 +190,7 @@ function formatRankForMessage(result) {
 async function getCustomCampaignConfig(campaign, req) {
   const found = await getManagedCampaignPayloadByKey(campaign, {
     includeTesting: true,
+    channel: "plugin",
   });
   if (!found || !found.enabled) return null;
   if (found.testingPhase) {

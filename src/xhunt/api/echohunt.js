@@ -303,7 +303,7 @@ function buildRewardSummary(pluginCampaign) {
 
 function buildEchohuntCampaignListItem(record, lang, viewer, req) {
   const base = buildCampaignListItem(record, lang);
-  const plugin = buildPluginCampaign(record);
+  const plugin = buildPluginCampaign(record, { channel: "echohunt" });
   return {
     ...base,
     testingPhase: !!plugin.testingPhase,
@@ -334,7 +334,7 @@ function buildEchohuntCampaignListItem(record, lang, viewer, req) {
 
 function buildEchohuntCampaignDetail(record, lang) {
   const detail = buildCampaignDetail(record, lang);
-  const plugin = buildPluginCampaign(record);
+  const plugin = buildPluginCampaign(record, { channel: "echohunt" });
   return {
     ...detail,
     testingPhase: !!plugin.testingPhase,
@@ -822,7 +822,7 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
     });
 
     const data = records
-      .map((record) => ({ record, plugin: buildPluginCampaign(record) }))
+      .map((record) => ({ record, plugin: buildPluginCampaign(record, { channel: "echohunt" }) }))
       .filter(({ plugin }) => {
         if (!plugin.testingPhase) return true;
         const allowed = !!viewer && isViewerAllowedForTesting(plugin, viewer, req);
@@ -967,7 +967,7 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
 
     let found = null;
     try {
-      found = await getManagedCampaignPayloadByKey(normalizedCampaign, { includeTesting: true });
+      found = await getManagedCampaignPayloadByKey(normalizedCampaign, { includeTesting: true, channel: "echohunt" });
       if (!found) throw publicError("INVALID_CAMPAIGN", 400, "Invalid campaign identifier");
       if (!found.enabled) throw publicError("CAMPAIGN_NOT_ENABLED", 400, "Campaign is not enabled");
       if (found.testingPhase && !isViewerAllowedForTesting(found, { username: twitterIdentity.username }, req)) {

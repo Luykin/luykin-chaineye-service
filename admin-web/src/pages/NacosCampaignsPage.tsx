@@ -78,6 +78,13 @@ const CAMPAIGN_DISPLAY_DOMAIN_OPTIONS = [
 const CAMPAIGN_DISPLAY_DOMAIN_VALUES = new Set(
   CAMPAIGN_DISPLAY_DOMAIN_OPTIONS.map((item) => item.value),
 );
+const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS = [
+  { value: "plugin", label: "插件" },
+  { value: "echohunt", label: "EchoHunt" },
+];
+const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_VALUES = new Set(
+  CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.map((item) => item.value),
+);
 
 function normalizeDisplayDomains(value: unknown) {
   const list = Array.isArray(value) ? value : ["web3"];
@@ -91,6 +98,24 @@ function normalizeDisplayDomains(value: unknown) {
   return domains.length ? domains : ["web3"];
 }
 
+function normalizeCustomLeaderboardDisplayChannels(value: unknown) {
+  const list = Array.isArray(value)
+    ? value
+    : value
+      ? [value]
+      : CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.map((item) => item.value);
+  const channels = Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim().toLowerCase())
+        .filter((item) => CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_VALUES.has(item)),
+    ),
+  );
+  return channels.length
+    ? channels
+    : CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.map((item) => item.value);
+}
+
 type AnyObj = Record<string, any>;
 export interface CustomLeaderboardConfig {
   id?: string;
@@ -100,6 +125,7 @@ export interface CustomLeaderboardConfig {
   distributionType?: "equal" | "mindshare" | "workshare" | string;
   unit?: string;
   short_name?: string | { zh?: string; en?: string };
+  displayChannels?: string[];
 }
 type CampaignConfig = {
   version: number;
@@ -259,6 +285,7 @@ function normalizeCampaign(
     participantCount: it?.participantCount,
     distributionType: it?.distributionType || "",
     unit: it?.unit || "",
+    displayChannels: normalizeCustomLeaderboardDisplayChannels(it?.displayChannels),
   }));
   c.logos.forEach((logo: AnyObj) => {
     if (!logo.ringClassName) logo.ringClassName = DEFAULT_RING;
@@ -1271,6 +1298,9 @@ export function NacosCampaignsPage() {
               );
             if (!String(item.unit || "").trim())
               errors.push(`${label} 奖励单位不能为空`);
+            item.displayChannels = normalizeCustomLeaderboardDisplayChannels(
+              item.displayChannels,
+            );
           },
         );
       }
@@ -1509,6 +1539,7 @@ export function NacosCampaignsPage() {
           participantCount: undefined,
           distributionType: "equal",
           unit: "USDT",
+          displayChannels: ["plugin", "echohunt"],
         });
       if (kind === "tags")
         c[kind].push({
@@ -2618,6 +2649,25 @@ function CustomLeaderboards({
               <Col xs={24} md={8}><Field label={<InfoLabel info="榜单唯一 key，建议填写；榜单接口和用户排名接口会按这个 key 返回数据。">榜单 ID</InfoLabel>}><Input value={it.id || ""} onChange={(e) => update("customLeaderboards", i, "id", e.target.value)} placeholder="poi leaderboard" /></Field></Col>
               <Col xs={24} md={8}><Field label="中文名"><Input value={it.name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "name.zh", e.target.value)} /></Field></Col>
               <Col xs={24} md={8}><Field label="English"><Input value={it.name?.en || ""} onChange={(e) => update("customLeaderboards", i, "name.en", e.target.value)} /></Field></Col>
+              <Col xs={24} md={8}>
+                <Field label={<InfoLabel info="控制该自定义榜单在哪个客户端接口返回；未选择时默认插件和 EchoHunt 都展示。">展示渠道</InfoLabel>}>
+                  <Select
+                    mode="multiple"
+                    allowClear={false}
+                    maxTagCount="responsive"
+                    value={normalizeCustomLeaderboardDisplayChannels(it.displayChannels)}
+                    onChange={(values) =>
+                      update(
+                        "customLeaderboards",
+                        i,
+                        "displayChannels",
+                        normalizeCustomLeaderboardDisplayChannels(values),
+                      )
+                    }
+                    options={CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS}
+                  />
+                </Field>
+              </Col>
               <Col xs={24} md={8}><Field label={<InfoLabel info="可选短名称；前端空间较小时可以优先展示 short_name，不填则使用完整名称。">中文短名</InfoLabel>}><Input value={it.short_name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "short_name.zh", e.target.value)} placeholder="可选" /></Field></Col>
               <Col xs={24} md={8}><Field label={<InfoLabel info="Optional short name for compact leaderboard display. If empty, frontend can fallback to full English name.">English Short Name</InfoLabel>}><Input value={it.short_name?.en || ""} onChange={(e) => update("customLeaderboards", i, "short_name.en", e.target.value)} placeholder="Optional" /></Field></Col>
               <Col xs={12} md={4}><Field label="金额"><InputNumber min={0} value={it.amount} onChange={(v) => update("customLeaderboards", i, "amount", v)} /></Field></Col>

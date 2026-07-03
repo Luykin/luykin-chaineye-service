@@ -54,6 +54,41 @@ function normalizeDisplayDomains(value) {
   return domains.length ? domains : ["web3"];
 }
 
+const CUSTOM_LEADERBOARD_DISPLAY_CHANNELS = ["plugin", "echohunt"];
+const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_SET = new Set(CUSTOM_LEADERBOARD_DISPLAY_CHANNELS);
+
+function normalizeCustomLeaderboardDisplayChannels(value) {
+  const list = Array.isArray(value)
+    ? value
+    : value
+      ? [value]
+      : CUSTOM_LEADERBOARD_DISPLAY_CHANNELS;
+  const channels = Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim().toLowerCase())
+        .filter((item) => CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_SET.has(item))
+    )
+  );
+  return channels.length ? channels : CUSTOM_LEADERBOARD_DISPLAY_CHANNELS;
+}
+
+function isCustomLeaderboardVisibleOnChannel(item, channel) {
+  if (!channel) return true;
+  const normalizedChannel = String(channel || "").trim().toLowerCase();
+  if (!CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_SET.has(normalizedChannel)) return true;
+  return normalizeCustomLeaderboardDisplayChannels(item?.displayChannels).includes(normalizedChannel);
+}
+
+function filterCustomLeaderboardsByChannel(list, channel) {
+  return toSafeArray(list)
+    .filter((item) => isCustomLeaderboardVisibleOnChannel(item, channel))
+    .map((item) => ({
+      ...toSafeObject(item, {}),
+      displayChannels: normalizeCustomLeaderboardDisplayChannels(item?.displayChannels),
+    }));
+}
+
 
 function parseDateOrNull(value) {
   if (!value) return null;
@@ -557,7 +592,8 @@ function buildCampaignDetail(record, lang = "zh-CN") {
   };
 }
 
-function buildPluginCampaign(record) {
+function buildPluginCampaign(record, options = {}) {
+  const channel = options && typeof options === "object" ? options.channel : null;
   const payload = toSafeObject(record.nacosPayload, {});
   const common = {
     id: payload.id || record.nacosCampaignId,
@@ -606,7 +642,7 @@ function buildPluginCampaign(record) {
       ...common,
       leaderboardApiUrl: typeof payload.leaderboardApiUrl === "string" ? payload.leaderboardApiUrl : "",
       userActivityApiUrl: typeof payload.userActivityApiUrl === "string" ? payload.userActivityApiUrl : "",
-      customLeaderboards: toSafeArray(payload.customLeaderboards),
+      customLeaderboards: filterCustomLeaderboardsByChannel(payload.customLeaderboards, channel),
     };
   }
 
@@ -639,7 +675,7 @@ async function listPluginCampaigns({ includeTesting = false } = {}) {
   }
   const records = await XHuntWebsiteCampaign.findAll({ where });
   return records
-    .map(buildPluginCampaign)
+    .map((record) => buildPluginCampaign(record, { channel: "plugin" }))
     .sort((a, b) =>
       (Number(b.sortWeight) || 0) - (Number(a.sortWeight) || 0) ||
       (Date.parse(b.enrollmentWindow?.startAt || "") || 0) -
@@ -647,7 +683,7 @@ async function listPluginCampaigns({ includeTesting = false } = {}) {
     );
 }
 
-async function getManagedCampaignPayloadByKey(campaignKey, { includeTesting = false } = {}) {
+async function getManagedCampaignPayloadByKey(campaignKey, { includeTesting = false, channel = null } = {}) {
   const key = String(campaignKey || "").trim();
   if (!key) return null;
   const where = {
@@ -667,6 +703,7 @@ async function getManagedCampaignPayloadByKey(campaignKey, { includeTesting = fa
     campaignKey: payload.campaignKey || record.campaignKey,
     enabled: record.enabled,
     testingPhase: record.testingPhase,
+    customLeaderboards: filterCustomLeaderboardsByChannel(payload.customLeaderboards, channel),
     enrollmentWindow: toSafeObject(payload.enrollmentWindow, {
       startAt: record.startAt ? new Date(record.startAt).toISOString() : "",
       endAt: record.endAt ? new Date(record.endAt).toISOString() : "",
@@ -940,6 +977,8 @@ module.exports = {
   buildCampaignListItem,
   buildCampaignDetail,
   buildPluginCampaign,
+  normalizeCustomLeaderboardDisplayChannels,
+  filterCustomLeaderboardsByChannel,
   listAllWebsiteCampaignsAdmin,
   importLegacyWebsiteCampaigns,
   serializeWebsiteCampaignAdmin,
