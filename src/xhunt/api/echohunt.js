@@ -335,6 +335,17 @@ function buildEchohuntCampaignListItem(record, lang, viewer, req) {
   };
 }
 
+function mergeStaticLeaderboardSummary(item, staticCampaign) {
+  if (!item || !staticCampaign) return item;
+  return {
+    ...item,
+    leaderboardSummary: staticCampaign.summary || null,
+    leaderboardTracks: Array.isArray(staticCampaign.tracks) ? staticCampaign.tracks : [],
+    leaderboardDataUrl: staticCampaign.dataUrl || null,
+    hasStaticLeaderboardData: true,
+  };
+}
+
 function buildEchohuntCampaignDetail(record, lang) {
   const detail = buildCampaignDetail(record, lang);
   const plugin = buildPluginCampaign(record, { channel: "echohunt" });
@@ -809,6 +820,11 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
     const twitterIdentity = getTwitterIdentityFromAuth(req);
     const viewer = twitterIdentity ? { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId } : null;
     let hasTesting = false;
+    const staticManifest = await getStaticLeaderboardManifest().catch(() => null);
+    const staticCampaignMap = new Map();
+    (Array.isArray(staticManifest?.campaigns) ? staticManifest.campaigns : []).forEach((item) => {
+      if (item?.key) staticCampaignMap.set(String(item.key), item);
+    });
 
     // EchoHunt 活动列表永远不返回 draft/archived。
     // 预热/进行中/领奖/已结束可以返回；测试活动在 JS 层继续判断 internal_test + testList。
@@ -827,7 +843,15 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
         if (allowed) hasTesting = true;
         return allowed;
       })
-      .map(({ record }) => buildEchohuntCampaignListItem(record, lang, viewer, req))
+      .map(({ record }) => {
+        const item = buildEchohuntCampaignListItem(record, lang, viewer, req);
+        const dataKey = item.campaignKey || item.slug || item.nacosCampaignId;
+        const staticCampaign =
+          staticCampaignMap.get(String(dataKey || "")) ||
+          staticCampaignMap.get(String(item.slug || "")) ||
+          staticCampaignMap.get(String(item.nacosCampaignId || ""));
+        return mergeStaticLeaderboardSummary(item, staticCampaign);
+      })
       .sort((a, b) => Number(b.sortOrder || 0) - Number(a.sortOrder || 0));
 
     return res.json({
