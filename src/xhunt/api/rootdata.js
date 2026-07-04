@@ -2114,7 +2114,7 @@ router.delete(
  * POST /api/rootdata/manual-crawl
  * 手动触发单个项目的爬取
  */
-router.post("/manual-crawl", async (req, res) => {
+router.post("/manual-crawl", adminAuth, async (req, res) => {
   const startTime = Date.now();
   const { url, force } = req.body;
   const requestId = req.headers['x-request-id'] || `mc-${Date.now()}`;

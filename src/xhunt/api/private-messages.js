@@ -1,5 +1,6 @@
 const express = require("express");
 const { authenticateToken } = require("../middleware/auth");
+const { adminAuth } = require("../../admin/middleware/adminAuth");
 const { XPrivateMessage, XHuntUser } = require("../../models/postgres-start");
 const { Op } = require("sequelize");
 const { getRedisClient } = require("../../lib/redisClient");
@@ -168,7 +169,7 @@ router.get("/", authenticateToken, async (req, res) => {
  * campaignId 统一为：type + 当天日期（yyyyMMdd）
  * 根据 type 决定不同的内容（目前内容生成逻辑预留，先空着）
  */
-router.post("/send-batch-by-type", async (req, res) => {
+router.post("/send-batch-by-type", adminAuth, async (req, res) => {
   try {
     const senderId = "6666666d-cc11-8888-8888-034d3e9a8888";
     const { type, twitterIdList, idempotencyKey } = req.body || {};

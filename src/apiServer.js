@@ -513,7 +513,7 @@ async function initializeAndStartServer() {
   // API 路由
   app.use("/api/fundraising", fundraisingRoutes);
   app.use("/api/crypto", cryptoRoutes);
-  app.use("/api/proxy", proxyRoutes);
+  app.use("/api/proxy", adminAuth, proxyRoutes);
   app.use("/api/news", newsRoutes);
   app.use("/api/general", generalRoutes);
 
