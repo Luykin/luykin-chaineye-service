@@ -495,9 +495,12 @@ function mergeListAssets(recordLike) {
 function serializeWebsiteCampaignAdmin(record) {
   if (!record) return null;
   const data = typeof record.toJSON === "function" ? record.toJSON() : record;
+  const websiteExtra = mergeListAssets(data);
+  const listAssets = toSafeObject(websiteExtra.listAssets, {});
   return {
     ...data,
-    websiteExtra: mergeListAssets(data),
+    websiteExtra,
+    echohuntHeroImage: trimOrNull(listAssets.echohuntHeroImage) || null,
   };
 }
 

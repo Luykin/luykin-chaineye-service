@@ -544,11 +544,7 @@ router.put("/internal/:nacosCampaignId/web-config", adminAuth, requirePermission
     });
     return res.json({
       success: true,
-      data: {
-        nacosCampaignId: record.nacosCampaignId,
-        webStatus: record.webStatus,
-        updatedAt: record.updatedAt,
-      },
+      data: serializeWebsiteCampaignAdmin(record),
     });
   } catch (error) {
     await logAdminAction(req, {
