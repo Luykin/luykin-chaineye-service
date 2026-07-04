@@ -413,14 +413,15 @@ function findUserInBundle(bundle, user) {
   const tracks = [];
   const winners = [];
 
-  const leaderboards = bundle?.leaderboards || {};
-  for (const [range, bySource] of Object.entries(leaderboards)) {
-    if (!bySource || typeof bySource !== "object") continue;
-    for (const [sourceKey, rows] of Object.entries(bySource)) {
+  // 最终/历史个人统计只看 all 榜单。
+  // 7d 榜单只是活动过程中的阶段性展示，不应该进入最终历史排名、奖励和报名后个人排名。
+  const allLeaderboards = bundle?.leaderboards?.all || {};
+  if (allLeaderboards && typeof allLeaderboards === "object") {
+    for (const [sourceKey, rows] of Object.entries(allLeaderboards)) {
       if (!Array.isArray(rows)) continue;
       const track = trackIndex.get(String(sourceKey));
       rows.filter((row) => rowMatchesUser(row, user)).forEach((row) => {
-        tracks.push(simplifyLeaderboardRow(row, track, range));
+        tracks.push(simplifyLeaderboardRow(row, track, "all"));
       });
     }
   }

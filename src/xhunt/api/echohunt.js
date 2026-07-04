@@ -256,26 +256,52 @@ function isViewerAllowedForTesting(pluginCampaign, viewer, req) {
   return isRequestInternalTestUser(req) && isCampaignTester(pluginCampaign, viewer);
 }
 
-function localizeTaskTitle(title, lang) {
-  if (!title) return "";
-  if (typeof title === "string") return title;
-  if (lang === "en") return title.en || title.zh || "";
-  return title.zh || title.en || "";
+function localizeTextValue(value, lang, fallback = "") {
+  if (!value) return fallback;
+  if (typeof value === "string") return value || fallback;
+  if (typeof value === "object") {
+    if (lang === "en") return value.en || value.zh || value["zh-CN"] || value.zh_cn || fallback;
+    return value.zh || value["zh-CN"] || value.zh_cn || value.en || fallback;
+  }
+  return fallback;
 }
 
-function summarizeCustomLeaderboards(list) {
-  return (Array.isArray(list) ? list : []).map((item, index) => ({
-    id: item.id || `custom-${index}`,
-    name: item.name || null,
-    short_name: item.short_name || null,
-    amount: item.amount ?? null,
-    participantCount: item.participantCount ?? null,
-    distributionType: item.distributionType || null,
-    unit: item.unit || null,
+function localizeTaskTitle(title, lang) {
+  return localizeTextValue(title, lang, "");
+}
+
+function summarizeCustomLeaderboards(list, lang = "zh-CN") {
+  return (Array.isArray(list) ? list : []).map((item, index) => {
+    const id = String(item.id || item.distributionType || `custom-${index}`).trim() || `custom-${index}`;
+    const name = localizeTextValue(item.name, lang, id);
+    const shortName = localizeTextValue(item.short_name, lang, name);
+    return {
+      id,
+      name,
+      short_name: shortName,
+      amount: item.amount ?? null,
+      participantCount: item.participantCount ?? null,
+      distributionType: item.distributionType || null,
+      unit: item.unit || null,
+    };
+  });
+}
+
+function buildCustomLeaderboardTrackSummaries(pluginCampaign, lang = "zh-CN") {
+  if (pluginCampaign?.leaderboardMode !== "custom") return [];
+  return summarizeCustomLeaderboards(pluginCampaign.customLeaderboards, lang).map((item) => ({
+    id: item.id,
+    type: "leaderboard",
+    title: item.name || item.id,
+    shortTitle: item.short_name || item.name || item.id,
+    sourceKey: item.id,
+    winnerKey: null,
+    reward: item.amount === null || item.amount === undefined || item.amount === "" ? null : `${item.amount}${item.unit ? ` ${item.unit}` : ""}`,
+    counts: {},
   }));
 }
 
-function buildRewardSummary(pluginCampaign) {
+function buildRewardSummary(pluginCampaign, lang = "zh-CN") {
   return {
     poi: {
       amount: pluginCampaign.rewardAmount ?? null,
@@ -298,7 +324,7 @@ function buildRewardSummary(pluginCampaign) {
           participantCount: pluginCampaign.essayContestWinnerCount ?? null,
         }
       : null,
-    custom: summarizeCustomLeaderboards(pluginCampaign.customLeaderboards),
+    custom: summarizeCustomLeaderboards(pluginCampaign.customLeaderboards, lang),
   };
 }
 
@@ -322,9 +348,12 @@ function buildEchohuntCampaignListItem(record, lang, viewer, req) {
       enableEssayContest: !!plugin.enableEssayContest,
       leaderboardApiUrl: plugin.leaderboardApiUrl || null,
       userActivityApiUrl: plugin.userActivityApiUrl || null,
-      customLeaderboards: summarizeCustomLeaderboards(plugin.customLeaderboards),
+      customLeaderboards: summarizeCustomLeaderboards(plugin.customLeaderboards, lang),
     },
-    rewardSummary: buildRewardSummary(plugin),
+    rewardSummary: buildRewardSummary(plugin, lang),
+    leaderboardTracks: buildCustomLeaderboardTrackSummaries(plugin, lang),
+    guideUrl: record.guideUrl || null,
+    activeUrl: record.activeUrl || null,
     tasksSummary: (Array.isArray(plugin.tasks) ? plugin.tasks : []).map((task) => ({
       id: task.id,
       type: task.type,
@@ -362,7 +391,7 @@ function buildEchohuntCampaignDetail(record, lang) {
       autoComplete: !!task.autoComplete,
     })),
     registration: {
-      open: detail.webStatus === "live",
+      open: detail.webStatus === "live" || detail.webStatus === "coming_soon",
       allowEmailRegistration: plugin.allowEmailRegistration === true,
       threshold: plugin.threshold ?? null,
       includeCreator: !!plugin.includeCreator,
@@ -373,9 +402,9 @@ function buildEchohuntCampaignDetail(record, lang) {
       enableEssayContest: !!plugin.enableEssayContest,
       leaderboardApiUrl: plugin.leaderboardApiUrl || null,
       userActivityApiUrl: plugin.userActivityApiUrl || null,
-      customLeaderboards: summarizeCustomLeaderboards(plugin.customLeaderboards),
+      customLeaderboards: summarizeCustomLeaderboards(plugin.customLeaderboards, lang),
     },
-    rewardSummary: buildRewardSummary(plugin),
+    rewardSummary: buildRewardSummary(plugin, lang),
   };
 }
 
@@ -1015,7 +1044,8 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
         throw publicError("INVALID_ENROLLMENT_WINDOW", 502, "Invalid enrollment window in config");
       }
       const startAtWithGrace = new Date(startAt.getTime() - 60 * 60 * 1000);
-      if (now < startAtWithGrace || now > endAt) {
+      const isEchohuntWarmup = String(record.webStatus || "").toLowerCase() === "coming_soon";
+      if ((!isEchohuntWarmup && now < startAtWithGrace) || now > endAt) {
         throw publicError("OUTSIDE_ENROLLMENT_WINDOW", 400, "Not within the enrollment window");
       }
     } catch (error) {
