@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Card, Col, Collapse, Input, InputNumber, Modal, Row, Segmented, Select, Space, Switch, Tag as AntTag, Tooltip } from "antd";
 import { QuestionCircleOutlined } from "@ant-design/icons";
+import { AdminImageUpload } from "@/components/upload/AdminImageUpload";
 import { ConfigWorkbench } from "@/components/config/ConfigWorkbench";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { useAuth } from "@/app/auth";
@@ -23,6 +24,7 @@ const DEFAULT_RING = "ring-blue-400/20 hover:ring-blue-400/50";
 const DEFAULT_WEBSITE_LIST_LEFT_LOGO = "https://xhunt.ai/whitexhunt.png";
 const DEFAULT_WEBSITE_LIST_RIGHT_LOGO = "https://xhunt.ai/whitexhunt.png";
 const DEFAULT_WEBSITE_LIST_CHEST_IMAGE = "https://xhunt.ai/usdc2.png";
+const ECHOHUNT_HERO_IMAGE_MAX_MB = 4;
 const DEFAULT_CUSTOM_LEADERBOARD_API_URL =
   "/api/xhunt/campaigns/custom-leaderboard";
 const DEFAULT_CUSTOM_USER_ACTIVITY_API_URL =
@@ -157,6 +159,7 @@ type WebsiteForm = {
   listLeftLogo: string;
   listRightLogo: string;
   listChestImage: string;
+  echohuntHeroImage: string;
   claimPoiContractAddress: string;
   claimPowContractAddress: string;
   claimEssayContractAddress: string;
@@ -475,6 +478,7 @@ function getWebsiteListAssets(record: AnyObj | null) {
     leftLogo: listAssets.leftLogo || DEFAULT_WEBSITE_LIST_LEFT_LOGO,
     rightLogo: listAssets.rightLogo || DEFAULT_WEBSITE_LIST_RIGHT_LOGO,
     chestImage: listAssets.chestImage || DEFAULT_WEBSITE_LIST_CHEST_IMAGE,
+    echohuntHeroImage: listAssets.echohuntHeroImage || "",
   };
 }
 
@@ -518,6 +522,7 @@ function hasWebsiteCampaignContent(record?: AnyObj | null) {
       listAssets.leftLogo,
       listAssets.rightLogo,
       listAssets.chestImage,
+      listAssets.echohuntHeroImage,
     ].some(hasOwnMeaningfulValue) ||
     (record.pageTemplate && record.pageTemplate !== "standard") ||
     hasOwnMeaningfulValue(templateConfig)
@@ -542,6 +547,7 @@ function makeWebsiteForm(
     listLeftLogo: assets.leftLogo,
     listRightLogo: assets.rightLogo,
     listChestImage: assets.chestImage,
+    echohuntHeroImage: assets.echohuntHeroImage,
     claimPoiContractAddress: record?.claimPoiContractAddress || "",
     claimPowContractAddress: record?.claimPowContractAddress || "",
     claimEssayContractAddress: record?.claimEssayContractAddress || "",
@@ -1464,6 +1470,7 @@ export function NacosCampaignsPage() {
             leftLogo: websiteForm.listLeftLogo.trim(),
             rightLogo: websiteForm.listRightLogo.trim(),
             chestImage: websiteForm.listChestImage.trim(),
+            echohuntHeroImage: websiteForm.echohuntHeroImage.trim(),
           },
         },
       });
@@ -3071,11 +3078,25 @@ function WebsiteSection({
                     {assetPreview("XHunt", form.listLeftLogo)}
                     {assetPreview("活动方", form.listRightLogo)}
                     {assetPreview("奖励图", form.listChestImage)}
+                    {assetPreview("EchoHunt 宣传图", form.echohuntHeroImage)}
                   </Space>
                   <Row gutter={[12, 12]}>
                     <Col xs={24} md={8}><Field label={<InfoLabel info="列表卡片左侧图标。">XHunt 图标 URL</InfoLabel>}><Input disabled={!enabled} value={form.listLeftLogo} onChange={(e) => update({ listLeftLogo: e.target.value })} /></Field></Col>
                     <Col xs={24} md={8}><Field label={<InfoLabel info="列表卡片右侧 Logo。">活动方 Logo URL</InfoLabel>}><Input disabled={!enabled} value={form.listRightLogo} onChange={(e) => update({ listRightLogo: e.target.value })} /></Field></Col>
                     <Col xs={24} md={8}><Field label={<InfoLabel info="旧网站列表中间展示的奖池图片 / 宝箱图。">奖励图片 URL</InfoLabel>}><Input disabled={!enabled} value={form.listChestImage} onChange={(e) => update({ listChestImage: e.target.value })} /></Field></Col>
+                    <Col xs={24}>
+                      <Field label={<InfoLabel info="可选。EchoHunt 首页活动卡片左侧视觉区域使用；建议 16:9 或 4:3，图片会居中裁切。">EchoHunt 活动宣传大图</InfoLabel>}>
+                        <AdminImageUpload
+                          disabled={!enabled}
+                          value={form.echohuntHeroImage}
+                          purpose="echohunt-campaign-hero"
+                          directory="admin-images/echohunt-campaigns"
+                          maxSizeMb={ECHOHUNT_HERO_IMAGE_MAX_MB}
+                          buttonText="上传活动宣传大图"
+                          onChange={(url) => update({ echohuntHeroImage: url })}
+                        />
+                      </Field>
+                    </Col>
                   </Row>
                 </Space>
               ),

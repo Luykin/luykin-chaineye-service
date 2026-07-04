@@ -378,8 +378,12 @@ function mergeStaticLeaderboardSummary(item, staticCampaign) {
 function buildEchohuntCampaignDetail(record, lang) {
   const detail = buildCampaignDetail(record, lang);
   const plugin = buildPluginCampaign(record, { channel: "echohunt" });
+  const listAssets = detail.websiteExtra && typeof detail.websiteExtra === "object" && detail.websiteExtra.listAssets && typeof detail.websiteExtra.listAssets === "object"
+    ? detail.websiteExtra.listAssets
+    : {};
   return {
     ...detail,
+    echohuntHeroImage: listAssets.echohuntHeroImage || null,
     testingPhase: !!plugin.testingPhase,
     displayDomains: plugin.displayDomains || ["web3"],
     tags: Array.isArray(plugin.tags) ? plugin.tags : [],

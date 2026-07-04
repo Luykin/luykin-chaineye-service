@@ -487,6 +487,7 @@ function mergeListAssets(recordLike) {
       leftLogo: trimOrNull(mergedListAssets.leftLogo),
       rightLogo: trimOrNull(mergedListAssets.rightLogo),
       chestImage: trimOrNull(mergedListAssets.chestImage),
+      echohuntHeroImage: trimOrNull(mergedListAssets.echohuntHeroImage),
     },
   };
 }
@@ -512,6 +513,7 @@ function pickLogos(record) {
     rightLogo: trimOrNull(listAssets.rightLogo) || right?.image || null,
     rightLogoAlt: right?.label || "Campaign Logo",
     chestImage: trimOrNull(listAssets.chestImage) || null,
+    echohuntHeroImage: trimOrNull(listAssets.echohuntHeroImage) || null,
     showCompletedBadge: normalizeWebsiteStatus(record.webStatus) === "ended",
   };
 }
@@ -523,6 +525,7 @@ function buildCampaignListItem(record, lang = "zh-CN") {
     rightLogo,
     rightLogoAlt,
     chestImage,
+    echohuntHeroImage,
     showCompletedBadge,
   } = pickLogos(record);
   const status = normalizeWebsiteStatus(record.webStatus);
@@ -546,6 +549,7 @@ function buildCampaignListItem(record, lang = "zh-CN") {
     rightLogo,
     rightLogoAlt,
     chestImage,
+    echohuntHeroImage,
     showCompletedBadge,
     sortOrder: deriveSortOrder(record),
     startAt: record.startAt,
@@ -781,6 +785,7 @@ function normalizeWebsiteExtra(payloadExtra, existingExtra) {
       leftLogo: trimOrNull(nextListAssets.leftLogo),
       rightLogo: trimOrNull(nextListAssets.rightLogo),
       chestImage: trimOrNull(nextListAssets.chestImage),
+      echohuntHeroImage: trimOrNull(nextListAssets.echohuntHeroImage),
     },
   };
 }
