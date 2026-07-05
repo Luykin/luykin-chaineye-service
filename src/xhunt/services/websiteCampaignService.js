@@ -672,11 +672,13 @@ function buildPluginCampaign(record, options = {}) {
   };
 }
 
-async function listPluginCampaigns({ includeTesting = false } = {}) {
+async function listPluginCampaigns({ includeTesting = false, includeDisabled = false } = {}) {
   const where = {
     isDeleted: false,
-    enabled: true,
   };
+  if (!includeDisabled) {
+    where.enabled = true;
+  }
   if (!includeTesting) {
     where.testingPhase = false;
   }
