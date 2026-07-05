@@ -672,16 +672,13 @@ function buildPluginCampaign(record, options = {}) {
   };
 }
 
-async function listPluginCampaigns({ includeTesting = false, webStatuses = null } = {}) {
+async function listPluginCampaigns({ includeTesting = false } = {}) {
   const where = {
     isDeleted: false,
     enabled: true,
   };
   if (!includeTesting) {
     where.testingPhase = false;
-  }
-  if (Array.isArray(webStatuses) && webStatuses.length > 0) {
-    where.webStatus = { [Op.in]: webStatuses };
   }
   const records = await XHuntWebsiteCampaign.findAll({ where });
   return records

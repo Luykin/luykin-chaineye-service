@@ -99,14 +99,6 @@ function isCampaignTester(campaign, requestHandle) {
 }
 
 const CAMPAIGN_DISPLAY_DOMAINS = new Set(["web3", "ai"]);
-const INTERNAL_VISIBLE_WEB_STATUSES = [
-  "coming_soon",
-  "live",
-  "claim",
-  "ended",
-  "archived",
-];
-
 function normalizeDisplayDomain(value) {
   if (Array.isArray(value)) return normalizeDisplayDomain(value[0]);
   if (value === null || value === undefined || value === "") return "";
@@ -263,14 +255,11 @@ router.get("/config", securityMiddleware, authenticateTokenOptional, async (req,
   }
 });
 
-// 内部配置接口：返回结构与 /config 保持一致，但不走插件安全签名/登录校验，
-// 不按测试用户和 domain 过滤，直接返回 web3 + ai 的预热中、进行中、领奖、已结束、归档活动。
+// 内部配置接口：不走插件安全签名/登录校验。
+// 不按 domain / webStatus 过滤；仅返回 enabled=true、isDeleted=false、非测试中的活动。
 router.get("/internal/hK9N7y37rPa1/config", async (req, res) => {
   try {
-    const allCampaigns = await listPluginCampaigns({
-      includeTesting: false,
-      webStatuses: INTERNAL_VISIBLE_WEB_STATUSES,
-    });
+    const allCampaigns = await listPluginCampaigns({ includeTesting: false });
 
     return res.json({
       version: 3,
