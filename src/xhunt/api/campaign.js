@@ -99,6 +99,13 @@ function isCampaignTester(campaign, requestHandle) {
 }
 
 const CAMPAIGN_DISPLAY_DOMAINS = new Set(["web3", "ai"]);
+const INTERNAL_VISIBLE_WEB_STATUSES = [
+  "coming_soon",
+  "live",
+  "claim",
+  "ended",
+  "archived",
+];
 
 function normalizeDisplayDomain(value) {
   if (Array.isArray(value)) return normalizeDisplayDomain(value[0]);
@@ -252,6 +259,25 @@ router.get("/config", securityMiddleware, authenticateTokenOptional, async (req,
     return res.json(payload);
   } catch (error) {
     console.error("[CampaignConfig] error:", error.message || error);
+    return res.status(500).json({ success: false, error: "获取活动配置失败" });
+  }
+});
+
+// 内部配置接口：返回结构与 /config 保持一致，但不走插件安全签名/登录校验，
+// 不按测试用户和 domain 过滤，直接返回 web3 + ai 的预热中、进行中、领奖、已结束、归档活动。
+router.get("/internal/hK9N7y37rPa1/config", async (req, res) => {
+  try {
+    const allCampaigns = await listPluginCampaigns({
+      includeTesting: false,
+      webStatuses: INTERNAL_VISIBLE_WEB_STATUSES,
+    });
+
+    return res.json({
+      version: 3,
+      campaigns: allCampaigns,
+    });
+  } catch (error) {
+    console.error("[CampaignInternalConfig] error:", error.message || error);
     return res.status(500).json({ success: false, error: "获取活动配置失败" });
   }
 });
