@@ -25,6 +25,10 @@ const nacosAdminRouter = require("./stats-routes/nacos-admin");
 const { logAdminAction } = require("./stats-routes/shared");
 const { XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
 const {
+  getWebAuthnRequestConfig,
+  filterWebAuthnCredentialsForRp,
+} = require("../../admin/utils/webauthnConfig");
+const {
   sanitizePlainText,
   sanitizeSafeUrl,
   sanitizeRichTextHtml,
@@ -3999,8 +4003,12 @@ async function requireBackupRestoreWebAuthn(req, res, next) {
       return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "请先登录" });
     }
 
-    const credentialCount = await XhuntAdminWebAuthnCredential.count({ where: { adminId: admin.id } });
-    if (credentialCount <= 0) {
+    const webAuthnConfig = getWebAuthnRequestConfig(req);
+    const credentials = filterWebAuthnCredentialsForRp(
+      await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
+      webAuthnConfig.rpID,
+    );
+    if (credentials.length <= 0) {
       return res.status(403).json({
         success: false,
         error: "需要先录入生物识别",

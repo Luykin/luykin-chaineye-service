@@ -4,6 +4,10 @@ const {
   verifyAuthenticationResponse,
 } = require("@simplewebauthn/server");
 const { XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
+const {
+  getWebAuthnRequestConfig,
+  filterWebAuthnCredentialsForRp,
+} = require("../utils/webauthnConfig");
 
 // DB Admin 是直接改 PostgreSQL 的高危入口；必须完成一次近期 WebAuthn 二次认证。
 // TTL 默认和备份恢复一致：10 分钟。过期后前端会重新弹指纹 / Face ID / 通行密钥。
@@ -11,9 +15,6 @@ const DB_ADMIN_REAUTH_TTL_SECONDS = Math.max(
   60,
   parseInt(process.env.ADMIN_DB_ADMIN_WEBAUTHN_TTL_SECONDS || "600", 10) || 600
 );
-
-const RP_ID = process.env.WEBAUTHN_RP_ID || (process.env.ADMIN_COOKIE_DOMAIN || "localhost");
-const ORIGIN = process.env.WEBAUTHN_ORIGIN || `https://${RP_ID}`;
 
 function getDbAdminReauthKey(adminId) {
   return `admin:webauthn:reauth:db-admin:${adminId}`;
@@ -38,8 +39,12 @@ function buildAuthenticatorFromCredential(row) {
 }
 
 async function getDbAdminWebAuthnStatus(req, admin) {
-  const credentialCount = await XhuntAdminWebAuthnCredential.count({ where: { adminId: admin.id } });
-  if (credentialCount <= 0) {
+  const webAuthnConfig = getWebAuthnRequestConfig(req);
+  const credentials = filterWebAuthnCredentialsForRp(
+    await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
+    webAuthnConfig.rpID,
+  );
+  if (credentials.length <= 0) {
     return {
       enrolled: false,
       verified: false,
@@ -68,7 +73,11 @@ async function getDbAdminWebAuthnStatus(req, admin) {
 }
 
 async function createDbAdminWebAuthnOptions(req, admin) {
-  const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+  const webAuthnConfig = getWebAuthnRequestConfig(req);
+  const creds = filterWebAuthnCredentialsForRp(
+    await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
+    webAuthnConfig.rpID,
+  );
   if (!creds.length) {
     const error = new Error("DB Admin 需要先录入指纹 / Face ID / 通行密钥");
     error.statusCode = 403;
@@ -81,7 +90,7 @@ async function createDbAdminWebAuthnOptions(req, admin) {
     type: "public-key",
   }));
   const options = await generateAuthenticationOptions({
-    rpID: RP_ID,
+    rpID: webAuthnConfig.rpID,
     userVerification: "required",
     allowCredentials,
   });
@@ -105,7 +114,11 @@ async function verifyDbAdminWebAuthn(req, admin, assertion) {
     throw error;
   }
 
-  const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+  const webAuthnConfig = getWebAuthnRequestConfig(req);
+  const creds = filterWebAuthnCredentialsForRp(
+    await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
+    webAuthnConfig.rpID,
+  );
   if (!creds.length) {
     const error = new Error("DB Admin 需要先录入指纹 / Face ID / 通行密钥");
     error.statusCode = 403;
@@ -125,8 +138,8 @@ async function verifyDbAdminWebAuthn(req, admin, assertion) {
   const verification = await verifyAuthenticationResponse({
     response: assertion,
     expectedChallenge,
-    expectedOrigin: ORIGIN,
-    expectedRPID: RP_ID,
+    expectedOrigin: webAuthnConfig.origin,
+    expectedRPID: webAuthnConfig.rpID,
     authenticator: buildAuthenticatorFromCredential(credential),
     requireUserVerification: true,
   });

@@ -17,14 +17,16 @@ const { adminAuth, requireRole, requirePermission, setSessionCookie } = require(
 const { randomBytes } = require("crypto");
 const { handleUpload } = require("@vercel/blob/client");
 const { chat: llmChat } = require("../../lib/llm");
+const {
+  getWebAuthnRequestConfig,
+  filterWebAuthnCredentialsForRp,
+} = require("../utils/webauthnConfig");
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
 
 // WebAuthn 配置
 const RP_NAME = process.env.WEBAUTHN_RP_NAME || "XHunt Admin";
-const RP_ID = process.env.WEBAUTHN_RP_ID || (process.env.ADMIN_COOKIE_DOMAIN || "localhost");
-const ORIGIN = process.env.WEBAUTHN_ORIGIN || `https://${RP_ID}`;
 const TEMP_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 
 const ADMIN_LOGIN_MAX_FAILED_ATTEMPTS = 5;
@@ -694,11 +696,13 @@ router.get("/webauthn/registration/options", async (req, res) => {
     try { session = jwt.verify(rawCookie, process.env.ADMIN_JWT_SECRET || 'change-me'); } catch (e) { return res.status(401).json({ success: false, error: 'UNAUTHORIZED' }); }
     const admin = await XhuntAdminManager.findByPk(session.id);
     if (!admin || !admin.isActive || !admin.canLogin) return res.status(403).json({ success: false, error: 'FORBIDDEN' });
+    const webAuthnConfig = getWebAuthnRequestConfig(req);
     const existing = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
-    const excludeCredentials = existing.map(c => ({ id: base64url.toBuffer(c.credentialId), type: "public-key" }));
+    const currentRpCredentials = filterWebAuthnCredentialsForRp(existing, webAuthnConfig.rpID);
+    const excludeCredentials = currentRpCredentials.map(c => ({ id: base64url.toBuffer(c.credentialId), type: "public-key" }));
     const options = await generateRegistrationOptions({
       rpName: RP_NAME,
-      rpID: RP_ID,
+      rpID: webAuthnConfig.rpID,
       userID: String(admin.id),
       userName: admin.email,
       attestationType: "none",
@@ -727,11 +731,12 @@ router.post("/webauthn/registration/verify", express.json(), async (req, res) =>
     const expectedChallenge = await req.redisClient.get(challengeKey);
     if (!expectedChallenge) return res.status(400).json({ success: false, error: "注册超时" });
 
+    const webAuthnConfig = getWebAuthnRequestConfig(req);
     const verification = await verifyRegistrationResponse({
       response: attResp,
       expectedChallenge,
-      expectedOrigin: ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: webAuthnConfig.origin,
+      expectedRPID: webAuthnConfig.rpID,
     });
 
     const { verified, registrationInfo } = verification;
@@ -744,6 +749,7 @@ router.post("/webauthn/registration/verify", express.json(), async (req, res) =>
     await XhuntAdminWebAuthnCredential.create({
       adminId: admin.id,
       credentialId: credentialIdB64,
+      rpId: webAuthnConfig.rpID,
       publicKey: publicKeyB64,
       counter: counter || 0,
       aaguid: aaguid || null,
@@ -775,10 +781,14 @@ router.get("/webauthn/authentication/options", async (req, res) => {
     const admin = await XhuntAdminManager.findByPk(decoded.aid);
     if (!admin) return res.status(404).json({ success: false, error: "管理员不存在" });
 
-    const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    const webAuthnConfig = getWebAuthnRequestConfig(req);
+    const creds = filterWebAuthnCredentialsForRp(
+      await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
+      webAuthnConfig.rpID,
+    );
     const allowCredentials = creds.map(c => ({ id: base64url.toBuffer(c.credentialId), type: "public-key" }));
     const options = await generateAuthenticationOptions({
-      rpID: RP_ID,
+      rpID: webAuthnConfig.rpID,
       userVerification: "preferred",
       allowCredentials,
     });
@@ -804,14 +814,18 @@ router.post("/webauthn/authentication/verify", express.json(), async (req, res) 
     const expectedChallenge = await req.redisClient.get(challengeKey);
     if (!expectedChallenge) return res.status(400).json({ success: false, error: "认证超时" });
 
-    const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    const webAuthnConfig = getWebAuthnRequestConfig(req);
+    const creds = filterWebAuthnCredentialsForRp(
+      await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
+      webAuthnConfig.rpID,
+    );
     const credentialLookup = new Map(creds.map(c => [c.credentialId, c]));
 
     const verification = await verifyAuthenticationResponse({
       response: assertion,
       expectedChallenge,
-      expectedOrigin: ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: webAuthnConfig.origin,
+      expectedRPID: webAuthnConfig.rpID,
       authenticator: (function () {
         // SimpleWebAuthn Browser 返回的 assertion.id 通常为 base64url 字符串，与我们存储的一致
         const credKey = getCredentialKeyFromAssertion(assertion);
@@ -851,7 +865,11 @@ router.get("/webauthn/backup-restore/options", async (req, res) => {
     const admin = await getLoggedInAdminForJson(req, res);
     if (!admin) return;
 
-    const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    const webAuthnConfig = getWebAuthnRequestConfig(req);
+    const creds = filterWebAuthnCredentialsForRp(
+      await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
+      webAuthnConfig.rpID,
+    );
     if (!creds.length) {
       return res.status(403).json({
         success: false,
@@ -866,7 +884,7 @@ router.get("/webauthn/backup-restore/options", async (req, res) => {
       type: "public-key",
     }));
     const options = await generateAuthenticationOptions({
-      rpID: RP_ID,
+      rpID: webAuthnConfig.rpID,
       userVerification: "required",
       allowCredentials,
     });
@@ -892,7 +910,11 @@ router.post("/webauthn/backup-restore/verify", express.json(), async (req, res) 
     const expectedChallenge = await req.redisClient.get(challengeKey);
     if (!expectedChallenge) return res.status(400).json({ success: false, error: "认证超时，请重新验证" });
 
-    const creds = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    const webAuthnConfig = getWebAuthnRequestConfig(req);
+    const creds = filterWebAuthnCredentialsForRp(
+      await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } }),
+      webAuthnConfig.rpID,
+    );
     if (!creds.length) {
       return res.status(403).json({
         success: false,
@@ -909,8 +931,8 @@ router.post("/webauthn/backup-restore/verify", express.json(), async (req, res) 
     const verification = await verifyAuthenticationResponse({
       response: assertion,
       expectedChallenge,
-      expectedOrigin: ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: webAuthnConfig.origin,
+      expectedRPID: webAuthnConfig.rpID,
       authenticator: buildAuthenticatorFromCredential(credential),
       requireUserVerification: true,
     });
@@ -962,8 +984,12 @@ router.post("/webauthn/backup-restore/verify", express.json(), async (req, res) 
 router.get("/webauthn/credentials", adminAuth, async (req, res) => {
   try {
     const admin = req.adminUser;
-    const rows = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id }, order: [["updatedAt", "DESC"]] });
-    res.json({ success: true, credentials: rows.map(r => ({ id: r.id, nickname: r.nickname, lastUsedAt: r.lastUsedAt, createdAt: r.createdAt })) });
+    const webAuthnConfig = getWebAuthnRequestConfig(req);
+    const rows = filterWebAuthnCredentialsForRp(
+      await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id }, order: [["updatedAt", "DESC"]] }),
+      webAuthnConfig.rpID,
+    );
+    res.json({ success: true, rpId: webAuthnConfig.rpID, credentials: rows.map(r => ({ id: r.id, nickname: r.nickname, rpId: r.rpId || null, lastUsedAt: r.lastUsedAt, createdAt: r.createdAt })) });
   } catch (e) {
     res.status(500).json({ success: false, error: "获取失败" });
   }
@@ -1151,8 +1177,10 @@ router.post("/login", express.json(), async (req, res) => {
       });
     }
 
-    // 判断是否存在 WebAuthn 凭证
-    const credCount = await XhuntAdminWebAuthnCredential.count({ where: { adminId: admin.id } });
+    // 判断当前域名/RP ID 下是否存在 WebAuthn 凭证。kb.cryptohunt.ai 与 kb.xhunt.ai 是不同主域，凭证不能跨域复用。
+    const webAuthnConfig = getWebAuthnRequestConfig(req);
+    const allCredentials = await XhuntAdminWebAuthnCredential.findAll({ where: { adminId: admin.id } });
+    const credCount = filterWebAuthnCredentialsForRp(allCredentials, webAuthnConfig.rpID).length;
 
     try { const key = `admin:loginfail:${email}`; await req.redisClient.del(key); } catch (e) {}
 

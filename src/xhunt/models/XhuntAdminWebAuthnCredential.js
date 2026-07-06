@@ -7,6 +7,7 @@ module.exports = (sequelize) => {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       adminId: { type: DataTypes.INTEGER, allowNull: false },
       credentialId: { type: DataTypes.STRING(255), allowNull: false, unique: true },
+      rpId: { type: DataTypes.STRING(255), allowNull: true },
       publicKey: { type: DataTypes.TEXT, allowNull: false },
       counter: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
       transports: { type: DataTypes.JSONB, allowNull: true },
@@ -21,6 +22,7 @@ module.exports = (sequelize) => {
       indexes: [
         { unique: true, fields: ["credentialId"] },
         { fields: ["adminId"] },
+        { fields: ["adminId", "rpId"] },
       ],
       timestamps: true,
     }
