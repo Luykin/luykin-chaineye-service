@@ -4,19 +4,78 @@ const { XhuntAdminManager } = require("../../models/postgres-start");
 const SESSION_TTL = parseInt(process.env.ADMIN_SESSION_TTL || "7200", 10); // seconds
 const JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 
-function setSessionCookie(res, payload) {
+function normalizeCookieHost(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .split("/")[0]
+    .split(":")[0]
+    .replace(/^\./, "");
+}
+
+function getHeaderOriginHost(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return normalizeCookieHost(new URL(raw).hostname);
+  } catch (_) {
+    return "";
+  }
+}
+
+function getRequestHost(req) {
+  const originHost = getHeaderOriginHost(req?.headers?.origin);
+  if (originHost) return originHost;
+
+  const refererHost = getHeaderOriginHost(req?.headers?.referer || req?.headers?.referrer);
+  if (refererHost) return refererHost;
+
+  const forwardedHost = String(req?.headers?.["x-forwarded-host"] || "").split(",")[0];
+  return normalizeCookieHost(forwardedHost || req?.headers?.host || req?.hostname || "");
+}
+
+function getSessionCookieDomain(req) {
+  const configuredDomain = normalizeCookieHost(process.env.ADMIN_COOKIE_DOMAIN);
+  if (!configuredDomain) return undefined;
+
+  const requestHost = getRequestHost(req);
+  if (!requestHost) return configuredDomain;
+
+  // Cookie Domain 只能设置为当前 host 或其父域。kb.xhunt.ai 不能写 Domain=kb.cryptohunt.ai；
+  // 这种情况退回 host-only cookie，让两个后台域名各自维护自己的 admin session。
+  if (requestHost === configuredDomain || requestHost.endsWith(`.${configuredDomain}`)) {
+    return process.env.ADMIN_COOKIE_DOMAIN;
+  }
+  return undefined;
+}
+
+function buildSessionCookieOptions(req, overrides = {}) {
   const secure = (process.env.ADMIN_COOKIE_SECURE || "false").toLowerCase() === "true";
-  const domain = process.env.ADMIN_COOKIE_DOMAIN || undefined;
-  const cookieName = process.env.ADMIN_COOKIE_NAME || "xh_admin_session";
-  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: SESSION_TTL });
-  res.cookie(cookieName, token, {
+  const domain = getSessionCookieDomain(req);
+  return {
     httpOnly: true,
     sameSite: "lax",
     secure,
     domain,
-    maxAge: SESSION_TTL * 1000,
     path: "/",
-  });
+    ...overrides,
+  };
+}
+
+function setSessionCookie(res, payload, req = null) {
+  const cookieName = process.env.ADMIN_COOKIE_NAME || "xh_admin_session";
+  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: SESSION_TTL });
+  res.cookie(cookieName, token, buildSessionCookieOptions(req, {
+    maxAge: SESSION_TTL * 1000,
+  }));
+}
+
+function clearSessionCookie(res, req = null) {
+  const cookieName = process.env.ADMIN_COOKIE_NAME || "xh_admin_session";
+  res.cookie(cookieName, "", buildSessionCookieOptions(req, {
+    expires: new Date(0),
+  }));
 }
 
 function parseCookies(cookieHeader) {
@@ -64,7 +123,7 @@ async function adminAuth(req, res, next) {
     let permissions = Array.isArray(admin.permissions) ? admin.permissions : [];
 
     // Sliding expiration: re-issue cookie on each valid request
-    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email });
+    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email }, req);
 
     // 注入兼容对象与权限，供管理后台 API 权限判断使用
     req.adminUser = admin;
@@ -107,4 +166,4 @@ function renderLoginRedirect() {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><script>location.replace('/api/xhunt/stats#/login')</script><style>body{background:#f8fafc;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,-apple-system,sans-serif;color:#64748b}</style></head><body>会话已过期，正在跳转...</body></html>`;
 }
 
-module.exports = { adminAuth, requireRole, requirePermission, setSessionCookie };
+module.exports = { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie };
