@@ -119,6 +119,12 @@
   background: linear-gradient(180deg, light-dark(#f7fef9, rgba(16, 185, 129, 0.11)) 0%, var(--admin-surface) 46%);
 }
 
+.overview-activity-panel--daily-line {
+  color: var(--admin-primary);
+  border-color: light-dark(#bfdbfe, rgba(96, 165, 250, 0.42));
+  background: linear-gradient(180deg, var(--admin-primary-soft) 0%, var(--admin-surface) 44%);
+}
+
 .overview-activity-panel-head {
   display: flex;
   align-items: baseline;
@@ -143,6 +149,66 @@
 .overview-activity-panel-head strong::before {
   content: "峰值 ";
   font-weight: 500;
+}
+
+.overview-line-chart-wrap {
+  height: 236px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0 0;
+}
+
+.overview-line-chart {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: 236px;
+  color: var(--admin-primary);
+}
+
+.overview-line-chart-grid {
+  stroke: light-dark(rgba(148, 163, 184, 0.26), rgba(148, 163, 184, 0.16));
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.overview-line-chart-area {
+  fill: url("#overviewDauLineArea");
+}
+
+.overview-line-chart-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.overview-line-chart-dot-hit {
+  fill: transparent;
+  cursor: default;
+}
+
+.overview-line-chart-dot {
+  fill: var(--admin-surface);
+  stroke: currentColor;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  transition: r 0.15s ease, fill 0.15s ease;
+}
+
+.overview-line-chart g:hover .overview-line-chart-dot,
+.overview-line-chart g.is-current .overview-line-chart-dot {
+  fill: currentColor;
+}
+
+.overview-line-chart-label {
+  fill: var(--admin-text-muted);
+  font-size: 22px;
+  font-weight: 650;
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
 }
 
 .overview-activity-chart {

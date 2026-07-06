@@ -43,19 +43,128 @@ function getChartLabelStep(length: number) {
   return 1;
 }
 
+type ActivityChartItem = {
+  key: string;
+  label: string;
+  subLabel: string;
+  value: number;
+  isCurrent?: boolean;
+};
+
+function ActivityLineChart({
+  title,
+  items,
+}: {
+  title: string;
+  items: ActivityChartItem[];
+}) {
+  const maxValue = Math.max(...items.map((item) => item.value), 0);
+  const chartMaxValue = Math.max(maxValue, 1);
+  const labelStep = getChartLabelStep(items.length);
+  const width = 1000;
+  const height = 240;
+  const top = 22;
+  const bottom = 198;
+  const left = 28;
+  const right = 24;
+  const chartWidth = width - left - right;
+  const chartHeight = bottom - top;
+  const points = items.map((item, index) => {
+    const x = items.length === 1 ? left + chartWidth / 2 : left + (index / (items.length - 1)) * chartWidth;
+    const y = bottom - (item.value / chartMaxValue) * chartHeight;
+    return { ...item, x, y };
+  });
+  const polylinePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const areaPath = points.length
+    ? `M ${points[0].x} ${bottom} L ${points.map((point) => `${point.x} ${point.y}`).join(" L ")} L ${points[points.length - 1].x} ${bottom} Z`
+    : "";
+
+  return (
+    <div className="overview-activity-panel overview-activity-panel--daily-line">
+      <div className="overview-activity-panel-head">
+        <span>{title}</span>
+        <strong>{formatNumber(maxValue)}</strong>
+      </div>
+
+      {items.length ? (
+        <div className="overview-line-chart-wrap">
+          <svg
+            className="overview-line-chart"
+            viewBox={`0 0 ${width} ${height}`}
+            role="img"
+            aria-label={title}
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <linearGradient id="overviewDauLineArea" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
+                <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+              const y = top + ratio * chartHeight;
+              return (
+                <line
+                  className="overview-line-chart-grid"
+                  key={ratio}
+                  x1={left}
+                  x2={width - right}
+                  y1={y}
+                  y2={y}
+                />
+              );
+            })}
+
+            {areaPath ? <path className="overview-line-chart-area" d={areaPath} /> : null}
+            <polyline className="overview-line-chart-line" points={polylinePoints} />
+
+            {points.map((point, index) => {
+              const showLabel =
+                index === 0 || index === points.length - 1 || index % labelStep === 0;
+              return (
+                <g className={point.isCurrent ? "is-current" : ""} key={point.key}>
+                  <circle
+                    className="overview-line-chart-dot-hit"
+                    cx={point.x}
+                    cy={point.y}
+                    r="14"
+                  >
+                    <title>{`${point.label}：${formatNumber(point.value)}`}</title>
+                  </circle>
+                  <circle
+                    className="overview-line-chart-dot"
+                    cx={point.x}
+                    cy={point.y}
+                    r={point.isCurrent ? 5.5 : 4}
+                  />
+                  {showLabel ? (
+                    <text className="overview-line-chart-label" x={point.x} y={height - 12}>
+                      {point.subLabel}
+                    </text>
+                  ) : null}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      ) : (
+        <div className="overview-activity-empty">
+          <LegacyStatsIcon name="empty" />
+          <span>暂无活跃数据</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ActivityBarChart({
   title,
   items,
   variant,
 }: {
   title: string;
-  items: Array<{
-    key: string;
-    label: string;
-    subLabel: string;
-    value: number;
-    isCurrent?: boolean;
-  }>;
+  items: ActivityChartItem[];
   variant: "daily" | "weekly";
 }) {
   const maxValue = Math.max(...items.map((item) => item.value), 0);
@@ -216,7 +325,7 @@ function DailyActiveSection({
       </div>
 
       <div className="overview-activity-panels">
-        <ActivityBarChart title="日活用户数（DAU）" items={dailyChartItems} variant="daily" />
+        <ActivityLineChart title="日活用户数（DAU）" items={dailyChartItems} />
         <ActivityBarChart title="周活用户数（WAU）" items={weeklyChartItems} variant="weekly" />
       </div>
     </div>
