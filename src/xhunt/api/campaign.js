@@ -73,10 +73,15 @@ function normalizeTesterHandle(value) {
   return String(value).trim().replace(/^@+/, "").toLowerCase();
 }
 
-function isCampaignTester(campaign, requestHandle) {
-  if (!campaign || !requestHandle) return false;
+function isCampaignTester(campaign, requestHandleOrViewer) {
+  if (!campaign || !requestHandleOrViewer) return false;
   const list = Array.isArray(campaign.testList) ? campaign.testList : [];
-  return list.some((item) => normalizeTesterHandle(item) === requestHandle);
+  const requestIdentifiers = typeof requestHandleOrViewer === "object"
+    ? [requestHandleOrViewer.username, requestHandleOrViewer.twitterId]
+    : [requestHandleOrViewer];
+  const normalized = requestIdentifiers.map(normalizeTesterHandle).filter(Boolean);
+  if (!normalized.length) return false;
+  return list.some((item) => normalized.includes(normalizeTesterHandle(item)));
 }
 
 const CAMPAIGN_DISPLAY_DOMAINS = new Set(["web3", "ai"]);
