@@ -3,12 +3,12 @@ const axios = require("axios");
 const DEFAULT_ALERT_PUSH_URL =
   "http://65.21.227.58:3001/api/push/PdGpOIEiBa?status=up&msg=OK&ping=";
 
-function getAlertPushUrl() {
-  return process.env.ALERT_PUSH_URL || DEFAULT_ALERT_PUSH_URL;
+function getAlertPushUrl(customUrl) {
+  return customUrl || process.env.ALERT_PUSH_URL || DEFAULT_ALERT_PUSH_URL;
 }
 
-async function pushAlertNotification(source = "unknown") {
-  const url = getAlertPushUrl();
+async function pushAlertNotification(source = "unknown", customUrl = null) {
+  const url = getAlertPushUrl(customUrl);
   if (!url) {
     return { success: false, skipped: true, reason: "ALERT_PUSH_URL_NOT_CONFIGURED" };
   }
@@ -19,7 +19,7 @@ async function pushAlertNotification(source = "unknown") {
     const response = await axios.get(url, { timeout: 5000 });
     const durationMs = Date.now() - startedAt;
 
-    console.log("[alertPushService] 告警 push 调用成功:", {
+    console.log("[alertPushService] 心跳 push 调用成功:", {
       source,
       status: response.status,
       durationMs,
@@ -33,7 +33,7 @@ async function pushAlertNotification(source = "unknown") {
   } catch (error) {
     const durationMs = Date.now() - startedAt;
 
-    console.warn("[alertPushService] 告警 push 调用失败:", {
+    console.warn("[alertPushService] 心跳 push 调用失败:", {
       source,
       durationMs,
       error: error.message,
@@ -49,4 +49,5 @@ async function pushAlertNotification(source = "unknown") {
 
 module.exports = {
   pushAlertNotification,
+  getAlertPushUrl,
 };

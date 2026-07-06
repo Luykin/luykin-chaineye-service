@@ -1121,14 +1121,32 @@ async function sendAlertEmail(payload) {
     );
   }
 
-  const pushResult = await pushAlertNotification("rootdata-tampermonkey-alert");
-
   return {
     recipients,
     sent: results.length - failedItems.length,
     failed: failedItems.length,
-    push: pushResult,
   };
+}
+
+async function pushRootDataImportHeartbeat(source, meta = {}) {
+  try {
+    const result = await pushAlertNotification(source);
+    if (!result?.success) {
+      console.warn("[rootdata-tampermonkey] RootData 入库成功心跳调用失败:", {
+        source,
+        ...meta,
+        result,
+      });
+    }
+    return result;
+  } catch (error) {
+    console.warn("[rootdata-tampermonkey] RootData 入库成功心跳调用异常:", {
+      source,
+      ...meta,
+      error: error.message,
+    });
+    return { success: false, error: error.message };
+  }
 }
 
 router.post("/alert", requireClientToken, async (req, res) => {
@@ -1289,6 +1307,13 @@ router.post("/import", requireClientToken, async (req, res) => {
       scrapedAt,
       skippedItems: skipped.slice(0, 20),
     },
+  });
+
+  await pushRootDataImportHeartbeat("rootdata-tampermonkey-import-success", {
+    scheduleSlot,
+    page,
+    imported: data.length,
+    pageUrl,
   });
 
   return res.json({
@@ -1717,6 +1742,12 @@ router.post("/details/import", requireClientToken, async (req, res) => {
         forceRefreshInvestmentRelationships,
         cleanupWindowStart: cleanupWindowStart ? cleanupWindowStart.toISOString() : null,
       },
+    });
+
+    await pushRootDataImportHeartbeat("rootdata-tampermonkey-detail-import-success", {
+      scheduleSlot,
+      projectName,
+      projectLink,
     });
 
     return res.json({
