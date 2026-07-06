@@ -4,6 +4,45 @@ const { XhuntAdminManager } = require("../../models/postgres-start");
 const SESSION_TTL = parseInt(process.env.ADMIN_SESSION_TTL || "7200", 10); // seconds
 const JWT_SECRET = process.env.ADMIN_JWT_SECRET || "change-me";
 
+function getSessionVersionKey(adminId) {
+  return `admin:session-version:${adminId}`;
+}
+
+async function getAdminSessionVersion(req, adminId) {
+  if (!req?.redisClient || !adminId) return 0;
+  try {
+    const raw = await req.redisClient.get(getSessionVersionKey(adminId));
+    const value = Number(raw || 0);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch (error) {
+    console.warn("[adminAuth] 读取 sessionVersion 失败:", error.message);
+    return 0;
+  }
+}
+
+async function bumpAdminSessionVersion(req, adminId) {
+  if (!req?.redisClient || !adminId) return Date.now();
+  try {
+    const key = getSessionVersionKey(adminId);
+    if (typeof req.redisClient.incr === "function") {
+      return req.redisClient.incr(key);
+    }
+    const next = (await getAdminSessionVersion(req, adminId)) + 1;
+    await req.redisClient.set(key, String(next));
+    return next;
+  } catch (error) {
+    console.warn("[adminAuth] 更新 sessionVersion 失败:", error.message);
+    return Date.now();
+  }
+}
+
+function buildUnauthorizedResponse(req, res, status = 401) {
+  const wantsJson = String(req.headers['accept'] || '').includes('application/json') ||
+    String(req.headers['x-requested-with'] || '').toLowerCase() === 'xmlhttprequest';
+  if (wantsJson) return res.status(status).json({ success: false, error: status === 403 ? 'FORBIDDEN' : 'UNAUTHORIZED', needLogin: true });
+  return res.status(status).send(renderLoginRedirect());
+}
+
 function normalizeCookieHost(value) {
   return String(value || "")
     .trim()
@@ -95,35 +134,33 @@ async function adminAuth(req, res, next) {
     const cookies = req.cookies || parseCookies(req.headers.cookie || "");
     const token = cookies[cookieName];
     if (!token) {
-      const wantsJson = String(req.headers['accept'] || '').includes('application/json') ||
-        String(req.headers['x-requested-with'] || '').toLowerCase() === 'xmlhttprequest';
-      if (wantsJson) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', needLogin: true });
-      return res.status(401).send(renderLoginRedirect());
+      return buildUnauthorizedResponse(req, res, 401);
     }
 
     let decoded;
     try {
       decoded = jwt.verify(token, JWT_SECRET);
     } catch (e) {
-      const wantsJson = String(req.headers['accept'] || '').includes('application/json') ||
-        String(req.headers['x-requested-with'] || '').toLowerCase() === 'xmlhttprequest';
-      if (wantsJson) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', needLogin: true });
-      return res.status(401).send(renderLoginRedirect());
+      return buildUnauthorizedResponse(req, res, 401);
     }
 
     const admin = await XhuntAdminManager.findByPk(decoded.id);
     if (!admin || !admin.isActive || !admin.canLogin) {
-      const wantsJson = String(req.headers['accept'] || '').includes('application/json') ||
-        String(req.headers['x-requested-with'] || '').toLowerCase() === 'xmlhttprequest';
-      if (wantsJson) return res.status(403).json({ success: false, error: 'FORBIDDEN', needLogin: true });
-      return res.status(403).send(renderLoginRedirect());
+      return buildUnauthorizedResponse(req, res, 403);
+    }
+
+    const currentSessionVersion = await getAdminSessionVersion(req, admin.id);
+    const tokenSessionVersion = Number(decoded.sessionVersion || 0);
+    if (currentSessionVersion > 0 && tokenSessionVersion !== currentSessionVersion) {
+      clearSessionCookie(res, req);
+      return buildUnauthorizedResponse(req, res, 401);
     }
 
     // 载入权限：仅使用 DB 字段；为空则表示无任何细粒度权限
     let permissions = Array.isArray(admin.permissions) ? admin.permissions : [];
 
     // Sliding expiration: re-issue cookie on each valid request
-    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email }, req);
+    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email, sessionVersion: tokenSessionVersion }, req);
 
     // 注入兼容对象与权限，供管理后台 API 权限判断使用
     req.adminUser = admin;
@@ -166,4 +203,4 @@ function renderLoginRedirect() {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><script>location.replace('/api/xhunt/stats#/login')</script><style>body{background:#f8fafc;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,-apple-system,sans-serif;color:#64748b}</style></head><body>会话已过期，正在跳转...</body></html>`;
 }
 
-module.exports = { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie };
+module.exports = { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie, bumpAdminSessionVersion };

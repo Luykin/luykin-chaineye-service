@@ -13,7 +13,7 @@ const {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } = require("@simplewebauthn/server");
-const { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie } = require("../middleware/adminAuth");
+const { adminAuth, requireRole, requirePermission, setSessionCookie, clearSessionCookie, bumpAdminSessionVersion } = require("../middleware/adminAuth");
 const { randomBytes } = require("crypto");
 const { handleUpload } = require("@vercel/blob/client");
 const { chat: llmChat } = require("../../lib/llm");
@@ -847,7 +847,8 @@ router.post("/webauthn/authentication/verify", express.json(), async (req, res) 
     }
 
     await admin.update({ lastLoginAt: new Date() });
-    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email }, req);
+    const sessionVersion = await bumpAdminSessionVersion(req, admin.id);
+    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email, sessionVersion }, req);
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "webauthn-auth", route: "/admin/webauthn/authentication/verify", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } catch (e) {}
     await req.redisClient.del(challengeKey);
     res.json({ success: true, redirect: "/overview" });
@@ -1197,7 +1198,8 @@ router.post("/login", express.json(), async (req, res) => {
     // 无凭证：直接登录
     await admin.update({ failedLoginAttempts: 0, loginLockedUntil: null, lastLoginAt: new Date() });
     try { await XhuntAdminAuditLog.create({ adminId: admin.id, email: admin.email, action: "login", route: "/admin/login", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true, message: `credCount=${credCount}` }); } catch (e) {}
-    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email }, req);
+    const sessionVersion = await bumpAdminSessionVersion(req, admin.id);
+    setSessionCookie(res, { id: admin.id, role: admin.role, email: admin.email, sessionVersion }, req);
     res.set('Cache-Control','no-store');
     res.type('application/json');
     res.json({ success: true, redirect: "/overview", credCount });
@@ -1300,6 +1302,7 @@ router.post("/uploads/blob", async (req, res) => {
 router.post("/logout", adminAuth, async (req, res) => {
   try {
     try { const u = req.adminUser; if (u) { await XhuntAdminAuditLog.create({ adminId: u.id, email: u.email, action: "logout", route: "/admin/logout", method: "POST", ip: req.ip || "", userAgent: req.headers["user-agent"] || "", success: true }); } } catch (e) {}
+    if (req.adminUser?.id) await bumpAdminSessionVersion(req, req.adminUser.id);
     clearSessionCookie(res, req);
     res.json({ success: true });
   } catch (e) {
