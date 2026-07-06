@@ -444,6 +444,41 @@ function getSortBucket(status) {
   return 0;
 }
 
+const CARD_THEME_COLORS = new Set([
+  "neutral",
+  "slate",
+  "blue",
+  "cyan",
+  "emerald",
+  "mint",
+  "amber",
+  "orange",
+  "rose",
+  "purple",
+]);
+
+const CARD_THEME_BACKGROUND_STYLES = new Set(["clean", "dots", "grid", "glow"]);
+
+function normalizeCardThemeValue(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const theme = toSafeObject(value, {});
+  const color = String(theme.color || "").trim().toLowerCase();
+  const backgroundStyle = String(theme.backgroundStyle || "").trim().toLowerCase();
+  const hasExplicitValue = color || backgroundStyle;
+  if (!hasExplicitValue) return null;
+  return {
+    color: CARD_THEME_COLORS.has(color) ? color : "neutral",
+    backgroundStyle: CARD_THEME_BACKGROUND_STYLES.has(backgroundStyle)
+      ? backgroundStyle
+      : "clean",
+  };
+}
+
+function getCardTheme(recordLike) {
+  const websiteExtra = toSafeObject(recordLike?.websiteExtra, {});
+  return normalizeCardThemeValue(websiteExtra.cardTheme);
+}
+
 function deriveSortOrder(record) {
   const bucket = getSortBucket(record.webStatus);
   const weight = Number(record.sortWeight || 0) * 100000;
@@ -547,6 +582,7 @@ function buildCampaignListItem(record, lang = "zh-CN") {
     status,
     buttonText: getButtonTextByStatus(status, lang),
     cardStyle: getCardStyleByStatus(status),
+    cardTheme: getCardTheme(record),
     leftLogo,
     leftLogoAlt,
     rightLogo,
@@ -594,6 +630,7 @@ function buildCampaignDetail(record, lang = "zh-CN") {
     },
     pageTemplate: record.pageTemplate || "standard",
     templateConfig: toSafeObject(record.templateConfig, {}),
+    cardTheme: getCardTheme(record),
     websiteExtra: mergeListAssets(record),
     nacosPayload: toSafeObject(record.nacosPayload, {}),
   };
@@ -785,8 +822,11 @@ function normalizeWebsiteExtra(payloadExtra, existingExtra) {
   };
   const currentListAssets = toSafeObject(toSafeObject(existingExtra, {}).listAssets, {});
   const nextListAssets = toSafeObject(nextExtra.listAssets, currentListAssets);
+  const cardTheme = normalizeCardThemeValue(nextExtra.cardTheme);
+  const { cardTheme: _rawCardTheme, ...extraWithoutCardTheme } = nextExtra;
   return {
-    ...nextExtra,
+    ...extraWithoutCardTheme,
+    ...(cardTheme ? { cardTheme } : {}),
     listAssets: {
       leftLogo: trimOrNull(nextListAssets.leftLogo),
       rightLogo: trimOrNull(nextListAssets.rightLogo),

@@ -43,6 +43,30 @@ const TAG_COLOR_SCHEMES = [
   { value: "orange", label: "橙色", className: "tag-orange" },
 ];
 
+const CARD_THEME_COLOR_OPTIONS = [
+  { value: "neutral", label: "Neutral · 默认" },
+  { value: "slate", label: "Slate · 深灰" },
+  { value: "blue", label: "Blue · 蓝色" },
+  { value: "cyan", label: "Cyan · 青色" },
+  { value: "emerald", label: "Emerald · 绿色" },
+  { value: "mint", label: "Mint · 薄荷绿" },
+  { value: "amber", label: "Amber · 金色" },
+  { value: "orange", label: "Orange · 橙色" },
+  { value: "rose", label: "Rose · 玫红" },
+  { value: "purple", label: "Purple · 紫色" },
+];
+const CARD_THEME_COLOR_VALUES = new Set(CARD_THEME_COLOR_OPTIONS.map((item) => item.value));
+
+const CARD_THEME_BACKGROUND_STYLE_OPTIONS = [
+  { value: "clean", label: "Clean · 干净渐变" },
+  { value: "dots", label: "Dots · 点阵" },
+  { value: "grid", label: "Grid · 网格" },
+  { value: "glow", label: "Glow · 柔光" },
+];
+const CARD_THEME_BACKGROUND_STYLE_VALUES = new Set(
+  CARD_THEME_BACKGROUND_STYLE_OPTIONS.map((item) => item.value),
+);
+
 const LUCIDE_ICONS = [
   "FileText 📄",
   "Gift 🎁",
@@ -179,6 +203,9 @@ type WebsiteForm = {
   listRightLogo: string;
   listChestImage: string;
   echohuntHeroImage: string;
+  cardThemeEnabled: boolean;
+  cardThemeColor: string;
+  cardThemeBackgroundStyle: string;
   claimPoiContractAddress: string;
   claimPowContractAddress: string;
   claimEssayContractAddress: string;
@@ -511,6 +538,23 @@ function getWebsiteListAssets(record: AnyObj | null) {
   };
 }
 
+function getWebsiteCardTheme(record: AnyObj | null) {
+  const theme =
+    record?.websiteExtra?.cardTheme &&
+    typeof record.websiteExtra.cardTheme === "object"
+      ? (record.websiteExtra.cardTheme as AnyObj)
+      : null;
+  const color = String(theme?.color || "neutral").trim().toLowerCase();
+  const backgroundStyle = String(theme?.backgroundStyle || "clean").trim().toLowerCase();
+  return {
+    enabled: Boolean(theme?.color || theme?.backgroundStyle),
+    color: CARD_THEME_COLOR_VALUES.has(color) ? color : "neutral",
+    backgroundStyle: CARD_THEME_BACKGROUND_STYLE_VALUES.has(backgroundStyle)
+      ? backgroundStyle
+      : "clean",
+  };
+}
+
 function hasOwnMeaningfulValue(value: unknown) {
   if (value === null || value === undefined) return false;
   if (typeof value === "string") return value.trim() !== "";
@@ -552,6 +596,7 @@ function hasWebsiteCampaignContent(record?: AnyObj | null) {
       listAssets.rightLogo,
       listAssets.chestImage,
       listAssets.echohuntHeroImage,
+      websiteExtra.cardTheme,
     ].some(hasOwnMeaningfulValue) ||
     (record.pageTemplate && record.pageTemplate !== "standard") ||
     hasOwnMeaningfulValue(templateConfig)
@@ -563,6 +608,7 @@ function makeWebsiteForm(
   campaign?: AnyObj | null,
 ): WebsiteForm {
   const assets = getWebsiteListAssets(record || null);
+  const cardTheme = getWebsiteCardTheme(record || null);
   return {
     slug: record?.slug || campaign?.campaignKey || "",
     webStatus: record?.webStatus || "draft",
@@ -577,6 +623,9 @@ function makeWebsiteForm(
     listRightLogo: assets.rightLogo,
     listChestImage: assets.chestImage,
     echohuntHeroImage: assets.echohuntHeroImage,
+    cardThemeEnabled: cardTheme.enabled,
+    cardThemeColor: cardTheme.color,
+    cardThemeBackgroundStyle: cardTheme.backgroundStyle,
     claimPoiContractAddress: record?.claimPoiContractAddress || "",
     claimPowContractAddress: record?.claimPowContractAddress || "",
     claimEssayContractAddress: record?.claimEssayContractAddress || "",
@@ -1481,6 +1530,18 @@ export function NacosCampaignsPage() {
             "当前活动已开启征文大赛，claim 状态下必须填写征文大赛合约地址",
           );
       }
+      const cardTheme = websiteForm.cardThemeEnabled
+        ? {
+            color: CARD_THEME_COLOR_VALUES.has(websiteForm.cardThemeColor)
+              ? websiteForm.cardThemeColor
+              : "neutral",
+            backgroundStyle: CARD_THEME_BACKGROUND_STYLE_VALUES.has(
+              websiteForm.cardThemeBackgroundStyle,
+            )
+              ? websiteForm.cardThemeBackgroundStyle
+              : "clean",
+          }
+        : null;
       await saveWebsiteCampaignConfig(String(websiteConfigKey), {
         slug: websiteForm.slug.trim(),
         webStatus: websiteForm.webStatus,
@@ -1502,6 +1563,7 @@ export function NacosCampaignsPage() {
             chestImage: websiteForm.listChestImage.trim(),
             echohuntHeroImage: websiteForm.echohuntHeroImage.trim(),
           },
+          cardTheme,
         },
       });
       const record = await fetchWebsiteCampaignByNacosId(
@@ -3386,6 +3448,47 @@ function WebsiteSection({
                       </Field>
                     </Col>
                   </Row>
+                </Space>
+              ),
+            },
+            {
+              key: "cardTheme",
+              label: "列表卡片背景",
+              children: (
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Space>
+                    <Switch
+                      disabled={!enabled}
+                      checked={!!form.cardThemeEnabled}
+                      onChange={(v) => update({ cardThemeEnabled: v })}
+                    />
+                    <InfoLabel info="关闭后不会向前端返回 cardTheme，其他活动保持原来的默认卡片背景。">启用自定义背景</InfoLabel>
+                  </Space>
+                  <Row gutter={[12, 12]}>
+                    <Col xs={24} md={12}>
+                      <Field label={<InfoLabel info="仅保存主题色 token，前端会映射成安全、可读的卡片背景。">主题颜色</InfoLabel>}>
+                        <Select
+                          disabled={!enabled || !form.cardThemeEnabled}
+                          value={form.cardThemeColor}
+                          onChange={(v) => update({ cardThemeColor: v })}
+                          options={CARD_THEME_COLOR_OPTIONS}
+                        />
+                      </Field>
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Field label={<InfoLabel info="背景样式只影响列表活动卡片中间信息面板，不影响活动状态逻辑。">背景样式</InfoLabel>}>
+                        <Select
+                          disabled={!enabled || !form.cardThemeEnabled}
+                          value={form.cardThemeBackgroundStyle}
+                          onChange={(v) => update({ cardThemeBackgroundStyle: v })}
+                          options={CARD_THEME_BACKGROUND_STYLE_OPTIONS}
+                        />
+                      </Field>
+                    </Col>
+                  </Row>
+                  <div style={{ color: "#8c8c8c", fontSize: 12, lineHeight: 1.6 }}>
+                    推荐：YZi 使用 Amber + Dots；Mantle 使用 Emerald/Mint + Grid 或 Glow。关闭自定义背景时不会影响该活动原有列表卡片样式。
+                  </div>
                 </Space>
               ),
             },
