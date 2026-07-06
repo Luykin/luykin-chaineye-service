@@ -32,7 +32,6 @@ const {
   buildCampaignListItem,
   buildCampaignDetail,
   buildPluginCampaign,
-  getManagedCampaignPayloadByKey,
 } = require("../services/websiteCampaignService");
 const {
   getStaticLeaderboardManifest,
@@ -41,20 +40,18 @@ const {
   fetchCustomLeaderboardBundle,
   findUserHistoricalCampaigns,
 } = require("../services/echohuntLeaderboardService");
-const { isRequestInternalTestUser, isRequestXHuntVip } = require("../constants/xhuntVip");
+const {
+  normalizeRegistrationContact,
+  loadCampaignConfigForRegistration,
+  registerCampaignParticipant,
+  fetchCampaignRankByDomain,
+} = require("../services/campaignRegistrationService");
+const { isRequestInternalTestUser } = require("../constants/xhuntVip");
 
 const router = express.Router();
 
 const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";
 const ECHOHUNT_OAUTH_STATE_TTL_SECONDS = 8 * 60;
-const INITIALIZE_CAMPAIGN_URL = "https://data.cryptohunt.ai/pro/api/initialize_campaign";
-const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400;
-const RANK_API_BY_DOMAIN = {
-  web3: "https://data.cryptohunt.ai/fetch/twitter/rank",
-  ai: "https://data.cryptohunt.ai/fetch/ai/rank",
-};
-const SPECIAL_AUTHORED_RANK = 9999999;
-
 const authModels = {
   pgInstance,
   AuthCenterXhuntUser,
@@ -97,16 +94,6 @@ function normalizeUpstreamLang(value) {
 function normalizeCampaign(raw) {
   if (!raw || typeof raw !== "string") return "";
   return raw.trim();
-}
-
-function normalizeEmail(raw) {
-  if (raw === undefined || raw === null) return "";
-  return String(raw).trim().toLowerCase();
-}
-
-function isValidEmail(value) {
-  if (!value || value.length > 254) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function normalizeTesterHandle(value) {
@@ -222,16 +209,6 @@ async function ensureXHuntUserForEchohunt(twitterProfile, options = {}) {
     { transaction }
   );
   return user;
-}
-
-async function updateEvmAddressOnUser(user, evmAddress) {
-  if (!user || !evmAddress) return;
-  const normalized = String(evmAddress).trim();
-  const list = Array.isArray(user.evmAddresses) ? user.evmAddresses : [];
-  const exists = list.some((addr) => String(addr).toLowerCase() === normalized.toLowerCase());
-  if (!exists) {
-    await user.update({ evmAddresses: [...list, normalized] });
-  }
 }
 
 async function findCampaignRecord(identifier) {
@@ -412,55 +389,6 @@ function buildEchohuntCampaignDetail(record, lang) {
   };
 }
 
-function getCampaignDisplayDomains(campaign) {
-  const list = Array.isArray(campaign?.displayDomains) ? campaign.displayDomains : ["web3"];
-  const domains = list
-    .map((item) => String(item || "").trim().toLowerCase())
-    .filter((item) => RANK_API_BY_DOMAIN[item]);
-  return domains.length ? domains : ["web3"];
-}
-
-function isRankValid(rank) {
-  return Number.isFinite(rank);
-}
-
-function normalizeCreatorAuthPayload(rankData) {
-  const authCreator = rankData?.auth_creator || null;
-  const statusNumber = Number(authCreator?.status);
-  const kolRank = Number(rankData?.kolRank);
-  const hasStatus = Number.isFinite(statusNumber);
-  const isCreatorAuthed = statusNumber === 2 || kolRank === SPECIAL_AUTHORED_RANK;
-
-  return {
-    status: hasStatus ? statusNumber : null,
-    recordTime: authCreator?.record_time || authCreator?.recordTime || null,
-    twitterId: authCreator?.twitter_id || authCreator?.twitterId || null,
-    isCreatorAuthed,
-  };
-}
-
-function isCreatorRankData(rankData) {
-  return normalizeCreatorAuthPayload(rankData).isCreatorAuthed;
-}
-
-async function fetchCampaignRankByDomain(domain, twitterId) {
-  const apiBase = RANK_API_BY_DOMAIN[domain];
-  if (!apiBase) throw new Error(`Unsupported rank domain: ${domain}`);
-  const rankApiUrl = `${apiBase}?user_ids=${encodeURIComponent(twitterId)}`;
-  const rankResponse = await axios.get(rankApiUrl, { timeout: 7000 });
-  const list = rankResponse?.data?.data?.data;
-  if (!Array.isArray(list) || list.length === 0) throw new Error(`Empty ${domain} ranking data`);
-  const userRankData = list[0];
-  const creatorAuth = normalizeCreatorAuthPayload(userRankData);
-  return {
-    domain,
-    kolRank: Number(userRankData.kolRank),
-    isCreator: creatorAuth.isCreatorAuthed,
-    isCreatorAuthed: creatorAuth.isCreatorAuthed,
-    creatorAuth,
-  };
-}
-
 async function fetchEchohuntRankSummary(twitterId) {
   const domains = ["web3", "ai"];
   const settled = await Promise.allSettled(domains.map((domain) => fetchCampaignRankByDomain(domain, twitterId)));
@@ -489,81 +417,6 @@ async function fetchEchohuntRankSummary(twitterId) {
     creatorAuth,
     errors,
   };
-}
-
-function rankResultMeetsThreshold(result, threshold, includeCreator) {
-  if (isRankValid(result.kolRank) && result.kolRank <= threshold) return true;
-  return !!includeCreator && result.isCreator;
-}
-
-function formatRankForMessage(result) {
-  if (!result) return "unknown";
-  return isRankValid(result.kolRank) ? result.kolRank : "unranked";
-}
-
-async function validateCampaignThreshold(campaign, twitterId) {
-  if (!campaign || !Number.isInteger(campaign.threshold)) return;
-  const domainsToCheck = getCampaignDisplayDomains(campaign);
-  const rankResults = await Promise.allSettled(domainsToCheck.map((domain) => fetchCampaignRankByDomain(domain, twitterId)));
-  const fulfilledResults = rankResults.filter((result) => result.status === "fulfilled").map((result) => result.value);
-  const rejectedResults = rankResults.filter((result) => result.status === "rejected");
-  const meetsThreshold = fulfilledResults.some((result) => rankResultMeetsThreshold(result, campaign.threshold, campaign.includeCreator));
-
-  if (!meetsThreshold) {
-    if (!fulfilledResults.length || rejectedResults.length > 0) {
-      const err = publicError("RANK_DATA_UNAVAILABLE", 502, "Failed to fetch user ranking data");
-      err.details = rejectedResults.map((item) => item.reason?.message || String(item.reason));
-      throw err;
-    }
-    const rankSummary = fulfilledResults.map((result) => `${result.domain}: ${formatRankForMessage(result)}`).join(", ");
-    const err = publicError("THRESHOLD_NOT_MET", 400, `Does not meet registration threshold: KOL rank must be <= ${campaign.threshold}, current rank is ${rankSummary}`);
-    err.details = { threshold: campaign.threshold, ranks: fulfilledResults };
-    throw err;
-  }
-}
-
-async function validateTwitterProfileQuality(req, twitterId) {
-  if (isRequestXHuntVip(req)) return;
-  const response = await axios.post(
-    "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid",
-    { user_id: String(twitterId) },
-    { timeout: 7000 }
-  );
-  const data = response?.data || null;
-  if (!data || !data.created_at || typeof data.followers_count !== "number") {
-    throw publicError("PROFILE_DATA_INCOMPLETE", 502, "External profile data is incomplete");
-  }
-  const createdAt = new Date(data.created_at);
-  if (Number.isNaN(createdAt.getTime())) {
-    throw publicError("PROFILE_CREATED_AT_INVALID", 502, "External profile created_at is invalid");
-  }
-  const oneMonthAgo = new Date();
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-  if (createdAt > oneMonthAgo) {
-    throw publicError("ACCOUNT_TOO_NEW", 400, "X account must be older than 1 month");
-  }
-  if (data.followers_count < 50) {
-    throw publicError("FOLLOWERS_TOO_LOW", 400, "X account must have at least 50 followers");
-  }
-}
-
-async function notifyInitializeCampaign(redisClient, campaign) {
-  if (!redisClient || !campaign) return;
-  const cacheKey = `campaign:initialize_campaign:${campaign}`;
-  try {
-    const cached = await redisClient.get(cacheKey);
-    if (cached) return;
-  } catch (_) {}
-  try {
-    const resp = await axios.post(INITIALIZE_CAMPAIGN_URL, { campaign }, { timeout: 10000 });
-    if (resp?.data?.status === true) {
-      try {
-        await redisClient.setEx(cacheKey, INITIALIZE_CAMPAIGN_CACHE_TTL, "1");
-      } catch (_) {}
-    }
-  } catch (error) {
-    console.warn("[EchoHunt] initialize_campaign notify warn:", error.message || error);
-  }
 }
 
 async function fetchTwitterProfile(twitterId, lang) {
@@ -997,6 +850,11 @@ router.get("/campaigns/:campaignKey", authenticateAuthCenterToken({ optional: tr
   }
 });
 
+// EchoHunt Web 活动报名接口：
+// 1. 使用 Auth Center token 校验登录态，并从登录身份中读取 Twitter 身份；
+// 2. EchoHunt 入口负责把 Auth Center 用户关联/创建为原 XHuntUser；
+// 3. 活动状态、报名窗口、EVM/Email、排名门槛、账号质量、重复报名、写表等规则交给公共报名 service；
+// 4. 写入 CampaignRegistration，来源标记为 echohunt_web，与插件报名共用同一张表。
 router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), async (req, res) => {
   try {
     const record = await findCampaignRecord(req.params.campaignKey);
@@ -1033,90 +891,34 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
       });
     }
 
-    let found = null;
-    try {
-      found = await getManagedCampaignPayloadByKey(normalizedCampaign, { includeTesting: true, channel: "echohunt" });
-      if (!found) throw publicError("INVALID_CAMPAIGN", 400, "Invalid campaign identifier");
-      if (!found.enabled) throw publicError("CAMPAIGN_NOT_ENABLED", 400, "Campaign is not enabled");
-      if (found.testingPhase && !isViewerAllowedForTesting(found, { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId }, req)) {
-        throw publicError("CAMPAIGN_IN_TESTING", 403, "Campaign is in testing phase");
-      }
-      const now = new Date();
-      const startAt = found.enrollmentWindow?.startAt ? new Date(found.enrollmentWindow.startAt) : null;
-      const endAt = found.enrollmentWindow?.endAt ? new Date(found.enrollmentWindow.endAt) : null;
-      if (!startAt || !endAt || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
-        throw publicError("INVALID_ENROLLMENT_WINDOW", 502, "Invalid enrollment window in config");
-      }
-      const startAtWithGrace = new Date(startAt.getTime() - 60 * 60 * 1000);
-      const isEchohuntWarmup = String(record.webStatus || "").toLowerCase() === "coming_soon";
-      if ((!isEchohuntWarmup && now < startAtWithGrace) || now > endAt) {
-        throw publicError("OUTSIDE_ENROLLMENT_WINDOW", 400, "Not within the enrollment window");
-      }
-    } catch (error) {
-      if (error.status) throw error;
-      throw publicError("CAMPAIGN_CONFIG_UNAVAILABLE", 502, "Campaign configuration service unavailable");
-    }
+    const found = await loadCampaignConfigForRegistration(normalizedCampaign, req, {
+      channel: "echohunt",
+      viewer: { username: twitterIdentity.username, twitterId: twitterIdentity.twitterId },
+      allowComingSoonWarmup: String(record.webStatus || "").toLowerCase() === "coming_soon",
+    });
 
     const rawEmail = req.body?.email !== undefined ? req.body.email : req.body?.emil;
-    const normalizedEmail = normalizeEmail(rawEmail);
-    const hasEmail = !!normalizedEmail;
-    const trimmedAddress = typeof req.body?.evmAddress === "string" && req.body.evmAddress.trim() ? req.body.evmAddress.trim() : null;
-    const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
-    const allowEmailRegistration = found?.allowEmailRegistration === true;
-
-    if (trimmedAddress && !evmAddressRegex.test(trimmedAddress)) {
-      throw publicError("INVALID_EVM_ADDRESS", 400, "Invalid EVM address format");
-    }
-    if (!allowEmailRegistration) {
-      if (hasEmail) throw publicError("EMAIL_NOT_ALLOWED", 400, "Email registration is not allowed for this campaign");
-      if (!trimmedAddress) throw publicError("EVM_ADDRESS_REQUIRED", 400, "EVM address is required");
-    } else {
-      if (!trimmedAddress && !hasEmail) throw publicError("CONTACT_REQUIRED", 400, "EVM address or email is required");
-      if (trimmedAddress && hasEmail) throw publicError("CONTACT_CONFLICT", 400, "Please provide either EVM address or email, not both");
-      if (hasEmail && !isValidEmail(normalizedEmail)) throw publicError("INVALID_EMAIL", 400, "Invalid email format");
-    }
+    const contact = normalizeRegistrationContact({ evmAddress: req.body?.evmAddress, email: rawEmail });
 
     if (req.body?.agreements && (req.body.agreements.terms === false || req.body.agreements.disclosure === false)) {
       throw publicError("AGREEMENT_REQUIRED", 400, "Please accept campaign terms and disclosure policy");
     }
 
-    if (req.redisClient) {
-      const cooldownKey = `echohunt:campaign:${normalizedCampaign}:register:cd:${req.authCenter.user.id}`;
-      const ttl = await req.redisClient.ttl(cooldownKey).catch(() => 0);
-      if (typeof ttl === "number" && ttl > 0) {
-        return res.status(429).json({ success: false, error: "TOO_FREQUENT", message: `Too frequent requests, please try again in ${ttl}s` });
-      }
-      await req.redisClient.setEx(cooldownKey, 10, "1").catch(() => {});
-    }
-
-    await validateCampaignThreshold(found, twitterIdentity.twitterId);
-    await validateTwitterProfileQuality(req, twitterIdentity.twitterId);
-
-    if (trimmedAddress) {
-      const existingEVM = await CampaignRegistration.findOne({ where: { campaign: normalizedCampaign, evmAddress: trimmedAddress } });
-      if (existingEVM) throw publicError("EVM_ALREADY_USED", 409, "This EVM address is already in use");
-    }
-    if (hasEmail) {
-      const existingEmail = await CampaignRegistration.findOne({ where: { campaign: normalizedCampaign, email: normalizedEmail } });
-      if (existingEmail) throw publicError("EMAIL_ALREADY_USED", 409, "This email is already in use");
-    }
-
     const registrationUrl = typeof req.body?.registrationUrl === "string" ? req.body.registrationUrl : (req.headers["x-xhunt-web-page-url"] || req.headers.referer || null);
-    const recordPayload = await CampaignRegistration.create({
+    const result = await registerCampaignParticipant({
+      req,
       campaign: normalizedCampaign,
-      xHuntUserId: xhuntUser.id,
-      authCenterUserId: req.authCenter.user.id,
-      twitterId: twitterIdentity.twitterId,
-      username: twitterIdentity.username,
-      displayName: twitterIdentity.displayName,
-      avatar: twitterIdentity.avatar,
-      invitedByCode: null,
-      invitedByUserId: null,
-      invitedByTwitterId: null,
-      invitedByUsername: null,
-      invitedByUserInfo: null,
-      evmAddress: trimmedAddress,
-      email: hasEmail ? normalizedEmail : null,
+      campaignConfig: found,
+      user: {
+        xHuntUserId: xhuntUser.id,
+        authCenterUserId: req.authCenter.user.id,
+        twitterId: twitterIdentity.twitterId,
+        username: twitterIdentity.username,
+        displayName: twitterIdentity.displayName,
+        avatar: twitterIdentity.avatar,
+      },
+      userRecord: xhuntUser,
+      contact,
       registrationUrl,
       registrationSource: "echohunt_web",
       registrationClient: "echohunt",
@@ -1127,13 +929,20 @@ router.post("/campaigns/:campaignKey/register", authenticateAuthCenterToken(), a
         pageUrl: registrationUrl,
         source: "echohunt_web",
       },
+      cooldownKey: `echohunt:campaign:${normalizedCampaign}:register:cd:${req.authCenter.user.id}`,
+      updateUserEvmAddress: true,
     });
 
-    await updateEvmAddressOnUser(xhuntUser, trimmedAddress);
-    notifyInitializeCampaign(req.redisClient, normalizedCampaign).catch(() => {});
-
-    return res.json({ success: true, registration: serializeRegistration(recordPayload) });
+    return res.json({ success: true, registration: serializeRegistration(result.registration) });
   } catch (error) {
+    if (error.message === "ALREADY_REGISTERED" && error.details) {
+      return res.status(409).json({
+        success: false,
+        error: "ALREADY_REGISTERED",
+        message: "You have already registered for this campaign",
+        registration: serializeRegistration(error.details),
+      });
+    }
     if (error.details) {
       return sendError(res, error, "ECHOHUNT_REGISTER_FAILED", { details: error.details });
     }

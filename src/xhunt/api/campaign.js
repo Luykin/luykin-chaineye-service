@@ -15,7 +15,7 @@ const {
   CampaignRegistration,
   XHuntUser,
 } = require("../../models/postgres-start");
-const { isRequestXHuntVip, isRequestInternalTestUser } = require("../constants/xhuntVip");
+const { isRequestInternalTestUser } = require("../constants/xhuntVip");
 const {
   getManagedCampaignPayloadByKey,
   listPluginCampaigns,
@@ -23,6 +23,12 @@ const {
 const {
   getCachedPluginCampaigns,
 } = require("../utils/campaign-config-cache");
+const {
+  normalizeCampaignIdentifier,
+  normalizeRegistrationContact,
+  loadCampaignConfigForRegistration,
+  registerCampaignParticipant,
+} = require("../services/campaignRegistrationService");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
 const { adminAuth, requirePermission, requireRole } = require("../../admin/middleware/adminAuth");
@@ -51,39 +57,10 @@ function buildExtensionUpdateRequiredResponse({
   };
 }
 
-function generateInviteCode(length = 10) {
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < length; i += 1) {
-    code += letters.charAt(Math.floor(Math.random() * letters.length));
-  }
-  return code;
-}
-
-async function ensureUniqueInviteCode() {
-  for (let i = 0; i < 5; i += 1) {
-    const code = generateInviteCode(10);
-    const existed = await XHuntUser.findOne({ where: { inviteCode: code } });
-    if (!existed) return code;
-  }
-  throw new Error("Failed to generate unique invite code");
-}
-
-// const SPECIAL_INVITE_CODE = "XHuntAI";
 
 function normalizeCampaign(raw) {
   if (!raw || typeof raw !== "string") return null;
   return raw.trim();
-}
-
-function normalizeEmail(raw) {
-  if (raw === undefined || raw === null) return "";
-  return String(raw).trim().toLowerCase();
-}
-
-function isValidEmail(value) {
-  if (!value || value.length > 254) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function normalizeTesterHandle(value) {
@@ -121,9 +98,6 @@ function matchesDisplayDomain(campaign, domain) {
   return getCampaignDisplayDomains(campaign).includes(domain);
 }
 
-const INITIALIZE_CAMPAIGN_URL =
-  "https://data.cryptohunt.ai/pro/api/initialize_campaign";
-const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400; // 1 天
 function setCampaignConfigCacheHeaders(res) {
   // 按 domain / x-user-id / Authorization 可能返回不同活动，不让浏览器强缓存空结果；
   // 服务端仍通过 Redis 缓存活动列表，避免每次都打数据库。
@@ -139,53 +113,6 @@ function getCustomLeaderboardsFromCampaign(campaignConfig) {
     : [];
 }
 
-const RANK_API_BY_DOMAIN = {
-  web3: "https://data.cryptohunt.ai/fetch/twitter/rank",
-  ai: "https://data.cryptohunt.ai/fetch/ai/rank",
-};
-
-function isRankValid(rank) {
-  return Number.isFinite(rank);
-}
-
-function isCreatorRankData(rankData) {
-  return rankData?.auth_creator?.status === 2;
-}
-
-async function fetchCampaignRankByDomain(domain, twitterId) {
-  const apiBase = RANK_API_BY_DOMAIN[domain];
-  if (!apiBase) {
-    throw new Error(`Unsupported rank domain: ${domain}`);
-  }
-
-  const rankApiUrl = `${apiBase}?user_ids=${encodeURIComponent(twitterId)}`;
-  const rankResponse = await axios.get(rankApiUrl, { timeout: 7000 });
-  const list = rankResponse?.data?.data?.data;
-
-  if (!Array.isArray(list) || list.length === 0) {
-    throw new Error(`Empty ${domain} ranking data`);
-  }
-
-  const userRankData = list[0];
-  return {
-    domain,
-    kolRank: Number(userRankData.kolRank),
-    isCreator: isCreatorRankData(userRankData),
-  };
-}
-
-function rankResultMeetsThreshold(result, threshold, includeCreator) {
-  if (isRankValid(result.kolRank) && result.kolRank <= threshold) {
-    return true;
-  }
-  return !!includeCreator && result.isCreator;
-}
-
-function formatRankForMessage(result) {
-  if (!result) return "unknown";
-  return isRankValid(result.kolRank) ? result.kolRank : "unranked";
-}
-
 async function getCustomCampaignConfig(campaign, req) {
   const found = await getManagedCampaignPayloadByKey(campaign, {
     includeTesting: true,
@@ -194,8 +121,12 @@ async function getCustomCampaignConfig(campaign, req) {
   if (!found || !found.enabled) return null;
   if (found.testingPhase) {
     const requestHandle = normalizeTesterHandle(req?.headers?.["x-user-id"]);
+    const requestTwitterId = normalizeTesterHandle(req?.headers?.["x-tw-id"] || req?.user?.twitterId);
     const allowed =
-      isRequestInternalTestUser(req) || isCampaignTester(found, requestHandle);
+      isRequestInternalTestUser(req) && isCampaignTester(found, {
+        username: requestHandle,
+        twitterId: requestTwitterId,
+      });
     if (!allowed) return null;
   }
   return found;
@@ -204,6 +135,7 @@ async function getCustomCampaignConfig(campaign, req) {
 router.get("/config", securityMiddleware, authenticateTokenOptional, async (req, res) => {
   try {
     const requestHandle = normalizeTesterHandle(req.headers["x-user-id"]);
+    const requestTwitterId = normalizeTesterHandle(req.headers["x-tw-id"] || req.user?.twitterId);
     const requestedDomain = normalizeDisplayDomain(
       req.query.domain || req.query.displayDomain,
     );
@@ -214,7 +146,7 @@ router.get("/config", securityMiddleware, authenticateTokenOptional, async (req,
       });
     }
 
-    if (!requestHandle) {
+    if (!requestHandle && !requestTwitterId) {
       res.set("Cache-Control", "no-store");
       return res.json({
         success: true,
@@ -233,7 +165,10 @@ router.get("/config", securityMiddleware, authenticateTokenOptional, async (req,
     const campaigns = allCampaigns.filter((campaign) => {
       if (!matchesDisplayDomain(campaign, requestedDomain)) return false;
       if (!campaign.testingPhase) return true;
-      const allowed = isCampaignTester(campaign, requestHandle);
+      const allowed = isRequestInternalTestUser(req) && isCampaignTester(campaign, {
+        username: requestHandle,
+        twitterId: requestTwitterId,
+      });
       if (allowed) includeTesting = true;
       return allowed;
     });
@@ -350,33 +285,6 @@ router.get("/custom-user-activity", securityMiddleware, async (req, res) => {
   }
 });
 
-/**
- * 报名成功后通知 data.cryptohunt.ai 初始化 campaign；Redis 缓存 1 天内不重复调用。
- * 不阻塞主流程，仅 fire-and-forget。
- */
-async function notifyInitializeCampaign(redisClient, campaign) {
-  if (!campaign || !redisClient) return;
-  const cacheKey = `campaign:initialize_campaign:${campaign}`;
-  try {
-    const cached = await redisClient.get(cacheKey);
-    if (cached) return;
-  } catch (_) {}
-  try {
-    const resp = await axios.post(
-      INITIALIZE_CAMPAIGN_URL,
-      { campaign },
-      { timeout: 10000 }
-    );
-    const ok = resp.data && resp.data.status === true;
-    if (ok) {
-      try {
-        await redisClient.setEx(cacheKey, INITIALIZE_CAMPAIGN_CACHE_TTL, "1");
-      } catch (_) {}
-    }
-  } catch (e) {
-    throw e;
-  }
-}
 
 
 function serializeCampaignRegistration(record) {
@@ -482,7 +390,23 @@ router.delete(
   }
 );
 
-// 1) 通用活动报名
+function getPluginRegistrationErrorMessage(error, fallback = "服务器内部错误（campaign register）") {
+  const zhMessages = {
+    PROFILE_DATA_INCOMPLETE: "外部数据校验失败：返回数据不完整",
+    PROFILE_CREATED_AT_INVALID: "外部数据校验失败：创建时间无效",
+    ACCOUNT_TOO_NEW: "不满足条件：账号注册需早于1个月",
+    FOLLOWERS_TOO_LOW: "不满足条件：粉丝数量需不少于50",
+    PROFILE_CHECK_FAILED: "外部数据校验请求失败",
+    ALREADY_REGISTERED: "您已报名，无需重复提交",
+  };
+  return zhMessages[error?.message] || error?.publicMessage || error?.message || fallback;
+}
+
+// 1) 插件通用活动报名接口：
+// 1. 使用插件 token、浏览器环境校验和签名安全中间件确认请求来源；
+// 2. 插件入口仍单独校验插件版本，其余活动状态、报名窗口、EVM/Email、排名门槛、账号质量等规则交给公共报名 service；
+// 3. 公共 service 写入 CampaignRegistration，来源标记为 extension，与 EchoHunt Web 报名共用同一张表；
+// 4. 邀请码逻辑已下线：不再生成/返回 inviteCode，也不再处理邀请人统计。
 router.post(
   "/register",
   fingerprintLimiter,
@@ -493,8 +417,7 @@ router.post(
     let LOG = "[CampaignRegister]";
     try {
       const authedUserId = req.user && req.user.id;
-      const { campaign, evmAddress, email, emil, registrationUrl } =
-        req.body || {};
+      const { campaign, evmAddress, email, emil, registrationUrl } = req.body || {};
       const rawEmail = email !== undefined ? email : emil;
 
       LOG = `[CampaignRegister] user_id=${authedUserId} campaign=${campaign} evmAddress=${evmAddress} email=${rawEmail ? "<provided>" : ""}`;
@@ -529,58 +452,10 @@ router.post(
         });
       }
 
-      const normalizedCampaign = normalizeCampaign(campaign);
+      const normalizedCampaign = normalizeCampaignIdentifier(campaign);
       if (!normalizedCampaign) {
         console.log(LOG, "reject: campaign missing or invalid");
         return res.status(400).json({ error: "campaign is required" });
-      }
-      console.log(LOG, "start", { campaign: normalizedCampaign });
-
-      let found = null;
-      try {
-        const isInternalTester = isRequestInternalTestUser(req);
-        found = await getManagedCampaignPayloadByKey(normalizedCampaign, {
-          includeTesting: true,
-        });
-        if (!found) {
-          console.log(LOG, "reject: campaign not found in database", { campaign: normalizedCampaign });
-          return res.status(400).json({ error: "Invalid campaign identifier" });
-        }
-        if (found.testingPhase) {
-          const requestHandle = normalizeTesterHandle(
-            req.headers["x-user-id"] || req.user?.username,
-          );
-          const allowedTester =
-            isInternalTester || isCampaignTester(found, requestHandle);
-          if (!allowedTester) {
-            console.log(LOG, "reject: campaign in testing phase", {
-              campaign: normalizedCampaign,
-              requestHandle,
-            });
-            return res.status(403).json({ error: "Campaign is in testing phase" });
-          }
-        }
-        if (!found.enabled) {
-          console.log(LOG, "reject: campaign not enabled", { campaign: normalizedCampaign });
-          return res.status(400).json({ error: "Campaign is not enabled" });
-        }
-        const now = new Date();
-        const startAt = found.enrollmentWindow && found.enrollmentWindow.startAt ? new Date(found.enrollmentWindow.startAt) : null;
-        const endAt = found.enrollmentWindow && found.enrollmentWindow.endAt ? new Date(found.enrollmentWindow.endAt) : null;
-        if (!startAt || !endAt || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
-          console.log(LOG, "reject: invalid enrollment window");
-          return res.status(502).json({ error: "Invalid enrollment window in config" });
-        }
-        // 允许在正式开始时间前 1 小时即可报名
-        const oneHourMs = 60 * 60 * 1000;
-        const startAtWithGrace = new Date(startAt.getTime() - oneHourMs);
-        if (now < startAtWithGrace || now > endAt) {
-          console.log(LOG, "reject: outside enrollment window");
-          return res.status(400).json({ error: "Not within the enrollment window" });
-        }
-      } catch (cfgErr) {
-        console.error(LOG, "fetch campaigns config error:", cfgErr.message || cfgErr);
-        return res.status(502).json({ error: "Campaign configuration service unavailable" });
       }
 
       if (!authedUserId) {
@@ -593,310 +468,55 @@ router.post(
         return res.status(404).json({ error: "对应的用户不存在" });
       }
 
-      const allowEmailRegistration = found && found.allowEmailRegistration === true;
-      const trimmedAddress =
-        typeof evmAddress === "string" && evmAddress.trim()
-          ? evmAddress.trim()
-          : null;
-      const normalizedEmail = normalizeEmail(rawEmail);
-      const hasEmail = !!normalizedEmail;
-      const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
-
-      if (trimmedAddress && !evmAddressRegex.test(trimmedAddress)) {
-        console.log(LOG, "reject: invalid evm format", { len: trimmedAddress.length });
-        return res.status(400).json({ error: "Invalid EVM address format" });
-      }
-
-      if (!allowEmailRegistration) {
-        if (hasEmail) {
-          console.log(LOG, "reject: email registration not allowed");
-          return res.status(400).json({ error: "Email registration is not allowed for this campaign" });
-        }
-        if (!trimmedAddress) {
-          console.log(LOG, "reject: evm address missing");
-          return res.status(400).json({ error: "EVM address is required" });
-        }
-      } else {
-        if (!trimmedAddress && !hasEmail) {
-          console.log(LOG, "reject: registration contact missing");
-          return res.status(400).json({ error: "EVM address or email is required" });
-        }
-        if (trimmedAddress && hasEmail) {
-          console.log(LOG, "reject: both evm and email provided");
-          return res.status(400).json({ error: "Please provide either EVM address or email, not both" });
-        }
-        if (hasEmail && !isValidEmail(normalizedEmail)) {
-          console.log(LOG, "reject: invalid email format");
-          return res.status(400).json({ error: "Invalid email format" });
-        }
-      }
-
-      if (req.redisClient) {
-        try {
-          const cooldownKey = `campaign:${normalizedCampaign}:register:cd:${user.id}`;
-          const ttl = await req.redisClient.ttl(cooldownKey);
-          if (typeof ttl === "number" && ttl > 0) {
-            console.log(LOG, "reject: cooldown", { userId: user.id });
-            return res.status(429).json({
-              error: `Too frequent requests, please try again in ${ttl}s`,
-            });
-          }
-          await req.redisClient.setEx(cooldownKey, 10, "1");
-        } catch (cdErr) {
-        }
-      }
-
-      // 检查报名门槛：threshold、includeCreator 和活动支持领域
-      if (found && Number.isInteger(found.threshold)) {
-        try {
-          const twitterId = String(user.twitterId);
-          if (!twitterId || twitterId === "null" || twitterId === "undefined") {
-            console.log(LOG, "reject: invalid twitter id");
-            return res.status(400).json({ error: "Invalid Twitter ID" });
-          }
-
-          const rankDomains = getCampaignDisplayDomains(found)
-            .filter((domain) => RANK_API_BY_DOMAIN[domain]);
-          const domainsToCheck = rankDomains.length ? rankDomains : ["web3"];
-
-          const rankResults = await Promise.allSettled(
-            domainsToCheck.map((domain) => fetchCampaignRankByDomain(domain, twitterId))
-          );
-
-          const fulfilledResults = rankResults
-            .filter((result) => result.status === "fulfilled")
-            .map((result) => result.value);
-          const rejectedResults = rankResults.filter((result) => result.status === "rejected");
-
-          const meetsThreshold = fulfilledResults.some((result) =>
-            rankResultMeetsThreshold(result, found.threshold, found.includeCreator)
-          );
-
-          if (!meetsThreshold) {
-            if (!fulfilledResults.length || rejectedResults.length > 0) {
-              rejectedResults.forEach((result) => {
-                console.error(LOG, "rank domain check error:", result.reason?.message || result.reason);
-              });
-              return res.status(502).json({ error: "Failed to fetch user ranking data" });
-            }
-
-            const rankSummary = fulfilledResults
-              .map((result) => `${result.domain}: ${formatRankForMessage(result)}`)
-              .join(", ");
-            console.log(LOG, "reject: threshold not met", {
-              userId: user.id,
-              ranks: fulfilledResults,
-              threshold: found.threshold,
-              domains: domainsToCheck,
-            });
-            return res.status(400).json({
-              error: `Does not meet registration threshold: KOL rank must be less than or equal to ${found.threshold}, current rank is ${rankSummary}`
-            });
-          }
-        } catch (rankErr) {
-          console.error(LOG, "threshold check error:", rankErr.message || rankErr);
-          return res.status(502).json({ error: "Threshold check request failed, please try again later" });
-        }
-      }
-
-      if (trimmedAddress) {
-        const existingEVM = await CampaignRegistration.findOne({
-          where: {
-            campaign: normalizedCampaign,
-            evmAddress: trimmedAddress,
-          },
-        });
-        if (existingEVM) {
-          console.log(LOG, "reject: evm already used", { campaign: normalizedCampaign });
-          return res
-            .status(409)
-            .json({ error: "This EVM address is already in use" });
-        }
-      }
-
-      if (hasEmail) {
-        const existingEmail = await CampaignRegistration.findOne({
-          where: {
-            campaign: normalizedCampaign,
-            email: normalizedEmail,
-          },
-        });
-        if (existingEmail) {
-          console.log(LOG, "reject: email already used", { campaign: normalizedCampaign });
-          return res
-            .status(409)
-            .json({ error: "This email is already in use" });
-        }
-      }
-
-      let inviter = null;
-      const isSpecialUser = isRequestXHuntVip(req);
-
-      // if (typeof invitedByCode === "string" && invitedByCode.trim()) {
-      //   const code = invitedByCode.trim();
-      //   if (code.toLowerCase() === SPECIAL_INVITE_CODE.toLowerCase()) {
-      //     if (!isSpecialUser) {
-      //       return res
-      //         .status(403)
-      //         .json({ error: "You are not a specially invited user" });
-      //     }
-      //   } else {
-      //     inviter = await XHuntUser.findOne({
-      //       where: { inviteCode: code },
-      //     });
-      //     if (!inviter) {
-      //       return res.status(400).json({ error: "Invalid invite code" });
-      //     }
-      //     // 不能使用自己的邀请码
-      //     if (inviter.id === user.id) {
-      //       return res.status(400).json({ error: "Cannot use your own invite code" });
-      //     }
-      //   }
-      // }
-
-      if (!isSpecialUser) {
-        try {
-          const apiUrl =
-            "https://data.cryptohunt.ai/pro/api/inner/profile_by_userid";
-          const payload = { user_id: String(user.twitterId) };
-          const response = await axios.post(apiUrl, payload, { timeout: 7000 });
-
-          const data = response && response.data ? response.data : null;
-          if (
-            !data ||
-            !data.created_at ||
-            typeof data.followers_count !== "number"
-          ) {
-            console.log(LOG, "reject: profile data incomplete");
-            return res
-              .status(502)
-              .json({ error: "外部数据校验失败：返回数据不完整" });
-          }
-
-          const createdAt = new Date(data.created_at);
-          if (Number.isNaN(createdAt.getTime())) {
-            console.log(LOG, "reject: profile created_at invalid");
-            return res
-              .status(502)
-              .json({ error: "外部数据校验失败：创建时间无效" });
-          }
-
-          const now = new Date();
-          const oneMonthAgo = new Date(now.getTime());
-          oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-
-          if (createdAt > oneMonthAgo) {
-            console.log(LOG, "reject: account too new");
-            return res
-              .status(400)
-              .json({ error: "不满足条件：账号注册需早于1个月" });
-          }
-
-          if (data.followers_count < 50) {
-            console.log(LOG, "reject: followers < 50");
-            return res
-              .status(400)
-              .json({ error: "不满足条件：粉丝数量需不少于50" });
-          }
-        } catch (apiErr) {
-          console.error(LOG, "profile check error:", apiErr.message || apiErr);
-          return res.status(502).json({ error: "外部数据校验请求失败" });
-        }
-      }
-
-      const existed = await CampaignRegistration.findOne({
-        where: {
-          campaign: normalizedCampaign,
-          [Op.or]: [{ xHuntUserId: user.id }, { twitterId: user.twitterId }],
-        },
+      console.log(LOG, "start", { campaign: normalizedCampaign });
+      const found = await loadCampaignConfigForRegistration(normalizedCampaign, req, {
+        channel: "plugin",
+        viewer: { username: req.user?.username || user.username, twitterId: user.twitterId },
+        allowComingSoonWarmup: false,
       });
-      if (existed) {
-        console.log(LOG, "reject: already registered", { userId: user.id });
-        return res.status(409).json({ error: "您已报名，无需重复提交" });
-      }
-
-      if (!user.inviteCode) {
-        let uniqueCode;
-        try {
-          uniqueCode = await ensureUniqueInviteCode();
-        } catch (e) {
-          console.error(LOG, "invite code gen error:", e.message || e);
-          return res.status(500).json({ error: "邀请码生成失败" });
-        }
-        user.inviteCode = uniqueCode;
-        await user.save();
-      }
 
       const fallbackUrl = req.headers["x-window-location-href"]
         ? String(req.headers["x-window-location-href"])
         : null;
+      const pageUrl = typeof registrationUrl === "string" ? registrationUrl : fallbackUrl;
+      const contact = normalizeRegistrationContact({ evmAddress, email: rawEmail });
 
-      const record = await CampaignRegistration.create({
+      const result = await registerCampaignParticipant({
+        req,
         campaign: normalizedCampaign,
-        xHuntUserId: user.id,
-        twitterId: user.twitterId,
-        username: user.username,
-        displayName: user.displayName,
-        avatar: user.avatar,
-        // invitedByCode: typeof invitedByCode === "string" ? invitedByCode : null,
-        invitedByCode: null,
-        invitedByUserId: inviter ? inviter.id : null,
-        invitedByTwitterId: inviter ? inviter.twitterId : null,
-        invitedByUsername: inviter ? inviter.username : null,
-        invitedByUserInfo: inviter
-          ? {
-            username: inviter.username,
-            displayName: inviter.displayName,
-            avatar: inviter.avatar,
-            classification: inviter.classification,
-            inviteCode: inviter.inviteCode,
-            createdAt: inviter.createdAt,
-          }
-          : null,
-        evmAddress: trimmedAddress,
-        email: hasEmail ? normalizedEmail : null,
-        registrationUrl:
-          typeof registrationUrl === "string" ? registrationUrl : fallbackUrl,
+        campaignConfig: found,
+        user: {
+          xHuntUserId: user.id,
+          twitterId: user.twitterId,
+          username: user.username,
+          displayName: user.displayName,
+          avatar: user.avatar,
+        },
+        userRecord: user,
+        contact,
+        registrationUrl: pageUrl,
         registrationSource: "extension",
         registrationClient: "xhunt_extension",
         registrationMetadata: {
           extensionVersion: extVersion || null,
           userAgent: req.headers["user-agent"] || null,
-          pageUrl: typeof registrationUrl === "string" ? registrationUrl : fallbackUrl,
+          pageUrl,
           source: "extension",
         },
+        cooldownKey: `campaign:${normalizedCampaign}:register:cd:${user.id}`,
       });
 
-      if (inviter && inviter.id && req.redisClient) {
-        const cacheKey = `campaign:${normalizedCampaign}:invites:count:${inviter.id}`;
-        try {
-          await req.redisClient.del(cacheKey);
-        } catch (redisDelErr) {
-          console.warn("Redis DEL campaign invite count warn:", redisDelErr);
-        }
-      }
-
-      if (req.redisClient) {
-        notifyInitializeCampaign(req.redisClient, normalizedCampaign).catch(
-          (e) =>
-            console.warn(
-              LOG,
-              "initialize_campaign notify warn:",
-              e.message || e
-            )
-        );
-      }
-
-      const { xHuntUserId: _omit, ...safeRecord } = record.toJSON();
+      const { xHuntUserId: _omit, ...safeRecord } = result.registration.toJSON();
       console.log(LOG, "success", { userId: user.id, campaign: normalizedCampaign });
       return res.json({
         success: true,
-        inviteCode: user.inviteCode || null,
         registration: safeRecord,
       });
     } catch (err) {
-      console.error(LOG, "error:", err.message || err);
-      return res.status(500).json({ error: "服务器内部错误（campaign register）" });
+      const status = err.status || 500;
+      const message = getPluginRegistrationErrorMessage(err);
+      console.error(LOG, "error:", err.message || err, err.details || "");
+      return res.status(status).json({ error: message });
     }
   }
 );
