@@ -1,124 +1,183 @@
 const { Op, fn, col } = require("sequelize");
 const {
   XHuntUser,
-  XHuntUserToken,
   XReviewForAccount,
   XAccount,
   XPointRecord,
+  DailyActiveUser,
 } = require("../../models/postgres-start");
 const {
   getTodayStartChina,
   getTodayEndChina,
-  formatDateTimeChina,
   getChinaDateString,
 } = require("../utils/date");
 
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DEFAULT_ACTIVE_RANGE_DAYS = 30;
+const MAX_ACTIVE_RANGE_DAYS = 366;
+
+function isValidDateOnly(value) {
+  if (!DATE_ONLY_PATTERN.test(String(value || ""))) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function addDays(dateStr, days) {
+  const date = new Date(`${dateStr}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getInclusiveDays(startDate, endDate) {
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+}
+
+function normalizeActiveDateRange(params = {}) {
+  const today = getChinaDateString();
+  let endDate = isValidDateOnly(params.endDate) ? params.endDate : today;
+  let startDate = isValidDateOnly(params.startDate)
+    ? params.startDate
+    : addDays(endDate, -(DEFAULT_ACTIVE_RANGE_DAYS - 1));
+
+  if (startDate > endDate) {
+    [startDate, endDate] = [endDate, startDate];
+  }
+
+  const selectedDays = getInclusiveDays(startDate, endDate);
+  if (selectedDays > MAX_ACTIVE_RANGE_DAYS) {
+    startDate = addDays(endDate, -(MAX_ACTIVE_RANGE_DAYS - 1));
+  }
+
+  return {
+    startDate,
+    endDate,
+    days: getInclusiveDays(startDate, endDate),
+    maxDays: MAX_ACTIVE_RANGE_DAYS,
+  };
+}
+
+function eachDateInRange(startDate, endDate) {
+  const dates = [];
+  for (let date = startDate; date <= endDate; date = addDays(date, 1)) {
+    dates.push(date);
+  }
+  return dates;
+}
+
+function getWeekStartDate(dateStr) {
+  const date = new Date(`${dateStr}T00:00:00.000Z`);
+  const day = date.getUTCDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDisplayDate(dateStr) {
+  return new Date(`${dateStr}T00:00:00+08:00`).toLocaleDateString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "short",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+
+function formatShortDate(dateStr) {
+  return new Date(`${dateStr}T00:00:00+08:00`).toLocaleDateString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "numeric",
+    day: "numeric",
+  });
+}
+
 /**
- * 获取最近7天的日活数据（基于设备指纹）
- * @param {Object} redisClient - Redis客户端实例
- * @returns {Promise<Array>} 最近7天的日活数据
+ * 获取指定日期范围的日活数据（基于 PostgreSQL DailyActiveUsers 历史表）
+ * @param {{startDate?: string, endDate?: string}} params
+ * @returns {Promise<{range: object, data: Array}>}
  */
-async function getDailyActiveUsers(redisClient) {
+async function getDailyActiveUsers(params = {}) {
+  const range = normalizeActiveDateRange(params);
   try {
-    const dauData = [];
+    const rows = await DailyActiveUser.findAll({
+      attributes: ["date", [fn("COUNT", col("userId")), "activeUsers"]],
+      where: {
+        date: { [Op.between]: [range.startDate, range.endDate] },
+      },
+      group: ["date"],
+      order: [["date", "ASC"]],
+      raw: true,
+    });
 
-    // 获取最近7天的数据
-    for (let i = 6; i >= 0; i--) {
-      // 计算北京时间的日期（使用和 security.js 完全一致的UTC方法）
-      const now = new Date();
-      const utcHours = now.getUTCHours();
-      const beijingHours = utcHours + 8;
+    const countByDate = new Map(
+      rows.map((row) => [row.date, Number(row.activeUsers || 0)])
+    );
 
-      // 如果北京时间超过24小时，说明是下一天
-      let beijingDate = new Date(now);
-      if (beijingHours >= 24) {
-        beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
-        beijingDate.setUTCHours(beijingHours - 24);
-      } else {
-        beijingDate.setUTCHours(beijingHours);
-      }
+    const data = eachDateInRange(range.startDate, range.endDate).map((date) => ({
+      date,
+      activeUsers: countByDate.get(date) || 0,
+      displayDate: formatDisplayDate(date),
+    }));
 
-      // 减去天数得到目标日期
-      beijingDate.setUTCDate(beijingDate.getUTCDate() - i);
-      const dateStr = beijingDate.toISOString().split("T")[0];
-
-      const dauKey = `dau:${dateStr}`;
-
-      try {
-        // 获取当日活跃用户数（Set的成员数量）
-        const activeUsers = await redisClient.sCard(dauKey);
-
-        // 显示日期使用 now - i（不做 +8 小时位移），仅用于展示
-        const displayDateDate = new Date(
-          now.getTime() - i * 24 * 60 * 60 * 1000
-        );
-        const displayDate = displayDateDate.toLocaleDateString("zh-CN", {
-          timeZone: "Asia/Shanghai",
-          month: "short",
-          day: "numeric",
-          weekday: "short",
-        });
-
-        dauData.push({
-          date: dateStr,
-          activeUsers: activeUsers || 0,
-          displayDate: displayDate,
-        });
-      } catch (redisError) {
-        console.error(`Error fetching DAU for ${dateStr}:`, redisError);
-        const fallbackDisplayDateDate = new Date(
-          now.getTime() - i * 24 * 60 * 60 * 1000
-        );
-        dauData.push({
-          date: dateStr,
-          activeUsers: 0,
-          displayDate: fallbackDisplayDateDate.toLocaleDateString("zh-CN", {
-            timeZone: "Asia/Shanghai",
-            month: "short",
-            day: "numeric",
-            weekday: "short",
-          }),
-        });
-      }
-    }
-
-    return dauData;
+    return { range, data };
   } catch (error) {
     console.error("Error fetching daily active users:", error);
-    // 返回空数据而不是抛出错误
-    return Array.from({ length: 7 }, (_, i) => {
-      // 使用UTC方法计算北京时间（UTC+8）
-      const now = new Date();
-      const utcHours = now.getUTCHours();
-      const beijingHours = utcHours + 8;
+    const data = eachDateInRange(range.startDate, range.endDate).map((date) => ({
+      date,
+      activeUsers: 0,
+      displayDate: formatDisplayDate(date),
+    }));
+    return { range, data };
+  }
+}
 
-      // 如果北京时间超过24小时，说明是下一天
-      let beijingDate = new Date(now);
-      if (beijingHours >= 24) {
-        beijingDate.setUTCDate(beijingDate.getUTCDate() + 1);
-        beijingDate.setUTCHours(beijingHours - 24);
-      } else {
-        beijingDate.setUTCHours(beijingHours);
-      }
-
-      // 减去天数得到目标日期
-      beijingDate.setUTCDate(beijingDate.getUTCDate() - (6 - i));
-      const dateStr = beijingDate.toISOString().split("T")[0];
-
-      const defaultDisplayDateDate = new Date(
-        now.getTime() - (6 - i) * 24 * 60 * 60 * 1000
-      );
-      return {
-        date: dateStr,
-        activeUsers: 0,
-        displayDate: defaultDisplayDateDate.toLocaleDateString("zh-CN", {
-          timeZone: "Asia/Shanghai",
-          month: "short",
-          day: "numeric",
-          weekday: "short",
-        }),
-      };
+/**
+ * 获取指定日期范围的周活数据：按自然周（周一到周日）汇总去重 userId。
+ * 选择范围不是完整自然周时，只统计范围内实际覆盖的日期。
+ * @param {{startDate?: string, endDate?: string}} params
+ * @returns {Promise<Array>}
+ */
+async function getWeeklyActiveUsers(params = {}) {
+  const range = normalizeActiveDateRange(params);
+  try {
+    const records = await DailyActiveUser.findAll({
+      attributes: ["userId", "date"],
+      where: {
+        date: { [Op.between]: [range.startDate, range.endDate] },
+      },
+      order: [["date", "ASC"]],
+      raw: true,
     });
+
+    const usersByWeek = new Map();
+    for (const record of records) {
+      const weekStart = getWeekStartDate(record.date);
+      if (!usersByWeek.has(weekStart)) {
+        usersByWeek.set(weekStart, new Set());
+      }
+      usersByWeek.get(weekStart).add(record.userId);
+    }
+
+    const weeklyData = [];
+    const firstWeekStart = getWeekStartDate(range.startDate);
+    for (
+      let weekStart = firstWeekStart;
+      weekStart <= range.endDate;
+      weekStart = addDays(weekStart, 7)
+    ) {
+      const weekEnd = addDays(weekStart, 6);
+      weeklyData.push({
+        weekStart,
+        weekEnd,
+        displayDate: `${formatShortDate(weekStart)}-${formatShortDate(weekEnd)}`,
+        activeUsers: usersByWeek.get(weekStart)?.size || 0,
+      });
+    }
+
+    return weeklyData;
+  } catch (error) {
+    console.error("Error fetching weekly active users:", error);
+    return [];
   }
 }
 
@@ -203,19 +262,23 @@ function getMonthStartChina() {
 /**
  * 获取完整的统计数据
  * @param {Object} redisClient - Redis客户端实例（可选）
+ * @param {{startDate?: string, endDate?: string}} activeRangeParams - 活跃数据日期范围
  */
-async function getFullStats(redisClient = null) {
+async function getFullStats(redisClient = null, activeRangeParams = {}) {
   // 使用中国时区的时间范围
   const todayStart = getTodayStartChina();
   const todayEnd = getTodayEndChina();
   const weekStart = getWeekStartChina();
   const monthStart = getMonthStartChina();
+  const todayDate = getChinaDateString();
+  const currentWeekStartDate = getWeekStartDate(todayDate);
 
-  // 🆕 获取基于设备指纹的日活数据
-  let dailyActiveUsersData = [];
-  if (redisClient) {
-    dailyActiveUsersData = await getDailyActiveUsers(redisClient);
-  }
+  // 获取基于 DailyActiveUsers 历史表的日活 / 周活数据。
+  // 之前首页只展示 7 天，是因为读的是 Redis dau:* 临时集合且只保留 8 天；
+  // 这里改为读取 PostgreSQL，才能覆盖历史数据并支持自定义日期范围。
+  const dailyActiveUsersResult = await getDailyActiveUsers(activeRangeParams);
+  const dailyActiveUsersData = dailyActiveUsersResult.data;
+  const weeklyActiveUsersData = await getWeeklyActiveUsers(dailyActiveUsersResult.range);
 
   // 并行执行所有统计查询
   const [
@@ -243,6 +306,7 @@ async function getFullStats(redisClient = null) {
     monthlyReviews,
     weeklyNewUsers,
     monthlyNewUsers,
+    weeklyActiveUsers,
 
     // 7. KOL用户统计
     totalKOLUsers,
@@ -273,10 +337,9 @@ async function getFullStats(redisClient = null) {
     // fingerprintDuplicateAnalysis
   ] = await Promise.all([
     // 1. 日活统计（中国时区）
-    XHuntUserToken.count({
+    DailyActiveUser.count({
       where: {
-        lastUsed: { [Op.gte]: todayStart, [Op.lte]: todayEnd },
-        isRevoked: false,
+        date: todayDate,
       },
     }),
 
@@ -320,6 +383,13 @@ async function getFullStats(redisClient = null) {
     }),
     XHuntUser.count({
       where: { createdAt: { [Op.gte]: monthStart } },
+    }),
+    DailyActiveUser.count({
+      where: {
+        date: { [Op.gte]: currentWeekStartDate, [Op.lte]: todayDate },
+      },
+      distinct: true,
+      col: "userId",
     }),
 
     // 7. KOL用户统计（中国时区）
@@ -818,6 +888,7 @@ async function getFullStats(redisClient = null) {
       weekly: {
         reviews: weeklyReviews,
         newUsers: weeklyNewUsers,
+        activeUsers: weeklyActiveUsers,
       },
       monthly: {
         reviews: monthlyReviews,
@@ -878,8 +949,10 @@ async function getFullStats(redisClient = null) {
       },
     },
 
-    // 🆕 基于设备指纹的日活数据
+    // 基于 DailyActiveUsers 表的活跃身份统计
+    activeUsersRange: dailyActiveUsersResult.range,
     dailyActiveUsersData: dailyActiveUsersData || [],
+    weeklyActiveUsersData: weeklyActiveUsersData || [],
 
     // 🆕 设备指纹重复分析
     fingerprintDuplicateAnalysis: {
@@ -897,6 +970,7 @@ async function getFullStats(redisClient = null) {
 async function getSimpleStats() {
   const todayStart = getTodayStartChina();
   const todayEnd = getTodayEndChina();
+  const todayDate = getChinaDateString();
 
   const [
     todayActiveTokens,
@@ -905,10 +979,9 @@ async function getSimpleStats() {
     totalUsers,
     totalAccounts,
   ] = await Promise.all([
-    XHuntUserToken.count({
+    DailyActiveUser.count({
       where: {
-        lastUsed: { [Op.gte]: todayStart, [Op.lte]: todayEnd },
-        isRevoked: false,
+        date: todayDate,
       },
     }),
     XReviewForAccount.count({

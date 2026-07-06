@@ -30,7 +30,10 @@ router.get(
   requirePermission("overview"),
   async (req, res) => {
     try {
-      const stats = await getFullStats(req.redisClient);
+      const stats = await getFullStats(req.redisClient, {
+        startDate: req.query.startDate,
+        endDate: req.query.endDate,
+      });
 
       res.json({
         success: true,

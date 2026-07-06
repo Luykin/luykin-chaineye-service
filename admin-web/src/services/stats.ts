@@ -29,8 +29,17 @@ import type {
   VersionStatsResponse,
 } from "@/types/stats";
 
-export async function fetchOverviewStats() {
-  return apiRequest<OverviewStatsResponse>("/api/xhunt/stats/overview");
+export async function fetchOverviewStats(params?: {
+  startDate?: string;
+  endDate?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.startDate) query.set("startDate", params.startDate);
+  if (params?.endDate) query.set("endDate", params.endDate);
+
+  return apiRequest<OverviewStatsResponse>(
+    `/api/xhunt/stats/overview${query.toString() ? `?${query.toString()}` : ""}`
+  );
 }
 
 export async function fetchDauDetails(date?: string) {

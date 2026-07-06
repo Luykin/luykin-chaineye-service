@@ -13,6 +13,13 @@ export interface OverviewDailyActiveUserItem {
   activeUsers: number;
 }
 
+export interface OverviewWeeklyActiveUserItem {
+  weekStart: string;
+  weekEnd: string;
+  displayDate: string;
+  activeUsers: number;
+}
+
 export interface OverviewStatsResponse {
   success: boolean;
   data: {
@@ -39,6 +46,7 @@ export interface OverviewStatsResponse {
       weekly: {
         reviews: number;
         newUsers: number;
+        activeUsers?: number;
       };
       monthly: {
         reviews: number;
@@ -50,7 +58,14 @@ export interface OverviewStatsResponse {
       pointsAwarded: number;
       kolReviews: number;
     };
+    activeUsersRange?: {
+      startDate: string;
+      endDate: string;
+      days: number;
+      maxDays: number;
+    };
     dailyActiveUsersData: OverviewDailyActiveUserItem[];
+    weeklyActiveUsersData?: OverviewWeeklyActiveUserItem[];
   };
 }
 
