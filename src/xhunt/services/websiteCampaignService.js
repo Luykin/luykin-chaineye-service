@@ -642,6 +642,7 @@ function buildPluginCampaign(record, options = {}) {
     showSponsoredPolicy: payload.showSponsoredPolicy !== false,
     riskConfirmHtml: payload.riskConfirmHtml || null,
     leaderboardMode: payload.leaderboardMode === "custom" ? "custom" : "traditional",
+    mockCustomLeaderboardDataEnabled: payload.mockCustomLeaderboardDataEnabled === true,
   };
 
   if (common.leaderboardMode === "custom") {

@@ -280,6 +280,7 @@ function normalizeCampaign(
   if (fillDefaultApiUrls && !c.userActivityApiUrl.trim()) {
     c.userActivityApiUrl = DEFAULT_CUSTOM_USER_ACTIVITY_API_URL;
   }
+  c.mockCustomLeaderboardDataEnabled = c.mockCustomLeaderboardDataEnabled === true;
   c.customLeaderboards = Array.isArray(c.customLeaderboards)
     ? c.customLeaderboards
     : [];
@@ -418,6 +419,7 @@ function makeNewCampaign(): AnyObj {
     leaderboardMode: "traditional",
     leaderboardApiUrl: DEFAULT_CUSTOM_LEADERBOARD_API_URL,
     userActivityApiUrl: DEFAULT_CUSTOM_USER_ACTIVITY_API_URL,
+    mockCustomLeaderboardDataEnabled: false,
     customLeaderboards: [],
     enableEssayContest: false,
     enablePowLeaderboard: false,
@@ -1281,6 +1283,7 @@ export function NacosCampaignsPage() {
           errors.push(`${prefix}: includeCreator 必须是布尔值（true/false）`);
       }
       if (c.leaderboardMode === "custom") {
+        c.mockCustomLeaderboardDataEnabled = c.mockCustomLeaderboardDataEnabled === true;
         if (!String(c.leaderboardApiUrl || "").trim())
           errors.push(`${prefix}: 自定义模式下榜单接口 URL 不能为空`);
         if (!String(c.userActivityApiUrl || "").trim())
@@ -2510,7 +2513,7 @@ function CampaignEditor(props: {
           <Col xs={24} md={8}><Field label="报名门槛"><Select value={thresholdValue} onChange={changeThreshold} options={[{ value: "", label: "请选择" }, { value: "50k", label: "50k" }, { value: "100k", label: "100k" }, { value: "200k", label: "200k" }, { value: "200k+creator", label: "200k+creator" }]} /></Field></Col>
         </Row>
         <div style={{ marginTop: 12 }}>
-          {(c.leaderboardMode || "traditional") === "custom" ? <CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} userActivityApiUrl={c.userActivityApiUrl || ""} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
+          {(c.leaderboardMode || "traditional") === "custom" ? <CustomLeaderboards apiUrl={c.leaderboardApiUrl || ""} userActivityApiUrl={c.userActivityApiUrl || ""} mockEnabled={!!c.mockCustomLeaderboardDataEnabled} items={c.customLeaderboards || []} setCampaignPath={setCampaignPath} add={() => addArrayItem("customLeaderboards")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /> : <Space direction="vertical" size={8} style={{ width: "100%" }}><Card size="small" title="POI 基础奖励"><Row gutter={[12, 12]}><Col xs={12} md={6}><Field label="金额"><InputNumber min={1} max={99999999} value={c.rewardAmount} onChange={(v) => setCampaignPath("rewardAmount", v)} /></Field></Col><Col xs={12} md={6}><Field label="人数"><InputNumber min={10} max={1000} value={c.rewardParticipantCount} onChange={(v) => setCampaignPath("rewardParticipantCount", v)} /></Field></Col><Col xs={12} md={6}><Field label="机制"><Select value={c.rewardDistributionType || ""} onChange={(v) => setCampaignPath("rewardDistributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col><Col xs={12} md={6}><Field label="单位"><Input value={c.rewardUnit || ""} onChange={(e) => setCampaignPath("rewardUnit", e.target.value)} placeholder="USDT" /></Field></Col></Row></Card><RewardOptional c={c} type="pow" enabled={!!c.enablePowLeaderboard} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} /><RewardOptional c={c} type="essay" enabled={!!c.enableEssayContest} setCampaignPath={setCampaignPath} updateSelectedCampaign={updateSelectedCampaign} addWinner={() => addArrayItem("essayContestWinners")} update={updateArrayItem} move={moveArrayItem} remove={removeArrayItem} /></Space>}
         </div>
       </Section>
 
@@ -2736,66 +2739,114 @@ function WritingThemes({ items, update, move, remove }: any) {
   );
 }
 
-function Tasks({ items, update, move, remove }: any) {
-  if (!items.length) return <EmptyHint>暂无 Task，可点击上方添加。</EmptyHint>;
+function getTaskTitle(item: AnyObj, index: number) {
   return (
-    <Space direction="vertical" size={8} style={{ width: "100%" }}>
-      {items.map((it: AnyObj, i: number) => {
-        const isCustom = (it.type || "twitter") === "custom";
-        return (
-          <Card
-            size="small"
-            key={i}
-            title={`Task #${i + 1}`}
-            extra={
-              <RepActions
-                onUp={() => move("tasks", i, -1)}
-                onDown={() => move("tasks", i, 1)}
-                onRemove={() => remove("tasks", i)}
-              />
-            }
-          >
-            <Row gutter={[12, 12]} align="middle">
-              <Col xs={24} md={8}>
-                <Field label={<InfoLabel info="根据活动ID、类型和链接自动生成。">ID</InfoLabel>}>
-                  <Input value={it.id || ""} disabled />
-                </Field>
-              </Col>
-              <Col xs={12} md={4}>
-                <Field label="类型">
-                  <Select
-                    value={it.type || "twitter"}
-                    onChange={(v) => update("tasks", i, "type", v)}
-                    options={["twitter", "telegram", "other", "custom"].map((v) => ({ value: v, label: v === "custom" ? "backend-custom" : v }))}
-                  />
-                </Field>
-              </Col>
-              <Col xs={12} md={4} className="task-auto-complete-col">
-                <Field label={<InfoLabel info="开启后用户点击链接即视为完成。custom 类型不可开启。">自动完成</InfoLabel>}>
-                  <Switch size="small" disabled={isCustom} checked={!isCustom && !!it.autoComplete} onChange={(v) => update("tasks", i, "autoComplete", v)} />
-                </Field>
-              </Col>
-              <Col xs={24} md={12}>
-                <Field label="标题（中文）">
-                  <Input value={it.title?.zh || ""} onChange={(e) => update("tasks", i, "title.zh", e.target.value)} />
-                </Field>
-              </Col>
-              <Col xs={24} md={12}>
-                <Field label="标题（English）">
-                  <Input value={it.title?.en || ""} onChange={(e) => update("tasks", i, "title.en", e.target.value)} />
-                </Field>
-              </Col>
-              <Col xs={24}>
-                <Field label="跳转链接">
-                  <Input value={isCustom ? "https://" : it.url || ""} readOnly={isCustom} onChange={(e) => update("tasks", i, "url", e.target.value)} />
-                </Field>
-              </Col>
-            </Row>
-          </Card>
-        );
-      })}
+    String(item?.title?.zh || "").trim() ||
+    String(item?.title?.en || "").trim() ||
+    String(item?.id || "").trim() ||
+    `Task #${index + 1}`
+  );
+}
+
+function getTaskTypeLabel(type: unknown) {
+  const value = String(type || "twitter");
+  return value === "custom" ? "backend-custom" : value;
+}
+
+function getTaskUrlSummary(url: unknown) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch (_) {
+    return raw.length > 36 ? `${raw.slice(0, 33)}...` : raw;
+  }
+}
+
+function TaskSummary({ item, index }: { item: AnyObj; index: number }) {
+  const isCustom = (item.type || "twitter") === "custom";
+  const urlSummary = isCustom ? "" : getTaskUrlSummary(item.url);
+  return (
+    <Space size={10} wrap style={{ minWidth: 0 }}>
+      <span style={{ fontWeight: 700, color: "#1f2937" }}>{getTaskTitle(item, index)}</span>
+      <AntTag color={isCustom ? "purple" : item.type === "telegram" ? "blue" : item.type === "other" ? "default" : "cyan"}>
+        {getTaskTypeLabel(item.type)}
+      </AntTag>
+      {item.id ? <AntTag color="geekblue">ID: {item.id}</AntTag> : <AntTag>待生成 ID</AntTag>}
+      {isCustom ? (
+        <AntTag color="magenta">后端校验</AntTag>
+      ) : item.autoComplete ? (
+        <AntTag color="green">点击自动完成</AntTag>
+      ) : (
+        <AntTag color="orange">手动/接口完成</AntTag>
+      )}
+      {urlSummary ? (
+        <span style={{ color: "#8c8c8c", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {urlSummary}
+        </span>
+      ) : null}
     </Space>
   );
+}
+
+function Tasks({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无 Task，可点击上方添加。</EmptyHint>;
+  const panels = items.map((it: AnyObj, i: number) => {
+    const isCustom = (it.type || "twitter") === "custom";
+    return {
+      key: String(i),
+      label: <TaskSummary item={it} index={i} />,
+      extra: (
+        <div onClick={(e) => e.stopPropagation()}>
+          <RepActions
+            onUp={() => move("tasks", i, -1)}
+            onDown={() => move("tasks", i, 1)}
+            onRemove={() => remove("tasks", i)}
+          />
+        </div>
+      ),
+      children: (
+        <Row gutter={[12, 12]} align="middle">
+          <Col xs={24} md={8}>
+            <Field label={<InfoLabel info="根据活动ID、类型和链接自动生成。">ID</InfoLabel>}>
+              <Input value={it.id || ""} disabled />
+            </Field>
+          </Col>
+          <Col xs={12} md={4}>
+            <Field label="类型">
+              <Select
+                value={it.type || "twitter"}
+                onChange={(v) => update("tasks", i, "type", v)}
+                options={["twitter", "telegram", "other", "custom"].map((v) => ({ value: v, label: v === "custom" ? "backend-custom" : v }))}
+              />
+            </Field>
+          </Col>
+          <Col xs={12} md={4} className="task-auto-complete-col">
+            <Field label={<InfoLabel info="开启后用户点击链接即视为完成。custom 类型不可开启。">自动完成</InfoLabel>}>
+              <Switch size="small" disabled={isCustom} checked={!isCustom && !!it.autoComplete} onChange={(v) => update("tasks", i, "autoComplete", v)} />
+            </Field>
+          </Col>
+          <Col xs={24} md={12}>
+            <Field label="标题（中文）">
+              <Input value={it.title?.zh || ""} onChange={(e) => update("tasks", i, "title.zh", e.target.value)} />
+            </Field>
+          </Col>
+          <Col xs={24} md={12}>
+            <Field label="标题（English）">
+              <Input value={it.title?.en || ""} onChange={(e) => update("tasks", i, "title.en", e.target.value)} />
+            </Field>
+          </Col>
+          <Col xs={24}>
+            <Field label="跳转链接">
+              <Input value={isCustom ? "https://" : it.url || ""} readOnly={isCustom} onChange={(e) => update("tasks", i, "url", e.target.value)} />
+            </Field>
+          </Col>
+        </Row>
+      ),
+    };
+  });
+  return <Collapse size="small" items={panels} />;
 }
 
 function Winners({ items, update, move, remove }: any) {
@@ -2821,29 +2872,51 @@ function Winners({ items, update, move, remove }: any) {
   );
 }
 
-function Tags({ items, update, move, remove }: any) {
-  if (!items.length) return <EmptyHint>暂无 Tags，可点击上方添加。</EmptyHint>;
+function getTagLabel(item: AnyObj, index: number) {
+  return String(item?.label || item?.label_en || "").trim() || `Tag #${index + 1}`;
+}
+
+function TagSummary({ item, index }: { item: AnyObj; index: number }) {
+  const label = getTagLabel(item, index);
+  const english = String(item?.label_en || "").trim();
   return (
-    <Space direction="vertical" size={8} style={{ width: "100%" }}>
-      {items.map((it: AnyObj, i: number) => (
-        <Card
-          size="small"
-          key={i}
-          title={<Space>Tag #{i + 1}<AntTag color={it.colorScheme || "blue"}>{it.icon || "Tag"} {it.label || "未命名"}</AntTag></Space>}
-          extra={<RepActions onUp={() => move("tags", i, -1)} onDown={() => move("tags", i, 1)} onRemove={() => remove("tags", i)} />}
-        >
-          <Row gutter={[12, 12]}>
-            <Col xs={12} md={4}><Field label="颜色"><Select value={it.colorScheme || "blue"} onChange={(v) => update("tags", i, "colorScheme", v)} options={TAG_COLOR_SCHEMES.map(({ value, label }) => ({ value, label }))} /></Field></Col>
-            <Col xs={12} md={4}><Field label="图标"><Select value={it.icon || "Tag"} onChange={(v) => update("tags", i, "icon", v)} options={LUCIDE_ICONS} /></Field></Col>
-            <Col xs={24} md={8}><Field label="中文标签"><Input value={it.label || ""} onChange={(e) => update("tags", i, "label", e.target.value)} /></Field></Col>
-            <Col xs={24} md={8}><Field label="English 标签"><Input value={it.label_en || ""} onChange={(e) => update("tags", i, "label_en", e.target.value)} /></Field></Col>
-            <Col xs={24} md={12}><Field label="Hover 中文（支持 HTML）"><TextArea rows={2} value={it.hoverTips || ""} onChange={(e) => update("tags", i, "hoverTips", e.target.value)} /></Field></Col>
-            <Col xs={24} md={12}><Field label="Hover English（支持 HTML）"><TextArea rows={2} value={it.hoverTips_en || ""} onChange={(e) => update("tags", i, "hoverTips_en", e.target.value)} /></Field></Col>
-          </Row>
-        </Card>
-      ))}
+    <Space size={10} wrap style={{ minWidth: 0 }}>
+      <AntTag color={item.colorScheme || "blue"}>
+        {item.icon || "Tag"} {label}
+      </AntTag>
+      {english && english !== label ? (
+        <span style={{ color: "#8c8c8c", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {english}
+        </span>
+      ) : null}
+      {item.hoverTips ? <AntTag color="green">中文 hover</AntTag> : null}
+      {item.hoverTips_en ? <AntTag color="cyan">EN hover</AntTag> : null}
     </Space>
   );
+}
+
+function Tags({ items, update, move, remove }: any) {
+  if (!items.length) return <EmptyHint>暂无 Tags，可点击上方添加。</EmptyHint>;
+  const panels = items.map((it: AnyObj, i: number) => ({
+    key: String(i),
+    label: <TagSummary item={it} index={i} />,
+    extra: (
+      <div onClick={(e) => e.stopPropagation()}>
+        <RepActions onUp={() => move("tags", i, -1)} onDown={() => move("tags", i, 1)} onRemove={() => remove("tags", i)} />
+      </div>
+    ),
+    children: (
+      <Row gutter={[12, 12]}>
+        <Col xs={12} md={4}><Field label="颜色"><Select value={it.colorScheme || "blue"} onChange={(v) => update("tags", i, "colorScheme", v)} options={TAG_COLOR_SCHEMES.map(({ value, label }) => ({ value, label }))} /></Field></Col>
+        <Col xs={12} md={4}><Field label="图标"><Select value={it.icon || "Tag"} onChange={(v) => update("tags", i, "icon", v)} options={LUCIDE_ICONS} /></Field></Col>
+        <Col xs={24} md={8}><Field label="中文标签"><Input value={it.label || ""} onChange={(e) => update("tags", i, "label", e.target.value)} /></Field></Col>
+        <Col xs={24} md={8}><Field label="English 标签"><Input value={it.label_en || ""} onChange={(e) => update("tags", i, "label_en", e.target.value)} /></Field></Col>
+        <Col xs={24} md={12}><Field label="Hover 中文（支持 HTML）"><TextArea rows={2} value={it.hoverTips || ""} onChange={(e) => update("tags", i, "hoverTips", e.target.value)} /></Field></Col>
+        <Col xs={24} md={12}><Field label="Hover English（支持 HTML）"><TextArea rows={2} value={it.hoverTips_en || ""} onChange={(e) => update("tags", i, "hoverTips_en", e.target.value)} /></Field></Col>
+      </Row>
+    ),
+  }));
+  return <Collapse size="small" items={panels} />;
 }
 
 function pickCustomLeaderboardText(value: unknown, lang: "zh" | "en") {
@@ -2921,6 +2994,7 @@ function CustomLeaderboardSummary({ item, index }: { item: AnyObj; index: number
 function CustomLeaderboards({
   apiUrl,
   userActivityApiUrl,
+  mockEnabled,
   items,
   setCampaignPath,
   add,
@@ -2989,10 +3063,19 @@ function CustomLeaderboards({
               <Space size={8} wrap>
                 <strong>接口配置</strong>
                 <AntTag color={apiCustomized ? "orange" : "default"}>{apiCustomized ? "已自定义" : "默认占位，一般不用改"}</AntTag>
+                {mockEnabled ? <AntTag color="magenta">假数据开启</AntTag> : null}
               </Space>
             ),
             children: (
               <Row gutter={[12, 12]}>
+                <Col xs={24}>
+                  <Field
+                    label={<InfoLabel info="仅用于真实榜单尚未接入时预览前端效果；默认接口没有真实数据时，后端会按下方自定义榜单配置生成演示排名。">无真实数据时返回假数据</InfoLabel>}
+                    inline
+                  >
+                    <Switch checked={!!mockEnabled} onChange={(v) => setCampaignPath("mockCustomLeaderboardDataEnabled", v)} />
+                  </Field>
+                </Col>
                 <Col xs={24} md={12}>
                   <Field label={<InfoLabel info="可填写完整 URL，也可填写 /x/api 相对路径；会原样保存到数据库。">榜单接口 URL</InfoLabel>}>
                     <Input value={apiUrl} onChange={(e) => setCampaignPath("leaderboardApiUrl", e.target.value)} placeholder="/x/api" />
