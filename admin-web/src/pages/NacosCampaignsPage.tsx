@@ -90,6 +90,25 @@ const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS = [
 const CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_VALUES = new Set(
   CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.map((item) => item.value),
 );
+const TARGET_ACCOUNT_OPTIONS = [
+  { value: "xhunt_ai", label: "XHunt AI · @xhunt_ai" },
+  { value: "Mantle_Official", label: "Mantle · @Mantle_Official" },
+  { value: "yzilabs", label: "YZi Labs · @yzilabs" },
+  { value: "Bybit_Official", label: "Bybit · @Bybit_Official" },
+  { value: "0xMantle", label: "Mantle Network · @0xMantle" },
+  { value: "BNBCHAIN", label: "BNB Chain · @BNBCHAIN" },
+  { value: "Binance", label: "Binance · @Binance" },
+  { value: "BinanceWallet", label: "Binance Wallet · @BinanceWallet" },
+  { value: "okx", label: "OKX · @okx" },
+  { value: "base", label: "Base · @base" },
+  { value: "arbitrum", label: "Arbitrum · @arbitrum" },
+  { value: "Optimism", label: "Optimism · @Optimism" },
+  { value: "solana", label: "Solana · @solana" },
+  { value: "0xPolygon", label: "Polygon · @0xPolygon" },
+  { value: "ethereum", label: "Ethereum · @ethereum" },
+  { value: "CoinMarketCap", label: "CoinMarketCap · @CoinMarketCap" },
+  { value: "coingecko", label: "CoinGecko · @coingecko" },
+];
 
 function normalizeDisplayDomains(value: unknown) {
   const list = Array.isArray(value) ? value : ["web3"];
@@ -251,7 +270,7 @@ function normalizeCampaign(
       )
     : [{ zh: "", en: "" }];
   c.testList = Array.isArray(c.testList) ? c.testList : [];
-  c.targetUserIds = Array.isArray(c.targetUserIds) ? c.targetUserIds : [];
+  c.targetUserIds = normalizeTwitterHandleList(c.targetUserIds);
   c.displayDomains = normalizeDisplayDomains(c.displayDomains);
   c.logos = Array.isArray(c.logos) ? c.logos : [];
   c.tasks = Array.isArray(c.tasks) ? c.tasks : [];
@@ -300,14 +319,6 @@ function normalizeCampaign(
   return c;
 }
 
-function splitLinesToList(text: string) {
-  if (!text) return [];
-  return String(text)
-    .split(/[\n,]/g)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 function normalizeStringList(value: unknown) {
   const list = Array.isArray(value) ? value : [];
   return Array.from(
@@ -319,8 +330,24 @@ function normalizeStringList(value: unknown) {
   );
 }
 
-function listToLines(arr: unknown) {
-  return Array.isArray(arr) ? arr.map(String).join("\n") : "";
+function normalizeTwitterHandle(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const withoutUrl = raw
+    .replace(/^https?:\/\/(www\.)?(twitter\.com|x\.com)\//i, "")
+    .split(/[/?#]/)[0];
+  return withoutUrl.replace(/^@+/, "").trim();
+}
+
+function normalizeTwitterHandleList(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return Array.from(
+    new Set(
+      list
+        .map(normalizeTwitterHandle)
+        .filter(Boolean),
+    ),
+  );
 }
 
 function toDatetimeLocal(isoZ: string) {
@@ -2539,7 +2566,23 @@ function CampaignEditor(props: {
               />
             </Field>
           </Col>
-          <Col xs={24} md={12}><Field label="插件右侧展示账号"><TextArea rows={2} value={listToLines(c.targetUserIds)} onChange={(e) => setCampaignPath("targetUserIds", splitLinesToList(e.target.value))} /></Field></Col>
+          <Col xs={24} md={12}>
+            <Field
+              label="插件右侧展示账号"
+              hint="可下拉选择常用项目账号；也可以输入 X 用户名 / @handle / x.com 链接并回车添加。"
+            >
+              <Select
+                mode="tags"
+                allowClear
+                maxTagCount="responsive"
+                placeholder="选择或输入 X 账号，回车添加"
+                value={normalizeTwitterHandleList(c.targetUserIds)}
+                onChange={(values) => setCampaignPath("targetUserIds", normalizeTwitterHandleList(values))}
+                options={TARGET_ACCOUNT_OPTIONS}
+                tokenSeparators={[",", "\n", " "]}
+              />
+            </Field>
+          </Col>
         </Row>
       </Section>
 
@@ -2665,78 +2708,138 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
   return <div style={{ color: "#8c8c8c", padding: "8px 0" }}>{children}</div>;
 }
 
+function getCompactUrlLabel(url: unknown) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch (_) {
+    return raw.length > 40 ? `${raw.slice(0, 37)}...` : raw;
+  }
+}
+
+function LogoSummary({ item, index }: { item: AnyObj; index: number }) {
+  const label = String(item?.label || "").trim() || `Logo #${index + 1}`;
+  const host = getCompactUrlLabel(item?.url);
+  const imageUrl = String(item?.image || "").trim();
+  return (
+    <Space size={10} wrap style={{ minWidth: 0 }}>
+      <span
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          overflow: "hidden",
+          background: "#f5f5f5",
+          border: "1px solid #f0f0f0",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {imageUrl ? (
+          <img src={imageUrl} alt={label} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <span style={{ color: "#bfbfbf", fontSize: 12 }}>LOGO</span>
+        )}
+      </span>
+      <span style={{ fontWeight: 700, color: "#1f2937" }}>{label}</span>
+      {host ? <AntTag color="blue">{host}</AntTag> : <AntTag>未填跳转</AntTag>}
+      {imageUrl ? <AntTag color="green">已配置图片</AntTag> : <AntTag color="orange">未填图片</AntTag>}
+    </Space>
+  );
+}
+
 function Logos({ items, update, move, remove }: any) {
   if (!items.length) return <EmptyHint>暂无 Logo，可点击上方添加。</EmptyHint>;
+  const panels = items.map((it: AnyObj, i: number) => ({
+    key: String(i),
+    label: <LogoSummary item={it} index={i} />,
+    extra: (
+      <div onClick={(e) => e.stopPropagation()}>
+        <RepActions
+          onUp={() => move("logos", i, -1)}
+          onDown={() => move("logos", i, 1)}
+          onRemove={() => remove("logos", i)}
+        />
+      </div>
+    ),
+    children: (
+      <Row gutter={[12, 12]}>
+        <Col xs={24} md={10}>
+          <Field label="图片 URL">
+            <Input value={it.image || ""} onChange={(e) => update("logos", i, "image", e.target.value)} />
+          </Field>
+        </Col>
+        <Col xs={24} md={10}>
+          <Field label="跳转链接">
+            <Input value={it.url || ""} onChange={(e) => update("logos", i, "url", e.target.value)} />
+          </Field>
+        </Col>
+        <Col xs={24} md={4}>
+          <Field label="账号名">
+            <Input value={it.label || ""} onChange={(e) => update("logos", i, "label", e.target.value)} />
+          </Field>
+        </Col>
+      </Row>
+    ),
+  }));
+  return <Collapse size="small" items={panels} />;
+}
+
+function compactThemeText(value: unknown, fallback: string) {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  return text.length > 52 ? `${text.slice(0, 49)}...` : text;
+}
+
+function WritingThemeSummary({ item, index }: { item: AnyObj; index: number }) {
+  const zh = String(item?.zh || "").trim();
+  const en = String(item?.en || "").trim();
   return (
-    <Space direction="vertical" size={8} style={{ width: "100%" }}>
-      {items.map((it: AnyObj, i: number) => (
-        <Card
-          size="small"
-          key={i}
-          title={`Logo #${i + 1}`}
-          extra={
-            <RepActions
-              onUp={() => move("logos", i, -1)}
-              onDown={() => move("logos", i, 1)}
-              onRemove={() => remove("logos", i)}
-            />
-          }
-        >
-          <Row gutter={[12, 12]}>
-            <Col xs={24} md={10}>
-              <Field label="图片 URL">
-                <Input value={it.image || ""} onChange={(e) => update("logos", i, "image", e.target.value)} />
-              </Field>
-            </Col>
-            <Col xs={24} md={10}>
-              <Field label="跳转链接">
-                <Input value={it.url || ""} onChange={(e) => update("logos", i, "url", e.target.value)} />
-              </Field>
-            </Col>
-            <Col xs={24} md={4}>
-              <Field label="账号名">
-                <Input value={it.label || ""} onChange={(e) => update("logos", i, "label", e.target.value)} />
-              </Field>
-            </Col>
-          </Row>
-        </Card>
-      ))}
+    <Space size={10} wrap style={{ minWidth: 0 }}>
+      <span style={{ fontWeight: 700, color: "#1f2937", maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {compactThemeText(zh || en, `主题 #${index + 1}`)}
+      </span>
+      {zh ? <AntTag color="green">中文</AntTag> : <AntTag>未填中文</AntTag>}
+      {en ? <AntTag color="blue">English</AntTag> : <AntTag>未填 EN</AntTag>}
+      {zh && en ? <AntTag color="purple">双语</AntTag> : null}
     </Space>
   );
 }
 
 function WritingThemes({ items, update, move, remove }: any) {
-  return (
-    <Space direction="vertical" size={8} style={{ width: "100%" }}>
-      {items.map((it: AnyObj, i: number) => (
-        <Card
-          size="small"
-          key={i}
-          title={`主题 #${i + 1}`}
-          extra={
-            <RepActions
-              onUp={() => move("writingThemes", i, -1)}
-              onDown={() => move("writingThemes", i, 1)}
-              onRemove={() => remove("writingThemes", i)}
-            />
-          }
-        >
-          <Row gutter={[12, 12]}>
-            <Col xs={24} md={12}>
-              <Field label="中文">
-                <TextArea rows={3} value={it.zh || ""} onChange={(e) => update("writingThemes", i, "zh", e.target.value)} />
-              </Field>
-            </Col>
-            <Col xs={24} md={12}>
-              <Field label="English">
-                <TextArea rows={3} value={it.en || ""} onChange={(e) => update("writingThemes", i, "en", e.target.value)} />
-              </Field>
-            </Col>
-          </Row>
-        </Card>
-      ))}
-    </Space>
-  );
+  if (!items.length) return <EmptyHint>暂无写作主题，可点击上方添加。</EmptyHint>;
+  const panels = items.map((it: AnyObj, i: number) => ({
+    key: String(i),
+    label: <WritingThemeSummary item={it} index={i} />,
+    extra: (
+      <div onClick={(e) => e.stopPropagation()}>
+        <RepActions
+          onUp={() => move("writingThemes", i, -1)}
+          onDown={() => move("writingThemes", i, 1)}
+          onRemove={() => remove("writingThemes", i)}
+        />
+      </div>
+    ),
+    children: (
+      <Row gutter={[12, 12]}>
+        <Col xs={24} md={12}>
+          <Field label="中文">
+            <TextArea rows={3} value={it.zh || ""} onChange={(e) => update("writingThemes", i, "zh", e.target.value)} />
+          </Field>
+        </Col>
+        <Col xs={24} md={12}>
+          <Field label="English">
+            <TextArea rows={3} value={it.en || ""} onChange={(e) => update("writingThemes", i, "en", e.target.value)} />
+          </Field>
+        </Col>
+      </Row>
+    ),
+  }));
+  return <Collapse size="small" items={panels} />;
 }
 
 function getTaskTitle(item: AnyObj, index: number) {
