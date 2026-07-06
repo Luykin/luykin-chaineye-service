@@ -37,7 +37,7 @@ const {
   getStaticLeaderboardManifest,
   getStaticLeaderboardBundle,
   emptyLeaderboardBundle,
-  fetchCustomLeaderboardBundle,
+  buildCustomLeaderboardBundle,
   findUserHistoricalCampaigns,
 } = require("../services/echohuntLeaderboardService");
 const {
@@ -46,6 +46,9 @@ const {
   registerCampaignParticipant,
   fetchCampaignRankByDomain,
 } = require("../services/campaignRegistrationService");
+const {
+  getCustomLeaderboardData,
+} = require("../services/campaignLeaderboardService");
 const { isRequestInternalTestUser } = require("../constants/xhuntVip");
 
 const router = express.Router();
@@ -777,11 +780,13 @@ router.get("/campaigns/:campaignKey/leaderboard", async (req, res) => {
     const fallbackCampaign = record ? { ...buildEchohuntCampaignListItem(record, lang, null, req), lang } : { campaignKey, lang };
     if (fallbackCampaign?.leaderboardConfig?.leaderboardMode === "custom") {
       try {
-        const customBundle = await fetchCustomLeaderboardBundle(fallbackCampaign);
-        if (customBundle) {
-          res.set("Cache-Control", "public, max-age=120");
-          return res.json({ success: true, source: "configured_custom", data: customBundle });
-        }
+        const rawLeaderboard = await getCustomLeaderboardData(fallbackCampaign, {
+          campaign: campaignKey,
+          channel: "echohunt",
+        });
+        const customBundle = buildCustomLeaderboardBundle(fallbackCampaign, rawLeaderboard);
+        res.set("Cache-Control", "public, max-age=120");
+        return res.json({ success: true, source: "configured_custom", data: customBundle });
       } catch (customError) {
         console.warn("[EchoHunt] custom leaderboard fetch warn:", customError.message || customError);
       }

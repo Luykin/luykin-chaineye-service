@@ -29,6 +29,10 @@ const {
   loadCampaignConfigForRegistration,
   registerCampaignParticipant,
 } = require("../services/campaignRegistrationService");
+const {
+  getCustomLeaderboardData,
+  getCustomUserActivityData,
+} = require("../services/campaignLeaderboardService");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
 const { adminAuth, requirePermission, requireRole } = require("../../admin/middleware/adminAuth");
@@ -229,12 +233,17 @@ router.get("/custom-leaderboard", securityMiddleware, async (req, res) => {
       });
     }
 
+    const data = await getCustomLeaderboardData(campaignConfig, {
+      campaign: normalizedCampaign,
+      channel: "plugin",
+    });
+
     res.set("Cache-Control", "public, max-age=300");
     return res.json({
       success: true,
       campaign: normalizedCampaign,
-      updatedAt: new Date().toISOString(),
-      leaderboards: {},
+      updatedAt: data.updatedAt,
+      leaderboards: data.leaderboards || {},
     });
   } catch (err) {
     console.error("[CustomLeaderboard] error:", err.message || err);
@@ -269,12 +278,18 @@ router.get("/custom-user-activity", securityMiddleware, async (req, res) => {
       });
     }
 
+    const data = await getCustomUserActivityData(campaignConfig, userId, {
+      campaign: normalizedCampaign,
+      channel: "plugin",
+    });
+
     res.set("Cache-Control", "private, max-age=300");
     return res.json({
       success: true,
       campaign: normalizedCampaign,
       userid: String(userId),
-      leaderboards: {},
+      updatedAt: data.updatedAt,
+      leaderboards: data.leaderboards || {},
     });
   } catch (err) {
     console.error("[CustomUserActivity] error:", err.message || err);
