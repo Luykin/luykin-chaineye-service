@@ -2846,6 +2846,78 @@ function Tags({ items, update, move, remove }: any) {
   );
 }
 
+function pickCustomLeaderboardText(value: unknown, lang: "zh" | "en") {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "object") {
+    const obj = value as { zh?: unknown; en?: unknown };
+    return String((lang === "zh" ? obj.zh : obj.en) || "").trim();
+  }
+  return "";
+}
+
+function getCustomLeaderboardDisplayTitle(item: AnyObj, index: number) {
+  return (
+    pickCustomLeaderboardText(item.short_name, "zh") ||
+    pickCustomLeaderboardText(item.name, "zh") ||
+    pickCustomLeaderboardText(item.short_name, "en") ||
+    pickCustomLeaderboardText(item.name, "en") ||
+    String(item.id || "").trim() ||
+    `榜单 #${index + 1}`
+  );
+}
+
+function getCustomLeaderboardFullTitle(item: AnyObj) {
+  return (
+    pickCustomLeaderboardText(item.name, "zh") ||
+    pickCustomLeaderboardText(item.name, "en") ||
+    pickCustomLeaderboardText(item.short_name, "zh") ||
+    pickCustomLeaderboardText(item.short_name, "en") ||
+    ""
+  );
+}
+
+function getCustomLeaderboardRewardText(item: AnyObj) {
+  const amount = item?.amount;
+  if (amount === null || amount === undefined || amount === "") return "未填金额";
+  return `${amount}${item?.unit ? ` ${item.unit}` : ""}`;
+}
+
+function getDistributionLabel(value: unknown) {
+  const map: Record<string, string> = {
+    equal: "平分",
+    mindshare: "mindshare",
+    workshare: "workshare",
+  };
+  const key = String(value || "").trim();
+  return map[key] || key || "未选机制";
+}
+
+function CustomLeaderboardSummary({ item, index }: { item: AnyObj; index: number }) {
+  const title = getCustomLeaderboardDisplayTitle(item, index);
+  const fullTitle = getCustomLeaderboardFullTitle(item);
+  const channels = normalizeCustomLeaderboardDisplayChannels(item.displayChannels);
+  return (
+    <Space size={10} wrap style={{ minWidth: 0 }}>
+      <span style={{ fontWeight: 700, color: "#1f2937" }}>{title}</span>
+      {fullTitle && fullTitle !== title ? (
+        <span style={{ color: "#8c8c8c", maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {fullTitle}
+        </span>
+      ) : null}
+      {item.id ? <AntTag color="blue">ID: {item.id}</AntTag> : <AntTag>未填 ID</AntTag>}
+      <AntTag color="gold">{getCustomLeaderboardRewardText(item)}</AntTag>
+      <AntTag color="green">{item.participantCount || "-"} 人</AntTag>
+      <AntTag>{getDistributionLabel(item.distributionType)}</AntTag>
+      {channels.map((channel) => (
+        <AntTag key={channel} color={channel === "echohunt" ? "purple" : "cyan"}>
+          {CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS.find((opt) => opt.value === channel)?.label || channel}
+        </AntTag>
+      ))}
+    </Space>
+  );
+}
+
 function CustomLeaderboards({
   apiUrl,
   userActivityApiUrl,
@@ -2856,67 +2928,97 @@ function CustomLeaderboards({
   move,
   remove,
 }: any) {
-  return (
-    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+  const apiCustomized =
+    String(apiUrl || "") !== DEFAULT_CUSTOM_LEADERBOARD_API_URL ||
+    String(userActivityApiUrl || "") !== DEFAULT_CUSTOM_USER_ACTIVITY_API_URL;
+  const panels = items.map((it: AnyObj, i: number) => ({
+    key: String(i),
+    label: <CustomLeaderboardSummary item={it} index={i} />,
+    extra: (
+      <div onClick={(e) => e.stopPropagation()}>
+        <RepActions
+          onUp={() => move("customLeaderboards", i, -1)}
+          onDown={() => move("customLeaderboards", i, 1)}
+          onRemove={() => remove("customLeaderboards", i)}
+        />
+      </div>
+    ),
+    children: (
       <Row gutter={[12, 12]}>
-        <Col xs={24} md={12}>
-          <Field label={<InfoLabel info="可填写完整 URL，也可填写 /x/api 相对路径；会原样保存到数据库。">榜单接口 URL</InfoLabel>}>
-            <Input value={apiUrl} onChange={(e) => setCampaignPath("leaderboardApiUrl", e.target.value)} placeholder="/x/api" />
+        <Col xs={24} md={8}><Field label={<InfoLabel info="榜单唯一 key，建议填写；榜单接口和用户排名接口会按这个 key 返回数据。">榜单 ID</InfoLabel>}><Input value={it.id || ""} onChange={(e) => update("customLeaderboards", i, "id", e.target.value)} placeholder="cohort" /></Field></Col>
+        <Col xs={24} md={8}><Field label="中文名"><Input value={it.name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "name.zh", e.target.value)} /></Field></Col>
+        <Col xs={24} md={8}><Field label="English"><Input value={it.name?.en || ""} onChange={(e) => update("customLeaderboards", i, "name.en", e.target.value)} /></Field></Col>
+        <Col xs={24} md={8}>
+          <Field label={<InfoLabel info="控制该自定义榜单在哪个客户端接口返回；未选择时默认插件和 EchoHunt 都展示。">展示渠道</InfoLabel>}>
+            <Select
+              mode="multiple"
+              allowClear={false}
+              maxTagCount="responsive"
+              value={normalizeCustomLeaderboardDisplayChannels(it.displayChannels)}
+              onChange={(values) =>
+                update(
+                  "customLeaderboards",
+                  i,
+                  "displayChannels",
+                  normalizeCustomLeaderboardDisplayChannels(values),
+                )
+              }
+              options={CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS}
+            />
           </Field>
         </Col>
-        <Col xs={24} md={12}>
-          <Field label={<InfoLabel info="查询当前登录用户在该活动里的状态 / 分数 / 完成信息。可填写完整 URL，也可填写 /x/api 相对路径。">用户活动信息接口 URL</InfoLabel>}>
-            <Input value={userActivityApiUrl} onChange={(e) => setCampaignPath("userActivityApiUrl", e.target.value)} placeholder="/x/api" />
-          </Field>
-        </Col>
+        <Col xs={24} md={8}><Field label={<InfoLabel info="列表折叠态会优先展示短名；不填则展示完整名称。">中文短名</InfoLabel>}><Input value={it.short_name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "short_name.zh", e.target.value)} placeholder="例如：生态联合榜" /></Field></Col>
+        <Col xs={24} md={8}><Field label={<InfoLabel info="Optional short name for compact leaderboard display. If empty, frontend can fallback to full English name.">English Short Name</InfoLabel>}><Input value={it.short_name?.en || ""} onChange={(e) => update("customLeaderboards", i, "short_name.en", e.target.value)} placeholder="Optional" /></Field></Col>
+        <Col xs={12} md={4}><Field label="金额"><InputNumber min={0} value={it.amount} onChange={(v) => update("customLeaderboards", i, "amount", v)} /></Field></Col>
+        <Col xs={12} md={4}><Field label="人数"><InputNumber min={1} value={it.participantCount} onChange={(v) => update("customLeaderboards", i, "participantCount", v)} /></Field></Col>
+        <Col xs={12} md={4}><Field label="机制"><Select value={it.distributionType || ""} onChange={(v) => update("customLeaderboards", i, "distributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
+        <Col xs={12} md={4}><Field label="单位"><Input value={it.unit || ""} onChange={(e) => update("customLeaderboards", i, "unit", e.target.value)} placeholder="USDT" /></Field></Col>
       </Row>
+    ),
+  }));
+
+  return (
+    <Space direction="vertical" size={10} style={{ width: "100%" }}>
+      <Collapse
+        size="small"
+        ghost
+        items={[
+          {
+            key: "custom-api",
+            label: (
+              <Space size={8} wrap>
+                <strong>接口配置</strong>
+                <AntTag color={apiCustomized ? "orange" : "default"}>{apiCustomized ? "已自定义" : "默认占位，一般不用改"}</AntTag>
+              </Space>
+            ),
+            children: (
+              <Row gutter={[12, 12]}>
+                <Col xs={24} md={12}>
+                  <Field label={<InfoLabel info="可填写完整 URL，也可填写 /x/api 相对路径；会原样保存到数据库。">榜单接口 URL</InfoLabel>}>
+                    <Input value={apiUrl} onChange={(e) => setCampaignPath("leaderboardApiUrl", e.target.value)} placeholder="/x/api" />
+                  </Field>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Field label={<InfoLabel info="查询当前登录用户在该活动里的状态 / 分数 / 完成信息。可填写完整 URL，也可填写 /x/api 相对路径。">用户活动信息接口 URL</InfoLabel>}>
+                    <Input value={userActivityApiUrl} onChange={(e) => setCampaignPath("userActivityApiUrl", e.target.value)} placeholder="/x/api" />
+                  </Field>
+                </Col>
+              </Row>
+            ),
+          },
+        ]}
+      />
+
       <RepeaterHeader title="自定义榜单" onAdd={add} />
       {items.length ? (
-        items.map((it: AnyObj, i: number) => (
-          <Card
-            size="small"
-            key={i}
-            title={`榜单 #${i + 1}`}
-            extra={<RepActions onUp={() => move("customLeaderboards", i, -1)} onDown={() => move("customLeaderboards", i, 1)} onRemove={() => remove("customLeaderboards", i)} />}
-          >
-            <Row gutter={[12, 12]}>
-              <Col xs={24} md={8}><Field label={<InfoLabel info="榜单唯一 key，建议填写；榜单接口和用户排名接口会按这个 key 返回数据。">榜单 ID</InfoLabel>}><Input value={it.id || ""} onChange={(e) => update("customLeaderboards", i, "id", e.target.value)} placeholder="poi leaderboard" /></Field></Col>
-              <Col xs={24} md={8}><Field label="中文名"><Input value={it.name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "name.zh", e.target.value)} /></Field></Col>
-              <Col xs={24} md={8}><Field label="English"><Input value={it.name?.en || ""} onChange={(e) => update("customLeaderboards", i, "name.en", e.target.value)} /></Field></Col>
-              <Col xs={24} md={8}>
-                <Field label={<InfoLabel info="控制该自定义榜单在哪个客户端接口返回；未选择时默认插件和 EchoHunt 都展示。">展示渠道</InfoLabel>}>
-                  <Select
-                    mode="multiple"
-                    allowClear={false}
-                    maxTagCount="responsive"
-                    value={normalizeCustomLeaderboardDisplayChannels(it.displayChannels)}
-                    onChange={(values) =>
-                      update(
-                        "customLeaderboards",
-                        i,
-                        "displayChannels",
-                        normalizeCustomLeaderboardDisplayChannels(values),
-                      )
-                    }
-                    options={CUSTOM_LEADERBOARD_DISPLAY_CHANNEL_OPTIONS}
-                  />
-                </Field>
-              </Col>
-              <Col xs={24} md={8}><Field label={<InfoLabel info="可选短名称；前端空间较小时可以优先展示 short_name，不填则使用完整名称。">中文短名</InfoLabel>}><Input value={it.short_name?.zh || ""} onChange={(e) => update("customLeaderboards", i, "short_name.zh", e.target.value)} placeholder="可选" /></Field></Col>
-              <Col xs={24} md={8}><Field label={<InfoLabel info="Optional short name for compact leaderboard display. If empty, frontend can fallback to full English name.">English Short Name</InfoLabel>}><Input value={it.short_name?.en || ""} onChange={(e) => update("customLeaderboards", i, "short_name.en", e.target.value)} placeholder="Optional" /></Field></Col>
-              <Col xs={12} md={4}><Field label="金额"><InputNumber min={0} value={it.amount} onChange={(v) => update("customLeaderboards", i, "amount", v)} /></Field></Col>
-              <Col xs={12} md={4}><Field label="人数"><InputNumber min={1} value={it.participantCount} onChange={(v) => update("customLeaderboards", i, "participantCount", v)} /></Field></Col>
-              <Col xs={12} md={4}><Field label="机制"><Select value={it.distributionType || ""} onChange={(v) => update("customLeaderboards", i, "distributionType", v)} options={[{ value: "", label: "请选择" }, { value: "equal", label: "平分" }, { value: "mindshare", label: "mindshare" }, { value: "workshare", label: "workshare" }]} /></Field></Col>
-              <Col xs={12} md={4}><Field label="单位"><Input value={it.unit || ""} onChange={(e) => update("customLeaderboards", i, "unit", e.target.value)} placeholder="USDT" /></Field></Col>
-            </Row>
-          </Card>
-        ))
+        <Collapse size="small" items={panels} />
       ) : (
         <EmptyHint>暂无自定义榜单，可点击上方添加。</EmptyHint>
       )}
     </Space>
   );
 }
+
 
 function RewardOptional({
   c,
