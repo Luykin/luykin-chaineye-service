@@ -122,6 +122,19 @@ function getCustomLeaderboardsFromCampaign(campaignConfig) {
     : [];
 }
 
+function serializeInternalCampaignConfig(campaign) {
+  if (!campaign || typeof campaign !== "object") return campaign;
+  const {
+    testList: _testList,
+    tags: _tags,
+    tasks: _tasks,
+    copy: _copy,
+    customLeaderboards: _customLeaderboards,
+    ...safeCampaign
+  } = campaign;
+  return safeCampaign;
+}
+
 async function getCustomCampaignConfig(campaign, req) {
   const found = await getManagedCampaignPayloadByKey(campaign, {
     includeTesting: true,
@@ -210,7 +223,7 @@ router.get("/internal/hK9N7y37rPa1/config", async (req, res) => {
 
     return res.json({
       version: 3,
-      campaigns: allCampaigns,
+      campaigns: allCampaigns.map(serializeInternalCampaignConfig),
     });
   } catch (error) {
     console.error("[CampaignInternalConfig] error:", error.message || error);
