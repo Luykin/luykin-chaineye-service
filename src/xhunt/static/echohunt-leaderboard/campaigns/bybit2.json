@@ -89,7 +89,11 @@
       "counts": {
         "all": 100,
         "7d": 100
-      }
+      },
+      "titleEn": "Proof of Influence",
+      "shortTitleEn": "POI",
+      "titleZh": "影响力证明",
+      "shortTitleZh": "POI"
     },
     {
       "id": "content",
@@ -122,7 +126,11 @@
       ],
       "counts": {
         "winners": 10
-      }
+      },
+      "titleEn": "Content Contest",
+      "shortTitleEn": "Content",
+      "titleZh": "征文大赛",
+      "shortTitleZh": "征文"
     }
   ],
   "leaderboards": {
@@ -9163,8 +9171,14 @@
           "avatar": "https://unavatar.io/x/Guomin184935",
           "title": "Bybit Unified Trading Account (UTA): Mechanism, Risk Resilience, and Real-World Scenarios",
           "url": "https://x.com/Guomin184935/status/2048579176303923350?s=20",
-          "reward": "1,000 USDC"
-        }
+          "reward": "1,000 USDC",
+          "titleEn": "Bybit Unified Trading Account (UTA): Mechanism, Risk Resilience, and Real-World Scenarios",
+          "titleZh": "资金利用率的重构：Bybit 统一交易账户（UTA）的机制分析、风险韧性与场景实证"
+        },
+        "titleEn": "Bybit Unified Trading Account (UTA): Mechanism, Risk Resilience, and Real-World Scenarios",
+        "postEn": "Bybit Unified Trading Account (UTA): Mechanism, Risk Resilience, and Real-World Scenarios",
+        "titleZh": "资金利用率的重构：Bybit 统一交易账户（UTA）的机制分析、风险韧性与场景实证",
+        "postZh": "资金利用率的重构：Bybit 统一交易账户（UTA）的机制分析、风险韧性与场景实证"
       },
       {
         "rank": 2,
@@ -9188,8 +9202,14 @@
           "avatar": "https://unavatar.io/x/kylewmi",
           "title": "A Bull-and-Bear Market Guide to Bybit (Multi-Dimensional Earn Strategies)",
           "url": "https://x.com/kylewmi/status/2045076408284909841",
-          "reward": "600 USDC"
-        }
+          "reward": "600 USDC",
+          "titleEn": "A Bull-and-Bear Market Guide to Bybit (Multi-Dimensional Earn Strategies)",
+          "titleZh": "Bybit 猴熊市漫游指南（多维理财策略）"
+        },
+        "titleEn": "A Bull-and-Bear Market Guide to Bybit (Multi-Dimensional Earn Strategies)",
+        "postEn": "A Bull-and-Bear Market Guide to Bybit (Multi-Dimensional Earn Strategies)",
+        "titleZh": "Bybit 猴熊市漫游指南（多维理财策略）",
+        "postZh": "Bybit 猴熊市漫游指南（多维理财策略）"
       },
       {
         "rank": 3,
@@ -9213,8 +9233,14 @@
           "avatar": "https://unavatar.io/x/A9lansir",
           "title": "Bybit DCA + Earn: A Spot Loop That Keeps Idle Funds Working",
           "url": "https://x.com/A9lansir/status/2045535780307886560",
-          "reward": "600 USDC"
-        }
+          "reward": "600 USDC",
+          "titleEn": "Bybit DCA + Earn: A Spot Loop That Keeps Idle Funds Working",
+          "titleZh": "Bybit DCA + Earn 现货闭环，让闲钱边买边赚"
+        },
+        "titleEn": "Bybit DCA + Earn: A Spot Loop That Keeps Idle Funds Working",
+        "postEn": "Bybit DCA + Earn: A Spot Loop That Keeps Idle Funds Working",
+        "titleZh": "Bybit DCA + Earn 现货闭环，让闲钱边买边赚",
+        "postZh": "Bybit DCA + Earn 现货闭环，让闲钱边买边赚"
       },
       {
         "rank": 4,
@@ -9238,8 +9264,14 @@
           "avatar": "https://unavatar.io/x/captain_kent",
           "title": "How Bybit UTA Unifies Capital Efficiency Across Spot, Derivatives, and Margin",
           "url": "https://x.com/captain_kent/status/2047952091076055328?s=20",
-          "reward": "400 USDC"
-        }
+          "reward": "400 USDC",
+          "titleEn": "How Bybit UTA Unifies Capital Efficiency Across Spot, Derivatives, and Margin",
+          "titleZh": "Bybit UTA 是如何统一现货、合约、杠杆的资金利用的？"
+        },
+        "titleEn": "How Bybit UTA Unifies Capital Efficiency Across Spot, Derivatives, and Margin",
+        "postEn": "How Bybit UTA Unifies Capital Efficiency Across Spot, Derivatives, and Margin",
+        "titleZh": "Bybit UTA 是如何统一现货、合约、杠杆的资金利用的？",
+        "postZh": "Bybit UTA 是如何统一现货、合约、杠杆的资金利用的？"
       },
       {
         "rank": 5,
@@ -9263,8 +9295,14 @@
           "avatar": "https://unavatar.io/x/biteye_sister",
           "title": "Bybit UTA + Card: A Zero-Idle Capital Loop from DCA to Spending",
           "url": "https://x.com/biteye_sister/status/2047255052902191585?s=20",
-          "reward": "400 USDC"
-        }
+          "reward": "400 USDC",
+          "titleEn": "Bybit UTA + Card: A Zero-Idle Capital Loop from DCA to Spending",
+          "titleZh": "Bybit UTA + U卡：资金0闲置，从定投到日常花钱全闭环，我是怎么把加密资产变成生活现金流的？"
+        },
+        "titleEn": "Bybit UTA + Card: A Zero-Idle Capital Loop from DCA to Spending",
+        "postEn": "Bybit UTA + Card: A Zero-Idle Capital Loop from DCA to Spending",
+        "titleZh": "Bybit UTA + U卡：资金0闲置，从定投到日常花钱全闭环，我是怎么把加密资产变成生活现金流的？",
+        "postZh": "Bybit UTA + U卡：资金0闲置，从定投到日常花钱全闭环，我是怎么把加密资产变成生活现金流的？"
       },
       {
         "rank": 6,
@@ -9288,8 +9326,14 @@
           "avatar": "https://unavatar.io/x/BubbleBing_666",
           "title": "After a Year of Trial and Error, I Realized Bybit's Edge Is Capital Efficiency",
           "url": "https://x.com/BubbleBing_666/status/2046775760070070625",
-          "reward": "400 USDC"
-        }
+          "reward": "400 USDC",
+          "titleEn": "After a Year of Trial and Error, I Realized Bybit's Edge Is Capital Efficiency",
+          "titleZh": "踩坑一年后，我才明白 Bybit 真正强的不是功能多，而是资金效率"
+        },
+        "titleEn": "After a Year of Trial and Error, I Realized Bybit's Edge Is Capital Efficiency",
+        "postEn": "After a Year of Trial and Error, I Realized Bybit's Edge Is Capital Efficiency",
+        "titleZh": "踩坑一年后，我才明白 Bybit 真正强的不是功能多，而是资金效率",
+        "postZh": "踩坑一年后，我才明白 Bybit 真正强的不是功能多，而是资金效率"
       },
       {
         "rank": 7,
@@ -9313,8 +9357,14 @@
           "avatar": "https://unavatar.io/x/xx03199",
           "title": "A Complete Breakdown of Bybit DCA Bot and Flexible Earn",
           "url": "https://x.com/xx03199/status/2044623556114538653",
-          "reward": "400 USDC"
-        }
+          "reward": "400 USDC",
+          "titleEn": "A Complete Breakdown of Bybit DCA Bot and Flexible Earn",
+          "titleZh": "Bybit定投机器人（DCA Bot）活期理财全解析"
+        },
+        "titleEn": "A Complete Breakdown of Bybit DCA Bot and Flexible Earn",
+        "postEn": "A Complete Breakdown of Bybit DCA Bot and Flexible Earn",
+        "titleZh": "Bybit定投机器人（DCA Bot）活期理财全解析",
+        "postZh": "Bybit定投机器人（DCA Bot）活期理财全解析"
       },
       {
         "rank": 8,
@@ -9338,8 +9388,14 @@
           "avatar": "https://unavatar.io/x/Meta888_hk",
           "title": "How Bybit UTA Handles Extreme Market Events Like RAVE",
           "url": "https://x.com/Meta888_hk/status/2045746624392204466?s=20",
-          "reward": "400 USDC"
-        }
+          "reward": "400 USDC",
+          "titleEn": "How Bybit UTA Handles Extreme Market Events Like RAVE",
+          "titleZh": "Bybit统一交易账户（UTA）如何应对类似RAVE极端行情"
+        },
+        "titleEn": "How Bybit UTA Handles Extreme Market Events Like RAVE",
+        "postEn": "How Bybit UTA Handles Extreme Market Events Like RAVE",
+        "titleZh": "Bybit统一交易账户（UTA）如何应对类似RAVE极端行情",
+        "postZh": "Bybit统一交易账户（UTA）如何应对类似RAVE极端行情"
       },
       {
         "rank": 9,
@@ -9363,8 +9419,14 @@
           "avatar": "https://unavatar.io/x/BNBTC8",
           "title": "Bybit's Dual-Core Strategy: DCA Flexible Yield + One-Click Copy Trading",
           "url": "https://x.com/BNBTC8/status/2048674111946367272",
-          "reward": "400 USDC"
-        }
+          "reward": "400 USDC",
+          "titleEn": "Bybit's Dual-Core Strategy: DCA Flexible Yield + One-Click Copy Trading",
+          "titleZh": "Bybit 双核策略：DCA 活期理财 + 一键跟单"
+        },
+        "titleEn": "Bybit's Dual-Core Strategy: DCA Flexible Yield + One-Click Copy Trading",
+        "postEn": "Bybit's Dual-Core Strategy: DCA Flexible Yield + One-Click Copy Trading",
+        "titleZh": "Bybit 双核策略：DCA 活期理财 + 一键跟单",
+        "postZh": "Bybit 双核策略：DCA 活期理财 + 一键跟单"
       },
       {
         "rank": 10,
@@ -9388,8 +9450,14 @@
           "avatar": "https://unavatar.io/x/CheesyBun0211",
           "title": "DCA Bot & A Lazy Investor's Guide to Crypto",
           "url": "https://x.com/CheesyBun0211/status/2049012189315690656?s=20",
-          "reward": "400 USDC"
-        }
+          "reward": "400 USDC",
+          "titleEn": "DCA Bot & A Lazy Investor's Guide to Crypto",
+          "titleZh": "DCA 定投 + Flexible Savings：懒人投资者的加密闭环指南"
+        },
+        "titleEn": "DCA Bot & A Lazy Investor's Guide to Crypto",
+        "postEn": "DCA Bot & A Lazy Investor's Guide to Crypto",
+        "titleZh": "DCA 定投 + Flexible Savings：懒人投资者的加密闭环指南",
+        "postZh": "DCA 定投 + Flexible Savings：懒人投资者的加密闭环指南"
       }
     ]
   },
