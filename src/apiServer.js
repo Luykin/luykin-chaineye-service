@@ -388,7 +388,7 @@ async function initializeAndStartServer() {
       contentSecurityPolicy: {
         directives: {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-          "script-src": ["'self'", "'unsafe-inline'"],
+          "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'"],
           "style-src": ["'self'", "'unsafe-inline'"],
           "img-src": [
             "'self'",
