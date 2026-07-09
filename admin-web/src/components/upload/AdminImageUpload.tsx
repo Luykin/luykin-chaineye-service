@@ -5,6 +5,7 @@ import type { UploadProps } from "antd";
 import {
   ADMIN_IMAGE_ACCEPT,
   ADMIN_IMAGE_MAX_SIZE_MB,
+  ADMIN_PROGRESSIVE_IMAGE_ACCEPT,
   type AdminImageUploadResult,
   uploadAdminImage,
 } from "@/services/blobUpload";
@@ -15,6 +16,7 @@ interface AdminImageUploadProps {
   directory?: string;
   disabled?: boolean;
   maxSizeMb?: number;
+  progressiveJpeg?: boolean;
   buttonText?: string;
   onChange?: (url: string, blob?: AdminImageUploadResult) => void;
 }
@@ -25,6 +27,7 @@ export function AdminImageUpload({
   directory,
   disabled,
   maxSizeMb = ADMIN_IMAGE_MAX_SIZE_MB,
+  progressiveJpeg = false,
   buttonText = "上传图片",
   onChange,
 }: AdminImageUploadProps) {
@@ -38,13 +41,18 @@ export function AdminImageUpload({
     try {
       setUploading(true);
       setProgress(0);
-      setUploadHint("正在压缩图片…");
+      setUploadHint(progressiveJpeg ? "正在转成渐进式 JPEG…" : "正在压缩图片…");
       const blob = await uploadAdminImage(file, {
         purpose,
         directory,
         maxSizeMb,
+        progressiveJpeg,
         onPrepared: (result) => {
-          if (result.compressed) {
+          if (result.progressiveJpeg) {
+            const before = (result.originalSize / 1024 / 1024).toFixed(2);
+            const after = (result.preparedSize / 1024 / 1024).toFixed(2);
+            setUploadHint(`已转成渐进式 JPEG：${before}MB → ${after}MB`);
+          } else if (result.compressed) {
             const before = (result.originalSize / 1024 / 1024).toFixed(2);
             const after = (result.preparedSize / 1024 / 1024).toFixed(2);
             setUploadHint(`已自动压缩：${before}MB → ${after}MB`);
@@ -82,7 +90,7 @@ export function AdminImageUpload({
         />
       ) : null}
       <Space wrap>
-        <Upload accept={ADMIN_IMAGE_ACCEPT} maxCount={1} showUploadList={false} customRequest={customRequest} disabled={disabled || uploading}>
+        <Upload accept={progressiveJpeg ? ADMIN_PROGRESSIVE_IMAGE_ACCEPT : ADMIN_IMAGE_ACCEPT} maxCount={1} showUploadList={false} customRequest={customRequest} disabled={disabled || uploading}>
           <Button icon={<UploadOutlined />} loading={uploading} disabled={disabled}>
             {value ? "更换图片" : buttonText}
           </Button>
@@ -92,7 +100,7 @@ export function AdminImageUpload({
         ) : null}
       </Space>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        支持 jpg/png/webp/gif，上传前自动压缩，最大 {maxSizeMb}MB{progress !== null ? `，上传中 ${Math.round(progress)}%` : ""}
+        {progressiveJpeg ? "支持 jpg/png/webp，上传前自动转成渐进式 JPEG" : "支持 jpg/png/webp/gif，上传前自动压缩"}，最大 {maxSizeMb}MB{progress !== null ? `，上传中 ${Math.round(progress)}%` : ""}
         {uploadHint ? `，${uploadHint}` : ""}
       </Typography.Text>
     </Space>

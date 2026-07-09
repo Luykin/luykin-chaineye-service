@@ -3442,6 +3442,7 @@ function WebsiteSection({
                           purpose="echohunt-campaign-hero"
                           directory="admin-images/echohunt-campaigns"
                           maxSizeMb={ECHOHUNT_HERO_IMAGE_MAX_MB}
+                          progressiveJpeg
                           buttonText="上传活动宣传大图"
                           onChange={(url) => update({ echohuntHeroImage: url })}
                         />
