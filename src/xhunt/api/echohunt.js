@@ -49,6 +49,12 @@ const {
 const {
   getCustomLeaderboardData,
 } = require("../services/campaignLeaderboardService");
+const {
+  createBindingChallenge,
+  getBindingStatus,
+  verifyBindingPost,
+  revokeBinding,
+} = require("../services/binanceSquareBindingService");
 const { isRequestInternalTestUser } = require("../constants/xhuntVip");
 
 const router = express.Router();
@@ -124,7 +130,24 @@ function getTwitterIdentityFromAuth(req) {
     username: twitter.username || null,
     displayName: twitter.displayName || twitter.username || null,
     avatar: twitter.avatar || null,
+    authCenterUserId: req.authCenter?.user?.id || null,
+    xhuntUserId: req.authCenter?.user?.xhuntUserId || null,
   };
+}
+
+async function checkEchohuntBindingRateLimit(req, action, limit, ttlSeconds) {
+  const twitterIdentity = getTwitterIdentityFromAuth(req);
+  const keySubject = twitterIdentity?.twitterId || req.authCenter?.user?.id || req.ip || "unknown";
+  const key = `echohunt:bs-binding:rl:${action}:${keySubject}`;
+  const redis = req.redisClient;
+  if (!redis?.incr) return;
+  const count = await redis.incr(key).catch(() => 0);
+  if (count === 1 && redis.expire) {
+    await redis.expire(key, ttlSeconds).catch(() => {});
+  }
+  if (count > limit) {
+    throw publicError("RATE_LIMITED", 429, "操作太频繁，请稍后再试。");
+  }
 }
 
 function serializeRegistration(record) {
@@ -702,6 +725,57 @@ router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
     });
   } catch (error) {
     return sendError(res, error, "ECHOHUNT_ME_FAILED");
+  }
+});
+
+router.get("/binance-square-binding/me", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400, "请先连接 Twitter 账号后再绑定 Binance Square。");
+    const data = await getBindingStatus(twitterIdentity);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_BINANCE_SQUARE_BINDING_STATUS_FAILED");
+  }
+});
+
+router.post("/binance-square-binding/challenge", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    await checkEchohuntBindingRateLimit(req, "challenge", 3, 60);
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400, "请先连接 Twitter 账号后再绑定 Binance Square。");
+    const data = await createBindingChallenge(twitterIdentity);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_BINANCE_SQUARE_BINDING_CHALLENGE_FAILED");
+  }
+});
+
+router.post("/binance-square-binding/verify", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    await checkEchohuntBindingRateLimit(req, "verify", 5, 60);
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400, "请先连接 Twitter 账号后再绑定 Binance Square。");
+    const challengeId = parseInt(req.body?.challengeId, 10);
+    const postUrl = typeof req.body?.postUrl === "string" ? req.body.postUrl.trim() : "";
+    if (!challengeId || !Number.isFinite(challengeId)) throw publicError("CHALLENGE_ID_REQUIRED", 400, "验证码参数缺失，请重新生成。");
+    if (!postUrl) throw publicError("POST_URL_REQUIRED", 400, "请粘贴 Binance Square 帖子链接。");
+    const data = await verifyBindingPost(twitterIdentity, { challengeId, postUrl });
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_BINANCE_SQUARE_BINDING_VERIFY_FAILED");
+  }
+});
+
+router.delete("/binance-square-binding/me", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    await checkEchohuntBindingRateLimit(req, "unbind", 5, 60);
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400, "请先连接 Twitter 账号后再绑定 Binance Square。");
+    const data = await revokeBinding(twitterIdentity);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_BINANCE_SQUARE_BINDING_REVOKE_FAILED");
   }
 });
 

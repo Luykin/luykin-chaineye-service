@@ -28,6 +28,9 @@ const CollectorClientTokenModel = require("../xhunt/models/CollectorClientToken"
 const XHuntWebUserModel = require("../xhunt/models/XHuntWebUser");
 const XHuntWebUserTokenModel = require("../xhunt/models/XHuntWebUserToken");
 const XHuntWebsiteCampaignModel = require("../xhunt/models/XHuntWebsiteCampaign");
+const XHuntBinanceSquareBindingModel = require("../xhunt/models/XHuntBinanceSquareBinding");
+const XHuntBinanceSquareBindingChallengeModel = require("../xhunt/models/XHuntBinanceSquareBindingChallenge");
+const XHuntBinanceSquareBindingEventModel = require("../xhunt/models/XHuntBinanceSquareBindingEvent");
 const AuthCenterXhuntUserModel = require("../xhunt/auth-center/models/AuthCenterXhuntUser");
 const AuthCenterXhuntIdentityModel = require("../xhunt/auth-center/models/AuthCenterXhuntIdentity");
 const AuthCenterXhuntPasswordCredentialModel = require("../xhunt/auth-center/models/AuthCenterXhuntPasswordCredential");
@@ -103,6 +106,9 @@ const CollectorClientToken = CollectorClientTokenModel(pgInstance);
 const XHuntWebUser = XHuntWebUserModel(pgInstance);
 const XHuntWebUserToken = XHuntWebUserTokenModel(pgInstance);
 const XHuntWebsiteCampaign = XHuntWebsiteCampaignModel(pgInstance);
+const XHuntBinanceSquareBinding = XHuntBinanceSquareBindingModel(pgInstance);
+const XHuntBinanceSquareBindingChallenge = XHuntBinanceSquareBindingChallengeModel(pgInstance);
+const XHuntBinanceSquareBindingEvent = XHuntBinanceSquareBindingEventModel(pgInstance);
 const AuthCenterXhuntUser = AuthCenterXhuntUserModel(pgInstance);
 const AuthCenterXhuntIdentity = AuthCenterXhuntIdentityModel(pgInstance);
 const AuthCenterXhuntPasswordCredential = AuthCenterXhuntPasswordCredentialModel(pgInstance);
@@ -396,6 +402,9 @@ module.exports = {
   XHuntWebUser,
   XHuntWebUserToken,
   XHuntWebsiteCampaign,
+  XHuntBinanceSquareBinding,
+  XHuntBinanceSquareBindingChallenge,
+  XHuntBinanceSquareBindingEvent,
   AuthCenterXhuntUser,
   AuthCenterXhuntIdentity,
   AuthCenterXhuntPasswordCredential,
