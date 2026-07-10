@@ -1,6 +1,6 @@
 const express = require("express");
+const crypto = require("crypto");
 const { authenticateToken } = require("../middleware/auth");
-const { adminAuth } = require("../../admin/middleware/adminAuth");
 const { XPrivateMessage, XHuntUser } = require("../../models/postgres-start");
 const { Op } = require("sequelize");
 const { getRedisClient } = require("../../lib/redisClient");
@@ -10,6 +10,47 @@ const {
 } = require("../services/inputValidator");
 
 const router = express.Router();
+
+function safeCompareSecret(a, b) {
+  const left = Buffer.from(String(a || ""));
+  const right = Buffer.from(String(b || ""));
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
+function getInternalRequestSecret(req) {
+  const authorization = String(req.get("authorization") || "").trim();
+  if (authorization.toLowerCase().startsWith("bearer ")) {
+    return authorization.slice(7).trim();
+  }
+
+  // 兼容 nginx/kb.cryptohunt.ai.conf 里已经放行的内部客户端 token 头。
+  return String(req.get("x-collector-client-token") || "").trim();
+}
+
+function internalPrivateMessageAuth(req, res, next) {
+  const expectedSecret =
+    process.env.XHUNT_INTERNAL_API_SECRET ||
+    process.env.XHUNT_PRIVATE_MESSAGE_INTERNAL_SECRET;
+
+  if (!expectedSecret) {
+    console.error("[PM send-batch] XHUNT_INTERNAL_API_SECRET 未配置，拒绝内部调用");
+    return res.status(500).json({
+      success: false,
+      error: "INTERNAL_SECRET_NOT_CONFIGURED",
+    });
+  }
+
+  const providedSecret = getInternalRequestSecret(req);
+  if (!providedSecret || !safeCompareSecret(providedSecret, expectedSecret)) {
+    return res.status(401).json({
+      success: false,
+      error: "UNAUTHORIZED",
+    });
+  }
+
+  next();
+}
 
 /**
  * 查询用户的私信列表
@@ -152,6 +193,10 @@ router.get("/", authenticateToken, async (req, res) => {
 /**
  * 按类型批量发送私信（内部管理使用）
  * POST /api/xhunt/private-messages/send-batch-by-type
+ * headers:
+ *   Authorization: Bearer ${XHUNT_INTERNAL_API_SECRET}
+ *   // 或兼容已放行的 x-collector-client-token 头
+ *   x-collector-client-token: ${XHUNT_INTERNAL_API_SECRET}
  * body: {
  *   // 私信类型（英文枚举值）：
  *   // - "creator_verification_success"（创作者认证成功）
@@ -169,7 +214,7 @@ router.get("/", authenticateToken, async (req, res) => {
  * campaignId 统一为：type + 当天日期（yyyyMMdd）
  * 根据 type 决定不同的内容（目前内容生成逻辑预留，先空着）
  */
-router.post("/send-batch-by-type", adminAuth, async (req, res) => {
+router.post("/send-batch-by-type", internalPrivateMessageAuth, async (req, res) => {
   try {
     const senderId = "6666666d-cc11-8888-8888-034d3e9a8888";
     const { type, twitterIdList, idempotencyKey } = req.body || {};
