@@ -23,8 +23,8 @@ const BINDING_ERROR_MESSAGES = {
     en: "Please connect your X account before binding Binance Square.",
   },
   INVALID_POST_URL: {
-    "zh-CN": "帖子链接格式不正确。",
-    en: "The post link format is invalid.",
+    "zh-CN": "请粘贴 Binance Square 帖子链接。",
+    en: "Please paste a Binance Square post link.",
   },
   CHALLENGE_ID_REQUIRED: {
     "zh-CN": "验证码参数缺失，请重新生成。",
@@ -154,8 +154,35 @@ function buildVerificationText(code) {
   return `Verifying my Binance Square account via EchoHunt: ${code}`;
 }
 
-function extractBinanceSquarePostId(input) {
+function normalizeUrlInput(input) {
   const text = String(input || "").trim();
+  if (!text) return "";
+  if (/^https?:\/\//i.test(text)) return text;
+  if (/^(www\.)?binance\.com\//i.test(text)) return `https://${text}`;
+  return text;
+}
+
+function isBinanceSquarePostUrl(input) {
+  const text = normalizeUrlInput(input);
+  if (!text) return false;
+
+  try {
+    const url = new URL(text);
+    const hostname = url.hostname.toLowerCase();
+    const isBinanceHost = hostname === "binance.com" || hostname.endsWith(".binance.com");
+    if (!isBinanceHost) return false;
+
+    const parts = url.pathname.split("/").filter(Boolean).map((part) => part.toLowerCase());
+    const squareIndex = parts.indexOf("square");
+    const postIndex = parts.indexOf("post");
+    return squareIndex >= 0 && postIndex > squareIndex;
+  } catch (_) {
+    return false;
+  }
+}
+
+function extractBinanceSquarePostId(input) {
+  const text = normalizeUrlInput(input);
   if (!text) return null;
   if (/^\d{6,}$/.test(text)) return text;
 
@@ -317,6 +344,7 @@ function normalizePostDetailPayload(detail) {
 
 async function verifyBindingPost(twitterIdentity, { challengeId, postUrl }) {
   if (!twitterIdentity?.twitterId) throw bindingError("TWITTER_ID_REQUIRED", 400, "请先连接 Twitter 账号后再绑定 Binance Square。");
+  if (!isBinanceSquarePostUrl(postUrl)) throw bindingError("INVALID_POST_URL", 400, "请粘贴 Binance Square 帖子链接。");
   const postId = extractBinanceSquarePostId(postUrl);
   if (!postId) throw bindingError("INVALID_POST_URL", 400, "帖子链接格式不正确。");
 

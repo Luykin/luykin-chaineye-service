@@ -788,7 +788,7 @@ failed
 | `POST_FETCH_FAILED` | 暂时无法读取该帖子，请稍后重试。 |
 | `BINANCE_ACCOUNT_ALREADY_BOUND` | 该 Binance Square 账号已绑定其他 EchoHunt 用户。 |
 | `MONTHLY_REBIND_LIMIT_EXCEEDED` | 本月换绑次数已达上限。 |
-| `INVALID_POST_URL` | 帖子链接格式不正确。 |
+| `INVALID_POST_URL` | 请粘贴 Binance Square 帖子链接。 |
 | `RATE_LIMITED` | 操作太频繁，请稍后再试。 |
 
 ---
