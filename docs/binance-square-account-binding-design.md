@@ -784,7 +784,7 @@ failed
 |---|---|
 | `TWITTER_ID_REQUIRED` | 请先连接 Twitter 账号后再绑定 Binance Square。 |
 | `CHALLENGE_EXPIRED` | 验证码已过期，请重新生成。 |
-| `VERIFICATION_CODE_NOT_FOUND` | 帖子中没有找到验证码，请确认复制的是本次生成的文案。 |
+| `VERIFICATION_CODE_NOT_FOUND` | 暂时无法确认该帖子与本次验证请求匹配，请检查帖子内容后重试。 |
 | `POST_FETCH_FAILED` | 暂时无法读取该帖子，请稍后重试。 |
 | `BINANCE_ACCOUNT_ALREADY_BOUND` | 该 Binance Square 账号已绑定其他 EchoHunt 用户。 |
 | `MONTHLY_REBIND_LIMIT_EXCEEDED` | 本月换绑次数已达上限。 |

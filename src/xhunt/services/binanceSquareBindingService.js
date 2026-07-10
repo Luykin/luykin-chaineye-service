@@ -17,10 +17,90 @@ const MAX_ATTEMPTS = Number(process.env.ECHOHUNT_BS_BINDING_MAX_ATTEMPTS || 5);
 const MONTHLY_REBIND_LIMIT = Number(process.env.ECHOHUNT_BS_BINDING_MONTHLY_REBIND_LIMIT || 3);
 const POST_TIME_SKEW_MS = 5 * 60 * 1000;
 
+const BINDING_ERROR_MESSAGES = {
+  TWITTER_ID_REQUIRED: {
+    "zh-CN": "请先连接 X 账号后再绑定币安广场。",
+    en: "Please connect your X account before binding Binance Square.",
+  },
+  INVALID_POST_URL: {
+    "zh-CN": "帖子链接格式不正确。",
+    en: "The post link format is invalid.",
+  },
+  CHALLENGE_ID_REQUIRED: {
+    "zh-CN": "验证码参数缺失，请重新生成。",
+    en: "The verification request is missing. Please generate a new verification text.",
+  },
+  POST_URL_REQUIRED: {
+    "zh-CN": "请粘贴币安广场帖子链接。",
+    en: "Please paste the Binance Square post link.",
+  },
+  CHALLENGE_NOT_FOUND: {
+    "zh-CN": "验证码不存在，请重新生成。",
+    en: "The verification code was not found. Please generate a new one.",
+  },
+  CHALLENGE_NOT_PENDING: {
+    "zh-CN": "验证码状态已失效，请重新生成。",
+    en: "This verification code is no longer valid. Please generate a new one.",
+  },
+  CHALLENGE_EXPIRED: {
+    "zh-CN": "验证码已过期，请重新生成。",
+    en: "The verification code has expired. Please generate a new one.",
+  },
+  CHALLENGE_ATTEMPT_LIMIT_EXCEEDED: {
+    "zh-CN": "验证次数过多，请重新生成验证码。",
+    en: "Too many verification attempts. Please generate a new verification code.",
+  },
+  POST_FETCH_FAILED: {
+    "zh-CN": "暂时无法读取该帖子，请稍后重试。",
+    en: "We couldn't read this post right now. Please try again later.",
+  },
+  POST_PARSE_FAILED: {
+    "zh-CN": "帖子解析失败，请稍后重试。",
+    en: "We couldn't parse this post. Please try again later.",
+  },
+  VERIFICATION_CODE_NOT_FOUND: {
+    "zh-CN": "暂时无法确认该帖子与本次验证请求匹配，请检查帖子内容后重试。",
+    en: "We couldn't confirm that this post matches the current verification request. Please check the post content and try again.",
+  },
+  POST_TOO_OLD: {
+    "zh-CN": "请使用生成验证码后发布的新帖子进行验证。",
+    en: "Please verify with a new post published after the verification code was generated.",
+  },
+  BINANCE_AUTHOR_MISSING: {
+    "zh-CN": "未能识别帖子作者，请稍后重试。",
+    en: "We couldn't identify the post author. Please try again later.",
+  },
+  BINANCE_ACCOUNT_ALREADY_BOUND: {
+    "zh-CN": "该币安广场账号已绑定其他 EchoHunt 用户。",
+    en: "This Binance Square account is already bound to another EchoHunt user.",
+  },
+  MONTHLY_REBIND_LIMIT_EXCEEDED: {
+    "zh-CN": "本月换绑次数已达上限。",
+    en: "You have reached this month's rebind limit.",
+  },
+  RATE_LIMITED: {
+    "zh-CN": "操作太频繁，请稍后再试。",
+    en: "Too many requests. Please try again later.",
+  },
+};
+
+function normalizeBindingLanguage(lang) {
+  const raw = String(lang || "").trim().toLowerCase();
+  if (raw.startsWith("en")) return "en";
+  return "zh-CN";
+}
+
+function getBinanceSquareBindingErrorMessage(code, lang = "zh-CN") {
+  const entry = BINDING_ERROR_MESSAGES[code];
+  if (!entry) return null;
+  return entry[normalizeBindingLanguage(lang)] || entry["zh-CN"] || entry.en || null;
+}
+
 function bindingError(code, status = 400, message = null) {
   const err = new Error(code);
   err.status = status;
-  err.publicMessage = message || code;
+  err.publicMessages = BINDING_ERROR_MESSAGES[code] || null;
+  err.publicMessage = message || getBinanceSquareBindingErrorMessage(code, "zh-CN") || code;
   return err;
 }
 
@@ -273,7 +353,7 @@ async function verifyBindingPost(twitterIdentity, { challengeId, postUrl }) {
 
     const postText = normalizeText([parsedPost.title, parsedPost.contentText, content?.bodyTextOnly].filter(Boolean).join(" "));
     if (!postText.toUpperCase().includes(String(challenge.verificationCode).toUpperCase())) {
-      throw bindingError("VERIFICATION_CODE_NOT_FOUND", 400, "帖子中没有找到验证码，请确认复制的是本次生成的文案。");
+      throw bindingError("VERIFICATION_CODE_NOT_FOUND", 400, "暂时无法确认该帖子与本次验证请求匹配，请检查帖子内容后重试。");
     }
 
     const postTime = getPostTime(content);
@@ -449,5 +529,7 @@ module.exports = {
   revokeBinding,
   extractBinanceSquarePostId,
   getMonthlyRebindUsage,
+  getBinanceSquareBindingErrorMessage,
+  BINDING_ERROR_MESSAGES,
   MONTHLY_REBIND_LIMIT,
 };

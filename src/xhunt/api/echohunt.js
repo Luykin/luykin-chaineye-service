@@ -54,6 +54,7 @@ const {
   getBindingStatus,
   verifyBindingPost,
   revokeBinding,
+  getBinanceSquareBindingErrorMessage,
 } = require("../services/binanceSquareBindingService");
 const { isRequestInternalTestUser } = require("../constants/xhuntVip");
 
@@ -72,12 +73,30 @@ const authModels = {
   XHuntUser,
 };
 
+function getRequestLanguage(req) {
+  return normalizeLang(
+    req?.query?.lang ||
+      req?.query?.["x-language"] ||
+      req?.headers?.["x-echohunt-language"] ||
+      req?.headers?.["accept-language"]
+  );
+}
+
+function getLocalizedPublicMessage(error, fallback, req) {
+  const lang = getRequestLanguage(req);
+  const code = error.message || fallback;
+  if (error.publicMessages?.[lang]) return error.publicMessages[lang];
+  const binanceSquareMessage = getBinanceSquareBindingErrorMessage(code, lang);
+  if (binanceSquareMessage) return binanceSquareMessage;
+  return error.publicMessage || undefined;
+}
+
 function sendError(res, error, fallback = "ECHOHUNT_ERROR", extra = {}) {
   const status = error.status || 500;
   return res.status(status).json({
     success: false,
     error: error.message || fallback,
-    message: error.publicMessage || undefined,
+    message: getLocalizedPublicMessage(error, fallback, res.req),
     ...extra,
   });
 }
@@ -91,8 +110,9 @@ function publicError(message, status = 400, publicMessage) {
 
 function normalizeLang(value) {
   const raw = String(value || "").trim().toLowerCase();
-  if (raw === "en" || raw === "en-us") return "en";
-  if (raw === "zh" || raw === "zh-cn" || raw === "cn") return "zh-CN";
+  const primary = raw.split(",")[0].split(";")[0].trim();
+  if (primary === "en" || primary.startsWith("en-")) return "en";
+  if (primary === "zh" || primary.startsWith("zh-") || primary === "cn") return "zh-CN";
   return "zh-CN";
 }
 
