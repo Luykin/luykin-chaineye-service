@@ -118,8 +118,8 @@ function parsePostContent(content) {
 
   const postType = resolvePostType(content.contentType, content);
 
-  // 从 body JSON 中提取纯文本（币安API没有 bodyTextOnly 字段）
-  const extractedText = extractBodyText(content.body);
+  // 优先使用币安详情/列表接口直接返回的 bodyTextOnly；没有时再从 body JSON 中提取纯文本。
+  const extractedText = content.bodyTextOnly || extractBodyText(content.body);
 
   return {
     // 关键字段（程序传入）

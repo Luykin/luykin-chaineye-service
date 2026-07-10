@@ -45,6 +45,12 @@ function parsePositiveInt(value, defaultValue) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
 }
 
+function parseBoolean(value, defaultValue = false) {
+  if (value === undefined || value === null || value === "") return defaultValue;
+  if (typeof value === "boolean") return value;
+  return ["1", "true", "yes", "y"].includes(String(value).trim().toLowerCase());
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -321,6 +327,7 @@ router.post("/seed/remove", async (req, res) => {
 // ==================== 关注列表同步 ====================
 
 const apiClient = require("../scraper/api-client");
+const postParser = require("../scraper/parsers/postParser");
 
 const FOLLOWING_PROXY_URLS = [
   // 2026-05-21 新服务器 curl 测试结果：以下 7446 端口代理连接超时，暂时禁用。
@@ -368,6 +375,209 @@ function maskProxyUrl(proxyUrl) {
   } catch (_) {
     return "proxy";
   }
+}
+
+
+function extractBinanceSquarePostId(input) {
+  const text = String(input || "").trim();
+  if (!text) return null;
+
+  // 允许直接传 postId。
+  if (/^\d{6,}$/.test(text)) {
+    return text;
+  }
+
+  // 支持完整链接、带 query/hash 链接，以及偶尔被二次编码的链接。
+  const candidates = [text];
+  try {
+    candidates.push(decodeURIComponent(text));
+  } catch (_) {}
+
+  for (const candidate of candidates) {
+    try {
+      const url = new URL(candidate);
+      const parts = url.pathname.split("/").filter(Boolean);
+      const postIndex = parts.findIndex((part) => part.toLowerCase() === "post");
+      if (postIndex >= 0) {
+        const postSegment = parts[postIndex + 1] || "";
+        const postId = extractBinanceSquarePostId(postSegment);
+        if (postId) return postId;
+      }
+
+      // 兜底：从 path / search / hash 中取最后一段较长数字。
+      const fallback = `${url.pathname} ${url.search} ${url.hash}`.match(/\d{6,}/g);
+      if (fallback?.length) return fallback[fallback.length - 1];
+    } catch (_) {
+      const fallback = candidate.match(/\d{6,}/g);
+      if (fallback?.length) return fallback[fallback.length - 1];
+    }
+  }
+
+  return null;
+}
+
+function pickFirstDefined(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null) return value;
+  }
+  return null;
+}
+
+function mergeKeepExistingPositive(incoming, existing) {
+  const incomingNum = Number(incoming);
+  if (incoming !== null && incoming !== undefined && Number.isFinite(incomingNum) && incomingNum > 0) return incoming;
+  const existingNum = Number(existing);
+  if (existing !== null && existing !== undefined && Number.isFinite(existingNum) && existingNum > 0) return existing;
+  return incoming ?? existing ?? null;
+}
+
+function normalizePostDetailPayload(detail) {
+  if (!detail || typeof detail !== "object") return null;
+  if (detail.id) return detail;
+  if (detail.content?.id) return detail.content;
+  if (detail.post?.id) return detail.post;
+  if (detail.data?.id) return detail.data;
+  return detail;
+}
+
+function buildResolvedAuthor(content, profile = null, localUser = null) {
+  const local = localUser?.toJSON ? localUser.toJSON() : localUser || {};
+  return {
+    username: pickFirstDefined(profile?.username, content?.username, local.username),
+    squareUid: pickFirstDefined(profile?.squareUid, content?.squareUid, local.squareUid),
+    displayName: pickFirstDefined(profile?.displayName, content?.displayName, local.displayName),
+    avatar: pickFirstDefined(profile?.avatar, content?.avatar, local.avatar),
+    biography: pickFirstDefined(profile?.biography, content?.biography, local.biography),
+    role: pickFirstDefined(profile?.role, content?.roleCode, content?.role, local.role),
+    verificationType: pickFirstDefined(profile?.verificationType, content?.authorVerificationType, content?.verificationType, local.verificationType),
+    verificationDescription: pickFirstDefined(profile?.verificationDescription, content?.verificationDescription, local.verificationDescription),
+    totalFollowerCount: pickFirstDefined(profile?.totalFollowerCount, content?.totalFollowerCount, local.totalFollowerCount),
+    totalFollowingCount: pickFirstDefined(profile?.totalFollowCount, profile?.totalFollowingCount, content?.totalFollowCount, local.totalFollowingCount),
+    totalPostCount: pickFirstDefined(profile?.totalListedPostCount, profile?.totalPostCount, content?.totalPostCount, local.totalPostCount),
+    totalLikeCount: pickFirstDefined(profile?.totalLikeCount, content?.totalLikeCount, local.totalLikeCount),
+    totalShareCount: pickFirstDefined(profile?.totalShareCount, content?.totalShareCount, local.totalShareCount),
+    accountLang: pickFirstDefined(profile?.accountLang, content?.accountLang, local.accountLang),
+    isKol: pickFirstDefined(profile?.isKol, content?.isKol, local.isKol),
+    userStatus: pickFirstDefined(profile?.userStatus, content?.userStatus, local.userStatus),
+    level: pickFirstDefined(profile?.level, content?.level, local.level),
+    authorLink: content?.authorLink || null,
+    profileSource: profile ? "binance_profile_api" : local.username ? "database" : "post_detail_api",
+  };
+}
+
+function buildResolvedPost(parsedPost, content, includeRaw = false) {
+  return {
+    postId: parsedPost.postId,
+    username: parsedPost.username,
+    postType: parsedPost.postType,
+    title: parsedPost.title,
+    contentText: parsedPost.contentText,
+    content: parsedPost.content,
+    mediaUrls: parsedPost.mediaUrls,
+    likeCount: parsedPost.likeCount,
+    shareCount: parsedPost.shareCount,
+    commentCount: parsedPost.commentCount,
+    viewCount: parsedPost.viewCount,
+    quoteCount: content?.quoteCount ?? null,
+    publishedAt: parsedPost.publishedAt,
+    sourceUrl: content?.webLink || parsedPost.sourceUrl,
+    shareLink: content?.shareLink || null,
+    language: content?.lan || content?.detectedLang || null,
+    hashtags: content?.hashtagList || content?.hashtagIdentifyList || [],
+    quotedPost: content?.quoteContent
+      ? {
+          postId: content.quoteContent.id ? String(content.quoteContent.id) : null,
+          title: postParser.resolveTitle(content.quoteContent.title),
+          contentText: content.quoteContent.bodyTextOnly || postParser.extractBodyText(content.quoteContent.body) || content.quoteContent.body || null,
+          sourceUrl: content.quoteContent.webLink || null,
+          imageUrl: content.quoteContent.imageLink || null,
+          rawData: includeRaw ? content.quoteContent : undefined,
+        }
+      : null,
+    rawData: includeRaw ? content : undefined,
+  };
+}
+
+async function findLocalBinanceSquarePost(postId) {
+  const post = await db.BinanceSquarePost.findOne({
+    where: { postId: String(postId) },
+  });
+  if (!post?.username) {
+    return { post, author: null };
+  }
+
+  const author = await db.BinanceSquareUser.findOne({
+    where: db.sequelize.where(
+      db.sequelize.fn("LOWER", db.sequelize.col("username")),
+      String(post.username).toLowerCase()
+    ),
+  });
+  return { post, author };
+}
+
+async function persistResolvedBinanceSquareAuthor(author, rawData = null) {
+  if (!author?.username) return { persisted: false, reason: "missing_username" };
+
+  const existingUser = await db.BinanceSquareUser.findOne({
+    where: db.sequelize.where(
+      db.sequelize.fn("LOWER", db.sequelize.col("username")),
+      String(author.username).toLowerCase()
+    ),
+  });
+
+  const existing = existingUser?.toJSON ? existingUser.toJSON() : {};
+  const updateData = {
+    username: author.username,
+    squareUid: author.squareUid ?? existing.squareUid ?? null,
+    displayName: author.displayName ?? existing.displayName ?? null,
+    avatar: author.avatar ?? existing.avatar ?? null,
+    biography: author.biography ?? existing.biography ?? null,
+    role: author.role ?? existing.role ?? null,
+    verificationType: author.verificationType ?? existing.verificationType ?? null,
+    verificationDescription: author.verificationDescription ?? existing.verificationDescription ?? null,
+    totalFollowerCount: mergeKeepExistingPositive(author.totalFollowerCount, existing.totalFollowerCount),
+    totalFollowingCount: mergeKeepExistingPositive(author.totalFollowingCount, existing.totalFollowingCount),
+    totalPostCount: mergeKeepExistingPositive(author.totalPostCount, existing.totalPostCount),
+    totalLikeCount: mergeKeepExistingPositive(author.totalLikeCount, existing.totalLikeCount),
+    totalShareCount: mergeKeepExistingPositive(author.totalShareCount, existing.totalShareCount),
+    accountLang: author.accountLang ?? existing.accountLang ?? null,
+    isKol: author.isKol ?? existing.isKol ?? null,
+    userStatus: author.userStatus ?? existing.userStatus ?? null,
+    level: author.level ?? existing.level ?? null,
+    rawData: rawData || existing.rawData || null,
+  };
+
+  if (existingUser) {
+    await existingUser.update(updateData);
+    return { persisted: true, action: "updated" };
+  }
+
+  await db.BinanceSquareUser.create(updateData);
+  return { persisted: true, action: "created" };
+}
+
+async function persistResolvedBinanceSquarePost(parsedPost, content, author, snapshotId) {
+  if (!parsedPost?.postId) return { persisted: false, reason: "missing_post_id" };
+  const username = parsedPost.username || author?.username;
+  if (!username) return { persisted: false, reason: "missing_username" };
+
+  const record = {
+    ...parsedPost,
+    username,
+    sourceUrl: content?.webLink || parsedPost.sourceUrl,
+    lastSnapshotId: snapshotId,
+  };
+
+  await db.BinanceSquarePost.bulkCreate([record], {
+    updateOnDuplicate: [
+      "username", "title", "content", "contentText", "mediaUrls",
+      "likeCount", "shareCount", "commentCount", "viewCount",
+      "publishedAt", "sourceUrl", "postType", "rawData",
+      "lastSnapshotId", "updatedAt",
+    ],
+  });
+
+  return { persisted: true, action: "upserted", snapshotId };
 }
 
 function splitContiguousRanges(items, lineCount) {
@@ -2511,6 +2721,193 @@ router.post("/posts/recalculate-scores", async (req, res) => {
     res.status(500).json(fail(error.message));
   }
 });
+
+async function handleResolveBinanceSquarePostLink(req, res) {
+  const startedAt = Date.now();
+  const params = req.method === "GET" ? req.query : req.body;
+  const input = params?.url || params?.postUrl || params?.link || params?.postId;
+  const postId = extractBinanceSquarePostId(input);
+  const persist = parseBoolean(params?.persist, false);
+  const includeRaw = parseBoolean(params?.includeRaw, false);
+  const includeAuthorProfile = parseBoolean(params?.includeAuthorProfile, true);
+  const useCache = parseBoolean(params?.useCache, false);
+
+  if (!postId) {
+    return res.status(400).json(fail("无法从链接中识别 Binance Square postId，请传 url/postUrl/link/postId"));
+  }
+
+  try {
+    const local = await findLocalBinanceSquarePost(postId);
+    if (useCache && local.post) {
+      const localPost = local.post.toJSON();
+      return res.json(success({
+        input,
+        postId,
+        source: "database",
+        cached: true,
+        persisted: false,
+        durationMs: Date.now() - startedAt,
+        post: {
+          postId: localPost.postId,
+          username: localPost.username,
+          postType: localPost.postType,
+          title: localPost.title,
+          contentText: localPost.contentText,
+          content: localPost.content,
+          mediaUrls: localPost.mediaUrls,
+          likeCount: localPost.likeCount,
+          shareCount: localPost.shareCount,
+          commentCount: localPost.commentCount,
+          viewCount: localPost.viewCount,
+          publishedAt: localPost.publishedAt,
+          sourceUrl: localPost.sourceUrl,
+          rawData: includeRaw ? localPost.rawData : undefined,
+        },
+        author: buildResolvedAuthor(localPost.rawData || localPost, null, local.author),
+      }));
+    }
+
+    const detail = await apiClient.fetchPostDetail(postId);
+    const content = normalizePostDetailPayload(detail);
+    if (!content?.id) {
+      if (local.post) {
+        const localPost = local.post.toJSON();
+        return res.json(success({
+          input,
+          postId,
+          source: "database_fallback",
+          cached: true,
+          warning: "币安详情接口未返回有效帖子详情，已返回本地已入库数据",
+          persisted: false,
+          durationMs: Date.now() - startedAt,
+          post: {
+            postId: localPost.postId,
+            username: localPost.username,
+            postType: localPost.postType,
+            title: localPost.title,
+            contentText: localPost.contentText,
+            content: localPost.content,
+            mediaUrls: localPost.mediaUrls,
+            likeCount: localPost.likeCount,
+            shareCount: localPost.shareCount,
+            commentCount: localPost.commentCount,
+            viewCount: localPost.viewCount,
+            publishedAt: localPost.publishedAt,
+            sourceUrl: localPost.sourceUrl,
+            rawData: includeRaw ? localPost.rawData : undefined,
+          },
+          author: buildResolvedAuthor(localPost.rawData || localPost, null, local.author),
+        }));
+      }
+      return res.status(404).json(fail("币安详情接口未返回有效帖子详情"));
+    }
+
+    let profile = null;
+    let profileError = null;
+    const directUsername = content.username;
+    if (includeAuthorProfile && directUsername) {
+      try {
+        profile = await apiClient.fetchUserProfile(directUsername);
+      } catch (e) {
+        profileError = e.message;
+        console.warn(`[posts/resolve-link] 获取作者 profile 失败 username=${directUsername}:`, e.message);
+      }
+    }
+
+    const parsedPost = postParser.parsePostContent(content);
+    const author = buildResolvedAuthor(content, profile, local.author);
+    const post = buildResolvedPost(
+      {
+        ...parsedPost,
+        username: parsedPost?.username || author.username || null,
+      },
+      content,
+      includeRaw
+    );
+
+    let persistResult = null;
+    if (persist) {
+      const snapshotId = generateRunId("resolve-post");
+      const [authorPersistResult, postPersistResult] = await Promise.all([
+        persistResolvedBinanceSquareAuthor(author, profile || content),
+        persistResolvedBinanceSquarePost(
+          {
+            ...parsedPost,
+            username: parsedPost?.username || author.username || null,
+          },
+          content,
+          author,
+          snapshotId
+        ),
+      ]);
+      persistResult = {
+        author: authorPersistResult,
+        post: postPersistResult,
+      };
+    }
+
+    res.json(success({
+      input,
+      postId,
+      source: "binance_detail_api",
+      cached: false,
+      persisted: Boolean(persist),
+      persistResult,
+      durationMs: Date.now() - startedAt,
+      profileError,
+      post,
+      author,
+    }));
+  } catch (error) {
+    console.error("[posts/resolve-link] error:", error);
+    try {
+      const local = await findLocalBinanceSquarePost(postId);
+      if (local.post) {
+        const localPost = local.post.toJSON();
+        return res.json(success({
+          input,
+          postId,
+          source: "database_fallback",
+          cached: true,
+          warning: `币安详情接口请求失败，已返回本地已入库数据: ${error.message}`,
+          persisted: false,
+          durationMs: Date.now() - startedAt,
+          post: {
+            postId: localPost.postId,
+            username: localPost.username,
+            postType: localPost.postType,
+            title: localPost.title,
+            contentText: localPost.contentText,
+            content: localPost.content,
+            mediaUrls: localPost.mediaUrls,
+            likeCount: localPost.likeCount,
+            shareCount: localPost.shareCount,
+            commentCount: localPost.commentCount,
+            viewCount: localPost.viewCount,
+            publishedAt: localPost.publishedAt,
+            sourceUrl: localPost.sourceUrl,
+            rawData: includeRaw ? localPost.rawData : undefined,
+          },
+          author: buildResolvedAuthor(localPost.rawData || localPost, null, local.author),
+        }));
+      }
+    } catch (fallbackError) {
+      console.warn("[posts/resolve-link] 本地兜底查询失败:", fallbackError.message);
+    }
+    return res.status(500).json(fail(error.message));
+  }
+}
+
+/**
+ * POST /posts/resolve-link
+ * 通过 Binance Square 帖子链接/ID 识别帖子正文、互动数据和作者信息。
+ * @body {string} url|postUrl|link|postId
+ * @body {boolean} persist - 默认 false；true 时将帖子和作者 upsert 到本地 BinanceSquare 表。
+ * @body {boolean} includeAuthorProfile - 默认 true；额外调用作者 profile 接口补全作者信息。
+ * @body {boolean} includeRaw - 默认 false；true 时返回币安原始详情数据。
+ */
+router.post("/posts/resolve-link", handleResolveBinanceSquarePostLink);
+router.get("/posts/resolve-link", handleResolveBinanceSquarePostLink);
 
 /**
  * GET /posts
