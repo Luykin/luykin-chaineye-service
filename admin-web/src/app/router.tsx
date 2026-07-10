@@ -20,6 +20,7 @@ import { ReviewsManagementPage } from "@/pages/ReviewsManagementPage";
 import { MessagesPage } from "@/pages/MessagesPage";
 import { ServerCommandPage } from "@/pages/ServerCommandPage";
 import { BinanceSquarePage } from "@/pages/BinanceSquarePage";
+import { BinanceSquareBindingPage } from "@/pages/BinanceSquareBindingPage";
 import { PerfMonitorPage } from "@/pages/PerfMonitorPage";
 import { NacosMessagesPage } from "@/pages/NacosMessagesPage";
 import { NacosCampaignsPage } from "@/pages/NacosCampaignsPage";
@@ -61,6 +62,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "reviews-management": <ReviewsManagementPage />,
   "server-command": <ServerCommandPage />,
   "binance-square": <BinanceSquarePage />,
+  "binance-square-binding": <BinanceSquareBindingPage />,
   "perf-monitor": <PerfMonitorPage />,
   "nacos-messages": <NacosMessagesPage />,
   "nacos-campaigns": <NacosCampaignsPage />,

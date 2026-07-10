@@ -51,6 +51,46 @@ function parseBoolean(value, defaultValue = false) {
   return ["1", "true", "yes", "y"].includes(String(value).trim().toLowerCase());
 }
 
+function normalizePageParams(query) {
+  const page = Math.max(1, parsePositiveInt(query.page, 1));
+  const pageSize = Math.min(100, Math.max(1, parsePositiveInt(query.pageSize, 20)));
+  return {
+    page,
+    pageSize,
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  };
+}
+
+function getXHuntBinanceSquareBindingModels() {
+  const {
+    XHuntBinanceSquareBinding,
+    XHuntBinanceSquareBindingChallenge,
+    XHuntBinanceSquareBindingEvent,
+  } = require("../../models/postgres-start");
+
+  return {
+    XHuntBinanceSquareBinding,
+    XHuntBinanceSquareBindingChallenge,
+    XHuntBinanceSquareBindingEvent,
+  };
+}
+
+function getTodayRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+function addLikeFilter(where, field, value) {
+  const text = String(value || "").trim();
+  if (text) {
+    where[field] = { [Op.iLike]: `%${text}%` };
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -3658,6 +3698,215 @@ router.get("/crawl/logs", async (req, res) => {
     }));
   } catch (error) {
     console.error("[crawl/logs] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+// ==================== EchoHunt Binance Square 绑定监控 ====================
+
+/**
+ * GET /binding/overview
+ * EchoHunt 用户绑定 Binance Square 的总体观测指标。
+ */
+router.get("/binding/overview", async (req, res) => {
+  try {
+    const {
+      XHuntBinanceSquareBinding,
+      XHuntBinanceSquareBindingChallenge,
+      XHuntBinanceSquareBindingEvent,
+    } = getXHuntBinanceSquareBindingModels();
+    const now = new Date();
+    const { start, end } = getTodayRange();
+
+    const [
+      activeBindingCount,
+      revokedBindingCount,
+      pendingChallengeCount,
+      verifiedChallengeCount,
+      failedChallengeCount,
+      expiredChallengeCount,
+      todayChallengeCount,
+      todayVerifySuccessCount,
+      todayVerifyFailedCount,
+      lastChallenge,
+      lastBinding,
+      lastEvent,
+    ] = await Promise.all([
+      XHuntBinanceSquareBinding.count({ where: { status: "active" } }),
+      XHuntBinanceSquareBinding.count({ where: { status: "revoked" } }),
+      XHuntBinanceSquareBindingChallenge.count({
+        where: {
+          status: "pending",
+          expiresAt: { [Op.gte]: now },
+        },
+      }),
+      XHuntBinanceSquareBindingChallenge.count({ where: { status: "verified" } }),
+      XHuntBinanceSquareBindingChallenge.count({ where: { status: "failed" } }),
+      XHuntBinanceSquareBindingChallenge.count({
+        where: {
+          [Op.or]: [
+            { status: "expired" },
+            {
+              status: "pending",
+              expiresAt: { [Op.lt]: now },
+            },
+          ],
+        },
+      }),
+      XHuntBinanceSquareBindingChallenge.count({
+        where: { createdAt: { [Op.gte]: start, [Op.lt]: end } },
+      }),
+      XHuntBinanceSquareBindingChallenge.count({
+        where: {
+          status: "verified",
+          verifiedAt: { [Op.gte]: start, [Op.lt]: end },
+        },
+      }),
+      XHuntBinanceSquareBindingChallenge.count({
+        where: {
+          lastErrorCode: { [Op.ne]: null },
+          updatedAt: { [Op.gte]: start, [Op.lt]: end },
+        },
+      }),
+      XHuntBinanceSquareBindingChallenge.findOne({
+        attributes: ["id", "twitterId", "verificationCode", "status", "createdAt", "updatedAt"],
+        order: [["createdAt", "DESC"]],
+        raw: true,
+      }),
+      XHuntBinanceSquareBinding.findOne({
+        attributes: ["id", "twitterId", "binanceSquareUid", "binanceUsername", "status", "verifiedAt", "createdAt"],
+        order: [["createdAt", "DESC"]],
+        raw: true,
+      }),
+      XHuntBinanceSquareBindingEvent.findOne({
+        attributes: ["id", "twitterId", "eventType", "createdAt"],
+        order: [["createdAt", "DESC"]],
+        raw: true,
+      }),
+    ]);
+
+    res.json(success({
+      activeBindingCount,
+      revokedBindingCount,
+      pendingChallengeCount,
+      verifiedChallengeCount,
+      failedChallengeCount,
+      expiredChallengeCount,
+      todayChallengeCount,
+      todayVerifySuccessCount,
+      todayVerifyFailedCount,
+      lastChallenge,
+      lastBinding,
+      lastEvent,
+      generatedAt: new Date().toISOString(),
+    }));
+  } catch (error) {
+    console.error("[binding/overview] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /binding/challenges
+ * 查询 EchoHunt 用户生成的 Binance Square 发帖验证码。
+ */
+router.get("/binding/challenges", async (req, res) => {
+  try {
+    const { XHuntBinanceSquareBindingChallenge } = getXHuntBinanceSquareBindingModels();
+    const { page, pageSize, limit, offset } = normalizePageParams(req.query);
+    const where = {};
+
+    if (req.query.status) where.status = req.query.status;
+    addLikeFilter(where, "twitterId", req.query.twitterId);
+    addLikeFilter(where, "twitterUsername", req.query.twitterUsername);
+    addLikeFilter(where, "verificationCode", req.query.verificationCode);
+
+    const { count, rows } = await XHuntBinanceSquareBindingChallenge.findAndCountAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      limit,
+      offset,
+      raw: true,
+    });
+
+    res.json(success({
+      total: count,
+      page,
+      pageSize,
+      data: rows,
+    }));
+  } catch (error) {
+    console.error("[binding/challenges] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /binding/bindings
+ * 查询 EchoHunt 用户与 Binance Square 账号的一对一绑定关系。
+ */
+router.get("/binding/bindings", async (req, res) => {
+  try {
+    const { XHuntBinanceSquareBinding } = getXHuntBinanceSquareBindingModels();
+    const { page, pageSize, limit, offset } = normalizePageParams(req.query);
+    const where = {};
+
+    if (req.query.status) where.status = req.query.status;
+    addLikeFilter(where, "twitterId", req.query.twitterId);
+    addLikeFilter(where, "twitterUsername", req.query.twitterUsername);
+    addLikeFilter(where, "binanceSquareUid", req.query.binanceSquareUid);
+    addLikeFilter(where, "binanceUsername", req.query.binanceUsername);
+    addLikeFilter(where, "verificationCode", req.query.verificationCode);
+
+    const { count, rows } = await XHuntBinanceSquareBinding.findAndCountAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      limit,
+      offset,
+      raw: true,
+    });
+
+    res.json(success({
+      total: count,
+      page,
+      pageSize,
+      data: rows,
+    }));
+  } catch (error) {
+    console.error("[binding/bindings] error:", error);
+    res.status(500).json(fail(error.message));
+  }
+});
+
+/**
+ * GET /binding/events
+ * 查询绑定流程事件，包括 bind/rebind/unbind/verify_failed。
+ */
+router.get("/binding/events", async (req, res) => {
+  try {
+    const { XHuntBinanceSquareBindingEvent } = getXHuntBinanceSquareBindingModels();
+    const { page, pageSize, limit, offset } = normalizePageParams(req.query);
+    const where = {};
+
+    if (req.query.eventType) where.eventType = req.query.eventType;
+    addLikeFilter(where, "twitterId", req.query.twitterId);
+
+    const { count, rows } = await XHuntBinanceSquareBindingEvent.findAndCountAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      limit,
+      offset,
+      raw: true,
+    });
+
+    res.json(success({
+      total: count,
+      page,
+      pageSize,
+      data: rows,
+    }));
+  } catch (error) {
+    console.error("[binding/events] error:", error);
     res.status(500).json(fail(error.message));
   }
 });

@@ -2,6 +2,10 @@ import { apiRequest } from "./apiClient";
 import type {
   BinanceSquareActionResult,
   BinanceSquareApiResponse,
+  BinanceSquareBindingChallengeItem,
+  BinanceSquareBindingEventItem,
+  BinanceSquareBindingItem,
+  BinanceSquareBindingOverview,
   BinanceSquareConfigItem,
   BinanceSquareCrawlLogItem,
   BinanceSquareCrawlStatus,
@@ -255,6 +259,70 @@ export async function fetchBinanceSquareLogs(params?: {
   if (params?.status) query.set("status", params.status);
   return apiRequest<BinanceSquareApiResponse<BinanceSquarePaginated<BinanceSquareCrawlLogItem>>>(
     `${BASE}/crawl/logs?${query.toString()}`
+  );
+}
+
+export async function fetchBinanceSquareBindingOverview() {
+  return apiRequest<BinanceSquareApiResponse<BinanceSquareBindingOverview>>(`${BASE}/binding/overview`);
+}
+
+export async function fetchBinanceSquareBindingChallenges(params?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  twitterId?: string;
+  twitterUsername?: string;
+  verificationCode?: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("page", String(params?.page || 1));
+  query.set("pageSize", String(params?.pageSize || 20));
+  if (params?.status) query.set("status", params.status);
+  if (params?.twitterId) query.set("twitterId", params.twitterId);
+  if (params?.twitterUsername) query.set("twitterUsername", params.twitterUsername);
+  if (params?.verificationCode) query.set("verificationCode", params.verificationCode);
+  return apiRequest<BinanceSquareApiResponse<BinanceSquarePaginated<BinanceSquareBindingChallengeItem>>>(
+    `${BASE}/binding/challenges?${query.toString()}`
+  );
+}
+
+export async function fetchBinanceSquareBindings(params?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  twitterId?: string;
+  twitterUsername?: string;
+  binanceSquareUid?: string;
+  binanceUsername?: string;
+  verificationCode?: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("page", String(params?.page || 1));
+  query.set("pageSize", String(params?.pageSize || 20));
+  if (params?.status) query.set("status", params.status);
+  if (params?.twitterId) query.set("twitterId", params.twitterId);
+  if (params?.twitterUsername) query.set("twitterUsername", params.twitterUsername);
+  if (params?.binanceSquareUid) query.set("binanceSquareUid", params.binanceSquareUid);
+  if (params?.binanceUsername) query.set("binanceUsername", params.binanceUsername);
+  if (params?.verificationCode) query.set("verificationCode", params.verificationCode);
+  return apiRequest<BinanceSquareApiResponse<BinanceSquarePaginated<BinanceSquareBindingItem>>>(
+    `${BASE}/binding/bindings?${query.toString()}`
+  );
+}
+
+export async function fetchBinanceSquareBindingEvents(params?: {
+  page?: number;
+  pageSize?: number;
+  eventType?: string;
+  twitterId?: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("page", String(params?.page || 1));
+  query.set("pageSize", String(params?.pageSize || 20));
+  if (params?.eventType) query.set("eventType", params.eventType);
+  if (params?.twitterId) query.set("twitterId", params.twitterId);
+  return apiRequest<BinanceSquareApiResponse<BinanceSquarePaginated<BinanceSquareBindingEventItem>>>(
+    `${BASE}/binding/events?${query.toString()}`
   );
 }
 

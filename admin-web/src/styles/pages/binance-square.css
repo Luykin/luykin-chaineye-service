@@ -158,6 +158,93 @@
   color: #065f46 !important;
 }
 
+/* =====================================================
+   EchoHunt Binance Square 绑定监控
+   ===================================================== */
+
+.binance-square-binding-page .bs-binding-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.binance-square-binding-page .bs-binding-alert {
+  margin-bottom: 18px;
+}
+
+.bs-binding-stats-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin-bottom: 18px;
+}
+
+.bs-binding-crawl-card {
+  margin-bottom: 18px;
+  border: 1px solid var(--admin-border-soft);
+  background: linear-gradient(135deg, var(--admin-surface) 0%, var(--admin-surface-soft) 100%);
+}
+
+.bs-binding-crawl-card .ant-card-body {
+  padding: 16px 18px;
+}
+
+.bs-binding-crawl-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.75fr) minmax(210px, 1.2fr) minmax(120px, 0.75fr) minmax(260px, 1.5fr);
+  gap: 16px;
+}
+
+.bs-binding-crawl-main,
+.bs-binding-crawl-text {
+  margin-top: 6px;
+  color: var(--admin-text-strong);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.bs-binding-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.bs-binding-copy {
+  max-width: 340px;
+  margin-bottom: 0 !important;
+}
+
+.bs-binding-json-line {
+  display: inline-block;
+  max-width: 320px;
+}
+
+.bs-binding-json-tooltip {
+  max-width: 520px;
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 960px) {
+  .binance-square-binding-page .bs-binding-header {
+    display: block;
+  }
+
+  .bs-binding-crawl-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .bs-binding-crawl-grid,
+  .bs-binding-filter-bar {
+    grid-template-columns: 1fr;
+  }
+}
+
 .bs-rank-stage-update.ant-btn > span {
   display: inline-flex;
   align-items: center;

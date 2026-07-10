@@ -48,6 +48,98 @@ export interface BinanceSquarePaginated<T> {
   data: T[];
 }
 
+export interface BinanceSquareBindingOverview {
+  activeBindingCount: number;
+  revokedBindingCount: number;
+  pendingChallengeCount: number;
+  verifiedChallengeCount: number;
+  failedChallengeCount: number;
+  expiredChallengeCount: number;
+  todayChallengeCount: number;
+  todayVerifySuccessCount: number;
+  todayVerifyFailedCount: number;
+  generatedAt?: string;
+  lastChallenge?: {
+    id: number;
+    twitterId: string;
+    verificationCode: string;
+    status: string;
+    createdAt?: string;
+    updatedAt?: string;
+  } | null;
+  lastBinding?: {
+    id: number;
+    twitterId: string;
+    binanceSquareUid: string;
+    binanceUsername: string;
+    status: string;
+    verifiedAt?: string;
+    createdAt?: string;
+  } | null;
+  lastEvent?: {
+    id: number;
+    twitterId: string;
+    eventType: string;
+    createdAt?: string;
+  } | null;
+}
+
+export interface BinanceSquareBindingChallengeItem {
+  id: number;
+  twitterId: string;
+  twitterUsername?: string | null;
+  xhuntUserId?: string | null;
+  authCenterUserId?: string | null;
+  verificationCode: string;
+  verificationText: string;
+  status: string;
+  expiresAt: string;
+  verifiedAt?: string | null;
+  attemptCount: number;
+  lastAttemptAt?: string | null;
+  lastPostUrl?: string | null;
+  lastPostId?: string | null;
+  lastErrorCode?: string | null;
+  lastErrorMessage?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BinanceSquareBindingItem {
+  id: number;
+  twitterId: string;
+  twitterUsername?: string | null;
+  xhuntUserId?: string | null;
+  authCenterUserId?: string | null;
+  binanceSquareUid: string;
+  binanceUsername: string;
+  binanceDisplayName?: string | null;
+  binanceAvatar?: string | null;
+  verificationPostId: string;
+  verificationPostUrl: string;
+  verificationCode: string;
+  verifiedAt: string;
+  revokedAt?: string | null;
+  status: string;
+  rawAuthorData?: Record<string, unknown> | null;
+  rawPostData?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BinanceSquareBindingEventItem {
+  id: number;
+  twitterId: string;
+  eventType: string;
+  fromBinanceSquareUid?: string | null;
+  toBinanceSquareUid?: string | null;
+  bindingId?: number | null;
+  challengeId?: number | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface BinanceSquareTargetRankItem {
   id?: number;
   username: string;

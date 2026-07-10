@@ -19,6 +19,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/online-users", icon: <LegacySidebarIcon name="activity" />, label: "在线用户", permission: "online-users", group: "main", sidebarGroup: "data", implemented: true, section: "primary" },
   { key: "/cohorts", icon: <LegacySidebarIcon name="trending-up" />, label: "留存分析", permission: "cohorts", group: "main", sidebarGroup: "data", implemented: true, section: "primary" },
   { key: "/binance-square", icon: <LegacySidebarIcon name="square" />, label: "币安广场", permission: "binance-square", group: "main", sidebarGroup: "data", implemented: true, section: "primary" },
+  { key: "/binance-square-binding", icon: <LegacySidebarIcon name="link" />, label: "BS绑定监控", permission: "binance-square", group: "main", sidebarGroup: "data", implemented: true, section: "primary" },
   { key: "/notes", icon: <LegacySidebarIcon name="file-text" />, label: "备注查看", permission: "notes", group: "main", sidebarGroup: "data", implemented: true, section: "primary" },
   { key: "/log-search", icon: <LegacySidebarIcon name="search" />, label: "日志搜索", permission: "log-search:read", group: "main", sidebarGroup: "dev", implemented: true, section: "primary" },
   { key: "/device-monitor", icon: <LegacySidebarIcon name="monitor" />, label: "设备监控", permission: "device-status:read", group: "main", sidebarGroup: "monitor", implemented: true, section: "primary" },
