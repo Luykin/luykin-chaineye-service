@@ -158,7 +158,7 @@ function normalizeUrlInput(input) {
   const text = String(input || "").trim();
   if (!text) return "";
   if (/^https?:\/\//i.test(text)) return text;
-  if (/^(www\.)?binance\.com\//i.test(text)) return `https://${text}`;
+  if (/^([a-z0-9-]+\.)?binance\.com\//i.test(text)) return `https://${text}`;
   return text;
 }
 
@@ -175,7 +175,13 @@ function isBinanceSquarePostUrl(input) {
     const parts = url.pathname.split("/").filter(Boolean).map((part) => part.toLowerCase());
     const squareIndex = parts.indexOf("square");
     const postIndex = parts.indexOf("post");
-    return squareIndex >= 0 && postIndex > squareIndex;
+    if (squareIndex >= 0 && postIndex > squareIndex) return true;
+
+    // Binance App 分享链接会先落到 app.binance.com/uni-qr/cpos/{postId}，
+    // 再重定向到 www.binance.com/{lang}/square/post/{postId}。
+    // 这里直接认可该分享入口，避免验证阶段误判为非币安广场链接。
+    const cposIndex = parts.indexOf("cpos");
+    return hostname === "app.binance.com" && parts[0] === "uni-qr" && cposIndex >= 0 && /^\d{6,}$/.test(parts[cposIndex + 1] || "");
   } catch (_) {
     return false;
   }
@@ -199,6 +205,11 @@ function extractBinanceSquarePostId(input) {
       if (postIndex >= 0) {
         const postSegment = parts[postIndex + 1] || "";
         const postId = extractBinanceSquarePostId(postSegment);
+        if (postId) return postId;
+      }
+      const cposIndex = parts.findIndex((part) => part.toLowerCase() === "cpos");
+      if (url.hostname.toLowerCase() === "app.binance.com" && parts[0]?.toLowerCase() === "uni-qr" && cposIndex >= 0) {
+        const postId = extractBinanceSquarePostId(parts[cposIndex + 1] || "");
         if (postId) return postId;
       }
       const fallback = `${url.pathname} ${url.search} ${url.hash}`.match(/\d{6,}/g);

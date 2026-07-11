@@ -890,6 +890,7 @@ binance_square_binding_rebind_limit_exceeded
 | 用户复制了旧 challenge | 返回过期或无效 |
 | 帖子链接是 `/zh-CN/square/post/xxx` | 支持 |
 | 帖子链接是 `/en/square/post/xxx` | 支持 |
+| Binance App 分享链接是 `app.binance.com/uni-qr/cpos/xxx` | 支持，直接提取 cpos 后的 postId |
 | 链接带 query/hash | 支持，只提取 postId |
 | 用户发了图片帖但正文为空 | 校验失败 |
 | Binance 接口短暂失败 | 返回可重试错误 |
