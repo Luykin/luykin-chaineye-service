@@ -15,7 +15,6 @@ const {
   CampaignRegistration,
   XHuntUser,
 } = require("../../models/postgres-start");
-const { isRequestInternalTestUser } = require("../constants/xhuntVip");
 const {
   getManagedCampaignPayloadByKey,
   listPluginCampaigns,
@@ -144,11 +143,12 @@ async function getCustomCampaignConfig(campaign, req) {
   if (found.testingPhase) {
     const requestHandle = normalizeTesterHandle(req?.headers?.["x-user-id"]);
     const requestTwitterId = normalizeTesterHandle(req?.headers?.["x-tw-id"] || req?.user?.twitterId);
-    const allowed =
-      isRequestInternalTestUser(req) && isCampaignTester(found, {
-        username: requestHandle,
-        twitterId: requestTwitterId,
-      });
+    // 测试阶段活动的可见性只由活动自己的 testList 控制：
+    // 命中 testList 的用户可见，未命中则不可见，不再额外要求 internal_test。
+    const allowed = isCampaignTester(found, {
+      username: requestHandle,
+      twitterId: requestTwitterId,
+    });
     if (!allowed) return null;
   }
   return found;
@@ -187,7 +187,9 @@ router.get("/config", securityMiddleware, authenticateTokenOptional, async (req,
     const campaigns = allCampaigns.filter((campaign) => {
       if (!matchesDisplayDomain(campaign, requestedDomain)) return false;
       if (!campaign.testingPhase) return true;
-      const allowed = isRequestInternalTestUser(req) && isCampaignTester(campaign, {
+      // 测试阶段活动按活动配置的 testList 精准放行。
+      // testList 支持 username / twitterId；不再叠加 internal_test 白名单判断。
+      const allowed = isCampaignTester(campaign, {
         username: requestHandle,
         twitterId: requestTwitterId,
       });

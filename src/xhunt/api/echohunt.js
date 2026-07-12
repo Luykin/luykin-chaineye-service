@@ -56,8 +56,6 @@ const {
   revokeBinding,
   getBinanceSquareBindingErrorMessage,
 } = require("../services/binanceSquareBindingService");
-const { isRequestInternalTestUser } = require("../constants/xhuntVip");
-
 const router = express.Router();
 
 const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";
@@ -270,13 +268,11 @@ async function findCampaignRecord(identifier) {
   });
 }
 
-function isViewerAllowedForTesting(pluginCampaign, viewer, req) {
+function isViewerAllowedForTesting(pluginCampaign, viewer) {
   if (!pluginCampaign?.testingPhase) return true;
-  // EchoHunt 测试活动需要同时满足：
-  // 1. 当前登录用户是后端内测用户 internal_test；
-  // 2. 当前登录用户也在该活动 testList 中。
-  // 不能仅因为是内测用户就看到所有测试活动，也不能仅因为在 testList 但不是内测用户就看到。
-  return isRequestInternalTestUser(req) && isCampaignTester(pluginCampaign, viewer);
+  // EchoHunt 测试活动只按活动自身 testList 放行。
+  // 这里故意不再判断 internal_test，避免 testList 中的正式测试用户看不到活动。
+  return isCampaignTester(pluginCampaign, viewer);
 }
 
 function localizeTextValue(value, lang, fallback = "") {
@@ -351,13 +347,13 @@ function buildRewardSummary(pluginCampaign, lang = "zh-CN") {
   };
 }
 
-function buildEchohuntCampaignListItem(record, lang, viewer, req) {
+function buildEchohuntCampaignListItem(record, lang, viewer) {
   const base = buildCampaignListItem(record, lang);
   const plugin = buildPluginCampaign(record, { channel: "echohunt" });
   return {
     ...base,
     testingPhase: !!plugin.testingPhase,
-    viewerCanSeeTesting: !!plugin.testingPhase && isViewerAllowedForTesting(plugin, viewer, req),
+    viewerCanSeeTesting: !!plugin.testingPhase && isViewerAllowedForTesting(plugin, viewer),
     displayDomains: plugin.displayDomains || ["web3"],
     tags: Array.isArray(plugin.tags) ? plugin.tags : [],
     registrationConfig: {
@@ -812,7 +808,7 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
     });
 
     // EchoHunt 活动列表永远不返回 draft/archived。
-    // 预热/进行中/领奖/已结束可以返回；测试活动在 JS 层继续判断 internal_test + testList。
+    // 预热/进行中/领奖/已结束可以返回；测试活动在 JS 层继续按 testList 精准过滤。
     // 注意：即使是测试活动，只要仍是 draft，也不应该对 EchoHunt 前端返回。
     const records = await XHuntWebsiteCampaign.findAll({
       where: {
@@ -824,12 +820,12 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
       .map((record) => ({ record, plugin: buildPluginCampaign(record, { channel: "echohunt" }) }))
       .filter(({ plugin }) => {
         if (!plugin.testingPhase) return true;
-        const allowed = !!viewer && isViewerAllowedForTesting(plugin, viewer, req);
+        const allowed = !!viewer && isViewerAllowedForTesting(plugin, viewer);
         if (allowed) hasTesting = true;
         return allowed;
       })
       .map(({ record }) => {
-        const item = buildEchohuntCampaignListItem(record, lang, viewer, req);
+        const item = buildEchohuntCampaignListItem(record, lang, viewer);
         const dataKey = item.campaignKey || item.slug || item.nacosCampaignId;
         const staticCampaign =
           staticCampaignMap.get(String(dataKey || "")) ||

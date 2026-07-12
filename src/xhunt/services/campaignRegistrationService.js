@@ -2,7 +2,7 @@ const axios = require("axios");
 const { Op } = require("sequelize");
 const { CampaignRegistration } = require("../../models/postgres-start");
 const { getManagedCampaignPayloadByKey } = require("./websiteCampaignService");
-const { isRequestXHuntVip, isRequestInternalTestUser } = require("../constants/xhuntVip");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 
 const INITIALIZE_CAMPAIGN_URL = "https://data.cryptohunt.ai/pro/api/initialize_campaign";
 const INITIALIZE_CAMPAIGN_CACHE_TTL = 86400;
@@ -256,9 +256,9 @@ function validateTestingCampaignAccess(campaign, req, { channel = "plugin", view
     username: viewer?.username || headers["x-user-id"],
     twitterId: viewer?.twitterId || req?.user?.twitterId || headers["x-tw-id"],
   };
-  // 测试活动权限统一为：既是后端 internal_test 用户，也在该活动 testList 中。
-  // 不能仅因为是内测用户就看到/报名所有测试活动，也不能仅因为在 testList 但不是内测用户就通过。
-  const allowed = isRequestInternalTestUser(req) && isCampaignTester(campaign, testerIdentity);
+  // 测试活动报名权限与活动可见性保持一致：只要当前用户命中该活动 testList 即可。
+  // 不再额外要求 internal_test，避免能看到活动的测试用户在报名阶段被拦截。
+  const allowed = isCampaignTester(campaign, testerIdentity);
   if (!allowed) {
     throw campaignRegistrationError("CAMPAIGN_IN_TESTING", 403, "Campaign is in testing phase");
   }
