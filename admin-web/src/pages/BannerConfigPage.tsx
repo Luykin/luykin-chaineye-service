@@ -27,20 +27,23 @@ import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { AdminImageUpload } from "@/components/upload/AdminImageUpload";
 import { fetchBannerConfig, publishBannerConfig } from "@/services/feature-flags";
-import type { AdBannerConfig, FeatureFlagsConfig } from "@/types/feature-flags";
+import type { AdBannerConfig, AdBannerType, FeatureFlagsConfig } from "@/types/feature-flags";
 
 const BANNER_IMAGE_MAX_MB = 3;
-const DEFAULT_BANNER_TYPE = "commercial";
+const DEFAULT_BANNER_TYPE: AdBannerType = "normal";
 
-const BANNER_TYPE_OPTIONS = [
-  { label: "商业投放", value: "commercial" },
-  { label: "活动推广", value: "campaign" },
-  { label: "站内运营", value: "operation" },
-  { label: "其他", value: "custom" },
+const BANNER_TYPE_OPTIONS: Array<{ label: string; value: AdBannerType }> = [
+  { label: "商业投放（优先展示）", value: "commercial" },
+  { label: "普通展示", value: "normal" },
 ];
+const BANNER_TYPE_VALUE_SET = new Set<AdBannerType>(BANNER_TYPE_OPTIONS.map((item) => item.value));
 
 function cloneConfig<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function normalizeBannerType(value: unknown): AdBannerType {
+  return BANNER_TYPE_VALUE_SET.has(value as AdBannerType) ? (value as AdBannerType) : DEFAULT_BANNER_TYPE;
 }
 
 function normalizeBanners(value: unknown): AdBannerConfig[] {
@@ -50,7 +53,7 @@ function normalizeBanners(value: unknown): AdBannerConfig[] {
     .map((item, index) => ({
       id: String(item.id || `banner_${index + 1}`),
       enabled: typeof item.enabled === "boolean" ? item.enabled : true,
-      type: String(item.type || DEFAULT_BANNER_TYPE),
+      type: normalizeBannerType(item.type),
       daily_limit: Number.isFinite(Number(item.daily_limit)) ? Number(item.daily_limit) : 1,
       visible_to: Array.isArray(item.visible_to) ? item.visible_to.map(String).filter(Boolean) : [],
       image_url_zh: String(item.image_url_zh || ""),
@@ -83,11 +86,11 @@ function createEmptyBanner(existing: AdBannerConfig[]): AdBannerConfig {
   };
 }
 
-function toPublishBanners(banners: AdBannerConfig[]) {
+function toPublishBanners(banners: AdBannerConfig[]): AdBannerConfig[] {
   return banners.map((item) => ({
     id: item.id.trim(),
     enabled: !!item.enabled,
-    type: item.type || DEFAULT_BANNER_TYPE,
+    type: normalizeBannerType(item.type),
     daily_limit: Number(item.daily_limit || 0),
     visible_to: normalizeTags(item.visible_to),
     image_url_zh: item.image_url_zh?.trim() || "",
@@ -351,7 +354,7 @@ export function BannerConfigPage() {
                 </Form.Item>
               </Col>
             </Row>
-            <Form.Item name="type" label="类型">
+            <Form.Item name="type" label="类型" extra="区别：commercial 会优先展示；normal 按普通规则展示。">
               <Select options={BANNER_TYPE_OPTIONS} />
             </Form.Item>
             <Form.Item name="visible_to" label="定向用户" tooltip="留空表示全量可见。输入 Twitter handle 后回车，支持粘贴逗号分隔。">

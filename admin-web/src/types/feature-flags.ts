@@ -1,7 +1,10 @@
+export type AdBannerType = "commercial" | "normal";
+
 export interface AdBannerConfig {
   id: string;
   enabled: boolean;
-  type: string;
+  /** 条目类型：commercial 优先展示 */
+  type: AdBannerType;
   daily_limit: number;
   visible_to: string[];
   image_url_zh: string;
