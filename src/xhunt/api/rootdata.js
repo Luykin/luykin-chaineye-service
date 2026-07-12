@@ -1493,26 +1493,26 @@ router.get("/search", async (req, res) => {
       res.set("X-Cache-Status", "MISS");
       return res.json(notFoundResponse);
     }
-
-    // 6. 异步验证和修正数据（双重验证机制，不影响响应速度）
-    // 修正完成后会自动清除缓存，确保下次请求能获取最新数据
-    setImmediate(async () => {
-      try {
-        // // 第一重：API验证和修正
-        // await RootdataDataFixService.verifyAndFixProject(
-        //   project,
-        //   Fundraising,
-        //   req.redisClient,
-        //   cacheKey, // 传入搜索缓存key，修正后会清除
-        //   "auto_api_fix"
-        // );
-
-        // 第二重：爬虫更新验证（队列化、节流、去重）
-        crawlerQueue.updateCrawl(project, cacheKey);
-      } catch (error) {
-        console.error("数据修正失败:", error);
-      }
-    });
+		// 不需要了，现在roodata的爬取策略迁移到了 tampermonkey/rootdata-fundraising-scheduled-reader.user.js
+    // // 6. 异步验证和修正数据（双重验证机制，不影响响应速度）
+    // // 修正完成后会自动清除缓存，确保下次请求能获取最新数据
+    // setImmediate(async () => {
+    //   try {
+    //     // // 第一重：API验证和修正
+    //     // await RootdataDataFixService.verifyAndFixProject(
+    //     //   project,
+    //     //   Fundraising,
+    //     //   req.redisClient,
+    //     //   cacheKey, // 传入搜索缓存key，修正后会清除
+    //     //   "auto_api_fix"
+    //     // );
+		//
+    //     // 第二重：爬虫更新验证（队列化、节流、去重）
+    //     crawlerQueue.updateCrawl(project, cacheKey);
+    //   } catch (error) {
+    //     console.error("数据修正失败:", error);
+    //   }
+    // });
 
     // 7. 并行查询关联数据（性能优化）
     const [investmentsReceived, investmentsGiven] = await Promise.all([
