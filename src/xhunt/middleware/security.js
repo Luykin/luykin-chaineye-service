@@ -909,7 +909,11 @@ const sanitizeQueryStringForLog = (queryString = "") => {
       if (
         normalizedKey === "token" ||
         normalizedKey === "x-request-signature" ||
-        normalizedKey === "x_request_signature"
+        normalizedKey === "x_request_signature" ||
+        normalizedKey === "x-device-fingerprint" ||
+        normalizedKey === "x_device_fingerprint" ||
+        normalizedKey === "x-window-location-href" ||
+        normalizedKey === "x_window_location_href"
       ) {
         params.set(key, "[REDACTED]");
       }
@@ -918,7 +922,9 @@ const sanitizeQueryStringForLog = (queryString = "") => {
   } catch (_) {
     return queryString
       .replace(/((?:^|[?&])token=)[^&]*/gi, "$1[REDACTED]")
-      .replace(/((?:^|[?&])x[-_]request[-_]signature=)[^&]*/gi, "$1[REDACTED]");
+      .replace(/((?:^|[?&])x[-_]request[-_]signature=)[^&]*/gi, "$1[REDACTED]")
+      .replace(/((?:^|[?&])x[-_]device[-_]fingerprint=)[^&]*/gi, "$1[REDACTED]")
+      .replace(/((?:^|[?&])x[-_]window[-_]location[-_]href=)[^&]*/gi, "$1[REDACTED]");
   }
 };
 
@@ -1102,7 +1108,9 @@ const SENSITIVE_HEADER_KEYS = new Set([
   "cookie",
   "x-api-key",
   "x-access-token",
+  "x-device-fingerprint",
   "x-request-signature",
+  "x-window-location-href",
   "proxy-authorization",
   "cf-access-token",
   "x-forwarded-authorization",
@@ -1325,7 +1333,7 @@ class SecurityViolationLogger {
       clientIp: clientIp ? this.truncate(clientIp, 64) : null,
       headers: sanitizedHeaders,
       requestBody,
-      fingerprint: fingerprint ? this.truncate(fingerprint, 128) : null,
+      fingerprint: fingerprint ? "[REDACTED]" : null,
       extensionVersion: extensionVersion
         ? this.truncate(extensionVersion, 32)
         : null,
@@ -1333,9 +1341,7 @@ class SecurityViolationLogger {
         ? Number(requestTimestamp) || null
         : null,
       requestId: requestId ? this.truncate(requestId, 128) : null,
-      windowLocationHref: windowLocationHref
-        ? this.truncate(windowLocationHref, 1024)
-        : null,
+      windowLocationHref: windowLocationHref ? "[REDACTED]" : null,
       userAgent: req.headers["user-agent"]
         ? this.truncate(req.headers["user-agent"], 1024)
         : null,
@@ -1538,6 +1544,12 @@ const validateBrowserEnvironment = (req, allowQueryParams = false) => {
     return true;
   }
 
+  if (signatureVersion === V2_SIGNATURE_VERSION) {
+    // 新版插件不再发送 x-window-location-href；v2 请求先用 UA 做轻量浏览器校验，
+    // 真正的安全性由后续 securityMiddleware 的签名校验保证。
+    return isBrowserEnvironment(userAgent, windowLocationHref || "https://x.com");
+  }
+
   if (!isBrowserEnvironment(userAgent, windowLocationHref)) {
     return false;
   }
@@ -1573,8 +1585,8 @@ const validateLegacySecurityParams = (req, allowQueryParams = false) => {
     console.error("validateSecurityParams error:", {
       requestId,
       timestamp,
-      fingerprint,
-      signature,
+      hasFingerprint: Boolean(fingerprint),
+      signaturePrefix: signature ? `${String(signature).slice(0, 8)}...${String(signature).slice(-8)}` : null,
       version,
     });
     return { isValid: false, error: "400" };
@@ -1583,7 +1595,7 @@ const validateLegacySecurityParams = (req, allowQueryParams = false) => {
   // 验证指纹格式
   if (!isValidFingerprint(fingerprint)) {
     console.error("validateSecurityParams fingerprint error:", {
-      fingerprint,
+      hasFingerprint: true,
     });
     return { isValid: false, error: "400-1" };
   }
@@ -1626,8 +1638,8 @@ const validateLegacySecurityParams = (req, allowQueryParams = false) => {
 
     if (signature !== expectedSignature) {
       console.error("sse validateSecurityParams signature error:", {
-        signature,
-        expectedSignature,
+        signaturePrefix: signature ? `${String(signature).slice(0, 8)}...${String(signature).slice(-8)}` : null,
+        expectedPrefix: `${expectedSignature.slice(0, 8)}...${expectedSignature.slice(-8)}`,
       });
       return { isValid: false, error: "411" };
     }
@@ -1645,8 +1657,8 @@ const validateLegacySecurityParams = (req, allowQueryParams = false) => {
     );
     if (signature !== expectedSignature) {
       console.error("web validateSecurityParams signature error:", {
-        signature,
-        expectedSignature,
+        signaturePrefix: signature ? `${String(signature).slice(0, 8)}...${String(signature).slice(-8)}` : null,
+        expectedPrefix: `${expectedSignature.slice(0, 8)}...${expectedSignature.slice(-8)}`,
       });
       return { isValid: false, error: "411" };
     }
@@ -1717,7 +1729,6 @@ const validateV2SecurityParams = (req, { allowQueryParams = false } = {}) => {
     signatureVersion !== V2_SIGNATURE_VERSION ||
     !requestId ||
     !timestampRaw ||
-    !fingerprint ||
     !signature ||
     !version ||
     !userId ||
@@ -1735,9 +1746,9 @@ const validateV2SecurityParams = (req, { allowQueryParams = false } = {}) => {
     return { isValid: false, error: "INVALID_TWITTER_ID" };
   }
 
-  if (!isValidFingerprint(fingerprint)) {
+  if (fingerprint && !isValidFingerprint(fingerprint)) {
     console.error("validateV2SecurityParams fingerprint error:", {
-      fingerprint,
+      hasFingerprint: true,
     });
     return { isValid: false, error: "400-1" };
   }
@@ -1769,26 +1780,49 @@ const validateV2SecurityParams = (req, { allowQueryParams = false } = {}) => {
 
   const bodyText = req.rawBody || "";
   const bodyHash = hashBodySha512(bodyText);
-  const canonicalPayload = [
+  const commonPayloadParts = [
     req.method.toUpperCase(),
     pathWithQuery,
     timestampRaw,
     requestId,
-    fingerprint,
-    bodyHash,
-    twId,
-  ].join("\n");
+  ];
+  const signatureCandidates = [];
+  if (fingerprint) {
+    signatureCandidates.push({
+      payloadVersion: "v2-7line-fingerprint",
+      canonicalPayload: [
+        ...commonPayloadParts,
+        fingerprint,
+        bodyHash,
+        twId,
+      ].join("\n"),
+    });
+  }
+  signatureCandidates.push({
+    payloadVersion: "v2-6line-no-fingerprint",
+    canonicalPayload: [
+      ...commonPayloadParts,
+      bodyHash,
+      twId,
+    ].join("\n"),
+  });
 
-  const expectedSignature = generateV2Signature(canonicalPayload, signingKey);
+  const matchedSignature = signatureCandidates
+    .map((candidate) => ({
+      ...candidate,
+      expectedSignature: generateV2Signature(candidate.canonicalPayload, signingKey),
+    }))
+    .find((candidate) => safeCompareHex(signature, candidate.expectedSignature));
 
-  if (!safeCompareHex(signature, expectedSignature)) {
+  if (!matchedSignature) {
     console.error("validateV2SecurityParams signature error:", {
       pathWithQuery,
       requestId,
       twId,
       timestamp,
+      hasFingerprint: Boolean(fingerprint),
+      triedPayloadVersions: signatureCandidates.map((item) => item.payloadVersion),
       signaturePrefix: signature ? `${signature.slice(0, 8)}...${signature.slice(-8)}` : null,
-      expectedPrefix: `${expectedSignature.slice(0, 8)}...${expectedSignature.slice(-8)}`,
     });
     return { isValid: false, error: "INVALID_SIGNATURE" };
   }
@@ -1799,9 +1833,11 @@ const validateV2SecurityParams = (req, { allowQueryParams = false } = {}) => {
       req,
       {
         signatureVersion: V2_SIGNATURE_VERSION,
+        signaturePayloadVersion: matchedSignature.payloadVersion,
         requestId,
         timestamp,
-        fingerprint,
+        fingerprint: fingerprint || null,
+        rawFingerprint: fingerprint || null,
         version,
         signature,
         twId,
@@ -1855,7 +1891,7 @@ const browserOnlyMiddleware = (req, res, next) => {
       const signatureVersion = getRequestParam(req, "signature-version", false);
       console.error("browserOnlyMiddleware validateBrowserEnvironment error:", {
         userAgent,
-        windowLocationHref,
+        hasWindowLocationHref: Boolean(windowLocationHref),
         version,
         signatureVersion,
       });

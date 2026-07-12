@@ -270,9 +270,7 @@ async function initializeAndStartServer() {
       requestIdFrom: ["headers", "x-request-id"],
       userIdFrom: ["headers", "x-user-id"],
       collectDetailedInfo: {
-        fingerprint: ["headers", "x-device-fingerprint"],
         version: ["headers", "x-extension-version"],
-        location: ["headers", "x-window-location-href"],
         twId: ["headers", "x-tw-id"],
         ua: ["get", "user-agent"],
       },
@@ -359,9 +357,11 @@ async function initializeAndStartServer() {
       "x-request-timestamp",
       "x-device-fingerprint",
       "x-request-signature",
+      "x-signature-version",
       "x-extension-version",
       "x-user-id",
       "x-tw-id",
+      "x-language",
       "x-window-location-href",
       "x-xhunt-web-sign-version",
       "x-xhunt-web-client-key",
@@ -437,11 +437,8 @@ async function initializeAndStartServer() {
     const requestId = req.headers["x-request-id"] || "no-request-id";
     const userId = req.headers["x-user-id"] || "anonymous";
     const twId = req.headers["x-tw-id"] || "no-tw-id";
-    const fingerprint = req.headers["x-device-fingerprint"] || "no-fingerprint";
     const version = req.headers["x-extension-version"] || "no-version";
-    const windowLocationHref =
-      req.headers["x-window-location-href"] || "no-location";
-    return `request_id=${requestId} user_id=${userId} tw_id=${twId} fingerprint=${fingerprint} version=${version} location=${windowLocationHref}`;
+    return `request_id=${requestId} user_id=${userId} tw_id=${twId} version=${version}`;
   });
 
   morgan.token("xhunt-web", (req) => {
