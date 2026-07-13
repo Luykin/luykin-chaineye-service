@@ -857,6 +857,7 @@ export function NacosCampaignsPage() {
   const [websiteRecords, setWebsiteRecords] = useState<WebsiteCampaignRecord[]>(
     [],
   );
+  const [vipUsers, setVipUsers] = useState<VipListItem[]>([]);
   const [internalTestUsers, setInternalTestUsers] = useState<VipListItem[]>([]);
   const [selection, setSelection] = useState<Selection>(null);
   const [search, setSearch] = useState("");
@@ -991,6 +992,7 @@ export function NacosCampaignsPage() {
   async function loadInternalTestUsers() {
     try {
       const resp = await fetchVipLists();
+      setVipUsers(resp.data?.vip || []);
       setInternalTestUsers(resp.data?.internalTest || []);
     } catch (error) {
       showToast(
@@ -2057,6 +2059,7 @@ export function NacosCampaignsPage() {
                 <CampaignEditor
                   c={c}
                   canEditCampaignId={canEditCampaignId}
+                  vipUsers={vipUsers}
                   internalTestUsers={internalTestUsers}
                   setCampaignPath={setCampaignPath}
                   updateSelectedCampaign={updateSelectedCampaign}
@@ -2487,6 +2490,7 @@ function CampaignBrief({
 function CampaignEditor(props: {
   c: AnyObj;
   canEditCampaignId: boolean;
+  vipUsers: VipListItem[];
   internalTestUsers: VipListItem[];
   setCampaignPath: (path: string, value: any) => void;
   updateSelectedCampaign: (fn: (c: AnyObj) => void) => void;
@@ -2498,12 +2502,21 @@ function CampaignEditor(props: {
   moveArrayItem: (kind: string, index: number, delta: number) => void;
   removeArrayItem: (kind: string, index: number) => void;
 }) {
-  const { c, canEditCampaignId, internalTestUsers, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem } = props;
+  const { c, canEditCampaignId, vipUsers, internalTestUsers, setCampaignPath, updateSelectedCampaign, changeThreshold, thresholdValue, changeRiskConfirm, addArrayItem, updateArrayItem, moveArrayItem, removeArrayItem } = props;
   const campaignIdDisabled = !!c.id?.trim() && !canEditCampaignId;
   const internalTestUserOptions = internalTestUsers.map((item) => ({
     value: item.username,
     label: item.username,
   }));
+  const addUsersToTestList = (items: VipListItem[]) => {
+    const usernames = items.map((item) => item.username);
+    updateSelectedCampaign((campaign) => {
+      campaign.testList = normalizeStringList([
+        ...normalizeStringList(campaign.testList),
+        ...usernames,
+      ]);
+    });
+  };
   const changeTestingPhase = (checked: boolean) => {
     if (!checked && c.testingPhase) {
       const confirmed = window.confirm(
@@ -2625,6 +2638,39 @@ function CampaignEditor(props: {
                 onChange={(values) => setCampaignPath("testList", normalizeStringList(values))}
                 options={internalTestUserOptions}
                 tokenSeparators={[",", "\n"]}
+                popupRender={(menu) => (
+                  <>
+                    {menu}
+                    <div
+                      style={{
+                        borderTop: "1px solid #f0f0f0",
+                        marginTop: 4,
+                        padding: "8px 8px 4px",
+                      }}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                    >
+                      <Space size={8} wrap>
+                        <Button
+                          size="small"
+                          disabled={!vipUsers.length}
+                          onClick={() => addUsersToTestList(vipUsers)}
+                        >
+                          一键添加VIP
+                        </Button>
+                        <Button
+                          size="small"
+                          disabled={!internalTestUsers.length}
+                          onClick={() => addUsersToTestList(internalTestUsers)}
+                        >
+                          一键添加内测用户
+                        </Button>
+                      </Space>
+                    </div>
+                  </>
+                )}
               />
             </Field>
           </Col>
