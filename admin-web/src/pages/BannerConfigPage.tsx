@@ -26,8 +26,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { AdminImageUpload } from "@/components/upload/AdminImageUpload";
-import { fetchBannerConfig, publishBannerConfig } from "@/services/feature-flags";
-import type { AdBannerConfig, AdBannerType, FeatureFlagsConfig } from "@/types/feature-flags";
+import { fetchBannerConfig, fetchVipLists, publishBannerConfig } from "@/services/feature-flags";
+import type { AdBannerConfig, AdBannerType, FeatureFlagsConfig, VipListItem } from "@/types/feature-flags";
 
 const BANNER_IMAGE_MAX_MB = 3;
 const DEFAULT_BANNER_TYPE: AdBannerType = "normal";
@@ -133,11 +133,18 @@ export function BannerConfigPage() {
     select: (data) => ({ adBanners: data.data.adBanners, featureSlots: data.data.featureSlots } as FeatureFlagsConfig),
   });
 
+  const vipListsQuery = useQuery({
+    queryKey: ["banner-config", "vip-lists"],
+    queryFn: fetchVipLists,
+  });
+
   useEffect(() => {
     if (!configQuery.data || dirty) return;
     setBanners(normalizeBanners(configQuery.data.adBanners));
   }, [configQuery.data, dirty]);
 
+  const vipUsers = vipListsQuery.data?.data.vip || [];
+  const internalTestUsers = vipListsQuery.data?.data.internalTest || [];
   const enabledCount = banners.filter((item) => item.enabled).length;
   const targetedCount = banners.filter((item) => item.visible_to.length).length;
 
@@ -225,6 +232,17 @@ export function BannerConfigPage() {
     const [item] = next.splice(index, 1);
     next.splice(target, 0, item);
     markBanners(next);
+  }
+
+  function addUsersToVisibleTo(items: VipListItem[]) {
+    const usernames = items.map((item) => item.username);
+    form.setFieldValue(
+      "visible_to",
+      normalizeTags([
+        ...normalizeTags(form.getFieldValue("visible_to")),
+        ...usernames,
+      ]),
+    );
   }
 
   const columns: ColumnsType<AdBannerConfig & { _index: number }> = [
@@ -358,7 +376,46 @@ export function BannerConfigPage() {
               <Select options={BANNER_TYPE_OPTIONS} />
             </Form.Item>
             <Form.Item name="visible_to" label="定向用户" tooltip="留空表示全量可见。输入 Twitter handle 后回车，支持粘贴逗号分隔。">
-              <Select mode="tags" tokenSeparators={[",", " ", "\n"]} placeholder="例如 LuykinAI, xhunt_ai" maxTagCount="responsive" />
+              <Select
+                mode="tags"
+                tokenSeparators={[",", " ", "\n"]}
+                placeholder="例如 LuykinAI, xhunt_ai"
+                maxTagCount="responsive"
+                loading={vipListsQuery.isFetching}
+                popupRender={(menu) => (
+                  <>
+                    {menu}
+                    <div
+                      style={{
+                        borderTop: "1px solid #f0f0f0",
+                        marginTop: 4,
+                        padding: "8px 8px 4px",
+                      }}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                    >
+                      <Space size={8} wrap>
+                        <Button
+                          size="small"
+                          disabled={!vipUsers.length}
+                          onClick={() => addUsersToVisibleTo(vipUsers)}
+                        >
+                          一键添加VIP
+                        </Button>
+                        <Button
+                          size="small"
+                          disabled={!internalTestUsers.length}
+                          onClick={() => addUsersToVisibleTo(internalTestUsers)}
+                        >
+                          一键添加内测用户
+                        </Button>
+                      </Space>
+                    </div>
+                  </>
+                )}
+              />
             </Form.Item>
           </Card>
 
