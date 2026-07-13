@@ -151,7 +151,7 @@ function generateVerificationCode() {
 }
 
 function buildVerificationText(code) {
-  return `Verifying my Binance Square account via EchoHunt: ${code}`;
+  return `Verifying my Binance Square account for YZi Labs Amplify via EchoHunt: ${code}`;
 }
 
 function normalizeUrlInput(input) {
