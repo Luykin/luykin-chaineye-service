@@ -395,6 +395,7 @@ function serializeCampaignRegistration(record, binanceSquareAccountMap = new Map
     invitedByTwitterId: _invitedByTwitterId,
     invitedByUserInfo: _invitedByUserInfo,
     invitedByUsername: _invitedByUsername,
+    registrationMetadata: _registrationMetadata,
     ...safe
   } = json;
 
@@ -622,7 +623,7 @@ router.post(
         cooldownKey: `campaign:${normalizedCampaign}:register:cd:${user.id}`,
       });
 
-      const { xHuntUserId: _omit, ...safeRecord } = result.registration.toJSON();
+      const { xHuntUserId: _omit, registrationMetadata: _registrationMetadata, ...safeRecord } = result.registration.toJSON();
       console.log(LOG, "success", { userId: user.id, campaign: normalizedCampaign });
       return res.json({
         success: true,
