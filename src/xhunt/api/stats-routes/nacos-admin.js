@@ -56,7 +56,15 @@ const NACOS_CONFIG_CATALOG = [
   },
   {
     dataId: "xhunt_message",
-    label: "公告消息配置",
+    label: "公告消息配置（中文）",
+    group: DEFAULT_GROUP,
+    type: "json",
+    publicReadable: true,
+    permissions: ["nacos-messages"],
+  },
+  {
+    dataId: "xhunt_message_en",
+    label: "公告消息配置（英文）",
     group: DEFAULT_GROUP,
     type: "json",
     publicReadable: true,

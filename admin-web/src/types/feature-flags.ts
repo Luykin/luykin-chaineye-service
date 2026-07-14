@@ -72,6 +72,23 @@ export interface VipTwitterIdSyncResponse {
   error?: string;
 }
 
+export interface VipCreatorAuthQueryResponse {
+  success: boolean;
+  data: {
+    requestedUsername: string;
+    username: string;
+    found: boolean;
+    twitterId?: string | null;
+    authCreator: {
+      recordTime: string | null;
+      status: number | null;
+      statusLabel: string;
+      twitterId: string | null;
+    } | null;
+  };
+  error?: string;
+}
+
 export interface VipListsResponse {
   success: boolean;
   data: {

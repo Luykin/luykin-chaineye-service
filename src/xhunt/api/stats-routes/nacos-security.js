@@ -677,6 +677,7 @@ async function scanNginxConfig() {
       "xhunt_built_in_tag",
       "xhunt_built_in_tag_en",
       "xhunt_message",
+      "xhunt_message_en",
     ];
     const hasExpectedDataIdWhitelist = publicDataIds.every((dataId) => nacosConfigsBlockText.includes(dataId));
     const hasReadOnlyCors = !allowWriteMethods && /Access-Control-Allow-Methods\s+"GET,\s*HEAD,\s*OPTIONS"/i.test(nacosConfigsBlockText);

@@ -3,6 +3,7 @@ import type {
   AdBannerConfig,
   FeatureFlagsPublishResponse,
   FeatureFlagsResponse,
+  VipCreatorAuthQueryResponse,
   VipListsResponse,
   VipTwitterIdSyncResponse,
 } from "@/types/feature-flags";
@@ -63,6 +64,12 @@ export async function syncVipTwitterIds(force = true) {
     method: "POST",
     body: { force },
   });
+}
+
+export async function fetchVipCreatorAuth(username: string) {
+  const query = new URLSearchParams();
+  query.set("username", username);
+  return apiRequest<VipCreatorAuthQueryResponse>(`/api/xhunt/stats/vip-lists/creator-auth?${query.toString()}`);
 }
 
 export async function becomeCreator(id: number) {

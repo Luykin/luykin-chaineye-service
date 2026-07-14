@@ -10,9 +10,17 @@ const { logAdminAction } = require("./shared");
 
 const router = express.Router();
 const TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
+const TWITTER_RANK_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/rank";
 const CREATOR_AUTH_URL = "https://data.cryptohunt.ai/front/auth/creator";
 const CREATOR_SUBMIT_URL = "https://data.cryptohunt.ai/front/auth/creator_submit";
 const CREATOR_SUBMIT_AUTH = process.env.XHUNT_CREATOR_SUBMIT_AUTH || "cd3c59e6-451d-44a8-9355-f4ead498b712";
+const CREATOR_STATUS_LABELS = {
+  0: "未认证",
+  1: "认证中",
+  2: "已认证",
+  3: "认证失败",
+  4: "认证撤销",
+};
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -48,6 +56,37 @@ async function fetchTwitterIdByUsername(username) {
     timeout: 8000,
   });
   return extractTwitterId(response.data);
+}
+
+function normalizeCreatorAuthRecord(item, requestedUsername) {
+  const authCreator = item?.auth_creator || null;
+  const status = authCreator?.status == null ? null : Number(authCreator.status);
+
+  return {
+    requestedUsername,
+    username: item?.username || requestedUsername,
+    found: !!item,
+    twitterId: authCreator?.twitter_id || item?.user_id || null,
+    authCreator: authCreator
+      ? {
+          recordTime: authCreator.record_time || null,
+          status: Number.isFinite(status) ? status : null,
+          statusLabel: CREATOR_STATUS_LABELS[status] || "未知状态",
+          twitterId: authCreator.twitter_id || null,
+        }
+      : null,
+  };
+}
+
+async function fetchCreatorAuthByUsername(username) {
+  const response = await axios.get(TWITTER_RANK_LOOKUP_URL, {
+    params: { usernames: username },
+    timeout: 10000,
+  });
+  const list = response.data?.data?.data;
+  const rows = Array.isArray(list) ? list : [];
+  const matched = rows.find((item) => normalizeUsername(item?.username) === username) || rows[0] || null;
+  return normalizeCreatorAuthRecord(matched, username);
 }
 
 async function refreshVipCache() {
@@ -169,6 +208,45 @@ router.post(
         message: error.message || "同步失败",
       });
       res.status(500).json({ success: false, error: error.message || "同步失败" });
+    }
+  }
+);
+
+router.get(
+  "/vip-lists/creator-auth",
+  adminAuth,
+  requirePermission("vip-management"),
+  async (req, res) => {
+    try {
+      const username = normalizeUsername(req.query.username);
+      if (!username) {
+        return res.status(400).json({ success: false, error: "username 不能为空" });
+      }
+
+      const data = await fetchCreatorAuthByUsername(username);
+
+      res.json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      const upstreamStatus = error.response?.status;
+      const upstreamData = error.response?.data;
+      const message =
+        upstreamData?.message ||
+        upstreamData?.error ||
+        error.message ||
+        "查询创作者申请记录失败";
+
+      console.error("[vip-lists/creator-auth] 查询失败:", {
+        message,
+        status: upstreamStatus,
+        data: upstreamData,
+      });
+      res.status(upstreamStatus && upstreamStatus >= 400 && upstreamStatus < 500 ? 400 : 500).json({
+        success: false,
+        error: message,
+      });
     }
   }
 );

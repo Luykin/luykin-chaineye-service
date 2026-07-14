@@ -1,7 +1,7 @@
 .vip-management-container { padding: 16px; }
 .vip-management-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .vip-management-header h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--admin-text); }
-.vip-management-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.vip-management-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
 .vip-card { background: var(--admin-surface); border: 1px solid var(--admin-border); border-radius: 8px; padding: 16px; }
 .vip-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--admin-surface-hover); }
 .vip-card-title { font-size: 15px; font-weight: 600; color: var(--admin-text); }
