@@ -11,6 +11,185 @@ const {
 
 const router = express.Router();
 
+// 支持的系统私信类型。内部回调只传语义 type，不传具体语言文案。
+const BATCH_MESSAGE_TYPES = [
+  "creator_verification_success", // 创作者认证成功
+  "creator_verification_failed", // 创作者认证失败
+  "kol_tip_received", // 收到KOL打赏奖励
+  "kol_tip_auto_refund", // KOL打赏奖励未领取自动退回
+  "kol_tip_refund_received", // KOL收到退回的奖励
+];
+const ALLOWED_BATCH_MESSAGE_TYPES = new Set(BATCH_MESSAGE_TYPES);
+
+const BATCH_MESSAGE_TEMPLATES = {
+  creator_verification_success: {
+    zh: {
+      title: "创作者认证通过",
+      content:
+        "亲爱的创作者，\n\n" +
+        "恭喜你！你的创作者认证 **已通过审核** 。🎉\n\n" +
+        "从现在开始，你将享有：\n" +
+        "• 💰 开通「互动榜」功能，真实互动将转化为实际收益\n" +
+        "• 🪙 解锁贡献榜区域相关功能和后续激励玩法\n" +
+        "请持续保持高质量创作，我们会根据你的长期表现，解锁更多玩法与权益。\n\n" +
+        "感谢你对 XHunt 的支持！",
+    },
+    en: {
+      title: "Creator verification approved",
+      content:
+        "Dear creator,\n\n" +
+        "Congratulations! Your creator verification has **been approved**. 🎉\n\n" +
+        "You can now enjoy:\n" +
+        "• 💰 Access to the Interaction Leaderboard, where real engagement can turn into real rewards\n" +
+        "• 🪙 Access to Contribution Leaderboard features and future incentive programs\n\n" +
+        "Please keep creating high-quality content. We will unlock more features and benefits based on your long-term performance.\n\n" +
+        "Thank you for supporting XHunt!",
+    },
+  },
+  creator_verification_failed: {
+    zh: {
+      title: "创作者认证未通过",
+      content:
+        "亲爱的创作者，\n\n" +
+        "很抱歉，此次你的创作者认证 **未能通过审核** 。\n\n" +
+        "主要原因是：\n" +
+        "• 📉 最近 30 天内暂未检测到足够的高质量推文或内容表现。\n\n" +
+        "建议你在接下来的 30 天内：\n" +
+        "• 持续稳定地产出高质量内容\n" +
+        "• 提升真实互动（评论、转发、点赞等）\n\n" +
+        "当前申请通道已关闭，你可以在 **30 天后重新发起创作者认证申请**。\n" +
+        "我们也非常期待看到你接下来的成长与表现。💪",
+    },
+    en: {
+      title: "Creator verification not approved",
+      content:
+        "Dear creator,\n\n" +
+        "Unfortunately, your creator verification **was not approved** this time.\n\n" +
+        "Main reason:\n" +
+        "• 📉 We did not detect enough high-quality tweets or content performance in the past 30 days.\n\n" +
+        "We recommend that over the next 30 days you:\n" +
+        "• Keep publishing high-quality content consistently\n" +
+        "• Improve real engagement such as comments, reposts, and likes\n\n" +
+        "The current application channel is now closed. You can **apply for creator verification again after 30 days**.\n" +
+        "We look forward to seeing your growth and future performance. 💪",
+    },
+  },
+  kol_tip_received: {
+    zh: {
+      title: "你收到一笔 KOL 打赏奖励",
+      content:
+        "亲爱的创作者，\n\n" +
+        "你刚刚 **收到一笔 KOL 打赏奖励**。🎁\n\n" +
+        "你可以前往打赏页查看本次奖励的具体金额和来源详情：\n" +
+        '<a href="#rewardPage">前往打赏页查看详情</a>\n\n' +
+        "感谢你持续为社区贡献价值内容！",
+    },
+    en: {
+      title: "You received a KOL tip reward",
+      content:
+        "Dear creator,\n\n" +
+        "You have just **received a KOL tip reward**. 🎁\n\n" +
+        "You can go to the rewards page to view the amount and source details:\n" +
+        '<a href="#rewardPage">View reward details</a>\n\n' +
+        "Thank you for continuing to contribute valuable content to the community!",
+    },
+  },
+  kol_tip_auto_refund: {
+    zh: {
+      title: "一笔待领取的 KOL 打赏奖励已失效",
+      content:
+        "你好，\n\n" +
+        "之前有一笔正在等待你领取的 **KOL 打赏奖励**，由于你长时间未领取，系统已将这笔奖励 **自动退回给发起打赏的用户**。\n\n" +
+        "感谢你对创作者生态的贡献！",
+    },
+    en: {
+      title: "An unclaimed KOL tip reward has expired",
+      content:
+        "Hello,\n\n" +
+        "A **KOL tip reward** was previously waiting for you to claim. Because it was not claimed for a long time, the system has **automatically returned it to the user who sent the tip**.\n\n" +
+        "Thank you for contributing to the creator ecosystem!",
+    },
+  },
+  kol_tip_refund_received: {
+    zh: {
+      title: "你收到一笔退回的 KOL 奖励",
+      content:
+        "你好，\n\n" +
+        "你已 **收到一笔退回的 KOL 奖励** ，相关金额已回到你的账户。\n\n" +
+        "你可以在打赏页中查看本次退回奖励的来源和明细：\n" +
+        '<a href="#rewardPage">前往打赏页查看详情</a>\n\n' +
+        "如果你有任何疑问，欢迎通过支持渠道联系我们。🙏",
+    },
+    en: {
+      title: "You received a returned KOL reward",
+      content:
+        "Hello,\n\n" +
+        "You have **received a returned KOL reward**, and the amount has been credited back to your account.\n\n" +
+        "You can view the source and details of this returned reward on the rewards page:\n" +
+        '<a href="#rewardPage">View reward details</a>\n\n' +
+        "If you have any questions, please contact us through support. 🙏",
+    },
+  },
+};
+
+function normalizePrivateMessageLanguage(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  const primary = raw.split(",")[0].split(";")[0].trim();
+  if (primary === "en" || primary.startsWith("en-")) return "en";
+  if (primary === "zh" || primary.startsWith("zh-") || primary === "cn") return "zh";
+  // 兼容旧客户端：未传语言时继续展示中文，避免存量体验突然变化。
+  return "zh";
+}
+
+function getPrivateMessageRequestLanguage(req) {
+  return normalizePrivateMessageLanguage(
+    req?.query?.lang ||
+      req?.query?.["x-language"] ||
+      req?.headers?.["x-language"] ||
+      req?.headers?.["accept-language"]
+  );
+}
+
+function getMessageTemplateByType(messageType, language = "zh") {
+  const templateGroup = BATCH_MESSAGE_TEMPLATES[messageType];
+  if (!templateGroup) {
+    return {
+      title: "",
+      content: "",
+    };
+  }
+
+  const lang = normalizePrivateMessageLanguage(language);
+  return templateGroup[lang] || templateGroup.zh || templateGroup.en;
+}
+
+function resolveBatchMessageTypeFromCampaignId(campaignId) {
+  const rawCampaignId = String(campaignId || "");
+  return (
+    BATCH_MESSAGE_TYPES.find((messageType) =>
+      rawCampaignId.startsWith(messageType)
+    ) || null
+  );
+}
+
+function getLocalizedPrivateMessage(message, language) {
+  const messageType = resolveBatchMessageTypeFromCampaignId(message.campaignId);
+  if (!messageType) {
+    return {
+      title: message.title,
+      content: message.content,
+      messageType: null,
+    };
+  }
+
+  const template = getMessageTemplateByType(messageType, language);
+  return {
+    title: sanitizePlainText(template.title || message.title, 255),
+    content: sanitizeRichTextHtml(template.content || message.content, 12000),
+    messageType,
+  };
+}
+
 function safeCompareSecret(a, b) {
   const left = Buffer.from(String(a || ""));
   const right = Buffer.from(String(b || ""));
@@ -61,6 +240,7 @@ router.get("/", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const { page = 1, limit = 20, isRead, type = "received" } = req.query;
+    const language = getPrivateMessageRequestLanguage(req);
 
     // 参数验证
     const pageNum = parseInt(page, 10);
@@ -135,14 +315,17 @@ router.get("/", authenticateToken, async (req, res) => {
 
     // 格式化返回数据
     const formattedMessages = messages.map((message) => {
+      const localizedMessage = getLocalizedPrivateMessage(message, language);
       const baseMessage = {
         id: message.id,
-        title: message.title,
-        content: message.content,
+        title: localizedMessage.title,
+        content: localizedMessage.content,
         displayAt: message.displayAt,
         sentAt: message.sentAt,
         isRead: message.isRead,
         campaignId: message.campaignId,
+        messageType: localizedMessage.messageType,
+        language,
       };
 
       if (type === "received") {
@@ -166,6 +349,7 @@ router.get("/", authenticateToken, async (req, res) => {
 
     // 设置前端缓存：私有缓存 2 分钟
     res.set("Cache-Control", "private, max-age=120");
+    res.set("Vary", "x-language, accept-language");
 
     return res.status(200).json({
       success: true,
@@ -211,8 +395,8 @@ router.get("/", authenticateToken, async (req, res) => {
  *   idempotencyKey?: string,
  * }
  * displayAt 统一取当前时间；
- * campaignId 统一为：type + 当天日期（yyyyMMdd）
- * 根据 type 决定不同的内容（目前内容生成逻辑预留，先空着）
+ * campaignId 统一为：type + 当天日期小时（yyyyMMddHH）
+ * 写入时保存默认中文兜底文案；读取私信时按 x-language / Accept-Language 动态返回对应语言。
  */
 router.post("/send-batch-by-type", internalPrivateMessageAuth, async (req, res) => {
   try {
@@ -223,15 +407,6 @@ router.post("/send-batch-by-type", internalPrivateMessageAuth, async (req, res) 
     const logCtx = () => ({ type, twitterIdList: Array.isArray(twitterIdList) ? twitterIdList : [] });
     console.log(LOG_TAG, "1/5 收到请求", logCtx());
 
-    // 支持的英文类型枚举（value 即为前端需要传的 type 值）
-    const ALLOWED_TYPES = new Set([
-      "creator_verification_success", // 创作者认证成功
-      "creator_verification_failed", // 创作者认证失败
-      "kol_tip_received", // 收到KOL打赏奖励
-      "kol_tip_auto_refund", // KOL打赏奖励未领取自动退回
-      "kol_tip_refund_received", // KOL收到退回的奖励
-    ]);
-
     // 基本参数校验
     if (!type || typeof type !== "string") {
       return res.status(400).json({
@@ -240,7 +415,7 @@ router.post("/send-batch-by-type", internalPrivateMessageAuth, async (req, res) 
       });
     }
 
-    if (!ALLOWED_TYPES.has(type)) {
+    if (!ALLOWED_BATCH_MESSAGE_TYPES.has(type)) {
       return res.status(400).json({
         success: false,
         error:
@@ -270,75 +445,8 @@ router.post("/send-batch-by-type", internalPrivateMessageAuth, async (req, res) 
     const HH = String(today.getHours()).padStart(2, "0");
     const campaignId = `${type}${yyyy}${mm}${dd}${HH}`;
 
-    /**
-     * 根据 type 生成不同的标题和内容
-     * 文案风格参考 send-kol-reports，使用中英文结合 + Markdown 文本
-     */
-    function getMessageTemplateByType(messageType) {
-      switch (messageType) {
-        case "creator_verification_success":
-          return {
-            title: "创作者认证通过",
-            content:
-              "亲爱的创作者，\n\n" +
-              "恭喜你！你的创作者认证 **已通过审核** 。🎉\n\n" +
-              "从现在开始，你将享有：\n" +
-              "• 💰 开通「互动榜」功能，真实互动将转化为实际收益\n" +
-              "• 🪙 解锁贡献榜区域相关功能和后续激励玩法\n" +
-              "请持续保持高质量创作，我们会根据你的长期表现，解锁更多玩法与权益。\n\n" +
-              "感谢你对 XHunt 的支持！",
-          };
-        case "creator_verification_failed":
-          return {
-            title: "创作者认证未通过",
-            content:
-              "亲爱的创作者，\n\n" +
-              "很抱歉，此次你的创作者认证 **未能通过审核** 。\n\n" +
-              "主要原因是：\n" +
-              "• 📉 最近 30 天内暂未检测到足够的高质量推文或内容表现。\n\n" +
-              "建议你在接下来的 30 天内：\n" +
-              "• 持续稳定地产出高质量内容\n" +
-              "• 提升真实互动（评论、转发、点赞等）\n\n" +
-              "当前申请通道已关闭，你可以在 **30 天后重新发起创作者认证申请**。\n" +
-              "我们也非常期待看到你接下来的成长与表现。💪",
-          };
-        case "kol_tip_received":
-          return {
-            title: "你收到一笔 KOL 打赏奖励",
-            content:
-              "亲爱的创作者，\n\n" +
-              "你刚刚 **收到一笔 KOL 打赏奖励**。🎁\n\n" +
-              "你可以前往打赏页查看本次奖励的具体金额和来源详情：\n" +
-              '<a href="#rewardPage">前往打赏页查看详情</a>\n\n' +
-              "感谢你持续为社区贡献价值内容！",
-          };
-        case "kol_tip_auto_refund":
-          return {
-            title: "一笔待领取的 KOL 打赏奖励已失效",
-            content:
-              "你好，\n\n" +
-              "之前有一笔正在等待你领取的 **KOL 打赏奖励**，由于你长时间未领取，系统已将这笔奖励 **自动退回给发起打赏的用户**。\n\n" +
-              "感谢你对创作者生态的贡献！",
-          };
-        case "kol_tip_refund_received":
-          return {
-            title: "你收到一笔退回的 KOL 奖励",
-            content:
-              "你好，\n\n" +
-              "你已 **收到一笔退回的 KOL 奖励** ，相关金额已回到你的账户。\n\n" +
-              "你可以在打赏页中查看本次退回奖励的来源和明细：\n" +
-              '<a href="#rewardPage">前往打赏页查看详情</a>\n\n' +
-              "如果你有任何疑问，欢迎通过支持渠道联系我们。🙏",
-          };
-        default:
-          return {
-            title: "",
-            content: "",
-          };
-      }
-    }
-
-    const template = getMessageTemplateByType(type);
+    // 默认落库中文兜底内容；真正展示语言由 GET /private-messages 读取时决定。
+    const template = getMessageTemplateByType(type, "zh");
     const sanitizedTitle = sanitizePlainText(template.title, 255);
     const sanitizedTemplateContent = sanitizeRichTextHtml(template.content, 12000);
 
@@ -382,7 +490,7 @@ router.post("/send-batch-by-type", internalPrivateMessageAuth, async (req, res) 
      * - 未传 idempotencyKey：key = xhunt:pm:send_limit:{type}:{userId}，TTL 2 分钟
      * - 传了 idempotencyKey：key = xhunt:pm:send_limit:{type}:{userId}:{idempotencyKey}，TTL 24 小时（幂等）
      */
-    const TEN_MINUTES = 2 * 60;
+    const TWO_MINUTES = 2 * 60;
     const IDEMPOTENCY_TTL = 24 * 60 * 60;
     let effectiveTargetUsers = targetUsers;
     let rateLimitedTwitterIds = [];
@@ -390,7 +498,7 @@ router.post("/send-batch-by-type", internalPrivateMessageAuth, async (req, res) 
     try {
       const redisClient = await getRedisClient();
       const allowedUsers = [];
-      const ttl = trimmedIdempotencyKey ? IDEMPOTENCY_TTL : TEN_MINUTES;
+      const ttl = trimmedIdempotencyKey ? IDEMPOTENCY_TTL : TWO_MINUTES;
 
       for (const user of targetUsers) {
         const key = trimmedIdempotencyKey
@@ -429,7 +537,7 @@ router.post("/send-batch-by-type", internalPrivateMessageAuth, async (req, res) 
     // 构造批量插入的数据（仅对未被限流的用户发送）
     const now = new Date();
     console.log(LOG_TAG, "4/5 开始构造待发送", { ...logCtx(), effectiveCount: effectiveTargetUsers.length });
-      const messagesToCreate = effectiveTargetUsers.map((user) => ({
+    const messagesToCreate = effectiveTargetUsers.map((user) => ({
       senderId,
       receiverId: user.id,
       title: sanitizedTitle,
