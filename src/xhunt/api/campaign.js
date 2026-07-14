@@ -24,8 +24,11 @@ const {
   getCachedPluginCampaigns,
 } = require("../utils/campaign-config-cache");
 const {
+  RANK_API_BY_DOMAIN,
   normalizeCampaignIdentifier,
+  normalizeCreatorAuthPayload,
   normalizeRegistrationContact,
+  rankResultMeetsThreshold,
   loadCampaignConfigForRegistration,
   registerCampaignParticipant,
 } = require("../services/campaignRegistrationService");
@@ -474,6 +477,236 @@ router.get(
     } catch (err) {
       console.error("Admin campaign registrations query error:", err);
       return res.status(500).json({ success: false, error: "服务器内部错误（admin campaign registrations）" });
+    }
+  }
+);
+
+function normalizeRankCheckUsers(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value
+    .map((item) => ({
+      id: item?.id == null ? null : String(item.id),
+      username: item?.username == null ? null : String(item.username),
+      twitterId: String(item?.twitterId || "").trim(),
+    }))
+    .filter((item) => {
+      if (!item.twitterId || item.twitterId === "null" || item.twitterId === "undefined") return false;
+      if (seen.has(item.twitterId)) return false;
+      seen.add(item.twitterId);
+      return true;
+    })
+    .slice(0, 200);
+}
+
+function normalizeAdminRankRow(domain, row, error) {
+  if (error) {
+    return {
+      domain,
+      status: "failed",
+      kolRank: null,
+      rankFollowers: null,
+      userId: null,
+      username: null,
+      isCreator: false,
+      creatorAuth: null,
+      error,
+    };
+  }
+  if (!row) {
+    return {
+      domain,
+      status: "missing",
+      kolRank: null,
+      rankFollowers: null,
+      userId: null,
+      username: null,
+      isCreator: false,
+      creatorAuth: null,
+      error: "未返回排名数据",
+    };
+  }
+
+  const kolRank = Number(row.kolRank);
+  const rankFollowers = Number(row.rank_followers);
+  const creatorAuth = normalizeCreatorAuthPayload(row);
+  return {
+    domain,
+    status: "success",
+    kolRank: Number.isFinite(kolRank) ? kolRank : null,
+    rankFollowers: Number.isFinite(rankFollowers) ? rankFollowers : null,
+    userId: row.user_id == null ? null : String(row.user_id),
+    username: row.username || null,
+    isCreator: creatorAuth.isCreatorAuthed,
+    creatorAuth,
+    error: null,
+  };
+}
+
+async function fetchAdminRankMap(domain, twitterIds) {
+  const apiBase = RANK_API_BY_DOMAIN[domain];
+  if (!apiBase) throw new Error(`Unsupported rank domain: ${domain}`);
+  const response = await axios.get(apiBase, {
+    params: { user_ids: twitterIds.join(",") },
+    timeout: 10000,
+  });
+  const list = response?.data?.data?.data;
+  if (!Array.isArray(list)) throw new Error(`Invalid ${domain} rank response`);
+  const map = new Map();
+  for (const row of list) {
+    const userId = String(row?.user_id || row?.auth_creator?.twitter_id || row?.twitter_id || "").trim();
+    if (userId) map.set(userId, row);
+  }
+  return map;
+}
+
+function buildAdminRankEligibility({ ranks, campaignConfig }) {
+  const hasThreshold = !!campaignConfig && Number.isInteger(campaignConfig.threshold);
+  if (!hasThreshold) {
+    return {
+      status: "no_threshold",
+      eligible: true,
+      label: "无需门槛",
+      reason: "当前活动未配置报名门槛",
+      activeDomains: [],
+      threshold: null,
+      includeCreator: !!campaignConfig?.includeCreator,
+    };
+  }
+
+  const threshold = campaignConfig.threshold;
+  const includeCreator = campaignConfig.includeCreator === true;
+  const activeDomains = getCampaignDisplayDomains(campaignConfig).filter((domain) => RANK_API_BY_DOMAIN[domain]);
+  const effectiveDomains = activeDomains.length ? activeDomains : ["web3"];
+  const activeRanks = ranks.filter((item) => effectiveDomains.includes(item.domain));
+  const meets = activeRanks.some((item) =>
+    item.status === "success" &&
+    rankResultMeetsThreshold(
+      {
+        domain: item.domain,
+        kolRank: item.kolRank,
+        isCreator: item.isCreator,
+        isCreatorAuthed: item.isCreator,
+        creatorAuth: item.creatorAuth,
+      },
+      threshold,
+      includeCreator
+    )
+  );
+
+  if (meets) {
+    return {
+      status: "eligible",
+      eligible: true,
+      label: "符合",
+      reason: `满足报名门槛（threshold <= ${threshold}${includeCreator ? " 或 Creator 已认证" : ""}）`,
+      activeDomains: effectiveDomains,
+      threshold,
+      includeCreator,
+    };
+  }
+
+  const hasUnavailable = activeRanks.some((item) => item.status !== "success");
+  if (hasUnavailable) {
+    return {
+      status: "unavailable",
+      eligible: false,
+      label: "无法判断",
+      reason: "报名门槛所需排名数据未完整返回",
+      activeDomains: effectiveDomains,
+      threshold,
+      includeCreator,
+    };
+  }
+
+  return {
+    status: "not_eligible",
+    eligible: false,
+    label: "不符合",
+    reason: `未满足报名门槛（threshold <= ${threshold}${includeCreator ? " 或 Creator 已认证" : ""}）`,
+    activeDomains: effectiveDomains,
+    threshold,
+    includeCreator,
+  };
+}
+
+// 管理后台：批量查询报名用户 Web3 / AI 排名，并按当前活动报名门槛判断是否符合
+router.post(
+  "/internal/registrations/rank-check",
+  adminAuth,
+  requirePermission("nacos_config"),
+  async (req, res) => {
+    try {
+      const normalizedCampaign = normalizeCampaign(req.body?.campaign);
+      if (!normalizedCampaign) {
+        return res.status(400).json({ success: false, error: "campaign 为必填字段" });
+      }
+
+      const users = normalizeRankCheckUsers(req.body?.users);
+      if (!users.length) {
+        return res.status(400).json({ success: false, error: "users 不能为空，且需要包含 twitterId" });
+      }
+
+      let campaignConfig =
+        req.body?.campaignConfig && typeof req.body.campaignConfig === "object"
+          ? req.body.campaignConfig
+          : null;
+      if (!campaignConfig) {
+        campaignConfig = await getManagedCampaignPayloadByKey(normalizedCampaign, {
+          includeTesting: true,
+          channel: "admin",
+        }).catch(() => null);
+      }
+
+      const twitterIds = users.map((item) => item.twitterId);
+      const domains = ["web3", "ai"];
+      const rankFetches = await Promise.allSettled(
+        domains.map(async (domain) => ({ domain, map: await fetchAdminRankMap(domain, twitterIds) }))
+      );
+
+      const domainMaps = new Map();
+      const domainErrors = new Map();
+      rankFetches.forEach((result, index) => {
+        const domain = domains[index];
+        if (result.status === "fulfilled") {
+          domainMaps.set(domain, result.value.map);
+        } else {
+          domainErrors.set(domain, result.reason?.message || String(result.reason));
+        }
+      });
+
+      const rows = users.map((user) => {
+        const ranks = domains.map((domain) => {
+          const error = domainErrors.get(domain);
+          const row = domainMaps.get(domain)?.get(user.twitterId) || null;
+          return normalizeAdminRankRow(domain, row, error);
+        });
+        return {
+          id: user.id,
+          username: user.username,
+          twitterId: user.twitterId,
+          ranks,
+          eligibility: buildAdminRankEligibility({ ranks, campaignConfig }),
+        };
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          campaign: normalizedCampaign,
+          checkedAt: new Date().toISOString(),
+          campaignRule: {
+            threshold: Number.isInteger(campaignConfig?.threshold) ? campaignConfig.threshold : null,
+            includeCreator: campaignConfig?.includeCreator === true,
+            displayDomains: campaignConfig ? getCampaignDisplayDomains(campaignConfig) : ["web3"],
+          },
+          total: rows.length,
+          rows,
+        },
+      });
+    } catch (err) {
+      console.error("Admin campaign registration rank check error:", err);
+      return res.status(500).json({ success: false, error: err.message || "服务器内部错误（rank check）" });
     }
   }
 );

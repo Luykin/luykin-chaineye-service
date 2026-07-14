@@ -415,6 +415,7 @@ module.exports = {
   getCampaignDisplayDomains,
   matchesDisplayDomain,
   normalizeCreatorAuthPayload,
+  rankResultMeetsThreshold,
   fetchCampaignRankByDomain,
   validateCampaignThreshold,
   validateTwitterProfileQuality,

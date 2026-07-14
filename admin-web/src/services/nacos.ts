@@ -99,6 +99,28 @@ export async function fetchCampaignRegistrationsAdmin(params: {
   return apiRequest<CampaignRegistrationListResponse>(`/api/xhunt/campaigns/internal/registrations?${query.toString()}`);
 }
 
+export async function checkCampaignRegistrationRanksAdmin(params: {
+  campaign: string;
+  campaignConfig?: Record<string, unknown> | null;
+  users: Array<{
+    id?: string | number | null;
+    username?: string | null;
+    twitterId?: string | null;
+  }>;
+}) {
+  return apiRequest<import("@/types/nacos").CampaignRegistrationRankCheckResponse>(
+    "/api/xhunt/campaigns/internal/registrations/rank-check",
+    {
+      method: "POST",
+      body: {
+        campaign: params.campaign,
+        campaignConfig: params.campaignConfig || null,
+        users: params.users,
+      },
+    }
+  );
+}
+
 export async function deleteCampaignRegistrationAdmin(id: string, campaign?: string) {
   const query = new URLSearchParams();
   if (campaign?.trim()) query.set("campaign", campaign.trim());

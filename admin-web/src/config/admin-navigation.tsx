@@ -28,6 +28,7 @@ export const adminNavItems: AdminNavItem[] = [
   { key: "/generic-stats", icon: <LegacySidebarIcon name="clipboard" />, label: "通用统计", permission: "generic-stats", group: "main", sidebarGroup: "data", implemented: true, section: "primary" },
   { key: "/security-violations", icon: <LegacySidebarIcon name="shield" />, label: "安全违规", permission: "security-violations", group: "main", sidebarGroup: "monitor", implemented: true, section: "primary" },
   { key: "/messages", icon: <LegacySidebarIcon name="message" />, label: "站内消息", permission: "messages", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
+  { key: "/user-lookup", icon: <LegacySidebarIcon name="search" />, label: "用户查询", permission: ["messages", "vip-management"], group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/reviews-management", icon: <LegacySidebarIcon name="message-circle" />, label: "点评管理", permission: "reviews-management", group: "main", sidebarGroup: "operation", implemented: true, section: "primary" },
   { key: "/perf-monitor", icon: <LegacySidebarIcon name="zap" />, label: "性能监控", permission: "perf-monitor", group: "main", sidebarGroup: "monitor", implemented: true, section: "primary" },
   { key: "/server-command", icon: <LegacySidebarIcon name="server" />, label: "服务器命令", permission: "server:execute", group: "main", sidebarGroup: "dev", implemented: true, section: "primary" },

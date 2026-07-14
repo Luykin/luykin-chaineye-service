@@ -885,6 +885,7 @@ export function NacosCampaignsPage() {
   );
   const [registrationsOpen, setRegistrationsOpen] = useState(false);
   const [registrationsCampaign, setRegistrationsCampaign] = useState("");
+  const [registrationsCampaignConfig, setRegistrationsCampaignConfig] = useState<AnyObj | null>(null);
   const [echohuntTokenOpen, setEchohuntTokenOpen] = useState(false);
   const [echohuntTokenKeyword, setEchohuntTokenKeyword] = useState("");
   const [echohuntTokenUsers, setEchohuntTokenUsers] = useState<EchohuntDebugTokenUser[]>([]);
@@ -1604,7 +1605,14 @@ export function NacosCampaignsPage() {
       showToast("当前活动缺少 campaignKey，无法查询报名名单", "error");
       return;
     }
+    const campaignConfig =
+      target?.nacosPayload && typeof target.nacosPayload === "object"
+        ? clone(target.nacosPayload)
+        : target
+          ? clone(target)
+          : null;
     setRegistrationsCampaign(campaign);
+    setRegistrationsCampaignConfig(campaignConfig);
     setRegistrationsOpen(true);
   }
 
@@ -2297,6 +2305,7 @@ export function NacosCampaignsPage() {
       <CampaignRegistrationsModal
         open={registrationsOpen}
         campaign={registrationsCampaign}
+        campaignConfig={registrationsCampaignConfig}
         onClose={() => setRegistrationsOpen(false)}
         onToast={showToast}
       />

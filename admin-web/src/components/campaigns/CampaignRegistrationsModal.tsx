@@ -2,16 +2,48 @@ import { useEffect, useState } from "react";
 import { Button, Input, Modal, Popconfirm, Space, Table, Tag } from "antd";
 import { useAuth } from "@/app/auth";
 import {
+  checkCampaignRegistrationRanksAdmin,
   deleteCampaignRegistrationAdmin,
   fetchCampaignRegistrationsAdmin,
 } from "@/services/nacos";
-import type { CampaignRegistrationItem } from "@/types/nacos";
+import type { CampaignRegistrationItem, CampaignRegistrationRankCheckRow, CampaignRegistrationRankItem } from "@/types/nacos";
 
 function formatFullDateTime(value?: string | null) {
   if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString();
+}
+
+function formatRankValue(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "-";
+}
+
+function getRankByDomain(row: CampaignRegistrationRankCheckRow | undefined, domain: "web3" | "ai") {
+  return row?.ranks.find((item) => item.domain === domain);
+}
+
+function renderRankCell(rank?: CampaignRegistrationRankItem) {
+  if (!rank) return <Tag>未查询</Tag>;
+  if (rank.status !== "success") return <Tag color="red">{rank.error || "查询失败"}</Tag>;
+  return (
+    <Space size={4} wrap>
+      <Tag color="blue">#{formatRankValue(rank.kolRank)}</Tag>
+      {rank.isCreator ? <Tag color="green">Creator</Tag> : null}
+    </Space>
+  );
+}
+
+function renderEligibility(row?: CampaignRegistrationRankCheckRow) {
+  if (!row) return <Tag>未查询</Tag>;
+  const status = row.eligibility.status;
+  const color =
+    status === "eligible" || status === "no_threshold"
+      ? "green"
+      : status === "not_eligible"
+        ? "red"
+        : "orange";
+  return <Tag color={color} title={row.eligibility.reason}>{row.eligibility.label}</Tag>;
 }
 
 export function getRegistrationCampaignKey(target?: Record<string, any> | null) {
@@ -29,11 +61,13 @@ export function getRegistrationCampaignKey(target?: Record<string, any> | null) 
 export function CampaignRegistrationsModal({
   open,
   campaign,
+  campaignConfig,
   onClose,
   onToast,
 }: {
   open: boolean;
   campaign: string;
+  campaignConfig?: Record<string, unknown> | null;
   onClose: () => void;
   onToast?: (message: string, type?: "success" | "error" | "info") => void;
 }) {
@@ -44,6 +78,8 @@ export function CampaignRegistrationsModal({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [rankLoading, setRankLoading] = useState(false);
+  const [rankRows, setRankRows] = useState<Record<string, CampaignRegistrationRankCheckRow>>({});
 
   async function load(params?: {
     page?: number;
@@ -62,10 +98,12 @@ export function CampaignRegistrationsModal({
         pageSize: nextPageSize,
         username: nextUsername,
       });
-      setRows(resp.data?.rows || []);
+      const nextRows = resp.data?.rows || [];
+      setRows(nextRows);
       setTotal(resp.data?.total || 0);
       setPage(resp.data?.page || nextPage);
       setPageSize(resp.data?.pageSize || nextPageSize);
+      setRankRows({});
     } catch (error) {
       onToast?.(
         `报名名单加载失败：${error instanceof Error ? error.message : "未知错误"}`,
@@ -81,6 +119,7 @@ export function CampaignRegistrationsModal({
     setRows([]);
     setTotal(0);
     setPage(1);
+    setRankRows({});
     setUsernameSearch("");
     void load({ page: 1, username: "" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,6 +136,42 @@ export function CampaignRegistrationsModal({
         `删除失败：${error instanceof Error ? error.message : "未知错误"}`,
         "error",
       );
+    }
+  }
+
+  async function checkCurrentPageRanks() {
+    const users = rows
+      .filter((item) => item.twitterId)
+      .map((item) => ({
+        id: item.id,
+        username: item.username || null,
+        twitterId: item.twitterId,
+      }));
+    if (!users.length) {
+      onToast?.("当前页没有可查询的 Twitter ID", "error");
+      return;
+    }
+
+    setRankLoading(true);
+    try {
+      const resp = await checkCampaignRegistrationRanksAdmin({
+        campaign,
+        campaignConfig,
+        users,
+      });
+      const next: Record<string, CampaignRegistrationRankCheckRow> = {};
+      (resp.data?.rows || []).forEach((item) => {
+        if (item.twitterId) next[item.twitterId] = item;
+      });
+      setRankRows(next);
+      onToast?.(`已查询当前页 ${resp.data?.total || users.length} 个用户的 Web3 / AI 排名`, "success");
+    } catch (error) {
+      onToast?.(
+        `排名查询失败：${error instanceof Error ? error.message : "未知错误"}`,
+        "error",
+      );
+    } finally {
+      setRankLoading(false);
     }
   }
 
@@ -128,14 +203,23 @@ export function CampaignRegistrationsModal({
               void load({ page: 1, username: value });
             }}
           />
-          <Button onClick={() => void load()}>刷新</Button>
+          <Space wrap>
+            <Button
+              disabled={!rows.length}
+              loading={rankLoading}
+              onClick={() => void checkCurrentPageRanks()}
+            >
+              批量查询 Web3/AI 排名
+            </Button>
+            <Button onClick={() => void load()}>刷新</Button>
+          </Space>
         </Space>
         <Table
           size="small"
           rowKey="id"
           loading={loading}
           dataSource={rows}
-          scroll={{ x: 1180 }}
+          scroll={{ x: 1500 }}
           pagination={{
             current: page,
             pageSize,
@@ -176,6 +260,24 @@ export function CampaignRegistrationsModal({
               ),
             },
             { title: "Twitter ID", dataIndex: "twitterId", width: 150 },
+            {
+              title: "Web3 排名",
+              key: "web3Rank",
+              width: 130,
+              render: (_value, record) => renderRankCell(getRankByDomain(rankRows[record.twitterId], "web3")),
+            },
+            {
+              title: "AI 排名",
+              key: "aiRank",
+              width: 130,
+              render: (_value, record) => renderRankCell(getRankByDomain(rankRows[record.twitterId], "ai")),
+            },
+            {
+              title: "报名门槛",
+              key: "rankEligibility",
+              width: 140,
+              render: (_value, record) => renderEligibility(rankRows[record.twitterId]),
+            },
             {
               title: "EVM",
               dataIndex: "evmAddress",

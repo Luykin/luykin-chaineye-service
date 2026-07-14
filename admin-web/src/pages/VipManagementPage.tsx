@@ -1,7 +1,6 @@
-import { Button, Card, Descriptions, Empty, Input, Modal, Space, Tag, Typography, message } from "antd";
+import { Button, Card, Empty, Input, Modal, Space, Tag, Typography, message } from "antd";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import dayjs from "dayjs";
 import { useAuth } from "@/app/auth";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import {
@@ -9,25 +8,11 @@ import {
   becomeCreator,
   deleteVipListUser,
   fetchFeatureFlagsConfig,
-  fetchVipCreatorAuth,
   fetchVipLists,
   publishFeatureFlagsConfig,
   syncVipTwitterIds,
 } from "@/services/feature-flags";
 import type { VipListItem } from "@/types/feature-flags";
-
-const CREATOR_STATUS_COLORS: Record<number, string> = {
-  0: "default",
-  1: "processing",
-  2: "success",
-  3: "error",
-  4: "warning",
-};
-
-function formatCreatorRecordTime(value?: string | null) {
-  if (!value) return "-";
-  return dayjs(value).format("YYYY-MM-DD HH:mm:ss");
-}
 
 function VipListCard({
   title,
@@ -35,7 +20,6 @@ function VipListCard({
   onAdd,
   onDelete,
   onBecomeCreator,
-  onQueryCreatorAuth,
   creatorLoadingId,
   showCreatorAction,
   loading,
@@ -45,7 +29,6 @@ function VipListCard({
   onAdd: (username: string) => void;
   onDelete: (id: number) => void;
   onBecomeCreator?: (item: VipListItem) => void;
-  onQueryCreatorAuth?: (item: VipListItem) => void;
   creatorLoadingId?: number | null;
   showCreatorAction?: boolean;
   loading?: boolean;
@@ -66,7 +49,6 @@ function VipListCard({
               {item.twitterId ? <Tag color="blue" style={{ marginLeft: 8 }}>ID: {item.twitterId}</Tag> : <Tag style={{ marginLeft: 8 }}>未同步ID</Tag>}
             </span>
             <Space size={6}>
-              {onQueryCreatorAuth ? <Button size="small" onClick={() => onQueryCreatorAuth(item)}>查申请</Button> : null}
               {showCreatorAction ? (
                 <Button
                   size="small"
@@ -88,7 +70,6 @@ function VipListCard({
 
 export function VipManagementPage() {
   const [messageApi, contextHolder] = message.useMessage();
-  const [creatorQueryUsername, setCreatorQueryUsername] = useState("");
   const { user } = useAuth();
   const query = useQuery({ queryKey: ["vip-lists"], queryFn: fetchVipLists });
   const vip = query.data?.data.vip || [];
@@ -139,21 +120,6 @@ export function VipManagementPage() {
     onError: (error: Error) => messageApi.error(error.message || "设置认证者失败"),
   });
 
-  const creatorAuthQueryMutation = useMutation({
-    mutationFn: fetchVipCreatorAuth,
-    onError: (error: Error) => messageApi.error(error.message || "查询创作者申请记录失败"),
-  });
-
-  const queryCreatorAuth = (value: string) => {
-    const username = value.trim().replace(/^@+/, "");
-    if (!username) {
-      messageApi.warning("请输入 Twitter 用户名");
-      return;
-    }
-    setCreatorQueryUsername(username);
-    creatorAuthQueryMutation.mutate(username);
-  };
-
   const confirmBecomeCreator = (item: VipListItem) => {
     if (!item.twitterId) {
       messageApi.warning("该用户未同步 Twitter ID，请先同步ID信息");
@@ -170,54 +136,15 @@ export function VipManagementPage() {
 
   const empty = useMemo(() => vip.length === 0 && internalTest.length === 0, [vip.length, internalTest.length]);
   const missingIdCount = useMemo(() => [...vip, ...internalTest].filter((item) => !item.twitterId).length, [vip, internalTest]);
-  const creatorAuthResult = creatorAuthQueryMutation.data?.data;
 
   return (
     <PermissionGuard permission="vip-management">
       {contextHolder}
       <div className="vip-management-container">
         <div className="vip-management-header"><h2>VIP / 内测名单管理</h2></div>
-        <Card size="small" className="vip-sync-section">
-          <Space direction="vertical" size={10} style={{ width: "100%" }}>
-            <Typography.Text strong>查询创作者申请记录</Typography.Text>
-            <Typography.Text type="secondary">
-              根据 Twitter username 查询用户上一次申请创作者的时间与状态。状态：0 未认证、1 认证中、2 已认证、3 认证失败、4 认证撤销。
-            </Typography.Text>
-            <Input.Search
-              allowClear
-              value={creatorQueryUsername}
-              onChange={(event) => setCreatorQueryUsername(event.target.value)}
-              onSearch={queryCreatorAuth}
-              enterButton="查询"
-              loading={creatorAuthQueryMutation.isPending}
-              placeholder="输入 Twitter 用户名，例如 DaveyNFTsAI"
-            />
-            {creatorAuthResult ? (
-              creatorAuthResult.authCreator ? (
-                <Descriptions size="small" column={{ xs: 1, sm: 2, md: 4 }} bordered>
-                  <Descriptions.Item label="用户名">@{creatorAuthResult.username}</Descriptions.Item>
-                  <Descriptions.Item label="Twitter ID">
-                    {creatorAuthResult.authCreator.twitterId || creatorAuthResult.twitterId || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="认证状态">
-                    <Tag color={CREATOR_STATUS_COLORS[creatorAuthResult.authCreator.status ?? -1] || "default"}>
-                      {creatorAuthResult.authCreator.statusLabel}
-                      {creatorAuthResult.authCreator.status == null ? "" : ` (${creatorAuthResult.authCreator.status})`}
-                    </Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="上次申请时间">
-                    {formatCreatorRecordTime(creatorAuthResult.authCreator.recordTime)}
-                  </Descriptions.Item>
-                </Descriptions>
-              ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`@${creatorAuthResult.username || creatorAuthResult.requestedUsername} 暂无创作者申请记录`} />
-              )
-            ) : null}
-          </Space>
-        </Card>
         <div className="vip-management-grid">
-          <VipListCard title="VIP 名单" items={vip} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "vip", username })} onDelete={(id) => deleteMutation.mutate(id)} onQueryCreatorAuth={(item) => queryCreatorAuth(item.username)} showCreatorAction={isSuperAdmin} onBecomeCreator={confirmBecomeCreator} creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null} />
-          <VipListCard title="内测名单" items={internalTest} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "internal_test", username })} onDelete={(id) => deleteMutation.mutate(id)} onQueryCreatorAuth={(item) => queryCreatorAuth(item.username)} showCreatorAction={isSuperAdmin} onBecomeCreator={confirmBecomeCreator} creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null} />
+          <VipListCard title="VIP 名单" items={vip} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "vip", username })} onDelete={(id) => deleteMutation.mutate(id)} showCreatorAction={isSuperAdmin} onBecomeCreator={confirmBecomeCreator} creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null} />
+          <VipListCard title="内测名单" items={internalTest} loading={addMutation.isPending} onAdd={(username) => addMutation.mutate({ listType: "internal_test", username })} onDelete={(id) => deleteMutation.mutate(id)} showCreatorAction={isSuperAdmin} onBecomeCreator={confirmBecomeCreator} creatorLoadingId={creatorMutation.isPending ? creatorMutation.variables || null : null} />
         </div>
         <Card size="small" className="vip-sync-section">
           <Space direction="vertical" size={8}>

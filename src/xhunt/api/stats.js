@@ -36,6 +36,7 @@ const {
 const { isDeadFingerprint } = require("../utils/request-identity");
 
 const router = express.Router();
+const ADMIN_MESSAGE_SENDER_ID = "6666666d-cc11-8888-8888-034d3e9a8888";
 
 function sanitizeMessageCampaignId(value) {
   return String(value || "")
@@ -1718,6 +1719,114 @@ router.post("/send-messages", adminAuth, async (req, res) => {
     });
   }
 });
+
+/**
+ * GET /user-lookup/private-messages
+ * 管理后台按用户查询由“站内消息”页面发出的私信
+ */
+router.get(
+  "/user-lookup/private-messages",
+  adminAuth,
+  requirePermission("messages"),
+  async (req, res) => {
+    try {
+      const identifier = String(req.query.identifier || "")
+        .trim()
+        .replace(/^@+/, "");
+      if (!identifier) {
+        return res.status(400).json({ success: false, error: "identifier 为必填字段" });
+      }
+
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+      const campaignId = sanitizeMessageCampaignId(req.query.campaignId || "");
+
+      const postgresModels = require("../../models/postgres-start");
+      const XPrivateMessage = postgresModels.XPrivateMessage;
+      const XHuntUser = postgresModels.XHuntUser;
+      const { Op } = require("sequelize");
+
+      const userOr = [
+        { username: { [Op.iLike]: identifier } },
+        { twitterId: identifier },
+      ];
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier)) {
+        userOr.push({ id: identifier });
+      }
+      const userWhere = { [Op.or]: userOr };
+
+      const user = await XHuntUser.findOne({
+        where: userWhere,
+        attributes: ["id", "username", "twitterId", "displayName", "avatar"],
+      });
+
+      if (!user) {
+        return res.json({
+          success: true,
+          data: {
+            user: null,
+            messages: [],
+            pagination: {
+              currentPage: page,
+              pageSize: limit,
+              totalCount: 0,
+              totalPages: 0,
+            },
+          },
+        });
+      }
+
+      const where = {
+        receiverId: user.id,
+        senderId: ADMIN_MESSAGE_SENDER_ID,
+      };
+      if (campaignId) where.campaignId = campaignId;
+
+      const { count, rows } = await XPrivateMessage.findAndCountAll({
+        where,
+        order: [["sentAt", "DESC"]],
+        limit,
+        offset: (page - 1) * limit,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          user: {
+            id: user.id,
+            username: user.username,
+            twitterId: user.twitterId,
+            displayName: user.displayName,
+            avatar: user.avatar,
+          },
+          messages: rows.map((message) => ({
+            id: message.id,
+            title: message.title,
+            content: message.content,
+            displayAt: message.displayAt,
+            sentAt: message.sentAt,
+            isRead: message.isRead,
+            campaignId: message.campaignId,
+            createdAt: message.createdAt,
+            updatedAt: message.updatedAt,
+          })),
+          pagination: {
+            currentPage: page,
+            pageSize: limit,
+            totalCount: count,
+            totalPages: Math.ceil(count / limit),
+          },
+        },
+      });
+    } catch (error) {
+      console.error("[user-lookup/private-messages] query failed:", error);
+      return res.status(500).json({
+        success: false,
+        error: error.message || "查询用户私信失败",
+      });
+    }
+  }
+);
 
 /**
  * GET /weekly-cohorts

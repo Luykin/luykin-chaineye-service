@@ -18,6 +18,7 @@ import { RootdataPage } from "@/pages/RootdataPage";
 import { SecurityViolationsPage } from "@/pages/SecurityViolationsPage";
 import { ReviewsManagementPage } from "@/pages/ReviewsManagementPage";
 import { MessagesPage } from "@/pages/MessagesPage";
+import { UserLookupPage } from "@/pages/UserLookupPage";
 import { ServerCommandPage } from "@/pages/ServerCommandPage";
 import { BinanceSquarePage } from "@/pages/BinanceSquarePage";
 import { BinanceSquareBindingPage } from "@/pages/BinanceSquareBindingPage";
@@ -59,6 +60,7 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "version-stats": <VersionStatsPage />,
   "security-violations": <SecurityViolationsPage />,
   messages: <MessagesPage />,
+  "user-lookup": <UserLookupPage />,
   "reviews-management": <ReviewsManagementPage />,
   "server-command": <ServerCommandPage />,
   "binance-square": <BinanceSquarePage />,

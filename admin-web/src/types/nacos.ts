@@ -87,6 +87,59 @@ export interface CampaignRegistrationListResponse {
   error?: string;
 }
 
+export type CampaignRegistrationRankDomain = "web3" | "ai";
+
+export interface CampaignRegistrationRankItem {
+  domain: CampaignRegistrationRankDomain;
+  status: "success" | "missing" | "failed";
+  kolRank: number | null;
+  rankFollowers: number | null;
+  userId: string | null;
+  username: string | null;
+  isCreator: boolean;
+  creatorAuth: {
+    status: number | null;
+    recordTime: string | null;
+    twitterId: string | null;
+    isCreatorAuthed: boolean;
+  } | null;
+  error: string | null;
+}
+
+export interface CampaignRegistrationRankEligibility {
+  status: "no_threshold" | "eligible" | "not_eligible" | "unavailable";
+  eligible: boolean;
+  label: string;
+  reason: string;
+  activeDomains: CampaignRegistrationRankDomain[];
+  threshold: number | null;
+  includeCreator: boolean;
+}
+
+export interface CampaignRegistrationRankCheckRow {
+  id: string | null;
+  username: string | null;
+  twitterId: string;
+  ranks: CampaignRegistrationRankItem[];
+  eligibility: CampaignRegistrationRankEligibility;
+}
+
+export interface CampaignRegistrationRankCheckResponse {
+  success: boolean;
+  data: {
+    campaign: string;
+    checkedAt: string;
+    campaignRule: {
+      threshold: number | null;
+      includeCreator: boolean;
+      displayDomains: CampaignRegistrationRankDomain[];
+    };
+    total: number;
+    rows: CampaignRegistrationRankCheckRow[];
+  };
+  error?: string;
+}
+
 export interface UserTagItem {
   id: number;
   username: string;

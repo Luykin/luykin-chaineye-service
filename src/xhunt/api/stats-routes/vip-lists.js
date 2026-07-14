@@ -215,7 +215,7 @@ router.post(
 router.get(
   "/vip-lists/creator-auth",
   adminAuth,
-  requirePermission("vip-management"),
+  requirePermission(["vip-management", "messages"]),
   async (req, res) => {
     try {
       const username = normalizeUsername(req.query.username);
