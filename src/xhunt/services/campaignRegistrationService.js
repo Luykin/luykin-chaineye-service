@@ -88,7 +88,7 @@ function normalizeCreatorAuthPayload(rankData) {
 }
 
 function isRankValid(rank) {
-  return Number.isFinite(rank);
+  return Number.isFinite(rank) && rank > 0;
 }
 
 async function fetchCampaignRankByDomain(domain, twitterId) {

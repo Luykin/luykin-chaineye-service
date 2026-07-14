@@ -16,7 +16,7 @@ function formatFullDateTime(value?: string | null) {
 }
 
 function formatRankValue(value?: number | null) {
-  return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "-";
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value.toLocaleString() : "未上榜";
 }
 
 function getRankByDomain(row: CampaignRegistrationRankCheckRow | undefined, domain: "web3" | "ai") {
@@ -28,7 +28,9 @@ function renderRankCell(rank?: CampaignRegistrationRankItem) {
   if (rank.status !== "success") return <Tag color="red">{rank.error || "查询失败"}</Tag>;
   return (
     <Space size={4} wrap>
-      <Tag color="blue">#{formatRankValue(rank.kolRank)}</Tag>
+      <Tag color={typeof rank.kolRank === "number" && rank.kolRank > 0 ? "blue" : "default"}>
+        {typeof rank.kolRank === "number" && rank.kolRank > 0 ? `#${formatRankValue(rank.kolRank)}` : formatRankValue(rank.kolRank)}
+      </Tag>
       {rank.isCreator ? <Tag color="green">Creator</Tag> : null}
     </Space>
   );
