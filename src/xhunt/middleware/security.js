@@ -878,6 +878,22 @@ const getRequestParam = (req, paramName, allowQueryParams = true) => {
   return req.headers[headerName];
 };
 
+// 历史业务语义：req.twid 表示正在浏览/被点评/被备注的目标 Twitter 账号 ID，
+// 来源是 x-request-id 后缀（例如: <uuid>-twid1570682472358346752）。
+// 注意：不要用 x-tw-id / securityContext.twId 覆盖 req.twid；x-tw-id 表示请求用户自己的 Twitter ID。
+const attachTargetTwidFromRequestId = (req, requestId) => {
+  try {
+    if (typeof requestId === "string") {
+      const match = requestId.match(/-twid(\d{5,})$/);
+      if (match) {
+        req.twid = match[1];
+      }
+    }
+  } catch (e) {
+    // 忽略解析异常，不影响后续流程
+  }
+};
+
 const V2_SSE_TRANSPORT_QUERY_KEYS = new Set([
   "x-signature-version",
   "x_signature_version",
@@ -1664,17 +1680,7 @@ const validateLegacySecurityParams = (req, allowQueryParams = false) => {
     }
   }
 
-  // 从 requestId 中解析 twid（例如: <uuid>-twid1570682472358346752），若存在则挂载到 req 上
-  try {
-    if (typeof requestId === "string") {
-      const match = requestId.match(/-twid(\d{5,})$/);
-      if (match) {
-        req.twid = match[1];
-      }
-    }
-  } catch (e) {
-    // 忽略解析异常，不影响后续流程
-  }
+  attachTargetTwidFromRequestId(req, requestId);
 
   return {
     isValid: true,
@@ -1827,6 +1833,8 @@ const validateV2SecurityParams = (req, { allowQueryParams = false } = {}) => {
     return { isValid: false, error: "INVALID_SIGNATURE" };
   }
 
+  attachTargetTwidFromRequestId(req, requestId);
+
   return {
     isValid: true,
     securityContext: attachIdentityToSecurityContext(
@@ -1958,12 +1966,6 @@ const securityMiddleware = async (req, res, next) => {
 
     // 将验证后的信息添加到请求对象中
     req.securityContext = validation.securityContext;
-    // 兼容历史业务代码：reviews/notes 等模块仍读取 req.twid。
-    // v2 签名链路的 Twitter ID 存在 securityContext.twId/twitterId 中，需要同步挂载。
-    req.twid =
-      validation.securityContext?.twId ||
-      validation.securityContext?.twitterId ||
-      req.twid;
 
     // 🔥 智能日活统计 - 使用统一的 DAU 处理函数
     const windowLocationHref = getRequestParam(
@@ -2044,10 +2046,6 @@ const sseSecurityMiddleware = async (req, res, next) => {
 
     // 将验证后的信息添加到请求对象中，供 SSE auth 和后续业务使用。
     req.securityContext = validation.securityContext;
-    req.twid =
-      validation.securityContext?.twId ||
-      validation.securityContext?.twitterId ||
-      req.twid;
 
     // 🔥 请求统计（版本 + URL）- 异步处理，不阻塞请求
     requestStatsManager.init();
