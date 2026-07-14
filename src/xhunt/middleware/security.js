@@ -1958,6 +1958,12 @@ const securityMiddleware = async (req, res, next) => {
 
     // 将验证后的信息添加到请求对象中
     req.securityContext = validation.securityContext;
+    // 兼容历史业务代码：reviews/notes 等模块仍读取 req.twid。
+    // v2 签名链路的 Twitter ID 存在 securityContext.twId/twitterId 中，需要同步挂载。
+    req.twid =
+      validation.securityContext?.twId ||
+      validation.securityContext?.twitterId ||
+      req.twid;
 
     // 🔥 智能日活统计 - 使用统一的 DAU 处理函数
     const windowLocationHref = getRequestParam(
@@ -2038,6 +2044,10 @@ const sseSecurityMiddleware = async (req, res, next) => {
 
     // 将验证后的信息添加到请求对象中，供 SSE auth 和后续业务使用。
     req.securityContext = validation.securityContext;
+    req.twid =
+      validation.securityContext?.twId ||
+      validation.securityContext?.twitterId ||
+      req.twid;
 
     // 🔥 请求统计（版本 + URL）- 异步处理，不阻塞请求
     requestStatsManager.init();

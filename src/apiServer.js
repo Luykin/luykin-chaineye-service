@@ -50,6 +50,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/ai-detect',
   './xhunt/api/kol-chat',
   './xhunt/api/tags',
+  './xhunt/api/twitter-rename',
   
   // Admin API
   './admin/api/admin',
@@ -222,6 +223,7 @@ const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
 const xHuntAIDetectRoutes = require("./xhunt/api/ai-detect");
 const xHuntKolChatRoutes = require("./xhunt/api/kol-chat");
 const xHuntTagsRoutes = require("./xhunt/api/tags");
+const xHuntTwitterRenameRoutes = require("./xhunt/api/twitter-rename");
 const internalQueryRoutes = require("./api/internal-query");
 const { initPerfMonitor } = require("./lib/perf-monitor"); // 性能监控模块
 const {
@@ -601,6 +603,15 @@ async function initializeAndStartServer() {
     browserOnlyMiddleware,
     securityMiddleware,
     xHuntTagsRoutes
+  );
+
+  // Twitter 改名历史查询接口（专用代理，避免开放通用外部 URL 代理）
+  app.use(
+    "/api/xhunt/twitter",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntTwitterRenameRoutes
   );
 
   // AI 探测功能接口 - 推文内容分析和评分
