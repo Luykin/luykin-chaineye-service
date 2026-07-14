@@ -878,15 +878,15 @@ const getRequestParam = (req, paramName, allowQueryParams = true) => {
   return req.headers[headerName];
 };
 
-// 历史业务语义：req.twid 表示正在浏览/被点评/被备注的目标 Twitter 账号 ID，
+// 历史业务语义：req.targetTwitterId 表示正在浏览/被点评/被备注的目标 Twitter 账号 ID，
 // 来源是 x-request-id 后缀（例如: <uuid>-twid1570682472358346752）。
-// 注意：不要用 x-tw-id / securityContext.twId 覆盖 req.twid；x-tw-id 表示请求用户自己的 Twitter ID。
-const attachTargetTwidFromRequestId = (req, requestId) => {
+// 注意：不要用 x-tw-id / securityContext.twId 覆盖 req.targetTwitterId；x-tw-id 表示请求用户自己的 Twitter ID。
+const attachTargetTwitterIdFromRequestId = (req, requestId) => {
   try {
     if (typeof requestId === "string") {
       const match = requestId.match(/-twid(\d{5,})$/);
       if (match) {
-        req.twid = match[1];
+        req.targetTwitterId = match[1];
       }
     }
   } catch (e) {
@@ -1680,7 +1680,7 @@ const validateLegacySecurityParams = (req, allowQueryParams = false) => {
     }
   }
 
-  attachTargetTwidFromRequestId(req, requestId);
+  attachTargetTwitterIdFromRequestId(req, requestId);
 
   return {
     isValid: true,
@@ -1833,7 +1833,7 @@ const validateV2SecurityParams = (req, { allowQueryParams = false } = {}) => {
     return { isValid: false, error: "INVALID_SIGNATURE" };
   }
 
-  attachTargetTwidFromRequestId(req, requestId);
+  attachTargetTwitterIdFromRequestId(req, requestId);
 
   return {
     isValid: true,

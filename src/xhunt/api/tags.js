@@ -10,7 +10,7 @@ function normalizeUsername(value) {
     .toLowerCase();
 }
 
-function extractTwitterIdFromRequestId(value) {
+function extractTargetTwitterIdFromRequestId(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
   const match = raw.match(/(?:^|-)twid(\d+)(?:$|[^\d])/i);
@@ -57,7 +57,7 @@ router.get("/lookup", async (req, res) => {
     }
 
     const twitterId = String(
-      req.query.twitterId || extractTwitterIdFromRequestId(req.headers["x-request-id"]) || ""
+      req.query.twitterId || extractTargetTwitterIdFromRequestId(req.headers["x-request-id"]) || ""
     ).trim();
     const username = normalizeUsername(req.query.username || req.headers["x-user-id"]);
 

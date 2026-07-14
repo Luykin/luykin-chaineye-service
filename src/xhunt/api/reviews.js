@@ -93,13 +93,13 @@ router.get(
   async (req, res) => {
     try {
       const handle = req.params.handle;
-      const twid = req.twid;
+      const targetTwitterId = req.targetTwitterId;
       const onlyKOL = req.query.onlyKOL === true;
-      // Step 1: 获取 XAccount 及其基础信息 - 优先用 twid 匹配 xId
+      // Step 1: 获取 XAccount 及其基础信息 - 优先用 targetTwitterId 匹配 xId
       let xAccount = null;
-      if (twid) {
+      if (targetTwitterId) {
         xAccount = await XAccount.findOne({
-          where: { xId: twid },
+          where: { xId: targetTwitterId },
           attributes: ["id"],
         });
       }
@@ -114,12 +114,12 @@ router.get(
         });
       }
 
-      // 如果通过 handle 找到了 xAccount，且存在 twid，但 xId 尚未写入，则异步补写
-      if (xAccount && twid && (!xAccount.xId || xAccount.xId === "")) {
+      // 如果通过 handle 找到了 xAccount，且存在 targetTwitterId，但 xId 尚未写入，则异步补写
+      if (xAccount && targetTwitterId && (!xAccount.xId || xAccount.xId === "")) {
         setImmediate(async () => {
           try {
             await XAccount.update(
-              { xId: twid },
+              { xId: targetTwitterId },
               { where: { id: xAccount.id, xId: null } }
             );
           } catch (e) {
@@ -337,17 +337,17 @@ router.get(
   async (req, res) => {
     try {
       const handle = req.params.handle;
-      const twid = req.twid;
+      const targetTwitterId = req.targetTwitterId;
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const onlyKOL = req.query.onlyKOL === true;
       const offset = (page - 1) * limit;
 
-      // Step 1: 查找目标账号 - 优先用 twid 匹配 xId，其次按 handle（大小写不敏感）
+      // Step 1: 查找目标账号 - 优先用 targetTwitterId 匹配 xId，其次按 handle（大小写不敏感）
       let xAccount = null;
-      if (twid) {
+      if (targetTwitterId) {
         xAccount = await XAccount.findOne({
-          where: { xId: twid },
+          where: { xId: targetTwitterId },
           attributes: ["id", "handle", "displayName", "avatar"],
         });
       }
@@ -527,7 +527,7 @@ router.post(
         note,
         comment,
       } = req.body;
-      const twid = req.twid;
+      const targetTwitterId = req.targetTwitterId;
       const sanitizedHandle = sanitizePlainText(handle, 100);
       const sanitizedXLink = sanitizeSafeUrl(xLink, 2048);
       const sanitizedDisplayName = sanitizePlainText(displayName, 255);
@@ -549,10 +549,10 @@ router.post(
           .status(403)
           .json({ status: "error", error: "您今日已达到最大评论次数（5次）" });
       }
-      // Step 1: 查找或创建 XAccount - 优先按 twid 匹配 xId，其次按 handle（大小写不敏感）
+      // Step 1: 查找或创建 XAccount - 优先按 targetTwitterId 匹配 xId，其次按 handle（大小写不敏感）
       let xAccount = null;
-      if (twid) {
-        xAccount = await XAccount.findOne({ where: { xId: twid } });
+      if (targetTwitterId) {
+        xAccount = await XAccount.findOne({ where: { xId: targetTwitterId } });
       }
       // xLink 在 XAccounts 表里有唯一索引。若按 handle 命中旧账号后直接更新 xLink，
       // 可能撞到另一个已存在账号的 xLink，导致 SequelizeUniqueConstraintError。
@@ -579,22 +579,9 @@ router.post(
           avatar: sanitizedAvatar,
           followers: followers || 0,
           following: following || 0,
-          ...(twid ? { xId: twid } : {}),
+          ...(targetTwitterId ? { xId: targetTwitterId } : {}),
         });
       } else {
-        // 二次防护：如果当前账号不是该 xLink 的拥有者，切换到 xLink 对应账号，避免唯一键冲突。
-        if (xAccount.xLink !== sanitizedXLink) {
-          const xLinkOwner = await XAccount.findOne({
-            where: {
-              xLink: sanitizedXLink,
-              id: { [Op.ne]: xAccount.id },
-            },
-          });
-          if (xLinkOwner) {
-            xAccount = xLinkOwner;
-          }
-        }
-
         // 如果存在，更新相关信息
         await xAccount.update({
           handle: sanitizedHandle,
@@ -603,7 +590,7 @@ router.post(
           avatar: sanitizedAvatar,
           followers: followers || 0,
           following: following || 0,
-          ...(twid ? { xId: twid } : {}),
+          ...(targetTwitterId ? { xId: targetTwitterId } : {}),
         });
       }
 
@@ -708,6 +695,15 @@ router.post(
         detail: error?.parent?.detail,
         stack: error?.stack,
       });
+      if (error.name === "SequelizeUniqueConstraintError") {
+        const requestId = req.headers["x-request-id"] || req.securityContext?.requestId || "";
+        return res.status(409).json({
+          error: requestId
+            ? `评论失败，请联系管理员（x-request-id: ${requestId}）`
+            : "评论失败，请联系管理员",
+          requestId,
+        });
+      }
       res.status(500).json({ error: "Failed to create review" });
     }
   }

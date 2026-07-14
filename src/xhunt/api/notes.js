@@ -1,6 +1,5 @@
 const express = require('express');
 const { body, param } = require('express-validator');
-const { Op } = require('sequelize');
 const { validateRequest } = require('../middleware/validate-request');
 const { authenticateToken } = require('../middleware/auth');
 const { XPrivateNote, XAccount, XReviewForAccount } = require('../../models/postgres-start');
@@ -25,12 +24,12 @@ router.get('/:handle', [
 ], async (req, res) => {
 	try {
 		const { handle } = req.params;
-		const twid = req.twid;
+		const targetTwitterId = req.targetTwitterId;
 
-		// Step 1: 优先按 twid 匹配 XAccount.xId，其次按 handle 精确匹配
+		// Step 1: 优先按 targetTwitterId 匹配 XAccount.xId，其次按 handle 精确匹配
 		let xAccount = null;
-		if (twid) {
-			xAccount = await XAccount.findOne({ where: { xId: twid }, attributes: ['id', 'handle', 'displayName', 'avatar'] });
+		if (targetTwitterId) {
+			xAccount = await XAccount.findOne({ where: { xId: targetTwitterId }, attributes: ['id', 'handle', 'displayName', 'avatar'] });
 		}
 		if (!xAccount) {
 			xAccount = await XAccount.findOne({ where: { handle: handle.trim() }, attributes: ['id', 'handle', 'displayName', 'avatar'] });
@@ -118,18 +117,18 @@ router.post('/', [
 ], async (req, res) => {
 	try {
 		const { handle, xLink, displayName, avatar, followers, following, note } = req.body;
-		const twid = req.twid;
+		const targetTwitterId = req.targetTwitterId;
 		const sanitizedHandle = sanitizePlainText(handle, 100);
 		const sanitizedXLink = sanitizeSafeUrl(xLink, 2048);
 		const sanitizedDisplayName = sanitizePlainText(displayName, 255);
 		const sanitizedAvatar = sanitizeSafeUrl(avatar, 2048);
 
-		// Step 1: 查找或创建 XAccount（优先按 twid 匹配 xId）
+		// Step 1: 查找或创建 XAccount（优先按 targetTwitterId 匹配 xId）
 		let xAccount = null;
-		if (twid) {
-			xAccount = await XAccount.findOne({ where: { xId: twid } });
+		if (targetTwitterId) {
+			xAccount = await XAccount.findOne({ where: { xId: targetTwitterId } });
 		}
-		// xLink 在 XAccounts 表里有唯一索引。若按 twid/handle 命中旧账号后直接更新 xLink，
+		// xLink 在 XAccounts 表里有唯一索引。若按 targetTwitterId/handle 命中旧账号后直接更新 xLink，
 		// 可能撞到另一个已存在账号的 xLink，导致 SequelizeUniqueConstraintError。
 		// 因此优先用 xLink 定位账号，再 fallback 到 handle。
 		if (!xAccount) {
@@ -148,22 +147,9 @@ router.post('/', [
 				avatar: sanitizedAvatar,
 				followers: followers || 0,
 				following: following || 0,
-				...(twid ? { xId: twid } : {})
+				...(targetTwitterId ? { xId: targetTwitterId } : {})
 			});
 		} else {
-			// 二次防护：如果当前账号不是该 xLink 的拥有者，切换到 xLink 对应账号，避免唯一键冲突。
-			if (xAccount.xLink !== sanitizedXLink) {
-				const xLinkOwner = await XAccount.findOne({
-					where: {
-						xLink: sanitizedXLink,
-						id: { [Op.ne]: xAccount.id }
-					}
-				});
-				if (xLinkOwner) {
-					xAccount = xLinkOwner;
-				}
-			}
-
 			// 如果存在，更新相关信息
 			await xAccount.update({
 				handle: sanitizedHandle,
@@ -172,7 +158,7 @@ router.post('/', [
 				avatar: sanitizedAvatar,
 				followers: followers || 0,
 				following: following || 0,
-				...(twid ? { xId: twid } : {})
+				...(targetTwitterId ? { xId: targetTwitterId } : {})
 			});
 		}
 
@@ -223,6 +209,15 @@ router.post('/', [
 		
 	} catch (error) {
 		console.error('Error saving private note:', error);
+		if (error.name === 'SequelizeUniqueConstraintError') {
+			const requestId = req.headers['x-request-id'] || req.securityContext?.requestId || '';
+			return res.status(409).json({
+				error: requestId
+					? `备注失败，请联系管理员（x-request-id: ${requestId}）`
+					: '备注失败，请联系管理员',
+				requestId
+			});
+		}
 		res.status(500).json({ error: '保存备注失败' });
 	}
 });
