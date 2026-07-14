@@ -1,5 +1,6 @@
 const express = require('express');
 const { body, param } = require('express-validator');
+const { Op } = require('sequelize');
 const { validateRequest } = require('../middleware/validate-request');
 const { authenticateToken } = require('../middleware/auth');
 const { XPrivateNote, XAccount, XReviewForAccount } = require('../../models/postgres-start');
@@ -128,6 +129,12 @@ router.post('/', [
 		if (twid) {
 			xAccount = await XAccount.findOne({ where: { xId: twid } });
 		}
+		// xLink 在 XAccounts 表里有唯一索引。若按 twid/handle 命中旧账号后直接更新 xLink，
+		// 可能撞到另一个已存在账号的 xLink，导致 SequelizeUniqueConstraintError。
+		// 因此优先用 xLink 定位账号，再 fallback 到 handle。
+		if (!xAccount) {
+			xAccount = await XAccount.findOne({ where: { xLink: sanitizedXLink } });
+		}
 		if (!xAccount) {
 			xAccount = await XAccount.findOne({ where: { handle: sanitizedHandle } });
 		}
@@ -144,6 +151,19 @@ router.post('/', [
 				...(twid ? { xId: twid } : {})
 			});
 		} else {
+			// 二次防护：如果当前账号不是该 xLink 的拥有者，切换到 xLink 对应账号，避免唯一键冲突。
+			if (xAccount.xLink !== sanitizedXLink) {
+				const xLinkOwner = await XAccount.findOne({
+					where: {
+						xLink: sanitizedXLink,
+						id: { [Op.ne]: xAccount.id }
+					}
+				});
+				if (xLinkOwner) {
+					xAccount = xLinkOwner;
+				}
+			}
+
 			// 如果存在，更新相关信息
 			await xAccount.update({
 				handle: sanitizedHandle,
