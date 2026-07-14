@@ -14,6 +14,7 @@ const {
 const {
   CampaignRegistration,
   XHuntUser,
+  XHuntBinanceSquareBinding,
 } = require("../../models/postgres-start");
 const {
   getManagedCampaignPayloadByKey,
@@ -322,10 +323,88 @@ router.get("/custom-user-activity", securityMiddleware, async (req, res) => {
 
 
 
-function serializeCampaignRegistration(record) {
+function serializeBinanceSquareAccount(record) {
+  if (!record) return null;
+  const row = typeof record.toJSON === "function" ? record.toJSON() : record;
+  return {
+    id: row.id,
+    twitterId: row.twitterId,
+    binanceSquareUid: row.binanceSquareUid,
+    binanceUsername: row.binanceUsername,
+    binanceDisplayName: row.binanceDisplayName || null,
+    binanceAvatar: row.binanceAvatar || null,
+    verificationPostUrl: row.verificationPostUrl || null,
+    verifiedAt: row.verifiedAt || null,
+    status: row.status || null,
+  };
+}
+
+async function loadBinanceSquareAccountMap(registrationRows) {
+  const twitterIds = Array.from(
+    new Set(
+      (registrationRows || [])
+        .map((record) => {
+          const row = typeof record?.toJSON === "function" ? record.toJSON() : record;
+          return row?.twitterId ? String(row.twitterId).trim() : "";
+        })
+        .filter(Boolean)
+    )
+  );
+
+  if (twitterIds.length === 0) return new Map();
+
+  const bindings = await XHuntBinanceSquareBinding.findAll({
+    where: {
+      twitterId: { [Op.in]: twitterIds },
+      status: "active",
+    },
+    attributes: [
+      "id",
+      "twitterId",
+      "binanceSquareUid",
+      "binanceUsername",
+      "binanceDisplayName",
+      "binanceAvatar",
+      "verificationPostUrl",
+      "verifiedAt",
+      "status",
+    ],
+    order: [
+      ["verifiedAt", "DESC"],
+      ["createdAt", "DESC"],
+    ],
+  });
+
+  const map = new Map();
+  for (const binding of bindings) {
+    const account = serializeBinanceSquareAccount(binding);
+    if (account?.twitterId && !map.has(String(account.twitterId))) {
+      map.set(String(account.twitterId), account);
+    }
+  }
+  return map;
+}
+
+function serializeCampaignRegistration(record, binanceSquareAccountMap = new Map()) {
   if (!record) return null;
   const json = typeof record.toJSON === "function" ? record.toJSON() : record;
-  const { xHuntUserId: _omit, ...safe } = json;
+  const {
+    xHuntUserId: _omit,
+    invitedByCode: _invitedByCode,
+    invitedByUserId: _invitedByUserId,
+    invitedByTwitterId: _invitedByTwitterId,
+    invitedByUserInfo: _invitedByUserInfo,
+    invitedByUsername: _invitedByUsername,
+    ...safe
+  } = json;
+
+  if (safe.xHuntUser) {
+    const { inviteCode: _inviteCode, ...xHuntUser } = safe.xHuntUser;
+    safe.xHuntUser = xHuntUser;
+  }
+
+  const twitterId = safe.twitterId ? String(safe.twitterId) : "";
+  safe.binanceSquareAccount = binanceSquareAccountMap.get(twitterId) || null;
   return safe;
 }
 
@@ -374,11 +453,13 @@ router.get(
               {
                 model: XHuntUser,
                 as: "xHuntUser",
-                attributes: ["inviteCode", "displayName", "classification"],
+                attributes: ["displayName", "classification"],
               },
             ],
           })
         : [];
+
+      const binanceSquareAccountMap = await loadBinanceSquareAccountMap(rows);
 
       return res.json({
         success: true,
@@ -386,7 +467,7 @@ router.get(
           total,
           page,
           pageSize,
-          rows: rows.map(serializeCampaignRegistration),
+          rows: rows.map((row) => serializeCampaignRegistration(row, binanceSquareAccountMap)),
         },
       });
     } catch (err) {
@@ -613,16 +694,18 @@ router.get("/registrations", async (req, res) => {
         {
           model: XHuntUser,
           as: "xHuntUser",
-          attributes: ["inviteCode", "displayName", "classification"],
+          attributes: ["displayName", "classification"],
         },
       ],
     });
+
+    const binanceSquareAccountMap = await loadBinanceSquareAccountMap(rows);
 
     return res.json({
       total,
       page,
       pageSize,
-      rows,
+      rows: rows.map((row) => serializeCampaignRegistration(row, binanceSquareAccountMap)),
     });
   } catch (err) {
     console.error("Campaign registrations query error:", err);

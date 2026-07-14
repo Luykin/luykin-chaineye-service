@@ -56,13 +56,21 @@ export interface CampaignRegistrationItem {
   evmAddress?: string | null;
   email?: string | null;
   registrationUrl?: string | null;
-  invitedByUsername?: string | null;
-  invitedByTwitterId?: string | null;
+  binanceSquareAccount?: {
+    id?: number | string;
+    twitterId?: string | null;
+    binanceSquareUid?: string | null;
+    binanceUsername?: string | null;
+    binanceDisplayName?: string | null;
+    binanceAvatar?: string | null;
+    verificationPostUrl?: string | null;
+    verifiedAt?: string | null;
+    status?: string | null;
+  } | null;
   registeredAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   xHuntUser?: {
-    inviteCode?: string | null;
     displayName?: string | null;
     classification?: string | null;
   } | null;

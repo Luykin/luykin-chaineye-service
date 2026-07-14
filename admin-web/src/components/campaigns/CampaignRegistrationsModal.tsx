@@ -191,16 +191,36 @@ export function CampaignRegistrationsModal({
               render: (value) => value || "-",
             },
             {
-              title: "邀请码",
-              dataIndex: ["xHuntUser", "inviteCode"],
-              width: 120,
-              render: (value) => value || "-",
-            },
-            {
-              title: "邀请人",
-              dataIndex: "invitedByUsername",
-              width: 140,
-              render: (value) => (value ? `@${value}` : "-"),
+              title: "币安广场账户",
+              dataIndex: "binanceSquareAccount",
+              width: 240,
+              ellipsis: true,
+              render: (account) =>
+                account ? (
+                  <Space size={8}>
+                    {account.binanceAvatar ? (
+                      <img
+                        src={account.binanceAvatar}
+                        alt=""
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          objectFit: "cover",
+                        }}
+                      />
+                    ) : null}
+                    <span>
+                      <strong>{account.binanceUsername || "-"}</strong>
+                      <br />
+                      <span style={{ color: "#94a3b8" }}>
+                        {account.binanceSquareUid ? `UID: ${account.binanceSquareUid}` : "-"}
+                      </span>
+                    </span>
+                  </Space>
+                ) : (
+                  "-"
+                ),
             },
             {
               title: "报名时间",
