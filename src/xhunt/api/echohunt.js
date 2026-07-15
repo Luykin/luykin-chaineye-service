@@ -38,6 +38,7 @@ const {
   getStaticLeaderboardBundle,
   emptyLeaderboardBundle,
   buildCustomLeaderboardBundle,
+  findUserInBundle,
   findUserHistoricalCampaigns,
 } = require("../services/echohuntLeaderboardService");
 const {
@@ -908,15 +909,51 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
       include: [{ model: XHuntUser, as: "xHuntUser", attributes: ["id", "inviteCode", "displayName", "classification", "userSource"] }],
     });
 
-    const historicalCampaigns = await findUserHistoricalCampaigns(twitterIdentity).catch(() => []);
-    const campaignHistory = historicalCampaigns.find((item) => item.campaignKey === normalizedCampaign || item.campaignKey === campaignKey) || null;
+    let rankIdentity = twitterIdentity;
+    if (req.authCenter?.user?.xhuntUserId) {
+      const xhuntUser = await XHuntUser.findByPk(req.authCenter.user.xhuntUserId, {
+        attributes: ["twitterId", "username"],
+      }).catch(() => null);
+      rankIdentity = {
+        ...twitterIdentity,
+        twitterId: xhuntUser?.twitterId || twitterIdentity.twitterId,
+        username: xhuntUser?.username || twitterIdentity.username,
+      };
+    }
+
+    const historicalCampaigns = await findUserHistoricalCampaigns(rankIdentity).catch(() => []);
+    let campaignHistory = historicalCampaigns.find((item) => item.campaignKey === normalizedCampaign || item.campaignKey === campaignKey) || null;
+
+    if (!campaignHistory && record) {
+      const lang = normalizeLang(req.query.lang);
+      const fallbackCampaign = {
+        ...buildEchohuntCampaignListItem(record, lang, {
+          username: rankIdentity.username,
+          twitterId: rankIdentity.twitterId,
+        }, req),
+        lang,
+      };
+
+      if (fallbackCampaign?.leaderboardConfig?.leaderboardMode === "custom") {
+        try {
+          const rawLeaderboard = await getCustomLeaderboardData(fallbackCampaign, {
+            campaign: normalizedCampaign,
+            channel: "echohunt",
+          });
+          const customBundle = buildCustomLeaderboardBundle(fallbackCampaign, rawLeaderboard);
+          campaignHistory = findUserInBundle(customBundle, rankIdentity);
+        } catch (customError) {
+          console.warn("[EchoHunt] custom campaign rank fetch warn:", customError.message || customError);
+        }
+      }
+    }
 
     if (!registration) {
       return res.json({
         success: true,
         registered: false,
         totalRegistrations,
-        user: twitterIdentity,
+        user: rankIdentity,
         registration: null,
         rank: campaignHistory,
       });
@@ -927,7 +964,7 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
       success: true,
       registered: true,
       totalRegistrations,
-      user: twitterIdentity,
+      user: rankIdentity,
       registration: serializeRegistration(registration),
       rank: campaignHistory,
     });

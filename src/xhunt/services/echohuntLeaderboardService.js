@@ -314,11 +314,19 @@ function normalizeHandle(value) {
   return String(value || "").trim().replace(/^@+/, "").toLowerCase();
 }
 
-function rowMatchesUser(row, user) {
+function isYziLabsBundle(bundle) {
+  return normalizeHandle(bundle?.campaign?.key).replace(/[^a-z0-9]/g, "") === "yzilabs";
+}
+
+function rowMatchesUser(row, user, options = {}) {
   if (!row || !user) return false;
   const twitterId = String(user.twitterId || "").trim();
-  const username = normalizeHandle(user.username);
   if (twitterId && String(row.twitterId || "").trim() === twitterId) return true;
+
+  // YZi Labs 个人排名只用 Twitter ID；匹配不到则视为未上榜，不再使用 username 兜底。
+  if (options.twitterIdOnly) return false;
+
+  const username = normalizeHandle(user.username);
   if (username) {
     if (normalizeHandle(row.handle) === username) return true;
     if (normalizeHandle(row.username) === username) return true;
@@ -412,6 +420,7 @@ function findUserInBundle(bundle, user) {
   const trackIndex = buildTrackIndex(bundle);
   const tracks = [];
   const winners = [];
+  const matchOptions = { twitterIdOnly: isYziLabsBundle(bundle) };
 
   // 最终/历史个人统计只看 all 榜单。
   // 7d 榜单只是活动过程中的阶段性展示，不应该进入最终历史排名、奖励和报名后个人排名。
@@ -420,7 +429,7 @@ function findUserInBundle(bundle, user) {
     for (const [sourceKey, rows] of Object.entries(allLeaderboards)) {
       if (!Array.isArray(rows)) continue;
       const track = trackIndex.get(String(sourceKey));
-      rows.filter((row) => rowMatchesUser(row, user)).forEach((row) => {
+      rows.filter((row) => rowMatchesUser(row, user, matchOptions)).forEach((row) => {
         tracks.push(simplifyLeaderboardRow(row, track, "all"));
       });
     }
@@ -430,7 +439,7 @@ function findUserInBundle(bundle, user) {
   for (const [winnerKey, rows] of Object.entries(rawWinners)) {
     if (!Array.isArray(rows)) continue;
     const track = trackIndex.get(`winner:${winnerKey}`) || trackIndex.get(String(winnerKey));
-    rows.filter((row) => rowMatchesUser(row, user)).forEach((row) => {
+    rows.filter((row) => rowMatchesUser(row, user, matchOptions)).forEach((row) => {
       winners.push(simplifyWinnerRow(row, track));
     });
   }
@@ -477,5 +486,6 @@ module.exports = {
   emptyLeaderboardBundle,
   buildCustomLeaderboardBundle,
   fetchCustomLeaderboardBundle,
+  findUserInBundle,
   findUserHistoricalCampaigns,
 };

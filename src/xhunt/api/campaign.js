@@ -35,6 +35,7 @@ const {
 const {
   getCustomLeaderboardData,
   getCustomUserActivityData,
+  isYziLabsCampaign,
 } = require("../services/campaignLeaderboardService");
 const { parseUtcDateParam } = require("../utils/date");
 const { isVersionGreaterOrEqual } = require("../utils/version");
@@ -278,15 +279,12 @@ router.get("/custom-leaderboard", securityMiddleware, async (req, res) => {
   }
 });
 
-router.get("/custom-user-activity", securityMiddleware, async (req, res) => {
+router.get("/custom-user-activity", securityMiddleware, authenticateTokenOptional, async (req, res) => {
   try {
     const normalizedCampaign = normalizeCampaign(req.query.campaign);
     const userId = req.query.userid || req.query.userId;
     if (!normalizedCampaign) {
       return res.status(400).json({ success: false, error: "campaign is required" });
-    }
-    if (!userId) {
-      return res.status(400).json({ success: false, error: "userid is required" });
     }
 
     const campaignConfig = await getCustomCampaignConfig(normalizedCampaign, req);
@@ -302,16 +300,32 @@ router.get("/custom-user-activity", securityMiddleware, async (req, res) => {
       });
     }
 
+    const yziLabsCampaign = isYziLabsCampaign(normalizedCampaign);
+    if (!userId && !yziLabsCampaign) {
+      return res.status(400).json({ success: false, error: "userid is required" });
+    }
+
+    // YZi Labs 个人排名：只用 Twitter ID 匹配榜单 t_twitter_id；
+    // 已登录优先用 XHuntUser.twitterId，未登录退回 x-tw-id。
+    // 匹配不到则视为未上榜，不再使用 username 兜底。
+    const twitterId = String(req.user?.twitterId || req.headers["x-tw-id"] || "").trim();
+
+    if (yziLabsCampaign && !twitterId) {
+      return res.status(400).json({ success: false, error: "twitter identity is required" });
+    }
+
     const data = await getCustomUserActivityData(campaignConfig, userId, {
       campaign: normalizedCampaign,
       channel: "plugin",
+      twitterId,
     });
 
     res.set("Cache-Control", "private, max-age=300");
+    res.set("Vary", "Authorization, x-tw-id, x-user-id");
     return res.json({
       success: true,
       campaign: normalizedCampaign,
-      userid: String(userId),
+      userid: userId ? String(userId) : "",
       updatedAt: data.updatedAt,
       leaderboards: data.leaderboards || {},
     });
