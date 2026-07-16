@@ -232,19 +232,27 @@ function normalizeYziLabsLeaderboardRow(item, index, sourceKey, metric = "") {
   };
 }
 
+function hasPositiveYziLabsScore(row) {
+  return Number(row?.score) > 0;
+}
+
+function rerankYziLabsRows(rows) {
+  return rows.map((item, index) => ({
+    ...item,
+    rank: index + 1,
+  }));
+}
+
 function buildYziLabsRows(rawRows, sourceKey, metric = "") {
   const rows = rawRows
     .map((item, index) => normalizeYziLabsLeaderboardRow(item, index, sourceKey, metric))
-    .filter((item) => item.username || item.twitterId);
+    .filter((item) => (item.username || item.twitterId) && hasPositiveYziLabsScore(item));
 
-  if (!metric) return rows;
+  if (!metric) return rerankYziLabsRows(rows);
 
-  return rows
-    .sort((a, b) => (b.share || 0) - (a.share || 0) || (b.score || 0) - (a.score || 0))
-    .map((item, index) => ({
-      ...item,
-      rank: index + 1,
-    }));
+  return rerankYziLabsRows(
+    rows.sort((a, b) => (b.share || 0) - (a.share || 0) || (b.score || 0) - (a.score || 0))
+  );
 }
 
 function getYziLabsLeaderboardTargets(config = {}) {
