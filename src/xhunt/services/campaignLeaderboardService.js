@@ -7,7 +7,7 @@ const YZILABS_PROJECT = "yzilabs";
 const YZILABS_LEADERBOARD_URL = "https://data.cryptohunt.ai/info/board/top";
 const YZILABS_FETCH_TYPE = "mind_share";
 const YZILABS_CACHE_TTL_MS = 5 * 60 * 1000;
-const YZILABS_PREVIEW_TWITTER_IDS = new Set(["1455055533140893696"]);
+const YZILABS_PREVIEW_TWITTER_IDS = new Set(["1455055533140893696", "1691722976121520128", "1225173132"]);
 
 let yziLabsLeaderboardCache = null;
 
