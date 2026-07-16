@@ -167,6 +167,25 @@ async function getViewerTwitterIdForLeaderboard(req) {
   return String(twitterId || "").trim();
 }
 
+function buildNotRankedCampaignRank(record, campaignKey) {
+  const row = typeof record?.toJSON === "function" ? record.toJSON() : (record || {});
+  const title = row.displayNameEn || row.displayNameZh || campaignKey || null;
+  return {
+    campaignKey: campaignKey || null,
+    title,
+    project: title,
+    status: row.webStatus || null,
+    prize: null,
+    tracks: [],
+    winners: [],
+    bestRank: null,
+    estimatedRewards: [],
+    rankStatus: "not_ranked",
+    rankMessage: "USER_NOT_RANKED",
+    notRanked: true,
+  };
+}
+
 async function checkEchohuntBindingRateLimit(req, action, limit, ttlSeconds) {
   const twitterIdentity = getTwitterIdentityFromAuth(req);
   const keySubject = twitterIdentity?.twitterId || req.authCenter?.user?.id || req.ip || "unknown";
@@ -966,6 +985,10 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
           console.warn("[EchoHunt] custom campaign rank fetch warn:", customError.message || customError);
         }
       }
+    }
+
+    if (!campaignHistory && isYziLabsCampaign(normalizedCampaign)) {
+      campaignHistory = buildNotRankedCampaignRank(record, normalizedCampaign);
     }
 
     if (!registration) {
