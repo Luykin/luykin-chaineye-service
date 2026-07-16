@@ -7,7 +7,8 @@ const YZILABS_PROJECT = "yzilabs";
 const YZILABS_LEADERBOARD_URL = "https://data.cryptohunt.ai/info/board/top";
 const YZILABS_FETCH_TYPE = "mind_share";
 const YZILABS_CACHE_TTL_MS = 5 * 60 * 1000;
-const YZILABS_PREVIEW_TWITTER_IDS = new Set(["1455055533140893696", "1691722976121520128", "1225173132"]);
+// YZi Labs 榜单已开放给所有用户；如需恢复预览白名单，可重新启用下面的限制。
+// const YZILABS_PREVIEW_TWITTER_IDS = new Set(["1455055533140893696", "1691722976121520128", "1225173132"]);
 
 let yziLabsLeaderboardCache = null;
 
@@ -127,15 +128,15 @@ function isYziLabsCampaign(campaignKey) {
   return normalizeHandle(campaignKey).replace(/[^a-z0-9]/g, "") === YZILABS_PROJECT;
 }
 
-function canPreviewYziLabsLeaderboard(options = {}) {
-  const twitterId = String(
-    options.viewerTwitterId ||
-      options.twitterId ||
-      options.twId ||
-      ""
-  ).trim();
-  return !!twitterId && YZILABS_PREVIEW_TWITTER_IDS.has(twitterId);
-}
+// function canPreviewYziLabsLeaderboard(options = {}) {
+//   const twitterId = String(
+//     options.viewerTwitterId ||
+//       options.twitterId ||
+//       options.twId ||
+//       ""
+//   ).trim();
+//   return !!twitterId && YZILABS_PREVIEW_TWITTER_IDS.has(twitterId);
+// }
 
 function getCustomLeaderboardKey(item) {
   const rawName = typeof item?.name === "string" ? item.name : item?.name?.en || item?.name?.zh || "";
@@ -412,9 +413,10 @@ async function getCustomLeaderboardData(campaign = {}, options = {}) {
   if (config.leaderboardMode !== "custom") return emptyLeaderboardPayload(campaignKey);
 
   if (isYziLabsCampaign(campaignKey)) {
-    if (!canPreviewYziLabsLeaderboard(options)) {
-      return emptyLeaderboardPayload(campaignKey);
-    }
+    // 已放开给所有用户；不再按 YZILABS_PREVIEW_TWITTER_IDS 过滤。
+    // if (!canPreviewYziLabsLeaderboard(options)) {
+    //   return emptyLeaderboardPayload(campaignKey);
+    // }
     const rawPayload = await fetchYziLabsRawLeaderboard();
     return buildYziLabsLeaderboardPayload(config, campaignKey, rawPayload);
   }
@@ -441,9 +443,10 @@ async function getCustomUserActivityData(campaign = {}, userId, options = {}) {
   }
 
   if (isYziLabsCampaign(campaignKey)) {
-    if (!canPreviewYziLabsLeaderboard(options)) {
-      return { ...emptyLeaderboardPayload(campaignKey), userid: normalizedUserId };
-    }
+    // 已放开给所有用户；不再按 YZILABS_PREVIEW_TWITTER_IDS 过滤。
+    // if (!canPreviewYziLabsLeaderboard(options)) {
+    //   return { ...emptyLeaderboardPayload(campaignKey), userid: normalizedUserId };
+    // }
     const rawPayload = await fetchYziLabsRawLeaderboard();
     return buildYziLabsUserActivityPayload(config, campaignKey, rawPayload, {
       userId: normalizedUserId,
