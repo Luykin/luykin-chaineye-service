@@ -49,6 +49,7 @@ const {
 } = require("../services/campaignRegistrationService");
 const {
   getCustomLeaderboardData,
+  isYziLabsCampaign,
 } = require("../services/campaignLeaderboardService");
 const {
   createBindingChallenge,
@@ -152,6 +153,18 @@ function getTwitterIdentityFromAuth(req) {
     authCenterUserId: req.authCenter?.user?.id || null,
     xhuntUserId: req.authCenter?.user?.xhuntUserId || null,
   };
+}
+
+async function getViewerTwitterIdForLeaderboard(req) {
+  const twitterIdentity = getTwitterIdentityFromAuth(req);
+  let twitterId = twitterIdentity?.twitterId || "";
+  if (req.authCenter?.user?.xhuntUserId) {
+    const xhuntUser = await XHuntUser.findByPk(req.authCenter.user.xhuntUserId, {
+      attributes: ["twitterId"],
+    }).catch(() => null);
+    twitterId = xhuntUser?.twitterId || twitterId;
+  }
+  return String(twitterId || "").trim();
 }
 
 async function checkEchohuntBindingRateLimit(req, action, limit, ttlSeconds) {
@@ -859,7 +872,7 @@ router.get("/leaderboard/manifest", async (req, res) => {
   }
 });
 
-router.get("/campaigns/:campaignKey/leaderboard", async (req, res) => {
+router.get("/campaigns/:campaignKey/leaderboard", authenticateAuthCenterToken({ optional: true }), async (req, res) => {
   try {
     const campaignKey = normalizeCampaign(req.params.campaignKey);
     const bundle = await getStaticLeaderboardBundle(campaignKey);
@@ -876,9 +889,15 @@ router.get("/campaigns/:campaignKey/leaderboard", async (req, res) => {
         const rawLeaderboard = await getCustomLeaderboardData(fallbackCampaign, {
           campaign: campaignKey,
           channel: "echohunt",
+          viewerTwitterId: await getViewerTwitterIdForLeaderboard(req),
         });
         const customBundle = buildCustomLeaderboardBundle(fallbackCampaign, rawLeaderboard);
-        res.set("Cache-Control", "public, max-age=120");
+        if (isYziLabsCampaign(campaignKey)) {
+          res.set("Cache-Control", "private, max-age=80");
+          res.set("Vary", "Authorization");
+        } else {
+          res.set("Cache-Control", "public, max-age=120");
+        }
         return res.json({ success: true, source: "configured_custom", data: customBundle });
       } catch (customError) {
         console.warn("[EchoHunt] custom leaderboard fetch warn:", customError.message || customError);
@@ -939,6 +958,7 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
           const rawLeaderboard = await getCustomLeaderboardData(fallbackCampaign, {
             campaign: normalizedCampaign,
             channel: "echohunt",
+            viewerTwitterId: rankIdentity.twitterId,
           });
           const customBundle = buildCustomLeaderboardBundle(fallbackCampaign, rawLeaderboard);
           campaignHistory = findUserInBundle(customBundle, rankIdentity);

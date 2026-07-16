@@ -106,6 +106,15 @@ function getCampaignDisplayDomains(campaign) {
   return domains.length ? domains : ["web3"];
 }
 
+function getRequestTwitterId(req) {
+  return String(
+    req?.user?.twitterId ||
+      req?.securityContext?.twId ||
+      req?.headers?.["x-tw-id"] ||
+      ""
+  ).trim();
+}
+
 function matchesDisplayDomain(campaign, domain) {
   if (!domain) return true;
   return getCampaignDisplayDomains(campaign).includes(domain);
@@ -238,7 +247,7 @@ router.get("/internal/hK9N7y37rPa1/config", async (req, res) => {
   }
 });
 
-router.get("/custom-leaderboard", securityMiddleware, async (req, res) => {
+router.get("/custom-leaderboard", securityMiddleware, authenticateTokenOptional, async (req, res) => {
   try {
     const normalizedCampaign = normalizeCampaign(req.query.campaign);
     if (!normalizedCampaign) {
@@ -261,9 +270,15 @@ router.get("/custom-leaderboard", securityMiddleware, async (req, res) => {
     const data = await getCustomLeaderboardData(campaignConfig, {
       campaign: normalizedCampaign,
       channel: "plugin",
+      viewerTwitterId: getRequestTwitterId(req),
     });
 
-    res.set("Cache-Control", "public, max-age=300");
+    if (isYziLabsCampaign(normalizedCampaign)) {
+      res.set("Cache-Control", "private, max-age=80");
+      res.set("Vary", "Authorization, x-tw-id, x-user-id");
+    } else {
+      res.set("Cache-Control", "public, max-age=300");
+    }
     return res.json({
       success: true,
       campaign: normalizedCampaign,
@@ -308,7 +323,7 @@ router.get("/custom-user-activity", securityMiddleware, authenticateTokenOptiona
     // YZi Labs 个人排名：只用 Twitter ID 匹配榜单 t_twitter_id；
     // 已登录优先用 XHuntUser.twitterId，未登录退回 x-tw-id。
     // 匹配不到则视为未上榜，不再使用 username 兜底。
-    const twitterId = String(req.user?.twitterId || req.headers["x-tw-id"] || "").trim();
+    const twitterId = getRequestTwitterId(req);
 
     if (yziLabsCampaign && !twitterId) {
       return res.status(400).json({ success: false, error: "twitter identity is required" });

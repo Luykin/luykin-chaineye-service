@@ -7,6 +7,7 @@ const YZILABS_PROJECT = "yzilabs";
 const YZILABS_LEADERBOARD_URL = "https://data.cryptohunt.ai/info/board/top";
 const YZILABS_FETCH_TYPE = "mind_share";
 const YZILABS_CACHE_TTL_MS = 5 * 60 * 1000;
+const YZILABS_PREVIEW_TWITTER_IDS = new Set(["1455055533140893696"]);
 
 let yziLabsLeaderboardCache = null;
 
@@ -124,6 +125,16 @@ function normalizeHandle(value) {
 
 function isYziLabsCampaign(campaignKey) {
   return normalizeHandle(campaignKey).replace(/[^a-z0-9]/g, "") === YZILABS_PROJECT;
+}
+
+function canPreviewYziLabsLeaderboard(options = {}) {
+  const twitterId = String(
+    options.viewerTwitterId ||
+      options.twitterId ||
+      options.twId ||
+      ""
+  ).trim();
+  return !!twitterId && YZILABS_PREVIEW_TWITTER_IDS.has(twitterId);
 }
 
 function getCustomLeaderboardKey(item) {
@@ -393,6 +404,9 @@ async function getCustomLeaderboardData(campaign = {}, options = {}) {
   if (config.leaderboardMode !== "custom") return emptyLeaderboardPayload(campaignKey);
 
   if (isYziLabsCampaign(campaignKey)) {
+    if (!canPreviewYziLabsLeaderboard(options)) {
+      return emptyLeaderboardPayload(campaignKey);
+    }
     const rawPayload = await fetchYziLabsRawLeaderboard();
     return buildYziLabsLeaderboardPayload(config, campaignKey, rawPayload);
   }
@@ -419,6 +433,9 @@ async function getCustomUserActivityData(campaign = {}, userId, options = {}) {
   }
 
   if (isYziLabsCampaign(campaignKey)) {
+    if (!canPreviewYziLabsLeaderboard(options)) {
+      return { ...emptyLeaderboardPayload(campaignKey), userid: normalizedUserId };
+    }
     const rawPayload = await fetchYziLabsRawLeaderboard();
     return buildYziLabsUserActivityPayload(config, campaignKey, rawPayload, {
       userId: normalizedUserId,
