@@ -167,8 +167,9 @@ function normalizeCustomLeaderboardRow(item, index, sourceKey) {
   const handle = item?.handle ? String(item.handle) : username ? `@${username}` : "";
   const shareValue = item?.share ?? item?.mindshare ?? item?.workshare;
   const scoreValue = item?.score ?? item?.result ?? item?.value ?? item?.points;
+  const { raw: _raw, image: _image, displayName: _displayName, ...rest } = item || {};
   return {
-    ...item,
+    ...rest,
     sourceKey,
     rank: Number.isFinite(Number(item?.rank)) ? Number(item.rank) : index + 1,
     username,
@@ -183,7 +184,7 @@ function normalizeCustomLeaderboardRow(item, index, sourceKey) {
     tweets: item?.tweets ?? item?.tweet_count ?? null,
     views: item?.views ?? item?.view_count ?? null,
     likes: item?.likes ?? item?.like_count ?? null,
-    raw: item,
+    create_time: item?.create_time || item?.createTime || null,
   };
 }
 

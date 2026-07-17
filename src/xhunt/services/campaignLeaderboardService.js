@@ -168,6 +168,12 @@ function normalizeNumber(value, fallback = null) {
   return Number.isFinite(num) ? num : fallback;
 }
 
+function getYziLabsCreateTime(rows = []) {
+  if (!Array.isArray(rows)) return null;
+  const createTime = rows.find((row) => row?.create_time)?.create_time;
+  return createTime ? String(createTime) : null;
+}
+
 async function fetchYziLabsRawLeaderboard() {
   if (yziLabsLeaderboardCache?.expiresAt > Date.now()) {
     return yziLabsLeaderboardCache.data;
@@ -183,8 +189,9 @@ async function fetchYziLabsRawLeaderboard() {
     });
 
     const rows = Array.isArray(response?.data?.data?.data) ? response.data.data.data : [];
+    const createTime = getYziLabsCreateTime(rows);
     const payload = {
-      updatedAt: new Date().toISOString(),
+      updatedAt: createTime || new Date().toISOString(),
       rows,
     };
     yziLabsLeaderboardCache = {
@@ -216,20 +223,15 @@ function normalizeYziLabsLeaderboardRow(item, index, sourceKey, metric = "") {
     handle: username ? `@${username}` : "",
     twitterId,
     name: item?.name || username || "Unknown",
-    displayName: item?.name || username || "Unknown",
     avatar: item?.profile_image_url || item?.avatar || item?.image || "",
-    image: item?.profile_image_url || item?.avatar || item?.image || "",
     score,
     share,
     shareText: `${(share * 100).toFixed(2).replace(/\.?0+$/, "")}%`,
     tweets: normalizeNumber(item?.tweet_count, null),
     views: normalizeNumber(item?.view_count, null),
     likes: normalizeNumber(item?.like_count, null),
-    engageCount: normalizeNumber(item?.engage_count, null),
-    farming: normalizeNumber(item?.farming, null),
-    soul: normalizeNumber(item?.soul, null),
+    create_time: item?.create_time || null,
     sourceKey,
-    raw: item,
   };
 }
 
@@ -340,6 +342,7 @@ function buildYziLabsUserActivityPayload(config = {}, campaignKey, rawPayload, u
       share: found.share,
       shareText: found.shareText,
       score: found.score,
+      create_time: found.create_time || null,
     };
   });
 
