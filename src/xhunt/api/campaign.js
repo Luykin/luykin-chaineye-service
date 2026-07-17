@@ -283,6 +283,7 @@ router.get("/custom-leaderboard", securityMiddleware, authenticateTokenOptional,
       success: true,
       campaign: normalizedCampaign,
       updatedAt: data.updatedAt,
+      leaderboardDataUpdatedAt: data.leaderboardDataUpdatedAt || null,
       leaderboards: data.leaderboards || {},
     });
   } catch (err) {
@@ -342,6 +343,7 @@ router.get("/custom-user-activity", securityMiddleware, authenticateTokenOptiona
       campaign: normalizedCampaign,
       userid: userId ? String(userId) : "",
       updatedAt: data.updatedAt,
+      leaderboardDataUpdatedAt: data.leaderboardDataUpdatedAt || null,
       leaderboards: data.leaderboards || {},
     });
   } catch (err) {

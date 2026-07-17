@@ -6,6 +6,7 @@ const SELF_CUSTOM_USER_ACTIVITY_PATH = "/api/xhunt/campaigns/custom-user-activit
 const YZILABS_PROJECT = "yzilabs";
 const YZILABS_LEADERBOARD_URL = "https://data.cryptohunt.ai/info/board/top";
 const YZILABS_FETCH_TYPE = "mind_share";
+const YZILABS_DETAIL_FETCH_TYPE = "mind_detail";
 const YZILABS_CACHE_TTL_MS = 5 * 60 * 1000;
 // YZi Labs 榜单已开放给所有用户；如需恢复预览白名单，可重新启用下面的限制。
 // const YZILABS_PREVIEW_TWITTER_IDS = new Set(["1455055533140893696", "1691722976121520128", "1225173132"]);
@@ -168,9 +169,9 @@ function normalizeNumber(value, fallback = null) {
   return Number.isFinite(num) ? num : fallback;
 }
 
-function getYziLabsCreateTime(rows = []) {
-  if (!Array.isArray(rows)) return null;
-  const createTime = rows.find((row) => row?.create_time)?.create_time;
+function getYziLabsDetailCreateTime(response) {
+  const rows = Array.isArray(response?.data?.data?.data) ? response.data.data.data : [];
+  const createTime = rows[0]?.create_time || rows[0]?.createTime;
   return createTime ? String(createTime) : null;
 }
 
@@ -180,18 +181,37 @@ async function fetchYziLabsRawLeaderboard() {
   }
 
   try {
-    const response = await axios.get(YZILABS_LEADERBOARD_URL, {
-      timeout: CUSTOM_LEADERBOARD_TIMEOUT_MS,
-      params: {
-        project: YZILABS_PROJECT,
-        fetch_type: YZILABS_FETCH_TYPE,
-      },
-    });
+    const [leaderboardResult, detailResult] = await Promise.allSettled([
+      axios.get(YZILABS_LEADERBOARD_URL, {
+        timeout: CUSTOM_LEADERBOARD_TIMEOUT_MS,
+        params: {
+          project: YZILABS_PROJECT,
+          fetch_type: YZILABS_FETCH_TYPE,
+        },
+      }),
+      axios.get(YZILABS_LEADERBOARD_URL, {
+        timeout: CUSTOM_LEADERBOARD_TIMEOUT_MS,
+        params: {
+          project: YZILABS_PROJECT,
+          fetch_type: YZILABS_DETAIL_FETCH_TYPE,
+        },
+      }),
+    ]);
 
+    if (leaderboardResult.status === "rejected") throw leaderboardResult.reason;
+
+    const response = leaderboardResult.value;
     const rows = Array.isArray(response?.data?.data?.data) ? response.data.data.data : [];
-    const createTime = getYziLabsCreateTime(rows);
+    const leaderboardDataUpdatedAt = detailResult.status === "fulfilled"
+      ? getYziLabsDetailCreateTime(detailResult.value)
+      : null;
+    if (detailResult.status === "rejected") {
+      console.warn("[YZiLabsLeaderboard] detail update time fetch failed:", detailResult.reason?.message || detailResult.reason);
+    }
+
     const payload = {
-      updatedAt: createTime || new Date().toISOString(),
+      updatedAt: leaderboardDataUpdatedAt || new Date().toISOString(),
+      leaderboardDataUpdatedAt: leaderboardDataUpdatedAt || null,
       rows,
     };
     yziLabsLeaderboardCache = {
@@ -230,7 +250,6 @@ function normalizeYziLabsLeaderboardRow(item, index, sourceKey, metric = "") {
     tweets: normalizeNumber(item?.tweet_count, null),
     views: normalizeNumber(item?.view_count, null),
     likes: normalizeNumber(item?.like_count, null),
-    create_time: item?.create_time || null,
     sourceKey,
   };
 }
@@ -311,6 +330,7 @@ function buildYziLabsLeaderboardPayload(config = {}, campaignKey, rawPayload) {
   return {
     campaign: campaignKey || YZILABS_PROJECT,
     updatedAt: rawPayload.updatedAt,
+    leaderboardDataUpdatedAt: rawPayload.leaderboardDataUpdatedAt || null,
     leaderboards,
     source: YZILABS_PROJECT,
   };
@@ -342,7 +362,6 @@ function buildYziLabsUserActivityPayload(config = {}, campaignKey, rawPayload, u
       share: found.share,
       shareText: found.shareText,
       score: found.score,
-      create_time: found.create_time || null,
     };
   });
 
@@ -351,6 +370,7 @@ function buildYziLabsUserActivityPayload(config = {}, campaignKey, rawPayload, u
     userid: user.userId || "",
     twitterId: user.twitterId || "",
     updatedAt: rawPayload.updatedAt,
+    leaderboardDataUpdatedAt: rawPayload.leaderboardDataUpdatedAt || null,
     leaderboards,
     source: YZILABS_PROJECT,
   };

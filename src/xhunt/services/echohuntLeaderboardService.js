@@ -184,7 +184,6 @@ function normalizeCustomLeaderboardRow(item, index, sourceKey) {
     tweets: item?.tweets ?? item?.tweet_count ?? null,
     views: item?.views ?? item?.view_count ?? null,
     likes: item?.likes ?? item?.like_count ?? null,
-    create_time: item?.create_time || item?.createTime || null,
   };
 }
 
@@ -238,9 +237,18 @@ function buildCustomLeaderboardBundle(campaign = {}, rawResponse = {}) {
     };
   });
 
+  const leaderboardDataUpdatedAt = rawResponse?.leaderboardDataUpdatedAt || rawResponse?.data?.leaderboardDataUpdatedAt || null;
+  const updatedAt = rawResponse?.updatedAt || leaderboardDataUpdatedAt || rawResponse?.data?.updatedAt || new Date().toISOString();
+
   return {
     ...baseBundle,
-    generatedAt: rawResponse?.updatedAt || rawResponse?.data?.updatedAt || new Date().toISOString(),
+    generatedAt: updatedAt,
+    updatedAt,
+    leaderboardDataUpdatedAt,
+    summary: {
+      ...baseBundle.summary,
+      updatedAt,
+    },
     tracks,
     leaderboards: { all: leaderboards },
   };
