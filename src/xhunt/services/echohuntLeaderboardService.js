@@ -375,6 +375,7 @@ function simplifyLeaderboardRow(row, track, range) {
     invites: row.invites ?? null,
     score: row.score ?? null,
     result: row.result ?? null,
+    booster_bisquare: row.booster_bisquare ?? null,
     trackReward: track?.reward || null,
     reward: row.reward || null,
     raw: row,

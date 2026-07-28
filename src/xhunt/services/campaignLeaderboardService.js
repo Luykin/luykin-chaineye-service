@@ -232,6 +232,9 @@ function normalizeYziLabsLeaderboardRow(item, index, sourceKey, metric = "") {
   const value = item?.value && typeof item.value === "object" ? item.value : {};
   const metricShare = metric ? value[`${metric}_share`] : undefined;
   const metricScore = metric ? value[`${metric}_score`] : undefined;
+  const boosterBisquare = metric
+    ? value[`booster_bisquare_${metric}`] ?? item?.[`booster_bisquare_${metric}`] ?? null
+    : value.booster_bisquare ?? item?.booster_bisquare ?? null;
   const share = normalizeNumber(metricShare ?? item?.share, 0);
   const score = normalizeNumber(metricScore ?? item?.score_adj ?? item?.raw_score, null);
   const username = String(item?.username || "").trim();
@@ -250,6 +253,7 @@ function normalizeYziLabsLeaderboardRow(item, index, sourceKey, metric = "") {
     tweets: normalizeNumber(item?.tweet_count, null),
     views: normalizeNumber(item?.view_count, null),
     likes: normalizeNumber(item?.like_count, null),
+    booster_bisquare: boosterBisquare,
     sourceKey,
   };
 }
@@ -362,6 +366,7 @@ function buildYziLabsUserActivityPayload(config = {}, campaignKey, rawPayload, u
       share: found.share,
       shareText: found.shareText,
       score: found.score,
+      booster_bisquare: found.booster_bisquare ?? null,
     };
   });
 
