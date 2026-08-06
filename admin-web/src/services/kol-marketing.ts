@@ -8,6 +8,7 @@ export interface KolMarketingFilters {
   marketingGoals?: string[];
   projectStages?: string[];
   willingnessLevel?: string;
+  willingnessLevels?: string[];
   identityTier?: string;
   minFollowers?: number;
   maxFollowers?: number;
@@ -59,12 +60,33 @@ export interface KolMarketingServiceStatus {
   pgConfigured: boolean;
   pgRead: KolMarketingPgReadStatus;
   embeddingModel: string | null;
+  filterLlm?: {
+    enabled: boolean;
+    model?: string | null;
+  };
   maxLimit: number;
+}
+
+export interface KolMarketingFilterPlan {
+  source?: string;
+  llmEnabled?: boolean;
+  llmAttempted?: boolean;
+  llmCacheHit?: boolean;
+  llmModel?: string | null;
+  llmConfidence?: number;
+  llmError?: string | null;
+  semanticQuery?: string;
 }
 
 export interface KolMarketingSearchData {
   items: KolMarketingSearchItem[];
   filters: KolMarketingFilters;
+  inputFilters?: KolMarketingFilters;
+  llmFilters?: KolMarketingFilters;
+  ruleFilters?: KolMarketingFilters;
+  derivedFilters?: KolMarketingFilters;
+  filterReasons?: string[];
+  filterPlan?: KolMarketingFilterPlan;
   limit: number;
   semanticQuery: string;
   embeddingModel?: string | null;

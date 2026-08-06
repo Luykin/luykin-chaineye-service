@@ -13,7 +13,10 @@ const {
   isPostgresReadOnlyConfigured,
 } = require("../../infra/k8s/postgres-readonly");
 const {
+  buildKolMarketingSearchPlan,
+  getKolMarketingFilterLlmModel,
   getKolMarketingEmbeddingModel,
+  isKolMarketingFilterLlmEnabled,
   MAX_LIMIT,
   normalizeFilters,
   searchKolMarketingProfiles,
@@ -31,6 +34,10 @@ function getServiceStatus() {
     pgConfigured,
     pgRead,
     embeddingModel: embeddingModel || null,
+    filterLlm: {
+      enabled: isKolMarketingFilterLlmEnabled(),
+      model: getKolMarketingFilterLlmModel() || null,
+    },
     maxLimit: MAX_LIMIT,
   };
 }
@@ -118,11 +125,52 @@ router.post("/search", async (req, res) => {
   }
 });
 
-router.post("/normalize-filters", (req, res) => {
-  res.json({
-    success: true,
-    data: normalizeFilters(req.body?.filters),
-  });
+router.post("/normalize-filters", async (req, res) => {
+  try {
+    const query = sanitizeQuery(req.body?.query);
+    const filterPlan = query
+      ? await buildKolMarketingSearchPlan({
+          query,
+          filters: req.body?.filters,
+          redisClient: req.redisClient,
+        })
+      : {
+          explicitFilters: normalizeFilters(req.body?.filters),
+          llmFilters: {},
+          ruleFilters: {},
+          derivedFilters: {},
+          effectiveFilters: normalizeFilters(req.body?.filters),
+          reasons: [],
+          semanticQuery: "",
+          filterPlan: {
+            source: Object.keys(normalizeFilters(req.body?.filters)).length > 0 ? "explicit" : "semantic",
+            llmEnabled: isKolMarketingFilterLlmEnabled(),
+            llmAttempted: false,
+            llmCacheHit: false,
+            llmModel: getKolMarketingFilterLlmModel() || null,
+            llmConfidence: 0,
+            llmError: null,
+            semanticQuery: "",
+          },
+        };
+
+    res.json({
+      success: true,
+      data: filterPlan,
+    });
+  } catch (error) {
+    console.error("[Admin KOL Marketing Normalize Filters] failed", {
+      code: error.code,
+      message: error.message,
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error.message || "KOL Marketing 过滤条件归一化失败",
+      code: error.code || "KOL_MARKETING_NORMALIZE_FILTERS_FAILED",
+      message: error.message || "KOL Marketing 过滤条件归一化失败",
+    });
+  }
 });
 
 module.exports = router;

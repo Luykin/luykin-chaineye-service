@@ -33,13 +33,22 @@ import "@/styles/pages/kol-marketing-test.css";
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
 
-const EXAMPLE_QUERIES = [
-  "找适合 AI 项目早期增长合作的中文 KOL",
-  "找粉丝 5 万以上、偏 Web3/交易所方向、愿意做合作的账号",
-  "找英文区适合 DeFi 项目、互动质量高的营销账号",
+const EXAMPLE_PRESETS = [
+  {
+    query: "找适合 AI 项目早期增长合作的中文 KOL",
+    values: { language: "CN", domains: "AI", willingnessLevels: ["medium", "high"] },
+  },
+  {
+    query: "找粉丝 5 万以上、偏 Web3/交易所方向、愿意做合作的账号",
+    values: { language: "CN", domains: "Web3", minFollowers: 50000, willingnessLevels: ["medium", "high"] },
+  },
+  {
+    query: "找英文区适合 DeFi 项目、互动质量高的营销账号",
+    values: { language: "GLOBAL", domains: "Web3", willingnessLevels: ["medium", "high"] },
+  },
 ];
 
-const DEFAULT_QUERY = EXAMPLE_QUERIES[0];
+const DEFAULT_QUERY = EXAMPLE_PRESETS[0].query;
 
 function splitTags(value?: string) {
   return String(value || "")
@@ -55,11 +64,9 @@ function optionalNumber(value: unknown) {
 function compactFilters(values: Record<string, unknown>): KolMarketingFilters {
   const filters: KolMarketingFilters = {};
   const language = String(values.language || "").trim();
-  const willingnessLevel = String(values.willingnessLevel || "").trim();
   const identityTier = String(values.identityTier || "").trim();
 
   if (language) filters.language = language;
-  if (willingnessLevel) filters.willingnessLevel = willingnessLevel;
   if (identityTier) filters.identityTier = identityTier;
 
   const domains = splitTags(values.domains as string);
@@ -79,13 +86,30 @@ function compactFilters(values: Record<string, unknown>): KolMarketingFilters {
   if (minFollowers !== undefined) filters.minFollowers = minFollowers;
   if (maxFollowers !== undefined) filters.maxFollowers = maxFollowers;
 
+  const willingnessLevels = Array.isArray(values.willingnessLevels)
+    ? values.willingnessLevels.map((item) => String(item || "").trim()).filter(Boolean)
+    : splitTags(values.willingnessLevels as string);
+  if (willingnessLevels.length === 1) filters.willingnessLevel = willingnessLevels[0];
+  if (willingnessLevels.length > 1) filters.willingnessLevels = willingnessLevels;
+
   return filters;
+}
+
+function formatNumber(value?: string | number | null) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return "-";
+  return Math.floor(numberValue).toLocaleString();
 }
 
 function formatPercent(value?: string | number | null) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return "-";
   return `${(numberValue * 100).toFixed(1)}%`;
+}
+
+function formatConfidence(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+  return `${Math.round(value * 100)}%`;
 }
 
 function renderTags(values?: string[] | null, color = "blue") {
@@ -96,6 +120,12 @@ function renderTags(values?: string[] | null, color = "blue") {
       {values.length > 5 ? <Tag>+{values.length - 5}</Tag> : null}
     </Space>
   );
+}
+
+function renderFilterJson(filters?: KolMarketingFilters) {
+  const keys = Object.keys(filters || {});
+  if (!filters || keys.length === 0) return <Text type="secondary">无</Text>;
+  return <pre className="kol-filter-json">{JSON.stringify(filters, null, 2)}</pre>;
 }
 
 function statusColor(status?: KolMarketingServiceStatus | null) {
@@ -151,8 +181,19 @@ export function KolMarketingTestPage() {
     }
   }
 
-  function applyExample(query: string) {
-    form.setFieldsValue({ query });
+  function applyExample(preset: typeof EXAMPLE_PRESETS[number]) {
+    form.setFieldsValue({
+      query: preset.query,
+      limit: 20,
+      keywords: undefined,
+      cooperationTypes: undefined,
+      marketingGoals: undefined,
+      projectStages: undefined,
+      minFollowers: undefined,
+      maxFollowers: undefined,
+      identityTier: undefined,
+      ...preset.values,
+    });
   }
 
   const columns = useMemo<ColumnsType<KolMarketingSearchItem>>(() => [
@@ -180,7 +221,7 @@ export function KolMarketingTestPage() {
       title: "粉丝",
       dataIndex: "followers",
       width: 110,
-      render: (value) => typeof value === "number" ? value.toLocaleString() : "-",
+      render: (value) => formatNumber(value),
       sorter: (a, b) => Number(a.followers || 0) - Number(b.followers || 0),
     },
     {
@@ -269,15 +310,15 @@ export function KolMarketingTestPage() {
               <Form
                 form={form}
                 layout="vertical"
-                initialValues={{ query: DEFAULT_QUERY, limit: 20, language: "zh" }}
+                initialValues={{ query: DEFAULT_QUERY, limit: 20, language: "CN", domains: "AI", willingnessLevels: ["medium", "high"] }}
               >
                 <Form.Item name="query" label="自然语言 Query" rules={[{ required: true, min: 2, message: "请输入至少 2 个字符" }]}>
                   <TextArea rows={4} placeholder="例如：找适合 AI 项目早期增长合作的中文 KOL" />
                 </Form.Item>
 
                 <div className="kol-example-strip">
-                  {EXAMPLE_QUERIES.map((item) => (
-                    <button type="button" key={item} onClick={() => applyExample(item)}>{item}</button>
+                  {EXAMPLE_PRESETS.map((item) => (
+                    <button type="button" key={item.query} onClick={() => applyExample(item)}>{item.query}</button>
                   ))}
                 </div>
 
@@ -289,13 +330,20 @@ export function KolMarketingTestPage() {
                   </Col>
                   <Col span={12}>
                     <Form.Item name="language" label="语言">
-                      <Select allowClear options={[{ value: "zh", label: "zh" }, { value: "en", label: "en" }]} />
+                      <Select
+                        allowClear
+                        placeholder="不限制"
+                        options={[
+                          { value: "CN", label: "CN / 中文区" },
+                          { value: "GLOBAL", label: "GLOBAL / 英文区" },
+                        ]}
+                      />
                     </Form.Item>
                   </Col>
                 </Row>
 
                 <Form.Item name="domains" label="domains（逗号分隔）">
-                  <Input placeholder="ai, web3, defi" />
+                  <Input placeholder="AI, Web3" />
                 </Form.Item>
                 <Form.Item name="keywords" label="keywords（逗号分隔）">
                   <Input placeholder="growth, exchange, trading" />
@@ -325,8 +373,18 @@ export function KolMarketingTestPage() {
 
                 <Row gutter={12}>
                   <Col span={12}>
-                    <Form.Item name="willingnessLevel" label="意愿等级">
-                      <Input placeholder="high / medium" />
+                    <Form.Item name="willingnessLevels" label="意愿等级">
+                      <Select
+                        mode="multiple"
+                        allowClear
+                        placeholder="默认不限制"
+                        options={[
+                          { value: "high", label: "high / 高" },
+                          { value: "medium", label: "medium / 中" },
+                          { value: "low", label: "low / 低" },
+                          { value: "unknown", label: "unknown / 未知" },
+                        ]}
+                      />
                     </Form.Item>
                   </Col>
                   <Col span={12}>
@@ -356,11 +414,26 @@ export function KolMarketingTestPage() {
                 <Card className="kol-metric-card"><Statistic title="Embedding 缓存" value={result?.embeddingCacheHit ? "命中" : result ? "未命中" : "-"} /></Card>
               </Col>
             </Row>
+            {result ? (
+              <Row gutter={[16, 16]} className="kol-plan-metric-row">
+                <Col xs={24} md={8}>
+                  <Card className="kol-metric-card"><Statistic title="意图解析来源" value={result.filterPlan?.source || "-"} /></Card>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Card className="kol-metric-card"><Statistic title="LLM 置信度" value={formatConfidence(result.filterPlan?.llmConfidence)} /></Card>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Card className="kol-metric-card"><Statistic title="LLM 解析缓存" value={result.filterPlan?.llmCacheHit ? "命中" : result.filterPlan?.llmAttempted ? "未命中" : "未调用"} /></Card>
+                </Col>
+              </Row>
+            ) : null}
 
             <Card className="kol-status-card" title="服务状态">
               <Descriptions size="small" column={{ xs: 1, md: 2 }} bordered>
                 <Descriptions.Item label="ready">{String(status?.ready ?? false)}</Descriptions.Item>
                 <Descriptions.Item label="embeddingModel">{status?.embeddingModel || "-"}</Descriptions.Item>
+                <Descriptions.Item label="filterLlmEnabled">{String(status?.filterLlm?.enabled ?? true)}</Descriptions.Item>
+                <Descriptions.Item label="filterLlmModel">{status?.filterLlm?.model || "默认 LLM 模型"}</Descriptions.Item>
                 <Descriptions.Item label="pgConfigured">{String(status?.pgConfigured ?? false)}</Descriptions.Item>
                 <Descriptions.Item label="pgReady">{String(status?.pgRead?.ready ?? false)}</Descriptions.Item>
                 <Descriptions.Item label="database">{status?.pgRead?.server?.databaseName || "-"}</Descriptions.Item>
@@ -372,6 +445,61 @@ export function KolMarketingTestPage() {
             </Card>
 
             {errorText ? <Alert type="error" showIcon message={errorText} className="kol-status-alert" /> : null}
+
+            {result ? (
+              <Card className="kol-status-card" title="过滤条件归一化">
+                <div className="kol-filter-plan">
+                  <Space size={[8, 8]} wrap>
+                    <Tag color="blue">来源：{result.filterPlan?.source || "-"}</Tag>
+                    <Tag color={result.filterPlan?.llmEnabled === false ? "default" : "purple"}>
+                      LLM：{result.filterPlan?.llmEnabled === false ? "关闭" : result.filterPlan?.llmAttempted ? "已调用" : "未调用"}
+                    </Tag>
+                    <Tag color={result.filterPlan?.llmCacheHit ? "green" : "default"}>
+                      LLM 缓存：{result.filterPlan?.llmCacheHit ? "命中" : "未命中"}
+                    </Tag>
+                    <Tag color="gold">置信度：{formatConfidence(result.filterPlan?.llmConfidence)}</Tag>
+                  </Space>
+                  {result.filterPlan?.llmError ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message={`LLM 意图解析失败，已自动降级规则兜底：${result.filterPlan.llmError}`}
+                      className="kol-status-alert"
+                    />
+                  ) : null}
+                </div>
+                <Row gutter={[12, 12]}>
+                  <Col xs={24} md={12} xl={6}>
+                    <Text strong>显式过滤</Text>
+                    {renderFilterJson(result.inputFilters)}
+                  </Col>
+                  <Col xs={24} md={12} xl={6}>
+                    <Text strong>LLM 结构化推断</Text>
+                    {renderFilterJson(result.llmFilters)}
+                  </Col>
+                  <Col xs={24} md={12} xl={6}>
+                    <Text strong>规则兜底推断</Text>
+                    {renderFilterJson(result.ruleFilters)}
+                  </Col>
+                  <Col xs={24} md={12} xl={6}>
+                    <Text strong>最终推断</Text>
+                    {renderFilterJson(result.derivedFilters)}
+                  </Col>
+                  <Col xs={24}>
+                    <Text strong>实际 SQL 过滤</Text>
+                    {renderFilterJson(result.filters)}
+                  </Col>
+                </Row>
+                {result.filterReasons?.length ? (
+                  <div className="kol-filter-reasons">
+                    <Text type="secondary">推断原因：</Text>
+                    <Space size={[4, 4]} wrap>
+                      {result.filterReasons.map((item) => <Tag key={item}>{item}</Tag>)}
+                    </Space>
+                  </div>
+                ) : null}
+              </Card>
+            ) : null}
 
             <Card
               className="kol-result-card"
@@ -389,7 +517,7 @@ export function KolMarketingTestPage() {
                   size="middle"
                 />
               ) : (
-                <Empty description="输入 query 后运行检索，这里会展示 KOL 列表和相似度" />
+                <Empty description={result ? "当前硬过滤条件下没有结果，可放宽语言/粉丝/意愿等过滤条件后重试" : "输入 query 后运行检索，这里会展示 KOL 列表和相似度"} />
               )}
             </Card>
           </Col>

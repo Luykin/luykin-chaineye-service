@@ -36,6 +36,7 @@ function getChatModel(options = {}) {
     maxTokens,
     responseFormat,
     jsonSchema,
+    debug = process.env.LLM_DEBUG === "true",
   } = options;
 
   const apiKey = config.apiKey;
@@ -67,8 +68,8 @@ function getChatModel(options = {}) {
     };
   }
 
-  // 调试：打印请求参数
-  if (Object.keys(modelKwargs).length > 0) {
+  // 调试日志默认关闭，避免结构化 schema 在高频业务请求里刷屏；需要时设置 LLM_DEBUG=true。
+  if (debug && Object.keys(modelKwargs).length > 0) {
     console.log('[LLM getChatModel] modelKwargs:', JSON.stringify(modelKwargs, null, 2));
   }
 

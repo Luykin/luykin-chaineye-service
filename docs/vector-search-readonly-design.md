@@ -51,9 +51,9 @@ POST /api/xhunt/kol-marketing/search
 {
   "query": "找适合 AI 项目早期增长合作的中文 KOL",
   "filters": {
-    "language": "zh",
-    "domains": ["ai", "web3"],
-    "minFollowers": 50000
+    "language": "CN",
+    "domains": ["AI", "Web3"],
+    "willingnessLevels": ["medium", "high"]
   },
   "limit": 20
 }
@@ -61,16 +61,49 @@ POST /api/xhunt/kol-marketing/search
 
 当前支持 filters：
 
-- `language`
-- `domains`
+- `language`：画像表实际值为 `CN` / `GLOBAL`；后端兼容 `zh` -> `CN`、`en` -> `GLOBAL`
+- `domains`：画像表当前主要为 `AI` / `Web3`；后端兼容 `ai` / `web3` / `crypto` / `交易所` 等常见写法
 - `keywords`
 - `cooperationTypes`
 - `marketingGoals`
 - `projectStages`
 - `willingnessLevel`
+- `willingnessLevels`：多个意愿等级 OR 查询，例如 `["medium", "high"]`
 - `identityTier`
 - `minFollowers`
 - `maxFollowers`
+
+自然语言 query 会先走 LLM 结构化意图解析，抽取“硬过滤条件”，再用轻量规则做兜底，并和显式 filters 合并：
+
+- `5 万以上` / `50k+` -> `minFollowers: 50000`
+- `中文区` -> `language: CN`
+- `英文区` / `海外` / `global` -> `language: GLOBAL`
+- `AI` / `大模型` / `智能体` -> `domains: ["AI"]`
+- `Web3` / `加密` / `DeFi` / `交易所` -> `domains: ["Web3"]`
+- `愿意合作` / `适合合作` -> `willingnessLevels: ["medium", "high"]`
+
+合并优先级：
+
+```text
+显式 filters > LLM 结构化推断 > 规则兜底推断
+```
+
+实现要点：
+
+- LLM 只负责理解用户表达并产出结构化 JSON，所有结果仍会经过后端 `normalizeFilters()` 白名单归一化后才允许进入 SQL。
+- `keywords` / `cooperationTypes` / `marketingGoals` / `projectStages` 这类需要精确匹配表内标签的字段，只有用户明确表达为硬条件时才抽取；泛化描述保留在 `semanticQuery` 里走向量召回。
+- LLM 解析失败、超时、未配置 `LLM_API_KEY` 时，不影响搜索主链路，会自动降级为规则兜底。
+- LLM 解析结果会按 query + 模型 + 解析版本写 Redis 短缓存，减少额外模型调用。
+
+接口响应会返回：
+
+- `inputFilters`：显式 filters 归一化结果
+- `llmFilters`：LLM 结构化推断出的过滤条件
+- `ruleFilters`：规则兜底推断出的过滤条件
+- `derivedFilters`：LLM + 规则合并后的 query 推断过滤条件
+- `filters`：最终进入 SQL 的实际过滤条件
+- `filterPlan`：本次意图解析来源、LLM 置信度、缓存命中、降级错误等排查信息
+- `filterReasons`：query 推断原因，方便管理后台排查
 
 ---
 
@@ -198,12 +231,14 @@ KOL_MARKETING_PROFILE_EMBEDDING_MODEL=<必须和表内向量模型一致>
 KOL_MARKETING_PROFILE_EMBEDDING_DIMENSIONS=1536
 
 # KOL 画像内部 embedding HTTP 接口；配置后优先走该接口，不直接请求外部 LiteLLM/OpenAI
+# 仅当 API 进程运行在 K8s 集群内，能解析 *.svc.cluster.local 时使用。
 KOL_MARKETING_PROFILE_EMBEDDING_ENDPOINT_URL=http://backend-v1.xhunt.svc.cluster.local:3010/ai/embedding
 
 # KOL 画像 embedding 服务 API Key；不填时复用 LLM_API_KEY
 KOL_MARKETING_PROFILE_EMBEDDING_API_KEY=<可选，不填复用 LLM_API_KEY>
 
 # KOL 画像 embedding 服务 Base URL；未配置内部 endpoint 时使用，不填则复用 LLM_BASE_URL / llmConfig.baseURL
+# enterprise-admin 当前在 K8s 外部署时，使用内网 LiteLLM 地址，避免公网 aaii.xclaw.info 对来源 IP / embedding 路径的拦截。
 KOL_MARKETING_PROFILE_EMBEDDING_BASE_URL=<可选，不填复用 LLM_BASE_URL>
 
 # KOL 画像 query embedding Redis 缓存 TTL，单位秒；默认 86400
@@ -214,6 +249,18 @@ KOL_MARKETING_PROFILE_EMBEDDING_MAX_RETRIES=2
 
 # KOL 画像 embedding 请求超时时间，单位毫秒；默认 30000
 KOL_MARKETING_PROFILE_EMBEDDING_TIMEOUT_MS=30000
+
+# KOL Marketing 自然语言过滤条件是否启用 LLM 结构化解析；默认 true，异常时可设 false 降级规则兜底
+KOL_MARKETING_FILTER_LLM_ENABLED=true
+
+# KOL Marketing 过滤条件结构化解析模型；不填时复用 src/lib/llm 默认模型
+KOL_MARKETING_FILTER_LLM_MODEL=<可选，不填复用默认 LLM 模型>
+
+# KOL Marketing 过滤条件结构化解析超时时间，单位毫秒；默认 8000，超时后自动使用规则兜底
+KOL_MARKETING_FILTER_LLM_TIMEOUT_MS=8000
+
+# KOL Marketing 过滤条件结构化解析 Redis 缓存 TTL，单位秒；默认 3600，设为 0 可关闭解析缓存
+KOL_MARKETING_FILTER_LLM_CACHE_TTL_SECONDS=3600
 
 # KOL Marketing 搜索每日次数限制；默认 30，未配置时可兜底 VECTOR_SEARCH_DAILY_LIMIT
 KOL_MARKETING_SEARCH_DAILY_LIMIT=30

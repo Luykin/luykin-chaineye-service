@@ -104,6 +104,10 @@
   margin: 16px 0;
 }
 
+.kol-plan-metric-row {
+  margin-top: 16px;
+}
+
 .kol-status-alert {
   margin-top: 12px;
 }
@@ -141,4 +145,37 @@
     flex-direction: column;
     padding: 20px;
   }
+}
+
+.kol-filter-json {
+  min-height: 72px;
+  max-height: 180px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.78);
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.kol-filter-reasons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.kol-filter-plan {
+  margin-bottom: 12px;
+}
+
+[data-theme="dark"] .kol-filter-json {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.66);
+  color: #cbd5e1;
 }

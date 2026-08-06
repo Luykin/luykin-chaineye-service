@@ -139,7 +139,13 @@ function validateJsonSchema(data, schema, path = '') {
 }
 
 async function structuredChat(message, schema, options = {}) {
-  const { model: modelName, temperature = 0, systemPrompt, maxTokens } = options;
+  const {
+    model: modelName,
+    temperature = 0,
+    systemPrompt,
+    maxTokens,
+    debug = process.env.LLM_DEBUG === "true",
+  } = options;
 
   return withRetry(async () => {
     // schema 应该是普通 JSON Schema（来自用户输入）
@@ -152,6 +158,7 @@ async function structuredChat(message, schema, options = {}) {
       temperature,
       streaming: false,
       maxTokens,
+      debug,
       responseFormat: "json_schema",
       jsonSchema: {
         name: "structured_output",
@@ -177,7 +184,9 @@ async function structuredChat(message, schema, options = {}) {
       const response = await llm.invoke(messages);
       const content = response.content;
     
-      console.log(JSON.stringify(content), '======111调用模型返回结果111======')
+      if (debug) {
+        console.log("[LLM structuredChat] raw content:", JSON.stringify(content));
+      }
       // 尝试解析 JSON，处理多种格式
       let result = parseJsonResponse(content);
       
