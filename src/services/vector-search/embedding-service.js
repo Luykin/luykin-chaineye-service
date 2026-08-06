@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { OpenAIEmbeddings } = require("@langchain/openai");
+const OpenAI = require("openai");
 const llmConfig = require("../../lib/llm/config");
 
 /**
@@ -19,7 +19,7 @@ const llmConfig = require("../../lib/llm/config");
  * KOL_MARKETING_PROFILE_EMBEDDING_MODEL -> KOL_SEARCH_EMBEDDING_MODEL -> VECTOR_SEARCH_EMBEDDING_MODEL。
  */
 
-// OpenAIEmbeddings 客户端创建成本较高，这里按 namespace/model/baseURL/dimensions 复用。
+// OpenAI SDK 客户端创建成本较高，这里按 namespace/model/baseURL/dimensions 复用。
 const clientCache = new Map();
 
 function normalizeEnvPrefixes(envPrefixes = []) {
@@ -118,14 +118,17 @@ function createEmbeddingClient(options = {}) {
     throw error;
   }
 
-  return new OpenAIEmbeddings({
+  console.log("[Vector Embedding] create client", {
+    namespace: options.namespace || "default",
     model,
-    modelName: model,
-    apiKey,
-    configuration: baseURL ? { baseURL } : undefined,
-    // 关键：这里必须传给 OpenAIEmbeddings，不能只在结果侧校验；
-    // 否则 text-embedding-3-large 等模型会返回默认维度，和表字段 vector(1536) 不匹配。
     dimensions,
+    baseURLConfigured: Boolean(baseURL),
+    apiKeyConfigured: Boolean(apiKey),
+  });
+
+  return new OpenAI({
+    apiKey,
+    baseURL: baseURL || undefined,
     maxRetries: Number(
       options.maxRetries ||
         getEnvValue(options.envPrefixes, "EMBEDDING_MAX_RETRIES") ||
@@ -151,6 +154,60 @@ function getEmbeddingClient(options = {}) {
   }
 
   return clientCache.get(cacheKey);
+}
+
+async function createEmbeddingWithOpenAIClient(client, input, options = {}) {
+  const model = getConfiguredEmbeddingModel(options);
+  const dimensions = getEmbeddingDimensions(options);
+  const namespace = options.namespace || "default";
+  const startedAt = Date.now();
+
+  console.log("[Vector Embedding] request start", {
+    namespace,
+    model,
+    requestedDimensions: dimensions,
+    queryLength: String(input || "").length,
+  });
+
+  // 这里直接调用 OpenAI SDK，而不是 LangChain OpenAIEmbeddings。
+  // 线上历史 /ai/embedding 服务也是直接调用 openai.embeddings.create({
+  //   model: "gemini-embedding-001",
+  //   dimensions: 1536,
+  //   encoding_format: "float"
+  // }) 生成向量。直接调用能确保 dimensions 明确传到 LiteLLM/Gemini 兼容层。
+  let response;
+  try {
+    response = await client.embeddings.create({
+      model,
+      input,
+      dimensions,
+      encoding_format: "float",
+    });
+  } catch (error) {
+    console.error("[Vector Embedding] request failed", {
+      namespace,
+      model,
+      requestedDimensions: dimensions,
+      costMs: Date.now() - startedAt,
+      status: error.status,
+      code: error.code,
+      type: error.type,
+      message: error.message,
+    });
+    throw error;
+  }
+
+  const embedding = response?.data?.[0]?.embedding;
+  console.log("[Vector Embedding] request success", {
+    namespace,
+    model,
+    requestedDimensions: dimensions,
+    returnedDimensions: Array.isArray(embedding) ? embedding.length : null,
+    costMs: Date.now() - startedAt,
+    usage: response?.usage || null,
+  });
+
+  return embedding;
 }
 
 async function readEmbeddingCache(redisClient, cacheKey) {
@@ -196,6 +253,10 @@ function assertEmbeddingDimensions(embedding, options = {}) {
   }
 
   if (embedding.length !== expected) {
+    console.error("[Vector Embedding] dimension mismatch", {
+      expectedDimensions: expected,
+      returnedDimensions: embedding.length,
+    });
     const error = new Error(`embedding dimension mismatch: expected ${expected}, got ${embedding.length}`);
     error.code = "VECTOR_EMBEDDING_DIMENSION_MISMATCH";
     throw error;
@@ -225,6 +286,13 @@ async function getQueryEmbedding(options = {}) {
   const cachedEmbedding = await readEmbeddingCache(options.redisClient, cacheKey);
 
   if (cachedEmbedding) {
+    console.log("[Vector Embedding] cache hit", {
+      namespace,
+      model,
+      expectedDimensions: dimensions,
+      cachedDimensions: cachedEmbedding.length,
+      queryLength: normalizedQuery.length,
+    });
     assertEmbeddingDimensions(cachedEmbedding, options);
     return {
       embedding: cachedEmbedding,
@@ -235,8 +303,16 @@ async function getQueryEmbedding(options = {}) {
     };
   }
 
+  console.log("[Vector Embedding] cache miss", {
+    namespace,
+    model,
+    expectedDimensions: dimensions,
+    baseURLConfigured: Boolean(baseURL),
+    queryLength: normalizedQuery.length,
+  });
+
   const client = getEmbeddingClient(options);
-  const embedding = await client.embedQuery(normalizedQuery);
+  const embedding = await createEmbeddingWithOpenAIClient(client, normalizedQuery, options);
   assertEmbeddingDimensions(embedding, options);
   await writeEmbeddingCache(options.redisClient, cacheKey, embedding, options);
 

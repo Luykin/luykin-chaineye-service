@@ -180,24 +180,56 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
   const db = getPostgresReadOnlyInstance();
 
   const startedAt = Date.now();
-  const rows = await db.query(sql, {
-    bind: {
-      ...bind,
-      embedding: embeddingLiteral,
-      limit,
-    },
-    type: QueryTypes.SELECT,
-  });
-
-  return {
-    items: rows,
+  console.log("[KOL Marketing Search] db query start", {
     filters,
     limit,
-    dbCostMs: Date.now() - startedAt,
-  };
+    embeddingDimensions: params.embedding?.length,
+  });
+
+  try {
+    const rows = await db.query(sql, {
+      bind: {
+        ...bind,
+        embedding: embeddingLiteral,
+        limit,
+      },
+      type: QueryTypes.SELECT,
+    });
+
+    const dbCostMs = Date.now() - startedAt;
+    console.log("[KOL Marketing Search] db query success", {
+      filters,
+      limit,
+      resultCount: rows.length,
+      dbCostMs,
+    });
+
+    return {
+      items: rows,
+      filters,
+      limit,
+      dbCostMs,
+    };
+  } catch (error) {
+    console.error("[KOL Marketing Search] db query failed", {
+      filters,
+      limit,
+      costMs: Date.now() - startedAt,
+      code: error.code,
+      message: error.message,
+    });
+    throw error;
+  }
 }
 
 async function searchKolMarketingProfiles(params = {}) {
+  const startedAt = Date.now();
+  const queryLength = String(params.query || "").trim().length;
+  console.log("[KOL Marketing Search] embedding step start", {
+    queryLength,
+    requestedDimensions: EMBEDDING_DIMENSIONS,
+  });
+
   // 先把自然语言 query 转成和表内画像同维度的 query embedding。
   const embeddingResult = await getQueryEmbedding({
     namespace: EMBEDDING_NAMESPACE,
@@ -205,6 +237,14 @@ async function searchKolMarketingProfiles(params = {}) {
     redisClient: params.redisClient,
     envPrefixes: EMBEDDING_ENV_PREFIXES,
     dimensions: EMBEDDING_DIMENSIONS,
+  });
+
+  console.log("[KOL Marketing Search] embedding step success", {
+    queryLength,
+    embeddingModel: embeddingResult.model,
+    embeddingDimensions: embeddingResult.embedding.length,
+    embeddingCacheHit: embeddingResult.cacheHit,
+    costMs: Date.now() - startedAt,
   });
 
   // 再用 query embedding 走 pgvector 近邻检索。
