@@ -20,6 +20,7 @@
 const { chat, streamChat } = require('./chat');
 const { structuredChat } = require('./structured');
 const { getChatModel, clearModelCache, getCacheStats } = require('./models');
+const { embedding, clearEmbeddingClientCache } = require('./embedding');
 const { z } = require('zod');
 
 module.exports = {
@@ -27,11 +28,13 @@ module.exports = {
   chat,
   streamChat,
   structuredChat,
+  embedding,
   
   // ===== 基础实例（复杂场景，直接用 LangChain）=====
   getChatModel,       // 获取 ChatOpenAI 实例
   clearModelCache,    // 清空模型缓存
   getCacheStats,      // 获取缓存统计
+  clearEmbeddingClientCache, // 清空 embedding 客户端缓存
   
   // 导出 zod 方便自定义 Schema
   z,

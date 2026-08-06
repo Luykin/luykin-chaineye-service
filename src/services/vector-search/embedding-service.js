@@ -1,5 +1,8 @@
 const crypto = require("crypto");
-const OpenAI = require("openai");
+const {
+  embedding: createLlmEmbedding,
+  clearEmbeddingClientCache,
+} = require("../../lib/llm");
 const llmConfig = require("../../lib/llm/config");
 
 /**
@@ -8,6 +11,7 @@ const llmConfig = require("../../lib/llm/config");
  * 环境变量命名规则：
  * - <PREFIX>_EMBEDDING_MODEL：embedding 模型名，例如 KOL_MARKETING_PROFILE_EMBEDDING_MODEL。
  * - <PREFIX>_EMBEDDING_DIMENSIONS：embedding 维度，必须和库里 vector 维度一致。
+ * - <PREFIX>_EMBEDDING_ENDPOINT_URL：内部 embedding HTTP 接口；配置后优先走它。
  * - <PREFIX>_EMBEDDING_API_KEY：embedding 服务 API Key，不填则复用 LLM_API_KEY。
  * - <PREFIX>_EMBEDDING_BASE_URL：embedding 服务 Base URL，不填则复用 LLM_BASE_URL / llmConfig.baseURL。
  * - <PREFIX>_EMBEDDING_CACHE_TTL_SECONDS：Redis embedding 缓存 TTL，默认 86400 秒。
@@ -19,8 +23,6 @@ const llmConfig = require("../../lib/llm/config");
  * KOL_MARKETING_PROFILE_EMBEDDING_MODEL -> KOL_SEARCH_EMBEDDING_MODEL -> VECTOR_SEARCH_EMBEDDING_MODEL。
  */
 
-// OpenAI SDK 客户端创建成本较高，这里按 namespace/model/baseURL/dimensions 复用。
-const clientCache = new Map();
 
 function normalizeEnvPrefixes(envPrefixes = []) {
   return Array.from(
@@ -53,12 +55,16 @@ function getEnvValue(envPrefixes, suffix, fallbackNames = []) {
 
 // 当前业务要使用的 embedding 模型；必须和数据表里存量向量的模型一致。
 function getConfiguredEmbeddingModel(options = {}) {
-  return options.model || getEnvValue(options.envPrefixes, "EMBEDDING_MODEL");
+  return (
+    options.model ||
+    getEnvValue(options.envPrefixes, "EMBEDDING_MODEL", ["LLM_EMBEDDING_MODEL"]) ||
+    "gemini-embedding-001"
+  );
 }
 
 // 当前业务期望的 embedding 维度；pgvector 字段维度不一致会直接报错。
 function getEmbeddingDimensions(options = {}) {
-  const configured = options.dimensions || getEnvValue(options.envPrefixes, "EMBEDDING_DIMENSIONS");
+  const configured = options.dimensions || getEnvValue(options.envPrefixes, "EMBEDDING_DIMENSIONS", ["LLM_EMBEDDING_DIMENSIONS"]);
   const dimensions = Number(configured || 1536);
   return Number.isFinite(dimensions) && dimensions > 0 ? Math.floor(dimensions) : 1536;
 }
@@ -70,11 +76,21 @@ function getEmbeddingCacheTtlSeconds(options = {}) {
   return Number.isFinite(ttl) && ttl > 0 ? Math.floor(ttl) : 86400;
 }
 
+// 内部 embedding endpoint：例如 backend-v1 的 /ai/embedding。
+// 配置后优先走内部 endpoint，避免当前服务直接请求外部 LiteLLM/Gemini 被网关拦截。
+function getEmbeddingEndpointURL(options = {}) {
+  return (
+    options.endpointURL ||
+    getEnvValue(options.envPrefixes, "EMBEDDING_ENDPOINT_URL", ["LLM_EMBEDDING_ENDPOINT_URL"]) ||
+    ""
+  );
+}
+
 // embedding 服务地址：业务配置优先，其次复用通用 LLM 服务地址。
 function getEmbeddingBaseURL(options = {}) {
   return (
     options.baseURL ||
-    getEnvValue(options.envPrefixes, "EMBEDDING_BASE_URL", ["LLM_BASE_URL"]) ||
+    getEnvValue(options.envPrefixes, "EMBEDDING_BASE_URL", ["LLM_EMBEDDING_BASE_URL", "LLM_BASE_URL"]) ||
     llmConfig.baseURL ||
     ""
   );
@@ -85,130 +101,17 @@ function normalizeQueryText(text) {
   return String(text || "").trim().replace(/\s+/g, " ").slice(0, 500);
 }
 
-// 缓存 key 必须包含模型、维度、baseURL，防止切模型/切维度后命中旧 embedding。
-function getEmbeddingCacheKey(namespace, text, model, dimensions, baseURL) {
+// 缓存 key 必须包含模型、维度、上游地址，防止切模型/切维度/切服务后命中旧 embedding。
+function getEmbeddingCacheKey(namespace, text, model, dimensions, upstreamKey) {
   const normalized = normalizeQueryText(text);
   const safeNamespace = String(namespace || "default").trim() || "default";
   const hash = crypto
     .createHash("sha256")
-    .update(`${safeNamespace}\n${model}\n${dimensions}\n${baseURL || ""}\n${normalized}`)
+    .update(`${safeNamespace}\n${model}\n${dimensions}\n${upstreamKey || ""}\n${normalized}`)
     .digest("hex");
   return `vector_search:embedding:${safeNamespace}:${hash}`;
 }
 
-function createEmbeddingClient(options = {}) {
-  // model/apiKey/baseURL/dimensions 都在这里统一解析，便于多业务复用同一套逻辑。
-  const model = getConfiguredEmbeddingModel(options);
-  const apiKey =
-    options.apiKey ||
-    getEnvValue(options.envPrefixes, "EMBEDDING_API_KEY", ["LLM_API_KEY"]) ||
-    llmConfig.apiKey;
-  const baseURL = getEmbeddingBaseURL(options);
-  const dimensions = getEmbeddingDimensions(options);
-
-  if (!model) {
-    const error = new Error("embedding model is not configured");
-    error.code = "VECTOR_EMBEDDING_NOT_CONFIGURED";
-    throw error;
-  }
-
-  if (!apiKey) {
-    const error = new Error("embedding API key is not configured");
-    error.code = "VECTOR_EMBEDDING_NOT_CONFIGURED";
-    throw error;
-  }
-
-  console.log("[Vector Embedding] create client", {
-    namespace: options.namespace || "default",
-    model,
-    dimensions,
-    baseURLConfigured: Boolean(baseURL),
-    apiKeyConfigured: Boolean(apiKey),
-  });
-
-  return new OpenAI({
-    apiKey,
-    baseURL: baseURL || undefined,
-    maxRetries: Number(
-      options.maxRetries ||
-        getEnvValue(options.envPrefixes, "EMBEDDING_MAX_RETRIES") ||
-        llmConfig.maxRetries ||
-        2
-    ),
-    timeout: Number(
-      options.timeout || getEnvValue(options.envPrefixes, "EMBEDDING_TIMEOUT_MS") || 30000
-    ),
-  });
-}
-
-function getEmbeddingClient(options = {}) {
-  // 同一个业务 namespace 下，不同模型/服务地址/维度需要不同客户端。
-  const model = getConfiguredEmbeddingModel(options);
-  const namespace = String(options.namespace || "default");
-  const baseURL = getEmbeddingBaseURL(options);
-  const dimensions = getEmbeddingDimensions(options);
-  const cacheKey = `${namespace}:${model}:${baseURL}:${dimensions}`;
-
-  if (!clientCache.has(cacheKey)) {
-    clientCache.set(cacheKey, createEmbeddingClient(options));
-  }
-
-  return clientCache.get(cacheKey);
-}
-
-async function createEmbeddingWithOpenAIClient(client, input, options = {}) {
-  const model = getConfiguredEmbeddingModel(options);
-  const dimensions = getEmbeddingDimensions(options);
-  const namespace = options.namespace || "default";
-  const startedAt = Date.now();
-
-  console.log("[Vector Embedding] request start", {
-    namespace,
-    model,
-    requestedDimensions: dimensions,
-    queryLength: String(input || "").length,
-  });
-
-  // 这里直接调用 OpenAI SDK，而不是 LangChain OpenAIEmbeddings。
-  // 线上历史 /ai/embedding 服务也是直接调用 openai.embeddings.create({
-  //   model: "gemini-embedding-001",
-  //   dimensions: 1536,
-  //   encoding_format: "float"
-  // }) 生成向量。直接调用能确保 dimensions 明确传到 LiteLLM/Gemini 兼容层。
-  let response;
-  try {
-    response = await client.embeddings.create({
-      model,
-      input,
-      dimensions,
-      encoding_format: "float",
-    });
-  } catch (error) {
-    console.error("[Vector Embedding] request failed", {
-      namespace,
-      model,
-      requestedDimensions: dimensions,
-      costMs: Date.now() - startedAt,
-      status: error.status,
-      code: error.code,
-      type: error.type,
-      message: error.message,
-    });
-    throw error;
-  }
-
-  const embedding = response?.data?.[0]?.embedding;
-  console.log("[Vector Embedding] request success", {
-    namespace,
-    model,
-    requestedDimensions: dimensions,
-    returnedDimensions: Array.isArray(embedding) ? embedding.length : null,
-    costMs: Date.now() - startedAt,
-    usage: response?.usage || null,
-  });
-
-  return embedding;
-}
 
 async function readEmbeddingCache(redisClient, cacheKey) {
   // Redis 不是强依赖，读缓存失败只降级为实时生成 embedding。
@@ -274,14 +177,17 @@ async function getQueryEmbedding(options = {}) {
 
   const model = getConfiguredEmbeddingModel(options);
   const dimensions = getEmbeddingDimensions(options);
-  const baseURL = getEmbeddingBaseURL(options);
+  const endpointURL = getEmbeddingEndpointURL(options);
+  // 配置内部 endpoint 时不再解析/透传外部 baseURL，避免日志和缓存 key 混淆真实上游。
+  const baseURL = endpointURL ? "" : getEmbeddingBaseURL(options);
   const namespace = String(options.namespace || "default").trim() || "default";
+  const upstreamKey = endpointURL || baseURL;
   const cacheKey = getEmbeddingCacheKey(
     namespace,
     normalizedQuery,
     model || "unknown",
     dimensions,
-    baseURL
+    upstreamKey
   );
   const cachedEmbedding = await readEmbeddingCache(options.redisClient, cacheKey);
 
@@ -307,12 +213,38 @@ async function getQueryEmbedding(options = {}) {
     namespace,
     model,
     expectedDimensions: dimensions,
+    endpointConfigured: Boolean(endpointURL),
     baseURLConfigured: Boolean(baseURL),
     queryLength: normalizedQuery.length,
   });
 
-  const client = getEmbeddingClient(options);
-  const embedding = await createEmbeddingWithOpenAIClient(client, normalizedQuery, options);
+  const apiKey = endpointURL
+    ? options.apiKey
+    : (
+        options.apiKey ||
+        getEnvValue(options.envPrefixes, "EMBEDDING_API_KEY", ["LLM_EMBEDDING_API_KEY", "LLM_API_KEY"]) ||
+        llmConfig.apiKey
+      );
+
+  const embedding = await createLlmEmbedding(normalizedQuery, {
+    namespace,
+    model,
+    dimensions,
+    endpointURL,
+    baseURL,
+    apiKey,
+    timeout: Number(
+      options.timeout ||
+        getEnvValue(options.envPrefixes, "EMBEDDING_TIMEOUT_MS", ["LLM_EMBEDDING_TIMEOUT_MS"]) ||
+        30000
+    ),
+    maxRetries: Number(
+      options.maxRetries ||
+        getEnvValue(options.envPrefixes, "EMBEDDING_MAX_RETRIES", ["LLM_EMBEDDING_MAX_RETRIES"]) ||
+        llmConfig.maxRetries ||
+        2
+    ),
+  });
   assertEmbeddingDimensions(embedding, options);
   await writeEmbeddingCache(options.redisClient, cacheKey, embedding, options);
 
@@ -326,7 +258,8 @@ async function getQueryEmbedding(options = {}) {
 }
 
 function resetEmbeddingClientsForTest() {
-  clientCache.clear();
+  // 保留测试导出兼容；统一 embedding 客户端缓存由 src/lib/llm 管理。
+  clearEmbeddingClientCache();
 }
 
 module.exports = {

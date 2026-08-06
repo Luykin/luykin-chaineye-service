@@ -197,10 +197,13 @@ KOL_MARKETING_PROFILE_EMBEDDING_MODEL=<必须和表内向量模型一致>
 # KOL 画像 query embedding 维度；必须等于 marketing_profile_embedding 的 vector 维度
 KOL_MARKETING_PROFILE_EMBEDDING_DIMENSIONS=1536
 
+# KOL 画像内部 embedding HTTP 接口；配置后优先走该接口，不直接请求外部 LiteLLM/OpenAI
+KOL_MARKETING_PROFILE_EMBEDDING_ENDPOINT_URL=http://backend-v1.xhunt.svc.cluster.local:3010/ai/embedding
+
 # KOL 画像 embedding 服务 API Key；不填时复用 LLM_API_KEY
 KOL_MARKETING_PROFILE_EMBEDDING_API_KEY=<可选，不填复用 LLM_API_KEY>
 
-# KOL 画像 embedding 服务 Base URL；不填时复用 LLM_BASE_URL / llmConfig.baseURL
+# KOL 画像 embedding 服务 Base URL；未配置内部 endpoint 时使用，不填则复用 LLM_BASE_URL / llmConfig.baseURL
 KOL_MARKETING_PROFILE_EMBEDDING_BASE_URL=<可选，不填复用 LLM_BASE_URL>
 
 # KOL 画像 query embedding Redis 缓存 TTL，单位秒；默认 86400
@@ -234,6 +237,31 @@ VECTOR_SEARCH_EMBEDDING_MODEL=<fallback>
 
 # 向量检索通用每日次数限制兜底；业务专用日限额未配置时使用
 VECTOR_SEARCH_DAILY_LIMIT=30
+```
+
+统一 LLM embedding 兜底（`src/lib/llm/embedding.js`）：
+
+```bash
+# 通用内部 embedding HTTP 接口；业务未配置 <PREFIX>_EMBEDDING_ENDPOINT_URL 时使用
+LLM_EMBEDDING_ENDPOINT_URL=<optional-internal-embedding-endpoint>
+
+# 通用 embedding 模型；业务和 VECTOR_SEARCH 都未配置模型时使用
+LLM_EMBEDDING_MODEL=gemini-embedding-001
+
+# 通用 embedding 维度；业务未显式传 dimensions 时使用，默认 1536
+LLM_EMBEDDING_DIMENSIONS=1536
+
+# 通用 OpenAI-compatible Base URL；仅未配置内部 endpoint 时使用
+LLM_EMBEDDING_BASE_URL=<optional-openai-compatible-base-url>
+
+# 通用 OpenAI-compatible API Key；仅未配置内部 endpoint 时使用，不填则复用 LLM_API_KEY
+LLM_EMBEDDING_API_KEY=<optional-secret>
+
+# 通用 embedding 请求超时时间，单位毫秒；默认复用 llmConfig.timeout
+LLM_EMBEDDING_TIMEOUT_MS=30000
+
+# 通用 embedding OpenAI SDK 重试次数；默认复用 llmConfig.maxRetries
+LLM_EMBEDDING_MAX_RETRIES=2
 ```
 
 ---

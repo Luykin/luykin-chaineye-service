@@ -1443,7 +1443,7 @@ class CrawlTaskManager {
 }
 
 const taskManager = new CrawlTaskManager();
-// Auto-initialize on start, but don't force it.
-taskManager.initialize();
+// RootDataPro 已完全停止：模块加载时禁止自动初始化，避免误 require 触发 Redis/DB/爬虫队列逻辑。
+// 如需临时人工恢复调试，可显式调用 taskManager.initialize()，不要依赖 require 副作用。
 
 module.exports = taskManager;

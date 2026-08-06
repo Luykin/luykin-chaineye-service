@@ -72,8 +72,8 @@ const MODULES_TO_PRELOAD = [
   './routes/rootdata-tampermonkey',
   './api/internal-query',
   
-  // RootDataPro
-  './rootdatapro/api/rootdatapro',
+  // RootDataPro 已完全停止：不要在 API 启动时 preload，避免触发爬虫 TaskManager 初始化。
+  // './rootdatapro/api/rootdatapro',
   
   // 中间件
   './xhunt/middleware/security',
@@ -218,7 +218,8 @@ const xHuntPrivateMessageRoutes = require("./xhunt/api/private-messages");
 const xHuntRootdataRoutes = require("./xhunt/api/rootdata");
 const xHuntGhostFollowingRoutes = require("./xhunt/api/ghost-following");
 const xHuntProApiCreditsRoutes = require("./xhunt/api/pro-api-credits");
-const rootdataProRoutes = require("./rootdatapro/api/rootdatapro");
+// RootDataPro 已完全停止：不要 require 路由，避免模块加载副作用。
+// const rootdataProRoutes = require("./rootdatapro/api/rootdatapro");
 
 const adminRoutes = require("./admin/api/admin");
 const adminReviewsRoutes = require("./admin/api/reviews");
@@ -245,7 +246,8 @@ const {
 // const StatsD = require("hot-shots");
 // const dataDog = new StatsD();
 const { adminAuth } = require("./admin/middleware/adminAuth");
-const { setupRootdataProPostgres } = require("./rootdatapro/models");
+// RootDataPro 已完全停止：不要初始化 rootdatapro 独立数据库连接。
+// const { setupRootdataProPostgres } = require("./rootdatapro/models");
 
 const app = express();
 const PORT = process.env.PORT || 8090;
@@ -757,7 +759,8 @@ async function initializeAndStartServer() {
   } else {
     console.warn("[API Server] PostgreSQL 只读从库未配置，依赖只读从库的业务接口会返回 503");
   }
-  await setupRootdataProPostgres(); // 初始化新的 RootDataPro PostgreSQL（src/rootdatapro/models：database=rootdatapro，rootdatapro 专用表与关系）
+  // RootDataPro 已完全停止：不再初始化 rootdatapro 独立数据库连接。
+  // await setupRootdataProPostgres();
 
   // 初始化币安广场模型（使用主业务 PostgreSQL 实例 pgInstance）
   try {
