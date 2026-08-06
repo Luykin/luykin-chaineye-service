@@ -58,6 +58,7 @@ const MODULES_TO_PRELOAD = [
   './admin/api/admin',
   './admin/api/reviews',
   './admin/api/tampermonkey',
+  './admin/api/kol-marketing',
   
   // 币安广场
   './binance-square/api/binance-square',
@@ -223,6 +224,7 @@ const adminRoutes = require("./admin/api/admin");
 const adminReviewsRoutes = require("./admin/api/reviews");
 const adminLlmTestRoutes = require("./admin/api/llm-test");
 const adminTampermonkeyRoutes = require("./admin/api/tampermonkey");
+const adminKolMarketingRoutes = require("./admin/api/kol-marketing");
 const binanceSquareRoutes = require("./binance-square/api/binance-square");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
@@ -665,6 +667,9 @@ async function initializeAndStartServer() {
 
   // 管理后台 - Tampermonkey 采集脚本与 token 管理
   app.use("/api/admin/tampermonkey", adminAuth, adminTampermonkeyRoutes);
+
+  // 管理后台 - KOL Marketing 向量检索联调工具（只读，不走插件签名）
+  app.use("/api/admin/kol-marketing", adminAuth, adminKolMarketingRoutes);
 
   // 管理后台 - 币安广场
   app.use("/api/admin/binance-square", adminAuth, binanceSquareRoutes.router);

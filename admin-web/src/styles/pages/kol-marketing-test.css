@@ -1,0 +1,144 @@
+.kol-marketing-test-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kol-marketing-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--ant-color-border-secondary, #e5e7eb);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 8% 20%, rgba(245, 158, 11, 0.18), transparent 28%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.97), rgba(30, 41, 59, 0.92));
+  color: #f8fafc;
+}
+
+.kol-marketing-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -80px -120px auto;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  border: 42px solid rgba(251, 191, 36, 0.16);
+  pointer-events: none;
+}
+
+.kol-marketing-hero h2,
+.kol-marketing-hero .ant-typography {
+  color: inherit;
+}
+
+.kol-marketing-hero p {
+  max-width: 780px;
+  margin-bottom: 0;
+  color: rgba(248, 250, 252, 0.78);
+}
+
+.kol-marketing-kicker {
+  display: inline-flex;
+  margin-bottom: 8px;
+  color: #fbbf24 !important;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.kol-status-tag {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+}
+
+.kol-control-card,
+.kol-status-card,
+.kol-result-card,
+.kol-metric-card {
+  border-radius: 18px;
+  box-shadow: 0 12px 35px rgba(15, 23, 42, 0.06);
+}
+
+.kol-control-card .ant-card-head,
+.kol-status-card .ant-card-head,
+.kol-result-card .ant-card-head {
+  border-bottom-style: dashed;
+}
+
+.kol-full {
+  width: 100%;
+}
+
+.kol-example-strip {
+  display: grid;
+  gap: 8px;
+  margin: -8px 0 18px;
+}
+
+.kol-example-strip button {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.75);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.75);
+  color: #475569;
+  text-align: left;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.kol-example-strip button:hover {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+  transform: translateY(-1px);
+}
+
+.kol-status-card {
+  margin: 16px 0;
+}
+
+.kol-status-alert {
+  margin-top: 12px;
+}
+
+.kol-result-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kol-result-handle,
+.kol-result-id {
+  font-size: 12px;
+}
+
+.kol-summary {
+  margin-bottom: 0 !important;
+  max-width: 330px;
+}
+
+[data-theme="dark"] .kol-marketing-hero {
+  border-color: rgba(148, 163, 184, 0.2);
+  background:
+    radial-gradient(circle at 8% 20%, rgba(245, 158, 11, 0.22), transparent 28%),
+    linear-gradient(135deg, rgba(2, 6, 23, 0.98), rgba(15, 23, 42, 0.94));
+}
+
+[data-theme="dark"] .kol-example-strip button {
+  background: rgba(15, 23, 42, 0.7);
+  color: #cbd5e1;
+}
+
+@media (max-width: 768px) {
+  .kol-marketing-hero {
+    flex-direction: column;
+    padding: 20px;
+  }
+}
