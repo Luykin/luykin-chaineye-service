@@ -53,6 +53,20 @@ function normalizeEmbeddingInput(input) {
   return String(input || "").trim();
 }
 
+function getSafeUrlSummary(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return {
+      protocol: parsed.protocol.replace(":", ""),
+      host: parsed.host,
+      pathname: parsed.pathname,
+    };
+  } catch (error) {
+    return { invalid: true };
+  }
+}
+
 function getEmbeddingClient({ apiKey, baseURL, timeout, maxRetries }) {
   const cacheKey = `${baseURL || "default"}:${timeout}:${maxRetries}`;
   if (!embeddingClientCache.has(cacheKey)) {
@@ -64,6 +78,7 @@ function getEmbeddingClient({ apiKey, baseURL, timeout, maxRetries }) {
 
     console.log("[LLM Embedding] create OpenAI-compatible client", {
       baseURLConfigured: Boolean(baseURL),
+      baseURL: getSafeUrlSummary(baseURL),
       apiKeyConfigured: Boolean(apiKey),
       timeout,
       maxRetries,
@@ -113,6 +128,7 @@ async function requestEmbeddingByEndpoint(input, options) {
     model,
     requestedDimensions: dimensions,
     endpointConfigured: Boolean(endpointURL),
+    endpoint: getSafeUrlSummary(endpointURL),
     inputLength: input.length,
   });
 
@@ -192,6 +208,9 @@ async function requestEmbeddingByOpenAI(input, options) {
     model,
     requestedDimensions: dimensions,
     baseURLConfigured: Boolean(baseURL),
+    baseURL: getSafeUrlSummary(baseURL),
+    apiKeySource: options.apiKeySource || "unknown",
+    apiKeyConfigured: Boolean(apiKey),
     inputLength: input.length,
   });
 
@@ -213,6 +232,8 @@ async function requestEmbeddingByOpenAI(input, options) {
       status: error.status,
       code: error.code,
       type: error.type,
+      apiKeySource: options.apiKeySource || "unknown",
+      baseURL: getSafeUrlSummary(baseURL),
       message: error.message,
     });
     throw error;
@@ -265,6 +286,7 @@ async function embedding(input, options = {}) {
     timeout: getNumber(options.timeout, getDefaultEmbeddingTimeout()),
     maxRetries: getNumber(options.maxRetries, getDefaultEmbeddingMaxRetries()),
     namespace: options.namespace || "default",
+    apiKeySource: options.apiKeySource || (endpointURL ? "endpoint-not-required" : "unknown"),
   };
 
   if (!resolved.model) {

@@ -95,6 +95,14 @@ router.post("/search", async (req, res) => {
       },
     });
   } catch (error) {
+    const totalCostMs = Date.now() - startedAt;
+    console.error("[Admin KOL Marketing Search] failed", {
+      code: error.code,
+      status: error.status,
+      message: error.message,
+      totalCostMs,
+    });
+
     const isConfigError = [
       "PG_READ_NOT_CONFIGURED",
       "VECTOR_EMBEDDING_NOT_CONFIGURED",

@@ -38,7 +38,7 @@ function normalizeEnvPrefixes(envPrefixes = []) {
 }
 
 // 根据业务前缀读取环境变量，并自动追加 VECTOR_SEARCH 作为通用兜底前缀。
-function getEnvValue(envPrefixes, suffix, fallbackNames = []) {
+function getEnvValueWithSource(envPrefixes, suffix, fallbackNames = []) {
   const names = [];
   for (const prefix of normalizeEnvPrefixes(envPrefixes)) {
     names.push(`${prefix}_${suffix}`);
@@ -47,10 +47,14 @@ function getEnvValue(envPrefixes, suffix, fallbackNames = []) {
 
   for (const name of names) {
     const value = process.env[name];
-    if (value) return value;
+    if (value) return { value, source: name };
   }
 
-  return "";
+  return { value: "", source: "" };
+}
+
+function getEnvValue(envPrefixes, suffix, fallbackNames = []) {
+  return getEnvValueWithSource(envPrefixes, suffix, fallbackNames).value;
 }
 
 // 当前业务要使用的 embedding 模型；必须和数据表里存量向量的模型一致。
@@ -209,12 +213,19 @@ async function getQueryEmbedding(options = {}) {
     };
   }
 
+  const apiKeyEnv = getEnvValueWithSource(options.envPrefixes, "EMBEDDING_API_KEY", ["LLM_EMBEDDING_API_KEY", "LLM_API_KEY"]);
+  const apiKeySource = endpointURL
+    ? (options.apiKey ? "options.apiKey" : "endpoint-not-required")
+    : (options.apiKey ? "options.apiKey" : (apiKeyEnv.source || (llmConfig.apiKey ? "llmConfig.apiKey" : "")));
+
   console.log("[Vector Embedding] cache miss", {
     namespace,
     model,
     expectedDimensions: dimensions,
     endpointConfigured: Boolean(endpointURL),
     baseURLConfigured: Boolean(baseURL),
+    apiKeyConfigured: Boolean(endpointURL ? options.apiKey : (options.apiKey || apiKeyEnv.value || llmConfig.apiKey)),
+    apiKeySource,
     queryLength: normalizedQuery.length,
   });
 
@@ -222,7 +233,7 @@ async function getQueryEmbedding(options = {}) {
     ? options.apiKey
     : (
         options.apiKey ||
-        getEnvValue(options.envPrefixes, "EMBEDDING_API_KEY", ["LLM_EMBEDDING_API_KEY", "LLM_API_KEY"]) ||
+        apiKeyEnv.value ||
         llmConfig.apiKey
       );
 
@@ -233,6 +244,7 @@ async function getQueryEmbedding(options = {}) {
     endpointURL,
     baseURL,
     apiKey,
+    apiKeySource,
     timeout: Number(
       options.timeout ||
         getEnvValue(options.envPrefixes, "EMBEDDING_TIMEOUT_MS", ["LLM_EMBEDDING_TIMEOUT_MS"]) ||
