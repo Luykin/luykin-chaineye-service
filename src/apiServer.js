@@ -25,6 +25,7 @@ const MODULES_TO_PRELOAD = [
   './models/sqlite-start',
   './models/postgres-start',
   './models/postgres-fundraising',
+  './infra/k8s/postgres-readonly',
   
   // XHunt API 路由
   './xhunt/api/auth',
@@ -49,6 +50,7 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/user-entry',
   './xhunt/api/ai-detect',
   './xhunt/api/kol-chat',
+  './xhunt/api/kol-marketing',
   './xhunt/api/tags',
   './xhunt/api/twitter-rename',
   
@@ -187,6 +189,10 @@ const { getRedisClient } = require("./lib/redisClient");
 const { setupSqlite } = require("./models/sqlite-start");
 const { setupPostgres } = require("./models/postgres-start");
 const { setupPostgresFundraising } = require("./models/postgres-fundraising");
+const {
+  isPostgresReadOnlyConfigured,
+  setupK8sPostgresReadOnlyConnection,
+} = require("./infra/k8s/postgres-readonly");
 const fundraisingRoutes = require("./routes/fundraising");
 const cryptoRoutes = require("./routes/cryptohunt-tg");
 const proxyRoutes = require("./routes/proxy");
@@ -222,6 +228,7 @@ const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
 const xHuntAIDetectRoutes = require("./xhunt/api/ai-detect");
 const xHuntKolChatRoutes = require("./xhunt/api/kol-chat");
+const xHuntKolMarketingSearchRoutes = require("./xhunt/api/kol-marketing");
 const xHuntTagsRoutes = require("./xhunt/api/tags");
 const xHuntTwitterRenameRoutes = require("./xhunt/api/twitter-rename");
 const internalQueryRoutes = require("./api/internal-query");
@@ -632,6 +639,15 @@ async function initializeAndStartServer() {
     xHuntKolChatRoutes
   );
 
+  // KOL Marketing Profile 向量检索接口 - 业务 SQL 显式维护，底层复用只读从库 + pgvector 工具
+  app.use(
+    "/api/xhunt/kol-marketing",
+    fingerprintLimiter,
+    browserOnlyMiddleware,
+    securityMiddleware,
+    xHuntKolMarketingSearchRoutes
+  );
+
   // RootdataPro: 触发爬虫并入库
   // app.use("/api/rootdatapro/internal", adminAuth, rootdataProRoutes);
 
@@ -724,6 +740,18 @@ async function initializeAndStartServer() {
   await setupSqlite(); // 初始化本地 SQLite（用于轻量本地表/缓存类表，具体取决于 models/sqlite-start 的定义）
   await setupPostgres(); // 初始化主 PostgreSQL（src/models/postgres-start.js：cryptohunt + xhunt 相关业务表）
   await setupPostgresFundraising(); // 初始xhunt里面老版本化融资业务 PostgreSQL（src/models/postgres-fundraising.js：Fundraising 相关表与关系）
+  if (isPostgresReadOnlyConfigured()) {
+    try {
+      await setupK8sPostgresReadOnlyConnection(); // 初始化 K8s 注入的 PostgreSQL 只读从库连接；不执行 sync
+    } catch (error) {
+      console.error(
+        "[API Server] ❌ PostgreSQL 只读从库初始化失败，依赖只读从库的业务接口会返回 503:",
+        error.message
+      );
+    }
+  } else {
+    console.warn("[API Server] PostgreSQL 只读从库未配置，依赖只读从库的业务接口会返回 503");
+  }
   await setupRootdataProPostgres(); // 初始化新的 RootDataPro PostgreSQL（src/rootdatapro/models：database=rootdatapro，rootdatapro 专用表与关系）
 
   // 初始化币安广场模型（使用主业务 PostgreSQL 实例 pgInstance）
