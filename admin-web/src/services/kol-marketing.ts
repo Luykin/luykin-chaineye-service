@@ -60,6 +60,17 @@ export interface KolMarketingServiceStatus {
   pgConfigured: boolean;
   pgRead: KolMarketingPgReadStatus;
   embeddingModel: string | null;
+  profileStats?: {
+    total: number;
+    active: number;
+    activeWithEmbedding: number;
+    activeMissingEmbedding: number;
+    activeNeedsEmbeddingRefresh: number;
+    activeNeedsAiRefresh: number;
+    embeddingCoverage: number;
+    checkedAt?: string | null;
+  } | null;
+  profileStatsError?: string | null;
   filterLlm?: {
     enabled: boolean;
     model?: string | null;

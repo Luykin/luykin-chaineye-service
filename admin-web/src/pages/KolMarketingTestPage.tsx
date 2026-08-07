@@ -170,7 +170,13 @@ export function KolMarketingTestPage() {
     try {
       const resp = await searchKolMarketingProfiles({ query, filters, limit });
       setResult(resp.data);
-      if (resp.data.serviceStatus) setStatus(resp.data.serviceStatus);
+      if (resp.data.serviceStatus) {
+        setStatus((prevStatus) => ({
+          ...resp.data.serviceStatus!,
+          profileStats: resp.data.serviceStatus?.profileStats ?? prevStatus?.profileStats ?? null,
+          profileStatsError: resp.data.serviceStatus?.profileStatsError ?? prevStatus?.profileStatsError ?? null,
+        }));
+      }
       messageApi.success(`检索完成，返回 ${resp.data.items.length} 条`);
     } catch (error) {
       const text = error instanceof Error ? error.message : "KOL Marketing 搜索失败";
@@ -282,6 +288,7 @@ export function KolMarketingTestPage() {
   ], []);
 
   const items = result?.items || [];
+  const profileStats = status?.profileStats || null;
 
   return (
     <PermissionGuard permission="llm-test">
@@ -427,6 +434,34 @@ export function KolMarketingTestPage() {
                 </Col>
               </Row>
             ) : null}
+
+            <Card className="kol-status-card" title="KOL 数据覆盖">
+              <Row gutter={[16, 16]}>
+                <Col xs={12} md={6}>
+                  <Statistic title="总行数" value={profileStats?.total ?? "-"} />
+                </Col>
+                <Col xs={12} md={6}>
+                  <Statistic title="Active 行数" value={profileStats?.active ?? "-"} />
+                </Col>
+                <Col xs={12} md={6}>
+                  <Statistic title="支持向量" value={profileStats?.activeWithEmbedding ?? "-"} />
+                </Col>
+                <Col xs={12} md={6}>
+                  <Statistic title="向量覆盖率" value={profileStats ? formatPercent(profileStats.embeddingCoverage) : "-"} />
+                </Col>
+              </Row>
+              {profileStats ? (
+                <Space size={[8, 8]} wrap className="kol-profile-stats-tags">
+                  <Tag>缺 embedding：{formatNumber(profileStats.activeMissingEmbedding)}</Tag>
+                  <Tag color="orange">需刷新 embedding：{formatNumber(profileStats.activeNeedsEmbeddingRefresh)}</Tag>
+                  <Tag color="purple">需刷新 AI 画像：{formatNumber(profileStats.activeNeedsAiRefresh)}</Tag>
+                  {profileStats.checkedAt ? <Text type="secondary">统计时间：{profileStats.checkedAt}</Text> : null}
+                </Space>
+              ) : (
+                <Text type="secondary">暂无统计数据，点击“刷新状态”重试。</Text>
+              )}
+              {status?.profileStatsError ? <Alert type="warning" showIcon message={status.profileStatsError} className="kol-status-alert" /> : null}
+            </Card>
 
             <Card className="kol-status-card" title="服务状态">
               <Descriptions size="small" column={{ xs: 1, md: 2 }} bordered>

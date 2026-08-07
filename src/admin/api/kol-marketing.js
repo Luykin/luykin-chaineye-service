@@ -8,7 +8,9 @@
  */
 
 const express = require("express");
+const { QueryTypes } = require("sequelize");
 const {
+  getPostgresReadOnlyInstance,
   getPostgresReadOnlyStatus,
   isPostgresReadOnlyConfigured,
 } = require("../../infra/k8s/postgres-readonly");
@@ -53,10 +55,61 @@ function sanitizeQuery(value) {
   return String(value || "").trim().slice(0, 500);
 }
 
-router.get("/status", (req, res) => {
+async function getProfileStats() {
+  const db = getPostgresReadOnlyInstance();
+  const [row] = await db.query(
+    `
+      SELECT
+        COUNT(*)::integer AS "total",
+        COUNT(*) FILTER (WHERE active)::integer AS "active",
+        COUNT(*) FILTER (WHERE active AND marketing_profile_embedding IS NOT NULL)::integer AS "activeWithEmbedding",
+        COUNT(*) FILTER (WHERE active AND marketing_profile_embedding IS NULL)::integer AS "activeMissingEmbedding",
+        COUNT(*) FILTER (WHERE active AND needs_embedding_refresh)::integer AS "activeNeedsEmbeddingRefresh",
+        COUNT(*) FILTER (WHERE active AND needs_ai_refresh)::integer AS "activeNeedsAiRefresh"
+      FROM dev.kol_marketing_profile
+    `,
+    { type: QueryTypes.SELECT }
+  );
+
+  const active = Number(row.active || 0);
+  const activeWithEmbedding = Number(row.activeWithEmbedding || 0);
+
+  return {
+    total: Number(row.total || 0),
+    active,
+    activeWithEmbedding,
+    activeMissingEmbedding: Number(row.activeMissingEmbedding || 0),
+    activeNeedsEmbeddingRefresh: Number(row.activeNeedsEmbeddingRefresh || 0),
+    activeNeedsAiRefresh: Number(row.activeNeedsAiRefresh || 0),
+    embeddingCoverage: active > 0 ? activeWithEmbedding / active : 0,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+router.get("/status", async (req, res) => {
+  const status = getServiceStatus();
+  let profileStats = null;
+  let profileStatsError = null;
+
+  if (status.pgConfigured && status.pgRead.ready) {
+    try {
+      profileStats = await getProfileStats();
+    } catch (error) {
+      profileStatsError = error.message || "KOL Marketing 表统计加载失败";
+      console.warn("[Admin KOL Marketing Status] load profile stats failed", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+  }
+
   res.json({
     success: true,
-    data: getServiceStatus(),
+    data: {
+      ...status,
+      profileStats,
+      profileStatsError,
+    },
   });
 });
 
