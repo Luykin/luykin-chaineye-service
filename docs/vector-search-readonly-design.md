@@ -91,9 +91,10 @@ POST /api/xhunt/kol-marketing/search
 实现要点：
 
 - LLM 只负责理解用户表达并产出结构化 JSON，所有结果仍会经过后端 `normalizeFilters()` 白名单归一化后才允许进入 SQL。
-- `keywords` / `cooperationTypes` / `marketingGoals` / `projectStages` 这类需要精确匹配表内标签的字段，只有用户明确表达为硬条件时才抽取；泛化描述保留在 `semanticQuery` 里走向量召回。
+- `keywords` / `cooperationTypes` / `marketingGoals` / `projectStages` 这类需要精确匹配表内标签的字段，LLM 推断结果只用于排查和补充 `semanticQuery`，不会自动进入 SQL；只有调用方显式传入 filters 时才作为硬过滤。
 - LLM 解析失败、超时、未配置 `LLM_API_KEY` 时，不影响搜索主链路，会自动降级为规则兜底。
 - LLM 解析结果会按 query + 模型 + 解析版本写 Redis 短缓存，减少额外模型调用。
+- 当存在语言、领域、粉丝、意愿等硬过滤时，SQL 会先 materialize 过滤候选集，再做精确向量排序，避免 HNSW 近似索引在过滤条件下漏召回导致 0 结果。
 
 接口响应会返回：
 

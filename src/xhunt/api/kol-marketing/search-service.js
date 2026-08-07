@@ -47,6 +47,16 @@ const FILTER_PATCH_KEYS = [
   "maxFollowers",
 ];
 
+// 这些字段在画像表里是模型生成的业务标签，值不是标准枚举。
+// LLM 可把它们写进 semanticQuery 辅助向量召回，但不能作为自动推断的 SQL 硬过滤；
+// 只有前端/调用方显式传 filters 时，才允许它们进入 SQL。
+const LLM_SEMANTIC_ONLY_FILTER_KEYS = [
+  "keywords",
+  "cooperationTypes",
+  "marketingGoals",
+  "projectStages",
+];
+
 const VALID_LANGUAGES = new Set(["CN", "GLOBAL"]);
 const VALID_DOMAINS = new Set(["AI", "Web3"]);
 const VALID_WILLINGNESS_LEVELS = new Set(["low", "medium", "high", "unknown"]);
@@ -808,6 +818,14 @@ function shouldUseLlmFilters(llmExtraction = {}) {
   );
 }
 
+function getLlmSqlHardFilters(filters = {}) {
+  const normalized = normalizeFilters(filters);
+  for (const key of LLM_SEMANTIC_ONLY_FILTER_KEYS) {
+    delete normalized[key];
+  }
+  return normalized;
+}
+
 async function buildKolMarketingSearchPlan(params = {}) {
   const query = normalizeQueryText(params.query);
   const explicitFilters = normalizeFilters(params.filters);
@@ -818,12 +836,13 @@ async function buildKolMarketingSearchPlan(params = {}) {
   const llmFilters = shouldUseLlmFilters(llmExtraction)
     ? normalizeFilters(llmExtraction.filters)
     : {};
+  const llmSqlHardFilters = getLlmSqlHardFilters(llmFilters);
 
   // 推断过滤条件先用确定性规则兜底，再用 LLM 结构化结果覆盖，最后再做一次粉丝数冲突保护。
   const derivedFilters = resolveFollowerConflicts(
-    applyFilterPatch(ruleFilters, llmFilters),
+    applyFilterPatch(ruleFilters, llmSqlHardFilters),
     ruleFilters,
-    llmFilters
+    llmSqlHardFilters
   );
 
   // 显式 filters 是用户/前端直接选择的硬条件，优先级最高。
@@ -844,7 +863,7 @@ async function buildKolMarketingSearchPlan(params = {}) {
     reasons: buildFilterReasons(ruleReasons, llmExtraction),
     semanticQuery,
     filterPlan: {
-      source: getFilterPlanSource({ explicitFilters, llmFilters, ruleFilters }),
+      source: getFilterPlanSource({ explicitFilters, llmFilters: llmSqlHardFilters, ruleFilters }),
       llmEnabled: llmExtraction.enabled,
       llmAttempted: llmExtraction.attempted,
       llmCacheHit: llmExtraction.cacheHit,
@@ -870,7 +889,7 @@ function mergeKolMarketingFilters(inputFilters = {}, query = "") {
 }
 
 function buildKolMarketingProfileSearchSql(filters) {
-  // 固定条件必须保留：和生产 HNSW 部分索引条件一致，才能稳定命中索引。
+  // 固定条件必须保留：和生产 HNSW 部分索引条件一致。
   const clauses = [
     "p.active = true",
     "p.marketing_profile_embedding IS NOT NULL",
@@ -933,6 +952,76 @@ function buildKolMarketingProfileSearchSql(filters) {
     bind.identityTier = filters.identityTier;
   }
 
+  const hasHardFilters = hasMeaningfulFilters(filters);
+
+  if (hasHardFilters) {
+    // pgvector HNSW 是近似索引：在 WHERE 里叠加语言/领域/粉丝/意愿等硬过滤时，
+    // 可能先取近邻候选再过滤，导致“库里有匹配数据但返回 0 条”。
+    // 有硬过滤时先 materialize 过滤候选，再在候选集上做精确向量排序，保证召回正确。
+    const sql = `
+      WITH filtered_profiles AS MATERIALIZED (
+        SELECT
+          p.twitter_user_id,
+          p.handle,
+          p.name,
+          p.language,
+          p.domains,
+          p.followers,
+          p.ai_rank_global,
+          p.ai_rank_cn,
+          p.web3_rank_global,
+          p.web3_rank_cn,
+          p.marketing_summary_cn,
+          p.marketing_summary_en,
+          p.keywords,
+          p.cooperation_types,
+          p.marketing_goals,
+          p.project_stages,
+          p.willingness_level,
+          p.willingness_score,
+          p.willingness_reason,
+          p.identity_tier,
+          p.embedding_model,
+          p.embedding_version,
+          p.embedding_generated_at,
+          p.marketing_profile_embedding
+        FROM dev.kol_marketing_profile p
+        WHERE ${clauses.join(" AND ")}
+      )
+      SELECT
+        fp.twitter_user_id AS "twitterUserId",
+        fp.handle,
+        fp.name,
+        fp.language,
+        fp.domains,
+        fp.followers::double precision AS followers,
+        fp.ai_rank_global AS "aiRankGlobal",
+        fp.ai_rank_cn AS "aiRankCn",
+        fp.web3_rank_global AS "web3RankGlobal",
+        fp.web3_rank_cn AS "web3RankCn",
+        fp.marketing_summary_cn AS "marketingSummaryCn",
+        fp.marketing_summary_en AS "marketingSummaryEn",
+        fp.keywords,
+        fp.cooperation_types AS "cooperationTypes",
+        fp.marketing_goals AS "marketingGoals",
+        fp.project_stages AS "projectStages",
+        fp.willingness_level AS "willingnessLevel",
+        fp.willingness_score::double precision AS "willingnessScore",
+        fp.willingness_reason AS "willingnessReason",
+        fp.identity_tier AS "identityTier",
+        fp.embedding_model AS "embeddingModel",
+        fp.embedding_version AS "embeddingVersion",
+        fp.embedding_generated_at AS "embeddingGeneratedAt",
+        -- pgvector cosine distance：距离越小越相似；这里转成 similarity，越接近 1 越相似。
+        1 - (fp.marketing_profile_embedding <=> $embedding::vector) AS similarity
+      FROM filtered_profiles fp
+      ORDER BY fp.marketing_profile_embedding <=> $embedding::vector
+      LIMIT $limit
+    `;
+
+    return { sql, bind, searchMode: "exact_filtered" };
+  }
+
   const sql = `
     SELECT
       p.twitter_user_id AS "twitterUserId",
@@ -966,7 +1055,7 @@ function buildKolMarketingProfileSearchSql(filters) {
     LIMIT $limit
   `;
 
-  return { sql, bind };
+  return { sql, bind, searchMode: "hnsw_unfiltered" };
 }
 
 async function queryKolMarketingProfilesByEmbedding(params = {}) {
@@ -979,7 +1068,7 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
 
   // embedding 数组转 pgvector literal，最终仍通过 Sequelize bind 参数传入。
   const embeddingLiteral = vectorToPgLiteral(params.embedding, EMBEDDING_DIMENSIONS);
-  const { sql, bind } = buildKolMarketingProfileSearchSql(filters);
+  const { sql, bind, searchMode } = buildKolMarketingProfileSearchSql(filters);
 
   // 只使用 K8s 注入的只读从库实例，不复用主库 pgInstance。
   const db = getPostgresReadOnlyInstance();
@@ -988,6 +1077,7 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
   console.log("[KOL Marketing Search] db query start", {
     filters,
     limit,
+    searchMode,
     embeddingDimensions: params.embedding?.length,
   });
 
@@ -1005,6 +1095,7 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
     console.log("[KOL Marketing Search] db query success", {
       filters,
       limit,
+      searchMode,
       resultCount: rows.length,
       dbCostMs,
     });
@@ -1013,12 +1104,14 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
       items: rows,
       filters,
       limit,
+      searchMode,
       dbCostMs,
     };
   } catch (error) {
     console.error("[KOL Marketing Search] db query failed", {
       filters,
       limit,
+      searchMode,
       costMs: Date.now() - startedAt,
       code: error.code,
       message: error.message,
