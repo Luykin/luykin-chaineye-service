@@ -8,6 +8,179 @@
 
 ---
 
+## 0. 接下来开发计划与当前进度
+
+### 0.1 总体顺序
+
+接下来按以下顺序推进，避免后端接口未定时前端被阻塞，也避免一开始就陷入完整接口复杂度：
+
+```text
+阶段 1：先做前端静态 UI
+  -> 阶段 2：再做后端接口改造
+    -> 阶段 3：进行前后端联调和细节补充
+```
+
+当前进度：
+
+| 阶段 | 状态 | 说明 |
+|---|---|---|
+| 方案设计 | 已完成 | 已明确产品流程、接口方向、实时进度、额度、登录、安全边界 |
+| 阶段 1：前端静态 UI | 待开始 | 先按原型还原页面、状态机和交互，不等待后端完整接口 |
+| 阶段 2：后端接口改造 | 待开始 | 在静态 UI 稳定后补 EchoHunt KOL Match 产品 API |
+| 阶段 3：联调和细节补充 | 待开始 | 接真实数据、SSE、额度、安全拒绝态、移动端和细节优化 |
+
+### 0.2 阶段 1：前端静态 UI
+
+目标：先把 EchoHunt 网站里的 KOL Match 页面做出来，完整覆盖主要用户流程和状态，不依赖后端最终接口。
+
+主要任务：
+
+1. 新增 `/kol-match` 页面入口。
+2. 改造 EchoHunt dashboard 导航：
+   - 侧边栏增加「KOL 匹配」。
+   - 移动端底部导航增加「KOL 匹配」。
+   - 路由识别 `/kol-match`。
+3. 新增前端模块：
+   ```text
+   components/kol-match/KolMatchPage.tsx
+   components/kol-match/AiMatchFlow.tsx
+   components/kol-match/FilterMatchPanel.tsx
+   components/kol-match/KolResultList.tsx
+   components/kol-match/KolDetailDrawer.tsx
+   components/kol-match/ThinkingTrace.tsx
+   components/kol-match/types.ts
+   ```
+4. 按参考原型还原：
+   - AI 精准匹配 tab。
+   - 条件筛选 tab。
+   - 项目 X 账号输入。
+   - 项目与需求描述。
+   - 策略确认页。
+   - 实时进度 / 思考过程页面。
+   - 推荐结果列表。
+   - KOL 详情抽屉。
+5. 先使用 mock 数据实现所有状态：
+   - 未登录态。
+   - 次数耗尽。
+   - 需求过于模糊。
+   - 无关请求被拒绝。
+   - X lookup 失败。
+   - 匹配失败。
+   - 空结果。
+   - 正常结果。
+6. 页面样式优先复刻原型 UI 和流程，但用当前 EchoHunt 网站的 React + Tailwind 组件方式实现。
+
+阶段 1 验收：
+
+- 不接真实后端也能完整演示流程。
+- `/kol-match` 可从桌面和移动端进入。
+- AI 精准匹配和条件筛选两种 tab 都能操作。
+- 所有关键空态 / 错误态 / quota 态都有 UI。
+- ThinkingTrace 能展示 mock 的实时步骤。
+- 中英文 copy 结构预留。
+
+### 0.3 阶段 2：后端接口改造
+
+目标：在后端新增 EchoHunt 专用 KOL Match 产品 API，复用当前已跑通的 KOL Marketing 搜索能力，同时补齐登录、额度、SSE、安全和筛选能力。
+
+主要任务：
+
+1. 新增 EchoHunt KOL Match router：
+   ```text
+   /api/xhunt/echohunt/kol-match/*
+   ```
+2. 所有接口接入 Auth Center 登录态。
+3. 新增 quota：
+   - AI 精准匹配每日次数。
+   - 条件筛选每日次数。
+   - 成功才扣，失败不扣。
+4. 新增外部 X lookup：
+   - 项目账号确认调用外部 X lookup。
+   - 失败不扣额度。
+5. 新增模型安全 gate：
+   - 拒绝与 KOL Match 无关请求。
+   - 拒绝 prompt injection / system prompt / key 泄露请求。
+   - 对混合合法需求做 `safeBrief` 清洗。
+6. 改造 AI 精准匹配：
+   - 从“单句 query”升级为“项目与需求 composite query”。
+   - 输出 strategy、semanticQuery、filters、publicReasoning。
+7. 新增 `ai-search/stream`：
+   - SSE 输出真实进度。
+   - 输出经过过滤的模型可公开推理摘要。
+8. 新增条件筛选接口：
+   - 登录后才能筛选。
+   - 最多 200 个。
+   - `GLOBAL -> language = GLOBAL`。
+9. 补齐 KOL 列表和详情字段：
+   - avatar
+   - views
+   - soulScore
+   - abilities
+   - willingnessEvidence
+   - lastActiveAt
+   - updatedAt
+
+阶段 2 验收：
+
+- 登录后可以调用 KOL Match API。
+- 未登录统一 401。
+- 无关请求会被拒绝且不扣额度。
+- AI stream 能真实输出阶段进度。
+- 成功生成 AI 名单最多 20 个。
+- 条件筛选成功最多 200 个。
+- 失败不扣额度。
+- 不返回 embedding 原始向量。
+- SQL 仍只走只读从库。
+
+### 0.4 阶段 3：联调和细节补充
+
+目标：把前端静态 UI 接入真实后端 API，补齐产品细节、异常处理和上线质量。
+
+主要任务：
+
+1. 前端 API client 接入：
+   - quota
+   - X lookup
+   - strategy
+   - ai-search/stream
+   - filter-search
+   - KOL detail
+2. 改造 Next proxy：
+   - 普通 `/api/echohunt/*` 继续 JSON 代理。
+   - `/api/echohunt/kol-match/ai-search/stream` 需要透传 `ReadableStream`，不能 `response.text()` 缓冲。
+3. 联调 SSE：
+   - loading skeleton。
+   - progress event。
+   - reasoning delta。
+   - final event。
+   - error event。
+4. 联调额度：
+   - 成功扣减。
+   - 失败不扣。
+   - 次数耗尽 429。
+   - resetTime 展示。
+5. 联调安全拒绝态：
+   - `needs_clarification`。
+   - `KOL_MATCH_OUT_OF_SCOPE`。
+   - prompt injection 被拒绝或清洗。
+6. 补齐移动端、空态、错误态、详情抽屉、排序和中英文文案。
+7. 根据真实数据调整：
+   - 推荐分展示。
+   - 结果为空提示。
+   - embedding 覆盖不足提示。
+   - 字段 fallback。
+
+阶段 3 验收：
+
+- 前端真实跑通 AI 精准匹配全链路。
+- 前端真实跑通条件筛选全链路。
+- 实时进度不是假进度。
+- 额度、登录、安全拒绝、失败不扣都符合预期。
+- 桌面和移动端都可用。
+- 可以交给坤哥做产品体验验收。
+
+---
+
 ## 1. 目标
 
 把当前已在管理后台测试页跑通的 KOL Marketing pgvector 检索能力，接入 EchoHunt 网站，形成正式的 KOL Match 产品页。
@@ -1330,7 +1503,18 @@ const KOL_MATCH_COPY = {
 
 ## 11. 推荐开发顺序
 
-### 阶段 1：后端产品 API 最小闭环
+本节和文档最前面的进度计划保持一致：**先前端静态 UI，再后端接口改造，最后联调和细节补充**。
+
+### 阶段 1：前端静态 UI
+
+1. 从原型抽 UI 结构。
+2. 用 React + Tailwind 重写为 `components/kol-match/*`。
+3. 接入 dashboard nav 和 `/kol-match` route。
+4. 先 mock API data，保证交互完整。
+5. 补齐 AI 精准匹配、条件筛选、ThinkingTrace、结果列表、详情抽屉。
+6. 补齐未登录、次数耗尽、需求模糊、无关请求拒绝、X lookup 失败、空结果等静态状态。
+
+### 阶段 2：后端接口改造
 
 1. 新增 EchoHunt KOL Match router。
 2. 接入 Auth Center 鉴权。
@@ -1342,14 +1526,7 @@ const KOL_MATCH_COPY = {
 8. 实现 `ai-search/stream` SSE 实时进度。
 9. 返回最终 `trace`，用于前端回放和兜底展示。
 
-### 阶段 2：前端页面静态迁移
-
-1. 从原型抽 UI 结构。
-2. 用 React + Tailwind 重写为 `components/kol-match/*`。
-3. 接入 dashboard nav 和 `/kol-match` route。
-4. 先 mock API data，保证交互完整。
-
-### 阶段 3：前后端联调
+### 阶段 3：联调和细节补充
 
 1. 接入 quota。
 2. 接入 strategy。
@@ -1358,13 +1535,8 @@ const KOL_MATCH_COPY = {
 5. 接入 filter-search。
 6. 接入 lookup 和 detail。
 7. 补齐错误态、空态、次数耗尽态。
-
-### 阶段 4：数据和体验优化
-
-1. 补 embedding 覆盖。
-2. 增加条件筛选索引。
-3. 优化 AI 推荐分。
-4. 优化 SSE 事件粒度和 publicReasoning 文案质量。
+8. 改造 Next proxy，确保 SSE 流式透传不被 `response.text()` 缓冲。
+9. 根据真实数据优化推荐分、空结果提示、字段 fallback、移动端细节和中英文文案。
 
 ---
 
