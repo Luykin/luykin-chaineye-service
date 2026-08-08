@@ -33,6 +33,8 @@ const FILTER_QUOTA_BUCKET = "filterSearch";
 const STRATEGY_CACHE_PREFIX = "echohunt:kol-match:strategy";
 const IDEMPOTENCY_CACHE_PREFIX = "echohunt:kol-match:idempotency";
 const STRATEGY_TTL_SECONDS = 30 * 60;
+const INTERNAL_TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
+const INTERNAL_TWITTER_USER_LOOKUP_TIMEOUT_MS = 7000;
 const DEFAULT_AI_DAILY_LIMIT = 3;
 const DEFAULT_FILTER_DAILY_LIMIT = 10;
 const DEFAULT_AI_RESULT_LIMIT = 20;
@@ -1248,61 +1250,54 @@ function buildTrace({ strategy, filters, candidateTotal, returned, quota }) {
   ];
 }
 
-function getExternalXLookupConfig() {
-  const url = process.env.ECHOHUNT_X_LOOKUP_URL || process.env.XHUNT_X_LOOKUP_URL || "";
-  return {
-    url,
-    apiKey: process.env.ECHOHUNT_X_LOOKUP_API_KEY || process.env.XHUNT_X_LOOKUP_API_KEY || "",
-    timeoutMs: getEnvPositiveInteger("ECHOHUNT_X_LOOKUP_TIMEOUT_MS", 7000),
-  };
-}
-
-function normalizeExternalXAccount(payload) {
-  const source = payload?.data || payload?.user || payload?.result || payload;
+function normalizeInternalTwitterAccount(payload) {
+  const source = payload?.data?.data || payload?.data?.user || payload?.data || payload?.user || payload?.result || payload;
   if (!source || typeof source !== "object") return null;
-  const handle = normalizeHandle(source.handle || source.username || source.screen_name || source.userName);
-  const twitterId = String(source.twitterId || source.twitter_id || source.id || source.userId || "").trim();
+  const profile = source.profile && typeof source.profile === "object" ? source.profile : {};
+  const handle = normalizeHandle(
+    source.handle ||
+      source.username ||
+      source.username_raw ||
+      source.screen_name ||
+      source.userName ||
+      profile.username ||
+      profile.username_raw
+  );
+  const twitterId = String(source.twitterId || source.twitter_id || source.id || source.userId || profile.id || "").trim();
   if (!handle && !twitterId) return null;
-  const name = normalizeString(source.name || source.displayName || source.display_name || handle, 120);
-  const avatar = source.avatar || source.profile_image_url || source.profileImageUrl || source.profileImageURL || null;
+  const name = normalizeString(source.name || source.displayName || source.display_name || profile.name || handle, 120);
+  const avatar = source.avatar || source.profile_image_url || source.profileImageUrl || source.profileImageURL || profile.profile_image_url || null;
   return {
     handle,
     name,
     avatar: isSafeHttpUrl(avatar) ? avatar : null,
     twitterId: twitterId || null,
     initial: buildInitial(name, handle),
-    verified: source.verified === true || source.isVerified === true || source.blue_verified === true || false,
-    source: "external_x_lookup",
+    verified: source.verified === true || source.isVerified === true || source.blue_verified === true || profile.verified === true || profile.is_blue_verified === true || false,
+    followers: numeric(source.followers || source.followers_count || profile.followers_count),
+    following: numeric(source.following || source.following_count || profile.following_count),
+    description: normalizeString(source.description || profile.description || "", 280),
+    createdAt: toIso(source.create_time || source.created_at || profile.created_at || profile.first_record),
+    source: "internal_twitter_user_lookup",
   };
 }
 
-async function lookupExternalXAccount(handle) {
-  const config = getExternalXLookupConfig();
-  if (!config.url) return { configured: false, account: null, error: null };
-  const url = config.url.includes("{handle}")
-    ? config.url.replace("{handle}", encodeURIComponent(handle))
-    : `${config.url}${config.url.includes("?") ? "&" : "?"}handle=${encodeURIComponent(handle)}`;
-  const headers = {};
-  if (config.apiKey) {
-    headers.Authorization = `Bearer ${config.apiKey}`;
-    headers["X-API-Key"] = config.apiKey;
-  }
+async function lookupInternalTwitterAccount(handle) {
+  const url = `${INTERNAL_TWITTER_USER_LOOKUP_URL}?username=${encodeURIComponent(handle)}`;
 
   try {
-    const response = await axios.get(url, { headers, timeout: config.timeoutMs });
+    const response = await axios.get(url, { timeout: INTERNAL_TWITTER_USER_LOOKUP_TIMEOUT_MS });
     return {
-      configured: true,
-      account: normalizeExternalXAccount(response.data),
+      account: normalizeInternalTwitterAccount(response.data),
       error: null,
     };
   } catch (error) {
     if (error.response?.status === 404) {
-      return { configured: true, account: null, error: null };
+      return { account: null, error: null };
     }
     return {
-      configured: true,
       account: null,
-      error: sanitizePublicText(error.message || "external lookup failed", 160),
+      error: "INTERNAL_TWITTER_USER_LOOKUP_FAILED",
     };
   }
 }
@@ -1345,16 +1340,15 @@ async function lookupProjectAccount(handle, options = {}) {
     throw publicError("PROJECT_HANDLE_INVALID", 400, "请输入有效的 X 用户名。", { quotaCharged: false });
   }
 
-  const external = await lookupExternalXAccount(normalizedHandle);
-  if (external.account) {
+  const upstream = await lookupInternalTwitterAccount(normalizedHandle);
+  if (upstream.account) {
     return {
-      ...external.account,
-      externalConfigured: external.configured,
+      ...upstream.account,
       lookupWarning: null,
     };
   }
 
-  if (external.configured && !external.error) {
+  if (!upstream.error) {
     return null;
   }
 
@@ -1362,14 +1356,13 @@ async function lookupProjectAccount(handle, options = {}) {
   if (local) {
     return {
       ...local,
-      externalConfigured: external.configured,
-      lookupWarning: external.error || (external.configured ? "EXTERNAL_X_LOOKUP_EMPTY" : "EXTERNAL_X_LOOKUP_NOT_CONFIGURED"),
+      lookupWarning: upstream.error,
     };
   }
 
-  if (external.error && options.failOnExternalError) {
+  if (upstream.error && options.failOnUpstreamError) {
     throw publicError("PROJECT_ACCOUNT_LOOKUP_FAILED", 503, "项目 X 账号确认暂时失败，请稍后重试。", {
-      lookupWarning: external.error,
+      lookupWarning: upstream.error,
       quotaCharged: false,
     });
   }
@@ -1692,25 +1685,25 @@ async function runAiMatch(req, body = {}, emitProgress) {
   const projectHandle = normalizeHandle(body.projectHandle || strategy.projectHandle);
   if (projectHandle) {
     await emitProgress?.({
-      stage: "x_lookup",
+      stage: "twitter_user_lookup",
       status: "running",
       title: "验证项目 X 账号",
-      message: `正在调用外部 X lookup 服务确认 @${projectHandle}。`,
+      message: `正在通过后端内部用户查询确认 @${projectHandle}。`,
       sources: ["projectHandle"],
     });
-    projectAccount = await lookupProjectAccount(projectHandle, { allowLocalFallback: true, failOnExternalError: false });
-    if (!projectAccount && getExternalXLookupConfig().url) {
+    projectAccount = await lookupProjectAccount(projectHandle, { allowLocalFallback: true, failOnUpstreamError: true });
+    if (!projectAccount) {
       throw publicError("PROJECT_ACCOUNT_NOT_FOUND", 404, "没有找到这个项目 X 账号，请检查用户名后重试。", {
         quotaCharged: false,
       });
     }
     await emitProgress?.({
-      stage: "x_lookup",
+      stage: "twitter_user_lookup",
       status: projectAccount ? "done" : "skipped",
       title: projectAccount ? "项目 X 账号已确认" : "项目 X 账号未确认，继续使用 brief",
-      message: projectAccount ? `已确认 @${projectAccount.handle}。` : "外部 X lookup 未配置或未命中，本次继续根据项目描述匹配。",
-      metrics: projectAccount ? { source: projectAccount.source, externalConfigured: projectAccount.externalConfigured } : { externalConfigured: false },
-      sources: ["external_x_lookup", "local_fallback"],
+      message: projectAccount ? `已确认 @${projectAccount.handle}。` : "后端内部用户查询未命中，本次继续根据项目描述匹配。",
+      metrics: projectAccount ? { source: projectAccount.source, lookupWarning: projectAccount.lookupWarning || null } : undefined,
+      sources: ["internal_twitter_user_lookup", "local_fallback"],
     });
   }
 
@@ -1865,7 +1858,7 @@ router.get("/quota", async (req, res) => {
 router.get("/project-account/lookup", async (req, res) => {
   try {
     const handle = normalizeHandle(req.query.handle);
-    const account = await lookupProjectAccount(handle, { allowLocalFallback: true, failOnExternalError: false });
+    const account = await lookupProjectAccount(handle, { allowLocalFallback: true, failOnUpstreamError: true });
     if (!account) {
       return res.status(404).json({
         success: false,

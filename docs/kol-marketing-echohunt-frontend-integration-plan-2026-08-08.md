@@ -26,8 +26,8 @@
 |---|---|---|
 | 方案设计 | 已完成 | 已明确产品流程、接口方向、实时进度、额度、登录、安全边界 |
 | 阶段 1：前端静态 UI | 已完成 | `/kol-match` 静态页面、流程、mock 状态和原型布局已基本完成 |
-| 阶段 2：后端接口改造 | 进行中 | P0 产品 API 代码已落地，下一步需要接真实环境联调 |
-| 阶段 3：联调和细节补充 | 待开始 | 接真实数据、SSE、额度、安全拒绝态、移动端和细节优化 |
+| 阶段 2：后端接口改造 | 已完成核心代码 | P0 产品 API 已落地；内部推特用户查询改为后端常量调用，不再依赖 `ECHOHUNT_TWITTER_USER_LOOKUP_*` 环境配置 |
+| 阶段 3：联调和细节补充 | 进行中 | 前端已开始真实 API 对接，保留原型布局与交互；下一步需要用真实 token / Redis / 只读 PG / embedding 服务跑通全链路 |
 
 ### 0.1.1 阶段 2 当前实现进度（2026-08-08）
 
@@ -59,7 +59,7 @@
 7. 已实现 AI 精准匹配：
    - `POST /ai-search`
    - `POST /ai-search/stream`
-   - SSE 输出真实阶段进度：scope、quota、X lookup、strategy、embedding、db_search、ranking、final。
+   - SSE 输出真实阶段进度：scope、quota、内部推特用户查询、strategy、embedding、db_search、ranking、final。
 8. 已实现条件筛选：
    - `POST /filter-search`
    - 登录必需。
@@ -80,15 +80,72 @@
 
 阶段 2 剩余事项：
 
-1. 在部署环境补充外部 X lookup 配置：
-   ```bash
-   ECHOHUNT_X_LOOKUP_URL=
-   ECHOHUNT_X_LOOKUP_API_KEY=
-   ECHOHUNT_X_LOOKUP_TIMEOUT_MS=7000
+1. 用真实 Auth Center token、Redis、只读 PG、embedding 服务进行接口联调。
+2. 根据真实返回再微调前端字段映射、错误态文案和 SSE 事件展示。
+3. 如后续有套餐等级，再把固定 quota 扩展为账户等级配置。
+
+### 0.1.2 阶段 3 当前实现进度（2026-08-08）
+
+本轮前端真实对接已完成核心代码改造：
+
+1. 新增 EchoHunt KOL Match 前端 API client：
+   ```text
+   apps/echohunt/components/kol-match/api.ts
    ```
-2. 用真实 Auth Center token、Redis、只读 PG、embedding 服务进行接口联调。
-3. 根据真实返回再微调前端字段映射、错误态文案和 SSE 事件展示。
-4. 如后续有套餐等级，再把固定 quota 扩展为账户等级配置。
+   已接入：
+   - `GET /kol-match/quota`
+   - `GET /kol-match/project-account/lookup`
+   - `POST /kol-match/strategy`
+   - `POST /kol-match/ai-search/stream`
+   - `POST /kol-match/filter-search`
+   - `GET /kol-match/kols/lookup`
+   - `GET /kol-match/kols/:twitterUserId`
+2. Next proxy 已支持 SSE 流式透传：
+   ```text
+   apps/echohunt/app/api/echohunt/[...path]/route.ts
+   ```
+   对 `/kol-match/ai-search/stream` 不再 `response.text()` 缓冲，直接返回 `ReadableStream`，并设置：
+   - `Content-Type: text/event-stream`
+   - `Cache-Control: no-cache, no-transform`
+   - `X-Accel-Buffering: no`
+3. `/kol-match` 页面已从 mock 流程切换为真实数据流：
+   - 登录后加载真实额度。
+   - 项目 X 账号通过后端接口验证，前端不会直接访问或展示内部数据服务域名。
+   - 策略确认页使用后端 `strategy` 返回的项目理解、目标 KOL 画像、硬筛 chip 和安全清洗提示。
+   - 生成名单时消费 SSE 真实进度和公开 reasoning 摘要，不再使用前端假进度定时器。
+   - AI 最多展示 20 个结果，条件筛选最多展示 200 个结果。
+   - 条件筛选不再自动加载，必须用户登录并点击「应用筛选」后调用真实接口。
+   - KOL 指定查找与详情抽屉已改为真实接口。
+4. 已补充前端联调细节：
+   - quota loading / error / retry。
+   - 429 次数耗尽展示。
+   - 失败不扣额度的错误文案。
+   - SSE 取消：用户在进度页点「修改需求」会 abort 当前流式请求并清理进度状态。
+   - AI 生成名单使用前端 idempotency key，失败后重试同一个 strategy 不应重复扣费。
+   - 移除生产路径对 `mock-data` 的依赖，只保留真实返回字段映射和排序工具。
+
+阶段 3 剩余事项：
+
+1. 坤哥启动前后端服务后，用真实 Auth Center token 跑通：
+   - quota
+   - project-account lookup
+   - strategy
+   - ai-search/stream
+   - filter-search
+   - KOL detail
+2. 根据真实响应再微调：
+   - 空结果提示。
+   - 后端 `trace` / SSE event 的展示顺序和文案。
+   - KOL avatar、能力标签、浏览量、接单意愿证据等字段 fallback。
+3. 做移动端体验验收：
+   - 进度页沉浸模式。
+   - 条件筛选表单换行。
+   - 结果表格卡片态。
+4. 验证安全场景：
+   - 无关请求拒绝。
+   - prompt injection 被忽略或拒绝。
+   - 失败不扣 quota。
+   - 内部推特查询服务异常时不暴露内部域名。
 
 ### 0.2 阶段 1：前端静态 UI
 
@@ -125,7 +182,7 @@
    - 次数耗尽。
    - 需求过于模糊。
    - 无关请求被拒绝。
-   - X lookup 失败。
+   - 内部推特用户查询 失败。
    - 匹配失败。
    - 空结果。
    - 正常结果。
@@ -155,8 +212,8 @@
    - AI 精准匹配每日次数。
    - 条件筛选每日次数。
    - 成功才扣，失败不扣。
-4. 新增外部 X lookup：
-   - 项目账号确认调用外部 X lookup。
+4. 新增后端内部推特用户查询：
+   - 项目账号确认调用后端内部推特用户查询。
    - 失败不扣额度。
 5. 新增模型安全 gate：
    - 拒绝与 KOL Match 无关请求。
@@ -201,7 +258,7 @@
 
 1. 前端 API client 接入：
    - quota
-   - X lookup
+   - 内部推特用户查询
    - strategy
    - ai-search/stream
    - filter-search
@@ -270,7 +327,7 @@
 3. **结果数量上限**：P0 固定为 AI 精准匹配最多 20 个，条件筛选最多 200 个。
 4. **登录要求**：AI 精准匹配和条件筛选都必须登录。
 5. **实时进度**：P0 就需要真实实时进度，不做纯前端假进度。
-6. **项目 X 账号验证**：调用外部 X lookup 服务，不只查本地缓存。
+6. **项目 X 账号验证**：调用后端内部推特用户查询服务，不只查本地缓存。
 7. **思考过程展示**：目标是展示模型真实参与生成的推理过程，但需要经过过滤、摘要和结构化处理；不原样输出模型隐藏 raw chain-of-thought。
 
 ---
@@ -789,7 +846,7 @@ Authorization: Bearer <accessToken>
 
 - 前端展示的“思考过程”不是前端假进度，而是后端在真实执行链路中流式返回的进度事件和模型生成的可公开推理摘要。
 - 不原样输出模型隐藏 raw chain-of-thought；做法是让模型在关键阶段额外输出 `publicReasoning` / `rationaleSummary` 这类可展示内容，并由后端过滤敏感信息、截断长度、结构化后推给前端。
-- AI search 成功后扣 `aiMatch` 额度；策略生成失败、X lookup 失败、embedding / DB / rerank 失败都不扣。
+- AI search 成功后扣 `aiMatch` 额度；策略生成失败、内部推特用户查询 失败、embedding / DB / rerank 失败都不扣。
 - P0 AI 结果上限固定最多 20 个。
 
 ### 6.5 条件筛选
@@ -870,10 +927,10 @@ X-Accel-Buffering: no
 ```text
 event: progress
 data: {
-  "stage": "x_lookup",
+  "stage": "twitter_user_lookup",
   "status": "running",
   "title": "验证项目 X 账号",
-  "message": "正在调用外部 X lookup 服务确认 @echohunt。",
+  "message": "正在调用后端内部推特用户查询服务确认 @echohunt。",
   "publicReasoning": "",
   "sources": ["projectHandle"]
 }
@@ -973,7 +1030,7 @@ AI 精准匹配：最多 20 个
 - strategy 不扣。
 - ai-search / ai-search-stream 成功返回最终名单后扣 `aiMatch`。
 - filter-search 成功返回结果后扣 `filterSearch`。
-- 外部 X lookup、LLM、embedding、DB、rerank、网络中断等失败都不扣。
+- 后端内部推特用户查询、LLM、embedding、DB、rerank、网络中断等失败都不扣。
 - 建议前端每次生成传 `idempotencyKey`，后端用 Redis 记录成功结果，避免用户重复点击导致重复扣减。
 
 如果存在不同账户套餐，后续可改成：
@@ -1169,7 +1226,7 @@ type KolMatchScopeResult = {
 - `rejected` / `needs_clarification` 不扣额度。
 - prompt injection 被拒绝不扣额度，但要记录安全日志。
 - 混合输入中忽略攻击片段后成功生成名单，正常扣额度。
-- 外部 X lookup、LLM、embedding、DB 任意失败都不扣。
+- 后端内部推特用户查询、LLM、embedding、DB 任意失败都不扣。
 
 #### 6. 日志与审计
 
@@ -1196,12 +1253,12 @@ costMs
 - `rejected`：提示“这里只支持根据项目与营销需求做 KOL 匹配”，保留用户输入，方便修改。
 - 被忽略攻击片段但继续成功时，可不强提示；如要透明，可在策略确认页显示“已忽略与 KOL 匹配无关的指令”。
 
-### P0：外部 X lookup
+### P0：后端内部推特用户查询
 
-项目 X 账号确认使用外部 X lookup 服务：
+项目 X 账号确认使用后端内部推特用户查询服务。该数据域名只允许后端服务器调用，前端不能直接访问，也不能把内部域名透出到浏览器响应里。
 
 ```text
-projectHandle -> external X lookup -> twitterId / name / avatar / handle
+projectHandle -> server-side internal Twitter user lookup -> twitterId / name / avatar / handle
 ```
 
 建议要求：
@@ -1210,7 +1267,7 @@ projectHandle -> external X lookup -> twitterId / name / avatar / handle
 - 支持重试，但不要无限重试。
 - 失败不扣额度。
 - lookup 返回的项目账号信息写入 strategy 和 ai-search 请求上下文。
-- 如果外部服务不可用，返回明确错误态，前端保留用户已填写内容。
+- 如果内部数据服务不可用，返回明确错误态，前端保留用户已填写内容。
 
 ### P0：条件筛选 SQL
 
@@ -1275,8 +1332,8 @@ auth_checked
 scope_check_started
 scope_check_done
 quota_checked
-x_lookup_started
-x_lookup_done
+twitter_user_lookup_started
+twitter_user_lookup_done
 strategy_llm_started
 strategy_llm_reasoning_delta
 strategy_llm_done
@@ -1532,7 +1589,7 @@ const KOL_MATCH_COPY = {
    - strategy 阶段不扣。
    - AI 精准匹配成功生成名单后才扣 `aiMatch`。
    - 条件筛选成功返回结果后才扣 `filterSearch`。
-   - X lookup / LLM / embedding / DB / rerank / 网络中断失败都不扣。
+   - 内部推特用户查询 / LLM / embedding / DB / rerank / 网络中断失败都不扣。
 
 3. **结果数量上限**
    - 已确认 P0 固定：
@@ -1551,7 +1608,7 @@ const KOL_MATCH_COPY = {
    - 前端不做纯模拟进度，只在等待首个事件前展示 loading skeleton。
 
 6. **项目 X 账号验证数据源**
-   - 已确认调用外部 X lookup。
+   - 已确认调用后端内部推特用户查询。
    - 本地 `XHuntUser / twitter_user` 只能作为补充缓存或 fallback。
    - lookup 失败不扣额度。
 
@@ -1573,7 +1630,7 @@ const KOL_MATCH_COPY = {
 3. 接入 dashboard nav 和 `/kol-match` route。
 4. 先 mock API data，保证交互完整。
 5. 补齐 AI 精准匹配、条件筛选、ThinkingTrace、结果列表、详情抽屉。
-6. 补齐未登录、次数耗尽、需求模糊、无关请求拒绝、X lookup 失败、空结果等静态状态。
+6. 补齐未登录、次数耗尽、需求模糊、无关请求拒绝、内部推特用户查询 失败、空结果等静态状态。
 
 ### 阶段 2：后端接口改造
 
@@ -1583,7 +1640,7 @@ const KOL_MATCH_COPY = {
 4. 包装现有 `searchKolMarketingProfiles()` 实现 AI search。
 5. 扩展字段输出。
 6. 增加 scope gate 和 prompt injection 防护。
-7. 接入外部 X lookup。
+7. 接入后端内部推特用户查询。
 8. 实现 `ai-search/stream` SSE 实时进度。
 9. 返回最终 `trace`，用于前端回放和兜底展示。
 
@@ -1614,7 +1671,7 @@ const KOL_MATCH_COPY = {
 - 次数耗尽时返回 429 和 resetTime。
 - 失败不扣额度。
 - `GLOBAL` 市场固定进入 `language = GLOBAL`。
-- 项目 X 账号确认调用外部 X lookup。
+- 项目 X 账号确认调用后端内部推特用户查询。
 - 不返回 embedding 原始向量。
 - 所有 SQL 仍走只读从库。
 - 所有用户输入仍走白名单和 bind 参数。
