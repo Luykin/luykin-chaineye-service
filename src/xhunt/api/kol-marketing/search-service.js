@@ -45,6 +45,7 @@ const FILTER_PATCH_KEYS = [
   "identityTier",
   "minFollowers",
   "maxFollowers",
+  "activityDays",
 ];
 
 // 这些字段在画像表里是模型生成的业务标签，值不是标准枚举。
@@ -357,6 +358,9 @@ function normalizeFilters(filters = {}) {
 
   const maxFollowers = normalizeNonNegativeInteger(input.maxFollowers);
   if (maxFollowers !== null) normalized.maxFollowers = maxFollowers;
+
+  const activityDays = normalizeNonNegativeInteger(input.activityDays);
+  if (activityDays !== null && activityDays > 0) normalized.activityDays = Math.min(activityDays, 365);
 
   return normalized;
 }
@@ -913,6 +917,11 @@ function buildKolMarketingProfileSearchSql(filters) {
     bind.maxFollowers = filters.maxFollowers;
   }
 
+  if (filters.activityDays !== undefined) {
+    clauses.push("activity.last_active_at >= now() - make_interval(days => $activityDays::integer)");
+    bind.activityDays = filters.activityDays;
+  }
+
   if (filters.domains?.length > 0) {
     // && 是 PostgreSQL 数组重叠操作：只要 domains 任一项命中即可。
     clauses.push("p.domains && $domains::text[]");
@@ -963,7 +972,8 @@ function buildKolMarketingProfileSearchSql(filters) {
         SELECT
           p.twitter_user_id,
           p.handle,
-          p.name,
+          coalesce(p.name, u.name::text, u.profile ->> 'name') as name,
+          u.profile ->> 'profile_image_url' as avatar,
           p.language,
           p.domains,
           p.followers,
@@ -971,27 +981,50 @@ function buildKolMarketingProfileSearchSql(filters) {
           p.ai_rank_cn,
           p.web3_rank_global,
           p.web3_rank_cn,
+          p.main_tweet_view_median,
+          p.reply_tweet_view_median,
+          p.main_metrics_window_days,
+          p.reply_metrics_window_days,
+          p.soul_score,
           p.marketing_summary_cn,
           p.marketing_summary_en,
           p.keywords,
           p.cooperation_types,
           p.marketing_goals,
           p.project_stages,
+          p.ai_abilities,
+          p.web3_abilities,
           p.willingness_level,
           p.willingness_score,
           p.willingness_reason,
+          p.willingness_confidence,
+          p.willingness_evidence,
           p.identity_tier,
+          p.updated_at,
+          p.metrics_calculated_at,
+          activity.last_active_at,
           p.embedding_model,
           p.embedding_version,
           p.embedding_generated_at,
           p.marketing_profile_embedding
         FROM dev.kol_marketing_profile p
+        LEFT JOIN dev.twitter_user u ON u.id = p.twitter_user_id
+        LEFT JOIN LATERAL (
+          SELECT t.create_time AS last_active_at
+          FROM dev.tweet t
+          WHERE t.twitter_user_id = p.twitter_user_id
+            AND t.id = t.conversation_id
+            AND t.retweet_id IS NULL
+          ORDER BY t.create_time DESC
+          LIMIT 1
+        ) activity ON true
         WHERE ${clauses.join(" AND ")}
       )
       SELECT
         fp.twitter_user_id AS "twitterUserId",
         fp.handle,
         fp.name,
+        fp.avatar,
         fp.language,
         fp.domains,
         fp.followers::double precision AS followers,
@@ -999,19 +1032,32 @@ function buildKolMarketingProfileSearchSql(filters) {
         fp.ai_rank_cn AS "aiRankCn",
         fp.web3_rank_global AS "web3RankGlobal",
         fp.web3_rank_cn AS "web3RankCn",
+        fp.main_tweet_view_median::double precision AS "mainTweetViewMedian",
+        fp.reply_tweet_view_median::double precision AS "replyTweetViewMedian",
+        fp.main_metrics_window_days::double precision AS "mainMetricsWindowDays",
+        fp.reply_metrics_window_days::double precision AS "replyMetricsWindowDays",
+        fp.soul_score::double precision AS "soulScore",
         fp.marketing_summary_cn AS "marketingSummaryCn",
         fp.marketing_summary_en AS "marketingSummaryEn",
         fp.keywords,
         fp.cooperation_types AS "cooperationTypes",
         fp.marketing_goals AS "marketingGoals",
         fp.project_stages AS "projectStages",
+        fp.ai_abilities AS "aiAbilities",
+        fp.web3_abilities AS "web3Abilities",
         fp.willingness_level AS "willingnessLevel",
         fp.willingness_score::double precision AS "willingnessScore",
         fp.willingness_reason AS "willingnessReason",
+        fp.willingness_confidence::double precision AS "willingnessConfidence",
+        fp.willingness_evidence AS "willingnessEvidence",
         fp.identity_tier AS "identityTier",
+        fp.updated_at AS "updatedAt",
+        fp.metrics_calculated_at AS "metricsCalculatedAt",
+        fp.last_active_at AS "lastActiveAt",
         fp.embedding_model AS "embeddingModel",
         fp.embedding_version AS "embeddingVersion",
         fp.embedding_generated_at AS "embeddingGeneratedAt",
+        count(*) over()::integer AS "candidateTotal",
         -- pgvector cosine distance：距离越小越相似；这里转成 similarity，越接近 1 越相似。
         1 - (fp.marketing_profile_embedding <=> $embedding::vector) AS similarity
       FROM filtered_profiles fp
@@ -1026,7 +1072,8 @@ function buildKolMarketingProfileSearchSql(filters) {
     SELECT
       p.twitter_user_id AS "twitterUserId",
       p.handle,
-      p.name,
+      coalesce(p.name, u.name::text, u.profile ->> 'name') AS name,
+      u.profile ->> 'profile_image_url' AS avatar,
       p.language,
       p.domains,
       p.followers::double precision AS followers,
@@ -1034,22 +1081,45 @@ function buildKolMarketingProfileSearchSql(filters) {
       p.ai_rank_cn AS "aiRankCn",
       p.web3_rank_global AS "web3RankGlobal",
       p.web3_rank_cn AS "web3RankCn",
+      p.main_tweet_view_median::double precision AS "mainTweetViewMedian",
+      p.reply_tweet_view_median::double precision AS "replyTweetViewMedian",
+      p.main_metrics_window_days::double precision AS "mainMetricsWindowDays",
+      p.reply_metrics_window_days::double precision AS "replyMetricsWindowDays",
+      p.soul_score::double precision AS "soulScore",
       p.marketing_summary_cn AS "marketingSummaryCn",
       p.marketing_summary_en AS "marketingSummaryEn",
       p.keywords,
       p.cooperation_types AS "cooperationTypes",
       p.marketing_goals AS "marketingGoals",
       p.project_stages AS "projectStages",
+      p.ai_abilities AS "aiAbilities",
+      p.web3_abilities AS "web3Abilities",
       p.willingness_level AS "willingnessLevel",
       p.willingness_score::double precision AS "willingnessScore",
       p.willingness_reason AS "willingnessReason",
+      p.willingness_confidence::double precision AS "willingnessConfidence",
+      p.willingness_evidence AS "willingnessEvidence",
       p.identity_tier AS "identityTier",
+      p.updated_at AS "updatedAt",
+      p.metrics_calculated_at AS "metricsCalculatedAt",
+      activity.last_active_at AS "lastActiveAt",
       p.embedding_model AS "embeddingModel",
       p.embedding_version AS "embeddingVersion",
       p.embedding_generated_at AS "embeddingGeneratedAt",
+      count(*) over()::integer AS "candidateTotal",
       -- pgvector cosine distance：距离越小越相似；这里转成 similarity，越接近 1 越相似。
       1 - (p.marketing_profile_embedding <=> $embedding::vector) AS similarity
     FROM dev.kol_marketing_profile p
+    LEFT JOIN dev.twitter_user u ON u.id = p.twitter_user_id
+    LEFT JOIN LATERAL (
+      SELECT t.create_time AS last_active_at
+      FROM dev.tweet t
+      WHERE t.twitter_user_id = p.twitter_user_id
+        AND t.id = t.conversation_id
+        AND t.retweet_id IS NULL
+      ORDER BY t.create_time DESC
+      LIMIT 1
+    ) activity ON true
     WHERE ${clauses.join(" AND ")}
     ORDER BY p.marketing_profile_embedding <=> $embedding::vector
     LIMIT $limit
@@ -1120,13 +1190,39 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
   }
 }
 
+async function emitSearchProgress(callback, event) {
+  if (typeof callback !== "function") return;
+  try {
+    await callback(event);
+  } catch (error) {
+    // 进度回调只服务 SSE/日志，不应影响搜索主链路。
+    console.warn("[KOL Marketing Search] progress callback failed", {
+      stage: event?.stage,
+      message: error.message,
+    });
+  }
+}
+
 async function searchKolMarketingProfiles(params = {}) {
   const startedAt = Date.now();
   const queryLength = String(params.query || "").trim().length;
+  await emitSearchProgress(params.onProgress, {
+    stage: "search_plan",
+    status: "running",
+    message: "正在解析搜索语义和硬过滤条件",
+  });
   const searchPlan = await buildKolMarketingSearchPlan({
     query: params.query,
     filters: params.filters,
     redisClient: params.redisClient,
+  });
+  await emitSearchProgress(params.onProgress, {
+    stage: "search_plan",
+    status: "done",
+    message: "搜索语义和硬过滤条件已生成",
+    filters: searchPlan.effectiveFilters,
+    semanticQuery: searchPlan.semanticQuery,
+    filterPlan: searchPlan.filterPlan,
   });
 
   console.log("[KOL Marketing Search] embedding step start", {
@@ -1142,12 +1238,24 @@ async function searchKolMarketingProfiles(params = {}) {
   });
 
   // 先把自然语言 query 转成和表内画像同维度的 query embedding。
+  await emitSearchProgress(params.onProgress, {
+    stage: "embedding",
+    status: "running",
+    message: "正在生成需求向量",
+  });
   const embeddingResult = await getQueryEmbedding({
     namespace: EMBEDDING_NAMESPACE,
     query: searchPlan.semanticQuery,
     redisClient: params.redisClient,
     envPrefixes: EMBEDDING_ENV_PREFIXES,
     dimensions: EMBEDDING_DIMENSIONS,
+  });
+  await emitSearchProgress(params.onProgress, {
+    stage: "embedding",
+    status: "done",
+    message: "需求向量已生成",
+    embeddingModel: embeddingResult.model,
+    embeddingCacheHit: embeddingResult.cacheHit,
   });
 
   console.log("[KOL Marketing Search] embedding step success", {
@@ -1159,10 +1267,24 @@ async function searchKolMarketingProfiles(params = {}) {
   });
 
   // 再用 query embedding 走 pgvector 近邻检索。
+  await emitSearchProgress(params.onProgress, {
+    stage: "db_search",
+    status: "running",
+    message: "正在检索 KOL 候选集",
+  });
   const searchResult = await queryKolMarketingProfilesByEmbedding({
     embedding: embeddingResult.embedding,
     filters: searchPlan.effectiveFilters,
     limit: params.limit,
+  });
+  await emitSearchProgress(params.onProgress, {
+    stage: "db_search",
+    status: "done",
+    message: "KOL 候选集检索完成",
+    resultCount: searchResult.items.length,
+    candidateTotal: searchResult.items[0]?.candidateTotal || searchResult.items.length,
+    dbCostMs: searchResult.dbCostMs,
+    searchMode: searchResult.searchMode,
   });
 
   return {

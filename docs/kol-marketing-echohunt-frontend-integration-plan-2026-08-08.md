@@ -25,9 +25,70 @@
 | 阶段 | 状态 | 说明 |
 |---|---|---|
 | 方案设计 | 已完成 | 已明确产品流程、接口方向、实时进度、额度、登录、安全边界 |
-| 阶段 1：前端静态 UI | 待开始 | 先按原型还原页面、状态机和交互，不等待后端完整接口 |
-| 阶段 2：后端接口改造 | 待开始 | 在静态 UI 稳定后补 EchoHunt KOL Match 产品 API |
+| 阶段 1：前端静态 UI | 已完成 | `/kol-match` 静态页面、流程、mock 状态和原型布局已基本完成 |
+| 阶段 2：后端接口改造 | 进行中 | P0 产品 API 代码已落地，下一步需要接真实环境联调 |
 | 阶段 3：联调和细节补充 | 待开始 | 接真实数据、SSE、额度、安全拒绝态、移动端和细节优化 |
+
+### 0.1.1 阶段 2 当前实现进度（2026-08-08）
+
+本轮后端 P0 已新增 EchoHunt KOL Match 产品 API，代码层面完成以下内容：
+
+1. 新增产品 router：
+   ```text
+   src/xhunt/api/echohunt-kol-match.js
+   /api/xhunt/echohunt/kol-match/*
+   ```
+2. 已挂载到现有 EchoHunt router：
+   ```text
+   src/xhunt/api/echohunt.js
+   router.use("/kol-match", echohuntKolMatchRoutes)
+   ```
+3. 所有 KOL Match 接口默认接入 `authenticateAuthCenterToken()`，未登录不能调用。
+4. 已实现独立 Redis quota：
+   - `aiMatch`
+   - `filterSearch`
+   - 成功后才扣减，异常 / 拒绝 / 需求模糊 / lookup 失败不扣。
+5. 已实现 P0 模型安全 gate：
+   - `accepted`
+   - `needs_clarification`
+   - `rejected`
+   - prompt injection / 系统提示词 / 密钥 / SQL / 代码执行 / 投资建议等无关请求会被拒绝或从混合输入中剔除。
+6. 已实现 `strategy`：
+   - 从「项目与需求」生成项目理解、目标 KOL 画像、semantic query、硬筛条件、可公开 reasoning。
+   - LLM 失败时使用规则兜底，不直接暴露模型错误。
+7. 已实现 AI 精准匹配：
+   - `POST /ai-search`
+   - `POST /ai-search/stream`
+   - SSE 输出真实阶段进度：scope、quota、X lookup、strategy、embedding、db_search、ranking、final。
+8. 已实现条件筛选：
+   - `POST /filter-search`
+   - 登录必需。
+   - `GLOBAL -> language = GLOBAL`。
+   - 最多 200 条。
+9. 已实现 KOL 查找与详情：
+   - `GET /kols/lookup`
+   - `GET /kols/:twitterUserId`
+10. 已扩展底层搜索返回字段：
+    - avatar
+    - main / reply view median
+    - soulScore
+    - ai / web3 abilities
+    - willingness confidence / evidence
+    - lastActiveAt
+    - updatedAt / metricsCalculatedAt
+11. 已让 `ai-search/stream` 跳过 Express compression，避免 SSE 被 gzip 缓冲。
+
+阶段 2 剩余事项：
+
+1. 在部署环境补充外部 X lookup 配置：
+   ```bash
+   ECHOHUNT_X_LOOKUP_URL=
+   ECHOHUNT_X_LOOKUP_API_KEY=
+   ECHOHUNT_X_LOOKUP_TIMEOUT_MS=7000
+   ```
+2. 用真实 Auth Center token、Redis、只读 PG、embedding 服务进行接口联调。
+3. 根据真实返回再微调前端字段映射、错误态文案和 SSE 事件展示。
+4. 如后续有套餐等级，再把固定 quota 扩展为账户等级配置。
 
 ### 0.2 阶段 1：前端静态 UI
 

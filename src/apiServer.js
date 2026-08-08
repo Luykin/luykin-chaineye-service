@@ -437,7 +437,8 @@ async function initializeAndStartServer() {
   app.use((req, res, next) => {
     if (
       req.path.includes("/api/xhunt/proxy/public-stream/") ||
-      req.path.includes("/api/xhunt/sse")
+      req.path.includes("/api/xhunt/sse") ||
+      req.path.includes("/api/xhunt/echohunt/kol-match/ai-search/stream")
     ) {
       // 流式路由和 SSE 路由跳过压缩中间件
       return next();

@@ -58,7 +58,10 @@ const {
   revokeBinding,
   getBinanceSquareBindingErrorMessage,
 } = require("../services/binanceSquareBindingService");
+const echohuntKolMatchRoutes = require("./echohunt-kol-match");
 const router = express.Router();
+
+router.use("/kol-match", echohuntKolMatchRoutes);
 
 const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";
 const ECHOHUNT_OAUTH_STATE_TTL_SECONDS = 8 * 60;
