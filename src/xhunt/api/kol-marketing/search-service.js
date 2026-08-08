@@ -48,7 +48,7 @@ const FILTER_PATCH_KEYS = [
   "activityDays",
 ];
 
-// 这些字段在画像表里是模型生成的业务标签，值不是标准枚举。
+// 这些字段在画像表里是模型生成的业务标签，或要求精确枚举值。
 // LLM 可把它们写进 semanticQuery 辅助向量召回，但不能作为自动推断的 SQL 硬过滤；
 // 只有前端/调用方显式传 filters 时，才允许它们进入 SQL。
 const LLM_SEMANTIC_ONLY_FILTER_KEYS = [
@@ -56,6 +56,7 @@ const LLM_SEMANTIC_ONLY_FILTER_KEYS = [
   "cooperationTypes",
   "marketingGoals",
   "projectStages",
+  "identityTier",
 ];
 
 const VALID_LANGUAGES = new Set(["CN", "GLOBAL"]);

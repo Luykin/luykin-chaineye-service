@@ -40,6 +40,13 @@ const DEFAULT_FILTER_DAILY_LIMIT = 10;
 const DEFAULT_AI_RESULT_LIMIT = 20;
 const DEFAULT_FILTER_RESULT_LIMIT = 200;
 const GENERIC_PUBLIC_PROGRESS = "当前阶段已完成，系统正在继续生成 KOL 推荐名单。";
+const AI_STRATEGY_SEMANTIC_ONLY_FILTER_KEYS = [
+  "keywords",
+  "cooperationTypes",
+  "marketingGoals",
+  "projectStages",
+  "identityTier",
+];
 
 const STRATEGY_SCHEMA = {
   type: "object",
@@ -483,6 +490,19 @@ async function consumeQuota(req, bucket) {
     used: newCount,
     remaining: Math.max(0, config.limit - newCount),
     resetTime: dateContext.resetTime,
+    charged: true,
+  };
+}
+
+function buildNoChargeQuota(bucket, quota) {
+  const config = getQuotaBucketConfig(bucket);
+  return {
+    bucket,
+    limit: numeric(quota?.limit) ?? config.limit,
+    used: Math.max(0, numeric(quota?.used) ?? 0),
+    remaining: Math.max(0, numeric(quota?.remaining) ?? config.limit),
+    resetTime: quota?.resetTime,
+    charged: false,
   };
 }
 
@@ -743,6 +763,19 @@ function mergeExplicitFilters(base = {}, explicit = {}) {
     if (explicit.willingnessLevel) merged.willingnessLevel = explicit.willingnessLevel;
   }
   return normalizeFilters(merged);
+}
+
+function getAiSearchSqlFilters(strategyFilters = {}, hardFilters = {}) {
+  const base = normalizeFilters(strategyFilters);
+
+  // strategy.filters 由 LLM 生成，keywords / goals / stages / identityTier 容易是自然语言标签，
+  // 不能作为 AI 精准匹配的 SQL 硬过滤；这些信息保留在 semanticQuery 中参与向量召回。
+  // hardFilters 是前端显式选择的产品过滤条件，仍保留最高优先级。
+  for (const key of AI_STRATEGY_SEMANTIC_ONLY_FILTER_KEYS) {
+    delete base[key];
+  }
+
+  return mergeExplicitFilters(base, hardFilters);
 }
 
 function buildStrategyChips(filters = {}, lang = "zh") {
@@ -1272,6 +1305,9 @@ function buildCompositeQuery({ strategy, projectHandle }) {
 
 function buildTrace({ strategy, filters, candidateTotal, returned, quota }) {
   const chips = buildStrategyChips(filters);
+  const finalDetail = quota?.charged === false
+    ? (returned > 0 ? `名单已生成，本次未消耗次数，今日剩余 ${quota.remaining} 次。` : `未匹配到 KOL，本次不消耗次数，今日剩余 ${quota.remaining} 次。`)
+    : (quota ? `本次成功消耗 1 次，今日剩余 ${quota.remaining} 次。` : "名单已生成。");
   return [
     {
       type: "scope",
@@ -1319,7 +1355,7 @@ function buildTrace({ strategy, filters, candidateTotal, returned, quota }) {
     {
       type: "final",
       title: "名单生成完成",
-      detail: quota ? `本次成功消耗 1 次，今日剩余 ${quota.remaining} 次。` : "名单已生成。",
+      detail: finalDetail,
       publicReasoning: "最终名单可继续打开详情查看每个 KOL 的内容画像和推荐证据。",
       sources: ["quota", "results"],
     },
@@ -1803,7 +1839,7 @@ async function runAiMatch(req, body = {}, emitProgress) {
   }
 
   const hardFilters = normalizeProductHardFilters(body.hardFilters || body.filters || {});
-  const filters = mergeExplicitFilters(strategy.filters, hardFilters);
+  const filters = getAiSearchSqlFilters(strategy.filters, hardFilters);
   const compositeQuery = buildCompositeQuery({ strategy, projectHandle });
   const briefTerms = extractBriefTerms(`${strategy.projectBrief || ""} ${strategy.semanticQuery || ""}`);
 
@@ -1863,7 +1899,24 @@ async function runAiMatch(req, body = {}, emitProgress) {
     delta: sanitizePublicText(`候选集共 ${candidateTotal} 人，最终按项目语义相关性、${filters.domains?.[0] || "Web3"} 影响力排名、粉丝量、内容证据和接单意愿排序。`, 500),
   });
 
-  const quota = await consumeQuota(req, AI_QUOTA_BUCKET);
+  if (items.length === 0) {
+    console.warn("[EchoHunt KOL Match] AI search returned empty result, quota not charged", {
+      requestId,
+      authCenterUserId: getAuthCenterUserId(req),
+      strategyId: strategy.strategyId,
+      filters: searchResult.filters,
+      inputFilters: searchResult.inputFilters,
+      derivedFilters: searchResult.derivedFilters,
+      filterPlan: searchResult.filterPlan,
+      searchMode: searchResult.searchMode,
+      candidateTotal,
+      dbCostMs: searchResult.dbCostMs,
+    });
+  }
+
+  const quota = items.length === 0
+    ? buildNoChargeQuota(AI_QUOTA_BUCKET, quotaBefore)
+    : await consumeQuota(req, AI_QUOTA_BUCKET);
   const data = {
     mode: "ai",
     strategyId: strategy.strategyId,
@@ -2055,7 +2108,7 @@ router.post("/filter-search", async (req, res) => {
     const cached = await readIdempotentResult(req, FILTER_QUOTA_BUCKET, idempotencyKey);
     if (cached) return res.json({ success: true, data: cached });
 
-    await ensureQuotaAvailable(req, FILTER_QUOTA_BUCKET);
+    const quotaBefore = await ensureQuotaAvailable(req, FILTER_QUOTA_BUCKET);
     const startedAt = Date.now();
     const queryResult = await queryKolProfilesByFilters(req.body || {});
     const briefTerms = [];
@@ -2065,7 +2118,18 @@ router.post("/filter-search", async (req, res) => {
       lang: req.body?.lang,
       briefTerms,
     }));
-    const quota = await consumeQuota(req, FILTER_QUOTA_BUCKET);
+    if (items.length === 0) {
+      console.warn("[EchoHunt KOL Match] filter search returned empty result, quota not charged", {
+        requestId: getRequestId(req),
+        authCenterUserId: getAuthCenterUserId(req),
+        filters: queryResult.filters,
+        candidateTotal: queryResult.candidateTotal,
+        dbCostMs: queryResult.dbCostMs,
+      });
+    }
+    const quota = items.length === 0
+      ? buildNoChargeQuota(FILTER_QUOTA_BUCKET, quotaBefore)
+      : await consumeQuota(req, FILTER_QUOTA_BUCKET);
     const data = {
       mode: "filter",
       items,
