@@ -39,6 +39,7 @@ const DEFAULT_AI_DAILY_LIMIT = 3;
 const DEFAULT_FILTER_DAILY_LIMIT = 10;
 const DEFAULT_AI_RESULT_LIMIT = 20;
 const DEFAULT_FILTER_RESULT_LIMIT = 200;
+const DEFAULT_FILTER_CANDIDATE_SCAN_LIMIT = 2000;
 const GENERIC_PUBLIC_PROGRESS = "当前阶段已完成，系统正在继续生成 KOL 推荐名单。";
 const AI_STRATEGY_SEMANTIC_ONLY_FILTER_KEYS = [
   "keywords",
@@ -231,6 +232,10 @@ function getFilterResultLimit() {
   return getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_FILTER_RESULT_LIMIT", DEFAULT_FILTER_RESULT_LIMIT);
 }
 
+function getFilterCandidateScanLimit() {
+  return getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_FILTER_CANDIDATE_SCAN_LIMIT", DEFAULT_FILTER_CANDIDATE_SCAN_LIMIT);
+}
+
 function clampInteger(value, fallback, min, max) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return fallback;
@@ -345,6 +350,41 @@ function sendError(res, error, fallbackCode = "KOL_MATCH_FAILED") {
       ...(error.data || {}),
       quotaCharged: false,
     },
+  });
+}
+
+function isPgStatementTimeout(error) {
+  const code = error?.parent?.code || error?.original?.code || error?.code;
+  const message = error?.parent?.message || error?.original?.message || error?.message || "";
+  return code === "57014" || /statement timeout|canceling statement due to statement timeout/i.test(message);
+}
+
+function normalizeKolMatchError(error, fallbackCode = "KOL_MATCH_FAILED") {
+  if (!error || typeof error !== "object") return error;
+  if (isPgStatementTimeout(error)) {
+    error.code = `${fallbackCode}_TIMEOUT`;
+    error.status = 504;
+    error.publicMessage = "筛选耗时较长，请稍后重试或适当放宽筛选条件。";
+    error.data = {
+      ...(error.data || {}),
+      reason: "PG_STATEMENT_TIMEOUT",
+    };
+  }
+  return error;
+}
+
+function logKolMatchError(label, req, error, extra = {}) {
+  const status = error?.status || (error?.code === "PG_READ_NOT_CONFIGURED" ? 503 : 500);
+  const parent = error?.parent || error?.original || {};
+  console.warn(label, {
+    requestId: getRequestId(req),
+    authCenterUserId: getAuthCenterUserId(req),
+    status,
+    code: error?.code || error?.message,
+    message: error?.message,
+    parentCode: parent.code,
+    parentMessage: parent.message,
+    ...extra,
   });
 }
 
@@ -1482,7 +1522,8 @@ async function lookupProjectAccount(handle, options = {}) {
   return null;
 }
 
-function getKolSelectSql() {
+function getKolSelectSql(options = {}) {
+  const lastActiveExpression = options.lastActiveExpression || "activity.last_active_at";
   return `
     k.twitter_user_id AS "twitterUserId",
     lower(ltrim(coalesce(k.handle, u.profile ->> 'username', ''), '@')) AS handle,
@@ -1516,7 +1557,7 @@ function getKolSelectSql() {
     k.updated_at AS "updatedAt",
     k.metrics_calculated_at AS "metricsCalculatedAt",
     u.profile ->> 'profile_image_url' AS avatar,
-    activity.last_active_at AS "lastActiveAt",
+    ${lastActiveExpression} AS "lastActiveAt",
     CASE
       WHEN $domain = 'AI' AND $market = 'CN' THEN k.ai_rank_cn
       WHEN $domain = 'AI' THEN k.ai_rank_global
@@ -1526,19 +1567,29 @@ function getKolSelectSql() {
   `;
 }
 
-function getKolFromJoinSql() {
+function getLatestActivityJoinSql(twitterUserIdExpression) {
   return `
-    FROM dev.kol_marketing_profile k
-    LEFT JOIN dev.twitter_user u ON u.id = k.twitter_user_id
     LEFT JOIN LATERAL (
       SELECT t.create_time AS last_active_at
       FROM dev.tweet t
-      WHERE t.twitter_user_id = k.twitter_user_id
+      WHERE t.twitter_user_id = ${twitterUserIdExpression}
         AND t.id = t.conversation_id
         AND t.retweet_id IS NULL
       ORDER BY t.create_time DESC
       LIMIT 1
     ) activity ON true
+  `;
+}
+
+function getKolLatestActivityJoinSql() {
+  return getLatestActivityJoinSql("k.twitter_user_id");
+}
+
+function getKolFromJoinSql() {
+  return `
+    FROM dev.kol_marketing_profile k
+    LEFT JOIN dev.twitter_user u ON u.id = k.twitter_user_id
+    ${getKolLatestActivityJoinSql()}
   `;
 }
 
@@ -1585,6 +1636,7 @@ function normalizeFilterSearchInput(body = {}) {
 async function queryKolProfilesByFilters(filterInput = {}) {
   const startedAt = Date.now();
   const filters = normalizeFilterSearchInput(filterInput);
+  const useActivityFilter = filters.activityDays !== null;
   const clauses = [
     "k.active IS TRUE",
     "$domain = ANY(k.domains)",
@@ -1602,8 +1654,8 @@ async function queryKolProfilesByFilters(filterInput = {}) {
     clauses.push("coalesce(k.followers, 0) <= $maxFollowers");
     bind.maxFollowers = filters.maxFollowers;
   }
+  const activityWhereClause = "activity.last_active_at >= now() - make_interval(days => $activityDays::integer)";
   if (filters.activityDays !== null) {
-    clauses.push("activity.last_active_at >= now() - make_interval(days => $activityDays::integer)");
     bind.activityDays = Math.min(Math.max(Math.floor(filters.activityDays), 1), 365);
   }
   if (filters.willingness === "exclude-low") {
@@ -1667,22 +1719,125 @@ async function queryKolProfilesByFilters(filterInput = {}) {
   const orderBy = filters.sort === "followers"
     ? 'k.followers DESC NULLS LAST, "influenceRank" ASC NULLS LAST'
     : '"influenceRank" ASC NULLS LAST, k.followers DESC NULLS LAST';
-  const sql = `
+  const activeOrderBy = filters.sort === "followers"
+    ? 'followers DESC NULLS LAST, "influenceRank" ASC NULLS LAST'
+    : '"influenceRank" ASC NULLS LAST, followers DESC NULLS LAST';
+  const influenceRankSql = `CASE
+        WHEN $domain = 'AI' AND $market = 'CN' THEN k.ai_rank_cn
+        WHEN $domain = 'AI' THEN k.ai_rank_global
+        WHEN $market = 'CN' THEN k.web3_rank_cn
+        ELSE k.web3_rank_global
+      END`;
+  const scanLimit = Math.max(filters.limit, Math.min(5000, getFilterCandidateScanLimit()));
+  if (useActivityFilter) bind.scanLimit = scanLimit;
+  // Keep the first statement narrow so PostgreSQL does not spend the 1.5s
+  // read-replica timeout materializing wide JSON/text profile columns before LIMIT.
+  // When activity is requested, rank a bounded candidate window first, then run the
+  // per-account latest-tweet lookup only inside that window.
+  const candidateSql = useActivityFilter
+    ? `
+    WITH base AS MATERIALIZED (
+      SELECT
+        k.twitter_user_id::text AS "twitterUserId",
+        k.followers,
+        ${influenceRankSql} AS "influenceRank"
+      FROM dev.kol_marketing_profile k
+      WHERE ${clauses.join("\n        AND ")}
+      ORDER BY ${orderBy}
+      LIMIT $scanLimit
+    ),
+    active_base AS MATERIALIZED (
+      SELECT
+        base."twitterUserId",
+        base.followers,
+        base."influenceRank",
+        activity.last_active_at AS "lastActiveAt"
+      FROM base
+      ${getLatestActivityJoinSql('base."twitterUserId"')}
+      WHERE ${activityWhereClause}
+    )
     SELECT
-      ${getKolSelectSql()},
+      active_base.*,
       count(*) over()::integer AS "candidateTotal"
-    ${getKolFromJoinSql()}
+    FROM active_base
+    ORDER BY ${activeOrderBy}
+    LIMIT $limit
+  `
+    : `
+    SELECT
+      k.twitter_user_id::text AS "twitterUserId",
+      k.followers,
+      ${influenceRankSql} AS "influenceRank",
+      count(*) over()::integer AS "candidateTotal"
+    FROM dev.kol_marketing_profile k
     WHERE ${clauses.join("\n      AND ")}
     ORDER BY ${orderBy}
     LIMIT $limit
   `;
 
   const db = getPostgresReadOnlyInstance();
-  const rows = await db.query(sql, { bind, type: QueryTypes.SELECT });
+  const candidateRows = await db.query(candidateSql, { bind, type: QueryTypes.SELECT });
+  if (candidateRows.length === 0) {
+    return {
+      rows: [],
+      filters,
+      candidateTotal: 0,
+      candidateScanLimit: useActivityFilter ? scanLimit : null,
+      dbCostMs: Date.now() - startedAt,
+    };
+  }
+
+  const detailBind = {
+    domain: filters.domain,
+    market: filters.market,
+    twitterUserIds: candidateRows.map((row) => String(row.twitterUserId || "")),
+    resultOrders: candidateRows.map((_, index) => index + 1),
+    candidateTotal: candidateRows[0]?.candidateTotal || candidateRows.length,
+  };
+  if (useActivityFilter) {
+    detailBind.lastActiveAts = candidateRows.map((row) => row.lastActiveAt || null);
+  }
+
+  const rankedCte = useActivityFilter
+    ? `
+    WITH ranked AS (
+      SELECT *
+      FROM unnest(
+        $twitterUserIds::text[],
+        $resultOrders::int[],
+        $lastActiveAts::timestamptz[]
+      ) AS r(twitter_user_id, result_order, last_active_at)
+    )
+  `
+    : `
+    WITH ranked AS (
+      SELECT *
+      FROM unnest(
+        $twitterUserIds::text[],
+        $resultOrders::int[]
+      ) AS r(twitter_user_id, result_order)
+    )
+  `;
+  const finalActivityJoinSql = useActivityFilter ? "" : getKolLatestActivityJoinSql();
+  const lastActiveExpression = useActivityFilter ? "ranked.last_active_at" : "activity.last_active_at";
+  const detailSql = `
+    ${rankedCte}
+    SELECT
+      ${getKolSelectSql({ lastActiveExpression })},
+      $candidateTotal::integer AS "candidateTotal"
+    FROM ranked
+    JOIN dev.kol_marketing_profile k ON k.twitter_user_id::text = ranked.twitter_user_id
+    LEFT JOIN dev.twitter_user u ON u.id = k.twitter_user_id
+    ${finalActivityJoinSql}
+    ORDER BY ranked.result_order
+  `;
+
+  const rows = await db.query(detailSql, { bind: detailBind, type: QueryTypes.SELECT });
   return {
     rows,
     filters,
-    candidateTotal: rows[0]?.candidateTotal || rows.length,
+    candidateTotal: detailBind.candidateTotal,
+    candidateScanLimit: useActivityFilter ? scanLimit : null,
     dbCostMs: Date.now() - startedAt,
   };
 }
@@ -2139,6 +2294,7 @@ router.post("/filter-search", async (req, res) => {
         limit: queryResult.filters.limit,
         filters: queryResult.filters,
         sort: queryResult.filters.sort,
+        candidateScanLimit: queryResult.candidateScanLimit,
         dbCostMs: queryResult.dbCostMs,
         totalCostMs: Date.now() - startedAt,
         quota,
@@ -2150,7 +2306,17 @@ router.post("/filter-search", async (req, res) => {
     await writeIdempotentResult(req, FILTER_QUOTA_BUCKET, idempotencyKey, data);
     return res.json({ success: true, data });
   } catch (error) {
-    return sendError(res, error, "KOL_MATCH_FILTER_SEARCH_FAILED");
+    const normalizedError = normalizeKolMatchError(error, "KOL_MATCH_FILTER_SEARCH_FAILED");
+    let normalizedFilters = null;
+    try {
+      normalizedFilters = normalizeFilterSearchInput(req.body || {});
+    } catch (normalizeError) {
+      normalizedFilters = { error: normalizeError.message };
+    }
+    logKolMatchError("[EchoHunt KOL Match] filter search failed", req, normalizedError, {
+      filters: normalizedFilters,
+    });
+    return sendError(res, normalizedError, "KOL_MATCH_FILTER_SEARCH_FAILED");
   }
 });
 
