@@ -23,6 +23,7 @@ const {
 const { createSessionAndToken, refreshSessionToken } = require("../auth-center/services/token");
 const { buildPublicUser } = require("../auth-center/services/display-name");
 const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const {
   generateEchohuntTwitterAuthUrl,
   getEchohuntTwitterTokens,
@@ -745,6 +746,7 @@ router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
     const profile = normalizeProfilePayload(rawProfile);
     const soul = normalizeSoulPayload(rawSoul);
     const rankSummary = rankSummaryResult.status === "fulfilled" ? rankSummaryResult.value : null;
+    const isVip = isRequestXHuntVip(req);
 
     if (profile?.rank?.kolRank || profile?.classification) {
       xhuntUser.update({
@@ -756,7 +758,11 @@ router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
     res.set("Cache-Control", "private, max-age=120");
     return res.json({
       success: true,
-      user: buildEchohuntUserPayload(req.authCenter.user, xhuntUser, twitterIdentity),
+      user: {
+        ...buildEchohuntUserPayload(req.authCenter.user, xhuntUser, twitterIdentity),
+        isVip,
+        isXHuntVip: isVip,
+      },
       profile: profile
         ? {
             ...profile,
