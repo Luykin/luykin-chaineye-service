@@ -14,6 +14,7 @@
 const express = require("express");
 const { body } = require("express-validator");
 const { validateRequest } = require("../../middleware/validate-request");
+const { isRequestXHuntVip } = require("../../constants/xhuntVip");
 const { getEffectiveIdentity } = require("../../utils/request-identity");
 const {
   getPostgresReadOnlyStatus,
@@ -26,6 +27,19 @@ const {
 } = require("./search-service");
 
 const router = express.Router();
+
+function requireXHuntVip(req, res, next) {
+  if (isRequestXHuntVip(req)) return next();
+
+  return res.status(403).json({
+    code: 403,
+    error: "XHUNT_VIP_REQUIRED",
+    message: "该功能仅限 XHunt VIP 用户使用",
+    message_en: "This feature is available to XHunt VIP users only",
+  });
+}
+
+router.use(requireXHuntVip);
 
 // Redis 日限额 key 前缀，最终 key 形如：kol_marketing_search_limit:tw:123:2026-08-06
 const RATE_LIMIT_PREFIX = "kol_marketing_search_limit";
