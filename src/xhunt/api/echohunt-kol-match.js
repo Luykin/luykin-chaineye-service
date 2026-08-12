@@ -19,6 +19,7 @@ const {
 } = require("../../infra/k8s/postgres-readonly");
 const { structuredChat } = require("../../lib/llm");
 const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth");
+const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const {
   getKolMarketingEmbeddingModel,
   normalizeFilters,
@@ -716,6 +717,30 @@ function throwIfScopeNotAccepted(scope) {
   });
 }
 
+function requireKolMatchVip(req, res, next) {
+  if (isRequestXHuntVip(req)) return next();
+
+  return res.status(403).json({
+    success: false,
+    error: "XHUNT_VIP_REQUIRED",
+    message: "KOL Match 当前仅限 XHunt VIP 用户使用。",
+    data: { quotaCharged: false },
+  });
+}
+
+function createClientClosedError() {
+  return publicError("KOL_MATCH_CLIENT_CLOSED", 499, "请求已取消，本次不会扣除 AI 精准匹配次数。", {
+    quotaCharged: false,
+  });
+}
+
+function throwIfClientClosed(isClientClosed) {
+  if (typeof isClientClosed === "function" && isClientClosed()) {
+    throw createClientClosedError();
+  }
+}
+
+
 function followerPresetToMin(value) {
   const map = {
     any: null,
@@ -771,7 +796,7 @@ function normalizeProductHardFilters(input = {}) {
     minFollowers: explicitMinFollowers !== null ? explicitMinFollowers : presetFollowers,
     maxFollowers: explicitMaxFollowers,
     activityDays: explicitActivityDays !== null ? explicitActivityDays : presetActivityDays,
-    willingnessLevel: ["high", "medium", "low", "unknown"].includes(willingness) ? willingness : undefined,
+    willingnessLevels: willingnessMinimumToLevels(willingness),
     keywords: source.keywords,
     cooperationTypes: source.cooperationTypes,
     marketingGoals: source.marketingGoals,
@@ -825,7 +850,14 @@ function buildStrategyChips(filters = {}, lang = "zh") {
   if (filters.minFollowers !== undefined) chips.push(lang === "en" ? `${Math.round(filters.minFollowers).toLocaleString("en-US")}+ followers` : `粉丝 ${Math.round(filters.minFollowers).toLocaleString("en-US")}+`);
   if (filters.maxFollowers !== undefined) chips.push(lang === "en" ? `≤ ${Math.round(filters.maxFollowers).toLocaleString("en-US")} followers` : `粉丝 ≤ ${Math.round(filters.maxFollowers).toLocaleString("en-US")}`);
   if (filters.activityDays !== undefined) chips.push(lang === "en" ? `Active in ${filters.activityDays}d` : `近 ${filters.activityDays} 天活跃`);
-  if (filters.willingnessLevels?.length) chips.push(lang === "en" ? "Exclude low willingness" : "排除低接单意愿");
+  if (filters.willingnessLevels?.length) {
+    const levels = [...filters.willingnessLevels].sort().join(",");
+    if (levels === "high") chips.push(lang === "en" ? "High willingness" : "高接单意愿");
+    else if (levels === "high,medium") chips.push(lang === "en" ? "Medium+ willingness" : "中及以上接单意愿");
+    else if (levels === "high,low,medium") chips.push(lang === "en" ? "Low+ willingness" : "低及以上接单意愿");
+    else if (levels === "high,medium,unknown") chips.push(lang === "en" ? "Exclude low willingness" : "排除低接单意愿");
+    else chips.push(lang === "en" ? `Willingness: ${filters.willingnessLevels.join(" / ")}` : `接单意愿：${filters.willingnessLevels.join(" / ")}`);
+  }
   if (filters.willingnessLevel) chips.push(lang === "en" ? `Willingness: ${filters.willingnessLevel}` : `接单意愿：${filters.willingnessLevel}`);
   return chips.slice(0, 10);
 }
@@ -1633,6 +1665,14 @@ function normalizeFilterSearchInput(body = {}) {
   };
 }
 
+function willingnessMinimumToLevels(value) {
+  if (value === "high") return ["high"];
+  if (value === "medium") return ["medium", "high"];
+  if (value === "low") return ["low", "medium", "high"];
+  if (value === "unknown") return ["unknown"];
+  return [];
+}
+
 async function queryKolProfilesByFilters(filterInput = {}) {
   const startedAt = Date.now();
   const filters = normalizeFilterSearchInput(filterInput);
@@ -1660,9 +1700,12 @@ async function queryKolProfilesByFilters(filterInput = {}) {
   }
   if (filters.willingness === "exclude-low") {
     clauses.push("coalesce(k.willingness_level, 'unknown') <> 'low'");
-  } else if (["high", "medium", "low", "unknown"].includes(filters.willingness)) {
-    clauses.push("k.willingness_level = $willingness");
-    bind.willingness = filters.willingness;
+  } else {
+    const willingnessLevels = willingnessMinimumToLevels(filters.willingness);
+    if (willingnessLevels.length > 0) {
+      clauses.push("k.willingness_level = ANY($willingnessLevels::text[])");
+      bind.willingnessLevels = willingnessLevels;
+    }
   }
   if (filters.maxRank !== null) {
     clauses.push(`coalesce(
@@ -1898,12 +1941,14 @@ async function resolveStrategyForAiSearch(req, body, emitProgress) {
   return generateKolMatchStrategy(body, req);
 }
 
-async function runAiMatch(req, body = {}, emitProgress) {
+async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   const requestId = getRequestId(req);
   const startedAt = Date.now();
   const requestedLimit = clampInteger(body.limit, getAiResultLimit(), 1, getAiResultLimit());
   const idempotencyKey = normalizeIdempotencyKey(body.idempotencyKey);
+  const isClientClosed = options.isClientClosed;
 
+  throwIfClientClosed(isClientClosed);
   const cached = await readIdempotentResult(req, AI_QUOTA_BUCKET, idempotencyKey);
   if (cached) {
     await emitProgress?.({
@@ -1915,6 +1960,7 @@ async function runAiMatch(req, body = {}, emitProgress) {
     return cached;
   }
 
+  throwIfClientClosed(isClientClosed);
   await emitProgress?.({
     stage: "scope_check",
     status: "running",
@@ -1922,6 +1968,7 @@ async function runAiMatch(req, body = {}, emitProgress) {
     message: "正在确认输入是否属于 KOL Match 场景。",
   });
   const strategy = await resolveStrategyForAiSearch(req, body, emitProgress);
+  throwIfClientClosed(isClientClosed);
   await emitProgress?.({
     stage: "scope_check",
     status: "done",
@@ -1940,6 +1987,7 @@ async function runAiMatch(req, body = {}, emitProgress) {
     message: "正在检查 AI 精准匹配剩余次数。",
   });
   const quotaBefore = await ensureQuotaAvailable(req, AI_QUOTA_BUCKET);
+  throwIfClientClosed(isClientClosed);
   await emitProgress?.({
     stage: "quota_checked",
     status: "done",
@@ -1958,12 +2006,14 @@ async function runAiMatch(req, body = {}, emitProgress) {
       message: `正在通过后端内部用户查询确认 @${projectHandle}。`,
       sources: ["projectHandle"],
     });
+    throwIfClientClosed(isClientClosed);
     projectAccount = await lookupProjectAccount(projectHandle, { allowLocalFallback: true, failOnUpstreamError: true });
     if (!projectAccount) {
       throw publicError("PROJECT_ACCOUNT_NOT_FOUND", 404, "没有找到这个项目 X 账号，请检查用户名后重试。", {
         quotaCharged: false,
       });
     }
+    throwIfClientClosed(isClientClosed);
     await emitProgress?.({
       stage: "twitter_user_lookup",
       status: projectAccount ? "done" : "skipped",
@@ -1998,11 +2048,14 @@ async function runAiMatch(req, body = {}, emitProgress) {
   const compositeQuery = buildCompositeQuery({ strategy, projectHandle });
   const briefTerms = extractBriefTerms(`${strategy.projectBrief || ""} ${strategy.semanticQuery || ""}`);
 
+  throwIfClientClosed(isClientClosed);
   const searchResult = await searchKolMarketingProfiles({
     query: compositeQuery,
     filters,
     limit: requestedLimit,
     redisClient: req.redisClient,
+    skipAutoFilterExtraction: true,
+    isAborted: isClientClosed,
     onProgress: async (event) => {
       const stageMap = {
         search_plan: "strategy",
@@ -2028,6 +2081,7 @@ async function runAiMatch(req, body = {}, emitProgress) {
     },
   });
 
+  throwIfClientClosed(isClientClosed);
   await emitProgress?.({
     stage: "ranking",
     status: "running",
@@ -2069,6 +2123,7 @@ async function runAiMatch(req, body = {}, emitProgress) {
     });
   }
 
+  throwIfClientClosed(isClientClosed);
   const quota = items.length === 0
     ? buildNoChargeQuota(AI_QUOTA_BUCKET, quotaBefore)
     : await consumeQuota(req, AI_QUOTA_BUCKET);
@@ -2101,6 +2156,7 @@ async function runAiMatch(req, body = {}, emitProgress) {
     trace: buildTrace({ strategy, filters: searchResult.filters, candidateTotal, returned: items.length, quota }),
   };
 
+  throwIfClientClosed(isClientClosed);
   await writeIdempotentResult(req, AI_QUOTA_BUCKET, idempotencyKey, data);
   return data;
 }
@@ -2129,6 +2185,7 @@ function writeSse(res, eventName, data) {
 }
 
 router.use(authenticateAuthCenterToken());
+router.use(requireKolMatchVip);
 
 router.get("/quota", async (req, res) => {
   try {
@@ -2222,7 +2279,9 @@ router.post("/ai-search/stream", async (req, res) => {
     if (configError) {
       throw publicError("KOL_MATCH_SERVICE_UNAVAILABLE", 503, "KOL Match 服务暂不可用，请稍后再试。", { reason: configError });
     }
-    const data = await runAiMatch(req, req.body || {}, emit);
+    const data = await runAiMatch(req, req.body || {}, emit, {
+      isClientClosed: () => closed,
+    });
     if (!closed) writeSse(res, "final", { success: true, data });
   } catch (error) {
     const status = error.status || (isConfigError(error) ? 503 : 500);

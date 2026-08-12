@@ -665,6 +665,18 @@ function sanitizeLlmError(error) {
   return normalizeString(error?.message || String(error || "LLM filter extraction failed"), 180);
 }
 
+function createSearchAbortedError() {
+  const error = new Error("KOL_MARKETING_SEARCH_ABORTED");
+  error.code = "KOL_MARKETING_SEARCH_ABORTED";
+  return error;
+}
+
+function throwIfSearchAborted(isAborted) {
+  if (typeof isAborted === "function" && isAborted()) {
+    throw createSearchAbortedError();
+  }
+}
+
 async function extractKolMarketingFiltersWithLlm(query, options = {}) {
   const normalizedQuery = normalizeQueryText(query);
   const model = getKolMarketingFilterLlmModel();
@@ -834,6 +846,33 @@ function getLlmSqlHardFilters(filters = {}) {
 async function buildKolMarketingSearchPlan(params = {}) {
   const query = normalizeQueryText(params.query);
   const explicitFilters = normalizeFilters(params.filters);
+
+  // EchoHunt KOL Match 的 AI 产品层已经单独生成 strategy.filters。
+  // 这里允许调用方跳过底层从 query 再次推断硬过滤，避免 composite query 中的
+  // “营销/合作/campaign”等词被规则误解为必须排除 low willingness。
+  if (params.skipAutoFilterExtraction) {
+    return {
+      explicitFilters,
+      llmFilters: {},
+      ruleFilters: {},
+      derivedFilters: {},
+      effectiveFilters: explicitFilters,
+      reasons: ["auto_filter_extraction: skipped"],
+      semanticQuery: query,
+      filterPlan: {
+        source: hasMeaningfulFilters(explicitFilters) ? "explicit" : "semantic",
+        autoFilterExtractionSkipped: true,
+        llmEnabled: isKolMarketingFilterLlmEnabled(),
+        llmAttempted: false,
+        llmCacheHit: false,
+        llmModel: null,
+        llmConfidence: 0,
+        llmError: null,
+        semanticQuery: query,
+      },
+    };
+  }
+
   const { filters: ruleFilters, reasons: ruleReasons } = inferFiltersFromQuery(query);
   const llmExtraction = await extractKolMarketingFiltersWithLlm(query, {
     redisClient: params.redisClient,
@@ -1207,6 +1246,8 @@ async function emitSearchProgress(callback, event) {
 async function searchKolMarketingProfiles(params = {}) {
   const startedAt = Date.now();
   const queryLength = String(params.query || "").trim().length;
+  const isAborted = params.isAborted;
+  throwIfSearchAborted(isAborted);
   await emitSearchProgress(params.onProgress, {
     stage: "search_plan",
     status: "running",
@@ -1216,6 +1257,7 @@ async function searchKolMarketingProfiles(params = {}) {
     query: params.query,
     filters: params.filters,
     redisClient: params.redisClient,
+    skipAutoFilterExtraction: params.skipAutoFilterExtraction === true,
   });
   await emitSearchProgress(params.onProgress, {
     stage: "search_plan",
@@ -1225,6 +1267,7 @@ async function searchKolMarketingProfiles(params = {}) {
     semanticQuery: searchPlan.semanticQuery,
     filterPlan: searchPlan.filterPlan,
   });
+  throwIfSearchAborted(isAborted);
 
   console.log("[KOL Marketing Search] embedding step start", {
     queryLength,
@@ -1244,6 +1287,7 @@ async function searchKolMarketingProfiles(params = {}) {
     status: "running",
     message: "正在生成需求向量",
   });
+  throwIfSearchAborted(isAborted);
   const embeddingResult = await getQueryEmbedding({
     namespace: EMBEDDING_NAMESPACE,
     query: searchPlan.semanticQuery,
@@ -1258,6 +1302,7 @@ async function searchKolMarketingProfiles(params = {}) {
     embeddingModel: embeddingResult.model,
     embeddingCacheHit: embeddingResult.cacheHit,
   });
+  throwIfSearchAborted(isAborted);
 
   console.log("[KOL Marketing Search] embedding step success", {
     queryLength,
@@ -1273,6 +1318,7 @@ async function searchKolMarketingProfiles(params = {}) {
     status: "running",
     message: "正在检索 KOL 候选集",
   });
+  throwIfSearchAborted(isAborted);
   const searchResult = await queryKolMarketingProfilesByEmbedding({
     embedding: embeddingResult.embedding,
     filters: searchPlan.effectiveFilters,
@@ -1287,6 +1333,7 @@ async function searchKolMarketingProfiles(params = {}) {
     dbCostMs: searchResult.dbCostMs,
     searchMode: searchResult.searchMode,
   });
+  throwIfSearchAborted(isAborted);
 
   return {
     ...searchResult,
