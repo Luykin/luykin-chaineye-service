@@ -41,7 +41,8 @@ const DEFAULT_FILTER_DAILY_LIMIT = 10;
 const DEFAULT_AI_RESULT_LIMIT = 20;
 const DEFAULT_FILTER_RESULT_LIMIT = 200;
 const DEFAULT_FILTER_CANDIDATE_SCAN_LIMIT = 2000;
-const GENERIC_PUBLIC_PROGRESS = "当前阶段已完成，系统正在继续生成 KOL 推荐名单。";
+const GENERIC_PUBLIC_PROGRESS_ZH = "当前阶段已完成，系统正在继续生成 KOL 推荐名单。";
+const GENERIC_PUBLIC_PROGRESS_EN = "This stage is complete; EchoHunt is continuing to build the KOL shortlist.";
 const AI_STRATEGY_SEMANTIC_ONLY_FILTER_KEYS = [
   "keywords",
   "cooperationTypes",
@@ -208,6 +209,67 @@ function normalizeUiLang(...values) {
   return "zh";
 }
 
+function isEnglishUi(lang) {
+  return normalizeUiLang(lang) === "en";
+}
+
+function uiText(lang, zh, en) {
+  return isEnglishUi(lang) ? en : zh;
+}
+
+function genericPublicProgress(lang = "zh") {
+  return uiText(lang, GENERIC_PUBLIC_PROGRESS_ZH, GENERIC_PUBLIC_PROGRESS_EN);
+}
+
+function localizeProgressSources(sources = [], lang = "zh") {
+  const sourceLabelsEn = {
+    projectHandle: "Project handle",
+    internal_twitter_user_lookup: "Internal Twitter user lookup",
+    local_fallback: "Local fallback",
+    scope_gate: "Scope gate",
+    projectBrief: "Project brief",
+    strategy: "Search strategy",
+    semanticQuery: "Semantic query",
+    hardFilters: "Hard filters",
+    normalizedFilters: "Normalized filters",
+    pgvector: "Vector search",
+    kol_marketing_profile: "KOL marketing profile",
+    similarity: "Semantic similarity",
+    rank: "Influence rank",
+    followers: "Followers",
+    willingness: "Collaboration willingness",
+    quota: "Quota",
+    results: "Results",
+  };
+  if (!isEnglishUi(lang)) return safeArray(sources || [], 6, 40);
+  return safeArray(sources || [], 6, 80).map((source) => sourceLabelsEn[source] || source);
+}
+
+function searchProgressTitle(stage, lang) {
+  if (stage === "embedding") return uiText(lang, "生成需求向量", "Generate requirement vector");
+  if (stage === "db_search") return uiText(lang, "检索候选 KOL", "Retrieve candidate KOLs");
+  return uiText(lang, "解析检索计划", "Parse retrieval plan");
+}
+
+function searchProgressMessage(event = {}, lang = "zh") {
+  if (event.stage === "search_plan") {
+    return event.status === "done"
+      ? uiText(lang, "搜索语义和硬过滤条件已生成", "Search semantics and hard filters are ready.")
+      : uiText(lang, "正在解析搜索语义和硬过滤条件", "Parsing search semantics and hard filters.");
+  }
+  if (event.stage === "embedding") {
+    return event.status === "done"
+      ? uiText(lang, "需求向量已生成", "Requirement vector is ready.")
+      : uiText(lang, "正在生成需求向量", "Generating the requirement vector.");
+  }
+  if (event.stage === "db_search") {
+    return event.status === "done"
+      ? uiText(lang, "KOL 候选集检索完成", "KOL candidate retrieval is complete.")
+      : uiText(lang, "正在检索 KOL 候选集", "Retrieving KOL candidates.");
+  }
+  return isEnglishUi(lang) ? "Processing the search stage." : (event.message || "正在处理搜索阶段。");
+}
+
 function getEnvBoolean(name, defaultValue = false) {
   const raw = process.env[name];
   if (raw === undefined || raw === null || raw === "") return defaultValue;
@@ -321,11 +383,11 @@ function getRequestId(req) {
   return req.requestId || req.headers["x-request-id"] || req.headers["x-xhunt-web-request-id"] || crypto.randomUUID();
 }
 
-function sanitizePublicText(value, maxLength = 500) {
+function sanitizePublicText(value, maxLength = 500, lang = "zh") {
   const clean = normalizeString(value, maxLength + 80);
   if (!clean) return "";
   if (SENSITIVE_OUTPUT_PATTERNS.some((pattern) => pattern.test(clean))) {
-    return GENERIC_PUBLIC_PROGRESS;
+    return genericPublicProgress(lang);
   }
   return clean.length > maxLength ? `${clean.slice(0, maxLength - 1)}…` : clean;
 }
@@ -978,8 +1040,8 @@ function shouldUseLocalizedFallback(value, lang) {
 }
 
 function localizedOrFallback(value, fallback, lang) {
-  const text = sanitizePublicText(value, 500);
-  return shouldUseLocalizedFallback(text, lang) ? sanitizePublicText(fallback, 500) : text;
+  const text = sanitizePublicText(value, 500, lang);
+  return shouldUseLocalizedFallback(text, lang) ? sanitizePublicText(fallback, 500, lang) : text;
 }
 
 function enforceStrategyLanguage(strategy, fallbackStrategy, lang) {
@@ -1034,15 +1096,15 @@ function normalizeLlmStrategy(raw, fallbackStrategy, hardFilters, lang = "zh") {
   }
   const filters = mergeExplicitFilters(normalizeFilters(baseFilters), hardFilters);
   const projectUnderstanding = {
-    projectType: sanitizePublicText(understanding.projectType || fallbackStrategy.projectUnderstanding.projectType, 120),
-    marketingGoal: sanitizePublicText(understanding.marketingGoal || fallbackStrategy.projectUnderstanding.marketingGoal, 120),
-    targetAudience: sanitizePublicText(understanding.targetAudience || fallbackStrategy.projectUnderstanding.targetAudience, 180),
-    idealKolProfile: sanitizePublicText(understanding.idealKolProfile || fallbackStrategy.projectUnderstanding.idealKolProfile, 180),
+    projectType: sanitizePublicText(understanding.projectType || fallbackStrategy.projectUnderstanding.projectType, 120, lang),
+    marketingGoal: sanitizePublicText(understanding.marketingGoal || fallbackStrategy.projectUnderstanding.marketingGoal, 120, lang),
+    targetAudience: sanitizePublicText(understanding.targetAudience || fallbackStrategy.projectUnderstanding.targetAudience, 180, lang),
+    idealKolProfile: sanitizePublicText(understanding.idealKolProfile || fallbackStrategy.projectUnderstanding.idealKolProfile, 180, lang),
   };
-  const semanticQuery = sanitizePublicText(source.semanticQuery || fallbackStrategy.semanticQuery, 500);
+  const semanticQuery = sanitizePublicText(source.semanticQuery || fallbackStrategy.semanticQuery, 500, lang);
   const strategyChips = safeArray(source.strategyChips, 10, 80);
   const publicReasoning = safeArray(source.publicReasoning, 8, 500)
-    .map((item) => sanitizePublicText(item, 500))
+    .map((item) => sanitizePublicText(item, 500, lang))
     .filter(Boolean);
   const confidence = numeric(source.confidence);
 
@@ -1091,7 +1153,7 @@ async function generateKolMatchStrategy(params, req) {
       );
       strategy = normalizeLlmStrategy(raw, fallbackStrategy, hardFilters, lang);
     } catch (error) {
-      llmError = sanitizePublicText(error.message || "strategy llm failed", 160);
+      llmError = sanitizePublicText(error.message || "strategy llm failed", 160, lang);
       console.warn("[EchoHunt KOL Match] strategy LLM fallback", {
         requestId: getRequestId(req),
         authCenterUserId: getAuthCenterUserId(req),
@@ -1104,6 +1166,7 @@ async function generateKolMatchStrategy(params, req) {
   const strategyId = `ks_${crypto.randomBytes(12).toString("base64url")}`;
   const payload = {
     strategyId,
+    lang,
     scope,
     projectHandle,
     projectBrief: scope.safeBrief,
@@ -1198,7 +1261,7 @@ function willingnessText(value, lang = "zh") {
 function localizedWillingnessEvidence(row, lang) {
   const raw = row.willingnessEvidence !== undefined ? row.willingnessEvidence : row.willingness_evidence;
   const source = Array.isArray(raw) ? raw.filter(Boolean) : [];
-  if (lang !== "en") return source.slice(0, 5).map((item) => sanitizePublicText(item, 120));
+  if (lang !== "en") return source.slice(0, 5).map((item) => sanitizePublicText(item, 120, lang));
   const level = row.willingnessLevel || row.willingness_level || "unknown";
   const fallback = {
     high: "Public profile data indicates clear willingness to accept commercial collaborations.",
@@ -1208,7 +1271,7 @@ function localizedWillingnessEvidence(row, lang) {
   }[level] || "No public willingness evidence has been collected yet.";
   const localized = source.map((value) => {
     const text = String(value);
-    if (!/[\u4e00-\u9fff]/.test(text)) return sanitizePublicText(text, 120);
+    if (!/[\u4e00-\u9fff]/.test(text)) return sanitizePublicText(text, 120, lang);
     if (/个人简介|简介/.test(text) && /赞助|广告|合作|商务|sponsor|contact|email/i.test(text)) {
       return "The public bio lists sponsorship or collaboration contact information.";
     }
@@ -1284,7 +1347,7 @@ function evidenceFor(row, matchedTerms, domain, market, lang = "zh") {
   if (replyViews !== null) evidence.push(lang === "en" ? `Median reply views ${Math.round(replyViews).toLocaleString("en-US")}` : `回复浏览量中位数 ${Math.round(replyViews).toLocaleString("en-US")}`);
   if (row.lastActiveAt) evidence.push(lang === "en" ? `Latest original post ${new Date(row.lastActiveAt).toLocaleDateString("en-US")}` : `最近原创内容 ${new Date(row.lastActiveAt).toLocaleDateString("zh-CN")}`);
   if (row.willingnessLevel && row.willingnessLevel !== "unknown") evidence.push(lang === "en" ? `Willingness to collaborate: ${willingnessText(row.willingnessLevel, lang)}` : `接单意愿 ${willingnessText(row.willingnessLevel, lang)}`);
-  return evidence.slice(0, 5).map((item) => sanitizePublicText(item, 160));
+  return evidence.slice(0, 5).map((item) => sanitizePublicText(item, 160, lang));
 }
 
 function buildInitial(name, handle) {
@@ -1375,61 +1438,70 @@ function buildCompositeQuery({ strategy, projectHandle }) {
   ].filter(Boolean).join("\n"), 500);
 }
 
-function buildTrace({ strategy, filters, candidateTotal, returned, quota }) {
-  const chips = buildStrategyChips(filters);
+function buildTrace({ strategy, filters, candidateTotal, returned, quota, lang = "zh" }) {
+  const english = isEnglishUi(lang);
+  const chips = buildStrategyChips(filters, lang);
   const finalDetail = quota?.charged === false
-    ? (returned > 0 ? `名单已生成，本次未消耗次数，今日剩余 ${quota.remaining} 次。` : `未匹配到 KOL，本次不消耗次数，今日剩余 ${quota.remaining} 次。`)
-    : (quota ? `本次成功消耗 1 次，今日剩余 ${quota.remaining} 次。` : "名单已生成。");
+    ? (returned > 0
+      ? uiText(lang, `名单已生成，本次未消耗次数，今日剩余 ${quota.remaining} 次。`, `The shortlist is ready. This run did not use quota; ${quota.remaining} AI matches remain today.`)
+      : uiText(lang, `未匹配到 KOL，本次不消耗次数，今日剩余 ${quota.remaining} 次。`, `No KOLs matched. This run did not use quota; ${quota.remaining} AI matches remain today.`))
+    : (quota
+      ? uiText(lang, `本次成功消耗 1 次，今日剩余 ${quota.remaining} 次。`, `This run used 1 AI match; ${quota.remaining} remain today.`)
+      : uiText(lang, "名单已生成。", "The shortlist is ready."));
   return [
     {
       type: "scope",
-      title: "安全检查完成",
-      detail: strategy.scope?.ignoredInstructions?.length ? "已忽略与 KOL 匹配无关或不安全的片段。" : "需求属于 KOL Match 场景。",
-      publicReasoning: "用户输入已被当作项目 brief 数据处理，不会作为系统指令执行。",
-      sources: ["scope_gate"],
+      title: uiText(lang, "安全检查完成", "Safety check complete"),
+      detail: strategy.scope?.ignoredInstructions?.length
+        ? uiText(lang, "已忽略与 KOL 匹配无关或不安全的片段。", "Irrelevant or unsafe fragments were ignored.")
+        : uiText(lang, "需求属于 KOL Match 场景。", "The request fits the KOL Match scenario."),
+      publicReasoning: uiText(lang, "用户输入已被当作项目 brief 数据处理，不会作为系统指令执行。", "User input is handled as project brief data, not as executable instructions."),
+      sources: localizeProgressSources(["scope_gate"], lang),
     },
     {
       type: "project",
-      title: "理解项目与本次活动",
-      detail: strategy.projectUnderstanding?.projectType || "项目需求已解析",
-      publicReasoning: strategy.publicReasoning?.[0] || "已提取项目定位和营销目标。",
-      sources: ["projectBrief", "strategy"],
+      title: uiText(lang, "理解项目与本次活动", "Understand the project and campaign"),
+      detail: strategy.projectUnderstanding?.projectType || uiText(lang, "项目需求已解析", "The project brief has been parsed."),
+      publicReasoning: strategy.publicReasoning?.[0] || uiText(lang, "已提取项目定位和营销目标。", "Project positioning and marketing goals have been extracted."),
+      sources: localizeProgressSources(["projectBrief", "strategy"], lang),
     },
     {
       type: "intent",
-      title: "确认目标 KOL 画像",
-      detail: strategy.projectUnderstanding?.idealKolProfile || "已形成目标 KOL 画像",
-      publicReasoning: strategy.publicReasoning?.[1] || "会优先寻找内容方向和目标受众匹配的 KOL。",
-      sources: ["strategy", "semanticQuery"],
+      title: uiText(lang, "确认目标 KOL 画像", "Confirm the target KOL profile"),
+      detail: strategy.projectUnderstanding?.idealKolProfile || uiText(lang, "已形成目标 KOL 画像", "The target KOL profile is ready."),
+      publicReasoning: strategy.publicReasoning?.[1] || uiText(lang, "会优先寻找内容方向和目标受众匹配的 KOL。", "The search will prioritize KOLs whose content direction and audience match the campaign."),
+      sources: localizeProgressSources(["strategy", "semanticQuery"], lang),
     },
     {
       type: "filters",
-      title: "应用基础筛选条件",
-      detail: chips.join(" · ") || "无额外硬筛条件",
-      publicReasoning: `先使用明确硬筛条件缩小候选范围：${chips.join("、") || "使用语义召回为主"}。`,
-      sources: ["hardFilters", "normalizedFilters"],
+      title: uiText(lang, "应用基础筛选条件", "Apply base filters"),
+      detail: chips.join(" · ") || uiText(lang, "无额外硬筛条件", "No additional hard filters"),
+      publicReasoning: english
+        ? `Explicit hard filters narrow the candidate pool first: ${chips.join(", ") || "semantic recall is the main signal"}.`
+        : `先使用明确硬筛条件缩小候选范围：${chips.join("、") || "使用语义召回为主"}。`,
+      sources: localizeProgressSources(["hardFilters", "normalizedFilters"], lang),
     },
     {
       type: "candidates",
-      title: "载入候选 KOL 数据",
-      detail: `${candidateTotal || 0} 名候选 KOL 进入排序。`,
-      publicReasoning: "候选数量来自当前数据库检索结果。",
-      sources: ["pgvector", "kol_marketing_profile"],
+      title: uiText(lang, "载入候选 KOL 数据", "Load candidate KOL data"),
+      detail: uiText(lang, `${candidateTotal || 0} 名候选 KOL 进入排序。`, `${candidateTotal || 0} candidate KOLs entered ranking.`),
+      publicReasoning: uiText(lang, "候选数量来自当前数据库检索结果。", "The candidate count comes from the current database retrieval result."),
+      sources: localizeProgressSources(["pgvector", "kol_marketing_profile"], lang),
       candidateCount: candidateTotal || 0,
     },
     {
       type: "ranking",
-      title: "整理推荐顺序与理由",
-      detail: `已生成 ${returned || 0} 名推荐 KOL。`,
-      publicReasoning: "推荐顺序综合语义相关性、影响力、内容证据、粉丝规模和接单意愿。",
-      sources: ["similarity", "rank", "followers", "willingness"],
+      title: uiText(lang, "整理推荐顺序与理由", "Rank candidates and reasons"),
+      detail: uiText(lang, `已生成 ${returned || 0} 名推荐 KOL。`, `${returned || 0} recommended KOLs have been generated.`),
+      publicReasoning: uiText(lang, "推荐顺序综合语义相关性、影响力、内容证据、粉丝规模和接单意愿。", "Ranking combines semantic relevance, influence, content evidence, follower scale, and collaboration willingness."),
+      sources: localizeProgressSources(["similarity", "rank", "followers", "willingness"], lang),
     },
     {
       type: "final",
-      title: "名单生成完成",
+      title: uiText(lang, "名单生成完成", "Shortlist generation complete"),
       detail: finalDetail,
-      publicReasoning: "最终名单可继续打开详情查看每个 KOL 的内容画像和推荐证据。",
-      sources: ["quota", "results"],
+      publicReasoning: uiText(lang, "最终名单可继续打开详情查看每个 KOL 的内容画像和推荐证据。", "Open each KOL detail to review the content profile and recommendation evidence."),
+      sources: localizeProgressSources(["quota", "results"], lang),
     },
   ];
 }
@@ -1925,17 +1997,17 @@ async function queryKolProfileByTwitterUserId(twitterUserId, filterInput = {}) {
   return row || null;
 }
 
-async function resolveStrategyForAiSearch(req, body, emitProgress) {
+async function resolveStrategyForAiSearch(req, body, emitProgress, lang = "zh") {
   const strategyId = normalizeString(body.strategyId, 80);
   const stored = strategyId ? await loadStoredStrategy(req, strategyId) : null;
-  if (stored) return stored;
+  if (stored && normalizeUiLang(stored.lang) === normalizeUiLang(lang)) return stored;
 
-  if (strategyId) {
+  if (strategyId || stored) {
     await emitProgress?.({
       stage: "strategy",
       status: "running",
-      title: "重新生成搜索策略",
-      message: "未找到已确认策略，正在根据当前项目需求重新生成。",
+      title: uiText(lang, "重新生成搜索策略", "Regenerate search strategy"),
+      message: uiText(lang, "未找到同语言的已确认策略，正在根据当前项目需求重新生成。", "No confirmed strategy was found for this language, so a new one is being generated from the current brief."),
     });
   }
   return generateKolMatchStrategy(body, req);
@@ -1947,15 +2019,16 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   const requestedLimit = clampInteger(body.limit, getAiResultLimit(), 1, getAiResultLimit());
   const idempotencyKey = normalizeIdempotencyKey(body.idempotencyKey);
   const isClientClosed = options.isClientClosed;
+  const lang = normalizeUiLang(body.lang, req?.query?.lang, req?.headers?.["x-language"], req?.headers?.["accept-language"]);
 
   throwIfClientClosed(isClientClosed);
   const cached = await readIdempotentResult(req, AI_QUOTA_BUCKET, idempotencyKey);
-  if (cached) {
+  if (cached && normalizeUiLang(cached.meta?.lang) === lang) {
     await emitProgress?.({
       stage: "final",
       status: "done",
-      title: "已命中重复请求缓存",
-      message: "本次返回已生成过的名单，不重复扣减额度。",
+      title: uiText(lang, "已命中重复请求缓存", "Reused cached result"),
+      message: uiText(lang, "本次返回已生成过的名单，不重复扣减额度。", "This returns a previously generated shortlist without charging quota again."),
     });
     return cached;
   }
@@ -1964,16 +2037,18 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   await emitProgress?.({
     stage: "scope_check",
     status: "running",
-    title: "检查需求范围",
-    message: "正在确认输入是否属于 KOL Match 场景。",
+    title: uiText(lang, "检查需求范围", "Check request scope"),
+    message: uiText(lang, "正在确认输入是否属于 KOL Match 场景。", "Checking whether the input belongs to the KOL Match scenario."),
   });
-  const strategy = await resolveStrategyForAiSearch(req, body, emitProgress);
+  const strategy = await resolveStrategyForAiSearch(req, body, emitProgress, lang);
   throwIfClientClosed(isClientClosed);
   await emitProgress?.({
     stage: "scope_check",
     status: "done",
-    title: "需求范围已确认",
-    message: strategy.scope?.ignoredInstructions?.length ? "已忽略与 KOL 匹配无关或不安全的片段。" : "需求已通过安全检查。",
+    title: uiText(lang, "需求范围已确认", "Request scope confirmed"),
+    message: strategy.scope?.ignoredInstructions?.length
+      ? uiText(lang, "已忽略与 KOL 匹配无关或不安全的片段。", "Irrelevant or unsafe fragments were ignored.")
+      : uiText(lang, "需求已通过安全检查。", "The request passed the safety check."),
     metrics: {
       reasonCode: strategy.scope?.reasonCode,
       ignoredInstructions: strategy.scope?.ignoredInstructions?.length || 0,
@@ -1983,16 +2058,16 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   await emitProgress?.({
     stage: "quota_checked",
     status: "running",
-    title: "检查今日额度",
-    message: "正在检查 AI 精准匹配剩余次数。",
+    title: uiText(lang, "检查今日额度", "Check today's quota"),
+    message: uiText(lang, "正在检查 AI 精准匹配剩余次数。", "Checking remaining AI match quota."),
   });
   const quotaBefore = await ensureQuotaAvailable(req, AI_QUOTA_BUCKET);
   throwIfClientClosed(isClientClosed);
   await emitProgress?.({
     stage: "quota_checked",
     status: "done",
-    title: "今日额度可用",
-    message: `AI 精准匹配今日剩余 ${quotaBefore.remaining} 次。`,
+    title: uiText(lang, "今日额度可用", "Today's quota is available"),
+    message: uiText(lang, `AI 精准匹配今日剩余 ${quotaBefore.remaining} 次。`, `${quotaBefore.remaining} AI matches remain today.`),
     metrics: quotaBefore,
   });
 
@@ -2002,9 +2077,9 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
     await emitProgress?.({
       stage: "twitter_user_lookup",
       status: "running",
-      title: "验证项目 X 账号",
-      message: `正在通过后端内部用户查询确认 @${projectHandle}。`,
-      sources: ["projectHandle"],
+      title: uiText(lang, "验证项目 X 账号", "Verify project X account"),
+      message: uiText(lang, `正在通过后端内部用户查询确认 @${projectHandle}。`, `Confirming @${projectHandle} through the internal user lookup.`),
+      sources: localizeProgressSources(["projectHandle"], lang),
     });
     throwIfClientClosed(isClientClosed);
     projectAccount = await lookupProjectAccount(projectHandle, { allowLocalFallback: true, failOnUpstreamError: true });
@@ -2017,18 +2092,22 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
     await emitProgress?.({
       stage: "twitter_user_lookup",
       status: projectAccount ? "done" : "skipped",
-      title: projectAccount ? "项目 X 账号已确认" : "项目 X 账号未确认，继续使用 brief",
-      message: projectAccount ? `已确认 @${projectAccount.handle}。` : "后端内部用户查询未命中，本次继续根据项目描述匹配。",
+      title: projectAccount
+        ? uiText(lang, "项目 X 账号已确认", "Project X account confirmed")
+        : uiText(lang, "项目 X 账号未确认，继续使用 brief", "Project X account not confirmed; continuing with the brief"),
+      message: projectAccount
+        ? uiText(lang, `已确认 @${projectAccount.handle}。`, `Confirmed @${projectAccount.handle}.`)
+        : uiText(lang, "后端内部用户查询未命中，本次继续根据项目描述匹配。", "The internal lookup did not find the account, so this run continues with the project brief."),
       metrics: projectAccount ? { source: projectAccount.source, lookupWarning: projectAccount.lookupWarning || null } : undefined,
-      sources: ["internal_twitter_user_lookup", "local_fallback"],
+      sources: localizeProgressSources(["internal_twitter_user_lookup", "local_fallback"], lang),
     });
   }
 
   await emitProgress?.({
     stage: "strategy",
     status: "done",
-    title: "搜索策略已生成",
-    message: strategy.projectUnderstanding?.idealKolProfile || "已生成目标 KOL 画像。",
+    title: uiText(lang, "搜索策略已生成", "Search strategy generated"),
+    message: strategy.projectUnderstanding?.idealKolProfile || uiText(lang, "已生成目标 KOL 画像。", "The target KOL profile has been generated."),
     metrics: {
       strategyId: strategy.strategyId,
       filters: strategy.filters,
@@ -2039,7 +2118,7 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
     await emitProgress?.({
       type: "reasoning",
       stage: "strategy",
-      delta: sanitizePublicText(reasoning, 500),
+      delta: sanitizePublicText(reasoning, 500, lang),
     });
   }
 
@@ -2065,8 +2144,8 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
       await emitProgress?.({
         stage: stageMap[event.stage] || event.stage,
         status: event.status,
-        title: event.stage === "embedding" ? "生成需求向量" : event.stage === "db_search" ? "检索候选 KOL" : "解析检索计划",
-        message: event.message,
+        title: searchProgressTitle(event.stage, lang),
+        message: searchProgressMessage(event, lang),
         metrics: {
           filters: event.filters,
           semanticQuery: event.semanticQuery,
@@ -2085,8 +2164,8 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   await emitProgress?.({
     stage: "ranking",
     status: "running",
-    title: "整理推荐顺序与理由",
-    message: "正在综合语义相关性、影响力、内容证据和接单意愿生成推荐名单。",
+    title: uiText(lang, "整理推荐顺序与理由", "Rank candidates and reasons"),
+    message: uiText(lang, "正在综合语义相关性、影响力、内容证据和接单意愿生成推荐名单。", "Ranking recommendations by semantic relevance, influence, content evidence, and collaboration willingness."),
   });
 
   const items = searchResult.items
@@ -2098,14 +2177,22 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   await emitProgress?.({
     stage: "ranking",
     status: "done",
-    title: "推荐顺序已整理",
-    message: `已生成 ${items.length} 名推荐 KOL。`,
+    title: uiText(lang, "推荐顺序已整理", "Recommendation order is ready"),
+    message: uiText(lang, `已生成 ${items.length} 名推荐 KOL。`, `${items.length} recommended KOLs have been generated.`),
     metrics: { returned: items.length, candidateTotal },
   });
   await emitProgress?.({
     type: "reasoning",
     stage: "ranking",
-    delta: sanitizePublicText(`候选集共 ${candidateTotal} 人，最终按项目语义相关性、${filters.domains?.[0] || "Web3"} 影响力排名、粉丝量、内容证据和接单意愿排序。`, 500),
+    delta: sanitizePublicText(
+      uiText(
+        lang,
+        `候选集共 ${candidateTotal} 人，最终按项目语义相关性、${filters.domains?.[0] || "Web3"} 影响力排名、粉丝量、内容证据和接单意愿排序。`,
+        `The candidate pool contains ${candidateTotal} KOLs. Final ranking uses project semantic relevance, ${filters.domains?.[0] || "Web3"} influence rank, follower scale, content evidence, and collaboration willingness.`
+      ),
+      500,
+      lang
+    ),
   });
 
   if (items.length === 0) {
@@ -2149,11 +2236,12 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
       embeddingModel: searchResult.embeddingModel,
       embeddingCacheHit: searchResult.embeddingCacheHit,
       quota,
+      lang,
       generatedAt: new Date().toISOString(),
       requestId,
     },
     quota,
-    trace: buildTrace({ strategy, filters: searchResult.filters, candidateTotal, returned: items.length, quota }),
+    trace: buildTrace({ strategy, filters: searchResult.filters, candidateTotal, returned: items.length, quota, lang }),
   };
 
   throwIfClientClosed(isClientClosed);
@@ -2161,20 +2249,20 @@ async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   return data;
 }
 
-function normalizeSseProgress(event = {}) {
+function normalizeSseProgress(event = {}, lang = "zh") {
   if (event.type === "reasoning") {
     return {
       stage: event.stage || "strategy",
-      delta: sanitizePublicText(event.delta, 500),
+      delta: sanitizePublicText(event.delta, 500, lang),
     };
   }
   return {
     stage: event.stage || "unknown",
     status: event.status || "running",
-    title: sanitizePublicText(event.title || event.stage || "处理进度", 120),
-    message: sanitizePublicText(event.message || "", 300),
-    publicReasoning: sanitizePublicText(event.publicReasoning || "", 500),
-    sources: safeArray(event.sources || [], 6, 40),
+    title: sanitizePublicText(event.title || event.stage || uiText(lang, "处理进度", "Processing"), 120, lang),
+    message: sanitizePublicText(event.message || "", 300, lang),
+    publicReasoning: sanitizePublicText(event.publicReasoning || "", 500, lang),
+    sources: localizeProgressSources(event.sources || [], lang),
     metrics: event.metrics || undefined,
   };
 }
@@ -2255,6 +2343,7 @@ router.post("/ai-search", async (req, res) => {
 
 router.post("/ai-search/stream", async (req, res) => {
   const configError = getAiServiceConfigError();
+  const lang = normalizeUiLang(req.body?.lang, req.query?.lang, req.headers?.["x-language"], req.headers?.["accept-language"]);
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
@@ -2269,10 +2358,10 @@ router.post("/ai-search/stream", async (req, res) => {
   const emit = async (event) => {
     if (closed) return;
     if (event?.type === "reasoning") {
-      writeSse(res, "reasoning", normalizeSseProgress(event));
+      writeSse(res, "reasoning", normalizeSseProgress(event, lang));
       return;
     }
-    writeSse(res, "progress", normalizeSseProgress(event));
+    writeSse(res, "progress", normalizeSseProgress(event, lang));
   };
 
   try {
@@ -2286,7 +2375,9 @@ router.post("/ai-search/stream", async (req, res) => {
   } catch (error) {
     const status = error.status || (isConfigError(error) ? 503 : 500);
     const code = error.code || error.message || "KOL_MATCH_AI_SEARCH_FAILED";
-    const message = error.publicMessage || (status >= 500 ? "KOL 匹配失败，请稍后重试。" : "请求参数不符合要求，请检查后重试。");
+    const message = error.publicMessage || (status >= 500
+      ? uiText(lang, "KOL 匹配失败，请稍后重试。", "KOL matching failed. Please try again later.")
+      : uiText(lang, "请求参数不符合要求，请检查后重试。", "The request parameters are invalid. Please check and try again."));
     console.warn("[EchoHunt KOL Match] stream failed", {
       requestId: getRequestId(req),
       authCenterUserId: getAuthCenterUserId(req),
