@@ -1,12 +1,14 @@
 # EchoHunt KOL Match 用户视角全链路技术分析
 
 > 日期：2026-08-13  
+> 最近更新：2026-08-14，补充 Embedding TopK 召回、第二次 LLM 深评和综合推荐分链路  
 > 后端项目：`/Users/luykin/Documents/mac-work/luykin-chaineye-service`  
 > 前端项目：`/Users/luykin/Documents/mac-work-new/XHunt.website/apps/echohunt`  
 > 参考文档：  
 > - `docs/kol-match-architecture-audit-report-2026-08-12.html`  
 > - `docs/kol-marketing-search-table-audit-2026-08-07.md`  
 > - `docs/kol-marketing-echohunt-frontend-integration-plan-2026-08-08.md`
+> - `docs/kol-match-embedding-llm-alignment-implementation-2026-08-14.md`
 
 ---
 
@@ -43,13 +45,18 @@ src/xhunt/api/echohunt-kol-match.js
   /api/xhunt/echohunt/kol-match/*
 ```
 
-底层语义搜索复用：
+底层语义搜索与候选深评复用：
 
 ```text
 src/xhunt/api/kol-marketing/search-service.js
   -> embedding service
   -> PG read-only dev.kol_marketing_profile
-  -> pgvector 相似度检索
+  -> pgvector 相似度检索 TopK
+
+src/xhunt/api/echohunt-kol-match.js
+  -> 第二次 LLM 候选深评，默认开启
+  -> 失败时降级为 Embedding similarity proxy
+  -> 程序综合 AI 匹配度、真实流量、影响力和 Soul 排序
 ```
 
 ---
@@ -142,6 +149,7 @@ getQuotaSnapshot(req)
   -> 按北京时间计算今日 key
   -> 读取 Redis aiMatch / filterSearch 已用次数
   -> 返回 limit / used / remaining / resetTime
+  -> 返回 resultLimits.aiMatch / aiRecallTopK / filterSearch
 ```
 
 Redis key 形态：
@@ -167,12 +175,28 @@ quotaLoaded = true
 
 ## 4. AI 精准匹配完整流程
 
-AI 精准匹配是两段式：
+AI 精准匹配是两段式，但第二段内部现在包含 Embedding TopK 召回和第二次候选深评：
 
 ```text
 第一段：生成搜索策略，不扣 AI 次数
 第二段：用户确认后生成名单，成功有结果才扣 1 次
+
+第二段内部：
+scope / quota / account / strategy
+  -> 完整硬筛 + pgvector Embedding 召回 TopK
+  -> 第二次 LLM 深评召回候选
+  -> 程序综合排序
+  -> 返回最终名单
 ```
+
+相关环境变量：
+
+| 变量 | 默认 | 说明 |
+|---|---:|---|
+| `ECHOHUNT_KOL_MATCH_RECALL_TOP_K` | `40` | AI 精准匹配进入深评/排序的 Embedding 召回数，受底层 `MAX_LIMIT=50` 限制 |
+| `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED` | `true` | 是否启用第二次 LLM 候选深评；设为 `false` 时使用 Embedding similarity proxy |
+| `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_MODEL` | `LLM_MODEL` | 候选深评模型 |
+| `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_TIMEOUT_MS` | `20000` | 候选深评超时 |
 
 ---
 
@@ -424,8 +448,8 @@ echohunt:kol-match:strategy:{authCenterUserId}:{strategyId}
 `loadCandidatesAndStart()`：
 
 1. 检查登录、quota、strategy 是否存在。
-2. 清空旧结果和旧 thinking events。
-3. 设置 `aiView = progress`。
+2. 清空旧结果和旧实时分析进度 events。
+3. 设置 `aiView = progress`，前端展示「实时分析进度 / Live analysis progress」。
 4. 创建 `AbortController`，用于用户中途点「修改需求」取消 SSE。
 5. 调用：
 
@@ -608,15 +632,17 @@ isAborted: isClientClosed
 
 这解决了旧审计里提到的一个重要风险：底层不会再从 composite query 里的「营销/合作」等词二次推断接单意愿硬过滤。
 
-#### 阶段 6：search_plan / embedding / db_search
+#### 阶段 6：search_plan / embedding / db_search，即 Embedding TopK 召回
 
-底层调用：
+底层调用现在使用 AI 召回 TopK，而不是最终展示 limit：
 
 ```js
+const recallTopK = getAiRecallTopK(); // 默认 40，受底层 MAX_LIMIT=50 限制
+
 searchKolMarketingProfiles({
   query: compositeQuery,
   filters,
-  limit: 20,
+  limit: recallTopK,
   redisClient,
   skipAutoFilterExtraction: true,
   isAborted,
@@ -636,6 +662,14 @@ getQueryEmbedding()
 queryKolMarketingProfilesByEmbedding()
   -> 如果有硬过滤：exact_filtered，先 materialize filtered_profiles 再精确向量排序
   -> 如果无硬过滤：hnsw_unfiltered，走 pgvector HNSW 近邻
+  -> 按向量距离返回 TopK 召回候选
+```
+
+关键变化：
+
+```text
+旧生产文档：limit = 20，直接取最终展示结果
+当前代码：limit = recallTopK，默认 40，先召回候选再深评/排序，最后切 20
 ```
 
 SSE 对应事件：
@@ -654,7 +688,7 @@ LEFT JOIN dev.twitter_user
 LEFT JOIN dev.tweet 获取 last_active_at
 ```
 
-返回字段包括：
+召回字段包括：
 
 ```text
 twitterUserId / handle / name / avatar
@@ -665,25 +699,144 @@ soulScore
 marketing summaries
 keywords / cooperationTypes / marketingGoals / projectStages
 aiAbilities / web3Abilities
-willingnessLevel / score / reason / evidence
+willingnessLevel / willingnessEvidence
 updatedAt / metricsCalculatedAt / lastActiveAt
 similarity / candidateTotal
 ```
 
-#### 阶段 7：ranking
+注意：粉丝、影响力、真实流量、Soul、接单意愿等字段会返回给后端程序用于最终排序或结果展示，但不会进入第二次 LLM 深评 Prompt。
 
-后端把底层结果 `mapKolProfile()` 后重新打分：
+#### 阶段 7：candidate_evaluation，第二次 LLM 深评召回候选
+
+后端在 `db_search` 完成后新增候选深评阶段：
 
 ```text
-score = 语义相关性 + 影响力排名 + 粉丝量 + 浏览量 + 接单意愿
+event: progress
+stage: candidate_evaluation
+status: running / done
+```
+
+调用：
+
+```js
+evaluateAiMatchCandidates({
+  req,
+  strategy,
+  rows: searchResult.items, // 默认最多 40 个召回候选
+  filters,
+  briefTerms,
+  lang
+})
+```
+
+当前实现是一轮 LLM 调用完成全部召回候选深评，不是多轮对话，也不是逐个 KOL 单独调用。Prompt 输入形态：
+
+```json
+{
+  "lang": "zh",
+  "projectContext": {
+    "project": "第一次模型理解的项目类型",
+    "goal": "本次营销目标",
+    "targetAudience": "目标受众",
+    "idealKol": "理想 KOL",
+    "matchingQuery": "strategy.semanticQuery",
+    "hardFilters": { "domain": "Web3", "market": "CN", "activityDays": 30 }
+  },
+  "candidates": [
+    {
+      "candidateId": "twitterUserId",
+      "evidence": [
+        { "evidenceRef": "candidate:0:domains", "field": "domains", "text": "Web3" },
+        { "evidenceRef": "candidate:0:marketingSummary", "field": "marketingSummary", "text": "候选 KOL 语义画像摘要" }
+      ]
+    }
+  ]
+}
+```
+
+明确不传给第二次 LLM 的字段：
+
+```text
+followers
+influence rank
+main/reply views
+soulScore
+willingnessLevel / willingnessEvidence
+价格或其他商业字段
+```
+
+第二次 LLM 输出：
+
+```json
+{
+  "assessments": [
+    {
+      "candidateId": "twitterUserId",
+      "semanticScore": 82,
+      "dimensions": {
+        "expertise": 88,
+        "content": 84,
+        "audience": 65,
+        "campaign": 80
+      },
+      "reason": "面向用户的推荐理由",
+      "evidence": [
+        { "evidenceRef": "candidate:0:marketingSummary", "statement": "候选内容长期覆盖 DeFi" }
+      ],
+      "matchedTerms": ["DeFi", "链上交易"]
+    }
+  ]
+}
+```
+
+校验规则：
+
+```text
+每个召回候选必须且只能返回一条 assessment
+candidateId 必须原样匹配
+evidenceRef 必须来自该候选自己的 evidence
+无效、漏评、重复或证据越权都会触发降级
+```
+
+降级规则：
+
+```text
+ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED=false
+或第二次 LLM 超时/失败/输出校验失败
+  -> 使用 Embedding similarity proxy 生成 semanticScore / reason / evidence
+  -> meta.evaluation.fallback = true
+  -> 主流程继续，不把内部错误暴露给前端
+```
+
+#### 阶段 8：ranking，程序综合排序
+
+后端把召回候选、深评结果和客观数据合并后重新打分：
+
+```text
+综合推荐分 = AI/语义匹配度 70%
+           + 真实流量 15%
+           + 影响力 10%
+           + Soul 5%
+```
+
+当前代码里的边界：
+
+```text
+AI/语义匹配度：第二次 LLM semanticScore；降级时用 Embedding similarity proxy
+真实流量：mainTweetViewMedian 60% + replyTweetViewMedian 40%，在本次召回池内归一化
+影响力：基于当前 domain/market 的 influenceRank 计算
+Soul：直接使用 soulScore
+粉丝数：不参与新推荐分，只展示
+接单意愿：不参与新推荐分，只展示/作为用户显式排除低意愿时的硬筛
 ```
 
 再排序：
 
 ```text
 score desc
+aiMatchScore desc
 influenceRank asc
-limit 20
+limit 最终展示数量，默认 20
 ```
 
 SSE event：
@@ -697,7 +850,7 @@ event: reasoning
 stage: ranking
 ```
 
-#### 阶段 8：扣 quota 与返回 final
+#### 阶段 9：扣 quota 与返回 final
 
 扣费规则：
 
@@ -711,6 +864,12 @@ items.length > 0：consumeQuota(req, aiMatch)，Redis incr 今日 ai key
 ```text
 event: final
 data: { success: true, data: { mode, items, meta, quota, trace } }
+
+meta 关键新增字段：
+- recallTopK：本次 Embedding 召回配置，默认 40
+- recalledCount：实际进入深评/排序的召回人数
+- evaluation：第二次 LLM 深评或 proxy 降级信息
+- scoreWeights：综合推荐分权重
 ```
 
 前端收到 final 后：
@@ -720,7 +879,7 @@ setAiResults(result.items)
 setAiCandidateTotal(meta.candidateTotal)
 setLiveThinkingEvents(trace)
 applyQuotaResult('ai', result.quota)
-等待最小 thinking 展示时间 4.2s
+等待最小实时分析进度展示时间 4.2s
 切换 aiView = results
 ```
 
@@ -736,7 +895,7 @@ applyQuotaResult('ai', result.quota)
 abortAiStream()
   -> aiStreamAbort.current.abort()
   -> setCandidateLoading(false)
-清空 thinking events / candidateTotal / typedThought
+清空实时分析进度 events / candidateTotal / typedThought
 aiView = input
 ```
 
@@ -769,8 +928,16 @@ throwIfSearchAborted(isAborted)
 
 ```text
 推荐 KOL 数量
-排序方式：推荐分 / 影响力排名 / 粉丝数
-结果表格：账号、推荐分、粉丝、排名、浏览量、接单意愿、推荐理由等
+排序方式：综合推荐分 / 影响力排名 / 粉丝数
+结果表格：账号、综合推荐分、AI 匹配度、粉丝、排名、浏览量、接单意愿、推荐理由等
+```
+
+其中：
+
+```text
+综合推荐分：后端程序综合 AI/语义匹配度、真实流量、影响力和 Soul 后生成
+AI 匹配度：第二次 LLM semanticScore；降级时为 Embedding similarity proxy
+粉丝数和接单意愿：展示和筛选用途，不参与新的综合推荐分
 ```
 
 前端只展示最多 20 个 AI 结果：
@@ -988,7 +1155,9 @@ localLookupQuery
 | 需求太模糊 | 否 | 不相关 | 需要补充项目类型/受众/目标 |
 | prompt injection / 密钥 / SQL / 投资建议 | 否 | 不相关 | 安全策略拦截 |
 | strategy LLM 失败 | 否 | 不相关 | 后端 fallback，不一定失败 |
+| 第二次 LLM 深评失败/超时/输出无效 | 跟随最终结果 | 不相关 | 后端使用 Embedding similarity proxy 降级，主流程继续；最终有结果才扣 |
 | AI 搜索服务配置缺失 | 否 | 不相关 | 服务暂不可用 |
+| Embedding / PG 检索失败 | 否 | 不相关 | 匹配失败，本次不扣 AI 次数 |
 | AI 搜索 0 结果 | 否 | 不相关 | 空结果，quota 不变 |
 | AI 搜索成功 >0 结果 | 扣 1 次 | 不相关 | 进入结果页 |
 | 条件筛选 0 结果 | 不相关 | 否 | 空结果，quota 不变 |
@@ -1006,6 +1175,9 @@ localLookupQuery
 |---|---|---|
 | SSE 取消后可能继续执行并扣 quota | 已做关键改造 | `runAiMatch()` 支持 `isClientClosed`；底层搜索支持 `isAborted`；扣 quota 前检查关闭状态 |
 | AI 搜索底层二次推断 filters | 已做关键改造 | `skipAutoFilterExtraction: true`，底层 `buildKolMarketingSearchPlan()` 直接使用 explicit filters |
+| AI 搜索先按影响力预截断 | 当前后端不存在 | pgvector 检索在完整硬筛集合中按向量距离召回 TopK，不按 influence rank 先取 Top500 |
+| 第二次候选深评缺失 | 已新增 | `candidate_evaluation` 阶段默认调用第二次 LLM；失败时 proxy 降级 |
+| 推荐分混入粉丝数/接单意愿 | 已调整 | 新综合推荐分使用 AI/语义匹配度、真实流量、影响力、Soul；粉丝数和接单意愿只展示/筛选 |
 | 前端权限与后端权限不一致 | 仍需产品确认 | 前端按 internal test user；后端按 XHunt VIP |
 | 条件筛选指定 KOL 查找没真正调用后端 lookup | 仍存在 | API client 有 `lookupSpecificKol()`，页面当前只做本地结果内搜索 |
 | 详情 metricsCalculatedAt 字段 | 已映射 | 前端 `mapKolProfile()` 已映射 `metricsCalculatedAt` |
@@ -1026,10 +1198,21 @@ localLookupQuery
 -> 点击生成搜索策略
 -> 确认 strategy 展示合理
 -> 点击确认并生成名单
--> 观察 SSE 阶段：scope_check / quota_checked / twitter_user_lookup / strategy / embedding / db_search / ranking / final
--> 结果页展示 1-20 个 KOL
--> quota 少 1
+-> 观察 SSE 阶段：scope_check / quota_checked / twitter_user_lookup / strategy / embedding / db_search / candidate_evaluation / ranking / final
+-> 结果页展示 1-20 个 KOL，包含综合推荐分和 AI 匹配度
+-> 有结果时 quota 少 1
 -> 打开 KOL 详情
+```
+
+### 10.1.1 第二次 LLM 深评降级路径
+
+```text
+临时设置 ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED=false
+或模拟第二次 LLM 超时/输出校验失败
+-> SSE 仍出现 candidate_evaluation running / done
+-> meta.evaluation.fallback = true
+-> 结果页仍展示综合推荐分和 AI 匹配度 proxy
+-> 有结果时仍按成功生成名单扣 1 次
 ```
 
 ### 10.2 安全与不扣费路径
@@ -1080,4 +1263,4 @@ internalTestUser 但非 XHunt VIP
 
 ## 11. 一句话结论
 
-当前 KOL Match 用户链路已经是清晰的「前端表单 → Next 代理 → EchoHunt 产品 API → 安全/额度/策略/SSE → KOL Marketing 向量检索/SQL 筛选 → 结果详情」架构；AI 精准匹配的取消与底层二次过滤风险在当前代码中已做主要修复，下一步最值得补的是权限口径统一，以及条件筛选中的指定 KOL 后端 lookup 真正接入页面交互。
+当前 KOL Match 用户链路已经更新为「前端表单 → Next 代理 → EchoHunt 产品 API → 安全/额度/策略/SSE → KOL Marketing 完整硬筛 + Embedding TopK 召回 → 第二次 LLM 候选深评 → 程序综合排序 → 结果详情」架构；AI 精准匹配已经避免影响力预截断，并把粉丝数/接单意愿从新综合推荐分中移除。下一步最值得补的是权限口径统一、第二次 LLM 成本/延迟监控，以及条件筛选中的指定 KOL 后端 lookup 真正接入页面交互。
