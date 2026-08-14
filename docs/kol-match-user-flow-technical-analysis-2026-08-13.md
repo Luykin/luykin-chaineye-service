@@ -1,7 +1,7 @@
 # EchoHunt KOL Match 用户视角全链路技术分析
 
 > 日期：2026-08-13  
-> 最近更新：2026-08-14，补充 Embedding TopK 召回、第二次 LLM 深评和综合推荐分链路  
+> 最近更新：2026-08-14，补充 Embedding TopK 召回、第二次 LLM 深评、结果页深评状态和综合推荐分链路  
 > 后端项目：`/Users/luykin/Documents/mac-work/luykin-chaineye-service`  
 > 前端项目：`/Users/luykin/Documents/mac-work-new/XHunt.website/apps/echohunt`  
 > 参考文档：  
@@ -877,6 +877,7 @@ meta 关键新增字段：
 ```text
 setAiResults(result.items)
 setAiCandidateTotal(meta.candidateTotal)
+setAiEvaluationMeta(meta.evaluation)
 setLiveThinkingEvents(trace)
 applyQuotaResult('ai', result.quota)
 等待最小实时分析进度展示时间 4.2s
@@ -928,6 +929,7 @@ throwIfSearchAborted(isAborted)
 
 ```text
 推荐 KOL 数量
+深度评测状态：已完成 / 基础匹配模式
 排序方式：综合推荐分 / 影响力排名 / 粉丝数
 结果表格：账号、综合推荐分、AI 匹配度、粉丝、排名、浏览量、接单意愿、推荐理由等
 ```
@@ -937,6 +939,7 @@ throwIfSearchAborted(isAborted)
 ```text
 综合推荐分：后端程序综合 AI/语义匹配度、真实流量、影响力和 Soul 后生成
 AI 匹配度：第二次 LLM semanticScore；降级时为 Embedding similarity proxy
+深度评测状态：读取 meta.evaluation；fallback=false 显示“已完成”，fallback=true 显示“基础匹配模式”
 粉丝数和接单意愿：展示和筛选用途，不参与新的综合推荐分
 ```
 

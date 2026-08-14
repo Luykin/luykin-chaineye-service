@@ -75,6 +75,7 @@
 2. AI 结果表将“推荐分”文案调整为“综合推荐分”。
 3. 补充 AI 匹配度展示，避免把推荐分误解为纯语义分。
 4. 进度文案从“直接生成推荐名单”调整为“召回候选 → 深评 → 排序”。
+5. 结果页读取 `meta.evaluation` 展示深度评测状态：成功显示“已完成”，降级显示“基础匹配模式”。
 
 ## 4. 风险与边界
 
@@ -98,7 +99,7 @@
 |---|---|---|
 | 技术方案文档 | 已完成 | 已记录旧逻辑判断、目标链路、环境变量和验收建议 |
 | 后端召回 TopK 与二次深评 | 已完成 | `echohunt-kol-match.js` 已新增 `ECHOHUNT_KOL_MATCH_RECALL_TOP_K`、候选深评 Prompt/Schema、LLM 灰度开关和 proxy 降级 |
-| 前端字段与文案对齐 | 已完成 | `types.ts` / `api.ts` / `ResultTable.tsx` / `KolDetailDrawer.tsx` / `globals.css` 已兼容 AI 匹配度、综合推荐分和候选深评进度 |
+| 前端字段与文案对齐 | 已完成 | `types.ts` / `api.ts` / `ResultTable.tsx` / `KolDetailDrawer.tsx` / `KolMatchPage.tsx` / `globals.css` 已兼容 AI 匹配度、综合推荐分、候选深评进度和结果页深评状态 |
 | 静态检查 | 已完成 | 已执行 `node -c src/xhunt/api/echohunt-kol-match.js` 和 `npx tsc --noEmit --project apps/echohunt/tsconfig.json`；未启动 dev/build |
 
 ## 6.1 本次已落地的链路
@@ -122,8 +123,8 @@
 
 ## 7. 验收建议
 
-1. 显式设置 `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED=false`：验证结果仍可返回，meta 中 evaluation engine 为 embedding proxy。
-2. 默认配置或显式设置 `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED=true`：验证 SSE 出现候选深评阶段，结果含 AI 匹配度和证据。
+1. 显式设置 `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED=false`：验证结果仍可返回，meta 中 evaluation engine 为 embedding proxy，结果页显示“深度评测：基础匹配模式”。
+2. 默认配置或显式设置 `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED=true`：验证 SSE 出现候选深评阶段，结果含 AI 匹配度和证据，结果页显示“深度评测：已完成”。
 3. 检查推荐分：粉丝数和接单意愿只展示，不参与新推荐分。
 4. 宽硬筛场景验证 `candidateTotal >= recalledCount`，且不出现影响力 Top 500 预截断。
 5. 模型失败/超时场景：应降级返回，不暴露内部错误，不提前扣 quota。
