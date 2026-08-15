@@ -1,7 +1,7 @@
 # EchoHunt KOL Match 用户视角全链路技术分析
 
 > 日期：2026-08-13  
-> 最近更新：2026-08-14，补充 Embedding TopK 召回、项目 X 画像证据接入、第二次 LLM 深评、结果页深评状态、Prompt 对齐和综合推荐分链路  
+> 最近更新：2026-08-15，补充 Embedding TopK 召回、项目 X 画像证据接入、第二次 LLM 深评、结果页深评状态、Prompt 对齐和综合推荐分链路  
 > 后端项目：`/Users/luykin/Documents/mac-work/luykin-chaineye-service`  
 > 前端项目：`/Users/luykin/Documents/mac-work-new/XHunt.website/apps/echohunt`  
 > 参考文档：  
@@ -340,6 +340,14 @@ Content-Type: application/json
 {
   "projectHandle": "yourproject",
   "projectBrief": "用户输入的项目与营销需求",
+  "xProfile": {
+    "handle": "yourproject",
+    "name": "Your Project",
+    "verified": true,
+    "followers": 12345,
+    "description": "项目 X Bio",
+    "recentPosts": [{ "id": "1", "text": "近期公开内容摘要" }]
+  },
   "hardFilters": {
     "domains": ["Web3"],
     "language": "CN",
@@ -415,6 +423,15 @@ echohunt:kol-match:strategy:{authCenterUserId}:{strategyId}
   },
   "semanticQuery": "...",
   "filters": { ... },
+  "profileContext": {
+    "available": true,
+    "enrichment": "bio",
+    "title": "已结合项目 X 画像",
+    "summary": "已参考项目账号的简介，用于校准项目背景和受众语境。",
+    "evidenceLabels": ["X Bio", "3 条近期内容", "粉丝 12,345"],
+    "followers": 12345,
+    "postCount": 3
+  },
   "strategyChips": ["Web3", "中文", "粉丝 50,000+", "近 30 天活跃"],
   "publicReasoning": ["..."],
   "scope": {
@@ -433,12 +450,15 @@ echohunt:kol-match:strategy:{authCenterUserId}:{strategyId}
 前端进入 `aiView = strategy`，展示「确认 EchoHunt 对需求的理解」：
 
 ```text
+已结合项目 X 画像（展示 Bio / 近期内容 / 粉丝 / 认证等已取得的画像信号）
 系统理解的项目类型
 本次营销目标
 计划寻找的 KOL
 已应用的硬筛条件
 安全提示 / 被忽略的不安全片段
 ```
+
+说明：项目 X 画像在第一次 LLM 生成策略时已经作为 evidence 参与分析；确认策略页通过 `profileContext` 做用户可见表达。如果后端尚未返回 `profileContext`，前端会用账号 lookup 结果做轻量兜底展示，避免用户误以为画像没有参与。
 
 如果策略接口失败：回到输入页，显示安全/策略错误，不扣 quota。
 

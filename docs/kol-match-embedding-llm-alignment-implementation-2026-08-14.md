@@ -77,10 +77,11 @@
 3. 补充 AI 匹配度展示，避免把推荐分误解为纯语义分。
 4. 进度文案从“直接生成推荐名单”调整为“召回候选 → 深评 → 排序”。
 5. 结果页读取 `meta.evaluation` 展示深度评测状态：成功显示“已完成”，降级显示“基础匹配模式”。
+6. 确认策略页新增项目 X 画像理解卡片：展示后端 `profileContext`（Bio / 近期内容 / 粉丝 / 认证等已取得信号），后端旧版本未返回时用前端账号 lookup 结果轻量兜底，明确第一步策略已感知项目画像。
 
 ## 4. 风险与边界
 
-- 已接入项目 X 画像证据：前端把账号 lookup 结果作为 `xProfile` 传给 `/strategy`，后端整理 `x:identity`、`x:bio`、`x:post:*`（内部 X lookup 上游有返回时）给第一次 LLM；内部 X lookup 异常只 retry 1 次，不再 PG fallback；若缺少 Bio/近期内容，则仍以 brief 和硬筛为准。
+- 已接入项目 X 画像证据：前端把账号 lookup 结果作为 `xProfile` 传给 `/strategy`，后端整理 `x:identity`、`x:bio`、`x:post:*`（内部 X lookup 上游有返回时）给第一次 LLM，并返回 `profileContext` 供确认策略页展示；内部 X lookup 异常只 retry 1 次，不再 PG fallback；若缺少 Bio/近期内容，则仍以 brief 和硬筛为准。
 - 第二次 LLM 默认开启；如上线后成本、延迟或稳定性不可控，可通过环境变量关闭。
 - `ECHOHUNT_KOL_MATCH_RECALL_TOP_K` 受底层 `MAX_LIMIT=50` 限制。
 - 深评失败时会在 meta 中标记 `evaluationFallback=true`，并继续返回结果，不扣费策略仍沿用“成功有结果才扣”。

@@ -1176,6 +1176,46 @@ function mergeProjectXProfiles(primary, fallback) {
   };
 }
 
+function buildStrategyProfileContext(xProfile, lang = "zh") {
+  const profile = normalizeProjectXProfile(xProfile);
+  if (!hasUsefulXProfile(profile)) {
+    return {
+      available: false,
+      enrichment: "none",
+      title: uiText(lang, "主要依据本次需求生成策略", "Strategy based mainly on this brief"),
+      summary: uiText(lang, "未取得可用的项目 X 画像，本次策略会以你填写的需求和硬筛条件为准。", "No usable project X profile was available, so the strategy is based on your brief and required filters."),
+      evidenceLabels: [],
+      followers: null,
+      postCount: 0,
+    };
+  }
+
+  const evidenceLabels = [];
+  if (profile.description) evidenceLabels.push(uiText(lang, "X Bio", "X bio"));
+  if (profile.recentPosts?.length) evidenceLabels.push(uiText(lang, `${profile.recentPosts.length} 条近期内容`, `${profile.recentPosts.length} recent posts`));
+  if (Number.isFinite(profile.followers)) evidenceLabels.push(uiText(lang, `粉丝 ${Math.round(profile.followers).toLocaleString("en-US")}`, `${Math.round(profile.followers).toLocaleString("en-US")} followers`));
+  if (profile.verified) evidenceLabels.push(uiText(lang, "已认证账号", "Verified account"));
+
+  const enrichment = profile.recentPosts?.length ? "posts" : profile.description ? "bio" : "identity";
+  const displayName = profile.name || (profile.handle ? `@${profile.handle}` : "");
+  const title = uiText(lang, "已结合项目 X 画像", "Project X profile included");
+  const summary = profile.description
+    ? uiText(lang, `已参考 ${displayName || "项目账号"} 的简介，用于校准项目背景和受众语境。`, `Referenced ${displayName || "the project account"} bio to calibrate project context and audience signals.`)
+    : profile.recentPosts?.length
+      ? uiText(lang, `已参考 ${displayName || "项目账号"} 的近期公开内容，用于补充项目表达方式。`, `Referenced recent public posts from ${displayName || "the project account"} to enrich project positioning.`)
+      : uiText(lang, `已确认 ${displayName || "项目账号"} 的 X 身份，本次策略主要依据你填写的需求。`, `Confirmed the X identity for ${displayName || "the project account"}; the strategy is mainly based on your brief.`);
+
+  return {
+    available: true,
+    enrichment,
+    title,
+    summary: sanitizePublicText(summary, 220, lang),
+    evidenceLabels: evidenceLabels.slice(0, 4),
+    followers: Number.isFinite(profile.followers) ? profile.followers : null,
+    postCount: profile.recentPosts?.length || 0,
+  };
+}
+
 function buildStrategyEvidence({ scope, projectHandle, hardFilters, xProfile }) {
   const evidence = [];
   const push = (id, type, text) => {
@@ -1387,6 +1427,7 @@ async function generateKolMatchStrategy(params, req) {
     scope,
     projectHandle,
     xProfile: hasUsefulXProfile(xProfile) ? xProfile : null,
+    profileContext: buildStrategyProfileContext(xProfile, lang),
     projectBrief: scope.safeBrief,
     projectUnderstanding: strategy.projectUnderstanding,
     semanticQuery: strategy.semanticQuery,
