@@ -99,7 +99,7 @@
 | 步骤 | 状态 | 说明 |
 |---|---|---|
 | 技术方案文档 | 已完成 | 已记录旧逻辑判断、目标链路、环境变量和验收建议 |
-| 后端召回 TopK 与二次深评 | 已完成 | `echohunt-kol-match.js` 已新增 `ECHOHUNT_KOL_MATCH_RECALL_TOP_K`、候选深评 Prompt/Schema、LLM 灰度开关、proxy 降级，并完成 Prompt 低风险对齐 |
+| 后端召回 TopK 与二次深评 | 已完成 | `echohunt-kol-match.js` 已新增 `ECHOHUNT_KOL_MATCH_RECALL_TOP_K`、候选深评 Prompt/Schema、LLM 灰度开关、proxy 降级，并完成 Prompt 低风险对齐；已移除深评 schema 顶层 `assessments.maxItems/minItems` 以兼容 Gemini/Vertex 结构化输出 |
 | 前端字段与文案对齐 | 已完成 | `types.ts` / `api.ts` / `ResultTable.tsx` / `KolDetailDrawer.tsx` / `KolMatchPage.tsx` / `globals.css` 已兼容 AI 匹配度、综合推荐分、候选深评进度和结果页深评状态 |
 | 静态检查 | 已完成 | 已执行 `node -c src/xhunt/api/echohunt-kol-match.js` 和 `npx tsc --noEmit --project apps/echohunt/tsconfig.json`；未启动 dev/build |
 
@@ -129,3 +129,15 @@
 3. 检查推荐分：粉丝数和接单意愿只展示，不参与新推荐分。
 4. 宽硬筛场景验证 `candidateTotal >= recalledCount`，且不出现影响力 Top 500 预截断。
 5. 模型失败/超时场景：应降级返回，不暴露内部错误，不提前扣 quota。
+
+
+### 7.1 线上降级排查记录
+
+2026-08-15 线上出现结果页显示“深度评测：基础匹配模式”。SSH 排查 PM2 日志发现第二次 LLM 失败：
+
+```text
+400 litellm.BadRequestError: Vertex_aiException BadRequestError - Request contains an invalid argument.
+Received Model Group=gemini-3.1-flash-lite-preview
+```
+
+最小化验证结果：LLM API Key 和基础 JSON Schema 可用，但候选深评复杂 schema 在顶层 `assessments` 数组同时带 `maxItems: 50` / `minItems: 1` 时会被 Gemini/Vertex 拒绝。移除顶层数组数量约束后，同模型同服务可正常返回结构化结果。运行时仍通过 `normalized.length !== rows.length` 校验必须返回每个候选，因此不会放宽业务约束。

@@ -52,8 +52,6 @@ const AI_EVALUATOR_SCHEMA = {
   properties: {
     assessments: {
       type: "array",
-      minItems: 1,
-      maxItems: 50,
       items: {
         type: "object",
         additionalProperties: false,
