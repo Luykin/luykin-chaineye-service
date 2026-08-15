@@ -51,7 +51,7 @@
 - 没有单独的 Embedding Top K 召回参数，当前直接取最终 `limit`。
 - 没有第二次 LLM 对 Top K 候选深评。
 - 最终推荐分仍混入 followers / willingness。
-- 第一次模型 Schema 与产品原型 Prompt 存在字段差异，如 `matchingQuery`、证据引用、假设与冲突。
+- 第一次模型 Schema 与产品原型仍存在字段差异，如 `matchingQuery`、证据引用、假设与冲突；Prompt 规则已做低风险对齐，保留当前兼容 Schema。
 
 ## 3. 本次实施范围
 
@@ -68,6 +68,7 @@
    - LLM 开启且成功：AI 语义匹配 70% + 真实流量 15% + 影响力 10% + Soul 5%。
    - LLM 未开启/失败：用 embedding similarity 作为语义 proxy，仍使用同一权重结构。
 6. 返回结构兼容前端，并新增 `aiMatchScore`、`dimensions`、`matchedTerms`、`evaluationEvidence`、`recommendationScoreBreakdown`、`evaluationEngine`。
+7. Prompt 对齐产品原型：第一次模型接入 `xProfile` evidence，补充事实边界、brief / X 画像 / hardFilters 优先级、hardFilters 冲突处理、`semanticQuery` 等价 `matchingQuery`；第二次模型补充禁止外部知识/工具调用和 `semanticScore` 非影响力分。
 
 ### 3.2 前端
 
@@ -79,7 +80,7 @@
 
 ## 4. 风险与边界
 
-- 本次不接入真实项目 X Bio / 近期内容证据；第一次模型仍主要使用用户 brief 和账号 lookup 结果。
+- 已接入项目 X 画像证据：前端把账号 lookup 结果作为 `xProfile` 传给 `/strategy`，后端整理 `x:identity`、`x:bio`、`x:post:*`（内部 X lookup 上游有返回时）给第一次 LLM；内部 X lookup 异常只 retry 1 次，不再 PG fallback；若缺少 Bio/近期内容，则仍以 brief 和硬筛为准。
 - 第二次 LLM 默认开启；如上线后成本、延迟或稳定性不可控，可通过环境变量关闭。
 - `ECHOHUNT_KOL_MATCH_RECALL_TOP_K` 受底层 `MAX_LIMIT=50` 限制。
 - 深评失败时会在 meta 中标记 `evaluationFallback=true`，并继续返回结果，不扣费策略仍沿用“成功有结果才扣”。
@@ -98,7 +99,7 @@
 | 步骤 | 状态 | 说明 |
 |---|---|---|
 | 技术方案文档 | 已完成 | 已记录旧逻辑判断、目标链路、环境变量和验收建议 |
-| 后端召回 TopK 与二次深评 | 已完成 | `echohunt-kol-match.js` 已新增 `ECHOHUNT_KOL_MATCH_RECALL_TOP_K`、候选深评 Prompt/Schema、LLM 灰度开关和 proxy 降级 |
+| 后端召回 TopK 与二次深评 | 已完成 | `echohunt-kol-match.js` 已新增 `ECHOHUNT_KOL_MATCH_RECALL_TOP_K`、候选深评 Prompt/Schema、LLM 灰度开关、proxy 降级，并完成 Prompt 低风险对齐 |
 | 前端字段与文案对齐 | 已完成 | `types.ts` / `api.ts` / `ResultTable.tsx` / `KolDetailDrawer.tsx` / `KolMatchPage.tsx` / `globals.css` 已兼容 AI 匹配度、综合推荐分、候选深评进度和结果页深评状态 |
 | 静态检查 | 已完成 | 已执行 `node -c src/xhunt/api/echohunt-kol-match.js` 和 `npx tsc --noEmit --project apps/echohunt/tsconfig.json`；未启动 dev/build |
 
@@ -118,8 +119,8 @@
 
 - 第二次 LLM 当前默认开启；需要重点观察成本、延迟、超时和模型稳定性，必要时可用 `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED=false` 降级。
 - 当前真实流量归一化基于本次 Embedding 召回池；如果严格要求“完整硬筛池归一化”，需要额外 SQL 聚合或持久化分位指标。
-- 第一次模型仍未接入项目 X Bio 和近期内容证据，只使用项目 handle lookup 与用户 brief。
-- `matchingQuery` 在产品原型中命名为 matchingQuery，当前生产兼容链路仍使用 `semanticQuery` 作为接口字段。
+- 第一次模型已接入项目 X 画像证据通道；实际可用的 Bio / 近期内容取决于内部 X lookup 接口返回字段，缺失时不得由模型虚构。
+- `matchingQuery` 在产品原型中命名为 matchingQuery，当前生产兼容链路仍使用 `semanticQuery` 作为接口字段；Prompt 已明确 `semanticQuery` 等价产品文档中的 `matchingQuery`。
 
 ## 7. 验收建议
 

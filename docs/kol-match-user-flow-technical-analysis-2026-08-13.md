@@ -1,7 +1,7 @@
 # EchoHunt KOL Match 用户视角全链路技术分析
 
 > 日期：2026-08-13  
-> 最近更新：2026-08-14，补充 Embedding TopK 召回、第二次 LLM 深评、结果页深评状态和综合推荐分链路  
+> 最近更新：2026-08-14，补充 Embedding TopK 召回、项目 X 画像证据接入、第二次 LLM 深评、结果页深评状态、Prompt 对齐和综合推荐分链路  
 > 后端项目：`/Users/luykin/Documents/mac-work/luykin-chaineye-service`  
 > 前端项目：`/Users/luykin/Documents/mac-work-new/XHunt.website/apps/echohunt`  
 > 参考文档：  
@@ -246,21 +246,22 @@ router.get('/project-account/lookup', ...)
 authenticateAuthCenterToken()
 requireKolMatchVip()
 normalizeHandle(req.query.handle)
-lookupProjectAccount(handle, { allowLocalFallback: true, failOnUpstreamError: true })
+lookupProjectAccount(handle, { failOnUpstreamError: true })
   -> lookupInternalTwitterAccount(handle)
       -> GET https://data.cryptohunt.ai/fetch/twitter/user?username={handle}
+      -> 内部接口异常时最多 retry 1 次
       -> normalizeInternalTwitterAccount()
+      -> 归一化 identity / bio(description) / followers / recentPosts（若上游返回）
   -> 如果内部服务 404：返回 null
-  -> 如果内部服务异常：尝试 lookupLocalXAccount(handle)
-      -> 从只读 PG dev.kol_marketing_profile + dev.twitter_user 查本地缓存账号
-  -> 如果 upstream 异常且本地也没找到：返回 503 PROJECT_ACCOUNT_LOOKUP_FAILED
+  -> 如果内部服务重试后仍异常：返回 503 PROJECT_ACCOUNT_LOOKUP_FAILED
+  -> 不再 fallback 查询 PG dev.kol_marketing_profile / dev.twitter_user
 ```
 
 #### 前端状态变化
 
 | 后端结果 | 前端状态 |
 |---|---|
-| 成功返回 account | `accountStatus = success`，展示头像、名称、handle |
+| 成功返回 account | `accountStatus = success`，展示头像、名称、handle；同时在后续 `/strategy` 请求中作为 `xProfile` 传给第一次 LLM |
 | 404 | `accountStatus = notFound` |
 | 503 / 网络异常 | `accountStatus = failed` |
 
@@ -379,8 +380,12 @@ generateKolMatchStrategy(req.body, req)
       -> domain / market / followers / activity / willingness 归一化
   -> buildFallbackStrategy()
       -> 规则兜底生成项目类型、营销目标、目标受众、理想 KOL、semanticQuery、filters
+  -> 前端传入 lookup 得到的 xProfile；后端在缺少画像时会非阻塞尝试 lookupProjectAccount(projectHandle) 补充
+  -> buildStrategyEvidence()
+      -> brief:0 / filter:* / x:identity / x:bio / x:post:*（若有）
   -> 如果 ECHOHUNT_KOL_MATCH_STRATEGY_LLM_ENABLED 开启
       -> structuredChat(buildStrategyPrompt(), STRATEGY_SCHEMA)
+      -> Prompt 已对齐产品原型规则：只用 INPUT_DATA.evidence 中的 brief / X 画像证据 / hardFilters，禁止外部知识和虚构未提供的 X Bio / 近期内容；brief 是营销意图主依据，X 画像只补充背景，硬筛最高优先级；semanticQuery 等价于产品文档 matchingQuery
       -> 生成更完整的 strategy
       -> 失败则使用 fallback，不把内部错误暴露给前端
   -> 生成 strategyId
@@ -573,7 +578,7 @@ ensureQuotaAvailable(req, aiMatch)
 如果有 projectHandle：
 
 ```text
-lookupProjectAccount(projectHandle, { allowLocalFallback: true, failOnUpstreamError: true })
+lookupProjectAccount(projectHandle, { failOnUpstreamError: true })
 ```
 
 SSE event：
@@ -764,6 +769,8 @@ soulScore
 willingnessLevel / willingnessEvidence
 价格或其他商业字段
 ```
+
+第二次 LLM Prompt 已对齐产品原型的低风险规则：不得读取文件、调用工具、浏览或使用外部知识；`semanticScore` 是整体语义匹配度，不是影响力分；证据不足时必须直说。
 
 第二次 LLM 输出：
 
