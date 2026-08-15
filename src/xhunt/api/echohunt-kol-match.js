@@ -362,6 +362,10 @@ function getEvaluatorLlmTimeoutMs() {
   return getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_TIMEOUT_MS", 20000);
 }
 
+function getEvaluatorLlmBatchSize() {
+  return clampInteger(process.env.ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_BATCH_SIZE || 10, 10, 1, 20);
+}
+
 function getFilterResultLimit() {
   return getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_FILTER_RESULT_LIMIT", DEFAULT_FILTER_RESULT_LIMIT);
 }
@@ -1674,7 +1678,11 @@ function buildCandidateSemanticEvidence(row, index, domain, market, lang = "zh")
   return evidence.slice(0, 8);
 }
 
-function buildCandidateEvaluationPrompt({ strategy, rows, filters, lang = "zh" }) {
+function candidateEvaluationId(row, index = 0) {
+  return String(row.twitterUserId || row.id || row.handle || index);
+}
+
+function buildCandidateEvaluationPrompt({ strategy, rows, filters, lang = "zh", rowOffset = 0 }) {
   const domain = filters.domains?.[0] || "Web3";
   const market = filters.language || "GLOBAL";
   const projectContext = {
@@ -1689,10 +1697,13 @@ function buildCandidateEvaluationPrompt({ strategy, rows, filters, lang = "zh" }
       activityDays: filters.activityDays,
     },
   };
-  const candidates = rows.map((row, index) => ({
-    candidateId: String(row.twitterUserId || row.id || row.handle || index),
-    evidence: buildCandidateSemanticEvidence(row, index, domain, market, lang),
-  }));
+  const candidates = rows.map((row, index) => {
+    const originalIndex = rowOffset + index;
+    return {
+      candidateId: candidateEvaluationId(row, originalIndex),
+      evidence: buildCandidateSemanticEvidence(row, originalIndex, domain, market, lang),
+    };
+  });
 
   return [
     "You are EchoHunt's semantic evaluator for Web3 and AI KOL matching.",
@@ -1749,7 +1760,7 @@ function normalizeAssessment(raw, allowedIds, evidenceOwners, lang = "zh") {
   };
 }
 
-function buildProxyAssessment(row, briefTerms = [], domain = "Web3", market = "GLOBAL", lang = "zh") {
+function buildProxyAssessment(row, briefTerms = [], domain = "Web3", market = "GLOBAL", lang = "zh", index = 0) {
   const similarityScore = clampScore((numeric(row.similarity) || 0) * 100, 55);
   const haystack = [
     row.marketingSummaryCn,
@@ -1761,11 +1772,11 @@ function buildProxyAssessment(row, briefTerms = [], domain = "Web3", market = "G
   const matchedTerms = briefTerms.filter((term) => haystack.includes(String(term).toLowerCase())).slice(0, 8);
   const score = Math.max(similarityScore, matchedTerms.length ? Math.min(100, 58 + matchedTerms.length * 6) : similarityScore);
   const reason = recommendationReason(row, matchedTerms, domain, lang);
-  const evidence = buildCandidateSemanticEvidence(row, 0, domain, market, lang)
+  const evidence = buildCandidateSemanticEvidence(row, index, domain, market, lang)
     .slice(0, 3)
     .map((item) => ({ evidenceRef: item.evidenceRef, statement: shorten(item.text, 180) }));
   return {
-    candidateId: String(row.twitterUserId || row.id || row.handle || ""),
+    candidateId: candidateEvaluationId(row, index),
     semanticScore: clampScore(score, 55),
     dimensions: {
       expertise: clampScore(score, 55),
@@ -1785,17 +1796,26 @@ async function evaluateAiMatchCandidates({ req, strategy, rows, filters, briefTe
   const assessmentsById = new Map();
   const evidenceOwners = new Map();
   rows.forEach((row, index) => {
-    const candidateId = String(row.twitterUserId || row.id || row.handle || index);
+    const candidateId = candidateEvaluationId(row, index);
     buildCandidateSemanticEvidence(row, index, domain, market, lang).forEach((item) => {
       evidenceOwners.set(item.evidenceRef, candidateId);
     });
   });
 
-  const fillProxy = (reason) => {
-    rows.forEach((row) => {
-      const proxy = buildProxyAssessment(row, briefTerms, domain, market, lang);
+  const fillProxy = (reason, overwrite = true) => {
+    let filledCount = 0;
+    rows.forEach((row, index) => {
+      const candidateId = candidateEvaluationId(row, index);
+      if (!overwrite && assessmentsById.has(candidateId)) return;
+      const proxy = buildProxyAssessment(row, briefTerms, domain, market, lang, index);
       if (proxy.candidateId) assessmentsById.set(proxy.candidateId, proxy);
+      filledCount += 1;
     });
+    return filledCount;
+  };
+
+  const fallbackProxy = (reason) => {
+    fillProxy(reason, true);
     return {
       assessmentsById,
       meta: {
@@ -1804,61 +1824,101 @@ async function evaluateAiMatchCandidates({ req, strategy, rows, filters, briefTe
         fallback: true,
         fallbackReason: reason || null,
         evaluatedCount: rows.length,
+        llmEvaluatedCount: 0,
+        proxyEvaluatedCount: rows.length,
       },
     };
   };
 
-  if (!rows.length) return fillProxy("no_candidates");
-  if (!isEvaluatorLlmEnabled()) return fillProxy("llm_disabled");
+  if (!rows.length) return fallbackProxy("no_candidates");
+  if (!isEvaluatorLlmEnabled()) return fallbackProxy("llm_disabled");
 
-  const allowedIds = new Set(rows.map((row, index) => String(row.twitterUserId || row.id || row.handle || index)));
   const timeoutMs = getEvaluatorLlmTimeoutMs();
   const model = getEvaluatorLlmModel();
-  try {
-    const raw = await withTimeout(
-      structuredChat(buildCandidateEvaluationPrompt({ strategy, rows, filters, lang }), AI_EVALUATOR_SCHEMA, {
-        model: model || undefined,
-        temperature: 0,
-        maxTokens: Math.min(6000, 800 + rows.length * 120),
-        systemPrompt: [
-          "You are EchoHunt's safe, evidence-grounded KOL semantic evaluator.",
-          "Use only the supplied INPUT_DATA and return valid JSON matching the schema.",
-          "Do not inspect files, call tools, browse, use outside knowledge, or assume facts not present in INPUT_DATA.",
-          isEnglishUi(lang)
-            ? "All user-facing strings must be in English."
-            : "所有面向用户展示的字段必须使用简体中文，固定 Web3/AI 术语除外。",
-        ].join("\n"),
-      }),
-      timeoutMs,
-      `EchoHunt KOL evaluator LLM timeout after ${timeoutMs}ms`
-    );
-    const normalized = (Array.isArray(raw?.assessments) ? raw.assessments : [])
-      .map((item) => normalizeAssessment(item, allowedIds, evidenceOwners, lang))
-      .filter(Boolean);
-    if (normalized.length !== rows.length) {
-      throw new Error(`Evaluator returned ${normalized.length}/${rows.length} valid assessments`);
+  const batchSize = getEvaluatorLlmBatchSize();
+  const batchErrors = [];
+
+  for (let start = 0; start < rows.length; start += batchSize) {
+    const batchRows = rows.slice(start, start + batchSize);
+    const batchAllowedIds = new Set(batchRows.map((row, index) => candidateEvaluationId(row, start + index)));
+    try {
+      const raw = await withTimeout(
+        structuredChat(buildCandidateEvaluationPrompt({ strategy, rows: batchRows, filters, lang, rowOffset: start }), AI_EVALUATOR_SCHEMA, {
+          model: model || undefined,
+          temperature: 0,
+          maxTokens: Math.min(3000, 700 + batchRows.length * 160),
+          systemPrompt: [
+            "You are EchoHunt's safe, evidence-grounded KOL semantic evaluator.",
+            "Use only the supplied INPUT_DATA and return valid JSON matching the schema.",
+            "Do not inspect files, call tools, browse, use outside knowledge, or assume facts not present in INPUT_DATA.",
+            isEnglishUi(lang)
+              ? "All user-facing strings must be in English."
+              : "所有面向用户展示的字段必须使用简体中文，固定 Web3/AI 术语除外。",
+          ].join("\n"),
+        }),
+        timeoutMs,
+        `EchoHunt KOL evaluator LLM timeout after ${timeoutMs}ms`
+      );
+      const rawCount = Array.isArray(raw?.assessments) ? raw.assessments.length : 0;
+      const normalized = (Array.isArray(raw?.assessments) ? raw.assessments : [])
+        .map((item) => normalizeAssessment(item, batchAllowedIds, evidenceOwners, lang))
+        .filter(Boolean);
+      normalized.forEach((item) => assessmentsById.set(item.candidateId, item));
+      if (normalized.length !== batchRows.length) {
+        batchErrors.push(`batch_${start}_${normalized.length}/${batchRows.length}_valid_raw_${rawCount}`);
+      }
+    } catch (error) {
+      batchErrors.push(`batch_${start}_${sanitizePublicText(error.message || "failed", 120, lang)}`);
     }
-    normalized.forEach((item) => assessmentsById.set(item.candidateId, item));
-    return {
-      assessmentsById,
-      meta: {
-        enabled: true,
-        engine: "llm_semantic_evaluator",
-        model: model || null,
-        fallback: false,
-        evaluatedCount: normalized.length,
-      },
-    };
-  } catch (error) {
+  }
+
+  const llmEvaluatedCount = rows.reduce((count, row, index) => (
+    assessmentsById.has(candidateEvaluationId(row, index)) ? count + 1 : count
+  ), 0);
+
+  if (llmEvaluatedCount <= 0) {
+    const reason = batchErrors[0] || "candidate_evaluator_failed";
     console.warn("[EchoHunt KOL Match] candidate evaluator fallback", {
       requestId: getRequestId(req),
       authCenterUserId: getAuthCenterUserId(req),
       model: model || null,
-      message: sanitizePublicText(error.message || "candidate evaluator failed", 180, lang),
+      batchSize,
+      message: sanitizePublicText(reason, 180, lang),
     });
-    return fillProxy(error.message || "candidate_evaluator_failed");
+    return fallbackProxy(reason);
   }
-}
+
+  const proxyEvaluatedCount = fillProxy("llm_partial_missing_candidates", false);
+  const partial = llmEvaluatedCount < rows.length;
+  if (partial) {
+    console.warn("[EchoHunt KOL Match] candidate evaluator partial", {
+      requestId: getRequestId(req),
+      authCenterUserId: getAuthCenterUserId(req),
+      model: model || null,
+      batchSize,
+      llmEvaluatedCount,
+      proxyEvaluatedCount,
+      candidateCount: rows.length,
+      errors: batchErrors.slice(0, 6),
+    });
+  }
+
+  return {
+    assessmentsById,
+    meta: {
+      enabled: true,
+      engine: "llm_semantic_evaluator",
+      model: model || null,
+      fallback: false,
+      partial,
+      partialReason: partial ? "llm_partial_missing_candidates" : null,
+      evaluatedCount: rows.length,
+      llmEvaluatedCount,
+      proxyEvaluatedCount,
+      batchSize,
+    },
+  };
+  }
 
 function buildScoreContext(rows, domain, market) {
   const maxMainViews = Math.max(0, ...rows.map((row) => numeric(row.mainTweetViewMedian) || 0));

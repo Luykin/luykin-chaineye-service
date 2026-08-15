@@ -197,6 +197,7 @@ scope / quota / account / strategy
 | `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED` | `true` | 是否启用第二次 LLM 候选深评；设为 `false` 时使用 Embedding similarity proxy |
 | `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_MODEL` | `LLM_MODEL` | 候选深评模型 |
 | `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_TIMEOUT_MS` | `20000` | 候选深评超时 |
+| `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_BATCH_SIZE` | `10` | 候选深评分批大小，避免 40 个候选一次输出被模型截断或漏评 |
 
 ---
 
@@ -758,7 +759,7 @@ evaluateAiMatchCandidates({
 })
 ```
 
-当前实现是一轮 LLM 调用完成全部召回候选深评，不是多轮对话，也不是逐个 KOL 单独调用。Prompt 输入形态：
+当前实现会按批次调用第二次 LLM（默认每批 10 个候选），不是多轮对话，也不是逐个 KOL 单独调用。分批的目的是降低结构化输出过长时的漏评/截断风险；每批 Prompt 输入形态：
 
 ```json
 {
@@ -823,20 +824,27 @@ willingnessLevel / willingnessEvidence
 校验规则：
 
 ```text
-每个召回候选必须且只能返回一条 assessment
+每批中的每个召回候选必须且只能返回一条 assessment
 candidateId 必须原样匹配
 evidenceRef 必须来自该候选自己的 evidence
-无效、漏评、重复或证据越权都会触发降级
+单批无效、漏评、重复或证据越权只影响该批/该候选；已成功深评的候选保留 LLM 结果，缺失候选用 proxy 补齐
 ```
 
 降级规则：
 
 ```text
 ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED=false
-或第二次 LLM 超时/失败/输出校验失败
+或第二次 LLM 全部分批都超时/失败/输出校验失败
   -> 使用 Embedding similarity proxy 生成 semanticScore / reason / evidence
   -> meta.evaluation.fallback = true
   -> 主流程继续，不把内部错误暴露给前端
+
+部分成功：
+  -> LLM 成功候选使用 llm_semantic_evaluator 结果
+  -> 缺失候选使用 Embedding similarity proxy 补齐
+  -> meta.evaluation.fallback = false
+  -> meta.evaluation.partial = true
+  -> 结果页显示“深度评测：部分完成 · LLM成功数/候选数”
 ```
 
 #### 阶段 8：ranking，程序综合排序
@@ -960,7 +968,7 @@ throwIfSearchAborted(isAborted)
 
 ```text
 推荐 KOL 数量
-深度评测状态：已完成 / 基础匹配模式
+深度评测状态：已完成 / 部分完成 / 基础匹配模式
 排序方式：综合推荐分 / 影响力排名 / 粉丝数
 结果表格：账号、综合推荐分、AI 匹配度、粉丝、排名、浏览量、接单意愿、推荐理由等
 ```
@@ -970,7 +978,7 @@ throwIfSearchAborted(isAborted)
 ```text
 综合推荐分：后端程序综合 AI/语义匹配度、真实流量、影响力和 Soul 后生成
 AI 匹配度：第二次 LLM semanticScore；降级时为 Embedding similarity proxy
-深度评测状态：读取 meta.evaluation；fallback=false 显示“已完成”，fallback=true 显示“基础匹配模式”
+深度评测状态：读取 meta.evaluation；fallback=true 显示“基础匹配模式”，fallback=false 且 partial=true 显示“部分完成”，fallback=false 且 partial=false 显示“已完成”
 粉丝数和接单意愿：展示和筛选用途，不参与新的综合推荐分
 ```
 

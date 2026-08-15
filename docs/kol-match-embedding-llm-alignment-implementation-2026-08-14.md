@@ -76,8 +76,9 @@
 2. AI 结果表将“推荐分”文案调整为“综合推荐分”。
 3. 补充 AI 匹配度展示，避免把推荐分误解为纯语义分。
 4. 进度文案从“直接生成推荐名单”调整为“召回候选 → 深评 → 排序”。
-5. 结果页读取 `meta.evaluation` 展示深度评测状态：成功显示“已完成”，降级显示“基础匹配模式”。
+5. 结果页读取 `meta.evaluation` 展示深度评测状态：成功显示“已完成”，部分成功显示“部分完成”，整体降级显示“基础匹配模式”。
 6. 确认策略页新增紧凑的项目 X 画像理解卡片：展示后端 `profileContext`，优先表达 `feature.narrative` 的一句话核心定位，其次使用 `feature.mention_summary` / `profile.description`，避免只展示 Bio、粉丝、认证等弱信息；后端旧版本未返回时才用前端账号 lookup 结果轻量兜底。
+7. 第二次 LLM 候选深评改为分批执行（默认 10 个候选/批）：单批漏评或输出校验失败时只用 proxy 补齐缺失候选，保留已成功的 LLM 深评结果；全部分批失败时才整体进入“基础匹配模式”。结果页新增“部分完成”状态。
 
 ## 4. 风险与边界
 
@@ -94,6 +95,7 @@
 | `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED` | `true` | 是否启用第二次 LLM 候选深评；设为 `false` 时使用 Embedding similarity proxy |
 | `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_MODEL` | `LLM_MODEL` | 候选深评模型 |
 | `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_TIMEOUT_MS` | `20000` | 候选深评超时 |
+| `ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_BATCH_SIZE` | `10` | 候选深评分批大小，降低一次评测 40 个候选时的输出截断/漏评风险 |
 
 ## 6. 实施进度
 
@@ -141,4 +143,6 @@
 Received Model Group=gemini-3.1-flash-lite-preview
 ```
 
-最小化验证结果：LLM API Key 和基础 JSON Schema 可用，但候选深评复杂 schema 在顶层 `assessments` 数组同时带 `maxItems: 50` / `minItems: 1` 时会被 Gemini/Vertex 拒绝。移除顶层数组数量约束后，同模型同服务可正常返回结构化结果。运行时仍通过 `normalized.length !== rows.length` 校验必须返回每个候选，因此不会放宽业务约束。
+最小化验证结果：LLM API Key 和基础 JSON Schema 可用，但候选深评复杂 schema 在顶层 `assessments` 数组同时带 `maxItems: 50` / `minItems: 1` 时会被 Gemini/Vertex 拒绝。移除顶层数组数量约束后，同模型同服务可正常返回结构化结果。
+
+2026-08-15 后续线上复测出现 `Evaluator returned 16/40 valid assessments`：说明第二次 LLM 已调用成功，但一次性评测 40 个候选时只返回/通过校验 16 个 assessment，旧逻辑因此整批 fallback。现已改为分批深评并支持部分成功补齐：例如 16 个候选通过 LLM 校验时，保留这 16 个深评结果，剩余候选用 proxy 补齐，`meta.evaluation.partial=true`，前端显示“深度评测：部分完成”，不再直接显示“基础匹配模式”。
