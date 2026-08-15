@@ -1113,9 +1113,52 @@ function normalizeXRecentPosts(value) {
     .slice(0, 20);
 }
 
+function normalizeLocalizedProfileText(value, maxLength = 700) {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const text = normalizeString(value, maxLength);
+    return text ? { defaultValue: text } : null;
+  }
+  if (typeof value !== "object") return null;
+  const zh = normalizeString(value.zh || value.cn || value.summary_zh || value.summary_cn || value.text_zh || value.text_cn || "", maxLength);
+  const en = normalizeString(value.en || value.summary_en || value.text_en || "", maxLength);
+  const defaultValue = normalizeString(value.defaultValue || value.default || value.summary || value.text || "", maxLength);
+  if (!zh && !en && !defaultValue) return null;
+  return { zh, en, defaultValue };
+}
+
+function normalizeMentionSummary(value) {
+  if (!value) return null;
+  if (typeof value === "string") return normalizeLocalizedProfileText(value, 700);
+  if (typeof value !== "object") return null;
+  const preferred = value.day7 || value.week || value.last7d || value.day1 || value.daily || value;
+  return normalizeLocalizedProfileText(preferred, 700) || normalizeLocalizedProfileText(value, 700);
+}
+
+function pickLocalizedProfileText(value, lang = "zh") {
+  if (!value) return "";
+  if (typeof value === "string") return normalizeString(value, 700);
+  if (typeof value !== "object") return "";
+  const preferred = isEnglishUi(lang) ? value.en : value.zh;
+  const alternate = isEnglishUi(lang) ? value.zh : value.en;
+  return normalizeString(preferred || value.defaultValue || value.default || alternate || "", 700);
+}
+
+function localizedProfileEvidence(value) {
+  if (!value) return "";
+  if (typeof value === "string") return normalizeString(value, 700);
+  if (typeof value !== "object") return "";
+  return [value.zh, value.en, value.defaultValue || value.default]
+    .map((item) => normalizeString(item, 700))
+    .filter(Boolean)
+    .filter((item, index, list) => list.indexOf(item) === index)
+    .join(" / ");
+}
+
 function normalizeProjectXProfile(input) {
   const source = input && typeof input === "object" ? input : {};
   const profile = source.profile && typeof source.profile === "object" ? source.profile : {};
+  const feature = source.feature && typeof source.feature === "object" ? source.feature : {};
   const handle = normalizeHandle(
     source.handle ||
       source.username ||
@@ -1145,6 +1188,8 @@ function normalizeProjectXProfile(input) {
     followers: numeric(source.followers || source.followers_count || profile.followers_count),
     following: numeric(source.following || source.following_count || profile.following_count),
     description: normalizeString(source.description || source.bio || profile.description || profile.bio || "", 1000),
+    narrative: normalizeLocalizedProfileText(source.narrative || feature.narrative),
+    mentionSummary: normalizeMentionSummary(source.mentionSummary || source.mention_summary || feature.mention_summary),
     createdAt: toIso(source.createdAt || source.created_at || source.create_time || profile.created_at || profile.first_record),
     recentPosts,
     source: normalizeString(source.source || "request_x_profile", 80),
@@ -1170,6 +1215,8 @@ function mergeProjectXProfiles(primary, fallback) {
     followers: left.followers ?? right.followers,
     following: left.following ?? right.following,
     description: left.description || right.description,
+    narrative: left.narrative || right.narrative,
+    mentionSummary: left.mentionSummary || right.mentionSummary,
     createdAt: left.createdAt || right.createdAt,
     recentPosts: left.recentPosts?.length ? left.recentPosts : right.recentPosts,
     source: left.source || right.source,
@@ -1191,19 +1238,25 @@ function buildStrategyProfileContext(xProfile, lang = "zh") {
   }
 
   const evidenceLabels = [];
+  const narrativeText = pickLocalizedProfileText(profile.narrative, lang);
+  const mentionText = pickLocalizedProfileText(profile.mentionSummary, lang);
+  if (narrativeText) evidenceLabels.push(uiText(lang, "Narrative 画像", "Narrative"));
   if (profile.description) evidenceLabels.push(uiText(lang, "X Bio", "X bio"));
-  if (profile.recentPosts?.length) evidenceLabels.push(uiText(lang, `${profile.recentPosts.length} 条近期内容`, `${profile.recentPosts.length} recent posts`));
-  if (Number.isFinite(profile.followers)) evidenceLabels.push(uiText(lang, `粉丝 ${Math.round(profile.followers).toLocaleString("en-US")}`, `${Math.round(profile.followers).toLocaleString("en-US")} followers`));
-  if (profile.verified) evidenceLabels.push(uiText(lang, "已认证账号", "Verified account"));
+  if (mentionText) evidenceLabels.push(uiText(lang, "提及摘要", "Mention summary"));
+  if (profile.recentPosts?.length) evidenceLabels.push(uiText(lang, "近期公开内容", "Recent posts"));
 
-  const enrichment = profile.recentPosts?.length ? "posts" : profile.description ? "bio" : "identity";
+  const enrichment = narrativeText || mentionText ? "feature" : profile.recentPosts?.length ? "posts" : profile.description ? "bio" : "identity";
   const displayName = profile.name || (profile.handle ? `@${profile.handle}` : "");
-  const title = uiText(lang, "已结合项目 X 画像", "Project X profile included");
-  const summary = profile.description
-    ? uiText(lang, `已参考 ${displayName || "项目账号"} 的简介，用于校准项目背景和受众语境。`, `Referenced ${displayName || "the project account"} bio to calibrate project context and audience signals.`)
-    : profile.recentPosts?.length
-      ? uiText(lang, `已参考 ${displayName || "项目账号"} 的近期公开内容，用于补充项目表达方式。`, `Referenced recent public posts from ${displayName || "the project account"} to enrich project positioning.`)
-      : uiText(lang, `已确认 ${displayName || "项目账号"} 的 X 身份，本次策略主要依据你填写的需求。`, `Confirmed the X identity for ${displayName || "the project account"}; the strategy is mainly based on your brief.`);
+  const title = narrativeText
+    ? uiText(lang, `核心画像：${shorten(narrativeText, 54)}`, `Core profile: ${shorten(narrativeText, 64)}`)
+    : uiText(lang, "已识别项目账号定位", "Project account positioning identified");
+  const summary = mentionText
+    ? uiText(lang, `近期外部讨论主要指向：${shorten(mentionText, 96)}`, `Recent external discussion points to: ${shorten(mentionText, 110)}`)
+    : profile.description
+      ? uiText(lang, `${displayName || "项目账号"} 的公开简介显示：${shorten(profile.description, 96)}`, `${displayName || "The project account"} bio says: ${shorten(profile.description, 110)}`)
+      : profile.recentPosts?.length
+        ? uiText(lang, `已参考 ${displayName || "项目账号"} 的近期公开内容补充项目表达方式。`, `Referenced recent public posts from ${displayName || "the project account"} to enrich project positioning.`)
+        : uiText(lang, `已确认 ${displayName || "项目账号"} 的 X 身份，本次策略主要依据你填写的需求。`, `Confirmed the X identity for ${displayName || "the project account"}; the strategy is mainly based on your brief.`);
 
   return {
     available: true,
@@ -1211,6 +1264,8 @@ function buildStrategyProfileContext(xProfile, lang = "zh") {
     title,
     summary: sanitizePublicText(summary, 220, lang),
     evidenceLabels: evidenceLabels.slice(0, 4),
+    narrative: narrativeText || null,
+    mentionSummary: mentionText || null,
     followers: Number.isFinite(profile.followers) ? profile.followers : null,
     postCount: profile.recentPosts?.length || 0,
   };
@@ -1239,6 +1294,8 @@ function buildStrategyEvidence({ scope, projectHandle, hardFilters, xProfile }) 
     ].filter(Boolean).join(" ");
     push("x:identity", "x_profile_identity", identity);
     push("x:bio", "x_profile_bio", profile.description);
+    push("x:narrative", "x_profile_narrative", localizedProfileEvidence(profile.narrative));
+    push("x:mention_summary", "x_profile_mention_summary", localizedProfileEvidence(profile.mentionSummary));
     profile.recentPosts.forEach((post, index) => {
       const safeId = normalizeString(post.id, 80).replace(/[^a-zA-Z0-9_-]/g, "") || String(index + 1);
       push(`x:post:${safeId}`, "x_recent_post", post.text);
@@ -1378,12 +1435,13 @@ async function generateKolMatchStrategy(params, req) {
   throwIfScopeNotAccepted(scope);
 
   const hardFilters = normalizeProductHardFilters(params.hardFilters || params.filters || {});
-  let xProfile = normalizeProjectXProfile(params.xProfile || params.projectAccount || params.projectAccountSnapshot);
-  if (projectHandle && (!hasUsefulXProfile(xProfile) || (!xProfile.description && !xProfile.recentPosts?.length))) {
+  const requestXProfile = normalizeProjectXProfile(params.xProfile || params.projectAccount || params.projectAccountSnapshot);
+  let xProfile = requestXProfile;
+  if (projectHandle) {
     const lookedUpProfile = await lookupProjectAccount(projectHandle, {
       failOnUpstreamError: false,
     }).catch(() => null);
-    xProfile = mergeProjectXProfiles(xProfile, lookedUpProfile);
+    if (lookedUpProfile) xProfile = mergeProjectXProfiles(lookedUpProfile, requestXProfile);
   }
   const fallbackStrategy = buildFallbackStrategy({ scope, projectHandle, hardFilters, lang });
   let strategy = fallbackStrategy;
@@ -2050,6 +2108,7 @@ function normalizeInternalTwitterAccount(payload) {
   const source = payload?.data?.data || payload?.data?.user || payload?.data || payload?.user || payload?.result || payload;
   if (!source || typeof source !== "object") return null;
   const profile = source.profile && typeof source.profile === "object" ? source.profile : {};
+  const feature = source.feature && typeof source.feature === "object" ? source.feature : {};
   const handle = normalizeHandle(
     source.handle ||
       source.username ||
@@ -2073,6 +2132,8 @@ function normalizeInternalTwitterAccount(payload) {
     followers: numeric(source.followers || source.followers_count || profile.followers_count),
     following: numeric(source.following || source.following_count || profile.following_count),
     description: normalizeString(source.description || profile.description || "", 280),
+    narrative: normalizeLocalizedProfileText(source.narrative || feature.narrative),
+    mentionSummary: normalizeMentionSummary(source.mentionSummary || source.mention_summary || feature.mention_summary),
     createdAt: toIso(source.create_time || source.created_at || profile.created_at || profile.first_record),
     recentPosts: normalizeXRecentPosts(
       source.recentPosts ||

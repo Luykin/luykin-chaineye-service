@@ -346,6 +346,8 @@ Content-Type: application/json
     "verified": true,
     "followers": 12345,
     "description": "项目 X Bio",
+    "narrative": { "zh": "项目定位画像", "en": "Project positioning narrative" },
+    "mentionSummary": { "zh": "近期提及摘要", "en": "Recent mention summary" },
     "recentPosts": [{ "id": "1", "text": "近期公开内容摘要" }]
   },
   "hardFilters": {
@@ -425,10 +427,12 @@ echohunt:kol-match:strategy:{authCenterUserId}:{strategyId}
   "filters": { ... },
   "profileContext": {
     "available": true,
-    "enrichment": "bio",
-    "title": "已结合项目 X 画像",
-    "summary": "已参考项目账号的简介，用于校准项目背景和受众语境。",
-    "evidenceLabels": ["X Bio", "3 条近期内容", "粉丝 12,345"],
+    "enrichment": "feature",
+    "title": "核心画像：提供链上数据和跨链互操作的基础设施",
+    "summary": "近期外部讨论主要指向：行业广泛集成，赋能链上金融与资产。",
+    "evidenceLabels": ["Narrative 画像", "X Bio", "提及摘要"],
+    "narrative": "提供链上数据和跨链互操作的基础设施",
+    "mentionSummary": "行业广泛集成，赋能链上金融与资产。",
     "followers": 12345,
     "postCount": 3
   },
@@ -450,7 +454,7 @@ echohunt:kol-match:strategy:{authCenterUserId}:{strategyId}
 前端进入 `aiView = strategy`，展示「确认 EchoHunt 对需求的理解」：
 
 ```text
-已结合项目 X 画像（展示 Bio / 近期内容 / 粉丝 / 认证等已取得的画像信号）
+项目画像理解（突出一句话核心画像；优先使用 feature.narrative，其次 mention_summary / profile.description）
 系统理解的项目类型
 本次营销目标
 计划寻找的 KOL
@@ -458,7 +462,7 @@ echohunt:kol-match:strategy:{authCenterUserId}:{strategyId}
 安全提示 / 被忽略的不安全片段
 ```
 
-说明：项目 X 画像在第一次 LLM 生成策略时已经作为 evidence 参与分析；确认策略页通过 `profileContext` 做用户可见表达。如果后端尚未返回 `profileContext`，前端会用账号 lookup 结果做轻量兜底展示，避免用户误以为画像没有参与。
+说明：项目 X 画像在第一次 LLM 生成策略时已经作为 evidence 参与分析。后端会优先自己调用 `fetch/twitter/user` lookup，并提取 `data.data.feature.narrative`、`data.data.profile.description`、`data.data.feature.mention_summary`；确认策略页通过 `profileContext` 展示“账号是什么定位”的核心理解。如果后端旧版本尚未返回 `profileContext`，前端才用账号 lookup 结果做轻量兜底。
 
 如果策略接口失败：回到输入页，显示安全/策略错误，不扣 quota。
 
