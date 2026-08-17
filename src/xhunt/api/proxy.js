@@ -210,7 +210,7 @@ async function proxyRequest(req, res, targetUrl) {
     ensureCorsHeaders(req, res);
 
     // 设置浏览器缓存策略
-    setBrowserCacheHeaders(res, req.method);
+    setBrowserCacheHeaders(res, req);
 
     // 处理用户创建后的积分赠送（同步等待完成）
     await handleUserCreateGiftCredits(req, targetUrl, isSuccess);
@@ -274,21 +274,152 @@ async function proxyRequest(req, res, targetUrl) {
   }
 }
 
-// 设置浏览器缓存头
-function setBrowserCacheHeaders(res, method) {
-  if (method === "GET") {
-    // GET 请求设置10分钟缓存
-    res.setHeader("Cache-Control", "public, max-age=600"); // 600秒 = 10分钟
-    res.setHeader(
-      "Expires",
-      new Date(Date.now() + 10 * 60 * 1000).toUTCString()
-    );
-  } else {
-    // 非 GET 请求不缓存
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
+const CACHE_POLICIES = {
+  DEFAULT: "default",
+  SHORT: "short",
+  NO_CACHE: "no-cache",
+  PRIVATE_USER: "private-user",
+};
+
+// 默认缓存分组：public 缓存 10 分钟
+const DEFAULT_CACHE_PATHS = [/.*/];
+
+// 短缓存分组：public 缓存 5 分钟
+const SHORT_CACHE_PATHS = ["twitter/trending_tweets"];
+
+// 完全不缓存分组：需要实时返回或不允许缓存的接口放这里
+const NO_CACHE_PATHS = [];
+
+// 私有人信息分组：private 缓存 5 分钟，避免共享缓存复用用户态响应
+const PRIVATE_USER_CACHE_PATHS = [
+  /\/me$/,
+  /^\/auth(?:\/|$)/
+];
+
+const CACHE_PATH_GROUPS = {
+  [CACHE_POLICIES.DEFAULT]: DEFAULT_CACHE_PATHS,
+  [CACHE_POLICIES.SHORT]: SHORT_CACHE_PATHS,
+  [CACHE_POLICIES.NO_CACHE]: NO_CACHE_PATHS,
+  [CACHE_POLICIES.PRIVATE_USER]: PRIVATE_USER_CACHE_PATHS,
+};
+
+function normalizeCachePath(path = "") {
+  return path.toLowerCase().replace(/\/+$/, "") || "/";
+}
+
+function getTargetCachePath(req) {
+  return normalizeCachePath((req.path || "").replace(/^\/(auth|public)\//, "/"));
+}
+
+function isCachePathMatched(path, pattern) {
+  if (!path || !pattern) {
+    return false;
   }
+
+  const normalizedPath = normalizeCachePath(path);
+
+  // 字符串规则：包含匹配，适合 twitter/trending_tweets 这类稳定路径片段
+  if (typeof pattern === "string") {
+    return normalizedPath.includes(pattern.toLowerCase());
+  }
+
+  // 正则规则：适合 /me 结尾、边界匹配、避免 /user 误匹配 /users 等场景
+  if (pattern instanceof RegExp) {
+    return pattern.test(normalizedPath);
+  }
+
+  return false;
+}
+
+function isCacheGroupMatched(paths, path, targetPath) {
+  return paths.some(
+    (pattern) =>
+      isCachePathMatched(path, pattern) || isCachePathMatched(targetPath, pattern)
+  );
+}
+
+function getBrowserCachePolicy(req) {
+  if (req.method !== "GET") {
+    return CACHE_POLICIES.NO_CACHE;
+  }
+
+  const path = normalizeCachePath(req.path || "");
+  const targetPath = getTargetCachePath(req);
+
+  if (
+    isCacheGroupMatched(
+      CACHE_PATH_GROUPS[CACHE_POLICIES.NO_CACHE],
+      path,
+      targetPath
+    )
+  ) {
+    return CACHE_POLICIES.NO_CACHE;
+  }
+
+  if (
+    isCacheGroupMatched(
+      CACHE_PATH_GROUPS[CACHE_POLICIES.PRIVATE_USER],
+      path,
+      targetPath
+    )
+  ) {
+    return CACHE_POLICIES.PRIVATE_USER;
+  }
+
+  if (
+    isCacheGroupMatched(CACHE_PATH_GROUPS[CACHE_POLICIES.SHORT], path, targetPath)
+  ) {
+    return CACHE_POLICIES.SHORT;
+  }
+
+  if (
+    isCacheGroupMatched(
+      CACHE_PATH_GROUPS[CACHE_POLICIES.DEFAULT],
+      path,
+      targetPath
+    )
+  ) {
+    return CACHE_POLICIES.DEFAULT;
+  }
+
+  return CACHE_POLICIES.NO_CACHE;
+}
+
+function setNoCacheHeaders(res) {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+}
+
+function setTimedCacheHeaders(res, maxAgeSeconds, visibility = "public") {
+  res.setHeader("Cache-Control", `${visibility}, max-age=${maxAgeSeconds}`);
+  res.setHeader(
+    "Expires",
+    new Date(Date.now() + maxAgeSeconds * 1000).toUTCString()
+  );
+}
+
+// 设置浏览器缓存头
+function setBrowserCacheHeaders(res, req) {
+  const cachePolicy = getBrowserCachePolicy(req);
+
+  if (cachePolicy === CACHE_POLICIES.NO_CACHE) {
+    setNoCacheHeaders(res);
+    return;
+  }
+
+  if (cachePolicy === CACHE_POLICIES.PRIVATE_USER) {
+    setTimedCacheHeaders(res, 5 * 60, "private");
+    res.setHeader("Vary", "Authorization, X-User-ID, X-Device-Fingerprint");
+    return;
+  }
+
+  if (cachePolicy === CACHE_POLICIES.SHORT) {
+    setTimedCacheHeaders(res, 5 * 60);
+    return;
+  }
+
+  setTimedCacheHeaders(res, 10 * 60);
 }
 
 // 获取目标URL
