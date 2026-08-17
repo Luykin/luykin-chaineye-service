@@ -359,7 +359,7 @@ function getEvaluatorLlmModel() {
 }
 
 function getEvaluatorLlmTimeoutMs() {
-  return getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_TIMEOUT_MS", 20000);
+  return getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_TIMEOUT_MS", 45000);
 }
 
 function getEvaluatorLlmBatchSize() {
@@ -1795,6 +1795,26 @@ async function evaluateAiMatchCandidates({ req, strategy, rows, filters, briefTe
   const market = filters.language || "GLOBAL";
   const assessmentsById = new Map();
   const evidenceOwners = new Map();
+  const evaluatorStartedAt = Date.now();
+  const evaluatorEnabled = isEvaluatorLlmEnabled();
+  const timeoutMs = getEvaluatorLlmTimeoutMs();
+  const model = getEvaluatorLlmModel();
+  const batchSize = getEvaluatorLlmBatchSize();
+  const evaluatorLogContext = {
+    requestId: getRequestId(req),
+    authCenterUserId: getAuthCenterUserId(req),
+  };
+  console.info("[EchoHunt KOL Match] candidate evaluator start", {
+    ...evaluatorLogContext,
+    model: model || null,
+    batchSize,
+    timeoutMs,
+    candidateCount: rows.length,
+    domain,
+    market,
+    enabled: evaluatorEnabled,
+  });
+
   rows.forEach((row, index) => {
     const candidateId = candidateEvaluationId(row, index);
     buildCandidateSemanticEvidence(row, index, domain, market, lang).forEach((item) => {
@@ -1816,37 +1836,54 @@ async function evaluateAiMatchCandidates({ req, strategy, rows, filters, briefTe
 
   const fallbackProxy = (reason) => {
     fillProxy(reason, true);
+    const meta = {
+      enabled: evaluatorEnabled,
+      engine: "embedding_similarity_proxy",
+      fallback: true,
+      fallbackReason: reason || null,
+      evaluatedCount: rows.length,
+      llmEvaluatedCount: 0,
+      proxyEvaluatedCount: rows.length,
+    };
+    console.info("[EchoHunt KOL Match] candidate evaluator done", {
+      ...evaluatorLogContext,
+      engine: meta.engine,
+      fallback: meta.fallback,
+      fallbackReason: meta.fallbackReason,
+      candidateCount: rows.length,
+      evaluatedCount: meta.evaluatedCount,
+      llmEvaluatedCount: meta.llmEvaluatedCount,
+      proxyEvaluatedCount: meta.proxyEvaluatedCount,
+      costMs: Date.now() - evaluatorStartedAt,
+    });
     return {
       assessmentsById,
-      meta: {
-        enabled: isEvaluatorLlmEnabled(),
-        engine: "embedding_similarity_proxy",
-        fallback: true,
-        fallbackReason: reason || null,
-        evaluatedCount: rows.length,
-        llmEvaluatedCount: 0,
-        proxyEvaluatedCount: rows.length,
-      },
+      meta,
     };
   };
 
   if (!rows.length) return fallbackProxy("no_candidates");
-  if (!isEvaluatorLlmEnabled()) return fallbackProxy("llm_disabled");
+  if (!evaluatorEnabled) return fallbackProxy("llm_disabled");
 
-  const timeoutMs = getEvaluatorLlmTimeoutMs();
-  const model = getEvaluatorLlmModel();
-  const batchSize = getEvaluatorLlmBatchSize();
   const batchErrors = [];
 
-  for (let start = 0; start < rows.length; start += batchSize) {
+  const evaluateBatch = async (start) => {
     const batchRows = rows.slice(start, start + batchSize);
     const batchAllowedIds = new Set(batchRows.map((row, index) => candidateEvaluationId(row, start + index)));
+    const batchStartedAt = Date.now();
+    console.info("[EchoHunt KOL Match] candidate evaluator batch start", {
+      ...evaluatorLogContext,
+      model: model || null,
+      batchStart: start,
+      expectedCount: batchRows.length,
+      timeoutMs,
+    });
     try {
       const raw = await withTimeout(
         structuredChat(buildCandidateEvaluationPrompt({ strategy, rows: batchRows, filters, lang, rowOffset: start }), AI_EVALUATOR_SCHEMA, {
           model: model || undefined,
           temperature: 0,
-          maxTokens: Math.min(3000, 700 + batchRows.length * 160),
+          maxTokens: Math.min(5000, 900 + batchRows.length * 300),
           systemPrompt: [
             "You are EchoHunt's safe, evidence-grounded KOL semantic evaluator.",
             "Use only the supplied INPUT_DATA and return valid JSON matching the schema.",
@@ -1857,20 +1894,57 @@ async function evaluateAiMatchCandidates({ req, strategy, rows, filters, briefTe
           ].join("\n"),
         }),
         timeoutMs,
-        `EchoHunt KOL evaluator LLM timeout after ${timeoutMs}ms`
+        `EchoHunt KOL evaluator LLM batch ${start} timeout after ${timeoutMs}ms`
       );
       const rawCount = Array.isArray(raw?.assessments) ? raw.assessments.length : 0;
       const normalized = (Array.isArray(raw?.assessments) ? raw.assessments : [])
         .map((item) => normalizeAssessment(item, batchAllowedIds, evidenceOwners, lang))
         .filter(Boolean);
-      normalized.forEach((item) => assessmentsById.set(item.candidateId, item));
-      if (normalized.length !== batchRows.length) {
-        batchErrors.push(`batch_${start}_${normalized.length}/${batchRows.length}_valid_raw_${rawCount}`);
-      }
+      const result = {
+        start,
+        expectedCount: batchRows.length,
+        rawCount,
+        assessments: normalized,
+        error: normalized.length !== batchRows.length
+          ? `batch_${start}_${normalized.length}/${batchRows.length}_valid_raw_${rawCount}`
+          : null,
+      };
+      console.info("[EchoHunt KOL Match] candidate evaluator batch done", {
+        ...evaluatorLogContext,
+        batchStart: start,
+        expectedCount: result.expectedCount,
+        rawCount: result.rawCount,
+        validCount: result.assessments.length,
+        hasError: !!result.error,
+        costMs: Date.now() - batchStartedAt,
+      });
+      return result;
     } catch (error) {
-      batchErrors.push(`batch_${start}_${sanitizePublicText(error.message || "failed", 120, lang)}`);
+      const errorMessage = sanitizePublicText(error.message || "failed", 120, lang);
+      console.warn("[EchoHunt KOL Match] candidate evaluator batch failed", {
+        ...evaluatorLogContext,
+        batchStart: start,
+        expectedCount: batchRows.length,
+        message: errorMessage,
+        costMs: Date.now() - batchStartedAt,
+      });
+      return {
+        start,
+        expectedCount: batchRows.length,
+        rawCount: 0,
+        assessments: [],
+        error: `batch_${start}_${errorMessage}`,
+      };
     }
-  }
+  };
+
+  const batchStarts = [];
+  for (let start = 0; start < rows.length; start += batchSize) batchStarts.push(start);
+  const batchResults = await Promise.all(batchStarts.map((start) => evaluateBatch(start)));
+  batchResults.forEach((result) => {
+    result.assessments.forEach((item) => assessmentsById.set(item.candidateId, item));
+    if (result.error) batchErrors.push(result.error);
+  });
 
   const llmEvaluatedCount = rows.reduce((count, row, index) => (
     assessmentsById.has(candidateEvaluationId(row, index)) ? count + 1 : count
@@ -1903,22 +1977,37 @@ async function evaluateAiMatchCandidates({ req, strategy, rows, filters, briefTe
     });
   }
 
+  const meta = {
+    enabled: true,
+    engine: "llm_semantic_evaluator",
+    model: model || null,
+    fallback: false,
+    partial,
+    partialReason: partial ? "llm_partial_missing_candidates" : null,
+    evaluatedCount: rows.length,
+    llmEvaluatedCount,
+    proxyEvaluatedCount,
+    batchSize,
+  };
+  console.info("[EchoHunt KOL Match] candidate evaluator done", {
+    ...evaluatorLogContext,
+    engine: meta.engine,
+    model: meta.model,
+    fallback: meta.fallback,
+    partial: meta.partial,
+    candidateCount: rows.length,
+    evaluatedCount: meta.evaluatedCount,
+    llmEvaluatedCount: meta.llmEvaluatedCount,
+    proxyEvaluatedCount: meta.proxyEvaluatedCount,
+    batchSize,
+    costMs: Date.now() - evaluatorStartedAt,
+  });
+
   return {
     assessmentsById,
-    meta: {
-      enabled: true,
-      engine: "llm_semantic_evaluator",
-      model: model || null,
-      fallback: false,
-      partial,
-      partialReason: partial ? "llm_partial_missing_candidates" : null,
-      evaluatedCount: rows.length,
-      llmEvaluatedCount,
-      proxyEvaluatedCount,
-      batchSize,
-    },
+    meta,
   };
-  }
+}
 
 function buildScoreContext(rows, domain, market) {
   const maxMainViews = Math.max(0, ...rows.map((row) => numeric(row.mainTweetViewMedian) || 0));
@@ -2956,6 +3045,10 @@ function writeSse(res, eventName, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+function writeSseHeartbeat(res) {
+  res.write(": ping\n\n");
+}
+
 router.use(authenticateAuthCenterToken());
 router.use(requireKolMatchVip);
 
@@ -3039,6 +3132,15 @@ router.post("/ai-search/stream", async (req, res) => {
     closed = true;
   });
 
+  const heartbeat = setInterval(() => {
+    if (closed) return;
+    try {
+      writeSseHeartbeat(res);
+    } catch {
+      closed = true;
+    }
+  }, 15000);
+
   const emit = async (event) => {
     if (closed) return;
     if (event?.type === "reasoning") {
@@ -3082,6 +3184,7 @@ router.post("/ai-search/stream", async (req, res) => {
       });
     }
   } finally {
+    clearInterval(heartbeat);
     if (!closed) res.end();
   }
 });
