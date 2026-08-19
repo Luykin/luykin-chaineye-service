@@ -451,8 +451,113 @@ function collectBundleLeaderboardRows(bundle) {
   return rows;
 }
 
-function summarizeLeaderboardBundle(bundle) {
+function parseMetricNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(typeof value === "string" ? value.replace(/,/g, "") : value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function getFirstMetricValue(sources, keys) {
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (parseMetricNumber(value) !== null) return value;
+    }
+  }
+  return null;
+}
+
+function extractRawLeaderboardSummary(rawResponse) {
+  const raw = rawResponse?.raw && typeof rawResponse.raw === "object" ? rawResponse.raw : rawResponse;
+  const sources = [
+    rawResponse,
+    rawResponse?.summary,
+    rawResponse?.stats,
+    rawResponse?.data,
+    rawResponse?.data?.summary,
+    rawResponse?.data?.stats,
+    rawResponse?.data?.data,
+    rawResponse?.data?.data?.summary,
+    rawResponse?.data?.data?.stats,
+    raw,
+    raw?.summary,
+    raw?.stats,
+    raw?.data,
+    raw?.data?.summary,
+    raw?.data?.stats,
+    raw?.data?.data,
+    raw?.data?.data?.summary,
+    raw?.data?.data?.stats,
+  ];
+
+  return {
+    participants: getFirstMetricValue(sources, [
+      "participants",
+      "hunters",
+      "totalHunters",
+      "total_hunters",
+      "participantCount",
+      "participant_count",
+      "userCount",
+      "user_count",
+      "totalUsers",
+      "total_users",
+    ]),
+    tweets: getFirstMetricValue(sources, [
+      "tweets",
+      "totalTweets",
+      "total_tweets",
+      "tweetCount",
+      "tweet_count",
+      "posts",
+      "totalPosts",
+      "total_posts",
+    ]),
+    views: getFirstMetricValue(sources, [
+      "views",
+      "totalViews",
+      "total_views",
+      "viewCount",
+      "view_count",
+      "impressions",
+      "totalImpressions",
+      "total_impressions",
+    ]),
+    engagement: getFirstMetricValue(sources, [
+      "engagement",
+      "totalEngagement",
+      "total_engagement",
+      "interactions",
+      "totalInteractions",
+      "total_interactions",
+      "likes",
+      "totalLikes",
+      "total_likes",
+      "likeCount",
+      "like_count",
+    ]),
+    bridges: getFirstMetricValue(sources, ["bridges", "totalBridges", "total_bridges", "bridgeCount", "bridge_count"]),
+    updatedAt:
+      rawResponse?.leaderboardDataUpdatedAt ||
+      rawResponse?.updatedAt ||
+      rawResponse?.data?.leaderboardDataUpdatedAt ||
+      rawResponse?.data?.updatedAt ||
+      rawResponse?.data?.data?.leaderboardDataUpdatedAt ||
+      rawResponse?.data?.data?.updatedAt ||
+      raw?.leaderboardDataUpdatedAt ||
+      raw?.updatedAt ||
+      raw?.data?.leaderboardDataUpdatedAt ||
+      raw?.data?.updatedAt ||
+      raw?.data?.data?.leaderboardDataUpdatedAt ||
+      raw?.data?.data?.updatedAt ||
+      null,
+  };
+}
+
+function summarizeLeaderboardBundle(bundle, rawResponse = null) {
   const base = bundle?.summary && typeof bundle.summary === "object" ? bundle.summary : {};
+  const rawSummary = extractRawLeaderboardSummary(rawResponse);
   const rows = collectBundleLeaderboardRows(bundle);
   const userKeys = new Set();
   rows.forEach((row) => {
@@ -472,25 +577,25 @@ function summarizeLeaderboardBundle(bundle) {
     return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
   };
   const pickPositiveNumber = (value, fallback) => {
-    const num = Number(value);
+    const num = parseMetricNumber(value);
     return Number.isFinite(num) && num > 0 ? value : fallback;
   };
 
   return {
-    participants: pickPositiveNumber(base.participants, userKeys.size || countFromTracks || rows.length || 0),
-    tweets: pickPositiveNumber(base.tweets, sumRows(["tweets", "tweet_count"])),
-    views: pickPositiveNumber(base.views, sumRows(["views", "view_count"])),
-    engagement: pickPositiveNumber(base.engagement, sumRows(["engagement", "likes", "like_count"])),
-    bridges: base.bridges ?? null,
-    updatedAt: base.updatedAt || bundle?.leaderboardDataUpdatedAt || bundle?.updatedAt || bundle?.generatedAt || null,
+    participants: pickPositiveNumber(rawSummary.participants ?? base.participants, userKeys.size || countFromTracks || rows.length || 0),
+    tweets: pickPositiveNumber(rawSummary.tweets ?? base.tweets, sumRows(["tweets", "tweet_count"])),
+    views: pickPositiveNumber(rawSummary.views ?? base.views, sumRows(["views", "view_count"])),
+    engagement: pickPositiveNumber(rawSummary.engagement ?? base.engagement, sumRows(["engagement", "likes", "like_count"])),
+    bridges: rawSummary.bridges ?? base.bridges ?? null,
+    updatedAt: rawSummary.updatedAt || base.updatedAt || bundle?.leaderboardDataUpdatedAt || bundle?.updatedAt || bundle?.generatedAt || null,
   };
 }
 
-function mergeDynamicLeaderboardSummary(item, bundle) {
+function mergeDynamicLeaderboardSummary(item, bundle, rawResponse = null) {
   if (!item || !bundle) return item;
   return {
     ...item,
-    leaderboardSummary: summarizeLeaderboardBundle(bundle),
+    leaderboardSummary: summarizeLeaderboardBundle(bundle, rawResponse),
     leaderboardTracks: Array.isArray(bundle.tracks) ? bundle.tracks : [],
     leaderboardDataUrl: null,
     hasStaticLeaderboardData: false,
@@ -509,7 +614,7 @@ async function mergeDynamicEndedLeaderboardSummary(item, options = {}) {
       viewerTwitterId: options.viewerTwitterId || "",
     });
     const bundle = buildCustomLeaderboardBundle(item, rawLeaderboard);
-    return mergeDynamicLeaderboardSummary(item, bundle);
+    return mergeDynamicLeaderboardSummary(item, bundle, rawLeaderboard);
   } catch (error) {
     console.warn("[EchoHunt] ended campaign dynamic leaderboard summary fetch warn:", error.message || error);
     return item;
