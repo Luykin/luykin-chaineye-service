@@ -1216,6 +1216,7 @@ router.get("/campaigns/:campaignKey/leaderboard", authenticateAuthCenterToken({ 
           viewerTwitterId: await getViewerTwitterIdForLeaderboard(req),
         });
         const customBundle = buildCustomLeaderboardBundle(fallbackCampaign, rawLeaderboard);
+        customBundle.summary = summarizeLeaderboardBundle(customBundle, rawLeaderboard);
         if (isYziLabsCampaign(campaignKey)) {
           res.set("Cache-Control", "private, max-age=80");
           res.set("Vary", "Authorization");
