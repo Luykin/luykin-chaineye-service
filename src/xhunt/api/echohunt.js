@@ -50,6 +50,7 @@ const {
 } = require("../services/campaignRegistrationService");
 const {
   getCustomLeaderboardData,
+  getCustomUserActivityData,
   isYziLabsCampaign,
 } = require("../services/campaignLeaderboardService");
 const {
@@ -422,7 +423,7 @@ function buildEchohuntCampaignListItem(record, lang, viewer) {
 }
 
 function mergeStaticLeaderboardSummary(item, staticCampaign) {
-  if (!item || !staticCampaign) return item;
+  if (!item || !staticCampaign?.dataUrl) return item;
   return {
     ...item,
     leaderboardSummary: staticCampaign.summary || null,
@@ -430,6 +431,183 @@ function mergeStaticLeaderboardSummary(item, staticCampaign) {
     leaderboardDataUrl: staticCampaign.dataUrl || null,
     hasStaticLeaderboardData: true,
   };
+}
+
+function isCampaignEffectivelyEnded(item) {
+  if (!item) return false;
+  if (item.status === "ended" || item.webStatus === "ended") return true;
+  if (!item.endAt) return false;
+  const endAt = new Date(item.endAt).getTime();
+  return Number.isFinite(endAt) && endAt <= Date.now();
+}
+
+function collectBundleLeaderboardRows(bundle) {
+  const rows = [];
+  const leaderboards = bundle?.leaderboards?.all || bundle?.leaderboards || {};
+  if (!leaderboards || typeof leaderboards !== "object") return rows;
+  Object.values(leaderboards).forEach((value) => {
+    if (Array.isArray(value)) rows.push(...value);
+  });
+  return rows;
+}
+
+function summarizeLeaderboardBundle(bundle) {
+  const base = bundle?.summary && typeof bundle.summary === "object" ? bundle.summary : {};
+  const rows = collectBundleLeaderboardRows(bundle);
+  const userKeys = new Set();
+  rows.forEach((row) => {
+    const key = row?.twitterId || row?.twitter_id || row?.user_id || row?.username || row?.handle;
+    if (key) userKeys.add(String(key).trim().toLowerCase());
+  });
+
+  const countFromTracks = (Array.isArray(bundle?.tracks) ? bundle.tracks : []).reduce((max, track) => {
+    const allCount = Number(track?.counts?.all);
+    return Number.isFinite(allCount) ? Math.max(max, allCount) : max;
+  }, 0);
+
+  const sumRows = (fieldNames) => {
+    const values = rows
+      .map((row) => fieldNames.map((field) => Number(row?.[field])).find((value) => Number.isFinite(value)))
+      .filter((value) => Number.isFinite(value));
+    return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+  };
+  const pickPositiveNumber = (value, fallback) => {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? value : fallback;
+  };
+
+  return {
+    participants: pickPositiveNumber(base.participants, userKeys.size || countFromTracks || rows.length || 0),
+    tweets: pickPositiveNumber(base.tweets, sumRows(["tweets", "tweet_count"])),
+    views: pickPositiveNumber(base.views, sumRows(["views", "view_count"])),
+    engagement: pickPositiveNumber(base.engagement, sumRows(["engagement", "likes", "like_count"])),
+    bridges: base.bridges ?? null,
+    updatedAt: base.updatedAt || bundle?.leaderboardDataUpdatedAt || bundle?.updatedAt || bundle?.generatedAt || null,
+  };
+}
+
+function mergeDynamicLeaderboardSummary(item, bundle) {
+  if (!item || !bundle) return item;
+  return {
+    ...item,
+    leaderboardSummary: summarizeLeaderboardBundle(bundle),
+    leaderboardTracks: Array.isArray(bundle.tracks) ? bundle.tracks : [],
+    leaderboardDataUrl: null,
+    hasStaticLeaderboardData: false,
+    leaderboardDataSource: "configured_custom",
+  };
+}
+
+async function mergeDynamicEndedLeaderboardSummary(item, options = {}) {
+  if (!isCampaignEffectivelyEnded(item)) return item;
+  if (item?.leaderboardConfig?.leaderboardMode !== "custom") return item;
+
+  try {
+    const rawLeaderboard = await getCustomLeaderboardData(item, {
+      campaign: item.campaignKey || item.slug || item.nacosCampaignId,
+      channel: "echohunt",
+      viewerTwitterId: options.viewerTwitterId || "",
+    });
+    const bundle = buildCustomLeaderboardBundle(item, rawLeaderboard);
+    return mergeDynamicLeaderboardSummary(item, bundle);
+  } catch (error) {
+    console.warn("[EchoHunt] ended campaign dynamic leaderboard summary fetch warn:", error.message || error);
+    return item;
+  }
+}
+
+function getCustomActivityTrackId(campaign) {
+  const customLeaderboards = Array.isArray(campaign?.leaderboardConfig?.customLeaderboards)
+    ? campaign.leaderboardConfig.customLeaderboards
+    : [];
+  const first = customLeaderboards[0] || null;
+  return String(first?.id || first?.distributionType || "custom-0").trim() || "custom-0";
+}
+
+function ensureUserIdentityOnActivityRow(row, user) {
+  if (!row || typeof row !== "object") return row;
+  const hasIdentity =
+    row.twitterId ||
+    row.twitter_id ||
+    row.user_id ||
+    row.username ||
+    row.handler ||
+    row.handle ||
+    row.screen_name;
+  if (hasIdentity) return row;
+  return {
+    ...row,
+    twitterId: user?.twitterId || null,
+    username: user?.username || null,
+  };
+}
+
+function normalizeCustomUserActivityForBundle(campaign, rawActivity, user) {
+  const source = rawActivity?.leaderboards && typeof rawActivity.leaderboards === "object"
+    ? rawActivity.leaderboards
+    : {};
+  const leaderboards = {};
+
+  Object.entries(source).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      leaderboards[key] = value.map((row) => ensureUserIdentityOnActivityRow(row, user));
+      return;
+    }
+    if (value && typeof value === "object") {
+      const rows = Array.isArray(value.items)
+        ? value.items
+        : Array.isArray(value.rows)
+          ? value.rows
+          : [value];
+      leaderboards[key] = rows.map((row) => ensureUserIdentityOnActivityRow(row, user));
+    }
+  });
+
+  if (!Object.keys(leaderboards).length && rawActivity && typeof rawActivity === "object" && rawActivity.rank !== undefined) {
+    leaderboards[getCustomActivityTrackId(campaign)] = [ensureUserIdentityOnActivityRow(rawActivity, user)];
+  }
+
+  return {
+    ...rawActivity,
+    leaderboards,
+  };
+}
+
+async function fetchCustomCampaignHistoryFromInterfaces(campaign, user, campaignKey) {
+  if (campaign?.leaderboardConfig?.leaderboardMode !== "custom") return null;
+
+  const userActivityUserId = user?.username || user?.twitterId || "";
+  if (campaign.leaderboardConfig.userActivityApiUrl || isYziLabsCampaign(campaignKey)) {
+    try {
+      const rawActivity = await getCustomUserActivityData(campaign, userActivityUserId, {
+        campaign: campaignKey,
+        channel: "echohunt",
+        twitterId: user?.twitterId,
+        username: user?.username,
+      });
+      const activityBundle = buildCustomLeaderboardBundle(
+        campaign,
+        normalizeCustomUserActivityForBundle(campaign, rawActivity, user)
+      );
+      const found = findUserInBundle(activityBundle, user);
+      if (found) return found;
+    } catch (activityError) {
+      console.warn("[EchoHunt] custom user activity fetch warn:", activityError.message || activityError);
+    }
+  }
+
+  try {
+    const rawLeaderboard = await getCustomLeaderboardData(campaign, {
+      campaign: campaignKey,
+      channel: "echohunt",
+      viewerTwitterId: user?.twitterId,
+    });
+    const customBundle = buildCustomLeaderboardBundle(campaign, rawLeaderboard);
+    return findUserInBundle(customBundle, user);
+  } catch (customError) {
+    console.warn("[EchoHunt] custom campaign rank fetch warn:", customError.message || customError);
+    return null;
+  }
 }
 
 function buildEchohuntCampaignDetail(record, lang) {
@@ -848,7 +1026,10 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
     const staticManifest = await getStaticLeaderboardManifest().catch(() => null);
     const staticCampaignMap = new Map();
     (Array.isArray(staticManifest?.campaigns) ? staticManifest.campaigns : []).forEach((item) => {
-      if (item?.key) staticCampaignMap.set(String(item.key), item);
+      if (item?.key) {
+        staticCampaignMap.set(String(item.key), item);
+        staticCampaignMap.set(String(item.key).toLowerCase(), item);
+      }
     });
 
     // EchoHunt 活动列表永远不返回 draft/archived。
@@ -860,7 +1041,8 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
       },
     });
 
-    const data = records
+    const viewerTwitterId = await getViewerTwitterIdForLeaderboard(req);
+    const data = await Promise.all(records
       .map((record) => ({ record, plugin: buildPluginCampaign(record, { channel: "echohunt" }) }))
       .filter(({ plugin }) => {
         if (!plugin.testingPhase) return true;
@@ -868,15 +1050,22 @@ router.get("/campaigns", authenticateAuthCenterToken({ optional: true }), async 
         if (allowed) hasTesting = true;
         return allowed;
       })
-      .map(({ record }) => {
+      .map(async ({ record }) => {
         const item = buildEchohuntCampaignListItem(record, lang, viewer);
         const dataKey = item.campaignKey || item.slug || item.nacosCampaignId;
         const staticCampaign =
           staticCampaignMap.get(String(dataKey || "")) ||
+          staticCampaignMap.get(String(dataKey || "").toLowerCase()) ||
           staticCampaignMap.get(String(item.slug || "")) ||
-          staticCampaignMap.get(String(item.nacosCampaignId || ""));
-        return mergeStaticLeaderboardSummary(item, staticCampaign);
-      })
+          staticCampaignMap.get(String(item.slug || "").toLowerCase()) ||
+          staticCampaignMap.get(String(item.nacosCampaignId || "")) ||
+          staticCampaignMap.get(String(item.nacosCampaignId || "").toLowerCase());
+        const mergedItem = mergeStaticLeaderboardSummary(item, staticCampaign);
+        if (mergedItem.hasStaticLeaderboardData) return mergedItem;
+        return mergeDynamicEndedLeaderboardSummary(mergedItem, { viewerTwitterId });
+      }));
+
+    data
       .sort((a, b) => Number(b.sortOrder || 0) - Number(a.sortOrder || 0));
 
     return res.json({
@@ -984,17 +1173,7 @@ router.get("/campaigns/:campaignKey/me", authenticateAuthCenterToken({ optional:
       };
 
       if (fallbackCampaign?.leaderboardConfig?.leaderboardMode === "custom") {
-        try {
-          const rawLeaderboard = await getCustomLeaderboardData(fallbackCampaign, {
-            campaign: normalizedCampaign,
-            channel: "echohunt",
-            viewerTwitterId: rankIdentity.twitterId,
-          });
-          const customBundle = buildCustomLeaderboardBundle(fallbackCampaign, rawLeaderboard);
-          campaignHistory = findUserInBundle(customBundle, rankIdentity);
-        } catch (customError) {
-          console.warn("[EchoHunt] custom campaign rank fetch warn:", customError.message || customError);
-        }
+        campaignHistory = await fetchCustomCampaignHistoryFromInterfaces(fallbackCampaign, rankIdentity, normalizedCampaign);
       }
     }
 
