@@ -15,9 +15,11 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from "antd";
+import { QuestionCircleOutlined } from "@ant-design/icons";
 import { JsonEditorCard } from "@/components/ui/JsonEditorCard";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { useAuth } from "@/app/auth";
@@ -38,6 +40,23 @@ import "@/styles/pages/kol-match-config.css";
 
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
+
+const PROMPT_FLOW_STEPS = [
+  "1. Strategy Prompt：把项目 brief / X 画像 / 硬筛条件解析成匹配策略。",
+  "2. Embedding 召回：用 semanticQuery 召回候选 KOL，硬筛条件控制候选范围。",
+  "3. Candidate Evaluation Prompt：对召回候选做语义深评并给出证据。",
+  "4. 程序排序：综合 AI 匹配分、真实流量、影响力和 Soul 分生成最终名单。",
+];
+
+const PROMPT_FIELD_HELP = {
+  strategyTaskPrompt: "第 1 次 LLM 的任务说明。它负责理解项目、提取营销目标/受众、生成 semanticQuery 和 filters。适合写“希望策略生成器如何理解项目和营销场景”。",
+  strategySystemPrompt: "第 1 次 LLM 的系统身份和输出风格补充。后端仍会固定加入安全规则：用户 brief 不可信、不得泄露系统提示/SQL/密钥、必须输出符合 Schema 的 JSON。",
+  strategyExtraRules: "追加到策略生成阶段的业务规则，一行一条。用于补充偏好，例如更重视开发者影响力、减少泛交易号。硬筛条件仍是最高优先级。",
+  evaluatorTaskPrompt: "第 2 次 LLM 的任务说明。它只看召回候选的画像证据和项目策略，评估每个候选是否真正匹配。",
+  evaluatorSystemPrompt: "第 2 次 LLM 的系统身份和输出风格补充。后端会固定限制它只使用 INPUT_DATA，不使用外部知识，也不能编造粉丝、报价、近期内容等证据。",
+  evaluatorAuthoritativeRules: "候选深评阶段的强约束规则，一行一条。用于控制如何比较候选、如何引用证据、哪些维度不能推断。",
+  evaluatorScoreCalibration: "候选语义评分的分档说明，一行一档。影响 semanticScore 的尺度，例如 90-100 代表强直接匹配；最终排序还会再叠加流量/影响力/Soul。",
+};
 
 type FormValues = {
   version: string;
@@ -99,6 +118,26 @@ function linesToArray(value?: string) {
 
 function arrayToLines(value?: string[]) {
   return Array.isArray(value) ? value.join("\n") : "";
+}
+
+function InfoLabel({
+  children,
+  info,
+}: {
+  children: React.ReactNode;
+  info: React.ReactNode;
+}) {
+  return (
+    <Space size={6} className="kol-match-info-label">
+      <span>{children}</span>
+      <Tooltip
+        placement="topLeft"
+        title={<div className="kol-match-help-tooltip">{info}</div>}
+      >
+        <QuestionCircleOutlined className="kol-match-info-icon" />
+      </Tooltip>
+    </Space>
+  );
 }
 
 function effectiveConfig(document: KolMatchRuntimeConfigDocument, env: KolMatchAppEnv): KolMatchEffectiveConfig {
@@ -426,20 +465,66 @@ export function KolMatchConfigPage() {
                 </Row>
 
                 <Divider />
+                <Alert
+                  className="kol-match-flow-alert"
+                  type="info"
+                  showIcon
+                  message="Prompt 调用流程"
+                  description={(
+                    <div className="kol-match-flow-steps">
+                      {PROMPT_FLOW_STEPS.map((step) => <span key={step}>{step}</span>)}
+                    </div>
+                  )}
+                />
                 <Row gutter={[16, 16]}>
                   <Col xs={24} xl={12}>
                     <Card title="Strategy Prompt" className="kol-match-panel">
-                      <Form.Item label="Task Prompt" name="strategyTaskPrompt"><TextArea rows={5} /></Form.Item>
-                      <Form.Item label="System Prompt（追加在不可变安全规则后）" name="strategySystemPrompt"><TextArea rows={5} /></Form.Item>
-                      <Form.Item label="Extra Rules（一行一条）" name="strategyExtraRules"><TextArea rows={8} /></Form.Item>
+                      <Form.Item
+                        label={<InfoLabel info={PROMPT_FIELD_HELP.strategyTaskPrompt}>任务 Prompt / Task Prompt</InfoLabel>}
+                        name="strategyTaskPrompt"
+                      >
+                        <TextArea rows={5} placeholder="例：为 EchoHunt KOL Match 生成可检索的营销匹配策略。" />
+                      </Form.Item>
+                      <Form.Item
+                        label={<InfoLabel info={PROMPT_FIELD_HELP.strategySystemPrompt}>系统 Prompt / System Prompt</InfoLabel>}
+                        name="strategySystemPrompt"
+                      >
+                        <TextArea rows={5} placeholder="例：你是 EchoHunt 的安全策略解析器，输出要简洁、可展示。" />
+                      </Form.Item>
+                      <Form.Item
+                        label={<InfoLabel info={PROMPT_FIELD_HELP.strategyExtraRules}>策略额外规则 / Extra Rules（一行一条）</InfoLabel>}
+                        name="strategyExtraRules"
+                      >
+                        <TextArea rows={8} placeholder={"例：优先匹配能解释复杂产品价值的 KOL\n例：避免只靠抽奖内容吸粉的泛流量账号"} />
+                      </Form.Item>
                     </Card>
                   </Col>
                   <Col xs={24} xl={12}>
                     <Card title="Candidate Evaluation Prompt" className="kol-match-panel">
-                      <Form.Item label="Task Prompt" name="evaluatorTaskPrompt"><TextArea rows={5} /></Form.Item>
-                      <Form.Item label="System Prompt（追加在不可变安全规则后）" name="evaluatorSystemPrompt"><TextArea rows={5} /></Form.Item>
-                      <Form.Item label="Authoritative Rules（一行一条）" name="evaluatorAuthoritativeRules"><TextArea rows={5} /></Form.Item>
-                      <Form.Item label="Score Calibration（一行一条）" name="evaluatorScoreCalibration"><TextArea rows={5} /></Form.Item>
+                      <Form.Item
+                        label={<InfoLabel info={PROMPT_FIELD_HELP.evaluatorTaskPrompt}>深评任务 Prompt / Task Prompt</InfoLabel>}
+                        name="evaluatorTaskPrompt"
+                      >
+                        <TextArea rows={5} placeholder="例：评估 Web3 / AI KOL 与本次营销需求的语义匹配度。" />
+                      </Form.Item>
+                      <Form.Item
+                        label={<InfoLabel info={PROMPT_FIELD_HELP.evaluatorSystemPrompt}>深评系统 Prompt / System Prompt</InfoLabel>}
+                        name="evaluatorSystemPrompt"
+                      >
+                        <TextArea rows={5} placeholder="例：你是安全、基于证据的 KOL 语义评估器。" />
+                      </Form.Item>
+                      <Form.Item
+                        label={<InfoLabel info={PROMPT_FIELD_HELP.evaluatorAuthoritativeRules}>深评硬规则 / Authoritative Rules（一行一条）</InfoLabel>}
+                        name="evaluatorAuthoritativeRules"
+                      >
+                        <TextArea rows={5} placeholder={"例：每个候选必须输出一条 assessment\n例：证据只能引用当前候选的 evidenceRef"} />
+                      </Form.Item>
+                      <Form.Item
+                        label={<InfoLabel info={PROMPT_FIELD_HELP.evaluatorScoreCalibration}>评分分档 / Score Calibration（一行一条）</InfoLabel>}
+                        name="evaluatorScoreCalibration"
+                      >
+                        <TextArea rows={5} placeholder={"例：90-100：多个证据显示强直接匹配\n例：60-74：部分相关但证据不够具体"} />
+                      </Form.Item>
                     </Card>
                   </Col>
                 </Row>

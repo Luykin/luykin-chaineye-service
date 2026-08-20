@@ -71,6 +71,35 @@
   font-weight: 800;
 }
 
+.kol-match-flow-alert {
+  margin-bottom: 16px;
+  border-radius: 14px;
+}
+
+.kol-match-flow-steps {
+  display: grid;
+  gap: 4px;
+}
+
+.kol-match-info-label {
+  font-weight: 600;
+}
+
+.kol-match-info-icon {
+  color: #8c8c8c;
+  font-size: 12px;
+  cursor: help;
+}
+
+.kol-match-info-icon:hover {
+  color: #1677ff;
+}
+
+.kol-match-help-tooltip {
+  max-width: 340px;
+  line-height: 1.55;
+}
+
 .kol-match-config-page .full {
   width: 100%;
 }
