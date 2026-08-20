@@ -1306,3 +1306,57 @@ internalTestUser 但非 XHunt VIP
 ## 11. 一句话结论
 
 当前 KOL Match 用户链路已经更新为「前端表单 → Next 代理 → EchoHunt 产品 API → 安全/额度/策略/SSE → KOL Marketing 完整硬筛 + Embedding TopK 召回 → 第二次 LLM 候选深评 → 程序综合排序 → 结果详情」架构；AI 精准匹配已经避免影响力预截断，并把粉丝数/接单意愿从新综合推荐分中移除。下一步最值得补的是权限口径统一、第二次 LLM 成本/延迟监控，以及条件筛选中的指定 KOL 后端 lookup 真正接入页面交互。
+
+---
+
+## 12. 2026-08-20 环境分流与运行配置更新
+
+本次补充后，EchoHunt KOL Match 后端会在 Auth Center 鉴权和 VIP 校验后解析 Next.js 代理注入的：
+
+```http
+x-echohunt-app-env: test | production
+```
+
+只有 header 精确等于 `test` 时进入测试配置；缺失、`production` 或其他值全部归一为 `production`。该 header 只作为业务配置分流，不作为权限边界。
+
+运行配置统一读取 Nacos JSON：
+
+```text
+dataId: echohunt-kol-match-runtime-config.json
+group: XHUNT
+```
+
+读取优先级为 Nacos > 兼容环境变量 > 代码默认值，并带 45 秒进程内缓存；后台发布配置后会写 Redis 版本 key 并清理当前进程缓存。业务接口返回的 quota、strategy、AI search、SSE final、filter search meta 均会包含：
+
+```json
+{
+  "appEnv": "production | test",
+  "configVersion": "...",
+  "configSource": "nacos | env | defaults"
+}
+```
+
+当前可配置项包括：
+
+- `limits.aiDailyLimit`、`filterDailyLimit`
+- `limits.aiResultLimit`、`aiRecallTopK`
+- `limits.filterResultLimit`、`filterCandidateScanLimit`
+- `strategyLlm.enabled/model/timeoutMs/maxTokens/temperature`
+- `evaluatorLlm.enabled/model/timeoutMs/batchSize/maxTokensBase/maxTokensPerCandidate/maxTokensCap/temperature`
+- `prompts.strategy.taskPrompt/systemPrompt/extraRules`
+- `prompts.candidateEvaluation.taskPrompt/systemPrompt/authoritativeRules/scoreCalibration`
+
+Prompt 配置只会追加/补充业务表达，后端仍保留不可变安全规则：用户 brief 永远是不可信数据、不得泄露 system prompt/SQL/密钥、不得使用外部知识、输出必须符合 JSON Schema。
+
+缓存维度也已增加环境与配置版本，避免测试/正式或 Prompt 版本切换后复用旧结果：
+
+- strategy cache payload 校验 `lang + appEnv + configVersion`
+- idempotency cache key 包含 `appEnv + configVersion`
+
+后台新增专用配置页：
+
+```text
+/admin/kol-match-config
+```
+
+该页面底层保存同一份 Nacos JSON，首版支持正式/测试环境切换、有效配置摘要、高级 JSON 编辑、后端校验、发布到 Nacos 和刷新后端缓存；历史与更细粒度表单可继续复用 Nacos 配置中心能力补强。正式环境保存需要填写原因并二次确认。

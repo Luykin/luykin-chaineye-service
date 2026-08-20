@@ -7,7 +7,6 @@ const {
 const { logAdminAction } = require("./shared");
 const { nacosRequest } = require("../../services/nacosConfigClient");
 const { XhuntNacosConfigSnapshot } = require("../../../models/postgres-start");
-
 const router = express.Router();
 const DEFAULT_GROUP = "DEFAULT_GROUP";
 const DEFAULT_TYPE = "json";

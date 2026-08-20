@@ -22,6 +22,7 @@ const vipListsRouter = require("./stats-routes/vip-lists");
 const userTagsRouter = require("./stats-routes/user-tags");
 const nacosSecurityRouter = require("./stats-routes/nacos-security");
 const nacosAdminRouter = require("./stats-routes/nacos-admin");
+const kolMatchConfigRouter = require("./stats-routes/kol-match-config");
 const { logAdminAction } = require("./stats-routes/shared");
 const { XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
 const {
@@ -598,6 +599,7 @@ router.use(userTagsRouter);
 router.use(genericStatsRouter);
 router.use(nacosSecurityRouter);
 router.use(nacosAdminRouter);
+router.use(kolMatchConfigRouter);
 
 /**
  * GET /dau-details
