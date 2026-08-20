@@ -260,7 +260,7 @@ export function NacosMessagesPage() {
   }
 
   function getEditorHtml() {
-    if (quillReady && quillRef.current?.root) {
+    if (quillRef.current?.root) {
       return removeBlackColors(
         sanitizeRichTextHtml(quillRef.current.root.innerHTML || ""),
       );
@@ -273,7 +273,7 @@ export function NacosMessagesPage() {
   function setEditorHtml(html: string) {
     const cleaned = removeBlackColors(sanitizeRichTextHtml(html || ""));
     suppressEditorChangeRef.current = true;
-    if (quillReady && quillRef.current?.clipboard) {
+    if (quillRef.current?.clipboard) {
       quillRef.current.clipboard.dangerouslyPasteHTML(cleaned);
     } else if (fallbackRef.current) {
       fallbackRef.current.innerHTML = cleaned;
