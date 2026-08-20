@@ -15,6 +15,7 @@ const {
   sha256,
   validateKolMatchRuntimeConfigDocument,
 } = require("../echohunt-kol-match/config");
+const { getKolMatchPromptFallbacks } = require("../echohunt-kol-match/prompts");
 
 const router = express.Router();
 const CONFIG_TYPE = "json";
@@ -133,6 +134,7 @@ function responseForDocument(document, source, rawContent = "") {
       production: getEffectiveConfigFromDocument(normalized, "production", { source }),
       test: getEffectiveConfigFromDocument(normalized, "test", { source }),
     },
+    promptFallbacks: getKolMatchPromptFallbacks("zh"),
   };
 }
 

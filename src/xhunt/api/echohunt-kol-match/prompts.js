@@ -74,6 +74,27 @@ function isEnglishUiLang(lang) {
   return lang === "en";
 }
 
+function getKolMatchPromptFallbacks(lang = "zh") {
+  const normalizedLang = isEnglishUiLang(lang) ? "en" : "zh";
+  const outputLanguage = normalizedLang === "en" ? "English" : "简体中文";
+  return {
+    strategy: {
+      taskPrompt: DEFAULT_STRATEGY_TASK_PROMPT,
+      systemPrompt: DEFAULT_STRATEGY_SYSTEM_PROMPT,
+      builtInRules: resolveLines(STRATEGY_PROMPT_RULES, { outputLanguage, lang: normalizedLang }),
+      systemSafetyRules: resolveLines(STRATEGY_SYSTEM_SAFETY_RULES, { lang: normalizedLang }),
+      extraRules: [],
+    },
+    candidateEvaluation: {
+      taskPrompt: DEFAULT_CANDIDATE_EVALUATION_TASK_PROMPT,
+      systemPrompt: DEFAULT_CANDIDATE_EVALUATION_SYSTEM_PROMPT,
+      authoritativeRules: CANDIDATE_EVALUATION_AUTHORITATIVE_RULES.slice(),
+      scoreCalibration: CANDIDATE_EVALUATION_SCORE_CALIBRATION.slice(),
+      systemSafetyRules: resolveLines(CANDIDATE_EVALUATION_SYSTEM_SAFETY_RULES, { lang: normalizedLang }),
+    },
+  };
+}
+
 function buildStrategyPrompt({ scope, projectHandle, hardFilters, evidence, lang = "zh", config }) {
   const outputLanguage = lang === "en" ? "English" : "简体中文";
   const promptConfig = getPromptConfig(config, "strategy");
@@ -140,4 +161,5 @@ module.exports = {
   buildCandidateEvaluationSystemPrompt,
   buildStrategyPrompt,
   buildStrategySystemPrompt,
+  getKolMatchPromptFallbacks,
 };

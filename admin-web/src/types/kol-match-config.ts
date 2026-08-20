@@ -61,6 +61,23 @@ export interface KolMatchRuntimeConfigDocument {
   envs: Record<KolMatchAppEnv, Partial<KolMatchEffectiveConfig> & Record<string, unknown>>;
 }
 
+export interface KolMatchPromptFallbacks {
+  strategy: {
+    taskPrompt: string;
+    systemPrompt: string;
+    builtInRules: string[];
+    systemSafetyRules: string[];
+    extraRules: string[];
+  };
+  candidateEvaluation: {
+    taskPrompt: string;
+    systemPrompt: string;
+    authoritativeRules: string[];
+    scoreCalibration: string[];
+    systemSafetyRules: string[];
+  };
+}
+
 export interface KolMatchConfigData {
   dataId: string;
   group: string;
@@ -75,6 +92,7 @@ export interface KolMatchConfigData {
   envs: KolMatchRuntimeConfigDocument["envs"];
   effective: Record<KolMatchAppEnv, KolMatchEffectiveConfig>;
   runtime?: Record<KolMatchAppEnv, KolMatchEffectiveConfig>;
+  promptFallbacks?: KolMatchPromptFallbacks;
 }
 
 export interface KolMatchConfigResponse {
