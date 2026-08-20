@@ -5,6 +5,7 @@ import {
   Card,
   Col,
   Divider,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -34,6 +35,7 @@ import type {
   KolMatchAppEnv,
   KolMatchEffectiveConfig,
   KolMatchHistoryItem,
+  KolMatchModelFallbacks,
   KolMatchPromptFallbacks,
   KolMatchRuntimeConfigDocument,
 } from "@/types/kol-match-config";
@@ -49,6 +51,73 @@ const PROMPT_FLOW_STEPS = [
   "4. 程序排序：综合 AI 匹配分、真实流量、影响力和 Soul 分生成最终名单。",
 ];
 
+const PROMPT_GUIDE_FLOW = [
+  {
+    label: "1. 策略解析",
+    title: "Strategy LLM",
+    info: "读取项目 brief、X 画像和硬筛条件，生成 semanticQuery、可安全下发的 filters 和公开分析摘要。",
+    fields: "使用：任务 Prompt、系统 Prompt、策略额外规则。",
+  },
+  {
+    label: "2. 向量召回",
+    title: "Embedding Recall",
+    info: "后端用 semanticQuery 去 KOL 向量库召回候选，再叠加语言、领域、粉丝数、活跃度等硬筛条件。",
+    fields: "不使用 Prompt；主要受 AI 召回 TopK 和硬筛条件影响。",
+  },
+  {
+    label: "3. 候选深评",
+    title: "Candidate Evaluator LLM",
+    info: "只看每个候选已提供的证据，判断语义匹配度，输出 semanticScore、原因、证据引用和匹配词。",
+    fields: "使用：深评任务 Prompt、深评系统 Prompt、深评硬规则、评分分档。",
+  },
+  {
+    label: "4. 程序排序",
+    title: "Ranking",
+    info: "后端综合语义分、真实流量、影响力、Soul 分和结果数量限制，生成最终展示名单。",
+    fields: "不使用 Prompt；主要受 AI 展示数量、Batch、Token 配置影响。",
+  },
+];
+
+const PROMPT_GUIDE_FIELDS = [
+  {
+    name: "任务 Prompt / Task Prompt",
+    stage: "策略解析、候选深评各一次",
+    role: "定义这次 LLM 要完成什么任务。适合写目标、输入含义、输出方向。",
+    suggestion: "可以简短，不要放太多业务硬规则；复杂规则放到 Extra Rules / Authoritative Rules。",
+  },
+  {
+    name: "系统 Prompt / System Prompt",
+    stage: "策略解析、候选深评各一次",
+    role: "定义模型身份、安全边界和输出风格。后端还会固定追加安全规则。",
+    suggestion: "建议少改。不要要求模型忽略后端安全规则，也不要写会和 JSON Schema 冲突的内容。",
+  },
+  {
+    name: "策略额外规则 / Extra Rules",
+    stage: "第 1 步策略解析",
+    role: "补充业务偏好，例如更重视开发者 KOL、减少泛交易号、优先项目方受众。",
+    suggestion: "一行一条，建议用中文，便于运营同学维护；不要写 SQL、密钥、绕过限制等内容。",
+  },
+  {
+    name: "深评硬规则 / Authoritative Rules",
+    stage: "第 3 步候选深评",
+    role: "控制候选评分时必须遵守的强约束，例如只能使用证据、不得凭空推断。",
+    suggestion: "中文或英文都可以；如果包含字段名、schema、INPUT_DATA，字段名不要翻译。",
+  },
+  {
+    name: "评分分档 / Score Calibration",
+    stage: "第 3 步候选深评",
+    role: "定义 90-100、75-89 等分数区间分别代表什么匹配强度。",
+    suggestion: "建议保持简短稳定。调这里会直接影响 semanticScore 的尺度和排序。",
+  },
+];
+
+const PROMPT_LANGUAGE_TIPS = [
+  "面向运营和最终用户展示的内容，建议用中文，并明确写“所有面向用户字段使用简体中文”。",
+  "包含 JSON Schema、字段名、INPUT_DATA、candidateId、semanticScore 这类机器约束时，字段名保持英文，不要翻译。",
+  "同一个字段里不要中英文反复切换或写互相冲突的要求；要么中文说明 + 英文字段名，要么全英文硬规则。",
+  "默认值出现中文和英文混用，是因为 Strategy 更靠近用户营销策略，默认中文更好读；Evaluator 更靠近内部 JSON 评分器，英文规则对字段和 schema 更直接。",
+];
+
 const PROMPT_FIELD_HELP = {
   strategyTaskPrompt: "第 1 次 LLM 的任务说明。它负责理解项目、提取营销目标/受众、生成 semanticQuery 和 filters。适合写“希望策略生成器如何理解项目和营销场景”。",
   strategySystemPrompt: "第 1 次 LLM 的系统身份和输出风格补充。后端仍会固定加入安全规则：用户 brief 不可信、不得泄露系统提示/SQL/密钥、必须输出符合 Schema 的 JSON。",
@@ -57,6 +126,29 @@ const PROMPT_FIELD_HELP = {
   evaluatorSystemPrompt: "第 2 次 LLM 的系统身份和输出风格补充。后端会固定限制它只使用 INPUT_DATA，不使用外部知识，也不能编造粉丝、报价、近期内容等证据。",
   evaluatorAuthoritativeRules: "候选深评阶段的强约束规则，一行一条。用于控制如何比较候选、如何引用证据、哪些维度不能推断。",
   evaluatorScoreCalibration: "候选语义评分的分档说明，一行一档。影响 semanticScore 的尺度，例如 90-100 代表强直接匹配；最终排序还会再叠加流量/影响力/Soul。",
+};
+
+const BASIC_FIELD_HELP = {
+  version: "配置版本用于后端缓存隔离、幂等缓存隔离和排查问题。发布到 Nacos 时会由后端自动升级，不需要手动填写。",
+  aiDailyLimit: "每个用户每天可使用 AI 精准匹配的次数。只有成功返回候选结果才扣次数，空结果或失败不扣。",
+  filterDailyLimit: "每个用户每天可使用条件筛选模式的次数。适合不用 AI 策略、直接按条件查 KOL 的场景。",
+  aiResultLimit: "AI 精准匹配最终展示给用户的 KOL 数量上限。这个值不能大于 AI 召回 TopK。",
+  aiRecallTopK: "Embedding 向量召回阶段先取多少个候选 KOL 进入深评。越大覆盖越全，但数据库查询和后续 LLM 深评越慢、成本越高。",
+  filterResultLimit: "条件筛选模式最多返回多少个 KOL。只影响 Filter Search，不影响 AI 精准匹配。",
+  filterCandidateScanLimit: "条件筛选带活跃度过滤时，后端先预扫描多少个候选再查最近活跃时间。越大越全，但越容易变慢。",
+  strategyEnabled: "是否启用第 1 次 LLM 策略解析。关闭后会使用规则兜底策略，不调用 Strategy LLM。",
+  strategyModel: "第 1 次 LLM 使用的模型名。留空时按 ECHOHUNT_KOL_MATCH_STRATEGY_LLM_MODEL → KOL_MARKETING_FILTER_LLM_MODEL → LLM_MODEL 取后端默认模型，输入框为空时会显示当前实际默认值。",
+  strategyTimeoutMs: "第 1 次 LLM 最长等待时间，单位毫秒。超时后自动回退到规则策略。",
+  strategyMaxTokens: "第 1 次 LLM 最多输出 token 数。太小可能导致 JSON 不完整，太大成本和耗时会上升。",
+  strategyTemperature: "第 1 次 LLM 随机性。0 最稳定，数值越大越发散；策略解析建议保持较低。",
+  evaluatorEnabled: "是否启用第 2 次 LLM 候选深评。关闭后会用 Embedding 相似度作为语义匹配代理分。",
+  evaluatorModel: "候选深评 LLM 使用的模型名。留空时按 ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_MODEL → LLM_MODEL 取后端默认模型，输入框为空时会显示当前实际默认值。",
+  evaluatorTimeoutMs: "每个候选深评批次最长等待时间，单位毫秒。超时批次会降级为代理评分。",
+  evaluatorBatchSize: "每次发给候选深评 LLM 的 KOL 数量。越大请求更少，但单次上下文更长、更容易超时。",
+  evaluatorMaxTokensCap: "候选深评单批次最多输出 token 上限。用于防止批次过大导致成本失控。",
+  evaluatorMaxTokensBase: "候选深评每批固定预留的基础输出 token。",
+  evaluatorMaxTokensPerCandidate: "候选深评每增加 1 个 KOL 额外预留的输出 token。",
+  evaluatorTemperature: "候选深评 LLM 随机性。建议保持 0，保证评分和理由稳定。",
 };
 
 const DEFAULT_PROMPT_FALLBACKS: KolMatchPromptFallbacks = {
@@ -110,6 +202,11 @@ const DEFAULT_PROMPT_FALLBACKS: KolMatchPromptFallbacks = {
       "所有面向用户展示的字段必须使用简体中文，固定 Web3/AI 术语除外。",
     ],
   },
+};
+
+const DEFAULT_MODEL_FALLBACKS: KolMatchModelFallbacks = {
+  strategyLlm: { model: "", source: "" },
+  evaluatorLlm: { model: "", source: "" },
 };
 
 type FormValues = {
@@ -194,6 +291,13 @@ function fallbackRules(title: string, lines?: string[], emptyText = "不填则�
   return [`${title}：`, content || emptyText].join("\n");
 }
 
+function modelFallbackPlaceholder(fallback?: { model?: string; source?: string }) {
+  const model = String(fallback?.model || "").trim();
+  const source = String(fallback?.source || "").trim();
+  if (!model) return "未配置默认模型：请填写模型名，或在后端配置 LLM_MODEL";
+  return `默认：${model}${source ? `（来自 ${source}）` : ""}`;
+}
+
 function InfoLabel({
   children,
   info,
@@ -211,6 +315,91 @@ function InfoLabel({
         <QuestionCircleOutlined className="kol-match-info-icon" />
       </Tooltip>
     </Space>
+  );
+}
+
+function PromptGuideDrawer({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Drawer
+      title="KOL Match Prompt 配置教程"
+      width={720}
+      open={open}
+      onClose={onClose}
+      className="kol-match-guide-drawer"
+    >
+      <Space direction="vertical" size={18} className="kol-match-guide">
+        <Alert
+          type="info"
+          showIcon
+          message="先用默认值跑通，再只改最需要的规则"
+          description="这些 Prompt 不是越多越好。默认 Prompt 已覆盖安全、JSON 格式和基础评分逻辑；日常配置建议优先改“策略额外规则”和“评分分档”，少改 Task/System。"
+        />
+
+        <section>
+          <Title level={5}>为什么会有多段 Prompt？能不能简化？</Title>
+          <Paragraph>
+            不能完全合成一段，因为链路里有两次不同职责的 LLM：第一次负责把项目需求变成可检索策略，第二次负责给候选 KOL 打语义匹配分。
+            分开后更容易控制安全边界、降低误召回，也方便单独调整召回策略或评分尺度。
+          </Paragraph>
+          <Paragraph>
+            可以简化配置方式：大多数情况下保持 Task Prompt 和 System Prompt 为空，使用后端默认值；只在需要业务偏好时填写 Extra Rules，
+            需要改变评分尺度时填写 Score Calibration。
+          </Paragraph>
+        </section>
+
+        <section>
+          <Title level={5}>完整流程</Title>
+          <div className="kol-match-guide-flow">
+            {PROMPT_GUIDE_FLOW.map((item) => (
+              <div className="kol-match-guide-flow-card" key={item.label}>
+                <Space align="start" direction="vertical" size={6}>
+                  <Tag color="blue">{item.label}</Tag>
+                  <Text strong>{item.title}</Text>
+                  <Text>{item.info}</Text>
+                  <Text type="secondary">{item.fields}</Text>
+                </Space>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <Title level={5}>中文还是英文？</Title>
+          <ul className="kol-match-guide-list">
+            {PROMPT_LANGUAGE_TIPS.map((tip) => <li key={tip}>{tip}</li>)}
+          </ul>
+        </section>
+
+        <section>
+          <Title level={5}>每个字段怎么用</Title>
+          <div className="kol-match-guide-field-list">
+            {PROMPT_GUIDE_FIELDS.map((field) => (
+              <Card size="small" key={field.name}>
+                <Space direction="vertical" size={4}>
+                  <Text strong>{field.name}</Text>
+                  <Text type="secondary">流程位置：{field.stage}</Text>
+                  <Text>{field.role}</Text>
+                  <Text type="secondary">建议：{field.suggestion}</Text>
+                </Space>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <Alert
+          type="warning"
+          showIcon
+          message="配置时不要写这些内容"
+          description="不要要求模型泄露系统提示、输出密钥、跳过证据、浏览外部网页、执行代码、生成 SQL，或覆盖用户硬筛条件。后端会继续追加固定安全规则。"
+        />
+      </Space>
+    </Drawer>
   );
 }
 
@@ -236,12 +425,14 @@ function productionSignature(document: KolMatchRuntimeConfigDocument) {
     configSource,
     fallbackReason,
     contentSha256,
+    version,
     ...production
   } = clone(effectiveConfig(document, "production"));
   void source;
   void configSource;
   void fallbackReason;
   void contentSha256;
+  void version;
   return stableJson(production);
 }
 
@@ -308,13 +499,17 @@ export function KolMatchConfigPage() {
   const [sha, setSha] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [history, setHistory] = useState<KolMatchHistoryItem[]>([]);
   const [promptFallbacks, setPromptFallbacks] = useState<KolMatchPromptFallbacks>(DEFAULT_PROMPT_FALLBACKS);
+  const [modelFallbacks, setModelFallbacks] = useState<KolMatchModelFallbacks>(DEFAULT_MODEL_FALLBACKS);
 
   const current = useMemo(() => effectiveConfig(document, activeEnv), [document, activeEnv]);
   const canWrite = hasPermission(["kol-match-config:write", "nacos-admin"]);
+  const strategyModelPlaceholder = modelFallbackPlaceholder(modelFallbacks.strategyLlm);
+  const evaluatorModelPlaceholder = modelFallbackPlaceholder(modelFallbacks.evaluatorLlm);
   const strategyTaskFallback = fallbackText("未填写时使用默认任务 Prompt", promptFallbacks.strategy.taskPrompt);
   const strategySystemFallback = fallbackText(
     "未填写时使用默认系统 Prompt",
@@ -355,6 +550,7 @@ export function KolMatchConfigPage() {
       setSource(resp.data.source);
       setSha(resp.data.contentSha256 || "");
       setPromptFallbacks(resp.data.promptFallbacks || DEFAULT_PROMPT_FALLBACKS);
+      setModelFallbacks(resp.data.modelFallbacks || DEFAULT_MODEL_FALLBACKS);
       form.setFieldsValue(valuesFromConfig(parsed, activeEnv));
       const historyResp = await fetchKolMatchConfigHistory(12).catch(() => null);
       if (historyResp?.data) setHistory(historyResp.data);
@@ -416,9 +612,17 @@ export function KolMatchConfigPage() {
       messageApi.error("当前账号只有查看权限，不能发布 KOL Match 配置");
       return;
     }
-    const valid = await validateCurrent();
-    if (!valid) return;
     const next = updateDocumentFromForm();
+    try {
+      const resp = await validateKolMatchConfig(next, reason);
+      setValidationErrors(resp.data.errors || []);
+    } catch (error) {
+      const data = (error as { data?: { data?: { errors?: string[] } } }).data;
+      const errors = data?.data?.errors || [error instanceof Error ? error.message : "配置校验失败"];
+      setValidationErrors(errors);
+      messageApi.error("配置校验失败");
+      return;
+    }
     const productionChanged = hasProductionConfigChange(baselineDocument, next);
     let productionConfirm = "";
     if (productionChanged) {
@@ -477,6 +681,7 @@ export function KolMatchConfigPage() {
     <PermissionGuard permission={["kol-match-config:read", "kol-match-config:write", "nacos-admin"]}>
     <div className="kol-match-config-page">
       {contextHolder}
+      <PromptGuideDrawer open={guideOpen} onClose={() => setGuideOpen(false)} />
       <section className="kol-match-hero">
         <div>
           <Text className="kol-match-kicker">EchoHunt runtime control</Text>
@@ -487,6 +692,7 @@ export function KolMatchConfigPage() {
           <Tag color={source === "nacos" ? "green" : "orange"}>source: {source}</Tag>
           <Tag>version: {document.version || "-"}</Tag>
           <Tag>{sha ? sha.slice(0, 12) : "no-sha"}</Tag>
+          <Button onClick={() => setGuideOpen(true)}>查看配置教程</Button>
           <Button onClick={loadConfig} loading={loading}>刷新</Button>
         </Space>
       </section>
@@ -525,43 +731,44 @@ export function KolMatchConfigPage() {
             children: (
               <Form form={form} layout="vertical" onValuesChange={updateDocumentFromForm} initialValues={valuesFromConfig(document, activeEnv)}>
                 <Row gutter={[16, 16]}>
-                  <Col xs={24} xl={8}>
-                    <Card title="基础数量 / Quota" className="kol-match-panel">
-                      <Form.Item label="配置版本" name="version"><Input /></Form.Item>
-                      <Row gutter={12}>
-                        <Col span={12}><Form.Item label="AI 每日次数" name={["limits", "aiDailyLimit"]}><InputNumber min={1} max={100} className="full" /></Form.Item></Col>
-                        <Col span={12}><Form.Item label="Filter 每日次数" name={["limits", "filterDailyLimit"]}><InputNumber min={1} max={100} className="full" /></Form.Item></Col>
-                        <Col span={12}><Form.Item label="AI 展示数量" name={["limits", "aiResultLimit"]}><InputNumber min={1} max={200} className="full" /></Form.Item></Col>
-                        <Col span={12}><Form.Item label="AI 召回 TopK" name={["limits", "aiRecallTopK"]}><InputNumber min={1} max={600} className="full" /></Form.Item></Col>
-                        <Col span={12}><Form.Item label="Filter 展示数量" name={["limits", "filterResultLimit"]}><InputNumber min={1} max={200} className="full" /></Form.Item></Col>
-                        <Col span={12}><Form.Item label="Filter 预扫描" name={["limits", "filterCandidateScanLimit"]}><InputNumber min={1} max={5000} className="full" /></Form.Item></Col>
-                      </Row>
-                    </Card>
-                  </Col>
-                  <Col xs={24} xl={8}>
-                    <Card title="Strategy LLM" className="kol-match-panel">
-                      <Form.Item label="启用" name={["strategyLlm", "enabled"]} valuePropName="checked"><Switch /></Form.Item>
-                      <Form.Item label="模型（空则使用默认 LLM_MODEL）" name={["strategyLlm", "model"]}><Input /></Form.Item>
-                      <Row gutter={12}>
-                        <Col span={8}><Form.Item label="Timeout" name={["strategyLlm", "timeoutMs"]}><InputNumber min={1000} max={60000} className="full" /></Form.Item></Col>
-                        <Col span={8}><Form.Item label="Max tokens" name={["strategyLlm", "maxTokens"]}><InputNumber min={100} max={12000} className="full" /></Form.Item></Col>
-                        <Col span={8}><Form.Item label="Temperature" name={["strategyLlm", "temperature"]}><InputNumber min={0} max={2} step={0.1} className="full" /></Form.Item></Col>
-                      </Row>
-                    </Card>
-                  </Col>
-                  <Col xs={24} xl={8}>
-                    <Card title="Candidate Evaluator LLM" className="kol-match-panel">
-                      <Form.Item label="启用" name={["evaluatorLlm", "enabled"]} valuePropName="checked"><Switch /></Form.Item>
-                      <Form.Item label="模型（空则使用默认 LLM_MODEL）" name={["evaluatorLlm", "model"]}><Input /></Form.Item>
-                      <Row gutter={12}>
-                        <Col span={8}><Form.Item label="Timeout" name={["evaluatorLlm", "timeoutMs"]}><InputNumber min={5000} max={120000} className="full" /></Form.Item></Col>
-                        <Col span={8}><Form.Item label="Batch" name={["evaluatorLlm", "batchSize"]}><InputNumber min={1} max={20} className="full" /></Form.Item></Col>
-                        <Col span={8}><Form.Item label="Token cap" name={["evaluatorLlm", "maxTokensCap"]}><InputNumber min={500} max={12000} className="full" /></Form.Item></Col>
-                        <Col span={12}><Form.Item label="Base tokens" name={["evaluatorLlm", "maxTokensBase"]}><InputNumber min={100} max={12000} className="full" /></Form.Item></Col>
-                        <Col span={12}><Form.Item label="Per candidate" name={["evaluatorLlm", "maxTokensPerCandidate"]}><InputNumber min={50} max={2000} className="full" /></Form.Item></Col>
-                      </Row>
-                    </Card>
-                  </Col>
+	                  <Col xs={24} xl={8}>
+	                    <Card title="基础数量 / Quota" className="kol-match-panel">
+	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.version}>配置版本</InfoLabel>} name="version"><Input readOnly /></Form.Item>
+	                      <Row gutter={12}>
+	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.aiDailyLimit}>AI 每日次数</InfoLabel>} name={["limits", "aiDailyLimit"]}><InputNumber min={1} max={100} className="full" /></Form.Item></Col>
+	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.filterDailyLimit}>Filter 每日次数</InfoLabel>} name={["limits", "filterDailyLimit"]}><InputNumber min={1} max={100} className="full" /></Form.Item></Col>
+	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.aiResultLimit}>AI 展示数量</InfoLabel>} name={["limits", "aiResultLimit"]}><InputNumber min={1} max={200} className="full" /></Form.Item></Col>
+	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.aiRecallTopK}>AI 召回 TopK</InfoLabel>} name={["limits", "aiRecallTopK"]}><InputNumber min={1} max={600} className="full" /></Form.Item></Col>
+	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.filterResultLimit}>Filter 展示数量</InfoLabel>} name={["limits", "filterResultLimit"]}><InputNumber min={1} max={200} className="full" /></Form.Item></Col>
+	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.filterCandidateScanLimit}>Filter 预扫描</InfoLabel>} name={["limits", "filterCandidateScanLimit"]}><InputNumber min={1} max={5000} className="full" /></Form.Item></Col>
+	                      </Row>
+	                    </Card>
+	                  </Col>
+	                  <Col xs={24} xl={8}>
+	                    <Card title="Strategy LLM" className="kol-match-panel">
+	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyEnabled}>启用</InfoLabel>} name={["strategyLlm", "enabled"]} valuePropName="checked"><Switch /></Form.Item>
+	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyModel}>模型（留空用默认）</InfoLabel>} name={["strategyLlm", "model"]}><Input placeholder={strategyModelPlaceholder} allowClear /></Form.Item>
+	                      <Row gutter={12}>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyTimeoutMs}>Timeout</InfoLabel>} name={["strategyLlm", "timeoutMs"]}><InputNumber min={1000} max={60000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyMaxTokens}>Max tokens</InfoLabel>} name={["strategyLlm", "maxTokens"]}><InputNumber min={100} max={12000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyTemperature}>Temperature</InfoLabel>} name={["strategyLlm", "temperature"]}><InputNumber min={0} max={2} step={0.1} className="full" /></Form.Item></Col>
+	                      </Row>
+	                    </Card>
+	                  </Col>
+	                  <Col xs={24} xl={8}>
+	                    <Card title="Candidate Evaluator LLM" className="kol-match-panel">
+	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorEnabled}>启用</InfoLabel>} name={["evaluatorLlm", "enabled"]} valuePropName="checked"><Switch /></Form.Item>
+	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorModel}>模型（留空用默认）</InfoLabel>} name={["evaluatorLlm", "model"]}><Input placeholder={evaluatorModelPlaceholder} allowClear /></Form.Item>
+	                      <Row gutter={12}>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorTimeoutMs}>Timeout</InfoLabel>} name={["evaluatorLlm", "timeoutMs"]}><InputNumber min={5000} max={120000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorBatchSize}>Batch</InfoLabel>} name={["evaluatorLlm", "batchSize"]}><InputNumber min={1} max={20} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensCap}>Token cap</InfoLabel>} name={["evaluatorLlm", "maxTokensCap"]}><InputNumber min={500} max={12000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensBase}>Base tokens</InfoLabel>} name={["evaluatorLlm", "maxTokensBase"]}><InputNumber min={100} max={12000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensPerCandidate}>Per candidate</InfoLabel>} name={["evaluatorLlm", "maxTokensPerCandidate"]}><InputNumber min={50} max={2000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorTemperature}>Temperature</InfoLabel>} name={["evaluatorLlm", "temperature"]}><InputNumber min={0} max={2} step={0.1} className="full" /></Form.Item></Col>
+	                      </Row>
+	                    </Card>
+	                  </Col>
                 </Row>
 
                 <Divider />
@@ -569,7 +776,12 @@ export function KolMatchConfigPage() {
                   className="kol-match-flow-alert"
                   type="info"
                   showIcon
-                  message="Prompt 调用流程"
+                  message={(
+                    <Space wrap>
+                      <span>Prompt 调用流程</span>
+                      <Button size="small" type="link" onClick={() => setGuideOpen(true)}>查看完整教程</Button>
+                    </Space>
+                  )}
                   description={(
                     <div className="kol-match-flow-steps">
                       {PROMPT_FLOW_STEPS.map((step) => <span key={step}>{step}</span>)}

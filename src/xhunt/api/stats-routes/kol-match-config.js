@@ -87,6 +87,7 @@ function getProductionSignature(document) {
   delete stable.configSource;
   delete stable.fallbackReason;
   delete stable.contentSha256;
+  delete stable.version;
   return JSON.stringify(stable);
 }
 
@@ -115,6 +116,66 @@ async function readCurrentConfigForPublish() {
   return { rawContent, contentSha256, document, readError };
 }
 
+function buildAutoConfigVersion() {
+  const now = new Date();
+  const pad = (value, length = 2) => String(value).padStart(length, "0");
+  return [
+    "kol-match",
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    "-",
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds()),
+    "-",
+    pad(now.getMilliseconds(), 3),
+  ].join("");
+}
+
+function bumpConfigVersion(document) {
+  const next = JSON.parse(JSON.stringify(document || {}));
+  const version = buildAutoConfigVersion();
+  next.version = version;
+
+  // 运行时会优先读取 envs.<env>.version；发布时统一只保留 root version，
+  // 避免历史/高级 JSON 里的 env 级旧版本覆盖最新发布版本。
+  if (next.envs && typeof next.envs === "object") {
+    ["production", "test"].forEach((env) => {
+      if (next.envs[env] && typeof next.envs[env] === "object" && !Array.isArray(next.envs[env])) {
+        delete next.envs[env].version;
+      }
+    });
+  }
+
+  return next;
+}
+
+
+function pickConfiguredEnv(names = []) {
+  for (const name of names) {
+    const value = String(process.env[name] || "").trim();
+    if (value) return { value, source: name };
+  }
+  return { value: "", source: "" };
+}
+
+function getKolMatchModelFallbacks() {
+  const strategy = pickConfiguredEnv([
+    "ECHOHUNT_KOL_MATCH_STRATEGY_LLM_MODEL",
+    "KOL_MARKETING_FILTER_LLM_MODEL",
+    "LLM_MODEL",
+  ]);
+  const evaluator = pickConfiguredEnv([
+    "ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_MODEL",
+    "LLM_MODEL",
+  ]);
+  return {
+    strategyLlm: { model: strategy.value, source: strategy.source },
+    evaluatorLlm: { model: evaluator.value, source: evaluator.source },
+  };
+}
+
 function responseForDocument(document, source, rawContent = "") {
   const validation = validateKolMatchRuntimeConfigDocument(document);
   const normalized = validation.normalizedDocument;
@@ -135,6 +196,7 @@ function responseForDocument(document, source, rawContent = "") {
       test: getEffectiveConfigFromDocument(normalized, "test", { source }),
     },
     promptFallbacks: getKolMatchPromptFallbacks("zh"),
+    modelFallbacks: getKolMatchModelFallbacks(),
   };
 }
 
@@ -192,8 +254,9 @@ router.post("/echohunt/kol-match/config/publish", adminAuth, requirePermission(K
       return res.status(400).json({ success: false, error: "KOL_MATCH_CONFIG_INVALID", data: result });
     }
 
+    const publishDocument = bumpConfigVersion(result.normalizedDocument);
     const before = await readCurrentConfigForPublish();
-    const productionChanged = hasProductionConfigChange(before.document, result.normalizedDocument);
+    const productionChanged = hasProductionConfigChange(before.document, publishDocument);
     if (productionChanged && !reason) {
       return res.status(400).json({
         success: false,
@@ -215,7 +278,7 @@ router.post("/echohunt/kol-match/config/publish", adminAuth, requirePermission(K
       await saveSnapshot(req, { content: before.rawContent, action: "backup_before_kol_match_publish", reason: reason || "KOL Match 发布前自动备份" });
     }
 
-    const content = JSON.stringify(result.normalizedDocument, null, 2);
+    const content = JSON.stringify(publishDocument, null, 2);
     afterSha256 = sha256(content);
     const form = new URLSearchParams({
       dataId: KOL_MATCH_CONFIG_DATA_ID,
@@ -233,7 +296,7 @@ router.post("/echohunt/kol-match/config/publish", adminAuth, requirePermission(K
     }
 
     await saveSnapshot(req, { content, action: "kol_match_publish", reason });
-    await publishRedisConfigVersion(req.redisClient, result.normalizedDocument.version || afterSha256).catch(() => false);
+    await publishRedisConfigVersion(req.redisClient, publishDocument.version || afterSha256).catch(() => false);
     clearKolMatchRuntimeConfigCache();
     const runtimeProduction = await resolveKolMatchRuntimeConfigValue("production", { force: true, redisClient: req.redisClient });
     const runtimeTest = await resolveKolMatchRuntimeConfigValue("test", { redisClient: req.redisClient });
@@ -253,7 +316,7 @@ router.post("/echohunt/kol-match/config/publish", adminAuth, requirePermission(K
         changed: before.contentSha256 !== afterSha256,
         productionChanged,
         beforeReadError: before.readError || undefined,
-        version: result.normalizedDocument.version,
+        version: publishDocument.version,
         runtime: { production: runtimeProduction, test: runtimeTest },
       },
     });

@@ -37,6 +37,13 @@ const FILTER_LLM_DEFAULT_TIMEOUT_MS = 8000;
 const FILTER_LLM_DEFAULT_CACHE_TTL_SECONDS = 3600;
 const FILTER_LLM_MIN_CONFIDENCE_FOR_FILTERS = 0.35;
 const FILTER_LLM_MIN_CONFIDENCE_FOR_SEMANTIC_QUERY = 0.35;
+// 只读库默认 statement_timeout 偏保守（线上默认 1500ms）。
+// activityDays 会额外查最近发帖时间，偶发略超时；只在这类超时时用更长的事务级 timeout 重试一次。
+const ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS = getPositiveIntegerEnv(
+  ["KOL_MARKETING_ACTIVITY_QUERY_RETRY_TIMEOUT_MS", "KOL_MARKETING_ACTIVITY_RETRY_STATEMENT_TIMEOUT_MS"],
+  6000,
+  { min: 1000, max: 30000 }
+);
 
 const FILTER_PATCH_KEYS = [
   "language",
@@ -129,6 +136,20 @@ const WILLINGNESS_LEVEL_ALIASES = {
   unknown: "unknown",
   未知: "unknown",
 };
+
+function getPositiveIntegerEnv(names = [], defaultValue, options = {}) {
+  const min = Number.isFinite(options.min) ? options.min : 1;
+  const max = Number.isFinite(options.max) ? options.max : Number.MAX_SAFE_INTEGER;
+  for (const name of names) {
+    const raw = process.env[name];
+    if (raw === undefined || raw === null || raw === "") continue;
+    const value = Number(raw);
+    if (Number.isFinite(value) && value >= min) {
+      return Math.min(Math.floor(value), max);
+    }
+  }
+  return Math.min(Math.max(Math.floor(defaultValue), min), max);
+}
 
 const LLM_FILTER_EXTRACTION_SCHEMA = {
   type: "object",
@@ -1185,6 +1206,38 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
   return { sql, bind, searchMode: "hnsw_unfiltered" };
 }
 
+function errorDetails(error) {
+  return {
+    code: error?.code || error?.parent?.code || error?.original?.code,
+    message: error?.message || error?.parent?.message || error?.original?.message,
+  };
+}
+
+function isStatementTimeoutError(error) {
+  const errors = [error, error?.parent, error?.original].filter(Boolean);
+  return errors.some((item) => {
+    const code = String(item.code || "");
+    const message = String(item.message || "");
+    return code === "57014" && /statement timeout/i.test(message);
+  }) || errors.some((item) => /canceling statement due to statement timeout/i.test(String(item.message || "")));
+}
+
+async function queryWithOptionalStatementTimeout(db, sql, queryOptions, statementTimeoutMs = 0) {
+  const timeoutMs = Number(statementTimeoutMs);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return db.query(sql, queryOptions);
+  }
+
+  return db.transaction(async (transaction) => {
+    await db.query("SELECT set_config('statement_timeout', $statementTimeout, true)", {
+      bind: { statementTimeout: `${Math.floor(timeoutMs)}ms` },
+      type: QueryTypes.SELECT,
+      transaction,
+    });
+    return db.query(sql, { ...queryOptions, transaction });
+  });
+}
+
 async function queryKolMarketingProfilesByEmbedding(params = {}) {
   // 进入数据库前再次 clamp limit 和 normalize filters，保证 service 被内部复用时也安全。
   const limit = clampLimit(params.limit, {
@@ -1212,15 +1265,53 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
     embeddingDimensions: params.embedding?.length,
   });
 
+  const queryOptions = {
+    bind: {
+      ...bind,
+      embedding: embeddingLiteral,
+      limit,
+    },
+    type: QueryTypes.SELECT,
+  };
+
+  let retryInfo = null;
+  let rows = [];
+
   try {
-    const rows = await db.query(sql, {
-      bind: {
-        ...bind,
-        embedding: embeddingLiteral,
+    try {
+      rows = await queryWithOptionalStatementTimeout(db, sql, queryOptions);
+    } catch (error) {
+      const timeoutDetails = errorDetails(error);
+      const canRetryActivityTimeout = filters.activityDays !== undefined &&
+        isStatementTimeoutError(error) &&
+        ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS > 0;
+
+      if (!canRetryActivityTimeout) throw error;
+
+      const retryStartedAt = Date.now();
+      retryInfo = {
+        reason: "activityDays_statement_timeout",
+        retryStatementTimeoutMs: ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS,
+        firstCostMs: retryStartedAt - startedAt,
+      };
+      console.warn("[KOL Marketing Search] db query timeout, retry activityDays with longer statement_timeout", {
+        filters,
         limit,
-      },
-      type: QueryTypes.SELECT,
-    });
+        searchMode,
+        firstCostMs: retryInfo.firstCostMs,
+        firstCode: timeoutDetails.code,
+        firstMessage: timeoutDetails.message,
+        retryStatementTimeoutMs: ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS,
+      });
+
+      rows = await queryWithOptionalStatementTimeout(
+        db,
+        sql,
+        queryOptions,
+        ACTIVITY_QUERY_RETRY_STATEMENT_TIMEOUT_MS
+      );
+      retryInfo.retryCostMs = Date.now() - retryStartedAt;
+    }
 
     const dbCostMs = Date.now() - startedAt;
     console.log("[KOL Marketing Search] db query success", {
@@ -1229,6 +1320,8 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
       searchMode,
       resultCount: rows.length,
       dbCostMs,
+      retried: Boolean(retryInfo),
+      retryInfo,
     });
 
     return {
@@ -1237,15 +1330,19 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
       limit,
       searchMode,
       dbCostMs,
+      retryInfo,
     };
   } catch (error) {
+    const details = errorDetails(error);
     console.error("[KOL Marketing Search] db query failed", {
       filters,
       limit,
       searchMode,
       costMs: Date.now() - startedAt,
-      code: error.code,
-      message: error.message,
+      retried: Boolean(retryInfo),
+      retryInfo,
+      code: details.code,
+      message: details.message,
     });
     throw error;
   }

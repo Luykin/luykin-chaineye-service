@@ -78,6 +78,17 @@ export interface KolMatchPromptFallbacks {
   };
 }
 
+export interface KolMatchModelFallbacks {
+  strategyLlm: {
+    model: string;
+    source: string;
+  };
+  evaluatorLlm: {
+    model: string;
+    source: string;
+  };
+}
+
 export interface KolMatchConfigData {
   dataId: string;
   group: string;
@@ -93,6 +104,7 @@ export interface KolMatchConfigData {
   effective: Record<KolMatchAppEnv, KolMatchEffectiveConfig>;
   runtime?: Record<KolMatchAppEnv, KolMatchEffectiveConfig>;
   promptFallbacks?: KolMatchPromptFallbacks;
+  modelFallbacks?: KolMatchModelFallbacks;
 }
 
 export interface KolMatchConfigResponse {
