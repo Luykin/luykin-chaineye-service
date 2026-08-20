@@ -2681,7 +2681,9 @@ async function resolveStrategyForAiSearch(req, body, emitProgress, lang = "zh") 
 async function runAiMatch(req, body = {}, emitProgress, options = {}) {
   const requestId = getRequestId(req);
   const startedAt = Date.now();
-  const requestedLimit = clampInteger(body.limit, getAiResultLimit(req), 1, getAiResultLimit(req));
+  // AI Match 最终展示数量由运行时配置统一控制，避免前端历史默认值（例如 20）
+  // 把已深评/已排序的候选名单再次截短。
+  const requestedLimit = getAiResultLimit(req);
   const idempotencyKey = normalizeIdempotencyKey(body.idempotencyKey);
   const isClientClosed = options.isClientClosed;
   const lang = normalizeUiLang(body.lang, req?.query?.lang, req?.headers?.["x-language"], req?.headers?.["accept-language"]);
