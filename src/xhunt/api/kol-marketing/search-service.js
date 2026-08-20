@@ -21,12 +21,15 @@ const EMBEDDING_NAMESPACE = "kol_marketing_profile";
 // dev.kol_marketing_profile.marketing_profile_embedding 当前是 vector(1536)。
 const EMBEDDING_DIMENSIONS = 1536;
 
-// 默认返回 20 条，最大 50 条，防止一次请求拉太多从库数据。
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 50;
+// 默认返回 200 条，最大 600 条；KOL Match AI 会默认召回并深评 600 个候选。
+const DEFAULT_LIMIT = 200;
+const MAX_LIMIT = 600;
 
 // 环境变量优先级：新 KOL 画像专用配置 > 历史 KOL_SEARCH 配置 > VECTOR_SEARCH 通用配置。
 const EMBEDDING_ENV_PREFIXES = ["KOL_MARKETING_PROFILE", "KOL_SEARCH"];
+
+// KOL Match 只展示个人 KOL，过滤项目方账号。
+const PERSON_PROFILE_ACCOUNT_TYPE = "person";
 
 const FILTER_PLAN_CACHE_NAMESPACE = "kol_marketing_profile_filter_plan";
 const FILTER_PLAN_VERSION = "v2_llm_structured_filters";
@@ -219,6 +222,15 @@ function getEnvBoolean(name, defaultValue = false) {
 function getEnvPositiveInteger(name, fallback) {
   const parsed = Number(process.env[name]);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function getKolMarketingPersonProfileFilterSql(alias = "p") {
+  const safeAlias = /^[a-z][a-z0-9_]*$/i.test(String(alias || "")) ? alias : "p";
+  return {
+    clause: `${safeAlias}.account_type = $personProfileAccountType`,
+    bind: { personProfileAccountType: PERSON_PROFILE_ACCOUNT_TYPE },
+    column: "account_type",
+  };
 }
 
 function isKolMarketingFilterLlmEnabled() {
@@ -932,7 +944,7 @@ function mergeKolMarketingFilters(inputFilters = {}, query = "") {
   };
 }
 
-function buildKolMarketingProfileSearchSql(filters) {
+function buildKolMarketingProfileSearchSql(filters, options = {}) {
   // 固定条件必须保留：和生产 HNSW 部分索引条件一致。
   const clauses = [
     "p.active = true",
@@ -941,6 +953,11 @@ function buildKolMarketingProfileSearchSql(filters) {
 
   // 所有用户输入都放 bind，SQL 字符串里只拼接白名单生成的固定条件。
   const bind = {};
+
+  if (options.personProfileTypeFilter?.clause) {
+    clauses.push(options.personProfileTypeFilter.clause);
+    Object.assign(bind, options.personProfileTypeFilter.bind || {});
+  }
 
   if (filters.language) {
     clauses.push("p.language = $language");
@@ -1178,16 +1195,20 @@ async function queryKolMarketingProfilesByEmbedding(params = {}) {
 
   // embedding 数组转 pgvector literal，最终仍通过 Sequelize bind 参数传入。
   const embeddingLiteral = vectorToPgLiteral(params.embedding, EMBEDDING_DIMENSIONS);
-  const { sql, bind, searchMode } = buildKolMarketingProfileSearchSql(filters);
 
   // 只使用 K8s 注入的只读从库实例，不复用主库 pgInstance。
   const db = getPostgresReadOnlyInstance();
+  const personProfileTypeFilter = getKolMarketingPersonProfileFilterSql("p");
+  const { sql, bind, searchMode } = buildKolMarketingProfileSearchSql(filters, {
+    personProfileTypeFilter,
+  });
 
   const startedAt = Date.now();
   console.log("[KOL Marketing Search] db query start", {
     filters,
     limit,
     searchMode,
+    personProfileTypeColumn: personProfileTypeFilter.column || null,
     embeddingDimensions: params.embedding?.length,
   });
 
@@ -1358,6 +1379,7 @@ module.exports = {
   inferFiltersFromQuery,
   getKolMarketingFilterLlmModel,
   getKolMarketingEmbeddingModel,
+  getKolMarketingPersonProfileFilterSql,
   isKolMarketingFilterLlmEnabled,
   mergeKolMarketingFilters,
   normalizeFilters,

@@ -22,6 +22,7 @@ const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth"
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const {
   getKolMarketingEmbeddingModel,
+  getKolMarketingPersonProfileFilterSql,
   MAX_LIMIT: KOL_MARKETING_SEARCH_MAX_LIMIT,
   normalizeFilters,
   searchKolMarketingProfiles,
@@ -39,8 +40,8 @@ const INTERNAL_TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitt
 const INTERNAL_TWITTER_USER_LOOKUP_TIMEOUT_MS = 7000;
 const DEFAULT_AI_DAILY_LIMIT = 3;
 const DEFAULT_FILTER_DAILY_LIMIT = 10;
-const DEFAULT_AI_RESULT_LIMIT = 20;
-const DEFAULT_AI_RECALL_TOP_K = 40;
+const DEFAULT_AI_RESULT_LIMIT = 200;
+const DEFAULT_AI_RECALL_TOP_K = 600;
 const DEFAULT_FILTER_RESULT_LIMIT = 200;
 const DEFAULT_FILTER_CANDIDATE_SCAN_LIMIT = 2000;
 const GENERIC_PUBLIC_PROGRESS_ZH = "当前阶段已完成，系统正在继续生成 KOL 推荐名单。";
@@ -347,7 +348,7 @@ function getAiResultLimit() {
 
 function getAiRecallTopK() {
   const configured = getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_RECALL_TOP_K", DEFAULT_AI_RECALL_TOP_K);
-  return Math.min(KOL_MARKETING_SEARCH_MAX_LIMIT || 50, Math.max(getAiResultLimit(), configured));
+  return Math.min(KOL_MARKETING_SEARCH_MAX_LIMIT || DEFAULT_AI_RECALL_TOP_K, Math.max(getAiResultLimit(), configured));
 }
 
 function isEvaluatorLlmEnabled() {
@@ -2486,6 +2487,12 @@ async function queryKolProfilesByFilters(filterInput = {}) {
     minFollowers: filters.minFollowers,
     limit: filters.limit,
   };
+  const db = getPostgresReadOnlyInstance();
+  const personProfileTypeFilter = getKolMarketingPersonProfileFilterSql("k");
+  if (personProfileTypeFilter.clause) {
+    clauses.push(personProfileTypeFilter.clause);
+    Object.assign(bind, personProfileTypeFilter.bind || {});
+  }
 
   clauses.push("coalesce(k.followers, 0) >= $minFollowers");
   if (filters.maxFollowers !== null) {
@@ -2616,7 +2623,6 @@ async function queryKolProfilesByFilters(filterInput = {}) {
     LIMIT $limit
   `;
 
-  const db = getPostgresReadOnlyInstance();
   const candidateRows = await db.query(candidateSql, { bind, type: QueryTypes.SELECT });
   if (candidateRows.length === 0) {
     return {
@@ -2687,18 +2693,26 @@ async function queryKolProfileByHandle(handle, filterInput = {}) {
   const normalizedHandle = normalizeHandle(handle);
   if (!normalizedHandle) throw publicError("KOL_HANDLE_INVALID", 400, "请输入有效的 X 用户名。", { quotaCharged: false });
   const filters = normalizeFilterSearchInput(filterInput);
+  const db = getPostgresReadOnlyInstance();
+  const personProfileTypeFilter = getKolMarketingPersonProfileFilterSql("k");
+  const personProfileTypeClause = personProfileTypeFilter.clause ? `
+      AND ${personProfileTypeFilter.clause}` : "";
   const sql = `
     SELECT ${getKolSelectSql()}
     ${getKolFromJoinSql()}
     WHERE k.active IS TRUE
       AND lower(ltrim(coalesce(k.handle, u.profile ->> 'username', ''), '@')) = $handle
       AND $domain = ANY(k.domains)
-      AND k.language = $market
+      AND k.language = $market${personProfileTypeClause}
     LIMIT 1
   `;
-  const db = getPostgresReadOnlyInstance();
   const [row] = await db.query(sql, {
-    bind: { handle: normalizedHandle, domain: filters.domain, market: filters.market },
+    bind: {
+      handle: normalizedHandle,
+      domain: filters.domain,
+      market: filters.market,
+      ...(personProfileTypeFilter.bind || {}),
+    },
     type: QueryTypes.SELECT,
   });
   return row || null;
@@ -2708,16 +2722,24 @@ async function queryKolProfileByTwitterUserId(twitterUserId, filterInput = {}) {
   const normalizedId = normalizeTwitterUserId(twitterUserId);
   if (!normalizedId) throw publicError("KOL_ID_INVALID", 400, "KOL ID 不合法。", { quotaCharged: false });
   const filters = normalizeFilterSearchInput(filterInput);
+  const db = getPostgresReadOnlyInstance();
+  const personProfileTypeFilter = getKolMarketingPersonProfileFilterSql("k");
+  const personProfileTypeClause = personProfileTypeFilter.clause ? `
+      AND ${personProfileTypeFilter.clause}` : "";
   const sql = `
     SELECT ${getKolSelectSql()}
     ${getKolFromJoinSql()}
     WHERE k.active IS TRUE
-      AND k.twitter_user_id::text = $twitterUserId
+      AND k.twitter_user_id::text = $twitterUserId${personProfileTypeClause}
     LIMIT 1
   `;
-  const db = getPostgresReadOnlyInstance();
   const [row] = await db.query(sql, {
-    bind: { twitterUserId: normalizedId, domain: filters.domain, market: filters.market },
+    bind: {
+      twitterUserId: normalizedId,
+      domain: filters.domain,
+      market: filters.market,
+      ...(personProfileTypeFilter.bind || {}),
+    },
     type: QueryTypes.SELECT,
   });
   return row || null;
