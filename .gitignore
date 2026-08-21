@@ -21,3 +21,6 @@ backups/
 .idea
 packages/xhunt-auth-client/dist
 packages/xhunt-auth-client/release
+
+# CodeGraph local index
+.codegraph/
