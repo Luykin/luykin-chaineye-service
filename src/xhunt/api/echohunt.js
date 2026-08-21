@@ -746,10 +746,28 @@ function addHistoricalCampaignToMap(map, item) {
   map.set(`unknown:${map.size}`, item);
 }
 
+function getHistoricalCampaignSortTime(item) {
+  const candidates = [item?.endAt, item?.startAt];
+  for (const value of candidates) {
+    if (!value) continue;
+    const timestamp = new Date(value).getTime();
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return 0;
+}
+
+function sortHistoricalCampaigns(items) {
+  return [...items].sort((a, b) => {
+    const timeDiff = getHistoricalCampaignSortTime(b) - getHistoricalCampaignSortTime(a);
+    if (timeDiff) return timeDiff;
+    return String(a?.title || a?.campaignKey || "").localeCompare(String(b?.title || b?.campaignKey || ""));
+  });
+}
+
 function mergeHistoricalCampaignSources(...sources) {
   const map = new Map();
   sources.flat().forEach((item) => addHistoricalCampaignToMap(map, item));
-  return Array.from(new Set(map.values()));
+  return sortHistoricalCampaigns(Array.from(new Set(map.values())));
 }
 
 function shouldFetchDynamicCampaignHistory(campaign, campaignKey) {
