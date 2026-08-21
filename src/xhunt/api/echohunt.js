@@ -715,6 +715,93 @@ async function fetchCustomCampaignHistoryFromInterfaces(campaign, user, campaign
   }
 }
 
+function normalizeHistoryKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getHistoryDedupKeys(item) {
+  return [item?.campaignKey, item?.slug, item?.nacosCampaignId]
+    .map(normalizeHistoryKey)
+    .filter(Boolean);
+}
+
+function addHistoricalCampaignToMap(map, item) {
+  if (!item) return;
+  const keys = getHistoryDedupKeys(item);
+  const existingKey = keys.find((key) => map.has(key));
+  if (existingKey) {
+    const existing = map.get(existingKey);
+    const existingTrackCount = (existing?.tracks || []).length + (existing?.winners || []).length;
+    const nextTrackCount = (item?.tracks || []).length + (item?.winners || []).length;
+    // 同一个活动同时存在静态和接口数据时，优先保留信息更完整的结果。
+    if (nextTrackCount > existingTrackCount) {
+      keys.forEach((key) => map.set(key, item));
+    }
+    return;
+  }
+  if (keys.length) {
+    keys.forEach((key) => map.set(key, item));
+    return;
+  }
+  map.set(`unknown:${map.size}`, item);
+}
+
+function mergeHistoricalCampaignSources(...sources) {
+  const map = new Map();
+  sources.flat().forEach((item) => addHistoricalCampaignToMap(map, item));
+  return Array.from(new Set(map.values()));
+}
+
+function shouldFetchDynamicCampaignHistory(campaign, campaignKey) {
+  if (campaign?.leaderboardConfig?.leaderboardMode !== "custom") return false;
+  const config = campaign.leaderboardConfig || {};
+  return !!(
+    config.userActivityApiUrl ||
+    config.leaderboardApiUrl ||
+    config.mockCustomLeaderboardDataEnabled ||
+    isYziLabsCampaign(campaignKey)
+  );
+}
+
+async function findUserDynamicCampaignHistories(user, options = {}) {
+  const lang = options.lang || "zh-CN";
+  const viewer = user ? { username: user.username, twitterId: user.twitterId } : null;
+
+  const records = await XHuntWebsiteCampaign.findAll({
+    where: {
+      webStatus: { [Op.notIn]: ["draft", "archived"] },
+    },
+  });
+
+  const candidates = records
+    .map((record) => ({
+      record,
+      campaign: buildEchohuntCampaignListItem(record, lang, viewer),
+      plugin: buildPluginCampaign(record, { channel: "echohunt" }),
+    }))
+    .filter(({ campaign, plugin }) => {
+      if (plugin.testingPhase && (!viewer || !isViewerAllowedForTesting(plugin, viewer))) return false;
+      const campaignKey = campaign.campaignKey || campaign.slug || campaign.nacosCampaignId;
+      return shouldFetchDynamicCampaignHistory(campaign, campaignKey);
+    });
+
+  const settled = await Promise.allSettled(
+    candidates.map(async ({ campaign }) => {
+      const campaignKey = campaign.campaignKey || campaign.slug || campaign.nacosCampaignId;
+      return fetchCustomCampaignHistoryFromInterfaces(campaign, user, campaignKey);
+    })
+  );
+
+  return settled
+    .map((result, index) => {
+      if (result.status === "fulfilled") return result.value;
+      const campaignKey = candidates[index]?.campaign?.campaignKey || candidates[index]?.campaign?.slug || "unknown";
+      console.warn("[EchoHunt] dynamic historical campaign fetch warn:", campaignKey, result.reason?.message || result.reason);
+      return null;
+    })
+    .filter(Boolean);
+}
+
 function buildEchohuntCampaignDetail(record, lang) {
   const detail = buildCampaignDetail(record, lang);
   const plugin = buildPluginCampaign(record, { channel: "echohunt" });
@@ -1014,17 +1101,26 @@ router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
       await req.authCenter.user.update({ xhuntUserId: xhuntUser.id });
     }
 
-    const [profileResult, soulResult, historicalResult, joinedCountResult, rankSummaryResult] = await Promise.allSettled([
+    const historyIdentity = {
+      ...twitterIdentity,
+      twitterId: xhuntUser?.twitterId || twitterIdentity.twitterId,
+      username: xhuntUser?.username || twitterIdentity.username,
+    };
+
+    const [profileResult, soulResult, staticHistoryResult, dynamicHistoryResult, joinedCountResult, rankSummaryResult] = await Promise.allSettled([
       fetchTwitterProfile(twitterIdentity.twitterId, lang),
       fetchSoulProfile(twitterIdentity.twitterId, lang),
-      findUserHistoricalCampaigns(twitterIdentity),
+      findUserHistoricalCampaigns(historyIdentity),
+      findUserDynamicCampaignHistories(historyIdentity, { lang }),
       CampaignRegistration.count({ where: { twitterId: twitterIdentity.twitterId } }),
       fetchEchohuntRankSummary(twitterIdentity.twitterId),
     ]);
 
     const rawProfile = profileResult.status === "fulfilled" ? profileResult.value : null;
     const rawSoul = soulResult.status === "fulfilled" ? soulResult.value : null;
-    const historicalCampaigns = historicalResult.status === "fulfilled" ? historicalResult.value : [];
+    const staticHistoricalCampaigns = staticHistoryResult.status === "fulfilled" ? staticHistoryResult.value : [];
+    const dynamicHistoricalCampaigns = dynamicHistoryResult.status === "fulfilled" ? dynamicHistoryResult.value : [];
+    const historicalCampaigns = mergeHistoricalCampaignSources(staticHistoricalCampaigns, dynamicHistoricalCampaigns);
     const joinedCampaigns = joinedCountResult.status === "fulfilled" ? joinedCountResult.value : 0;
     const profile = normalizeProfilePayload(rawProfile);
     const soul = normalizeSoulPayload(rawSoul);
