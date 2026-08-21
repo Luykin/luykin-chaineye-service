@@ -671,7 +671,7 @@ async function initializeAndStartServer() {
   // 管理后台 - Tampermonkey 采集脚本与 token 管理
   app.use("/api/admin/tampermonkey", adminAuth, adminTampermonkeyRoutes);
 
-  // 管理后台 - KOL Marketing 向量检索联调工具（只读，不走插件签名）
+  // 管理后台 - KOL Marketing 只读状态（供 KOL Match 配置页展示）
   app.use("/api/admin/kol-marketing", adminAuth, adminKolMarketingRoutes);
 
   // 管理后台 - 币安广场

@@ -23,6 +23,8 @@ const AVAILABLE_MODELS = [
   { value: 'v0/Kimi-K2.5', label: 'Kimi K2.5' },
   { value: 'v0/gpt-5-mini', label: 'GPT-5 Mini' },
   { value: 'v0/deepseek-v3.2', label: 'DeepSeek V3.2' },
+  { value: 'chatgpt/gpt-5.4-mini', label: 'ChatGPT GPT-5.4 Mini' },
+  { value: 'chatgpt/gpt-5.6-luna', label: 'ChatGPT GPT-5.6 Luna' },
 ];
 
 /**

@@ -41,7 +41,6 @@ import { BackupRestorePage } from "@/pages/BackupRestorePage";
 import { EmergencyRollbackPage } from "@/pages/EmergencyRollbackPage";
 import { ReleaseDeployPage } from "@/pages/ReleaseDeployPage";
 import { AuthCenterTestPage } from "@/pages/AuthCenterTestPage";
-import { KolMarketingTestPage } from "@/pages/KolMarketingTestPage";
 import { KolMatchConfigPage } from "@/pages/KolMatchConfigPage";
 import { DbAdminPage } from "@/features/db-admin/DbAdminPage";
 import { FeaturePlaceholderPage } from "@/pages/FeaturePlaceholderPage";
@@ -86,7 +85,6 @@ const implementedRouteElements: Record<string, ReactNode> = {
   "emergency-rollback": <EmergencyRollbackPage />,
   "release-deploy": <ReleaseDeployPage />,
   "auth-center-test": <AuthCenterTestPage />,
-  "kol-marketing-test": <KolMarketingTestPage />,
   "kol-match-config": <KolMatchConfigPage />,
   "db-admin": <DbAdminPage />,
 };

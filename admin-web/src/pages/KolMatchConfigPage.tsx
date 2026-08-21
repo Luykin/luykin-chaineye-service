@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  AutoComplete,
   Button,
   Card,
   Col,
+  Descriptions,
   Divider,
   Drawer,
   Form,
@@ -12,6 +14,7 @@ import {
   Row,
   Segmented,
   Space,
+  Statistic,
   Switch,
   Table,
   Tabs,
@@ -31,6 +34,8 @@ import {
   refreshKolMatchConfigCache,
   validateKolMatchConfig,
 } from "@/services/kol-match-config";
+import { fetchKolMarketingStatus, type KolMarketingServiceStatus } from "@/services/kol-marketing";
+import { fetchLlmModels, type LlmModelOption } from "@/services/llm";
 import type {
   KolMatchAppEnv,
   KolMatchEffectiveConfig,
@@ -45,34 +50,34 @@ const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
 
 const PROMPT_FLOW_STEPS = [
-  "1. Strategy Prompt：把项目 brief / X 画像 / 硬筛条件解析成匹配策略。",
+  "1. 策略 Prompt：把项目 brief / X 画像 / 硬筛条件解析成匹配策略。",
   "2. Embedding 召回：用 semanticQuery 召回候选 KOL，硬筛条件控制候选范围。",
-  "3. Candidate Evaluation Prompt：对召回候选做语义深评并给出证据。",
+  "3. 候选深评 Prompt：对召回候选做语义深评并给出证据。",
   "4. 程序排序：综合 AI 匹配分、真实流量、影响力和 Soul 分生成最终名单。",
 ];
 
 const PROMPT_GUIDE_FLOW = [
   {
     label: "1. 策略解析",
-    title: "Strategy LLM",
+    title: "策略解析 LLM",
     info: "读取项目 brief、X 画像和硬筛条件，生成 semanticQuery、可安全下发的 filters 和公开分析摘要。",
     fields: "使用：任务 Prompt、系统 Prompt、策略额外规则。",
   },
   {
     label: "2. 向量召回",
-    title: "Embedding Recall",
+    title: "向量召回",
     info: "后端用 semanticQuery 去 KOL 向量库召回候选，再叠加语言、领域、粉丝数、活跃度等硬筛条件。",
     fields: "不使用 Prompt；主要受 AI 召回 TopK 和硬筛条件影响。",
   },
   {
     label: "3. 候选深评",
-    title: "Candidate Evaluator LLM",
+    title: "候选深评 LLM",
     info: "只看每个候选已提供的证据，判断语义匹配度，输出 semanticScore、原因、证据引用和匹配词。",
     fields: "使用：深评任务 Prompt、深评系统 Prompt、深评硬规则、评分分档。",
   },
   {
     label: "4. 程序排序",
-    title: "Ranking",
+    title: "程序排序",
     info: "后端综合语义分、真实流量、影响力、Soul 分和结果数量限制，生成最终展示名单。",
     fields: "不使用 Prompt；主要受 AI 展示数量、Batch、Token 配置影响。",
   },
@@ -209,6 +214,11 @@ const DEFAULT_MODEL_FALLBACKS: KolMatchModelFallbacks = {
   evaluatorLlm: { model: "", source: "" },
 };
 
+const EXTRA_LLM_MODEL_OPTIONS: LlmModelOption[] = [
+  { value: "chatgpt/gpt-5.4-mini", label: "ChatGPT GPT-5.4 Mini" },
+  { value: "chatgpt/gpt-5.6-luna", label: "ChatGPT GPT-5.6 Luna" },
+];
+
 type FormValues = {
   version: string;
   limits: KolMatchEffectiveConfig["limits"];
@@ -221,6 +231,63 @@ type FormValues = {
   evaluatorSystemPrompt: string;
   evaluatorAuthoritativeRules: string;
   evaluatorScoreCalibration: string;
+};
+
+type CostAssumptionKey =
+  | "estimateRequestCount"
+  | "strategyInputTokens"
+  | "evaluatorInputTokensPerBatch"
+  | "evaluatorInputTokensPerCandidate";
+
+type CostAssumptions = Record<CostAssumptionKey, number>;
+
+type ModelPricing = {
+  inputUsdPerMillion: number;
+  outputUsdPerMillion: number;
+  matched: boolean;
+};
+
+const DEFAULT_COST_ASSUMPTIONS: CostAssumptions = {
+  estimateRequestCount: 100,
+  strategyInputTokens: 2200,
+  evaluatorInputTokensPerBatch: 1400,
+  evaluatorInputTokensPerCandidate: 850,
+};
+
+const DEFAULT_MODEL_PRICING: ModelPricing = {
+  inputUsdPerMillion: 0.5,
+  outputUsdPerMillion: 3,
+  matched: false,
+};
+
+const MODEL_PRICING_BY_MODEL: Record<string, Omit<ModelPricing, "matched">> = {
+  "chatgpt/gpt-5.6-sol": { inputUsdPerMillion: 5, outputUsdPerMillion: 30 },
+  "chatgpt/gpt-5.6-terra": { inputUsdPerMillion: 2.5, outputUsdPerMillion: 15 },
+  "chatgpt/gpt-5.6-luna": { inputUsdPerMillion: 1, outputUsdPerMillion: 6 },
+  "chatgpt/gpt-5.5": { inputUsdPerMillion: 5, outputUsdPerMillion: 30 },
+  "chatgpt/gpt-5.4": { inputUsdPerMillion: 2.5, outputUsdPerMillion: 15 },
+  "chatgpt/gpt-5.3-codex": { inputUsdPerMillion: 1.75, outputUsdPerMillion: 14 },
+  "chatgpt/gpt-5.4-mini": { inputUsdPerMillion: 0.75, outputUsdPerMillion: 4.5 },
+  "gemini-2.5-flash": { inputUsdPerMillion: 0.3, outputUsdPerMillion: 2.5 },
+  "gemini-3-flash-preview": { inputUsdPerMillion: 0.5, outputUsdPerMillion: 3 },
+  "gemini-3.1-flash-lite": { inputUsdPerMillion: 0.25, outputUsdPerMillion: 1.5 },
+  "gemini-3.1-flash-lite-preview": { inputUsdPerMillion: 0.25, outputUsdPerMillion: 1.5 },
+  "gemini-3.5-flash": { inputUsdPerMillion: 1.5, outputUsdPerMillion: 9 },
+  "gemini-embedding-001": { inputUsdPerMillion: 0.15, outputUsdPerMillion: 0 },
+  "v0/gemini-3-flash": { inputUsdPerMillion: 0.4, outputUsdPerMillion: 2.4 },
+  "poe/gemini-3-flash": { inputUsdPerMillion: 0.4, outputUsdPerMillion: 2.4 },
+  "ep-20250709203644-2gl8j": { inputUsdPerMillion: 0.28, outputUsdPerMillion: 0.42 },
+  "ep-20250915171452-5hszq": { inputUsdPerMillion: 0.25, outputUsdPerMillion: 0.5 },
+  "v0/gpt-4o-mini": { inputUsdPerMillion: 0.14, outputUsdPerMillion: 0.54 },
+  "poe/gpt-4o-mini": { inputUsdPerMillion: 0.14, outputUsdPerMillion: 0.54 },
+  "v0/claude-sonnet-4.5": { inputUsdPerMillion: 2.6, outputUsdPerMillion: 13 },
+  "poe/claude-sonnet-4.5": { inputUsdPerMillion: 2.6, outputUsdPerMillion: 13 },
+  "v0/gpt-5-mini": { inputUsdPerMillion: 0.22, outputUsdPerMillion: 1.8 },
+  "poe/gpt-5-mini": { inputUsdPerMillion: 0.22, outputUsdPerMillion: 1.8 },
+  "v0/deepseek-v3.2": { inputUsdPerMillion: 0.27, outputUsdPerMillion: 0.4 },
+  "poe/deepseek-v3.2": { inputUsdPerMillion: 0.27, outputUsdPerMillion: 0.4 },
+  "v0/kimi-k2.5": { inputUsdPerMillion: 0.6, outputUsdPerMillion: 3 },
+  "poe/kimi-k2.5": { inputUsdPerMillion: 0.6, outputUsdPerMillion: 3 },
 };
 
 const DEFAULT_DOCUMENT: KolMatchRuntimeConfigDocument = {
@@ -296,6 +363,18 @@ function modelFallbackPlaceholder(fallback?: { model?: string; source?: string }
   const source = String(fallback?.source || "").trim();
   if (!model) return "未配置默认模型：请填写模型名，或在后端配置 LLM_MODEL";
   return `默认：${model}${source ? `（来自 ${source}）` : ""}`;
+}
+
+function mergeModelOptions(models: LlmModelOption[]) {
+  const seen = new Set<string>();
+  return [...models, ...EXTRA_LLM_MODEL_OPTIONS]
+    .filter((item) => {
+      const value = String(item.value || "").trim();
+      if (!value || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    })
+    .map((item) => ({ value: item.value, label: item.label || item.value }));
 }
 
 function InfoLabel({
@@ -459,13 +538,21 @@ function valuesFromConfig(document: KolMatchRuntimeConfigDocument, env: KolMatch
 
 function applyValues(document: KolMatchRuntimeConfigDocument, env: KolMatchAppEnv, values: FormValues) {
   const next = clone(document || DEFAULT_DOCUMENT);
+  const strategyLlm = {
+    ...(values.strategyLlm || {}),
+    model: values.strategyLlm?.model || "",
+  };
+  const evaluatorLlm = {
+    ...(values.evaluatorLlm || {}),
+    model: values.evaluatorLlm?.model || "",
+  };
   next.version = values.version || next.version;
   next.envs = next.envs || { production: {}, test: {} };
   next.envs[env] = {
     ...(next.envs[env] || {}),
     limits: values.limits,
-    strategyLlm: values.strategyLlm,
-    evaluatorLlm: values.evaluatorLlm,
+    strategyLlm,
+    evaluatorLlm,
     prompts: {
       strategy: {
         taskPrompt: values.strategyTaskPrompt || "",
@@ -487,6 +574,123 @@ function envLabel(env: KolMatchAppEnv) {
   return env === "production" ? "正式 production" : "测试 test";
 }
 
+function toNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatInteger(value: number) {
+  return Math.round(value || 0).toLocaleString("en-US");
+}
+
+function formatUsd(value: number) {
+  if (!Number.isFinite(value)) return "$0.0000";
+  if (value > 0 && value < 0.01) return `$${value.toFixed(4)}`;
+  return `$${value.toFixed(2)}`;
+}
+
+function formatTokenCompact(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return formatInteger(value);
+}
+
+function formatPercent(value?: string | number | null) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return "-";
+  return `${(numberValue * 100).toFixed(1)}%`;
+}
+
+function statusColor(status?: KolMarketingServiceStatus | null) {
+  if (!status) return "default";
+  return status.ready ? "success" : "error";
+}
+
+function resolveModelName(configModel?: string, fallback?: { model?: string }) {
+  return String(configModel || fallback?.model || "").trim();
+}
+
+function modelPricingFor(modelName?: string): ModelPricing {
+  const normalized = String(modelName || "").trim().toLowerCase();
+  const pricing = MODEL_PRICING_BY_MODEL[normalized];
+  if (!pricing) return { ...DEFAULT_MODEL_PRICING };
+  return { ...pricing, matched: true };
+}
+
+function formatModelPricing(pricing: ModelPricing) {
+  return `In ${formatUsd(pricing.inputUsdPerMillion)} / Out ${formatUsd(pricing.outputUsdPerMillion)} per 1M`;
+}
+
+function estimateEvaluatorOutputTokens(config: KolMatchEffectiveConfig) {
+  const candidates = Math.max(0, Math.floor(toNumber(config.limits?.aiRecallTopK)));
+  const batchSize = Math.max(1, Math.floor(toNumber(config.evaluatorLlm?.batchSize, 1)));
+  const base = Math.max(0, Math.floor(toNumber(config.evaluatorLlm?.maxTokensBase)));
+  const perCandidate = Math.max(0, Math.floor(toNumber(config.evaluatorLlm?.maxTokensPerCandidate)));
+  const cap = Math.max(0, Math.floor(toNumber(config.evaluatorLlm?.maxTokensCap)));
+  const batches = Math.ceil(candidates / batchSize);
+  let outputTokens = 0;
+  for (let start = 0; start < candidates; start += batchSize) {
+    const batchLength = Math.min(batchSize, candidates - start);
+    outputTokens += Math.min(cap, base + batchLength * perCandidate);
+  }
+  return { candidates, batchSize, batches, outputTokens };
+}
+
+function estimateKolMatchCost(
+  config: KolMatchEffectiveConfig,
+  assumptions: CostAssumptions,
+  pricing: { strategy: ModelPricing; evaluator: ModelPricing }
+) {
+  const strategyEnabled = config.strategyLlm?.enabled !== false;
+  const evaluatorEnabled = config.evaluatorLlm?.enabled !== false;
+  const evaluator = estimateEvaluatorOutputTokens(config);
+  const strategyInputTokens = strategyEnabled ? Math.max(0, assumptions.strategyInputTokens) : 0;
+  const strategyOutputTokens = strategyEnabled ? Math.max(0, toNumber(config.strategyLlm?.maxTokens)) : 0;
+  const evaluatorInputTokens = evaluatorEnabled
+    ? evaluator.batches * Math.max(0, assumptions.evaluatorInputTokensPerBatch)
+      + evaluator.candidates * Math.max(0, assumptions.evaluatorInputTokensPerCandidate)
+    : 0;
+  const evaluatorOutputTokens = evaluatorEnabled ? evaluator.outputTokens : 0;
+  const inputTokens = strategyInputTokens + evaluatorInputTokens;
+  const outputTokens = strategyOutputTokens + evaluatorOutputTokens;
+  const strategyCost = (
+    strategyInputTokens * pricing.strategy.inputUsdPerMillion
+    + strategyOutputTokens * pricing.strategy.outputUsdPerMillion
+  ) / 1_000_000;
+  const evaluatorCost = (
+    evaluatorInputTokens * pricing.evaluator.inputUsdPerMillion
+    + evaluatorOutputTokens * pricing.evaluator.outputUsdPerMillion
+  ) / 1_000_000;
+  const perRequestCost = strategyCost + evaluatorCost;
+  const requestCount = Math.max(1, Math.floor(assumptions.estimateRequestCount || 1));
+  const aiDailyLimit = Math.max(1, Math.floor(toNumber(config.limits?.aiDailyLimit, 1)));
+  const maxWaitSeconds = (
+    (strategyEnabled ? toNumber(config.strategyLlm?.timeoutMs) : 0)
+    + (evaluatorEnabled ? toNumber(config.evaluatorLlm?.timeoutMs) : 0)
+  ) / 1000;
+
+  return {
+    ...evaluator,
+    strategyEnabled,
+    evaluatorEnabled,
+    strategyInputTokens,
+    strategyOutputTokens,
+    evaluatorInputTokens,
+    evaluatorOutputTokens,
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    strategyCost,
+    evaluatorCost,
+    perRequestCost,
+    plannedCost: perRequestCost * requestCount,
+    dailyQuotaCost: perRequestCost * aiDailyLimit,
+    requestCount,
+    aiDailyLimit,
+    maxWaitSeconds,
+  };
+}
+
 export function KolMatchConfigPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const { hasPermission } = useAuth();
@@ -505,11 +709,24 @@ export function KolMatchConfigPage() {
   const [history, setHistory] = useState<KolMatchHistoryItem[]>([]);
   const [promptFallbacks, setPromptFallbacks] = useState<KolMatchPromptFallbacks>(DEFAULT_PROMPT_FALLBACKS);
   const [modelFallbacks, setModelFallbacks] = useState<KolMatchModelFallbacks>(DEFAULT_MODEL_FALLBACKS);
+  const [llmModels, setLlmModels] = useState<LlmModelOption[]>([]);
+  const [costAssumptions, setCostAssumptions] = useState<CostAssumptions>(DEFAULT_COST_ASSUMPTIONS);
+  const [kolMarketingStatus, setKolMarketingStatus] = useState<KolMarketingServiceStatus | null>(null);
+  const [kolMarketingStatusLoading, setKolMarketingStatusLoading] = useState(false);
 
   const current = useMemo(() => effectiveConfig(document, activeEnv), [document, activeEnv]);
   const canWrite = hasPermission(["kol-match-config:write", "nacos-admin"]);
   const strategyModelPlaceholder = modelFallbackPlaceholder(modelFallbacks.strategyLlm);
   const evaluatorModelPlaceholder = modelFallbackPlaceholder(modelFallbacks.evaluatorLlm);
+  const baseModelOptions = useMemo(() => mergeModelOptions(llmModels), [llmModels]);
+  const strategyModelOptions = useMemo(() => [
+    { value: "", label: strategyModelPlaceholder },
+    ...baseModelOptions,
+  ], [baseModelOptions, strategyModelPlaceholder]);
+  const evaluatorModelOptions = useMemo(() => [
+    { value: "", label: evaluatorModelPlaceholder },
+    ...baseModelOptions,
+  ], [baseModelOptions, evaluatorModelPlaceholder]);
   const strategyTaskFallback = fallbackText("未填写时使用默认任务 Prompt", promptFallbacks.strategy.taskPrompt);
   const strategySystemFallback = fallbackText(
     "未填写时使用默认系统 Prompt",
@@ -534,9 +751,36 @@ export function KolMatchConfigPage() {
     "未填写时使用这些默认评分分档",
     promptFallbacks.candidateEvaluation.scoreCalibration
   );
+  const strategyCostModel = resolveModelName(current.strategyLlm?.model, modelFallbacks.strategyLlm);
+  const evaluatorCostModel = resolveModelName(current.evaluatorLlm?.model, modelFallbacks.evaluatorLlm);
+  const strategyModelPricing = useMemo(() => modelPricingFor(strategyCostModel), [strategyCostModel]);
+  const evaluatorModelPricing = useMemo(() => modelPricingFor(evaluatorCostModel), [evaluatorCostModel]);
+  const costEstimate = useMemo(
+    () => estimateKolMatchCost(current, costAssumptions, { strategy: strategyModelPricing, evaluator: evaluatorModelPricing }),
+    [current, costAssumptions, strategyModelPricing, evaluatorModelPricing]
+  );
 
   function syncForm(nextDoc = document, env = activeEnv) {
     form.setFieldsValue(valuesFromConfig(nextDoc, env));
+  }
+
+  function updateCostAssumption(key: CostAssumptionKey, value: unknown) {
+    setCostAssumptions((prev) => ({
+      ...prev,
+      [key]: Math.max(0, toNumber(value, prev[key])),
+    }));
+  }
+
+  async function loadKolMarketingStatus() {
+    setKolMarketingStatusLoading(true);
+    try {
+      const resp = await fetchKolMarketingStatus();
+      setKolMarketingStatus(resp.data);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "加载 KOL 数据状态失败");
+    } finally {
+      setKolMarketingStatusLoading(false);
+    }
   }
 
   async function loadConfig() {
@@ -563,7 +807,14 @@ export function KolMatchConfigPage() {
 
   useEffect(() => {
     void loadConfig();
+    void loadKolMarketingStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    fetchLlmModels()
+      .then((resp) => setLlmModels(resp.data || []))
+      .catch(() => setLlmModels(EXTRA_LLM_MODEL_OPTIONS));
   }, []);
 
   useEffect(() => {
@@ -677,6 +928,8 @@ export function KolMatchConfigPage() {
     messageApi.success("已复制正式配置到测试环境，保存后生效");
   }
 
+  const profileStats = kolMarketingStatus?.profileStats || null;
+
   return (
     <PermissionGuard permission={["kol-match-config:read", "kol-match-config:write", "nacos-admin"]}>
     <div className="kol-match-config-page">
@@ -719,9 +972,96 @@ export function KolMatchConfigPage() {
       <Row gutter={[16, 16]} className="kol-match-metrics">
         <Col xs={12} lg={6}><Card><Text type="secondary">AI 展示</Text><strong>{current.limits?.aiResultLimit}</strong></Card></Col>
         <Col xs={12} lg={6}><Card><Text type="secondary">Embedding 召回</Text><strong>{current.limits?.aiRecallTopK}</strong></Card></Col>
-        <Col xs={12} lg={6}><Card><Text type="secondary">Evaluator Batch</Text><strong>{current.evaluatorLlm?.batchSize}</strong></Card></Col>
-        <Col xs={12} lg={6}><Card><Text type="secondary">Prompt Rules</Text><strong>{current.prompts?.strategy?.extraRules?.length || 0}</strong></Card></Col>
+        <Col xs={12} lg={6}><Card><Text type="secondary">深评批次</Text><strong>{current.evaluatorLlm?.batchSize}</strong></Card></Col>
+        <Col xs={12} lg={6}><Card><Text type="secondary">Prompt 规则</Text><strong>{current.prompts?.strategy?.extraRules?.length || 0}</strong></Card></Col>
       </Row>
+
+      <Card
+        className="kol-match-cost-panel"
+        title={(
+          <Space wrap>
+            <span>成本估算</span>
+            <Tag color="gold">仅估算</Tag>
+          </Space>
+        )}
+        extra={<Text type="secondary">按当前 {envLabel(activeEnv)} 配置实时计算</Text>}
+      >
+        <div className="kol-match-cost-layout">
+          <div className="kol-match-cost-ledger">
+            <div className="kol-match-cost-primary">
+              <Text>单次 AI Match 预估</Text>
+              <strong>{formatUsd(costEstimate.perRequestCost)}</strong>
+              <span>{formatTokenCompact(costEstimate.totalTokens)} tokens · 输入 {formatTokenCompact(costEstimate.inputTokens)} / 输出 {formatTokenCompact(costEstimate.outputTokens)}</span>
+            </div>
+            <div className="kol-match-cost-breakdown">
+              <div>
+                <Text type="secondary">策略解析</Text>
+                <strong>{costEstimate.strategyEnabled ? formatUsd(costEstimate.strategyCost) : "已关闭"}</strong>
+                <span>{formatTokenCompact(costEstimate.strategyInputTokens + costEstimate.strategyOutputTokens)} tokens</span>
+              </div>
+              <div>
+                <Text type="secondary">候选深评</Text>
+                <strong>{costEstimate.evaluatorEnabled ? formatUsd(costEstimate.evaluatorCost) : "已关闭"}</strong>
+                <span>{costEstimate.batches} 批 · TopK {costEstimate.candidates}</span>
+              </div>
+              <div>
+                <Text type="secondary">{costEstimate.requestCount} 次请求</Text>
+                <strong>{formatUsd(costEstimate.plannedCost)}</strong>
+                <span>用于预估活动/压测预算</span>
+              </div>
+              <div>
+                <Text type="secondary">单用户日满额</Text>
+                <strong>{formatUsd(costEstimate.dailyQuotaCost)}</strong>
+                <span>{costEstimate.aiDailyLimit} 次 AI quota</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="kol-match-cost-assumptions">
+            <div className="kol-match-cost-note">
+              <Text strong>估算假设</Text>
+              <Text type="secondary">
+                单价按当前选择模型自动套用截图里的 LiteLLM 价格；未匹配模型按 In $0.50 / Out $3.00 per 1M 兜底。
+                深评批次在后端并发执行，最长等待约 {Math.round(costEstimate.maxWaitSeconds)} 秒。
+              </Text>
+            </div>
+            <Row gutter={10}>
+              <Col xs={12} md={8}>
+                <Text type="secondary">估算请求数</Text>
+                <InputNumber min={1} max={1_000_000} value={costAssumptions.estimateRequestCount} onChange={(value) => updateCostAssumption("estimateRequestCount", value)} className="full" />
+              </Col>
+              <Col xs={12} md={8}>
+                <Text type="secondary">策略输入 Token</Text>
+                <InputNumber min={0} max={200_000} value={costAssumptions.strategyInputTokens} onChange={(value) => updateCostAssumption("strategyInputTokens", value)} className="full" />
+              </Col>
+              <Col xs={12} md={8}>
+                <Text type="secondary">深评每候选输入</Text>
+                <InputNumber min={0} max={50_000} value={costAssumptions.evaluatorInputTokensPerCandidate} onChange={(value) => updateCostAssumption("evaluatorInputTokensPerCandidate", value)} className="full" />
+              </Col>
+              <Col xs={12} md={8}>
+                <Text type="secondary">深评每批固定输入</Text>
+                <InputNumber min={0} max={200_000} value={costAssumptions.evaluatorInputTokensPerBatch} onChange={(value) => updateCostAssumption("evaluatorInputTokensPerBatch", value)} className="full" />
+              </Col>
+              <Col xs={24} md={12}>
+                <div className="kol-match-cost-model-price">
+                  <Text type="secondary">策略模型单价</Text>
+                  <strong>{strategyCostModel || "未配置模型"}</strong>
+                  <span>{formatModelPricing(strategyModelPricing)}</span>
+                  {!strategyModelPricing.matched ? <Tag color="orange">默认兜底价</Tag> : null}
+                </div>
+              </Col>
+              <Col xs={24} md={12}>
+                <div className="kol-match-cost-model-price">
+                  <Text type="secondary">深评模型单价</Text>
+                  <strong>{evaluatorCostModel || "未配置模型"}</strong>
+                  <span>{formatModelPricing(evaluatorModelPricing)}</span>
+                  {!evaluatorModelPricing.matched ? <Tag color="orange">默认兜底价</Tag> : null}
+                </div>
+              </Col>
+            </Row>
+          </div>
+        </div>
+      </Card>
 
       <Tabs
         items={[
@@ -732,7 +1072,7 @@ export function KolMatchConfigPage() {
               <Form form={form} layout="vertical" onValuesChange={updateDocumentFromForm} initialValues={valuesFromConfig(document, activeEnv)}>
                 <Row gutter={[16, 16]}>
 	                  <Col xs={24} xl={8}>
-	                    <Card title="基础数量 / Quota" className="kol-match-panel">
+	                    <Card title="基础数量 / 配额" className="kol-match-panel">
 	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.version}>配置版本</InfoLabel>} name="version"><Input readOnly /></Form.Item>
 	                      <Row gutter={12}>
 	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.aiDailyLimit}>AI 每日次数</InfoLabel>} name={["limits", "aiDailyLimit"]}><InputNumber min={1} max={100} className="full" /></Form.Item></Col>
@@ -745,27 +1085,27 @@ export function KolMatchConfigPage() {
 	                    </Card>
 	                  </Col>
 	                  <Col xs={24} xl={8}>
-	                    <Card title="Strategy LLM" className="kol-match-panel">
+	                    <Card title="策略解析 LLM" className="kol-match-panel">
 	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyEnabled}>启用</InfoLabel>} name={["strategyLlm", "enabled"]} valuePropName="checked"><Switch /></Form.Item>
-	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyModel}>模型（留空用默认）</InfoLabel>} name={["strategyLlm", "model"]}><Input placeholder={strategyModelPlaceholder} allowClear /></Form.Item>
+	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyModel}>模型（留空用默认）</InfoLabel>} name={["strategyLlm", "model"]}><AutoComplete className="full" allowClear placeholder={strategyModelPlaceholder} options={strategyModelOptions} filterOption={(input, option) => String(option?.label || option?.value || "").toLowerCase().includes(input.toLowerCase())} /></Form.Item>
 	                      <Row gutter={12}>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyTimeoutMs}>Timeout</InfoLabel>} name={["strategyLlm", "timeoutMs"]}><InputNumber min={1000} max={60000} className="full" /></Form.Item></Col>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyMaxTokens}>Max tokens</InfoLabel>} name={["strategyLlm", "maxTokens"]}><InputNumber min={100} max={12000} className="full" /></Form.Item></Col>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyTemperature}>Temperature</InfoLabel>} name={["strategyLlm", "temperature"]}><InputNumber min={0} max={2} step={0.1} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyTimeoutMs}>超时时间</InfoLabel>} name={["strategyLlm", "timeoutMs"]}><InputNumber min={1000} max={60000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyMaxTokens}>最大输出 Token</InfoLabel>} name={["strategyLlm", "maxTokens"]}><InputNumber min={100} max={12000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.strategyTemperature}>随机性</InfoLabel>} name={["strategyLlm", "temperature"]}><InputNumber min={0} max={2} step={0.1} className="full" /></Form.Item></Col>
 	                      </Row>
 	                    </Card>
 	                  </Col>
 	                  <Col xs={24} xl={8}>
-	                    <Card title="Candidate Evaluator LLM" className="kol-match-panel">
+	                    <Card title="候选深评 LLM" className="kol-match-panel">
 	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorEnabled}>启用</InfoLabel>} name={["evaluatorLlm", "enabled"]} valuePropName="checked"><Switch /></Form.Item>
-	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorModel}>模型（留空用默认）</InfoLabel>} name={["evaluatorLlm", "model"]}><Input placeholder={evaluatorModelPlaceholder} allowClear /></Form.Item>
+	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorModel}>模型（留空用默认）</InfoLabel>} name={["evaluatorLlm", "model"]}><AutoComplete className="full" allowClear placeholder={evaluatorModelPlaceholder} options={evaluatorModelOptions} filterOption={(input, option) => String(option?.label || option?.value || "").toLowerCase().includes(input.toLowerCase())} /></Form.Item>
 	                      <Row gutter={12}>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorTimeoutMs}>Timeout</InfoLabel>} name={["evaluatorLlm", "timeoutMs"]}><InputNumber min={5000} max={120000} className="full" /></Form.Item></Col>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorBatchSize}>Batch</InfoLabel>} name={["evaluatorLlm", "batchSize"]}><InputNumber min={1} max={20} className="full" /></Form.Item></Col>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensCap}>Token cap</InfoLabel>} name={["evaluatorLlm", "maxTokensCap"]}><InputNumber min={500} max={12000} className="full" /></Form.Item></Col>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensBase}>Base tokens</InfoLabel>} name={["evaluatorLlm", "maxTokensBase"]}><InputNumber min={100} max={12000} className="full" /></Form.Item></Col>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensPerCandidate}>Per candidate</InfoLabel>} name={["evaluatorLlm", "maxTokensPerCandidate"]}><InputNumber min={50} max={2000} className="full" /></Form.Item></Col>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorTemperature}>Temperature</InfoLabel>} name={["evaluatorLlm", "temperature"]}><InputNumber min={0} max={2} step={0.1} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorTimeoutMs}>超时时间</InfoLabel>} name={["evaluatorLlm", "timeoutMs"]}><InputNumber min={5000} max={120000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorBatchSize}>批次大小</InfoLabel>} name={["evaluatorLlm", "batchSize"]}><InputNumber min={1} max={20} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensCap}>Token 上限</InfoLabel>} name={["evaluatorLlm", "maxTokensCap"]}><InputNumber min={500} max={12000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensBase}>基础 Token</InfoLabel>} name={["evaluatorLlm", "maxTokensBase"]}><InputNumber min={100} max={12000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensPerCandidate}>每候选 Token</InfoLabel>} name={["evaluatorLlm", "maxTokensPerCandidate"]}><InputNumber min={50} max={2000} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorTemperature}>随机性</InfoLabel>} name={["evaluatorLlm", "temperature"]}><InputNumber min={0} max={2} step={0.1} className="full" /></Form.Item></Col>
 	                      </Row>
 	                    </Card>
 	                  </Col>
@@ -790,7 +1130,7 @@ export function KolMatchConfigPage() {
                 />
                 <Row gutter={[16, 16]}>
                   <Col xs={24} xl={12}>
-                    <Card title="Strategy Prompt" className="kol-match-panel">
+                    <Card title="策略 Prompt" className="kol-match-panel">
                       <Form.Item
                         label={<InfoLabel info={PROMPT_FIELD_HELP.strategyTaskPrompt}>任务 Prompt / Task Prompt</InfoLabel>}
                         name="strategyTaskPrompt"
@@ -812,7 +1152,7 @@ export function KolMatchConfigPage() {
                     </Card>
                   </Col>
                   <Col xs={24} xl={12}>
-                    <Card title="Candidate Evaluation Prompt" className="kol-match-panel">
+                    <Card title="候选深评 Prompt" className="kol-match-panel">
                       <Form.Item
                         label={<InfoLabel info={PROMPT_FIELD_HELP.evaluatorTaskPrompt}>深评任务 Prompt / Task Prompt</InfoLabel>}
                         name="evaluatorTaskPrompt"
@@ -876,6 +1216,71 @@ export function KolMatchConfigPage() {
           },
         ]}
       />
+
+      <section className="kol-match-runtime-footer">
+        <div className="kol-match-runtime-heading">
+          <div>
+            <Text className="kol-match-kicker">readonly pgvector health</Text>
+            <Title level={4}>KOL 数据与服务状态</Title>
+            <Paragraph>这里保留原联调页里的数据覆盖和只读从库状态，方便配置发布前检查召回链路是否健康。</Paragraph>
+          </div>
+          <Space wrap>
+            <Tag color={statusColor(kolMarketingStatus)}>
+              {kolMarketingStatus?.ready ? "服务可用" : "服务未就绪"}
+            </Tag>
+            <Button loading={kolMarketingStatusLoading} onClick={loadKolMarketingStatus}>刷新状态</Button>
+          </Space>
+        </div>
+
+        <Row gutter={[16, 16]}>
+          <Col xs={24} xl={12}>
+            <Card className="kol-match-status-card" title="KOL 数据覆盖">
+              <Row gutter={[16, 16]}>
+                <Col xs={12} md={6}>
+                  <Statistic title="总行数" value={profileStats?.total ?? "-"} />
+                </Col>
+                <Col xs={12} md={6}>
+                  <Statistic title="Active 行数" value={profileStats?.active ?? "-"} />
+                </Col>
+                <Col xs={12} md={6}>
+                  <Statistic title="支持向量" value={profileStats?.activeWithEmbedding ?? "-"} />
+                </Col>
+                <Col xs={12} md={6}>
+                  <Statistic title="向量覆盖率" value={profileStats ? formatPercent(profileStats.embeddingCoverage) : "-"} />
+                </Col>
+              </Row>
+              {profileStats ? (
+                <Space size={[8, 8]} wrap className="kol-match-profile-stats-tags">
+                  <Tag>缺 embedding：{formatInteger(profileStats.activeMissingEmbedding)}</Tag>
+                  <Tag color="orange">需刷新 embedding：{formatInteger(profileStats.activeNeedsEmbeddingRefresh)}</Tag>
+                  <Tag color="purple">需刷新 AI 画像：{formatInteger(profileStats.activeNeedsAiRefresh)}</Tag>
+                  {profileStats.checkedAt ? <Text type="secondary">统计时间：{profileStats.checkedAt}</Text> : null}
+                </Space>
+              ) : (
+                <Text type="secondary">暂无统计数据，点击“刷新状态”重试。</Text>
+              )}
+              {kolMarketingStatus?.profileStatsError ? <Alert type="warning" showIcon message={kolMarketingStatus.profileStatsError} className="kol-match-status-alert" /> : null}
+            </Card>
+          </Col>
+          <Col xs={24} xl={12}>
+            <Card className="kol-match-status-card" title="服务状态">
+              <Descriptions size="small" column={{ xs: 1, md: 2 }} bordered>
+                <Descriptions.Item label="ready">{String(kolMarketingStatus?.ready ?? false)}</Descriptions.Item>
+                <Descriptions.Item label="embeddingModel">{kolMarketingStatus?.embeddingModel || "-"}</Descriptions.Item>
+                <Descriptions.Item label="filterLlmEnabled">{String(kolMarketingStatus?.filterLlm?.enabled ?? true)}</Descriptions.Item>
+                <Descriptions.Item label="filterLlmModel">{kolMarketingStatus?.filterLlm?.model || "默认 LLM 模型"}</Descriptions.Item>
+                <Descriptions.Item label="pgConfigured">{String(kolMarketingStatus?.pgConfigured ?? false)}</Descriptions.Item>
+                <Descriptions.Item label="pgReady">{String(kolMarketingStatus?.pgRead?.ready ?? false)}</Descriptions.Item>
+                <Descriptions.Item label="database">{kolMarketingStatus?.pgRead?.server?.databaseName || "-"}</Descriptions.Item>
+                <Descriptions.Item label="server">{kolMarketingStatus?.pgRead?.server ? `${kolMarketingStatus.pgRead.server.serverAddr}:${kolMarketingStatus.pgRead.server.serverPort}` : "-"}</Descriptions.Item>
+                <Descriptions.Item label="inRecovery">{String(kolMarketingStatus?.pgRead?.server?.inRecovery ?? "-")}</Descriptions.Item>
+                <Descriptions.Item label="readonly">{kolMarketingStatus?.pgRead?.server?.transactionReadOnly || "-"}</Descriptions.Item>
+              </Descriptions>
+              {kolMarketingStatus?.pgRead?.error ? <Alert type="warning" showIcon message={kolMarketingStatus.pgRead.error} className="kol-match-status-alert" /> : null}
+            </Card>
+          </Col>
+        </Row>
+      </section>
     </div>
     </PermissionGuard>
   );
