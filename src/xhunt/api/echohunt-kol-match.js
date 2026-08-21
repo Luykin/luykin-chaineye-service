@@ -9,6 +9,7 @@
  */
 
 const crypto = require("crypto");
+const path = require("path");
 const express = require("express");
 const axios = require("axios");
 const { QueryTypes } = require("sequelize");
@@ -36,6 +37,10 @@ const {
   buildStrategySystemPrompt,
 } = require("./echohunt-kol-match/prompts");
 const {
+  createRequestEnvDispatcher,
+  getEnvRouteMeta,
+} = require("../utils/env-handler-dispatch");
+const {
   getKolMarketingEmbeddingModel,
   getKolMarketingPersonProfileFilterSql,
   MAX_LIMIT: KOL_MARKETING_SEARCH_MAX_LIMIT,
@@ -44,6 +49,13 @@ const {
 } = require("./kol-marketing/search-service");
 
 const router = express.Router();
+const dispatchByEchohuntEnv = createRequestEnvDispatcher({
+  handlersDir: path.join(__dirname, "echohunt-kol-match", "handlers"),
+  getEnv: (req) => req.echohuntAppEnv?.value || "production",
+  metaKeyPrefix: "echohunt",
+  targetEnv: "test",
+  productionEnv: "production",
+});
 
 const QUOTA_TIMEZONE = "Asia/Shanghai";
 const AI_QUOTA_BUCKET = "aiMatch";
@@ -247,7 +259,14 @@ function getResolvedKolMatchConfig(reqOrConfig) {
 
 function getKolMatchRuntimeMeta(reqOrConfig) {
   const config = getResolvedKolMatchConfig(reqOrConfig);
-  return getKolMatchConfigSummary(config || {});
+  const meta = getKolMatchConfigSummary(config || {});
+  if (reqOrConfig?.echohuntRouteVariant) {
+    return {
+      ...meta,
+      ...getEnvRouteMeta(reqOrConfig, { metaKeyPrefix: "echohunt" }),
+    };
+  }
+  return meta;
 }
 
 function getAiDailyLimit(reqOrConfig) {
@@ -664,8 +683,9 @@ function getIdempotencyRedisKey(userId, bucket, key, reqOrConfig) {
   const hash = crypto.createHash("sha256").update(key).digest("hex");
   const meta = getKolMatchRuntimeMeta(reqOrConfig);
   const appEnv = String(meta.appEnv || "production").replace(/[^a-zA-Z0-9_-]/g, "");
+  const routeVariant = String(meta.routeVariant || "default").replace(/[^a-zA-Z0-9:_-]/g, "");
   const configVersion = crypto.createHash("sha256").update(String(meta.configVersion || "defaults")).digest("hex").slice(0, 16);
-  return `${IDEMPOTENCY_CACHE_PREFIX}:${userId}:${bucket}:${appEnv}:${configVersion}:${hash}`;
+  return `${IDEMPOTENCY_CACHE_PREFIX}:${userId}:${bucket}:${appEnv}:${routeVariant}:${configVersion}:${hash}`;
 }
 
 async function readIdempotentResult(req, bucket, idempotencyKey) {
@@ -679,6 +699,7 @@ async function readIdempotentResult(req, bucket, idempotencyKey) {
     const data = JSON.parse(cached);
     const meta = getKolMatchRuntimeMeta(req);
     if (data?.meta?.appEnv && data.meta.appEnv !== meta.appEnv) return null;
+    if (data?.meta?.routeVariant && data.meta.routeVariant !== meta.routeVariant) return null;
     if (data?.meta?.configVersion && data.meta.configVersion !== meta.configVersion) return null;
     return data;
   } catch {
@@ -2996,16 +3017,16 @@ router.use(requireKolMatchVip);
 router.use(resolveEchohuntAppEnv);
 router.use(resolveKolMatchRuntimeConfig);
 
-router.get("/quota", async (req, res) => {
+const quotaHandler = async (req, res) => {
   try {
     const data = await getQuotaSnapshot(req);
     return res.json({ success: true, data });
   } catch (error) {
     return sendError(res, error, "KOL_MATCH_QUOTA_FAILED");
   }
-});
+};
 
-router.get("/project-account/lookup", async (req, res) => {
+const projectAccountLookupHandler = async (req, res) => {
   try {
     const handle = normalizeHandle(req.query.handle);
     const account = await lookupProjectAccount(handle, { failOnUpstreamError: true });
@@ -3021,9 +3042,9 @@ router.get("/project-account/lookup", async (req, res) => {
   } catch (error) {
     return sendError(res, error, "PROJECT_ACCOUNT_LOOKUP_FAILED");
   }
-});
+};
 
-router.post("/strategy", async (req, res) => {
+const strategyHandler = async (req, res) => {
   const startedAt = Date.now();
   try {
     const data = await generateKolMatchStrategy(req.body || {}, req);
@@ -3043,9 +3064,9 @@ router.post("/strategy", async (req, res) => {
   } catch (error) {
     return sendError(res, error, "KOL_MATCH_STRATEGY_FAILED");
   }
-});
+};
 
-router.post("/ai-search", async (req, res) => {
+const aiSearchHandler = async (req, res) => {
   const configError = getAiServiceConfigError();
   if (configError) {
     return sendError(res, publicError("KOL_MATCH_SERVICE_UNAVAILABLE", 503, "KOL Match 服务暂不可用，请稍后再试。", { reason: configError }));
@@ -3060,9 +3081,9 @@ router.post("/ai-search", async (req, res) => {
     }
     return sendError(res, error, "KOL_MATCH_AI_SEARCH_FAILED");
   }
-});
+};
 
-router.post("/ai-search/stream", async (req, res) => {
+const aiSearchStreamHandler = async (req, res) => {
   const configError = getAiServiceConfigError();
   const lang = normalizeUiLang(req.body?.lang, req.query?.lang, req.headers?.["x-language"], req.headers?.["accept-language"]);
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -3131,9 +3152,9 @@ router.post("/ai-search/stream", async (req, res) => {
     clearInterval(heartbeat);
     if (!closed) res.end();
   }
-});
+};
 
-router.post("/filter-search", async (req, res) => {
+const filterSearchHandler = async (req, res) => {
   const configError = getPgServiceConfigError();
   if (configError) {
     return sendError(res, publicError("KOL_MATCH_SERVICE_UNAVAILABLE", 503, "KOL Match 服务暂不可用，请稍后再试。", { reason: configError }));
@@ -3200,9 +3221,9 @@ router.post("/filter-search", async (req, res) => {
     });
     return sendError(res, normalizedError, "KOL_MATCH_FILTER_SEARCH_FAILED");
   }
-});
+};
 
-router.get("/kols/lookup", async (req, res) => {
+const kolsLookupHandler = async (req, res) => {
   const configError = getPgServiceConfigError();
   if (configError) {
     return sendError(res, publicError("KOL_MATCH_SERVICE_UNAVAILABLE", 503, "KOL Match 服务暂不可用，请稍后再试。", { reason: configError }));
@@ -3233,9 +3254,9 @@ router.get("/kols/lookup", async (req, res) => {
   } catch (error) {
     return sendError(res, error, "KOL_LOOKUP_FAILED");
   }
-});
+};
 
-router.get("/kols/:twitterUserId", async (req, res) => {
+const kolsDetailHandler = async (req, res) => {
   const configError = getPgServiceConfigError();
   if (configError) {
     return sendError(res, publicError("KOL_MATCH_SERVICE_UNAVAILABLE", 503, "KOL Match 服务暂不可用，请稍后再试。", { reason: configError }));
@@ -3266,6 +3287,15 @@ router.get("/kols/:twitterUserId", async (req, res) => {
   } catch (error) {
     return sendError(res, error, "KOL_DETAIL_FAILED");
   }
-});
+};
+
+router.get("/quota", dispatchByEchohuntEnv("quota", quotaHandler));
+router.get("/project-account/lookup", dispatchByEchohuntEnv("project-account-lookup", projectAccountLookupHandler));
+router.post("/strategy", dispatchByEchohuntEnv("strategy", strategyHandler));
+router.post("/ai-search", dispatchByEchohuntEnv("ai-search", aiSearchHandler));
+router.post("/ai-search/stream", dispatchByEchohuntEnv("ai-search-stream", aiSearchStreamHandler));
+router.post("/filter-search", dispatchByEchohuntEnv("filter-search", filterSearchHandler));
+router.get("/kols/lookup", dispatchByEchohuntEnv("kols-lookup", kolsLookupHandler));
+router.get("/kols/:twitterUserId", dispatchByEchohuntEnv("kols-detail", kolsDetailHandler));
 
 module.exports = router;
