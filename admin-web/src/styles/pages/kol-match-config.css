@@ -103,12 +103,29 @@
   font-weight: 800;
 }
 
+.kol-match-panel .ant-row .ant-form-item-label {
+  min-height: 44px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.kol-match-panel .ant-row .ant-form-item-label > label {
+  height: auto;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.kol-match-panel .ant-row .ant-form-item {
+  margin-bottom: 18px;
+}
+
 .kol-match-cost-panel {
-  margin-bottom: 14px;
-  overflow: hidden;
+  margin-top: 18px;
+  margin-bottom: 0;
   border: 1px solid #e4e8f0;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #fffdf7 0%, #ffffff 48%, #f7fbff 100%);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: none;
 }
 
 .kol-match-cost-panel .ant-card-head {
@@ -121,9 +138,9 @@
 
 .kol-match-cost-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
-  gap: 18px;
-  align-items: stretch;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 14px;
+  align-items: start;
 }
 
 .kol-match-cost-ledger {
@@ -133,52 +150,38 @@
 }
 
 .kol-match-cost-primary {
-  position: relative;
-  padding: 18px;
-  overflow: hidden;
-  border: 1px solid rgba(217, 119, 6, 0.16);
-  border-radius: 16px;
-  background: #18130b;
-  color: #fef3c7;
+  padding: 16px;
+  border: 1px solid #e6e9f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 .kol-match-cost-primary::after {
-  position: absolute;
-  right: -38px;
-  bottom: -58px;
-  width: 160px;
-  height: 160px;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(251, 191, 36, 0.36), transparent 68%);
-  content: "";
+  display: none;
 }
 
 .kol-match-cost-primary .ant-typography {
-  position: relative;
-  z-index: 1;
   display: block;
-  color: #fde68a !important;
+  color: #64748b !important;
   font-size: 13px;
   font-weight: 700;
 }
 
 .kol-match-cost-primary strong {
-  position: relative;
-  z-index: 1;
   display: block;
-  margin: 6px 0;
-  color: #fff7ed;
-  font-size: clamp(34px, 5vw, 52px);
+  margin: 8px 0 6px;
+  color: #0f172a;
+  font-size: clamp(32px, 4.2vw, 46px);
   font-weight: 800;
   letter-spacing: -0.04em;
-  line-height: 0.98;
+  line-height: 1;
 }
 
 .kol-match-cost-primary span {
-  position: relative;
-  z-index: 1;
-  color: #fcd34d;
+  color: #475569;
   font-size: 12px;
+  font-weight: 600;
 }
 
 .kol-match-cost-breakdown {
@@ -219,9 +222,9 @@
 
 .kol-match-cost-assumptions {
   padding: 14px;
-  border: 1px dashed rgba(15, 23, 42, 0.16);
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid #e6e9f0;
+  border-radius: 14px;
+  background: #f8fafc;
 }
 
 .kol-match-cost-assumptions .ant-row {
@@ -394,6 +397,77 @@
 
 .kol-match-config-page .full {
   width: 100%;
+}
+
+[data-theme="dark"] .kol-match-config-page {
+  background: #0f172a;
+}
+
+[data-theme="dark"] .kol-match-hero,
+[data-theme="dark"] .kol-match-toolbar,
+[data-theme="dark"] .kol-match-metrics .ant-card,
+[data-theme="dark"] .kol-match-panel,
+[data-theme="dark"] .kol-match-cost-panel,
+[data-theme="dark"] .kol-match-status-card {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: #111827;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .kol-match-cost-primary,
+[data-theme="dark"] .kol-match-cost-breakdown > div,
+[data-theme="dark"] .kol-match-cost-assumptions,
+[data-theme="dark"] .kol-match-cost-model-price,
+[data-theme="dark"] .kol-match-guide-flow-card {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: #172033;
+}
+
+[data-theme="dark"] .kol-match-hero h2.ant-typography,
+[data-theme="dark"] .kol-match-runtime-heading h4.ant-typography,
+[data-theme="dark"] .kol-match-metrics strong,
+[data-theme="dark"] .kol-match-cost-primary strong,
+[data-theme="dark"] .kol-match-cost-breakdown strong,
+[data-theme="dark"] .kol-match-cost-model-price strong,
+[data-theme="dark"] .kol-match-panel .ant-card-head-title,
+[data-theme="dark"] .kol-match-cost-panel .ant-card-head-title,
+[data-theme="dark"] .kol-match-status-card .ant-card-head-title {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .kol-match-kicker,
+[data-theme="dark"] .kol-match-hero .ant-typography:last-child,
+[data-theme="dark"] .kol-match-runtime-heading .ant-typography,
+[data-theme="dark"] .kol-match-metrics .ant-typography,
+[data-theme="dark"] .kol-match-cost-primary .ant-typography,
+[data-theme="dark"] .kol-match-cost-primary span,
+[data-theme="dark"] .kol-match-cost-breakdown span,
+[data-theme="dark"] .kol-match-cost-note .ant-typography:last-child,
+[data-theme="dark"] .kol-match-cost-model-price span {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .kol-match-alert,
+[data-theme="dark"] .kol-match-flow-alert,
+[data-theme="dark"] .kol-match-status-alert {
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+[data-theme="dark"] .kol-match-runtime-footer {
+  border-top-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .kol-match-cost-panel .ant-card-head,
+[data-theme="dark"] .kol-match-panel .ant-card-head,
+[data-theme="dark"] .kol-match-status-card .ant-card-head {
+  border-bottom-color: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme="dark"] .kol-match-status-card .ant-descriptions-bordered .ant-descriptions-item-label,
+[data-theme="dark"] .kol-match-status-card .ant-descriptions-bordered .ant-descriptions-item-content {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: #111827;
+  color: #cbd5e1;
 }
 
 @media (max-width: 768px) {

@@ -365,6 +365,10 @@ function modelFallbackPlaceholder(fallback?: { model?: string; source?: string }
   return `默认：${model}${source ? `（来自 ${source}）` : ""}`;
 }
 
+function modelFallbackValue(fallback?: { model?: string }) {
+  return String(fallback?.model || "").trim();
+}
+
 function mergeModelOptions(models: LlmModelOption[]) {
   const seen = new Set<string>();
   return [...models, ...EXTRA_LLM_MODEL_OPTIONS]
@@ -375,6 +379,17 @@ function mergeModelOptions(models: LlmModelOption[]) {
       return true;
     })
     .map((item) => ({ value: item.value, label: item.label || item.value }));
+}
+
+function modelOptionsWithDefault(models: LlmModelOption[], fallback?: { model?: string; source?: string }) {
+  const fallbackModel = modelFallbackValue(fallback);
+  if (!fallbackModel) return models;
+  const exists = models.some((item) => item.value === fallbackModel);
+  const defaultOption = {
+    value: fallbackModel,
+    label: `${fallbackModel}（默认${fallback?.source ? ` / ${fallback.source}` : ""}）`,
+  };
+  return exists ? models : [defaultOption, ...models];
 }
 
 function InfoLabel({
@@ -519,13 +534,23 @@ function hasProductionConfigChange(beforeDocument: KolMatchRuntimeConfigDocument
   return productionSignature(beforeDocument) !== productionSignature(afterDocument);
 }
 
-function valuesFromConfig(document: KolMatchRuntimeConfigDocument, env: KolMatchAppEnv): FormValues {
+function valuesFromConfig(
+  document: KolMatchRuntimeConfigDocument,
+  env: KolMatchAppEnv,
+  fallbacks: KolMatchModelFallbacks = DEFAULT_MODEL_FALLBACKS
+): FormValues {
   const config = effectiveConfig(document, env);
   return {
     version: document.version,
     limits: config.limits,
-    strategyLlm: config.strategyLlm,
-    evaluatorLlm: config.evaluatorLlm,
+    strategyLlm: {
+      ...config.strategyLlm,
+      model: config.strategyLlm?.model || modelFallbackValue(fallbacks.strategyLlm),
+    },
+    evaluatorLlm: {
+      ...config.evaluatorLlm,
+      model: config.evaluatorLlm?.model || modelFallbackValue(fallbacks.evaluatorLlm),
+    },
     strategyTaskPrompt: config.prompts?.strategy?.taskPrompt || "",
     strategySystemPrompt: config.prompts?.strategy?.systemPrompt || "",
     strategyExtraRules: arrayToLines(config.prompts?.strategy?.extraRules),
@@ -536,15 +561,25 @@ function valuesFromConfig(document: KolMatchRuntimeConfigDocument, env: KolMatch
   };
 }
 
-function applyValues(document: KolMatchRuntimeConfigDocument, env: KolMatchAppEnv, values: FormValues) {
+function normalizeModelForConfig(value?: string, fallback?: { model?: string }) {
+  const model = String(value || "").trim();
+  return model && model !== modelFallbackValue(fallback) ? model : "";
+}
+
+function applyValues(
+  document: KolMatchRuntimeConfigDocument,
+  env: KolMatchAppEnv,
+  values: FormValues,
+  fallbacks: KolMatchModelFallbacks = DEFAULT_MODEL_FALLBACKS
+) {
   const next = clone(document || DEFAULT_DOCUMENT);
   const strategyLlm = {
     ...(values.strategyLlm || {}),
-    model: values.strategyLlm?.model || "",
+    model: normalizeModelForConfig(values.strategyLlm?.model, fallbacks.strategyLlm),
   };
   const evaluatorLlm = {
     ...(values.evaluatorLlm || {}),
-    model: values.evaluatorLlm?.model || "",
+    model: normalizeModelForConfig(values.evaluatorLlm?.model, fallbacks.evaluatorLlm),
   };
   next.version = values.version || next.version;
   next.envs = next.envs || { production: {}, test: {} };
@@ -719,14 +754,14 @@ export function KolMatchConfigPage() {
   const strategyModelPlaceholder = modelFallbackPlaceholder(modelFallbacks.strategyLlm);
   const evaluatorModelPlaceholder = modelFallbackPlaceholder(modelFallbacks.evaluatorLlm);
   const baseModelOptions = useMemo(() => mergeModelOptions(llmModels), [llmModels]);
-  const strategyModelOptions = useMemo(() => [
-    { value: "", label: strategyModelPlaceholder },
-    ...baseModelOptions,
-  ], [baseModelOptions, strategyModelPlaceholder]);
-  const evaluatorModelOptions = useMemo(() => [
-    { value: "", label: evaluatorModelPlaceholder },
-    ...baseModelOptions,
-  ], [baseModelOptions, evaluatorModelPlaceholder]);
+  const strategyModelOptions = useMemo(
+    () => modelOptionsWithDefault(baseModelOptions, modelFallbacks.strategyLlm),
+    [baseModelOptions, modelFallbacks.strategyLlm]
+  );
+  const evaluatorModelOptions = useMemo(
+    () => modelOptionsWithDefault(baseModelOptions, modelFallbacks.evaluatorLlm),
+    [baseModelOptions, modelFallbacks.evaluatorLlm]
+  );
   const strategyTaskFallback = fallbackText("未填写时使用默认任务 Prompt", promptFallbacks.strategy.taskPrompt);
   const strategySystemFallback = fallbackText(
     "未填写时使用默认系统 Prompt",
@@ -761,7 +796,7 @@ export function KolMatchConfigPage() {
   );
 
   function syncForm(nextDoc = document, env = activeEnv) {
-    form.setFieldsValue(valuesFromConfig(nextDoc, env));
+    form.setFieldsValue(valuesFromConfig(nextDoc, env, modelFallbacks));
   }
 
   function updateCostAssumption(key: CostAssumptionKey, value: unknown) {
@@ -794,8 +829,9 @@ export function KolMatchConfigPage() {
       setSource(resp.data.source);
       setSha(resp.data.contentSha256 || "");
       setPromptFallbacks(resp.data.promptFallbacks || DEFAULT_PROMPT_FALLBACKS);
-      setModelFallbacks(resp.data.modelFallbacks || DEFAULT_MODEL_FALLBACKS);
-      form.setFieldsValue(valuesFromConfig(parsed, activeEnv));
+      const nextModelFallbacks = resp.data.modelFallbacks || DEFAULT_MODEL_FALLBACKS;
+      setModelFallbacks(nextModelFallbacks);
+      form.setFieldsValue(valuesFromConfig(parsed, activeEnv, nextModelFallbacks));
       const historyResp = await fetchKolMatchConfigHistory(12).catch(() => null);
       if (historyResp?.data) setHistory(historyResp.data);
     } catch (error) {
@@ -824,7 +860,7 @@ export function KolMatchConfigPage() {
 
   function updateDocumentFromForm() {
     const values = form.getFieldsValue(true) as FormValues;
-    const next = applyValues(document, activeEnv, values);
+    const next = applyValues(document, activeEnv, values, modelFallbacks);
     setDocument(next);
     setJsonText(JSON.stringify(next, null, 2));
     return next;
@@ -836,7 +872,7 @@ export function KolMatchConfigPage() {
       const parsed = JSON.parse(value || "{}");
       setDocument(parsed);
       setValidationErrors([]);
-      form.setFieldsValue(valuesFromConfig(parsed, activeEnv));
+      form.setFieldsValue(valuesFromConfig(parsed, activeEnv, modelFallbacks));
     } catch (error) {
       setValidationErrors(["JSON 解析失败，修正后才能保存"]);
     }
@@ -924,7 +960,7 @@ export function KolMatchConfigPage() {
     next.envs.test = clone(next.envs.production || {});
     setDocument(next);
     setJsonText(JSON.stringify(next, null, 2));
-    if (activeEnv === "test") form.setFieldsValue(valuesFromConfig(next, "test"));
+    if (activeEnv === "test") form.setFieldsValue(valuesFromConfig(next, "test", modelFallbacks));
     messageApi.success("已复制正式配置到测试环境，保存后生效");
   }
 
@@ -976,92 +1012,6 @@ export function KolMatchConfigPage() {
         <Col xs={12} lg={6}><Card><Text type="secondary">Prompt 规则</Text><strong>{current.prompts?.strategy?.extraRules?.length || 0}</strong></Card></Col>
       </Row>
 
-      <Card
-        className="kol-match-cost-panel"
-        title={(
-          <Space wrap>
-            <span>成本估算</span>
-            <Tag color="gold">仅估算</Tag>
-          </Space>
-        )}
-        extra={<Text type="secondary">按当前 {envLabel(activeEnv)} 配置实时计算</Text>}
-      >
-        <div className="kol-match-cost-layout">
-          <div className="kol-match-cost-ledger">
-            <div className="kol-match-cost-primary">
-              <Text>单次 AI Match 预估</Text>
-              <strong>{formatUsd(costEstimate.perRequestCost)}</strong>
-              <span>{formatTokenCompact(costEstimate.totalTokens)} tokens · 输入 {formatTokenCompact(costEstimate.inputTokens)} / 输出 {formatTokenCompact(costEstimate.outputTokens)}</span>
-            </div>
-            <div className="kol-match-cost-breakdown">
-              <div>
-                <Text type="secondary">策略解析</Text>
-                <strong>{costEstimate.strategyEnabled ? formatUsd(costEstimate.strategyCost) : "已关闭"}</strong>
-                <span>{formatTokenCompact(costEstimate.strategyInputTokens + costEstimate.strategyOutputTokens)} tokens</span>
-              </div>
-              <div>
-                <Text type="secondary">候选深评</Text>
-                <strong>{costEstimate.evaluatorEnabled ? formatUsd(costEstimate.evaluatorCost) : "已关闭"}</strong>
-                <span>{costEstimate.batches} 批 · TopK {costEstimate.candidates}</span>
-              </div>
-              <div>
-                <Text type="secondary">{costEstimate.requestCount} 次请求</Text>
-                <strong>{formatUsd(costEstimate.plannedCost)}</strong>
-                <span>用于预估活动/压测预算</span>
-              </div>
-              <div>
-                <Text type="secondary">单用户日满额</Text>
-                <strong>{formatUsd(costEstimate.dailyQuotaCost)}</strong>
-                <span>{costEstimate.aiDailyLimit} 次 AI quota</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="kol-match-cost-assumptions">
-            <div className="kol-match-cost-note">
-              <Text strong>估算假设</Text>
-              <Text type="secondary">
-                单价按当前选择模型自动套用截图里的 LiteLLM 价格；未匹配模型按 In $0.50 / Out $3.00 per 1M 兜底。
-                深评批次在后端并发执行，最长等待约 {Math.round(costEstimate.maxWaitSeconds)} 秒。
-              </Text>
-            </div>
-            <Row gutter={10}>
-              <Col xs={12} md={8}>
-                <Text type="secondary">估算请求数</Text>
-                <InputNumber min={1} max={1_000_000} value={costAssumptions.estimateRequestCount} onChange={(value) => updateCostAssumption("estimateRequestCount", value)} className="full" />
-              </Col>
-              <Col xs={12} md={8}>
-                <Text type="secondary">策略输入 Token</Text>
-                <InputNumber min={0} max={200_000} value={costAssumptions.strategyInputTokens} onChange={(value) => updateCostAssumption("strategyInputTokens", value)} className="full" />
-              </Col>
-              <Col xs={12} md={8}>
-                <Text type="secondary">深评每候选输入</Text>
-                <InputNumber min={0} max={50_000} value={costAssumptions.evaluatorInputTokensPerCandidate} onChange={(value) => updateCostAssumption("evaluatorInputTokensPerCandidate", value)} className="full" />
-              </Col>
-              <Col xs={12} md={8}>
-                <Text type="secondary">深评每批固定输入</Text>
-                <InputNumber min={0} max={200_000} value={costAssumptions.evaluatorInputTokensPerBatch} onChange={(value) => updateCostAssumption("evaluatorInputTokensPerBatch", value)} className="full" />
-              </Col>
-              <Col xs={24} md={12}>
-                <div className="kol-match-cost-model-price">
-                  <Text type="secondary">策略模型单价</Text>
-                  <strong>{strategyCostModel || "未配置模型"}</strong>
-                  <span>{formatModelPricing(strategyModelPricing)}</span>
-                  {!strategyModelPricing.matched ? <Tag color="orange">默认兜底价</Tag> : null}
-                </div>
-              </Col>
-              <Col xs={24} md={12}>
-                <div className="kol-match-cost-model-price">
-                  <Text type="secondary">深评模型单价</Text>
-                  <strong>{evaluatorCostModel || "未配置模型"}</strong>
-                  <span>{formatModelPricing(evaluatorModelPricing)}</span>
-                  {!evaluatorModelPricing.matched ? <Tag color="orange">默认兜底价</Tag> : null}
-                </div>
-              </Col>
-            </Row>
-          </div>
-        </div>
-      </Card>
 
       <Tabs
         items={[
@@ -1069,7 +1019,7 @@ export function KolMatchConfigPage() {
             key: "form",
             label: "表单配置",
             children: (
-              <Form form={form} layout="vertical" onValuesChange={updateDocumentFromForm} initialValues={valuesFromConfig(document, activeEnv)}>
+              <Form form={form} layout="vertical" onValuesChange={updateDocumentFromForm} initialValues={valuesFromConfig(document, activeEnv, modelFallbacks)}>
                 <Row gutter={[16, 16]}>
 	                  <Col xs={24} xl={8}>
 	                    <Card title="基础数量 / 配额" className="kol-match-panel">
@@ -1281,6 +1231,94 @@ export function KolMatchConfigPage() {
           </Col>
         </Row>
       </section>
+
+      <Card
+        className="kol-match-cost-panel"
+        title={(
+          <Space wrap>
+            <span>成本估算</span>
+            <Tag color="gold">仅估算</Tag>
+          </Space>
+        )}
+        extra={<Text type="secondary">按当前 {envLabel(activeEnv)} 配置实时计算</Text>}
+      >
+        <div className="kol-match-cost-layout">
+          <div className="kol-match-cost-ledger">
+            <div className="kol-match-cost-primary">
+              <Text>单次 AI Match 预估</Text>
+              <strong>{formatUsd(costEstimate.perRequestCost)}</strong>
+              <span>{formatTokenCompact(costEstimate.totalTokens)} tokens · 输入 {formatTokenCompact(costEstimate.inputTokens)} / 输出 {formatTokenCompact(costEstimate.outputTokens)}</span>
+            </div>
+            <div className="kol-match-cost-breakdown">
+              <div>
+                <Text type="secondary">策略解析</Text>
+                <strong>{costEstimate.strategyEnabled ? formatUsd(costEstimate.strategyCost) : "已关闭"}</strong>
+                <span>{formatTokenCompact(costEstimate.strategyInputTokens + costEstimate.strategyOutputTokens)} tokens</span>
+              </div>
+              <div>
+                <Text type="secondary">候选深评</Text>
+                <strong>{costEstimate.evaluatorEnabled ? formatUsd(costEstimate.evaluatorCost) : "已关闭"}</strong>
+                <span>{costEstimate.batches} 批 · TopK {costEstimate.candidates}</span>
+              </div>
+              <div>
+                <Text type="secondary">{costEstimate.requestCount} 次请求</Text>
+                <strong>{formatUsd(costEstimate.plannedCost)}</strong>
+                <span>用于预估活动/压测预算</span>
+              </div>
+              <div>
+                <Text type="secondary">单用户日满额</Text>
+                <strong>{formatUsd(costEstimate.dailyQuotaCost)}</strong>
+                <span>{costEstimate.aiDailyLimit} 次 AI quota</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="kol-match-cost-assumptions">
+            <div className="kol-match-cost-note">
+              <Text strong>估算假设</Text>
+              <Text type="secondary">
+                单价按当前选择模型自动套用截图里的 LiteLLM 价格；未匹配模型按 In $0.50 / Out $3.00 per 1M 兜底。
+                深评批次在后端并发执行，最长等待约 {Math.round(costEstimate.maxWaitSeconds)} 秒。
+              </Text>
+            </div>
+            <Row gutter={10}>
+              <Col xs={12} md={8}>
+                <Text type="secondary">估算请求数</Text>
+                <InputNumber min={1} max={1_000_000} value={costAssumptions.estimateRequestCount} onChange={(value) => updateCostAssumption("estimateRequestCount", value)} className="full" />
+              </Col>
+              <Col xs={12} md={8}>
+                <Text type="secondary">策略输入 Token</Text>
+                <InputNumber min={0} max={200_000} value={costAssumptions.strategyInputTokens} onChange={(value) => updateCostAssumption("strategyInputTokens", value)} className="full" />
+              </Col>
+              <Col xs={12} md={8}>
+                <Text type="secondary">深评每候选输入</Text>
+                <InputNumber min={0} max={50_000} value={costAssumptions.evaluatorInputTokensPerCandidate} onChange={(value) => updateCostAssumption("evaluatorInputTokensPerCandidate", value)} className="full" />
+              </Col>
+              <Col xs={12} md={8}>
+                <Text type="secondary">深评每批固定输入</Text>
+                <InputNumber min={0} max={200_000} value={costAssumptions.evaluatorInputTokensPerBatch} onChange={(value) => updateCostAssumption("evaluatorInputTokensPerBatch", value)} className="full" />
+              </Col>
+              <Col xs={24} md={12}>
+                <div className="kol-match-cost-model-price">
+                  <Text type="secondary">策略模型单价</Text>
+                  <strong>{strategyCostModel || "未配置模型"}</strong>
+                  <span>{formatModelPricing(strategyModelPricing)}</span>
+                  {!strategyModelPricing.matched ? <Tag color="orange">默认兜底价</Tag> : null}
+                </div>
+              </Col>
+              <Col xs={24} md={12}>
+                <div className="kol-match-cost-model-price">
+                  <Text type="secondary">深评模型单价</Text>
+                  <strong>{evaluatorCostModel || "未配置模型"}</strong>
+                  <span>{formatModelPricing(evaluatorModelPricing)}</span>
+                  {!evaluatorModelPricing.matched ? <Tag color="orange">默认兜底价</Tag> : null}
+                </div>
+              </Col>
+            </Row>
+          </div>
+        </div>
+      </Card>
+
     </div>
     </PermissionGuard>
   );
