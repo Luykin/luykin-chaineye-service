@@ -1512,15 +1512,19 @@ function extractBriefTerms(brief) {
   return [...unique.values()].slice(0, 12);
 }
 
-function capabilityLabels(abilities, market, lang = "zh") {
+function capabilityScoreItems(abilities, market, lang = "zh", maxItems = 20) {
   if (!abilities || typeof abilities !== "object") return [];
   const bucket = abilities[lang === "en" ? "en" : market === "CN" ? "cn" : "en"] || abilities.en || abilities.cn;
   const fields = Array.isArray(bucket?.fields) ? bucket.fields : [];
   return fields
-    .flatMap((field) => Object.entries(field || {}).map(([label, value]) => ({ label, value: numeric(value) })))
+    .flatMap((field) => Object.entries(field || {}).map(([label, value]) => ({ label, score: numeric(value) })))
     .filter((item) => item.label)
-    .sort((a, b) => (b.value ?? -1) - (a.value ?? -1))
-    .slice(0, 6)
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+    .slice(0, maxItems);
+}
+
+function capabilityLabels(abilities, market, lang = "zh") {
+  return capabilityScoreItems(abilities, market, lang, 6)
     .map((item) => item.label);
 }
 
@@ -2049,6 +2053,7 @@ function mapKolProfile(row, context = {}) {
   const evidenceCn = assessmentEvidence.length && lang === "zh" ? assessmentEvidence : evidenceFor(row, matchedTerms, domain, market, "zh");
   const evidenceEn = assessmentEvidence.length && lang === "en" ? assessmentEvidence : evidenceFor(row, matchedTerms, domain, market, "en");
   const abilities = domain === "AI" ? row.aiAbilities : row.web3Abilities;
+  const capabilityScores = capabilityScoreItems(abilities, market, lang);
 
   return {
     id: String(row.twitterUserId || row.twitter_user_id || ""),
@@ -2085,7 +2090,8 @@ function mapKolProfile(row, context = {}) {
     willingnessConfidence: numeric(row.willingnessConfidence),
     willingnessReason: row.willingnessReason || null,
     willingnessEvidence: localizedWillingnessEvidence(row, lang),
-    capabilities: capabilityLabels(abilities, market, lang),
+    capabilities: capabilityScores.slice(0, 6).map((item) => item.label),
+    capabilityScores,
     keywords: safeArray(row.keywords, 12, 64),
     cooperationTypes: safeArray(row.cooperationTypes, 10, 64),
     marketingGoals: safeArray(row.marketingGoals, 10, 64),
