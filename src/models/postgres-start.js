@@ -31,6 +31,7 @@ const XHuntWebsiteCampaignModel = require("../xhunt/models/XHuntWebsiteCampaign"
 const XHuntBinanceSquareBindingModel = require("../xhunt/models/XHuntBinanceSquareBinding");
 const XHuntBinanceSquareBindingChallengeModel = require("../xhunt/models/XHuntBinanceSquareBindingChallenge");
 const XHuntBinanceSquareBindingEventModel = require("../xhunt/models/XHuntBinanceSquareBindingEvent");
+const XHuntKolCollaborationModel = require("../xhunt/models/XHuntKolCollaboration");
 const AuthCenterXhuntUserModel = require("../xhunt/auth-center/models/AuthCenterXhuntUser");
 const AuthCenterXhuntIdentityModel = require("../xhunt/auth-center/models/AuthCenterXhuntIdentity");
 const AuthCenterXhuntPasswordCredentialModel = require("../xhunt/auth-center/models/AuthCenterXhuntPasswordCredential");
@@ -109,6 +110,7 @@ const XHuntWebsiteCampaign = XHuntWebsiteCampaignModel(pgInstance);
 const XHuntBinanceSquareBinding = XHuntBinanceSquareBindingModel(pgInstance);
 const XHuntBinanceSquareBindingChallenge = XHuntBinanceSquareBindingChallengeModel(pgInstance);
 const XHuntBinanceSquareBindingEvent = XHuntBinanceSquareBindingEventModel(pgInstance);
+const XHuntKolCollaboration = XHuntKolCollaborationModel(pgInstance);
 const AuthCenterXhuntUser = AuthCenterXhuntUserModel(pgInstance);
 const AuthCenterXhuntIdentity = AuthCenterXhuntIdentityModel(pgInstance);
 const AuthCenterXhuntPasswordCredential = AuthCenterXhuntPasswordCredentialModel(pgInstance);
@@ -347,6 +349,26 @@ AuthCenterXhuntAuditLog.belongsTo(AuthCenterXhuntUser, {
   as: "user",
 });
 
+AuthCenterXhuntUser.hasOne(XHuntKolCollaboration, {
+  foreignKey: "authCenterUserId",
+  as: "kolCollaboration",
+});
+
+XHuntKolCollaboration.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "authCenterUserId",
+  as: "authCenterUser",
+});
+
+XHuntUser.hasOne(XHuntKolCollaboration, {
+  foreignKey: "xhuntUserId",
+  as: "kolCollaboration",
+});
+
+XHuntKolCollaboration.belongsTo(XHuntUser, {
+  foreignKey: "xhuntUserId",
+  as: "xhuntUser",
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 async function setupPostgres() {
@@ -405,6 +427,7 @@ module.exports = {
   XHuntBinanceSquareBinding,
   XHuntBinanceSquareBindingChallenge,
   XHuntBinanceSquareBindingEvent,
+  XHuntKolCollaboration,
   AuthCenterXhuntUser,
   AuthCenterXhuntIdentity,
   AuthCenterXhuntPasswordCredential,

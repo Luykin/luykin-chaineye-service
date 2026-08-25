@@ -6,6 +6,7 @@ const {
   XHuntUser,
   CampaignRegistration,
   XHuntWebsiteCampaign,
+  XHuntKolCollaboration,
   AuthCenterXhuntUser,
   AuthCenterXhuntIdentity,
   AuthCenterXhuntPasswordCredential,
@@ -226,6 +227,102 @@ function buildEchohuntUserPayload(authUser, xhuntUser, twitterIdentity = null) {
     displayName: twitterIdentity?.displayName || xhuntUser?.displayName || null,
     avatar: twitterIdentity?.avatar || xhuntUser?.avatar || authUser?.avatar || null,
     userSource: xhuntUser?.userSource || null,
+  };
+}
+
+function normalizeCollaborationTelegram(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  let username = raw.replace(/^@+/, "");
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+      if (!["t.me", "telegram.me"].includes(host)) {
+        throw publicError("COLLABORATION_TELEGRAM_INVALID", 400, "Telegram 格式不正确。");
+      }
+      username = decodeURIComponent(url.pathname.split("/").filter(Boolean)[0] || "").replace(/^@+/, "");
+    } catch (error) {
+      if (error.status) throw error;
+      throw publicError("COLLABORATION_TELEGRAM_INVALID", 400, "Telegram 格式不正确。");
+    }
+  }
+
+  if (!/^[A-Za-z0-9_]{5,32}$/.test(username)) {
+    throw publicError("COLLABORATION_TELEGRAM_INVALID", 400, "Telegram 格式不正确。");
+  }
+  return `@${username}`;
+}
+
+function normalizeCollaborationEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  if (!email) return null;
+  if (email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw publicError("COLLABORATION_EMAIL_INVALID", 400, "Email 格式不正确。");
+  }
+  return email;
+}
+
+function normalizeCollaborationCurrency(value, fallback = "USDT") {
+  const currency = String(value || fallback).trim().toUpperCase();
+  if (!["USDT", "USD"].includes(currency)) {
+    throw publicError("COLLABORATION_CURRENCY_INVALID", 400, "报价币种不支持。");
+  }
+  return currency;
+}
+
+function normalizeCollaborationPrice(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value).trim().replace(/,/g, "");
+  if (!text) return null;
+  if (!/^\d{1,16}(\.\d{1,2})?$/.test(text) || Number(text) <= 0) {
+    throw publicError("COLLABORATION_PRICE_INVALID", 400, "报价必须大于 0，且最多保留两位小数。");
+  }
+  const [integerPart, decimalPart = ""] = text.split(".");
+  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, "") || "0";
+  return `${normalizedInteger}.${decimalPart.padEnd(2, "0")}`;
+}
+
+function normalizeKolCollaborationPayload(body = {}) {
+  if (typeof body.acceptingNewInvitations !== "boolean") {
+    throw publicError("COLLABORATION_STATUS_REQUIRED", 400, "请设置是否接受邀约。");
+  }
+
+  const telegram = normalizeCollaborationTelegram(body.telegram);
+  const email = normalizeCollaborationEmail(body.email);
+  if (body.acceptingNewInvitations && !telegram && !email) {
+    throw publicError("COLLABORATION_CONTACT_REQUIRED", 400, "接受邀约时，Telegram 和 Email 至少填写一项。");
+  }
+
+  return {
+    acceptingNewInvitations: body.acceptingNewInvitations,
+    telegram,
+    email,
+    shortPostPrice: normalizeCollaborationPrice(body.shortPostPrice),
+    shortPostCurrency: normalizeCollaborationCurrency(body.shortPostCurrency),
+    threadPrice: normalizeCollaborationPrice(body.threadPrice),
+    threadCurrency: normalizeCollaborationCurrency(body.threadCurrency),
+  };
+}
+
+function serializeKolCollaboration(record) {
+  if (!record) return null;
+  const json = typeof record.toJSON === "function" ? record.toJSON() : record;
+  return {
+    id: json.id,
+    status: json.acceptingNewInvitations ? "ACTIVE" : "PAUSED",
+    acceptingNewInvitations: !!json.acceptingNewInvitations,
+    telegram: json.telegram || null,
+    email: json.email || null,
+    shortPostPrice: json.shortPostPrice === null || json.shortPostPrice === undefined ? null : String(json.shortPostPrice),
+    shortPostCurrency: json.shortPostCurrency || "USDT",
+    threadPrice: json.threadPrice === null || json.threadPrice === undefined ? null : String(json.threadPrice),
+    threadCurrency: json.threadCurrency || "USDT",
+    twitterId: json.twitterId || null,
+    twitterUsername: json.twitterUsername || null,
+    createdAt: json.createdAt || null,
+    updatedAt: json.updatedAt || null,
   };
 }
 
@@ -1182,6 +1279,108 @@ router.get("/me", authenticateAuthCenterToken(), async (req, res) => {
     });
   } catch (error) {
     return sendError(res, error, "ECHOHUNT_ME_FAILED");
+  }
+});
+
+router.get("/me/collaboration", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400, "请先使用 X 登录 EchoHunt。");
+
+    const record = await XHuntKolCollaboration.findOne({
+      where: {
+        [Op.or]: [
+          { authCenterUserId: req.authCenter.user.id },
+          { twitterId: twitterIdentity.twitterId },
+        ],
+      },
+      order: [["updatedAt", "DESC"]],
+    });
+
+    res.set("Cache-Control", "no-store");
+    return res.json({ success: true, data: serializeKolCollaboration(record) });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_COLLABORATION_FAILED");
+  }
+});
+
+router.put("/me/collaboration", authenticateAuthCenterToken(), async (req, res) => {
+  try {
+    const twitterIdentity = getTwitterIdentityFromAuth(req);
+    if (!twitterIdentity?.twitterId) throw publicError("TWITTER_ID_REQUIRED", 400, "请先使用 X 登录 EchoHunt。");
+    const payload = normalizeKolCollaborationPayload(req.body || {});
+
+    const record = await pgInstance.transaction(async (transaction) => {
+      const xhuntUser = await ensureXHuntUserForEchohunt(
+        {
+          id: twitterIdentity.twitterId,
+          username: twitterIdentity.username,
+          name: twitterIdentity.displayName,
+          profile_image_url: twitterIdentity.avatar,
+        },
+        { authCenterUserId: req.authCenter.user.id, transaction }
+      );
+
+      if (!req.authCenter.user.xhuntUserId && xhuntUser?.id) {
+        await req.authCenter.user.update({ xhuntUserId: xhuntUser.id }, { transaction });
+      }
+
+      const recordPayload = {
+        ...payload,
+        authCenterUserId: req.authCenter.user.id,
+        xhuntUserId: xhuntUser?.id || req.authCenter.user.xhuntUserId || null,
+        twitterId: twitterIdentity.twitterId,
+        twitterUsername: twitterIdentity.username || null,
+        metadata: {
+          source: "echohunt_web",
+          updatedBy: "kol_self",
+        },
+      };
+
+      const existing = await XHuntKolCollaboration.findOne({
+        where: {
+          [Op.or]: [
+            { authCenterUserId: req.authCenter.user.id },
+            { twitterId: twitterIdentity.twitterId },
+          ],
+        },
+        order: [["updatedAt", "DESC"]],
+        transaction,
+        lock: true,
+      });
+
+      if (existing) {
+        await existing.update(recordPayload, { transaction });
+        return existing;
+      }
+
+      return XHuntKolCollaboration.create(recordPayload, { transaction });
+    }).catch(async (error) => {
+      const code = error?.parent?.code || error?.original?.code || error?.code;
+      if (code !== "23505") throw error;
+      const existing = await XHuntKolCollaboration.findOne({
+        where: {
+          [Op.or]: [
+            { authCenterUserId: req.authCenter.user.id },
+            { twitterId: twitterIdentity.twitterId },
+          ],
+        },
+        order: [["updatedAt", "DESC"]],
+      });
+      if (!existing) throw error;
+      await existing.update({
+        ...payload,
+        authCenterUserId: req.authCenter.user.id,
+        twitterId: twitterIdentity.twitterId,
+        twitterUsername: twitterIdentity.username || null,
+      });
+      return existing;
+    });
+
+    res.set("Cache-Control", "no-store");
+    return res.json({ success: true, data: serializeKolCollaboration(record) });
+  } catch (error) {
+    return sendError(res, error, "ECHOHUNT_COLLABORATION_FAILED");
   }
 });
 
