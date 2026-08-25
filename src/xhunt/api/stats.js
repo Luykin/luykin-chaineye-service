@@ -23,6 +23,7 @@ const userTagsRouter = require("./stats-routes/user-tags");
 const nacosSecurityRouter = require("./stats-routes/nacos-security");
 const nacosAdminRouter = require("./stats-routes/nacos-admin");
 const kolMatchConfigRouter = require("./stats-routes/kol-match-config");
+const externalLoginStatusRouter = require("./stats-routes/external-login-status");
 const { logAdminAction } = require("./stats-routes/shared");
 const { XhuntAdminWebAuthnCredential } = require("../../models/postgres-start");
 const {
@@ -600,6 +601,7 @@ router.use(genericStatsRouter);
 router.use(nacosSecurityRouter);
 router.use(nacosAdminRouter);
 router.use(kolMatchConfigRouter);
+router.use(externalLoginStatusRouter);
 
 /**
  * GET /dau-details
