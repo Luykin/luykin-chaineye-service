@@ -56,6 +56,7 @@ const FILTER_PATCH_KEYS = [
   "minFollowers",
   "maxFollowers",
   "activityDays",
+  "excludeNonAcceptingCollaboration",
 ];
 
 // 这些字段在画像表里是模型生成的业务标签，或要求精确枚举值。
@@ -395,6 +396,10 @@ function normalizeFilters(filters = {}) {
 
   const activityDays = normalizeNonNegativeInteger(input.activityDays);
   if (activityDays !== null && activityDays > 0) normalized.activityDays = Math.min(activityDays, 365);
+
+  if (input.excludeNonAcceptingCollaboration === true) {
+    normalized.excludeNonAcceptingCollaboration = true;
+  }
 
   return normalized;
 }
@@ -1024,6 +1029,11 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
   if (filters.projectStages?.length > 0) {
     clauses.push("p.project_stages && $projectStages::text[]");
     bind.projectStages = filters.projectStages;
+  }
+
+  if (filters.excludeNonAcceptingCollaboration === true) {
+    // 只排除用户主动关闭接单的 KOL；未设置 collaboration 的历史画像仍保留。
+    clauses.push("p.collaboration_accepting_new_invitations IS DISTINCT FROM false");
   }
 
   if (filters.willingnessLevels?.length > 0) {

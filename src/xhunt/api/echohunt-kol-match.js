@@ -937,6 +937,7 @@ function normalizeProductHardFilters(input = {}) {
     marketingGoals: source.marketingGoals,
     projectStages: source.projectStages,
     identityTier: source.identityTier,
+    excludeNonAcceptingCollaboration: source.excludeNonAcceptingCollaboration === true,
   });
 
   if (source.excludeLowWillingness === true || willingness === "exclude-low") {
@@ -985,6 +986,7 @@ function buildStrategyChips(filters = {}, lang = "zh") {
   if (filters.minFollowers !== undefined) chips.push(lang === "en" ? `${Math.round(filters.minFollowers).toLocaleString("en-US")}+ followers` : `粉丝 ${Math.round(filters.minFollowers).toLocaleString("en-US")}+`);
   if (filters.maxFollowers !== undefined) chips.push(lang === "en" ? `≤ ${Math.round(filters.maxFollowers).toLocaleString("en-US")} followers` : `粉丝 ≤ ${Math.round(filters.maxFollowers).toLocaleString("en-US")}`);
   if (filters.activityDays !== undefined) chips.push(lang === "en" ? `Active in ${filters.activityDays}d` : `近 ${filters.activityDays} 天活跃`);
+  if (filters.excludeNonAcceptingCollaboration === true) chips.push(lang === "en" ? "Exclude explicitly unavailable KOLs" : "排除明确不接受邀请");
   if (filters.willingnessLevels?.length) {
     const levels = [...filters.willingnessLevels].sort().join(",");
     if (levels === "high") chips.push(lang === "en" ? "High willingness" : "高接单意愿");
@@ -1020,6 +1022,7 @@ function buildFallbackStrategy({ scope, projectHandle, hardFilters, lang = "zh" 
     activityDays: hardFilters.activityDays,
     willingnessLevels: hardFilters.willingnessLevels,
     willingnessLevel: hardFilters.willingnessLevel,
+    excludeNonAcceptingCollaboration: hardFilters.excludeNonAcceptingCollaboration === true,
   });
   const topicTerms = extractBriefTerms(scope.safeBrief).slice(0, 6);
   const goal = inferMarketingGoal(scope.safeBrief, lang);
@@ -2410,6 +2413,7 @@ function normalizeFilterSearchInput(body = {}, reqOrConfig) {
     .map((value) => CAPABILITY_ALIASES[value.toLowerCase()] || [value])
     .filter((group) => group.length > 0);
   const capabilityMatch = source.capabilityMatch === "all" ? "all" : "any";
+  const excludeNonAcceptingCollaboration = source.excludeNonAcceptingCollaboration === true;
   const sort = body.sort === "followers" || source.sort === "followers" ? "followers" : "rank";
   const resultLimit = getFilterResultLimit(reqOrConfig);
   const limit = clampInteger(body.limit || source.limit, resultLimit, 1, resultLimit);
@@ -2426,6 +2430,7 @@ function normalizeFilterSearchInput(body = {}, reqOrConfig) {
     capabilityGroups,
     selectedCapabilities,
     capabilityMatch,
+    excludeNonAcceptingCollaboration,
     sort,
     limit,
   };
@@ -2478,6 +2483,10 @@ async function queryKolProfilesByFilters(filterInput = {}, reqOrConfig) {
       clauses.push("k.willingness_level = ANY($willingnessLevels::text[])");
       bind.willingnessLevels = willingnessLevels;
     }
+  }
+  if (filters.excludeNonAcceptingCollaboration === true) {
+    // 只排除用户主动关闭接单的 KOL；未设置 collaboration 的历史画像仍保留。
+    clauses.push("k.collaboration_accepting_new_invitations IS DISTINCT FROM false");
   }
   if (filters.maxRank !== null) {
     clauses.push(`coalesce(
