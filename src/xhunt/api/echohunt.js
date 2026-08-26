@@ -61,6 +61,9 @@ const {
   revokeBinding,
   getBinanceSquareBindingErrorMessage,
 } = require("../services/binanceSquareBindingService");
+const {
+  syncKolCollaborationToMarketingProfile,
+} = require("../services/kolMarketingProfileCollaborationSync");
 const echohuntKolMatchRoutes = require("./echohunt-kol-match");
 const router = express.Router();
 
@@ -1377,8 +1380,23 @@ router.put("/me/collaboration", authenticateAuthCenterToken(), async (req, res) 
       return existing;
     });
 
+    let profileSync = { status: "skipped", reason: "NOT_ATTEMPTED" };
+    try {
+      profileSync = await syncKolCollaborationToMarketingProfile(record);
+    } catch (syncError) {
+      profileSync = {
+        status: "failed",
+        reason: syncError?.code || syncError?.message || "PROFILE_SYNC_FAILED",
+      };
+      console.warn("[EchoHunt Collaboration] sync kol_marketing_profile failed", {
+        authCenterUserId: req.authCenter.user.id,
+        twitterId: record?.twitterId || twitterIdentity.twitterId,
+        reason: profileSync.reason,
+      });
+    }
+
     res.set("Cache-Control", "no-store");
-    return res.json({ success: true, data: serializeKolCollaboration(record) });
+    return res.json({ success: true, data: serializeKolCollaboration(record), profileSync });
   } catch (error) {
     return sendError(res, error, "ECHOHUNT_COLLABORATION_FAILED");
   }

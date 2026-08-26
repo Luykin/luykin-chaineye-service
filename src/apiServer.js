@@ -26,6 +26,7 @@ const MODULES_TO_PRELOAD = [
   './models/postgres-start',
   './models/postgres-fundraising',
   './infra/k8s/postgres-readonly',
+  './infra/k8s/postgres-write',
   
   // XHunt API 路由
   './xhunt/api/auth',
@@ -194,6 +195,10 @@ const {
   isPostgresReadOnlyConfigured,
   setupK8sPostgresReadOnlyConnection,
 } = require("./infra/k8s/postgres-readonly");
+const {
+  isPostgresWriteConfigured,
+  setupK8sPostgresWriteConnection,
+} = require("./infra/k8s/postgres-write");
 const fundraisingRoutes = require("./routes/fundraising");
 const cryptoRoutes = require("./routes/cryptohunt-tg");
 const proxyRoutes = require("./routes/proxy");
@@ -759,6 +764,18 @@ async function initializeAndStartServer() {
     }
   } else {
     console.warn("[API Server] PostgreSQL 只读从库未配置，依赖只读从库的业务接口会返回 503");
+  }
+  if (isPostgresWriteConfigured()) {
+    try {
+      await setupK8sPostgresWriteConnection(); // 初始化 PostgreSQL 可写主库连接；不执行 sync
+    } catch (error) {
+      console.error(
+        "[API Server] ❌ PostgreSQL 可写主库初始化失败，KOL 商务合作画像同步会跳过:",
+        error.message
+      );
+    }
+  } else {
+    console.warn("[API Server] PostgreSQL 可写主库未配置，KOL 商务合作画像同步会跳过");
   }
   // RootDataPro 已完全停止：不再初始化 rootdatapro 独立数据库连接。
   // await setupRootdataProPostgres();
