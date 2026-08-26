@@ -36,6 +36,7 @@ import {
   validateKolMatchConfig,
 } from "@/services/kol-match-config";
 import {
+  clearKolMarketingProfileCollaboration,
   fetchKolMarketingProfileDebug,
   fetchKolMarketingStatus,
   type KolMarketingProfileDebugResult,
@@ -750,7 +751,7 @@ function estimateKolMatchCost(
 
 export function KolMatchConfigPage() {
   const [messageApi, contextHolder] = message.useMessage();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const [form] = Form.useForm<FormValues>();
   const [activeEnv, setActiveEnv] = useState<KolMatchAppEnv>("test");
   const [document, setDocument] = useState<KolMatchRuntimeConfigDocument>(DEFAULT_DOCUMENT);
@@ -773,6 +774,7 @@ export function KolMatchConfigPage() {
   const [profileDebugOpen, setProfileDebugOpen] = useState(false);
   const [profileDebugQuery, setProfileDebugQuery] = useState("");
   const [profileDebugLoading, setProfileDebugLoading] = useState(false);
+  const [profileDebugClearing, setProfileDebugClearing] = useState(false);
   const [profileDebugResult, setProfileDebugResult] = useState<KolMarketingProfileDebugResult | null>(null);
 
   const current = useMemo(() => effectiveConfig(document, activeEnv), [document, activeEnv]);
@@ -866,6 +868,49 @@ export function KolMatchConfigPage() {
     } finally {
       setProfileDebugLoading(false);
     }
+  }
+
+  function confirmClearProfileCollaboration() {
+    const twitterId = String(profileDebugResult?.profile?.twitter_user_id || "").trim();
+    if (!twitterId) {
+      messageApi.warning("请先查询到 KOL，再清空接单意愿");
+      return;
+    }
+    if (user?.role !== "super") {
+      messageApi.error("只有超级管理员可以清空接单意愿");
+      return;
+    }
+
+    Modal.confirm({
+      title: "清空接单意愿",
+      content: (
+        <div>
+          <p>确定要清空这个 KOL 的接单意愿相关字段吗？</p>
+          <p>
+            只会清空 <Text code>collaboration_*</Text> 新增字段，不会修改 KOL 原有画像字段。
+          </p>
+          <p>
+            Twitter ID：<Text code>{twitterId}</Text>
+          </p>
+        </div>
+      ),
+      okText: "确认清空",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: async () => {
+        setProfileDebugClearing(true);
+        try {
+          const resp = await clearKolMarketingProfileCollaboration(twitterId);
+          setProfileDebugResult(resp.data);
+          messageApi.success("已清空接单意愿相关字段");
+        } catch (error) {
+          messageApi.error(error instanceof Error ? error.message : "清空接单意愿失败");
+          throw error;
+        } finally {
+          setProfileDebugClearing(false);
+        }
+      },
+    });
   }
 
   async function loadConfig() {
@@ -1017,6 +1062,7 @@ export function KolMatchConfigPage() {
   const profileStats = kolMarketingStatus?.profileStats || null;
   const profileDebugRow = profileDebugResult?.profile || null;
   const profileDebugCollaboration = profileDebugResult?.collaboration || null;
+  const canClearProfileCollaboration = user?.role === "super";
 
   return (
     <PermissionGuard permission={["kol-match-config:read", "kol-match-config:write", "nacos-admin"]}>
@@ -1059,6 +1105,11 @@ export function KolMatchConfigPage() {
                 </Tag>
                 {profileDebugResult.matchedBy ? <Tag>matched: {profileDebugResult.matchedBy}</Tag> : null}
                 <Text type="secondary">checkedAt: {profileDebugResult.checkedAt}</Text>
+                {canClearProfileCollaboration && profileDebugRow ? (
+                  <Button size="small" danger loading={profileDebugClearing} onClick={confirmClearProfileCollaboration}>
+                    清空接单意愿
+                  </Button>
+                ) : null}
               </Space>
 
               {profileDebugRow ? (

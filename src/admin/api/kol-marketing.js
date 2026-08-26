@@ -117,6 +117,30 @@ function getProfileDebugDb() {
   throw error;
 }
 
+function getProfileDebugWriteDb() {
+  const pgWrite = getPostgresWriteStatus();
+  if (isPostgresWriteConfigured() && pgWrite.ready) {
+    return {
+      db: getPostgresWriteInstance(),
+      source: "write",
+      status: pgWrite,
+    };
+  }
+
+  const error = new Error("PG write connection is not ready");
+  error.statusCode = 503;
+  error.details = { pgWrite };
+  throw error;
+}
+
+function requireSuperAdmin(req, res, next) {
+  if (req.adminUser?.role === "super") return next();
+  return res.status(403).json({
+    success: false,
+    error: "仅超级管理员可以清空 KOL 接单意愿",
+  });
+}
+
 function pickCollaborationFields(row) {
   if (!row) return null;
   return {
@@ -216,6 +240,100 @@ router.get("/profile-debug", profileDebugGuard, async (req, res) => {
     return res.status(error.statusCode || 500).json({
       success: false,
       error: error.message || "KOL Marketing Profile 查询失败",
+    });
+  }
+});
+
+router.delete("/profile-debug/collaboration", profileDebugGuard, requireSuperAdmin, express.json({ limit: "20kb" }), async (req, res) => {
+  const lookup = normalizeProfileLookup(
+    req.body?.twitterId || req.body?.query || req.query.twitterId || req.query.query || req.query.q
+  );
+  if (!lookup.twitterId && !lookup.handle) {
+    return res.status(400).json({
+      success: false,
+      error: "请输入 Twitter ID、@handle 或 x.com/handle",
+    });
+  }
+
+  try {
+    const { db, source, status } = getProfileDebugWriteDb();
+    const [row] = await db.query(
+      `
+        WITH target AS (
+          SELECT p.twitter_user_id
+          FROM dev.kol_marketing_profile p
+          WHERE
+            ($twitterId::text IS NOT NULL AND p.twitter_user_id::text = $twitterId)
+            OR ($handle::text IS NOT NULL AND lower(p.handle) = $handle)
+          ORDER BY
+            CASE
+              WHEN $twitterId::text IS NOT NULL AND p.twitter_user_id::text = $twitterId THEN 0
+              ELSE 1
+            END,
+            p.updated_at DESC NULLS LAST
+          LIMIT 1
+        )
+        UPDATE dev.kol_marketing_profile p
+        SET
+          collaboration_accepting_new_invitations = NULL,
+          collaboration_telegram = NULL,
+          collaboration_email = NULL,
+          collaboration_short_post_price = NULL,
+          collaboration_short_post_currency = NULL,
+          collaboration_thread_price = NULL,
+          collaboration_thread_currency = NULL,
+          collaboration_updated_at = NULL,
+          collaboration_synced_at = NULL,
+          collaboration_source = NULL
+        FROM target
+        WHERE p.twitter_user_id = target.twitter_user_id
+        RETURNING p.*
+      `,
+      {
+        bind: {
+          twitterId: lookup.twitterId || null,
+          handle: lookup.handle || null,
+        },
+        type: QueryTypes.SELECT,
+      }
+    );
+
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        error: "dev.kol_marketing_profile 里没有查到这个 KOL",
+      });
+    }
+
+    console.warn("[Admin KOL Marketing Profile Debug] collaboration fields cleared", {
+      adminId: req.adminUser?.id,
+      adminEmail: req.adminUser?.email,
+      twitterUserId: String(row.twitter_user_id || ""),
+      handle: row.handle || null,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        query: lookup.raw,
+        matchedBy: lookup.twitterId && String(row.twitter_user_id) === lookup.twitterId ? "twitterId" : "handle",
+        found: true,
+        cleared: true,
+        source,
+        checkedAt: new Date().toISOString(),
+        dbStatus: status,
+        collaboration: pickCollaborationFields(row),
+        profile: row,
+      },
+    });
+  } catch (error) {
+    console.warn("[Admin KOL Marketing Profile Debug] clear collaboration failed", {
+      code: error.code || error.parent?.code || error.original?.code,
+      message: error.message,
+    });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || "KOL Profile 接单意愿清空失败",
     });
   }
 });

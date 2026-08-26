@@ -76,3 +76,10 @@ export function fetchKolMarketingProfileDebug(query: string) {
   const params = new URLSearchParams({ query });
   return apiRequest<ApiEnvelope<KolMarketingProfileDebugResult>>(`/api/admin/kol-marketing/profile-debug?${params.toString()}`);
 }
+
+export function clearKolMarketingProfileCollaboration(twitterId: string) {
+  return apiRequest<ApiEnvelope<KolMarketingProfileDebugResult>>("/api/admin/kol-marketing/profile-debug/collaboration", {
+    method: "DELETE",
+    body: { twitterId },
+  });
+}
