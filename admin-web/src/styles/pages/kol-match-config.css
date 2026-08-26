@@ -395,6 +395,30 @@
   border-radius: 12px;
 }
 
+.kol-match-profile-debug {
+  display: grid;
+  gap: 14px;
+}
+
+.kol-match-profile-debug-result {
+  width: 100%;
+}
+
+.kol-match-profile-debug-json {
+  max-height: 420px;
+  margin: 8px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid #e6e9f0;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #dbeafe;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .kol-match-config-page .full {
   width: 100%;
 }
@@ -468,6 +492,11 @@
   border-color: rgba(148, 163, 184, 0.16);
   background: #111827;
   color: #cbd5e1;
+}
+
+[data-theme="dark"] .kol-match-profile-debug-json {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: #020617;
 }
 
 @media (max-width: 768px) {

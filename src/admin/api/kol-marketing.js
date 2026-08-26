@@ -13,6 +13,12 @@ const {
   isPostgresReadOnlyConfigured,
 } = require("../../infra/k8s/postgres-readonly");
 const {
+  getPostgresWriteInstance,
+  getPostgresWriteStatus,
+  isPostgresWriteConfigured,
+} = require("../../infra/k8s/postgres-write");
+const { requirePermission } = require("../middleware/adminAuth");
+const {
   getKolMarketingFilterLlmModel,
   getKolMarketingEmbeddingModel,
   isKolMarketingFilterLlmEnabled,
@@ -20,6 +26,7 @@ const {
 } = require("../../xhunt/api/kol-marketing/search-service");
 
 const router = express.Router();
+const profileDebugGuard = requirePermission(["kol-match-config:read", "kol-match-config:write", "nacos-admin"]);
 
 function getServiceStatus() {
   const pgConfigured = isPostgresReadOnlyConfigured();
@@ -70,6 +77,62 @@ async function getProfileStats() {
   };
 }
 
+function normalizeProfileLookup(value) {
+  const raw = String(value || "").trim().slice(0, 120);
+  const urlHandleMatch = raw.match(/(?:x|twitter)\.com\/([a-zA-Z0-9_]{1,30})/i);
+  const handleInput = (urlHandleMatch?.[1] || raw)
+    .replace(/^@+/, "")
+    .replace(/\/.*$/, "")
+    .trim();
+  const twitterId = /^\d{1,32}$/.test(raw) ? raw : "";
+  const handle = /^[a-zA-Z0-9_]{1,30}$/.test(handleInput) && !/^\d+$/.test(handleInput)
+    ? handleInput.toLowerCase()
+    : "";
+
+  return { raw, twitterId, handle };
+}
+
+function getProfileDebugDb() {
+  const pgWrite = getPostgresWriteStatus();
+  if (isPostgresWriteConfigured() && pgWrite.ready) {
+    return {
+      db: getPostgresWriteInstance(),
+      source: "write",
+      status: pgWrite,
+    };
+  }
+
+  const pgRead = getPostgresReadOnlyStatus();
+  if (isPostgresReadOnlyConfigured() && pgRead.ready) {
+    return {
+      db: getPostgresReadOnlyInstance(),
+      source: "readonly",
+      status: pgRead,
+    };
+  }
+
+  const error = new Error("PG write/readonly connection is not ready");
+  error.statusCode = 503;
+  error.details = { pgWrite, pgRead };
+  throw error;
+}
+
+function pickCollaborationFields(row) {
+  if (!row) return null;
+  return {
+    acceptingNewInvitations: row.collaboration_accepting_new_invitations,
+    telegram: row.collaboration_telegram,
+    email: row.collaboration_email,
+    shortPostPrice: row.collaboration_short_post_price,
+    shortPostCurrency: row.collaboration_short_post_currency,
+    threadPrice: row.collaboration_thread_price,
+    threadCurrency: row.collaboration_thread_currency,
+    updatedAt: row.collaboration_updated_at,
+    syncedAt: row.collaboration_synced_at,
+    source: row.collaboration_source,
+  };
+}
+
 router.get("/status", async (req, res) => {
   const status = getServiceStatus();
   let profileStats = null;
@@ -95,6 +158,66 @@ router.get("/status", async (req, res) => {
       profileStatsError,
     },
   });
+});
+
+router.get("/profile-debug", profileDebugGuard, async (req, res) => {
+  const lookup = normalizeProfileLookup(req.query.query || req.query.q || req.query.twitterId || req.query.handle);
+  if (!lookup.twitterId && !lookup.handle) {
+    return res.status(400).json({
+      success: false,
+      error: "请输入 Twitter ID、@handle 或 x.com/handle",
+    });
+  }
+
+  try {
+    const { db, source, status } = getProfileDebugDb();
+    const [row] = await db.query(
+      `
+        SELECT p.*
+        FROM dev.kol_marketing_profile p
+        WHERE
+          ($twitterId::text IS NOT NULL AND p.twitter_user_id::text = $twitterId)
+          OR ($handle::text IS NOT NULL AND lower(p.handle) = $handle)
+        ORDER BY
+          CASE
+            WHEN $twitterId::text IS NOT NULL AND p.twitter_user_id::text = $twitterId THEN 0
+            ELSE 1
+          END,
+          p.updated_at DESC NULLS LAST
+        LIMIT 1
+      `,
+      {
+        bind: {
+          twitterId: lookup.twitterId || null,
+          handle: lookup.handle || null,
+        },
+        type: QueryTypes.SELECT,
+      }
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        query: lookup.raw,
+        matchedBy: row ? (lookup.twitterId && String(row.twitter_user_id) === lookup.twitterId ? "twitterId" : "handle") : null,
+        found: Boolean(row),
+        source,
+        checkedAt: new Date().toISOString(),
+        dbStatus: status,
+        collaboration: pickCollaborationFields(row),
+        profile: row || null,
+      },
+    });
+  } catch (error) {
+    console.warn("[Admin KOL Marketing Profile Debug] query failed", {
+      code: error.code || error.parent?.code || error.original?.code,
+      message: error.message,
+    });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || "KOL Marketing Profile 查询失败",
+    });
+  }
 });
 
 module.exports = router;

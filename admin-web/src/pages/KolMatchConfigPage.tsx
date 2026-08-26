@@ -11,6 +11,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Row,
   Segmented,
   Space,
@@ -34,7 +35,12 @@ import {
   refreshKolMatchConfigCache,
   validateKolMatchConfig,
 } from "@/services/kol-match-config";
-import { fetchKolMarketingStatus, type KolMarketingServiceStatus } from "@/services/kol-marketing";
+import {
+  fetchKolMarketingProfileDebug,
+  fetchKolMarketingStatus,
+  type KolMarketingProfileDebugResult,
+  type KolMarketingServiceStatus,
+} from "@/services/kol-marketing";
 import { fetchLlmModels, type LlmModelOption } from "@/services/llm";
 import type {
   KolMatchAppEnv,
@@ -641,6 +647,22 @@ function statusColor(status?: KolMarketingServiceStatus | null) {
   return status.ready ? "success" : "error";
 }
 
+function formatDebugValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function stringifyDebugProfile(value: unknown) {
+  return JSON.stringify(
+    value,
+    (_key, item) => (typeof item === "bigint" ? item.toString() : item),
+    2
+  );
+}
+
 function resolveModelName(configModel?: string, fallback?: { model?: string }) {
   return String(configModel || fallback?.model || "").trim();
 }
@@ -748,6 +770,10 @@ export function KolMatchConfigPage() {
   const [costAssumptions, setCostAssumptions] = useState<CostAssumptions>(DEFAULT_COST_ASSUMPTIONS);
   const [kolMarketingStatus, setKolMarketingStatus] = useState<KolMarketingServiceStatus | null>(null);
   const [kolMarketingStatusLoading, setKolMarketingStatusLoading] = useState(false);
+  const [profileDebugOpen, setProfileDebugOpen] = useState(false);
+  const [profileDebugQuery, setProfileDebugQuery] = useState("");
+  const [profileDebugLoading, setProfileDebugLoading] = useState(false);
+  const [profileDebugResult, setProfileDebugResult] = useState<KolMarketingProfileDebugResult | null>(null);
 
   const current = useMemo(() => effectiveConfig(document, activeEnv), [document, activeEnv]);
   const canWrite = hasPermission(["kol-match-config:write", "nacos-admin"]);
@@ -815,6 +841,30 @@ export function KolMatchConfigPage() {
       messageApi.error(error instanceof Error ? error.message : "加载 KOL 数据状态失败");
     } finally {
       setKolMarketingStatusLoading(false);
+    }
+  }
+
+  async function loadProfileDebug(input = profileDebugQuery) {
+    const query = input.trim();
+    if (!query) {
+      messageApi.warning("请输入 Twitter ID、@handle 或 x.com/handle");
+      return;
+    }
+
+    setProfileDebugQuery(query);
+    setProfileDebugLoading(true);
+    try {
+      const resp = await fetchKolMarketingProfileDebug(query);
+      setProfileDebugResult(resp.data);
+      if (resp.data.found) {
+        messageApi.success("已查到 KOL Profile，同步字段可在弹框内检查");
+      } else {
+        messageApi.warning("dev.kol_marketing_profile 里没有查到这个 KOL");
+      }
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "查询 KOL Profile 失败");
+    } finally {
+      setProfileDebugLoading(false);
     }
   }
 
@@ -965,12 +1015,84 @@ export function KolMatchConfigPage() {
   }
 
   const profileStats = kolMarketingStatus?.profileStats || null;
+  const profileDebugRow = profileDebugResult?.profile || null;
+  const profileDebugCollaboration = profileDebugResult?.collaboration || null;
 
   return (
     <PermissionGuard permission={["kol-match-config:read", "kol-match-config:write", "nacos-admin"]}>
     <div className="kol-match-config-page">
       {contextHolder}
       <PromptGuideDrawer open={guideOpen} onClose={() => setGuideOpen(false)} />
+      <Modal
+        title="KOL Profile 字段检查"
+        open={profileDebugOpen}
+        onCancel={() => setProfileDebugOpen(false)}
+        footer={null}
+        width={980}
+        destroyOnClose={false}
+      >
+        <div className="kol-match-profile-debug">
+          <Alert
+            type="info"
+            showIcon
+            message="用于验证 EchoHunt 商户合作保存后，dev.kol_marketing_profile 的新增 collaboration_* 字段是否同步成功。"
+            description="支持输入 Twitter ID、@handle 或 x.com/handle；后端优先读写库，写库不可用时回退只读库。"
+          />
+          <Input.Search
+            allowClear
+            enterButton="查询"
+            loading={profileDebugLoading}
+            placeholder="例如：44196397 / @xxx / https://x.com/xxx"
+            value={profileDebugQuery}
+            onChange={(event) => setProfileDebugQuery(event.target.value)}
+            onSearch={(value) => void loadProfileDebug(value)}
+          />
+
+          {profileDebugResult ? (
+            <Space direction="vertical" size={14} className="kol-match-profile-debug-result">
+              <Space wrap>
+                <Tag color={profileDebugResult.found ? "green" : "orange"}>
+                  {profileDebugResult.found ? "已找到" : "未找到"}
+                </Tag>
+                <Tag color={profileDebugResult.source === "write" ? "blue" : "default"}>
+                  source: {profileDebugResult.source}
+                </Tag>
+                {profileDebugResult.matchedBy ? <Tag>matched: {profileDebugResult.matchedBy}</Tag> : null}
+                <Text type="secondary">checkedAt: {profileDebugResult.checkedAt}</Text>
+              </Space>
+
+              {profileDebugRow ? (
+                <>
+                  <Descriptions size="small" bordered column={{ xs: 1, md: 2 }}>
+                    <Descriptions.Item label="twitter_user_id">{formatDebugValue(profileDebugRow.twitter_user_id)}</Descriptions.Item>
+                    <Descriptions.Item label="handle">{formatDebugValue(profileDebugRow.handle)}</Descriptions.Item>
+                    <Descriptions.Item label="collaboration_accepting_new_invitations">
+                      {formatDebugValue(profileDebugCollaboration?.acceptingNewInvitations)}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="collaboration_source">{formatDebugValue(profileDebugCollaboration?.source)}</Descriptions.Item>
+                    <Descriptions.Item label="collaboration_telegram">{formatDebugValue(profileDebugCollaboration?.telegram)}</Descriptions.Item>
+                    <Descriptions.Item label="collaboration_email">{formatDebugValue(profileDebugCollaboration?.email)}</Descriptions.Item>
+                    <Descriptions.Item label="collaboration_short_post_price">
+                      {formatDebugValue(profileDebugCollaboration?.shortPostPrice)} {formatDebugValue(profileDebugCollaboration?.shortPostCurrency)}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="collaboration_thread_price">
+                      {formatDebugValue(profileDebugCollaboration?.threadPrice)} {formatDebugValue(profileDebugCollaboration?.threadCurrency)}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="collaboration_updated_at">{formatDebugValue(profileDebugCollaboration?.updatedAt)}</Descriptions.Item>
+                    <Descriptions.Item label="collaboration_synced_at">{formatDebugValue(profileDebugCollaboration?.syncedAt)}</Descriptions.Item>
+                  </Descriptions>
+                  <div>
+                    <Text strong>完整字段 JSON</Text>
+                    <pre className="kol-match-profile-debug-json">{stringifyDebugProfile(profileDebugRow)}</pre>
+                  </div>
+                </>
+              ) : (
+                <Alert type="warning" showIcon message="这个 Twitter ID / handle 在 dev.kol_marketing_profile 里不存在，所以保存接口会返回 profileSync.status = skipped。" />
+              )}
+            </Space>
+          ) : null}
+        </div>
+      </Modal>
       <section className="kol-match-hero">
         <div>
           <Text className="kol-match-kicker">EchoHunt runtime control</Text>
@@ -1178,6 +1300,7 @@ export function KolMatchConfigPage() {
             <Tag color={statusColor(kolMarketingStatus)}>
               {kolMarketingStatus?.ready ? "服务可用" : "服务未就绪"}
             </Tag>
+            <Button size="small" type="text" onClick={() => setProfileDebugOpen(true)}>字段检查</Button>
             <Button loading={kolMarketingStatusLoading} onClick={loadKolMarketingStatus}>刷新状态</Button>
           </Space>
         </div>

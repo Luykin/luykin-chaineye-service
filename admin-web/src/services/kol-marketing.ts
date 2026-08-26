@@ -37,6 +37,30 @@ export interface KolMarketingServiceStatus {
   maxLimit: number;
 }
 
+export type KolMarketingProfileRow = Record<string, unknown>;
+
+export interface KolMarketingProfileDebugResult {
+  query: string;
+  matchedBy: "twitterId" | "handle" | null;
+  found: boolean;
+  source: "write" | "readonly";
+  checkedAt: string;
+  dbStatus?: KolMarketingPgReadStatus | Record<string, unknown>;
+  collaboration?: {
+    acceptingNewInvitations?: boolean | null;
+    telegram?: string | null;
+    email?: string | null;
+    shortPostPrice?: string | number | null;
+    shortPostCurrency?: string | null;
+    threadPrice?: string | number | null;
+    threadCurrency?: string | null;
+    updatedAt?: string | null;
+    syncedAt?: string | null;
+    source?: string | null;
+  } | null;
+  profile: KolMarketingProfileRow | null;
+}
+
 interface ApiEnvelope<T> {
   success: boolean;
   data: T;
@@ -46,4 +70,9 @@ interface ApiEnvelope<T> {
 
 export function fetchKolMarketingStatus() {
   return apiRequest<ApiEnvelope<KolMarketingServiceStatus>>("/api/admin/kol-marketing/status");
+}
+
+export function fetchKolMarketingProfileDebug(query: string) {
+  const params = new URLSearchParams({ query });
+  return apiRequest<ApiEnvelope<KolMarketingProfileDebugResult>>(`/api/admin/kol-marketing/profile-debug?${params.toString()}`);
 }
