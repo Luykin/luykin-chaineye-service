@@ -942,7 +942,8 @@ function normalizeProductHardFilters(input = {}) {
 
   if (source.excludeLowWillingness === true || willingness === "exclude-low") {
     delete normalized.willingnessLevel;
-    normalized.willingnessLevels = ["medium", "high", "unknown"];
+    delete normalized.willingnessLevels;
+    normalized.excludeLowWillingness = true;
   }
 
   return normalized;
@@ -962,6 +963,11 @@ function mergeExplicitFilters(base = {}, explicit = {}) {
     delete merged.willingnessLevel;
     if (explicit.willingnessLevels) merged.willingnessLevels = explicit.willingnessLevels;
     if (explicit.willingnessLevel) merged.willingnessLevel = explicit.willingnessLevel;
+  }
+  if (explicit.excludeLowWillingness === true) {
+    delete merged.willingnessLevels;
+    delete merged.willingnessLevel;
+    merged.excludeLowWillingness = true;
   }
   return normalizeFilters(merged);
 }
@@ -987,6 +993,7 @@ function buildStrategyChips(filters = {}, lang = "zh") {
   if (filters.maxFollowers !== undefined) chips.push(lang === "en" ? `≤ ${Math.round(filters.maxFollowers).toLocaleString("en-US")} followers` : `粉丝 ≤ ${Math.round(filters.maxFollowers).toLocaleString("en-US")}`);
   if (filters.activityDays !== undefined) chips.push(lang === "en" ? `Active in ${filters.activityDays}d` : `近 ${filters.activityDays} 天活跃`);
   if (filters.excludeNonAcceptingCollaboration === true) chips.push(lang === "en" ? "Exclude explicitly unavailable KOLs" : "排除明确不接受邀请");
+  if (filters.excludeLowWillingness === true) chips.push(lang === "en" ? "Exclude low willingness" : "排除低接单意愿");
   if (filters.willingnessLevels?.length) {
     const levels = [...filters.willingnessLevels].sort().join(",");
     if (levels === "high") chips.push(lang === "en" ? "High willingness" : "高接单意愿");
@@ -2057,6 +2064,11 @@ function mapKolProfile(row, context = {}) {
   const evidenceEn = assessmentEvidence.length && lang === "en" ? assessmentEvidence : evidenceFor(row, matchedTerms, domain, market, "en");
   const abilities = domain === "AI" ? row.aiAbilities : row.web3Abilities;
   const capabilityScores = capabilityScoreItems(abilities, market, lang);
+  const hasCollaborationRecord = row.collaborationAcceptingNewInvitations === true
+    || row.collaborationAcceptingNewInvitations === false
+    || Boolean(row.collaborationUpdatedAt)
+    || Boolean(row.collaborationSyncedAt)
+    || Boolean(row.collaborationSource);
 
   return {
     id: String(row.twitterUserId || row.twitter_user_id || ""),
@@ -2117,15 +2129,9 @@ function mapKolProfile(row, context = {}) {
     metricsCalculatedAt: toIso(row.metricsCalculatedAt),
     metricsUpdatedAt: toIso(row.metricsCalculatedAt),
     embeddingGeneratedAt: toIso(row.embeddingGeneratedAt),
-    collaboration: row.collaborationUpdatedAt ? {
+    collaboration: hasCollaborationRecord ? {
       acceptingNewInvitations: row.collaborationAcceptingNewInvitations === true,
       status: row.collaborationAcceptingNewInvitations === true ? "ACTIVE" : "PAUSED",
-      telegram: row.collaborationTelegram || null,
-      email: row.collaborationEmail || null,
-      shortPostPrice: row.collaborationShortPostPrice || null,
-      shortPostCurrency: row.collaborationShortPostCurrency || "USDT",
-      threadPrice: row.collaborationThreadPrice || null,
-      threadCurrency: row.collaborationThreadCurrency || "USDT",
       updatedAt: toIso(row.collaborationUpdatedAt),
       syncedAt: toIso(row.collaborationSyncedAt),
       source: row.collaborationSource || null,
@@ -2345,12 +2351,6 @@ function getKolSelectSql(options = {}) {
     k.willingness_evidence AS "willingnessEvidence",
     k.identity_tier AS "identityTier",
     k.collaboration_accepting_new_invitations AS "collaborationAcceptingNewInvitations",
-    k.collaboration_telegram AS "collaborationTelegram",
-    k.collaboration_email AS "collaborationEmail",
-    k.collaboration_short_post_price::text AS "collaborationShortPostPrice",
-    k.collaboration_short_post_currency AS "collaborationShortPostCurrency",
-    k.collaboration_thread_price::text AS "collaborationThreadPrice",
-    k.collaboration_thread_currency AS "collaborationThreadCurrency",
     k.collaboration_updated_at AS "collaborationUpdatedAt",
     k.collaboration_synced_at AS "collaborationSyncedAt",
     k.collaboration_source AS "collaborationSource",
@@ -2414,6 +2414,7 @@ function normalizeFilterSearchInput(body = {}, reqOrConfig) {
     .filter((group) => group.length > 0);
   const capabilityMatch = source.capabilityMatch === "all" ? "all" : "any";
   const excludeNonAcceptingCollaboration = source.excludeNonAcceptingCollaboration === true;
+  const excludeLowWillingness = source.excludeLowWillingness === true || willingness === "exclude-low";
   const sort = body.sort === "followers" || source.sort === "followers" ? "followers" : "rank";
   const resultLimit = getFilterResultLimit(reqOrConfig);
   const limit = clampInteger(body.limit || source.limit, resultLimit, 1, resultLimit);
@@ -2431,6 +2432,7 @@ function normalizeFilterSearchInput(body = {}, reqOrConfig) {
     selectedCapabilities,
     capabilityMatch,
     excludeNonAcceptingCollaboration,
+    excludeLowWillingness,
     sort,
     limit,
   };
@@ -2442,6 +2444,16 @@ function willingnessMinimumToLevels(value) {
   if (value === "low") return ["low", "medium", "high"];
   if (value === "unknown") return ["unknown"];
   return [];
+}
+
+function excludeLowWillingnessWithCollaborationSql(alias = "k") {
+  return `(
+    ${alias}.collaboration_accepting_new_invitations IS TRUE
+    OR (
+      ${alias}.collaboration_accepting_new_invitations IS NULL
+      AND coalesce(${alias}.willingness_level, 'unknown') <> 'low'
+    )
+  )`;
 }
 
 async function queryKolProfilesByFilters(filterInput = {}, reqOrConfig) {
@@ -2475,8 +2487,8 @@ async function queryKolProfilesByFilters(filterInput = {}, reqOrConfig) {
   if (filters.activityDays !== null) {
     bind.activityDays = Math.min(Math.max(Math.floor(filters.activityDays), 1), 365);
   }
-  if (filters.willingness === "exclude-low") {
-    clauses.push("coalesce(k.willingness_level, 'unknown') <> 'low'");
+  if (filters.excludeLowWillingness === true) {
+    clauses.push(excludeLowWillingnessWithCollaborationSql("k"));
   } else {
     const willingnessLevels = willingnessMinimumToLevels(filters.willingness);
     if (willingnessLevels.length > 0) {

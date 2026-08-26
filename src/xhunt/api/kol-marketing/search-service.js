@@ -56,6 +56,7 @@ const FILTER_PATCH_KEYS = [
   "minFollowers",
   "maxFollowers",
   "activityDays",
+  "excludeLowWillingness",
   "excludeNonAcceptingCollaboration",
 ];
 
@@ -397,11 +398,27 @@ function normalizeFilters(filters = {}) {
   const activityDays = normalizeNonNegativeInteger(input.activityDays);
   if (activityDays !== null && activityDays > 0) normalized.activityDays = Math.min(activityDays, 365);
 
+  if (input.excludeLowWillingness === true) {
+    delete normalized.willingnessLevel;
+    delete normalized.willingnessLevels;
+    normalized.excludeLowWillingness = true;
+  }
+
   if (input.excludeNonAcceptingCollaboration === true) {
     normalized.excludeNonAcceptingCollaboration = true;
   }
 
   return normalized;
+}
+
+function excludeLowWillingnessWithCollaborationSql(alias = "p") {
+  return `(
+    ${alias}.collaboration_accepting_new_invitations IS TRUE
+    OR (
+      ${alias}.collaboration_accepting_new_invitations IS NULL
+      AND coalesce(${alias}.willingness_level, 'unknown') <> 'low'
+    )
+  )`;
 }
 
 function hasMeaningfulFilters(filters = {}) {
@@ -442,6 +459,12 @@ function applyFilterPatch(baseFilters = {}, patchFilters = {}) {
     } else {
       merged.willingnessLevel = patch.willingnessLevel;
     }
+  }
+
+  if (patch.excludeLowWillingness === true) {
+    delete merged.willingnessLevels;
+    delete merged.willingnessLevel;
+    merged.excludeLowWillingness = true;
   }
 
   return normalizeFollowerRange(merged);
@@ -1031,7 +1054,9 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
     bind.projectStages = filters.projectStages;
   }
 
-  if (filters.excludeNonAcceptingCollaboration === true) {
+  if (filters.excludeLowWillingness === true) {
+    clauses.push(excludeLowWillingnessWithCollaborationSql("p"));
+  } else if (filters.excludeNonAcceptingCollaboration === true) {
     // 只排除用户主动关闭接单的 KOL；未设置 collaboration 的历史画像仍保留。
     clauses.push("p.collaboration_accepting_new_invitations IS DISTINCT FROM false");
   }
@@ -1089,12 +1114,6 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
           p.willingness_evidence,
           p.identity_tier,
           p.collaboration_accepting_new_invitations,
-          p.collaboration_telegram,
-          p.collaboration_email,
-          p.collaboration_short_post_price,
-          p.collaboration_short_post_currency,
-          p.collaboration_thread_price,
-          p.collaboration_thread_currency,
           p.collaboration_updated_at,
           p.collaboration_synced_at,
           p.collaboration_source,
@@ -1150,12 +1169,6 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
         fp.willingness_evidence AS "willingnessEvidence",
         fp.identity_tier AS "identityTier",
         fp.collaboration_accepting_new_invitations AS "collaborationAcceptingNewInvitations",
-        fp.collaboration_telegram AS "collaborationTelegram",
-        fp.collaboration_email AS "collaborationEmail",
-        fp.collaboration_short_post_price::text AS "collaborationShortPostPrice",
-        fp.collaboration_short_post_currency AS "collaborationShortPostCurrency",
-        fp.collaboration_thread_price::text AS "collaborationThreadPrice",
-        fp.collaboration_thread_currency AS "collaborationThreadCurrency",
         fp.collaboration_updated_at AS "collaborationUpdatedAt",
         fp.collaboration_synced_at AS "collaborationSyncedAt",
         fp.collaboration_source AS "collaborationSource",
@@ -1209,12 +1222,6 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
       p.willingness_evidence AS "willingnessEvidence",
       p.identity_tier AS "identityTier",
       p.collaboration_accepting_new_invitations AS "collaborationAcceptingNewInvitations",
-      p.collaboration_telegram AS "collaborationTelegram",
-      p.collaboration_email AS "collaborationEmail",
-      p.collaboration_short_post_price::text AS "collaborationShortPostPrice",
-      p.collaboration_short_post_currency AS "collaborationShortPostCurrency",
-      p.collaboration_thread_price::text AS "collaborationThreadPrice",
-      p.collaboration_thread_currency AS "collaborationThreadCurrency",
       p.collaboration_updated_at AS "collaborationUpdatedAt",
       p.collaboration_synced_at AS "collaborationSyncedAt",
       p.collaboration_source AS "collaborationSource",
