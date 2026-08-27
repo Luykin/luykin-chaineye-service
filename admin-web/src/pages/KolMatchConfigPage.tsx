@@ -264,6 +264,7 @@ const DEFAULT_COST_ASSUMPTIONS: CostAssumptions = {
 const AI_RECALL_TOPK_MAX = 2000;
 const EVALUATOR_BATCH_SIZE_MAX = 20;
 const EVALUATOR_BATCH_SIZE_RECOMMENDED_MIN = 10;
+const EVALUATOR_TARGET_BATCH_COUNT = 40;
 
 const DEFAULT_MODEL_PRICING: ModelPricing = {
   inputUsdPerMillion: 0.5,
@@ -687,7 +688,7 @@ function suggestEvaluatorBatchSize(aiRecallTopK: unknown) {
   const topK = Math.max(1, Math.floor(toNumber(aiRecallTopK, 1)));
   return Math.min(
     EVALUATOR_BATCH_SIZE_MAX,
-    Math.max(EVALUATOR_BATCH_SIZE_RECOMMENDED_MIN, Math.ceil(topK / 100))
+    Math.max(EVALUATOR_BATCH_SIZE_RECOMMENDED_MIN, Math.ceil(topK / EVALUATOR_TARGET_BATCH_COUNT))
   );
 }
 
