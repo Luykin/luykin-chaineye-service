@@ -22,7 +22,6 @@ const { structuredChat } = require("../../lib/llm");
 const { authenticateAuthCenterToken } = require("../auth-center/middleware/auth");
 const { isRequestXHuntVip } = require("../constants/xhuntVip");
 const {
-  getKolMatchConfigSummary,
   resolveEchohuntAppEnv,
   resolveKolMatchRuntimeConfig,
 } = require("./echohunt-kol-match/config");
@@ -37,13 +36,87 @@ const {
   buildStrategySystemPrompt,
 } = require("./echohunt-kol-match/prompts");
 const {
+  AI_QUOTA_BUCKET,
+  AI_SCORE_WEIGHTS,
+  AI_STRATEGY_SEMANTIC_ONLY_FILTER_KEYS,
+  BRIEF_VOCABULARY,
+  CAPABILITY_ALIASES,
+  DANGEROUS_INPUT_PATTERNS,
+  FILTER_QUOTA_BUCKET,
+  GOAL_EN_SIGNALS,
+  IDEMPOTENCY_CACHE_PREFIX,
+  INTERNAL_TWITTER_USER_LOOKUP_TIMEOUT_MS,
+  INTERNAL_TWITTER_USER_LOOKUP_URL,
+  QUOTA_TIMEZONE,
+  SENSITIVE_OUTPUT_PATTERNS,
+  STRATEGY_CACHE_PREFIX,
+  STRATEGY_TTL_SECONDS,
+  TOPIC_EN_SIGNALS,
+} = require("./echohunt-kol-match/constants");
+const {
+  genericPublicProgress,
+  isEnglishUi,
+  localizeProgressSources,
+  normalizeUiLang,
+  sanitizePublicText,
+  searchProgressMessage,
+  searchProgressTitle,
+  uiText,
+} = require("./echohunt-kol-match/i18n");
+const {
+  isConfigError,
+  normalizeKolMatchError,
+  publicError,
+  sendError,
+} = require("./echohunt-kol-match/errors");
+const {
+  getAuthCenterUserId,
+  getRequestId,
+} = require("./echohunt-kol-match/request-context");
+const {
+  writeSse,
+  writeSseHeartbeat,
+} = require("./echohunt-kol-match/sse-writer");
+const {
+  getAiDailyLimit,
+  getAiRecallTopK,
+  getAiResultLimit,
+  getEvaluatorLlmBatchSize,
+  getEvaluatorLlmMaxTokens,
+  getEvaluatorLlmModel,
+  getEvaluatorLlmTemperature,
+  getEvaluatorLlmTimeoutMs,
+  getFilterCandidateScanLimit,
+  getFilterDailyLimit,
+  getFilterResultLimit,
+  getKolMatchRuntimeMeta,
+  getResolvedKolMatchConfig,
+  getStrategyLlmMaxTokens,
+  getStrategyLlmModel,
+  getStrategyLlmTemperature,
+  getStrategyLlmTimeoutMs,
+  isEvaluatorLlmEnabled,
+  isStrategyLlmEnabled,
+} = require("./echohunt-kol-match/runtime");
+const {
+  clampInteger,
+  isSafeHttpUrl,
+  normalizeDomain,
+  normalizeHandle,
+  normalizeMarket,
+  normalizeString,
+  normalizeTwitterUserId,
+  numeric,
+  safeArray,
+  shorten,
+  toIso,
+} = require("./echohunt-kol-match/utils");
+const {
   createRequestEnvDispatcher,
-  getEnvRouteMeta,
 } = require("../utils/env-handler-dispatch");
 const {
   getKolMarketingEmbeddingModel,
   getKolMarketingPersonProfileFilterSql,
-  MAX_LIMIT: KOL_MARKETING_SEARCH_MAX_LIMIT,
   normalizeFilters,
   searchKolMarketingProfiles,
 } = require("./kol-marketing/search-service");
@@ -56,447 +129,6 @@ const dispatchByEchohuntEnv = createRequestEnvDispatcher({
   targetEnv: "test",
   productionEnv: "production",
 });
-
-const QUOTA_TIMEZONE = "Asia/Shanghai";
-const AI_QUOTA_BUCKET = "aiMatch";
-const FILTER_QUOTA_BUCKET = "filterSearch";
-const STRATEGY_CACHE_PREFIX = "echohunt:kol-match:strategy";
-const IDEMPOTENCY_CACHE_PREFIX = "echohunt:kol-match:idempotency";
-const STRATEGY_TTL_SECONDS = 30 * 60;
-const INTERNAL_TWITTER_USER_LOOKUP_URL = "https://data.cryptohunt.ai/fetch/twitter/user";
-const INTERNAL_TWITTER_USER_LOOKUP_TIMEOUT_MS = 7000;
-const DEFAULT_AI_DAILY_LIMIT = 3;
-const DEFAULT_FILTER_DAILY_LIMIT = 10;
-const DEFAULT_AI_RESULT_LIMIT = 50;
-const DEFAULT_AI_RECALL_TOP_K = 100;
-const DEFAULT_FILTER_RESULT_LIMIT = 200;
-const DEFAULT_FILTER_CANDIDATE_SCAN_LIMIT = 2000;
-const GENERIC_PUBLIC_PROGRESS_ZH = "当前阶段已完成，系统正在继续生成 KOL 推荐名单。";
-const GENERIC_PUBLIC_PROGRESS_EN = "This stage is complete; EchoHunt is continuing to build the KOL shortlist.";
-const AI_SCORE_WEIGHTS = {
-  semantic: 0.7,
-  traffic: 0.15,
-  influence: 0.1,
-  soul: 0.05,
-};
-
-const AI_STRATEGY_SEMANTIC_ONLY_FILTER_KEYS = [
-  "keywords",
-  "cooperationTypes",
-  "marketingGoals",
-  "projectStages",
-  "identityTier",
-];
-
-const BRIEF_VOCABULARY = [
-  "BNB Chain", "Ethereum", "Solana", "Base", "Bitcoin", "RWA", "DeFi", "AI Agent", "AI", "DEX",
-  "Perps", "永续合约", "合约", "链上交易", "交易", "积分", "空投", "钱包", "安全", "开发者",
-  "公链", "Layer2", "NFT", "Meme", "GameFi", "社区", "研究", "教程", "工具", "KOL", "influencer",
-];
-
-const CAPABILITY_ALIASES = {
-  ai: ["AI", "人工智能"],
-  rwa: ["RWA"],
-  security: ["Security", "安全"],
-  defi: ["DeFi"],
-  trading: ["Trading", "交易"],
-  meme: ["MEME", "Meme"],
-  airdrop: ["Airdrop", "空投"],
-  layer1: ["Layer1", "Layer 1"],
-  ethereum: ["Ethereum", "以太坊"],
-  perps: ["Perps", "永续合约", "合约"],
-  arbitrage: ["Arbitrage", "套利"],
-  bitcoin: ["Bitcoin", "比特币"],
-  macro: ["Macro", "宏观"],
-  "prediction-market": ["Prediction Market", "预测市场"],
-};
-
-const TOPIC_EN_SIGNALS = [
-  [/以太坊|ethereum/i, "Ethereum"],
-  [/比特币|bitcoin/i, "Bitcoin"],
-  [/人工智能|\bai\b|大语言模型|\bllm\b|智能体|模型|算力|机器人/i, "AI"],
-  [/\brwa\b|代币化资产|资产代币化/i, "RWA"],
-  [/\bdefi\b|去中心化金融/i, "DeFi"],
-  [/交易|市场|流动性|套利|衍生品/i, "Trading"],
-  [/监管|合规|法律|政策/i, "Regulation"],
-  [/公链|layer\s?1|区块链基础设施|协议|链上基础设施/i, "Blockchain infrastructure"],
-  [/安全|隐私|密码学|零知识|\bzk\b|审计/i, "Security & privacy"],
-  [/\bnft\b|数字艺术|生成艺术|艺术|收藏/i, "NFT & digital culture"],
-  [/社区|社群|\bmeme\b|迷因/i, "Community & culture"],
-  [/宏观|地缘政治|金融/i, "Macro & finance"],
-  [/开发者|开源|工程|软件|编程/i, "Developer ecosystem"],
-  [/支付|稳定币|结算/i, "Payments"],
-  [/创业|创投|风险投资|投资/i, "Venture & startups"],
-  [/\bweb3\b|加密|链上|区块链/i, "Web3"],
-];
-
-const GOAL_EN_SIGNALS = [
-  [/品牌|曝光|声量|知名度|认知|传播|叙事/i, "Brand awareness"],
-  [/产品|功能|教育|价值传递/i, "Product education"],
-  [/用户增长|转化|拉新|活跃度|用户/i, "User growth"],
-  [/社区|社群|共识|话题/i, "Community growth"],
-  [/开发者|技术|协议|标准|开源|安全/i, "Technical credibility"],
-  [/生态|集成|采用|落地|合作伙伴/i, "Ecosystem adoption"],
-  [/机构|高净值|投资者|资本市场/i, "Institutional reach"],
-  [/行业|权威|思想领导|影响力|背书/i, "Thought leadership"],
-  [/合规|监管|政策/i, "Regulatory positioning"],
-  [/流动性|交易用户|交易者/i, "Liquidity & trader acquisition"],
-  [/艺术|文化|\bnft\b|创意/i, "Cultural positioning"],
-];
-
-const SENSITIVE_OUTPUT_PATTERNS = [
-  /system\s*prompt/i,
-  /developer\s*message/i,
-  /api[_\s-]?key/i,
-  /secret/i,
-  /token/i,
-  /jwt/i,
-  /database_url/i,
-  /password/i,
-  /连接串|数据库密码|系统提示|开发者指令|密钥|环境变量/i,
-  /select\s+.+\s+from\s+/i,
-  /insert\s+into|drop\s+table|alter\s+table/i,
-];
-
-const DANGEROUS_INPUT_PATTERNS = [
-  /ignore\s+(all\s+)?(previous|above)\s+instructions[^。！？!?；;，,\n]*/gi,
-  /忽略(以上|前面|之前|所有)[^。！？!?；;，,\n]*(指令|提示)[^。！？!?；;，,\n]*/gi,
-  /(system\s*prompt|developer\s*message|系统提示|开发者指令|内部提示)[^。！？!?；;，,\n]*/gi,
-  /(api[_\s-]?key|密钥|token|jwt|数据库密码|连接串|database_url|环境变量)[^。！？!?；;，,\n]*/gi,
-  /(执行命令|shell|drop\s+table|数据库结构)[^。！？!?；;，,\n]*/gi,
-  /(预测.*(币价|价格|涨跌)|投资建议|price\s+prediction|trading\s+signal)[^。！？!?；;，,\n]*/gi,
-];
-
-function getEnvPositiveInteger(name, fallback) {
-  const parsed = Number(process.env[name]);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
-}
-
-function normalizeUiLang(...values) {
-  for (const value of values) {
-    const text = String(value || "").trim().toLowerCase();
-    if (!text) continue;
-    if (text.startsWith("en")) return "en";
-    if (text.startsWith("zh") || text === "cn" || text.includes("chinese") || text.includes("中文")) return "zh";
-  }
-  return "zh";
-}
-
-function isEnglishUi(lang) {
-  return normalizeUiLang(lang) === "en";
-}
-
-function uiText(lang, zh, en) {
-  return isEnglishUi(lang) ? en : zh;
-}
-
-function genericPublicProgress(lang = "zh") {
-  return uiText(lang, GENERIC_PUBLIC_PROGRESS_ZH, GENERIC_PUBLIC_PROGRESS_EN);
-}
-
-function localizeProgressSources(sources = [], lang = "zh") {
-  const sourceLabelsEn = {
-    projectHandle: "Project handle",
-    internal_twitter_user_lookup: "Internal Twitter user lookup",
-    scope_gate: "Scope gate",
-    projectBrief: "Project brief",
-    strategy: "Search strategy",
-    semanticQuery: "Semantic query",
-    hardFilters: "Hard filters",
-    normalizedFilters: "Normalized filters",
-    pgvector: "Vector search",
-    kol_marketing_profile: "KOL marketing profile",
-    similarity: "Semantic similarity",
-    rank: "Influence rank",
-    followers: "Followers",
-    willingness: "Collaboration willingness",
-    quota: "Quota",
-    results: "Results",
-  };
-  if (!isEnglishUi(lang)) return safeArray(sources || [], 6, 40);
-  return safeArray(sources || [], 6, 80).map((source) => sourceLabelsEn[source] || source);
-}
-
-function searchProgressTitle(stage, lang) {
-  if (stage === "embedding") return uiText(lang, "生成需求向量", "Generate requirement vector");
-  if (stage === "db_search") return uiText(lang, "检索候选 KOL", "Retrieve candidate KOLs");
-  return uiText(lang, "解析检索计划", "Parse retrieval plan");
-}
-
-function searchProgressMessage(event = {}, lang = "zh") {
-  if (event.stage === "search_plan") {
-    return event.status === "done"
-      ? uiText(lang, "搜索语义和硬过滤条件已生成", "Search semantics and hard filters are ready.")
-      : uiText(lang, "正在解析搜索语义和硬过滤条件", "Parsing search semantics and hard filters.");
-  }
-  if (event.stage === "embedding") {
-    return event.status === "done"
-      ? uiText(lang, "需求向量已生成", "Requirement vector is ready.")
-      : uiText(lang, "正在生成需求向量", "Generating the requirement vector.");
-  }
-  if (event.stage === "db_search") {
-    return event.status === "done"
-      ? uiText(lang, "KOL 候选集检索完成", "KOL candidate retrieval is complete.")
-      : uiText(lang, "正在检索 KOL 候选集", "Retrieving KOL candidates.");
-  }
-  return isEnglishUi(lang) ? "Processing the search stage." : (event.message || "正在处理搜索阶段。");
-}
-
-function getEnvBoolean(name, defaultValue = false) {
-  const raw = process.env[name];
-  if (raw === undefined || raw === null || raw === "") return defaultValue;
-  const normalized = String(raw).trim().toLowerCase();
-  if (["1", "true", "yes", "y", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "n", "off"].includes(normalized)) return false;
-  return defaultValue;
-}
-
-function getResolvedKolMatchConfig(reqOrConfig) {
-  if (reqOrConfig?.kolMatchConfig) return reqOrConfig.kolMatchConfig;
-  if (reqOrConfig?.limits || reqOrConfig?.strategyLlm || reqOrConfig?.evaluatorLlm) return reqOrConfig;
-  return null;
-}
-
-function getKolMatchRuntimeMeta(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  const meta = getKolMatchConfigSummary(config || {});
-  if (reqOrConfig?.echohuntRouteVariant) {
-    return {
-      ...meta,
-      ...getEnvRouteMeta(reqOrConfig, { metaKeyPrefix: "echohunt" }),
-    };
-  }
-  return meta;
-}
-
-function getAiDailyLimit(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.limits?.aiDailyLimit || getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_AI_DAILY_LIMIT", DEFAULT_AI_DAILY_LIMIT);
-}
-
-function getFilterDailyLimit(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.limits?.filterDailyLimit || getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_FILTER_DAILY_LIMIT", DEFAULT_FILTER_DAILY_LIMIT);
-}
-
-function getAiResultLimit(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.limits?.aiResultLimit || getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_AI_RESULT_LIMIT", DEFAULT_AI_RESULT_LIMIT);
-}
-
-function getAiRecallTopK(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  if (config?.limits?.aiRecallTopK) return config.limits.aiRecallTopK;
-  const configured = getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_RECALL_TOP_K", DEFAULT_AI_RECALL_TOP_K);
-  return Math.min(KOL_MARKETING_SEARCH_MAX_LIMIT || DEFAULT_AI_RECALL_TOP_K, Math.max(getAiResultLimit(reqOrConfig), configured));
-}
-
-function isStrategyLlmEnabled(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  if (config?.strategyLlm) return config.strategyLlm.enabled !== false;
-  return getEnvBoolean("ECHOHUNT_KOL_MATCH_STRATEGY_LLM_ENABLED", true);
-}
-
-function getStrategyLlmModel(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.strategyLlm?.model || process.env.ECHOHUNT_KOL_MATCH_STRATEGY_LLM_MODEL || process.env.KOL_MARKETING_FILTER_LLM_MODEL || process.env.LLM_MODEL || "";
-}
-
-function getStrategyLlmTimeoutMs(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.strategyLlm?.timeoutMs || getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_STRATEGY_LLM_TIMEOUT_MS", 10000);
-}
-
-function getStrategyLlmMaxTokens(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.strategyLlm?.maxTokens || 1200;
-}
-
-function getStrategyLlmTemperature(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return Number.isFinite(Number(config?.strategyLlm?.temperature)) ? Number(config.strategyLlm.temperature) : 0;
-}
-
-function isEvaluatorLlmEnabled(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  if (config?.evaluatorLlm) return config.evaluatorLlm.enabled !== false;
-  return getEnvBoolean("ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_ENABLED", true);
-}
-
-function getEvaluatorLlmModel(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.evaluatorLlm?.model || process.env.ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_MODEL || process.env.LLM_MODEL || "";
-}
-
-function getEvaluatorLlmTimeoutMs(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.evaluatorLlm?.timeoutMs || getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_TIMEOUT_MS", 45000);
-}
-
-function getEvaluatorLlmBatchSize(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.evaluatorLlm?.batchSize || clampInteger(process.env.ECHOHUNT_KOL_MATCH_EVALUATOR_LLM_BATCH_SIZE || 10, 10, 1, 20);
-}
-
-function getEvaluatorLlmMaxTokens(reqOrConfig, batchLength) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  const base = config?.evaluatorLlm?.maxTokensBase || 900;
-  const perCandidate = config?.evaluatorLlm?.maxTokensPerCandidate || 300;
-  const cap = config?.evaluatorLlm?.maxTokensCap || 5000;
-  return Math.min(cap, base + Math.max(0, batchLength || 0) * perCandidate);
-}
-
-function getEvaluatorLlmTemperature(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return Number.isFinite(Number(config?.evaluatorLlm?.temperature)) ? Number(config.evaluatorLlm.temperature) : 0;
-}
-
-function getFilterResultLimit(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.limits?.filterResultLimit || getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_FILTER_RESULT_LIMIT", DEFAULT_FILTER_RESULT_LIMIT);
-}
-
-function getFilterCandidateScanLimit(reqOrConfig) {
-  const config = getResolvedKolMatchConfig(reqOrConfig);
-  return config?.limits?.filterCandidateScanLimit || getEnvPositiveInteger("ECHOHUNT_KOL_MATCH_FILTER_CANDIDATE_SCAN_LIMIT", DEFAULT_FILTER_CANDIDATE_SCAN_LIMIT);
-}
-
-function clampInteger(value, fallback, min, max) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(max, Math.max(min, parsed));
-}
-
-function numeric(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function normalizeString(value, maxLength = 500) {
-  return String(value || "").trim().replace(/\s+/g, " ").slice(0, maxLength);
-}
-
-function normalizeHandle(value) {
-  return String(value || "")
-    .trim()
-    .replace(/^@+/, "")
-    .replace(/[^a-zA-Z0-9_]/g, "")
-    .slice(0, 30)
-    .toLowerCase();
-}
-
-function normalizeTwitterUserId(value) {
-  const normalized = String(value || "").trim();
-  return /^\d{1,32}$/.test(normalized) ? normalized : "";
-}
-
-function normalizeMarket(value, fallback = "GLOBAL") {
-  const raw = String(value || "").trim().toUpperCase();
-  if (["CN", "ZH", "CHINESE", "中文", "中文区", "华语"].includes(raw)) return "CN";
-  if (["GLOBAL", "EN", "ENGLISH", "OVERSEAS", "全球", "海外", "国际"].includes(raw)) return "GLOBAL";
-  return fallback;
-}
-
-function normalizeDomain(value, fallback = "Web3") {
-  const raw = String(value || "").trim();
-  const lower = raw.toLowerCase();
-  if (lower === "ai" || lower.includes("人工智能") || lower.includes("aigc")) return "AI";
-  if (lower === "web3" || lower === "crypto" || lower.includes("区块链") || lower.includes("加密")) return "Web3";
-  return fallback;
-}
-
-function isSafeHttpUrl(value) {
-  return /^https?:\/\//i.test(String(value || ""));
-}
-
-function safeArray(value, maxItems = 8, maxItemLength = 80) {
-  const input = Array.isArray(value) ? value : [];
-  return Array.from(
-    new Set(
-      input
-        .map((item) => normalizeString(item, maxItemLength))
-        .filter(Boolean)
-    )
-  ).slice(0, maxItems);
-}
-
-function toIso(value) {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
-}
-
-function shorten(text, maxLength = 160) {
-  const clean = normalizeString(text, maxLength + 20);
-  return clean.length > maxLength ? `${clean.slice(0, Math.max(1, maxLength - 1))}…` : clean;
-}
-
-function publicError(code, status = 400, publicMessage, data = {}) {
-  const error = new Error(code);
-  error.code = code;
-  error.status = status;
-  error.publicMessage = publicMessage;
-  error.data = data;
-  return error;
-}
-
-function getRequestId(req) {
-  return req.requestId || req.headers["x-request-id"] || req.headers["x-xhunt-web-request-id"] || crypto.randomUUID();
-}
-
-function sanitizePublicText(value, maxLength = 500, lang = "zh") {
-  const clean = normalizeString(value, maxLength + 80);
-  if (!clean) return "";
-  if (SENSITIVE_OUTPUT_PATTERNS.some((pattern) => pattern.test(clean))) {
-    return genericPublicProgress(lang);
-  }
-  return clean.length > maxLength ? `${clean.slice(0, maxLength - 1)}…` : clean;
-}
-
-function sendError(res, error, fallbackCode = "KOL_MATCH_FAILED") {
-  const status = error.status || (error.code === "PG_READ_NOT_CONFIGURED" ? 503 : 500);
-  const code = error.code || error.message || fallbackCode;
-  const publicMessage = error.publicMessage || (
-    status === 429
-      ? "今日次数已用完，请明天再试。"
-      : status === 503
-        ? "KOL Match 服务暂不可用，请稍后再试。"
-        : status >= 500
-          ? "KOL Match 处理失败，请稍后重试。"
-          : "请求参数不符合要求，请检查后重试。"
-  );
-
-  return res.status(status).json({
-    success: false,
-    error: code,
-    message: publicMessage,
-    data: {
-      ...(error.data || {}),
-      quotaCharged: false,
-    },
-  });
-}
-
-function isPgStatementTimeout(error) {
-  const code = error?.parent?.code || error?.original?.code || error?.code;
-  const message = error?.parent?.message || error?.original?.message || error?.message || "";
-  return code === "57014" || /statement timeout|canceling statement due to statement timeout/i.test(message);
-}
-
-function normalizeKolMatchError(error, fallbackCode = "KOL_MATCH_FAILED") {
-  if (!error || typeof error !== "object") return error;
-  if (isPgStatementTimeout(error)) {
-    error.code = `${fallbackCode}_TIMEOUT`;
-    error.status = 504;
-    error.publicMessage = "筛选耗时较长，请稍后重试或适当放宽筛选条件。";
-    error.data = {
-      ...(error.data || {}),
-      reason: "PG_STATEMENT_TIMEOUT",
-    };
-  }
-  return error;
-}
 
 function logKolMatchError(label, req, error, extra = {}) {
   const status = error?.status || (error?.code === "PG_READ_NOT_CONFIGURED" ? 503 : 500);
@@ -511,15 +143,6 @@ function logKolMatchError(label, req, error, extra = {}) {
     parentMessage: parent.message,
     ...extra,
   });
-}
-
-function isConfigError(error) {
-  return [
-    "PG_READ_NOT_CONFIGURED",
-    "PG_READ_CONNECTED_TO_PRIMARY",
-    "VECTOR_EMBEDDING_NOT_CONFIGURED",
-    "VECTOR_EMBEDDING_DIMENSION_MISMATCH",
-  ].includes(error?.code || error?.message);
 }
 
 function getPgServiceConfigError() {
@@ -551,10 +174,6 @@ function getBeijingDateContext() {
     resetTime: tomorrow.getTime(),
     ttlSeconds: Math.max(1, Math.ceil((tomorrow - beijingTime) / 1000)),
   };
-}
-
-function getAuthCenterUserId(req) {
-  return req.authCenter?.user?.id ? String(req.authCenter.user.id) : "";
 }
 
 function requireRedis(req) {
@@ -3051,15 +2670,6 @@ function normalizeSseProgress(event = {}, lang = "zh") {
     sources: localizeProgressSources(event.sources || [], lang),
     metrics: event.metrics || undefined,
   };
-}
-
-function writeSse(res, eventName, data) {
-  res.write(`event: ${eventName}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-function writeSseHeartbeat(res) {
-  res.write(": ping\n\n");
 }
 
 router.use(authenticateAuthCenterToken());
