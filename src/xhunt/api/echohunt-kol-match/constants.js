@@ -86,17 +86,17 @@ const GOAL_EN_SIGNALS = [
 ];
 
 const SENSITIVE_OUTPUT_PATTERNS = [
-  /system\s*prompt/i,
-  /developer\s*message/i,
-  /api[_\s-]?key/i,
-  /secret/i,
-  /token/i,
-  /jwt/i,
-  /database_url/i,
-  /password/i,
-  /连接串|数据库密码|系统提示|开发者指令|密钥|环境变量/i,
-  /select\s+.+\s+from\s+/i,
-  /insert\s+into|drop\s+table|alter\s+table/i,
+  /\b(system\s*prompt|developer\s*message)\s*[:=]/i,
+  /\b(api[_\s-]?key|client[_\s-]?secret|api[_\s-]?secret|app[_\s-]?secret|consumer[_\s-]?secret|oauth[_\s-]?secret)\s*[:=]\s*[a-z0-9._~+/=-]{8,}\b/i,
+  /\b(secret|password|passwd|pwd|database[_\s-]?url)\s*[:=]\s*(?!hidden\b|redacted\b|masked\b)[^\s,;]{6,}/i,
+  /\b(access|refresh|session|auth|api|oauth|csrf|id)[_\s-]?token\s*[:=]\s*[a-z0-9._~+/=-]{8,}\b/i,
+  /\btoken[_\s-]?(secret|value|credential|key)\s*[:=]\s*[a-z0-9._~+/=-]{8,}\b/i,
+  /\bauthorization\s*[:=]\s*bearer\s+[a-z0-9._~+/=-]{12,}\b/i,
+  /\bbearer\s+[a-z0-9._~+/=-]{20,}\b/i,
+  /\bjwt\s*[:=]\s*[a-z0-9._~+/=-]{12,}\b/i,
+  /(连接串|数据库密码|系统提示|开发者指令|密钥|环境变量)\s*[:：=]\s*\S{6,}/i,
+  /\bselect\s+[\w*"`.,\s]{1,160}\s+from\s+[\w"`.[\]-]+(?:\s+where\s+|\s*;)/i,
+  /\b(insert\s+into|drop\s+table|alter\s+table)\s+[\w"`.[\]-]+(?:\s|;|$)/i,
 ];
 
 const DANGEROUS_INPUT_PATTERNS = [
