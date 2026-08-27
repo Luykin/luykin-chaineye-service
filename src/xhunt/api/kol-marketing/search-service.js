@@ -21,9 +21,9 @@ const EMBEDDING_NAMESPACE = "kol_marketing_profile";
 // dev.kol_marketing_profile.marketing_profile_embedding 当前是 vector(1536)。
 const EMBEDDING_DIMENSIONS = 1536;
 
-// 默认返回 200 条，最大 600 条；KOL Match AI 会默认召回并深评 600 个候选。
+// 默认返回 200 条，最大 2000 条；KOL Match AI 可配置召回并深评最多 2000 个候选。
 const DEFAULT_LIMIT = 200;
-const MAX_LIMIT = 600;
+const MAX_LIMIT = 2000;
 
 // 环境变量优先级：新 KOL 画像专用配置 > 历史 KOL_SEARCH 配置 > VECTOR_SEARCH 通用配置。
 const EMBEDDING_ENV_PREFIXES = ["KOL_MARKETING_PROFILE", "KOL_SEARCH"];

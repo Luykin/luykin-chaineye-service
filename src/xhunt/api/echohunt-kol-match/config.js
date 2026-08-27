@@ -9,7 +9,7 @@ const KOL_MATCH_CONFIG_TTL_MS = Number.isFinite(Number(process.env.ECHOHUNT_KOL_
 const KOL_MATCH_REDIS_VERSION_KEY = process.env.ECHOHUNT_KOL_MATCH_CONFIG_REDIS_VERSION_KEY || "echohunt:kol-match:config:version";
 const HARD_LIMITS = {
   aiResultLimitMax: 200,
-  aiRecallTopKMax: 600,
+  aiRecallTopKMax: 2000,
   filterResultLimitMax: 200,
   filterCandidateScanLimitMax: 5000,
   quotaMax: 100,

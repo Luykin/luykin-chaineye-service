@@ -261,6 +261,10 @@ const DEFAULT_COST_ASSUMPTIONS: CostAssumptions = {
   evaluatorInputTokensPerCandidate: 850,
 };
 
+const AI_RECALL_TOPK_MAX = 2000;
+const EVALUATOR_BATCH_SIZE_MAX = 20;
+const EVALUATOR_BATCH_SIZE_RECOMMENDED_MIN = 10;
+
 const DEFAULT_MODEL_PRICING: ModelPricing = {
   inputUsdPerMillion: 0.5,
   outputUsdPerMillion: 3,
@@ -679,6 +683,14 @@ function formatModelPricing(pricing: ModelPricing) {
   return `In ${formatUsd(pricing.inputUsdPerMillion)} / Out ${formatUsd(pricing.outputUsdPerMillion)} per 1M`;
 }
 
+function suggestEvaluatorBatchSize(aiRecallTopK: unknown) {
+  const topK = Math.max(1, Math.floor(toNumber(aiRecallTopK, 1)));
+  return Math.min(
+    EVALUATOR_BATCH_SIZE_MAX,
+    Math.max(EVALUATOR_BATCH_SIZE_RECOMMENDED_MIN, Math.ceil(topK / 100))
+  );
+}
+
 function estimateEvaluatorOutputTokens(config: KolMatchEffectiveConfig) {
   const candidates = Math.max(0, Math.floor(toNumber(config.limits?.aiRecallTopK)));
   const batchSize = Math.max(1, Math.floor(toNumber(config.evaluatorLlm?.batchSize, 1)));
@@ -961,6 +973,44 @@ export function KolMatchConfigPage() {
     return next;
   }
 
+  function handleAiRecallTopKBlur() {
+    const values = form.getFieldsValue(true) as FormValues;
+    const rawAiRecallTopK = values.limits?.aiRecallTopK as unknown;
+    if (rawAiRecallTopK === undefined || rawAiRecallTopK === null || rawAiRecallTopK === "") return;
+    const aiRecallTopK = Math.max(1, Math.floor(toNumber(rawAiRecallTopK, 1)));
+    const currentBatchSize = Math.max(1, Math.floor(toNumber(values.evaluatorLlm?.batchSize, 10)));
+    const suggestedBatchSize = suggestEvaluatorBatchSize(aiRecallTopK);
+    const currentBatchCount = Math.ceil(aiRecallTopK / currentBatchSize);
+    const suggestedBatchCount = Math.ceil(aiRecallTopK / suggestedBatchSize);
+
+    Modal.confirm({
+      title: "建议同步修改批次大小",
+      content: (
+        <Space direction="vertical" size={8}>
+          <Text>
+            AI 召回 TopK 当前为 <Text code>{aiRecallTopK}</Text>。建议把“批次大小”同步设置为{" "}
+            <Text code>{suggestedBatchSize}</Text>。
+          </Text>
+          <Text type="secondary">
+            当前批次大小 {currentBatchSize} 约 {currentBatchCount} 批；建议值约 {suggestedBatchCount} 批。确认后会同步修改“批次大小”，取消则保持不变。
+          </Text>
+        </Space>
+      ),
+      okText: `同步为 ${suggestedBatchSize}`,
+      cancelText: "保持不变",
+      onOk: () => {
+        form.setFieldsValue({
+          evaluatorLlm: {
+            ...(values.evaluatorLlm || {}),
+            batchSize: suggestedBatchSize,
+          },
+        });
+        updateDocumentFromForm();
+        messageApi.success(`已将批次大小同步为 ${suggestedBatchSize}`);
+      },
+    });
+  }
+
   function handleJsonChange(value: string) {
     setJsonText(value);
     try {
@@ -1201,7 +1251,7 @@ export function KolMatchConfigPage() {
 	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.aiDailyLimit}>AI 每日次数</InfoLabel>} name={["limits", "aiDailyLimit"]}><InputNumber min={1} max={100} className="full" /></Form.Item></Col>
 	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.filterDailyLimit}>Filter 每日次数</InfoLabel>} name={["limits", "filterDailyLimit"]}><InputNumber min={1} max={100} className="full" /></Form.Item></Col>
 	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.aiResultLimit}>AI 展示数量</InfoLabel>} name={["limits", "aiResultLimit"]}><InputNumber min={1} max={200} className="full" /></Form.Item></Col>
-	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.aiRecallTopK}>AI 召回 TopK</InfoLabel>} name={["limits", "aiRecallTopK"]}><InputNumber min={1} max={600} className="full" /></Form.Item></Col>
+	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.aiRecallTopK}>AI 召回 TopK</InfoLabel>} name={["limits", "aiRecallTopK"]}><InputNumber min={1} max={AI_RECALL_TOPK_MAX} className="full" onBlur={handleAiRecallTopKBlur} /></Form.Item></Col>
 	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.filterResultLimit}>Filter 展示数量</InfoLabel>} name={["limits", "filterResultLimit"]}><InputNumber min={1} max={200} className="full" /></Form.Item></Col>
 	                        <Col span={12}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.filterCandidateScanLimit}>Filter 预扫描</InfoLabel>} name={["limits", "filterCandidateScanLimit"]}><InputNumber min={1} max={5000} className="full" /></Form.Item></Col>
 	                      </Row>
@@ -1224,7 +1274,7 @@ export function KolMatchConfigPage() {
 	                      <Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorModel}>模型（留空用默认）</InfoLabel>} name={["evaluatorLlm", "model"]}><AutoComplete className="full" allowClear placeholder={evaluatorModelPlaceholder} options={evaluatorModelOptions} filterOption={(input, option) => String(option?.label || option?.value || "").toLowerCase().includes(input.toLowerCase())} /></Form.Item>
 	                      <Row gutter={12}>
 	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorTimeoutMs}>超时时间</InfoLabel>} name={["evaluatorLlm", "timeoutMs"]}><InputNumber min={5000} max={120000} className="full" /></Form.Item></Col>
-	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorBatchSize}>批次大小</InfoLabel>} name={["evaluatorLlm", "batchSize"]}><InputNumber min={1} max={20} className="full" /></Form.Item></Col>
+	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorBatchSize}>批次大小</InfoLabel>} name={["evaluatorLlm", "batchSize"]}><InputNumber min={1} max={EVALUATOR_BATCH_SIZE_MAX} className="full" /></Form.Item></Col>
 	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensCap}>Token 上限</InfoLabel>} name={["evaluatorLlm", "maxTokensCap"]}><InputNumber min={500} max={12000} className="full" /></Form.Item></Col>
 	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensBase}>基础 Token</InfoLabel>} name={["evaluatorLlm", "maxTokensBase"]}><InputNumber min={100} max={12000} className="full" /></Form.Item></Col>
 	                        <Col span={8}><Form.Item label={<InfoLabel info={BASIC_FIELD_HELP.evaluatorMaxTokensPerCandidate}>每候选 Token</InfoLabel>} name={["evaluatorLlm", "maxTokensPerCandidate"]}><InputNumber min={50} max={2000} className="full" /></Form.Item></Col>
