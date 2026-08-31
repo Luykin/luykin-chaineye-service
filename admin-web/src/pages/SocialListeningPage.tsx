@@ -675,7 +675,40 @@ export function SocialListeningPage() {
     { title: "数据", width: 140, render: (_, row) => <Space direction="vertical" size={0}><Text>{row.postCount || 0} posts</Text><Text type="secondary">{row.accessCount || 0} accesses</Text></Space> },
     { title: "处理进度", width: 250, render: (_, row) => <Space direction="vertical" size={0}><Text>{formatDate(row.processedThrough)}</Text><Text type={row.lastFailureReason ? "danger" : "secondary"}>{row.lastFailureReason || `最近成功 ${formatDate(row.lastSuccessAt)}`}</Text></Space> },
     { title: "最新任务", width: 190, render: (_, row) => row.latestJob ? <Space direction="vertical" size={0}>{statusTag(row.latestJob.status)}<Text type="secondary">{row.latestJob.jobType}</Text></Space> : "-" },
-    { title: "操作", fixed: "right", width: 280, render: (_, row) => <Space size={6} wrap><Button size="small" onClick={() => setDrawerBoard(row)}>管理</Button><Button size="small" onClick={() => openEdit(row)}>编辑</Button><Button size="small" icon={<ThunderboltOutlined />} loading={refreshMutation.isPending} onClick={() => refreshMutation.mutate(row.id)}>刷新</Button>{row.status === "paused" ? <Button size="small" icon={<PlayCircleOutlined />} onClick={() => resumeMutation.mutate(row.id)}>恢复</Button> : <Button size="small" icon={<PauseCircleOutlined />} onClick={() => pauseMutation.mutate(row.id)}>暂停</Button>}<Popconfirm title="软删除该看板？" okText="删除" cancelText="取消" onConfirm={() => deleteMutation.mutate(row.id)}><Button size="small" danger>删除</Button></Popconfirm></Space> },
+    {
+      title: "操作",
+      fixed: "right",
+      width: 280,
+      render: (_, row) => (
+        <Space size={6} wrap>
+          <Tooltip title="打开详情抽屉，查看授权账号、定时任务执行过程、推文字段追踪、配置说明和异常预警。">
+            <Button size="small" onClick={() => setDrawerBoard(row)}>管理</Button>
+          </Tooltip>
+          <Tooltip title="修改该监控账号的项目资料、召回关键词、关注关系源和 AI 提示语；保存配置不会立即跑任务。">
+            <Button size="small" onClick={() => openEdit(row)}>编辑</Button>
+          </Tooltip>
+          <Tooltip title="手动创建一次刷新任务：扫描该账号最近增量数据，更新推文入库、AI 字段、关系信号和聚合快照；如果已有任务在排队或运行，会复用现有任务。">
+            <Button size="small" icon={<ThunderboltOutlined />} loading={refreshMutation.isPending} onClick={() => refreshMutation.mutate(row.id)}>刷新</Button>
+          </Tooltip>
+          {row.status === "paused" ? (
+            <Tooltip title="恢复自动监控；首次恢复会先补最近 7 天，再低优先级补齐 30 天，之后交给定时任务增量处理。">
+              <Button size="small" icon={<PlayCircleOutlined />} onClick={() => resumeMutation.mutate(row.id)}>恢复</Button>
+            </Tooltip>
+          ) : (
+            <Tooltip title="暂停该账号的自动定时处理；配置和已入库数据保留，后续可点击恢复继续。">
+              <Button size="small" icon={<PauseCircleOutlined />} onClick={() => pauseMutation.mutate(row.id)}>暂停</Button>
+            </Tooltip>
+          )}
+          <Tooltip title="软删除该监控看板：从正常列表隐藏，不做物理删库；已入库历史数据不会在这里直接清空。">
+            <span>
+              <Popconfirm title="软删除该看板？" okText="删除" cancelText="取消" onConfirm={() => deleteMutation.mutate(row.id)}>
+                <Button size="small" danger>删除</Button>
+              </Popconfirm>
+            </span>
+          </Tooltip>
+        </Space>
+      ),
+    },
   ], [deleteMutation, pauseMutation, refreshMutation, resumeMutation]);
 
   return (
@@ -696,17 +729,11 @@ export function SocialListeningPage() {
           </Space>
         </div>
 
-        <PageSection
-          title="流程总览"
-          description="搜索某个账号后点击「管理」，在「执行过程」里可以看每次定时任务扫描了哪些窗口、写入多少推文、AI 生成了哪些字段，以及这些字段保存在哪些表。"
-        >
-          <WorkflowGuide />
-        </PageSection>
 
         <PageSection
           title="被监控账号"
           description="新增账号默认暂停，不会自动跑任务；管理员点击恢复后先补最近 7 天数据，再低优先级补齐 30 天，后续增量任务每 15 分钟由 jobs 进程推进。"
-          extra={<Space wrap><Input.Search placeholder="搜索项目 / handle" allowClear onSearch={(q) => setFilters((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={filters.status} onChange={(status) => setFilters((prev) => ({ ...prev, status }))} options={STATUS_OPTIONS} style={{ width: 130 }} /><Button icon={<ReloadOutlined />} loading={boardsQuery.isFetching} onClick={() => boardsQuery.refetch()}>刷新</Button><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增监控</Button></Space>}
+          extra={<Space wrap><Input.Search placeholder="搜索项目 / handle" allowClear onSearch={(q) => setFilters((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={filters.status} onChange={(status) => setFilters((prev) => ({ ...prev, status }))} options={STATUS_OPTIONS} style={{ width: 130 }} /><Tooltip title="重新加载被监控账号列表，只刷新管理台页面数据，不会触发采集或 AI 分析任务。"><Button icon={<ReloadOutlined />} loading={boardsQuery.isFetching} onClick={() => boardsQuery.refetch()}>刷新</Button></Tooltip><Tooltip title="新增一个被监控官方 X 账号；保存后默认暂停，需要点击恢复才会启动补数和定时监控。"><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增监控</Button></Tooltip></Space>}
         >
           <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1380 }} />
         </PageSection>
@@ -735,6 +762,23 @@ export function SocialListeningPage() {
             </PageSection>
           </Col>
         </Row>
+
+        <PageSection
+          title="流程总览"
+          description="默认折叠。需要了解任务链路时展开：从任务创建、窗口扫描、AI 字段生成，到关系信号、预警和聚合快照。"
+        >
+          <Collapse
+            className="social-listening-workflow-collapse"
+            bordered={false}
+            items={[
+              {
+                key: "workflow",
+                label: "展开查看 Social Listening 定时任务完整链路",
+                children: <WorkflowGuide />,
+              },
+            ]}
+          />
+        </PageSection>
       </Space>
 
       <Modal title={editingBoard ? "编辑被监控账号" : "新增被监控账号"} open={formOpen} onCancel={() => setFormOpen(false)} onOk={() => form.submit()} confirmLoading={saveMutation.isPending} okText="保存配置" cancelText="取消" width={1120}>
