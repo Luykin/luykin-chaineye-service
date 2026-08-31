@@ -9,6 +9,13 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.SOCIAL_LISTENING_AI_TIMEOUT_MS || 
 const SUMMARY_WORDS = Number(process.env.SOCIAL_LISTENING_SUMMARY_WORDS || 5);
 const NEGATIVE_THRESHOLD = Number(process.env.SOCIAL_LISTENING_NEGATIVE_SCORE_THRESHOLD || 4);
 const POSITIVE_THRESHOLD = Number(process.env.SOCIAL_LISTENING_POSITIVE_SCORE_THRESHOLD || 6);
+const MAX_PROMPT_LENGTH = Number(process.env.SOCIAL_LISTENING_AI_PROMPT_MAX_LENGTH || 6000);
+
+const PROMPT_FIELDS = Object.freeze({
+  PROJECT_ATTITUDE: "projectAttitude",
+  TWEET_TAG: "tweetTag",
+  TWEET_SUMMARY: "tweetSummary",
+});
 
 function getAiBaseUrl() {
   return String(process.env.SOCIAL_LISTENING_AI_BASE_URL || process.env.AI_SERVICE_BASE_URL || DEFAULT_AI_BASE_URL).replace(/\/+$/, "");
@@ -22,6 +29,67 @@ function isProjectAttitudeEnabled() {
 function isContentAiEnabled() {
   if (process.env.SOCIAL_LISTENING_CONTENT_AI_ENABLED === "false") return false;
   return Boolean(getAiBaseUrl());
+}
+
+function normalizePrompt(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.slice(0, Math.max(200, MAX_PROMPT_LENGTH));
+}
+
+function getBoardMetadata(board) {
+  return board?.metadata && typeof board.metadata === "object" ? board.metadata : {};
+}
+
+function getBoardPrompt(board, field) {
+  const metadata = getBoardMetadata(board);
+  const prompts = metadata.aiPrompts && typeof metadata.aiPrompts === "object" ? metadata.aiPrompts : {};
+  return normalizePrompt(prompts[field]);
+}
+
+function renderPromptTemplate(prompt, variables = {}) {
+  return String(prompt || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+    if (!Object.prototype.hasOwnProperty.call(variables, key)) return match;
+    const value = variables[key];
+    return value === null || value === undefined ? "" : String(value);
+  });
+}
+
+function buildPromptPayload(board, field, variables = {}) {
+  const template = getBoardPrompt(board, field);
+  if (!template) return {};
+  const prompt = renderPromptTemplate(template, variables);
+  return {
+    prompt,
+    customPrompt: prompt,
+    promptOverride: prompt,
+    promptSource: "board.metadata.aiPrompts",
+    promptKey: field,
+  };
+}
+
+function buildPromptTrace(board, field, variables = {}) {
+  const template = getBoardPrompt(board, field);
+  if (!template) {
+    return { key: field, source: "default", configured: false };
+  }
+  const prompt = renderPromptTemplate(template, variables);
+  return {
+    key: field,
+    source: "board.metadata.aiPrompts",
+    configured: true,
+    length: prompt.length,
+    preview: prompt.slice(0, 240),
+    templatePreview: template.slice(0, 240),
+  };
+}
+
+function hasPromptOverride(board, field) {
+  return Boolean(getBoardPrompt(board, field));
+}
+
+function countPromptOverrides(board, fields) {
+  return fields.filter((field) => hasPromptOverride(board, field)).length;
 }
 
 function scoreToSentiment(score) {
@@ -44,16 +112,20 @@ async function callAiEndpoint(path, payload) {
 }
 
 function buildProjectPromptName(board) {
-  const metadata = board?.metadata && typeof board.metadata === "object" ? board.metadata : {};
+  const metadata = getBoardMetadata(board);
   return String(metadata.aiProjectName || board.projectName || board.officialHandle || "").trim();
 }
 
 async function callProjectAttitudeAi(board, post) {
   const text = `<<${new Date(post.postCreatedAt).toISOString()}--${normalizeTweetText(post.text || post.normalizedText || "")}>>`;
+  const project = buildProjectPromptName(board);
+  const promptVariables = { text, project, lang: "cn" };
+  const promptTrace = buildPromptTrace(board, PROMPT_FIELDS.PROJECT_ATTITUDE, promptVariables);
   const data = await callAiEndpoint("/ai/project_attitude", {
     text,
-    project: buildProjectPromptName(board),
+    project,
     lang: "cn",
+    ...buildPromptPayload(board, PROMPT_FIELDS.PROJECT_ATTITUDE, promptVariables),
   });
 
   const score = data.score ?? data.data?.score;
@@ -62,6 +134,7 @@ async function callProjectAttitudeAi(board, post) {
     sentiment: scoreToSentiment(score),
     summary: data.summary || data.reason || data.message || null,
     raw: data,
+    promptTrace,
   };
 }
 
@@ -106,11 +179,16 @@ function hasSummaryFields(row) {
   return Boolean(row.summaryZh || row.summaryEn || row.titleZh || row.titleEn || row.abstractZh || row.abstractEn);
 }
 
-async function callTweetTagAi(post) {
+async function callTweetTagAi(board, post) {
   const text = normalizeTweetText(post.text || post.normalizedText || "");
-  if (!text) return { topics: [], keywords: [], raw: {} };
-  const data = await callAiEndpoint("/ai/tweet_tag_v2", { text });
-  return extractTagResult(data);
+  const promptVariables = { text };
+  const promptTrace = buildPromptTrace(board, PROMPT_FIELDS.TWEET_TAG, promptVariables);
+  if (!text) return { topics: [], keywords: [], raw: {}, promptTrace };
+  const data = await callAiEndpoint("/ai/tweet_tag_v2", {
+    text,
+    ...buildPromptPayload(board, PROMPT_FIELDS.TWEET_TAG, promptVariables),
+  });
+  return { ...extractTagResult(data), promptTrace };
 }
 
 function pickFirstMedia(post) {
@@ -124,17 +202,20 @@ function pickFirstMedia(post) {
   return "";
 }
 
-async function callTweetSummaryAi(post, lang) {
+async function callTweetSummaryAi(board, post, lang) {
   const text = normalizeTweetText(post.text || post.normalizedText || "");
-  if (!text) return "";
+  const promptVariables = { text, lang, words: SUMMARY_WORDS, media: pickFirstMedia(post) };
+  const promptTrace = buildPromptTrace(board, PROMPT_FIELDS.TWEET_SUMMARY, promptVariables);
+  if (!text) return { summary: "", promptTrace, raw: {} };
   const data = await callAiEndpoint("/ai/tweet_summary_media", {
     text,
     lang,
     words: SUMMARY_WORDS,
-    media: pickFirstMedia(post),
+    media: promptVariables.media,
+    ...buildPromptPayload(board, PROMPT_FIELDS.TWEET_SUMMARY, promptVariables),
   });
-  if (typeof data === "string") return data;
-  return data.summary || data.text || "";
+  const summary = typeof data === "string" ? data : (data.summary || data.text || "");
+  return { summary, promptTrace, raw: typeof data === "object" ? data : { text: data } };
 }
 
 async function analyzePendingContentMetadata(board, options = {}) {
@@ -163,6 +244,7 @@ async function analyzePendingContentMetadata(board, options = {}) {
   let analyzed = 0;
   let failed = 0;
   let skipped = 0;
+  const promptOverrides = countPromptOverrides(board, [PROMPT_FIELDS.TWEET_TAG, PROMPT_FIELDS.TWEET_SUMMARY]);
   for (const post of posts) {
     const text = normalizeTweetText(post.text || post.normalizedText || "");
     if (!text || text.length < 8) {
@@ -183,24 +265,34 @@ async function analyzePendingContentMetadata(board, options = {}) {
       const shouldReplaceOldAiFields = post.aiSource === "dev_tweet_ai" || post.tagStatus === "reused" || post.summaryStatus === "reused";
 
       if (shouldGenerateTag) {
-        const tagResult = await callTweetTagAi(post);
+        const tagResult = await callTweetTagAi(board, post);
         const matchedKeywords = Array.isArray(post.rawTweet?.matchedKeywords) ? post.rawTweet.matchedKeywords : [];
         if (shouldReplaceOldAiFields) patch.topics = tagResult.topics.length ? tagResult.topics : null;
         else if (tagResult.topics.length) patch.topics = mergeListValues(post.topics, tagResult.topics);
         if (shouldReplaceOldAiFields) patch.keywords = mergeListValues(matchedKeywords, tagResult.keywords);
         else if (tagResult.keywords.length) patch.keywords = mergeListValues(post.keywords, tagResult.keywords);
         patch.tagStatus = tagResult.topics.length || tagResult.keywords.length ? "generated" : "skipped";
-        rawAi.tag = tagResult.raw;
+        rawAi.tag = {
+          result: tagResult.raw,
+          prompt: tagResult.promptTrace,
+        };
       }
       if (shouldGenerateSummary) {
-        const [summaryZh, summaryEn] = await Promise.all([
-          shouldGenerateSummary ? callTweetSummaryAi(post, "chinese") : Promise.resolve(post.summaryZh),
-          shouldGenerateSummary ? callTweetSummaryAi(post, "english") : Promise.resolve(post.summaryEn),
+        const [summaryZhResult, summaryEnResult] = await Promise.all([
+          shouldGenerateSummary ? callTweetSummaryAi(board, post, "chinese") : Promise.resolve({ summary: post.summaryZh, promptTrace: buildPromptTrace(board, PROMPT_FIELDS.TWEET_SUMMARY), raw: {} }),
+          shouldGenerateSummary ? callTweetSummaryAi(board, post, "english") : Promise.resolve({ summary: post.summaryEn, promptTrace: buildPromptTrace(board, PROMPT_FIELDS.TWEET_SUMMARY), raw: {} }),
         ]);
+        const summaryZh = summaryZhResult.summary;
+        const summaryEn = summaryEnResult.summary;
         if (summaryZh || shouldReplaceOldAiFields) patch.summaryZh = summaryZh || null;
         if (summaryEn || shouldReplaceOldAiFields) patch.summaryEn = summaryEn || null;
         patch.summaryStatus = summaryZh || summaryEn ? "generated" : "skipped";
-        rawAi.summary = { summaryZh, summaryEn };
+        rawAi.summary = {
+          summaryZh,
+          summaryEn,
+          prompt: summaryZhResult.promptTrace || summaryEnResult.promptTrace,
+          raw: { zh: summaryZhResult.raw, en: summaryEnResult.raw },
+        };
       }
 
       if (Object.keys(patch).length) {
@@ -228,7 +320,7 @@ async function analyzePendingContentMetadata(board, options = {}) {
     }
   }
 
-  return { enabled: true, analyzed, failed, skipped };
+  return { enabled: true, analyzed, failed, skipped, promptOverrides };
 }
 
 async function analyzePendingProjectAttitudes(board, options = {}) {
@@ -253,6 +345,7 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
 
   let analyzed = 0;
   let failed = 0;
+  const promptOverrides = countPromptOverrides(board, [PROMPT_FIELDS.PROJECT_ATTITUDE]);
   for (const post of posts) {
     try {
       const result = await callProjectAttitudeAi(board, post);
@@ -268,7 +361,13 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
         aiSource: post.aiSource && post.aiSource !== "social_listening_pending" ? "mixed" : "project_attitude",
         rawTweet: {
           ...(post.rawTweet || {}),
-          projectAttitude: { score: result.score, sentiment: result.sentiment },
+          projectAttitude: {
+            score: result.score,
+            sentiment: result.sentiment,
+            summary: result.summary,
+            prompt: result.promptTrace,
+            raw: result.raw,
+          },
         },
       });
       analyzed += 1;
@@ -282,13 +381,14 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
       }).catch(() => null);
     }
   }
-  return { enabled: true, analyzed, failed };
+  return { enabled: true, analyzed, failed, promptOverrides };
 }
 
 module.exports = {
   isContentAiEnabled,
   isProjectAttitudeEnabled,
   scoreToSentiment,
+  buildPromptTrace,
   callProjectAttitudeAi,
   analyzePendingContentMetadata,
   analyzePendingProjectAttitudes,

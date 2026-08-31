@@ -195,11 +195,13 @@ async function processSocialListeningJob(jobId) {
     counters.contentAiFailed = contentAiResult.failed || 0;
     counters.contentAiSkipped = contentAiResult.skipped || 0;
     counters.contentAiEnabled = !!contentAiResult.enabled;
+    counters.contentAiPromptOverrides = contentAiResult.promptOverrides || 0;
 
     const aiResult = await analyzePendingProjectAttitudes(board, { limit: job.jobType === JOB_TYPES.HISTORY_BACKFILL ? 20 : 50 });
     counters.aiAnalyzed = aiResult.analyzed || 0;
     counters.aiFailed = aiResult.failed || 0;
     counters.aiEnabled = !!aiResult.enabled;
+    counters.aiPromptOverrides = aiResult.promptOverrides || 0;
 
     counters.influentialSignals = await generateInfluentialSignals(board, { since: range.startAt, until: range.endAt });
     counters.followSignals = await generateFollowSignals(board, { since: range.startAt, until: range.endAt });

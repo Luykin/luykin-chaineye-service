@@ -275,6 +275,7 @@ function JobProgressView({ job }: { job: SocialListeningJob }) {
           <Tag color="green">入库 {getNumberFromRecord(counters, "upserted")}</Tag>
           <Tag color="purple">内容 AI {getNumberFromRecord(counters, "contentAiAnalyzed")}</Tag>
           <Tag color="cyan">态度 AI {getNumberFromRecord(counters, "aiAnalyzed")}</Tag>
+          <Tag color="geekblue">Prompt 覆盖 {getNumberFromRecord(counters, "contentAiPromptOverrides") + getNumberFromRecord(counters, "aiPromptOverrides")}</Tag>
           <Tag color="gold">关系信号 {getNumberFromRecord(counters, "followSignals") + getNumberFromRecord(counters, "influentialSignals")}</Tag>
           <Tag color="orange">预警 {getNumberFromRecord(counters, "aggregateAlerts")}</Tag>
         </Space>
@@ -476,7 +477,7 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
     } },
     { title: "写入结果", width: 280, render: (_, row) => {
       const counters = asRecord(asRecord(row.progress).counters);
-      return <Space size={4} wrap><Tag>扫 {getNumberFromRecord(counters, "scanned")}</Tag><Tag color="green">入库 {getNumberFromRecord(counters, "upserted")}</Tag><Tag color="purple">AI {getNumberFromRecord(counters, "contentAiAnalyzed") + getNumberFromRecord(counters, "aiAnalyzed")}</Tag><Tag color="orange">预警 {getNumberFromRecord(counters, "aggregateAlerts")}</Tag></Space>;
+      return <Space size={4} wrap><Tag>扫 {getNumberFromRecord(counters, "scanned")}</Tag><Tag color="green">入库 {getNumberFromRecord(counters, "upserted")}</Tag><Tag color="purple">AI {getNumberFromRecord(counters, "contentAiAnalyzed") + getNumberFromRecord(counters, "aiAnalyzed")}</Tag><Tag color="geekblue">Prompt {getNumberFromRecord(counters, "contentAiPromptOverrides") + getNumberFromRecord(counters, "aiPromptOverrides")}</Tag><Tag color="orange">预警 {getNumberFromRecord(counters, "aggregateAlerts")}</Tag></Space>;
     } },
     { title: "范围", width: 260, render: (_, row) => <Text type="secondary">{formatDate(row.rangeStartAt)} → {formatDate(row.rangeEndAt)}</Text> },
     { title: "错误", dataIndex: "errorMessage", ellipsis: true, render: (value?: string | null) => value || "-" },
@@ -759,7 +760,7 @@ export function SocialListeningPage() {
                 <Col span={8}><Form.Item name="followSources" label="关注关系源" extra="关注/取关信号来源表；用于解释与后端扩展。"><Select mode="multiple" options={FOLLOW_SOURCE_OPTIONS} placeholder="选择来源表" /></Form.Item></Col>
               </Row>
               <Divider orientation="left">AI 提示语配置</Divider>
-              <Alert className="social-listening-modal-alert" type="warning" showIcon message="提示语保存到 metadata.aiPrompts" description="这些字段让运营能在后台维护 AI 任务口径。未填写时走默认逻辑；填写后后端可按该配置覆盖默认提示语。" />
+              <Alert className="social-listening-modal-alert" type="warning" showIcon message="提示语保存到 metadata.aiPrompts" description="这些字段让运营能在后台维护 AI 任务口径。未填写时走默认逻辑；填写后后端任务会把它作为 prompt/customPrompt/promptOverride 传给 AI 服务。" />
               <Form.Item name="aiProjectName" label="AI 项目名" extra="覆盖项目态度 AI 的 project 名称；项目名容易歧义时建议填写。"><Input placeholder="默认使用项目名称" /></Form.Item>
               <Form.Item name="projectAttitudePrompt" label="项目态度 Prompt" extra="说明如何判断推文对项目的态度，并要求输出 score、sentiment、summary。"><TextArea rows={3} placeholder="例如：判断这条推文对 {project} 的态度，输出 0-10 分、情绪和一句中文原因。" /></Form.Item>
               <Form.Item name="tweetTagPrompt" label="推文标签 Prompt" extra="说明如何从推文中抽取 topics 和 keywords，用于主题榜和词云。"><TextArea rows={3} placeholder="例如：从推文抽取加密行业主题标签和热词，返回 topics/keywords。" /></Form.Item>
