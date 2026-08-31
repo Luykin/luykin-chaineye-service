@@ -69,6 +69,8 @@ function serializeBoard(record, extra = {}) {
     lastSuccessAt: row.lastSuccessAt || null,
     lastFailureAt: row.lastFailureAt || null,
     lastFailureReason: row.lastFailureReason || null,
+    createdByAdminId: row.createdByAdminId || null,
+    updatedByAdminId: row.updatedByAdminId || null,
     metadata: row.metadata || {},
     createdAt: row.createdAt || null,
     updatedAt: row.updatedAt || null,

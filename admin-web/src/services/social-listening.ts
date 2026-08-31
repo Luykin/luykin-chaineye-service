@@ -20,6 +20,8 @@ export interface SocialListeningBoard {
   lastSuccessAt?: string | null;
   lastFailureAt?: string | null;
   lastFailureReason?: string | null;
+  createdByAdminId?: number | null;
+  updatedByAdminId?: number | null;
   metadata?: Record<string, unknown>;
   latestJob?: SocialListeningJob | null;
   accessCount?: number;
@@ -87,8 +89,16 @@ export interface SocialListeningAccountSignal {
   cnRank?: number | null;
   signalType: string;
   occurredAt: string;
+  mentionCount?: number | null;
+  viewsCount?: number | null;
+  engagementCount?: number | null;
+  sentiment?: string | null;
+  topics?: string[] | null;
+  postIds?: string[] | null;
   summaryZh?: string | null;
   rankSnapshot?: Record<string, unknown> | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface SocialListeningPost {

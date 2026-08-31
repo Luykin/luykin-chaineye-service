@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -202,6 +202,24 @@ function getNumberFromRecord(record: Record<string, unknown>, key: string) {
   return Number.isFinite(num) ? num : 0;
 }
 
+function getOptionalNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function formatRank(value: unknown) {
+  const num = getOptionalNumber(value);
+  if (num === null) return "-";
+  return num > 0 ? `#${formatNumber(num)}` : "未上榜";
+}
+
+function renderTagList(value: unknown) {
+  const list = Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  if (!list.length) return "-";
+  return <Space size={4} wrap>{list.map((item) => <Tag key={item}>{item}</Tag>)}</Space>;
+}
+
 function jsonPreview(value: unknown) {
   if (!value) return "-";
   try {
@@ -255,6 +273,126 @@ function buildBoardPayload(values: Record<string, unknown>, resolved?: ResolvedT
     allowUnresolved: Boolean(values.allowUnresolved),
     metadata,
   };
+}
+
+function BoardMetricCard({ title, value, hint, color }: { title: string; value: string | number; hint: string; color?: string }) {
+  return (
+    <Card size="small" className="social-listening-metric-card">
+      <Statistic title={title} value={value} valueStyle={{ color }} />
+      <Text type="secondary" className="social-listening-metric-hint">{hint}</Text>
+    </Card>
+  );
+}
+
+function BoardOverview({ board }: { board: SocialListeningBoard }) {
+  const metadata = board.metadata || {};
+  const profileSnapshot = asRecord(metadata.profileSnapshot);
+  const profile = asRecord(profileSnapshot.profile);
+  const ai = asRecord(profileSnapshot.ai);
+  const banner = getString(profile.profile_banner_url);
+  const followingCount = getOptionalNumber(profile.following_count);
+  const tweetsCount = getOptionalNumber(profile.tweets_count);
+  const listedCount = getOptionalNumber(profile.listed_count);
+  const isCn = ai.is_cn;
+  const latestJob = board.latestJob;
+
+  return (
+    <Space direction="vertical" size={14} className="social-listening-full">
+      <Card
+        size="small"
+        className="social-listening-board-profile"
+        style={banner ? { backgroundImage: `linear-gradient(90deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.28)), url(${banner})` } : undefined}
+      >
+        <Space align="start" size={14} className="social-listening-full">
+          <Avatar size={64} src={board.projectAvatar || undefined} style={{ backgroundColor: board.brandColor || undefined }}>{board.projectName.slice(0, 1)}</Avatar>
+          <Space direction="vertical" size={6} className="social-listening-full">
+            <Space size={8} wrap>
+              <Text strong className="social-listening-board-title">{board.projectName}</Text>
+              <Text type="secondary">@{board.officialHandle}</Text>
+              {board.verified ? <Tag color="blue">X 认证</Tag> : <Tag>未认证</Tag>}
+              {isCn === true ? <Tag color="geekblue">华语账号</Tag> : isCn === false ? <Tag>非华语账号</Tag> : null}
+              {board.brandColor ? <Tag color={board.brandColor}>品牌色 {board.brandColor}</Tag> : null}
+            </Space>
+            <Paragraph className="social-listening-board-description">{board.projectDescription || "暂无项目简介；可在「编辑」里补充，方便运营识别和 AI 理解项目背景。"}</Paragraph>
+            <Space size={6} wrap>
+              <Text type="secondary">Twitter ID：</Text><Text code>{board.officialTwitterId || "-"}</Text>
+              <Text type="secondary">资料快照：</Text><Text code>metadata.profileSnapshot</Text>
+            </Space>
+          </Space>
+        </Space>
+      </Card>
+
+      <Row gutter={[12, 12]}>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="粉丝数" value={formatNumber(board.followersCount)} hint="Boards.followersCount" /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="关注数" value={formatNumber(followingCount)} hint="dev.twitter_user.profile.following_count" /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="推文数" value={formatNumber(tweetsCount)} hint="profile.tweets_count" /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="Listed" value={formatNumber(listedCount)} hint="profile.listed_count" /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="全球排名" value={formatRank(board.globalRank)} hint="Boards.globalRank" color={board.globalRank && board.globalRank > 0 ? "#1677ff" : undefined} /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="华语排名" value={formatRank(board.cnRank)} hint="Boards.cnRank" color={board.cnRank && board.cnRank > 0 ? "#722ed1" : undefined} /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="帖子入库" value={board.postCount || 0} hint="SocialListeningPosts count" color="#16a34a" /></Col>
+        <Col xs={12} md={6} xl={3}><BoardMetricCard title="授权账号" value={board.accessCount || 0} hint="BoardAccess active count" color="#f97316" /></Col>
+      </Row>
+
+      <Descriptions size="small" bordered column={2}>
+        <Descriptions.Item label="状态">{statusTag(board.status)}</Descriptions.Item>
+        <Descriptions.Item label="认证状态">{board.verified ? <Tag color="blue">已认证</Tag> : <Tag>未认证 / 未知</Tag>}</Descriptions.Item>
+        <Descriptions.Item label="官方 Handle">@{board.officialHandle}</Descriptions.Item>
+        <Descriptions.Item label="官方 Twitter ID"><Text code>{board.officialTwitterId || "-"}</Text></Descriptions.Item>
+        <Descriptions.Item label="全球排名">{formatRank(board.globalRank)}</Descriptions.Item>
+        <Descriptions.Item label="华语排名">{formatRank(board.cnRank)}</Descriptions.Item>
+        <Descriptions.Item label="关注数">{formatNumber(followingCount)}</Descriptions.Item>
+        <Descriptions.Item label="推文数">{formatNumber(tweetsCount)}</Descriptions.Item>
+        <Descriptions.Item label="Listed 数">{formatNumber(listedCount)}</Descriptions.Item>
+        <Descriptions.Item label="语言识别">{isCn === true ? "华语" : isCn === false ? "非华语" : "-"}</Descriptions.Item>
+        <Descriptions.Item label="覆盖开始">{formatDate(board.coverageStartAt)}</Descriptions.Item>
+        <Descriptions.Item label="处理游标">{formatDate(board.processedThrough)}</Descriptions.Item>
+        <Descriptions.Item label="最近成功">{formatDate(board.lastSuccessAt)}</Descriptions.Item>
+        <Descriptions.Item label="最近失败">{formatDate(board.lastFailureAt)}</Descriptions.Item>
+        <Descriptions.Item label="最新任务">{latestJob ? <Space size={4} wrap>{statusTag(latestJob.status)}<Tag>{latestJob.jobType}</Tag><Text type="secondary">{formatDate(latestJob.createdAt)}</Text></Space> : "-"}</Descriptions.Item>
+        <Descriptions.Item label="排名来源">{getString(metadata.rankSource) || "-"}</Descriptions.Item>
+        <Descriptions.Item label="Token">{getString(metadata.token) || "-"}</Descriptions.Item>
+        <Descriptions.Item label="品牌色">{board.brandColor ? <Space size={6}><span className="social-listening-color-dot" style={{ background: board.brandColor }} /><Text code>{board.brandColor}</Text></Space> : "-"}</Descriptions.Item>
+        <Descriptions.Item label="创建时间">{formatDate(board.createdAt)}</Descriptions.Item>
+        <Descriptions.Item label="更新时间">{formatDate(board.updatedAt)}</Descriptions.Item>
+        <Descriptions.Item label="创建管理员">{board.createdByAdminId || "-"}</Descriptions.Item>
+        <Descriptions.Item label="更新管理员">{board.updatedByAdminId || "-"}</Descriptions.Item>
+        <Descriptions.Item label="主表"><Text code>EchohuntSocialListeningBoards</Text></Descriptions.Item>
+        <Descriptions.Item label="帖子表"><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
+        <Descriptions.Item label="源资料表"><Text code>dev.twitter_user.profile / ai / feature / kol</Text></Descriptions.Item>
+        <Descriptions.Item label="关系源表">{renderTagList(metadata.followSources)}</Descriptions.Item>
+        <Descriptions.Item label="关键词" span={2}>{renderTagList(metadata.keywords)}</Descriptions.Item>
+        <Descriptions.Item label="别名" span={2}>{renderTagList(metadata.aliases)}</Descriptions.Item>
+        {board.lastFailureReason ? <Descriptions.Item label="失败原因" span={2}><Text type="danger">{board.lastFailureReason}</Text></Descriptions.Item> : null}
+      </Descriptions>
+    </Space>
+  );
+}
+
+function SignalInspector({ signal }: { signal: SocialListeningAccountSignal }) {
+  const snapshot = asRecord(signal.rankSnapshot);
+  const relation = asRecord(snapshot.relation);
+  return (
+    <Descriptions size="small" bordered column={2}>
+      <Descriptions.Item label="Signal ID" span={2}><Text code>{signal.id}</Text></Descriptions.Item>
+      <Descriptions.Item label="Twitter ID"><Text code>{signal.twitterId}</Text></Descriptions.Item>
+      <Descriptions.Item label="账号">@{signal.handle || "-"}</Descriptions.Item>
+      <Descriptions.Item label="粉丝数">{formatNumber(signal.followersCount)}</Descriptions.Item>
+      <Descriptions.Item label="排名">G {formatRank(signal.globalRank)} / CN {formatRank(signal.cnRank)}</Descriptions.Item>
+      <Descriptions.Item label="提及次数">{getOptionalNumber(signal.mentionCount) ?? 0}</Descriptions.Item>
+      <Descriptions.Item label="曝光 / 互动">{formatNumber(signal.viewsCount)} / {formatNumber(signal.engagementCount)}</Descriptions.Item>
+      <Descriptions.Item label="情绪">{signal.sentiment ? statusTag(signal.sentiment) : "-"}</Descriptions.Item>
+      <Descriptions.Item label="发生时间">{formatDate(signal.occurredAt)}</Descriptions.Item>
+      <Descriptions.Item label="来源表"><Text code>{getString(snapshot.sourceTable) || "-"}</Text></Descriptions.Item>
+      <Descriptions.Item label="关系方向">{getString(snapshot.direction) || "-"}</Descriptions.Item>
+      <Descriptions.Item label="follower_id"><Text code>{getString(relation.followerId) || "-"}</Text></Descriptions.Item>
+      <Descriptions.Item label="following_id"><Text code>{getString(relation.followingId) || "-"}</Text></Descriptions.Item>
+      <Descriptions.Item label="latest / persist">{getOptionalNumber(relation.latest) ?? "-"} / {getOptionalNumber(relation.persist) ?? "-"}</Descriptions.Item>
+      <Descriptions.Item label="project key">{getString(snapshot.projectKey) || "-"}</Descriptions.Item>
+      <Descriptions.Item label="主题" span={2}>{renderTagList(signal.topics)}</Descriptions.Item>
+      <Descriptions.Item label="关联帖子" span={2}>{renderTagList(signal.postIds)}</Descriptions.Item>
+      <Descriptions.Item label="rankSnapshot JSON" span={2}><pre className="social-listening-json-block">{jsonPreview(signal.rankSnapshot)}</pre></Descriptions.Item>
+    </Descriptions>
+  );
 }
 
 function JobProgressView({ job }: { job: SocialListeningJob }) {
@@ -406,16 +544,22 @@ function BoardFormGuide() {
 interface BoardDrawerProps {
   board: SocialListeningBoard | null;
   open: boolean;
+  initialTab?: string;
   onClose: () => void;
   onChanged: () => void;
 }
 
-function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
+function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged }: BoardDrawerProps) {
   const [messageApi, contextHolder] = message.useMessage();
   const [range, setRange] = useState("7D");
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [accessForm] = Form.useForm();
   const [postQuery, setPostQuery] = useState({ q: "", sentiment: "", source: "", sort: "time_desc" });
   const boardId = board?.id || "";
+
+  useEffect(() => {
+    if (open) setActiveTab(initialTab);
+  }, [open, initialTab, boardId]);
 
   const accessesQuery = useQuery({
     queryKey: ["social-listening", "accesses", boardId],
@@ -461,12 +605,13 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
   });
 
   const accessColumns: TableProps<SocialListeningAccess>["columns"] = [
-    { title: "X Handle", dataIndex: "twitterHandle", render: (value: string) => <Text strong>@{value}</Text> },
+    { title: "被分配 EchoHunt 账号", dataIndex: "twitterHandle", width: 220, render: (value: string) => <Text strong>@{value}</Text> },
     { title: "Twitter ID", dataIndex: "twitterId", width: 170, render: (value?: string | null) => value || "-" },
-    { title: "AuthCenter", dataIndex: "authCenterUserId", width: 240, ellipsis: true, render: (value?: string | null) => value || "未绑定" },
+    { title: "AuthCenter User ID", dataIndex: "authCenterUserId", width: 240, ellipsis: true, render: (value?: string | null) => value || "未绑定" },
+    { title: "XHunt User ID", dataIndex: "xhuntUserId", width: 150, render: (value?: string | null) => value || "-" },
     { title: "状态", dataIndex: "status", width: 90, render: statusTag },
     { title: "授权时间", dataIndex: "grantedAt", width: 170, render: formatDate },
-    { title: "操作", width: 90, render: (_, row) => row.status === "active" ? <Popconfirm title="撤销该账号访问权限？" okText="撤销" cancelText="取消" onConfirm={() => revokeMutation.mutate(row.id)}><Button size="small" danger>撤销</Button></Popconfirm> : null },
+    { title: "操作", width: 90, render: (_, row) => row.status === "active" ? <Tooltip title="撤销后，该 EchoHunt 账号将不能再看到这个被监控账户的 Social Listening 看板。"><span><Popconfirm title="撤销该账号访问权限？" okText="撤销" cancelText="取消" onConfirm={() => revokeMutation.mutate(row.id)}><Button size="small" danger>撤销</Button></Popconfirm></span></Tooltip> : null },
   ];
 
   const jobColumns: TableProps<SocialListeningJob>["columns"] = [
@@ -497,10 +642,15 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
   ];
 
   const signalColumns: TableProps<SocialListeningAccountSignal>["columns"] = [
-    { title: "账号", width: 220, render: (_, row) => <Space><Avatar src={row.avatar || undefined}>{(row.handle || row.name || "?").slice(0, 1).toUpperCase()}</Avatar><Space direction="vertical" size={0}><Text strong>{row.name || row.handle}</Text><Text type="secondary">@{row.handle || row.twitterId}</Text></Space></Space> },
-    { title: "类型", dataIndex: "signalType", width: 190 },
-    { title: "排名", width: 140, render: (_, row) => <Space size={4} wrap>{row.globalRank ? <Tag>G {row.globalRank}</Tag> : null}{row.cnRank ? <Tag color="blue">CN {row.cnRank}</Tag> : null}</Space> },
-    { title: "摘要", dataIndex: "summaryZh", ellipsis: true },
+    { title: "账号", width: 260, render: (_, row) => <Space><Avatar src={row.avatar || undefined}>{(row.handle || row.name || "?").slice(0, 1).toUpperCase()}</Avatar><Space direction="vertical" size={0}><Text strong>{row.name || row.handle || row.twitterId}</Text><Text type="secondary">@{row.handle || "-"} · <Text code>{row.twitterId}</Text></Text></Space></Space> },
+    { title: "类型", dataIndex: "signalType", width: 190, render: (value: string) => <Tag color="geekblue">{value}</Tag> },
+    { title: "影响力", width: 210, render: (_, row) => <Space direction="vertical" size={0}><Text>粉丝 {formatNumber(row.followersCount)}</Text><Space size={4} wrap><Tag>G {formatRank(row.globalRank)}</Tag><Tag color="blue">CN {formatRank(row.cnRank)}</Tag></Space></Space> },
+    { title: "窗口数据", width: 220, render: (_, row) => <Space size={4} wrap><Tag>提及 {getOptionalNumber(row.mentionCount) ?? 0}</Tag><Tag color="purple">曝光 {formatNumber(row.viewsCount)}</Tag><Tag color="green">互动 {formatNumber(row.engagementCount)}</Tag>{row.sentiment ? statusTag(row.sentiment) : null}</Space> },
+    { title: "关系来源", width: 230, render: (_, row) => {
+      const snapshot = asRecord(row.rankSnapshot);
+      return <Space direction="vertical" size={0}><Text code>{getString(snapshot.sourceTable) || "-"}</Text><Text type="secondary">{getString(snapshot.direction) || "-"}</Text></Space>;
+    } },
+    { title: "摘要/主题", ellipsis: true, render: (_, row) => <Space direction="vertical" size={0}><Text ellipsis>{row.summaryZh || "-"}</Text>{Array.isArray(row.topics) && row.topics.length ? <Space size={4} wrap>{row.topics.slice(0, 4).map((topic) => <Tag key={topic}>{topic}</Tag>)}</Space> : null}</Space> },
     { title: "发生时间", dataIndex: "occurredAt", width: 170, render: formatDate },
   ];
 
@@ -523,23 +673,10 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
       {contextHolder}
       {board ? (
         <Space direction="vertical" size={16} className="social-listening-drawer">
-          <Row gutter={12}>
-            <Col xs={12} md={6}><Card size="small"><Statistic title="授权账号" value={board.accessCount || 0} /></Card></Col>
-            <Col xs={12} md={6}><Card size="small"><Statistic title="帖子入库" value={board.postCount || 0} /></Card></Col>
-            <Col xs={12} md={6}><Card size="small"><Statistic title="粉丝数" value={board.followersCount || 0} formatter={(value) => formatNumber(Number(value))} /></Card></Col>
-            <Col xs={12} md={6}><Card size="small"><Statistic title="华语排名" value={board.cnRank || "-"} /></Card></Col>
-          </Row>
-          <Descriptions size="small" bordered column={2}>
-            <Descriptions.Item label="状态">{statusTag(board.status)}</Descriptions.Item>
-            <Descriptions.Item label="最近成功">{formatDate(board.lastSuccessAt)}</Descriptions.Item>
-            <Descriptions.Item label="覆盖开始">{formatDate(board.coverageStartAt)}</Descriptions.Item>
-            <Descriptions.Item label="处理游标">{formatDate(board.processedThrough)}</Descriptions.Item>
-            <Descriptions.Item label="主表"><Text code>EchohuntSocialListeningBoards</Text></Descriptions.Item>
-            <Descriptions.Item label="帖子表"><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
-            <Descriptions.Item label="关键词" span={2}>{Array.isArray(board.metadata?.keywords) ? board.metadata.keywords.join("、") : "-"}</Descriptions.Item>
-            {board.lastFailureReason ? <Descriptions.Item label="失败原因" span={2}><Text type="danger">{board.lastFailureReason}</Text></Descriptions.Item> : null}
-          </Descriptions>
+          <BoardOverview board={board} />
           <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
             items={[
               {
                 key: "workflow",
@@ -559,7 +696,7 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
               {
                 key: "signals",
                 label: "关键账号动态",
-                children: <Space direction="vertical" size={12} className="social-listening-full"><Select value={range} onChange={setRange} options={RANGE_OPTIONS} /><Table rowKey="id" size="small" columns={signalColumns} dataSource={signalsQuery.data?.data.items || []} loading={signalsQuery.isFetching} pagination={false} scroll={{ x: 960 }} /></Space>,
+                children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="这里展示被关注/互动的关键账号画像，不只看华语排名；展开行可查看来源表、关系方向和 rankSnapshot 原始字段。" /><Select value={range} onChange={setRange} options={RANGE_OPTIONS} /><Table rowKey="id" size="small" columns={signalColumns} dataSource={signalsQuery.data?.data.items || []} loading={signalsQuery.isFetching} pagination={false} scroll={{ x: 1500 }} expandable={{ expandedRowRender: (row) => <SignalInspector signal={row} /> }} /></Space>,
               },
               {
                 key: "alerts",
@@ -568,8 +705,31 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
               },
               {
                 key: "access",
-                label: "授权管理",
-                children: <Space direction="vertical" size={12} className="social-listening-full"><Form form={accessForm} layout="inline" onFinish={(values) => grantMutation.mutate(values)}><Form.Item name="twitterHandle" rules={[{ required: true, message: "请输入 X handle" }]}><Input placeholder="EchoHunt 用户 X handle" prefix="@" /></Form.Item><Form.Item name="twitterId"><Input placeholder="Twitter ID（可选）" /></Form.Item><Button type="primary" htmlType="submit" loading={grantMutation.isPending}>授权</Button></Form><Table rowKey="id" size="small" columns={accessColumns} dataSource={accessesQuery.data?.data.items || []} loading={accessesQuery.isFetching} pagination={false} scroll={{ x: 980 }} /></Space>,
+                label: "分配可见账号",
+                children: (
+                  <Space direction="vertical" size={12} className="social-listening-full">
+                    <Alert
+                      type="info"
+                      showIcon
+                      message="这里就是把当前被监控账户分配给 EchoHunt 账号看的地方"
+                      description="输入 EchoHunt 用户绑定的 X Handle 后保存授权。系统会尝试从 AuthCenter 绑定关系补齐 AuthCenter User ID / XHunt User ID；保存后该用户即可在前台访问这个 Social Listening 看板。"
+                    />
+                    <Card size="small" title="新增可见账号" className="social-listening-access-card">
+                      <Form form={accessForm} layout="inline" onFinish={(values) => grantMutation.mutate(values)}>
+                        <Form.Item name="twitterHandle" label="EchoHunt 账号 X Handle" rules={[{ required: true, message: "请输入 EchoHunt 用户绑定的 X handle" }]}>
+                          <Input placeholder="例如 luykin" prefix="@" />
+                        </Form.Item>
+                        <Form.Item name="twitterId" label="Twitter ID">
+                          <Input placeholder="可选；不填会尽量按 handle 匹配 AuthCenter" />
+                        </Form.Item>
+                        <Tooltip title="把这个被监控账户分配给上面填写的 EchoHunt 账号，让该账号可以在前台看到此看板。">
+                          <Button type="primary" htmlType="submit" loading={grantMutation.isPending}>分配给此账号</Button>
+                        </Tooltip>
+                      </Form>
+                    </Card>
+                    <Table rowKey="id" size="small" columns={accessColumns} dataSource={accessesQuery.data?.data.items || []} loading={accessesQuery.isFetching} pagination={false} scroll={{ x: 1120 }} />
+                  </Space>
+                ),
               },
             ]}
           />
@@ -584,6 +744,7 @@ export function SocialListeningPage() {
   const [filters, setFilters] = useState({ q: "", status: "" });
   const [editingBoard, setEditingBoard] = useState<SocialListeningBoard | null>(null);
   const [drawerBoard, setDrawerBoard] = useState<SocialListeningBoard | null>(null);
+  const [drawerInitialTab, setDrawerInitialTab] = useState("workflow");
   const [formOpen, setFormOpen] = useState(false);
   const [resolved, setResolved] = useState<ResolvedTwitterAccount | null>(null);
   const [form] = Form.useForm();
@@ -668,21 +829,29 @@ export function SocialListeningPage() {
     setFormOpen(true);
   }
 
+  function openDrawer(board: SocialListeningBoard, tab = "workflow") {
+    setDrawerInitialTab(tab);
+    setDrawerBoard(board);
+  }
+
   const columns = useMemo<TableProps<SocialListeningBoard>["columns"]>(() => [
     { title: "被监控账号", width: 260, render: (_, row) => <Space><Avatar src={row.projectAvatar || undefined} style={{ backgroundColor: row.brandColor || undefined }}>{row.projectName.slice(0, 1)}</Avatar><Space direction="vertical" size={0}><Text strong>{row.projectName}</Text><Text type="secondary">@{row.officialHandle}{row.verified ? <Tag color="blue" style={{ marginLeft: 6 }}>verified</Tag> : null}</Text></Space></Space> },
     { title: "状态", dataIndex: "status", width: 105, render: statusTag },
     { title: "粉丝/排名", width: 160, render: (_, row) => <Space direction="vertical" size={0}><Text>{formatNumber(row.followersCount)}</Text><Text type="secondary">G {row.globalRank || "-"} · CN {row.cnRank || "-"}</Text></Space> },
-    { title: "数据", width: 140, render: (_, row) => <Space direction="vertical" size={0}><Text>{row.postCount || 0} posts</Text><Text type="secondary">{row.accessCount || 0} accesses</Text></Space> },
+    { title: "数据", width: 150, render: (_, row) => <Space direction="vertical" size={0}><Text>{row.postCount || 0} posts</Text><Text type="secondary">已分配 {row.accessCount || 0} 个账号</Text></Space> },
     { title: "处理进度", width: 250, render: (_, row) => <Space direction="vertical" size={0}><Text>{formatDate(row.processedThrough)}</Text><Text type={row.lastFailureReason ? "danger" : "secondary"}>{row.lastFailureReason || `最近成功 ${formatDate(row.lastSuccessAt)}`}</Text></Space> },
     { title: "最新任务", width: 190, render: (_, row) => row.latestJob ? <Space direction="vertical" size={0}>{statusTag(row.latestJob.status)}<Text type="secondary">{row.latestJob.jobType}</Text></Space> : "-" },
     {
       title: "操作",
       fixed: "right",
-      width: 280,
+      width: 330,
       render: (_, row) => (
         <Space size={6} wrap>
-          <Tooltip title="打开详情抽屉，查看授权账号、定时任务执行过程、推文字段追踪、配置说明和异常预警。">
-            <Button size="small" onClick={() => setDrawerBoard(row)}>管理</Button>
+          <Tooltip title="打开详情抽屉，查看分配可见账号、定时任务执行过程、推文字段追踪、配置说明和异常预警。">
+            <Button size="small" onClick={() => openDrawer(row)}>管理</Button>
+          </Tooltip>
+          <Tooltip title="把这个被监控账户分配给某个 EchoHunt 账号看；会直接打开「分配可见账号」页签。">
+            <Button size="small" onClick={() => openDrawer(row, "access")}>分配</Button>
           </Tooltip>
           <Tooltip title="修改该监控账号的项目资料、召回关键词、关注关系源和 AI 提示语；保存配置不会立即跑任务。">
             <Button size="small" onClick={() => openEdit(row)}>编辑</Button>
@@ -832,7 +1001,7 @@ export function SocialListeningPage() {
         </Row>
       </Modal>
 
-      <BoardDrawer board={drawerBoard} open={Boolean(drawerBoard)} onClose={() => setDrawerBoard(null)} onChanged={() => { void boardsQuery.refetch(); void jobsQuery.refetch(); void alertsQuery.refetch(); }} />
+      <BoardDrawer board={drawerBoard} open={Boolean(drawerBoard)} initialTab={drawerInitialTab} onClose={() => setDrawerBoard(null)} onChanged={() => { void boardsQuery.refetch(); void jobsQuery.refetch(); void alertsQuery.refetch(); }} />
     </PermissionGuard>
   );
 }
