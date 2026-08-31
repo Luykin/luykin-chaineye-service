@@ -5,7 +5,8 @@ const {
   EchohuntSocialListeningAlert,
   EchohuntSocialListeningAccountSignal,
 } = require("../../../models/postgres-start");
-const { RANGE_CONFIG, RANGE_KEYS, SENTIMENTS, ALERT_TYPES } = require("../constants");
+const { RANGE_CONFIG, RANGE_KEYS, SENTIMENTS, ALERT_TYPES, ACCOUNT_SIGNAL_TYPES } = require("../constants");
+const { fetchFollowSignalsForBoard } = require("./data-source");
 
 function normalizeRangeKey(value) {
   const range = String(value || "7D").toUpperCase();
@@ -36,6 +37,31 @@ function startOfBucket(date, bucketSize) {
 
 function getEngagement(post) {
   return toNumber(post.likesCount) + toNumber(post.repostsCount) + toNumber(post.quotesCount) + toNumber(post.repliesCount);
+}
+
+function isInfluentialRank(globalRank, cnRank) {
+  return (toNumber(globalRank) > 0 && toNumber(globalRank) <= 10000) ||
+    (toNumber(cnRank) > 0 && toNumber(cnRank) <= 1500);
+}
+
+function hasXhuntKolFlag(account = {}) {
+  const kol = account.raw?.kol && typeof account.raw.kol === "object" ? account.raw.kol : {};
+  return Object.values(kol).some((snapshot) => (
+    snapshot?.global?.is_kol === true ||
+    snapshot?.cn?.is_kol === true
+  ));
+}
+
+function isXhuntKolAccount(account = {}) {
+  return hasXhuntKolFlag(account) ||
+    toNumber(account.globalRank) > 0 ||
+    toNumber(account.cnRank) > 0;
+}
+
+function startOfHour(date) {
+  const d = new Date(date);
+  d.setUTCMinutes(0, 0, 0);
+  return d;
 }
 
 function incrementMap(map, key, patch) {
@@ -136,10 +162,7 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
     .sort((a, b) => (b.count - a.count) || (b.views - a.views))
     .slice(0, limit);
 
-  const influentialCount = posts.filter((post) =>
-    (toNumber(post.authorGlobalRank) > 0 && toNumber(post.authorGlobalRank) <= 10000) ||
-    (toNumber(post.authorCnRank) > 0 && toNumber(post.authorCnRank) <= 1500)
-  ).length;
+  const influentialCount = posts.filter((post) => isInfluentialRank(post.authorGlobalRank, post.authorCnRank)).length;
 
   const activeAlertCount = await EchohuntSocialListeningAlert.count({
     where: { boardId: board.id, status: "active", triggeredAt: { [Op.gte]: window.windowStartAt } },
@@ -195,10 +218,11 @@ async function generateSnapshotsForBoard(board, options = {}) {
 
 async function generateInfluentialSignals(board, options = {}) {
   const since = options.since || new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const until = options.until || new Date();
   const posts = await EchohuntSocialListeningPost.findAll({
     where: {
       boardId: board.id,
-      postCreatedAt: { [Op.gte]: since },
+      postCreatedAt: { [Op.gte]: since, [Op.lt]: until },
       [Op.or]: [
         { authorGlobalRank: { [Op.between]: [1, 10000] } },
         { authorCnRank: { [Op.between]: [1, 1500] } },
@@ -219,7 +243,7 @@ async function generateInfluentialSignals(board, options = {}) {
       followersCount: post.authorFollowersCount,
       globalRank: post.authorGlobalRank,
       cnRank: post.authorCnRank,
-      signalType: "influential_mention",
+      signalType: ACCOUNT_SIGNAL_TYPES.INFLUENTIAL_MENTION,
       occurredAt: post.postCreatedAt,
       mentionCount: 1,
       viewsCount: post.viewsCount,
@@ -252,9 +276,184 @@ async function generateInfluentialSignals(board, options = {}) {
   return posts.length;
 }
 
+function describeFollowSignal(signalType, accountName, boardName) {
+  const name = accountName || "关键账号";
+  if (signalType === ACCOUNT_SIGNAL_TYPES.ACCOUNT_FOLLOWED_PROJECT) return `${name} 新关注了 ${boardName}`;
+  if (signalType === ACCOUNT_SIGNAL_TYPES.PROJECT_FOLLOWED_ACCOUNT) return `${boardName} 新关注了 ${name}`;
+  if (signalType === ACCOUNT_SIGNAL_TYPES.ACCOUNT_UNFOLLOWED_PROJECT) return `${name} 取关了 ${boardName}`;
+  if (signalType === ACCOUNT_SIGNAL_TYPES.PROJECT_UNFOLLOWED_ACCOUNT) return `${boardName} 取关了 ${name}`;
+  return `${name} 关注关系发生变化`;
+}
+
+async function generateFollowSignals(board, options = {}) {
+  if (!board.officialTwitterId) return 0;
+  const startAt = options.since || new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const endAt = options.until || new Date();
+  const rows = await fetchFollowSignalsForBoard(board, startAt, endAt, options).catch((error) => {
+    console.warn("[SocialListening] 读取关注/取关动态失败:", error.message);
+    return [];
+  });
+
+  let saved = 0;
+  for (const row of rows) {
+    const account = row.account;
+    if (!account?.twitterId) continue;
+    if (!isXhuntKolAccount(account)) continue;
+    const displayName = account.name || account.handle || account.twitterId;
+    await EchohuntSocialListeningAccountSignal.upsert({
+      boardId: board.id,
+      twitterId: account.twitterId,
+      handle: account.handle,
+      name: account.name,
+      avatar: account.avatar,
+      followersCount: account.followersCount,
+      globalRank: account.globalRank,
+      cnRank: account.cnRank,
+      signalType: row.signalType,
+      occurredAt: row.occurredAt,
+      mentionCount: 0,
+      viewsCount: null,
+      engagementCount: null,
+      sentiment: null,
+      topics: null,
+      postIds: [],
+      summaryZh: describeFollowSignal(row.signalType, displayName, board.projectName),
+      rankSnapshot: {
+        globalRank: account.globalRank,
+        cnRank: account.cnRank,
+        sourceTable: row.sourceTable,
+        direction: row.direction,
+        projectKey: row.projectKey,
+        relation: row.relation,
+      },
+    }, { conflictFields: ["boardId", "signalType", "twitterId", "occurredAt"] }).catch(() => null);
+    saved += 1;
+  }
+  return saved;
+}
+
+function getNegativeRatio(posts) {
+  const analyzed = posts.filter((post) => [SENTIMENTS.POSITIVE, SENTIMENTS.NEUTRAL, SENTIMENTS.NEGATIVE].includes(post.sentiment));
+  if (!analyzed.length) return { ratio: null, analyzed: 0, negative: 0 };
+  const negative = analyzed.filter((post) => post.sentiment === SENTIMENTS.NEGATIVE).length;
+  return { ratio: negative / analyzed.length, analyzed: analyzed.length, negative };
+}
+
+async function upsertAggregateAlert(board, payload) {
+  await EchohuntSocialListeningAlert.upsert({
+    boardId: board.id,
+    status: "active",
+    ...payload,
+  }, { conflictFields: ["boardId", "dedupeKey"] });
+  return 1;
+}
+
+async function generateAggregateAlerts(board, options = {}) {
+  const now = options.now || new Date();
+  const currentEndAt = options.until || now;
+  const currentStartAt = options.since ? new Date(options.since) : new Date(currentEndAt.getTime() - 60 * 60 * 1000);
+  const bucketStart = startOfHour(currentStartAt);
+  const baselineDays = Math.min(Math.max(Number(process.env.SOCIAL_LISTENING_ALERT_BASELINE_DAYS || 7), 1), 30);
+  const baselineStartAt = new Date(currentStartAt.getTime() - baselineDays * 24 * 60 * 60 * 1000);
+
+  const [currentPosts, baselinePosts] = await Promise.all([
+    EchohuntSocialListeningPost.findAll({
+      where: { boardId: board.id, postCreatedAt: { [Op.gte]: currentStartAt, [Op.lt]: currentEndAt } },
+      raw: true,
+    }),
+    EchohuntSocialListeningPost.findAll({
+      where: { boardId: board.id, postCreatedAt: { [Op.gte]: baselineStartAt, [Op.lt]: currentStartAt } },
+      attributes: ["tweetId", "authorTwitterId", "postCreatedAt", "sentiment", "viewsCount"],
+      raw: true,
+    }),
+  ]);
+
+  const baselineHour = bucketStart.getUTCHours();
+  const sameHourBaseline = baselinePosts.filter((post) => new Date(post.postCreatedAt).getUTCHours() === baselineHour);
+  const baselineAvg = sameHourBaseline.length / baselineDays;
+  const minVolume = Math.max(Number(process.env.SOCIAL_LISTENING_VOLUME_SPIKE_MIN_POSTS || 5), 1);
+  const volumeMultiplier = Math.max(Number(process.env.SOCIAL_LISTENING_VOLUME_SPIKE_MULTIPLIER || 2), 1);
+  let alerts = 0;
+
+  if (currentPosts.length >= minVolume && baselineAvg > 0 && currentPosts.length >= baselineAvg * volumeMultiplier) {
+    alerts += await upsertAggregateAlert(board, {
+      alertType: ALERT_TYPES.VOLUME_SPIKE,
+      severity: currentPosts.length >= baselineAvg * volumeMultiplier * 1.5 ? "high" : "medium",
+      dedupeKey: `${ALERT_TYPES.VOLUME_SPIKE}:${bucketStart.toISOString()}`,
+      triggeredAt: currentStartAt,
+      lastSeenAt: now,
+      titleZh: "讨论量异常升高",
+      messageZh: `最近 1 小时讨论量 ${currentPosts.length} 条，达到同小时历史基线 ${baselineAvg.toFixed(1)} 条的 ${volumeMultiplier} 倍以上。`,
+      currentValue: { count: currentPosts.length, windowStartAt: currentStartAt, windowEndAt: currentEndAt },
+      baselineValue: { average: baselineAvg, days: baselineDays, sameHourSampleSize: sameHourBaseline.length },
+      sampleSize: currentPosts.length,
+      reason: "最近 1 小时讨论量显著高于过去 7 天同小时段基线",
+      evidenceTweetIds: currentPosts.slice(0, 20).map((post) => post.tweetId),
+    });
+  }
+
+  const currentNegative = getNegativeRatio(currentPosts);
+  const baselineNegative = getNegativeRatio(sameHourBaseline);
+  const minAnalyzed = Math.max(Number(process.env.SOCIAL_LISTENING_NEGATIVE_SPIKE_MIN_ANALYZED || 5), 1);
+  const ratioDelta = Number(process.env.SOCIAL_LISTENING_NEGATIVE_SHARE_SPIKE_DELTA || 0.2);
+  if (
+    currentNegative.analyzed >= minAnalyzed &&
+    baselineNegative.analyzed >= minAnalyzed &&
+    currentNegative.ratio !== null &&
+    baselineNegative.ratio !== null &&
+    currentNegative.ratio - baselineNegative.ratio >= ratioDelta
+  ) {
+    alerts += await upsertAggregateAlert(board, {
+      alertType: ALERT_TYPES.NEGATIVE_SHARE_SPIKE,
+      severity: currentNegative.ratio >= 0.5 ? "high" : "medium",
+      dedupeKey: `${ALERT_TYPES.NEGATIVE_SHARE_SPIKE}:${bucketStart.toISOString()}`,
+      triggeredAt: currentStartAt,
+      lastSeenAt: now,
+      titleZh: "负面占比异常升高",
+      messageZh: `最近 1 小时负面占比 ${(currentNegative.ratio * 100).toFixed(1)}%，较历史基线上升 ${((currentNegative.ratio - baselineNegative.ratio) * 100).toFixed(1)} 个百分点。`,
+      currentValue: currentNegative,
+      baselineValue: { ...baselineNegative, days: baselineDays },
+      sampleSize: currentNegative.analyzed,
+      reason: "负面情绪占比相对历史同小时段基线上升超过阈值",
+      evidenceTweetIds: currentPosts.filter((post) => post.sentiment === SENTIMENTS.NEGATIVE).slice(0, 20).map((post) => post.tweetId),
+    });
+  }
+
+  const negativePosts = currentPosts.filter((post) => post.sentiment === SENTIMENTS.NEGATIVE);
+  const negativeAuthors = new Set(negativePosts.map((post) => post.authorTwitterId).filter(Boolean));
+  const negativeViews = negativePosts.reduce((sum, post) => sum + toNumber(post.viewsCount), 0);
+  const minNegativePosts = Math.max(Number(process.env.SOCIAL_LISTENING_CONCENTRATED_NEGATIVE_MIN_POSTS || 3), 1);
+  const minNegativeAuthors = Math.max(Number(process.env.SOCIAL_LISTENING_CONCENTRATED_NEGATIVE_MIN_AUTHORS || 2), 1);
+  const minNegativeViews = Math.max(Number(process.env.SOCIAL_LISTENING_CONCENTRATED_NEGATIVE_MIN_VIEWS || 0), 0);
+  if (
+    negativePosts.length >= minNegativePosts &&
+    negativeAuthors.size >= minNegativeAuthors &&
+    negativeViews >= minNegativeViews
+  ) {
+    alerts += await upsertAggregateAlert(board, {
+      alertType: ALERT_TYPES.NEGATIVE_CONTENT,
+      severity: negativePosts.length >= minNegativePosts * 2 || negativeViews >= Math.max(minNegativeViews * 2, 50000) ? "high" : "medium",
+      dedupeKey: `${ALERT_TYPES.NEGATIVE_CONTENT}:${bucketStart.toISOString()}`,
+      triggeredAt: currentStartAt,
+      lastSeenAt: now,
+      titleZh: "集中负面内容风险",
+      messageZh: `最近 1 小时出现 ${negativePosts.length} 条负面内容，来自 ${negativeAuthors.size} 个账号。`,
+      currentValue: { negativeCount: negativePosts.length, authorCount: negativeAuthors.size, views: negativeViews },
+      baselineValue: null,
+      sampleSize: negativePosts.length,
+      reason: "同一时间窗内负面帖数量和负面作者数达到阈值",
+      evidenceTweetIds: negativePosts.slice(0, 20).map((post) => post.tweetId),
+    });
+  }
+
+  return alerts;
+}
+
 module.exports = {
   normalizeRangeKey,
   getWindowForRange,
   generateSnapshotsForBoard,
   generateInfluentialSignals,
+  generateFollowSignals,
+  generateAggregateAlerts,
 };

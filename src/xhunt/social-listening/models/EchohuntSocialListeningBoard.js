@@ -63,7 +63,7 @@ module.exports = (sequelize) => {
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,
-        defaultValue: "initializing",
+        defaultValue: "paused",
         comment: "看板状态：initializing/monitoring/paused/deleting/deleted/failed",
       },
       coverageStartAt: {

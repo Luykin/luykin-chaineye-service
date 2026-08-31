@@ -12,7 +12,7 @@
 - 已新增数据库迁移和 Sequelize 模型。
 - 已新增 EchoHunt 前台 API。
 - 已新增 admin 后端 API。
-- 已接入 `singletonJobsServer.js` 定时任务调度。
+- 已接入 `singletonJobsServer.js` 调度器；默认暂停，仅管理员在后台恢复看板/刷新/重试后才写入运行标记并开始处理。
 - 已实现只读库数据源读取、帖子召回入库、聚合快照、手动刷新、导出、授权校验等第一版逻辑。
 - 所有新增模型字段已写 `comment` 注释。
 - 迁移中已通过 `COMMENT ON COLUMN` 写数据库字段注释。
@@ -156,7 +156,7 @@ adminAuth + requirePermission("social-listening")
 |---|---|---|---|
 | GET | `/monitored-accounts` | 已完成 | 被监控账号分页列表 |
 | POST | `/monitored-accounts/resolve` | 已完成 | 输入 handle，从只读库解析官方账号资料 |
-| POST | `/monitored-accounts` | 已完成 | 新增被监控账号并创建历史补数据任务 |
+| POST | `/monitored-accounts` | 已完成 | 新增被监控账号；默认 paused，不创建历史补数据任务 |
 | GET | `/monitored-accounts/:boardId` | 已完成 | 被监控账号详情 |
 | PATCH | `/monitored-accounts/:boardId` | 已完成 | 修改看板配置、关键词、状态等 |
 | POST | `/boards/:boardId/pause` | 已完成 | 暂停看板 |
@@ -214,7 +214,7 @@ src/singletonJobsServer.js
 - 分时间窗口扫描候选推文。
 - join 作者资料。
 - 关键词命中。
-- 复用 `dev.tweet.ai` 已有摘要/标签/主题字段。
+- 不复用 `dev.tweet.ai` 作为最终摘要/标签/主题口径；统一由本功能调用旧 AI 服务写自己的字段。
 - 写入 `EchohuntSocialListeningPosts`。
 - `boardId + tweetId` 唯一去重。
 - 生成 24H / 7D / 30D snapshots。
@@ -231,13 +231,17 @@ src/xhunt/social-listening/services/analysis-service.js
 
 当前策略：
 
-- 默认不强依赖 AI。
-- 配置了 `SOCIAL_LISTENING_AI_BASE_URL` 或 `AI_SERVICE_BASE_URL` 才调用：
+- Social Listening 后台任务直接调用固定内部 AI 服务：
 
 ```text
+http://backend-v1.xhunt.svc.cluster.local:3010
 /ai/project_attitude
+/ai/tweet_tag_v2
+/ai/tweet_summary_media
 ```
 
+- 不再要求新增 `SOCIAL_LISTENING_AI_BASE_URL` / `AI_CLIENT_URL` / `AI_SERVICE_BASE_URL` 环境变量。
+- 不复用 `dev.tweet.ai` 作为最终分析口径；召回入库后由本功能自己的任务写入 `EchohuntSocialListeningPosts` 的摘要、主题、关键词、项目态度分、情绪等字段。
 - AI 失败不阻断入库。
 - 失败会写：
 
@@ -247,15 +251,9 @@ attitudeStatus='failed'
 aiError=错误摘要
 ```
 
-相关配置：
+相关批处理配置：
 
 ```text
-SOCIAL_LISTENING_AI_BASE_URL
-AI_SERVICE_BASE_URL
-SOCIAL_LISTENING_AI_TOKEN
-SOCIAL_LISTENING_AI_TIMEOUT_MS
-SOCIAL_LISTENING_NEGATIVE_SCORE_THRESHOLD
-SOCIAL_LISTENING_POSITIVE_SCORE_THRESHOLD
 SOCIAL_LISTENING_AI_BATCH_SIZE
 SOCIAL_LISTENING_PROJECT_ATTITUDE_ENABLED
 ```
@@ -366,7 +364,7 @@ social listening modules loaded
 
 还需继续补：
 
-- 关注/取关动态：`dev.twitter_user_follow` / `dev.twitter_user_unfollow` / `dev.project_follow`。
+- 关注/取关动态口径按 `cryptohunt-backend-v2` 对齐：通用关系来自 `dev.twitter_user_follow` / `dev.twitter_user_unfollow`；项目专属关系来自 `dev.project_follow`，并默认纳入 Social Listening 展示。
 - 讨论量异常：最近 1 小时 vs 过去 7 天同小时段基线，达到 2x。
 - 负面占比异常：最近 1 小时负面占比比历史基线上升 20pp。
 - 集中负面风险。
@@ -391,19 +389,14 @@ yarn db:migrate:pg:status
 
 ### 12.2 环境变量
 
-必须配置只读库，否则任务无法采集真实数据：
+只读库连接复用项目现有 `src/infra/k8s/postgres-readonly.js` / `getK8sReadObjectConfig()` 配置链路；如果目标环境已配置 K8s read PG，则 Social Listening 不需要新增一套配置。
 
 ```text
 K8S_PG_READ_DATABASE_URL
-# 或 K8S_PG_READ_HOST/K8S_PG_READ_DATABASE/K8S_PG_READ_USERNAME/K8S_PG_READ_PASSWORD
+# 或现有 getK8sReadObjectConfig 支持的 K8S_PG_READ_* / PG_READ_* 拆分配置
 ```
 
-可选 AI 配置：
-
-```text
-SOCIAL_LISTENING_AI_BASE_URL
-SOCIAL_LISTENING_AI_TOKEN
-```
+AI 服务地址已在代码中固定为 `http://backend-v1.xhunt.svc.cluster.local:3010`，不需要额外配置环境变量。
 
 ### 12.3 admin 权限
 
@@ -421,3 +414,68 @@ social-listening
 2. 后端补齐关注/取关动态和聚合型预警。
 3. EchoHunt 前端页面从 Mock 切真实 API。
 4. 结合真实只读库样例校准 `dev.tweet.info/mention/ai` JSON 解析。
+
+---
+
+## 14. 续实现记录（本轮）
+
+本轮在第一版骨架基础上继续补齐后端计算和管理后台能力：
+
+### 14.1 后端计算补充
+
+- 新增关注/取关动态读取（已按 `cryptohunt-backend-v2` 代码核对表来源）：
+  - 通用关注/取关关系读取 `dev.twitter_user_follow`、`dev.twitter_user_unfollow`，follow 条件按旧 DAO 对齐为 `latest > 0`。
+  - 默认同时读取 `dev.project_follow`，因为当前功能围绕被监控项目官方 X 账号做关系动态。
+  - `dev.project_follow` 查询按官方账号 ID 的入/出关系读取，不再猜测 `project` 字段应该等于 handle、项目名还是 slug。
+  - 高排名提及使用全球 Top 10,000 或华语 Top 1,500；关注/取关动态改为 XHunt KOL 口径，不套高排名提及门槛。
+- 新增聚合型预警：
+  - 讨论量异常：最近 1 小时 vs 过去 N 天同小时段基线，默认 2x、最小 5 条。
+  - 负面占比异常：最近 1 小时负面占比相对历史基线上升默认 20pp。
+  - 集中负面风险：默认最近 1 小时至少 3 条负面、2 个负面作者触发。
+- 新增可选摘要/标签 AI 补充：
+  - `SOCIAL_LISTENING_CONTENT_AI_ENABLED=false` 可关闭。
+  - 调用 `/ai/tweet_tag_v2`、`/ai/tweet_summary_media` 时只写本项目 `EchohuntSocialListeningPosts`，不回写 `dev.tweet.ai`，也不把 `dev.tweet.ai` 复用为最终口径。
+  - `/ai/project_attitude` 的 `project` 入参默认只传 board `projectName`；如需完全复刻旧任务里的项目名（例如 `BNB Chain(币安链)`），通过 board `metadata.aiProjectName` 显式指定，避免拼接 handle/aliases 导致评分口径偏移。
+
+### 14.2 admin 后端 API 补充
+
+新增运营侧排查接口：
+
+```text
+GET /api/admin/social-listening/boards/:boardId/overview
+GET /api/admin/social-listening/boards/:boardId/posts
+GET /api/admin/social-listening/boards/:boardId/posts/export
+GET /api/admin/social-listening/boards/:boardId/accounts
+GET /api/admin/social-listening/boards/:boardId/alerts
+GET /api/admin/social-listening/alerts
+GET /api/admin/social-listening/audit-logs
+```
+
+### 14.3 admin-web 管理界面
+
+新增 `admin-web` 页面：
+
+- 导航菜单入口：`/social-listening`。
+- 管理员权限点展示：`social-listening`。
+- 被监控账号列表、新增、编辑、解析资料。
+- 看板管理抽屉：授权管理、关键账号动态、预警、任务、帖子排查和导出。
+- 支持暂停、恢复、软删除、手动刷新、失败任务重试。
+
+### 14.4 本轮静态校验
+
+已执行：
+
+```bash
+find src/xhunt/social-listening -name '*.js' -print | sort | xargs -n 1 node --check
+./admin-web/node_modules/.bin/tsc -p admin-web/tsconfig.app.json --noEmit --pretty false
+PG_HOST=localhost PG_DATABASE=test PG_USERNAME=test PG_PASSWORD=test node - <<'NODE'
+require('./src/xhunt/social-listening/api/public');
+require('./src/xhunt/social-listening/api/admin');
+require('./src/xhunt/social-listening/services/scheduler');
+require('./src/xhunt/social-listening/services/analysis-service');
+require('./src/xhunt/social-listening/services/aggregate-service');
+console.log('social listening modules loaded');
+NODE
+```
+
+结果：均通过。未启动开发服务器，未执行 build。

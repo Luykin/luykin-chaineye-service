@@ -14,7 +14,7 @@
 - `admin-web` 新增权限点：`social-listening`，用于维护被监控账号名单、授权关系、任务/异常。
 - EchoHunt 前端：只有被分配了至少一个被监控账号的 EchoHunt 账号才展示 Social Listening 页面入口；无授权用户直接访问 `/social-listening` 时**跳回首页**。
 - 手动刷新需要限流；导出也需要限制在安全范围内。
-- 关注/取关表、华语排名字段已结合旧代码和只读库输出确认可用：华语排名优先取 `dev.twitter_user.feature.rank.kolCnRank`；关注/取关从 `dev.twitter_user_follow`、`dev.twitter_user_unfollow`、`dev.project_follow` 中取，最终产品口径再定。
+- 关注/取关表、华语排名字段已结合旧代码和只读库输出确认可用：华语排名优先取 `dev.twitter_user.feature.rank.kolCnRank`；关注/取关从 `dev.twitter_user_follow`、`dev.twitter_user_unfollow`、`dev.project_follow` 中取，其中 `project_follow` 默认纳入 Social Listening 项目关系动态。
 
 ### 1.1 已阅读资料
 
@@ -70,7 +70,7 @@ Social Listening V1 要实现：
 
 1. 运营人员在 `admin-web` 维护“被监控账号名单”，每个被监控账号对应一个 Social Listening 看板。
 2. 新看板先产出最近 7 天数据，随后补齐最近 30 天数据。
-3. 监控中看板每 15 分钟更新一次；手动刷新立即触发一次，但同一看板不并发跑重复任务。
+3. 新增看板默认暂停；管理员在后台主动恢复后才创建首次历史补数据任务，监控中看板每 15 分钟更新一次；手动刷新立即触发一次，但同一看板不并发跑重复任务。
 4. 运营人员可以把某个被监控账号/看板分配给一个或多个 EchoHunt X 登录账号查看。
 5. EchoHunt 用户只有被分配了至少一个被监控账号时，才可以看见 Social Listening 页面入口；未分配用户不展示入口，直接访问 `/social-listening` 时跳回首页。
 6. 全页统一支持 `24H / 7D / 30D` 时间范围。
@@ -104,7 +104,7 @@ src/xhunt/social-listening/
 │   ├── board-service.js
 │   ├── data-source.js         # 查询 dev.tweet/dev.twitter_user/dev.cache
 │   ├── ingest-service.js      # 历史补数据/15min增量入库
-│   ├── analysis-service.js    # 复用 dev.tweet.ai + 项目态度 AI
+│   ├── analysis-service.js    # Social Listening 自跑摘要/标签/项目态度 AI
 │   ├── aggregate-service.js   # 指标/趋势/摘要快照
 │   ├── alert-service.js       # 四类预警检测与合并
 │   ├── export-service.js      # xlsx 导出
@@ -328,9 +328,9 @@ V1 建议：
 | Views/Likes/Reposts/Replies | `dev.tweet.statistic`，必要时参考 `dev.tweet_metric_snapshot` | 页面展示当前快照；趋势基线可用历史快照增强。 |
 | Mention/Quote/Reply 类型 | `dev.tweet.info.mentions`、`quote_id`、`reply_id`、`conversation_id` | 根据被监控账号官方 tweet/handle 判断来源类型。 |
 | 情绪 | 复用旧 `/ai/project_attitude` 的 score/summary 口径 | 旧代码不持久化到 `dev.tweet.ai`；Social Listening 需要自己调用并写入 `EchohuntSocialListeningPosts.projectAttitudeScore/sentiment/sentimentSummaryZh`。 |
-| 主题/词云 | 优先复用 `dev.tweet.ai.domain_tag/crypto_sub_tags/ai_sub_tags/hot_tags` + 命中关键词 | 有旧值就复用；缺失时按优先级参考旧 tag AI 补到 `EchohuntSocialListeningPosts`，再聚合到 snapshot。 |
+| 主题/词云 | 命中关键词 + Social Listening 自跑 `/ai/tweet_tag_v2` | 不把 `dev.tweet.ai` 作为最终口径；召回后按优先级补到 `EchohuntSocialListeningPosts`，再聚合到 snapshot。 |
 | 关键账号动态：高排名提及 | `EchohuntSocialListeningPosts` + rank 快照 | global <= 10000 或 cn <= 1500。 |
-| 关键账号动态：新增 KOL 关注/取关 | `dev.twitter_user_follow` / `dev.twitter_user_unfollow` / `dev.project_follow` | `cryptohunt-backend-v2` 已确认存在 `unfollow_relation` 相关接口和 `dev.twitter_user_unfollow` 逻辑；仍需真实库 DDL/样例确认最终口径。 |
+| 关键账号动态：新增 KOL 关注/取关 | `dev.twitter_user_follow` / `dev.twitter_user_unfollow` / `dev.project_follow` | `cryptohunt-backend-v2` 已确认三张表和旧关系接口；Social Listening 默认纳入 `project_follow`，按官方账号 ID 的入/出关系读取。 |
 | 预警信号 | `EchohuntSocialListeningPosts` 聚合 + `EchohuntSocialListeningAlerts` | 2x 讨论量、负面占比 +20pp、高排名提及、集中负面。 |
 | 24H/7D/30D 聚合 | `EchohuntSocialListeningPosts` -> `EchohuntSocialListeningSnapshots` | 后台预聚合，前台不扫大表。 |
 | 用户关键事件 | 新增 `EchohuntSocialListeningKeyEvents` | 按 `authCenterUserId` 隔离。 |
@@ -493,21 +493,21 @@ Bearer token
 - `projectAttitudeScore` decimal nullable，来自 `/ai/project_attitude.score`
 - `sentimentScore` decimal nullable，可选兼容字段；若保留，值可等同 `projectAttitudeScore`
 - `sentimentSummaryZh` text nullable
-- `topics` JSONB nullable，优先来自 `dev.tweet.ai.domain_tag/crypto_sub_tags/ai_sub_tags/hot_tags`
-- `keywords` JSONB nullable，优先来自命中关键词 + `dev.tweet.ai.hot_tags/crypto_sub_tags`
-- `summaryZh` text nullable，优先来自 `dev.tweet.ai.summary_cn`
-- `summaryEn` text nullable，优先来自 `dev.tweet.ai.summary_en`
-- `titleZh` text nullable，优先来自 `dev.tweet.ai.title_cn`
-- `titleEn` text nullable，优先来自 `dev.tweet.ai.title_en`
-- `abstractZh` text nullable，优先来自 `dev.tweet.ai.abstract_cn`
-- `abstractEn` text nullable，优先来自 `dev.tweet.ai.abstract_en`
+- `topics` JSONB nullable，来自 Social Listening 调用 `/ai/tweet_tag_v2` 生成
+- `keywords` JSONB nullable，来自命中关键词 + Social Listening 调用 `/ai/tweet_tag_v2` 返回的 hot_tags
+- `summaryZh` text nullable，来自 Social Listening 调用 `/ai/tweet_summary_media` 生成
+- `summaryEn` text nullable，来自 Social Listening 调用 `/ai/tweet_summary_media` 生成
+- `titleZh` text nullable，V1 预留字段
+- `titleEn` text nullable，V1 预留字段
+- `abstractZh` text nullable，V1 预留字段
+- `abstractEn` text nullable，V1 预留字段
 - `tagStatus` string nullable：`reused` / `generated` / `pending` / `failed` / `skipped`
 - `summaryStatus` string nullable：`reused` / `generated` / `pending` / `failed` / `skipped`
 - `attitudeStatus` string nullable：`pending` / `succeeded` / `failed` / `skipped`，表示项目态度 `/ai/project_attitude` 是否已处理
 - `aiStatus` string nullable：兼容/汇总状态，可由 `tagStatus + summaryStatus + attitudeStatus` 计算
 - `aiAnalyzedAt` date nullable
 - `aiError` text nullable
-- `aiSource` string nullable：`dev_tweet_ai` / `social_listening_generated` / `project_attitude` / `mixed`，便于排查字段来源
+- `aiSource` string nullable：`social_listening_generated` / `project_attitude` / `mixed`，便于排查字段来源；`dev_tweet_ai` 不作为新口径来源。
 - `rawTweet` JSONB nullable（保留必要片段，不建议全量无限膨胀）
 - `rawAuthor` JSONB nullable
 - timestamps
@@ -729,8 +729,8 @@ PRD 口径：纳入外部账号提及项目、引用官方帖子、回复/评论
 
 更稳妥的策略是：
 
-1. **有就复用**：入库时先读 `dev.tweet.ai`，已有摘要/标签就直接复制到 `EchohuntSocialListeningPosts`。
-2. **没有就补**：对 Social Listening 页面确实需要的字段，用旧 AI 接口的实现口径补齐，但默认写到我们自己的 `EchohuntSocialListeningPosts`，不回写 `dev.tweet.ai`。
+1. **复用接口，不复用字段**：入库时不把 `dev.tweet.ai` 的摘要/标签作为最终口径，统一由本功能调用旧 AI 服务生成并写入 `EchohuntSocialListeningPosts`。
+2. **异步补齐**：对 Social Listening 页面确实需要的字段，用旧 AI 接口和旧 payload 口径补齐，只写自己的 `EchohuntSocialListeningPosts`，不回写 `dev.tweet.ai`。
 3. **项目态度必须自己存**：`/ai/project_attitude` 是按“帖子 + 当前项目”计算的，同一条帖子对不同项目可能结果不同，必须存到我们自己的 `boardId + tweetId` 记录里。
 4. **异步补，不阻塞入库**：先让帖子入库和页面可见；AI 缺失字段可以后台慢慢补，前端展示“分析中/部分完成”。
 
@@ -740,7 +740,7 @@ PRD 口径：纳入外部账号提及项目、引用官方帖子、回复/评论
 
 | 字段/能力 | 旧 AI 路径 | 旧代码产生条件 | 对我们的结论 |
 |---|---|---|---|
-| `domain_tag/crypto_sub_tags/ai_sub_tags/hot_tags` | `/ai/tweet_tag_v2` 或 strict 版本 | `post_generate_tweet_tag_service()` 只有在 `domain_tag` 为空或 force 时生成；Trending pipeline 只对候选热帖、刷新范围内、并且受 `max_ai_pregen_per_cycle` 限制的帖子预生成。 | 覆盖不完整。Social Listening 可先复用，缺失时按需调用同类接口补到自己的表。 |
+| `domain_tag/crypto_sub_tags/ai_sub_tags/hot_tags` | `/ai/tweet_tag_v2` 或 strict 版本 | `post_generate_tweet_tag_service()` 只有在 `domain_tag` 为空或 force 时生成；Trending pipeline 只对候选热帖、刷新范围内、并且受 `max_ai_pregen_per_cycle` 限制的帖子预生成。 | 只参考旧接口和 payload，不复用旧字段；Social Listening 自己调用并写自己的表。 |
 | `summary_cn/summary_en` | `/ai/tweet_summary_media` | `post_generate_tweet_summary_service()` 只有 summary 缺失/空或 force 时生成；旧任务里主要在 KOL 聚合/筛选场景使用，不是全量帖子都会有。 | 不能依赖全量存在。前端可先展示原文，重要帖子/导出/告警代表帖再补摘要。 |
 | `title_cn/title_en/abstract_cn/abstract_en` | `/ai/tweet_abstract` | `post_generate_tweet_abstract_service()` 要求 `tweet.id == conversation_id`，也就是主要面向会话根帖；回复帖、评论帖通常不会生成。Hot tweets 任务还只对 Top KOL 近 48h 左右的根帖补。 | 不适合作为 Social Listening 所有帖子摘要来源，只能有就用。 |
 | `project_attitude.score/summary` | `/ai/project_attitude` | BNB/Bybit 告警按 30 分钟窗口扫最近 4 小时，关键词命中后调用，只发 TG，并用 `dev.cache` 去重；不写入 `dev.tweet.ai`。 | 这个和我们高度契合，但必须由 Social Listening 自己调用并存入主业务库。 |
@@ -753,22 +753,22 @@ PRD 口径：纳入外部账号提及项目、引用官方帖子、回复/评论
 - 旧字段版本会变化，例如 `domain_tag_version` 已经有多版；直接混用时要记录来源和版本。
 - 如果我们调用旧 `/tweet/generate_*` 接口，会改 `dev.tweet.ai`，这和当前“meta/dev 表只读复用”的原则冲突。
 
-#### 6.6.2 V1 推荐策略：字段级复用 + 字段级补充
+#### 6.6.2 V1 推荐策略：复用旧 AI 接口，但结果独立写入本功能字段
 
 入库每条命中帖子时，按字段判断：
 
-| 字段 | 如果 `dev.tweet.ai` 已有 | 如果没有 | 写到哪里 |
+| 字段 | V1 处理方式 | 写到哪里 | 备注 |
 |---|---|---|---|
-| 摘要 `summaryZh/summaryEn` | 直接复制 `summary_cn/summary_en` | 后台按优先级调用 `/ai/tweet_summary_media` 补；低优先级帖子可先展示原文 | `EchohuntSocialListeningPosts` |
-| 主题 `topics` | 复制 `domain_tag/crypto_sub_tags/ai_sub_tags` | 调用 `/ai/tweet_tag_v2` 或 strict 版本补 | `EchohuntSocialListeningPosts` |
-| 热词 `keywords` | 复制 `hot_tags`，再合并命中关键词 | 没有 hot_tags 时先用命中关键词；必要时跟随 tag 补齐 | `EchohuntSocialListeningPosts` |
-| 标题/长摘要 `title/abstract` | 有就复制 | V1 不强制补；因为旧代码主要只支持根帖 | `EchohuntSocialListeningPosts` |
-| 项目态度 `sentiment/projectAttitudeScore` | 旧字段没有可复用 | 调用 `/ai/project_attitude` | `EchohuntSocialListeningPosts` |
+| 摘要 `summaryZh/summaryEn` | 后台按优先级调用 `/ai/tweet_summary_media` | `EchohuntSocialListeningPosts` | 低优先级帖子可先展示原文 |
+| 主题 `topics` | 调用 `/ai/tweet_tag_v2` 或 strict 版本补 | `EchohuntSocialListeningPosts` | 不混用旧字段版本 |
+| 热词 `keywords` | 先用命中关键词，tag 补完后合并 AI hot_tags | `EchohuntSocialListeningPosts` | 用于词云和命中原因 |
+| 标题/长摘要 `title/abstract` | V1 预留，不强制补 | `EchohuntSocialListeningPosts` | 旧 abstract 主要支持根帖，暂不混入口径 |
+| 项目态度 `sentiment/projectAttitudeScore` | 调用 `/ai/project_attitude` | `EchohuntSocialListeningPosts` | score < 4 固定为负面 |
 
 这样做的好处：
 
-- 不浪费：已有结果直接用。
-- 不冒险：默认不改 `dev.tweet.ai`。
+- 口径一致：同一功能内的摘要、主题、热词都由同一套旧 AI 接口/payload 生成。
+- 不冒险：不改 `dev.tweet.ai`，也不把旧字段版本混到新口径里。
 - 不被旧覆盖率卡住：Social Listening 必需字段缺失时可以自己补。
 - 可追踪：每条记录保存 `tagStatus/summaryStatus/attitudeStatus/aiSource/aiError`，后面好排查。
 
@@ -1034,7 +1034,7 @@ Redis lock TTL 建议 30 分钟；任务心跳写 `EchohuntSocialListeningJobs.p
 - 任务锁：重复手动刷新只产生一个 running job。
 - 聚合口径：同 tweetId 多来源只算一次；24H/7D/30D 指标一致。
 - 预警：2x 讨论量、负面占比 +20pp、样本不足不触发。
-- AI 缺失字段：已有 `dev.tweet.ai` 时复用；缺失时只补写自己的表；AI 失败不阻断帖子入库。
+- AI 字段：不复用 `dev.tweet.ai` 作为最终口径；统一调用旧 AI 服务补写自己的表；AI 失败不阻断帖子入库。
 
 前端：
 
@@ -1048,9 +1048,9 @@ Redis lock TTL 建议 30 分钟；任务心跳写 `EchohuntSocialListeningJobs.p
 
 ### Phase 0：确认依赖
 
-- 只读确认 `dev.tweet/dev.twitter_user/dev.cache` DDL 与 JSON 字段结构，尤其是 `dev.tweet.ai` 样例。
+- 只读确认 `dev.tweet/dev.twitter_user/dev.cache` DDL 与 JSON 字段结构，重点是 `mention/info/statistic/profile/feature/kol`。
 - 确认 `/ai/project_attitude` 在当前环境的调用地址、鉴权、限流和超时。
-- 确认是否允许在摘要/标签缺失时调用旧 `/tweet/generate_*` 写回 `dev.tweet.ai`；默认不写。
+- 不调用旧 `/tweet/generate_*` 写回 `dev.tweet.ai`；只调用底层 `/ai/*` 服务写本功能字段。
 - 确认 X 资料源、XHunt 排名/华语排名源、关注/取关展示口径。
 
 ### Phase 1：后端数据闭环
@@ -1063,7 +1063,7 @@ Redis lock TTL 建议 30 分钟；任务心跳写 `EchohuntSocialListeningJobs.p
 
 ### Phase 2：分析与预警
 
-- 只读复用 `dev.tweet.ai` 里已有摘要、标题、标签、主题字段。
+- 不再把 `dev.tweet.ai` 里已有摘要、标题、标签、主题字段作为最终展示/聚合口径。
 - 对缺失的摘要/标签，参考旧 Rust 实现按优先级调用 AI 补齐，但默认只写 `EchohuntSocialListeningPosts`。
 - 对命中的帖子调用 `/ai/project_attitude`，只计算“这条帖子对当前项目/官方账号的态度”，结果写我们自己的 `EchohuntSocialListeningPosts`。
 - 聚合 snapshots、词云、账号动态、高排名提及。
@@ -1094,15 +1094,15 @@ Redis lock TTL 建议 30 分钟；任务心跳写 `EchohuntSocialListeningJobs.p
 6. 导出需要限制在安全范围内。
 7. 华语排名优先从 `dev.twitter_user.feature.rank.kolCnRank` 取，缺失时 fallback 到 `kol/dev.cache`。
 8. 关注/取关相关表在真实只读库已看到：`dev.twitter_user_follow`、`dev.twitter_user_unfollow`、`dev.project_follow`；最终展示口径仍需定。
-9. AI 不从零新做一套：摘要/标签优先复用 `dev.tweet.ai`；缺失时参考旧实现补到自己的表；项目态度优先复用旧 `/ai/project_attitude`。
+9. AI 不从零新做一套提示词：摘要/标签/项目态度复用旧 AI 服务接口和 payload，但结果统一写入 `EchohuntSocialListeningPosts` 自己的字段，不复用 `dev.tweet.ai` 作为最终口径。
 
 ### 13.2 仍待确认
 
-1. `dev.tweet.mention`、`dev.tweet.ai`、`dev.twitter_user.profile/feature` 的更多真实线上 JSON 样例，用来补齐边界情况。
+1. `dev.tweet.mention/info/statistic`、`dev.twitter_user.profile/feature/kol` 的更多真实线上 JSON 样例，用来补齐边界情况。
 2. 关注/取关动态最终采用通用关系表 `dev.twitter_user_follow/unfollow`，还是项目专用 `dev.project_follow`，以及“新增 KOL 粉丝/取关”的产品展示口径。
 3. `/ai/project_attitude` 的线上调用地址、鉴权、QPS、超时和失败重试策略。
-4. 摘要/标签缺失时，是否允许调用旧 `/tweet/generate_tag`、`/tweet/generate_summary`、`/tweet/generate_abstract` 写回 `dev.tweet.ai`；默认不写。
-5. 是否需要“项目专属主题分类”。如果只是前端词云/主题榜，V1 可先用 `dev.tweet.ai` 标签 + 命中关键词，不足部分再调用 tag AI 补。
+4. 摘要/标签缺失时，不调用旧 `/tweet/generate_tag`、`/tweet/generate_summary`、`/tweet/generate_abstract` 写回 `dev.tweet.ai`；只调用底层 `/ai/*` 服务写本功能字段。
+5. 是否需要“项目专属主题分类”。如果只是前端词云/主题榜，V1 先用命中关键词 + `/ai/tweet_tag_v2` 返回标签，不混用 `dev.tweet.ai` 历史版本。
 6. 推文 Views 与互动统计是否在 `dev.tweet.statistic` 中稳定可用；转推是否纳入讨论量。
 7. 导出上限最终值：本文建议 10,000 行/20MB；需坤哥确认是否合适。
 8. Social Listening 数据保留周期：本文建议帖子事实表先保留 45-60 天；需坤哥确认。
@@ -1301,7 +1301,7 @@ flowchart LR
 
 这里要分清楚三件事：
 
-1. **先复用**：读 `dev.tweet.ai`，如果已有摘要、标签、热词，就复制到我们的帖子表。
+1. **复用旧 AI 服务**：不直接复制 `dev.tweet.ai`，由 Social Listening 调用旧 `/ai/*` 接口生成自己的摘要、标签、热词。
 2. **缺什么补什么**：如果 Social Listening 需要的字段没有，就参考旧 Rust 实现调用对应 AI，但只写我们自己的表。
 3. **项目态度单独算**：情绪不是 `dev.tweet.ai` 的通用字段，而是“这条帖子对当前项目的态度”，用 `/ai/project_attitude`。
 
@@ -1324,18 +1324,18 @@ flowchart LR
 
 按字段处理：
 
-| 字段 | 有旧值时 | 没旧值时 | 前端用途 |
+| 字段 | V1 处理方式 | 写入位置 | 前端用途 |
 |---|---|---|---|
-| `summaryZh/summaryEn` | 复制 `dev.tweet.ai.summary_*` | 调 `/ai/tweet_summary_media` 补，低优先级可先不补 | 帖子摘要、导出摘要 |
-| `topics` | 复制 `domain_tag/crypto_sub_tags/ai_sub_tags` | 调 `/ai/tweet_tag_v2` 或 strict 版本补 | 主题榜、筛选 |
-| `keywords` | 复制 `hot_tags` 并合并命中关键词 | 先用命中关键词，tag 补完后再更新 | 词云、命中原因 |
-| `title/abstract` | 有就复制 | V1 不强制补，因为旧逻辑主要支持根帖 | 帖子卡片增强 |
-| `sentiment/projectAttitudeScore` | 无通用旧值 | 调 `/ai/project_attitude` | 情绪图、负面筛选、预警 |
+| `summaryZh/summaryEn` | 调 `/ai/tweet_summary_media` 补，低优先级可先不补 | 本功能字段 | 帖子摘要、导出摘要 |
+| `topics` | 调 `/ai/tweet_tag_v2` 或 strict 版本补 | 本功能字段 | 主题榜、筛选 |
+| `keywords` | 先用命中关键词，tag 补完后合并 AI hot_tags | 本功能字段 | 词云、命中原因 |
+| `title/abstract` | V1 不强制补，因为旧逻辑主要支持根帖，避免混旧版本 | 本功能字段 | 帖子卡片增强 |
+| `sentiment/projectAttitudeScore` | 调 `/ai/project_attitude` | 本功能字段 | 情绪图、负面筛选、预警 |
 
 送给 `/ai/project_attitude` 的内容：
 
 - `text`：帖子正文，建议沿用旧格式 `<<create_time--norm_tweet(text)>>`。
-- `project`：项目名 + 官方 handle + 主要别名/token。
+- `project`：默认只传 board `projectName`；如旧任务有固定名称，可用 `metadata.aiProjectName` 显式覆盖。
 - `lang`：按帖子语言或看板默认语言传入，具体值做配置。
 
 写入 `EchohuntSocialListeningPosts`：
@@ -1478,7 +1478,7 @@ score 到情绪的建议映射：
    - 旧逻辑有效条件：`persist > 0 OR latest > 0`，并排除太新的记录，例如 `created_at < now - 1h`。
 4. KOL 判断：
    - global Top 10,000 或 cn Top 1,500。
-5. `project_follow` 是否用于项目专属关系仍待最终口径确认。
+5. `project_follow` 默认用于项目专属关系动态，按被监控官方账号 ID 查询入/出关系；不猜 `project` 字段字符串。
 
 #### 14.2.6 预警计算
 
@@ -1543,14 +1543,15 @@ sequenceDiagram
   Admin->>AdminAPI: POST /monitored-accounts {handle, projectName, keywords}
   AdminAPI->>MainDB: 查询 EchohuntSocialListeningBoards 是否已存在 active
   alt 不存在
-    AdminAPI->>MainDB: 新建看板 EchohuntSocialListeningBoards(initializing)
+    AdminAPI->>MainDB: 新建看板 EchohuntSocialListeningBoards(status=paused)
     AdminAPI->>MainDB: 记录运营日志 board_create
-    AdminAPI->>MainDB: 新建历史补数据任务(stage=recent_7d)
-    AdminAPI->>Redis: 写入/通知待处理任务，可选
   else 已存在
     AdminAPI-->>Admin: 返回已有 board
   end
-  AdminAPI-->>Admin: 返回 board + 最近7天历史补数据任务
+  AdminAPI-->>Admin: 返回 board(status=paused)，提示需后台恢复后启动
+  Admin->>AdminAPI: POST /boards/{boardId}/resume
+  AdminAPI->>MainDB: 新建最近7天 history_backfill 任务
+  AdminAPI->>Redis: 写入 scheduler:state=running
   Jobs->>MainDB: 领取待执行 history_backfill 任务
   Jobs->>Redis: 获取 echohunt:social-listening:job-lock:{boardId}
   Jobs->>MetaDB: 分片扫描 dev.tweet + join dev.twitter_user
@@ -1583,13 +1584,13 @@ sequenceDiagram
       Jobs->>Jobs: 判断是否提到/引用/回复官方账号或关键词
       Jobs->>Jobs: 提取 views、likes、作者粉丝数、排名
       Jobs->>MainDB: 写入或更新 EchohuntSocialListeningPosts
-      Jobs->>Jobs: 先复用 dev.tweet.ai 里的摘要和标签
+      Jobs->>AI: 调用旧 AI 服务生成摘要和标签，写入本功能字段
       alt 摘要/标签缺失且达到补充优先级
         Jobs->>AI: 发送正文/媒体，补摘要或标签
         AI-->>Jobs: 返回摘要/主题/热词
         Jobs->>MainDB: 写入 summary/topics/keywords/status
       else 已有旧值或暂缓补充
-        Jobs->>MainDB: 保留已有摘要/标签或标记 pending
+        Jobs->>MainDB: 写入 AI 生成摘要/标签或标记 pending
       end
       alt 需要判断这条帖子的项目态度
         Jobs->>AI: 发送 text + project + lang
@@ -1836,7 +1837,7 @@ admin-web 配置被监控账号
   -> EchohuntSocialListeningJobs(history_backfill: 先7D再30D)
   -> 后台任务扫 dev.tweet + dev.twitter_user
   -> EchohuntSocialListeningPosts
-  -> 有 dev.tweet.ai 摘要/标签就复用，缺失字段按优先级补到自己的表
+  -> 调用旧 AI 服务生成摘要/标签/项目态度，写入本功能自己的字段
   -> 调用 /ai/project_attitude 计算项目态度
   -> EchohuntSocialListeningSnapshots
   -> EchohuntSocialListeningAccountSignals

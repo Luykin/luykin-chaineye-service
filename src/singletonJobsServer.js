@@ -111,7 +111,7 @@ const redisClient = redis.createClient({
     });
 
     const socialListeningScheduler = createSocialListeningScheduler({ redisClient });
-    socialListeningScheduler.start();
+    const socialListeningSchedulerStatus = socialListeningScheduler.start();
 
     // 启动备份服务
     await pgBackupService.start();
@@ -141,7 +141,11 @@ const redisClient = redis.createClient({
       "✅ 统计数据清理任务已启动（每天执行一次，清理版本统计和URL统计）"
     );
     console.log("✅ 后端健康自检测任务已启动（每30分钟执行一次）");
-    console.log("✅ Social Listening 调度任务已启动（每分钟 tick，按看板 15 分钟增量）");
+    console.log(
+      socialListeningSchedulerStatus.enabled
+        ? "✅ Social Listening 调度器已加载（默认暂停；管理员在后台恢复看板后才会处理任务）"
+        : "⏸️ Social Listening 调度器已禁用（SOCIAL_LISTENING_SCHEDULER_ENABLED=false）"
+    );
 
   } catch (err) {
     console.error("单例任务进程启动失败:", err);

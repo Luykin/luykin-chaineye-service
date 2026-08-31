@@ -44,6 +44,14 @@ const POST_SOURCES = Object.freeze({
   COMMENT: "comment",
 });
 
+const ACCOUNT_SIGNAL_TYPES = Object.freeze({
+  INFLUENTIAL_MENTION: "influential_mention",
+  ACCOUNT_FOLLOWED_PROJECT: "account_followed_project",
+  PROJECT_FOLLOWED_ACCOUNT: "project_followed_account",
+  ACCOUNT_UNFOLLOWED_PROJECT: "account_unfollowed_project",
+  PROJECT_UNFOLLOWED_ACCOUNT: "project_unfollowed_account",
+});
+
 const SENTIMENTS = Object.freeze({
   POSITIVE: "positive",
   NEUTRAL: "neutral",
@@ -73,6 +81,7 @@ module.exports = {
   DEFAULT_RANGE_KEY,
   RANGE_CONFIG,
   POST_SOURCES,
+  ACCOUNT_SIGNAL_TYPES,
   SENTIMENTS,
   ALERT_TYPES,
   SOCIAL_LISTENING_PERMISSION,

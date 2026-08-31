@@ -215,7 +215,7 @@
       <div class="table-wrap">
         <table>
           <thead><tr><th>表名</th><th>状态</th><th>存储位置</th><th>用途</th></tr></thead>
-          <tbody><tr><td><code>dev.twitter_user</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>X 用户/官方账号资料表；用于确认被监控账号、作者画像、粉丝数、头像、是否中文账号、feature.rank.kolCnRank 等排名字段。</td></tr><tr><td><code>dev.tweet</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>X 推文主表；用于召回提及、引用、回复官方账号或关键词的帖子，读取 text/create_time/statistic/info/mention/ai 等字段；ai 里已有摘要/标签时优先复用。</td></tr><tr><td><code>dev.twitter_user_follow</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>通用关注关系表；用于判断谁新增关注了官方账号，或官方账号新增关注了谁。</td></tr><tr><td><code>dev.twitter_user_unfollow</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>通用取关关系表；用于判断取关动态，读取 follower_id/following_id/created_at/latest/persist。</td></tr><tr><td><code>dev.project_follow</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>项目维度关注关系表；是否作为 Social Listening 的关注口径还需最终确认。</td></tr><tr><td><code>dev.cache</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>排名快照缓存；作为 feature.rank 缺失时的 fallback，例如 backend:score_tag:rank_record:snap_20250606kol。</td></tr><tr><td><code>dev.tweet_metric_snapshot</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>推文指标历史快照；可用于更准确的 views/likes/reply/retweet/quote 历史趋势，V1 可作为增强。</td></tr></tbody>
+          <tbody><tr><td><code>dev.twitter_user</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>X 用户/官方账号资料表；用于确认被监控账号、作者画像、粉丝数、头像、是否中文账号、feature.rank.kolCnRank 等排名字段。</td></tr><tr><td><code>dev.tweet</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>X 推文主表；用于召回提及、引用、回复官方账号或关键词的帖子，读取 text/create_time/statistic/info/mention 等字段；ai 字段不作为最终展示/聚合口径。</td></tr><tr><td><code>dev.twitter_user_follow</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>通用关注关系表；用于判断谁新增关注了官方账号，或官方账号新增关注了谁。</td></tr><tr><td><code>dev.twitter_user_unfollow</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>通用取关关系表；用于判断取关动态，读取 follower_id/following_id/created_at/latest/persist。</td></tr><tr><td><code>dev.project_follow</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>项目维度关注关系表；Social Listening 默认纳入项目关系动态。</td></tr><tr><td><code>dev.cache</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>排名快照缓存；作为 feature.rank 缺失时的 fallback，例如 backend:score_tag:rank_record:snap_20250606kol。</td></tr><tr><td><code>dev.tweet_metric_snapshot</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>推文指标历史快照；可用于更准确的 views/likes/reply/retweet/quote 历史趋势，V1 可作为增强。</td></tr></tbody>
         </table>
       </div>
     </article><article class="data-group">
@@ -246,7 +246,7 @@
     <div class="data-map-head">
       <p class="eyebrow">Computation Map</p>
       <h2>AI 输入、落表字段与前端模块映射</h2>
-      <p>后台任务的核心不是“扫到推文就直接给前端”，而是先标准化成帖子结果表；能复用 dev.tweet.ai 的摘要/标签就先复用，项目态度再调用旧 AI 接口，最后聚合成前端直接读取的概览图表、账号动态和预警。</p>
+      <p>后台任务的核心不是“扫到推文就直接给前端”，而是先标准化成帖子结果表；摘要、标签、项目态度统一调用旧 AI 服务并写本功能字段，最后聚合成前端直接读取的概览图表、账号动态和预警。</p>
     </div>
     <article class="data-group">
     <div class="group-title">
@@ -256,7 +256,7 @@
     <div class="table-wrap">
       <table>
         <thead><tr><th>前端/计算模块</th><th>来源表</th><th>核心字段</th><th>用途</th></tr></thead>
-        <tbody><tr><td>项目上下文</td><td><code>EchohuntSocialListeningBoards</code></td><td>projectName、officialHandle、metadata.keywords / aliases / tokenSymbols</td><td>让 AI 知道这条帖子是在评价哪个项目，避免只看单帖误判。</td></tr><tr><td>帖子正文</td><td><code>EchohuntSocialListeningPosts</code></td><td>tweetId、text、normalizedText、source、postCreatedAt、matchedSources</td><td>AI 判断情绪、主题、摘要的主体内容。</td></tr><tr><td>作者画像</td><td><code>EchohuntSocialListeningPosts 作者快照</code></td><td>authorHandle、authorName、authorFollowersCount、authorGlobalRank、authorCnRank、authorIsCn</td><td>辅助判断影响力、语言环境、KOL 权重；不作为唯一情绪依据。</td></tr><tr><td>互动指标</td><td><code>EchohuntSocialListeningPosts</code></td><td>viewsCount、likesCount、repostsCount、quotesCount、repliesCount</td><td>辅助聚合影响力和代表帖排序；AI 可用于判断传播强度。</td></tr><tr><td>AI 输出</td><td><code>写回 EchohuntSocialListeningPosts</code></td><td>projectAttitudeScore、sentiment、sentimentSummaryZh、topics、keywords、aiStatus、aiAnalyzedAt、aiError</td><td>供帖子列表、情绪图、主题、词云、负面预警继续聚合；已有 dev.tweet.ai 摘要/标签可先复用。</td></tr></tbody>
+        <tbody><tr><td>项目上下文</td><td><code>EchohuntSocialListeningBoards</code></td><td>projectName、officialHandle、metadata.keywords / aliases / tokenSymbols</td><td>让 AI 知道这条帖子是在评价哪个项目，避免只看单帖误判。</td></tr><tr><td>帖子正文</td><td><code>EchohuntSocialListeningPosts</code></td><td>tweetId、text、normalizedText、source、postCreatedAt、matchedSources</td><td>AI 判断情绪、主题、摘要的主体内容。</td></tr><tr><td>作者画像</td><td><code>EchohuntSocialListeningPosts 作者快照</code></td><td>authorHandle、authorName、authorFollowersCount、authorGlobalRank、authorCnRank、authorIsCn</td><td>辅助判断影响力、语言环境、KOL 权重；不作为唯一情绪依据。</td></tr><tr><td>互动指标</td><td><code>EchohuntSocialListeningPosts</code></td><td>viewsCount、likesCount、repostsCount、quotesCount、repliesCount</td><td>辅助聚合影响力和代表帖排序；AI 可用于判断传播强度。</td></tr><tr><td>AI 输出</td><td><code>写回 EchohuntSocialListeningPosts</code></td><td>projectAttitudeScore、sentiment、sentimentSummaryZh、topics、keywords、aiStatus、aiAnalyzedAt、aiError</td><td>供帖子列表、情绪图、主题、词云、负面预警继续聚合；不混用 dev.tweet.ai 历史字段版本。</td></tr></tbody>
       </table>
     </div>
   </article>
@@ -284,8 +284,8 @@
     <div class="diagram-wrap"><img src="./01-admin-create-monitored-account.svg" alt="01 运营新增被监控账号" /></div>
     <div class="flow-copy">
       <h3>流程说明</h3>
-      <p>运营在 admin-web 输入官方 X handle 后，后端先只读查询 meta.dev.twitter_user 确认账号资料，再在主业务库创建被监控看板和初始化任务。</p>
-      <ul><li>读取 dev.twitter_user.username/profile/feature/kol，解析头像、粉丝数、华语排名和全球排名。</li><li>写入 EchohuntSocialListeningBoards，状态从 initializing 开始。</li><li>创建最近7天历史补数据任务，由单实例后台进程异步加工最近7天数据。</li></ul>
+      <p>运营在 admin-web 输入官方 X handle 后，后端先只读查询 meta.dev.twitter_user 确认账号资料，再在主业务库创建默认暂停的被监控看板；管理员点击恢复后才创建初始化任务。</p>
+      <ul><li>读取 dev.twitter_user.username/profile/feature/kol，解析头像、粉丝数、华语排名和全球排名。</li><li>写入 EchohuntSocialListeningBoards，状态默认 paused。</li><li>不自动创建补数据任务；管理员在后台点击恢复后才创建最近7天历史补数据任务。</li></ul>
     </div>
   </section></div>
 <div id="diagram-2"><section class="diagram-card">
@@ -329,8 +329,8 @@
     <div class="diagram-wrap"><img src="./02b-ai-analysis-storage.svg" alt="02B 复用旧 AI 能力与落表" /></div>
     <div class="flow-copy">
       <h3>流程说明</h3>
-      <p>旧系统已经有摘要、标签、项目态度等 AI 能力；本需求优先复用已有 dev.tweet.ai 字段和 /ai/project_attitude，避免重复做一套。</p>
-      <ul><li>已有可复用：dev.tweet.ai.summary_cn、domain_tag、crypto_sub_tags、hot_tags；项目态度用项目名+帖子正文调用 /ai/project_attitude。</li><li>项目态度接口返回 score + summary；score 可映射为正/中/负，summary 可作为项目相关摘要。</li><li>写回帖子结果表：项目态度分数、情绪、项目相关摘要、复用到的标签/主题、分析状态、分析时间、失败原因。</li></ul>
+      <p>旧系统已经有摘要、标签、项目态度等 AI 能力；本需求复用旧 AI 服务接口和 payload，但不复用 dev.tweet.ai 字段版本，避免评分/标签口径混杂。</p>
+      <ul><li>摘要/标签调用旧 /ai/tweet_summary_media、/ai/tweet_tag_v2；项目态度用项目名+帖子正文调用 /ai/project_attitude。</li><li>项目态度接口返回 score + summary；score 可映射为正/中/负，summary 可作为项目相关摘要。</li><li>写回帖子结果表：项目态度分数、情绪、项目相关摘要、复用到的标签/主题、分析状态、分析时间、失败原因。</li></ul>
     </div>
   </section></div>
 <div id="diagram-5"><section class="diagram-card">

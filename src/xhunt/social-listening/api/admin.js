@@ -5,11 +5,17 @@ const {
   EchohuntSocialListeningBoard,
   EchohuntSocialListeningBoardAccess,
   EchohuntSocialListeningJob,
+  EchohuntSocialListeningPost,
+  EchohuntSocialListeningSnapshot,
+  EchohuntSocialListeningAccountSignal,
+  EchohuntSocialListeningAlert,
+  EchohuntSocialListeningAccessAuditLog,
 } = require("../../../models/postgres-start");
 const { SOCIAL_LISTENING_PERMISSION, BOARD_STATUSES } = require("../constants");
 const {
   resolveMonitoredAccount,
   createMonitoredAccount,
+  resumeBoard,
   listMonitoredAccounts,
   updateBoard,
   grantBoardAccess,
@@ -18,9 +24,13 @@ const {
   createManualRefreshJob,
   serializeAccess,
   serializeJob,
+  serializePost,
   normalizePage,
   writeAudit,
 } = require("../services/board-service");
+const { normalizeRangeKey, getWindowForRange } = require("../services/aggregate-service");
+const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
+const { enableSocialListeningScheduler } = require("../services/scheduler");
 const { sendJsonError, publicError } = require("../services/errors");
 
 const router = express.Router();
@@ -92,10 +102,16 @@ router.post("/boards/:boardId/pause", async (req, res) => {
 
 router.post("/boards/:boardId/resume", async (req, res) => {
   try {
-    const board = await updateBoard(req.params.boardId, { status: BOARD_STATUSES.MONITORING }, getAdminId(req));
-    const refresh = await createManualRefreshJob(board.id, { type: "admin", adminId: getAdminId(req) }, req.redisClient);
-    await writeAudit({ boardId: board.id, adminId: getAdminId(req), action: "board_resume" });
-    return res.json({ success: true, data: { board: await getBoardDetail(board.id), job: serializeJob(refresh.job), reused: refresh.reused } });
+    const result = await resumeBoard(req.params.boardId, getAdminId(req), req.redisClient);
+    return res.json({
+      success: true,
+      data: {
+        board: await getBoardDetail(result.board.id),
+        job: serializeJob(result.job),
+        reused: result.reused,
+        firstActivation: result.firstActivation,
+      },
+    });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_RESUME_FAILED");
   }
@@ -116,9 +132,109 @@ router.delete("/boards/:boardId", async (req, res) => {
 router.post("/boards/:boardId/refresh", async (req, res) => {
   try {
     const result = await createManualRefreshJob(req.params.boardId, { type: "admin", adminId: getAdminId(req) }, req.redisClient);
+    await enableSocialListeningScheduler(req.redisClient, { type: "admin", adminId: getAdminId(req) });
     return res.json({ success: true, data: { job: serializeJob(result.job), reused: result.reused } });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_REFRESH_FAILED");
+  }
+});
+
+router.get("/boards/:boardId/overview", async (req, res) => {
+  try {
+    const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
+    if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+    const rangeKey = normalizeRangeKey(req.query.range);
+    const snapshot = await EchohuntSocialListeningSnapshot.findOne({
+      where: { boardId: board.id, rangeKey },
+      order: [["generatedAt", "DESC"]],
+      raw: true,
+    });
+    return res.json({
+      success: true,
+      data: {
+        board: await getBoardDetail(board.id),
+        rangeKey,
+        state: snapshot ? "ready" : (board.status === "failed" ? "failed" : "processing"),
+        snapshot: snapshot || null,
+      },
+    });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_OVERVIEW_FAILED");
+  }
+});
+
+router.get("/boards/:boardId/posts", async (req, res) => {
+  try {
+    const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
+    if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+    const { page, pageSize, offset, limit } = normalizePage(req.query);
+    const { where, rangeKey } = buildPostWhere(board.id, req.query);
+    const result = await EchohuntSocialListeningPost.findAndCountAll({
+      where,
+      order: buildPostOrder(req.query.sort),
+      offset,
+      limit,
+    });
+    return res.json({ success: true, data: { rangeKey, items: result.rows.map(serializePost), page, pageSize, total: result.count } });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_POSTS_FAILED");
+  }
+});
+
+router.get("/boards/:boardId/posts/export", async (req, res) => {
+  try {
+    const board = await EchohuntSocialListeningBoard.findByPk(req.params.boardId);
+    if (!board) throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+    const result = await exportPostsXlsx(board, req.query, {
+      type: "admin",
+      adminId: getAdminId(req),
+    }, req.redisClient);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(result.filename)}"`);
+    return res.send(result.buffer);
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_EXPORT_FAILED");
+  }
+});
+
+router.get("/boards/:boardId/accounts", async (req, res) => {
+  try {
+    const { page, pageSize, offset, limit } = normalizePage(req.query);
+    const rangeKey = normalizeRangeKey(req.query.range);
+    const window = getWindowForRange(rangeKey);
+    const where = { boardId: req.params.boardId, occurredAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt } };
+    if (req.query.type) where.signalType = String(req.query.type);
+    const result = await EchohuntSocialListeningAccountSignal.findAndCountAll({
+      where,
+      order: [["occurredAt", "DESC"]],
+      offset,
+      limit,
+      raw: true,
+    });
+    return res.json({ success: true, data: { rangeKey, items: result.rows, page, pageSize, total: result.count } });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_SIGNALS_FAILED");
+  }
+});
+
+router.get("/boards/:boardId/alerts", async (req, res) => {
+  try {
+    const { page, pageSize, offset, limit } = normalizePage(req.query);
+    const rangeKey = normalizeRangeKey(req.query.range);
+    const window = getWindowForRange(rangeKey);
+    const where = { boardId: req.params.boardId, triggeredAt: { [Op.gte]: window.windowStartAt } };
+    if (req.query.type) where.alertType = String(req.query.type);
+    if (req.query.status) where.status = String(req.query.status);
+    const result = await EchohuntSocialListeningAlert.findAndCountAll({
+      where,
+      order: [["triggeredAt", "DESC"]],
+      offset,
+      limit,
+      raw: true,
+    });
+    return res.json({ success: true, data: { rangeKey, items: result.rows, page, pageSize, total: result.count } });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_BOARD_ALERTS_FAILED");
   }
 });
 
@@ -171,6 +287,47 @@ router.get("/jobs", async (req, res) => {
   }
 });
 
+router.get("/alerts", async (req, res) => {
+  try {
+    const { page, pageSize, offset, limit } = normalizePage(req.query);
+    const where = {};
+    if (req.query.boardId) where.boardId = String(req.query.boardId);
+    if (req.query.type) where.alertType = String(req.query.type);
+    if (req.query.status) where.status = String(req.query.status);
+    if (req.query.severity) where.severity = String(req.query.severity);
+    const result = await EchohuntSocialListeningAlert.findAndCountAll({
+      where,
+      order: [["triggeredAt", "DESC"]],
+      offset,
+      limit,
+      raw: true,
+    });
+    return res.json({ success: true, data: { items: result.rows, page, pageSize, total: result.count } });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_ALERTS_FAILED");
+  }
+});
+
+router.get("/audit-logs", async (req, res) => {
+  try {
+    const { page, pageSize, offset, limit } = normalizePage(req.query);
+    const where = {};
+    if (req.query.boardId) where.boardId = String(req.query.boardId);
+    if (req.query.action) where.action = String(req.query.action);
+    if (req.query.adminId) where.adminId = Number(req.query.adminId);
+    const result = await EchohuntSocialListeningAccessAuditLog.findAndCountAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      offset,
+      limit,
+      raw: true,
+    });
+    return res.json({ success: true, data: { items: result.rows, page, pageSize, total: result.count } });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_AUDIT_FAILED");
+  }
+});
+
 router.post("/jobs/:jobId/retry", async (req, res) => {
   try {
     const job = await EchohuntSocialListeningJob.findByPk(req.params.jobId);
@@ -185,6 +342,7 @@ router.post("/jobs/:jobId/retry", async (req, res) => {
       triggeredByAdminId: getAdminId(req),
       metadata: { ...(job.metadata || {}), retryFromJobId: job.id },
     });
+    await enableSocialListeningScheduler(req.redisClient, { type: "admin", adminId: getAdminId(req) });
     return res.json({ success: true, data: serializeJob(retry) });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_JOB_RETRY_FAILED");

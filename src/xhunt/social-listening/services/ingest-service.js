@@ -12,8 +12,10 @@ const {
 const {
   generateSnapshotsForBoard,
   generateInfluentialSignals,
+  generateFollowSignals,
+  generateAggregateAlerts,
 } = require("./aggregate-service");
-const { analyzePendingProjectAttitudes } = require("./analysis-service");
+const { analyzePendingProjectAttitudes, analyzePendingContentMetadata } = require("./analysis-service");
 
 const DEFAULT_WINDOW_MINUTES = Number(process.env.SOCIAL_LISTENING_WINDOW_MINUTES || 60);
 const DEFAULT_HISTORY_DAYS = Number(process.env.SOCIAL_LISTENING_HISTORY_DAYS || 30);
@@ -91,19 +93,6 @@ async function upsertPostPayloads(payloads) {
       "repostsCount",
       "quotesCount",
       "repliesCount",
-      "topics",
-      "keywords",
-      "summaryZh",
-      "summaryEn",
-      "titleZh",
-      "titleEn",
-      "abstractZh",
-      "abstractEn",
-      "tagStatus",
-      "summaryStatus",
-      "aiStatus",
-      "aiSource",
-      "rawTweet",
       "rawAuthor",
       "updatedAt",
     ],
@@ -156,6 +145,15 @@ async function processSocialListeningJob(jobId) {
     await job.update({ status: JOB_STATUSES.SKIPPED, finishedAt: new Date(), errorCode: "BOARD_NOT_AVAILABLE" });
     return job;
   }
+  if (board.status === BOARD_STATUSES.PAUSED) {
+    await job.update({
+      status: JOB_STATUSES.SKIPPED,
+      finishedAt: new Date(),
+      errorCode: "BOARD_PAUSED",
+      errorMessage: "看板已暂停，任务不会自动执行。",
+    });
+    return job;
+  }
 
   await markJobRunning(job);
   const counters = { scanned: 0, upserted: 0, windows: 0 };
@@ -192,12 +190,20 @@ async function processSocialListeningJob(jobId) {
       lastFailureReason: null,
     });
 
+    const contentAiResult = await analyzePendingContentMetadata(board, { limit: job.jobType === JOB_TYPES.HISTORY_BACKFILL ? 10 : 30 });
+    counters.contentAiAnalyzed = contentAiResult.analyzed || 0;
+    counters.contentAiFailed = contentAiResult.failed || 0;
+    counters.contentAiSkipped = contentAiResult.skipped || 0;
+    counters.contentAiEnabled = !!contentAiResult.enabled;
+
     const aiResult = await analyzePendingProjectAttitudes(board, { limit: job.jobType === JOB_TYPES.HISTORY_BACKFILL ? 20 : 50 });
     counters.aiAnalyzed = aiResult.analyzed || 0;
     counters.aiFailed = aiResult.failed || 0;
     counters.aiEnabled = !!aiResult.enabled;
 
-    await generateInfluentialSignals(board, { since: range.startAt });
+    counters.influentialSignals = await generateInfluentialSignals(board, { since: range.startAt, until: range.endAt });
+    counters.followSignals = await generateFollowSignals(board, { since: range.startAt, until: range.endAt });
+    counters.aggregateAlerts = await generateAggregateAlerts(board);
     await generateSnapshotsForBoard(await EchohuntSocialListeningBoard.findByPk(board.id));
     await markJobSucceeded(job, { counters });
 

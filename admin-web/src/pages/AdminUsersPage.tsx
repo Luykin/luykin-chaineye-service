@@ -32,6 +32,7 @@ const PERMISSION_OPTIONS = [
   { label: "安全违规", value: "security-violations" },
   { label: "站内消息", value: "messages" },
   { label: "点评管理", value: "reviews-management" },
+  { label: "舆论监控", value: "social-listening" },
   { label: "性能监控", value: "perf-monitor" },
   { label: "服务器命令", value: "server:execute" },
   { label: "采集脚本", value: "tampermonkey" },

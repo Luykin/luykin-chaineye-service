@@ -6,11 +6,41 @@ const {
 const { BOARD_STATUSES, JOB_STATUSES, JOB_TYPES } = require("../constants");
 const { processSocialListeningJob, recoverStaleRunningJobs, getIncrementalRange } = require("./ingest-service");
 
+const SCHEDULER_STATE_KEY = "echohunt:social-listening:scheduler:state";
+const SCHEDULER_ENABLED_VALUE = "running";
+
+function isForceDisabled() {
+  return process.env.SOCIAL_LISTENING_SCHEDULER_ENABLED === "false";
+}
+
+function isForceEnabled() {
+  return process.env.SOCIAL_LISTENING_SCHEDULER_ENABLED === "true";
+}
+
+async function enableSocialListeningScheduler(redisClient, actor = {}) {
+  if (isForceDisabled()) return { enabled: false, reason: "env_disabled" };
+  if (!redisClient?.set) return { enabled: false, reason: "redis_unavailable" };
+  await redisClient.set(SCHEDULER_STATE_KEY, SCHEDULER_ENABLED_VALUE);
+  await redisClient.set(`${SCHEDULER_STATE_KEY}:enabled_at`, JSON.stringify({
+    at: new Date().toISOString(),
+    actorType: actor.type || "admin",
+    adminId: actor.adminId || null,
+  })).catch(() => null);
+  return { enabled: true };
+}
+
 function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
   const intervalMs = Number(tickIntervalMs || process.env.SOCIAL_LISTENING_TICK_INTERVAL_MS || 60 * 1000);
-  const enabled = process.env.SOCIAL_LISTENING_SCHEDULER_ENABLED !== "false";
   let timer = null;
   let ticking = false;
+  let pausedLogged = false;
+
+  async function isSchedulerEnabled() {
+    if (isForceDisabled()) return false;
+    if (isForceEnabled()) return true;
+    const state = await redisClient?.get?.(SCHEDULER_STATE_KEY).catch(() => null);
+    return state === SCHEDULER_ENABLED_VALUE;
+  }
 
   async function withBoardLock(boardId, fn) {
     const key = `echohunt:social-listening:job-lock:${boardId}`;
@@ -84,7 +114,15 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
   }
 
   async function tick() {
-    if (!enabled) return;
+    const enabled = await isSchedulerEnabled();
+    if (!enabled) {
+      if (!pausedLogged) {
+        console.warn("[SocialListeningScheduler] paused by default; resume a board in admin to enable scheduled processing.");
+        pausedLogged = true;
+      }
+      return;
+    }
+    pausedLogged = false;
     if (ticking) return;
     ticking = true;
     try {
@@ -105,7 +143,7 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
   }
 
   function start() {
-    if (!enabled) {
+    if (isForceDisabled()) {
       console.warn("[SocialListeningScheduler] disabled by SOCIAL_LISTENING_SCHEDULER_ENABLED=false");
       return { enabled: false };
     }
@@ -113,7 +151,7 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
     timer = setInterval(tick, Math.max(intervalMs, 10 * 1000));
     timer.unref?.();
     setTimeout(tick, 5000).unref?.();
-    console.log(`[SocialListeningScheduler] started intervalMs=${intervalMs}`);
+    console.log(`[SocialListeningScheduler] started intervalMs=${intervalMs}, defaultState=${isForceEnabled() ? "running(env)" : "paused"}`);
     return { enabled: true };
   }
 
@@ -125,4 +163,8 @@ function createSocialListeningScheduler({ redisClient, tickIntervalMs } = {}) {
   return { start, stop, tick, enqueueDueIncrementalJobs, processPendingJobs };
 }
 
-module.exports = { createSocialListeningScheduler };
+module.exports = {
+  SCHEDULER_STATE_KEY,
+  createSocialListeningScheduler,
+  enableSocialListeningScheduler,
+};

@@ -26,6 +26,7 @@ const { normalizeKeywords } = require("../utils/text-normalize");
 const { resolveTwitterUserByHandle } = require("./data-source");
 const { publicError } = require("./errors");
 const { getHistoryRange } = require("./ingest-service");
+const { enableSocialListeningScheduler } = require("./scheduler");
 
 function toJson(record) {
   return typeof record?.toJSON === "function" ? record.toJSON() : record;
@@ -200,7 +201,7 @@ function buildBoardPayload(input = {}, resolved = null, adminId = null) {
     globalRank: resolved?.globalRank ?? input.globalRank ?? null,
     cnRank: resolved?.cnRank ?? input.cnRank ?? null,
     brandColor: input.brandColor || null,
-    status: input.status || BOARD_STATUSES.INITIALIZING,
+    status: BOARD_STATUSES.PAUSED,
     createdByAdminId: adminId,
     updatedByAdminId: adminId,
     metadata: {
@@ -230,26 +231,77 @@ async function createMonitoredAccount(input = {}, adminId = null) {
     if (existing) return { board: existing, created: false, job: null };
 
     const board = await EchohuntSocialListeningBoard.create(payload, { transaction });
-    const range = getHistoryRange("recent_7d");
-    const job = await EchohuntSocialListeningJob.create({
-      boardId: board.id,
-      jobType: JOB_TYPES.HISTORY_BACKFILL,
-      status: JOB_STATUSES.PENDING,
-      rangeStartAt: range.startAt,
-      rangeEndAt: range.endAt,
-      triggeredBy: "admin",
-      triggeredByAdminId: adminId,
-      metadata: { stage: "recent_7d" },
-    }, { transaction });
     await writeAudit({
       boardId: board.id,
       adminId,
       action: "board_create",
       targetTwitterHandle: handle,
-      payload: { officialHandle: handle, projectName: payload.projectName, keywords: payload.metadata.keywords },
+      payload: {
+        officialHandle: handle,
+        projectName: payload.projectName,
+        keywords: payload.metadata.keywords,
+        status: payload.status,
+        schedulerState: "paused_by_default",
+      },
     }, { transaction });
-    return { board, created: true, job };
+    return { board, created: true, job: null };
   });
+}
+
+function shouldRunInitialBackfill(board) {
+  return !board.coverageStartAt && !board.processedThrough && !board.lastSuccessAt;
+}
+
+async function createInitialBackfillJob(board, adminId = null) {
+  const range = getHistoryRange("recent_7d");
+  return EchohuntSocialListeningJob.create({
+    boardId: board.id,
+    jobType: JOB_TYPES.HISTORY_BACKFILL,
+    status: JOB_STATUSES.PENDING,
+    rangeStartAt: range.startAt,
+    rangeEndAt: range.endAt,
+    triggeredBy: "admin",
+    triggeredByAdminId: adminId,
+    metadata: { stage: "recent_7d", source: "admin_resume" },
+  });
+}
+
+async function resumeBoard(boardId, adminId = null, redisClient = null) {
+  const board = await EchohuntSocialListeningBoard.findByPk(boardId);
+  if (!board || [BOARD_STATUSES.DELETED, BOARD_STATUSES.DELETING].includes(board.status)) {
+    throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
+  }
+
+  const runningOrPending = await EchohuntSocialListeningJob.findOne({
+    where: { boardId, status: { [Op.in]: [JOB_STATUSES.PENDING, JOB_STATUSES.RUNNING] } },
+    order: [["createdAt", "DESC"]],
+  });
+
+  const firstActivation = shouldRunInitialBackfill(board);
+  await board.update({
+    status: firstActivation ? BOARD_STATUSES.INITIALIZING : BOARD_STATUSES.MONITORING,
+    updatedByAdminId: adminId,
+  });
+
+  let job = runningOrPending;
+  let reused = Boolean(runningOrPending);
+  if (!job) {
+    if (firstActivation) {
+      job = await createInitialBackfillJob(board, adminId);
+    } else {
+      const refresh = await createManualRefreshJob(board.id, { type: "admin", adminId }, redisClient);
+      job = refresh.job;
+      reused = refresh.reused;
+    }
+  }
+
+  await enableSocialListeningScheduler(redisClient, { type: "admin", adminId }).catch((error) => {
+    console.warn("[SocialListening] 开启调度器状态失败:", error.message);
+    return null;
+  });
+
+  await writeAudit({ boardId: board.id, adminId, action: "board_resume", payload: { firstActivation } });
+  return { board: await EchohuntSocialListeningBoard.findByPk(board.id), job, reused, firstActivation };
 }
 
 async function listMonitoredAccounts(query = {}) {
@@ -432,6 +484,9 @@ async function createManualRefreshJob(boardId, actor, redisClient = null) {
   if (!board || [BOARD_STATUSES.DELETED, BOARD_STATUSES.DELETING].includes(board.status)) {
     throw publicError("BOARD_NOT_FOUND", 404, "看板不存在。");
   }
+  if (board.status === BOARD_STATUSES.PAUSED) {
+    throw publicError("BOARD_PAUSED", 409, "看板已暂停，请先在管理后台恢复监控。");
+  }
   const prefix = actor.type === "admin" ? `admin:${actor.adminId || "unknown"}` : `user:${actor.authCenterUserId || "unknown"}`;
   const cooldownSeconds = actor.type === "admin" ? 60 : 5 * 60;
   const cooldownKey = `echohunt:social-listening:refresh:${prefix}:${boardId}`;
@@ -446,7 +501,7 @@ async function createManualRefreshJob(boardId, actor, redisClient = null) {
   }
 
   const running = await EchohuntSocialListeningJob.findOne({
-    where: { boardId, status: JOB_STATUSES.RUNNING },
+    where: { boardId, status: { [Op.in]: [JOB_STATUSES.PENDING, JOB_STATUSES.RUNNING] } },
     order: [["updatedAt", "DESC"]],
   });
   if (running) return { job: running, reused: true };
@@ -472,6 +527,7 @@ module.exports = {
   writeAudit,
   resolveMonitoredAccount,
   createMonitoredAccount,
+  resumeBoard,
   listMonitoredAccounts,
   updateBoard,
   grantBoardAccess,

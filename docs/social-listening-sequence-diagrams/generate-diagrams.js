@@ -315,7 +315,7 @@ renderDiagram({
 renderDiagram({
   file: '02b-ai-analysis-storage.svg',
   title: '02B 复用旧 AI 能力与项目态度落表时序图',
-  subtitle: '先复用 dev.tweet.ai 已有摘要/标签；项目态度再调用 /ai/project_attitude',
+  subtitle: '调用旧 AI 服务生成摘要/标签/项目态度，并写入本功能字段',
   width: 1500,
   height: 1120,
   actors: [
@@ -330,14 +330,14 @@ renderDiagram({
     { type: 'arrow', from: 2, to: 0, y: 242, label: '2. 正文、来源、作者、排名、互动、已有 ai', dashed: true },
     { type: 'arrow', from: 0, to: 1, y: 312, label: '3. 读取项目背景信息' },
     { type: 'arrow', from: 1, to: 0, y: 382, label: '4. 项目名、官方账号、关键词', dashed: true },
-    { type: 'note', x: 92, y: 430, w: 1320, h: 108, fill: '#eef6ff', label: '优先复用旧数据：dev.tweet.ai.summary_cn/summary_en/domain_tag/crypto_sub_tags/hot_tags；若缺失或项目态度未分析，再准备 AI 输入：项目名、官方 handle、关键词、帖子正文、命中方式、作者粉丝/排名、互动指标' },
+    { type: 'note', x: 92, y: 430, w: 1320, h: 108, fill: '#eef6ff', label: '复用旧 AI 服务接口，不复用 dev.tweet.ai 字段版本；准备 AI 输入：项目名、关键词、帖子正文、命中方式、作者粉丝/排名、互动指标，结果写本功能字段' },
     { type: 'arrow', from: 0, to: 3, y: 606, label: '5. 调用 /ai/project_attitude' },
     { type: 'arrow', from: 3, to: 0, y: 686, label: '6. 返回项目态度分数和摘要', dashed: true },
     { type: 'arrow', from: 0, to: 2, y: 766, label: '7. 写回项目态度和复用标签' },
     { type: 'note', x: 92, y: 828, w: 1320, h: 96, fill: '#f1fff6', label: '写回 EchohuntSocialListeningPosts：sentiment、sentimentScore、sentimentSummaryZh、topics、keywords、aiAnalyzedAt、aiStatus、aiError。AI 失败时 aiStatus=failed，sentiment=unknown，不阻断入库。' },
     { type: 'arrow', from: 2, to: 4, y: 1000, label: '8. 前端展示情绪、摘要、主题、词云', dashed: true },
   ],
-  note: '项目态度是 Social Listening 专属结果，建议写我们自己的表；dev.tweet.ai 已有摘要/标签只读复用，不主动改 meta.dev。',
+  note: '项目态度、摘要、标签都写 Social Listening 自己的表；dev.tweet.ai 不作为最终口径，也不主动改 meta.dev。',
 });
 
 renderDiagram({
@@ -538,11 +538,11 @@ const diagramCards = [
   {
     file: '01-admin-create-monitored-account.svg',
     title: '01 运营新增被监控账号',
-    summary: '运营在 admin-web 输入官方 X handle 后，后端先只读查询 meta.dev.twitter_user 确认账号资料，再在主业务库创建被监控看板和初始化任务。',
+    summary: '运营在 admin-web 输入官方 X handle 后，后端先只读查询 meta.dev.twitter_user 确认账号资料，再在主业务库创建默认暂停的被监控看板；管理员点击恢复后才创建初始化任务。',
     bullets: [
       '读取 dev.twitter_user.username/profile/feature/kol，解析头像、粉丝数、华语排名和全球排名。',
-      '写入 EchohuntSocialListeningBoards，状态从 initializing 开始。',
-      '创建最近7天历史补数据任务，由单实例后台进程异步加工最近7天数据。',
+      '写入 EchohuntSocialListeningBoards，状态默认 paused。',
+      '不自动创建补数据任务；管理员在后台点击恢复后才创建最近7天历史补数据任务。',
     ],
   },
   {
@@ -568,9 +568,9 @@ const diagramCards = [
   {
     file: '02b-ai-analysis-storage.svg',
     title: '02B 复用旧 AI 能力与落表',
-    summary: '旧系统已经有摘要、标签、项目态度等 AI 能力；本需求优先复用已有 dev.tweet.ai 字段和 /ai/project_attitude，避免重复做一套。',
+    summary: '旧系统已经有摘要、标签、项目态度等 AI 能力；本需求复用旧 AI 服务接口和 payload，但不复用 dev.tweet.ai 字段版本，避免评分/标签口径混杂。',
     bullets: [
-      '已有可复用：dev.tweet.ai.summary_cn、domain_tag、crypto_sub_tags、hot_tags；项目态度用项目名+帖子正文调用 /ai/project_attitude。',
+      '摘要/标签调用旧 /ai/tweet_summary_media、/ai/tweet_tag_v2；项目态度用项目名+帖子正文调用 /ai/project_attitude。',
       '项目态度接口返回 score + summary；score 可映射为正/中/负，summary 可作为项目相关摘要。',
       '写回帖子结果表：项目态度分数、情绪、项目相关摘要、复用到的标签/主题、分析状态、分析时间、失败原因。',
     ],
@@ -644,10 +644,10 @@ const dataGroups = [
     desc: '这些表已经在线上只读从库存在，本需求只读取，不改这些表。',
     rows: [
       ['dev.twitter_user', '现有表', 'meta 只读库 dev schema', 'X 用户/官方账号资料表；用于确认被监控账号、作者画像、粉丝数、头像、是否中文账号、feature.rank.kolCnRank 等排名字段。'],
-      ['dev.tweet', '现有表', 'meta 只读库 dev schema', 'X 推文主表；用于召回提及、引用、回复官方账号或关键词的帖子，读取 text/create_time/statistic/info/mention/ai 等字段；ai 里已有摘要/标签时优先复用。'],
+      ['dev.tweet', '现有表', 'meta 只读库 dev schema', 'X 推文主表；用于召回提及、引用、回复官方账号或关键词的帖子，读取 text/create_time/statistic/info/mention 等字段；ai 字段不作为最终展示/聚合口径。'],
       ['dev.twitter_user_follow', '现有表', 'meta 只读库 dev schema', '通用关注关系表；用于判断谁新增关注了官方账号，或官方账号新增关注了谁。'],
       ['dev.twitter_user_unfollow', '现有表', 'meta 只读库 dev schema', '通用取关关系表；用于判断取关动态，读取 follower_id/following_id/created_at/latest/persist。'],
-      ['dev.project_follow', '现有表', 'meta 只读库 dev schema', '项目维度关注关系表；是否作为 Social Listening 的关注口径还需最终确认。'],
+      ['dev.project_follow', '现有表', 'meta 只读库 dev schema', '项目维度关注关系表；Social Listening 默认纳入项目关系动态。'],
       ['dev.cache', '现有表', 'meta 只读库 dev schema', '排名快照缓存；作为 feature.rank 缺失时的 fallback，例如 backend:score_tag:rank_record:snap_20250606kol。'],
       ['dev.tweet_metric_snapshot', '现有表', 'meta 只读库 dev schema', '推文指标历史快照；可用于更准确的 views/likes/reply/retweet/quote 历史趋势，V1 可作为增强。'],
     ],
@@ -718,7 +718,7 @@ const aiPayloadRows = [
   ['帖子正文', 'EchohuntSocialListeningPosts', 'tweetId、text、normalizedText、source、postCreatedAt、matchedSources', 'AI 判断情绪、主题、摘要的主体内容。'],
   ['作者画像', 'EchohuntSocialListeningPosts 作者快照', 'authorHandle、authorName、authorFollowersCount、authorGlobalRank、authorCnRank、authorIsCn', '辅助判断影响力、语言环境、KOL 权重；不作为唯一情绪依据。'],
   ['互动指标', 'EchohuntSocialListeningPosts', 'viewsCount、likesCount、repostsCount、quotesCount、repliesCount', '辅助聚合影响力和代表帖排序；AI 可用于判断传播强度。'],
-  ['AI 输出', '写回 EchohuntSocialListeningPosts', 'projectAttitudeScore、sentiment、sentimentSummaryZh、topics、keywords、aiStatus、aiAnalyzedAt、aiError', '供帖子列表、情绪图、主题、词云、负面预警继续聚合；已有 dev.tweet.ai 摘要/标签可先复用。'],
+  ['AI 输出', '写回 EchohuntSocialListeningPosts', 'projectAttitudeScore、sentiment、sentimentSummaryZh、topics、keywords、aiStatus、aiAnalyzedAt、aiError', '供帖子列表、情绪图、主题、词云、负面预警继续聚合；不混用 dev.tweet.ai 历史字段版本。'],
 ];
 
 function renderMappingTable(title, desc, rows) {
@@ -741,7 +741,7 @@ function renderComputationMap() {
     <div class="data-map-head">
       <p class="eyebrow">Computation Map</p>
       <h2>AI 输入、落表字段与前端模块映射</h2>
-      <p>后台任务的核心不是“扫到推文就直接给前端”，而是先标准化成帖子结果表；能复用 dev.tweet.ai 的摘要/标签就先复用，项目态度再调用旧 AI 接口，最后聚合成前端直接读取的概览图表、账号动态和预警。</p>
+      <p>后台任务的核心不是“扫到推文就直接给前端”，而是先标准化成帖子结果表；摘要、标签、项目态度统一调用旧 AI 服务并写本功能字段，最后聚合成前端直接读取的概览图表、账号动态和预警。</p>
     </div>
     ${renderMappingTable('送给 AI 的内容', '每条待分析帖子会携带项目上下文、帖子正文、作者画像和互动指标；具体 prompt/接口字段还要按最终 AI 服务确认。', aiPayloadRows)}
     ${renderMappingTable('计算结果如何服务前端', '这些字段决定 Social Listening 页面每个模块的数据来源，前端不直接扫描 meta.dev 大表。', frontendFieldRows)}

@@ -6,6 +6,7 @@ const {
 } = require("../../../infra/k8s/postgres-readonly");
 const { assertTwitterHandle } = require("../utils/twitter");
 const { normalizeTweetText, collectMatchedKeywords, normalizeKeywords } = require("../utils/text-normalize");
+const { ACCOUNT_SIGNAL_TYPES } = require("../constants");
 
 function getReadonlyDbOrThrow() {
   const status = getPostgresReadOnlyStatus();
@@ -110,29 +111,20 @@ function buildBoardKeywords(board) {
   ]);
 }
 
-function extractTweetAi(ai = {}, matchedKeywords = []) {
-  const topics = [];
-  [ai.domain_tag, ...(Array.isArray(ai.crypto_sub_tags) ? ai.crypto_sub_tags : []), ...(Array.isArray(ai.ai_sub_tags) ? ai.ai_sub_tags : [])]
-    .filter(Boolean)
-    .forEach((item) => topics.push(item));
-
-  const keywords = [
-    ...(Array.isArray(ai.hot_tags) ? ai.hot_tags : []),
-    ...matchedKeywords,
-  ].filter(Boolean);
-
+function buildInitialAiFields(matchedKeywords = []) {
+  const keywords = matchedKeywords.filter(Boolean);
   return {
-    topics: topics.length ? Array.from(new Set(topics.map(String))) : null,
+    topics: null,
     keywords: keywords.length ? Array.from(new Set(keywords.map(String))) : matchedKeywords,
-    summaryZh: ai.summary_cn || null,
-    summaryEn: ai.summary_en || null,
-    titleZh: ai.title_cn || null,
-    titleEn: ai.title_en || null,
-    abstractZh: ai.abstract_cn || null,
-    abstractEn: ai.abstract_en || null,
-    tagStatus: topics.length ? "reused" : "pending",
-    summaryStatus: ai.summary_cn || ai.summary_en ? "reused" : "pending",
-    aiSource: topics.length || ai.summary_cn || ai.summary_en ? "dev_tweet_ai" : "social_listening_pending",
+    summaryZh: null,
+    summaryEn: null,
+    titleZh: null,
+    titleEn: null,
+    abstractZh: null,
+    abstractEn: null,
+    tagStatus: "pending",
+    summaryStatus: "pending",
+    aiSource: "social_listening_pending",
   };
 }
 
@@ -172,7 +164,7 @@ function mapTweetRowToPostPayload(board, row) {
     feature: row.author_feature,
     kol: row.author_kol,
   });
-  const ai = extractTweetAi(row.ai || {}, matchedKeywords);
+  const ai = buildInitialAiFields(matchedKeywords);
   const statistic = row.statistic && typeof row.statistic === "object" ? row.statistic : {};
 
   return {
@@ -201,7 +193,7 @@ function mapTweetRowToPostPayload(board, row) {
     repliesCount: pickStat(statistic, "reply_count", "replies"),
     sentiment: "unknown",
     attitudeStatus: "pending",
-    aiStatus: ai.aiSource === "dev_tweet_ai" ? "partial" : "pending",
+    aiStatus: "pending",
     ...ai,
     rawTweet: {
       id: String(row.id),
@@ -245,7 +237,6 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
         t.statistic,
         t.info,
         t.mention,
-        t.ai,
         t.metric_observed_at,
         u.id::text AS author_id,
         u.username AS author_username,
@@ -282,6 +273,198 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
   );
 }
 
+function shouldIncludeProjectFollow(board) {
+  return Boolean(board?.officialTwitterId);
+}
+
+function mapRelationRow(row) {
+  const account = serializeTwitterUser({
+    id: row.related_id,
+    username: row.related_username,
+    username_raw: row.related_username_raw,
+    name: row.related_name,
+    profile: row.related_profile,
+    ai: row.related_ai,
+    feature: row.related_feature,
+    kol: row.related_kol,
+  });
+  return {
+    signalType: row.signal_type,
+    occurredAt: row.occurred_at,
+    sourceTable: row.source_table,
+    direction: row.direction,
+    projectKey: row.project_key || null,
+    relation: {
+      followerId: row.follower_id ? String(row.follower_id) : null,
+      followingId: row.following_id ? String(row.following_id) : null,
+      latest: toNumberOrNull(row.latest),
+      persist: toNumberOrNull(row.persist),
+    },
+    account,
+  };
+}
+
+async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
+  if (!board?.officialTwitterId) return [];
+  const db = getReadonlyDbOrThrow();
+  const limit = Math.min(Math.max(Number(options.limit || 200), 1), 1000);
+  const now = options.now || new Date();
+  const safeUnfollowEndAt = new Date(Math.min(new Date(endAt).getTime(), now.getTime() - 60 * 60 * 1000));
+  const bind = {
+    officialTwitterId: String(board.officialTwitterId),
+    startAt,
+    endAt,
+    safeUnfollowEndAt,
+    limit,
+  };
+
+  const unionParts = [
+    `
+      SELECT
+        'dev.twitter_user_follow' AS source_table,
+        '${ACCOUNT_SIGNAL_TYPES.ACCOUNT_FOLLOWED_PROJECT}' AS signal_type,
+        'inbound' AS direction,
+        f.follower_id::text AS related_id,
+        f.follower_id::text AS follower_id,
+        f.following_id::text AS following_id,
+        f.created_at AS occurred_at,
+        f.latest,
+        NULL::integer AS persist,
+        NULL::text AS project_key
+      FROM dev.twitter_user_follow f
+      WHERE f.following_id::text = $officialTwitterId
+        AND f.created_at >= $startAt
+        AND f.created_at < $endAt
+        AND f.latest > 0
+    `,
+    `
+      SELECT
+        'dev.twitter_user_follow' AS source_table,
+        '${ACCOUNT_SIGNAL_TYPES.PROJECT_FOLLOWED_ACCOUNT}' AS signal_type,
+        'outbound' AS direction,
+        f.following_id::text AS related_id,
+        f.follower_id::text AS follower_id,
+        f.following_id::text AS following_id,
+        f.created_at AS occurred_at,
+        f.latest,
+        NULL::integer AS persist,
+        NULL::text AS project_key
+      FROM dev.twitter_user_follow f
+      WHERE f.follower_id::text = $officialTwitterId
+        AND f.created_at >= $startAt
+        AND f.created_at < $endAt
+        AND f.latest > 0
+    `,
+  ];
+
+  if (safeUnfollowEndAt > new Date(startAt)) {
+    unionParts.push(
+      `
+        SELECT
+          'dev.twitter_user_unfollow' AS source_table,
+          '${ACCOUNT_SIGNAL_TYPES.ACCOUNT_UNFOLLOWED_PROJECT}' AS signal_type,
+          'inbound' AS direction,
+          uf.follower_id::text AS related_id,
+          uf.follower_id::text AS follower_id,
+          uf.following_id::text AS following_id,
+          uf.created_at AS occurred_at,
+          uf.latest,
+          uf.persist,
+          NULL::text AS project_key
+        FROM dev.twitter_user_unfollow uf
+        WHERE uf.following_id::text = $officialTwitterId
+          AND uf.created_at >= $startAt
+          AND uf.created_at < $safeUnfollowEndAt
+          AND (COALESCE(uf.persist, 0) > 0 OR COALESCE(uf.latest, 0) > 0)
+      `,
+      `
+        SELECT
+          'dev.twitter_user_unfollow' AS source_table,
+          '${ACCOUNT_SIGNAL_TYPES.PROJECT_UNFOLLOWED_ACCOUNT}' AS signal_type,
+          'outbound' AS direction,
+          uf.following_id::text AS related_id,
+          uf.follower_id::text AS follower_id,
+          uf.following_id::text AS following_id,
+          uf.created_at AS occurred_at,
+          uf.latest,
+          uf.persist,
+          NULL::text AS project_key
+        FROM dev.twitter_user_unfollow uf
+        WHERE uf.follower_id::text = $officialTwitterId
+          AND uf.created_at >= $startAt
+          AND uf.created_at < $safeUnfollowEndAt
+          AND (COALESCE(uf.persist, 0) > 0 OR COALESCE(uf.latest, 0) > 0)
+      `
+    );
+  }
+
+  if (shouldIncludeProjectFollow(board)) {
+    unionParts.push(
+      `
+        SELECT
+          'dev.project_follow' AS source_table,
+          '${ACCOUNT_SIGNAL_TYPES.ACCOUNT_FOLLOWED_PROJECT}' AS signal_type,
+          'project_inbound' AS direction,
+          pf.follower_id::text AS related_id,
+          pf.follower_id::text AS follower_id,
+          pf.following_id::text AS following_id,
+          pf.created_at AS occurred_at,
+          pf.latest,
+          NULL::integer AS persist,
+          pf.project::text AS project_key
+        FROM dev.project_follow pf
+        WHERE pf.following_id::text = $officialTwitterId
+          AND pf.created_at >= $startAt
+          AND pf.created_at < $endAt
+          AND pf.latest > 0
+      `,
+      `
+        SELECT
+          'dev.project_follow' AS source_table,
+          '${ACCOUNT_SIGNAL_TYPES.PROJECT_FOLLOWED_ACCOUNT}' AS signal_type,
+          'project_outbound' AS direction,
+          pf.following_id::text AS related_id,
+          pf.follower_id::text AS follower_id,
+          pf.following_id::text AS following_id,
+          pf.created_at AS occurred_at,
+          pf.latest,
+          NULL::integer AS persist,
+          pf.project::text AS project_key
+        FROM dev.project_follow pf
+        WHERE pf.follower_id::text = $officialTwitterId
+          AND pf.created_at >= $startAt
+          AND pf.created_at < $endAt
+          AND pf.latest > 0
+      `
+    );
+  }
+
+  const rows = await db.query(
+    `
+      WITH relation_rows AS (
+        ${unionParts.join("\nUNION ALL\n")}
+      )
+      SELECT
+        r.*,
+        u.id::text AS related_id,
+        u.username AS related_username,
+        u.username_raw AS related_username_raw,
+        u.name AS related_name,
+        u.profile AS related_profile,
+        u.ai AS related_ai,
+        u.feature AS related_feature,
+        u.kol AS related_kol
+      FROM relation_rows r
+      JOIN dev.twitter_user u ON u.id::text = r.related_id
+      ORDER BY r.occurred_at DESC
+      LIMIT $limit
+    `,
+    { bind, type: QueryTypes.SELECT }
+  );
+
+  return rows.map(mapRelationRow);
+}
+
 module.exports = {
   getReadonlyDbOrThrow,
   resolveTwitterUserByHandle,
@@ -289,4 +472,5 @@ module.exports = {
   buildBoardKeywords,
   mapTweetRowToPostPayload,
   fetchCandidateTweetsForBoard,
+  fetchFollowSignalsForBoard,
 };
