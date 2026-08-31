@@ -8,6 +8,10 @@ const { assertTwitterHandle } = require("../utils/twitter");
 const { normalizeTweetText, collectMatchedKeywords, normalizeKeywords } = require("../utils/text-normalize");
 const { ACCOUNT_SIGNAL_TYPES } = require("../constants");
 
+const DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS = Number(
+  process.env.SOCIAL_LISTENING_PG_READ_STATEMENT_TIMEOUT_MS || 10000
+);
+
 function getReadonlyDbOrThrow() {
   const status = getPostgresReadOnlyStatus();
   if (!isPostgresReadOnlyConfigured() || !status.ready) {
@@ -18,6 +22,35 @@ function getReadonlyDbOrThrow() {
     throw error;
   }
   return getPostgresReadOnlyInstance();
+}
+
+function getReadStatementTimeoutMs() {
+  return Number.isFinite(DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS) && DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS > 0
+    ? Math.floor(DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS)
+    : 10000;
+}
+
+function isStatementTimeoutError(error) {
+  const errors = [error, error?.parent, error?.original].filter(Boolean);
+  return errors.some((item) => {
+    const code = String(item.code || "");
+    const message = String(item.message || "");
+    return code === "57014" && /statement timeout/i.test(message);
+  }) || errors.some((item) => /canceling statement due to statement timeout/i.test(String(item.message || "")));
+}
+
+async function queryReadonlyWithStatementTimeout(db, sql, queryOptions, statementTimeoutMs = getReadStatementTimeoutMs()) {
+  const timeoutMs = Number(statementTimeoutMs);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return db.query(sql, queryOptions);
+
+  return db.transaction(async (transaction) => {
+    await db.query("SELECT set_config('statement_timeout', $statementTimeout, true)", {
+      bind: { statementTimeout: `${Math.floor(timeoutMs)}ms` },
+      type: QueryTypes.SELECT,
+      transaction,
+    });
+    return db.query(sql, { ...queryOptions, transaction });
+  });
 }
 
 function toNumberOrNull(value) {
@@ -223,7 +256,8 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
     ? patterns.map((item) => `t.text ILIKE $${item.key}`).join(" OR ")
     : "FALSE";
 
-  return db.query(
+  return queryReadonlyWithStatementTimeout(
+    db,
     `
       SELECT
         t.id::text,
@@ -270,7 +304,15 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
       LIMIT $limit
     `,
     { bind, type: QueryTypes.SELECT }
-  );
+  ).catch((error) => {
+    if (!isStatementTimeoutError(error)) throw error;
+    error.publicMessage = [
+      "只读库扫描推文超时，不是前端 URL 或接口地址配置问题。",
+      `当前窗口：${new Date(startAt).toISOString()} → ${new Date(endAt).toISOString()}。`,
+      "可调小 SOCIAL_LISTENING_WINDOW_MINUTES 或调大 SOCIAL_LISTENING_PG_READ_STATEMENT_TIMEOUT_MS 后重试。",
+    ].join(" ");
+    throw error;
+  });
 }
 
 function shouldIncludeProjectFollow(board) {

@@ -90,6 +90,16 @@
   border-radius: 999px;
 }
 
+.social-listening-access-card .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.social-listening-access-dropdown-actions {
+  margin-top: 4px;
+  padding: 8px 8px 4px;
+  border-top: 1px solid var(--admin-border, #f0f0f0);
+}
+
 @media (max-width: 960px) {
   .social-listening-hero {
     align-items: flex-start;

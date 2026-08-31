@@ -32,6 +32,7 @@ import { DownloadOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
+import { fetchVipLists } from "@/services/feature-flags";
 import {
   buildSocialListeningExportUrl,
   createSocialListeningBoard,
@@ -58,6 +59,7 @@ import {
   type SocialListeningJob,
   type SocialListeningPost,
 } from "@/services/social-listening";
+import type { VipListItem } from "@/types/feature-flags";
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -186,6 +188,21 @@ function splitTextarea(value?: string) {
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeHandle(value: unknown) {
+  return String(value || "")
+    .trim()
+    .replace(/^https?:\/\/(www\.)?(x\.com|twitter\.com)\//i, "")
+    .replace(/^@+/, "")
+    .split(/[/?#]/)[0]
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeHandleList(value: unknown) {
+  const rawItems = Array.isArray(value) ? value : String(value || "").split(/[,\n\s]+/);
+  return Array.from(new Set(rawItems.map(normalizeHandle).filter(Boolean)));
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -587,10 +604,51 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
     queryFn: () => fetchSocialListeningPosts(boardId, { range, pageSize: 20, ...postQuery }),
     enabled: open && Boolean(boardId),
   });
+  const vipListsQuery = useQuery({
+    queryKey: ["social-listening", "vip-lists"],
+    queryFn: fetchVipLists,
+    enabled: open,
+  });
+
+  const vipUsers = vipListsQuery.data?.data.vip || [];
+  const internalTestUsers = vipListsQuery.data?.data.internalTest || [];
+  const accessUserOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return [...internalTestUsers, ...vipUsers].reduce<Array<{ value: string; label: string }>>((options, item) => {
+      const handle = normalizeHandle(item.username);
+      if (!handle || seen.has(handle)) return options;
+      seen.add(handle);
+      const source = internalTestUsers.some((candidate) => normalizeHandle(candidate.username) === handle) ? "内测" : "VIP";
+      options.push({
+        value: handle,
+        label: item.twitterId ? `${item.username} · ${source} · ${item.twitterId}` : `${item.username} · ${source}`,
+      });
+      return options;
+    }, []);
+  }, [internalTestUsers, vipUsers]);
+
+  function addAccessUsersToForm(items: VipListItem[]) {
+    const current = normalizeHandleList(accessForm.getFieldValue("twitterHandles"));
+    accessForm.setFieldsValue({
+      twitterHandles: normalizeHandleList([...current, ...items.map((item) => item.username)]),
+    });
+  }
 
   const grantMutation = useMutation({
-    mutationFn: (values: { twitterHandle: string; twitterId?: string }) => grantSocialListeningAccess(boardId, values),
-    onSuccess: () => { messageApi.success("授权已生效"); accessForm.resetFields(); void accessesQuery.refetch(); onChanged(); },
+    mutationFn: async (values: { twitterHandles?: string[] }) => {
+      const handles = normalizeHandleList(values.twitterHandles);
+      if (!handles.length) throw new Error("请选择或输入至少一个 EchoHunt 账号 X Handle");
+      const userByHandle = [...internalTestUsers, ...vipUsers].reduce<Record<string, VipListItem>>((map, item) => {
+        const handle = normalizeHandle(item.username);
+        if (handle) map[handle] = item;
+        return map;
+      }, {});
+      return Promise.all(handles.map((handle) => grantSocialListeningAccess(boardId, {
+        twitterHandle: handle,
+        twitterId: userByHandle[handle]?.twitterId || undefined,
+      })));
+    },
+    onSuccess: (results) => { messageApi.success(`已分配 ${results.length} 个可见账号`); accessForm.resetFields(); void accessesQuery.refetch(); onChanged(); },
     onError: (error: Error) => messageApi.error(error.message || "授权失败"),
   });
   const revokeMutation = useMutation({
@@ -681,7 +739,7 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
               {
                 key: "workflow",
                 label: "执行过程",
-                children: <Space direction="vertical" size={12} className="social-listening-full"><WorkflowGuide /><Table rowKey="id" size="small" columns={jobColumns} dataSource={jobsQuery.data?.data.items || []} loading={jobsQuery.isFetching} pagination={false} scroll={{ x: 1280 }} expandable={{ expandedRowRender: (row) => <JobProgressView job={row} /> }} /></Space>,
+                children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="这里仅展示当前账号的实际任务记录；完整流程说明已放在页面底部「流程总览」。" /><Table rowKey="id" size="small" columns={jobColumns} dataSource={jobsQuery.data?.data.items || []} loading={jobsQuery.isFetching} pagination={false} scroll={{ x: 1280 }} expandable={{ expandedRowRender: (row) => <JobProgressView job={row} /> }} /></Space>,
               },
               {
                 key: "posts",
@@ -712,18 +770,51 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
                       type="info"
                       showIcon
                       message="这里就是把当前被监控账户分配给 EchoHunt 账号看的地方"
-                      description="输入 EchoHunt 用户绑定的 X Handle 后保存授权。系统会尝试从 AuthCenter 绑定关系补齐 AuthCenter User ID / XHunt User ID；保存后该用户即可在前台访问这个 Social Listening 看板。"
+                      description="选择内测/VIP 用户，或输入 EchoHunt 用户绑定的 X Handle 后保存授权。系统会尝试从 AuthCenter 绑定关系补齐 AuthCenter User ID / XHunt User ID；保存后这些用户即可在前台访问这个 Social Listening 看板。"
                     />
                     <Card size="small" title="新增可见账号" className="social-listening-access-card">
-                      <Form form={accessForm} layout="inline" onFinish={(values) => grantMutation.mutate(values)}>
-                        <Form.Item name="twitterHandle" label="EchoHunt 账号 X Handle" rules={[{ required: true, message: "请输入 EchoHunt 用户绑定的 X handle" }]}>
-                          <Input placeholder="例如 luykin" prefix="@" />
+                      <Form form={accessForm} layout="vertical" onFinish={(values) => grantMutation.mutate(values)}>
+                        <Form.Item
+                          name="twitterHandles"
+                          label="EchoHunt 可见账号"
+                          rules={[{ required: true, message: "请选择或输入至少一个 EchoHunt 用户绑定的 X handle" }]}
+                          extra="可从内测/VIP 名单下拉选择；也可以直接输入 X 用户名、@handle 或 x.com 链接，回车添加。"
+                        >
+                          <Select
+                            mode="tags"
+                            allowClear
+                            showSearch
+                            maxTagCount="responsive"
+                            loading={vipListsQuery.isFetching}
+                            placeholder="选择内测用户，或输入 handle 后回车"
+                            options={accessUserOptions}
+                            tokenSeparators={[",", "\n", " "]}
+                            onChange={(values) => accessForm.setFieldsValue({ twitterHandles: normalizeHandleList(values) })}
+                            popupRender={(menu) => (
+                              <>
+                                {menu}
+                                <div
+                                  className="social-listening-access-dropdown-actions"
+                                  onMouseDown={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                  }}
+                                >
+                                  <Space size={8} wrap>
+                                    <Button size="small" disabled={!internalTestUsers.length} onClick={() => addAccessUsersToForm(internalTestUsers)}>
+                                      一键添加内测用户
+                                    </Button>
+                                    <Button size="small" disabled={!vipUsers.length} onClick={() => addAccessUsersToForm(vipUsers)}>
+                                      一键添加 VIP
+                                    </Button>
+                                  </Space>
+                                </div>
+                              </>
+                            )}
+                          />
                         </Form.Item>
-                        <Form.Item name="twitterId" label="Twitter ID">
-                          <Input placeholder="可选；不填会尽量按 handle 匹配 AuthCenter" />
-                        </Form.Item>
-                        <Tooltip title="把这个被监控账户分配给上面填写的 EchoHunt 账号，让该账号可以在前台看到此看板。">
-                          <Button type="primary" htmlType="submit" loading={grantMutation.isPending}>分配给此账号</Button>
+                        <Tooltip title="把这个被监控账户分配给上面选择/输入的 EchoHunt 账号，让这些账号可以在前台看到此看板。">
+                          <Button type="primary" htmlType="submit" loading={grantMutation.isPending}>分配给选中账号</Button>
                         </Tooltip>
                       </Form>
                     </Card>
