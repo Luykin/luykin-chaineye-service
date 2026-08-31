@@ -11,6 +11,9 @@ const { ACCOUNT_SIGNAL_TYPES } = require("../constants");
 const DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS = Number(
   process.env.SOCIAL_LISTENING_PG_READ_STATEMENT_TIMEOUT_MS || 10000
 );
+const DEFAULT_SCAN_PAGE_SIZE = Number(process.env.SOCIAL_LISTENING_SCAN_PAGE_SIZE || 500);
+const DEFAULT_MAX_SCAN_PAGES = Number(process.env.SOCIAL_LISTENING_MAX_SCAN_PAGES || 4);
+const DEFAULT_OFFICIAL_POST_SCAN_LIMIT = Number(process.env.SOCIAL_LISTENING_OFFICIAL_POST_SCAN_LIMIT || 1000);
 
 function getReadonlyDbOrThrow() {
   const status = getPostgresReadOnlyStatus();
@@ -28,6 +31,35 @@ function getReadStatementTimeoutMs() {
   return Number.isFinite(DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS) && DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS > 0
     ? Math.floor(DEFAULT_SOCIAL_LISTENING_READ_TIMEOUT_MS)
     : 10000;
+}
+
+function clampInteger(value, fallback, min, max) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.min(Math.max(Math.floor(num), min), max);
+}
+
+function getScanPageSize() {
+  return clampInteger(DEFAULT_SCAN_PAGE_SIZE, 500, 50, 1000);
+}
+
+function getMaxScanPages() {
+  return clampInteger(DEFAULT_MAX_SCAN_PAGES, 4, 1, 20);
+}
+
+function getOfficialPostScanLimit() {
+  return clampInteger(DEFAULT_OFFICIAL_POST_SCAN_LIMIT, 1000, 50, 5000);
+}
+
+function escapeLikePattern(value) {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_");
+}
+
+function isNumericId(value) {
+  return /^\d+$/.test(String(value || "").trim());
 }
 
 function isStatementTimeoutError(error) {
@@ -144,6 +176,101 @@ function buildBoardKeywords(board) {
   ]);
 }
 
+async function fetchOfficialTweetIdsForBoard(db, board, startAt, endAt, limit) {
+  if (!isNumericId(board?.officialTwitterId)) return [];
+  const rows = await queryReadonlyWithStatementTimeout(
+    db,
+    `
+      SELECT ot.id::text AS id
+      FROM dev.tweet ot
+      WHERE ot.twitter_user_id = $officialTwitterId::bigint
+        AND ot.create_time >= ($startAt::timestamptz - interval '30 days')
+        AND ot.create_time < $endAt
+      ORDER BY ot.create_time DESC
+      LIMIT $limit
+    `,
+    {
+      bind: {
+        officialTwitterId: String(board.officialTwitterId),
+        startAt,
+        endAt,
+        limit,
+      },
+      type: QueryTypes.SELECT,
+    }
+  );
+  return rows.map((row) => String(row.id)).filter(Boolean);
+}
+
+async function fetchCandidateTweetPage(db, bind, keywordClause) {
+  return queryReadonlyWithStatementTimeout(
+    db,
+    `
+      SELECT
+        t.id::text AS id,
+        t.create_time,
+        (
+          ${keywordClause}
+          OR (
+            cardinality($officialTweetIds::bigint[]) > 0
+            AND (
+              t.quote_id = ANY($officialTweetIds::bigint[])
+              OR t.reply_id = ANY($officialTweetIds::bigint[])
+            )
+          )
+        ) AS is_match
+      FROM dev.tweet t
+      WHERE t.create_time >= $startAt
+        AND t.create_time < $endAt
+        AND t.retweet_id IS NULL
+        AND (
+          $cursorCreateTime::timestamptz IS NULL
+          OR t.create_time < $cursorCreateTime::timestamptz
+          OR (t.create_time = $cursorCreateTime::timestamptz AND t.id < $cursorTweetId::bigint)
+        )
+      ORDER BY t.create_time DESC, t.id DESC
+      LIMIT $pageSize
+    `,
+    { bind, type: QueryTypes.SELECT }
+  );
+}
+
+async function fetchTweetRowsByIds(db, tweetIds, limit) {
+  if (!tweetIds.length) return [];
+  return queryReadonlyWithStatementTimeout(
+    db,
+    `
+      SELECT
+        t.id::text,
+        t.text,
+        t.create_time,
+        t.twitter_user_id::text,
+        t.conversation_id::text,
+        t.quote_id::text,
+        t.reply_id::text,
+        t.retweet_id::text,
+        t.statistic,
+        t.info,
+        t.mention,
+        t.metric_observed_at,
+        u.id::text AS author_id,
+        u.username AS author_username,
+        u.username_raw AS author_username_raw,
+        u.name AS author_name,
+        u.profile AS author_profile,
+        u.ai AS author_ai,
+        u.feature AS author_feature,
+        u.kol AS author_kol
+      FROM dev.tweet t
+      JOIN dev.twitter_user u ON u.id = t.twitter_user_id
+      WHERE t.id = ANY($tweetIds::bigint[])
+      ORDER BY t.create_time DESC, t.id DESC
+      LIMIT $limit
+    `,
+    { bind: { tweetIds, limit }, type: QueryTypes.SELECT }
+  );
+}
+
 function buildInitialAiFields(matchedKeywords = []) {
   const keywords = matchedKeywords.filter(Boolean);
   return {
@@ -242,77 +369,96 @@ function mapTweetRowToPostPayload(board, row) {
 async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {}) {
   const db = getReadonlyDbOrThrow();
   const limit = Math.min(Math.max(Number(options.limit || 500), 1), 2000);
+  const pageSize = clampInteger(options.pageSize || getScanPageSize(), getScanPageSize(), 50, 1000);
+  const maxPages = clampInteger(options.maxPages || getMaxScanPages(), getMaxScanPages(), 1, 20);
+  const scanLimit = pageSize * maxPages;
+  const officialPostLimit = getOfficialPostScanLimit();
   const keywords = buildBoardKeywords(board).slice(0, 10);
-  const patterns = keywords.map((keyword, index) => ({ key: `kw${index}`, value: `%${String(keyword).replace(/^@+/, "")}%` }));
-  const bind = {
-    startAt,
-    endAt,
-    limit,
-    officialTwitterId: board.officialTwitterId ? String(board.officialTwitterId) : null,
-  };
-  patterns.forEach((item) => { bind[item.key] = item.value; });
+  const patterns = keywords.map((keyword, index) => ({ key: `kw${index}`, value: `%${escapeLikePattern(String(keyword).replace(/^@+/, ""))}%` }));
 
   const keywordClause = patterns.length
-    ? patterns.map((item) => `t.text ILIKE $${item.key}`).join(" OR ")
+    ? patterns.map((item) => `t.text ILIKE $${item.key} ESCAPE '\\'`).join(" OR ")
     : "FALSE";
 
-  return queryReadonlyWithStatementTimeout(
-    db,
-    `
-      SELECT
-        t.id::text,
-        t.text,
-        t.create_time,
-        t.twitter_user_id::text,
-        t.conversation_id::text,
-        t.quote_id::text,
-        t.reply_id::text,
-        t.retweet_id::text,
-        t.statistic,
-        t.info,
-        t.mention,
-        t.metric_observed_at,
-        u.id::text AS author_id,
-        u.username AS author_username,
-        u.username_raw AS author_username_raw,
-        u.name AS author_name,
-        u.profile AS author_profile,
-        u.ai AS author_ai,
-        u.feature AS author_feature,
-        u.kol AS author_kol
-      FROM dev.tweet t
-      JOIN dev.twitter_user u ON u.id = t.twitter_user_id
-      WHERE t.create_time >= $startAt
-        AND t.create_time < $endAt
-        AND t.retweet_id IS NULL
-        AND (
-          ${keywordClause}
-          OR ($officialTwitterId::text IS NOT NULL AND t.quote_id::text IN (
-            SELECT ot.id::text FROM dev.tweet ot
-            WHERE ot.twitter_user_id::text = $officialTwitterId
-              AND ot.create_time >= ($startAt::timestamptz - interval '30 days')
-              AND ot.create_time < $endAt
-          ))
-          OR ($officialTwitterId::text IS NOT NULL AND t.reply_id::text IN (
-            SELECT rt.id::text FROM dev.tweet rt
-            WHERE rt.twitter_user_id::text = $officialTwitterId
-              AND rt.create_time >= ($startAt::timestamptz - interval '30 days')
-              AND rt.create_time < $endAt
-          ))
-        )
-      ORDER BY t.create_time DESC
-      LIMIT $limit
-    `,
-    { bind, type: QueryTypes.SELECT }
-  ).catch((error) => {
+  const scanMeta = {
+    strategy: "keyset_candidate_pages",
+    pageSize,
+    maxPages,
+    scanLimit,
+    matchLimit: limit,
+    officialPostLimit,
+    officialPostCount: 0,
+    pagesScanned: 0,
+    candidatesScanned: 0,
+    matchedBeforeLimit: 0,
+    stoppedReason: "max_pages",
+  };
+
+  let rows = [];
+  try {
+    const officialTweetIds = await fetchOfficialTweetIdsForBoard(db, board, startAt, endAt, officialPostLimit);
+    scanMeta.officialPostCount = officialTweetIds.length;
+
+    const matchedIds = [];
+    const seenIds = new Set();
+    let cursorCreateTime = null;
+    let cursorTweetId = null;
+    for (let page = 0; page < maxPages && matchedIds.length < limit; page += 1) {
+      const bind = {
+        startAt,
+        endAt,
+        pageSize,
+        cursorCreateTime,
+        cursorTweetId: cursorTweetId || "0",
+        officialTweetIds,
+      };
+      patterns.forEach((item) => { bind[item.key] = item.value; });
+
+      const pageRows = await fetchCandidateTweetPage(db, bind, keywordClause);
+      scanMeta.pagesScanned += 1;
+      scanMeta.candidatesScanned += pageRows.length;
+      if (!pageRows.length) {
+        scanMeta.stoppedReason = "no_more_candidates";
+        break;
+      }
+
+      for (const item of pageRows) {
+        const id = String(item.id || "");
+        if (!id || seenIds.has(id)) continue;
+        seenIds.add(id);
+        if (item.is_match === true || item.is_match === "true" || item.is_match === "t") matchedIds.push(id);
+        if (matchedIds.length >= limit) {
+          scanMeta.stoppedReason = "match_limit";
+          break;
+        }
+      }
+
+      const last = pageRows[pageRows.length - 1];
+      cursorCreateTime = last.create_time;
+      cursorTweetId = String(last.id || "0");
+      if (pageRows.length < pageSize) {
+        scanMeta.stoppedReason = "no_more_candidates";
+        break;
+      }
+    }
+    scanMeta.matchedBeforeLimit = matchedIds.length;
+    rows = await fetchTweetRowsByIds(db, matchedIds.slice(0, limit), limit);
+  } catch (error) {
     if (!isStatementTimeoutError(error)) throw error;
     error.publicMessage = [
       "只读库扫描推文超时，不是前端 URL 或接口地址配置问题。",
       `当前窗口：${new Date(startAt).toISOString()} → ${new Date(endAt).toISOString()}。`,
-      "可调小 SOCIAL_LISTENING_WINDOW_MINUTES 或调大 SOCIAL_LISTENING_PG_READ_STATEMENT_TIMEOUT_MS 后重试。",
+      `当前已按 keyset 分页扫描，已扫 ${scanMeta.pagesScanned} 页 / ${maxPages} 页，每页 ${pageSize} 条。`,
+      "可继续调小 SOCIAL_LISTENING_WINDOW_MINUTES / SOCIAL_LISTENING_SCAN_PAGE_SIZE，或调大 SOCIAL_LISTENING_PG_READ_STATEMENT_TIMEOUT_MS 后重试。",
     ].join(" ");
     throw error;
+  }
+
+  Object.defineProperty(rows, "scanMeta", {
+    enumerable: false,
+    value: scanMeta,
   });
+  return rows;
 }
 
 function shouldIncludeProjectFollow(board) {
@@ -347,7 +493,7 @@ function mapRelationRow(row) {
 }
 
 async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
-  if (!board?.officialTwitterId) return [];
+  if (!isNumericId(board?.officialTwitterId)) return [];
   const db = getReadonlyDbOrThrow();
   const limit = Math.min(Math.max(Number(options.limit || 200), 1), 1000);
   const now = options.now || new Date();
@@ -374,7 +520,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
         NULL::integer AS persist,
         NULL::text AS project_key
       FROM dev.twitter_user_follow f
-      WHERE f.following_id::text = $officialTwitterId
+      WHERE f.following_id = $officialTwitterId::bigint
         AND f.created_at >= $startAt
         AND f.created_at < $endAt
         AND f.latest > 0
@@ -392,7 +538,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
         NULL::integer AS persist,
         NULL::text AS project_key
       FROM dev.twitter_user_follow f
-      WHERE f.follower_id::text = $officialTwitterId
+      WHERE f.follower_id = $officialTwitterId::bigint
         AND f.created_at >= $startAt
         AND f.created_at < $endAt
         AND f.latest > 0
@@ -414,7 +560,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
           uf.persist,
           NULL::text AS project_key
         FROM dev.twitter_user_unfollow uf
-        WHERE uf.following_id::text = $officialTwitterId
+        WHERE uf.following_id = $officialTwitterId::bigint
           AND uf.created_at >= $startAt
           AND uf.created_at < $safeUnfollowEndAt
           AND (COALESCE(uf.persist, 0) > 0 OR COALESCE(uf.latest, 0) > 0)
@@ -432,7 +578,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
           uf.persist,
           NULL::text AS project_key
         FROM dev.twitter_user_unfollow uf
-        WHERE uf.follower_id::text = $officialTwitterId
+        WHERE uf.follower_id = $officialTwitterId::bigint
           AND uf.created_at >= $startAt
           AND uf.created_at < $safeUnfollowEndAt
           AND (COALESCE(uf.persist, 0) > 0 OR COALESCE(uf.latest, 0) > 0)
@@ -455,7 +601,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
           NULL::integer AS persist,
           pf.project::text AS project_key
         FROM dev.project_follow pf
-        WHERE pf.following_id::text = $officialTwitterId
+        WHERE pf.following_id = $officialTwitterId::bigint
           AND pf.created_at >= $startAt
           AND pf.created_at < $endAt
           AND pf.latest > 0
@@ -473,7 +619,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
           NULL::integer AS persist,
           pf.project::text AS project_key
         FROM dev.project_follow pf
-        WHERE pf.follower_id::text = $officialTwitterId
+        WHERE pf.follower_id = $officialTwitterId::bigint
           AND pf.created_at >= $startAt
           AND pf.created_at < $endAt
           AND pf.latest > 0
@@ -481,7 +627,8 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
     );
   }
 
-  const rows = await db.query(
+  const rows = await queryReadonlyWithStatementTimeout(
+    db,
     `
       WITH relation_rows AS (
         ${unionParts.join("\nUNION ALL\n")}

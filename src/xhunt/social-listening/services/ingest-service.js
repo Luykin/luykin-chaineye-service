@@ -102,9 +102,10 @@ async function upsertPostPayloads(payloads) {
 
 async function processWindow(board, window) {
   const rows = await fetchCandidateTweetsForBoard(board, window.startAt, window.endAt);
+  const scanMeta = rows.scanMeta || null;
   const payloads = rows.map((row) => mapTweetRowToPostPayload(board, row));
   const upserted = await upsertPostPayloads(payloads);
-  return { scanned: rows.length, upserted };
+  return { scanned: rows.length, upserted, scanMeta };
 }
 
 async function markJobRunning(job) {
@@ -165,11 +166,18 @@ async function processSocialListeningJob(jobId) {
       counters.scanned += result.scanned;
       counters.upserted += result.upserted;
       counters.windows += 1;
+      if (result.scanMeta) {
+        counters.scanPageSize = result.scanMeta.pageSize;
+        counters.maxScanPages = result.scanMeta.maxPages;
+        counters.candidatePagesScanned = (counters.candidatePagesScanned || 0) + result.scanMeta.pagesScanned;
+        counters.candidateRowsScanned = (counters.candidateRowsScanned || 0) + result.scanMeta.candidatesScanned;
+        counters.candidateScanBudget = (counters.candidateScanBudget || 0) + result.scanMeta.scanLimit;
+      }
       await job.update({
         progress: {
           ...(job.progress || {}),
           stage: job.metadata?.stage || job.jobType,
-          currentWindow: { startAt: window.startAt.toISOString(), endAt: window.endAt.toISOString() },
+          currentWindow: { startAt: window.startAt.toISOString(), endAt: window.endAt.toISOString(), scanMeta: result.scanMeta || undefined },
           windowIndex: index + 1,
           windowTotal: windows.length,
           counters,

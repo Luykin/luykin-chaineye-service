@@ -429,6 +429,9 @@ function JobProgressView({ job }: { job: SocialListeningJob }) {
         <Progress percent={percent} status={job.status === "failed" ? "exception" : job.status === "succeeded" ? "success" : "active"} />
         <Space wrap>
           <Tag>窗口 {windowIndex || 0}/{windowTotal || 0}</Tag>
+          <Tag color="default">候选页 {getNumberFromRecord(counters, "candidatePagesScanned") || "-"}</Tag>
+          <Tag color="default">每页 {getNumberFromRecord(counters, "scanPageSize") || "-"}</Tag>
+          <Tag color="default">候选行 {getNumberFromRecord(counters, "candidateRowsScanned")}</Tag>
           <Tag color="blue">扫描 {getNumberFromRecord(counters, "scanned")}</Tag>
           <Tag color="green">入库 {getNumberFromRecord(counters, "upserted")}</Tag>
           <Tag color="purple">内容 AI {getNumberFromRecord(counters, "contentAiAnalyzed")}</Tag>
