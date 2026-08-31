@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1080" viewBox="0 0 1360 1080">
+  <defs>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M 28 0 L 0 0 0 28" fill="none" stroke="#dce7f3" stroke-width="0.8" opacity="0.45"/></pattern>
+    <linearGradient id="headerGrad" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#eaf4ff"/><stop offset="1" stop-color="#9bd0ff"/></linearGradient>
+    <linearGradient id="activeGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#93caff"/><stop offset="1" stop-color="#d8ecff"/></linearGradient>
+    <marker id="arrow-right" markerWidth="13" markerHeight="13" refX="10.5" refY="6.5" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L11,6.5 L2,11 Z" fill="#172033"/></marker>
+    <marker id="arrow-left" markerWidth="13" markerHeight="13" refX="2.5" refY="6.5" orient="auto" markerUnits="strokeWidth"><path d="M11,2 L2,6.5 L11,11 Z" fill="#172033"/></marker>
+    <filter id="softShadow" x="-15%" y="-30%" width="130%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#1e293b" flood-opacity="0.13"/></filter>
+    <filter id="cardShadow" x="-15%" y="-20%" width="130%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#1e293b" flood-opacity="0.14"/></filter>
+  </defs>
+  <rect width="1360" height="1080" fill="#f3f6fb"/>
+  <rect x="24" y="22" width="1312" height="1036" rx="28" fill="#fbfdff" stroke="#d9e4f2" stroke-width="1.2" filter="url(#cardShadow)"/>
+  <rect x="24" y="22" width="1312" height="1036" rx="28" fill="url(#grid)"/>
+  <rect x="40" y="38" width="1280" height="78" rx="22" fill="#ffffff" fill-opacity="0.78" stroke="#dbe7f5" stroke-width="1"/>
+  <text x="62" y="68" font-size="25" font-weight="900" fill="#1e293b" letter-spacing="0.2">07 帖子导出时序图</text>
+  <text x="62" y="98" font-size="15" fill="#64748b">导出复用列表筛选条件和同一套权限校验，并限制行数/文件大小/频率</text>
+<rect x="-52" y="128" width="280" height="866" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)">
+          <circle cx="88" cy="150" r="16" fill="url(#headerGrad)" stroke="#1f2a3d" stroke-width="2.8"/>
+          <line x1="88" y1="166" x2="88" y2="210" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="54" y1="182" x2="122" y2="182" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="88" y1="210" x2="63" y2="246" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="88" y1="210" x2="113" y2="246" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+        </g>
+        <rect x="34" y="260" width="108" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.1"/>
+        <text x="88" y="278" text-anchor="middle" dominant-baseline="middle" font-size="15" font-weight="800" fill="#1e293b">EchoHunt用户</text>
+      <line x1="88" y1="268" x2="88" y2="984" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="77" y="296" width="22" height="628" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="244" y="128" width="280" height="866" rx="22" fill="#edf5ff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="279" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="384" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">Social页面</text>
+      <line x1="384" y1="268" x2="384" y2="984" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="373" y="296" width="22" height="628" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="540" y="128" width="280" height="866" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="575" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="680" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">Export API</text>
+      <line x1="680" y1="268" x2="680" y2="984" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="669" y="296" width="22" height="628" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="836" y="128" width="280" height="866" rx="22" fill="#edf5ff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="871" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="976" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">Redis</text>
+      <line x1="976" y1="268" x2="976" y2="984" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="965" y="296" width="22" height="628" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="1132" y="128" width="280" height="866" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="1167" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="1272" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">主业务库</text>
+      <line x1="1272" y1="268" x2="1272" y2="984" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="1261" y="296" width="22" height="628" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  />
+    <line x1="88" y1="370" x2="384" y2="370" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="132" y="335" width="208" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="152" cy="352" r="12" fill="#2f7fca"/><text x="152" y="353" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">1</text>
+      <text x="172" y="353" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">点击导出当前帖子列表</text>
+    </g>
+  
+    <line x1="384" y1="418" x2="680" y2="418" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="371.75" y="383" width="320.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="391.75" cy="400" r="12" fill="#2f7fca"/><text x="391.75" y="401" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">2</text>
+      <text x="411.75" y="391" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">GET /posts/export?range&amp;filter&amp;sor</text>
+<text x="411.75" y="411" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">t</text>
+    </g>
+  
+    <line x1="680" y1="466" x2="1272" y2="466" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="860.75" y="431" width="230.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="880.75" cy="448" r="12" fill="#2f7fca"/><text x="880.75" y="449" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">3</text>
+      <text x="900.75" y="449" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">校验 BoardAccess active</text>
+    </g>
+  
+    <line x1="680" y1="514" x2="976" y2="514" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="739" y="479" width="178" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="759" cy="496" r="12" fill="#2f7fca"/><text x="759" y="497" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">4</text>
+      <text x="779" y="497" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">检查导出冷却 key</text>
+    </g>
+  
+    <rect x="52" y="562" width="1256" height="214" rx="18" fill="#ffffff" fill-opacity="0.36" stroke="#1f2a3d" stroke-width="2.1"/>
+    <path d="M 53 563 H 212 Q 232 563 240 583 L 250 607 H 53 Z" fill="#ddecff" stroke="#1f2a3d" stroke-width="2"/>
+    <text x="70" y="590" font-size="16" font-weight="850" fill="#1e293b" letter-spacing="0.2">Alt · 安全限制</text>
+  
+    <line x1="976" y1="612" x2="680" y2="612" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="743" y="577" width="170" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="763" cy="594" r="12" fill="#9fb5ce"/><text x="763" y="595" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">5A</text>
+      <text x="783" y="595" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">命中频率限制</text>
+    </g>
+  
+    <line x1="680" y1="658" x2="384" y2="658" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="416.75" y="623" width="230.5" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="436.75" cy="640" r="12" fill="#9fb5ce"/><text x="436.75" y="641" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">6A</text>
+      <text x="456.75" y="641" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">429 EXPORT_RATE_LIMITED</text>
+    </g>
+  
+    <line x1="680" y1="708" x2="1272" y2="708" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="872" y="673" width="208" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="892" cy="690" r="12" fill="#2f7fca"/><text x="892" y="691" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">5B</text>
+      <text x="912" y="691" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">COUNT 符合条件 posts</text>
+    </g>
+  
+    <line x1="1272" y1="754" x2="680" y2="754" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="891" y="719" width="170" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="911" cy="736" r="12" fill="#9fb5ce"/><text x="911" y="737" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">6B</text>
+      <text x="931" y="737" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">返回行数</text>
+    </g>
+  
+    <line x1="680" y1="826" x2="384" y2="826" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="368" y="791" width="328" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="388" cy="808" r="12" fill="#9fb5ce"/><text x="388" y="809" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">7</text>
+      <text x="408" y="809" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">超过 10000 行/20MB：EXPORT_TOO_LARGE</text>
+    </g>
+  
+    <line x1="680" y1="880" x2="1272" y2="880" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="864.5" y="845" width="223" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="884.5" cy="862" r="12" fill="#2f7fca"/><text x="884.5" y="863" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">8</text>
+      <text x="904.5" y="863" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">未超限：查询白名单字段</text>
+    </g>
+  
+    <path d="M 693 904 C 738 904, 775 908, 775 927 C 775 946, 738 950, 701 950" fill="none" stroke="#172033" stroke-width="2.4" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="783" y="909" width="193" height="44" rx="14" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.1"/>
+      
+      <text x="797" y="932" text-anchor="start" dominant-baseline="middle" font-size="14" font-weight="650" fill="#1e293b">生成 xlsx/csv 文件</text>
+    </g>
+  
+    <line x1="680" y1="976" x2="1272" y2="976" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="891" y="941" width="170" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="911" cy="958" r="12" fill="#2f7fca"/><text x="911" y="959" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">9</text>
+      <text x="931" y="959" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">写导出审计日志</text>
+    </g>
+  
+    <line x1="680" y1="1026" x2="384" y2="1026" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="447" y="991" width="170" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="467" cy="1008" r="12" fill="#9fb5ce"/><text x="467" y="1009" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">10</text>
+      <text x="487" y="1009" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">返回文件流下载</text>
+    </g>
+  <rect x="46" y="1010" width="1268" height="42" rx="16" fill="#eff7ff" fill-opacity="1" stroke="#bad5ef" stroke-width="1.1"  /><text x="66" y="1033" font-size="14" font-weight="650" fill="#64748b">禁止导出 rawTweet/rawAuthor 中的内部字段、AI prompt、系统字段。</text></svg>

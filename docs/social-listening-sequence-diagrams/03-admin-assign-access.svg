@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1060" viewBox="0 0 1360 1060">
+  <defs>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M 28 0 L 0 0 0 28" fill="none" stroke="#dce7f3" stroke-width="0.8" opacity="0.45"/></pattern>
+    <linearGradient id="headerGrad" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#eaf4ff"/><stop offset="1" stop-color="#9bd0ff"/></linearGradient>
+    <linearGradient id="activeGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#93caff"/><stop offset="1" stop-color="#d8ecff"/></linearGradient>
+    <marker id="arrow-right" markerWidth="13" markerHeight="13" refX="10.5" refY="6.5" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L11,6.5 L2,11 Z" fill="#172033"/></marker>
+    <marker id="arrow-left" markerWidth="13" markerHeight="13" refX="2.5" refY="6.5" orient="auto" markerUnits="strokeWidth"><path d="M11,2 L2,6.5 L11,11 Z" fill="#172033"/></marker>
+    <filter id="softShadow" x="-15%" y="-30%" width="130%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#1e293b" flood-opacity="0.13"/></filter>
+    <filter id="cardShadow" x="-15%" y="-20%" width="130%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#1e293b" flood-opacity="0.14"/></filter>
+  </defs>
+  <rect width="1360" height="1060" fill="#f3f6fb"/>
+  <rect x="24" y="22" width="1312" height="1016" rx="28" fill="#fbfdff" stroke="#d9e4f2" stroke-width="1.2" filter="url(#cardShadow)"/>
+  <rect x="24" y="22" width="1312" height="1016" rx="28" fill="url(#grid)"/>
+  <rect x="40" y="38" width="1280" height="78" rx="22" fill="#ffffff" fill-opacity="0.78" stroke="#dbe7f5" stroke-width="1"/>
+  <text x="62" y="68" font-size="25" font-weight="900" fill="#1e293b" letter-spacing="0.2">03 运营分配 EchoHunt 查看权限时序图</text>
+  <text x="62" y="98" font-size="15" fill="#64748b">某个被监控账号/看板可以分配给多个 EchoHunt X 登录账号查看</text>
+<rect x="-52" y="128" width="280" height="846" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)">
+          <circle cx="88" cy="150" r="16" fill="url(#headerGrad)" stroke="#1f2a3d" stroke-width="2.8"/>
+          <line x1="88" y1="166" x2="88" y2="210" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="54" y1="182" x2="122" y2="182" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="88" y1="210" x2="63" y2="246" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="88" y1="210" x2="113" y2="246" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+        </g>
+        <rect x="34" y="260" width="108" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.1"/>
+        <text x="88" y="278" text-anchor="middle" dominant-baseline="middle" font-size="15" font-weight="800" fill="#1e293b">运营人员</text>
+      <line x1="88" y1="268" x2="88" y2="964" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="77" y="296" width="22" height="608" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="244" y="128" width="280" height="846" rx="22" fill="#edf5ff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="279" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="384" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">admin-web</text>
+      <line x1="384" y1="268" x2="384" y2="964" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="373" y="296" width="22" height="608" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="540" y="128" width="280" height="846" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="575" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="680" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">Admin API</text>
+      <line x1="680" y1="268" x2="680" y2="964" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="669" y="296" width="22" height="608" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="836" y="128" width="280" height="846" rx="22" fill="#edf5ff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="871" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="976" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">AuthCenter</text>
+      <line x1="976" y1="268" x2="976" y2="964" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="965" y="296" width="22" height="608" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="1132" y="128" width="280" height="846" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="1167" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="1272" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">主业务库</text>
+      <line x1="1272" y1="268" x2="1272" y2="964" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="1261" y="296" width="22" height="608" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  />
+    <line x1="88" y1="370" x2="384" y2="370" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="143.25" y="335" width="185.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="163.25" cy="352" r="12" fill="#2f7fca"/><text x="163.25" y="353" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">1</text>
+      <text x="183.25" y="353" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">输入客户 X handle</text>
+    </g>
+  
+    <line x1="384" y1="418" x2="680" y2="418" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="386.75" y="383" width="290.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="406.75" cy="400" r="12" fill="#2f7fca"/><text x="406.75" y="401" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">2</text>
+      <text x="426.75" y="401" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">POST /boards/{boardId}/accesses</text>
+    </g>
+  
+    <path d="M 693 440 C 738 440, 775 444, 775 463 C 775 482, 738 486, 701 486" fill="none" stroke="#172033" stroke-width="2.4" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="783" y="445" width="176" height="44" rx="14" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.1"/>
+      
+      <text x="797" y="468" text-anchor="start" dominant-baseline="middle" font-size="14" font-weight="650" fill="#1e293b">规范化 handle</text>
+    </g>
+  
+    <line x1="680" y1="514" x2="976" y2="514" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="727.75" y="479" width="200.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="747.75" cy="496" r="12" fill="#2f7fca"/><text x="747.75" y="497" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">3</text>
+      <text x="767.75" y="497" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">查 Twitter identity</text>
+    </g>
+  
+    <line x1="976" y1="562" x2="680" y2="562" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="664" y="527" width="328" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="684" cy="544" r="12" fill="#9fb5ce"/><text x="684" y="545" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">4</text>
+      <text x="704" y="545" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">userId/providerSubject/username 或空</text>
+    </g>
+  
+    <rect x="52" y="610" width="1256" height="214" rx="18" fill="#ffffff" fill-opacity="0.36" stroke="#1f2a3d" stroke-width="2.1"/>
+    <path d="M 53 611 H 392 Q 412 611 420 631 L 430 655 H 53 Z" fill="#ddecff" stroke="#1f2a3d" stroke-width="2"/>
+    <text x="70" y="638" font-size="16" font-weight="850" fill="#1e293b" letter-spacing="0.2">Alt · 已登录过 / 未登录过均支持授权</text>
+  
+    <line x1="680" y1="664" x2="1272" y2="664" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="800.75" y="629" width="350.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="820.75" cy="646" r="12" fill="#2f7fca"/><text x="820.75" y="647" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">5A</text>
+      <text x="840.75" y="647" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">已登录：写 authCenterUserId + twitterId</text>
+    </g>
+  
+    <line x1="680" y1="716" x2="1272" y2="716" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="849.5" y="681" width="253" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="869.5" cy="698" r="12" fill="#2f7fca"/><text x="869.5" y="699" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">5B</text>
+      <text x="889.5" y="699" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">未登录：仅写 twitterHandle</text>
+    </g>
+  
+    <line x1="680" y1="768" x2="1272" y2="768" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="815.75" y="733" width="320.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="835.75" cy="750" r="12" fill="#2f7fca"/><text x="835.75" y="751" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">6</text>
+      <text x="855.75" y="741" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">INSERT/UPSERT BoardAccesses(active</text>
+<text x="855.75" y="761" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">)</text>
+    </g>
+  
+    <line x1="680" y1="862" x2="1272" y2="862" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="812" y="827" width="328" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="832" cy="844" r="12" fill="#2f7fca"/><text x="832" y="845" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">7</text>
+      <text x="852" y="835" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">INSERT AccessAuditLogs(access_gran</text>
+<text x="852" y="855" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">t)</text>
+    </g>
+  
+    <line x1="680" y1="912" x2="384" y2="912" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="447" y="877" width="170" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="467" cy="894" r="12" fill="#9fb5ce"/><text x="467" y="895" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">8</text>
+      <text x="487" y="895" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">返回授权记录</text>
+    </g>
+  
+    <line x1="384" y1="958" x2="88" y2="958" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="139.5" y="923" width="193" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="159.5" cy="940" r="12" fill="#9fb5ce"/><text x="159.5" y="941" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">9</text>
+      <text x="179.5" y="941" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">页面展示已授权账号</text>
+    </g>
+  <rect x="46" y="990" width="1268" height="42" rx="16" fill="#eff7ff" fill-opacity="1" stroke="#bad5ef" stroke-width="1.1"  /><text x="66" y="1013" font-size="14" font-weight="650" fill="#64748b">授权匹配优先级：authCenterUserId -&gt; twitterId(providerSubject) -&gt; twitterHandle(username lower)。</text></svg>

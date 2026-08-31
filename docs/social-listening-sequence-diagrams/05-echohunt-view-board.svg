@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="1160" viewBox="0 0 1420 1160">
+  <defs>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M 28 0 L 0 0 0 28" fill="none" stroke="#dce7f3" stroke-width="0.8" opacity="0.45"/></pattern>
+    <linearGradient id="headerGrad" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#eaf4ff"/><stop offset="1" stop-color="#9bd0ff"/></linearGradient>
+    <linearGradient id="activeGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#93caff"/><stop offset="1" stop-color="#d8ecff"/></linearGradient>
+    <marker id="arrow-right" markerWidth="13" markerHeight="13" refX="10.5" refY="6.5" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L11,6.5 L2,11 Z" fill="#172033"/></marker>
+    <marker id="arrow-left" markerWidth="13" markerHeight="13" refX="2.5" refY="6.5" orient="auto" markerUnits="strokeWidth"><path d="M11,2 L2,6.5 L11,11 Z" fill="#172033"/></marker>
+    <filter id="softShadow" x="-15%" y="-30%" width="130%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#1e293b" flood-opacity="0.13"/></filter>
+    <filter id="cardShadow" x="-15%" y="-20%" width="130%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#1e293b" flood-opacity="0.14"/></filter>
+  </defs>
+  <rect width="1420" height="1160" fill="#f3f6fb"/>
+  <rect x="24" y="22" width="1372" height="1116" rx="28" fill="#fbfdff" stroke="#d9e4f2" stroke-width="1.2" filter="url(#cardShadow)"/>
+  <rect x="24" y="22" width="1372" height="1116" rx="28" fill="url(#grid)"/>
+  <rect x="40" y="38" width="1340" height="78" rx="22" fill="#ffffff" fill-opacity="0.78" stroke="#dbe7f5" stroke-width="1"/>
+  <text x="62" y="68" font-size="25" font-weight="900" fill="#1e293b" letter-spacing="0.2">05 EchoHunt 用户查看看板数据时序图</text>
+  <text x="62" y="98" font-size="15" fill="#64748b">切换看板、时间范围、Tab 时，全部从主业务库加工表读取</text>
+<rect x="-59.5" y="128" width="295" height="946" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)">
+          <circle cx="88" cy="150" r="16" fill="url(#headerGrad)" stroke="#1f2a3d" stroke-width="2.8"/>
+          <line x1="88" y1="166" x2="88" y2="210" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="54" y1="182" x2="122" y2="182" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="88" y1="210" x2="63" y2="246" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="88" y1="210" x2="113" y2="246" stroke="#1f2a3d" stroke-width="3.2" stroke-linecap="round"/>
+        </g>
+        <rect x="34" y="260" width="108" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.1"/>
+        <text x="88" y="278" text-anchor="middle" dominant-baseline="middle" font-size="15" font-weight="800" fill="#1e293b">EchoHunt用户</text>
+      <line x1="88" y1="268" x2="88" y2="1064" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="77" y="296" width="22" height="708" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="251.5" y="128" width="295" height="946" rx="22" fill="#edf5ff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="294" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="399" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">Social页面</text>
+      <line x1="399" y1="268" x2="399" y2="1064" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="388" y="296" width="22" height="708" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="562.5" y="128" width="295" height="946" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="605" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="710" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">Public API</text>
+      <line x1="710" y1="268" x2="710" y2="1064" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="699" y="296" width="22" height="708" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="873.5" y="128" width="295" height="946" rx="22" fill="#edf5ff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="916" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="1021" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">Auth中间件</text>
+      <line x1="1021" y1="268" x2="1021" y2="1064" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="1010" y="296" width="22" height="708" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="1184.5" y="128" width="295" height="946" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="1227" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="1332" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">主业务库</text>
+      <line x1="1332" y1="268" x2="1332" y2="1064" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="1321" y="296" width="22" height="708" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  />
+    <line x1="88" y1="370" x2="399" y2="370" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="128.25" y="335" width="230.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="148.25" cy="352" r="12" fill="#2f7fca"/><text x="148.25" y="353" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">1</text>
+      <text x="168.25" y="353" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">选择 board / 24H-7D-30D</text>
+    </g>
+  
+    <line x1="399" y1="418" x2="710" y2="418" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="398" y="383" width="313" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="418" cy="400" r="12" fill="#2f7fca"/><text x="418" y="401" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">2</text>
+      <text x="438" y="401" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">GET /boards/{id}/overview?range=7D</text>
+    </g>
+  
+    <line x1="710" y1="466" x2="1021" y2="466" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="780.5" y="431" width="170" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="800.5" cy="448" r="12" fill="#2f7fca"/><text x="800.5" y="449" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">3</text>
+      <text x="820.5" y="449" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">校验 token</text>
+    </g>
+  
+    <line x1="1021" y1="514" x2="710" y2="514" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="761.5" y="479" width="208" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="781.5" cy="496" r="12" fill="#9fb5ce"/><text x="781.5" y="497" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">4</text>
+      <text x="801.5" y="497" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">返回 user/identities</text>
+    </g>
+  
+    <line x1="710" y1="562" x2="1332" y2="562" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="905.75" y="527" width="230.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="925.75" cy="544" r="12" fill="#2f7fca"/><text x="925.75" y="545" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">5</text>
+      <text x="945.75" y="545" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">校验 BoardAccess active</text>
+    </g>
+  
+    <rect x="52" y="608" width="1316" height="168" rx="18" fill="#ffffff" fill-opacity="0.36" stroke="#1f2a3d" stroke-width="2.1"/>
+    <path d="M 53 609 H 212 Q 232 609 240 629 L 250 653 H 53 Z" fill="#ddecff" stroke="#1f2a3d" stroke-width="2"/>
+    <text x="70" y="636" font-size="16" font-weight="850" fill="#1e293b" letter-spacing="0.2">Alt · 权限判断</text>
+  
+    <line x1="1332" y1="660" x2="710" y2="660" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="936" y="625" width="170" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="956" cy="642" r="12" fill="#9fb5ce"/><text x="956" y="643" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">6A</text>
+      <text x="976" y="643" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">无权限</text>
+    </g>
+  
+    <line x1="710" y1="706" x2="399" y2="706" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="461.75" y="671" width="185.5" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="481.75" cy="688" r="12" fill="#9fb5ce"/><text x="481.75" y="689" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">7A</text>
+      <text x="501.75" y="689" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">403，前端跳回首页</text>
+    </g>
+  
+    <line x1="1332" y1="754" x2="710" y2="754" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="936" y="719" width="170" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="956" cy="736" r="12" fill="#9fb5ce"/><text x="956" y="737" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">6B</text>
+      <text x="976" y="737" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">有权限</text>
+    </g>
+  
+    <line x1="710" y1="818" x2="1332" y2="818" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="898.25" y="783" width="245.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="918.25" cy="800" r="12" fill="#2f7fca"/><text x="918.25" y="801" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">8</text>
+      <text x="938.25" y="801" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">查看板状态 + 最新概览快照</text>
+    </g>
+  
+    <line x1="1332" y1="866" x2="710" y2="866" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="887" y="831" width="268" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="907" cy="848" r="12" fill="#9fb5ce"/><text x="907" y="849" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">9</text>
+      <text x="927" y="849" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">metrics/series/topics/alerts</text>
+    </g>
+  
+    <line x1="710" y1="914" x2="399" y2="914" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="458" y="879" width="193" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="478" cy="896" r="12" fill="#9fb5ce"/><text x="478" y="897" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">10</text>
+      <text x="498" y="897" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">返回 overview 状态</text>
+    </g>
+  
+    <line x1="399" y1="960" x2="88" y2="960" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="158.5" y="925" width="170" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="178.5" cy="942" r="12" fill="#9fb5ce"/><text x="178.5" y="943" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">11</text>
+      <text x="198.5" y="943" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">渲染概览图表</text>
+    </g>
+  
+    <line x1="72" y1="1004" x2="1348" y2="1004" stroke="#9fb5ce" stroke-width="2" stroke-dasharray="11 10"/>
+    <g filter="url(#softShadow)">
+      <rect x="84" y="985" width="354" height="38" rx="19" fill="#fff4c7" stroke="#9fb5ce" stroke-width="1.2"/>
+      <text x="104" y="1005" font-size="15" font-weight="850" fill="#1e293b" dominant-baseline="middle">切换帖子 / 账号动态 / 预警 Tab</text>
+    </g>
+  
+    <line x1="399" y1="1056" x2="710" y2="1056" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="413" y="1021" width="283" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="433" cy="1038" r="12" fill="#2f7fca"/><text x="433" y="1039" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">12</text>
+      <text x="453" y="1039" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">GET posts/accounts/alerts 分页</text>
+    </g>
+  
+    <line x1="710" y1="1102" x2="1332" y2="1102" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="868.25" y="1067" width="305.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="888.25" cy="1084" r="12" fill="#2f7fca"/><text x="888.25" y="1085" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">13</text>
+      <text x="908.25" y="1085" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">校验权限 + 查询帖子/账号动态/预警</text>
+    </g>
+  <rect x="46" y="1090" width="1328" height="42" rx="16" fill="#eff7ff" fill-opacity="1" stroke="#bad5ef" stroke-width="1.1"  /><text x="66" y="1113" font-size="14" font-weight="650" fill="#64748b">读取表：看板表 / 概览快照表 / 帖子结果表 / 账号动态表 / 预警表 / 关键事件表。</text></svg>

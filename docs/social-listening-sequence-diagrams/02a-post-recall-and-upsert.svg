@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1300" viewBox="0 0 1500 1300">
+  <defs>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M 28 0 L 0 0 0 28" fill="none" stroke="#dce7f3" stroke-width="0.8" opacity="0.45"/></pattern>
+    <linearGradient id="headerGrad" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#eaf4ff"/><stop offset="1" stop-color="#9bd0ff"/></linearGradient>
+    <linearGradient id="activeGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#93caff"/><stop offset="1" stop-color="#d8ecff"/></linearGradient>
+    <marker id="arrow-right" markerWidth="13" markerHeight="13" refX="10.5" refY="6.5" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L11,6.5 L2,11 Z" fill="#172033"/></marker>
+    <marker id="arrow-left" markerWidth="13" markerHeight="13" refX="2.5" refY="6.5" orient="auto" markerUnits="strokeWidth"><path d="M11,2 L2,6.5 L11,11 Z" fill="#172033"/></marker>
+    <filter id="softShadow" x="-15%" y="-30%" width="130%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#1e293b" flood-opacity="0.13"/></filter>
+    <filter id="cardShadow" x="-15%" y="-20%" width="130%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#1e293b" flood-opacity="0.14"/></filter>
+  </defs>
+  <rect width="1500" height="1300" fill="#f3f6fb"/>
+  <rect x="24" y="22" width="1452" height="1256" rx="28" fill="#fbfdff" stroke="#d9e4f2" stroke-width="1.2" filter="url(#cardShadow)"/>
+  <rect x="24" y="22" width="1452" height="1256" rx="28" fill="url(#grid)"/>
+  <rect x="40" y="38" width="1420" height="78" rx="22" fill="#ffffff" fill-opacity="0.78" stroke="#dbe7f5" stroke-width="1"/>
+  <text x="62" y="68" font-size="25" font-weight="900" fill="#1e293b" letter-spacing="0.2">02A 推文召回、作者快照、去重落表时序图</text>
+  <text x="62" y="98" font-size="15" fill="#64748b">先把命中的候选推文整理成帖子结果表，再送 AI 分析</text>
+<rect x="-69.5" y="128" width="315" height="1086" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="-17" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="88" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">Jobs进程</text>
+      <line x1="88" y1="268" x2="88" y2="1204" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="77" y="296" width="22" height="848" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="261.5" y="128" width="315" height="1086" rx="22" fill="#edf5ff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="314" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="419" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">监控看板表</text>
+      <line x1="419" y1="268" x2="419" y2="1204" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="408" y="296" width="22" height="848" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="592.5" y="128" width="315" height="1086" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="645" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="750" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">dev.tweet</text>
+      <line x1="750" y1="268" x2="750" y2="1204" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="739" y="296" width="22" height="848" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="923.5" y="128" width="315" height="1086" rx="22" fill="#edf5ff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="976" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="1081" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">dev.twitter_user</text>
+      <line x1="1081" y1="268" x2="1081" y2="1204" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="1070" y="296" width="22" height="848" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  /><rect x="1254.5" y="128" width="315" height="1086" rx="22" fill="#f8fbff" opacity="0.58" stroke="#dfeaf6" stroke-width="0.8"/>
+        <g filter="url(#softShadow)"><rect x="1307" y="142" width="210" height="58" rx="10" fill="url(#headerGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.5"  /></g>
+        <text x="1412" y="172" text-anchor="middle" dominant-baseline="middle" font-size="17" font-weight="850" fill="#1e293b">帖子结果表</text>
+      <line x1="1412" y1="268" x2="1412" y2="1204" stroke="#2f3a4d" stroke-width="2.1" stroke-dasharray="4 10" opacity="0.75"/><rect x="1401" y="296" width="22" height="848" rx="8" fill="url(#activeGrad)" fill-opacity="1" stroke="#1f2a3d" stroke-width="2.1"  />
+    <line x1="88" y1="352" x2="419" y2="352" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="157" y="317" width="193" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="177" cy="334" r="12" fill="#2f7fca"/><text x="177" y="335" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">1</text>
+      <text x="197" y="335" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">读取被监控账号配置</text>
+    </g>
+  
+    <line x1="419" y1="422" x2="88" y2="422" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="127" y="387" width="253" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="147" cy="404" r="12" fill="#9fb5ce"/><text x="147" y="405" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">2</text>
+      <text x="167" y="405" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">官方账号ID、handle、关键词</text>
+    </g>
+  
+    <rect x="52" y="472" width="1396" height="418" rx="18" fill="#ffffff" fill-opacity="0.36" stroke="#1f2a3d" stroke-width="2.1"/>
+    <path d="M 53 473 H 312 Q 332 473 340 493 L 350 517 H 53 Z" fill="#ddecff" stroke="#1f2a3d" stroke-width="2"/>
+    <text x="70" y="500" font-size="16" font-weight="850" fill="#1e293b" letter-spacing="0.2">Loop · 把时间范围拆小段处理</text>
+  
+    <line x1="88" y1="540" x2="750" y2="540" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="315" y="505" width="208" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="335" cy="522" r="12" fill="#2f7fca"/><text x="335" y="523" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">3</text>
+      <text x="355" y="523" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">查询这段时间的新帖子</text>
+    </g>
+  
+    <line x1="750" y1="610" x2="88" y2="610" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="262.5" y="575" width="313" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="282.5" cy="592" r="12" fill="#9fb5ce"/><text x="282.5" y="593" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">4</text>
+      <text x="302.5" y="593" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">帖子ID、正文、时间、互动、提及信息</text>
+    </g>
+  
+    <line x1="88" y1="680" x2="1081" y2="680" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="473" y="645" width="223" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="493" cy="662" r="12" fill="#2f7fca"/><text x="493" y="663" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">5</text>
+      <text x="513" y="663" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">根据作者ID查询作者资料</text>
+    </g>
+  
+    <line x1="1081" y1="750" x2="88" y2="750" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="465.5" y="715" width="238" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="485.5" cy="732" r="12" fill="#9fb5ce"/><text x="485.5" y="733" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">6</text>
+      <text x="505.5" y="733" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">用户名、头像、粉丝、排名</text>
+    </g>
+  
+    <path d="M 101 816 C 146 816, 183 820, 183 839 C 183 858, 146 862, 109 862" fill="none" stroke="#172033" stroke-width="2.4" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="191" y="821" width="253" height="44" rx="14" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.1"/>
+      
+      <text x="205" y="844" text-anchor="start" dominant-baseline="middle" font-size="14" font-weight="650" fill="#1e293b">判断是否提及/引用/回复项目</text>
+    </g>
+  
+    <path d="M 101 902 C 146 902, 183 906, 183 925 C 183 944, 146 948, 109 948" fill="none" stroke="#172033" stroke-width="2.4" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="191" y="907" width="223" height="44" rx="14" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.1"/>
+      
+      <text x="205" y="930" text-anchor="start" dominant-baseline="middle" font-size="14" font-weight="650" fill="#1e293b">整理作者资料和互动数据</text>
+    </g>
+  
+    <line x1="88" y1="1000" x2="1412" y2="1000" stroke="#172033" stroke-width="2.6" stroke-linecap="round"  marker-end="url(#arrow-right)"/>
+    <g filter="url(#softShadow)">
+      <rect x="642.25" y="965" width="215.5" height="34" rx="17" fill="#f8fbff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="662.25" cy="982" r="12" fill="#2f7fca"/><text x="662.25" y="983" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">7</text>
+      <text x="682.25" y="983" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">按看板+帖子ID去重保存</text>
+    </g>
+  
+    <line x1="1412" y1="1070" x2="88" y2="1070" stroke="#172033" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 8" marker-end="url(#arrow-left)"/>
+    <g filter="url(#softShadow)">
+      <rect x="616" y="1035" width="268" height="34" rx="17" fill="#ffffff" stroke="#9fb5ce" stroke-width="1.2"/>
+      <circle cx="636" cy="1052" r="12" fill="#9fb5ce"/><text x="636" y="1053" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#fff">8</text>
+      <text x="656" y="1053" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="650" fill="#1e293b">返回新保存、待 AI 分析的帖子</text>
+    </g>
+  <rect x="92" y="1130" width="1320" height="92" rx="12" fill="#fff8dc" fill-opacity="1" stroke="#9fb5ce" stroke-width="1.3"  filter="url(#softShadow)"/><text x="108" y="1156" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="700" fill="#1e293b">落表字段：tweetId、authorTwitterId、authorHandle</text>
+<text x="108" y="1176" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="700" fill="#1e293b">、authorFollowersCount、authorGlobalRank、aut</text>
+<text x="108" y="1196" text-anchor="start" dominant-baseline="middle" font-size="15" font-weight="700" fill="#1e293b">horCnRank、postCreatedAt、text、normalizedTex</text><rect x="46" y="1230" width="1408" height="42" rx="16" fill="#eff7ff" fill-opacity="1" stroke="#bad5ef" stroke-width="1.1"  /><text x="66" y="1253" font-size="14" font-weight="650" fill="#64748b">这一步还不做最终图表，只完成“候选推文 -&gt; 去重帖子事实表”的标准化。</text></svg>

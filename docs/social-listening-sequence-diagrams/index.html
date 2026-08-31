@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EchoHunt Social Listening 时序图</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #66758a;
+      --line: #d8e4f2;
+      --paper: #fbfdff;
+      --card: #ffffff;
+      --blue: #2f7fca;
+      --blue-soft: #e8f4ff;
+      --warn: #fff4c7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 16% 4%, rgba(47,127,202,.16), transparent 28%),
+        radial-gradient(circle at 88% 0%, rgba(124,58,237,.10), transparent 26%),
+        linear-gradient(180deg, #edf3fa 0%, #f7f9fc 42%, #eef3f8 100%);
+    }
+    header {
+      padding: 42px 48px 28px;
+      color: var(--ink);
+    }
+    .hero {
+      max-width: 1180px;
+      border: 1px solid rgba(216,228,242,.9);
+      border-radius: 28px;
+      background: rgba(255,255,255,.74);
+      box-shadow: 0 24px 70px rgba(23,32,51,.10);
+      padding: 30px 34px;
+      backdrop-filter: blur(10px);
+    }
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 12px;
+      color: var(--blue);
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+    .kicker::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--blue);
+      box-shadow: 0 0 0 7px rgba(47,127,202,.12);
+    }
+    h1 { margin: 0; font-size: clamp(30px, 4vw, 46px); letter-spacing: -.04em; line-height: 1.05; }
+    .hero p { margin: 14px 0 0; color: var(--muted); font-size: 16px; line-height: 1.7; max-width: 860px; }
+    .toc {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .toc a {
+      display: inline-flex;
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: var(--blue-soft);
+      color: #215f9d;
+      border: 1px solid #c8ddf3;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 13px;
+    }
+    main { padding: 0 48px 72px; display: grid; gap: 34px; }
+    .data-map {
+      background: rgba(255,255,255,.88);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 24px;
+      box-shadow: 0 22px 55px rgba(23,32,51,.09);
+    }
+    .data-map-head {
+      max-width: 980px;
+      margin-bottom: 18px;
+    }
+    .data-map-head h2 { margin: 0; font-size: 28px; letter-spacing: -.03em; }
+    .data-map-head p { margin: 10px 0 0; color: var(--muted); line-height: 1.75; }
+    .data-group + .data-group { margin-top: 22px; }
+    .group-title {
+      display: grid;
+      grid-template-columns: minmax(240px, 330px) 1fr;
+      gap: 18px;
+      align-items: baseline;
+      margin-bottom: 10px;
+    }
+    .group-title h3 { margin: 0; font-size: 18px; }
+    .group-title p { margin: 0; color: var(--muted); line-height: 1.65; }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid #dce8f5;
+      border-radius: 18px;
+      background: #fbfdff;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    th, td { padding: 13px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid #e6eef7; font-size: 14px; line-height: 1.6; }
+    th { color: #42526a; background: #f1f7ff; font-weight: 900; }
+    tr:last-child td { border-bottom: 0; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 800; color: #1f5f9f; background: #eef6ff; padding: 2px 6px; border-radius: 7px; }
+    .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 900; white-space: nowrap; }
+    .badge.existing { color: #245b40; background: #dcf8e8; border: 1px solid #b8e9cd; }
+    .badge.new { color: #7a4b00; background: #fff1c2; border: 1px solid #f0d98d; }
+    .diagram-card {
+      background: rgba(255,255,255,.86);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 22px;
+      box-shadow: 0 22px 55px rgba(23,32,51,.09);
+      overflow: hidden;
+    }
+    .card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 4px 4px 16px;
+    }
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h2 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+    .open-link {
+      flex: 0 0 auto;
+      color: #1f5f9f;
+      text-decoration: none;
+      font-weight: 850;
+      background: #f0f7ff;
+      border: 1px solid #c8ddf3;
+      border-radius: 999px;
+      padding: 10px 14px;
+    }
+    .open-link:hover { background: #e2f0ff; }
+    .diagram-wrap {
+      background: #f7faff;
+      border: 1px solid #dce8f5;
+      border-radius: 22px;
+      padding: 12px;
+      overflow: auto;
+    }
+    img {
+      width: 100%;
+      min-width: 960px;
+      height: auto;
+      display: block;
+      border-radius: 16px;
+      background: #f7f9fc;
+    }
+    .flow-copy {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: minmax(180px, 240px) 1fr;
+      gap: 18px 28px;
+      padding: 20px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #f8fbff, #fffdf3);
+      border: 1px solid #e3edf7;
+    }
+    .flow-copy h3 { margin: 0; font-size: 18px; }
+    .flow-copy p { margin: 0; color: #334155; line-height: 1.75; font-weight: 650; }
+    .flow-copy ul { grid-column: 2; margin: -4px 0 0; padding-left: 20px; color: var(--muted); line-height: 1.75; }
+    .flow-copy li + li { margin-top: 4px; }
+    @media (max-width: 900px) {
+      header, main { padding-left: 18px; padding-right: 18px; }
+      .hero { padding: 24px; }
+      .card-head { flex-direction: column; }
+      .flow-copy { grid-template-columns: 1fr; }
+      .flow-copy ul { grid-column: auto; }
+      .group-title { grid-template-columns: 1fr; }
+      img { min-width: 860px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <p class="kicker">EchoHunt Social Listening</p>
+      <h1>可视化时序图</h1>
+      <p>面向产品、研发和运营评审：用图片表达各角色动作、后端计算、核心读写表和授权门禁。单张 SVG 可直接复制到技术文档、飞书、语雀或 PRD。</p>
+      <nav class="toc">
+        <a href="#diagram-1">运营新增被监控账号</a><a href="#diagram-2">后台任务调度总览</a><a href="#diagram-3">A 推文召回与落表</a><a href="#diagram-4">B 复用旧 AI 能力与落表</a><a href="#diagram-5">C 聚合到前端模块</a><a href="#diagram-6">运营分配查看权限</a><a href="#diagram-7">前台入口显示与直接访问</a><a href="#diagram-8">前台查看看板数据</a><a href="#diagram-9">手动刷新</a><a href="#diagram-10">帖子导出</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <section class="data-map">
+    <div class="data-map-head">
+      <p class="eyebrow">Data Map</p>
+      <h2>表与存储位置说明</h2>
+      <p>这里把“已经存在的只读表”和“本需求新增表”分开说明，明确 meta 数据库 dev schema 下的现有表、当前主业务库已有表，以及本需求未来新增表。</p>
+    </div>
+    <article class="data-group">
+      <div class="group-title">
+        <h3>现有只读数据源：meta 数据库 / dev schema</h3>
+        <p>这些表已经在线上只读从库存在，本需求只读取，不改这些表。</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>表名</th><th>状态</th><th>存储位置</th><th>用途</th></tr></thead>
+          <tbody><tr><td><code>dev.twitter_user</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>X 用户/官方账号资料表；用于确认被监控账号、作者画像、粉丝数、头像、是否中文账号、feature.rank.kolCnRank 等排名字段。</td></tr><tr><td><code>dev.tweet</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>X 推文主表；用于召回提及、引用、回复官方账号或关键词的帖子，读取 text/create_time/statistic/info/mention/ai 等字段；ai 里已有摘要/标签时优先复用。</td></tr><tr><td><code>dev.twitter_user_follow</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>通用关注关系表；用于判断谁新增关注了官方账号，或官方账号新增关注了谁。</td></tr><tr><td><code>dev.twitter_user_unfollow</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>通用取关关系表；用于判断取关动态，读取 follower_id/following_id/created_at/latest/persist。</td></tr><tr><td><code>dev.project_follow</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>项目维度关注关系表；是否作为 Social Listening 的关注口径还需最终确认。</td></tr><tr><td><code>dev.cache</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>排名快照缓存；作为 feature.rank 缺失时的 fallback，例如 backend:score_tag:rank_record:snap_20250606kol。</td></tr><tr><td><code>dev.tweet_metric_snapshot</code></td><td><span class="badge existing">现有表</span></td><td>meta 只读库 dev schema</td><td>推文指标历史快照；可用于更准确的 views/likes/reply/retweet/quote 历史趋势，V1 可作为增强。</td></tr></tbody>
+        </table>
+      </div>
+    </article><article class="data-group">
+      <div class="group-title">
+        <h3>当前系统已有用户与认证表：主业务库</h3>
+        <p>这些表已经在当前 XHunt 主业务库存在，用于识别 EchoHunt 登录用户和 Twitter 身份。</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>表名</th><th>状态</th><th>存储位置</th><th>用途</th></tr></thead>
+          <tbody><tr><td><code>AuthCenterXhuntUsers</code></td><td><span class="badge existing">现有表</span></td><td>当前 XHunt 主业务库</td><td>认证中心用户主表；Social Listening 前台授权主要使用 id，辅助使用 primaryTwitterId/xhuntUserId/status。</td></tr><tr><td><code>AuthCenterXhuntIdentities</code></td><td><span class="badge existing">现有表</span></td><td>当前 XHunt 主业务库</td><td>认证中心登录身份表；provider=twitter 时，providerSubject 是 Twitter user id，username 是 X handle。</td></tr></tbody>
+        </table>
+      </div>
+    </article><article class="data-group">
+      <div class="group-title">
+        <h3>本需求未来新增业务表：主业务库 / Echohunt 前缀</h3>
+        <p>这些表本次需求新增，统一放当前 XHunt 主业务库，不放 meta.dev。</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>表名</th><th>状态</th><th>存储位置</th><th>用途</th></tr></thead>
+          <tbody><tr><td><code>EchohuntSocialListeningBoards</code></td><td><span class="badge new">新增表</span></td><td>当前 XHunt 主业务库</td><td>运营维护的被监控账号/看板主表；保存官方账号快照、项目名、关键词、状态、处理进度。</td></tr><tr><td><code>EchohuntSocialListeningBoardAccesses</code></td><td><span class="badge new">新增表</span></td><td>当前 XHunt 主业务库</td><td>看板授权表；控制哪个 EchoHunt 账号能查看哪个被监控账号，是前台是否展示入口的核心依据。</td></tr><tr><td><code>EchohuntSocialListeningPosts</code></td><td><span class="badge new">新增表</span></td><td>当前 XHunt 主业务库</td><td>召回并去重后的帖子事实表；保存作者快照、统计指标、来源类型、情绪、主题、关键词。</td></tr><tr><td><code>EchohuntSocialListeningSnapshots</code></td><td><span class="badge new">新增表</span></td><td>当前 XHunt 主业务库</td><td>24H/7D/30D 聚合快照表；前台概览图表优先读这张表，不实时扫大表。</td></tr><tr><td><code>EchohuntSocialListeningAccountSignals</code></td><td><span class="badge new">新增表</span></td><td>当前 XHunt 主业务库</td><td>关键账号动态表；保存高排名账号提及、关注、取关等信号。</td></tr><tr><td><code>EchohuntSocialListeningAlerts</code></td><td><span class="badge new">新增表</span></td><td>当前 XHunt 主业务库</td><td>预警信号表；保存讨论量异常、负面占比异常、高排名提及、集中负面等结果。</td></tr><tr><td><code>EchohuntSocialListeningKeyEvents</code></td><td><span class="badge new">新增表</span></td><td>当前 XHunt 主业务库</td><td>用户自维护关键事件表；按 authCenterUserId 隔离。</td></tr><tr><td><code>EchohuntSocialListeningJobs</code></td><td><span class="badge new">新增表</span></td><td>当前 XHunt 主业务库</td><td>后台任务状态表；保存历史补数据、增量刷新、手动刷新等任务；先补最近7天，再用同一套逻辑继续补到30天。</td></tr><tr><td><code>EchohuntSocialListeningAccessAuditLogs</code></td><td><span class="badge new">新增表</span></td><td>当前 XHunt 主业务库</td><td>运营操作审计表；记录创建看板、分配权限、撤销权限、暂停恢复等动作。</td></tr></tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+    <section class="data-map computation-map">
+    <div class="data-map-head">
+      <p class="eyebrow">Computation Map</p>
+      <h2>AI 输入、落表字段与前端模块映射</h2>
+      <p>后台任务的核心不是“扫到推文就直接给前端”，而是先标准化成帖子结果表；能复用 dev.tweet.ai 的摘要/标签就先复用，项目态度再调用旧 AI 接口，最后聚合成前端直接读取的概览图表、账号动态和预警。</p>
+    </div>
+    <article class="data-group">
+    <div class="group-title">
+      <h3>送给 AI 的内容</h3>
+      <p>每条待分析帖子会携带项目上下文、帖子正文、作者画像和互动指标；具体 prompt/接口字段还要按最终 AI 服务确认。</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>前端/计算模块</th><th>来源表</th><th>核心字段</th><th>用途</th></tr></thead>
+        <tbody><tr><td>项目上下文</td><td><code>EchohuntSocialListeningBoards</code></td><td>projectName、officialHandle、metadata.keywords / aliases / tokenSymbols</td><td>让 AI 知道这条帖子是在评价哪个项目，避免只看单帖误判。</td></tr><tr><td>帖子正文</td><td><code>EchohuntSocialListeningPosts</code></td><td>tweetId、text、normalizedText、source、postCreatedAt、matchedSources</td><td>AI 判断情绪、主题、摘要的主体内容。</td></tr><tr><td>作者画像</td><td><code>EchohuntSocialListeningPosts 作者快照</code></td><td>authorHandle、authorName、authorFollowersCount、authorGlobalRank、authorCnRank、authorIsCn</td><td>辅助判断影响力、语言环境、KOL 权重；不作为唯一情绪依据。</td></tr><tr><td>互动指标</td><td><code>EchohuntSocialListeningPosts</code></td><td>viewsCount、likesCount、repostsCount、quotesCount、repliesCount</td><td>辅助聚合影响力和代表帖排序；AI 可用于判断传播强度。</td></tr><tr><td>AI 输出</td><td><code>写回 EchohuntSocialListeningPosts</code></td><td>projectAttitudeScore、sentiment、sentimentSummaryZh、topics、keywords、aiStatus、aiAnalyzedAt、aiError</td><td>供帖子列表、情绪图、主题、词云、负面预警继续聚合；已有 dev.tweet.ai 摘要/标签可先复用。</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+    <article class="data-group">
+    <div class="group-title">
+      <h3>计算结果如何服务前端</h3>
+      <p>这些字段决定 Social Listening 页面每个模块的数据来源，前端不直接扫描 meta.dev 大表。</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>前端/计算模块</th><th>来源表</th><th>核心字段</th><th>用途</th></tr></thead>
+        <tbody><tr><td>顶部看板资料</td><td><code>EchohuntSocialListeningBoards</code></td><td>projectName、officialHandle、projectAvatar、followersCount、globalRank、cnRank、status、已处理到的时间</td><td>页面头部、看板切换、监控状态、最后更新时间。</td></tr><tr><td>概览指标</td><td><code>EchohuntSocialListeningSnapshots.metrics</code></td><td>帖子数、参与账号数、总曝光、总互动、正面/中性/负面/未知数量、历史是否不完整</td><td>顶部指标卡：讨论量、参与账号、曝光、互动、情绪占比、历史是否完整。</td></tr><tr><td>趋势图</td><td><code>EchohuntSocialListeningSnapshots.volumeSeries / sentimentSeries</code></td><td>bucketStart、帖子数、views、positiveCount、neutralCount、negativeCount</td><td>24H/7D/30D 趋势折线/柱状图。</td></tr><tr><td>主题和词云</td><td><code>EchohuntSocialListeningSnapshots.topics / wordCloud</code></td><td>topic、count、views、sampleTweetIds、keyword、weight</td><td>主题排行、词云、热门讨论方向。</td></tr><tr><td>帖子列表</td><td><code>EchohuntSocialListeningPosts</code></td><td>tweetId、text、postCreatedAt、source、authorHandle、authorName、authorAvatar、viewsCount、likesCount、repostsCount、quotesCount、repliesCount</td><td>Posts Tab、导出、代表帖、原帖跳转。</td></tr><tr><td>帖子情绪与摘要</td><td><code>EchohuntSocialListeningPosts</code></td><td>sentiment、sentimentScore、sentimentSummaryZh、topics、keywords、aiStatus</td><td>帖子情绪标签、负面筛选、主题筛选、AI 摘要。</td></tr><tr><td>关键账号动态</td><td><code>EchohuntSocialListeningAccountSignals</code></td><td>signalType、twitterId、handle、followersCount、globalRank、cnRank、occurredAt、mentionCount、postIds、summaryZh</td><td>高排名账号提及、KOL 关注/取关、账号动态列表。</td></tr><tr><td>预警信号</td><td><code>EchohuntSocialListeningAlerts</code></td><td>alertType、severity、titleZh、messageZh、currentValue、baselineValue、sampleSize、evidenceTweetIds、status</td><td>预警卡片、异常详情、证据帖子。</td></tr><tr><td>关键事件</td><td><code>EchohuntSocialListeningKeyEvents</code></td><td>authCenterUserId、tweetId、eventType、title、eventAt、metadata</td><td>用户自己维护的关键事件；按用户隔离。</td></tr><tr><td>处理状态</td><td><code>EchohuntSocialListeningJobs + EchohuntSocialListeningBoards</code></td><td>任务类型、状态、进度、startedAt、finishedAt、errorMessage、coverageStartAt、lastSuccessAt</td><td>初始化中、回填中、刷新中、失败提示、最近更新时间。</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+  </section>
+    <div id="diagram-1"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>01 运营新增被监控账号</h2>
+      </div>
+      <a class="open-link" href="./01-admin-create-monitored-account.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./01-admin-create-monitored-account.svg" alt="01 运营新增被监控账号" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>运营在 admin-web 输入官方 X handle 后，后端先只读查询 meta.dev.twitter_user 确认账号资料，再在主业务库创建被监控看板和初始化任务。</p>
+      <ul><li>读取 dev.twitter_user.username/profile/feature/kol，解析头像、粉丝数、华语排名和全球排名。</li><li>写入 EchohuntSocialListeningBoards，状态从 initializing 开始。</li><li>创建最近7天历史补数据任务，由单实例后台进程异步加工最近7天数据。</li></ul>
+    </div>
+  </section></div>
+<div id="diagram-2"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>02 后台任务调度总览</h2>
+      </div>
+      <a class="open-link" href="./02-backend-job-computation.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./02-backend-job-computation.svg" alt="02 后台任务调度总览" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>这里先澄清：最近7天初始化和30天回填本质是一件事，都是“历史补数据”；只是先补最近7天让页面尽快可用，再继续从近到远补到30天。</p>
+      <ul><li>后台进程先检查哪些看板该更新、哪些任务待执行，再用 Redis 锁住看板，避免重复跑。</li><li>每个任务都走同一套流程：把相关帖子筛出来、去重，然后保存到帖子结果表。</li><li>AI 分析和聚合计算完成后，再保存概览和图表数据、AccountSignals、Alerts 给前端读取。</li></ul>
+    </div>
+  </section></div>
+<div id="diagram-3"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>02A 推文召回与落表</h2>
+      </div>
+      <a class="open-link" href="./02a-post-recall-and-upsert.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./02a-post-recall-and-upsert.svg" alt="02A 推文召回与落表" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>后台任务先读取被监控账号配置，再按时间片扫描 meta.dev.tweet，关联 meta.dev.twitter_user 获取作者画像，最终按“看板+帖子ID”去重写入帖子结果表。</p>
+      <ul><li>判断帖子是否相关，主要看是否提及官方账号、命中关键词、引用官方帖、回复官方帖。</li><li>作者头像、粉丝数、是否中文账号、排名来自 dev.twitter_user。</li><li>保存字段包括帖子ID、正文、发布时间、来源类型、作者资料、互动指标和必要原始片段。</li></ul>
+    </div>
+  </section></div>
+<div id="diagram-4"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>02B 复用旧 AI 能力与落表</h2>
+      </div>
+      <a class="open-link" href="./02b-ai-analysis-storage.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./02b-ai-analysis-storage.svg" alt="02B 复用旧 AI 能力与落表" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>旧系统已经有摘要、标签、项目态度等 AI 能力；本需求优先复用已有 dev.tweet.ai 字段和 /ai/project_attitude，避免重复做一套。</p>
+      <ul><li>已有可复用：dev.tweet.ai.summary_cn、domain_tag、crypto_sub_tags、hot_tags；项目态度用项目名+帖子正文调用 /ai/project_attitude。</li><li>项目态度接口返回 score + summary；score 可映射为正/中/负，summary 可作为项目相关摘要。</li><li>写回帖子结果表：项目态度分数、情绪、项目相关摘要、复用到的标签/主题、分析状态、分析时间、失败原因。</li></ul>
+    </div>
+  </section></div>
+<div id="diagram-5"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>02C 聚合到前端模块</h2>
+      </div>
+      <a class="open-link" href="./02c-aggregate-to-frontend.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./02c-aggregate-to-frontend.svg" alt="02C 聚合到前端模块" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>单条帖子分析完成后，后台再按 24H/7D/30D 汇总成概览、趋势、主题、词云、关键账号动态和预警，前端直接读汇总结果。</p>
+      <ul><li>概览快照表服务顶部指标、趋势图、情绪占比、主题和词云。</li><li>账号动态表服务高排名账号提及、关注、取关。</li><li>预警表服务讨论量异常、负面占比异常、高排名提及、集中负面。</li></ul>
+    </div>
+  </section></div>
+<div id="diagram-6"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>03 运营分配查看权限</h2>
+      </div>
+      <a class="open-link" href="./03-admin-assign-access.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./03-admin-assign-access.svg" alt="03 运营分配查看权限" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>运营把某个被监控账号分配给 EchoHunt X 登录账号后，用户才有资格看到 Social Listening 页面。</p>
+      <ul><li>优先查询 AuthCenterXhuntIdentities 中 provider=twitter 的登录身份。</li><li>已登录用户写 authCenterUserId/twitterId；未登录用户先按 twitterHandle 授权。</li><li>授权记录写入 EchohuntSocialListeningBoardAccesses，操作写入审计日志。</li></ul>
+    </div>
+  </section></div>
+<div id="diagram-7"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>04 前台入口显示与直接访问</h2>
+      </div>
+      <a class="open-link" href="./04-echohunt-entry-guard.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./04-echohunt-entry-guard.svg" alt="04 前台入口显示与直接访问" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>EchoHunt 前端通过 access-summary 判断是否展示入口；无授权用户直接访问 /social-listening 会跳回首页。</p>
+      <ul><li>前端携带 Bearer token 请求 /me/access-summary。</li><li>后端用 authenticateAuthCenterToken 得到 user 和 identities，再查 active BoardAccesses。</li><li>boardCount 大于 0 才显示入口；无 token 或无授权时不显示入口且直接访问会跳首页。</li></ul>
+    </div>
+  </section></div>
+<div id="diagram-8"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>05 前台查看看板数据</h2>
+      </div>
+      <a class="open-link" href="./05-echohunt-view-board.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./05-echohunt-view-board.svg" alt="05 前台查看看板数据" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>用户查看 overview、posts、accounts、alerts 时，每个接口都重复校验授权，然后读取主业务库中的加工结果。</p>
+      <ul><li>概览页读取概览快照表和看板状态。</li><li>帖子、账号动态、预警分别读取帖子结果表、账号动态表、预警表。</li><li>如果授权被撤销，接口返回 403，前端清理状态并跳回首页。</li></ul>
+    </div>
+  </section></div>
+<div id="diagram-9"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>06 手动刷新</h2>
+      </div>
+      <a class="open-link" href="./06-manual-refresh.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./06-manual-refresh.svg" alt="06 手动刷新" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>手动刷新不会直接同步扫库，而是创建或复用后台任务，并通过 Redis 控制频率和并发。</p>
+      <ul><li>前台建议 用户+看板 5 分钟限流，看板全局 2 分钟冷却，运营侧 1 分钟冷却。</li><li>如果已有正在处理的任务，直接返回当前任务，不重复创建。</li><li>没有正在处理的任务时，创建手动刷新任务，由后台进程异步执行增量计算。</li></ul>
+    </div>
+  </section></div>
+<div id="diagram-10"><section class="diagram-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Sequence Diagram</p>
+        <h2>07 帖子导出</h2>
+      </div>
+      <a class="open-link" href="./07-export.svg" target="_blank">单独打开 SVG</a>
+    </div>
+    <div class="diagram-wrap"><img src="./07-export.svg" alt="07 帖子导出" /></div>
+    <div class="flow-copy">
+      <h3>流程说明</h3>
+      <p>导出复用帖子列表的同一套筛选、排序和授权校验，并限制导出规模，避免被当成大表下载入口。</p>
+      <ul><li>先校验 BoardAccess active，再检查导出冷却。</li><li>先 COUNT，超过 10,000 行或约 20MB 时返回 EXPORT_TOO_LARGE。</li><li>只导出白名单字段，写导出审计，禁止导出 rawTweet/rawAuthor 内部字段。</li></ul>
+    </div>
+  </section></div>
+  </main>
+</body>
+</html>
