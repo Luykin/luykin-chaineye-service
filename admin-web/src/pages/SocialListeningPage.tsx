@@ -1,16 +1,20 @@
 import { useMemo, useState } from "react";
 import {
+  Alert,
   Avatar,
   Button,
   Card,
   Col,
+  ColorPicker,
   Descriptions,
+  Divider,
   Drawer,
   Empty,
   Form,
   Input,
   Modal,
   Popconfirm,
+  Progress,
   Row,
   Select,
   Space,
@@ -18,6 +22,8 @@ import {
   Table,
   Tabs,
   Tag,
+  Timeline,
+  Tooltip,
   Typography,
   message,
   type TableProps,
@@ -54,6 +60,7 @@ import {
 } from "@/services/social-listening";
 
 const { Text, Paragraph } = Typography;
+const { TextArea } = Input;
 
 const STATUS_OPTIONS = [
   { value: "", label: "全部状态" },
@@ -68,6 +75,69 @@ const RANGE_OPTIONS = [
   { value: "24H", label: "24H" },
   { value: "7D", label: "7D" },
   { value: "30D", label: "30D" },
+];
+
+const FOLLOW_SOURCE_OPTIONS = [
+  { value: "twitter_user_follow", label: "dev.twitter_user_follow" },
+  { value: "twitter_user_unfollow", label: "dev.twitter_user_unfollow" },
+  { value: "project_follow", label: "dev.project_follow" },
+];
+
+const PROCESS_STEPS = [
+  {
+    title: "1. 生成任务",
+    table: "EchohuntSocialListeningJobs",
+    desc: "恢复/刷新/定时器会创建 pending 任务，记录 jobType、时间范围、触发人和 metadata。",
+  },
+  {
+    title: "2. 拆窗口扫描",
+    table: "dev.tweet → EchohuntSocialListeningPosts",
+    desc: "按 60 分钟窗口读取提及、引用、回复及关键词命中的推文，写入帖子事实表。",
+  },
+  {
+    title: "3. 内容 AI",
+    table: "EchohuntSocialListeningPosts",
+    desc: "生成 topics、keywords、summaryZh、summaryEn，并更新 tagStatus/summaryStatus。",
+  },
+  {
+    title: "4. 项目态度 AI",
+    table: "EchohuntSocialListeningPosts",
+    desc: "判断推文对项目的 positive/neutral/negative，写入 score、sentiment、sentimentSummaryZh。",
+  },
+  {
+    title: "5. 关系与预警",
+    table: "EchohuntSocialListeningAccountSignals / Alerts",
+    desc: "生成高影响账号动态、关注/取关信号、讨论量与负面占比预警。",
+  },
+  {
+    title: "6. 聚合快照",
+    table: "EchohuntSocialListeningSnapshots",
+    desc: "刷新 24H/7D/30D 快照，前台看板读取趋势、词云、主题和预警汇总。",
+  },
+];
+
+const FIELD_GUIDE = [
+  { label: "官方 X Handle", table: "Boards.officialHandle", desc: "被监控项目的官方 X 用户名，保存时会去掉 @ 并转小写；新增后不可直接改，避免历史数据串号。" },
+  { label: "项目名称", table: "Boards.projectName", desc: "看板标题，也是项目态度 AI 识别“这个项目是谁”的默认名称。" },
+  { label: "项目简介", table: "Boards.projectDescription", desc: "运营侧可补充项目背景；解析资料时会从官方 profile 自动带入。" },
+  { label: "头像 URL", table: "Boards.projectAvatar", desc: "前台与后台列表头像展示；解析资料时会从官方 profile 自动带入。" },
+  { label: "品牌色", table: "Boards.brandColor", desc: "前台看板主题色。这里使用前端选色器，保存十六进制色值，例如 #1677ff。" },
+  { label: "关键词", table: "Boards.metadata.keywords", desc: "推文召回词，每行一个；会和官方 handle、项目名称合并后匹配 dev.tweet.text。" },
+  { label: "别名", table: "Boards.metadata.aliases", desc: "项目常见别称、代币名、缩写；也会参与召回，适合写 ticker、旧品牌名。" },
+  { label: "Token", table: "Boards.metadata.token", desc: "项目代币符号或合约简称，会追加到召回关键词里；不是 API 密钥。" },
+  { label: "project_follow key", table: "Boards.metadata.projectFollowKey", desc: "预留给 dev.project_follow 的项目键，用于区分同一官方号下多个项目/活动的关注关系。" },
+  { label: "关注关系源", table: "Boards.metadata.followSources", desc: "说明关注/取关信号优先观察哪些来源表；用于运营理解与后端扩展。" },
+  { label: "AI 项目名", table: "Boards.metadata.aiProjectName", desc: "覆盖项目态度 AI 中的 project 名称，适合项目名与品牌名/协议名不一致时使用。" },
+  { label: "AI 提示语", table: "Boards.metadata.aiPrompts", desc: "把项目态度、标签、摘要的提示语保存为可配置文本，避免只依赖代码里的固定默认逻辑。" },
+];
+
+const POST_FIELD_GUIDE = [
+  { field: "topics / keywords", desc: "内容 AI 生成主题标签与热词，保存到 EchohuntSocialListeningPosts.topics / keywords。" },
+  { field: "summaryZh / summaryEn", desc: "推文中英文摘要，保存到 EchohuntSocialListeningPosts.summaryZh / summaryEn。" },
+  { field: "projectAttitudeScore", desc: "项目态度分，保存到 EchohuntSocialListeningPosts.projectAttitudeScore / sentimentScore。" },
+  { field: "sentiment", desc: "positive / neutral / negative / unknown，保存到 EchohuntSocialListeningPosts.sentiment。" },
+  { field: "sentimentSummaryZh", desc: "态度判断原因，保存到 EchohuntSocialListeningPosts.sentimentSummaryZh。" },
+  { field: "ai.*Status", desc: "标签、摘要、态度和总状态，保存到 tagStatus / summaryStatus / attitudeStatus / aiStatus。" },
 ];
 
 function formatDate(value?: string | null) {
@@ -95,6 +165,8 @@ function statusTag(status?: string) {
     skipped: "default",
     active: "success",
     revoked: "default",
+    partial: "warning",
+    generated: "success",
   };
   return <Tag color={colorMap[status || ""] || "default"}>{status || "-"}</Tag>;
 }
@@ -111,28 +183,63 @@ function splitTextarea(value?: string) {
     .filter(Boolean);
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function getNumberFromRecord(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  const num = Number(value || 0);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function jsonPreview(value: unknown) {
+  if (!value) return "-";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 function boardFormInitialValues(board?: SocialListeningBoard | null) {
   const metadata = board?.metadata || {};
+  const aiPrompts = asRecord(metadata.aiPrompts);
   return {
     officialHandle: board?.officialHandle || "",
     projectName: board?.projectName || "",
     projectDescription: board?.projectDescription || "",
     projectAvatar: board?.projectAvatar || "",
-    brandColor: board?.brandColor || "",
+    brandColor: board?.brandColor || undefined,
     keywords: Array.isArray(metadata.keywords) ? metadata.keywords.join("\n") : "",
     aliases: Array.isArray(metadata.aliases) ? metadata.aliases.join("\n") : "",
     token: typeof metadata.token === "string" ? metadata.token : "",
-    followSources: Array.isArray(metadata.followSources) ? metadata.followSources : [],
+    followSources: Array.isArray(metadata.followSources) ? metadata.followSources : ["twitter_user_follow", "twitter_user_unfollow", "project_follow"],
     projectFollowKey: typeof metadata.projectFollowKey === "string" ? metadata.projectFollowKey : "",
+    aiProjectName: typeof metadata.aiProjectName === "string" ? metadata.aiProjectName : "",
+    projectAttitudePrompt: getString(aiPrompts.projectAttitude),
+    tweetTagPrompt: getString(aiPrompts.tweetTag),
+    tweetSummaryPrompt: getString(aiPrompts.tweetSummary),
     allowUnresolved: false,
   };
 }
 
 function buildBoardPayload(values: Record<string, unknown>, resolved?: ResolvedTwitterAccount | null) {
+  const aiPrompts = {
+    projectAttitude: values.projectAttitudePrompt || null,
+    tweetTag: values.tweetTagPrompt || null,
+    tweetSummary: values.tweetSummaryPrompt || null,
+  };
   const metadata = {
     token: values.token || null,
     followSources: values.followSources || [],
     projectFollowKey: values.projectFollowKey || null,
+    aiProjectName: values.aiProjectName || null,
+    aiPrompts,
   };
   return {
     officialHandle: values.officialHandle,
@@ -145,6 +252,151 @@ function buildBoardPayload(values: Record<string, unknown>, resolved?: ResolvedT
     allowUnresolved: Boolean(values.allowUnresolved),
     metadata,
   };
+}
+
+function JobProgressView({ job }: { job: SocialListeningJob }) {
+  const progress = asRecord(job.progress);
+  const counters = asRecord(progress.counters);
+  const windowIndex = Number(progress.windowIndex || 0);
+  const windowTotal = Number(progress.windowTotal || 0);
+  const percent = job.status === "succeeded"
+    ? 100
+    : windowTotal > 0
+      ? Math.min(99, Math.round((windowIndex / windowTotal) * 100))
+      : job.status === "running" ? 12 : 0;
+
+  return (
+    <Space direction="vertical" size={12} className="social-listening-full">
+      <div className="social-listening-job-progress">
+        <Progress percent={percent} status={job.status === "failed" ? "exception" : job.status === "succeeded" ? "success" : "active"} />
+        <Space wrap>
+          <Tag>窗口 {windowIndex || 0}/{windowTotal || 0}</Tag>
+          <Tag color="blue">扫描 {getNumberFromRecord(counters, "scanned")}</Tag>
+          <Tag color="green">入库 {getNumberFromRecord(counters, "upserted")}</Tag>
+          <Tag color="purple">内容 AI {getNumberFromRecord(counters, "contentAiAnalyzed")}</Tag>
+          <Tag color="cyan">态度 AI {getNumberFromRecord(counters, "aiAnalyzed")}</Tag>
+          <Tag color="gold">关系信号 {getNumberFromRecord(counters, "followSignals") + getNumberFromRecord(counters, "influentialSignals")}</Tag>
+          <Tag color="orange">预警 {getNumberFromRecord(counters, "aggregateAlerts")}</Tag>
+        </Space>
+      </div>
+      <Descriptions size="small" bordered column={2}>
+        <Descriptions.Item label="任务 ID" span={2}><Text code>{job.id}</Text></Descriptions.Item>
+        <Descriptions.Item label="处理范围">{formatDate(job.rangeStartAt)} → {formatDate(job.rangeEndAt)}</Descriptions.Item>
+        <Descriptions.Item label="触发方">{job.triggeredBy || "system"}</Descriptions.Item>
+        <Descriptions.Item label="开始时间">{formatDate(job.startedAt)}</Descriptions.Item>
+        <Descriptions.Item label="结束时间">{formatDate(job.finishedAt)}</Descriptions.Item>
+        <Descriptions.Item label="当前窗口" span={2}><Text code>{jsonPreview(progress.currentWindow)}</Text></Descriptions.Item>
+        <Descriptions.Item label="progress JSON" span={2}><pre className="social-listening-json-block">{jsonPreview(job.progress)}</pre></Descriptions.Item>
+        <Descriptions.Item label="metadata JSON" span={2}><pre className="social-listening-json-block">{jsonPreview(job.metadata)}</pre></Descriptions.Item>
+      </Descriptions>
+    </Space>
+  );
+}
+
+function WorkflowGuide() {
+  return (
+    <div className="social-listening-process-map">
+      {PROCESS_STEPS.map((step) => (
+        <Card key={step.title} size="small" className="social-listening-process-card">
+          <Text strong>{step.title}</Text>
+          <Text code>{step.table}</Text>
+          <Paragraph type="secondary">{step.desc}</Paragraph>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function ConfigGuide({ board }: { board?: SocialListeningBoard | null }) {
+  const metadata = board?.metadata || {};
+  return (
+    <Space direction="vertical" size={12} className="social-listening-full">
+      <Alert
+        type="info"
+        showIcon
+        message="配置字段怎么影响任务"
+        description="被监控账号的基础字段保存在 EchohuntSocialListeningBoards；运营配置保存在 metadata。任务执行时会用 keywords/aliases/token 召回推文，用 AI 项目名和提示语指导后续 AI 处理。"
+      />
+      <Table
+        rowKey="label"
+        size="small"
+        pagination={false}
+        dataSource={FIELD_GUIDE}
+        columns={[
+          { title: "字段", dataIndex: "label", width: 160, render: (value) => <Text strong>{value}</Text> },
+          { title: "保存位置", dataIndex: "table", width: 260, render: (value) => <Text code>{value}</Text> },
+          { title: "用途", dataIndex: "desc" },
+        ]}
+      />
+      {board ? (
+        <Descriptions title="当前看板配置快照" size="small" bordered column={2}>
+          <Descriptions.Item label="Token">{getString(metadata.token) || "-"}</Descriptions.Item>
+          <Descriptions.Item label="project_follow key">{getString(metadata.projectFollowKey) || "-"}</Descriptions.Item>
+          <Descriptions.Item label="关注关系源" span={2}>{Array.isArray(metadata.followSources) ? metadata.followSources.join("、") : "-"}</Descriptions.Item>
+          <Descriptions.Item label="AI 项目名" span={2}>{getString(metadata.aiProjectName) || board.projectName}</Descriptions.Item>
+          <Descriptions.Item label="AI Prompts" span={2}><pre className="social-listening-json-block">{jsonPreview(metadata.aiPrompts)}</pre></Descriptions.Item>
+        </Descriptions>
+      ) : null}
+    </Space>
+  );
+}
+
+function PostAiInspector({ post }: { post: SocialListeningPost }) {
+  const row = post as SocialListeningPost & Record<string, unknown>;
+  const ai = asRecord(row.ai);
+  return (
+    <Row gutter={[16, 16]}>
+      <Col xs={24} lg={14}>
+        <Descriptions size="small" bordered column={2}>
+          <Descriptions.Item label="保存表" span={2}><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
+          <Descriptions.Item label="tweetId"><Text code>{post.tweetId}</Text></Descriptions.Item>
+          <Descriptions.Item label="source">{post.source}</Descriptions.Item>
+          <Descriptions.Item label="topics" span={2}>{Array.isArray(row.topics) && row.topics.length ? row.topics.map((item) => <Tag key={String(item)}>{String(item)}</Tag>) : "-"}</Descriptions.Item>
+          <Descriptions.Item label="keywords" span={2}>{Array.isArray(row.keywords) && row.keywords.length ? row.keywords.map((item) => <Tag key={String(item)} color="blue">{String(item)}</Tag>) : "-"}</Descriptions.Item>
+          <Descriptions.Item label="summaryZh" span={2}>{getString(row.summaryZh) || "-"}</Descriptions.Item>
+          <Descriptions.Item label="summaryEn" span={2}>{getString(row.summaryEn) || "-"}</Descriptions.Item>
+          <Descriptions.Item label="projectAttitudeScore">{row.projectAttitudeScore === null || row.projectAttitudeScore === undefined ? "-" : String(row.projectAttitudeScore)}</Descriptions.Item>
+          <Descriptions.Item label="sentiment">{statusTag(post.sentiment)}</Descriptions.Item>
+          <Descriptions.Item label="sentimentSummaryZh" span={2}>{getString(row.sentimentSummaryZh) || "-"}</Descriptions.Item>
+          <Descriptions.Item label="AI 状态" span={2}>
+            <Space wrap>
+              <Tooltip title="EchohuntSocialListeningPosts.tagStatus"><span>{statusTag(getString(ai.tagStatus))}</span></Tooltip>
+              <Tooltip title="EchohuntSocialListeningPosts.summaryStatus"><span>{statusTag(getString(ai.summaryStatus))}</span></Tooltip>
+              <Tooltip title="EchohuntSocialListeningPosts.attitudeStatus"><span>{statusTag(getString(ai.attitudeStatus))}</span></Tooltip>
+              <Tooltip title="EchohuntSocialListeningPosts.aiStatus"><span>{statusTag(getString(ai.aiStatus))}</span></Tooltip>
+              <Tag>{getString(ai.aiSource) || "aiSource -"}</Tag>
+              <Tag>{formatDate(getString(ai.aiAnalyzedAt))}</Tag>
+            </Space>
+          </Descriptions.Item>
+        </Descriptions>
+      </Col>
+      <Col xs={24} lg={10}>
+        <Card size="small" title="这些字段从哪里来">
+          <Timeline
+            items={POST_FIELD_GUIDE.map((item) => ({
+              children: <><Text strong>{item.field}</Text><Paragraph type="secondary">{item.desc}</Paragraph></>,
+            }))}
+          />
+        </Card>
+      </Col>
+    </Row>
+  );
+}
+
+function BoardFormGuide() {
+  return (
+    <Card size="small" className="social-listening-form-guide" title="字段教材">
+      <Space direction="vertical" size={10}>
+        {FIELD_GUIDE.map((item) => (
+          <div key={item.label} className="social-listening-guide-item">
+            <Text strong>{item.label}</Text>
+            <Text type="secondary">{item.desc}</Text>
+            <Text code>{item.table}</Text>
+          </div>
+        ))}
+      </Space>
+    </Card>
+  );
 }
 
 interface BoardDrawerProps {
@@ -170,6 +422,7 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
     queryKey: ["social-listening", "jobs", boardId],
     queryFn: () => fetchSocialListeningJobs({ boardId, pageSize: 20 }),
     enabled: open && Boolean(boardId),
+    refetchInterval: open ? 15_000 : false,
   });
   const alertsQuery = useQuery({
     queryKey: ["social-listening", "alerts", boardId],
@@ -213,10 +466,19 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
   ];
 
   const jobColumns: TableProps<SocialListeningJob>["columns"] = [
-    { title: "类型", dataIndex: "jobType", width: 140 },
+    { title: "类型", dataIndex: "jobType", width: 150 },
     { title: "状态", dataIndex: "status", width: 100, render: statusTag },
+    { title: "处理进度", width: 180, render: (_, row) => {
+      const progress = asRecord(row.progress);
+      const total = Number(progress.windowTotal || 0);
+      const current = Number(progress.windowIndex || 0);
+      return total ? `${current}/${total} 个窗口` : getString(progress.stage) || "-";
+    } },
+    { title: "写入结果", width: 280, render: (_, row) => {
+      const counters = asRecord(asRecord(row.progress).counters);
+      return <Space size={4} wrap><Tag>扫 {getNumberFromRecord(counters, "scanned")}</Tag><Tag color="green">入库 {getNumberFromRecord(counters, "upserted")}</Tag><Tag color="purple">AI {getNumberFromRecord(counters, "contentAiAnalyzed") + getNumberFromRecord(counters, "aiAnalyzed")}</Tag><Tag color="orange">预警 {getNumberFromRecord(counters, "aggregateAlerts")}</Tag></Space>;
+    } },
     { title: "范围", width: 260, render: (_, row) => <Text type="secondary">{formatDate(row.rangeStartAt)} → {formatDate(row.rangeEndAt)}</Text> },
-    { title: "进度", dataIndex: "progress", ellipsis: true, render: (value) => value ? JSON.stringify(value) : "-" },
     { title: "错误", dataIndex: "errorMessage", ellipsis: true, render: (value?: string | null) => value || "-" },
     { title: "创建时间", dataIndex: "createdAt", width: 170, render: formatDate },
     { title: "操作", width: 80, render: (_, row) => row.status === "failed" ? <Button size="small" onClick={() => retryMutation.mutate(row.id)} loading={retryMutation.isPending}>重试</Button> : null },
@@ -243,12 +505,17 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
     { title: "内容", dataIndex: "text", ellipsis: true, render: (value: string, row) => <a href={row.tweetUrl} target="_blank" rel="noreferrer">{value || row.tweetId}</a> },
     { title: "来源", dataIndex: "source", width: 90, render: (value: string) => <Tag>{value}</Tag> },
     { title: "情绪", dataIndex: "sentiment", width: 90, render: (value: string) => <Tag color={value === "negative" ? "red" : value === "positive" ? "green" : "default"}>{value}</Tag> },
+    { title: "AI 字段", width: 240, render: (_, row) => {
+      const cast = row as SocialListeningPost & Record<string, unknown>;
+      const ai = asRecord(cast.ai);
+      return <Space size={4} wrap>{statusTag(getString(ai.tagStatus))}{statusTag(getString(ai.summaryStatus))}{statusTag(getString(ai.attitudeStatus))}</Space>;
+    } },
     { title: "Views", width: 100, render: (_, row) => formatNumber(row.metrics.views) },
     { title: "发布时间", dataIndex: "postCreatedAt", width: 170, render: formatDate },
   ];
 
   return (
-    <Drawer open={open} onClose={onClose} width="min(1180px, 96vw)" title={board ? `${board.projectName} / @${board.officialHandle}` : "Social Listening 看板"} destroyOnClose>
+    <Drawer open={open} onClose={onClose} width="min(1280px, 96vw)" title={board ? `${board.projectName} / @${board.officialHandle}` : "Social Listening 看板"} destroyOnClose>
       {contextHolder}
       {board ? (
         <Space direction="vertical" size={16} className="social-listening-drawer">
@@ -263,15 +530,27 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
             <Descriptions.Item label="最近成功">{formatDate(board.lastSuccessAt)}</Descriptions.Item>
             <Descriptions.Item label="覆盖开始">{formatDate(board.coverageStartAt)}</Descriptions.Item>
             <Descriptions.Item label="处理游标">{formatDate(board.processedThrough)}</Descriptions.Item>
+            <Descriptions.Item label="主表"><Text code>EchohuntSocialListeningBoards</Text></Descriptions.Item>
+            <Descriptions.Item label="帖子表"><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
             <Descriptions.Item label="关键词" span={2}>{Array.isArray(board.metadata?.keywords) ? board.metadata.keywords.join("、") : "-"}</Descriptions.Item>
             {board.lastFailureReason ? <Descriptions.Item label="失败原因" span={2}><Text type="danger">{board.lastFailureReason}</Text></Descriptions.Item> : null}
           </Descriptions>
           <Tabs
             items={[
               {
-                key: "access",
-                label: "授权管理",
-                children: <Space direction="vertical" size={12} className="social-listening-full"><Form form={accessForm} layout="inline" onFinish={(values) => grantMutation.mutate(values)}><Form.Item name="twitterHandle" rules={[{ required: true, message: "请输入 X handle" }]}><Input placeholder="EchoHunt 用户 X handle" prefix="@" /></Form.Item><Form.Item name="twitterId"><Input placeholder="Twitter ID（可选）" /></Form.Item><Button type="primary" htmlType="submit" loading={grantMutation.isPending}>授权</Button></Form><Table rowKey="id" size="small" columns={accessColumns} dataSource={accessesQuery.data?.data.items || []} loading={accessesQuery.isFetching} pagination={false} scroll={{ x: 980 }} /></Space>,
+                key: "workflow",
+                label: "执行过程",
+                children: <Space direction="vertical" size={12} className="social-listening-full"><WorkflowGuide /><Table rowKey="id" size="small" columns={jobColumns} dataSource={jobsQuery.data?.data.items || []} loading={jobsQuery.isFetching} pagination={false} scroll={{ x: 1280 }} expandable={{ expandedRowRender: (row) => <JobProgressView job={row} /> }} /></Space>,
+              },
+              {
+                key: "posts",
+                label: "推文字段追踪",
+                children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="展开每条推文，可以看到 AI 生成了哪些字段，以及这些字段保存在哪个表。" /><Space wrap><Select value={range} onChange={setRange} options={RANGE_OPTIONS} style={{ width: 100 }} /><Input.Search placeholder="搜索内容/作者" allowClear onSearch={(q) => setPostQuery((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={postQuery.sentiment} onChange={(sentiment) => setPostQuery((prev) => ({ ...prev, sentiment }))} style={{ width: 130 }} options={[{ value: "", label: "全部情绪" }, { value: "negative", label: "负面" }, { value: "neutral", label: "中性" }, { value: "positive", label: "正面" }, { value: "unknown", label: "未知" }]} /><Button icon={<DownloadOutlined />} onClick={() => window.open(buildSocialListeningExportUrl(board.id, { range, ...postQuery }), "_blank")}>导出</Button></Space><Table rowKey="id" size="small" columns={postColumns} dataSource={postsQuery.data?.data.items || []} loading={postsQuery.isFetching} pagination={false} scroll={{ x: 1180 }} expandable={{ expandedRowRender: (row) => <PostAiInspector post={row} /> }} /></Space>,
+              },
+              {
+                key: "config",
+                label: "配置说明",
+                children: <ConfigGuide board={board} />,
               },
               {
                 key: "signals",
@@ -284,14 +563,9 @@ function BoardDrawer({ board, open, onClose, onChanged }: BoardDrawerProps) {
                 children: <Table rowKey="id" size="small" columns={alertColumns} dataSource={alertsQuery.data?.data.items || []} loading={alertsQuery.isFetching} pagination={false} scroll={{ x: 980 }} />,
               },
               {
-                key: "jobs",
-                label: "任务状态",
-                children: <Table rowKey="id" size="small" columns={jobColumns} dataSource={jobsQuery.data?.data.items || []} loading={jobsQuery.isFetching} pagination={false} scroll={{ x: 1100 }} />,
-              },
-              {
-                key: "posts",
-                label: "帖子排查",
-                children: <Space direction="vertical" size={12} className="social-listening-full"><Space wrap><Select value={range} onChange={setRange} options={RANGE_OPTIONS} style={{ width: 100 }} /><Input.Search placeholder="搜索内容/作者" allowClear onSearch={(q) => setPostQuery((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={postQuery.sentiment} onChange={(sentiment) => setPostQuery((prev) => ({ ...prev, sentiment }))} style={{ width: 130 }} options={[{ value: "", label: "全部情绪" }, { value: "negative", label: "负面" }, { value: "neutral", label: "中性" }, { value: "positive", label: "正面" }, { value: "unknown", label: "未知" }]} /><Button icon={<DownloadOutlined />} onClick={() => window.open(buildSocialListeningExportUrl(board.id, { range, ...postQuery }), "_blank")}>导出</Button></Space><Table rowKey="id" size="small" columns={postColumns} dataSource={postsQuery.data?.data.items || []} loading={postsQuery.isFetching} pagination={false} scroll={{ x: 980 }} /></Space>,
+                key: "access",
+                label: "授权管理",
+                children: <Space direction="vertical" size={12} className="social-listening-full"><Form form={accessForm} layout="inline" onFinish={(values) => grantMutation.mutate(values)}><Form.Item name="twitterHandle" rules={[{ required: true, message: "请输入 X handle" }]}><Input placeholder="EchoHunt 用户 X handle" prefix="@" /></Form.Item><Form.Item name="twitterId"><Input placeholder="Twitter ID（可选）" /></Form.Item><Button type="primary" htmlType="submit" loading={grantMutation.isPending}>授权</Button></Form><Table rowKey="id" size="small" columns={accessColumns} dataSource={accessesQuery.data?.data.items || []} loading={accessesQuery.isFetching} pagination={false} scroll={{ x: 980 }} /></Space>,
               },
             ]}
           />
@@ -317,6 +591,7 @@ export function SocialListeningPage() {
   const jobsQuery = useQuery({
     queryKey: ["social-listening", "jobs", "recent"],
     queryFn: () => fetchSocialListeningJobs({ pageSize: 8 }),
+    refetchInterval: 15_000,
   });
   const alertsQuery = useQuery({
     queryKey: ["social-listening", "alerts", "active"],
@@ -326,6 +601,7 @@ export function SocialListeningPage() {
   const boards = boardsQuery.data?.data.items || [];
   const activeCount = boards.filter((item) => item.status === "monitoring").length;
   const failedCount = boards.filter((item) => item.status === "failed").length;
+  const runningJobs = (jobsQuery.data?.data.items || []).filter((item) => ["pending", "running"].includes(item.status)).length;
 
   const resolveMutation = useMutation({
     mutationFn: (handle: string) => resolveSocialListeningAccount(handle),
@@ -389,12 +665,12 @@ export function SocialListeningPage() {
   }
 
   const columns = useMemo<TableProps<SocialListeningBoard>["columns"]>(() => [
-    { title: "被监控账号", width: 260, render: (_, row) => <Space><Avatar src={row.projectAvatar || undefined}>{row.projectName.slice(0, 1)}</Avatar><Space direction="vertical" size={0}><Text strong>{row.projectName}</Text><Text type="secondary">@{row.officialHandle}{row.verified ? <Tag color="blue" style={{ marginLeft: 6 }}>verified</Tag> : null}</Text></Space></Space> },
+    { title: "被监控账号", width: 260, render: (_, row) => <Space><Avatar src={row.projectAvatar || undefined} style={{ backgroundColor: row.brandColor || undefined }}>{row.projectName.slice(0, 1)}</Avatar><Space direction="vertical" size={0}><Text strong>{row.projectName}</Text><Text type="secondary">@{row.officialHandle}{row.verified ? <Tag color="blue" style={{ marginLeft: 6 }}>verified</Tag> : null}</Text></Space></Space> },
     { title: "状态", dataIndex: "status", width: 105, render: statusTag },
     { title: "粉丝/排名", width: 160, render: (_, row) => <Space direction="vertical" size={0}><Text>{formatNumber(row.followersCount)}</Text><Text type="secondary">G {row.globalRank || "-"} · CN {row.cnRank || "-"}</Text></Space> },
     { title: "数据", width: 140, render: (_, row) => <Space direction="vertical" size={0}><Text>{row.postCount || 0} posts</Text><Text type="secondary">{row.accessCount || 0} accesses</Text></Space> },
     { title: "处理进度", width: 250, render: (_, row) => <Space direction="vertical" size={0}><Text>{formatDate(row.processedThrough)}</Text><Text type={row.lastFailureReason ? "danger" : "secondary"}>{row.lastFailureReason || `最近成功 ${formatDate(row.lastSuccessAt)}`}</Text></Space> },
-    { title: "最新任务", width: 170, render: (_, row) => row.latestJob ? <Space direction="vertical" size={0}>{statusTag(row.latestJob.status)}<Text type="secondary">{row.latestJob.jobType}</Text></Space> : "-" },
+    { title: "最新任务", width: 190, render: (_, row) => row.latestJob ? <Space direction="vertical" size={0}>{statusTag(row.latestJob.status)}<Text type="secondary">{row.latestJob.jobType}</Text></Space> : "-" },
     { title: "操作", fixed: "right", width: 280, render: (_, row) => <Space size={6} wrap><Button size="small" onClick={() => setDrawerBoard(row)}>管理</Button><Button size="small" onClick={() => openEdit(row)}>编辑</Button><Button size="small" icon={<ThunderboltOutlined />} loading={refreshMutation.isPending} onClick={() => refreshMutation.mutate(row.id)}>刷新</Button>{row.status === "paused" ? <Button size="small" icon={<PlayCircleOutlined />} onClick={() => resumeMutation.mutate(row.id)}>恢复</Button> : <Button size="small" icon={<PauseCircleOutlined />} onClick={() => pauseMutation.mutate(row.id)}>暂停</Button>}<Popconfirm title="软删除该看板？" okText="删除" cancelText="取消" onConfirm={() => deleteMutation.mutate(row.id)}><Button size="small" danger>删除</Button></Popconfirm></Space> },
   ], [deleteMutation, pauseMutation, refreshMutation, resumeMutation]);
 
@@ -406,27 +682,47 @@ export function SocialListeningPage() {
           <div>
             <Text className="social-listening-kicker">EchoHunt Ops</Text>
             <Typography.Title level={2}>Social Listening 管理台</Typography.Title>
-            <Paragraph type="secondary">维护被监控账号、分配 EchoHunt 访问权限，并追踪后台采集任务与预警异常。</Paragraph>
+            <Paragraph type="secondary">维护被监控账号、配置 AI 提示语，并追踪后台采集任务、入库字段与预警异常。</Paragraph>
           </div>
           <Space wrap>
             <Card size="small"><Statistic title="看板数" value={boards.length} /></Card>
             <Card size="small"><Statistic title="监控中" value={activeCount} /></Card>
+            <Card size="small"><Statistic title="运行中任务" value={runningJobs} /></Card>
             <Card size="small"><Statistic title="失败" value={failedCount} valueStyle={{ color: failedCount ? "#cf1322" : undefined }} /></Card>
           </Space>
         </div>
+
+        <PageSection
+          title="流程总览"
+          description="搜索某个账号后点击「管理」，在「执行过程」里可以看每次定时任务扫描了哪些窗口、写入多少推文、AI 生成了哪些字段，以及这些字段保存在哪些表。"
+        >
+          <WorkflowGuide />
+        </PageSection>
 
         <PageSection
           title="被监控账号"
           description="新增账号默认暂停，不会自动跑任务；管理员点击恢复后先补最近 7 天数据，再低优先级补齐 30 天，后续增量任务每 15 分钟由 jobs 进程推进。"
           extra={<Space wrap><Input.Search placeholder="搜索项目 / handle" allowClear onSearch={(q) => setFilters((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={filters.status} onChange={(status) => setFilters((prev) => ({ ...prev, status }))} options={STATUS_OPTIONS} style={{ width: 130 }} /><Button icon={<ReloadOutlined />} loading={boardsQuery.isFetching} onClick={() => boardsQuery.refetch()}>刷新</Button><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增监控</Button></Space>}
         >
-          <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1360 }} />
+          <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1380 }} />
         </PageSection>
 
         <Row gutter={16}>
           <Col xs={24} lg={12}>
-            <PageSection title="最近任务" description="失败任务可进入看板管理抽屉重试。">
-              <Table<SocialListeningJob> rowKey="id" size="small" dataSource={jobsQuery.data?.data.items || []} loading={jobsQuery.isFetching} pagination={false} columns={[{ title: "类型", dataIndex: "jobType" }, { title: "状态", dataIndex: "status", render: statusTag }, { title: "创建", dataIndex: "createdAt", render: formatDate }]} />
+            <PageSection title="最近任务" description="自动每 15 秒刷新；展开行可查看 counters、窗口游标和写表结果。">
+              <Table<SocialListeningJob>
+                rowKey="id"
+                size="small"
+                dataSource={jobsQuery.data?.data.items || []}
+                loading={jobsQuery.isFetching}
+                pagination={false}
+                expandable={{ expandedRowRender: (row) => <JobProgressView job={row} /> }}
+                columns={[
+                  { title: "类型", dataIndex: "jobType" },
+                  { title: "状态", dataIndex: "status", render: statusTag },
+                  { title: "创建", dataIndex: "createdAt", render: formatDate },
+                ]}
+              />
             </PageSection>
           </Col>
           <Col xs={24} lg={12}>
@@ -437,27 +733,43 @@ export function SocialListeningPage() {
         </Row>
       </Space>
 
-      <Modal title={editingBoard ? "编辑被监控账号" : "新增被监控账号"} open={formOpen} onCancel={() => setFormOpen(false)} onOk={() => form.submit()} confirmLoading={saveMutation.isPending} okText="保存" cancelText="取消" width={760}>
-        <Form form={form} layout="vertical" onFinish={(values) => saveMutation.mutate(values)} initialValues={boardFormInitialValues(editingBoard)}>
-          <Space.Compact style={{ width: "100%" }}>
-            <Form.Item name="officialHandle" label="官方 X Handle" rules={[{ required: true, message: "请输入官方 handle" }]} style={{ flex: 1 }}><Input prefix="@" disabled={Boolean(editingBoard)} /></Form.Item>
-            <Form.Item label=" "><Button loading={resolveMutation.isPending} disabled={Boolean(editingBoard)} onClick={() => resolveMutation.mutate(form.getFieldValue("officialHandle"))}>解析资料</Button></Form.Item>
-          </Space.Compact>
-          {resolved ? <Card size="small" className="social-listening-resolved-card"><Space><Avatar src={resolved.avatar || undefined}>{(resolved.name || resolved.handle || "?").slice(0, 1)}</Avatar><Space direction="vertical" size={0}><Text strong>{resolved.name} @{resolved.handleLower || resolved.handle}</Text><Text type="secondary">粉丝 {formatNumber(resolved.followersCount)} · G {resolved.globalRank || "-"} · CN {resolved.cnRank || "-"}</Text></Space></Space></Card> : null}
-          <Form.Item name="projectName" label="项目名称" rules={[{ required: true, message: "请输入项目名称" }]}><Input /></Form.Item>
-          <Form.Item name="projectDescription" label="项目简介"><Input.TextArea rows={2} /></Form.Item>
-          <Form.Item name="projectAvatar" label="头像 URL"><Input /></Form.Item>
-          <Form.Item name="brandColor" label="品牌色"><Input placeholder="#1677ff" /></Form.Item>
-          <Row gutter={12}>
-            <Col span={12}><Form.Item name="keywords" label="关键词（每行一个）"><Input.TextArea rows={4} /></Form.Item></Col>
-            <Col span={12}><Form.Item name="aliases" label="别名（每行一个）"><Input.TextArea rows={4} /></Form.Item></Col>
-          </Row>
-          <Row gutter={12}>
-            <Col span={8}><Form.Item name="token" label="Token"><Input placeholder="可选" /></Form.Item></Col>
-            <Col span={8}><Form.Item name="projectFollowKey" label="project_follow key"><Input placeholder="可选" /></Form.Item></Col>
-            <Col span={8}><Form.Item name="followSources" label="关注关系源"><Select mode="multiple" options={[{ value: "project_follow", label: "project_follow" }]} /></Form.Item></Col>
-          </Row>
-        </Form>
+      <Modal title={editingBoard ? "编辑被监控账号" : "新增被监控账号"} open={formOpen} onCancel={() => setFormOpen(false)} onOk={() => form.submit()} confirmLoading={saveMutation.isPending} okText="保存配置" cancelText="取消" width={1120}>
+        <Alert className="social-listening-modal-alert" type="info" showIcon message="新增后默认暂停" description="保存只写入配置，不会立刻跑任务。确认字段后，在列表点击「恢复」才会创建补数任务。" />
+        <Row gutter={20} align="top">
+          <Col xs={24} lg={15}>
+            <Form form={form} layout="vertical" onFinish={(values) => saveMutation.mutate(values)} initialValues={boardFormInitialValues(editingBoard)}>
+              <Space.Compact style={{ width: "100%" }}>
+                <Form.Item name="officialHandle" label="官方 X Handle" rules={[{ required: true, message: "请输入官方 handle" }]} style={{ flex: 1 }} extra="被监控项目官方账号；保存到 Boards.officialHandle，新增后不可直接改。"><Input prefix="@" disabled={Boolean(editingBoard)} placeholder="例如 ethereum" /></Form.Item>
+                <Form.Item label=" "><Button loading={resolveMutation.isPending} disabled={Boolean(editingBoard)} onClick={() => resolveMutation.mutate(form.getFieldValue("officialHandle"))}>解析资料</Button></Form.Item>
+              </Space.Compact>
+              {resolved ? <Card size="small" className="social-listening-resolved-card"><Space><Avatar src={resolved.avatar || undefined}>{(resolved.name || resolved.handle || "?").slice(0, 1)}</Avatar><Space direction="vertical" size={0}><Text strong>{resolved.name} @{resolved.handleLower || resolved.handle}</Text><Text type="secondary">粉丝 {formatNumber(resolved.followersCount)} · G {resolved.globalRank || "-"} · CN {resolved.cnRank || "-"}</Text></Space></Space></Card> : null}
+              <Form.Item name="projectName" label="项目名称" rules={[{ required: true, message: "请输入项目名称" }]} extra="展示名称；也作为项目态度 AI 的默认 project 输入。"><Input placeholder="例如 Ethereum" /></Form.Item>
+              <Form.Item name="projectDescription" label="项目简介" extra="项目背景快照，展示与后续 AI 理解都可参考。"><TextArea rows={2} placeholder="一句话说明项目定位、生态或核心产品" /></Form.Item>
+              <Form.Item name="projectAvatar" label="头像 URL" extra="前台和后台头像展示；可以由解析资料自动带入，也可以手动覆盖。"><Input placeholder="https://..." /></Form.Item>
+              <Form.Item name="brandColor" label="品牌色" extra="前台看板主题色；使用选色组件保存 #RRGGBB。" getValueFromEvent={(color, hex) => typeof hex === "string" ? hex : color?.toHexString?.()}>
+                <ColorPicker showText format="hex" presets={[{ label: "常用", colors: ["#1677ff", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0f172a"] }]} />
+              </Form.Item>
+              <Row gutter={12}>
+                <Col span={12}><Form.Item name="keywords" label="关键词（每行一个）" extra="召回推文用；会匹配 dev.tweet.text，适合品牌名、协议名、产品名。"><TextArea rows={4} placeholder="Ethereum\nETH\nEVM" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="aliases" label="别名（每行一个）" extra="项目简称、旧名、ticker；会与关键词一起参与召回。"><TextArea rows={4} placeholder="Ether\n$ETH" /></Form.Item></Col>
+              </Row>
+              <Row gutter={12}>
+                <Col span={8}><Form.Item name="token" label="Token" extra="项目代币符号，会追加到召回关键词；不是 API token。"><Input placeholder="可选，例如 ETH" /></Form.Item></Col>
+                <Col span={8}><Form.Item name="projectFollowKey" label="project_follow key" extra="用于标记 dev.project_follow 的项目键；没有明确 key 可先留空。"><Input placeholder="可选" /></Form.Item></Col>
+                <Col span={8}><Form.Item name="followSources" label="关注关系源" extra="关注/取关信号来源表；用于解释与后端扩展。"><Select mode="multiple" options={FOLLOW_SOURCE_OPTIONS} placeholder="选择来源表" /></Form.Item></Col>
+              </Row>
+              <Divider orientation="left">AI 提示语配置</Divider>
+              <Alert className="social-listening-modal-alert" type="warning" showIcon message="提示语保存到 metadata.aiPrompts" description="这些字段让运营能在后台维护 AI 任务口径。未填写时走默认逻辑；填写后后端可按该配置覆盖默认提示语。" />
+              <Form.Item name="aiProjectName" label="AI 项目名" extra="覆盖项目态度 AI 的 project 名称；项目名容易歧义时建议填写。"><Input placeholder="默认使用项目名称" /></Form.Item>
+              <Form.Item name="projectAttitudePrompt" label="项目态度 Prompt" extra="说明如何判断推文对项目的态度，并要求输出 score、sentiment、summary。"><TextArea rows={3} placeholder="例如：判断这条推文对 {project} 的态度，输出 0-10 分、情绪和一句中文原因。" /></Form.Item>
+              <Form.Item name="tweetTagPrompt" label="推文标签 Prompt" extra="说明如何从推文中抽取 topics 和 keywords，用于主题榜和词云。"><TextArea rows={3} placeholder="例如：从推文抽取加密行业主题标签和热词，返回 topics/keywords。" /></Form.Item>
+              <Form.Item name="tweetSummaryPrompt" label="推文摘要 Prompt" extra="说明如何生成中英文摘要，用于推文字段追踪和前台展示。"><TextArea rows={3} placeholder="例如：用中文和英文分别概括推文，不超过 5 个词。" /></Form.Item>
+            </Form>
+          </Col>
+          <Col xs={24} lg={9}>
+            <BoardFormGuide />
+          </Col>
+        </Row>
       </Modal>
 
       <BoardDrawer board={drawerBoard} open={Boolean(drawerBoard)} onClose={() => setDrawerBoard(null)} onChanged={() => { void boardsQuery.refetch(); void jobsQuery.refetch(); void alertsQuery.refetch(); }} />
