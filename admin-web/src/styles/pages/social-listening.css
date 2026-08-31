@@ -140,3 +140,23 @@
     grid-template-columns: 1fr;
   }
 }
+
+.social-listening-ai-collapse {
+  margin-top: 10px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.social-listening-ai-collapse .ant-collapse-item {
+  border: 1px solid var(--admin-border, #e5e7eb);
+  border-radius: 14px !important;
+  overflow: hidden;
+}
+
+.social-listening-ai-collapse .ant-collapse-header {
+  font-weight: 650;
+}
+
+[data-theme="dark"] .social-listening-ai-collapse {
+  background: rgba(15, 23, 42, 0.58);
+}
