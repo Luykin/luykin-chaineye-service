@@ -223,8 +223,13 @@ async function createMonitoredAccount(input = {}, adminId = null) {
   const payload = buildBoardPayload({ ...input, officialHandle: handle }, resolved, adminId);
 
   return pgInstance.transaction(async (transaction) => {
+    const identityWhere = [{ officialHandle: handle }];
+    if (payload.officialTwitterId) identityWhere.push({ officialTwitterId: String(payload.officialTwitterId) });
     const existing = await EchohuntSocialListeningBoard.findOne({
-      where: { officialHandle: handle, status: { [Op.ne]: BOARD_STATUSES.DELETED } },
+      where: {
+        status: { [Op.ne]: BOARD_STATUSES.DELETED },
+        [Op.or]: identityWhere,
+      },
       transaction,
       lock: true,
     });

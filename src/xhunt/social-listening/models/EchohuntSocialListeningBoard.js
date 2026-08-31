@@ -1,4 +1,4 @@
-const { DataTypes } = require("sequelize");
+const { DataTypes, Op } = require("sequelize");
 
 module.exports = (sequelize) => {
   return sequelize.define(
@@ -113,6 +113,12 @@ module.exports = (sequelize) => {
       indexes: [
         { name: "idx_echohunt_sl_boards_status", fields: ["status"] },
         { name: "idx_echohunt_sl_boards_processed_through", fields: ["processedThrough"] },
+        {
+          name: "ux_echohunt_sl_boards_active_twitter_id",
+          fields: ["officialTwitterId"],
+          unique: true,
+          where: { officialTwitterId: { [Op.ne]: null }, status: { [Op.ne]: "deleted" } },
+        },
       ],
     }
   );

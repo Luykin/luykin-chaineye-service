@@ -5,9 +5,9 @@ import {
   Button,
   Card,
   Col,
+  Collapse,
   ColorPicker,
   Descriptions,
-  Divider,
   Drawer,
   Empty,
   Form,
@@ -117,7 +117,7 @@ const PROCESS_STEPS = [
 ];
 
 const FIELD_GUIDE = [
-  { label: "官方 X Handle", table: "Boards.officialHandle", desc: "被监控项目的官方 X 用户名，保存时会去掉 @ 并转小写；新增后不可直接改，避免历史数据串号。" },
+  { label: "官方 X Handle", table: "Boards.officialHandle / officialTwitterId", desc: "输入 handle 后解析 Twitter ID；后端用 officialTwitterId 作为账号唯一身份，handle 只作为展示与兜底去重。" },
   { label: "项目名称", table: "Boards.projectName", desc: "看板标题，也是项目态度 AI 识别“这个项目是谁”的默认名称。" },
   { label: "项目简介", table: "Boards.projectDescription", desc: "运营侧可补充项目背景；解析资料时会从官方 profile 自动带入。" },
   { label: "头像 URL", table: "Boards.projectAvatar", desc: "前台与后台列表头像展示；解析资料时会从官方 profile 自动带入。" },
@@ -125,8 +125,7 @@ const FIELD_GUIDE = [
   { label: "关键词", table: "Boards.metadata.keywords", desc: "推文召回词，每行一个；会和官方 handle、项目名称合并后匹配 dev.tweet.text。" },
   { label: "别名", table: "Boards.metadata.aliases", desc: "项目常见别称、代币名、缩写；也会参与召回，适合写 ticker、旧品牌名。" },
   { label: "Token", table: "Boards.metadata.token", desc: "项目代币符号或合约简称，会追加到召回关键词里；不是 API 密钥。" },
-  { label: "project_follow key", table: "Boards.metadata.projectFollowKey", desc: "预留给 dev.project_follow 的项目键，用于区分同一官方号下多个项目/活动的关注关系。" },
-  { label: "关注关系源", table: "Boards.metadata.followSources", desc: "说明关注/取关信号优先观察哪些来源表；用于运营理解与后端扩展。" },
+  { label: "关注关系源", table: "Boards.metadata.followSources", desc: "说明关注/取关信号来自哪些来源表；实际匹配账号用 officialTwitterId，不需要额外填写项目 key。" },
   { label: "AI 项目名", table: "Boards.metadata.aiProjectName", desc: "覆盖项目态度 AI 中的 project 名称，适合项目名与品牌名/协议名不一致时使用。" },
   { label: "AI 提示语", table: "Boards.metadata.aiPrompts", desc: "把项目态度、标签、摘要的提示语保存为可配置文本，避免只依赖代码里的固定默认逻辑。" },
 ];
@@ -139,6 +138,12 @@ const POST_FIELD_GUIDE = [
   { field: "sentimentSummaryZh", desc: "态度判断原因，保存到 EchohuntSocialListeningPosts.sentimentSummaryZh。" },
   { field: "ai.*Status", desc: "标签、摘要、态度和总状态，保存到 tagStatus / summaryStatus / attitudeStatus / aiStatus。" },
 ];
+
+const DEFAULT_AI_PROMPTS = {
+  projectAttitude: "判断这条推文对 {project} 的态度。输入文本格式为 <<发布时间--推文正文>>。请输出 score、sentiment 和中文 summary/reason：score 为 0-10 分，低于 4 视为 negative，高于 6 视为 positive，其余为 neutral。",
+  tweetTag: "从推文正文中抽取加密/AI/产品/市场相关主题标签和热词。请返回 topics/domain_tags 和 keywords/hot_tags，标签要短、可聚合、适合主题榜和词云。推文正文：{text}",
+  tweetSummary: "请根据推文正文生成 {lang} 摘要，控制在 {words} 个词左右；如果有媒体链接可结合媒体语境，但不要编造未出现的信息。推文正文：{text}",
+};
 
 function formatDate(value?: string | null) {
   if (!value) return "-";
@@ -219,11 +224,10 @@ function boardFormInitialValues(board?: SocialListeningBoard | null) {
     aliases: Array.isArray(metadata.aliases) ? metadata.aliases.join("\n") : "",
     token: typeof metadata.token === "string" ? metadata.token : "",
     followSources: Array.isArray(metadata.followSources) ? metadata.followSources : ["twitter_user_follow", "twitter_user_unfollow", "project_follow"],
-    projectFollowKey: typeof metadata.projectFollowKey === "string" ? metadata.projectFollowKey : "",
     aiProjectName: typeof metadata.aiProjectName === "string" ? metadata.aiProjectName : "",
-    projectAttitudePrompt: getString(aiPrompts.projectAttitude),
-    tweetTagPrompt: getString(aiPrompts.tweetTag),
-    tweetSummaryPrompt: getString(aiPrompts.tweetSummary),
+    projectAttitudePrompt: getString(aiPrompts.projectAttitude) || DEFAULT_AI_PROMPTS.projectAttitude,
+    tweetTagPrompt: getString(aiPrompts.tweetTag) || DEFAULT_AI_PROMPTS.tweetTag,
+    tweetSummaryPrompt: getString(aiPrompts.tweetSummary) || DEFAULT_AI_PROMPTS.tweetSummary,
     allowUnresolved: false,
   };
 }
@@ -237,7 +241,6 @@ function buildBoardPayload(values: Record<string, unknown>, resolved?: ResolvedT
   const metadata = {
     token: values.token || null,
     followSources: values.followSources || [],
-    projectFollowKey: values.projectFollowKey || null,
     aiProjectName: values.aiProjectName || null,
     aiPrompts,
   };
@@ -332,7 +335,7 @@ function ConfigGuide({ board }: { board?: SocialListeningBoard | null }) {
       {board ? (
         <Descriptions title="当前看板配置快照" size="small" bordered column={2}>
           <Descriptions.Item label="Token">{getString(metadata.token) || "-"}</Descriptions.Item>
-          <Descriptions.Item label="project_follow key">{getString(metadata.projectFollowKey) || "-"}</Descriptions.Item>
+          <Descriptions.Item label="官方 Twitter ID">{board.officialTwitterId || "未解析"}</Descriptions.Item>
           <Descriptions.Item label="关注关系源" span={2}>{Array.isArray(metadata.followSources) ? metadata.followSources.join("、") : "-"}</Descriptions.Item>
           <Descriptions.Item label="AI 项目名" span={2}>{getString(metadata.aiProjectName) || board.projectName}</Descriptions.Item>
           <Descriptions.Item label="AI Prompts" span={2}><pre className="social-listening-json-block">{jsonPreview(metadata.aiPrompts)}</pre></Descriptions.Item>
@@ -755,16 +758,28 @@ export function SocialListeningPage() {
                 <Col span={12}><Form.Item name="aliases" label="别名（每行一个）" extra="项目简称、旧名、ticker；会与关键词一起参与召回。"><TextArea rows={4} placeholder="Ether\n$ETH" /></Form.Item></Col>
               </Row>
               <Row gutter={12}>
-                <Col span={8}><Form.Item name="token" label="Token" extra="项目代币符号，会追加到召回关键词；不是 API token。"><Input placeholder="可选，例如 ETH" /></Form.Item></Col>
-                <Col span={8}><Form.Item name="projectFollowKey" label="project_follow key" extra="用于标记 dev.project_follow 的项目键；没有明确 key 可先留空。"><Input placeholder="可选" /></Form.Item></Col>
-                <Col span={8}><Form.Item name="followSources" label="关注关系源" extra="关注/取关信号来源表；用于解释与后端扩展。"><Select mode="multiple" options={FOLLOW_SOURCE_OPTIONS} placeholder="选择来源表" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="token" label="Token" extra="项目代币符号，会追加到召回关键词；不是 API token。"><Input placeholder="可选，例如 ETH" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="followSources" label="关注关系源" extra="关注/取关信号来源表。具体账号唯一身份使用解析得到的 officialTwitterId，不需要手填 project key。"><Select mode="multiple" options={FOLLOW_SOURCE_OPTIONS} placeholder="选择来源表" /></Form.Item></Col>
               </Row>
-              <Divider orientation="left">AI 提示语配置</Divider>
-              <Alert className="social-listening-modal-alert" type="warning" showIcon message="提示语保存到 metadata.aiPrompts" description="这些字段让运营能在后台维护 AI 任务口径。未填写时走默认逻辑；填写后后端任务会把它作为 prompt/customPrompt/promptOverride 传给 AI 服务。" />
-              <Form.Item name="aiProjectName" label="AI 项目名" extra="覆盖项目态度 AI 的 project 名称；项目名容易歧义时建议填写。"><Input placeholder="默认使用项目名称" /></Form.Item>
-              <Form.Item name="projectAttitudePrompt" label="项目态度 Prompt" extra="说明如何判断推文对项目的态度，并要求输出 score、sentiment、summary。"><TextArea rows={3} placeholder="例如：判断这条推文对 {project} 的态度，输出 0-10 分、情绪和一句中文原因。" /></Form.Item>
-              <Form.Item name="tweetTagPrompt" label="推文标签 Prompt" extra="说明如何从推文中抽取 topics 和 keywords，用于主题榜和词云。"><TextArea rows={3} placeholder="例如：从推文抽取加密行业主题标签和热词，返回 topics/keywords。" /></Form.Item>
-              <Form.Item name="tweetSummaryPrompt" label="推文摘要 Prompt" extra="说明如何生成中英文摘要，用于推文字段追踪和前台展示。"><TextArea rows={3} placeholder="例如：用中文和英文分别概括推文，不超过 5 个词。" /></Form.Item>
+              <Collapse
+                className="social-listening-ai-collapse"
+                bordered={false}
+                items={[
+                  {
+                    key: "ai-prompts",
+                    label: "AI 提示语配置（默认折叠，通常不需要改）",
+                    children: (
+                      <>
+                        <Alert className="social-listening-modal-alert" type="warning" showIcon message="提示语保存到 metadata.aiPrompts" description="输入框里已填当前兜底口径。你可以直接保存不改；如果需要调整 AI 判断标准，再展开修改。后端任务会把这里的文本作为 prompt/customPrompt/promptOverride 传给 AI 服务。" />
+                        <Form.Item name="aiProjectName" label="AI 项目名" extra="覆盖项目态度 AI 的 project 名称；不填时使用项目名称。"><Input placeholder="默认使用项目名称" /></Form.Item>
+                        <Form.Item name="projectAttitudePrompt" label="项目态度 Prompt" extra="默认对应 /ai/project_attitude：输入 text、project、lang=cn，要求输出 score、sentiment、summary/reason。"><TextArea rows={5} /></Form.Item>
+                        <Form.Item name="tweetTagPrompt" label="推文标签 Prompt" extra="默认对应 /ai/tweet_tag_v2：根据 text 生成 topics/domain_tags 和 keywords/hot_tags。"><TextArea rows={5} /></Form.Item>
+                        <Form.Item name="tweetSummaryPrompt" label="推文摘要 Prompt" extra="默认对应 /ai/tweet_summary_media：根据 text、lang、words、media 生成摘要。"><TextArea rows={5} /></Form.Item>
+                      </>
+                    ),
+                  },
+                ]}
+              />
             </Form>
           </Col>
           <Col xs={24} lg={9}>
