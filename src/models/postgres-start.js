@@ -39,6 +39,15 @@ const AuthCenterXhuntClientModel = require("../xhunt/auth-center/models/AuthCent
 const AuthCenterXhuntSessionModel = require("../xhunt/auth-center/models/AuthCenterXhuntSession");
 const AuthCenterXhuntAuthorizationCodeModel = require("../xhunt/auth-center/models/AuthCenterXhuntAuthorizationCode");
 const AuthCenterXhuntAuditLogModel = require("../xhunt/auth-center/models/AuthCenterXhuntAuditLog");
+const EchohuntSocialListeningBoardModel = require("../xhunt/social-listening/models/EchohuntSocialListeningBoard");
+const EchohuntSocialListeningBoardAccessModel = require("../xhunt/social-listening/models/EchohuntSocialListeningBoardAccess");
+const EchohuntSocialListeningAccessAuditLogModel = require("../xhunt/social-listening/models/EchohuntSocialListeningAccessAuditLog");
+const EchohuntSocialListeningPostModel = require("../xhunt/social-listening/models/EchohuntSocialListeningPost");
+const EchohuntSocialListeningSnapshotModel = require("../xhunt/social-listening/models/EchohuntSocialListeningSnapshot");
+const EchohuntSocialListeningAccountSignalModel = require("../xhunt/social-listening/models/EchohuntSocialListeningAccountSignal");
+const EchohuntSocialListeningAlertModel = require("../xhunt/social-listening/models/EchohuntSocialListeningAlert");
+const EchohuntSocialListeningKeyEventModel = require("../xhunt/social-listening/models/EchohuntSocialListeningKeyEvent");
+const EchohuntSocialListeningJobModel = require("../xhunt/social-listening/models/EchohuntSocialListeningJob");
 
 const pgDialect = process.env.PG_DIALECT || "postgres";
 const pgHost = process.env.PG_HOST;
@@ -118,6 +127,15 @@ const AuthCenterXhuntClient = AuthCenterXhuntClientModel(pgInstance);
 const AuthCenterXhuntSession = AuthCenterXhuntSessionModel(pgInstance);
 const AuthCenterXhuntAuthorizationCode = AuthCenterXhuntAuthorizationCodeModel(pgInstance);
 const AuthCenterXhuntAuditLog = AuthCenterXhuntAuditLogModel(pgInstance);
+const EchohuntSocialListeningBoard = EchohuntSocialListeningBoardModel(pgInstance);
+const EchohuntSocialListeningBoardAccess = EchohuntSocialListeningBoardAccessModel(pgInstance);
+const EchohuntSocialListeningAccessAuditLog = EchohuntSocialListeningAccessAuditLogModel(pgInstance);
+const EchohuntSocialListeningPost = EchohuntSocialListeningPostModel(pgInstance);
+const EchohuntSocialListeningSnapshot = EchohuntSocialListeningSnapshotModel(pgInstance);
+const EchohuntSocialListeningAccountSignal = EchohuntSocialListeningAccountSignalModel(pgInstance);
+const EchohuntSocialListeningAlert = EchohuntSocialListeningAlertModel(pgInstance);
+const EchohuntSocialListeningKeyEvent = EchohuntSocialListeningKeyEventModel(pgInstance);
+const EchohuntSocialListeningJob = EchohuntSocialListeningJobModel(pgInstance);
 
 // 建立模型之间的关系
 XHuntUser.hasMany(XReviewForAccount, {
@@ -369,6 +387,88 @@ XHuntKolCollaboration.belongsTo(XHuntUser, {
   as: "xhuntUser",
 });
 
+// EchoHunt Social Listening 关系
+EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningBoardAccess, {
+  foreignKey: "boardId",
+  as: "accesses",
+});
+EchohuntSocialListeningBoardAccess.belongsTo(EchohuntSocialListeningBoard, {
+  foreignKey: "boardId",
+  as: "board",
+});
+
+EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningPost, {
+  foreignKey: "boardId",
+  as: "posts",
+});
+EchohuntSocialListeningPost.belongsTo(EchohuntSocialListeningBoard, {
+  foreignKey: "boardId",
+  as: "board",
+});
+
+EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningSnapshot, {
+  foreignKey: "boardId",
+  as: "snapshots",
+});
+EchohuntSocialListeningSnapshot.belongsTo(EchohuntSocialListeningBoard, {
+  foreignKey: "boardId",
+  as: "board",
+});
+
+EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningAccountSignal, {
+  foreignKey: "boardId",
+  as: "accountSignals",
+});
+EchohuntSocialListeningAccountSignal.belongsTo(EchohuntSocialListeningBoard, {
+  foreignKey: "boardId",
+  as: "board",
+});
+
+EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningAlert, {
+  foreignKey: "boardId",
+  as: "alerts",
+});
+EchohuntSocialListeningAlert.belongsTo(EchohuntSocialListeningBoard, {
+  foreignKey: "boardId",
+  as: "board",
+});
+
+EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningKeyEvent, {
+  foreignKey: "boardId",
+  as: "keyEvents",
+});
+EchohuntSocialListeningKeyEvent.belongsTo(EchohuntSocialListeningBoard, {
+  foreignKey: "boardId",
+  as: "board",
+});
+
+EchohuntSocialListeningBoard.hasMany(EchohuntSocialListeningJob, {
+  foreignKey: "boardId",
+  as: "jobs",
+});
+EchohuntSocialListeningJob.belongsTo(EchohuntSocialListeningBoard, {
+  foreignKey: "boardId",
+  as: "board",
+});
+
+AuthCenterXhuntUser.hasMany(EchohuntSocialListeningBoardAccess, {
+  foreignKey: "authCenterUserId",
+  as: "socialListeningAccesses",
+});
+EchohuntSocialListeningBoardAccess.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "authCenterUserId",
+  as: "authCenterUser",
+});
+
+AuthCenterXhuntUser.hasMany(EchohuntSocialListeningKeyEvent, {
+  foreignKey: "authCenterUserId",
+  as: "socialListeningKeyEvents",
+});
+EchohuntSocialListeningKeyEvent.belongsTo(AuthCenterXhuntUser, {
+  foreignKey: "authCenterUserId",
+  as: "authCenterUser",
+});
+
 /** 这是XHunt 浏览器插件的 数据表  end====== **/
 
 async function setupPostgres() {
@@ -435,4 +535,13 @@ module.exports = {
   AuthCenterXhuntSession,
   AuthCenterXhuntAuthorizationCode,
   AuthCenterXhuntAuditLog,
+  EchohuntSocialListeningBoard,
+  EchohuntSocialListeningBoardAccess,
+  EchohuntSocialListeningAccessAuditLog,
+  EchohuntSocialListeningPost,
+  EchohuntSocialListeningSnapshot,
+  EchohuntSocialListeningAccountSignal,
+  EchohuntSocialListeningAlert,
+  EchohuntSocialListeningKeyEvent,
+  EchohuntSocialListeningJob,
 };

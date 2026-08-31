@@ -43,6 +43,12 @@ const MODULES_TO_PRELOAD = [
   './xhunt/api/campaign',
   './xhunt/api/website-campaigns',
   './xhunt/api/echohunt',
+  './xhunt/social-listening/api/public',
+  './xhunt/social-listening/api/admin',
+  './xhunt/social-listening/services/board-service',
+  './xhunt/social-listening/services/ingest-service',
+  './xhunt/social-listening/services/analysis-service',
+  './xhunt/social-listening/services/scheduler',
   './xhunt/api/private-messages',
   './xhunt/api/rootdata',
   './xhunt/api/ghost-following',
@@ -231,6 +237,7 @@ const adminReviewsRoutes = require("./admin/api/reviews");
 const adminLlmTestRoutes = require("./admin/api/llm-test");
 const adminTampermonkeyRoutes = require("./admin/api/tampermonkey");
 const adminKolMarketingRoutes = require("./admin/api/kol-marketing");
+const adminSocialListeningRoutes = require("./xhunt/social-listening/api/admin");
 const binanceSquareRoutes = require("./binance-square/api/binance-square");
 const xHuntSSERoutes = require("./xhunt/api/sse");
 const xHuntUserEntryRoutes = require("./xhunt/api/user-entry");
@@ -678,6 +685,9 @@ async function initializeAndStartServer() {
 
   // 管理后台 - KOL Marketing 只读状态（供 KOL Match 配置页展示）
   app.use("/api/admin/kol-marketing", adminAuth, adminKolMarketingRoutes);
+
+  // 管理后台 - EchoHunt Social Listening
+  app.use("/api/admin/social-listening", adminAuth, adminSocialListeningRoutes);
 
   // 管理后台 - 币安广场
   app.use("/api/admin/binance-square", adminAuth, binanceSquareRoutes.router);

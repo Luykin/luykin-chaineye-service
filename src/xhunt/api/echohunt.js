@@ -65,9 +65,11 @@ const {
   syncKolCollaborationToMarketingProfile,
 } = require("../services/kolMarketingProfileCollaborationSync");
 const echohuntKolMatchRoutes = require("./echohunt-kol-match");
+const socialListeningPublicRoutes = require("../social-listening/api/public");
 const router = express.Router();
 
 router.use("/kol-match", echohuntKolMatchRoutes);
+router.use("/social-listening", socialListeningPublicRoutes);
 
 const ECHOHUNT_CLIENT_KEY = process.env.ECHOHUNT_AUTH_CLIENT_KEY || "echohunt";
 const ECHOHUNT_OAUTH_STATE_TTL_SECONDS = 8 * 60;

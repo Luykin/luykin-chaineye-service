@@ -19,6 +19,11 @@ const {
 } = require("./models/postgres-start");
 const { requestStatsManager } = require("./xhunt/middleware/security");
 const { initPerfMonitor } = require("./lib/perf-monitor"); // 性能监控模块
+const {
+  isPostgresReadOnlyConfigured,
+  setupK8sPostgresReadOnlyConnection,
+} = require("./infra/k8s/postgres-readonly");
+const { createSocialListeningScheduler } = require("./xhunt/social-listening/services/scheduler");
 const { recordGenericStat } = require("./xhunt/services/generic-stats-service");
 const emailService = require("./services/emailService");
 const { cleanupPm2Logs } = require("./services/singleton/pm2-log-cleaner");
@@ -46,6 +51,18 @@ const redisClient = redis.createClient({
     // 连接Redis
     await redisClient.connect();
     console.log("✅ Redis 连接成功");
+
+    // Social Listening 后台任务需要 meta/dev 只读从库；未配置时调度器仍会启动但任务会失败并留下明确错误。
+    if (isPostgresReadOnlyConfigured()) {
+      try {
+        await setupK8sPostgresReadOnlyConnection();
+        console.log("✅ Social Listening 只读从库初始化成功");
+      } catch (error) {
+        console.error("[SocialListening] 只读从库初始化失败:", error.message);
+      }
+    } else {
+      console.warn("[SocialListening] 未配置只读从库，数据采集任务会返回 PG_READ_NOT_READY");
+    }
 
     // --- Performance Monitor Initialization ---
     const { processor: perfProcessor } = initPerfMonitor({
@@ -93,6 +110,8 @@ const redisClient = redis.createClient({
       recordGenericStat,
     });
 
+    const socialListeningScheduler = createSocialListeningScheduler({ redisClient });
+    socialListeningScheduler.start();
 
     // 启动备份服务
     await pgBackupService.start();
@@ -122,6 +141,7 @@ const redisClient = redis.createClient({
       "✅ 统计数据清理任务已启动（每天执行一次，清理版本统计和URL统计）"
     );
     console.log("✅ 后端健康自检测任务已启动（每30分钟执行一次）");
+    console.log("✅ Social Listening 调度任务已启动（每分钟 tick，按看板 15 分钟增量）");
 
   } catch (err) {
     console.error("单例任务进程启动失败:", err);
