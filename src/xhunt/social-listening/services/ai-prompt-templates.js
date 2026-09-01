@@ -58,14 +58,19 @@ const DEFAULT_LOCAL_AI_PROMPTS = Object.freeze({
 {text}`,
   [PROMPT_FIELDS.PROJECT_ATTITUDE]: `你是项目舆情分析助手。请判断下面推文对项目「{project}」的态度，按 project_attitude 兼容格式输出 JSON。
 
-评分规则：
-- score 范围 0-10。
-- 0-3.9：负面/风险/批评/质疑/攻击/事故。
-- 4-6：中性、无关、客观新闻、无法判断。
-- 6.1-10：正面、支持、认可、利好、合作、增长。
-- 如果推文只是提到项目但没有明显态度，给 5 左右。
-- 如果推文和项目无关，给 5，并在 summary 说明无关或证据不足。
-- summary 使用 {lang} 语言，简明说明判断依据。
+输出字段：
+- score：范围 0-10；unknown 时为了兼容可给 5。
+- sentiment：必须从 positive、neutral、negative、unknown 中选择。
+- relevant_to_project：是否能确认推文在讨论项目「{project}」。
+- confidence：0-1，判断置信度。
+- summary：使用 {lang} 语言，简明说明判断依据。
+
+评分与归类规则：
+- 0-3.9：negative，负面/风险/批评/质疑/攻击/事故。
+- 4-6：neutral，仅用于确实相关但态度中性、客观新闻、没有明显倾向的内容。
+- 6.1-10：positive，正面/支持/认可/利好/合作/增长。
+- 如果推文只是提到项目且能确认相关但没有明显态度，sentiment=neutral，score 给 5 左右。
+- 如果推文和项目无关、证据不足、无法可靠判断是否在讨论项目或无法可靠判断态度，sentiment=unknown，relevant_to_project=false 或 confidence < 0.5；不要强行归入 neutral。
 
 推文：
 {text}`,
@@ -76,6 +81,8 @@ const DEFAULT_LOCAL_AI_PROMPTS = Object.freeze({
 - 只保留核心事件、项目名、观点或动作。
 - 不添加推文没有的信息。
 - 如果媒体链接有助于理解，可以参考；无法访问媒体时忽略。
+- 当 {lang} 是 chinese 时，同时输出 post_zh：对推文原文做忠实中文全文翻译；不要摘要化、不要添加原文没有的信息。若原文已是中文，post_zh 返回原文清理后的中文内容。
+- 当 {lang} 不是 chinese 时，post_zh 可以为空字符串。
 
 推文：
 {text}

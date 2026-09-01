@@ -115,17 +115,17 @@ const FIELD_GUIDE = [
 
 const POST_FIELD_GUIDE = [
   { field: "topics / keywords", desc: "内容 AI 生成主题标签与热词，保存到 EchohuntSocialListeningPosts.topics / keywords。" },
-  { field: "summaryZh / summaryEn", desc: "推文中英文摘要，保存到 EchohuntSocialListeningPosts.summaryZh / summaryEn。" },
+  { field: "postZh / summaryZh / summaryEn", desc: "推文中文全文翻译 + 中英文摘要，保存到 EchohuntSocialListeningPosts.postZh / summaryZh / summaryEn。" },
   { field: "projectAttitudeScore", desc: "项目态度分，保存到 EchohuntSocialListeningPosts.projectAttitudeScore / sentimentScore。" },
-  { field: "sentiment", desc: "positive / neutral / negative / unknown，保存到 EchohuntSocialListeningPosts.sentiment。" },
+  { field: "sentiment", desc: "positive / neutral / negative / unknown；无关、证据不足、无法可靠判断会写 unknown，不强行并入 neutral。" },
   { field: "sentimentSummaryZh", desc: "态度判断原因，保存到 EchohuntSocialListeningPosts.sentimentSummaryZh。" },
   { field: "ai.*Status", desc: "标签、摘要、态度和总状态，保存到 tagStatus / summaryStatus / attitudeStatus / aiStatus。" },
 ];
 
 const DEFAULT_AI_PROMPTS = {
-  "projectAttitude": "你是项目舆情分析助手。请判断下面推文对项目「{project}」的态度，按 project_attitude 兼容格式输出 JSON。\n\n评分规则：\n- score 范围 0-10。\n- 0-3.9：负面/风险/批评/质疑/攻击/事故。\n- 4-6：中性、无关、客观新闻、无法判断。\n- 6.1-10：正面、支持、认可、利好、合作、增长。\n- 如果推文只是提到项目但没有明显态度，给 5 左右。\n- 如果推文和项目无关，给 5，并在 summary 说明无关或证据不足。\n- summary 使用 {lang} 语言，简明说明判断依据。\n\n推文：\n{text}",
+  "projectAttitude": "你是项目舆情分析助手。请判断下面推文对项目「{project}」的态度，按 project_attitude 兼容格式输出 JSON。\n\n输出字段：\n- score：范围 0-10；unknown 时为了兼容可给 5。\n- sentiment：必须从 positive、neutral、negative、unknown 中选择。\n- relevant_to_project：是否能确认推文在讨论项目「{project}」。\n- confidence：0-1，判断置信度。\n- summary：使用 {lang} 语言，简明说明判断依据。\n\n评分与归类规则：\n- 0-3.9：negative，负面/风险/批评/质疑/攻击/事故。\n- 4-6：neutral，仅用于确实相关但态度中性、客观新闻、没有明显倾向的内容。\n- 6.1-10：positive，正面/支持/认可/利好/合作/增长。\n- 如果推文只是提到项目且能确认相关但没有明显态度，sentiment=neutral，score 给 5 左右。\n- 如果推文和项目无关、证据不足、无法可靠判断是否在讨论项目或无法可靠判断态度，sentiment=unknown，relevant_to_project=false 或 confidence < 0.5；不要强行归入 neutral。\n\n推文：\n{text}",
   "tweetTag": "你是 Crypto/Web3/AI 社媒内容严格分类器。请分析下面推文，按 tweet_tag_v2_strict 兼容格式输出 JSON。\n\n硬性规则：\n1. crypto_relevant：是否和 Crypto/Web3/AI/金融科技/链上生态明显相关。\n2. domain_tag 必须且只能从以下集合选择：crypto、ai、科技、金融、内容创作、其他、抽奖。\n3. domain_tag_version 固定返回 tweet_tag_v2_domain_filter_v5。\n4. crypto_sub_tags 最多 8 个，只能从以下集合选择：DeFi、Layer1、Layer2、Meme、NFT、GameFi、DePIN、CeFi、Wallet、Stablecoin、RWA、Mining、Airdrop、Exchange、Infra、Security、DAO、Bridge、Derivatives、Lending、Staking、Oracle、Payment、Launchpad。\n5. ai_sub_tags 最多 8 个，只能从以下集合选择：LLM、Agent、Infra、Model、Data、App、Robotics、Inference、Training、Chip。\n6. hot_tags 最多 12 个，只能抽取推文原文中明确出现的项目名、代币名、协议名、产品名、叙事词；不要编造原文没出现过的词。\n7. tags 仅作兼容补充，必须少量、短词；如果不确定返回空数组。\n8. 不确定、无关或无法判断时：domain_tag 返回 其他，子标签和 hot_tags 返回空数组。\n9. 禁止输出上述集合外的 domain_tag / crypto_sub_tags / ai_sub_tags。\n\n推文：\n{text}",
-  "tweetSummary": "你是社媒内容摘要助手。请基于下面推文生成一句 {lang} 摘要，尽量不超过 {words} 个词/中文短语，按 tweet_summary_media 兼容格式输出 JSON。\n\n要求：\n- 只保留核心事件、项目名、观点或动作。\n- 不添加推文没有的信息。\n- 如果媒体链接有助于理解，可以参考；无法访问媒体时忽略。\n\n推文：\n{text}\n\n媒体：\n{media}"
+  "tweetSummary": "你是社媒内容摘要助手。请基于下面推文生成一句 {lang} 摘要，尽量不超过 {words} 个词/中文短语，按 tweet_summary_media 兼容格式输出 JSON。\n\n要求：\n- 只保留核心事件、项目名、观点或动作。\n- 不添加推文没有的信息。\n- 如果媒体链接有助于理解，可以参考；无法访问媒体时忽略。\n- 当 {lang} 是 chinese 时，同时输出 post_zh：对推文原文做忠实中文全文翻译；不要摘要化、不要添加原文没有的信息。若原文已是中文，post_zh 返回原文清理后的中文内容。\n- 当 {lang} 不是 chinese 时，post_zh 可以为空字符串。\n\n推文：\n{text}\n\n媒体：\n{media}"
 };
 
 const LEGACY_FRONTEND_AI_PROMPTS = {
@@ -147,7 +147,7 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   tweetSummaryModel: "只用于中文摘要和英文摘要；为空表示使用默认模型。",
   projectAttitudeModel: "只用于项目态度评分；为空表示使用默认模型。",
   contentEnabled: "开启后每条帖子最多 3 次调用：tweetTag、中文摘要、英文摘要。",
-  projectAttitudeEnabled: "开启后每条帖子 1 次调用：输出 0-10 分、情绪和判断原因。",
+  projectAttitudeEnabled: "开启后每条帖子 1 次调用：输出 0-10 分、情绪和判断原因；无关/证据不足/无法可靠判断写 unknown。",
   contentBatchSize: "每个任务完成后处理多少条内容 AI。历史补数代码里最多按 10 条跑，避免一口气打爆费用。",
   projectAttitudeBatchSize: "每个任务完成后处理多少条态度 AI。历史补数代码里最多按 20 条跑。",
   negativeScoreThreshold: "态度分低于该值判定 negative；默认 4。",
@@ -191,6 +191,7 @@ const AI_POST_PROCESSING_STEPS = [
     calls: "2 次 / 帖（中文 1 次 + 英文 1 次）",
     model: "tweetSummaryModel；为空使用该账号模型",
     writes: [
+      "postZh：中文全文翻译（仅中文摘要调用返回）",
       "summaryZh：中文摘要",
       "summaryEn：英文摘要",
       "summaryStatus：generated / skipped / failed",
@@ -206,7 +207,7 @@ const AI_POST_PROCESSING_STEPS = [
     writes: [
       "projectAttitudeScore：0-10 态度分",
       "sentimentScore：兼容分数字段，等同态度分",
-      "sentiment：positive / neutral / negative / unknown",
+      "sentiment：positive / neutral / negative / unknown（无法可靠判断为 unknown）",
       "sentimentSummaryZh：中文判断依据",
       "attitudeStatus：succeeded / failed / skipped",
       "rawTweet.projectAttitude：AI 原始结果和 promptTrace",
@@ -668,6 +669,7 @@ function PostAiInspector({ post }: { post: SocialListeningPost }) {
           <Descriptions.Item label="source">{post.source}</Descriptions.Item>
           <Descriptions.Item label="topics" span={2}>{Array.isArray(row.topics) && row.topics.length ? row.topics.map((item) => <Tag key={String(item)}>{String(item)}</Tag>) : "-"}</Descriptions.Item>
           <Descriptions.Item label="keywords" span={2}>{Array.isArray(row.keywords) && row.keywords.length ? row.keywords.map((item) => <Tag key={String(item)} color="blue">{String(item)}</Tag>) : "-"}</Descriptions.Item>
+          <Descriptions.Item label="postZh" span={2}>{getString(row.postZh) || "-"}</Descriptions.Item>
           <Descriptions.Item label="summaryZh" span={2}>{getString(row.summaryZh) || "-"}</Descriptions.Item>
           <Descriptions.Item label="summaryEn" span={2}>{getString(row.summaryEn) || "-"}</Descriptions.Item>
           <Descriptions.Item label="projectAttitudeScore">{row.projectAttitudeScore === null || row.projectAttitudeScore === undefined ? "-" : String(row.projectAttitudeScore)}</Descriptions.Item>
@@ -714,14 +716,9 @@ function BoardFormGuide() {
   );
 }
 
-function AiPostProcessingGuide({ compact = false }: { compact?: boolean }) {
-  return (
-    <Card
-      size="small"
-      className="social-listening-ai-processing-guide"
-      title="开启 AI 后，每个帖子会发生什么"
-      extra={<Tag color="purple">最多 4 次调用 / 帖</Tag>}
-    >
+function AiPostProcessingGuide({ compact = false, defaultCollapsed = false }: { compact?: boolean; defaultCollapsed?: boolean }) {
+  const content = (
+    <>
       <Alert
         type="info"
         showIcon
@@ -751,9 +748,38 @@ function AiPostProcessingGuide({ compact = false }: { compact?: boolean }) {
       <Descriptions size="small" bordered column={compact ? 1 : 2} className="social-listening-ai-common-fields">
         <Descriptions.Item label="公共状态字段">aiStatus、aiAnalyzedAt、aiError、aiSource</Descriptions.Item>
         <Descriptions.Item label="跳过规则">正文为空或过短会标记 skipped，不会强行调用模型</Descriptions.Item>
-        <Descriptions.Item label="情绪阈值">score 小于负面阈值为 negative；大于正面阈值为 positive；中间为 neutral</Descriptions.Item>
+        <Descriptions.Item label="情绪阈值">score 小于负面阈值为 negative；大于正面阈值为 positive；中间为 neutral；无关/证据不足/低置信度为 unknown</Descriptions.Item>
         <Descriptions.Item label="保存表"><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
       </Descriptions>
+    </>
+  );
+
+  if (defaultCollapsed) {
+    return (
+      <Collapse
+        size="small"
+        className="social-listening-ai-processing-guide"
+        defaultActiveKey={[]}
+        items={[
+          {
+            key: "ai-post-processing-guide",
+            label: <Text strong>开启 AI 后，每个帖子会发生什么</Text>,
+            extra: <Tag color="purple">最多 4 次调用 / 帖</Tag>,
+            children: content,
+          },
+        ]}
+      />
+    );
+  }
+
+  return (
+    <Card
+      size="small"
+      className="social-listening-ai-processing-guide"
+      title="开启 AI 后，每个帖子会发生什么"
+      extra={<Tag color="purple">最多 4 次调用 / 帖</Tag>}
+    >
+      {content}
     </Card>
   );
 }
@@ -1023,7 +1049,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
         message="按被监控账号单独控制 AI，默认关闭"
         description="全局页只配置模型服务商、价格估算和总开关；这里才决定当前账号是否跑 AI。关闭后，后续采集任务到 AI 阶段会直接跳过该账号，已入库历史 AI 字段不会自动删除。"
       />
-      <AiPostProcessingGuide compact />
+      <AiPostProcessingGuide compact defaultCollapsed />
       {detail?.blockingReasons?.length ? (
         <Alert type="info" showIcon message="开启前需要补齐" description={<Space size={4} wrap>{detail.blockingReasons.map((item) => <Tag key={item}>{item}</Tag>)}</Space>} />
       ) : null}

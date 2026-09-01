@@ -26,15 +26,19 @@ const PROJECT_ATTITUDE_SCHEMA = Object.freeze({
   type: "object",
   properties: {
     score: { type: "number" },
+    sentiment: { type: "string", enum: ["positive", "neutral", "negative", "unknown"] },
+    relevant_to_project: { type: "boolean" },
+    confidence: { type: "number" },
     summary: { type: "string" },
   },
-  required: ["score", "summary"],
+  required: ["score", "sentiment", "relevant_to_project", "confidence", "summary"],
 });
 
 const TWEET_SUMMARY_SCHEMA = Object.freeze({
   type: "object",
   properties: {
     summary: { type: "string" },
+    post_zh: { type: "string" },
   },
   required: ["summary"],
 });
@@ -76,9 +80,12 @@ async function generateTweetTagV2({ prompt, aiConfig }) {
 async function generateProjectAttitude({ prompt, aiConfig }) {
   const data = await structuredChat(prompt, PROJECT_ATTITUDE_SCHEMA, getLlmOptions(aiConfig, "projectAttitude"));
   const score = Math.max(0, Math.min(10, toNumber(data.score, 5)));
+  const rawConfidence = Number(data.confidence);
+  const confidence = Number.isFinite(rawConfidence) ? Math.max(0, Math.min(1, rawConfidence)) : null;
   return {
     ...data,
     score,
+    confidence,
   };
 }
 

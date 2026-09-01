@@ -261,6 +261,7 @@ function serializePost(record) {
     },
     postCreatedAt: row.postCreatedAt,
     text: row.text,
+    postZh: row.postZh || null,
     source: row.source,
     metrics: {
       views: Number(row.viewsCount || 0),

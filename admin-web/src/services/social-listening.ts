@@ -116,11 +116,16 @@ export interface SocialListeningPost {
   };
   postCreatedAt: string;
   text?: string | null;
+  postZh?: string | null;
   source: string;
   sentiment: string;
   metrics: { views: number; likes: number; reposts: number; quotes: number; replies: number; engagement: number };
   topics?: string[];
   keywords?: string[];
+  summaryZh?: string | null;
+  summaryEn?: string | null;
+  sentimentSummaryZh?: string | null;
+  projectAttitudeScore?: number | null;
 }
 
 export interface SocialListeningPageData<T> {

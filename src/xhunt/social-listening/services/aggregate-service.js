@@ -89,19 +89,201 @@ function incrementMap(map, key, patch) {
   map.set(key, { ...current, ...patch(current) });
 }
 
+const TOPIC_ZH_MAP = Object.freeze({
+  crypto: "加密/Web3",
+  ai: "AI",
+  科技: "科技",
+  金融: "金融",
+  内容创作: "内容创作",
+  抽奖: "抽奖",
+  DeFi: "DeFi",
+  Layer1: "Layer1",
+  Layer2: "Layer2",
+  Meme: "Meme",
+  NFT: "NFT",
+  GameFi: "GameFi",
+  DePIN: "DePIN",
+  CeFi: "CeFi",
+  Wallet: "钱包",
+  Stablecoin: "稳定币",
+  RWA: "RWA",
+  Mining: "挖矿",
+  Airdrop: "空投",
+  Exchange: "交易所",
+  Infra: "基础设施",
+  Security: "安全",
+  DAO: "DAO",
+  Bridge: "跨链桥",
+  Derivatives: "衍生品",
+  Lending: "借贷",
+  Staking: "质押",
+  Oracle: "预言机",
+  Payment: "支付",
+  Launchpad: "Launchpad",
+  LLM: "大语言模型",
+  Agent: "智能体",
+  Model: "模型",
+  Data: "数据",
+  App: "应用",
+  Robotics: "机器人",
+  Inference: "推理",
+  Training: "训练",
+  Chip: "芯片",
+});
+
+function getTopicZh(value) {
+  const text = String(value || "").trim();
+  return TOPIC_ZH_MAP[text] || text;
+}
+
+function pushLimited(list, value, limit) {
+  if (!value || list.includes(value) || list.length >= limit) return;
+  list.push(value);
+}
+
+function normalizeAggregateItem(value) {
+  if (typeof value === "string") return { name: value, word: value, wordZh: getTopicZh(value) };
+  if (!value || typeof value !== "object") return null;
+  const name = value.name || value.tag || value.keyword || value.word || value.topic;
+  if (!name) return null;
+  return {
+    name: String(name),
+    word: String(value.word || name),
+    wordZh: value.wordZh || value.word_zh || value.topicZh || value.topic_zh || getTopicZh(name),
+  };
+}
+
+function getDominantSentiment(counts = {}) {
+  const order = [SENTIMENTS.POSITIVE, SENTIMENTS.NEGATIVE, SENTIMENTS.NEUTRAL, SENTIMENTS.UNKNOWN];
+  return order
+    .map((key) => ({ key, value: toNumber(counts[key]) }))
+    .sort((a, b) => (b.value - a.value) || order.indexOf(a.key) - order.indexOf(b.key))[0]?.key || SENTIMENTS.UNKNOWN;
+}
+
 function aggregateListValues(map, values, post, options = {}) {
   const list = Array.isArray(values) ? values : values ? [values] : [];
   list.forEach((value) => {
-    const key = typeof value === "string" ? value : value?.name || value?.tag || value?.keyword;
-    if (!key) return;
-    incrementMap(map, String(key), (current) => ({
-      count: toNumber(current.count) + 1,
-      views: toNumber(current.views) + toNumber(post.viewsCount),
-      engagement: toNumber(current.engagement) + getEngagement(post),
-      representativeTweetId: current.representativeTweetId || post.tweetId,
-      source: options.source || current.source || null,
-    }));
+    const item = normalizeAggregateItem(value);
+    if (!item?.name) return;
+    const sentiment = post.sentiment || SENTIMENTS.UNKNOWN;
+    incrementMap(map, item.name, (current) => {
+      const sentimentCounts = {
+        ...(current.sentimentCounts || {}),
+        [sentiment]: toNumber(current.sentimentCounts?.[sentiment]) + 1,
+      };
+      const postIds = Array.isArray(current.postIds) ? current.postIds.slice() : [];
+      const tweetIds = Array.isArray(current.tweetIds) ? current.tweetIds.slice() : [];
+      pushLimited(postIds, post.id, 100);
+      pushLimited(tweetIds, post.tweetId, 100);
+      return {
+        name: item.name,
+        word: item.word,
+        wordZh: item.wordZh,
+        topic: item.name,
+        topicZh: item.wordZh,
+        count: toNumber(current.count) + 1,
+        views: toNumber(current.views) + toNumber(post.viewsCount),
+        engagement: toNumber(current.engagement) + getEngagement(post),
+        sentimentCounts,
+        sentiment: getDominantSentiment(sentimentCounts),
+        representativePostId: current.representativePostId || post.id,
+        representativeTweetId: current.representativeTweetId || post.tweetId,
+        postIds,
+        tweetIds,
+        source: options.source || current.source || null,
+      };
+    });
   });
+}
+
+function buildBucketKeys(window) {
+  const keys = [];
+  const current = new Date(startOfBucket(window.windowStartAt, window.bucketSize));
+  const end = new Date(window.windowEndAt);
+  while (current < end) {
+    keys.push(current.toISOString());
+    if (window.bucketSize === "day") current.setUTCDate(current.getUTCDate() + 1);
+    else current.setUTCHours(current.getUTCHours() + 1);
+  }
+  return keys;
+}
+
+function buildTopicTrends(posts, topTopics, window) {
+  const buckets = buildBucketKeys(window);
+  const bucketIndex = new Map(buckets.map((bucket, index) => [bucket, index]));
+  return topTopics.slice(0, 3).map((topic) => {
+    const values = buckets.map(() => 0);
+    posts.forEach((post) => {
+      const postTopics = Array.isArray(post.topics) ? post.topics.map((item) => normalizeAggregateItem(item)?.name).filter(Boolean) : [];
+      if (!postTopics.includes(topic.name)) return;
+      const index = bucketIndex.get(startOfBucket(post.postCreatedAt, window.bucketSize));
+      if (index !== undefined) values[index] += 1;
+    });
+    return {
+      topic: topic.name,
+      topicZh: topic.topicZh || getTopicZh(topic.name),
+      name: topic.name,
+      count: topic.count,
+      mentions: topic.count,
+      buckets,
+      values,
+    };
+  });
+}
+
+function pickTopAggregateValues(posts, field, limit = 5) {
+  const map = new Map();
+  posts.forEach((post) => aggregateListValues(map, post[field], post, { source: field }));
+  return Array.from(map.values())
+    .sort((a, b) => (b.count - a.count) || (b.views - a.views))
+    .slice(0, limit);
+}
+
+function pickPostSummary(post, lang) {
+  if (lang === "zh") return post.summaryZh || post.sentimentSummaryZh || post.postZh || post.text || "";
+  return post.summaryEn || post.text || "";
+}
+
+function buildViewpointText(posts, sentiment, board, lang) {
+  const projectName = board.projectName || board.officialHandle || "该项目";
+  const selected = posts
+    .filter((post) => post.sentiment === sentiment)
+    .sort((a, b) => (toNumber(b.viewsCount) - toNumber(a.viewsCount)) || (getEngagement(b) - getEngagement(a)))
+    .slice(0, 3);
+  if (!selected.length) {
+    if (lang === "zh") return `当前范围内暂无可归纳的${sentiment === SENTIMENTS.POSITIVE ? "正面" : "负面"}观点。`;
+    return `No ${sentiment === SENTIMENTS.POSITIVE ? "positive" : "negative"} viewpoint can be summarized for the selected range.`;
+  }
+  const topicNames = pickTopAggregateValues(selected, "topics", 3).map((item) => lang === "zh" ? item.topicZh : item.name).filter(Boolean);
+  const keywordNames = pickTopAggregateValues(selected, "keywords", 5).map((item) => item.word).filter(Boolean);
+  const summaries = selected.map((post) => pickPostSummary(post, lang)).filter(Boolean).slice(0, 2);
+  if (lang === "zh") {
+    const sentimentLabel = sentiment === SENTIMENTS.POSITIVE ? "正面" : "负面";
+    return `${projectName} 的${sentimentLabel}讨论主要集中在 ${[...topicNames, ...keywordNames].slice(0, 5).join("、") || "相关帖子"}。代表内容：${summaries.join("；")}`;
+  }
+  return `${sentiment === SENTIMENTS.POSITIVE ? "Positive" : "Negative"} discussion around ${projectName} focuses on ${[...topicNames, ...keywordNames].slice(0, 5).join(", ") || "related posts"}. Representative posts: ${summaries.join("; ")}`;
+}
+
+function buildViewpoints(posts, board) {
+  const positivePosts = posts.filter((post) => post.sentiment === SENTIMENTS.POSITIVE);
+  const negativePosts = posts.filter((post) => post.sentiment === SENTIMENTS.NEGATIVE);
+  return {
+    positive: buildViewpointText(posts, SENTIMENTS.POSITIVE, board, "en"),
+    positiveZh: buildViewpointText(posts, SENTIMENTS.POSITIVE, board, "zh"),
+    negative: buildViewpointText(posts, SENTIMENTS.NEGATIVE, board, "en"),
+    negativeZh: buildViewpointText(posts, SENTIMENTS.NEGATIVE, board, "zh"),
+    sampleSize: {
+      positive: positivePosts.length,
+      negative: negativePosts.length,
+    },
+    generatedBy: "deterministic_aggregation",
+  };
+}
+
+function sortAggregate(map, limit) {
+  return Array.from(map.values())
+    .sort((a, b) => (b.count - a.count) || (b.views - a.views))
+    .slice(0, limit);
 }
 
 function buildSeries(posts, bucketSize) {
@@ -176,10 +358,8 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
     aggregateListValues(wordMap, post.keywords, post, { source: "keywords" });
   });
 
-  const sortAggregate = (map, limit) => Array.from(map.entries())
-    .map(([name, value]) => ({ name, ...value }))
-    .sort((a, b) => (b.count - a.count) || (b.views - a.views))
-    .slice(0, limit);
+  const topTopics = sortAggregate(topicMap, 20);
+  const wordCloud = sortAggregate(wordMap, 50);
 
   const influentialCount = posts.filter((post) => isInfluentialRank(post.authorGlobalRank, post.authorCnRank)).length;
 
@@ -209,8 +389,10 @@ async function buildSnapshotPayload(board, rangeKey, options = {}) {
       unknown: item.unknown,
     })),
     sentimentComposition,
-    topics: sortAggregate(topicMap, 20),
-    wordCloud: sortAggregate(wordMap, 50),
+    topics: topTopics,
+    topicTrends: buildTopicTrends(posts, topTopics, window),
+    wordCloud,
+    viewpoints: buildViewpoints(posts, board),
     accountSummary: {
       activeAccounts: authorIds.size,
       influentialMentionCount: influentialCount,
@@ -437,7 +619,7 @@ async function generateAggregateAlerts(board, options = {}) {
 
   const currentNegative = getNegativeRatio(currentPosts);
   const baselineNegative = getNegativeRatio(sameHourBaseline);
-  const minAnalyzed = Math.max(Number(alertConfig.negativeSpikeMinAnalyzed || 5), 1);
+  const minAnalyzed = Math.max(Number(alertConfig.negativeSpikeMinAnalyzed || 20), 1);
   const ratioDelta = Number(alertConfig.negativeShareSpikeDelta ?? 0.2);
   if (
     currentNegative.analyzed >= minAnalyzed &&

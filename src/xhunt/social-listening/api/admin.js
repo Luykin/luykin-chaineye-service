@@ -410,7 +410,7 @@ const AI_CONFIG_FIELD_DOCS = [
   { field: "tweetSummaryModel", label: "摘要模型", desc: "可单独指定中英文摘要模型；为空则使用默认模型。" },
   { field: "projectAttitudeModel", label: "态度模型", desc: "可单独指定项目态度评分模型；为空则使用默认模型。" },
   { field: "contentEnabled", label: "内容分析开关", desc: "开启后每条待处理帖子最多会调用 3 次 AI：标签、中文摘要、英文摘要。" },
-  { field: "projectAttitudeEnabled", label: "项目态度开关", desc: "开启后每条待处理帖子调用 1 次 AI，生成 0-10 分、positive/neutral/negative 和中文原因。" },
+  { field: "projectAttitudeEnabled", label: "项目态度开关", desc: "开启后每条待处理帖子调用 1 次 AI，生成 0-10 分、positive/neutral/negative/unknown 和中文原因；无关、证据不足、无法可靠判断不强行归为 neutral。" },
   { field: "contentBatchSize", label: "内容批大小", desc: "每个采集任务完成后最多分析多少条内容字段；历史补数任务额外限制为最多 10 条，避免费用瞬间放大。" },
   { field: "projectAttitudeBatchSize", label: "态度批大小", desc: "每个采集任务完成后最多评价多少条项目态度；历史补数任务额外限制为最多 20 条。" },
   { field: "negativeScoreThreshold", label: "负面阈值", desc: "项目态度分低于该值时判定为 negative。默认 4。" },

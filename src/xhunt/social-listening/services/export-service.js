@@ -24,10 +24,29 @@ function buildPostWhere(boardId, query = {}) {
   if (q) {
     where[Op.or] = [
       { text: { [Op.iLike]: `%${q}%` } },
+      { postZh: { [Op.iLike]: `%${q}%` } },
       { authorHandle: { [Op.iLike]: `%${q.replace(/^@+/, "")}%` } },
       { authorName: { [Op.iLike]: `%${q}%` } },
     ];
   }
+  const keyword = String(query.keyword || query.word || "").trim();
+  if (keyword) {
+    where[Op.and] = [
+      ...(where[Op.and] || []),
+      {
+        [Op.or]: [
+          { keywords: { [Op.contains]: [keyword] } },
+          { text: { [Op.iLike]: `%${keyword}%` } },
+          { postZh: { [Op.iLike]: `%${keyword}%` } },
+        ],
+      },
+    ];
+  }
+  const tweetIds = Array.isArray(query.tweetIds)
+    ? query.tweetIds
+    : String(query.tweetIds || "").split(",");
+  const normalizedTweetIds = tweetIds.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 200);
+  if (normalizedTweetIds.length) where.tweetId = { [Op.in]: normalizedTweetIds };
   return { where, rangeKey };
 }
 
@@ -88,6 +107,7 @@ async function exportPostsXlsx(board, query = {}, actor = {}, redisClient = null
       Replies: post.metrics.replies,
       主题: (post.topics || []).join(", "),
       关键词: (post.keywords || []).join(", "),
+      中文全文: post.postZh || "",
       中文摘要: post.summaryZh || "",
       原文: post.text || "",
     };

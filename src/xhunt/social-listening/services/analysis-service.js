@@ -183,6 +183,11 @@ function scoreToSentiment(score, config = {}) {
   return SENTIMENTS.NEUTRAL;
 }
 
+function normalizeSentiment(value) {
+  const sentiment = String(value || "").trim().toLowerCase();
+  return Object.values(SENTIMENTS).includes(sentiment) ? sentiment : "";
+}
+
 function buildProjectPromptName(board) {
   const metadata = getBoardMetadata(board);
   return String(metadata.aiProjectName || board.projectName || board.officialHandle || "").trim();
@@ -197,9 +202,22 @@ async function callProjectAttitudeAi(board, post) {
   const data = await generateProjectAttitude({ prompt, aiConfig });
 
   const score = data.score ?? data.data?.score;
+  const source = data.data && typeof data.data === "object" ? data.data : data;
+  const explicitSentiment = normalizeSentiment(source.sentiment);
+  const relevantToProject = source.relevant_to_project ?? source.relevantToProject;
+  const rawConfidence = source.confidence;
+  const confidence = rawConfidence === null || rawConfidence === undefined || rawConfidence === "" ? NaN : Number(rawConfidence);
+  const sentiment = explicitSentiment || scoreToSentiment(score, aiConfig);
+  const strictSentiment = (
+    sentiment === SENTIMENTS.UNKNOWN ||
+    relevantToProject === false ||
+    (Number.isFinite(confidence) && confidence < 0.5)
+  ) ? SENTIMENTS.UNKNOWN : sentiment;
   return {
     score,
-    sentiment: scoreToSentiment(score, aiConfig),
+    sentiment: strictSentiment,
+    relevantToProject: relevantToProject === undefined ? null : Boolean(relevantToProject),
+    confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : null,
     summary: data.summary || data.reason || data.message || null,
     raw: data,
     promptTrace,
@@ -323,6 +341,7 @@ function extractTagResult(data = {}, text = "") {
 function extractSummaryResult(data = {}) {
   const source = data.data && typeof data.data === "object" ? data.data : data;
   return {
+    postZh: source.post_zh || source.postZh || null,
     summaryZh: source.summary_cn || source.summaryZh || source.summary || null,
     summaryEn: source.summary_en || source.summaryEn || null,
     titleZh: source.title_cn || source.titleZh || null,
@@ -334,7 +353,7 @@ function extractSummaryResult(data = {}) {
 }
 
 function hasSummaryFields(row) {
-  return Boolean(row.summaryZh || row.summaryEn || row.titleZh || row.titleEn || row.abstractZh || row.abstractEn);
+  return Boolean(row.postZh || row.summaryZh || row.summaryEn || row.titleZh || row.titleEn || row.abstractZh || row.abstractEn);
 }
 
 async function callTweetTagAi(board, post) {
@@ -367,7 +386,8 @@ async function callTweetSummaryAi(board, post, lang) {
   if (!text) return { summary: "", promptTrace, raw: {} };
   const data = await generateTweetSummaryMedia({ prompt, aiConfig });
   const summary = typeof data === "string" ? data : (data.summary || data.text || "");
-  return { summary, promptTrace, raw: typeof data === "object" ? data : { text: data } };
+  const postZh = typeof data === "object" ? (data.post_zh || data.postZh || "") : "";
+  return { summary, postZh, promptTrace, raw: typeof data === "object" ? data : { text: data } };
 }
 
 async function analyzePendingContentMetadata(board, options = {}) {
@@ -414,7 +434,7 @@ async function analyzePendingContentMetadata(board, options = {}) {
       const patch = {};
       const rawAi = { ...(post.rawTweet?.socialListeningAi || {}) };
       const shouldGenerateTag = !Array.isArray(post.topics) || !post.topics.length || ["pending", "failed", "reused"].includes(post.tagStatus || "");
-      const shouldGenerateSummary = !hasSummaryFields(post) || ["pending", "failed", "reused"].includes(post.summaryStatus || "") || post.aiSource === "dev_tweet_ai";
+      const shouldGenerateSummary = !hasSummaryFields(post) || !post.postZh || ["pending", "failed", "reused"].includes(post.summaryStatus || "") || post.aiSource === "dev_tweet_ai";
       const shouldReplaceOldAiFields = post.aiSource === "dev_tweet_ai" || post.tagStatus === "reused" || post.summaryStatus === "reused";
 
       if (shouldGenerateTag) {
@@ -437,10 +457,13 @@ async function analyzePendingContentMetadata(board, options = {}) {
         ]);
         const summaryZh = summaryZhResult.summary;
         const summaryEn = summaryEnResult.summary;
+        const postZh = summaryZhResult.postZh;
+        if (postZh || shouldReplaceOldAiFields) patch.postZh = postZh || null;
         if (summaryZh || shouldReplaceOldAiFields) patch.summaryZh = summaryZh || null;
         if (summaryEn || shouldReplaceOldAiFields) patch.summaryEn = summaryEn || null;
-        patch.summaryStatus = summaryZh || summaryEn ? "generated" : "skipped";
+        patch.summaryStatus = postZh || summaryZh || summaryEn ? "generated" : "skipped";
         rawAi.summary = {
+          postZh,
           summaryZh,
           summaryEn,
           prompt: summaryZhResult.promptTrace || summaryEnResult.promptTrace,
@@ -518,6 +541,8 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
           projectAttitude: {
             score: result.score,
             sentiment: result.sentiment,
+            relevantToProject: result.relevantToProject,
+            confidence: result.confidence,
             summary: result.summary,
             prompt: result.promptTrace,
             raw: result.raw,
