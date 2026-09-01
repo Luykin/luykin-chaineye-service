@@ -43,6 +43,42 @@ const TWEET_SUMMARY_SCHEMA = Object.freeze({
   required: ["summary"],
 });
 
+const TWEET_ANALYSIS_SCHEMA = Object.freeze({
+  type: "object",
+  properties: {
+    crypto_relevant: { type: "boolean" },
+    tags: { type: "array", items: { type: "string" } },
+    summary_cn: { type: "string" },
+    summary_en: { type: "string" },
+    domain_tag: { type: "string", enum: STRICT_DOMAIN_TAGS },
+    domain_tag_version: { type: "string", enum: [STRICT_DOMAIN_TAG_VERSION] },
+    crypto_sub_tags: { type: "array", items: { type: "string", enum: STRICT_CRYPTO_SUB_TAGS } },
+    ai_sub_tags: { type: "array", items: { type: "string", enum: STRICT_AI_SUB_TAGS } },
+    hot_tags: { type: "array", items: { type: "string" } },
+    score: { type: "number" },
+    sentiment: { type: "string", enum: ["positive", "neutral", "negative", "unknown"] },
+    relevant_to_project: { type: "boolean" },
+    confidence: { type: "number" },
+    attitude_summary: { type: "string" },
+  },
+  required: [
+    "crypto_relevant",
+    "tags",
+    "summary_cn",
+    "summary_en",
+    "domain_tag",
+    "domain_tag_version",
+    "crypto_sub_tags",
+    "ai_sub_tags",
+    "hot_tags",
+    "score",
+    "sentiment",
+    "relevant_to_project",
+    "confidence",
+    "attitude_summary",
+  ],
+});
+
 function toNumber(value, fallback) {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
@@ -86,6 +122,20 @@ function getLlmOptions(aiConfig = {}, purpose) {
   };
 }
 
+
+async function generateTweetAnalysis({ prompt, aiConfig }) {
+  const options = getLlmOptions(aiConfig, "tweetAnalysis");
+  const data = await timedStructuredChat("tweetAnalysis", prompt, TWEET_ANALYSIS_SCHEMA, options);
+  const score = Math.max(0, Math.min(10, toNumber(data.score, 5)));
+  const rawConfidence = Number(data.confidence);
+  const confidence = Number.isFinite(rawConfidence) ? Math.max(0, Math.min(1, rawConfidence)) : null;
+  return {
+    ...data,
+    score,
+    confidence,
+  };
+}
+
 async function generateTweetTagV2({ prompt, aiConfig }) {
   const options = getLlmOptions(aiConfig, "tweetTag");
   return timedStructuredChat("tweetTag", prompt, TWEET_TAG_SCHEMA, options);
@@ -110,6 +160,7 @@ async function generateTweetSummaryMedia({ prompt, aiConfig }) {
 }
 
 module.exports = {
+  generateTweetAnalysis,
   generateTweetTagV2,
   generateProjectAttitude,
   generateTweetSummaryMedia,

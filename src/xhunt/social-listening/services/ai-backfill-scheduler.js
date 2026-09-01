@@ -5,8 +5,7 @@ const {
 } = require("../../../models/postgres-start");
 const { BOARD_STATUSES } = require("../constants");
 const {
-  analyzePendingContentMetadata,
-  analyzePendingProjectAttitudes,
+  analyzePendingPostAi,
   getBoardAiConfig,
 } = require("./analysis-service");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
@@ -123,16 +122,13 @@ function createSocialListeningAiWorker({ redisClient, tickIntervalMs } = {}) {
       return { skipped: true, reason: "board_ai_disabled" };
     }
     const startedAt = Date.now();
-    const content = await analyzePendingContentMetadata(board, {
-      limit: workerConfig.contentBatchSize,
-      concurrency: workerConfig.contentConcurrency,
+    const result = await analyzePendingPostAi(board, {
+      limit: Math.max(workerConfig.contentBatchSize || 0, workerConfig.projectAttitudeBatchSize || 0),
+      concurrency: Math.max(workerConfig.contentConcurrency || 0, workerConfig.projectAttitudeConcurrency || 0),
       maxTextLength: workerConfig.maxTextLength,
     });
-    const attitude = await analyzePendingProjectAttitudes(board, {
-      limit: workerConfig.projectAttitudeBatchSize,
-      concurrency: workerConfig.projectAttitudeConcurrency,
-      maxTextLength: workerConfig.maxTextLength,
-    });
+    const content = result.content || {};
+    const attitude = result.attitude || {};
     const durationMs = Date.now() - startedAt;
     console.log(
       `[SocialListeningAIWorker] board=${board.id} handle=${board.officialHandle} content=${content.analyzed || 0}/${content.selected || 0} contentFailed=${content.failed || 0} attitude=${attitude.analyzed || 0}/${attitude.selected || 0} attitudeFailed=${attitude.failed || 0} ms=${durationMs}`

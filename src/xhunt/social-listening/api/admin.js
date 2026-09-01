@@ -78,26 +78,27 @@ function toFiniteNumber(value, fallback) {
 
 function estimateAiCost(aiConfig = {}, postCount = 0) {
   const posts = Math.max(0, Math.floor(toFiniteNumber(postCount, 0)));
-  const contentCallsPerPost = aiConfig.contentEnabled ? 3 : 0;
-  const attitudeCallsPerPost = aiConfig.projectAttitudeEnabled ? 1 : 0;
+  const callsPerPost = aiConfig.contentEnabled || aiConfig.projectAttitudeEnabled ? 1 : 0;
   const inputPrice = Math.max(0, toFiniteNumber(aiConfig.estimateInputPricePerMillion, 0.25));
   const outputPrice = Math.max(0, toFiniteNumber(aiConfig.estimateOutputPricePerMillion, 1.5));
   const contentInputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateContentInputTokens, 1200));
   const contentOutputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateContentOutputTokens, 260));
   const attitudeInputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateProjectAttitudeInputTokens, 900));
   const attitudeOutputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateProjectAttitudeOutputTokens, 180));
-  const inputTokens = posts * (contentCallsPerPost * contentInputTokens + attitudeCallsPerPost * attitudeInputTokens);
-  const outputTokens = posts * (contentCallsPerPost * contentOutputTokens + attitudeCallsPerPost * attitudeOutputTokens);
+  const inputTokensPerPost = callsPerPost ? Math.max(aiConfig.contentEnabled ? contentInputTokens : 0, aiConfig.projectAttitudeEnabled ? attitudeInputTokens : 0) : 0;
+  const outputTokensPerPost = callsPerPost ? (aiConfig.contentEnabled ? contentOutputTokens : 0) + (aiConfig.projectAttitudeEnabled ? attitudeOutputTokens : 0) : 0;
+  const inputTokens = posts * inputTokensPerPost;
+  const outputTokens = posts * outputTokensPerPost;
   const usd = (inputTokens / 1_000_000) * inputPrice + (outputTokens / 1_000_000) * outputPrice;
   return {
     posts,
-    calls: posts * (contentCallsPerPost + attitudeCallsPerPost),
+    calls: posts * callsPerPost,
     inputTokens,
     outputTokens,
     inputPricePerMillion: inputPrice,
     outputPricePerMillion: outputPrice,
     estimatedUsd: Number(usd.toFixed(4)),
-    assumption: "内容分析按每条 3 次调用（标签、中文摘要、英文摘要），项目态度按每条 1 次调用；费用仅用于上线前估算，实际以模型服务商账单为准。",
+    assumption: "标签、摘要、项目态度已合并为每条推文 1 次结构化调用；不再生成全文翻译；费用仅用于上线前估算，实际以模型服务商账单为准。",
   };
 }
 

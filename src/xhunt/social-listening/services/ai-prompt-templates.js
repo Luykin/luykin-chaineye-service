@@ -1,4 +1,5 @@
 const PROMPT_FIELDS = Object.freeze({
+  TWEET_ANALYSIS: "tweetAnalysis",
   PROJECT_ATTITUDE: "projectAttitude",
   TWEET_TAG: "tweetTag",
   TWEET_SUMMARY: "tweetSummary",
@@ -35,12 +36,46 @@ const STRICT_CRYPTO_SUB_TAGS = Object.freeze([
 const STRICT_AI_SUB_TAGS = Object.freeze(["LLM", "Agent", "Infra", "Model", "Data", "App", "Robotics", "Inference", "Training", "Chip"]);
 
 const PROMPT_ALIASES = Object.freeze({
+  [PROMPT_FIELDS.TWEET_ANALYSIS]: ["tweetAnalysis", "tweetAnalysisPrompt"],
   [PROMPT_FIELDS.PROJECT_ATTITUDE]: ["projectAttitude", "projectAttitudePrompt"],
   [PROMPT_FIELDS.TWEET_TAG]: ["tweetTag", "tweetTagV2", "tweetTagPrompt"],
   [PROMPT_FIELDS.TWEET_SUMMARY]: ["tweetSummary", "tweetSummaryMedia", "tweetSummaryPrompt"],
 });
 
 const DEFAULT_LOCAL_AI_PROMPTS = Object.freeze({
+  [PROMPT_FIELDS.TWEET_ANALYSIS]: `你是 Crypto/Web3/AI 社媒内容结构化分析助手。请对同一条推文只分析一次，并一次性输出标签、摘要、项目态度 JSON。
+
+输出字段：
+- crypto_relevant：是否和 Crypto/Web3/AI/金融科技/链上生态明显相关。
+- domain_tag：必须且只能从以下集合选择：crypto、ai、科技、金融、内容创作、其他、抽奖。
+- domain_tag_version：固定返回 ${STRICT_DOMAIN_TAG_VERSION}。
+- crypto_sub_tags：最多 8 个，只能从以下集合选择：${STRICT_CRYPTO_SUB_TAGS.join("、")}。
+- ai_sub_tags：最多 8 个，只能从以下集合选择：${STRICT_AI_SUB_TAGS.join("、")}。
+- hot_tags：最多 12 个，只能抽取推文原文中明确出现的项目名、代币名、协议名、产品名、叙事词；不要编造原文没出现过的词。
+- tags：仅作兼容补充，必须少量、短词；如果不确定返回空数组。
+- summary_cn：一句中文摘要，尽量不超过 {words} 个词/短语，只保留核心事件、项目名、观点或动作。
+- summary_en：一句英文摘要，尽量短句。
+- score：推文对项目「{project}」的态度分，范围 0-10；unknown 时为了兼容可给 5。
+- sentiment：必须从 positive、neutral、negative、unknown 中选择。
+- relevant_to_project：是否能确认推文在讨论项目「{project}」。
+- confidence：0-1，判断置信度。
+- attitude_summary：中文简明说明项目态度判断依据。
+
+规则：
+1. 不需要翻译全文，不要输出 post_zh。
+2. 不添加推文没有的信息。
+3. domain_tag / crypto_sub_tags / ai_sub_tags 禁止输出上述集合外的值。
+4. 不确定、无关或无法判断时：domain_tag 返回 其他，子标签和 hot_tags 返回空数组。
+5. 评分：0-3.9 negative；4-6 neutral；6.1-10 positive。
+6. 如果推文和项目无关、证据不足、无法可靠判断是否在讨论项目或态度，sentiment=unknown，relevant_to_project=false 或 confidence < 0.5；不要强行归入 neutral。
+
+项目：{project}
+推文发布时间：{createdAt}
+推文：
+{text}
+
+媒体：
+{media}`,
   [PROMPT_FIELDS.TWEET_TAG]: `你是 Crypto/Web3/AI 社媒内容严格分类器。请分析下面推文，按 tweet_tag_v2_strict 兼容格式输出 JSON。
 
 硬性规则：
@@ -81,8 +116,7 @@ const DEFAULT_LOCAL_AI_PROMPTS = Object.freeze({
 - 只保留核心事件、项目名、观点或动作。
 - 不添加推文没有的信息。
 - 如果媒体链接有助于理解，可以参考；无法访问媒体时忽略。
-- 当 {lang} 是 chinese 时，同时输出 post_zh：对推文原文做忠实中文全文翻译；不要摘要化、不要添加原文没有的信息。若原文已是中文，post_zh 返回原文清理后的中文内容。
-- 当 {lang} 不是 chinese 时，post_zh 可以为空字符串。
+- 不需要翻译全文，不要输出 post_zh；只输出摘要即可。
 
 推文：
 {text}
