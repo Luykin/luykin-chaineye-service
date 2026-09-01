@@ -284,6 +284,49 @@ function getBoardAiBlockingReasons(runtimeAi = {}, boardAi = {}) {
   return reasons;
 }
 
+function buildAiProgressItem(done = 0, pending = 0, batchSize = 1, intervalMinutes = 15) {
+  const safeDone = Math.max(0, Math.floor(toFiniteNumber(done, 0)));
+  const safePending = Math.max(0, Math.floor(toFiniteNumber(pending, 0)));
+  const total = safeDone + safePending;
+  const safeBatchSize = Math.max(1, Math.floor(toFiniteNumber(batchSize, 1)));
+  const safeIntervalMinutes = Math.max(1, Math.floor(toFiniteNumber(intervalMinutes, 15)));
+  const batchesRemaining = safePending > 0 ? Math.ceil(safePending / safeBatchSize) : 0;
+  return {
+    done: safeDone,
+    pending: safePending,
+    total,
+    percent: total > 0 ? Number(((safeDone / total) * 100).toFixed(2)) : 100,
+    batchSize: safeBatchSize,
+    batchesRemaining,
+    estimatedMinutesRemaining: batchesRemaining * safeIntervalMinutes,
+  };
+}
+
+function buildBoardAiProgress(runtimeConfig = {}, stats = {}) {
+  const runtimeAi = runtimeConfig.ai || {};
+  const scheduler = runtimeConfig.scheduler || {};
+  const intervalMinutes = Math.max(1, Math.floor(toFiniteNumber(scheduler.incrementalIntervalMinutes, 15)));
+  const content = buildAiProgressItem(
+    stats.contentAnalyzedPosts,
+    stats.contentPendingPosts,
+    runtimeAi.contentBatchSize || 10,
+    intervalMinutes
+  );
+  const projectAttitude = buildAiProgressItem(
+    stats.projectAttitudeAnalyzedPosts,
+    stats.projectAttitudePendingPosts,
+    runtimeAi.projectAttitudeBatchSize || 20,
+    intervalMinutes
+  );
+  return {
+    content,
+    projectAttitude,
+    intervalMinutes,
+    estimatedMinutesRemaining: Math.max(content.estimatedMinutesRemaining, projectAttitude.estimatedMinutesRemaining),
+    assumption: "按每个被监控账号的增量任务周期估算；实际耗时会受 LLM 响应、失败重试、全局开关和任务队列影响。",
+  };
+}
+
 async function buildBoardAiConfigResponse(board, runtimeConfig, estimatePostsInput = null) {
   const runtimeAi = runtimeConfig.ai || {};
   const boardAi = getBoardAiRuntime(board);
@@ -304,6 +347,7 @@ async function buildBoardAiConfigResponse(board, runtimeConfig, estimatePostsInp
     config: sanitized,
     runtime: sanitizeRuntimeConfig(runtimeConfig).ai,
     stats,
+    progress: buildBoardAiProgress(runtimeConfig, stats),
     costEstimate,
     blockingReasons: getBoardAiBlockingReasons(runtimeAi, sanitized),
     rules: [

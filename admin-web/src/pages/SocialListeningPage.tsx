@@ -276,6 +276,17 @@ function formatUsd(value?: number | null) {
   return `$${num.toFixed(num >= 10 ? 2 : 4)}`;
 }
 
+function formatEtaMinutes(value?: number | null) {
+  const minutes = Math.max(0, Math.floor(Number(value || 0)));
+  if (!minutes) return "已完成";
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  if (days > 0) return `约 ${days} 天 ${hours} 小时`;
+  if (hours > 0) return `约 ${hours} 小时 ${mins} 分钟`;
+  return `约 ${mins} 分钟`;
+}
+
 function calculateAiCost(ai?: Partial<SocialListeningAiRuntimeConfig>, postCount = 0) {
   const posts = Math.max(0, Math.floor(Number(postCount || 0)));
   const contentCalls = ai?.contentEnabled ? 3 : 0;
@@ -988,6 +999,35 @@ function AiRuntimeConfigPanel() {
   );
 }
 
+function AiProgressLine({
+  title,
+  item,
+  enabled,
+}: {
+  title: string;
+  item?: { done: number; pending: number; total: number; percent: number; batchSize: number; batchesRemaining: number; estimatedMinutesRemaining: number };
+  enabled?: boolean;
+}) {
+  if (!item) return null;
+  const percent = Math.min(100, Math.max(0, Number(item.percent || 0)));
+  const status = enabled && item.pending > 0 ? "active" : item.pending > 0 ? "normal" : "success";
+  return (
+    <Space direction="vertical" size={4} style={{ width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <Space size={6}>
+          <Text strong>{title}</Text>
+          {enabled ? <Tag color="green">补跑中</Tag> : <Tag>未生效</Tag>}
+        </Space>
+        <Text type="secondary">已 {formatNumber(item.done)} / 总 {formatNumber(item.total)}</Text>
+      </div>
+      <Progress percent={percent} size="small" status={status} />
+      <Text type="secondary">
+        待处理 {formatNumber(item.pending)} 条；每轮最多 {item.batchSize} 条，剩余约 {item.batchesRemaining} 轮，ETA {enabled ? formatEtaMinutes(item.estimatedMinutesRemaining) : "开启后开始估算"}。
+      </Text>
+    </Space>
+  );
+}
+
 function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; open: boolean; onChanged: () => void }) {
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm();
@@ -995,6 +1035,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
     queryKey: ["social-listening", "board-ai-config", boardId],
     queryFn: () => fetchSocialListeningBoardAiConfig(boardId),
     enabled: open && Boolean(boardId),
+    refetchInterval: open ? 60_000 : false,
   });
   const llmModelsQuery = useQuery({
     queryKey: ["llm-models"],
@@ -1005,6 +1046,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
   const detail = configQuery.data?.data || null;
   const runtime = detail?.runtime;
   const stats = detail?.stats;
+  const progress = detail?.progress;
   const watchedAi = Form.useWatch("ai", form) as Partial<SocialListeningBoardAiRuntimeConfig> | undefined;
   const watchedAcceptCost = Form.useWatch("acceptCost", form) as boolean | undefined;
   const estimatePosts = Number(watchedAi?.estimatePosts ?? detail?.config.estimatePosts ?? 10000);
@@ -1082,6 +1124,16 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                 <Col span={12}><Statistic title="内容待分析" value={stats?.contentPendingPosts || 0} /></Col>
                 <Col span={12}><Statistic title="态度待评价" value={stats?.projectAttitudePendingPosts || 0} /></Col>
               </Row>
+              <Divider style={{ margin: "2px 0" }} />
+              <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                <AiProgressLine title="内容分析进度" item={progress?.content} enabled={detail?.config.effective.contentEnabled} />
+                <AiProgressLine title="态度评价进度" item={progress?.projectAttitude} enabled={detail?.config.effective.projectAttitudeEnabled} />
+                {progress ? (
+                  <Text type="secondary">
+                    整体 ETA {formatEtaMinutes(progress.estimatedMinutesRemaining)}；按约 {progress.intervalMinutes} 分钟一轮保守估算，不提速。
+                  </Text>
+                ) : null}
+              </Space>
               <Divider style={{ margin: "2px 0" }} />
               <Statistic title="预计 AI 调用" value={liveEstimate.calls} suffix="次" />
               <Statistic title="预计费用" value={formatUsd(liveEstimate.estimatedUsd)} valueStyle={{ color: wantsAi ? "#d46b08" : undefined }} />

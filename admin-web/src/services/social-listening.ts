@@ -200,6 +200,24 @@ export interface SocialListeningAiCostEstimate {
   assumption: string;
 }
 
+export interface SocialListeningAiProgressItem {
+  done: number;
+  pending: number;
+  total: number;
+  percent: number;
+  batchSize: number;
+  batchesRemaining: number;
+  estimatedMinutesRemaining: number;
+}
+
+export interface SocialListeningAiProgress {
+  content: SocialListeningAiProgressItem;
+  projectAttitude: SocialListeningAiProgressItem;
+  intervalMinutes: number;
+  estimatedMinutesRemaining: number;
+  assumption: string;
+}
+
 export interface SocialListeningAiFieldDoc {
   field: string;
   label: string;
@@ -250,6 +268,7 @@ export interface SocialListeningBoardAiConfigResponse {
   config: SocialListeningBoardAiRuntimeConfig;
   runtime: SocialListeningAiRuntimeConfig;
   stats: SocialListeningAiPendingStats;
+  progress?: SocialListeningAiProgress;
   costEstimate: SocialListeningAiCostEstimate;
   blockingReasons: string[];
   rules: string[];
