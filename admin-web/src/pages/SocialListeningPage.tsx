@@ -32,6 +32,7 @@ import {
   Tooltip,
   Typography,
   message,
+  type AutoCompleteProps,
   type MenuProps,
   type TableProps,
 } from "antd";
@@ -236,8 +237,26 @@ function filterModelOption(input: string, option?: { label?: unknown; value?: un
   return String(option?.label || option?.value || "").toLowerCase().includes(keyword);
 }
 
-function ModelAutoComplete({ options, placeholder }: { options: Array<{ value: string; label: string }>; placeholder: string }) {
-  return <AutoComplete className="social-listening-model-autocomplete" allowClear placeholder={placeholder} options={options} filterOption={filterModelOption} />;
+type ModelAutoCompleteProps = Omit<AutoCompleteProps, "options"> & {
+  options: Array<{ value: string; label: string }>;
+  placeholder: string;
+};
+
+function ModelAutoComplete({
+  options,
+  placeholder,
+  ...props
+}: ModelAutoCompleteProps) {
+  return (
+    <AutoComplete
+      {...props}
+      className="social-listening-model-autocomplete"
+      allowClear
+      placeholder={placeholder}
+      options={options}
+      filterOption={filterModelOption}
+    />
+  );
 }
 
 function formatDate(value?: string | null) {
