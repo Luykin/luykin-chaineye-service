@@ -164,6 +164,50 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   prompts: "全局 Prompt 覆盖；看板详情里的看板级 Prompt 优先级更高。",
 };
 
+const AI_POST_PROCESSING_STEPS = [
+  {
+    key: "tweetTag",
+    title: "1. 内容标签分析",
+    trigger: "开启「内容分析」后执行",
+    calls: "1 次 / 帖",
+    model: "tweetTagModel；为空使用该账号模型",
+    writes: [
+      "topics：主题标签",
+      "keywords：热词 + 召回命中关键词",
+      "tagStatus：generated / skipped / failed",
+      "rawTweet.socialListeningAi.tag：AI 原始结果和 promptTrace",
+    ],
+  },
+  {
+    key: "tweetSummary",
+    title: "2. 中英文摘要",
+    trigger: "开启「内容分析」后执行",
+    calls: "2 次 / 帖（中文 1 次 + 英文 1 次）",
+    model: "tweetSummaryModel；为空使用该账号模型",
+    writes: [
+      "summaryZh：中文摘要",
+      "summaryEn：英文摘要",
+      "summaryStatus：generated / skipped / failed",
+      "rawTweet.socialListeningAi.summary：摘要结果和 promptTrace",
+    ],
+  },
+  {
+    key: "projectAttitude",
+    title: "3. 项目态度评价",
+    trigger: "开启「态度评价」后执行",
+    calls: "1 次 / 帖",
+    model: "projectAttitudeModel；为空使用该账号模型",
+    writes: [
+      "projectAttitudeScore：0-10 态度分",
+      "sentimentScore：兼容分数字段，等同态度分",
+      "sentiment：positive / neutral / negative / unknown",
+      "sentimentSummaryZh：中文判断依据",
+      "attitudeStatus：succeeded / failed / skipped",
+      "rawTweet.projectAttitude：AI 原始结果和 promptTrace",
+    ],
+  },
+];
+
 function aiHelp(field: string) {
   return { title: AI_RUNTIME_FIELD_HELP[field] || "", icon: <InfoCircleOutlined /> };
 }
@@ -652,6 +696,50 @@ function BoardFormGuide() {
   );
 }
 
+function AiPostProcessingGuide({ compact = false }: { compact?: boolean }) {
+  return (
+    <Card
+      size="small"
+      className="social-listening-ai-processing-guide"
+      title="开启 AI 后，每个帖子会发生什么"
+      extra={<Tag color="purple">最多 4 次调用 / 帖</Tag>}
+    >
+      <Alert
+        type="info"
+        showIcon
+        message="AI 分为两个开关：内容分析、态度评价"
+        description="只开启内容分析时，每条帖子会做标签分析 + 中英文摘要；只开启态度评价时，只判断这条帖子对当前被监控项目的态度。两个都开启时，单条帖子最多 4 次 AI 调用。关闭账号 AI 后，后续任务会跳过该账号的 AI 阶段，历史 AI 字段不会自动清空。"
+      />
+      <Row gutter={[12, 12]} className="social-listening-ai-processing-steps">
+        {AI_POST_PROCESSING_STEPS.map((step) => (
+          <Col key={step.key} xs={24} lg={compact ? 24 : 8}>
+            <Card size="small" className="social-listening-ai-processing-step" title={step.title}>
+              <Space direction="vertical" size={8} className="social-listening-full">
+                <Space size={6} wrap>
+                  <Tag>{step.trigger}</Tag>
+                  <Tag color="blue">{step.calls}</Tag>
+                </Space>
+                <Text type="secondary">{step.model}</Text>
+                <div className="social-listening-ai-field-list">
+                  {step.writes.map((item) => (
+                    <Text key={item} code>{item}</Text>
+                  ))}
+                </div>
+              </Space>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+      <Descriptions size="small" bordered column={compact ? 1 : 2} className="social-listening-ai-common-fields">
+        <Descriptions.Item label="公共状态字段">aiStatus、aiAnalyzedAt、aiError、aiSource</Descriptions.Item>
+        <Descriptions.Item label="跳过规则">正文为空或过短会标记 skipped，不会强行调用模型</Descriptions.Item>
+        <Descriptions.Item label="情绪阈值">score 小于负面阈值为 negative；大于正面阈值为 positive；中间为 neutral</Descriptions.Item>
+        <Descriptions.Item label="保存表"><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
+      </Descriptions>
+    </Card>
+  );
+}
+
 function AiRuntimeConfigPanel() {
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm();
@@ -708,6 +796,7 @@ function AiRuntimeConfigPanel() {
     <Space direction="vertical" size={12} className="social-listening-full social-listening-ai-runtime-panel">
       {contextHolder}
       {detail?.loadError ? <Alert type="warning" showIcon message="当前使用默认配置" description={detail.loadError} /> : null}
+      <AiPostProcessingGuide />
       <Row gutter={[16, 16]} align="top">
         <Col xs={24} xl={6}>
           <Card size="small" title="状态与预算" extra={<Tag color={detail?.source === "nacos" ? "green" : "orange"}>{detail?.source === "nacos" ? "Nacos" : "默认"}</Tag>}>
@@ -916,6 +1005,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
         message="按被监控账号单独控制 AI，默认关闭"
         description="全局页只配置模型服务商、价格估算和总开关；这里才决定当前账号是否跑 AI。关闭后，后续采集任务到 AI 阶段会直接跳过该账号，已入库历史 AI 字段不会自动删除。"
       />
+      <AiPostProcessingGuide compact />
       {detail?.blockingReasons?.length ? (
         <Alert type="info" showIcon message="开启前需要补齐" description={<Space size={4} wrap>{detail.blockingReasons.map((item) => <Tag key={item}>{item}</Tag>)}</Space>} />
       ) : null}
