@@ -1,4 +1,10 @@
 const { structuredChat } = require("../../../lib/llm");
+const {
+  STRICT_DOMAIN_TAG_VERSION,
+  STRICT_DOMAIN_TAGS,
+  STRICT_CRYPTO_SUB_TAGS,
+  STRICT_AI_SUB_TAGS,
+} = require("./ai-prompt-templates");
 
 const TWEET_TAG_SCHEMA = Object.freeze({
   type: "object",
@@ -7,10 +13,10 @@ const TWEET_TAG_SCHEMA = Object.freeze({
     tags: { type: "array", items: { type: "string" } },
     summary_cn: { type: "string" },
     summary_en: { type: "string" },
-    domain_tag: { type: "string" },
-    domain_tag_version: { type: "string" },
-    crypto_sub_tags: { type: "array", items: { type: "string" } },
-    ai_sub_tags: { type: "array", items: { type: "string" } },
+    domain_tag: { type: "string", enum: STRICT_DOMAIN_TAGS },
+    domain_tag_version: { type: "string", enum: [STRICT_DOMAIN_TAG_VERSION] },
+    crypto_sub_tags: { type: "array", items: { type: "string", enum: STRICT_CRYPTO_SUB_TAGS } },
+    ai_sub_tags: { type: "array", items: { type: "string", enum: STRICT_AI_SUB_TAGS } },
     hot_tags: { type: "array", items: { type: "string" } },
   },
   required: ["crypto_relevant", "tags", "domain_tag", "domain_tag_version", "crypto_sub_tags", "ai_sub_tags", "hot_tags"],

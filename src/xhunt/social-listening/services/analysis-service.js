@@ -4,7 +4,16 @@ const { SENTIMENTS } = require("../constants");
 const { normalizeTweetText } = require("../utils/text-normalize");
 
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
-const { PROMPT_FIELDS, PROMPT_ALIASES, DEFAULT_LOCAL_AI_PROMPTS } = require("./ai-prompt-templates");
+const {
+  PROMPT_FIELDS,
+  PROMPT_ALIASES,
+  STRICT_DOMAIN_TAG_VERSION,
+  STRICT_DOMAIN_TAGS,
+  STRICT_CRYPTO_SUB_TAGS,
+  STRICT_AI_SUB_TAGS,
+  DEFAULT_LOCAL_AI_PROMPTS,
+  LEGACY_FRONTEND_AI_PROMPTS,
+} = require("./ai-prompt-templates");
 const {
   generateTweetTagV2,
   generateProjectAttitude,
@@ -92,6 +101,21 @@ function getDefaultPrompt(field) {
   return DEFAULT_LOCAL_AI_PROMPTS[field] || "";
 }
 
+function normalizePromptForCompare(value) {
+  return String(value || "").trim().replace(/\r\n/g, "\n");
+}
+
+function isDefaultEquivalentPrompt(field, prompt) {
+  const normalized = normalizePromptForCompare(prompt);
+  return Boolean(
+    normalized &&
+    (
+      normalized === normalizePromptForCompare(DEFAULT_LOCAL_AI_PROMPTS[field]) ||
+      normalized === normalizePromptForCompare(LEGACY_FRONTEND_AI_PROMPTS[field])
+    )
+  );
+}
+
 function renderPromptTemplate(prompt, variables = {}) {
   return String(prompt || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
     if (!Object.prototype.hasOwnProperty.call(variables, key)) return match;
@@ -108,12 +132,12 @@ function buildPromptInfo(board, aiConfig, field, variables = {}) {
   let configured = false;
   let template = defaultTemplate;
 
-  if (runtimeTemplate) {
+  if (runtimeTemplate && !isDefaultEquivalentPrompt(field, runtimeTemplate)) {
     template = runtimeTemplate;
     source = "nacos.echohunt_social_listening_config.ai.prompts";
     configured = true;
   }
-  if (boardTemplate) {
+  if (boardTemplate && !isDefaultEquivalentPrompt(field, boardTemplate)) {
     template = boardTemplate;
     source = "board.metadata.aiPrompts";
     configured = true;
@@ -141,7 +165,8 @@ function buildPromptTrace(board, field, variables = {}, aiConfig = {}) {
 }
 
 function hasPromptOverride(board, field) {
-  return Boolean(getBoardPrompt(board, field));
+  const prompt = getBoardPrompt(board, field);
+  return Boolean(prompt && !isDefaultEquivalentPrompt(field, prompt));
 }
 
 function countPromptOverrides(board, fields) {
@@ -191,18 +216,108 @@ function mergeListValues(...values) {
   return Array.from(new Set(values.flatMap(normalizeList)));
 }
 
-function extractTagResult(data = {}) {
+const DOMAIN_TAG_ALIAS_MAP = new Map([
+  ["crypto", "crypto"],
+  ["web3", "crypto"],
+  ["blockchain", "crypto"],
+  ["区块链", "crypto"],
+  ["加密", "crypto"],
+  ["ai", "ai"],
+  ["人工智能", "ai"],
+  ["科技", "科技"],
+  ["tech", "科技"],
+  ["technology", "科技"],
+  ["金融", "金融"],
+  ["finance", "金融"],
+  ["fintech", "金融"],
+  ["内容创作", "内容创作"],
+  ["creator", "内容创作"],
+  ["content", "内容创作"],
+  ["other", "其他"],
+  ["unknown", "其他"],
+  ["其它", "其他"],
+  ["其他", "其他"],
+  ["抽奖", "抽奖"],
+  ["giveaway", "抽奖"],
+  ["airdrop", "抽奖"],
+]);
+
+function normalizeForStrictCompare(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeStrictDomainTag(value) {
+  const raw = String(value || "").trim();
+  if (STRICT_DOMAIN_TAGS.includes(raw)) return raw;
+  return DOMAIN_TAG_ALIAS_MAP.get(normalizeForStrictCompare(raw)) || "其他";
+}
+
+function normalizeStrictList(value, allowedList, limit) {
+  const canonical = new Map(allowedList.map((item) => [normalizeForStrictCompare(item), item]));
+  const output = [];
+  for (const item of normalizeList(value)) {
+    const normalized = canonical.get(normalizeForStrictCompare(item));
+    if (!normalized || output.includes(normalized)) continue;
+    output.push(normalized);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s_\-.,!?，。！？:：;；()[\]{}"'“”‘’`]+/g, "");
+}
+
+function hotTagAppearsInText(tag, text) {
+  const raw = String(tag || "").trim();
+  const stripped = raw.replace(/^[$#@]+/, "").trim();
+  if (!stripped || stripped.length > 80) return false;
+  if (/^[a-z0-9]+$/i.test(stripped) && stripped.length < 2) return false;
+  const haystack = normalizeSearchText(text);
+  return Boolean(haystack && normalizeSearchText(stripped) && haystack.includes(normalizeSearchText(stripped)));
+}
+
+function normalizeHotTags(value, text, limit = 12) {
+  const output = [];
+  for (const item of normalizeList(value)) {
+    const tag = String(item || "").trim().slice(0, 80);
+    if (!hotTagAppearsInText(tag, text) || output.includes(tag)) continue;
+    output.push(tag);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+function extractTagResult(data = {}, text = "") {
   const source = data.data && typeof data.data === "object" ? data.data : data;
+  const domainTag = normalizeStrictDomainTag(source.domain_tag || source.domainTag);
+  const cryptoSubTags = normalizeStrictList(source.crypto_sub_tags || source.cryptoSubTags, STRICT_CRYPTO_SUB_TAGS, 8);
+  const aiSubTags = normalizeStrictList(source.ai_sub_tags || source.aiSubTags, STRICT_AI_SUB_TAGS, 8);
+  const hotTags = normalizeHotTags(mergeListValues(source.hot_tags, source.hotTags, source.keywords), text, 12);
   const topics = mergeListValues(
-    source.domain_tag,
-    source.domain_tags,
-    source.crypto_sub_tags,
-    source.ai_sub_tags,
-    source.tags,
-    source.topics
+    domainTag === "其他" ? [] : [domainTag],
+    cryptoSubTags,
+    aiSubTags
   );
-  const keywords = mergeListValues(source.hot_tags, source.keywords);
-  return { topics, keywords, raw: source };
+  return {
+    topics,
+    keywords: hotTags,
+    raw: {
+      ...source,
+      domain_tag: domainTag,
+      domain_tag_version: STRICT_DOMAIN_TAG_VERSION,
+      crypto_sub_tags: cryptoSubTags,
+      ai_sub_tags: aiSubTags,
+      hot_tags: hotTags,
+      socialListeningStrict: {
+        version: STRICT_DOMAIN_TAG_VERSION,
+        ignoredFreeformTags: normalizeList(source.tags || source.topics || source.domain_tags),
+      },
+    },
+  };
 }
 
 function extractSummaryResult(data = {}) {
@@ -229,7 +344,7 @@ async function callTweetTagAi(board, post) {
   const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_TAG, promptVariables);
   if (!text) return { topics: [], keywords: [], raw: {}, promptTrace };
   const data = await generateTweetTagV2({ prompt, aiConfig });
-  return { ...extractTagResult(data), promptTrace };
+  return { ...extractTagResult(data, text), promptTrace };
 }
 
 function pickFirstMedia(post) {
