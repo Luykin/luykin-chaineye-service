@@ -5,13 +5,16 @@ import {
   Button,
   Card,
   Col,
+  Checkbox,
   Collapse,
   ColorPicker,
   Descriptions,
+  Divider,
   Drawer,
   Empty,
   Form,
   Input,
+  InputNumber,
   Modal,
   Popconfirm,
   Progress,
@@ -19,6 +22,7 @@ import {
   Select,
   Space,
   Statistic,
+  Switch,
   Table,
   Tabs,
   Tag,
@@ -39,9 +43,11 @@ import {
   deleteSocialListeningBoard,
   fetchSocialListeningAccesses,
   fetchSocialListeningAlerts,
+  fetchSocialListeningBoardAiConfig,
   fetchSocialListeningBoards,
   fetchSocialListeningJobs,
   fetchSocialListeningPosts,
+  fetchSocialListeningRuntimeConfig,
   fetchSocialListeningSignals,
   grantSocialListeningAccess,
   pauseSocialListeningBoard,
@@ -51,7 +57,11 @@ import {
   retrySocialListeningJob,
   revokeSocialListeningAccess,
   updateSocialListeningBoard,
+  updateSocialListeningBoardAiConfig,
+  updateSocialListeningRuntimeConfig,
   type ResolvedTwitterAccount,
+  type SocialListeningAiRuntimeConfig,
+  type SocialListeningBoardAiRuntimeConfig,
   type SocialListeningAccess,
   type SocialListeningAccountSignal,
   type SocialListeningAlert,
@@ -147,6 +157,37 @@ const DEFAULT_AI_PROMPTS = {
   tweetSummary: "请根据推文正文生成 {lang} 摘要，控制在 {words} 个词左右；如果有媒体链接可结合媒体语境，但不要编造未出现的信息。推文正文：{text}",
 };
 
+const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
+  apiKey: "模型服务密钥。后台不会回显明文；保持不变时留空即可，选择替换时才填写新 Key。",
+  baseURL: "OpenAI-compatible 接口地址，例如官方 OpenAI、Gemini 代理或内部网关，以 /v1 结尾更稳。",
+  model: "默认模型。标签、摘要、态度三个专项模型为空时都会使用这个模型。",
+  tweetTagModel: "只用于推文标签/热词生成；为空表示使用默认模型。",
+  tweetSummaryModel: "只用于中文摘要和英文摘要；为空表示使用默认模型。",
+  projectAttitudeModel: "只用于项目态度评分；为空表示使用默认模型。",
+  contentEnabled: "开启后每条帖子最多 3 次调用：tweetTag、中文摘要、英文摘要。",
+  projectAttitudeEnabled: "开启后每条帖子 1 次调用：输出 0-10 分、情绪和判断原因。",
+  contentBatchSize: "每个任务完成后处理多少条内容 AI。历史补数代码里最多按 10 条跑，避免一口气打爆费用。",
+  projectAttitudeBatchSize: "每个任务完成后处理多少条态度 AI。历史补数代码里最多按 20 条跑。",
+  negativeScoreThreshold: "态度分低于该值判定 negative；默认 4。",
+  positiveScoreThreshold: "态度分高于该值判定 positive；中间区间判定 neutral；默认 6。",
+  temperature: "模型随机性。分类/打分建议为 0，结果更稳定。",
+  maxTokens: "默认输出 token 上限。专项上限未配置时使用这个值。",
+  tweetTagMaxTokens: "标签/热词结构化输出上限。",
+  tweetSummaryMaxTokens: "单次摘要输出上限；中英文摘要会分别调用。",
+  projectAttitudeMaxTokens: "项目态度评分输出上限。",
+  timeoutMs: "单次模型请求超时时间，单位毫秒。",
+  maxRetries: "失败重试次数。过高会拖慢任务并可能增加调用次数。",
+  summaryWords: "摘要 Prompt 中的目标摘要长度。",
+  promptMaxLength: "全局/看板 Prompt 最大字符数，防止误填超长内容。",
+  estimateInputPricePerMillion: "费用估算用的输入 token 单价，单位 USD / 100万 tokens；不影响真实调用。",
+  estimateOutputPricePerMillion: "费用估算用的输出 token 单价，单位 USD / 100万 tokens；不影响真实调用。",
+  estimateContentInputTokens: "估算内容分析单次调用平均输入 token，用于预算。",
+  estimateContentOutputTokens: "估算内容分析单次调用平均输出 token，用于预算。",
+  estimateProjectAttitudeInputTokens: "估算态度评价单次调用平均输入 token，用于预算。",
+  estimateProjectAttitudeOutputTokens: "估算态度评价单次调用平均输出 token，用于预算。",
+  prompts: "全局 Prompt 覆盖；看板详情里的看板级 Prompt 优先级更高。",
+};
+
 function formatDate(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
@@ -157,6 +198,34 @@ function formatDate(value?: string | null) {
 function formatNumber(value?: number | null) {
   if (value === null || value === undefined) return "-";
   return Intl.NumberFormat("zh-CN", { notation: value >= 100000 ? "compact" : "standard" }).format(value);
+}
+
+function formatUsd(value?: number | null) {
+  const num = Number(value || 0);
+  return `$${num.toFixed(num >= 10 ? 2 : 4)}`;
+}
+
+function calculateAiCost(ai?: Partial<SocialListeningAiRuntimeConfig>, postCount = 0) {
+  const posts = Math.max(0, Math.floor(Number(postCount || 0)));
+  const contentCalls = ai?.contentEnabled ? 3 : 0;
+  const attitudeCalls = ai?.projectAttitudeEnabled ? 1 : 0;
+  const inputTokens = posts * (
+    contentCalls * Number(ai?.estimateContentInputTokens || 1200)
+    + attitudeCalls * Number(ai?.estimateProjectAttitudeInputTokens || 900)
+  );
+  const outputTokens = posts * (
+    contentCalls * Number(ai?.estimateContentOutputTokens || 260)
+    + attitudeCalls * Number(ai?.estimateProjectAttitudeOutputTokens || 180)
+  );
+  const estimatedUsd = (inputTokens / 1_000_000) * Number(ai?.estimateInputPricePerMillion || 0)
+    + (outputTokens / 1_000_000) * Number(ai?.estimateOutputPricePerMillion || 0);
+  return {
+    posts,
+    calls: posts * (contentCalls + attitudeCalls),
+    inputTokens,
+    outputTokens,
+    estimatedUsd,
+  };
 }
 
 function statusTag(status?: string) {
@@ -235,6 +304,27 @@ function renderTagList(value: unknown) {
   const list = Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
   if (!list.length) return "-";
   return <Space size={4} wrap>{list.map((item) => <Tag key={item}>{item}</Tag>)}</Space>;
+}
+
+function getBoardAiRuntimeFromMetadata(board?: SocialListeningBoard | null) {
+  const metadata = asRecord(board?.metadata);
+  return asRecord(metadata.aiRuntime);
+}
+
+function renderBoardAiStatus(board: SocialListeningBoard) {
+  const aiRuntime = getBoardAiRuntimeFromMetadata(board);
+  const contentOn = aiRuntime.contentEnabled === true;
+  const attitudeOn = aiRuntime.projectAttitudeEnabled === true;
+  const model = getString(aiRuntime.model);
+  return (
+    <Space direction="vertical" size={2}>
+      <Space size={4} wrap>
+        <Tag color={contentOn ? "green" : "default"}>内容 {contentOn ? "开" : "关"}</Tag>
+        <Tag color={attitudeOn ? "green" : "default"}>态度 {attitudeOn ? "开" : "关"}</Tag>
+      </Space>
+      <Text type="secondary" ellipsis style={{ maxWidth: 160 }}>{model || "未选模型"}</Text>
+    </Space>
+  );
 }
 
 function jsonPreview(value: unknown) {
@@ -561,6 +651,358 @@ function BoardFormGuide() {
   );
 }
 
+function AiRuntimeConfigPanel() {
+  const [messageApi, contextHolder] = message.useMessage();
+  const [form] = Form.useForm();
+  const [estimatePosts, setEstimatePosts] = useState(10000);
+  const configQuery = useQuery({
+    queryKey: ["social-listening", "runtime-config"],
+    queryFn: () => fetchSocialListeningRuntimeConfig({ estimatePosts }),
+  });
+  const detail = configQuery.data?.data || null;
+  const stats = detail?.stats;
+  const fieldDocs = detail?.fieldDocs || [];
+  const watchedAi = Form.useWatch("ai", form) as Partial<SocialListeningAiRuntimeConfig> | undefined;
+  const watchedApiKeyAction = Form.useWatch("apiKeyAction", form) as string | undefined;
+  const liveEstimate = calculateAiCost(watchedAi || detail?.config.ai, estimatePosts);
+
+  useEffect(() => {
+    if (!detail?.config?.ai) return;
+    form.setFieldsValue({
+      apiKeyAction: "keep",
+      ai: {
+        ...detail.config.ai,
+        apiKey: "",
+        prompts: {
+          projectAttitude: detail.config.ai.prompts?.projectAttitude || "",
+          tweetTag: detail.config.ai.prompts?.tweetTag || "",
+          tweetSummary: detail.config.ai.prompts?.tweetSummary || "",
+        },
+      },
+    });
+    const pending = Math.max(detail.stats.contentPendingPosts || 0, detail.stats.projectAttitudePendingPosts || 0);
+    if (pending > 10000) setEstimatePosts((prev) => Math.max(prev, pending));
+  }, [detail, form]);
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      const values = form.getFieldsValue(true) as { apiKeyAction?: "keep" | "replace" | "clear"; ai?: Partial<SocialListeningAiRuntimeConfig> };
+      return updateSocialListeningRuntimeConfig({
+        apiKeyAction: values.apiKeyAction || "keep",
+        ai: values.ai || {},
+      });
+    },
+    onSuccess: () => {
+      messageApi.success("AI 运行配置已发布到 Nacos，后端 1 分钟内会读到新配置");
+      void configQuery.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "保存 AI 配置失败"),
+  });
+
+  return (
+    <PageSection
+      title="AI 运行配置"
+      description="这里是 Social Listening AI 的全局供应商配置和总开关；不会直接让所有账号跑 AI。每个被监控账号还必须在详情「AI 开关」里单独选模型、确认成本后才能开启。配置保存到 Nacos：echohunt_social_listening_config。"
+      extra={<Space wrap><Tag color={detail?.source === "nacos" ? "green" : "orange"}>{detail?.source === "nacos" ? "Nacos 配置" : "默认配置"}</Tag><Button icon={<ReloadOutlined />} loading={configQuery.isFetching} onClick={() => configQuery.refetch()}>重新读取</Button></Space>}
+    >
+      {contextHolder}
+      {detail?.loadError ? <Alert style={{ marginBottom: 12 }} type="warning" showIcon message="当前使用默认配置" description={detail.loadError} /> : null}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} xl={7}>
+          <Card size="small" title="AI 状态总览">
+            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+              <Row gutter={[8, 8]}>
+                <Col span={12}><Statistic title="看板数" value={stats?.boardCount || 0} /></Col>
+                <Col span={12}><Statistic title="帖子总数" value={stats?.totalPosts || 0} /></Col>
+                <Col span={12}><Statistic title="内容待分析" value={stats?.contentPendingPosts || 0} valueStyle={{ color: (stats?.contentPendingPosts || 0) ? "#d46b08" : undefined }} /></Col>
+                <Col span={12}><Statistic title="态度待评价" value={stats?.projectAttitudePendingPosts || 0} valueStyle={{ color: (stats?.projectAttitudePendingPosts || 0) ? "#d46b08" : undefined }} /></Col>
+              </Row>
+              <Alert
+                type={detail?.config.ai.apiKeyConfigured ? "success" : "warning"}
+                showIcon
+                message={detail?.config.ai.apiKeyConfigured ? `API Key 已配置：${detail.config.ai.apiKeyMasked}` : "API Key 未配置"}
+                description="这里只是全局总闸；还需要每个被监控账号自己的 AI 开关开启，任务才会真正调用 AI。"
+              />
+              <Divider style={{ margin: "4px 0" }} />
+              <InputNumber min={0} value={estimatePosts} onChange={(value) => setEstimatePosts(Number(value || 0))} addonBefore="估算帖子数" style={{ width: "100%" }} />
+              <Row gutter={[8, 8]}>
+                <Col span={12}><Statistic title="预计调用" value={liveEstimate.calls} suffix="次" /></Col>
+                <Col span={12}><Statistic title="预计费用" value={formatUsd(liveEstimate.estimatedUsd)} /></Col>
+              </Row>
+              <Text type="secondary">估算公式：输入 token / 100万 × 输入单价 + 输出 token / 100万 × 输出单价。内容分析按每条 3 次调用，态度评价按每条 1 次调用。</Text>
+            </Space>
+          </Card>
+        </Col>
+        <Col xs={24} xl={17}>
+          <Form form={form} layout="vertical" onFinish={() => updateMutation.mutate()}>
+            <Row gutter={12}>
+              <Col xs={24} md={8}>
+                <Form.Item name={["ai", "model"]} label="默认模型" extra={AI_RUNTIME_FIELD_HELP.model} rules={[{ required: true, message: "请输入默认模型" }]}>
+                  <Input placeholder="gemini-3.1-flash-lite-preview" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={16}>
+                <Form.Item name={["ai", "baseURL"]} label="Base URL" extra={AI_RUNTIME_FIELD_HELP.baseURL} rules={[{ required: true, message: "请输入 baseURL" }]}>
+                  <Input placeholder="https://aaii.xclaw.info/v1/" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item name="apiKeyAction" label="API Key 操作" extra={AI_RUNTIME_FIELD_HELP.apiKey}>
+                  <Select options={[{ value: "keep", label: "保持当前 Key" }, { value: "replace", label: "替换为新 Key" }, { value: "clear", label: "清空 Key（停用 AI）" }]} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={16}>
+                <Form.Item name={["ai", "apiKey"]} label="新 API Key" extra="保持当前 Key 时这里留空；选择替换时才会写入 Nacos。">
+                  <Input.Password disabled={watchedApiKeyAction !== "replace"} placeholder={watchedApiKeyAction === "replace" ? "粘贴新 API Key" : detail?.config.ai.apiKeyMasked || "未配置"} autoComplete="new-password" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item name={["ai", "contentEnabled"]} label="开启内容分析" valuePropName="checked" extra={AI_RUNTIME_FIELD_HELP.contentEnabled}>
+                  <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item name={["ai", "projectAttitudeEnabled"]} label="开启项目态度评价" valuePropName="checked" extra={AI_RUNTIME_FIELD_HELP.projectAttitudeEnabled}>
+                  <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={4}>
+                <Form.Item name={["ai", "contentBatchSize"]} label="内容批大小" extra={AI_RUNTIME_FIELD_HELP.contentBatchSize}>
+                  <InputNumber min={1} max={50} style={{ width: "100%" }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={4}>
+                <Form.Item name={["ai", "projectAttitudeBatchSize"]} label="态度批大小" extra={AI_RUNTIME_FIELD_HELP.projectAttitudeBatchSize}>
+                  <InputNumber min={1} max={100} style={{ width: "100%" }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12}>
+                <Form.Item name={["ai", "negativeScoreThreshold"]} label="负面阈值" extra={AI_RUNTIME_FIELD_HELP.negativeScoreThreshold}>
+                  <InputNumber min={0} max={10} step={0.1} style={{ width: "100%" }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12}>
+                <Form.Item name={["ai", "positiveScoreThreshold"]} label="正面阈值" extra={AI_RUNTIME_FIELD_HELP.positiveScoreThreshold}>
+                  <InputNumber min={0} max={10} step={0.1} style={{ width: "100%" }} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Collapse
+              bordered={false}
+              items={[
+                {
+                  key: "advanced",
+                  label: "展开高级模型、费用单价和 Prompt 配置说明",
+                  children: (
+                    <Row gutter={12}>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="标签模型" extra={AI_RUNTIME_FIELD_HELP.tweetTagModel}><Input placeholder="为空用默认模型" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="摘要模型" extra={AI_RUNTIME_FIELD_HELP.tweetSummaryModel}><Input placeholder="为空用默认模型" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="态度模型" extra={AI_RUNTIME_FIELD_HELP.projectAttitudeModel}><Input placeholder="为空用默认模型" /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "temperature"]} label="温度" extra={AI_RUNTIME_FIELD_HELP.temperature}><InputNumber min={0} max={2} step={0.1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "maxTokens"]} label="默认输出上限" extra={AI_RUNTIME_FIELD_HELP.maxTokens}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "timeoutMs"]} label="超时时间 ms" extra={AI_RUNTIME_FIELD_HELP.timeoutMs}><InputNumber min={1000} max={300000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "maxRetries"]} label="重试次数" extra={AI_RUNTIME_FIELD_HELP.maxRetries}><InputNumber min={0} max={5} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetTagMaxTokens"]} label="标签输出上限" extra={AI_RUNTIME_FIELD_HELP.tweetTagMaxTokens}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetSummaryMaxTokens"]} label="摘要输出上限" extra={AI_RUNTIME_FIELD_HELP.tweetSummaryMaxTokens}><InputNumber min={64} max={4000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "projectAttitudeMaxTokens"]} label="态度输出上限" extra={AI_RUNTIME_FIELD_HELP.projectAttitudeMaxTokens}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "summaryWords"]} label="摘要词数" extra={AI_RUNTIME_FIELD_HELP.summaryWords}><InputNumber min={3} max={80} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "estimateInputPricePerMillion"]} label="输入单价 / 100万 token" extra={AI_RUNTIME_FIELD_HELP.estimateInputPricePerMillion}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "estimateOutputPricePerMillion"]} label="输出单价 / 100万 token" extra={AI_RUNTIME_FIELD_HELP.estimateOutputPricePerMillion}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "promptMaxLength"]} label="Prompt 最大长度" extra={AI_RUNTIME_FIELD_HELP.promptMaxLength}><InputNumber min={200} max={30000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateContentInputTokens"]} label="内容输入 token/次" extra={AI_RUNTIME_FIELD_HELP.estimateContentInputTokens}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateContentOutputTokens"]} label="内容输出 token/次" extra={AI_RUNTIME_FIELD_HELP.estimateContentOutputTokens}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateProjectAttitudeInputTokens"]} label="态度输入 token/次" extra={AI_RUNTIME_FIELD_HELP.estimateProjectAttitudeInputTokens}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateProjectAttitudeOutputTokens"]} label="态度输出 token/次" extra={AI_RUNTIME_FIELD_HELP.estimateProjectAttitudeOutputTokens}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col span={24}><Form.Item name={["ai", "systemPrompt"]} label="系统 Prompt" extra="全局 systemPrompt，会拼到结构化 JSON 输出要求前面。"><TextArea rows={2} /></Form.Item></Col>
+                      <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "projectAttitude"]} label="全局项目态度 Prompt" extra="覆盖代码默认 projectAttitude Prompt；看板级 Prompt 优先级更高。"><TextArea rows={4} /></Form.Item></Col>
+                      <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "tweetTag"]} label="全局标签 Prompt" extra="覆盖代码默认 tweetTag Prompt；用于主题、热词、词云。"><TextArea rows={4} /></Form.Item></Col>
+                      <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "tweetSummary"]} label="全局摘要 Prompt" extra="覆盖代码默认 tweetSummary Prompt；中英文摘要都会用。"><TextArea rows={4} /></Form.Item></Col>
+                      <Col span={24}>
+                        <Table rowKey="field" size="small" pagination={false} dataSource={fieldDocs} columns={[{ title: "字段", dataIndex: "label", width: 170, render: (_, row) => <Text strong>{row.label}<br /><Text code>{row.field}</Text></Text> }, { title: "说明", dataIndex: "desc" }]} />
+                      </Col>
+                    </Row>
+                  ),
+                },
+              ]}
+            />
+            <Space style={{ marginTop: 14 }} wrap>
+              <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>保存全局 AI 配置到 Nacos</Button>
+              <Text type="secondary">保存全局配置不会立即消耗 AI；账号级开关默认关闭，必须逐个账号确认预算后才会跑。</Text>
+            </Space>
+          </Form>
+        </Col>
+      </Row>
+    </PageSection>
+  );
+}
+
+
+function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; open: boolean; onChanged: () => void }) {
+  const [messageApi, contextHolder] = message.useMessage();
+  const [form] = Form.useForm();
+  const configQuery = useQuery({
+    queryKey: ["social-listening", "board-ai-config", boardId],
+    queryFn: () => fetchSocialListeningBoardAiConfig(boardId),
+    enabled: open && Boolean(boardId),
+  });
+  const detail = configQuery.data?.data || null;
+  const runtime = detail?.runtime;
+  const stats = detail?.stats;
+  const watchedAi = Form.useWatch("ai", form) as Partial<SocialListeningBoardAiRuntimeConfig> | undefined;
+  const watchedAcceptCost = Form.useWatch("acceptCost", form) as boolean | undefined;
+  const estimatePosts = Number(watchedAi?.estimatePosts ?? detail?.config.estimatePosts ?? 10000);
+  const liveEstimate = calculateAiCost({
+    ...runtime,
+    ...watchedAi,
+    contentEnabled: Boolean(runtime?.contentEnabled && watchedAi?.contentEnabled),
+    projectAttitudeEnabled: Boolean(runtime?.projectAttitudeEnabled && watchedAi?.projectAttitudeEnabled),
+  }, estimatePosts);
+  const wantsAi = Boolean(watchedAi?.contentEnabled || watchedAi?.projectAttitudeEnabled);
+  const contentBlocked = Boolean(watchedAi?.contentEnabled && !runtime?.contentEnabled);
+  const attitudeBlocked = Boolean(watchedAi?.projectAttitudeEnabled && !runtime?.projectAttitudeEnabled);
+
+  useEffect(() => {
+    if (!detail?.config) return;
+    const nextEstimatePosts = Math.max(
+      detail.config.estimatePosts || 0,
+      detail.stats.contentPendingPosts || 0,
+      detail.stats.projectAttitudePendingPosts || 0,
+      10000
+    );
+    form.setFieldsValue({
+      acceptCost: false,
+      ai: {
+        contentEnabled: Boolean(detail.config.contentEnabled),
+        projectAttitudeEnabled: Boolean(detail.config.projectAttitudeEnabled),
+        model: detail.config.model || "",
+        tweetTagModel: detail.config.tweetTagModel || "",
+        tweetSummaryModel: detail.config.tweetSummaryModel || "",
+        projectAttitudeModel: detail.config.projectAttitudeModel || "",
+        estimatePosts: nextEstimatePosts,
+      },
+    });
+  }, [detail, form]);
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      const values = form.getFieldsValue(true) as { acceptCost?: boolean; ai?: Partial<SocialListeningBoardAiRuntimeConfig> };
+      const ai = values.ai || {};
+      const enabling = Boolean(ai.contentEnabled || ai.projectAttitudeEnabled);
+      if (enabling && !values.acceptCost) throw new Error("开启该账号 AI 前，请先勾选确认预估成本。关闭 AI 不需要确认成本。");
+      return updateSocialListeningBoardAiConfig(boardId, {
+        acceptCost: Boolean(values.acceptCost),
+        ai: { ...ai, acceptCost: Boolean(values.acceptCost) },
+      });
+    },
+    onSuccess: () => {
+      messageApi.success("该被监控账号的 AI 开关已保存");
+      void configQuery.refetch();
+      onChanged();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "保存账号 AI 配置失败"),
+  });
+
+  return (
+    <Space direction="vertical" size={12} className="social-listening-full">
+      {contextHolder}
+      <Alert
+        type="warning"
+        showIcon
+        message="按被监控账号单独控制 AI，默认关闭"
+        description="全局页只配置模型服务商、价格估算和总开关；这里才决定当前账号是否跑 AI。关闭后，后续采集任务到 AI 阶段会直接跳过该账号，已入库历史 AI 字段不会自动删除。"
+      />
+      {detail?.blockingReasons?.length ? (
+        <Alert type="info" showIcon message="开启前需要补齐" description={<Space size={4} wrap>{detail.blockingReasons.map((item) => <Tag key={item}>{item}</Tag>)}</Space>} />
+      ) : null}
+      <Row gutter={[12, 12]}>
+        <Col xs={24} lg={7}>
+          <Card size="small" title="当前账号预算">
+            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+              <Row gutter={[8, 8]}>
+                <Col span={12}><Statistic title="帖子总数" value={stats?.totalPosts || 0} /></Col>
+                <Col span={12}><Statistic title="估算帖子" value={liveEstimate.posts} /></Col>
+                <Col span={12}><Statistic title="内容待分析" value={stats?.contentPendingPosts || 0} /></Col>
+                <Col span={12}><Statistic title="态度待评价" value={stats?.projectAttitudePendingPosts || 0} /></Col>
+              </Row>
+              <Divider style={{ margin: "2px 0" }} />
+              <Statistic title="预计 AI 调用" value={liveEstimate.calls} suffix="次" />
+              <Statistic title="预计费用" value={formatUsd(liveEstimate.estimatedUsd)} valueStyle={{ color: wantsAi ? "#d46b08" : undefined }} />
+              <Text type="secondary">保存开启时会把这次预估费用和调用次数写入 metadata.aiRuntime，方便后续审计。</Text>
+              <Descriptions size="small" column={1} bordered>
+                <Descriptions.Item label="上次确认">{formatDate(detail?.config.costAcceptedAt)}</Descriptions.Item>
+                <Descriptions.Item label="确认费用">{formatUsd(detail?.config.acceptedEstimatedUsd)}</Descriptions.Item>
+                <Descriptions.Item label="确认调用">{detail?.config.acceptedCalls || 0} 次</Descriptions.Item>
+              </Descriptions>
+            </Space>
+          </Card>
+        </Col>
+        <Col xs={24} lg={17}>
+          <Card size="small" title="账号 AI 开关">
+            <Form form={form} layout="vertical" onFinish={() => updateMutation.mutate()}>
+              <Row gutter={12}>
+                <Col xs={24} md={8}>
+                  <Form.Item name={["ai", "model"]} label="该账号模型" extra="必填。管理员必须为这个被监控账号明确选择模型，不能只靠全局默认值。" rules={[{ required: wantsAi, message: "开启账号 AI 前必须填写模型" }]}> 
+                    <Input placeholder={runtime?.model || "例如 gpt-4.1-mini / gemini-3.1-flash-lite"} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Form.Item name={["ai", "contentEnabled"]} label="该账号内容分析" valuePropName="checked" extra={contentBlocked ? "全局内容分析总开关未开启，当前账号不能生效。" : "开启后：标签 + 中文摘要 + 英文摘要，约每条 3 次调用。"}>
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Form.Item name={["ai", "projectAttitudeEnabled"]} label="该账号态度评价" valuePropName="checked" extra={attitudeBlocked ? "全局项目态度总开关未开启，当前账号不能生效。" : "开启后：评价对项目态度，约每条 1 次调用。"}>
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Form.Item name={["ai", "estimatePosts"]} label="本次预估帖子数" extra="建议不低于当前待 AI 分析帖子数；只用于成本确认，不影响任务扫描范围。">
+                    <InputNumber min={0} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={16}>
+                  <Form.Item name="acceptCost" valuePropName="checked" extra={wantsAi ? `我已确认当前账号使用 ${watchedAi?.model || "未选模型"}，预计 ${liveEstimate.calls} 次调用，约 ${formatUsd(liveEstimate.estimatedUsd)}。` : "关闭该账号 AI 时不需要确认成本。"}>
+                    <Checkbox disabled={!wantsAi}>确认该账号模型和预估成本，允许开启 AI 分析</Checkbox>
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Collapse
+                bordered={false}
+                items={[{
+                  key: "advanced-board-ai",
+                  label: "专项模型覆盖（可选）",
+                  children: (
+                    <Row gutter={12}>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="标签模型" extra="为空使用该账号模型。"><Input placeholder="为空使用该账号模型" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="摘要模型" extra="为空使用该账号模型。"><Input placeholder="为空使用该账号模型" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="态度模型" extra="为空使用该账号模型。"><Input placeholder="为空使用该账号模型" /></Form.Item></Col>
+                      <Col span={24}>
+                        <Descriptions size="small" bordered column={2}>
+                          <Descriptions.Item label="Base URL">{runtime?.baseURL || "未配置"}</Descriptions.Item>
+                          <Descriptions.Item label="API Key">{runtime?.apiKeyConfigured ? runtime.apiKeyMasked || "已配置" : "未配置"}</Descriptions.Item>
+                          <Descriptions.Item label="全局内容总开关">{runtime?.contentEnabled ? <Tag color="green">开启</Tag> : <Tag>关闭</Tag>}</Descriptions.Item>
+                          <Descriptions.Item label="全局态度总开关">{runtime?.projectAttitudeEnabled ? <Tag color="green">开启</Tag> : <Tag>关闭</Tag>}</Descriptions.Item>
+                          <Descriptions.Item label="实际内容生效">{detail?.config.effective.contentEnabled ? <Tag color="green">生效</Tag> : <Tag>未生效</Tag>}</Descriptions.Item>
+                          <Descriptions.Item label="实际态度生效">{detail?.config.effective.projectAttitudeEnabled ? <Tag color="green">生效</Tag> : <Tag>未生效</Tag>}</Descriptions.Item>
+                        </Descriptions>
+                      </Col>
+                    </Row>
+                  ),
+                }]}
+              />
+              <Space style={{ marginTop: 14 }} wrap>
+                <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>保存该账号 AI 开关</Button>
+                <Button onClick={() => configQuery.refetch()} loading={configQuery.isFetching}>重新读取</Button>
+                {wantsAi && !watchedAcceptCost ? <Text type="warning">开启前必须勾选成本确认。</Text> : <Text type="secondary">随时可关闭；关闭立即让后续任务跳过该账号 AI 阶段。</Text>}
+              </Space>
+            </Form>
+          </Card>
+        </Col>
+      </Row>
+    </Space>
+  );
+}
+
 interface BoardDrawerProps {
   board: SocialListeningBoard | null;
   open: boolean;
@@ -748,6 +1190,11 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
                 key: "posts",
                 label: "推文字段追踪",
                 children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="展开每条推文，可以看到 AI 生成了哪些字段，以及这些字段保存在哪个表。" /><Space wrap><Select value={range} onChange={setRange} options={RANGE_OPTIONS} style={{ width: 100 }} /><Input.Search placeholder="搜索内容/作者" allowClear onSearch={(q) => setPostQuery((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={postQuery.sentiment} onChange={(sentiment) => setPostQuery((prev) => ({ ...prev, sentiment }))} style={{ width: 130 }} options={[{ value: "", label: "全部情绪" }, { value: "negative", label: "负面" }, { value: "neutral", label: "中性" }, { value: "positive", label: "正面" }, { value: "unknown", label: "未知" }]} /><Button icon={<DownloadOutlined />} onClick={() => window.open(buildSocialListeningExportUrl(board.id, { range, ...postQuery }), "_blank")}>导出</Button></Space><Table rowKey="id" size="small" columns={postColumns} dataSource={postsQuery.data?.data.items || []} loading={postsQuery.isFetching} pagination={false} scroll={{ x: 1180 }} expandable={{ expandedRowRender: (row) => <PostAiInspector post={row} /> }} /></Space>,
+              },
+              {
+                key: "ai",
+                label: "AI 开关",
+                children: <BoardAiConfigPanel boardId={board.id} open={open} onChanged={onChanged} />,
               },
               {
                 key: "config",
@@ -940,6 +1387,7 @@ export function SocialListeningPage() {
     { title: "状态", dataIndex: "status", width: 105, render: statusTag },
     { title: "粉丝/排名", width: 160, render: (_, row) => <Space direction="vertical" size={0}><Text>{formatNumber(row.followersCount)}</Text><Text type="secondary">G {row.globalRank || "-"} · CN {row.cnRank || "-"}</Text></Space> },
     { title: "数据", width: 150, render: (_, row) => <Space direction="vertical" size={0}><Text>{row.postCount || 0} posts</Text><Text type="secondary">已分配 {row.accessCount || 0} 个账号</Text></Space> },
+    { title: "AI", width: 170, render: (_, row) => renderBoardAiStatus(row) },
     { title: "处理进度", width: 250, render: (_, row) => <Space direction="vertical" size={0}><Text>{formatDate(row.processedThrough)}</Text><Text type={row.lastFailureReason ? "danger" : "secondary"}>{row.lastFailureReason || `最近成功 ${formatDate(row.lastSuccessAt)}`}</Text></Space> },
     { title: "最新任务", width: 190, render: (_, row) => row.latestJob ? <Space direction="vertical" size={0}>{statusTag(row.latestJob.status)}<Text type="secondary">{row.latestJob.jobType}</Text></Space> : "-" },
     {
@@ -950,6 +1398,9 @@ export function SocialListeningPage() {
         <Space size={6} wrap>
           <Tooltip title="打开详情抽屉，查看分配可见账号、定时任务执行过程、推文字段追踪、配置说明和异常预警。">
             <Button size="small" onClick={() => openDrawer(row)}>管理</Button>
+          </Tooltip>
+          <Tooltip title="为这个被监控账户单独开启/关闭 AI；默认关闭，开启前必须确认模型和预估成本。">
+            <Button size="small" onClick={() => openDrawer(row, "ai")}>AI</Button>
           </Tooltip>
           <Tooltip title="把这个被监控账户分配给某个 EchoHunt 账号看；会直接打开「分配可见账号」页签。">
             <Button size="small" onClick={() => openDrawer(row, "access")}>分配</Button>
@@ -988,7 +1439,7 @@ export function SocialListeningPage() {
         <div className="social-listening-hero">
           <div>
             <Text className="social-listening-kicker">EchoHunt Ops</Text>
-            <Typography.Title level={2}>Social Listening 管理台</Typography.Title>
+            <Typography.Title level={2}>舆论监控管理台</Typography.Title>
             <Paragraph type="secondary">维护被监控账号、配置 AI 提示语，并追踪后台采集任务、入库字段与预警异常。</Paragraph>
           </div>
           <Space wrap>
@@ -1000,12 +1451,14 @@ export function SocialListeningPage() {
         </div>
 
 
+        <AiRuntimeConfigPanel />
+
         <PageSection
           title="被监控账号"
           description="新增账号默认暂停，不会自动跑任务；管理员点击恢复后先补最近 7 天数据，再低优先级补齐 30 天，后续增量任务每 15 分钟由 jobs 进程推进。"
           extra={<Space wrap><Input.Search placeholder="搜索项目 / handle" allowClear onSearch={(q) => setFilters((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={filters.status} onChange={(status) => setFilters((prev) => ({ ...prev, status }))} options={STATUS_OPTIONS} style={{ width: 130 }} /><Tooltip title="重新加载被监控账号列表，只刷新管理台页面数据，不会触发采集或 AI 分析任务。"><Button icon={<ReloadOutlined />} loading={boardsQuery.isFetching} onClick={() => boardsQuery.refetch()}>刷新</Button></Tooltip><Tooltip title="新增一个被监控官方 X 账号；保存后默认暂停，需要点击恢复才会启动补数和定时监控。"><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增监控</Button></Tooltip></Space>}
         >
-          <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1380 }} />
+          <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1550 }} />
         </PageSection>
 
         <Row gutter={16}>

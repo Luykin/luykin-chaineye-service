@@ -374,6 +374,10 @@ function buildBoardPayload(input = {}, resolved = null, adminId = null) {
       ...(input.metadata && typeof input.metadata === "object" ? input.metadata : {}),
       keywords,
       aliases: normalizeKeywords(input.aliases || []),
+      aiRuntime: {
+        contentEnabled: false,
+        projectAttitudeEnabled: false,
+      },
       profileSnapshot: resolved?.raw || null,
       rankSource: resolved?.rankSource || null,
     },

@@ -131,6 +131,126 @@ export interface SocialListeningPageData<T> {
   rangeKey?: string;
 }
 
+export interface SocialListeningAiRuntimeConfig {
+  apiKey?: string;
+  apiKeyConfigured?: boolean;
+  apiKeyMasked?: string;
+  baseURL: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  tweetTagModel?: string;
+  projectAttitudeModel?: string;
+  tweetSummaryModel?: string;
+  systemPrompt?: string;
+  timeoutMs: number;
+  maxRetries: number;
+  summaryWords: number;
+  promptMaxLength: number;
+  contentEnabled: boolean;
+  projectAttitudeEnabled: boolean;
+  contentBatchSize: number;
+  projectAttitudeBatchSize: number;
+  negativeScoreThreshold: number;
+  positiveScoreThreshold: number;
+  tweetTagMaxTokens?: number;
+  projectAttitudeMaxTokens?: number;
+  tweetSummaryMaxTokens?: number;
+  estimateInputPricePerMillion: number;
+  estimateOutputPricePerMillion: number;
+  estimateContentInputTokens: number;
+  estimateContentOutputTokens: number;
+  estimateProjectAttitudeInputTokens: number;
+  estimateProjectAttitudeOutputTokens: number;
+  prompts?: Record<string, string>;
+}
+
+export interface SocialListeningRuntimeConfig {
+  version: string;
+  scan?: Record<string, unknown>;
+  ai: SocialListeningAiRuntimeConfig;
+  scheduler?: Record<string, unknown>;
+  alert?: Record<string, unknown>;
+  refresh?: Record<string, unknown>;
+  export?: Record<string, unknown>;
+}
+
+export interface SocialListeningAiPendingStats {
+  boardCount: number;
+  totalPosts: number;
+  contentPendingPosts: number;
+  projectAttitudePendingPosts: number;
+  contentAnalyzedPosts: number;
+  projectAttitudeAnalyzedPosts: number;
+}
+
+export interface SocialListeningAiCostEstimate {
+  posts: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  inputPricePerMillion: number;
+  outputPricePerMillion: number;
+  estimatedUsd: number;
+  assumption: string;
+}
+
+export interface SocialListeningAiFieldDoc {
+  field: string;
+  label: string;
+  desc: string;
+}
+
+export interface SocialListeningRuntimeConfigResponse {
+  dataId: string;
+  group: string;
+  config: SocialListeningRuntimeConfig;
+  source: string;
+  loadError?: string | null;
+  stats: SocialListeningAiPendingStats;
+  costEstimate: SocialListeningAiCostEstimate;
+  fieldDocs: SocialListeningAiFieldDoc[];
+}
+
+export interface SocialListeningBoardAiRuntimeConfig {
+  contentEnabled: boolean;
+  projectAttitudeEnabled: boolean;
+  model: string;
+  tweetTagModel?: string;
+  tweetSummaryModel?: string;
+  projectAttitudeModel?: string;
+  estimatePosts: number;
+  costAcceptedAt?: string | null;
+  costAcceptedByAdminId?: number | null;
+  acceptedEstimatedUsd?: number;
+  acceptedCalls?: number;
+  updatedAt?: string | null;
+  effective: {
+    contentEnabled: boolean;
+    projectAttitudeEnabled: boolean;
+    model: string;
+    tweetTagModel: string;
+    tweetSummaryModel: string;
+    projectAttitudeModel: string;
+    baseURL: string;
+    apiKeyConfigured: boolean;
+    globalContentEnabled: boolean;
+    globalProjectAttitudeEnabled: boolean;
+    ready: boolean;
+  };
+}
+
+export interface SocialListeningBoardAiConfigResponse {
+  board: { id: string; officialHandle: string; projectName: string };
+  config: SocialListeningBoardAiRuntimeConfig;
+  runtime: SocialListeningAiRuntimeConfig;
+  stats: SocialListeningAiPendingStats;
+  costEstimate: SocialListeningAiCostEstimate;
+  blockingReasons: string[];
+  rules: string[];
+  fieldDocs: SocialListeningAiFieldDoc[];
+}
+
 export interface ResolvedTwitterAccount {
   twitterId: string | null;
   handle: string | null;
@@ -155,6 +275,28 @@ function withQuery(path: string, query?: Record<string, string | number | boolea
 
 export function fetchSocialListeningBoards(query?: { page?: number; pageSize?: number; q?: string; status?: string }) {
   return apiRequest<{ success: boolean; data: SocialListeningPageData<SocialListeningBoard> }>(withQuery(`${BASE_PATH}/monitored-accounts`, query));
+}
+
+export function fetchSocialListeningRuntimeConfig(query?: { estimatePosts?: number }) {
+  return apiRequest<{ success: boolean; data: SocialListeningRuntimeConfigResponse }>(withQuery(`${BASE_PATH}/runtime-config`, query));
+}
+
+export function updateSocialListeningRuntimeConfig(payload: { ai: Partial<SocialListeningAiRuntimeConfig>; apiKeyAction?: "keep" | "replace" | "clear" }) {
+  return apiRequest<{ success: boolean; data: SocialListeningRuntimeConfigResponse }>(`${BASE_PATH}/runtime-config`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function fetchSocialListeningBoardAiConfig(boardId: string, query?: { estimatePosts?: number }) {
+  return apiRequest<{ success: boolean; data: SocialListeningBoardAiConfigResponse }>(withQuery(`${BASE_PATH}/boards/${boardId}/ai-config`, query));
+}
+
+export function updateSocialListeningBoardAiConfig(boardId: string, payload: { ai: Partial<SocialListeningBoardAiRuntimeConfig> & { acceptCost?: boolean }; acceptCost?: boolean }) {
+  return apiRequest<{ success: boolean; data: SocialListeningBoardAiConfigResponse }>(`${BASE_PATH}/boards/${boardId}/ai-config`, {
+    method: "POST",
+    body: payload,
+  });
 }
 
 export function resolveSocialListeningAccount(handle: string) {

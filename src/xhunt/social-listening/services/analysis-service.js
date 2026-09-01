@@ -16,17 +16,46 @@ async function getAiConfig() {
   return config.ai || {};
 }
 
+function getBoardAiRuntime(board) {
+  const metadata = getBoardMetadata(board);
+  return metadata.aiRuntime && typeof metadata.aiRuntime === "object" ? metadata.aiRuntime : {};
+}
+
+async function getBoardAiConfig(board) {
+  const runtimeAi = await getAiConfig();
+  const boardAi = getBoardAiRuntime(board);
+  const boardModel = String(boardAi.model || "").trim();
+  const contentModelReady = Boolean(boardModel || boardAi.tweetTagModel || boardAi.tweetSummaryModel);
+  const attitudeModelReady = Boolean(boardModel || boardAi.projectAttitudeModel);
+  return {
+    ...runtimeAi,
+    ...boardAi,
+    apiKey: runtimeAi.apiKey,
+    baseURL: boardAi.baseURL || runtimeAi.baseURL,
+    model: boardModel,
+    tweetTagModel: boardAi.tweetTagModel || boardModel,
+    tweetSummaryModel: boardAi.tweetSummaryModel || boardModel,
+    projectAttitudeModel: boardAi.projectAttitudeModel || boardModel,
+    prompts: {
+      ...(runtimeAi.prompts && typeof runtimeAi.prompts === "object" ? runtimeAi.prompts : {}),
+      ...(boardAi.prompts && typeof boardAi.prompts === "object" ? boardAi.prompts : {}),
+    },
+    contentEnabled: Boolean(runtimeAi.contentEnabled && boardAi.contentEnabled && contentModelReady),
+    projectAttitudeEnabled: Boolean(runtimeAi.projectAttitudeEnabled && boardAi.projectAttitudeEnabled && attitudeModelReady),
+  };
+}
+
 function hasLocalAiConfig(aiConfig = {}) {
   return Boolean(String(aiConfig.apiKey || "").trim() && String(aiConfig.baseURL || "").trim());
 }
 
-async function isProjectAttitudeEnabled() {
-  const aiConfig = await getAiConfig();
+async function isProjectAttitudeEnabled(board) {
+  const aiConfig = await getBoardAiConfig(board);
   return Boolean(aiConfig.projectAttitudeEnabled && hasLocalAiConfig(aiConfig));
 }
 
-async function isContentAiEnabled() {
-  const aiConfig = await getAiConfig();
+async function isContentAiEnabled(board) {
+  const aiConfig = await getBoardAiConfig(board);
   return Boolean(aiConfig.contentEnabled && hasLocalAiConfig(aiConfig));
 }
 
@@ -135,7 +164,7 @@ function buildProjectPromptName(board) {
 }
 
 async function callProjectAttitudeAi(board, post) {
-  const aiConfig = await getAiConfig();
+  const aiConfig = await getBoardAiConfig(board);
   const text = `<<${new Date(post.postCreatedAt).toISOString()}--${normalizeTweetText(post.text || post.normalizedText || "")}>>`;
   const project = buildProjectPromptName(board);
   const promptVariables = { text, project, lang: "cn" };
@@ -196,7 +225,7 @@ function hasSummaryFields(row) {
 async function callTweetTagAi(board, post) {
   const text = normalizeTweetText(post.text || post.normalizedText || "");
   const promptVariables = { text };
-  const aiConfig = await getAiConfig();
+  const aiConfig = await getBoardAiConfig(board);
   const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_TAG, promptVariables);
   if (!text) return { topics: [], keywords: [], raw: {}, promptTrace };
   const data = await generateTweetTagV2({ prompt, aiConfig });
@@ -215,7 +244,7 @@ function pickFirstMedia(post) {
 }
 
 async function callTweetSummaryAi(board, post, lang) {
-  const aiConfig = await getAiConfig();
+  const aiConfig = await getBoardAiConfig(board);
   const summaryWords = aiConfig.summaryWords || 5;
   const text = normalizeTweetText(post.text || post.normalizedText || "");
   const promptVariables = { text, lang, words: summaryWords, media: pickFirstMedia(post) };
@@ -227,8 +256,8 @@ async function callTweetSummaryAi(board, post, lang) {
 }
 
 async function analyzePendingContentMetadata(board, options = {}) {
-  const aiConfig = await getAiConfig();
-  if (!await isContentAiEnabled()) return { enabled: false, analyzed: 0, failed: 0, skipped: 0 };
+  const aiConfig = await getBoardAiConfig(board);
+  if (!await isContentAiEnabled(board)) return { enabled: false, analyzed: 0, failed: 0, skipped: 0 };
   const limit = Math.min(Math.max(Number(options.limit || aiConfig.contentBatchSize || 10), 1), 50);
   const posts = await EchohuntSocialListeningPost.findAll({
     where: {
@@ -333,8 +362,8 @@ async function analyzePendingContentMetadata(board, options = {}) {
 }
 
 async function analyzePendingProjectAttitudes(board, options = {}) {
-  const aiConfig = await getAiConfig();
-  if (!await isProjectAttitudeEnabled()) return { enabled: false, analyzed: 0, failed: 0 };
+  const aiConfig = await getBoardAiConfig(board);
+  if (!await isProjectAttitudeEnabled(board)) return { enabled: false, analyzed: 0, failed: 0 };
   const limit = Math.min(Math.max(Number(options.limit || aiConfig.projectAttitudeBatchSize || 20), 1), 100);
   const posts = await EchohuntSocialListeningPost.findAll({
     where: {
@@ -397,6 +426,7 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
 module.exports = {
   isContentAiEnabled,
   isProjectAttitudeEnabled,
+  getBoardAiConfig,
   scoreToSentiment,
   buildPromptTrace,
   callProjectAttitudeAi,
