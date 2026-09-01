@@ -67,7 +67,7 @@ function keywordMatchesText(text, keyword) {
   const normalizedKeyword = String(keyword || "").trim().replace(/^@+/, "").toLowerCase();
   if (!normalizedText || !normalizedKeyword) return false;
   if (hasCjk(normalizedKeyword)) return normalizedText.includes(normalizedKeyword);
-  return new RegExp(`(^|[^a-z0-9_])${escapeRegExp(normalizedKeyword)}([^a-z0-9_]|$)`, "i").test(normalizedText);
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalizedKeyword)}([^a-z0-9]|$)`, "i").test(normalizedText);
 }
 
 function collectMatchedKeywords(text, keywords = []) {

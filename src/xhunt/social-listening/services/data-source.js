@@ -34,6 +34,30 @@ function escapeLikePattern(value) {
     .replace(/_/g, "\\_");
 }
 
+function escapeRegexPattern(value) {
+  return String(value || "").replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
+function hasCjk(value) {
+  return /[\u3400-\u9fff]/.test(String(value || ""));
+}
+
+function buildKeywordScanPattern(keyword, index) {
+  const normalizedKeyword = String(keyword || "").trim().replace(/^@+/, "");
+  if (hasCjk(normalizedKeyword)) {
+    return {
+      key: `kw${index}`,
+      type: "like",
+      value: `%${escapeLikePattern(normalizedKeyword)}%`,
+    };
+  }
+  return {
+    key: `kw${index}`,
+    type: "regex",
+    value: `(^|[^a-z0-9])${escapeRegexPattern(normalizedKeyword)}([^a-z0-9]|$)`,
+  };
+}
+
 function isNumericId(value) {
   return /^\d+$/.test(String(value || "").trim());
 }
@@ -160,7 +184,7 @@ async function fetchOfficialTweetIdsForBoard(db, board, startAt, endAt, limit) {
     `
       SELECT ot.id::text AS id
       FROM dev.tweet ot
-      WHERE ot.twitter_user_id = $officialTwitterId::bigint
+      WHERE ot.twitter_user_id::text = $officialTwitterId
         AND ot.create_time >= ($startAt::timestamptz - interval '30 days')
         AND ot.create_time < $endAt
       ORDER BY ot.create_time DESC
@@ -189,10 +213,10 @@ async function fetchCandidateTweetPage(db, bind, keywordClause) {
         (
           ${keywordClause}
           OR (
-            cardinality($officialTweetIds::bigint[]) > 0
+            cardinality($officialTweetIds::text[]) > 0
             AND (
-              t.quote_id = ANY($officialTweetIds::bigint[])
-              OR t.reply_id = ANY($officialTweetIds::bigint[])
+              t.quote_id::text = ANY($officialTweetIds::text[])
+              OR t.reply_id::text = ANY($officialTweetIds::text[])
             )
           )
         ) AS is_match
@@ -203,9 +227,9 @@ async function fetchCandidateTweetPage(db, bind, keywordClause) {
         AND (
           $cursorCreateTime::timestamptz IS NULL
           OR t.create_time < $cursorCreateTime::timestamptz
-          OR (t.create_time = $cursorCreateTime::timestamptz AND t.id < $cursorTweetId::bigint)
+          OR (t.create_time = $cursorCreateTime::timestamptz AND t.id::text < $cursorTweetId)
         )
-      ORDER BY t.create_time DESC, t.id DESC
+      ORDER BY t.create_time DESC, t.id::text DESC
       LIMIT $pageSize
     `,
     { bind, type: QueryTypes.SELECT }
@@ -239,9 +263,9 @@ async function fetchTweetRowsByIds(db, tweetIds, limit) {
         u.feature AS author_feature,
         u.kol AS author_kol
       FROM dev.tweet t
-      JOIN dev.twitter_user u ON u.id = t.twitter_user_id
-      WHERE t.id = ANY($tweetIds::bigint[])
-      ORDER BY t.create_time DESC, t.id DESC
+      JOIN dev.twitter_user u ON u.id::text = t.twitter_user_id::text
+      WHERE t.id::text = ANY($tweetIds::text[])
+      ORDER BY t.create_time DESC, t.id::text DESC
       LIMIT $limit
     `,
     { bind: { tweetIds, limit }, type: QueryTypes.SELECT }
@@ -353,10 +377,14 @@ async function fetchCandidateTweetsForBoard(board, startAt, endAt, options = {})
   const scanLimit = pageSize * maxPages;
   const officialPostLimit = clampInteger(options.officialPostScanLimit || scanConfig.officialPostScanLimit, scanConfig.officialPostScanLimit || 1000, 50, 5000);
   const keywords = buildBoardKeywords(board).slice(0, 10);
-  const patterns = keywords.map((keyword, index) => ({ key: `kw${index}`, value: `%${escapeLikePattern(String(keyword).replace(/^@+/, ""))}%` }));
+  const patterns = keywords.map(buildKeywordScanPattern);
 
   const keywordClause = patterns.length
-    ? patterns.map((item) => `t.text ILIKE $${item.key} ESCAPE '\\'`).join(" OR ")
+    ? patterns.map((item) => (
+      item.type === "regex"
+        ? `COALESCE(t.text, '') ~* $${item.key}`
+        : `t.text ILIKE $${item.key} ESCAPE '\\'`
+    )).join(" OR ")
     : "FALSE";
 
   const scanMeta = {
@@ -499,7 +527,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
         NULL::integer AS persist,
         NULL::text AS project_key
       FROM dev.twitter_user_follow f
-      WHERE f.following_id = $officialTwitterId::bigint
+        WHERE f.following_id::text = $officialTwitterId
         AND f.created_at >= $startAt
         AND f.created_at < $endAt
         AND f.latest > 0
@@ -517,7 +545,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
         NULL::integer AS persist,
         NULL::text AS project_key
       FROM dev.twitter_user_follow f
-      WHERE f.follower_id = $officialTwitterId::bigint
+        WHERE f.follower_id::text = $officialTwitterId
         AND f.created_at >= $startAt
         AND f.created_at < $endAt
         AND f.latest > 0
@@ -539,7 +567,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
           uf.persist,
           NULL::text AS project_key
         FROM dev.twitter_user_unfollow uf
-        WHERE uf.following_id = $officialTwitterId::bigint
+        WHERE uf.following_id::text = $officialTwitterId
           AND uf.created_at >= $startAt
           AND uf.created_at < $safeUnfollowEndAt
           AND (COALESCE(uf.persist, 0) > 0 OR COALESCE(uf.latest, 0) > 0)
@@ -557,7 +585,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
           uf.persist,
           NULL::text AS project_key
         FROM dev.twitter_user_unfollow uf
-        WHERE uf.follower_id = $officialTwitterId::bigint
+        WHERE uf.follower_id::text = $officialTwitterId
           AND uf.created_at >= $startAt
           AND uf.created_at < $safeUnfollowEndAt
           AND (COALESCE(uf.persist, 0) > 0 OR COALESCE(uf.latest, 0) > 0)
@@ -580,7 +608,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
           NULL::integer AS persist,
           pf.project::text AS project_key
         FROM dev.project_follow pf
-        WHERE pf.following_id = $officialTwitterId::bigint
+        WHERE pf.following_id::text = $officialTwitterId
           AND pf.created_at >= $startAt
           AND pf.created_at < $endAt
           AND pf.latest > 0
@@ -598,7 +626,7 @@ async function fetchFollowSignalsForBoard(board, startAt, endAt, options = {}) {
           NULL::integer AS persist,
           pf.project::text AS project_key
         FROM dev.project_follow pf
-        WHERE pf.follower_id = $officialTwitterId::bigint
+        WHERE pf.follower_id::text = $officialTwitterId
           AND pf.created_at >= $startAt
           AND pf.created_at < $endAt
           AND pf.latest > 0
