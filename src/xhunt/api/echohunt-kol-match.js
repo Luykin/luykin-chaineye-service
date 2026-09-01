@@ -1172,6 +1172,12 @@ function localizedSignals(values, lang, patterns, fallback) {
   return (unique.length ? unique : [fallback]).slice(0, 8);
 }
 
+function pickLocalizedProfileArray(row, cnField, enField, lang, maxItems = 8, maxItemLength = 80) {
+  const cnItems = safeArray(row?.[cnField], maxItems, maxItemLength);
+  const enItems = safeArray(row?.[enField], maxItems, maxItemLength);
+  return lang === "en" && enItems.length ? enItems : cnItems;
+}
+
 function willingnessText(value, lang = "zh") {
   const labels = lang === "en"
     ? { high: "High", medium: "Medium", low: "Low", unknown: "Not collected" }
@@ -1214,6 +1220,9 @@ function scoreKol(row, briefTerms, domain, market) {
     row.marketingSummaryCn,
     row.marketingSummaryEn,
     ...(Array.isArray(row.keywords) ? row.keywords : []),
+    ...(Array.isArray(row.keywordsEn) ? row.keywordsEn : []),
+    ...(Array.isArray(row.marketingGoals) ? row.marketingGoals : []),
+    ...(Array.isArray(row.marketingGoalsEn) ? row.marketingGoalsEn : []),
     ...(Array.isArray(row.domains) ? row.domains : []),
   ].join(" ").toLowerCase();
   const matchedTerms = briefTerms.filter((term) => haystack.includes(term.toLowerCase()));
@@ -1265,7 +1274,7 @@ function buildCandidateSemanticEvidence(row, index, domain, market, lang = "zh")
   push("name", row.name || row.handle);
   push("handle", row.handle ? `@${row.handle}` : "");
   push("domains", row.domains);
-  push("keywords", row.keywords);
+  push("keywords", pickLocalizedProfileArray(row, "keywords", "keywordsEn", lang, 12, 64));
   push("capabilities", [
     ...capabilityLabels(abilitySource, market, lang),
     ...capabilityLabels(abilitySource, market, lang === "en" ? "zh" : "en"),
@@ -1273,7 +1282,7 @@ function buildCandidateSemanticEvidence(row, index, domain, market, lang = "zh")
   push("marketingSummary", lang === "en"
     ? (row.marketingSummaryEn || row.marketingSummaryCn)
     : (row.marketingSummaryCn || row.marketingSummaryEn));
-  push("marketingGoals", row.marketingGoals);
+  push("marketingGoals", pickLocalizedProfileArray(row, "marketingGoals", "marketingGoalsEn", lang, 10, 64));
 
   return evidence.slice(0, 8);
 }
@@ -1342,7 +1351,9 @@ function buildProxyAssessment(row, briefTerms = [], domain = "Web3", market = "G
     row.marketingSummaryCn,
     row.marketingSummaryEn,
     ...(Array.isArray(row.keywords) ? row.keywords : []),
+    ...(Array.isArray(row.keywordsEn) ? row.keywordsEn : []),
     ...(Array.isArray(row.marketingGoals) ? row.marketingGoals : []),
+    ...(Array.isArray(row.marketingGoalsEn) ? row.marketingGoalsEn : []),
     ...(Array.isArray(row.domains) ? row.domains : []),
   ].join(" ").toLowerCase();
   const matchedTerms = briefTerms.filter((term) => haystack.includes(String(term).toLowerCase())).slice(0, 8);
@@ -1616,7 +1627,7 @@ function scoreAiRecommendation(row, assessment, domain, market, scoreContext) {
 function recommendationReason(row, matchedTerms, domain, lang = "zh") {
   const domainLabel = domain === "AI" ? "AI" : "Web3";
   const summary = shorten(lang === "en" ? row.marketingSummaryEn || row.marketingSummaryCn : row.marketingSummaryCn, 108);
-  const keywords = (Array.isArray(row.keywords) ? row.keywords : []).filter(Boolean).slice(0, 4);
+  const keywords = pickLocalizedProfileArray(row, "keywords", "keywordsEn", lang, 12, 64).slice(0, 4);
   const rank = getInfluenceRank(row, domain, row.language === "CN" ? "CN" : "GLOBAL");
   if (matchedTerms.length && summary) {
     return lang === "en"
@@ -1688,6 +1699,12 @@ function mapKolProfile(row, context = {}) {
     || Boolean(row.collaborationUpdatedAt)
     || Boolean(row.collaborationSyncedAt)
     || Boolean(row.collaborationSource);
+  const keywordsCn = safeArray(row.keywords, 12, 64);
+  const keywordsEn = safeArray(row.keywordsEn, 12, 64);
+  const marketingGoalsCn = safeArray(row.marketingGoals, 10, 64);
+  const marketingGoalsEn = safeArray(row.marketingGoalsEn, 10, 64);
+  const displayKeywords = lang === "en" && keywordsEn.length ? keywordsEn : keywordsCn;
+  const displayMarketingGoals = lang === "en" && marketingGoalsEn.length ? marketingGoalsEn : marketingGoalsCn;
 
   return {
     id: String(row.twitterUserId || row.twitter_user_id || ""),
@@ -1726,12 +1743,16 @@ function mapKolProfile(row, context = {}) {
     willingnessEvidence: localizedWillingnessEvidence(row, lang),
     capabilities: capabilityScores.slice(0, 6).map((item) => item.label),
     capabilityScores,
-    keywords: safeArray(row.keywords, 12, 64),
+    keywords: displayKeywords,
+    keywordsCn,
+    keywordsEn,
     cooperationTypes: safeArray(row.cooperationTypes, 10, 64),
-    marketingGoals: safeArray(row.marketingGoals, 10, 64),
+    marketingGoals: displayMarketingGoals,
+    marketingGoalsCn,
+    marketingGoalsEn,
     projectStages: safeArray(row.projectStages, 10, 64),
-    topics: localizedSignals(row.keywords, lang, TOPIC_EN_SIGNALS, domain),
-    goals: localizedSignals(row.marketingGoals, lang, GOAL_EN_SIGNALS, "Campaign collaboration"),
+    topics: localizedSignals(displayKeywords, lang, TOPIC_EN_SIGNALS, domain),
+    goals: localizedSignals(displayMarketingGoals, lang, GOAL_EN_SIGNALS, "Campaign collaboration"),
     summaryCn: row.marketingSummaryCn || "",
     summaryEn: row.marketingSummaryEn || row.marketingSummaryCn || "",
     marketingSummaryCn: row.marketingSummaryCn || "",
@@ -1958,8 +1979,10 @@ function getKolSelectSql(options = {}) {
     k.marketing_summary_cn AS "marketingSummaryCn",
     k.marketing_summary_en AS "marketingSummaryEn",
     k.keywords,
+    k.keywords_en AS "keywordsEn",
     k.cooperation_types AS "cooperationTypes",
     k.marketing_goals AS "marketingGoals",
+    k.marketing_goals_en AS "marketingGoalsEn",
     k.project_stages AS "projectStages",
     k.ai_abilities AS "aiAbilities",
     k.web3_abilities AS "web3Abilities",

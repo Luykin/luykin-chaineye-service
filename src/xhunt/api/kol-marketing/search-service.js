@@ -1035,7 +1035,7 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
   }
 
   if (filters.keywords?.length > 0) {
-    clauses.push("p.keywords && $keywords::text[]");
+    clauses.push("(p.keywords && $keywords::text[] OR p.keywords_en && $keywords::text[])");
     bind.keywords = filters.keywords;
   }
 
@@ -1045,7 +1045,7 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
   }
 
   if (filters.marketingGoals?.length > 0) {
-    clauses.push("p.marketing_goals && $marketingGoals::text[]");
+    clauses.push("(p.marketing_goals && $marketingGoals::text[] OR p.marketing_goals_en && $marketingGoals::text[])");
     bind.marketingGoals = filters.marketingGoals;
   }
 
@@ -1102,8 +1102,10 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
           p.marketing_summary_cn,
           p.marketing_summary_en,
           p.keywords,
+          p.keywords_en,
           p.cooperation_types,
           p.marketing_goals,
+          p.marketing_goals_en,
           p.project_stages,
           p.ai_abilities,
           p.web3_abilities,
@@ -1157,8 +1159,10 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
         fp.marketing_summary_cn AS "marketingSummaryCn",
         fp.marketing_summary_en AS "marketingSummaryEn",
         fp.keywords,
+        fp.keywords_en AS "keywordsEn",
         fp.cooperation_types AS "cooperationTypes",
         fp.marketing_goals AS "marketingGoals",
+        fp.marketing_goals_en AS "marketingGoalsEn",
         fp.project_stages AS "projectStages",
         fp.ai_abilities AS "aiAbilities",
         fp.web3_abilities AS "web3Abilities",
@@ -1210,8 +1214,10 @@ function buildKolMarketingProfileSearchSql(filters, options = {}) {
       p.marketing_summary_cn AS "marketingSummaryCn",
       p.marketing_summary_en AS "marketingSummaryEn",
       p.keywords,
+      p.keywords_en AS "keywordsEn",
       p.cooperation_types AS "cooperationTypes",
       p.marketing_goals AS "marketingGoals",
+      p.marketing_goals_en AS "marketingGoalsEn",
       p.project_stages AS "projectStages",
       p.ai_abilities AS "aiAbilities",
       p.web3_abilities AS "web3Abilities",
