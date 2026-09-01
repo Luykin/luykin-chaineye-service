@@ -74,17 +74,19 @@ async function getBoardAiConfig(board) {
   const runtimeAi = await getAiConfig();
   const boardAi = getBoardAiRuntime(board);
   const boardModel = String(boardAi.model || "").trim();
-  const contentModelReady = Boolean(boardModel || boardAi.tweetTagModel || boardAi.tweetSummaryModel);
-  const attitudeModelReady = Boolean(boardModel || boardAi.projectAttitudeModel);
+  const tweetAnalysisModel = String(boardAi.tweetAnalysisModel || runtimeAi.tweetAnalysisModel || "").trim();
+  const contentModelReady = Boolean(boardModel || tweetAnalysisModel || boardAi.tweetTagModel || boardAi.tweetSummaryModel);
+  const attitudeModelReady = Boolean(boardModel || tweetAnalysisModel || boardAi.projectAttitudeModel);
   return {
     ...runtimeAi,
     ...boardAi,
     apiKey: runtimeAi.apiKey,
     baseURL: boardAi.baseURL || runtimeAi.baseURL,
     model: boardModel,
-    tweetTagModel: boardAi.tweetTagModel || boardModel,
-    tweetSummaryModel: boardAi.tweetSummaryModel || boardModel,
-    projectAttitudeModel: boardAi.projectAttitudeModel || boardModel,
+    tweetAnalysisModel,
+    tweetTagModel: boardAi.tweetTagModel || tweetAnalysisModel || boardModel,
+    tweetSummaryModel: boardAi.tweetSummaryModel || tweetAnalysisModel || boardModel,
+    projectAttitudeModel: boardAi.projectAttitudeModel || tweetAnalysisModel || boardModel,
     prompts: {
       ...(runtimeAi.prompts && typeof runtimeAi.prompts === "object" ? runtimeAi.prompts : {}),
       ...(boardAi.prompts && typeof boardAi.prompts === "object" ? boardAi.prompts : {}),
@@ -462,7 +464,7 @@ async function callTweetAnalysisAi(board, post, options = {}) {
     ...variables,
     text: `<<${createdAt}--${aiText.text}>>`,
   });
-  const prompt = analysisPrompt.trace.configured || !tagPrompt.trace.configured && !summaryPrompt.trace.configured && !attitudePrompt.trace.configured
+  const prompt = analysisPrompt.trace.configured || (!tagPrompt.trace.configured && !summaryPrompt.trace.configured && !attitudePrompt.trace.configured)
     ? analysisPrompt.prompt
     : [
       "你是 Crypto/Web3/AI 社媒内容结构化分析助手。请只读取 INPUT.tweet_text 一次，并一次性完成标签、摘要、项目态度三类结果。",

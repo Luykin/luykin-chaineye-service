@@ -12,13 +12,15 @@ const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 function buildPostWhere(boardId, query = {}) {
   const rangeKey = normalizeRangeKey(query.range);
   const window = getWindowForRange(rangeKey);
-  const where = {
-    boardId,
-    postCreatedAt: { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt },
-  };
+  const sortKey = String(query.sort || "").trim().toLowerCase();
+  const aiFilter = String(query.ai || "").trim().toLowerCase();
+  const latestAiMode = sortKey === "ai_recent" && ["analyzed", "generated", "succeeded"].includes(aiFilter);
+  const where = { boardId };
+  if (!latestAiMode) {
+    where.postCreatedAt = { [Op.gte]: window.windowStartAt, [Op.lt]: window.windowEndAt };
+  }
   const sentiment = String(query.sentiment || query.filter || "").trim().toLowerCase();
   if (["positive", "neutral", "negative", "unknown"].includes(sentiment)) where.sentiment = sentiment;
-  const aiFilter = String(query.ai || "").trim().toLowerCase();
   if (["analyzed", "generated", "succeeded"].includes(aiFilter)) where.aiAnalyzedAt = { [Op.ne]: null };
   const source = String(query.source || "").trim().toLowerCase();
   if (["mention", "quote", "reply", "comment"].includes(source)) where.source = source;

@@ -289,6 +289,7 @@ function serializePost(record) {
       aiStatus: row.aiStatus || null,
       aiAnalyzedAt: row.aiAnalyzedAt || null,
       aiSource: row.aiSource || null,
+      aiError: row.aiError || null,
     },
   };
 }

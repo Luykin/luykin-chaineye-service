@@ -175,17 +175,19 @@ function getBoardAiRuntime(board) {
 
 function getEffectiveBoardAiConfig(runtimeAi = {}, boardAi = {}) {
   const boardModel = String(boardAi.model || "").trim();
-  const contentModelReady = Boolean(boardModel || boardAi.tweetTagModel || boardAi.tweetSummaryModel);
-  const attitudeModelReady = Boolean(boardModel || boardAi.projectAttitudeModel);
+  const tweetAnalysisModel = String(boardAi.tweetAnalysisModel || runtimeAi.tweetAnalysisModel || "").trim();
+  const contentModelReady = Boolean(boardModel || tweetAnalysisModel || boardAi.tweetTagModel || boardAi.tweetSummaryModel);
+  const attitudeModelReady = Boolean(boardModel || tweetAnalysisModel || boardAi.projectAttitudeModel);
   return {
     ...runtimeAi,
     ...boardAi,
     apiKey: runtimeAi.apiKey || "",
     baseURL: boardAi.baseURL || runtimeAi.baseURL || "",
     model: boardModel,
-    tweetTagModel: boardAi.tweetTagModel || boardModel,
-    tweetSummaryModel: boardAi.tweetSummaryModel || boardModel,
-    projectAttitudeModel: boardAi.projectAttitudeModel || boardModel,
+    tweetAnalysisModel,
+    tweetTagModel: boardAi.tweetTagModel || tweetAnalysisModel || boardModel,
+    tweetSummaryModel: boardAi.tweetSummaryModel || tweetAnalysisModel || boardModel,
+    projectAttitudeModel: boardAi.projectAttitudeModel || tweetAnalysisModel || boardModel,
     contentEnabled: Boolean(runtimeAi.contentEnabled && boardAi.contentEnabled && contentModelReady),
     projectAttitudeEnabled: Boolean(runtimeAi.projectAttitudeEnabled && boardAi.projectAttitudeEnabled && attitudeModelReady),
   };
@@ -197,6 +199,7 @@ function sanitizeBoardAiRuntime(boardAi = {}, runtimeAi = {}) {
     contentEnabled: Boolean(boardAi.contentEnabled),
     projectAttitudeEnabled: Boolean(boardAi.projectAttitudeEnabled),
     model: boardAi.model || "",
+    tweetAnalysisModel: boardAi.tweetAnalysisModel || "",
     tweetTagModel: boardAi.tweetTagModel || "",
     tweetSummaryModel: boardAi.tweetSummaryModel || "",
     projectAttitudeModel: boardAi.projectAttitudeModel || "",
@@ -210,6 +213,7 @@ function sanitizeBoardAiRuntime(boardAi = {}, runtimeAi = {}) {
       contentEnabled: effective.contentEnabled,
       projectAttitudeEnabled: effective.projectAttitudeEnabled,
       model: effective.model,
+      tweetAnalysisModel: effective.tweetAnalysisModel || effective.model,
       tweetTagModel: effective.tweetTagModel || effective.model,
       tweetSummaryModel: effective.tweetSummaryModel || effective.model,
       projectAttitudeModel: effective.projectAttitudeModel || effective.model,
@@ -217,7 +221,7 @@ function sanitizeBoardAiRuntime(boardAi = {}, runtimeAi = {}) {
       apiKeyConfigured: Boolean(String(runtimeAi.apiKey || "").trim()),
       globalContentEnabled: Boolean(runtimeAi.contentEnabled),
       globalProjectAttitudeEnabled: Boolean(runtimeAi.projectAttitudeEnabled),
-      ready: Boolean(String(runtimeAi.apiKey || "").trim() && String(effective.baseURL || "").trim() && effective.model),
+      ready: Boolean(String(runtimeAi.apiKey || "").trim() && String(effective.baseURL || "").trim() && (effective.tweetAnalysisModel || effective.model)),
     },
   };
 }
@@ -238,6 +242,7 @@ function normalizeBoardAiRuntimeInput(current = {}, body = {}, runtimeAi = {}, a
     contentEnabled: Boolean(input.contentEnabled),
     projectAttitudeEnabled: Boolean(input.projectAttitudeEnabled),
     model: pickStringField(input, current, "model"),
+    tweetAnalysisModel: pickStringField(input, current, "tweetAnalysisModel"),
     tweetTagModel: pickStringField(input, current, "tweetTagModel"),
     tweetSummaryModel: pickStringField(input, current, "tweetSummaryModel"),
     projectAttitudeModel: pickStringField(input, current, "projectAttitudeModel"),
@@ -248,7 +253,8 @@ function normalizeBoardAiRuntimeInput(current = {}, body = {}, runtimeAi = {}, a
     const acceptCost = input.acceptCost === true || body.acceptCost === true || input.costAccepted === true || body.costAccepted === true;
     if (!String(runtimeAi.apiKey || "").trim()) throw publicError("AI_API_KEY_NOT_CONFIGURED", 400, "全局 API Key 未配置，不能开启该账号 AI。");
     if (!String(runtimeAi.baseURL || "").trim()) throw publicError("AI_BASE_URL_NOT_CONFIGURED", 400, "全局 Base URL 未配置，不能开启该账号 AI。");
-    if (!next.model) throw publicError("BOARD_AI_MODEL_REQUIRED", 400, "开启账号 AI 前必须为这个被监控账号明确选择模型。");
+    const effectiveModel = next.tweetAnalysisModel || runtimeAi.tweetAnalysisModel || next.model;
+    if (!effectiveModel) throw publicError("BOARD_AI_MODEL_REQUIRED", 400, "开启账号 AI 前必须选择账号模型，或配置综合分析模型。");
     if (next.contentEnabled && !runtimeAi.contentEnabled) throw publicError("GLOBAL_CONTENT_AI_DISABLED", 400, "全局内容分析总开关未开启，不能开启该账号内容分析。");
     if (next.projectAttitudeEnabled && !runtimeAi.projectAttitudeEnabled) throw publicError("GLOBAL_ATTITUDE_AI_DISABLED", 400, "全局项目态度总开关未开启，不能开启该账号态度评价。");
     const estimate = estimateAiCost(getEffectiveBoardAiConfig(runtimeAi, next), next.estimatePosts);
@@ -284,7 +290,7 @@ function getBoardAiBlockingReasons(runtimeAi = {}, boardAi = {}) {
   const reasons = [];
   if (!String(runtimeAi.apiKey || "").trim()) reasons.push("全局 API Key 未配置");
   if (!String(runtimeAi.baseURL || "").trim()) reasons.push("全局 Base URL 未配置");
-  if (!String(boardAi.model || "").trim()) reasons.push("该账号尚未选择模型");
+  if (!String(boardAi.model || boardAi.tweetAnalysisModel || runtimeAi.tweetAnalysisModel || "").trim()) reasons.push("尚未选择账号模型或综合分析模型");
   if (boardAi.contentEnabled && !runtimeAi.contentEnabled) reasons.push("全局内容分析总开关未开启");
   if (boardAi.projectAttitudeEnabled && !runtimeAi.projectAttitudeEnabled) reasons.push("全局项目态度总开关未开启");
   return reasons;
@@ -295,7 +301,7 @@ function buildAiProgressItem(done = 0, pending = 0, batchSize = 1, intervalMinut
   const safePending = Math.max(0, Math.floor(toFiniteNumber(pending, 0)));
   const total = safeDone + safePending;
   const safeBatchSize = Math.max(1, Math.floor(toFiniteNumber(batchSize, 1)));
-  const safeIntervalMinutes = Math.max(1, Math.floor(toFiniteNumber(intervalMinutes, 15)));
+  const safeIntervalMinutes = Math.max(0.01, toFiniteNumber(intervalMinutes, 15));
   const batchesRemaining = safePending > 0 ? Math.ceil(safePending / safeBatchSize) : 0;
   return {
     done: safeDone,
@@ -310,7 +316,8 @@ function buildAiProgressItem(done = 0, pending = 0, batchSize = 1, intervalMinut
 
 function buildBoardAiProgress(runtimeConfig = {}, stats = {}) {
   const worker = runtimeConfig.aiWorker || {};
-  const intervalMinutes = 1;
+  const activeDelaySeconds = 10;
+  const intervalMinutes = activeDelaySeconds / 60;
   const content = buildAiProgressItem(
     stats.contentAnalyzedPosts,
     stats.contentPendingPosts,
@@ -327,6 +334,7 @@ function buildBoardAiProgress(runtimeConfig = {}, stats = {}) {
     content,
     projectAttitude,
     intervalMinutes,
+    activeDelaySeconds,
     estimatedMinutesRemaining: Math.max(content.estimatedMinutesRemaining, projectAttitude.estimatedMinutesRemaining),
     assumption: "按独立 AI Worker 的每轮批大小估算；有待处理时会连续跑，清空后才按间隔检查；实际耗时会受 LLM 响应、并发、失败重试、账号数量和队列影响。",
   };
@@ -357,7 +365,7 @@ async function buildBoardAiConfigResponse(board, runtimeConfig, estimatePostsInp
     blockingReasons: getBoardAiBlockingReasons(runtimeAi, sanitized),
     rules: [
       "全局 AI 配置只提供 API Key、Base URL、价格估算和总开关。",
-      "每个被监控账号的 AI 开关默认关闭；开启前必须为该账号选择模型并确认预估成本。",
+      "每个被监控账号的 AI 开关默认关闭；开启前需选择账号模型或综合分析模型，并确认预估成本。",
       "关闭该账号开关后，后续任务的内容分析/项目态度评价会直接跳过，不再产生该账号 AI 调用。",
     ],
     fieldDocs: AI_CONFIG_FIELD_DOCS,
@@ -715,6 +723,7 @@ router.post("/boards/:boardId/ai-config", async (req, res) => {
         contentEnabled: next.contentEnabled,
         projectAttitudeEnabled: next.projectAttitudeEnabled,
         model: next.model,
+        tweetAnalysisModel: next.tweetAnalysisModel,
         tweetTagModel: next.tweetTagModel,
         tweetSummaryModel: next.tweetSummaryModel,
         projectAttitudeModel: next.projectAttitudeModel,

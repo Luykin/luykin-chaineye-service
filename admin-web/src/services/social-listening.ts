@@ -126,6 +126,15 @@ export interface SocialListeningPost {
   summaryEn?: string | null;
   sentimentSummaryZh?: string | null;
   projectAttitudeScore?: number | null;
+  ai?: {
+    tagStatus?: string | null;
+    summaryStatus?: string | null;
+    attitudeStatus?: string | null;
+    aiStatus?: string | null;
+    aiAnalyzedAt?: string | null;
+    aiSource?: string | null;
+    aiError?: string | null;
+  };
 }
 
 export interface SocialListeningPageData<T> {
@@ -231,6 +240,7 @@ export interface SocialListeningAiProgress {
   content: SocialListeningAiProgressItem;
   projectAttitude: SocialListeningAiProgressItem;
   intervalMinutes: number;
+  activeDelaySeconds?: number;
   estimatedMinutesRemaining: number;
   assumption: string;
 }
@@ -267,6 +277,7 @@ export interface SocialListeningBoardAiRuntimeConfig {
   contentEnabled: boolean;
   projectAttitudeEnabled: boolean;
   model: string;
+  tweetAnalysisModel?: string;
   tweetTagModel?: string;
   tweetSummaryModel?: string;
   projectAttitudeModel?: string;
@@ -280,6 +291,7 @@ export interface SocialListeningBoardAiRuntimeConfig {
     contentEnabled: boolean;
     projectAttitudeEnabled: boolean;
     model: string;
+    tweetAnalysisModel?: string;
     tweetTagModel: string;
     tweetSummaryModel: string;
     projectAttitudeModel: string;

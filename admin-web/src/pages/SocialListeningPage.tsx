@@ -37,14 +37,13 @@ import {
   type MenuProps,
   type TableProps,
 } from "antd";
-import { DeleteOutlined, DownloadOutlined, InfoCircleOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { DeleteOutlined, InfoCircleOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { fetchVipLists } from "@/services/feature-flags";
 import { fetchLlmModels, type LlmModelOption } from "@/services/llm";
 import {
-  buildSocialListeningExportUrl,
   createSocialListeningBoard,
   deleteSocialListeningBoard,
   fetchSocialListeningAccesses,
@@ -116,7 +115,7 @@ const FIELD_GUIDE = [
   { label: "Token", table: "Boards.metadata.token", desc: "项目代币符号或合约简称，会追加到召回关键词里；不是 API 密钥。" },
   { label: "关注关系源", table: "Boards.metadata.followSources", desc: "说明关注/取关信号来自哪些来源表；实际匹配账号用 officialTwitterId，不需要额外填写项目 key。" },
   { label: "AI 项目名", table: "Boards.metadata.aiProjectName", desc: "覆盖项目态度 AI 中的 project 名称，适合项目名与品牌名/协议名不一致时使用。" },
-  { label: "AI 提示语", table: "Boards.metadata.aiPrompts", desc: "把项目态度、标签、摘要的提示语保存为可配置文本，避免只依赖代码里的固定默认逻辑。" },
+  { label: "AI 提示语", table: "Boards.metadata.aiPrompts", desc: "把综合分析 Prompt 保存为可配置文本；旧拆分 Prompt 仅作兼容兜底。" },
 ];
 
 const POST_FIELD_GUIDE = [
@@ -273,8 +272,10 @@ function formatUsd(value?: number | null) {
 }
 
 function formatEtaMinutes(value?: number | null) {
-  const minutes = Math.max(0, Math.floor(Number(value || 0)));
-  if (!minutes) return "已完成";
+  const rawMinutes = Math.max(0, Number(value || 0));
+  if (!rawMinutes) return "已完成";
+  if (rawMinutes < 1) return `约 ${Math.max(1, Math.ceil(rawMinutes * 60))} 秒`;
+  const minutes = Math.ceil(rawMinutes);
   const days = Math.floor(minutes / 1440);
   const hours = Math.floor((minutes % 1440) / 60);
   const mins = minutes % 60;
@@ -383,6 +384,32 @@ function renderTagList(value: unknown) {
   const list = Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
   if (!list.length) return "-";
   return <Space size={4} wrap>{list.map((item) => <Tag key={item}>{item}</Tag>)}</Space>;
+}
+
+function renderAiTagList(value: unknown, color?: string) {
+  const list = Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  if (!list.length) return <Text type="secondary">未生成</Text>;
+  return (
+    <Space size={[4, 4]} wrap>
+      {list.map((item) => <Tag key={item} color={color}>{item}</Tag>)}
+    </Space>
+  );
+}
+
+function AiTextValue({ value, rows = 2 }: { value: unknown; rows?: number }) {
+  const text = getString(value);
+  if (!text) return <Text type="secondary">未生成</Text>;
+  return <Paragraph copyable style={{ marginBottom: 0 }} ellipsis={{ rows, expandable: true, symbol: "展开" }}>{text}</Paragraph>;
+}
+
+function AiStatusPill({ label, value }: { label: string; value: unknown }) {
+  const status = getString(value);
+  const colorMap: Record<string, string> = { pending: "processing", generated: "success", succeeded: "success", failed: "error", skipped: "default", partial: "warning", reused: "warning" };
+  return (
+    <Tooltip title={`EchohuntSocialListeningPosts.${label}`}>
+      <Tag color={colorMap[status] || "default"}>{label}: {status || "-"}</Tag>
+    </Tooltip>
+  );
 }
 
 function getBoardAiRuntimeFromMetadata(board?: SocialListeningBoard | null) {
@@ -660,7 +687,7 @@ function ConfigGuide({ board }: { board?: SocialListeningBoard | null }) {
         type="info"
         showIcon
         message="配置字段怎么影响任务"
-        description="被监控账号的基础字段保存在 EchohuntSocialListeningBoards；运营配置保存在 metadata。任务执行时会用 keywords/aliases/token 召回推文，用 AI 项目名和提示语指导后续 AI 处理。"
+        description="被监控账号的基础字段保存在 EchohuntSocialListeningBoards；运营配置保存在 metadata。任务执行时会用 keywords/aliases/token 召回推文，用 AI 项目名和综合分析 Prompt 指导后续 AI 处理。"
       />
       <Table
         rowKey="label"
@@ -686,50 +713,6 @@ function ConfigGuide({ board }: { board?: SocialListeningBoard | null }) {
   );
 }
 
-function PostAiInspector({ post }: { post: SocialListeningPost }) {
-  const row = post as SocialListeningPost & Record<string, unknown>;
-  const ai = asRecord(row.ai);
-  return (
-    <Row gutter={[16, 16]}>
-      <Col xs={24} lg={14}>
-        <Descriptions size="small" bordered column={2}>
-          <Descriptions.Item label="保存表" span={2}><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
-          <Descriptions.Item label="tweetId"><Text code>{post.tweetId}</Text></Descriptions.Item>
-          <Descriptions.Item label="source">{post.source}</Descriptions.Item>
-          <Descriptions.Item label="topics" span={2}>{Array.isArray(row.topics) && row.topics.length ? row.topics.map((item) => <Tag key={String(item)}>{String(item)}</Tag>) : "-"}</Descriptions.Item>
-          <Descriptions.Item label="keywords" span={2}>{Array.isArray(row.keywords) && row.keywords.length ? row.keywords.map((item) => <Tag key={String(item)} color="blue">{String(item)}</Tag>) : "-"}</Descriptions.Item>
-          <Descriptions.Item label="postZh" span={2}>{getString(row.postZh) || "-"}</Descriptions.Item>
-          <Descriptions.Item label="summaryZh" span={2}>{getString(row.summaryZh) || "-"}</Descriptions.Item>
-          <Descriptions.Item label="summaryEn" span={2}>{getString(row.summaryEn) || "-"}</Descriptions.Item>
-          <Descriptions.Item label="projectAttitudeScore">{row.projectAttitudeScore === null || row.projectAttitudeScore === undefined ? "-" : String(row.projectAttitudeScore)}</Descriptions.Item>
-          <Descriptions.Item label="sentiment">{statusTag(post.sentiment)}</Descriptions.Item>
-          <Descriptions.Item label="sentimentSummaryZh" span={2}>{getString(row.sentimentSummaryZh) || "-"}</Descriptions.Item>
-          <Descriptions.Item label="AI 状态" span={2}>
-            <Space wrap>
-              <Tooltip title="EchohuntSocialListeningPosts.tagStatus"><span>{statusTag(getString(ai.tagStatus))}</span></Tooltip>
-              <Tooltip title="EchohuntSocialListeningPosts.summaryStatus"><span>{statusTag(getString(ai.summaryStatus))}</span></Tooltip>
-              <Tooltip title="EchohuntSocialListeningPosts.attitudeStatus"><span>{statusTag(getString(ai.attitudeStatus))}</span></Tooltip>
-              <Tooltip title="EchohuntSocialListeningPosts.aiStatus"><span>{statusTag(getString(ai.aiStatus))}</span></Tooltip>
-              <Tag>{getString(ai.aiSource) || "aiSource -"}</Tag>
-              <Tag>{formatDate(getString(ai.aiAnalyzedAt))}</Tag>
-            </Space>
-          </Descriptions.Item>
-        </Descriptions>
-      </Col>
-      <Col xs={24} lg={10}>
-        <Card size="small" title="这些字段从哪里来">
-          <Timeline
-            items={POST_FIELD_GUIDE.map((item) => ({
-              children: <><Text strong>{item.field}</Text><Paragraph type="secondary">{item.desc}</Paragraph></>,
-            }))}
-          />
-        </Card>
-      </Col>
-    </Row>
-  );
-}
-
-
 function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open: boolean }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -748,9 +731,23 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
       <Alert
         type="info"
         showIcon
-        message="最新 AI 回填样本"
-        description="按 aiAnalyzedAt 倒序展示最近回填过的帖子。看原文、摘要、标签和态度结果，方便你判断综合 Prompt 是否需要调整。"
+        message="AI 回填检查"
+        description="按 aiAnalyzedAt 倒序展示最近回填过的帖子；字段状态、摘要、标签、态度和字段来源放在一起看，方便判断综合 Prompt 质量。"
         action={<Space size={8} wrap><Text type="secondary">共 {formatNumber(total)} 条</Text><Button size="small" icon={<ReloadOutlined />} loading={samplesQuery.isFetching} onClick={() => samplesQuery.refetch()}>刷新样本</Button></Space>}
+      />
+      <Collapse
+        bordered={false}
+        items={[{
+          key: "ai-field-guide",
+          label: "字段来源说明（summaryZh / topics / projectAttitudeScore 等）",
+          children: (
+            <Timeline
+              items={POST_FIELD_GUIDE.map((item) => ({
+                children: <><Text strong>{item.field}</Text><Paragraph type="secondary">{item.desc}</Paragraph></>,
+              }))}
+            />
+          ),
+        }]}
       />
       {samples.length ? (
         <Space direction="vertical" size={10} className="social-listening-full">
@@ -771,42 +768,80 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
           {samples.map((post) => {
             const row = post as SocialListeningPost & Record<string, unknown>;
             const ai = asRecord(row.ai);
+            const topics = Array.isArray(row.topics) ? row.topics : [];
+            const keywords = Array.isArray(row.keywords) ? row.keywords : [];
+            const contentMissing = !getString(row.summaryZh) && !getString(row.summaryEn) && !topics.length && !keywords.length;
+            const aiError = getString(ai.aiError);
             return (
               <Card
                 key={post.id}
                 size="small"
-                title={<Space size={6} wrap><Text strong>@{post.author.handle || "-"}</Text><Tag>{post.source}</Tag>{statusTag(post.sentiment)}<Text type="secondary">{formatDate(getString(ai.aiAnalyzedAt))}</Text></Space>}
+                title={(
+                  <Space size={6} wrap>
+                    <Text strong>@{post.author.handle || "-"}</Text>
+                    <Tag>{post.source}</Tag>
+                    {statusTag(post.sentiment)}
+                    <Text type="secondary">AI：{formatDate(getString(ai.aiAnalyzedAt))}</Text>
+                  </Space>
+                )}
                 extra={<a href={post.tweetUrl} target="_blank" rel="noreferrer">打开推文</a>}
               >
-                <Row gutter={[14, 12]}>
-                  <Col xs={24} lg={12}>
-                    <Space direction="vertical" size={8} className="social-listening-full">
-                      <Text type="secondary">原文</Text>
-                      <Paragraph copyable ellipsis={{ rows: 4, expandable: true, symbol: "展开" }}>{post.text || "-"}</Paragraph>
-                      <Space size={4} wrap>
-                        <Tooltip title="EchohuntSocialListeningPosts.tagStatus"><span>{statusTag(getString(ai.tagStatus))}</span></Tooltip>
-                        <Tooltip title="EchohuntSocialListeningPosts.summaryStatus"><span>{statusTag(getString(ai.summaryStatus))}</span></Tooltip>
-                        <Tooltip title="EchohuntSocialListeningPosts.attitudeStatus"><span>{statusTag(getString(ai.attitudeStatus))}</span></Tooltip>
-                        <Tag>{getString(ai.aiSource) || "aiSource -"}</Tag>
-                      </Space>
-                    </Space>
-                  </Col>
-                  <Col xs={24} lg={12}>
-                    <Space direction="vertical" size={8} className="social-listening-full">
-                      <Text type="secondary">AI 回填结果</Text>
-                      <Descriptions size="small" bordered column={1}>
-                        <Descriptions.Item label="中文摘要">{getString(row.summaryZh) || "-"}</Descriptions.Item>
-                        <Descriptions.Item label="英文摘要">{getString(row.summaryEn) || "-"}</Descriptions.Item>
-                        <Descriptions.Item label="态度说明">{getString(row.sentimentSummaryZh) || "-"}</Descriptions.Item>
-                        <Descriptions.Item label="态度分">{row.projectAttitudeScore === null || row.projectAttitudeScore === undefined ? "-" : String(row.projectAttitudeScore)}</Descriptions.Item>
-                      </Descriptions>
-                      <Space size={4} wrap>
-                        {Array.isArray(row.topics) && row.topics.length ? row.topics.slice(0, 8).map((item) => <Tag key={String(item)}>{String(item)}</Tag>) : <Tag>无 topics</Tag>}
-                        {Array.isArray(row.keywords) && row.keywords.length ? row.keywords.slice(0, 8).map((item) => <Tag key={String(item)} color="blue">{String(item)}</Tag>) : null}
-                      </Space>
-                    </Space>
-                  </Col>
-                </Row>
+                <Space direction="vertical" size={12} className="social-listening-full">
+                  <Space size={[4, 4]} wrap>
+                    <AiStatusPill label="tagStatus" value={ai.tagStatus} />
+                    <AiStatusPill label="summaryStatus" value={ai.summaryStatus} />
+                    <AiStatusPill label="attitudeStatus" value={ai.attitudeStatus} />
+                    <AiStatusPill label="aiStatus" value={ai.aiStatus} />
+                    <Tag color="geekblue">aiSource: {getString(ai.aiSource) || "-"}</Tag>
+                  </Space>
+                  {contentMissing && (getString(ai.tagStatus) === "pending" || getString(ai.summaryStatus) === "pending") ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message="这条目前只看到部分 AI 字段"
+                      description="tagStatus / summaryStatus 仍是 pending，说明 topics、keywords、summaryZh、summaryEn 还没完成；态度字段可以已先完成。"
+                    />
+                  ) : null}
+                  {aiError ? <Alert type="error" showIcon message="AI 错误" description={aiError} /> : null}
+
+                  <Row gutter={[14, 12]}>
+                    <Col xs={24} xl={10}>
+                      <Card size="small" title="原文与元信息" bordered={false} style={{ background: "#fbfcff" }}>
+                        <Space direction="vertical" size={8} className="social-listening-full">
+                          <Paragraph copyable ellipsis={{ rows: 5, expandable: true, symbol: "展开" }} style={{ marginBottom: 0 }}>{post.text || "-"}</Paragraph>
+                          <Descriptions size="small" column={1}>
+                            <Descriptions.Item label="tweetId"><Text code>{post.tweetId}</Text></Descriptions.Item>
+                            <Descriptions.Item label="发布时间">{formatDate(post.postCreatedAt)}</Descriptions.Item>
+                            <Descriptions.Item label="曝光 / 互动">{formatNumber(post.metrics.views)} / {formatNumber(post.metrics.engagement)}</Descriptions.Item>
+                          </Descriptions>
+                        </Space>
+                      </Card>
+                    </Col>
+                    <Col xs={24} xl={14}>
+                      <Row gutter={[12, 12]}>
+                        <Col xs={24} lg={12}>
+                          <Card size="small" title="内容字段" bordered={false} style={{ background: "#fcfffb" }}>
+                            <Descriptions size="small" column={1}>
+                              <Descriptions.Item label="summaryZh"><AiTextValue value={row.summaryZh} rows={2} /></Descriptions.Item>
+                              <Descriptions.Item label="summaryEn"><AiTextValue value={row.summaryEn} rows={2} /></Descriptions.Item>
+                              <Descriptions.Item label="topics">{renderAiTagList(topics)}</Descriptions.Item>
+                              <Descriptions.Item label="keywords">{renderAiTagList(keywords, "blue")}</Descriptions.Item>
+                            </Descriptions>
+                          </Card>
+                        </Col>
+                        <Col xs={24} lg={12}>
+                          <Card size="small" title="态度字段" bordered={false} style={{ background: "#fffdf8" }}>
+                            <Descriptions size="small" column={1}>
+                              <Descriptions.Item label="sentiment">{statusTag(post.sentiment)}</Descriptions.Item>
+                              <Descriptions.Item label="projectAttitudeScore">{row.projectAttitudeScore === null || row.projectAttitudeScore === undefined ? <Text type="secondary">未生成</Text> : <Text strong>{String(row.projectAttitudeScore)}</Text>}</Descriptions.Item>
+                              <Descriptions.Item label="sentimentSummaryZh"><AiTextValue value={row.sentimentSummaryZh} rows={3} /></Descriptions.Item>
+                            </Descriptions>
+                          </Card>
+                        </Col>
+                      </Row>
+                    </Col>
+                  </Row>
+                </Space>
               </Card>
             );
           })}
@@ -826,7 +861,7 @@ function LatestAiBackfillSamplesPanel({ boardId, open }: { boardId: string; open
           />
         </Space>
       ) : (
-        <Empty description={samplesQuery.isFetching ? "正在读取最新 AI 回填样本" : "还没有可展示的 AI 回填样本"} />
+        <Empty description={samplesQuery.isFetching ? "正在读取 AI 回填检查数据" : "还没有可展示的 AI 回填数据"} />
       )}
     </Space>
   );
@@ -1074,12 +1109,12 @@ function AiRuntimeConfigPanel() {
             <Card size="small" title="基础配置" extra={<Button size="small" icon={<ReloadOutlined />} loading={configQuery.isFetching} onClick={() => configQuery.refetch()}>重新读取</Button>}>
               <Row gutter={[12, 4]}>
                 <Col xs={24} md={8}>
-                  <Form.Item name={["ai", "model"]} label="默认模型" tooltip={aiHelp("model")} rules={[{ required: true, message: "请输入默认模型" }]}> 
+                  <Form.Item name={["ai", "model"]} label="默认模型" tooltip={aiHelp("model")} rules={[{ required: true, message: "请输入默认模型" }]}>
                     <ModelAutoComplete options={modelOptions} placeholder="可下拉选择，也可直接输入模型名" />
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={16}>
-                  <Form.Item name={["ai", "baseURL"]} label="Base URL" tooltip={aiHelp("baseURL")} rules={[{ required: true, message: "请输入 baseURL" }]}> 
+                  <Form.Item name={["ai", "baseURL"]} label="Base URL" tooltip={aiHelp("baseURL")} rules={[{ required: true, message: "请输入 baseURL" }]}>
                     <Input placeholder="https://aaii.xclaw.info/v1/" />
                   </Form.Item>
                 </Col>
@@ -1267,6 +1302,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
     projectAttitudeEnabled: Boolean(runtime?.projectAttitudeEnabled && watchedAi?.projectAttitudeEnabled),
   }, estimatePosts);
   const wantsAi = Boolean(watchedAi?.contentEnabled || watchedAi?.projectAttitudeEnabled);
+  const modelReady = Boolean(watchedAi?.model || watchedAi?.tweetAnalysisModel || runtime?.tweetAnalysisModel);
   const contentBlocked = Boolean(watchedAi?.contentEnabled && !runtime?.contentEnabled);
   const attitudeBlocked = Boolean(watchedAi?.projectAttitudeEnabled && !runtime?.projectAttitudeEnabled);
 
@@ -1284,6 +1320,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
         contentEnabled: Boolean(detail.config.contentEnabled),
         projectAttitudeEnabled: Boolean(detail.config.projectAttitudeEnabled),
         model: detail.config.model || "",
+        tweetAnalysisModel: detail.config.tweetAnalysisModel || "",
         tweetTagModel: detail.config.tweetTagModel || "",
         tweetSummaryModel: detail.config.tweetSummaryModel || "",
         projectAttitudeModel: detail.config.projectAttitudeModel || "",
@@ -1340,7 +1377,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                 <AiProgressLine title="态度评价进度" item={progress?.projectAttitude} enabled={detail?.config.effective.projectAttitudeEnabled} />
                 {progress ? (
                   <Text type="secondary">
-                    整体 ETA {formatEtaMinutes(progress.estimatedMinutesRemaining)}；按独立 AI Worker 每约 {progress.intervalMinutes} 分钟一轮估算。
+                    整体 ETA {formatEtaMinutes(progress.estimatedMinutesRemaining)}；按每轮完成后约 {progress.activeDelaySeconds || Math.round((progress.intervalMinutes || 0) * 60) || 10} 秒继续调度粗估，实际还包含模型请求耗时。
                   </Text>
                 ) : null}
               </Space>
@@ -1361,8 +1398,8 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
             <Form form={form} layout="vertical" onFinish={() => updateMutation.mutate()}>
               <Row gutter={12}>
                 <Col xs={24} md={8}>
-                  <Form.Item name={["ai", "model"]} label="该账号模型" extra="必填。管理员必须为这个被监控账号明确选择模型，不能只靠全局默认值。" rules={[{ required: wantsAi, message: "开启账号 AI 前必须填写模型" }]}> 
-                    <ModelAutoComplete options={modelOptions} placeholder={runtime?.model ? `默认：${runtime.model}` : "可下拉选择，也可直接输入模型名"} />
+                  <Form.Item name={["ai", "model"]} label="该账号默认模型" extra="综合分析模型为空时使用；如果全局/账号综合分析模型已配置，这里可留空。" rules={[{ required: wantsAi && !modelReady, message: "开启账号 AI 前必须填写账号模型或综合分析模型" }]}>
+                    <ModelAutoComplete options={modelOptions} placeholder={runtime?.tweetAnalysisModel || runtime?.model ? `全局：${runtime.tweetAnalysisModel || runtime.model}` : "可下拉选择，也可直接输入模型名"} />
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={8}>
@@ -1381,7 +1418,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={16}>
-                  <Form.Item name="acceptCost" valuePropName="checked" extra={wantsAi ? `我已确认当前账号使用 ${watchedAi?.model || "未选模型"}，预计 ${liveEstimate.calls} 次调用，约 ${formatUsd(liveEstimate.estimatedUsd)}。` : "关闭该账号 AI 时不需要确认成本。"}>
+                  <Form.Item name="acceptCost" valuePropName="checked" extra={wantsAi ? `我已确认当前账号使用 ${watchedAi?.tweetAnalysisModel || watchedAi?.model || runtime?.tweetAnalysisModel || "未选模型"}，预计 ${liveEstimate.calls} 次调用，约 ${formatUsd(liveEstimate.estimatedUsd)}。` : "关闭该账号 AI 时不需要确认成本。"}>
                     <Checkbox disabled={!wantsAi}>确认该账号模型和预估成本，允许开启 AI 分析</Checkbox>
                   </Form.Item>
                 </Col>
@@ -1390,12 +1427,13 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                 bordered={false}
                 items={[{
                   key: "advanced-board-ai",
-                  label: "专项模型覆盖（可选）",
+                  label: "综合/旧拆分模型覆盖（可选）",
                   children: (
                     <Row gutter={12}>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="标签模型" extra="为空使用该账号模型。"><ModelAutoComplete options={modelOptions} placeholder="为空使用该账号模型，也可直接输入" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="摘要模型" extra="为空使用该账号模型。"><ModelAutoComplete options={modelOptions} placeholder="为空使用该账号模型，也可直接输入" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="态度模型" extra="为空使用该账号模型。"><ModelAutoComplete options={modelOptions} placeholder="为空使用该账号模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetAnalysisModel"]} label="综合分析模型" extra="为空使用该账号模型；一次调用生成标签、摘要和态度。"><ModelAutoComplete options={modelOptions} placeholder="为空使用该账号模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="旧：标签模型" extra="兼容旧拆分任务；新 Worker 通常不需要填写。"><ModelAutoComplete options={modelOptions} placeholder="通常留空" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="旧：摘要模型" extra="兼容旧拆分任务；新 Worker 通常不需要填写。"><ModelAutoComplete options={modelOptions} placeholder="通常留空" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="旧：态度模型" extra="兼容旧拆分任务；新 Worker 通常不需要填写。"><ModelAutoComplete options={modelOptions} placeholder="通常留空" /></Form.Item></Col>
                       <Col span={24}>
                         <Descriptions size="small" bordered column={2}>
                           <Descriptions.Item label="Base URL">{runtime?.baseURL || "未配置"}</Descriptions.Item>
@@ -1436,7 +1474,6 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
   const [range, setRange] = useState("7D");
   const [activeTab, setActiveTab] = useState(initialTab);
   const [accessForm] = Form.useForm();
-  const [postQuery, setPostQuery] = useState({ q: "", sentiment: "", source: "", sort: "time_desc" });
   const boardId = board?.id || "";
 
   useEffect(() => {
@@ -1462,11 +1499,6 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
   const signalsQuery = useQuery({
     queryKey: ["social-listening", "signals", boardId, range],
     queryFn: () => fetchSocialListeningSignals(boardId, { range, pageSize: 20 }),
-    enabled: open && Boolean(boardId),
-  });
-  const postsQuery = useQuery({
-    queryKey: ["social-listening", "posts", boardId, range, postQuery],
-    queryFn: () => fetchSocialListeningPosts(boardId, { range, pageSize: 20, ...postQuery }),
     enabled: open && Boolean(boardId),
   });
   const vipListsQuery = useQuery({
@@ -1577,20 +1609,6 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
     { title: "发生时间", dataIndex: "occurredAt", width: 170, render: formatDate },
   ];
 
-  const postColumns: TableProps<SocialListeningPost>["columns"] = [
-    { title: "作者", width: 220, render: (_, row) => <Space><Avatar src={row.author.avatar || undefined}>{(row.author.handle || "?").slice(0, 1).toUpperCase()}</Avatar><Space direction="vertical" size={0}><Text strong>{row.author.name || row.author.handle}</Text><Text type="secondary">@{row.author.handle}</Text></Space></Space> },
-    { title: "内容", dataIndex: "text", ellipsis: true, render: (value: string, row) => <a href={row.tweetUrl} target="_blank" rel="noreferrer">{value || row.tweetId}</a> },
-    { title: "来源", dataIndex: "source", width: 90, render: (value: string) => <Tag>{value}</Tag> },
-    { title: "情绪", dataIndex: "sentiment", width: 90, render: (value: string) => <Tag color={value === "negative" ? "red" : value === "positive" ? "green" : "default"}>{value}</Tag> },
-    { title: "AI 字段", width: 240, render: (_, row) => {
-      const cast = row as SocialListeningPost & Record<string, unknown>;
-      const ai = asRecord(cast.ai);
-      return <Space size={4} wrap>{statusTag(getString(ai.tagStatus))}{statusTag(getString(ai.summaryStatus))}{statusTag(getString(ai.attitudeStatus))}</Space>;
-    } },
-    { title: "Views", width: 100, render: (_, row) => formatNumber(row.metrics.views) },
-    { title: "发布时间", dataIndex: "postCreatedAt", width: 170, render: formatDate },
-  ];
-
   return (
     <Drawer open={open} onClose={onClose} width="min(1280px, 96vw)" title={board ? `${board.projectName} / @${board.officialHandle}` : "Social Listening 看板"} destroyOnClose>
       {contextHolder}
@@ -1608,13 +1626,8 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
               },
               {
                 key: "ai-samples",
-                label: "AI 回填样本",
+                label: "AI 回填检查",
                 children: <LatestAiBackfillSamplesPanel boardId={board.id} open={open} />,
-              },
-              {
-                key: "posts",
-                label: "推文字段追踪",
-                children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="展开每条推文，可以看到 AI 生成了哪些字段，以及这些字段保存在哪个表。" /><Space wrap><Select value={range} onChange={setRange} options={RANGE_OPTIONS} style={{ width: 100 }} /><Input.Search placeholder="搜索内容/作者" allowClear onSearch={(q) => setPostQuery((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={postQuery.sentiment} onChange={(sentiment) => setPostQuery((prev) => ({ ...prev, sentiment }))} style={{ width: 130 }} options={[{ value: "", label: "全部情绪" }, { value: "negative", label: "负面" }, { value: "neutral", label: "中性" }, { value: "positive", label: "正面" }, { value: "unknown", label: "未知" }]} /><Button icon={<DownloadOutlined />} onClick={() => window.open(buildSocialListeningExportUrl(board.id, { range, ...postQuery }), "_blank")}>导出</Button></Space><Table rowKey="id" size="small" columns={postColumns} dataSource={postsQuery.data?.data.items || []} loading={postsQuery.isFetching} pagination={false} scroll={{ x: 1180 }} expandable={{ expandedRowRender: (row) => <PostAiInspector post={row} /> }} /></Space>,
               },
               {
                 key: "ai",
@@ -1854,7 +1867,7 @@ export function SocialListeningPage() {
         };
         return (
           <Space size={6} wrap>
-            <Tooltip title="打开详情抽屉，查看定时任务执行过程、推文字段追踪、AI 开关、关键账号动态和异常预警。">
+            <Tooltip title="打开详情抽屉，查看定时任务执行过程、AI 回填检查、AI 开关、关键账号动态和异常预警。">
               <Button size="small" onClick={() => openDrawer(row)}>管理</Button>
             </Tooltip>
             <Tooltip title="为这个被监控账户单独开启/关闭 AI；默认关闭，开启前必须确认模型和预估成本。">
