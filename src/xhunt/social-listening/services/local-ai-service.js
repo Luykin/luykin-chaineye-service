@@ -53,6 +53,19 @@ function getText(value, fallback = "") {
   return text || fallback;
 }
 
+
+async function timedStructuredChat(purpose, prompt, schema, options) {
+  const startedAt = Date.now();
+  try {
+    const result = await structuredChat(prompt, schema, options);
+    console.log(`[SocialListeningAI] request purpose=${purpose} model=${options.model || ""} status=ok ms=${Date.now() - startedAt} promptLen=${String(prompt || "").length}`);
+    return result;
+  } catch (error) {
+    console.warn(`[SocialListeningAI] request purpose=${purpose} model=${options.model || ""} status=failed ms=${Date.now() - startedAt} promptLen=${String(prompt || "").length} error=${String(error.message || error).slice(0, 500)}`);
+    throw error;
+  }
+}
+
 function getLlmOptions(aiConfig = {}, purpose) {
   const apiKey = getText(aiConfig.apiKey);
   if (!apiKey) {
@@ -74,11 +87,13 @@ function getLlmOptions(aiConfig = {}, purpose) {
 }
 
 async function generateTweetTagV2({ prompt, aiConfig }) {
-  return structuredChat(prompt, TWEET_TAG_SCHEMA, getLlmOptions(aiConfig, "tweetTag"));
+  const options = getLlmOptions(aiConfig, "tweetTag");
+  return timedStructuredChat("tweetTag", prompt, TWEET_TAG_SCHEMA, options);
 }
 
 async function generateProjectAttitude({ prompt, aiConfig }) {
-  const data = await structuredChat(prompt, PROJECT_ATTITUDE_SCHEMA, getLlmOptions(aiConfig, "projectAttitude"));
+  const options = getLlmOptions(aiConfig, "projectAttitude");
+  const data = await timedStructuredChat("projectAttitude", prompt, PROJECT_ATTITUDE_SCHEMA, options);
   const score = Math.max(0, Math.min(10, toNumber(data.score, 5)));
   const rawConfidence = Number(data.confidence);
   const confidence = Number.isFinite(rawConfidence) ? Math.max(0, Math.min(1, rawConfidence)) : null;
@@ -90,7 +105,8 @@ async function generateProjectAttitude({ prompt, aiConfig }) {
 }
 
 async function generateTweetSummaryMedia({ prompt, aiConfig }) {
-  return structuredChat(prompt, TWEET_SUMMARY_SCHEMA, getLlmOptions(aiConfig, "tweetSummary"));
+  const options = getLlmOptions(aiConfig, "tweetSummary");
+  return timedStructuredChat("tweetSummary", prompt, TWEET_SUMMARY_SCHEMA, options);
 }
 
 module.exports = {

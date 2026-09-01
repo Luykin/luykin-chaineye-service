@@ -24,6 +24,7 @@ const {
   setupK8sPostgresReadOnlyConnection,
 } = require("./infra/k8s/postgres-readonly");
 const { createSocialListeningScheduler } = require("./xhunt/social-listening/services/scheduler");
+const { createSocialListeningAiWorker } = require("./xhunt/social-listening/services/ai-backfill-scheduler");
 const { recordGenericStat } = require("./xhunt/services/generic-stats-service");
 const emailService = require("./services/emailService");
 const { cleanupPm2Logs } = require("./services/singleton/pm2-log-cleaner");
@@ -112,6 +113,8 @@ const redisClient = redis.createClient({
 
     const socialListeningScheduler = createSocialListeningScheduler({ redisClient });
     const socialListeningSchedulerStatus = socialListeningScheduler.start();
+    const socialListeningAiWorker = createSocialListeningAiWorker({ redisClient });
+    const socialListeningAiWorkerStatus = socialListeningAiWorker.start();
 
     // 启动备份服务
     await pgBackupService.start();
@@ -143,8 +146,13 @@ const redisClient = redis.createClient({
     console.log("✅ 后端健康自检测任务已启动（每30分钟执行一次）");
     console.log(
       socialListeningSchedulerStatus.enabled
-        ? "✅ Social Listening 调度器已加载（默认暂停；管理员在后台恢复看板后才会处理任务）"
-        : "⏸️ Social Listening 调度器已禁用（SOCIAL_LISTENING_SCHEDULER_ENABLED=false）"
+        ? "✅ Social Listening 采集调度器已加载（只负责采集/聚合，不再内联跑 AI）"
+        : "⏸️ Social Listening 采集调度器已禁用"
+    );
+    console.log(
+      socialListeningAiWorkerStatus.enabled
+        ? "✅ Social Listening AI Worker 已加载（独立回填，可单独暂停/恢复）"
+        : "⏸️ Social Listening AI Worker 已禁用"
     );
 
   } catch (err) {

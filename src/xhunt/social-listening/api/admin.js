@@ -33,6 +33,11 @@ const {
 const { normalizeRangeKey, getWindowForRange } = require("../services/aggregate-service");
 const { buildPostWhere, buildPostOrder, exportPostsXlsx } = require("../services/export-service");
 const { enableSocialListeningScheduler } = require("../services/scheduler");
+const {
+  getSocialListeningAiWorkerStatus,
+  pauseSocialListeningAiWorker,
+  resumeSocialListeningAiWorker,
+} = require("../services/ai-backfill-scheduler");
 const { nacosRequest } = require("../../services/nacosConfigClient");
 const {
   SOCIAL_LISTENING_CONFIG_DATA_ID,
@@ -303,19 +308,18 @@ function buildAiProgressItem(done = 0, pending = 0, batchSize = 1, intervalMinut
 }
 
 function buildBoardAiProgress(runtimeConfig = {}, stats = {}) {
-  const runtimeAi = runtimeConfig.ai || {};
-  const scheduler = runtimeConfig.scheduler || {};
-  const intervalMinutes = Math.max(1, Math.floor(toFiniteNumber(scheduler.incrementalIntervalMinutes, 15)));
+  const worker = runtimeConfig.aiWorker || {};
+  const intervalMinutes = Math.max(1, Math.ceil(toFiniteNumber(worker.tickIntervalMs, 60000) / 60000));
   const content = buildAiProgressItem(
     stats.contentAnalyzedPosts,
     stats.contentPendingPosts,
-    runtimeAi.contentBatchSize || 10,
+    worker.contentBatchSize || runtimeConfig.ai?.contentBatchSize || 10,
     intervalMinutes
   );
   const projectAttitude = buildAiProgressItem(
     stats.projectAttitudeAnalyzedPosts,
     stats.projectAttitudePendingPosts,
-    runtimeAi.projectAttitudeBatchSize || 20,
+    worker.projectAttitudeBatchSize || runtimeConfig.ai?.projectAttitudeBatchSize || 20,
     intervalMinutes
   );
   return {
@@ -323,7 +327,7 @@ function buildBoardAiProgress(runtimeConfig = {}, stats = {}) {
     projectAttitude,
     intervalMinutes,
     estimatedMinutesRemaining: Math.max(content.estimatedMinutesRemaining, projectAttitude.estimatedMinutesRemaining),
-    assumption: "按每个被监控账号的增量任务周期估算；实际耗时会受 LLM 响应、失败重试、全局开关和任务队列影响。",
+    assumption: "按独立 AI Worker 的每轮批大小估算；实际耗时会受 LLM 响应、并发、失败重试、账号数量和队列影响。",
   };
 }
 
@@ -361,9 +365,12 @@ async function buildBoardAiConfigResponse(board, runtimeConfig, estimatePostsInp
 
 function buildRuntimeConfigDocument(currentConfig = {}, body = {}) {
   const currentAi = currentConfig.ai || {};
+  const currentAiWorker = currentConfig.aiWorker || {};
   const inputAi = body.ai && typeof body.ai === "object" ? body.ai : {};
+  const inputAiWorker = body.aiWorker && typeof body.aiWorker === "object" ? body.aiWorker : {};
   const apiKeyAction = String(body.apiKeyAction || inputAi.apiKeyAction || "keep").trim().toLowerCase();
   const nextAi = { ...currentAi, ...inputAi };
+  const nextAiWorker = { ...currentAiWorker, ...inputAiWorker };
   delete nextAi.apiKeyMasked;
   delete nextAi.apiKeyConfigured;
   delete nextAi.apiKeyAction;
@@ -381,6 +388,7 @@ function buildRuntimeConfigDocument(currentConfig = {}, body = {}) {
     ...currentConfig,
     version: body.version || currentConfig.version,
     ai: nextAi,
+    aiWorker: nextAiWorker,
   });
 }
 
@@ -455,8 +463,11 @@ const AI_CONFIG_FIELD_DOCS = [
   { field: "projectAttitudeModel", label: "态度模型", desc: "可单独指定项目态度评分模型；为空则使用默认模型。" },
   { field: "contentEnabled", label: "内容分析开关", desc: "开启后每条待处理帖子最多会调用 3 次 AI：标签、中文摘要、英文摘要。" },
   { field: "projectAttitudeEnabled", label: "项目态度开关", desc: "开启后每条待处理帖子调用 1 次 AI，生成 0-10 分、positive/neutral/negative/unknown 和中文原因；无关、证据不足、无法可靠判断不强行归为 neutral。" },
-  { field: "contentBatchSize", label: "内容批大小", desc: "每个采集任务完成后最多分析多少条内容字段；历史补数任务额外限制为最多 10 条，避免费用瞬间放大。" },
-  { field: "projectAttitudeBatchSize", label: "态度批大小", desc: "每个采集任务完成后最多评价多少条项目态度；历史补数任务额外限制为最多 20 条。" },
+  { field: "contentBatchSize", label: "内容批大小", desc: "AI Worker 每轮每个账号最多分析多少条内容字段；采集任务不再内联跑 AI。" },
+  { field: "projectAttitudeBatchSize", label: "态度批大小", desc: "AI Worker 每轮每个账号最多评价多少条项目态度。" },
+  { field: "contentConcurrency", label: "内容并发", desc: "内容 AI 的并发帖子数；单帖内部仍可能并行调用中英文摘要。" },
+  { field: "projectAttitudeConcurrency", label: "态度并发", desc: "项目态度 AI 的并发帖子数。" },
+  { field: "maxTextLength", label: "推文截断长度", desc: "进入 AI Prompt 前的正文硬截断字符数；超长推文会截断并在日志记录 truncated=true。" },
   { field: "negativeScoreThreshold", label: "负面阈值", desc: "项目态度分低于该值时判定为 negative。默认 4。" },
   { field: "positiveScoreThreshold", label: "正面阈值", desc: "项目态度分高于该值时判定为 positive；介于负面和正面阈值之间为 neutral。默认 6。" },
   { field: "temperature", label: "温度", desc: "模型随机性，舆情分类建议保持 0，保证结果稳定可复现。" },
@@ -494,6 +505,7 @@ router.get("/runtime-config", async (req, res) => {
         stats,
         costEstimate: estimateAiCost(config.ai || {}, estimatePosts || 10000),
         fieldDocs: AI_CONFIG_FIELD_DOCS,
+        aiWorkerStatus: await getSocialListeningAiWorkerStatus(req.redisClient),
       },
     });
   } catch (error) {
@@ -518,6 +530,7 @@ router.post("/runtime-config", async (req, res) => {
           ...safeAi,
           apiKeyConfigured: Boolean(apiKey),
         },
+        aiWorker: nextConfig.aiWorker || {},
       },
     });
     const stats = await getAiPendingStats();
@@ -531,10 +544,39 @@ router.post("/runtime-config", async (req, res) => {
         stats,
         costEstimate: estimateAiCost(nextConfig.ai || {}, Math.max(stats.contentPendingPosts, stats.projectAttitudePendingPosts, 10000)),
         fieldDocs: AI_CONFIG_FIELD_DOCS,
+        aiWorkerStatus: await getSocialListeningAiWorkerStatus(req.redisClient),
       },
     });
   } catch (error) {
     return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_RUNTIME_CONFIG_UPDATE_FAILED");
+  }
+});
+
+router.get("/ai-worker/status", async (req, res) => {
+  try {
+    return res.json({ success: true, data: await getSocialListeningAiWorkerStatus(req.redisClient) });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_AI_WORKER_STATUS_FAILED");
+  }
+});
+
+router.post("/ai-worker/pause", async (req, res) => {
+  try {
+    const result = await pauseSocialListeningAiWorker(req.redisClient, { type: "admin", adminId: getAdminId(req) });
+    await writeAudit({ adminId: getAdminId(req), action: "ai_worker_pause", payload: result });
+    return res.json({ success: true, data: await getSocialListeningAiWorkerStatus(req.redisClient) });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_AI_WORKER_PAUSE_FAILED");
+  }
+});
+
+router.post("/ai-worker/resume", async (req, res) => {
+  try {
+    const result = await resumeSocialListeningAiWorker(req.redisClient, { type: "admin", adminId: getAdminId(req) });
+    await writeAudit({ adminId: getAdminId(req), action: "ai_worker_resume", payload: result });
+    return res.json({ success: true, data: await getSocialListeningAiWorkerStatus(req.redisClient) });
+  } catch (error) {
+    return sendJsonError(res, error, "SOCIAL_LISTENING_ADMIN_AI_WORKER_RESUME_FAILED");
   }
 });
 

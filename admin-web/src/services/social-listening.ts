@@ -156,6 +156,9 @@ export interface SocialListeningAiRuntimeConfig {
   projectAttitudeEnabled: boolean;
   contentBatchSize: number;
   projectAttitudeBatchSize: number;
+  contentConcurrency?: number;
+  projectAttitudeConcurrency?: number;
+  maxTextLength?: number;
   negativeScoreThreshold: number;
   positiveScoreThreshold: number;
   tweetTagMaxTokens?: number;
@@ -170,10 +173,22 @@ export interface SocialListeningAiRuntimeConfig {
   prompts?: Record<string, string>;
 }
 
+export interface SocialListeningAiWorkerConfig {
+  mode: "enabled" | "disabled";
+  tickIntervalMs: number;
+  maxBoardsPerTick: number;
+  contentBatchSize: number;
+  projectAttitudeBatchSize: number;
+  contentConcurrency: number;
+  projectAttitudeConcurrency: number;
+  maxTextLength: number;
+}
+
 export interface SocialListeningRuntimeConfig {
   version: string;
   scan?: Record<string, unknown>;
   ai: SocialListeningAiRuntimeConfig;
+  aiWorker?: SocialListeningAiWorkerConfig;
   scheduler?: Record<string, unknown>;
   alert?: Record<string, unknown>;
   refresh?: Record<string, unknown>;
@@ -224,6 +239,16 @@ export interface SocialListeningAiFieldDoc {
   desc: string;
 }
 
+export interface SocialListeningAiWorkerStatus {
+  state: "running" | "paused";
+  redisState: string;
+  configMode: string;
+  paused: boolean;
+  enabled: boolean;
+  config: SocialListeningAiWorkerConfig;
+  lastRun?: Record<string, unknown> | null;
+}
+
 export interface SocialListeningRuntimeConfigResponse {
   dataId: string;
   group: string;
@@ -233,6 +258,7 @@ export interface SocialListeningRuntimeConfigResponse {
   stats: SocialListeningAiPendingStats;
   costEstimate: SocialListeningAiCostEstimate;
   fieldDocs: SocialListeningAiFieldDoc[];
+  aiWorkerStatus?: SocialListeningAiWorkerStatus;
 }
 
 export interface SocialListeningBoardAiRuntimeConfig {
@@ -305,11 +331,23 @@ export function fetchSocialListeningRuntimeConfig(query?: { estimatePosts?: numb
   return apiRequest<{ success: boolean; data: SocialListeningRuntimeConfigResponse }>(withQuery(`${BASE_PATH}/runtime-config`, query));
 }
 
-export function updateSocialListeningRuntimeConfig(payload: { ai: Partial<SocialListeningAiRuntimeConfig>; apiKeyAction?: "keep" | "replace" | "clear" }) {
+export function updateSocialListeningRuntimeConfig(payload: { ai: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig>; apiKeyAction?: "keep" | "replace" | "clear" }) {
   return apiRequest<{ success: boolean; data: SocialListeningRuntimeConfigResponse }>(`${BASE_PATH}/runtime-config`, {
     method: "POST",
     body: payload,
   });
+}
+
+export function fetchSocialListeningAiWorkerStatus() {
+  return apiRequest<{ success: boolean; data: SocialListeningAiWorkerStatus }>(`${BASE_PATH}/ai-worker/status`);
+}
+
+export function pauseSocialListeningAiWorker() {
+  return apiRequest<{ success: boolean; data: SocialListeningAiWorkerStatus }>(`${BASE_PATH}/ai-worker/pause`, { method: "POST" });
+}
+
+export function resumeSocialListeningAiWorker() {
+  return apiRequest<{ success: boolean; data: SocialListeningAiWorkerStatus }>(`${BASE_PATH}/ai-worker/resume`, { method: "POST" });
 }
 
 export function fetchSocialListeningBoardAiConfig(boardId: string, query?: { estimatePosts?: number }) {

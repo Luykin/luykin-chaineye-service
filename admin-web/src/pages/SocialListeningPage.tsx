@@ -53,11 +53,14 @@ import {
   fetchSocialListeningJobs,
   fetchSocialListeningPosts,
   fetchSocialListeningRuntimeConfig,
+  fetchSocialListeningAiWorkerStatus,
   fetchSocialListeningSignals,
   grantSocialListeningAccess,
+  pauseSocialListeningAiWorker,
   pauseSocialListeningBoard,
   refreshSocialListeningBoard,
   resolveSocialListeningAccount,
+  resumeSocialListeningAiWorker,
   resumeSocialListeningBoard,
   retrySocialListeningJob,
   revokeSocialListeningAccess,
@@ -66,6 +69,7 @@ import {
   updateSocialListeningRuntimeConfig,
   type ResolvedTwitterAccount,
   type SocialListeningAiRuntimeConfig,
+  type SocialListeningAiWorkerConfig,
   type SocialListeningBoardAiRuntimeConfig,
   type SocialListeningAccess,
   type SocialListeningAccountSignal,
@@ -149,8 +153,11 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   projectAttitudeModel: "只用于项目态度评分；为空表示使用默认模型。",
   contentEnabled: "开启后每条帖子最多 3 次调用：tweetTag、中文摘要、英文摘要。",
   projectAttitudeEnabled: "开启后每条帖子 1 次调用：输出 0-10 分、情绪和判断原因；无关/证据不足/无法可靠判断写 unknown。",
-  contentBatchSize: "每个任务完成后处理多少条内容 AI。历史补数代码里最多按 10 条跑，避免一口气打爆费用。",
-  projectAttitudeBatchSize: "每个任务完成后处理多少条态度 AI。历史补数代码里最多按 20 条跑。",
+  contentBatchSize: "AI Worker 每轮每个账号最多处理多少条内容 AI；采集任务不再内联跑 AI。",
+  projectAttitudeBatchSize: "AI Worker 每轮每个账号最多处理多少条态度 AI。",
+  contentConcurrency: "内容 AI 并发帖子数；提高能加速，但会增加模型服务瞬时压力。",
+  projectAttitudeConcurrency: "态度 AI 并发帖子数；提高能加速，但会增加模型服务瞬时压力。",
+  maxTextLength: "进入 AI Prompt 前的推文硬截断字符数；超长推文会排在后面且记录 truncated=true。",
   negativeScoreThreshold: "态度分低于该值判定 negative；默认 4。",
   positiveScoreThreshold: "态度分高于该值判定 positive；中间区间判定 neutral；默认 6。",
   temperature: "模型随机性。分类/打分建议为 0，结果更稳定。",
@@ -822,6 +829,11 @@ function AiRuntimeConfigPanel() {
     queryKey: ["social-listening", "runtime-config"],
     queryFn: () => fetchSocialListeningRuntimeConfig({ estimatePosts }),
   });
+  const aiWorkerQuery = useQuery({
+    queryKey: ["social-listening", "ai-worker-status"],
+    queryFn: fetchSocialListeningAiWorkerStatus,
+    refetchInterval: 15_000,
+  });
   const llmModelsQuery = useQuery({
     queryKey: ["llm-models"],
     queryFn: fetchLlmModels,
@@ -829,6 +841,7 @@ function AiRuntimeConfigPanel() {
   const modelOptions = useMemo(() => mergeModelOptions(llmModelsQuery.data?.data || []), [llmModelsQuery.data?.data]);
   const detail = configQuery.data?.data || null;
   const stats = detail?.stats;
+  const aiWorkerStatus = aiWorkerQuery.data?.data || detail?.aiWorkerStatus || null;
   const watchedAi = Form.useWatch("ai", form) as Partial<SocialListeningAiRuntimeConfig> | undefined;
   const watchedApiKeyAction = Form.useWatch("apiKeyAction", form) as string | undefined;
   const liveEstimate = calculateAiCost(watchedAi || detail?.config.ai, estimatePosts);
@@ -846,22 +859,45 @@ function AiRuntimeConfigPanel() {
           tweetSummary: detail.config.ai.prompts?.tweetSummary || "",
         },
       },
+      aiWorker: detail.config.aiWorker || detail.aiWorkerStatus?.config,
     });
     const pending = Math.max(detail.stats.contentPendingPosts || 0, detail.stats.projectAttitudePendingPosts || 0);
     if (pending > 10000) setEstimatePosts((prev) => Math.max(prev, pending));
   }, [detail, form]);
 
+
+  const pauseAiWorkerMutation = useMutation({
+    mutationFn: pauseSocialListeningAiWorker,
+    onSuccess: () => {
+      messageApi.success("AI Worker 已暂停");
+      void aiWorkerQuery.refetch();
+      void configQuery.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "暂停 AI Worker 失败"),
+  });
+  const resumeAiWorkerMutation = useMutation({
+    mutationFn: resumeSocialListeningAiWorker,
+    onSuccess: () => {
+      messageApi.success("AI Worker 已恢复");
+      void aiWorkerQuery.refetch();
+      void configQuery.refetch();
+    },
+    onError: (error: Error) => messageApi.error(error.message || "恢复 AI Worker 失败"),
+  });
+
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const values = form.getFieldsValue(true) as { apiKeyAction?: "keep" | "replace" | "clear"; ai?: Partial<SocialListeningAiRuntimeConfig> };
+      const values = form.getFieldsValue(true) as { apiKeyAction?: "keep" | "replace" | "clear"; ai?: Partial<SocialListeningAiRuntimeConfig>; aiWorker?: Partial<SocialListeningAiWorkerConfig> };
       return updateSocialListeningRuntimeConfig({
         apiKeyAction: values.apiKeyAction || "keep",
         ai: values.ai || {},
+        aiWorker: values.aiWorker || {},
       });
     },
     onSuccess: () => {
       messageApi.success("AI 运行配置已发布到 Nacos，后端 1 分钟内会读到新配置");
       void configQuery.refetch();
+      void aiWorkerQuery.refetch();
     },
     onError: (error: Error) => messageApi.error(error.message || "保存 AI 配置失败"),
   });
@@ -897,6 +933,48 @@ function AiRuntimeConfigPanel() {
         </Col>
         <Col xs={24} xl={18}>
           <Form form={form} layout="vertical" onFinish={() => updateMutation.mutate()}>
+            <Card
+              size="small"
+              title="AI Worker（独立回填任务）"
+              extra={<Space>
+                {aiWorkerStatus?.enabled ? <Tag color="green">运行中</Tag> : <Tag color="orange">已暂停</Tag>}
+                <Button size="small" icon={<ReloadOutlined />} loading={aiWorkerQuery.isFetching} onClick={() => aiWorkerQuery.refetch()}>刷新状态</Button>
+                {aiWorkerStatus?.enabled ? (
+                  <Button size="small" icon={<PauseCircleOutlined />} loading={pauseAiWorkerMutation.isPending} onClick={() => pauseAiWorkerMutation.mutate()}>暂停 AI</Button>
+                ) : (
+                  <Button size="small" type="primary" icon={<PlayCircleOutlined />} loading={resumeAiWorkerMutation.isPending} onClick={() => resumeAiWorkerMutation.mutate()}>恢复 AI</Button>
+                )}
+              </Space>}
+            >
+              <Alert
+                type="info"
+                showIcon
+                message="AI 已从 15 分钟采集轮询拆出来"
+                description="采集任务只负责入库/聚合；这里的 AI Worker 单独按自己的频率回填旧帖和新帖，可独立暂停。待处理队列按正文长度从短到长执行，超长推文会先硬截断。"
+                style={{ marginBottom: 12 }}
+              />
+              <Row gutter={[12, 4]}>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["aiWorker", "mode"]} label="Nacos 模式">
+                    <Select options={[{ value: "enabled", label: "允许运行" }, { value: "disabled", label: "强制关闭" }]} />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}><Form.Item name={["aiWorker", "tickIntervalMs"]} label="轮询间隔 ms"><InputNumber min={10000} max={300000} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["aiWorker", "maxBoardsPerTick"]} label="每轮账号数"><InputNumber min={1} max={20} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["aiWorker", "maxTextLength"]} label="推文截断字符"><InputNumber min={200} max={5000} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["aiWorker", "contentBatchSize"]} label="内容批大小"><InputNumber min={1} max={500} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["aiWorker", "projectAttitudeBatchSize"]} label="态度批大小"><InputNumber min={1} max={1000} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["aiWorker", "contentConcurrency"]} label="内容并发"><InputNumber min={1} max={20} style={{ width: "100%" }} /></Form.Item></Col>
+                <Col xs={12} md={6}><Form.Item name={["aiWorker", "projectAttitudeConcurrency"]} label="态度并发"><InputNumber min={1} max={20} style={{ width: "100%" }} /></Form.Item></Col>
+              </Row>
+              <Descriptions size="small" bordered column={2}>
+                <Descriptions.Item label="Redis 状态">{aiWorkerStatus?.redisState || "-"}</Descriptions.Item>
+                <Descriptions.Item label="上次运行">{formatDate(getString(asRecord(aiWorkerStatus?.lastRun).finishedAt))}</Descriptions.Item>
+                <Descriptions.Item label="上次内容成功">{getNumberFromRecord(asRecord(aiWorkerStatus?.lastRun), "contentAnalyzed")}</Descriptions.Item>
+                <Descriptions.Item label="上次态度成功">{getNumberFromRecord(asRecord(aiWorkerStatus?.lastRun), "attitudeAnalyzed")}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+
             <Card size="small" title="基础配置" extra={<Button size="small" icon={<ReloadOutlined />} loading={configQuery.isFetching} onClick={() => configQuery.refetch()}>重新读取</Button>}>
               <Row gutter={[12, 4]}>
                 <Col xs={24} md={8}>
@@ -931,12 +1009,27 @@ function AiRuntimeConfigPanel() {
                 </Col>
                 <Col xs={12} md={6}>
                   <Form.Item name={["ai", "contentBatchSize"]} label="内容批大小" tooltip={aiHelp("contentBatchSize")}>
-                    <InputNumber min={1} max={50} style={{ width: "100%" }} />
+                    <InputNumber min={1} max={500} style={{ width: "100%" }} />
                   </Form.Item>
                 </Col>
                 <Col xs={12} md={6}>
                   <Form.Item name={["ai", "projectAttitudeBatchSize"]} label="态度批大小" tooltip={aiHelp("projectAttitudeBatchSize")}>
-                    <InputNumber min={1} max={100} style={{ width: "100%" }} />
+                    <InputNumber min={1} max={1000} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["ai", "contentConcurrency"]} label="内容并发" tooltip={aiHelp("contentConcurrency")}>
+                    <InputNumber min={1} max={20} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["ai", "projectAttitudeConcurrency"]} label="态度并发" tooltip={aiHelp("projectAttitudeConcurrency")}>
+                    <InputNumber min={1} max={20} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["ai", "maxTextLength"]} label="截断字符" tooltip={aiHelp("maxTextLength")}>
+                    <InputNumber min={200} max={5000} style={{ width: "100%" }} />
                   </Form.Item>
                 </Col>
                 <Col xs={12} md={6}>
@@ -1130,7 +1223,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                 <AiProgressLine title="态度评价进度" item={progress?.projectAttitude} enabled={detail?.config.effective.projectAttitudeEnabled} />
                 {progress ? (
                   <Text type="secondary">
-                    整体 ETA {formatEtaMinutes(progress.estimatedMinutesRemaining)}；按约 {progress.intervalMinutes} 分钟一轮保守估算，不提速。
+                    整体 ETA {formatEtaMinutes(progress.estimatedMinutesRemaining)}；按独立 AI Worker 每约 {progress.intervalMinutes} 分钟一轮估算。
                   </Text>
                 ) : null}
               </Space>

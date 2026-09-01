@@ -15,7 +15,6 @@ const {
   generateFollowSignals,
   generateAggregateAlerts,
 } = require("./aggregate-service");
-const { analyzePendingProjectAttitudes, analyzePendingContentMetadata } = require("./analysis-service");
 const { getSocialListeningRuntimeConfig } = require("./runtime-config");
 
 function clampPositiveInteger(value, fallback, min, max) {
@@ -199,24 +198,15 @@ async function processSocialListeningJob(jobId) {
       lastFailureReason: null,
     });
 
-    const contentAiLimit = job.jobType === JOB_TYPES.HISTORY_BACKFILL
-      ? Math.min(runtimeConfig.ai?.contentBatchSize || 10, 10)
-      : (runtimeConfig.ai?.contentBatchSize || 30);
-    const contentAiResult = await analyzePendingContentMetadata(board, { limit: contentAiLimit });
-    counters.contentAiAnalyzed = contentAiResult.analyzed || 0;
-    counters.contentAiFailed = contentAiResult.failed || 0;
-    counters.contentAiSkipped = contentAiResult.skipped || 0;
-    counters.contentAiEnabled = !!contentAiResult.enabled;
-    counters.contentAiPromptOverrides = contentAiResult.promptOverrides || 0;
-
-    const attitudeAiLimit = job.jobType === JOB_TYPES.HISTORY_BACKFILL
-      ? Math.min(runtimeConfig.ai?.projectAttitudeBatchSize || 20, 20)
-      : (runtimeConfig.ai?.projectAttitudeBatchSize || 50);
-    const aiResult = await analyzePendingProjectAttitudes(board, { limit: attitudeAiLimit });
-    counters.aiAnalyzed = aiResult.analyzed || 0;
-    counters.aiFailed = aiResult.failed || 0;
-    counters.aiEnabled = !!aiResult.enabled;
-    counters.aiPromptOverrides = aiResult.promptOverrides || 0;
+    counters.contentAiAnalyzed = 0;
+    counters.contentAiFailed = 0;
+    counters.contentAiSkipped = 0;
+    counters.contentAiEnabled = false;
+    counters.contentAiMode = "ai_worker";
+    counters.aiAnalyzed = 0;
+    counters.aiFailed = 0;
+    counters.aiEnabled = false;
+    counters.aiMode = "ai_worker";
 
     counters.influentialSignals = await generateInfluentialSignals(board, { since: range.startAt, until: range.endAt });
     counters.followSignals = await generateFollowSignals(board, { since: range.startAt, until: range.endAt });

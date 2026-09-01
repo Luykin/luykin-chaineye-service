@@ -1,4 +1,4 @@
-const { Op } = require("sequelize");
+const { Op, literal } = require("sequelize");
 const { EchohuntSocialListeningPost } = require("../../../models/postgres-start");
 const { SENTIMENTS } = require("../constants");
 const { normalizeTweetText } = require("../utils/text-normalize");
@@ -19,6 +19,45 @@ const {
   generateProjectAttitude,
   generateTweetSummaryMedia,
 } = require("./local-ai-service");
+
+
+function clampInteger(value, fallback, min, max) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.min(Math.max(Math.floor(num), min), max);
+}
+
+function getPostAiText(post, options = {}) {
+  const rawText = normalizeTweetText(post.text || post.normalizedText || "");
+  const maxLength = clampInteger(options.maxTextLength, 1200, 200, 5000);
+  const truncated = rawText.length > maxLength;
+  return {
+    text: truncated ? rawText.slice(0, maxLength) : rawText,
+    rawLength: rawText.length,
+    truncated,
+    maxLength,
+  };
+}
+
+async function runWithConcurrency(items, concurrency, worker) {
+  const limit = clampInteger(concurrency, 1, 1, 20);
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      await worker(items[index], index);
+    }
+  }));
+}
+
+function getAiTextLengthOrder() {
+  return literal('length(coalesce("text", "normalizedText", \'\'))');
+}
+
+function summarizeError(error) {
+  return String(error?.message || error).slice(0, 1000);
+}
 
 async function getAiConfig() {
   const config = await getSocialListeningRuntimeConfig();
@@ -193,9 +232,10 @@ function buildProjectPromptName(board) {
   return String(metadata.aiProjectName || board.projectName || board.officialHandle || "").trim();
 }
 
-async function callProjectAttitudeAi(board, post) {
+async function callProjectAttitudeAi(board, post, options = {}) {
   const aiConfig = await getBoardAiConfig(board);
-  const text = `<<${new Date(post.postCreatedAt).toISOString()}--${normalizeTweetText(post.text || post.normalizedText || "")}>>`;
+  const aiText = getPostAiText(post, options);
+  const text = `<<${new Date(post.postCreatedAt).toISOString()}--${aiText.text}>>`;
   const project = buildProjectPromptName(board);
   const promptVariables = { text, project, lang: "cn" };
   const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.PROJECT_ATTITUDE, promptVariables);
@@ -356,8 +396,8 @@ function hasSummaryFields(row) {
   return Boolean(row.postZh || row.summaryZh || row.summaryEn || row.titleZh || row.titleEn || row.abstractZh || row.abstractEn);
 }
 
-async function callTweetTagAi(board, post) {
-  const text = normalizeTweetText(post.text || post.normalizedText || "");
+async function callTweetTagAi(board, post, options = {}) {
+  const { text } = getPostAiText(post, options);
   const promptVariables = { text };
   const aiConfig = await getBoardAiConfig(board);
   const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_TAG, promptVariables);
@@ -377,10 +417,10 @@ function pickFirstMedia(post) {
   return "";
 }
 
-async function callTweetSummaryAi(board, post, lang) {
+async function callTweetSummaryAi(board, post, lang, options = {}) {
   const aiConfig = await getBoardAiConfig(board);
   const summaryWords = aiConfig.summaryWords || 5;
-  const text = normalizeTweetText(post.text || post.normalizedText || "");
+  const { text } = getPostAiText(post, options);
   const promptVariables = { text, lang, words: summaryWords, media: pickFirstMedia(post) };
   const { prompt, trace: promptTrace } = buildPromptInfo(board, aiConfig, PROMPT_FIELDS.TWEET_SUMMARY, promptVariables);
   if (!text) return { summary: "", promptTrace, raw: {} };
@@ -393,7 +433,9 @@ async function callTweetSummaryAi(board, post, lang) {
 async function analyzePendingContentMetadata(board, options = {}) {
   const aiConfig = await getBoardAiConfig(board);
   if (!await isContentAiEnabled(board)) return { enabled: false, analyzed: 0, failed: 0, skipped: 0 };
-  const limit = Math.min(Math.max(Number(options.limit || aiConfig.contentBatchSize || 10), 1), 50);
+  const limit = clampInteger(options.limit || aiConfig.contentBatchSize, 10, 1, 500);
+  const concurrency = clampInteger(options.concurrency || aiConfig.contentConcurrency, 1, 1, 20);
+  const maxTextLength = clampInteger(options.maxTextLength || aiConfig.maxTextLength, 1200, 200, 5000);
   const posts = await EchohuntSocialListeningPost.findAll({
     where: {
       boardId: board.id,
@@ -407,6 +449,7 @@ async function analyzePendingContentMetadata(board, options = {}) {
       ],
     },
     order: [
+      [getAiTextLengthOrder(), "ASC"],
       ["authorGlobalRank", "ASC"],
       ["viewsCount", "DESC"],
       ["postCreatedAt", "DESC"],
@@ -417,17 +460,20 @@ async function analyzePendingContentMetadata(board, options = {}) {
   let analyzed = 0;
   let failed = 0;
   let skipped = 0;
+  const startedAt = Date.now();
   const promptOverrides = countPromptOverrides(board, [PROMPT_FIELDS.TWEET_TAG, PROMPT_FIELDS.TWEET_SUMMARY]);
-  for (const post of posts) {
-    const text = normalizeTweetText(post.text || post.normalizedText || "");
-    if (!text || text.length < 8) {
+  await runWithConcurrency(posts, concurrency, async (post) => {
+    const itemStartedAt = Date.now();
+    const aiText = getPostAiText(post, { maxTextLength });
+    if (!aiText.text || aiText.text.length < 8) {
       skipped += 1;
       await post.update({
         tagStatus: post.tagStatus === "pending" || !post.tagStatus ? "skipped" : post.tagStatus,
         summaryStatus: post.summaryStatus === "pending" || !post.summaryStatus ? "skipped" : post.summaryStatus,
         aiStatus: "skipped",
       }).catch(() => null);
-      continue;
+      console.log(`[SocialListeningAI] content board=${board.id} post=${post.id} tweet=${post.tweetId} status=skipped ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated}`);
+      return;
     }
 
     try {
@@ -438,7 +484,7 @@ async function analyzePendingContentMetadata(board, options = {}) {
       const shouldReplaceOldAiFields = post.aiSource === "dev_tweet_ai" || post.tagStatus === "reused" || post.summaryStatus === "reused";
 
       if (shouldGenerateTag) {
-        const tagResult = await callTweetTagAi(board, post);
+        const tagResult = await callTweetTagAi(board, post, { maxTextLength });
         const matchedKeywords = Array.isArray(post.rawTweet?.matchedKeywords) ? post.rawTweet.matchedKeywords : [];
         if (shouldReplaceOldAiFields) patch.topics = tagResult.topics.length ? tagResult.topics : null;
         else if (tagResult.topics.length) patch.topics = mergeListValues(post.topics, tagResult.topics);
@@ -452,8 +498,8 @@ async function analyzePendingContentMetadata(board, options = {}) {
       }
       if (shouldGenerateSummary) {
         const [summaryZhResult, summaryEnResult] = await Promise.all([
-          shouldGenerateSummary ? callTweetSummaryAi(board, post, "chinese") : Promise.resolve({ summary: post.summaryZh, promptTrace: buildPromptTrace(board, PROMPT_FIELDS.TWEET_SUMMARY), raw: {} }),
-          shouldGenerateSummary ? callTweetSummaryAi(board, post, "english") : Promise.resolve({ summary: post.summaryEn, promptTrace: buildPromptTrace(board, PROMPT_FIELDS.TWEET_SUMMARY), raw: {} }),
+          callTweetSummaryAi(board, post, "chinese", { maxTextLength }),
+          callTweetSummaryAi(board, post, "english", { maxTextLength }),
         ]);
         const summaryZh = summaryZhResult.summary;
         const summaryEn = summaryEnResult.summary;
@@ -485,24 +531,29 @@ async function analyzePendingContentMetadata(board, options = {}) {
         });
         analyzed += 1;
       }
+      console.log(`[SocialListeningAI] content board=${board.id} post=${post.id} tweet=${post.tweetId} status=ok ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} tag=${patch.tagStatus || post.tagStatus || "keep"} summary=${patch.summaryStatus || post.summaryStatus || "keep"}`);
     } catch (error) {
       failed += 1;
       await post.update({
         tagStatus: ["pending", "failed", null].includes(post.tagStatus) ? "failed" : post.tagStatus,
         summaryStatus: ["pending", "failed", null].includes(post.summaryStatus) ? "failed" : post.summaryStatus,
         aiAnalyzedAt: new Date(),
-        aiError: String(error.message || error).slice(0, 1000),
+        aiError: summarizeError(error),
       }).catch(() => null);
+      console.warn(`[SocialListeningAI] content board=${board.id} post=${post.id} tweet=${post.tweetId} status=failed ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} error=${summarizeError(error)}`);
     }
-  }
+  });
 
-  return { enabled: true, analyzed, failed, skipped, promptOverrides };
+  console.log(`[SocialListeningAI] content batch board=${board.id} posts=${posts.length} analyzed=${analyzed} failed=${failed} skipped=${skipped} concurrency=${concurrency} maxTextLength=${maxTextLength} ms=${Date.now() - startedAt}`);
+  return { enabled: true, analyzed, failed, skipped, promptOverrides, selected: posts.length, concurrency, maxTextLength, durationMs: Date.now() - startedAt };
 }
 
 async function analyzePendingProjectAttitudes(board, options = {}) {
   const aiConfig = await getBoardAiConfig(board);
   if (!await isProjectAttitudeEnabled(board)) return { enabled: false, analyzed: 0, failed: 0 };
-  const limit = Math.min(Math.max(Number(options.limit || aiConfig.projectAttitudeBatchSize || 20), 1), 100);
+  const limit = clampInteger(options.limit || aiConfig.projectAttitudeBatchSize, 20, 1, 1000);
+  const concurrency = clampInteger(options.concurrency || aiConfig.projectAttitudeConcurrency, 1, 1, 30);
+  const maxTextLength = clampInteger(options.maxTextLength || aiConfig.maxTextLength, 1200, 200, 5000);
   const posts = await EchohuntSocialListeningPost.findAll({
     where: {
       boardId: board.id,
@@ -513,6 +564,7 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
       text: { [Op.ne]: null },
     },
     order: [
+      [getAiTextLengthOrder(), "ASC"],
       ["authorGlobalRank", "ASC"],
       ["viewsCount", "DESC"],
       ["postCreatedAt", "DESC"],
@@ -522,10 +574,13 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
 
   let analyzed = 0;
   let failed = 0;
+  const startedAt = Date.now();
   const promptOverrides = countPromptOverrides(board, [PROMPT_FIELDS.PROJECT_ATTITUDE]);
-  for (const post of posts) {
+  await runWithConcurrency(posts, concurrency, async (post) => {
+    const itemStartedAt = Date.now();
+    const aiText = getPostAiText(post, { maxTextLength });
     try {
-      const result = await callProjectAttitudeAi(board, post);
+      const result = await callProjectAttitudeAi(board, post, { maxTextLength });
       await post.update({
         projectAttitudeScore: result.score,
         sentimentScore: result.score,
@@ -550,17 +605,20 @@ async function analyzePendingProjectAttitudes(board, options = {}) {
         },
       });
       analyzed += 1;
+      console.log(`[SocialListeningAI] attitude board=${board.id} post=${post.id} tweet=${post.tweetId} status=ok sentiment=${result.sentiment} score=${result.score} ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated}`);
     } catch (error) {
       failed += 1;
       await post.update({
         sentiment: SENTIMENTS.UNKNOWN,
         attitudeStatus: "failed",
         aiAnalyzedAt: new Date(),
-        aiError: String(error.message || error).slice(0, 1000),
+        aiError: summarizeError(error),
       }).catch(() => null);
+      console.warn(`[SocialListeningAI] attitude board=${board.id} post=${post.id} tweet=${post.tweetId} status=failed ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} error=${summarizeError(error)}`);
     }
-  }
-  return { enabled: true, analyzed, failed, promptOverrides };
+  });
+  console.log(`[SocialListeningAI] attitude batch board=${board.id} posts=${posts.length} analyzed=${analyzed} failed=${failed} concurrency=${concurrency} maxTextLength=${maxTextLength} ms=${Date.now() - startedAt}`);
+  return { enabled: true, analyzed, failed, promptOverrides, selected: posts.length, concurrency, maxTextLength, durationMs: Date.now() - startedAt };
 }
 
 module.exports = {
