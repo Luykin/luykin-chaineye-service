@@ -144,6 +144,7 @@ export interface SocialListeningAiRuntimeConfig {
   model: string;
   temperature: number;
   maxTokens: number;
+  tweetAnalysisModel?: string;
   tweetTagModel?: string;
   projectAttitudeModel?: string;
   tweetSummaryModel?: string;
@@ -161,6 +162,7 @@ export interface SocialListeningAiRuntimeConfig {
   maxTextLength?: number;
   negativeScoreThreshold: number;
   positiveScoreThreshold: number;
+  tweetAnalysisMaxTokens?: number;
   tweetTagMaxTokens?: number;
   projectAttitudeMaxTokens?: number;
   tweetSummaryMaxTokens?: number;

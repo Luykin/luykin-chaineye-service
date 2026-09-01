@@ -150,78 +150,64 @@ const EXTRA_LLM_MODEL_OPTIONS: LlmModelOption[] = [
 const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   apiKey: "模型服务密钥。后台不会回显明文；保持不变时留空即可，选择替换时才填写新 Key。",
   baseURL: "OpenAI-compatible 接口地址，例如官方 OpenAI、Gemini 代理或内部网关，以 /v1 结尾更稳。",
-  model: "默认模型。标签、摘要、态度三个专项模型为空时都会使用这个模型。",
-  tweetTagModel: "只用于推文标签/热词生成；为空表示使用默认模型。",
-  tweetSummaryModel: "只用于中文摘要和英文摘要；为空表示使用默认模型。",
-  projectAttitudeModel: "只用于项目态度评分；为空表示使用默认模型。",
-  contentEnabled: "开启后每条帖子最多 3 次调用：tweetTag、中文摘要、英文摘要。",
-  projectAttitudeEnabled: "开启后每条帖子 1 次调用：输出 0-10 分、情绪和判断原因；无关/证据不足/无法可靠判断写 unknown。",
-  contentBatchSize: "AI Worker 每轮每个账号最多处理多少条内容 AI；采集任务不再内联跑 AI。",
-  projectAttitudeBatchSize: "AI Worker 每轮每个账号最多处理多少条态度 AI。",
-  contentConcurrency: "内容 AI 并发帖子数；提高能加速，但会增加模型服务瞬时压力。",
-  projectAttitudeConcurrency: "态度 AI 并发帖子数；提高能加速，但会增加模型服务瞬时压力。",
+  model: "默认模型。综合分析模型为空时使用这个模型。",
+  tweetAnalysisModel: "综合分析模型；一次调用同时生成标签、摘要和项目态度，通常只需要配置这个。",
+  tweetTagModel: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
+  tweetSummaryModel: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
+  projectAttitudeModel: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
+  contentEnabled: "开启后参与综合 AI 调用，回填标签和中英文摘要；不再生成全文翻译。",
+  projectAttitudeEnabled: "开启后参与综合 AI 调用，输出 0-10 分、情绪和判断原因；无关/证据不足/无法可靠判断写 unknown。",
+  contentBatchSize: "AI Worker 每轮每个账号最多选取多少条内容待处理帖子；采集任务不再内联跑 AI。",
+  projectAttitudeBatchSize: "AI Worker 每轮每个账号最多选取多少条态度待处理帖子；综合调用会合并同一条推文的任务。",
+  contentConcurrency: "综合 AI Worker 并发帖子数；会和态度并发取较大值。",
+  projectAttitudeConcurrency: "综合 AI Worker 并发帖子数；会和内容并发取较大值。",
   maxTextLength: "进入 AI Prompt 前的推文硬截断字符数；超长推文会排在后面且记录 truncated=true。",
   negativeScoreThreshold: "态度分低于该值判定 negative；默认 4。",
   positiveScoreThreshold: "态度分高于该值判定 positive；中间区间判定 neutral；默认 6。",
   temperature: "模型随机性。分类/打分建议为 0，结果更稳定。",
-  maxTokens: "默认输出 token 上限。专项上限未配置时使用这个值。",
-  tweetTagMaxTokens: "标签/热词结构化输出上限。",
-  tweetSummaryMaxTokens: "单次摘要输出上限；中英文摘要会分别调用。",
-  projectAttitudeMaxTokens: "项目态度评分输出上限。",
+  maxTokens: "默认输出 token 上限。综合输出上限未配置时使用这个值。",
+  tweetAnalysisMaxTokens: "综合分析结构化输出上限。",
+  tweetTagMaxTokens: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
+  tweetSummaryMaxTokens: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
+  projectAttitudeMaxTokens: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。",
   timeoutMs: "单次模型请求超时时间，单位毫秒。",
   maxRetries: "失败重试次数。过高会拖慢任务并可能增加调用次数。",
   summaryWords: "摘要 Prompt 中的目标摘要长度。",
   promptMaxLength: "全局/看板 Prompt 最大字符数，防止误填超长内容。",
   estimateInputPricePerMillion: "费用估算用的输入 token 单价，单位 USD / 100万 tokens；不影响真实调用。",
   estimateOutputPricePerMillion: "费用估算用的输出 token 单价，单位 USD / 100万 tokens；不影响真实调用。",
-  estimateContentInputTokens: "估算内容分析单次调用平均输入 token，用于预算。",
-  estimateContentOutputTokens: "估算内容分析单次调用平均输出 token，用于预算。",
-  estimateProjectAttitudeInputTokens: "估算态度评价单次调用平均输入 token，用于预算。",
-  estimateProjectAttitudeOutputTokens: "估算态度评价单次调用平均输出 token，用于预算。",
-  prompts: "全局 Prompt 覆盖；看板详情里的看板级 Prompt 优先级更高。",
+  estimateContentInputTokens: "估算综合调用里内容标签/摘要部分的平均输入 token，用于预算。",
+  estimateContentOutputTokens: "估算综合调用里内容标签/摘要部分的平均输出 token，用于预算。",
+  estimateProjectAttitudeInputTokens: "估算综合调用里态度评价部分的平均输入 token，用于预算。",
+  estimateProjectAttitudeOutputTokens: "估算综合调用里态度评价部分的平均输出 token，用于预算。",
+  prompts: "优先配置 tweetAnalysis 综合 Prompt；看板详情里的看板级 Prompt 优先级更高。",
 };
 
 const AI_POST_PROCESSING_STEPS = [
   {
-    key: "tweetTag",
-    title: "1. 内容标签分析",
-    trigger: "开启「内容分析」后执行",
+    key: "tweetAnalysis",
+    title: "1. 综合 AI 分析",
+    trigger: "开启「内容分析」或「态度评价」后执行",
     calls: "1 次 / 帖",
-    model: "tweetTagModel；为空使用该账号模型",
+    model: "tweetAnalysisModel；为空使用该账号模型/默认模型",
     writes: [
-      "topics：主题标签",
-      "keywords：热词 + 召回命中关键词",
-      "tagStatus：generated / skipped / failed",
-      "rawTweet.socialListeningAi.tag：AI 原始结果和 promptTrace",
-    ],
-  },
-  {
-    key: "tweetSummary",
-    title: "2. 中英文摘要",
-    trigger: "开启「内容分析」后执行",
-    calls: "2 次 / 帖（中文 1 次 + 英文 1 次）",
-    model: "tweetSummaryModel；为空使用该账号模型",
-    writes: [
-      "postZh：中文全文翻译（仅中文摘要调用返回）",
-      "summaryZh：中文摘要",
-      "summaryEn：英文摘要",
-      "summaryStatus：generated / skipped / failed",
-      "rawTweet.socialListeningAi.summary：摘要结果和 promptTrace",
-    ],
-  },
-  {
-    key: "projectAttitude",
-    title: "3. 项目态度评价",
-    trigger: "开启「态度评价」后执行",
-    calls: "1 次 / 帖",
-    model: "projectAttitudeModel；为空使用该账号模型",
-    writes: [
-      "projectAttitudeScore：0-10 态度分",
-      "sentimentScore：兼容分数字段，等同态度分",
+      "topics / keywords：主题标签与热词",
+      "summaryZh / summaryEn：中英文摘要（不再生成全文翻译 postZh）",
+      "projectAttitudeScore / sentimentScore：0-10 态度分",
       "sentiment：positive / neutral / negative / unknown（无法可靠判断为 unknown）",
       "sentimentSummaryZh：中文判断依据",
-      "attitudeStatus：succeeded / failed / skipped",
-      "rawTweet.projectAttitude：AI 原始结果和 promptTrace",
+      "tagStatus / summaryStatus / attitudeStatus / aiStatus：处理状态",
+      "rawTweet.socialListeningAi：综合 AI 原始结果和 promptTrace",
+    ],
+  },
+  {
+    key: "legacyAi",
+    title: "2. 旧拆分任务兼容",
+    trigger: "仅保留给历史代码/历史 Prompt 兜底",
+    calls: "不作为新 AI Worker 的默认路径",
+    model: "旧 tweetTagModel / tweetSummaryModel / projectAttitudeModel",
+    writes: [
+      "旧字段仍兼容读取，但新回填优先使用综合分析。",
     ],
   },
 ];
@@ -300,10 +286,10 @@ function formatEtaMinutes(value?: number | null) {
 function calculateAiCost(ai?: Partial<SocialListeningAiRuntimeConfig>, postCount = 0) {
   const posts = Math.max(0, Math.floor(Number(postCount || 0)));
   const callsPerPost = ai?.contentEnabled || ai?.projectAttitudeEnabled ? 1 : 0;
-  const inputTokensPerPost = callsPerPost ? Math.max(
-    ai?.contentEnabled ? Number(ai?.estimateContentInputTokens || 1200) : 0,
-    ai?.projectAttitudeEnabled ? Number(ai?.estimateProjectAttitudeInputTokens || 900) : 0,
-  ) : 0;
+  const inputTokensPerPost = callsPerPost
+    ? (ai?.contentEnabled ? Number(ai?.estimateContentInputTokens || 1200) : 0)
+      + (ai?.projectAttitudeEnabled ? Number(ai?.estimateProjectAttitudeInputTokens || 900) : 0)
+    : 0;
   const outputTokensPerPost = callsPerPost
     ? (ai?.contentEnabled ? Number(ai?.estimateContentOutputTokens || 260) : 0)
       + (ai?.projectAttitudeEnabled ? Number(ai?.estimateProjectAttitudeOutputTokens || 180) : 0)
@@ -1164,16 +1150,18 @@ function AiRuntimeConfigPanel() {
                   label: "高级参数：专项模型 / 费用单价 / Prompt",
                   children: (
                     <Row gutter={[12, 4]}>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="标签模型" tooltip={aiHelp("tweetTagModel")}><ModelAutoComplete options={modelOptions} placeholder="为空用默认模型，也可直接输入" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="摘要模型" tooltip={aiHelp("tweetSummaryModel")}><ModelAutoComplete options={modelOptions} placeholder="为空用默认模型，也可直接输入" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="态度模型" tooltip={aiHelp("projectAttitudeModel")}><ModelAutoComplete options={modelOptions} placeholder="为空用默认模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetAnalysisModel"]} label="综合分析模型" tooltip={aiHelp("tweetAnalysisModel")}><ModelAutoComplete options={modelOptions} placeholder="为空用默认模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="旧：标签模型" tooltip={aiHelp("tweetTagModel")}><ModelAutoComplete options={modelOptions} placeholder="兼容旧拆分任务，通常留空" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="旧：摘要模型" tooltip={aiHelp("tweetSummaryModel")}><ModelAutoComplete options={modelOptions} placeholder="兼容旧拆分任务，通常留空" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="旧：态度模型" tooltip={aiHelp("projectAttitudeModel")}><ModelAutoComplete options={modelOptions} placeholder="兼容旧拆分任务，通常留空" /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "temperature"]} label="温度" tooltip={aiHelp("temperature")}><InputNumber min={0} max={2} step={0.1} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "maxTokens"]} label="默认输出上限" tooltip={aiHelp("maxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "timeoutMs"]} label="超时时间 ms" tooltip={aiHelp("timeoutMs")}><InputNumber min={1000} max={300000} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "maxRetries"]} label="重试次数" tooltip={aiHelp("maxRetries")}><InputNumber min={0} max={5} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetTagMaxTokens"]} label="标签输出上限" tooltip={aiHelp("tweetTagMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetSummaryMaxTokens"]} label="摘要输出上限" tooltip={aiHelp("tweetSummaryMaxTokens")}><InputNumber min={64} max={4000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "projectAttitudeMaxTokens"]} label="态度输出上限" tooltip={aiHelp("projectAttitudeMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetAnalysisMaxTokens"]} label="综合输出上限" tooltip={aiHelp("tweetAnalysisMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetTagMaxTokens"]} label="旧：标签输出上限" tooltip={aiHelp("tweetTagMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetSummaryMaxTokens"]} label="旧：摘要输出上限" tooltip={aiHelp("tweetSummaryMaxTokens")}><InputNumber min={64} max={4000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "projectAttitudeMaxTokens"]} label="旧：态度输出上限" tooltip={aiHelp("projectAttitudeMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={6}><Form.Item name={["ai", "summaryWords"]} label="摘要词数" tooltip={aiHelp("summaryWords")}><InputNumber min={3} max={80} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateInputPricePerMillion"]} label="输入单价 / 100万 token" tooltip={aiHelp("estimateInputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
                       <Col xs={24} md={8}><Form.Item name={["ai", "estimateOutputPricePerMillion"]} label="输出单价 / 100万 token" tooltip={aiHelp("estimateOutputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
@@ -1378,12 +1366,12 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={8}>
-                  <Form.Item name={["ai", "contentEnabled"]} label="该账号内容分析" valuePropName="checked" extra={contentBlocked ? "全局内容分析总开关未开启，当前账号不能生效。" : "开启后：标签 + 中文摘要 + 英文摘要，约每条 3 次调用。"}>
+                  <Form.Item name={["ai", "contentEnabled"]} label="该账号内容分析" valuePropName="checked" extra={contentBlocked ? "全局内容分析总开关未开启，当前账号不能生效。" : "开启后参与综合 AI 调用：标签 + 中文摘要 + 英文摘要，约每条 1 次调用。"}>
                     <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={8}>
-                  <Form.Item name={["ai", "projectAttitudeEnabled"]} label="该账号态度评价" valuePropName="checked" extra={attitudeBlocked ? "全局项目态度总开关未开启，当前账号不能生效。" : "开启后：评价对项目态度，约每条 1 次调用。"}>
+                  <Form.Item name={["ai", "projectAttitudeEnabled"]} label="该账号态度评价" valuePropName="checked" extra={attitudeBlocked ? "全局项目态度总开关未开启，当前账号不能生效。" : "开启后参与综合 AI 调用：评价对项目态度；和内容分析会合并为每条 1 次调用。"}>
                     <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                   </Form.Item>
                 </Col>

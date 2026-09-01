@@ -34,7 +34,7 @@ module.exports = (sequelize) => {
       sentimentSummaryZh: { type: DataTypes.TEXT, allowNull: true, comment: "项目态度中文摘要/原因" },
       topics: { type: DataTypes.JSONB, allowNull: true, comment: "主题标签 JSON，由 Social Listening 本地 LLM tweet_tag_v2 逻辑生成" },
       keywords: { type: DataTypes.JSONB, allowNull: true, comment: "热词与命中关键词 JSON，用于词云和命中原因" },
-      postZh: { type: DataTypes.TEXT, allowNull: true, comment: "帖子中文全文翻译，由 Social Listening 本地 LLM tweet_summary_media 逻辑生成" },
+      postZh: { type: DataTypes.TEXT, allowNull: true, comment: "历史兼容字段：旧版中文全文翻译；新版综合 AI 不再生成" },
       summaryZh: { type: DataTypes.TEXT, allowNull: true, comment: "中文摘要，由 Social Listening 本地 LLM tweet_summary_media 逻辑生成" },
       summaryEn: { type: DataTypes.TEXT, allowNull: true, comment: "英文摘要，由 Social Listening 本地 LLM tweet_summary_media 逻辑生成" },
       titleZh: { type: DataTypes.TEXT, allowNull: true, comment: "中文标题，预留字段" },

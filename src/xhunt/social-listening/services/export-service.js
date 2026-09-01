@@ -110,8 +110,9 @@ async function exportPostsXlsx(board, query = {}, actor = {}, redisClient = null
       Replies: post.metrics.replies,
       主题: (post.topics || []).join(", "),
       关键词: (post.keywords || []).join(", "),
-      中文全文: post.postZh || "",
       中文摘要: post.summaryZh || "",
+      英文摘要: post.summaryEn || "",
+      旧中文全文: post.postZh || "",
       原文: post.text || "",
     };
   });

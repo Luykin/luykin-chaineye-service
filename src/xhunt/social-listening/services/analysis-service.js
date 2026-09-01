@@ -394,7 +394,7 @@ function extractSummaryResult(data = {}) {
 }
 
 function hasSummaryFields(row) {
-  return Boolean(row.postZh || row.summaryZh || row.summaryEn || row.titleZh || row.titleEn || row.abstractZh || row.abstractEn);
+  return Boolean(row.summaryZh || row.summaryEn || row.titleZh || row.titleEn || row.abstractZh || row.abstractEn);
 }
 
 async function callTweetTagAi(board, post, options = {}) {
@@ -645,7 +645,6 @@ async function analyzePendingPostAi(board, options = {}) {
           prompt: result.summary.promptTrace,
           raw: result.summary.raw,
         };
-        content.analyzed += 1;
       }
 
       if (shouldGenerateAttitude) {
@@ -663,7 +662,6 @@ async function analyzePendingPostAi(board, options = {}) {
           prompt: result.attitude.promptTrace,
           raw: result.attitude.raw,
         };
-        attitude.analyzed += 1;
       }
 
       await post.update({
@@ -683,6 +681,8 @@ async function analyzePendingPostAi(board, options = {}) {
           socialListeningAi: rawAi,
         },
       });
+      if (shouldGenerateContent) content.analyzed += 1;
+      if (shouldGenerateAttitude) attitude.analyzed += 1;
       console.log(`[SocialListeningAI] combined board=${board.id} post=${post.id} tweet=${post.tweetId} status=ok ms=${Date.now() - itemStartedAt} textLen=${aiText.rawLength} truncated=${aiText.truncated} content=${shouldGenerateContent} attitude=${shouldGenerateAttitude}`);
     } catch (error) {
       if (shouldGenerateContent) content.failed += 1;

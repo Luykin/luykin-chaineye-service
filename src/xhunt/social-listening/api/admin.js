@@ -85,7 +85,7 @@ function estimateAiCost(aiConfig = {}, postCount = 0) {
   const contentOutputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateContentOutputTokens, 260));
   const attitudeInputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateProjectAttitudeInputTokens, 900));
   const attitudeOutputTokens = Math.max(0, toFiniteNumber(aiConfig.estimateProjectAttitudeOutputTokens, 180));
-  const inputTokensPerPost = callsPerPost ? Math.max(aiConfig.contentEnabled ? contentInputTokens : 0, aiConfig.projectAttitudeEnabled ? attitudeInputTokens : 0) : 0;
+  const inputTokensPerPost = callsPerPost ? (aiConfig.contentEnabled ? contentInputTokens : 0) + (aiConfig.projectAttitudeEnabled ? attitudeInputTokens : 0) : 0;
   const outputTokensPerPost = callsPerPost ? (aiConfig.contentEnabled ? contentOutputTokens : 0) + (aiConfig.projectAttitudeEnabled ? attitudeOutputTokens : 0) : 0;
   const inputTokens = posts * inputTokensPerPost;
   const outputTokens = posts * outputTokensPerPost;
@@ -458,31 +458,33 @@ function applyExcludeSelfMentionAlerts(where) {
 const AI_CONFIG_FIELD_DOCS = [
   { field: "apiKey", label: "API Key", desc: "调用 OpenAI-compatible / Gemini 代理服务的密钥。后台只脱敏展示；保存时可选择保持、替换或清空。" },
   { field: "baseURL", label: "Base URL", desc: "模型服务地址，例如 https://api.openai.com/v1 或内部代理 https://aaii.xclaw.info/v1/。" },
-  { field: "model", label: "默认模型", desc: "内容分析和项目态度评价默认使用的模型；专项模型为空时都会回落到它。" },
-  { field: "tweetTagModel", label: "标签模型", desc: "可单独指定推文标签/热词生成模型；为空则使用默认模型。" },
-  { field: "tweetSummaryModel", label: "摘要模型", desc: "可单独指定中英文摘要模型；为空则使用默认模型。" },
-  { field: "projectAttitudeModel", label: "态度模型", desc: "可单独指定项目态度评分模型；为空则使用默认模型。" },
-  { field: "contentEnabled", label: "内容分析开关", desc: "开启后每条待处理帖子最多会调用 3 次 AI：标签、中文摘要、英文摘要。" },
-  { field: "projectAttitudeEnabled", label: "项目态度开关", desc: "开启后每条待处理帖子调用 1 次 AI，生成 0-10 分、positive/neutral/negative/unknown 和中文原因；无关、证据不足、无法可靠判断不强行归为 neutral。" },
-  { field: "contentBatchSize", label: "内容批大小", desc: "AI Worker 每轮每个账号最多分析多少条内容字段；采集任务不再内联跑 AI。" },
-  { field: "projectAttitudeBatchSize", label: "态度批大小", desc: "AI Worker 每轮每个账号最多评价多少条项目态度。" },
-  { field: "contentConcurrency", label: "内容并发", desc: "内容 AI 的并发帖子数；单帖内部仍可能并行调用中英文摘要。" },
-  { field: "projectAttitudeConcurrency", label: "态度并发", desc: "项目态度 AI 的并发帖子数。" },
+  { field: "model", label: "默认模型", desc: "AI 默认使用的模型；综合分析模型为空时回落到它。" },
+  { field: "tweetAnalysisModel", label: "综合分析模型", desc: "可单独指定综合分析模型；一次调用同时生成标签、摘要和项目态度。为空则使用默认模型。" },
+  { field: "tweetTagModel", label: "旧：标签模型", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
+  { field: "tweetSummaryModel", label: "旧：摘要模型", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
+  { field: "projectAttitudeModel", label: "旧：态度模型", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
+  { field: "contentEnabled", label: "内容分析开关", desc: "开启后参与综合 AI 调用，回填标签和中英文摘要；不再生成全文翻译。" },
+  { field: "projectAttitudeEnabled", label: "项目态度开关", desc: "开启后参与综合 AI 调用，回填 0-10 分、positive/neutral/negative/unknown 和中文原因；无关、证据不足、无法可靠判断不强行归为 neutral。" },
+  { field: "contentBatchSize", label: "内容批大小", desc: "AI Worker 每轮每个账号最多选取多少条内容待处理帖子；采集任务不再内联跑 AI。" },
+  { field: "projectAttitudeBatchSize", label: "态度批大小", desc: "AI Worker 每轮每个账号最多选取多少条态度待处理帖子；综合调用会合并同一条推文的任务。" },
+  { field: "contentConcurrency", label: "内容并发", desc: "综合 AI Worker 的并发帖子数；会和态度并发取较大值。" },
+  { field: "projectAttitudeConcurrency", label: "态度并发", desc: "综合 AI Worker 的并发帖子数；会和内容并发取较大值。" },
   { field: "maxTextLength", label: "推文截断长度", desc: "进入 AI Prompt 前的正文硬截断字符数；超长推文会截断并在日志记录 truncated=true。" },
   { field: "negativeScoreThreshold", label: "负面阈值", desc: "项目态度分低于该值时判定为 negative。默认 4。" },
   { field: "positiveScoreThreshold", label: "正面阈值", desc: "项目态度分高于该值时判定为 positive；介于负面和正面阈值之间为 neutral。默认 6。" },
   { field: "temperature", label: "温度", desc: "模型随机性，舆情分类建议保持 0，保证结果稳定可复现。" },
-  { field: "maxTokens", label: "默认输出上限", desc: "未配置专项 maxTokens 时使用的输出 token 上限。" },
-  { field: "tweetTagMaxTokens", label: "标签输出上限", desc: "推文标签/热词结构化输出的 maxTokens。" },
-  { field: "tweetSummaryMaxTokens", label: "摘要输出上限", desc: "单次摘要输出的 maxTokens；中文和英文摘要会分别调用。" },
-  { field: "projectAttitudeMaxTokens", label: "态度输出上限", desc: "项目态度评分输出的 maxTokens。" },
+  { field: "maxTokens", label: "默认输出上限", desc: "未配置综合分析 maxTokens 时使用的输出 token 上限。" },
+  { field: "tweetAnalysisMaxTokens", label: "综合输出上限", desc: "综合分析结构化输出的 maxTokens。" },
+  { field: "tweetTagMaxTokens", label: "旧：标签输出上限", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
+  { field: "tweetSummaryMaxTokens", label: "旧：摘要输出上限", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
+  { field: "projectAttitudeMaxTokens", label: "旧：态度输出上限", desc: "兼容旧拆分任务；新 AI Worker 默认不再单独调用。" },
   { field: "timeoutMs", label: "超时时间", desc: "单次模型请求超时时间，单位毫秒。" },
   { field: "maxRetries", label: "重试次数", desc: "模型请求失败后的最大重试次数；过高会放大延迟和潜在费用。" },
   { field: "summaryWords", label: "摘要词数", desc: "传给摘要 Prompt 的目标词数/短语长度。" },
   { field: "promptMaxLength", label: "Prompt 最大长度", desc: "运行时或看板级 Prompt 的最大字符长度，防止错误配置导致超长请求。" },
   { field: "estimateInputPricePerMillion", label: "输入单价估算", desc: "用于费用估算的输入 token 单价，单位 USD / 100万 tokens，不影响真实调用。" },
   { field: "estimateOutputPricePerMillion", label: "输出单价估算", desc: "用于费用估算的输出 token 单价，单位 USD / 100万 tokens，不影响真实调用。" },
-  { field: "prompts", label: "全局 Prompt 覆盖", desc: "可覆盖 projectAttitude、tweetTag、tweetSummary 的默认 Prompt；看板级 Prompt 优先级更高。" },
+  { field: "prompts", label: "全局 Prompt 覆盖", desc: "优先配置 tweetAnalysis 综合 Prompt；旧 projectAttitude、tweetTag、tweetSummary 仅用于兼容拼接。看板级 Prompt 优先级更高。" },
 ];
 
 router.get("/runtime-config", async (req, res) => {
