@@ -11,6 +11,7 @@ import {
   Descriptions,
   Divider,
   Drawer,
+  Dropdown,
   Empty,
   Form,
   Input,
@@ -30,9 +31,10 @@ import {
   Tooltip,
   Typography,
   message,
+  type MenuProps,
   type TableProps,
 } from "antd";
-import { DownloadOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { DeleteOutlined, DownloadOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
@@ -386,7 +388,9 @@ function BoardMetricCard({ title, value, hint, color }: { title: string; value: 
   return (
     <Card size="small" className="social-listening-metric-card">
       <Statistic title={title} value={value} valueStyle={{ color }} />
-      <Text type="secondary" className="social-listening-metric-hint">{hint}</Text>
+      <Tooltip title={hint}>
+        <Text type="secondary" className="social-listening-metric-hint" ellipsis>{hint}</Text>
+      </Tooltip>
     </Card>
   );
 }
@@ -1197,11 +1201,6 @@ function BoardDrawer({ board, open, initialTab = "workflow", onClose, onChanged 
                 children: <BoardAiConfigPanel boardId={board.id} open={open} onChanged={onChanged} />,
               },
               {
-                key: "config",
-                label: "配置说明",
-                children: <ConfigGuide board={board} />,
-              },
-              {
                 key: "signals",
                 label: "关键账号动态",
                 children: <Space direction="vertical" size={12} className="social-listening-full"><Alert type="info" showIcon message="这里展示被关注/互动的关键账号画像，不只看华语排名；展开行可查看来源表、关系方向和 rankSnapshot 原始字段。" /><Select value={range} onChange={setRange} options={RANGE_OPTIONS} /><Table rowKey="id" size="small" columns={signalColumns} dataSource={signalsQuery.data?.data.items || []} loading={signalsQuery.isFetching} pagination={false} scroll={{ x: 1500 }} expandable={{ expandedRowRender: (row) => <SignalInspector signal={row} /> }} /></Space>,
@@ -1393,42 +1392,54 @@ export function SocialListeningPage() {
     {
       title: "操作",
       fixed: "right",
-      width: 330,
-      render: (_, row) => (
-        <Space size={6} wrap>
-          <Tooltip title="打开详情抽屉，查看分配可见账号、定时任务执行过程、推文字段追踪、配置说明和异常预警。">
-            <Button size="small" onClick={() => openDrawer(row)}>管理</Button>
-          </Tooltip>
-          <Tooltip title="为这个被监控账户单独开启/关闭 AI；默认关闭，开启前必须确认模型和预估成本。">
-            <Button size="small" onClick={() => openDrawer(row, "ai")}>AI</Button>
-          </Tooltip>
-          <Tooltip title="把这个被监控账户分配给某个 EchoHunt 账号看；会直接打开「分配可见账号」页签。">
-            <Button size="small" onClick={() => openDrawer(row, "access")}>分配</Button>
-          </Tooltip>
-          <Tooltip title="修改该监控账号的项目资料、召回关键词、关注关系源和 AI 提示语；保存配置不会立即跑任务。">
-            <Button size="small" onClick={() => openEdit(row)}>编辑</Button>
-          </Tooltip>
-          <Tooltip title="手动创建一次刷新任务：扫描该账号最近增量数据，更新推文入库、AI 字段、关系信号和聚合快照；如果已有任务在排队或运行，会复用现有任务。">
-            <Button size="small" icon={<ThunderboltOutlined />} loading={refreshMutation.isPending} onClick={() => refreshMutation.mutate(row.id)}>刷新</Button>
-          </Tooltip>
-          {row.status === "paused" ? (
-            <Tooltip title="恢复自动监控；首次恢复会先补最近 7 天，再低优先级补齐 30 天，之后交给定时任务增量处理。">
-              <Button size="small" icon={<PlayCircleOutlined />} onClick={() => resumeMutation.mutate(row.id)}>恢复</Button>
+      width: 250,
+      render: (_, row) => {
+        const moreItems: MenuProps["items"] = [
+          { key: "refresh", icon: <ThunderboltOutlined />, label: "刷新数据" },
+          { key: "delete", icon: <DeleteOutlined />, label: <Text type="danger">删除看板</Text>, danger: true },
+        ];
+        const handleMoreClick: MenuProps["onClick"] = ({ key }) => {
+          if (key === "refresh") {
+            refreshMutation.mutate(row.id);
+            return;
+          }
+          if (key === "delete") {
+            Modal.confirm({
+              title: "软删除该看板？",
+              content: "会从正常列表隐藏，不做物理删库；已入库历史数据不会在这里直接清空。",
+              okText: "删除",
+              okButtonProps: { danger: true },
+              cancelText: "取消",
+              onOk: () => deleteMutation.mutate(row.id),
+            });
+          }
+        };
+        return (
+          <Space size={6} wrap>
+            <Tooltip title="打开详情抽屉，查看定时任务执行过程、推文字段追踪、AI 开关、关键账号动态和异常预警。">
+              <Button size="small" onClick={() => openDrawer(row)}>管理</Button>
             </Tooltip>
-          ) : (
-            <Tooltip title="暂停该账号的自动定时处理；配置和已入库数据保留，后续可点击恢复继续。">
-              <Button size="small" icon={<PauseCircleOutlined />} onClick={() => pauseMutation.mutate(row.id)}>暂停</Button>
+            <Tooltip title="为这个被监控账户单独开启/关闭 AI；默认关闭，开启前必须确认模型和预估成本。">
+              <Button size="small" onClick={() => openDrawer(row, "ai")}>AI</Button>
             </Tooltip>
-          )}
-          <Tooltip title="软删除该监控看板：从正常列表隐藏，不做物理删库；已入库历史数据不会在这里直接清空。">
-            <span>
-              <Popconfirm title="软删除该看板？" okText="删除" cancelText="取消" onConfirm={() => deleteMutation.mutate(row.id)}>
-                <Button size="small" danger>删除</Button>
-              </Popconfirm>
-            </span>
-          </Tooltip>
-        </Space>
-      ),
+            <Tooltip title="修改该监控账号的项目资料、召回关键词、关注关系源和 AI 提示语；保存配置不会立即跑任务。">
+              <Button size="small" onClick={() => openEdit(row)}>编辑</Button>
+            </Tooltip>
+            {row.status === "paused" ? (
+              <Tooltip title="恢复自动监控；首次恢复会先补最近 7 天，再低优先级补齐 30 天，之后交给定时任务增量处理。">
+                <Button size="small" icon={<PlayCircleOutlined />} onClick={() => resumeMutation.mutate(row.id)}>恢复</Button>
+              </Tooltip>
+            ) : (
+              <Tooltip title="暂停该账号的自动定时处理；配置和已入库数据保留，后续可点击恢复继续。">
+                <Button size="small" icon={<PauseCircleOutlined />} onClick={() => pauseMutation.mutate(row.id)}>暂停</Button>
+              </Tooltip>
+            )}
+            <Dropdown menu={{ items: moreItems, onClick: handleMoreClick }} trigger={["click"]}>
+              <Button size="small" icon={<MoreOutlined />}>更多</Button>
+            </Dropdown>
+          </Space>
+        );
+      },
     },
   ], [deleteMutation, pauseMutation, refreshMutation, resumeMutation]);
 
@@ -1442,11 +1453,11 @@ export function SocialListeningPage() {
             <Typography.Title level={2}>舆论监控管理台</Typography.Title>
             <Paragraph type="secondary">维护被监控账号、配置 AI 提示语，并追踪后台采集任务、入库字段与预警异常。</Paragraph>
           </div>
-          <Space wrap>
-            <Card size="small"><Statistic title="看板数" value={boards.length} /></Card>
-            <Card size="small"><Statistic title="监控中" value={activeCount} /></Card>
-            <Card size="small"><Statistic title="运行中任务" value={runningJobs} /></Card>
-            <Card size="small"><Statistic title="失败" value={failedCount} valueStyle={{ color: failedCount ? "#cf1322" : undefined }} /></Card>
+          <Space wrap size={8} className="social-listening-hero-metrics">
+            <Card size="small" className="social-listening-hero-metric"><Statistic title="看板数" value={boards.length} /></Card>
+            <Card size="small" className="social-listening-hero-metric"><Statistic title="监控中" value={activeCount} /></Card>
+            <Card size="small" className="social-listening-hero-metric"><Statistic title="运行中任务" value={runningJobs} /></Card>
+            <Card size="small" className="social-listening-hero-metric"><Statistic title="失败" value={failedCount} valueStyle={{ color: failedCount ? "#cf1322" : undefined }} /></Card>
           </Space>
         </div>
 
@@ -1458,7 +1469,7 @@ export function SocialListeningPage() {
           description="新增账号默认暂停，不会自动跑任务；管理员点击恢复后先补最近 7 天数据，再低优先级补齐 30 天，后续增量任务每 15 分钟由 jobs 进程推进。"
           extra={<Space wrap><Input.Search placeholder="搜索项目 / handle" allowClear onSearch={(q) => setFilters((prev) => ({ ...prev, q }))} style={{ width: 220 }} /><Select value={filters.status} onChange={(status) => setFilters((prev) => ({ ...prev, status }))} options={STATUS_OPTIONS} style={{ width: 130 }} /><Tooltip title="重新加载被监控账号列表，只刷新管理台页面数据，不会触发采集或 AI 分析任务。"><Button icon={<ReloadOutlined />} loading={boardsQuery.isFetching} onClick={() => boardsQuery.refetch()}>刷新</Button></Tooltip><Tooltip title="新增一个被监控官方 X 账号；保存后默认暂停，需要点击恢复才会启动补数和定时监控。"><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增监控</Button></Tooltip></Space>}
         >
-          <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1550 }} />
+          <Table rowKey="id" size="small" columns={columns} dataSource={boards} loading={boardsQuery.isFetching} pagination={false} scroll={{ x: 1470 }} />
         </PageSection>
 
         <Row gutter={16}>

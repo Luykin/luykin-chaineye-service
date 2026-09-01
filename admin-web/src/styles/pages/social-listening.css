@@ -7,11 +7,11 @@
 .social-listening-hero {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
-  align-items: flex-end;
-  padding: 22px 24px;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 18px;
   border: 1px solid var(--admin-border, #e5e7eb);
-  border-radius: 18px;
+  border-radius: 14px;
   background:
     radial-gradient(circle at 8% 20%, rgba(37, 99, 235, 0.14), transparent 30%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.88));
@@ -25,12 +25,41 @@
 
 .social-listening-kicker {
   display: inline-flex;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+
+.social-listening-hero h2.ant-typography {
+  margin: 4px 0 6px;
+  font-size: 26px;
+  line-height: 1.15;
+}
+
+.social-listening-hero .ant-typography-secondary {
+  margin-bottom: 0;
+}
+
+.social-listening-hero-metrics {
+  flex-shrink: 0;
+}
+
+.social-listening-hero-metric .ant-card-body {
+  min-width: 70px;
+  padding: 9px 12px;
+}
+
+.social-listening-hero-metric .ant-statistic-title {
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+.social-listening-hero-metric .ant-statistic-content {
+  font-size: 22px;
+  line-height: 1.15;
 }
 
 .social-listening-resolved-card {
@@ -65,9 +94,23 @@
 }
 
 .social-listening-metric-card {
-  min-height: 112px;
+  height: 100%;
+  min-height: 96px;
   border-color: rgba(37, 99, 235, 0.12);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.82));
+}
+
+.social-listening-metric-card .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  padding: 14px 16px;
+}
+
+.social-listening-metric-card .ant-statistic-content {
+  font-size: 24px;
+  line-height: 1.18;
 }
 
 .social-listening-metric-card .ant-statistic-title {
@@ -77,9 +120,11 @@
 
 .social-listening-metric-hint {
   display: block;
+  max-width: 100%;
   margin-top: 8px;
   font-size: 11px;
   line-height: 1.35;
+  white-space: nowrap;
 }
 
 .social-listening-color-dot {
