@@ -1602,11 +1602,18 @@ export function SocialListeningPage() {
     queryKey: ["social-listening", "alerts", "active"],
     queryFn: () => fetchSocialListeningAlerts({ status: "active", pageSize: 8 }),
   });
+  const aiWorkerQuery = useQuery({
+    queryKey: ["social-listening", "ai-worker-status"],
+    queryFn: fetchSocialListeningAiWorkerStatus,
+    refetchInterval: 15_000,
+  });
 
   const boards = boardsQuery.data?.data.items || [];
   const activeCount = boards.filter((item) => item.status === "monitoring").length;
   const failedCount = boards.filter((item) => item.status === "failed").length;
   const runningJobs = (jobsQuery.data?.data.items || []).filter((item) => ["pending", "running"].includes(item.status)).length;
+  const aiWorkerStatus = aiWorkerQuery.data?.data || null;
+  const aiWorkerLastRun = asRecord(aiWorkerStatus?.lastRun);
 
   useEffect(() => {
     if (!drawerBoard?.id) return;
@@ -1656,6 +1663,16 @@ export function SocialListeningPage() {
     mutationFn: refreshSocialListeningBoard,
     onSuccess: (response) => { messageApi.success(response.data.reused ? "已有任务运行中，已复用" : "刷新任务已创建"); void boardsQuery.refetch(); void jobsQuery.refetch(); },
     onError: (error: Error) => messageApi.error(error.message || "刷新失败"),
+  });
+  const pauseAiWorkerMutation = useMutation({
+    mutationFn: pauseSocialListeningAiWorker,
+    onSuccess: () => { messageApi.success("AI Worker 已暂停"); void aiWorkerQuery.refetch(); },
+    onError: (error: Error) => messageApi.error(error.message || "暂停 AI Worker 失败"),
+  });
+  const resumeAiWorkerMutation = useMutation({
+    mutationFn: resumeSocialListeningAiWorker,
+    onSuccess: () => { messageApi.success("AI Worker 已恢复"); void aiWorkerQuery.refetch(); },
+    onError: (error: Error) => messageApi.error(error.message || "恢复 AI Worker 失败"),
   });
   const pauseMutation = useMutation({ mutationFn: pauseSocialListeningBoard, onSuccess: () => { messageApi.success("已暂停"); void boardsQuery.refetch(); }, onError: (error: Error) => messageApi.error(error.message || "暂停失败") });
   const resumeMutation = useMutation({ mutationFn: resumeSocialListeningBoard, onSuccess: () => { messageApi.success("已恢复并触发刷新"); void boardsQuery.refetch(); void jobsQuery.refetch(); }, onError: (error: Error) => messageApi.error(error.message || "恢复失败") });
@@ -1760,6 +1777,30 @@ export function SocialListeningPage() {
           </Space>
         </div>
 
+
+        <Card
+          size="small"
+          title="AI Worker 独立回填"
+          extra={<Space wrap>
+            {aiWorkerStatus?.enabled ? <Tag color="green">运行中</Tag> : <Tag color="orange">已暂停</Tag>}
+            <Button size="small" icon={<ReloadOutlined />} loading={aiWorkerQuery.isFetching} onClick={() => aiWorkerQuery.refetch()}>刷新状态</Button>
+            {aiWorkerStatus?.enabled ? (
+              <Button size="small" icon={<PauseCircleOutlined />} loading={pauseAiWorkerMutation.isPending} onClick={() => pauseAiWorkerMutation.mutate()}>暂停 AI</Button>
+            ) : (
+              <Button size="small" type="primary" icon={<PlayCircleOutlined />} loading={resumeAiWorkerMutation.isPending} onClick={() => resumeAiWorkerMutation.mutate()}>恢复 AI</Button>
+            )}
+          </Space>}
+        >
+          <Row gutter={[12, 12]} align="middle">
+            <Col xs={24} md={8} xl={6}>
+              <Text type="secondary">采集任务仍按 15 分钟跑；AI 由这个 Worker 单独回填，可独立暂停。</Text>
+            </Col>
+            <Col xs={12} md={4}><Statistic title="内容成功/轮" value={getNumberFromRecord(aiWorkerLastRun, "contentAnalyzed")} /></Col>
+            <Col xs={12} md={4}><Statistic title="态度成功/轮" value={getNumberFromRecord(aiWorkerLastRun, "attitudeAnalyzed")} /></Col>
+            <Col xs={12} md={4}><Statistic title="耗时" value={Math.round(getNumberFromRecord(aiWorkerLastRun, "durationMs") / 1000)} suffix="秒" /></Col>
+            <Col xs={12} md={4}><Statistic title="上次运行" value={formatDate(getString(aiWorkerLastRun.finishedAt))} /></Col>
+          </Row>
+        </Card>
 
         <PageSection
           title="被监控账号"
