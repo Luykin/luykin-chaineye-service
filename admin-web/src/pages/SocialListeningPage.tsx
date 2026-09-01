@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  AutoComplete,
   Avatar,
   Button,
   Card,
@@ -34,11 +35,12 @@ import {
   type MenuProps,
   type TableProps,
 } from "antd";
-import { DeleteOutlined, DownloadOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { DeleteOutlined, DownloadOutlined, InfoCircleOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PermissionGuard } from "@/components/permission/PermissionGuard";
 import { PageSection } from "@/components/ui/PageSection";
 import { fetchVipLists } from "@/services/feature-flags";
+import { fetchLlmModels, type LlmModelOption } from "@/services/llm";
 import {
   buildSocialListeningExportUrl,
   createSocialListeningBoard,
@@ -97,39 +99,6 @@ const FOLLOW_SOURCE_OPTIONS = [
   { value: "project_follow", label: "dev.project_follow" },
 ];
 
-const PROCESS_STEPS = [
-  {
-    title: "1. 生成任务",
-    table: "EchohuntSocialListeningJobs",
-    desc: "恢复/刷新/定时器会创建 pending 任务，记录 jobType、时间范围、触发人和 metadata。",
-  },
-  {
-    title: "2. 拆窗口扫描",
-    table: "dev.tweet → EchohuntSocialListeningPosts",
-    desc: "按 60 分钟窗口读取提及、引用、回复及关键词命中的推文，写入帖子事实表。",
-  },
-  {
-    title: "3. 内容 AI",
-    table: "EchohuntSocialListeningPosts",
-    desc: "生成 topics、keywords、summaryZh、summaryEn，并更新 tagStatus/summaryStatus。",
-  },
-  {
-    title: "4. 项目态度 AI",
-    table: "EchohuntSocialListeningPosts",
-    desc: "判断推文对项目的 positive/neutral/negative，写入 score、sentiment、sentimentSummaryZh。",
-  },
-  {
-    title: "5. 关系与预警",
-    table: "EchohuntSocialListeningAccountSignals / Alerts",
-    desc: "生成高影响账号动态、关注/取关信号、讨论量与负面占比预警。",
-  },
-  {
-    title: "6. 聚合快照",
-    table: "EchohuntSocialListeningSnapshots",
-    desc: "刷新 24H/7D/30D 快照，前台看板读取趋势、词云、主题和预警汇总。",
-  },
-];
-
 const FIELD_GUIDE = [
   { label: "官方 X Handle", table: "Boards.officialHandle / officialTwitterId", desc: "输入 handle 后解析 Twitter ID；后端用 officialTwitterId 作为账号唯一身份，handle 只作为展示与兜底去重。" },
   { label: "项目名称", table: "Boards.projectName", desc: "看板标题，也是项目态度 AI 识别“这个项目是谁”的默认名称。" },
@@ -158,6 +127,11 @@ const DEFAULT_AI_PROMPTS = {
   tweetTag: "从推文正文中抽取加密/AI/产品/市场相关主题标签和热词。请返回 topics/domain_tags 和 keywords/hot_tags，标签要短、可聚合、适合主题榜和词云。推文正文：{text}",
   tweetSummary: "请根据推文正文生成 {lang} 摘要，控制在 {words} 个词左右；如果有媒体链接可结合媒体语境，但不要编造未出现的信息。推文正文：{text}",
 };
+
+const EXTRA_LLM_MODEL_OPTIONS: LlmModelOption[] = [
+  { value: "chatgpt/gpt-5.4-mini", label: "ChatGPT GPT-5.4 Mini" },
+  { value: "chatgpt/gpt-5.6-luna", label: "ChatGPT GPT-5.6 Luna" },
+];
 
 const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   apiKey: "模型服务密钥。后台不会回显明文；保持不变时留空即可，选择替换时才填写新 Key。",
@@ -189,6 +163,31 @@ const AI_RUNTIME_FIELD_HELP: Record<string, string> = {
   estimateProjectAttitudeOutputTokens: "估算态度评价单次调用平均输出 token，用于预算。",
   prompts: "全局 Prompt 覆盖；看板详情里的看板级 Prompt 优先级更高。",
 };
+
+function aiHelp(field: string) {
+  return { title: AI_RUNTIME_FIELD_HELP[field] || "", icon: <InfoCircleOutlined /> };
+}
+
+function mergeModelOptions(models: LlmModelOption[] = []) {
+  const seen = new Set<string>();
+  return [...models, ...EXTRA_LLM_MODEL_OPTIONS]
+    .filter((item) => {
+      const value = String(item.value || "").trim();
+      if (!value || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    })
+    .map((item) => ({ value: item.value, label: item.label || item.value }));
+}
+
+function filterModelOption(input: string, option?: { label?: unknown; value?: unknown }) {
+  const keyword = input.toLowerCase();
+  return String(option?.label || option?.value || "").toLowerCase().includes(keyword);
+}
+
+function ModelAutoComplete({ options, placeholder }: { options: Array<{ value: string; label: string }>; placeholder: string }) {
+  return <AutoComplete className="social-listening-model-autocomplete" allowClear placeholder={placeholder} options={options} filterOption={filterModelOption} />;
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "-";
@@ -444,37 +443,49 @@ function BoardOverview({ board }: { board: SocialListeningBoard }) {
         <Col xs={12} md={6} xl={3}><BoardMetricCard title="授权账号" value={board.accessCount || 0} hint="BoardAccess active count" color="#f97316" /></Col>
       </Row>
 
-      <Descriptions size="small" bordered column={2}>
-        <Descriptions.Item label="状态">{statusTag(board.status)}</Descriptions.Item>
-        <Descriptions.Item label="认证状态">{board.verified ? <Tag color="blue">已认证</Tag> : <Tag>未认证 / 未知</Tag>}</Descriptions.Item>
-        <Descriptions.Item label="官方 Handle">@{board.officialHandle}</Descriptions.Item>
-        <Descriptions.Item label="官方 Twitter ID"><Text code>{board.officialTwitterId || "-"}</Text></Descriptions.Item>
-        <Descriptions.Item label="全球排名">{formatRank(board.globalRank)}</Descriptions.Item>
-        <Descriptions.Item label="华语排名">{formatRank(board.cnRank)}</Descriptions.Item>
-        <Descriptions.Item label="关注数">{formatNumber(followingCount)}</Descriptions.Item>
-        <Descriptions.Item label="推文数">{formatNumber(tweetsCount)}</Descriptions.Item>
-        <Descriptions.Item label="Listed 数">{formatNumber(listedCount)}</Descriptions.Item>
-        <Descriptions.Item label="语言识别">{isCn === true ? "华语" : isCn === false ? "非华语" : "-"}</Descriptions.Item>
-        <Descriptions.Item label="覆盖开始">{formatDate(board.coverageStartAt)}</Descriptions.Item>
-        <Descriptions.Item label="处理游标">{formatDate(board.processedThrough)}</Descriptions.Item>
-        <Descriptions.Item label="最近成功">{formatDate(board.lastSuccessAt)}</Descriptions.Item>
-        <Descriptions.Item label="最近失败">{formatDate(board.lastFailureAt)}</Descriptions.Item>
-        <Descriptions.Item label="最新任务">{latestJob ? <Space size={4} wrap>{statusTag(latestJob.status)}<Tag>{latestJob.jobType}</Tag><Text type="secondary">{formatDate(latestJob.createdAt)}</Text></Space> : "-"}</Descriptions.Item>
-        <Descriptions.Item label="排名来源">{getString(metadata.rankSource) || "-"}</Descriptions.Item>
-        <Descriptions.Item label="Token">{getString(metadata.token) || "-"}</Descriptions.Item>
-        <Descriptions.Item label="品牌色">{board.brandColor ? <Space size={6}><span className="social-listening-color-dot" style={{ background: board.brandColor }} /><Text code>{board.brandColor}</Text></Space> : "-"}</Descriptions.Item>
-        <Descriptions.Item label="创建时间">{formatDate(board.createdAt)}</Descriptions.Item>
-        <Descriptions.Item label="更新时间">{formatDate(board.updatedAt)}</Descriptions.Item>
-        <Descriptions.Item label="创建管理员">{board.createdByAdminId || "-"}</Descriptions.Item>
-        <Descriptions.Item label="更新管理员">{board.updatedByAdminId || "-"}</Descriptions.Item>
-        <Descriptions.Item label="主表"><Text code>EchohuntSocialListeningBoards</Text></Descriptions.Item>
-        <Descriptions.Item label="帖子表"><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
-        <Descriptions.Item label="源资料表"><Text code>dev.twitter_user.profile / ai / feature / kol</Text></Descriptions.Item>
-        <Descriptions.Item label="关系源表">{renderTagList(metadata.followSources)}</Descriptions.Item>
-        <Descriptions.Item label="关键词" span={2}>{renderTagList(metadata.keywords)}</Descriptions.Item>
-        <Descriptions.Item label="别名" span={2}>{renderTagList(metadata.aliases)}</Descriptions.Item>
-        {board.lastFailureReason ? <Descriptions.Item label="失败原因" span={2}><Text type="danger">{board.lastFailureReason}</Text></Descriptions.Item> : null}
-      </Descriptions>
+      <Collapse
+        className="social-listening-board-detail-collapse"
+        bordered={false}
+        items={[
+          {
+            key: "board-detail-fields",
+            label: "账号详细字段",
+            children: (
+              <Descriptions size="small" bordered column={2}>
+                <Descriptions.Item label="状态">{statusTag(board.status)}</Descriptions.Item>
+                <Descriptions.Item label="认证状态">{board.verified ? <Tag color="blue">已认证</Tag> : <Tag>未认证 / 未知</Tag>}</Descriptions.Item>
+                <Descriptions.Item label="官方 Handle">@{board.officialHandle}</Descriptions.Item>
+                <Descriptions.Item label="官方 Twitter ID"><Text code>{board.officialTwitterId || "-"}</Text></Descriptions.Item>
+                <Descriptions.Item label="全球排名">{formatRank(board.globalRank)}</Descriptions.Item>
+                <Descriptions.Item label="华语排名">{formatRank(board.cnRank)}</Descriptions.Item>
+                <Descriptions.Item label="关注数">{formatNumber(followingCount)}</Descriptions.Item>
+                <Descriptions.Item label="推文数">{formatNumber(tweetsCount)}</Descriptions.Item>
+                <Descriptions.Item label="Listed 数">{formatNumber(listedCount)}</Descriptions.Item>
+                <Descriptions.Item label="语言识别">{isCn === true ? "华语" : isCn === false ? "非华语" : "-"}</Descriptions.Item>
+                <Descriptions.Item label="覆盖开始">{formatDate(board.coverageStartAt)}</Descriptions.Item>
+                <Descriptions.Item label="处理游标">{formatDate(board.processedThrough)}</Descriptions.Item>
+                <Descriptions.Item label="最近成功">{formatDate(board.lastSuccessAt)}</Descriptions.Item>
+                <Descriptions.Item label="最近失败">{formatDate(board.lastFailureAt)}</Descriptions.Item>
+                <Descriptions.Item label="最新任务">{latestJob ? <Space size={4} wrap>{statusTag(latestJob.status)}<Tag>{latestJob.jobType}</Tag><Text type="secondary">{formatDate(latestJob.createdAt)}</Text></Space> : "-"}</Descriptions.Item>
+                <Descriptions.Item label="排名来源">{getString(metadata.rankSource) || "-"}</Descriptions.Item>
+                <Descriptions.Item label="Token">{getString(metadata.token) || "-"}</Descriptions.Item>
+                <Descriptions.Item label="品牌色">{board.brandColor ? <Space size={6}><span className="social-listening-color-dot" style={{ background: board.brandColor }} /><Text code>{board.brandColor}</Text></Space> : "-"}</Descriptions.Item>
+                <Descriptions.Item label="创建时间">{formatDate(board.createdAt)}</Descriptions.Item>
+                <Descriptions.Item label="更新时间">{formatDate(board.updatedAt)}</Descriptions.Item>
+                <Descriptions.Item label="创建管理员">{board.createdByAdminId || "-"}</Descriptions.Item>
+                <Descriptions.Item label="更新管理员">{board.updatedByAdminId || "-"}</Descriptions.Item>
+                <Descriptions.Item label="主表"><Text code>EchohuntSocialListeningBoards</Text></Descriptions.Item>
+                <Descriptions.Item label="帖子表"><Text code>EchohuntSocialListeningPosts</Text></Descriptions.Item>
+                <Descriptions.Item label="源资料表"><Text code>dev.twitter_user.profile / ai / feature / kol</Text></Descriptions.Item>
+                <Descriptions.Item label="关系源表">{renderTagList(metadata.followSources)}</Descriptions.Item>
+                <Descriptions.Item label="关键词" span={2}>{renderTagList(metadata.keywords)}</Descriptions.Item>
+                <Descriptions.Item label="别名" span={2}>{renderTagList(metadata.aliases)}</Descriptions.Item>
+                {board.lastFailureReason ? <Descriptions.Item label="失败原因" span={2}><Text type="danger">{board.lastFailureReason}</Text></Descriptions.Item> : null}
+              </Descriptions>
+            ),
+          },
+        ]}
+      />
     </Space>
   );
 }
@@ -546,20 +557,6 @@ function JobProgressView({ job }: { job: SocialListeningJob }) {
         <Descriptions.Item label="metadata JSON" span={2}><pre className="social-listening-json-block">{jsonPreview(job.metadata)}</pre></Descriptions.Item>
       </Descriptions>
     </Space>
-  );
-}
-
-function WorkflowGuide() {
-  return (
-    <div className="social-listening-process-map">
-      {PROCESS_STEPS.map((step) => (
-        <Card key={step.title} size="small" className="social-listening-process-card">
-          <Text strong>{step.title}</Text>
-          <Text code>{step.table}</Text>
-          <Paragraph type="secondary">{step.desc}</Paragraph>
-        </Card>
-      ))}
-    </div>
   );
 }
 
@@ -663,9 +660,13 @@ function AiRuntimeConfigPanel() {
     queryKey: ["social-listening", "runtime-config"],
     queryFn: () => fetchSocialListeningRuntimeConfig({ estimatePosts }),
   });
+  const llmModelsQuery = useQuery({
+    queryKey: ["llm-models"],
+    queryFn: fetchLlmModels,
+  });
+  const modelOptions = useMemo(() => mergeModelOptions(llmModelsQuery.data?.data || []), [llmModelsQuery.data?.data]);
   const detail = configQuery.data?.data || null;
   const stats = detail?.stats;
-  const fieldDocs = detail?.fieldDocs || [];
   const watchedAi = Form.useWatch("ai", form) as Partial<SocialListeningAiRuntimeConfig> | undefined;
   const watchedApiKeyAction = Form.useWatch("apiKeyAction", form) as string | undefined;
   const liveEstimate = calculateAiCost(watchedAi || detail?.config.ai, estimatePosts);
@@ -704,20 +705,16 @@ function AiRuntimeConfigPanel() {
   });
 
   return (
-    <PageSection
-      title="AI 运行配置"
-      description="这里是 Social Listening AI 的全局供应商配置和总开关；不会直接让所有账号跑 AI。每个被监控账号还必须在详情「AI 开关」里单独选模型、确认成本后才能开启。配置保存到 Nacos：echohunt_social_listening_config。"
-      extra={<Space wrap><Tag color={detail?.source === "nacos" ? "green" : "orange"}>{detail?.source === "nacos" ? "Nacos 配置" : "默认配置"}</Tag><Button icon={<ReloadOutlined />} loading={configQuery.isFetching} onClick={() => configQuery.refetch()}>重新读取</Button></Space>}
-    >
+    <Space direction="vertical" size={12} className="social-listening-full social-listening-ai-runtime-panel">
       {contextHolder}
-      {detail?.loadError ? <Alert style={{ marginBottom: 12 }} type="warning" showIcon message="当前使用默认配置" description={detail.loadError} /> : null}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} xl={7}>
-          <Card size="small" title="AI 状态总览">
+      {detail?.loadError ? <Alert type="warning" showIcon message="当前使用默认配置" description={detail.loadError} /> : null}
+      <Row gutter={[16, 16]} align="top">
+        <Col xs={24} xl={6}>
+          <Card size="small" title="状态与预算" extra={<Tag color={detail?.source === "nacos" ? "green" : "orange"}>{detail?.source === "nacos" ? "Nacos" : "默认"}</Tag>}>
             <Space direction="vertical" size={12} style={{ width: "100%" }}>
               <Row gutter={[8, 8]}>
-                <Col span={12}><Statistic title="看板数" value={stats?.boardCount || 0} /></Col>
-                <Col span={12}><Statistic title="帖子总数" value={stats?.totalPosts || 0} /></Col>
+                <Col span={12}><Statistic title="看板" value={stats?.boardCount || 0} /></Col>
+                <Col span={12}><Statistic title="帖子" value={stats?.totalPosts || 0} /></Col>
                 <Col span={12}><Statistic title="内容待分析" value={stats?.contentPendingPosts || 0} valueStyle={{ color: (stats?.contentPendingPosts || 0) ? "#d46b08" : undefined }} /></Col>
                 <Col span={12}><Statistic title="态度待评价" value={stats?.projectAttitudePendingPosts || 0} valueStyle={{ color: (stats?.projectAttitudePendingPosts || 0) ? "#d46b08" : undefined }} /></Col>
               </Row>
@@ -725,121 +722,119 @@ function AiRuntimeConfigPanel() {
                 type={detail?.config.ai.apiKeyConfigured ? "success" : "warning"}
                 showIcon
                 message={detail?.config.ai.apiKeyConfigured ? `API Key 已配置：${detail.config.ai.apiKeyMasked}` : "API Key 未配置"}
-                description="这里只是全局总闸；还需要每个被监控账号自己的 AI 开关开启，任务才会真正调用 AI。"
               />
-              <Divider style={{ margin: "4px 0" }} />
-              <InputNumber min={0} value={estimatePosts} onChange={(value) => setEstimatePosts(Number(value || 0))} addonBefore="估算帖子数" style={{ width: "100%" }} />
+              <InputNumber min={0} value={estimatePosts} onChange={(value) => setEstimatePosts(Number(value || 0))} addonBefore="估算帖子" style={{ width: "100%" }} />
               <Row gutter={[8, 8]}>
                 <Col span={12}><Statistic title="预计调用" value={liveEstimate.calls} suffix="次" /></Col>
                 <Col span={12}><Statistic title="预计费用" value={formatUsd(liveEstimate.estimatedUsd)} /></Col>
               </Row>
-              <Text type="secondary">估算公式：输入 token / 100万 × 输入单价 + 输出 token / 100万 × 输出单价。内容分析按每条 3 次调用，态度评价按每条 1 次调用。</Text>
+              <Text type="secondary">这里是全局供应商和总闸；账号仍需单独开启。</Text>
             </Space>
           </Card>
         </Col>
-        <Col xs={24} xl={17}>
+        <Col xs={24} xl={18}>
           <Form form={form} layout="vertical" onFinish={() => updateMutation.mutate()}>
-            <Row gutter={12}>
-              <Col xs={24} md={8}>
-                <Form.Item name={["ai", "model"]} label="默认模型" extra={AI_RUNTIME_FIELD_HELP.model} rules={[{ required: true, message: "请输入默认模型" }]}>
-                  <Input placeholder="gemini-3.1-flash-lite-preview" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={16}>
-                <Form.Item name={["ai", "baseURL"]} label="Base URL" extra={AI_RUNTIME_FIELD_HELP.baseURL} rules={[{ required: true, message: "请输入 baseURL" }]}>
-                  <Input placeholder="https://aaii.xclaw.info/v1/" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={8}>
-                <Form.Item name="apiKeyAction" label="API Key 操作" extra={AI_RUNTIME_FIELD_HELP.apiKey}>
-                  <Select options={[{ value: "keep", label: "保持当前 Key" }, { value: "replace", label: "替换为新 Key" }, { value: "clear", label: "清空 Key（停用 AI）" }]} />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={16}>
-                <Form.Item name={["ai", "apiKey"]} label="新 API Key" extra="保持当前 Key 时这里留空；选择替换时才会写入 Nacos。">
-                  <Input.Password disabled={watchedApiKeyAction !== "replace"} placeholder={watchedApiKeyAction === "replace" ? "粘贴新 API Key" : detail?.config.ai.apiKeyMasked || "未配置"} autoComplete="new-password" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={8}>
-                <Form.Item name={["ai", "contentEnabled"]} label="开启内容分析" valuePropName="checked" extra={AI_RUNTIME_FIELD_HELP.contentEnabled}>
-                  <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={8}>
-                <Form.Item name={["ai", "projectAttitudeEnabled"]} label="开启项目态度评价" valuePropName="checked" extra={AI_RUNTIME_FIELD_HELP.projectAttitudeEnabled}>
-                  <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={4}>
-                <Form.Item name={["ai", "contentBatchSize"]} label="内容批大小" extra={AI_RUNTIME_FIELD_HELP.contentBatchSize}>
-                  <InputNumber min={1} max={50} style={{ width: "100%" }} />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={4}>
-                <Form.Item name={["ai", "projectAttitudeBatchSize"]} label="态度批大小" extra={AI_RUNTIME_FIELD_HELP.projectAttitudeBatchSize}>
-                  <InputNumber min={1} max={100} style={{ width: "100%" }} />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={12}>
-                <Form.Item name={["ai", "negativeScoreThreshold"]} label="负面阈值" extra={AI_RUNTIME_FIELD_HELP.negativeScoreThreshold}>
-                  <InputNumber min={0} max={10} step={0.1} style={{ width: "100%" }} />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={12}>
-                <Form.Item name={["ai", "positiveScoreThreshold"]} label="正面阈值" extra={AI_RUNTIME_FIELD_HELP.positiveScoreThreshold}>
-                  <InputNumber min={0} max={10} step={0.1} style={{ width: "100%" }} />
-                </Form.Item>
-              </Col>
-            </Row>
+            <Card size="small" title="基础配置" extra={<Button size="small" icon={<ReloadOutlined />} loading={configQuery.isFetching} onClick={() => configQuery.refetch()}>重新读取</Button>}>
+              <Row gutter={[12, 4]}>
+                <Col xs={24} md={8}>
+                  <Form.Item name={["ai", "model"]} label="默认模型" tooltip={aiHelp("model")} rules={[{ required: true, message: "请输入默认模型" }]}> 
+                    <ModelAutoComplete options={modelOptions} placeholder="可下拉选择，也可直接输入模型名" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={16}>
+                  <Form.Item name={["ai", "baseURL"]} label="Base URL" tooltip={aiHelp("baseURL")} rules={[{ required: true, message: "请输入 baseURL" }]}> 
+                    <Input placeholder="https://aaii.xclaw.info/v1/" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Form.Item name="apiKeyAction" label="API Key 操作" tooltip={aiHelp("apiKey")}> 
+                    <Select options={[{ value: "keep", label: "保持当前 Key" }, { value: "replace", label: "替换为新 Key" }, { value: "clear", label: "清空 Key（停用 AI）" }]} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={16}>
+                  <Form.Item name={["ai", "apiKey"]} label="新 API Key" tooltip={{ title: "保持当前 Key 时这里留空；选择替换时才会写入 Nacos。", icon: <InfoCircleOutlined /> }}>
+                    <Input.Password disabled={watchedApiKeyAction !== "replace"} placeholder={watchedApiKeyAction === "replace" ? "粘贴新 API Key" : detail?.config.ai.apiKeyMasked || "未配置"} autoComplete="new-password" />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["ai", "contentEnabled"]} label="内容分析总闸" valuePropName="checked" tooltip={aiHelp("contentEnabled")}> 
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["ai", "projectAttitudeEnabled"]} label="态度评价总闸" valuePropName="checked" tooltip={aiHelp("projectAttitudeEnabled")}> 
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["ai", "contentBatchSize"]} label="内容批大小" tooltip={aiHelp("contentBatchSize")}>
+                    <InputNumber min={1} max={50} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["ai", "projectAttitudeBatchSize"]} label="态度批大小" tooltip={aiHelp("projectAttitudeBatchSize")}>
+                    <InputNumber min={1} max={100} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["ai", "negativeScoreThreshold"]} label="负面阈值" tooltip={aiHelp("negativeScoreThreshold")}>
+                    <InputNumber min={0} max={10} step={0.1} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
+                  <Form.Item name={["ai", "positiveScoreThreshold"]} label="正面阈值" tooltip={aiHelp("positiveScoreThreshold")}>
+                    <InputNumber min={0} max={10} step={0.1} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Card>
+
             <Collapse
+              className="social-listening-ai-advanced-collapse"
               bordered={false}
               items={[
                 {
                   key: "advanced",
-                  label: "展开高级模型、费用单价和 Prompt 配置说明",
+                  label: "高级参数：专项模型 / 费用单价 / Prompt",
                   children: (
-                    <Row gutter={12}>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="标签模型" extra={AI_RUNTIME_FIELD_HELP.tweetTagModel}><Input placeholder="为空用默认模型" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="摘要模型" extra={AI_RUNTIME_FIELD_HELP.tweetSummaryModel}><Input placeholder="为空用默认模型" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="态度模型" extra={AI_RUNTIME_FIELD_HELP.projectAttitudeModel}><Input placeholder="为空用默认模型" /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "temperature"]} label="温度" extra={AI_RUNTIME_FIELD_HELP.temperature}><InputNumber min={0} max={2} step={0.1} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "maxTokens"]} label="默认输出上限" extra={AI_RUNTIME_FIELD_HELP.maxTokens}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "timeoutMs"]} label="超时时间 ms" extra={AI_RUNTIME_FIELD_HELP.timeoutMs}><InputNumber min={1000} max={300000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "maxRetries"]} label="重试次数" extra={AI_RUNTIME_FIELD_HELP.maxRetries}><InputNumber min={0} max={5} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetTagMaxTokens"]} label="标签输出上限" extra={AI_RUNTIME_FIELD_HELP.tweetTagMaxTokens}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetSummaryMaxTokens"]} label="摘要输出上限" extra={AI_RUNTIME_FIELD_HELP.tweetSummaryMaxTokens}><InputNumber min={64} max={4000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "projectAttitudeMaxTokens"]} label="态度输出上限" extra={AI_RUNTIME_FIELD_HELP.projectAttitudeMaxTokens}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "summaryWords"]} label="摘要词数" extra={AI_RUNTIME_FIELD_HELP.summaryWords}><InputNumber min={3} max={80} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "estimateInputPricePerMillion"]} label="输入单价 / 100万 token" extra={AI_RUNTIME_FIELD_HELP.estimateInputPricePerMillion}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "estimateOutputPricePerMillion"]} label="输出单价 / 100万 token" extra={AI_RUNTIME_FIELD_HELP.estimateOutputPricePerMillion}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "promptMaxLength"]} label="Prompt 最大长度" extra={AI_RUNTIME_FIELD_HELP.promptMaxLength}><InputNumber min={200} max={30000} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateContentInputTokens"]} label="内容输入 token/次" extra={AI_RUNTIME_FIELD_HELP.estimateContentInputTokens}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateContentOutputTokens"]} label="内容输出 token/次" extra={AI_RUNTIME_FIELD_HELP.estimateContentOutputTokens}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateProjectAttitudeInputTokens"]} label="态度输入 token/次" extra={AI_RUNTIME_FIELD_HELP.estimateProjectAttitudeInputTokens}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateProjectAttitudeOutputTokens"]} label="态度输出 token/次" extra={AI_RUNTIME_FIELD_HELP.estimateProjectAttitudeOutputTokens}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
-                      <Col span={24}><Form.Item name={["ai", "systemPrompt"]} label="系统 Prompt" extra="全局 systemPrompt，会拼到结构化 JSON 输出要求前面。"><TextArea rows={2} /></Form.Item></Col>
-                      <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "projectAttitude"]} label="全局项目态度 Prompt" extra="覆盖代码默认 projectAttitude Prompt；看板级 Prompt 优先级更高。"><TextArea rows={4} /></Form.Item></Col>
-                      <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "tweetTag"]} label="全局标签 Prompt" extra="覆盖代码默认 tweetTag Prompt；用于主题、热词、词云。"><TextArea rows={4} /></Form.Item></Col>
-                      <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "tweetSummary"]} label="全局摘要 Prompt" extra="覆盖代码默认 tweetSummary Prompt；中英文摘要都会用。"><TextArea rows={4} /></Form.Item></Col>
-                      <Col span={24}>
-                        <Table rowKey="field" size="small" pagination={false} dataSource={fieldDocs} columns={[{ title: "字段", dataIndex: "label", width: 170, render: (_, row) => <Text strong>{row.label}<br /><Text code>{row.field}</Text></Text> }, { title: "说明", dataIndex: "desc" }]} />
-                      </Col>
+                    <Row gutter={[12, 4]}>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="标签模型" tooltip={aiHelp("tweetTagModel")}><ModelAutoComplete options={modelOptions} placeholder="为空用默认模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="摘要模型" tooltip={aiHelp("tweetSummaryModel")}><ModelAutoComplete options={modelOptions} placeholder="为空用默认模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="态度模型" tooltip={aiHelp("projectAttitudeModel")}><ModelAutoComplete options={modelOptions} placeholder="为空用默认模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "temperature"]} label="温度" tooltip={aiHelp("temperature")}><InputNumber min={0} max={2} step={0.1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "maxTokens"]} label="默认输出上限" tooltip={aiHelp("maxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "timeoutMs"]} label="超时时间 ms" tooltip={aiHelp("timeoutMs")}><InputNumber min={1000} max={300000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "maxRetries"]} label="重试次数" tooltip={aiHelp("maxRetries")}><InputNumber min={0} max={5} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetTagMaxTokens"]} label="标签输出上限" tooltip={aiHelp("tweetTagMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "tweetSummaryMaxTokens"]} label="摘要输出上限" tooltip={aiHelp("tweetSummaryMaxTokens")}><InputNumber min={64} max={4000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "projectAttitudeMaxTokens"]} label="态度输出上限" tooltip={aiHelp("projectAttitudeMaxTokens")}><InputNumber min={128} max={8000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "summaryWords"]} label="摘要词数" tooltip={aiHelp("summaryWords")}><InputNumber min={3} max={80} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "estimateInputPricePerMillion"]} label="输入单价 / 100万 token" tooltip={aiHelp("estimateInputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "estimateOutputPricePerMillion"]} label="输出单价 / 100万 token" tooltip={aiHelp("estimateOutputPricePerMillion")}><InputNumber min={0} step={0.01} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "promptMaxLength"]} label="Prompt 最大长度" tooltip={aiHelp("promptMaxLength")}><InputNumber min={200} max={30000} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateContentInputTokens"]} label="内容输入 token/次" tooltip={aiHelp("estimateContentInputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateContentOutputTokens"]} label="内容输出 token/次" tooltip={aiHelp("estimateContentOutputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateProjectAttitudeInputTokens"]} label="态度输入 token/次" tooltip={aiHelp("estimateProjectAttitudeInputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col xs={24} md={6}><Form.Item name={["ai", "estimateProjectAttitudeOutputTokens"]} label="态度输出 token/次" tooltip={aiHelp("estimateProjectAttitudeOutputTokens")}><InputNumber min={1} style={{ width: "100%" }} /></Form.Item></Col>
+                      <Col span={24}><Form.Item name={["ai", "systemPrompt"]} label="系统 Prompt" tooltip={{ title: "全局 systemPrompt，会拼到结构化 JSON 输出要求前面。", icon: <InfoCircleOutlined /> }}><TextArea rows={2} /></Form.Item></Col>
+                      <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "projectAttitude"]} label="项目态度 Prompt" tooltip={{ title: "覆盖代码默认 projectAttitude Prompt；看板级 Prompt 优先级更高。", icon: <InfoCircleOutlined /> }}><TextArea rows={3} /></Form.Item></Col>
+                      <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "tweetTag"]} label="标签 Prompt" tooltip={{ title: "覆盖代码默认 tweetTag Prompt；用于主题、热词、词云。", icon: <InfoCircleOutlined /> }}><TextArea rows={3} /></Form.Item></Col>
+                      <Col xs={24} lg={8}><Form.Item name={["ai", "prompts", "tweetSummary"]} label="摘要 Prompt" tooltip={{ title: "覆盖代码默认 tweetSummary Prompt；中英文摘要都会用。", icon: <InfoCircleOutlined /> }}><TextArea rows={3} /></Form.Item></Col>
                     </Row>
                   ),
                 },
               ]}
             />
-            <Space style={{ marginTop: 14 }} wrap>
+            <Space className="social-listening-ai-runtime-actions" wrap>
               <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>保存全局 AI 配置到 Nacos</Button>
-              <Text type="secondary">保存全局配置不会立即消耗 AI；账号级开关默认关闭，必须逐个账号确认预算后才会跑。</Text>
+              <Text type="secondary">不会立即消耗 AI；账号级开关默认关闭，必须逐个确认预算后才会跑。</Text>
             </Space>
           </Form>
         </Col>
       </Row>
-    </PageSection>
+    </Space>
   );
 }
-
 
 function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; open: boolean; onChanged: () => void }) {
   const [messageApi, contextHolder] = message.useMessage();
@@ -849,6 +844,12 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
     queryFn: () => fetchSocialListeningBoardAiConfig(boardId),
     enabled: open && Boolean(boardId),
   });
+  const llmModelsQuery = useQuery({
+    queryKey: ["llm-models"],
+    queryFn: fetchLlmModels,
+    enabled: open && Boolean(boardId),
+  });
+  const modelOptions = useMemo(() => mergeModelOptions(llmModelsQuery.data?.data || []), [llmModelsQuery.data?.data]);
   const detail = configQuery.data?.data || null;
   const runtime = detail?.runtime;
   const stats = detail?.stats;
@@ -946,7 +947,7 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
               <Row gutter={12}>
                 <Col xs={24} md={8}>
                   <Form.Item name={["ai", "model"]} label="该账号模型" extra="必填。管理员必须为这个被监控账号明确选择模型，不能只靠全局默认值。" rules={[{ required: wantsAi, message: "开启账号 AI 前必须填写模型" }]}> 
-                    <Input placeholder={runtime?.model || "例如 gpt-4.1-mini / gemini-3.1-flash-lite"} />
+                    <ModelAutoComplete options={modelOptions} placeholder={runtime?.model ? `默认：${runtime.model}` : "可下拉选择，也可直接输入模型名"} />
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={8}>
@@ -977,9 +978,9 @@ function BoardAiConfigPanel({ boardId, open, onChanged }: { boardId: string; ope
                   label: "专项模型覆盖（可选）",
                   children: (
                     <Row gutter={12}>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="标签模型" extra="为空使用该账号模型。"><Input placeholder="为空使用该账号模型" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="摘要模型" extra="为空使用该账号模型。"><Input placeholder="为空使用该账号模型" /></Form.Item></Col>
-                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="态度模型" extra="为空使用该账号模型。"><Input placeholder="为空使用该账号模型" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetTagModel"]} label="标签模型" extra="为空使用该账号模型。"><ModelAutoComplete options={modelOptions} placeholder="为空使用该账号模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "tweetSummaryModel"]} label="摘要模型" extra="为空使用该账号模型。"><ModelAutoComplete options={modelOptions} placeholder="为空使用该账号模型，也可直接输入" /></Form.Item></Col>
+                      <Col xs={24} md={8}><Form.Item name={["ai", "projectAttitudeModel"]} label="态度模型" extra="为空使用该账号模型。"><ModelAutoComplete options={modelOptions} placeholder="为空使用该账号模型，也可直接输入" /></Form.Item></Col>
                       <Col span={24}>
                         <Descriptions size="small" bordered column={2}>
                           <Descriptions.Item label="Base URL">{runtime?.baseURL || "未配置"}</Descriptions.Item>
@@ -1462,8 +1463,6 @@ export function SocialListeningPage() {
         </div>
 
 
-        <AiRuntimeConfigPanel />
-
         <PageSection
           title="被监控账号"
           description="新增账号默认暂停，不会自动跑任务；管理员点击恢复后先补最近 7 天数据，再低优先级补齐 30 天，后续增量任务每 15 分钟由 jobs 进程推进。"
@@ -1498,17 +1497,17 @@ export function SocialListeningPage() {
         </Row>
 
         <PageSection
-          title="流程总览"
-          description="默认折叠。需要了解任务链路时展开：从任务创建、窗口扫描、AI 字段生成，到关系信号、预警和聚合快照。"
+          title="AI 总配置"
+          description="全局模型服务商、总开关和费用估算放在这里；默认折叠，避免占用日常监控页面空间。"
         >
           <Collapse
-            className="social-listening-workflow-collapse"
+            className="social-listening-ai-runtime-collapse"
             bordered={false}
             items={[
               {
-                key: "workflow",
-                label: "展开查看 Social Listening 定时任务完整链路",
-                children: <WorkflowGuide />,
+                key: "ai-runtime",
+                label: "展开配置全局 AI 供应商 / 总闸 / 费用估算",
+                children: <AiRuntimeConfigPanel />,
               },
             ]}
           />
